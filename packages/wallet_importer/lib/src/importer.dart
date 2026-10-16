@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:logging/logging.dart';
+
 import 'csv_reader.dart';
 import 'ids.dart';
+import 'log.dart';
 import 'model.dart';
 import 'xls_reader.dart';
 import 'xlsx_reader.dart';
@@ -14,24 +17,47 @@ class ImportException implements Exception {
   String toString() => message;
 }
 
+final _log = Logger('bw.importer');
+
 /// Reads a bank export (PBZ .xls, Revolut .xlsx or .csv) into normalized transactions.
+///
+/// Logs on `bw.importer`: the detected container format, sizes, row counts and timings. Never cell contents.
 ImportBatch importBankFile(Uint8List bytes) {
+  final sw = Stopwatch()..start();
   List<List<Object>> rows;
+  final format = XlsReader.looksLikeXls(bytes) ? 'xls' : (XlsxReader.looksLikeZip(bytes) ? 'xlsx' : 'csv');
+  logImporter(_log, Level.FINE, 'importer.detect', {'format': format, 'bytes': bytes.length});
   try {
-    if (XlsReader.looksLikeXls(bytes)) {
-      rows = XlsReader.firstSheet(bytes);
-    } else if (XlsxReader.looksLikeZip(bytes)) {
-      rows = XlsxReader.firstSheet(bytes);
-    } else {
-      rows = readCsv(utf8.decode(bytes, allowMalformed: true));
-    }
-  } on FormatException catch (e) {
+    rows = switch (format) {
+      'xls' => XlsReader.firstSheet(bytes),
+      'xlsx' => XlsxReader.firstSheet(bytes),
+      _ => readCsv(utf8.decode(bytes, allowMalformed: true)),
+    };
+  } on FormatException catch (e, st) {
+    // Our readers' messages are fixed texts; the formatter drops FormatException.source.
+    _log.warning(() => 'importer.readFailed ${jsonEncode({'format': format, 'bytes': bytes.length})}', e, st);
     throw ImportException('Could not read this file: ${e.message}');
+  } catch (e, st) {
+    // A damaged file can fail anywhere in the readers (RangeError on a truncated .xls, archive errors, …).
+    _log.warning(() => 'importer.readFailed ${jsonEncode({'format': format, 'bytes': bytes.length})}', e, st);
+    throw const ImportException('Could not read this file. It may be damaged.');
   }
+  final readMs = sw.elapsedMilliseconds;
   final batch = parseRows(rows);
   if (batch == null) {
+    logImporter(_log, Level.WARNING, 'importer.unknown',
+        {'format': format, 'rows': rows.length, 'cols': rows.isEmpty ? 0 : rows.first.length, 'readMs': readMs});
     throw const ImportException('This is not a PBZ or Revolut export I recognise.');
   }
+  logImporter(_log, Level.INFO, 'importer.parse', {
+    'format': format,
+    'source': batch.source,
+    'rows': rows.length,
+    'txs': batch.transactions.length,
+    'skipped': batch.skipped,
+    'readMs': readMs,
+    'ms': sw.elapsedMilliseconds,
+  });
   return batch;
 }
 
@@ -75,7 +101,9 @@ String fixMojibake(String s) {
   if (units.every((c) => c < 0x80) || units.any((c) => c > 0xFF)) return s;
   try {
     return utf8.decode(units);
-  } on FormatException {
+  } on FormatException catch (e) {
+    // Expected for real Latin-1 text; per row, so FINEST and no text.
+    logImporter(_log, Level.FINEST, 'importer.mojibake.keep', {'offset': e.offset});
     return s;
   }
 }

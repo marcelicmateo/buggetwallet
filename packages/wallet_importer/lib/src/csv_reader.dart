@@ -1,3 +1,9 @@
+import 'package:logging/logging.dart';
+
+import 'log.dart';
+
+final _log = Logger('bw.importer.csv');
+
 /// Small RFC 4180 CSV reader. Detects `,` or `;` from the header line.
 List<List<Object>> readCsv(String text) {
   if (text.startsWith('﻿')) text = text.substring(1);
@@ -39,5 +45,6 @@ List<List<Object>> readCsv(String text) {
     row.add(field.toString());
     rows.add(row);
   }
+  logImporter(_log, Level.FINE, 'csv.read', {'chars': text.length, 'sep': sep, 'rows': rows.length, 'unclosedQuote': inQuotes});
   return rows;
 }

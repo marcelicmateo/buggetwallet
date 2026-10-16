@@ -5,6 +5,10 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
+import 'logs.dart';
+
+final _log = Logger('bw.vault');
+
 class VaultException implements Exception {
   final String message;
   const VaultException(this.message);
@@ -96,21 +100,37 @@ final _magic = utf8.encode('BWOP1');
 final _aead = Xchacha20.poly1305Aead();
 
 /// gzip + XChaCha20-Poly1305. Layout: "BWOP1" | nonce(24) | mac(16) | ciphertext.
+/// Logs `vault.seal` on `bw.perf` with the plain and sealed sizes.
 Future<Uint8List> seal(List<int> plain, VaultKey key) async {
-  final box = await _aead.encrypt(gzip.encode(plain), secretKey: SecretKey(key.bytes));
-  return Uint8List.fromList([..._magic, ...box.nonce, ...box.mac.bytes, ...box.cipherText]);
+  final t = PerfTimer('vault.seal', warnMs: 500);
+  final zipped = gzip.encode(plain);
+  final box = await _aead.encrypt(zipped, secretKey: SecretKey(key.bytes));
+  final out = Uint8List.fromList([..._magic, ...box.nonce, ...box.mac.bytes, ...box.cipherText]);
+  t.done({'plainBytes': plain.length, 'bytes': out.length});
+  return out;
 }
 
+/// Logs `vault.unseal` on `bw.perf` with the sealed and plain sizes.
 Future<Uint8List> unseal(List<int> data, VaultKey key) async {
-  if (data.length < 5 + 24 + 16) throw const VaultException('Sync file is damaged.');
+  final t = PerfTimer('vault.unseal', warnMs: 500);
+  if (data.length < 5 + 24 + 16) {
+    logEvent(_log, Level.WARNING, 'vault.unseal.short', {'bytes': data.length});
+    throw const VaultException('Sync file is damaged.');
+  }
   for (var i = 0; i < 5; i++) {
-    if (data[i] != _magic[i]) throw const VaultException('Not a Budget Wallet sync file.');
+    if (data[i] != _magic[i]) {
+      logEvent(_log, Level.WARNING, 'vault.unseal.magic', {'bytes': data.length});
+      throw const VaultException('Not a Budget Wallet sync file.');
+    }
   }
   final nonce = data.sublist(5, 29), mac = data.sublist(29, 45), cipher = data.sublist(45);
   try {
     final clear = await _aead.decrypt(SecretBox(cipher, nonce: nonce, mac: Mac(mac)), secretKey: SecretKey(key.bytes));
-    return Uint8List.fromList(gzip.decode(clear));
-  } on SecretBoxAuthenticationError {
+    final out = Uint8List.fromList(gzip.decode(clear));
+    t.done({'bytes': data.length, 'plainBytes': out.length});
+    return out;
+  } on SecretBoxAuthenticationError catch (e, st) {
+    logError(_log, 'vault.unseal.auth', e, st, fields: {'bytes': data.length});
     throw const VaultException('Sync file was made with a different key, or was changed.');
   }
 }

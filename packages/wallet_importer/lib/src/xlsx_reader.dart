@@ -2,7 +2,12 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:logging/logging.dart';
 import 'package:xml/xml.dart';
+
+import 'log.dart';
+
+final _log = Logger('bw.importer.xlsx');
 
 /// Reads the first worksheet of an .xlsx file into rows of cell values.
 /// Numbers come back as `double`, everything else as `String`.
@@ -72,6 +77,9 @@ class XlsxReader {
         if (col > maxCol) maxCol = col;
       }
     }
+    // Counts only: cell contents are bank data.
+    logImporter(_log, Level.FINE, 'xlsx.sheet',
+        {'zipFiles': archive.length, 'strings': shared.length, 'sheetBytes': sheetXml.length, 'rows': rows.length, 'cols': maxCol + 1});
     if (rows.isEmpty) return [];
     final maxRow = rows.keys.reduce((a, b) => a > b ? a : b);
     return [

@@ -1,6 +1,9 @@
 import 'categories.dart';
 import 'dates.dart';
+import 'logs.dart';
 import 'models.dart';
+
+final _log = Logger('bw.budget');
 
 /// The budget for the current pay period ("month" = salary to salary).
 class PeriodBudget {
@@ -58,6 +61,19 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final fixedPaid = <String, int>{};
   for (final t in inPeriod.where((t) => t.kind == Kind.fixed)) {
     fixedPaid[t.category] = (fixedPaid[t.category] ?? 0) - t.amount;
+  }
+  // Dates and counts only, never amounts.
+  if (_log.isLoggable(Level.FINER)) {
+    logEvent(_log, Level.FINER, 'budget.period', {
+      'start': start,
+      'end': end,
+      'saved': st.periodStart != null,
+      'days': length,
+      'daysLeft': daysLeft,
+      'tx': inPeriod.length,
+      'incomeMode': st.incomeMode,
+      'goals': goals.length
+    });
   }
   return PeriodBudget(
     start: start,

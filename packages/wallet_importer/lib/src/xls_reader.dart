@@ -1,6 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:logging/logging.dart';
+
+import 'log.dart';
+
+final _log = Logger('bw.importer.xls');
+
 /// Minimal reader for legacy Excel 97-2003 (.xls, BIFF8) files.
 ///
 /// Reads the first worksheet's cell values: strings (shared and inline),
@@ -19,7 +25,10 @@ class XlsReader {
 
   /// Rows of the first sheet. Empty cells are `''`, numbers are `double`.
   static List<List<Object>> firstSheet(Uint8List bytes) {
-    final wb = _CompoundFile(bytes).stream(const ['Workbook', 'Book']);
+    final cf = _CompoundFile(bytes);
+    final wb = cf.stream(const ['Workbook', 'Book']);
+    logImporter(_log, Level.FINE, 'xls.container',
+        {'bytes': bytes.length, 'sector': cf.sectorSize, 'entries': cf.entries.length, 'workbookBytes': wb.length});
     return _Biff(wb).firstSheet();
   }
 }
@@ -327,6 +336,9 @@ class _Biff {
           }
       }
     }
+    // Counts only: cell contents are bank data.
+    logImporter(_log, Level.FINE, 'xls.sheet',
+        {'records': recs.length, 'strings': sst.length, 'rows': cells.length, 'cols': maxCol + 1, 'sheetDir': started});
     if (cells.isEmpty) return [];
     final maxRow = cells.keys.reduce((a, b) => a > b ? a : b);
     return [

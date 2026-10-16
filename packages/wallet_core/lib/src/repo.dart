@@ -7,6 +7,7 @@ import 'package:wallet_importer/wallet_importer.dart';
 import 'categories.dart';
 import 'dates.dart';
 import 'hlc.dart';
+import 'logs.dart';
 import 'models.dart';
 
 /// One field-level change. This is what syncs between devices.
@@ -54,12 +55,15 @@ CREATE TABLE IF NOT EXISTS outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT
 CREATE TABLE IF NOT EXISTS peer_files(device TEXT NOT NULL, file TEXT NOT NULL, PRIMARY KEY(device, file));
 ''';
 
+final _log = Logger('bw.repo');
+
 /// The wallet database on one device. All writes go through [_write] so they are
 /// recorded as [Op]s and can be synced; remote ops come in through [applyRemote].
 class WalletRepo {
   final Database db;
   late final String deviceId;
   late final HlcClock clock;
+  bool _created = false;
 
   WalletRepo._(this.db, int Function()? now) {
     db.execute('PRAGMA journal_mode=WAL;');
@@ -69,15 +73,27 @@ class WalletRepo {
       final r = Random.secure();
       dev = List.generate(8, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
       _setMeta('device_id', dev);
+      _created = true;
     }
     deviceId = dev;
     clock = HlcClock(dev, now: now, last: _meta('hlc'));
   }
 
-  static WalletRepo open(String path, {int Function()? now}) => WalletRepo._(sqlite3.open(path), now);
-  static WalletRepo inMemory({int Function()? now}) => WalletRepo._(sqlite3.openInMemory(), now);
+  static WalletRepo _timedOpen(Database Function() opener, bool file, int Function()? now) {
+    final t = PerfTimer('repo.open');
+    final repo = WalletRepo._(opener(), now);
+    int count(String table) => repo.db.select('SELECT COUNT(*) AS n FROM $table').first['n'] as int;
+    t.done({'file': file, 'new': repo._created, 'tx': count('tx'), 'outbox': count('outbox')});
+    return repo;
+  }
 
-  void close() => db.dispose();
+  static WalletRepo open(String path, {int Function()? now}) => _timedOpen(() => sqlite3.open(path), true, now);
+  static WalletRepo inMemory({int Function()? now}) => _timedOpen(sqlite3.openInMemory, false, now);
+
+  void close() {
+    logEvent(_log, Level.FINE, 'repo.close');
+    db.dispose();
+  }
 
   // ---------- meta ----------
   String? _meta(String key) {
@@ -113,6 +129,7 @@ class WalletRepo {
 
   void _write(List<(String, String, Map<String, Object?>)> changes) {
     if (changes.isEmpty) return;
+    final t = PerfTimer('repo.write');
     _tx(() {
       for (final (entity, id, fields) in changes) {
         final op = Op(entity, id, fields, clock.tick().toString());
@@ -120,6 +137,10 @@ class WalletRepo {
         db.execute('INSERT INTO outbox(op) VALUES(?)', [jsonEncode(op.toJson())]);
       }
       _setMeta('hlc', clock.last.toString());
+    });
+    t.done({
+      'ops': changes.length,
+      'entities': {for (final c in changes) c.$1}.join(',')
     });
   }
 
@@ -129,7 +150,8 @@ class WalletRepo {
       final r = body();
       db.execute('COMMIT');
       return r;
-    } catch (_) {
+    } catch (e, st) {
+      logError(_log, 'repo.rollback', e, st, level: Level.SEVERE);
       db.execute('ROLLBACK');
       rethrow;
     }
@@ -141,10 +163,14 @@ class WalletRepo {
           (r['seq'] as int, Op.fromJson(jsonDecode(r['op'] as String) as Map<String, Object?>)),
       ];
 
-  void markExported(int upToSeq) => db.execute('DELETE FROM outbox WHERE seq <= ?', [upToSeq]);
+  void markExported(int upToSeq) {
+    db.execute('DELETE FROM outbox WHERE seq <= ?', [upToSeq]);
+    logEvent(_log, Level.FINE, 'repo.markExported', {'upTo': upToSeq, 'removed': db.updatedRows});
+  }
 
   /// Applies ops from another device. Returns how many changed something here.
   int applyRemote(List<Op> ops) {
+    final t = PerfTimer('repo.applyRemote');
     var changed = 0;
     _tx(() {
       for (final op in ops) {
@@ -153,6 +179,7 @@ class WalletRepo {
       }
       _setMeta('hlc', clock.last.toString());
     });
+    t.done({'ops': ops.length, 'changed': changed});
     return changed;
   }
 
@@ -168,10 +195,17 @@ class WalletRepo {
   }
 
   // ---------- reads ----------
-  List<Tx> transactions({bool includeHidden = false}) => [
-        for (final r in db.select('SELECT * FROM tx WHERE date != \'\' ORDER BY date DESC, id DESC'))
-          if (includeHidden || Tx.fromRow(r).live) Tx.fromRow(r),
-      ];
+  List<Tx> transactions({bool includeHidden = false}) {
+    final t = PerfTimer('repo.transactions');
+    final rows = db.select('SELECT * FROM tx WHERE date != \'\' ORDER BY date DESC, id DESC');
+    final out = <Tx>[];
+    for (final r in rows) {
+      final tx = Tx.fromRow(r);
+      if (includeHidden || tx.live) out.add(tx);
+    }
+    t.done({'rows': rows.length, 'live': out.length});
+    return out;
+  }
 
   Tx? transaction(String id) {
     final rs = db.select('SELECT * FROM tx WHERE id = ?', [id]);
@@ -212,6 +246,7 @@ class WalletRepo {
   /// Imports a normalized batch. Already-known ids are skipped. Hand-added expenses with the
   /// same amount within 3 days are matched to the new bank row, which keeps their category.
   ImportSummary importBatch(ImportBatch batch) {
+    final t = PerfTimer('repo.importBatch', warnMs: 500);
     final known = <String>{for (final r in db.select('SELECT id FROM tx')) r['id'] as String};
     final fresh = batch.transactions.where((t) => !known.contains(t.id)).toList();
     final manual = transactions().where((t) => t.manual && t.matchedTo == null).toList();
@@ -255,7 +290,16 @@ class WalletRepo {
       ));
     }
     _write(changes);
-    return ImportSummary(fresh.length, batch.transactions.length - fresh.length, matched, batch.skipped);
+    final s = ImportSummary(fresh.length, batch.transactions.length - fresh.length, matched, batch.skipped);
+    t.done({
+      'source': batch.source,
+      'rows': batch.transactions.length,
+      'added': s.added,
+      'dupes': s.duplicates,
+      'matched': s.matched,
+      'skipped': s.skipped
+    });
+    return s;
   }
 
   String _newId(String prefix) {

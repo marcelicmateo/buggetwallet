@@ -1,4 +1,7 @@
+import 'logs.dart';
 import 'models.dart';
+
+final _log = Logger('bw.categories');
 
 enum Kind { income, extra, fixed, flex, transfer }
 
@@ -64,12 +67,18 @@ class Categorizer {
           for (final p in patterns)
             if (categories.containsKey(p[0]))
               if (_tryRegex(p[1]) case final re?) (p[0], re),
-        ];
+        ] {
+    // Counts only: merchant rules and patterns are personal.
+    logEvent(_log, Level.FINE, 'categories.build',
+        {'rules': merchantRules.length, 'patterns': patterns.length, 'patternsUsed': userPatterns.length});
+  }
 
   static RegExp? _tryRegex(String s) {
     try {
       return RegExp(s, caseSensitive: false);
-    } on FormatException {
+    } on FormatException catch (e) {
+      // Not the error text: a RegExp error can quote the pattern, which names personal merchants.
+      logEvent(_log, Level.WARNING, 'categories.badPattern', {'offset': e.offset, 'length': s.length});
       return null;
     }
   }

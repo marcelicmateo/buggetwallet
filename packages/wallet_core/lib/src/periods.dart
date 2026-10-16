@@ -1,6 +1,9 @@
 import 'categories.dart';
 import 'dates.dart';
+import 'logs.dart';
 import 'models.dart';
+
+final _log = Logger('bw.budget');
 
 /// Money in and out over one pay period (salary to salary).
 class PeriodSummary {
@@ -62,6 +65,10 @@ List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String to
       out.add(d);
     }
   }
+  if (_log.isLoggable(Level.FINER)) {
+    logEvent(_log, Level.FINER, 'budget.paydays',
+        {'real': real.length, 'assumed': out.length - real.length, 'first': out.firstOrNull, 'last': out.lastOrNull});
+  }
   return out;
 }
 
@@ -103,6 +110,7 @@ List<PeriodSummary> periodSummaries(List<CategorizedTx> txs, WalletSettings st, 
   }
 
   final last = starts.length - 1;
+  logEvent(_log, Level.FINER, 'budget.periods', {'count': starts.length, 'from': starts.first, 'tx': txs.length});
   return [
     for (var i = 0; i < starts.length; i++)
       PeriodSummary(

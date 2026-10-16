@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'logs.dart';
 import 'repo.dart';
 import 'vault.dart';
+
+final _log = Logger('bw.sync');
 
 class SyncException implements Exception {
   final String message;
@@ -41,17 +44,20 @@ class FolderSync {
     if (await f.exists()) {
       final j = jsonDecode(await f.readAsString()) as Map<String, Object?>;
       if (j['kid'] != kid) {
+        logEvent(_log, Level.WARNING, 'sync.vault.mismatch');
         throw const SyncException(
             'This sync folder belongs to a wallet with a different key. Join that wallet with its key, or pick another folder.');
       }
     } else {
       await f.writeAsString(jsonEncode({'v': 1, 'kid': kid}));
+      logEvent(_log, Level.INFO, 'sync.vault.created');
     }
   }
 
   Future<SyncReport> run(WalletRepo repo) async {
     if (!await Directory(folder).exists()) {
-      throw SyncException('The sync folder is missing: $folder');
+      // No path in the message: it is logged, and paths can contain the user's name.
+      throw const SyncException('The sync folder is missing. Check that it still exists, or pick it again.');
     }
     await _checkVault();
     final sep = Platform.pathSeparator;
@@ -59,6 +65,7 @@ class FolderSync {
     // 1. Export this device's pending changes as one encrypted file.
     var sent = 0;
     final pending = repo.pendingOps();
+    final export = PerfTimer('sync.export', warnMs: 500);
     if (pending.isNotEmpty) {
       final mine = Directory('${_devices.path}$sep${repo.deviceId}');
       await mine.create(recursive: true);
@@ -66,31 +73,52 @@ class FolderSync {
       final name = '${n.toString().padLeft(10, '0')}.bwop';
       final payload = utf8.encode(jsonEncode([for (final (_, op) in pending) op.toJson()]));
       final tmp = File('${mine.path}$sep.$name.tmp');
-      await tmp.writeAsBytes(await seal(payload, key), flush: true);
+      final sealed = await seal(payload, key);
+      await tmp.writeAsBytes(sealed, flush: true);
       await tmp.rename('${mine.path}$sep$name');
       repo.markExported(pending.last.$1);
       sent = pending.length;
+      export.done({'ops': sent, 'file': n, 'jsonBytes': payload.length, 'bytes': sealed.length});
+    } else {
+      logEvent(_log, Level.FINE, 'sync.export.none');
     }
 
     // 2. Read every file from other devices that hasn't been applied yet.
-    var received = 0, filesRead = 0;
+    var received = 0, filesRead = 0, opsRead = 0, bytesRead = 0, devices = 0;
+    final apply = PerfTimer('sync.apply', warnMs: 1000);
     await for (final dev in _devices.list()) {
       if (dev is! Directory) continue;
       final device = dev.path.split(sep).last;
       if (device == repo.deviceId) continue;
+      devices++;
       final files =
           await dev.list().where((f) => f is File && f.path.endsWith('.bwop') && !f.path.split(sep).last.startsWith('.')).toList();
       files.sort((a, b) => a.path.compareTo(b.path));
       for (final f in files) {
         final name = f.path.split(sep).last;
         if (repo.peerFileSeen(device, name)) continue;
-        final clear = await unseal(await (f as File).readAsBytes(), key);
-        final list = jsonDecode(utf8.decode(clear)) as List;
-        received += repo.applyRemote([for (final j in list) Op.fromJson(Map<String, Object?>.from(j as Map))]);
+        final List<int> bytes;
+        final List<Object?> list;
+        final int changed;
+        try {
+          bytes = await (f as File).readAsBytes();
+          final clear = await unseal(bytes, key);
+          list = jsonDecode(utf8.decode(clear)) as List;
+          changed = repo.applyRemote([for (final j in list) Op.fromJson(Map<String, Object?>.from(j as Map))]);
+        } catch (e, st) {
+          logError(_log, 'sync.file.failed', e, st, fields: {'file': name});
+          rethrow;
+        }
+        received += changed;
         repo.markPeerFile(device, name);
         filesRead++;
+        opsRead += list.length;
+        bytesRead += bytes.length;
+        // File names are sequence numbers (0000000042.bwop); the device folder name is a random id, so it is not logged.
+        logEvent(_log, Level.FINE, 'sync.file', {'file': name, 'bytes': bytes.length, 'ops': list.length, 'changed': changed});
       }
     }
+    apply.done({'devices': devices, 'files': filesRead, 'ops': opsRead, 'changed': received, 'bytes': bytesRead});
     return SyncReport(sent, received, filesRead);
   }
 }
