@@ -83,24 +83,36 @@ dart_files() {
   find app packages \( -name .dart_tool -o -name build -o -name ephemeral -o -name .symlinks \) -prune \
     -o -name '*.dart' -print0
 }
-# `dart format` reads page_width through the analysis_options.yaml includes, which need resolved packages
+# `pub get` only where the resolution is out of date, so a warm run skips it (CI always starts clean).
+# Also needed by `dart format`, which reads page_width through the analysis_options.yaml includes.
 pub_ready() {
   local d
   for d in packages/wallet_importer packages/wallet_core app; do
-    if [[ ! -f $d/.dart_tool/package_config.json || $d/pubspec.yaml -nt $d/.dart_tool/package_config.json ]]; then
-      if [[ $d == app ]]; then (cd "$d" && flutter pub get >/dev/null); else (cd "$d" && dart pub get >/dev/null); fi
-    fi
+    pub_stale "$d" || continue
+    echo "--- pub get: $d"
+    if [[ $d == app ]]; then (cd "$d" && flutter pub get); else (cd "$d" && dart pub get); fi || return 1
+    touch "$d/.dart_tool/package_config.json"  # pub leaves it alone when nothing changed
   done
+}
+# Stale = no package_config, or older than a pubspec/lockfile it depends on (path dependencies included),
+# or resolved against a pub cache that isn't here (a deleted volume, a host SDK).
+pub_stale() {
+  local cfg=$1/.dart_tool/package_config.json f root
+  [[ -f $cfg ]] || return 0
+  for f in "$1/pubspec.yaml" "$1/pubspec.lock" packages/*/pubspec.yaml; do
+    [[ $f -nt $cfg ]] && return 0
+  done
+  root=$(grep -m1 -oP '"rootUri": "file://\K[^"]+' "$cfg" || true)
+  [[ -n $root && ! -d $root ]]
 }
 # shellcheck disable=SC2329  # called by name through step
 format_check() {
-  pub_ready
   if ! dart_files | xargs -0 dart format -o none --set-exit-if-changed; then
     echo "format check failed: run tools/build.sh format" >&2
     return 1
   fi
 }
-export -f dart_files pub_ready format_check
+export -f dart_files format_check
 
 step() {
   local name=$1; shift
@@ -111,16 +123,30 @@ step() {
     results+=("$name=FAILED"); failed=1
   fi
 }
-
-run_lint() {
-  step format     format_check
-  step shellcheck 'shellcheck tools/*.sh dev/*.sh .github/scripts/*.sh'
-  step actionlint 'actionlint'
+# steps name1 'cmd1' name2 'cmd2' ...: run them at the same time, then print each log in order.
+steps() {
+  local names=() pids=() i
+  while (($# >= 2)); do
+    ( bash -c "$2" >"$LOGS/$1.log" 2>&1 ) &
+    names+=("$1"); pids+=($!); shift 2
+  done
+  for i in "${!names[@]}"; do
+    if wait "${pids[$i]}"; then results+=("${names[$i]}=ok"); else results+=("${names[$i]}=FAILED"); failed=1; fi
+    echo "=== ${names[$i]} ==="; cat "$LOGS/${names[$i]}.log"
+  done
 }
-run_tests() {
-  step importer 'cd packages/wallet_importer && dart pub get && dart analyze --fatal-infos && dart test'
-  step core     'cd packages/wallet_core && dart pub get && dart analyze --fatal-infos && dart test'
-  step app      'cd app && flutter pub get && flutter analyze --fatal-infos && flutter test'
+
+# Packages are resolved first (pub_ready, sequentially: they share the pub cache), so the checks skip their own
+# implicit `pub get` (--no-pub) and all run in parallel.
+LINT=(format format_check
+      shellcheck 'shellcheck tools/*.sh dev/*.sh .github/scripts/*.sh'
+      actionlint actionlint)
+TESTS=(importer 'cd packages/wallet_importer && dart analyze --fatal-infos && dart test'
+       core     'cd packages/wallet_core && dart analyze --fatal-infos && dart test'
+       app      'cd app && flutter analyze --fatal-infos --no-pub && flutter test --no-pub')
+run_pub() {
+  pub_ready > "$LOGS/pub.log" 2>&1 || { results+=("pub=FAILED"); failed=1; }
+  if [[ -s $LOGS/pub.log ]]; then echo "=== pub ==="; cat "$LOGS/pub.log"; fi
 }
 build_apk() {
   if [[ ! -f "${BW_KEYSTORE:-}" ]]; then
@@ -151,11 +177,11 @@ case "$CMD" in
   # The SDK's own dart binary: the Flutter wrapper may print to stdout, which would corrupt the LSP stream
   lsp)    pub_ready >&2; exec "${FLUTTER_HOME:+$FLUTTER_HOME/bin/cache/dart-sdk/bin/}dart" language-server --protocol=lsp ;;
   format) pub_ready; dart_files | xargs -0 dart format; exit ;;
-  lint)   run_lint ;;
-  test)   run_lint; run_tests ;;
+  lint)   run_pub; steps "${LINT[@]}" ;;
+  test)   run_pub; [[ $failed == 0 ]] && steps "${LINT[@]}" "${TESTS[@]}" ;;
   apk)    build_apk ;;
   linux)  build_linux ;;
-  all)    run_lint; run_tests; if [[ $failed == 0 ]]; then build_apk; build_linux; fi ;;
+  all)    run_pub; [[ $failed == 0 ]] && steps "${LINT[@]}" "${TESTS[@]}"; if [[ $failed == 0 ]]; then build_apk; build_linux; fi ;;
   *)      usage ;;
 esac
 
