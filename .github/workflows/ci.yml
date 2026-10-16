@@ -57,6 +57,24 @@ jobs:
           if [ -z "$KEYSTORE_B64" ]; then echo "::error::ANDROID_KEYSTORE_BASE64 secret missing (run tools/make-signing-key.sh --upload)" | tee -a "$LOG"; exit 1; fi
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "BW_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+      # Without this every run downloads the NDK, CMake, the Gradle distribution and all dependencies (~9 min)
+      - name: Android cache paths
+        id: android-cache
+        if: steps.signing.outcome == 'success'
+        run: |
+          flutter_root=$(dirname "$(dirname "$(command -v flutter)")")
+          ndk=$(grep -oP 'val ndkVersion\s*:\s*String\s*=\s*"\K[^"]+' "$flutter_root/packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt")
+          { echo "ndk=$ndk"; echo "ndk-dir=$ANDROID_HOME/ndk/$ndk"; echo "cmake-dir=$ANDROID_HOME/cmake/3.22.1"; } >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        if: steps.signing.outcome == 'success'
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ${{ steps.android-cache.outputs.ndk-dir }}
+            ${{ steps.android-cache.outputs.cmake-dir }}
+          key: android-${{ steps.android-cache.outputs.ndk }}-${{ hashFiles('app/android/**/*.gradle.kts', 'app/android/gradle.properties', 'app/android/gradle/wrapper/gradle-wrapper.properties', 'app/pubspec.lock') }}
+          restore-keys: android-${{ steps.android-cache.outputs.ndk }}-
       - name: build android apk
         id: apk
         if: steps.signing.outcome == 'success'
