@@ -36,7 +36,7 @@ ImportBatch importBankFile(Uint8List bytes) {
   } on FormatException catch (e, st) {
     // Our readers' messages are fixed texts; the formatter drops FormatException.source.
     _log.warning(() => 'importer.readFailed ${jsonEncode({'format': format, 'bytes': bytes.length})}', e, st);
-    throw ImportException('Could not read this file: ${e.message}');
+    throw const ImportException('Could not read this file. It may be damaged or not a bank export.');
   } catch (e, st) {
     // A damaged file can fail anywhere in the readers (RangeError on a truncated .xls, archive errors, …).
     _log.warning(() => 'importer.readFailed ${jsonEncode({'format': format, 'bytes': bytes.length})}', e, st);

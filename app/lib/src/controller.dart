@@ -191,9 +191,10 @@ class WalletController extends ChangeNotifier {
   String get logLevel => repo.localValue('logLevel') ?? 'all';
 
   void setLogLevel(String level) {
-    logEvent(_log, Level.INFO, 'log.level', {'from': logLevel, 'to': level});
+    final from = logLevel;
     repo.setLocalValue('logLevel', level);
-    AppLog.setLevel(level);
+    AppLog.setLevel(level); // first, so the event below is logged at the new level
+    logEvent(_log, Level.INFO, 'log.level', {'from': from, 'to': level});
     notifyListeners();
   }
 

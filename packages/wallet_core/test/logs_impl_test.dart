@@ -7,6 +7,7 @@ import 'package:logging/logging.dart' show hierarchicalLoggingEnabled;
 import 'package:sqlite3/sqlite3.dart' show SqliteException, sqlite3;
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart' show ImportException;
 
 import 'support/synthetic.dart';
 
@@ -54,6 +55,23 @@ void main() {
   setUp(() => hierarchicalLoggingEnabled = false);
 
   group('describeError', () {
+    test('unknown error types log only their type name (their text can hold paths, commands or values)', () {
+      const e = ProcessException('chmod', ['600', '/home/someone/.local/share/budget_wallet_key'], 'not found', 2);
+      expect(describeError(e), 'ProcessException');
+      expect(describeError(Exception('POS LIDL 23.40')), isNot(contains('LIDL')));
+    });
+
+    test('our own exceptions and fixed-text errors keep their message', () {
+      expect(describeError(StateError('no wallet')), contains('no wallet'));
+      expect(describeError(const ImportException('Could not read this file.')), contains('Could not read this file.'));
+    });
+
+    test('a registered hook redacts error types the package cannot see', () {
+      describeErrorHook = (e) => e is ProcessException ? 'ProcessException(code ${e.errorCode})' : null;
+      addTearDown(() => describeErrorHook = null);
+      expect(describeError(const ProcessException('chmod', ['/secret/path'], 'x', 2)), 'ProcessException(code 2)');
+    });
+
     test('FormatException without its source text', () {
       const e = FormatException('Unexpected character', '{"description":"POS LIDL","amount":-2340}', 3);
       expect(describeError(e), 'FormatException: Unexpected character (at offset 3)');

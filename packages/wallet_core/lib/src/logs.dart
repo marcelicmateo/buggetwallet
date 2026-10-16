@@ -11,6 +11,10 @@ import 'dart:typed_data';
 
 import 'package:logging/logging.dart';
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
+import 'package:wallet_importer/wallet_importer.dart' show ImportException;
+
+import 'sync.dart' show SyncException;
+import 'vault.dart' show VaultException;
 
 export 'package:logging/logging.dart' show Level, LogRecord, Logger;
 
@@ -50,8 +54,17 @@ String formatLogTime(DateTime t) {
       '.${l.millisecond.toString().padLeft(3, '0')}${off.isNegative ? '-' : '+'}${_two(mins ~/ 60)}:${_two(mins % 60)}';
 }
 
-/// Error text without the parts that can carry user data.
+/// Extra redaction for error types this package can't see (the app registers one for PlatformException).
+/// Return null to fall through to the default handling.
+String? Function(Object e)? describeErrorHook;
+
+/// Error text without the parts that can carry user data. Only error types known to carry no user data keep
+/// their message; anything else is logged as its type name (its toString can hold paths, URIs or values).
 String describeError(Object? e) {
+  if (e != null) {
+    final hooked = describeErrorHook?.call(e);
+    if (hooked != null) return hooked;
+  }
   switch (e) {
     case SqliteException():
       // toString() would append the statement's parameters (descriptions, amounts).
@@ -70,8 +83,16 @@ String describeError(Object? e) {
     case ArgumentError():
       // invalidValue can be any value; keep the name and message.
       return 'ArgumentError${e.name != null ? '(${e.name})' : ''}: ${e.message ?? 'invalid argument'}';
+    // Our own exceptions and Dart errors whose messages are fixed texts or numbers.
+    case ImportException() || SyncException() || VaultException() || StateError() || UnsupportedError() || TimeoutException():
+      return e.toString();
+    case TypeError():
+      return 'TypeError'; // can name runtime values' types only, but keep it minimal
+    case null:
+      return 'null';
     default:
-      return '$e';
+      // PlatformException (URIs/paths), ProcessException (command lines), NoSuchMethodError (values), …
+      return e.runtimeType.toString();
   }
 }
 
@@ -300,7 +321,11 @@ class RotatingFileSink {
       if (_total > maxTotalBytes) await _trim();
     } catch (e) {
       lastError = e;
-      errors++;
+      if (errors++ == 0) {
+        // The sink can't log to itself; say it once on the console (stdout reaches logcat/terminal).
+        // ignore: avoid_print
+        print('${formatLogTime(DateTime.now())} SEVERE bw.logs log.writeFailed ${describeError(e)}');
+      }
       _curDay = null; // re-scan the folder next time
     }
   }

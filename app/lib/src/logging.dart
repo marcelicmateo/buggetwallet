@@ -9,7 +9,7 @@ import 'dart:ui' show FrameTiming, PlatformDispatcher;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart' show FlutterVersion;
+import 'package:flutter/services.dart' show FlutterVersion, PlatformException;
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -48,7 +48,10 @@ const logLevels = {'all': Level.ALL, 'info': Level.INFO, 'warning': Level.WARNIN
 
 class LogStats {
   final int files, bytes;
-  const LogStats(this.files, this.bytes);
+
+  /// Failed writes to the log files since start (disk full, folder not writable…).
+  final int writeErrors;
+  const LogStats(this.files, this.bytes, [this.writeErrors = 0]);
 }
 
 /// Sets up and owns the log sinks and monitors. Everything here is static: there is one log per app.
@@ -80,6 +83,8 @@ class AppLog {
   static Future<void> init({bool catchErrors = true}) async {
     if (_sub != null) return;
     Logger.root.level = Level.ALL;
+    // PlatformException messages/details can carry content:// URIs or paths (bank file names): log the code only.
+    describeErrorHook = (e) => e is PlatformException ? 'PlatformException(${e.code})' : null;
     _sub = Logger.root.onRecord.listen(_onRecord);
     if (catchErrors) _hookErrors();
     try {
@@ -99,7 +104,8 @@ class AppLog {
 
   static void _onRecord(LogRecord r) {
     final line = formatLogRecord(r);
-    if (console) debugPrint(line);
+    // Synchronous: debugPrint is throttled (~12 KB/s) with an unbounded queue, which lags and grows under bursts.
+    if (console) debugPrintSynchronously(line);
     final sink = _sink;
     if (sink == null) {
       if (_early.length < 5000) _early.add(line);
@@ -222,7 +228,7 @@ class AppLog {
     for (final f in files) {
       bytes += await f.length();
     }
-    return LogStats(files.length, bytes);
+    return LogStats(files.length, bytes, _sink?.errors ?? 0);
   }
 
   /// All log files, oldest first, as one text.
