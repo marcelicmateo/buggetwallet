@@ -58,7 +58,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         decoration: InputDecoration(prefixText: currencySymbol(cur), hintText: '0.00'),
       ),
       const SizedBox(height: 14),
-      Muted('Category'),
+      const Muted('Category'),
       const SizedBox(height: 6),
       Wrap(spacing: 6, runSpacing: 6, children: [
         for (final c in flexCategories.where((c) => c != 'Bank fees'))

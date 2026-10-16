@@ -120,7 +120,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
         else
           Padding(padding: const EdgeInsets.only(top: 10), child: Muted('Under ${money(s.impulse, cur, decimals: 0)}, no wait needed.')),
         OutlinedButton(
-          onPressed: () => showSheet(context, GoalSheet(wc: wc, name: name.text.trim().isEmpty ? 'Big purchase' : name.text.trim(), target: price)),
+          onPressed: () => showSheet<void>(context, GoalSheet(wc: wc, name: name.text.trim().isEmpty ? 'Big purchase' : name.text.trim(), target: price)),
           child: const Text('Save for it'),
         ),
       ]),

@@ -4,6 +4,6 @@
 /// [NormalizedTransaction]s; the app and database never see bank files.
 library;
 
-export 'src/model.dart';
-export 'src/importer.dart' show importBankFile, parseRows, ImportException;
 export 'src/ids.dart' show transactionId, fnv1a36, formatCents;
+export 'src/importer.dart' show importBankFile, parseRows, ImportException;
+export 'src/model.dart';

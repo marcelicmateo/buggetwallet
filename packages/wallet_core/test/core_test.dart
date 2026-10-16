@@ -15,12 +15,12 @@ void main() {
       expect(january.transactions.map(cat).toList(), ['Salary', 'Rent', 'Internal transfer', 'Groceries', 'Loan', 'Bank fees', 'Extra income']);
     });
     test('user patterns win over built-in rules', () {
-      final t = Tx(id: 'x', source: 'revolut', date: '2026-01-01', amount: -100, bankType: 'Card Payment', description: 'Corner Spot');
+      const t = Tx(id: 'x', source: 'revolut', date: '2026-01-01', amount: -100, bankType: 'Card Payment', description: 'Corner Spot');
       expect(Categorizer().categoryOf(t), 'Shopping');
       expect(Categorizer(patterns: [['Eating out', 'corner']]).categoryOf(t), 'Eating out');
     });
     test('merchant key matches v1', () {
-      final t = Tx(id: 'x', source: 'pbz', date: '2026-01-01', amount: -100, bankType: 'POS plaćanje', description: 'PBZ POS PBZ7BAUHAUS ZADAR');
+      const t = Tx(id: 'x', source: 'pbz', date: '2026-01-01', amount: -100, bankType: 'POS plaćanje', description: 'PBZ POS PBZ7BAUHAUS ZADAR');
       expect(merchantKey(t), 'bauhaus_zadar');
     });
   });
@@ -64,7 +64,7 @@ void main() {
     test('payday period: budget, rollover, days left', () {
       final r = WalletRepo.inMemory();
       r.importBatch(january);
-      final st = WalletSettings(salary: 150000, rent: 55000, loan: 25000, subs: 0, periodStart: '2026-01-15');
+      const st = WalletSettings(salary: 150000, rent: 55000, loan: 25000, subs: 0, periodStart: '2026-01-15');
       final cz = r.categorizer();
       final txs = r.transactions().map(cz.categorize).toList();
       final p = computePeriod(txs, st, const [Goal(id: 'g', name: 'g', monthly: 10000)], '2026-01-20');

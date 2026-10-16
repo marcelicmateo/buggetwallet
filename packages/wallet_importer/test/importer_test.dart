@@ -3,9 +3,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:test/test.dart';
-import 'package:wallet_importer/wallet_importer.dart';
-import 'package:wallet_importer/src/xls_reader.dart';
 import 'package:wallet_importer/src/importer.dart' show fixMojibake, excelDate;
+import 'package:wallet_importer/src/xls_reader.dart';
+import 'package:wallet_importer/wallet_importer.dart';
 
 Uint8List fixture(String name) => File('test/fixtures/$name').readAsBytesSync();
 

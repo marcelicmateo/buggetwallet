@@ -86,7 +86,7 @@ class TodayScreen extends StatelessWidget {
       ]),
       if (s.savedFor != p.start && wc.goals.isNotEmpty)
         Panel(children: [
-          Row(children: [const Heading('Payday checklist', size: 15), const Spacer(), const Tag('pay yourself first')]),
+          const Row(children: [Heading('Payday checklist', size: 15), Spacer(), Tag('pay yourself first')]),
           Text('Move ${money(p.goalMonthly, cur, decimals: 0)} to your savings account before you spend anything else.', style: const TextStyle(fontSize: 14)),
           Rows(children: [for (final g in wc.goals) LineItem(g.name, money(g.monthly, cur, decimals: 0))]),
           OutlinedButton.icon(

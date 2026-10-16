@@ -7,8 +7,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
-import '../storage_access.dart';
 import '../format.dart';
+import '../storage_access.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
@@ -187,7 +187,7 @@ class _PlanScreenState extends State<PlanScreen> {
             },
             child: const Text('Allow file access'),
           ),
-        FilledButton.tonal(onPressed: folder == null || wc.syncing ? null : () => wc.syncNow(), child: Text(wc.syncing ? 'Syncing…' : 'Sync now')),
+        FilledButton.tonal(onPressed: folder == null || wc.syncing ? null : wc.syncNow, child: Text(wc.syncing ? 'Syncing…' : 'Sync now')),
       ]),
       if (wc.syncError != null) StatusLabel(good: false, text: wc.syncError!),
       if (wc.syncError == null && last != null) StatusLabel(good: true, text: 'Synced at ${last.hour.toString().padLeft(2, '0')}:${last.minute.toString().padLeft(2, '0')}'),

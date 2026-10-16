@@ -2,12 +2,12 @@
 /// encrypted folder sync (for Syncthing) and the budget engine.
 library;
 
-export 'src/models.dart';
 export 'src/budget.dart';
-export 'src/periods.dart';
 export 'src/categories.dart';
-export 'src/hlc.dart' show Hlc;
-export 'src/repo.dart';
-export 'src/vault.dart';
-export 'src/sync.dart';
 export 'src/dates.dart';
+export 'src/hlc.dart' show Hlc;
+export 'src/models.dart';
+export 'src/periods.dart';
+export 'src/repo.dart';
+export 'src/sync.dart';
+export 'src/vault.dart';

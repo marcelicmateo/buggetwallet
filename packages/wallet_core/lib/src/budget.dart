@@ -76,7 +76,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     allowanceToday: allowanceToday,
     safeToday: allowanceToday - spentToday,
     planDaily: (flexBudget / length).round(),
-    elapsed: elapsed.toDouble(),
+    elapsed: elapsed,
     fixedPaid: fixedPaid,
   );
 }

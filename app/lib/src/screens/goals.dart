@@ -47,7 +47,7 @@ class GoalsScreen extends StatelessWidget {
         for (final g in wc.goals)
           InkWell(
             borderRadius: BorderRadius.circular(8),
-            onTap: () => showSheet(context, GoalSheet(wc: wc, goal: g)),
+            onTap: () => showSheet<void>(context, GoalSheet(wc: wc, goal: g)),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -70,7 +70,7 @@ class GoalsScreen extends StatelessWidget {
               ]),
             ),
           ),
-        OutlinedButton.icon(icon: const Icon(Icons.add), label: const Text('New goal'), onPressed: () => showSheet(context, GoalSheet(wc: wc))),
+        OutlinedButton.icon(icon: const Icon(Icons.add), label: const Text('New goal'), onPressed: () => showSheet<void>(context, GoalSheet(wc: wc))),
       ]),
     ]));
   }

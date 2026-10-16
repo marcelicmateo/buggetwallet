@@ -173,7 +173,7 @@ class _Biff {
     double x;
     if (v & 2 != 0) {
       var i = v >> 2;
-      if (i & (1 << 29) != 0) i -= (1 << 30);
+      if (i & (1 << 29) != 0) i -= 1 << 30;
       x = i.toDouble();
     } else {
       final b = ByteData(8)..setUint32(4, v & 0xFFFFFFFC, Endian.little);
