@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Android emulator in a rootless Podman container (needs /dev/kvm). Image: dev/Containerfile.emulator on top
-# of the build image.
+# Android emulator in a rootless Podman container (needs /dev/kvm). Image: dev/Containerfile.emulator (the build
+# image plus the emulator's libraries).
 #
 #   tools/emulator.sh screens          boot, run the screenshot test with synthetic data, stop
 #                                      -> dist/screens/*.png  (app/integration_test/screens_test.dart)
@@ -9,38 +9,74 @@
 #   tools/emulator.sh shot <name>      screenshot of the running emulator -> dist/screens/<name>.png
 #   tools/emulator.sh adb <args...>    run adb against it
 #   tools/emulator.sh stop             stop it
+#   tools/emulator.sh reset            delete the emulator volumes; the next run downloads the latest emulator
 #
-# The emulator starts from a wiped device every time; nothing real is ever on it.
+# The emulator, the system image and the AVD live in Podman volumes (bw-emulator, bw-emulator-image,
+# bw-emulator-avd), set up on first use (~2 GB download), so rebuilding the build image doesn't download them again.
+# Setup ends with a cold boot of a wiped device and saves a snapshot of it; every run then starts from that
+# snapshot in read-only mode (nothing is saved back), so each run sees the same clean device and nothing real is
+# ever on it.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 CMD=${1:-screens}
 NAME=bw-emulator
 SERIAL=emulator-5554
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+SYSIMG="system-images;android-35;google_apis;x86_64"
+# Change this (or the AVD settings in setup) to set the volumes up again on the next run.
+SETUP_ID="1 $SYSIMG pixel_6 hw.keyboard=yes hw.ramSize=3072 disk.dataPartition.size=6G lavapipe"
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
-boot() {  # inside the container
-  local window=${1:-}
-  local args=(-avd bw -no-audio -no-boot-anim -no-snapshot -wipe-data -gpu lavapipe -accel on -no-metrics)
-  # lavapipe (Mesa software Vulkan): SwiftShader GLES segfaults and SwANGLE hits illegal instructions in containers (emulator 37.x)
-  [[ -z "$window" ]] && args+=(-no-window)
-  emulator "${args[@]}" >/tmp/emulator.log 2>&1 &
-  adb start-server >/dev/null
+# lavapipe (Mesa software Vulkan): SwiftShader GLES segfaults and SwANGLE hits illegal instructions in containers (emulator 37.x)
+EMU_ARGS=(-avd bw -no-audio -no-boot-anim -gpu lavapipe -accel on -no-metrics)
+
+wait_booted() {  # inside the container
   timeout 60 adb wait-for-device || { cat /tmp/emulator.log; exit 1; }
   for _ in $(seq 150); do
     [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == 1 ]] && break
-    sleep 2
+    sleep 1
   done
   [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]] || { echo "emulator did not boot"; tail -30 /tmp/emulator.log; exit 1; }
   adb shell settings put global window_animation_scale 0
   adb shell settings put global transition_animation_scale 0
   adb shell settings put global animator_duration_scale 0
+}
+
+# First use: install into the volumes, create the AVD, cold boot it once and save the clean-boot snapshot.
+setup() {  # inside the container, volumes mounted read-write
+  exec 9>"$ANDROID_AVD_HOME/.lock"
+  flock 9  # several worktrees may start at once
+  [[ "$(cat "$ANDROID_AVD_HOME/.ready" 2>/dev/null)" == "$SETUP_ID" ]] && return
+  echo "Setting up the emulator (first run: ~2 GB download)…"
+  rm -rf "${ANDROID_AVD_HOME:?}"/bw.* "$ANDROID_AVD_HOME/.ready"
+  sdkmanager "emulator" "$SYSIMG" >/dev/null
+  echo no | avdmanager create avd -n bw -k "$SYSIMG" -d pixel_6 >/dev/null
+  printf 'hw.keyboard=yes\nhw.ramSize=3072\ndisk.dataPartition.size=6G\n' >> "$ANDROID_AVD_HOME/bw.avd/config.ini"
+  emulator "${EMU_ARGS[@]}" -no-window -no-snapshot-load -wipe-data >/tmp/emulator.log 2>&1 &
+  adb start-server >/dev/null
+  wait_booted
+  sleep 10  # let first-boot work settle before the snapshot
+  adb emu kill >/dev/null  # saves the default_boot snapshot on exit
+  wait
+  echo "$SETUP_ID" > "$ANDROID_AVD_HOME/.ready"
+  echo "emulator ready"
+}
+
+boot() {  # inside the container
+  local window=${1:-}
+  local args=("${EMU_ARGS[@]}" -read-only -no-snapshot-save)
+  [[ -z "$window" ]] && args+=(-no-window)
+  emulator "${args[@]}" >/tmp/emulator.log 2>&1 &
+  adb start-server >/dev/null
+  wait_booted
   echo "emulator booted"
 }
 
 # ---- inside the container ----
 if [[ "${BW_NATIVE:-}" == 1 ]]; then
+  export ANDROID_AVD_HOME=/opt/avd PATH=$ANDROID_HOME/emulator:$PATH
   case "$CMD" in
+    setup) setup; exit ;;
     boot) boot "${2:-}"; exec sleep infinity ;;
     screens)
       boot
@@ -65,20 +101,32 @@ emu_image() {
   podman image exists "$tag" || podman build --build-arg BASE="$base" -f "$ROOT/dev/Containerfile.emulator" -t "$tag" "$ROOT/dev" >&2
   echo "$tag"
 }
+VOLUMES=(bw-emulator:/opt/android-sdk/emulator bw-emulator-image:/opt/android-sdk/system-images bw-emulator-avd:/opt/avd)
+# Set up the volumes if needed (a no-op after the first run), then print the image tag
+prepare() {
+  local img v mounts=()
+  img=$(emu_image)
+  for v in "${VOLUMES[@]}"; do mounts+=(-v "$v"); done
+  podman run --rm --device /dev/kvm --shm-size=2g "${mounts[@]}" -v "$ROOT:/work:z" -e BW_NATIVE=1 -w /work "$img" tools/emulator.sh setup >&2
+  echo "$img"
+}
 common=(--device /dev/kvm --shm-size=2g -e BW_DRIVE_ARGS -v "$ROOT:/work:z" -v bw-pub-cache:/cache/pub -v bw-gradle-cache:/cache/gradle
         -v bw-android-user:/cache/android -e BW_NATIVE=1 -w /work)
+# Runs only read the SDK volumes. The AVD stays writable for the emulator's lock files; `-read-only` keeps the
+# device state itself out of it.
+common+=(-v "${VOLUMES[0]}:ro" -v "${VOLUMES[1]}:ro" -v "${VOLUMES[2]}")
 running() { podman container exists "$NAME" && [[ "$(podman inspect -f '{{.State.Running}}' "$NAME")" == true ]]; }
 need_running() { running || { echo "No emulator running. Start one with: tools/emulator.sh start" >&2; exit 1; }; }
 
 case "$CMD" in
   screens)
-    img=$(emu_image)
+    img=$(prepare)
     tty=(); [[ -t 0 && -t 1 ]] && tty=(-it)
     exec podman run --rm "${tty[@]}" "${common[@]}" "$img" tools/emulator.sh screens ;;
   start)
     running && { echo "already running"; exit 0; }
     podman rm -f "$NAME" >/dev/null 2>&1 || true
-    img=$(emu_image)
+    img=$(prepare)
     win=(); flag=
     if [[ "${2:-}" == --window ]]; then
       flag=window
@@ -87,11 +135,11 @@ case "$CMD" in
       win+=(--security-opt label=disable)
     fi
     podman run -d --name "$NAME" "${common[@]}" "${win[@]}" "$img" tools/emulator.sh boot $flag >/dev/null
-    echo "booting (1–2 min)…"
+    echo "booting…"
     for _ in $(seq 180); do
       podman logs "$NAME" 2>&1 | grep -q "emulator booted" && { echo "ready ($SERIAL)"; exit 0; }
       running || { podman logs "$NAME" | tail -30; exit 1; }
-      sleep 2
+      sleep 1
     done
     echo "timed out"; podman logs "$NAME" | tail -30; exit 1 ;;
   install)
@@ -109,6 +157,9 @@ case "$CMD" in
     need_running; shift
     podman exec "$NAME" adb "$@" ;;
   stop)
-    podman rm -f "$NAME" >/dev/null 2>&1 && echo stopped || echo "not running" ;;
+    podman rm -f -t 0 "$NAME" >/dev/null 2>&1 && echo stopped || echo "not running" ;;
+  reset)
+    running && { echo "Stop the running emulator first: tools/emulator.sh stop" >&2; exit 1; }
+    podman volume rm -f bw-emulator bw-emulator-image bw-emulator-avd >/dev/null && echo "emulator volumes deleted" ;;
   *) usage ;;
 esac

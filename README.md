@@ -41,6 +41,8 @@ tools/emulator.sh start --window  # an emulator on your desktop; then `install`,
 ```
 
 - The first run builds the image (~15 min). Logs are in `dist/logs/`.
+- The first `tools/emulator.sh` run downloads the emulator and system image (~2 GB) into Podman volumes and saves a
+  clean-boot snapshot; later runs boot from it in seconds. `tools/emulator.sh reset` deletes them.
 - **Code style.** `dart format` with page width 140, and stricter analyzer rules (strict casts/inference/raw
   types plus extra lints) shared by the app and both packages in the root `analysis_options.yaml`. Infos fail the
   build too. Shell scripts are checked by shellcheck, workflows by actionlint; both are pinned in

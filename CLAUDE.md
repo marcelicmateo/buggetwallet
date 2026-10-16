@@ -29,6 +29,8 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 - **See the app:** `tools/emulator.sh screens` boots an Android emulator (Podman + /dev/kvm, `dev/Containerfile.emulator`),
   runs `app/integration_test/screens_test.dart` with a synthetic demo wallet and saves every tab to `dist/screens/*.png`
   — read them to check UI changes before pushing. `start`/`install`/`shot`/`adb`/`stop` drive a running emulator.
+  The emulator, system image and AVD live in Podman volumes (`bw-emulator*`), set up once (~2 GB download, then a
+  cold boot saved as a snapshot); runs boot that snapshot read-only in ~3 s. `tools/emulator.sh reset` starts over.
   Known emulator 37.x limits: renderer `lavapipe`, and Flutter runs with `--no-enable-impeller` (Impeller trips an
   abort in the emulator's GLES decoder); real phones use Impeller.
 Android release builds are signed with one fixed key (`tools/make-signing-key.sh`, kept in
