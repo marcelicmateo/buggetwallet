@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
+import '../storage_access.dart';
 import '../format.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -179,8 +179,11 @@ class _PlanScreenState extends State<PlanScreen> {
         if (Platform.isAndroid)
           OutlinedButton(
             onPressed: () async {
-              final st = await Permission.manageExternalStorage.request();
-              if (context.mounted) toast(context, st.isGranted ? 'File access allowed' : 'File access is needed to use a shared folder');
+              if (await StorageAccess.granted()) {
+                if (context.mounted) toast(context, 'File access is already allowed');
+                return;
+              }
+              await StorageAccess.request();
             },
             child: const Text('Allow file access'),
           ),

@@ -72,24 +72,28 @@ jobs:
         with:
           name: budget-wallet-linux
           path: app/build/linux/x64/release/bundle
+      - name: Publish dev release (Android + Linux)
+        if: steps.apk.outcome == 'success' && github.ref_name == 'v2'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          cp app/build/app/outputs/flutter-apk/app-release.apk dist/BudgetWallet-android.apk
+          if [ "${{ steps.linux.outcome }}" = "success" ]; then tar -C app/build/linux/x64/release -czf dist/BudgetWallet-linux-x64.tar.gz bundle; fi
+          gh release delete dev --cleanup-tag -y 2>/dev/null || true
+          gh release create dev dist/* --target "$GITHUB_SHA" --prerelease --title "Budget Wallet (development build)" \
+            --notes "Latest development build from ${GITHUB_SHA::7}. Android: install BudgetWallet-android.apk. Linux: unpack and run bundle/budget_wallet. All platforms are built by the release workflow."
       - name: Publish log
         if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           {
-            echo "commit: ${{ github.sha }}  branch: ${{ github.ref_name }}  run: ${{ github.run_id }}"
             echo "importer=${{ steps.importer.outcome }} core=${{ steps.core.outcome }} app=${{ steps.app.outcome }} apk=${{ steps.apk.outcome }} linux=${{ steps.linux.outcome }}"
             echo
             cat "$LOG" 2>/dev/null
-          } > "$RUNNER_TEMP/latest.txt"
-          cd "$RUNNER_TEMP"
-          url="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
-          if git clone -q --depth 1 --branch ci-logs "$url" logs 2>/dev/null; then :; else
-            mkdir logs && cd logs && git init -q -b ci-logs && git remote add origin "$url" && cd ..
-          fi
-          cp latest.txt logs/latest.txt
-          cd logs
-          git config user.name ci-bot && git config user.email ci-bot@users.noreply.github.com
-          git add latest.txt && git commit -q -m "log ${{ github.sha }}" && git push -q origin HEAD:ci-logs
+          } > "$RUNNER_TEMP/ci.txt"
+          .github/scripts/publish-log.sh latest "$RUNNER_TEMP/ci.txt"
       - name: Fail if a step failed
         if: steps.importer.outcome == 'failure' || steps.core.outcome == 'failure' || steps.app.outcome == 'failure' || steps.apk.outcome == 'failure' || steps.linux.outcome == 'failure'
         run: exit 1

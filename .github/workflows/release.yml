@@ -1,0 +1,132 @@
+# Builds every platform and publishes the downloads as a GitHub Release.
+# Runs on pushes to master, on version tags (v*), and on any push whose commit
+# message contains [release]. macOS runners bill 10x minutes on private repos,
+# so this does not run on every development push.
+name: release
+on:
+  push:
+    branches: [master, v2]
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SHOULD_RUN: ${{ github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' || github.ref_name == 'master' || contains(github.event.head_commit.message, '[release]') }}
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.g.outputs.run }}
+    steps:
+      - id: g
+        run: echo "run=${SHOULD_RUN}" >> "$GITHUB_OUTPUT"
+
+  android-linux:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build libgtk-3-dev libsecret-1-dev >/dev/null
+      - name: Build
+        run: |
+          set -o pipefail
+          cd app
+          flutter pub get 2>&1 | tee -a ../build.log
+          flutter build apk --release 2>&1 | tail -40 | tee -a ../build.log
+          flutter build linux --release 2>&1 | tail -40 | tee -a ../build.log
+          mkdir -p ../dist
+          cp build/app/outputs/flutter-apk/app-release.apk ../dist/BudgetWallet-android.apk
+          tar -C build/linux/x64/release -czf ../dist/BudgetWallet-linux-x64.tar.gz bundle
+      - uses: actions/upload-artifact@v4
+        with: { name: android-linux, path: dist/* }
+      - if: always()
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: .github/scripts/publish-log.sh release-android-linux build.log
+
+  windows:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Build
+        shell: bash
+        run: |
+          set -o pipefail
+          cd app
+          flutter pub get 2>&1 | tee -a ../build.log
+          flutter build windows --release 2>&1 | tail -40 | tee -a ../build.log
+          mkdir -p ../dist
+          cd build/windows/x64/runner/Release && 7z a -tzip ../../../../../../dist/BudgetWallet-windows-x64.zip . > /dev/null
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: dist/* }
+      - if: always()
+        shell: bash
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: .github/scripts/publish-log.sh release-windows build.log
+
+  apple:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Build macOS and iOS (unsigned)
+        run: |
+          set -o pipefail
+          cd app
+          flutter pub get 2>&1 | tee -a ../build.log
+          flutter build macos --release 2>&1 | tail -40 | tee -a ../build.log
+          flutter build ios --release --no-codesign 2>&1 | tail -40 | tee -a ../build.log
+          mkdir -p ../dist
+          ditto -c -k --keepParent "build/macos/Build/Products/Release/budget_wallet.app" ../dist/BudgetWallet-macos.zip
+          mkdir -p Payload && cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qr ../dist/BudgetWallet-ios-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with: { name: apple, path: dist/* }
+      - if: always()
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: .github/scripts/publish-log.sh release-apple build.log
+
+  publish:
+    needs: [gate, android-linux, windows, apple]
+    if: always() && needs.gate.outputs.run == 'true' && (needs.android-linux.result == 'success' || needs.windows.result == 'success' || needs.apple.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - name: Publish release
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          ls -la dist
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            tag="${{ github.ref_name }}"; title="Budget Wallet ${{ github.ref_name }}"; pre=""
+          elif [ "${{ github.ref_name }}" = "master" ]; then
+            tag="latest"; title="Budget Wallet (latest)"; pre=""
+          else
+            tag="dev-all"; title="Budget Wallet (development build, all platforms)"; pre="--prerelease"
+          fi
+          notes="Built from ${GITHUB_SHA::7} on ${{ github.ref_name }}.
+
+          - Android: BudgetWallet-android.apk (install directly)
+          - Linux: BudgetWallet-linux-x64.tar.gz (run bundle/budget_wallet)
+          - Windows: BudgetWallet-windows-x64.zip (run budget_wallet.exe)
+          - macOS: BudgetWallet-macos.zip (unsigned: right-click > Open the first time)
+          - iPhone: BudgetWallet-ios-unsigned.ipa (unsigned: install with Sideloadly or AltStore using your Apple ID)
+
+          Missing files mean that platform's build failed this time."
+          if [ "${{ github.ref_type }}" != "tag" ]; then gh release delete "$tag" --cleanup-tag -y 2>/dev/null || true; fi
+          gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "$title" --notes "$notes" $pre

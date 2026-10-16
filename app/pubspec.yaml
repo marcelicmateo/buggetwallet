@@ -19,7 +19,6 @@ dependencies:
   flutter_secure_storage: ^11.2.0
   fl_chart: ^1.2.0
   qr_flutter: ^4.1.0
-  permission_handler: ^13.0.2
 
 dev_dependencies:
   flutter_test:
