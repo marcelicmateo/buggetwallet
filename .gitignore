@@ -1,0 +1,25 @@
+# Bank exports and real financial data — never commit
+*.xls
+*.xlsx
+*.csv
+*.pdf
+*.ofx
+*.qif
+data/
+exports/
+private/
+
+# Test fixtures must be synthetic; allow them explicitly
+!tests/fixtures/**
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Node / build
+node_modules/
+dist/
+.env
+.env.*
