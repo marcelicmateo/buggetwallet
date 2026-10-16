@@ -15,7 +15,12 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 - `docs/architecture.md`, `docs/setup.md`.
 - Each package has its own short `CLAUDE.md` (files, rules, how to test). Read the one for the code you touch.
 - `tools/` — `build.sh` (local builds, lint, format, LSP), `ci-status.sh` (CI results), `make-signing-key.sh`,
-  `install-hooks.sh`, `make_fixtures.py`. `dev/` — `Containerfile` and `install-lint-tools.sh` (pinned linters).
+  `install-hooks.sh`, `make_fixtures.py`, `log-summary.py` (summary of an app log). `dev/` — `Containerfile` and
+  `install-lint-tools.sh` (pinned linters).
+- **Logs:** the app logs to `<app support dir>/logs/bw-YYYY-MM-DD.log` (debug level by default while testing; Plan ›
+  Diagnostics changes the level and saves all logs as one file). `tools/emulator.sh screens` also writes
+  `dist/logs/app-emulator.log`. Read one with `python3 -I tools/log-summary.py <file>`. Logs must never contain
+  amounts, descriptions, merchants, notes, names, the key, paths or file names (see package `CLAUDE.md`s).
 
 ## Local builds (owner's laptop)
 `tools/build.sh test|lint|format|apk|linux|all|shell|lsp` runs the CI steps in a rootless **Podman** container

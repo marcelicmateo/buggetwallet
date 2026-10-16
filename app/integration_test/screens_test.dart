@@ -1,22 +1,38 @@
-// Screenshots of every tab with the synthetic demo wallet. Run on the emulator: tools/emulator.sh screens
+// Screenshots of every tab with the synthetic demo wallet, then the app's log. Run on the emulator: tools/emulator.sh screens
+// -> dist/screens/*.png and dist/logs/app-emulator.log (written by test_driver/integration_test.dart).
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:budget_wallet/main.dart';
-import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/logging.dart';
+import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'demo_data.dart';
 
+/// Distinctive texts of the synthetic data: none of them may reach the log.
+const _private = [
+  'LIDL', 'KONZUM', 'IKEA', 'MCDONALDS', 'WOLT', 'NETFLIX', 'Neto plaća', 'ATM TEST ULICA', 'Naplata kredita', 'POVRAT POREZA', //
+  'Revolut**', 'Desk lamp note', 'Gift card wish', 'Holiday fund', 'statement-secret', '€',
+  '1400.00', '550.00', '12.99', '480.00', '98.76', '43.21', '1,400', '1.400,00',
+];
+
+/// The same amounts in cents (as whole numbers, so ms and byte counts can't match by accident).
+final _cents = RegExp(r'(?<![\d.])(140000|100000|55000|25000|1299|48000|9876|4321)(?![\d.])');
+
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('every tab with a synthetic wallet', (tester) async {
-    final wc = await WalletController.load();
+    final wc = await bootstrap(catchErrors: false);
     if (!wc.hasWallet) await wc.createWallet();
     wc.repo.importBatch(demoBatch(wc.today()));
     wc.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
 
     await tester.pumpWidget(BudgetWalletApp(wc: wc));
+    AppLog.startMonitors();
     await binding.convertFlutterSurfaceToImage();
     await tester.pumpAndSettle();
     await binding.takeScreenshot('1-today');
@@ -26,5 +42,52 @@ void main() {
       await tester.pumpAndSettle();
       await binding.takeScreenshot('${i + 2}-${tab.toLowerCase()}');
     }
+
+    // Plan › Diagnostics at the bottom of the Plan tab; switch the level there and back.
+    final planList = find.descendant(of: find.byType(PlanScreen), matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.text('Clear logs'), 400, scrollable: planList);
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('6-plan-diagnostics');
+    await tester.tap(find.text('Info'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Debug'));
+    await tester.pumpAndSettle();
+
+    // After the screenshots: logged actions with private-looking synthetic values, to prove they stay out of the log.
+    wc.addExpense(amount: 9876, category: 'Home & tools', note: 'Desk lamp note', date: wc.today());
+    wc.addWish('Gift card wish', 4321);
+    wc.saveGoal(name: 'Holiday fund', target: 48000, saved: 0, monthly: 9876);
+    final csv = 'Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance\n'
+        'CARD_PAYMENT,Current,${wc.today()} 10:00:00,${wc.today()} 11:00:00,IKEA ZAGREB,-98.76,0,EUR,COMPLETED,43.21\n';
+    await wc.importFiles([('statement-secret-name.csv', Uint8List.fromList(utf8.encode(csv)))]);
+    final t = wc.txs.firstWhere((x) => x.tx.description.contains('IKEA ZAGREB'));
+    wc.setCategory(t.tx, 'Shopping', always: true);
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Today')));
+    await tester.pumpAndSettle();
+
+    // Let the engine report frame timings (batched), then close the frame window.
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    }
+    AppLog.logFrameWindow();
+    AppLog.logMemory();
+    AppLog.stopMonitors();
+
+    final log = await AppLog.combined();
+    await AppLog.close();
+    (binding.reportData ??= <String, dynamic>{})['log'] = log;
+
+    expect(log, contains('app.start'));
+    expect(log, contains('app.info'));
+    expect(log, contains('frames.window'));
+    expect(log, contains('import.file'));
+    expect(log, contains('nav.tab'));
+    expect(log, contains('log.level {"from":"info","to":"all"}'));
+    for (final p in _private) {
+      expect(log, isNot(contains(p)), reason: 'private text "$p" in the log');
+    }
+    expect(_cents.firstMatch(log)?.group(0), isNull, reason: 'an amount in cents in the log');
+    expect(log, isNot(contains(await wc.keyText())));
   });
 }
