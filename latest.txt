@@ -1,5 +1,5 @@
-commit: 3951699f1221eb36a98613aa70c69872742b4bc6  branch: v2  run: 38869462302
-importer=success core=success app=success apk=success linux=success
+commit: fef699899d095b998839f31442793302dffb51f0  branch: v2  run: 38870465164
+importer=success core=success app=failure apk=skipped linux=skipped
 
 === importer ===
 Resolving dependencies...
@@ -74,96 +74,165 @@ No issues found!
 00:00 +9: test/importer_test.dart: unknown files are rejected
 00:00 +10: All tests passed!
 === core ===
+Resolving dependencies...
+Downloading packages...
++ _fe_analyzer_shared 109.0.0
++ analyzer 14.5.0
++ archive 4.5.2
++ args 2.7.0
++ async 2.13.1
++ boolean_selector 2.1.2
++ cli_config 0.2.0
++ cli_util 0.6.0
++ collection 1.19.1
++ convert 3.1.2
++ coverage 1.16.0
++ crypto 3.0.7
++ cryptography 2.9.0
++ ffi 2.2.0
++ file 7.0.1
++ frontend_server_client 4.1.0
++ glob 2.2.0
++ http_multi_server 3.2.2
++ http_parser 4.1.2
++ io 1.1.0
++ lints 6.1.0
++ logging 1.3.0
++ matcher 0.12.20
++ meta 1.19.0
++ mime 2.1.0
++ node_preamble 2.0.2
++ package_config 3.0.0
++ path 1.9.1
++ petitparser 7.1.0
++ pool 1.5.3
++ posix 6.5.2
++ pub_semver 2.2.1
++ shelf 1.4.2
++ shelf_packages_handler 3.0.2
++ shelf_static 1.1.3
++ shelf_web_socket 3.0.0
++ source_map_stack_trace 2.1.2
++ source_maps 0.10.14
++ source_span 1.10.2
++ sqlite3 2.9.4 (3.7.1 available)
++ stack_trace 1.12.2
++ stream_channel 2.1.4
++ string_scanner 1.4.1
++ term_glyph 1.2.2
++ test 1.33.0
++ test_api 0.7.15
++ test_core 0.6.21
++ typed_data 1.4.0
++ vm_service 15.4.0
++ wallet_importer 0.1.0 from path ../wallet_importer
++ watcher 1.2.1
++ web 1.1.1
++ web_socket 1.0.1
++ web_socket_channel 3.0.3
++ webkit_inspection_protocol 1.2.1
++ xml 7.1.0
++ yaml 3.1.4
+Changed 57 dependencies!
+1 package has newer versions incompatible with dependency constraints.
+Try `dart pub outdated` for more information.
+Analyzing wallet_core...
+No issues found!
+00:00 +0: loading test/core_test.dart
+00:00 +0: test/core_test.dart: categories PBZ rules
+00:00 +1: test/core_test.dart: categories user patterns win over built-in rules
+00:00 +2: test/core_test.dart: categories merchant key matches v1
+00:00 +3: test/core_test.dart: repo import is idempotent
+00:00 +4: test/core_test.dart: repo hand-added expense is matched by the bank row and keeps its category
+00:00 +5: test/core_test.dart: repo settings and goals round-trip
+00:00 +6: test/core_test.dart: budget payday period: budget, rollover, days left
+00:00 +7: test/core_test.dart: budget month summary ignores internal transfers
+00:00 +8: test/core_test.dart: budget dates
+00:00 +9: test/core_test.dart: vault key text round-trip and typo detection
+00:00 +10: test/core_test.dart: vault seal/unseal and tamper detection
+00:00 +11: test/core_test.dart: sync two devices converge, last edit wins per field
+00:00 +12: test/core_test.dart: sync a different key is refused
+00:00 +13: All tests passed!
 === app ===
 Resolving dependencies...
 Downloading packages...
-  cupertino_icons 1.0.9 (2.0.0 available)
++ android_file_picker 2.1.1
++ archive 4.5.2
++ args 2.7.0
++ code_assets 2.1.0
++ cross_file 0.3.5+5 (0.4.0 available)
++ crypto 3.0.7
++ cryptography 2.9.0
++ dbus 0.8.0
++ equatable 2.1.0 (3.0.0 available)
++ ffi 2.2.0
++ ffi_leak_tracker 0.1.2
++ file_picker 13.1.0
++ file_picker_darwin 2.3.2
++ file_picker_linux 2.0.2
++ file_picker_platform_interface 4.2.0
++ file_picker_web 4.2.0
++ fl_chart 1.2.0
++ flutter_secure_storage 11.2.0
++ flutter_secure_storage_darwin 0.4.3
++ flutter_secure_storage_linux 3.0.3
++ flutter_secure_storage_platform_interface 2.1.1
++ flutter_secure_storage_web 2.1.1
++ flutter_secure_storage_windows 4.2.2
++ flutter_web_plugins 0.0.0 from sdk flutter
++ hooks 2.2.0
++ jni 1.1.0
++ jni_flutter 1.0.4+1
++ jni_util 1.0.0
++ logging 1.3.0
   material_color_utilities 0.13.0 (0.13.1 available)
-  meta 1.18.3 (1.19.0 available)
+> meta 1.19.0 (was 1.18.3)
++ objective_c 9.6.2
++ package_config 3.0.0
++ path_provider 2.1.6
++ path_provider_android 2.3.1
++ path_provider_foundation 2.6.0
++ path_provider_linux 2.2.2
++ path_provider_platform_interface 2.1.3
++ path_provider_windows 2.3.0
++ permission_handler 13.0.2
++ permission_handler_android 14.1.0
++ permission_handler_apple 9.6.2
++ permission_handler_html 0.1.4+1
++ permission_handler_platform_interface 4.4.1
++ permission_handler_windows 0.2.2
++ petitparser 7.1.0
++ platform 3.2.0
++ plugin_platform_interface 2.1.8
++ posix 6.5.2
++ pub_semver 2.2.1
++ qr 3.0.2 (4.0.0 available)
++ qr_flutter 4.1.0
++ record_use 1.1.1
++ sqlite3 2.9.4 (3.7.1 available)
++ sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
   test_api 0.7.12 (0.7.15 available)
++ typed_data 1.4.0
   vector_math 2.4.0 (2.4.3 available)
-Got dependencies!
-5 packages have newer versions incompatible with dependency constraints.
-Try `flutter pub outdated` for more information.
-Resolving dependencies...
-Downloading packages...
-  cupertino_icons 1.0.9 (2.0.0 available)
-  material_color_utilities 0.13.0 (0.13.1 available)
-  meta 1.18.3 (1.19.0 available)
-  test_api 0.7.12 (0.7.15 available)
-  vector_math 2.4.0 (2.4.3 available)
-Got dependencies!
-5 packages have newer versions incompatible with dependency constraints.
++ wallet_core 0.1.0 from path ../packages/wallet_core
++ wallet_importer 0.1.0 from path ../packages/wallet_importer
++ web 1.1.1
++ win32 6.4.0
++ windows_file_picker 2.0.1
++ xdg_directories 1.1.0
++ xml 7.1.0
++ yaml 3.1.4
+These packages are no longer being depended on:
+- cupertino_icons 1.0.9
+Changed 64 dependencies!
+8 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Analyzing app...                                                
-No issues found! (ran in 7.6s)
-Resolving dependencies...
-Downloading packages...
-  cupertino_icons 1.0.9 (2.0.0 available)
-  material_color_utilities 0.13.0 (0.13.1 available)
-  meta 1.18.3 (1.19.0 available)
-  test_api 0.7.12 (0.7.15 available)
-  vector_math 2.4.0 (2.4.3 available)
-Got dependencies!
-5 packages have newer versions incompatible with dependency constraints.
-Try `flutter pub outdated` for more information.
 
-::group::✅ Passing tests
-✅ Counter increments smoke test
-::endgroup::
+   info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/foundation.dart'. Try removing the import directive • lib/src/controller.dart:3:8 • unnecessary_import
+   info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/src/screens/plan.dart:2:8 • unnecessary_import
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext • lib/src/screens/plan.dart:113:32 • use_build_context_synchronously
+  error • The getter 'platform' isn't defined for the type 'FilePicker'. Try importing the library that defines 'platform', correcting the name to the name of an existing getter, or defining a getter or field named 'platform' • lib/src/screens/plan.dart:148:32 • undefined_getter
+  error • The getter 'platform' isn't defined for the type 'FilePicker'. Try importing the library that defines 'platform', correcting the name to the name of an existing getter, or defining a getter or field named 'platform' • lib/src/screens/plan.dart:175:45 • undefined_getter
 
-🎉 1 test passed.
-=== apk ===
-[==============                         ] 36% Unzipping... android-ndk-r28c/tool
-[==============                         ] 37% Unzipping... android-ndk-r28c/tool
-[===============                        ] 38% Unzipping... android-ndk-r28c/tool
-[===============                        ] 39% Unzipping... android-ndk-r28c/tool
-[===============                        ] 40% Unzipping... android-ndk-r28c/tool
-[================                       ] 40% Unzipping... android-ndk-r28c/tool
-[================                       ] 41% Unzipping... android-ndk-r28c/tool
-[================                       ] 42% Unzipping... android-ndk-r28c/tool
-[=================                      ] 43% Unzipping... android-ndk-r28c/tool
-[=================                      ] 44% Unzipping... android-ndk-r28c/tool
-[=================                      ] 45% Unzipping... android-ndk-r28c/tool
-[==================                     ] 45% Unzipping... android-ndk-r28c/tool
-[==================                     ] 46% Unzipping... android-ndk-r28c/tool
-[==================                     ] 47% Unzipping... android-ndk-r28c/tool
-[===================                    ] 48% Unzipping... android-ndk-r28c/tool
-[===================                    ] 49% Unzipping... android-ndk-r28c/tool
-[===================                    ] 50% Unzipping... android-ndk-r28c/tool
-[====================                   ] 50% Unzipping... android-ndk-r28c/tool
-[====================                   ] 51% Unzipping... android-ndk-r28c/tool
-[====================                   ] 52% Unzipping... android-ndk-r28c/tool
-[=====================                  ] 53% Unzipping... android-ndk-r28c/tool
-[=====================                  ] 54% Unzipping... android-ndk-r28c/tool
-[=====================                  ] 54% Unzipping... android-ndk-r28c/buil
-[=====================                  ] 54% Unzipping... android-ndk-r28c/sour
-[=====================                  ] 54% Unzipping... android-ndk-r28c/NOTI
-[=====================                  ] 54% Unzipping... android-ndk-r28c/ndk-
-[=====================                  ] 54% Unzipping... android-ndk-r28c/NOTI
-[=====================                  ] 54% Unzipping... android-ndk-r28c/pyth
-[=====================                  ] 54% Unzipping... android-ndk-r28c/preb
-[=====================                  ] 54% Unzipping... android-ndk-r28c/ndk-
-[=====================                  ] 54% Unzipping... android-ndk-r28c/sour
-[=====================                  ] 54% Unzipping... android-ndk-r28c/simp
-[=====================                  ] 55% Unzipping... android-ndk-r28c/simp
-[=====================                  ] 55% Unzipping... android-ndk-r28c/CHAN
-[=======================================] 100% Unzipping... android-ndk-r28c/CHA
-
-Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 1368 bytes (99.9% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
-Caught exception: Already watching path: /home/runner/work/buggetwallet/buggetwallet/app/android
-Running Gradle task 'assembleRelease'...                          311.4s
-✓ Built build/app/outputs/flutter-apk/app-release.apk (44.1MB)
-=== linux ===
-Resolving dependencies...
-Downloading packages...
-  cupertino_icons 1.0.9 (2.0.0 available)
-  material_color_utilities 0.13.0 (0.13.1 available)
-  meta 1.18.3 (1.19.0 available)
-  test_api 0.7.12 (0.7.15 available)
-  vector_math 2.4.0 (2.4.3 available)
-Got dependencies!
-5 packages have newer versions incompatible with dependency constraints.
-Try `flutter pub outdated` for more information.
-Building Linux application...                                   
-✓ Built build/linux/x64/release/bundle/budget_wallet
+5 issues found. (ran in 8.2s)
