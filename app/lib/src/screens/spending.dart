@@ -32,9 +32,9 @@ class _SpendingScreenState extends State<SpendingScreen> {
     for (final p in prev6) {
       p.byCategory.forEach((k, v) => avg[k] = (avg[k] ?? 0) + (v / (prev6.isEmpty ? 1 : prev6.length)).round());
     }
-    final full = sums.sublist(0, sums.length - 1);
-    final net12 = full.fold<int>(0, (a, s) => a + s.net);
-    final savedMonths = full.where((s) => s.net > 0).length;
+    final periods = wc.payPeriods(count: 12);
+    final trend = trendNet(periods);
+    final done = savingsOverview(periods);
 
     final merch = <String, (int, int)>{};
     for (final t in wc.txs.where((t) => monthOf(t.date) == sel && t.kind == Kind.flex && t.amount < 0)) {
@@ -48,9 +48,14 @@ class _SpendingScreenState extends State<SpendingScreen> {
     return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: gapped([
       Panel(children: [
         const Eyebrow('Saving or losing'),
-        Heading(net12 >= 0 ? 'Saved ${money(net12, cur, decimals: 0)} in the last 12 months' : 'Lost ${money(-net12, cur, decimals: 0)} in the last 12 months'),
-        Muted('$savedMonths of 12 months ended with more money than they started. Bars above the line are months you saved; below the line, months you spent more than came in. This month is still running.'),
-        NetBarsChart(months: sums, currentMonth: current, currency: cur),
+        if (periods.isEmpty) ...[
+          const Heading('No pay periods yet'),
+          const Muted('Import a bank file with your salary. Each pay period runs from one salary to the next.'),
+        ] else ...[
+          Heading(_savedHeading(done, cur)),
+          Muted(_savedNote(done)),
+          PeriodNetChart(periods: periods, trend: trend, currency: cur),
+        ],
       ]),
       Panel(children: [
         const Eyebrow('Where it goes'),
@@ -91,4 +96,21 @@ class _SpendingScreenState extends State<SpendingScreen> {
       ]),
     ]));
   }
+}
+
+String _periods(int n) => n == 1 ? 'pay period' : '$n pay periods';
+
+String _savedHeading(SavingsOverview o, String cur) {
+  if (o.periods == 0) return 'First pay period still running';
+  final over = o.periods == 1 ? 'in the last pay period' : 'over the last ${_periods(o.periods)}';
+  return o.net >= 0 ? 'Saved ${money(o.net, cur, decimals: 0)} $over' : 'Lost ${money(-o.net, cur, decimals: 0)} $over';
+}
+
+String _savedNote(SavingsOverview o) {
+  final parts = <String>[];
+  final r = o.savingsRate;
+  if (r != null) parts.add(r >= 0 ? 'You kept ${percent(r)} of what came in.' : 'You spent ${percent(-r)} more than came in.');
+  if (o.periods > 0) parts.add('${o.saved} of ${o.periods} ${o.periods == 1 ? 'period' : 'periods'} saved.');
+  parts.add('Each bar runs from one salary to the next; the line is the 3-period average. The faded bar is still running.');
+  return parts.join(' ');
 }

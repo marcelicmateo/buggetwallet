@@ -79,6 +79,9 @@ class WalletController extends ChangeNotifier {
 
   PeriodBudget period() => computePeriod(txs, effectiveSettings, goals, today());
 
+  /// Saved or lost per pay period (salary to salary), oldest first; the last one is still running.
+  List<PeriodSummary> payPeriods({int count = 12}) => periodSummaries(txs, settings, today(), count: count);
+
   void _changed() {
     reload();
     _debounce?.cancel();

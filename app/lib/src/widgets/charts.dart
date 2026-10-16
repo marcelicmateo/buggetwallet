@@ -5,78 +5,119 @@ import 'package:wallet_core/wallet_core.dart';
 import '../format.dart';
 import '../theme.dart';
 
-/// Saved (above the line) or lost (below) per month. The current month is faded.
-class NetBarsChart extends StatelessWidget {
-  final List<MonthSummary> months;
-  final String currentMonth;
+/// Saved (above the line) or lost (below) per pay period, with the rolling average as a line.
+/// The running period is faded.
+class PeriodNetChart extends StatelessWidget {
+  final List<PeriodSummary> periods;
+  final List<int?> trend; // same length as [periods]; null = no point
   final String currency;
-  const NetBarsChart({super.key, required this.months, required this.currentMonth, required this.currency});
+  const PeriodNetChart({super.key, required this.periods, required this.trend, required this.currency});
+
+  static const _height = 200.0, _labels = 30.0;
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final vals = months.map((m) => m.net / 100).toList();
-    final maxPos = vals.fold<double>(50, (a, b) => b > a ? b : a);
-    final maxNeg = vals.fold<double>(50, (a, b) => -b > a ? -b : a);
+    final vals = periods.map((p) => p.net / 100).toList();
+    final all = [...vals, for (final t in trend) if (t != null) t / 100];
+    final maxY = all.fold<double>(50, (a, b) => b > a ? b : a) * 1.08;
+    final minY = -all.fold<double>(50, (a, b) => -b > a ? -b : a) * 1.08;
+    const hidden = AxisTitles(sideTitles: SideTitles(showTitles: false));
+    // Both charts reserve the same label strip so their plot areas line up.
+    final bottom = AxisTitles(
+      sideTitles: SideTitles(
+        showTitles: true,
+        reservedSize: _labels,
+        getTitlesWidget: (value, meta) {
+          final i = value.toInt();
+          if (i < 0 || i >= periods.length) return const SizedBox.shrink();
+          final d = shortDate(periods[i].start).split(' ');
+          return Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Text('${d[0]}\n${d[1]}', textAlign: TextAlign.center, style: TextStyle(fontSize: 10, height: 1.15, color: c.muted)),
+          );
+        },
+      ),
+    );
+    final spots = [for (var i = 0; i < trend.length; i++) trend[i] == null ? FlSpot.nullSpot : FlSpot(i.toDouble(), trend[i]! / 100)];
     return SizedBox(
-      height: 200,
-      child: BarChart(
-        BarChartData(
-          maxY: maxPos * 1.08,
-          minY: -maxNeg * 1.08,
-          alignment: BarChartAlignment.spaceAround,
-          borderData: FlBorderData(show: false),
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            checkToShowHorizontalLine: (v) => v == 0,
-            getDrawingHorizontalLine: (v) => FlLine(color: c.line, strokeWidth: 1),
-          ),
-          titlesData: FlTitlesData(
-            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 22,
-                getTitlesWidget: (value, meta) {
-                  final i = value.toInt();
-                  if (i < 0 || i >= months.length) return const SizedBox.shrink();
-                  final ym = months[i].month;
-                  final label = monthShort(ym) + (i == 0 || ym.endsWith('-01') ? " '${ym.substring(2, 4)}" : '');
-                  return Padding(padding: const EdgeInsets.only(top: 4), child: Text(label, style: TextStyle(fontSize: 10, color: c.muted)));
+      height: _height,
+      child: Stack(children: [
+        BarChart(
+          BarChartData(
+            maxY: maxY,
+            minY: minY,
+            alignment: BarChartAlignment.spaceAround,
+            borderData: FlBorderData(show: false),
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: false,
+              checkToShowHorizontalLine: (v) => v == 0,
+              getDrawingHorizontalLine: (v) => FlLine(color: c.line, strokeWidth: 1),
+            ),
+            titlesData: FlTitlesData(leftTitles: hidden, rightTitles: hidden, topTitles: hidden, bottomTitles: bottom),
+            barTouchData: BarTouchData(
+              touchTooltipData: BarTouchTooltipData(
+                fitInsideHorizontally: true,
+                fitInsideVertically: true,
+                getTooltipItem: (group, gi, rod, ri) {
+                  final p = periods[group.x];
+                  final range = p.running ? '${shortDate(p.start)} – today (so far)' : dateRange(p.start, p.end);
+                  return BarTooltipItem(
+                    '$range\nIn ${money(p.income, currency, decimals: 0)} · Out ${money(p.out, currency, decimals: 0)}\n'
+                    '${p.net >= 0 ? 'Saved' : 'Lost'} ${money(p.net.abs(), currency, decimals: 0)} · kept ${percent(p.savingsRate)}',
+                    const TextStyle(fontSize: 12, color: Colors.white),
+                  );
                 },
               ),
             ),
+            barGroups: [
+              for (var i = 0; i < periods.length; i++)
+                BarChartGroupData(x: i, barRods: [
+                  BarChartRodData(
+                    toY: vals[i],
+                    width: 14,
+                    color: (vals[i] >= 0 ? c.pos : c.neg).withValues(alpha: periods[i].running ? 0.45 : 1),
+                    borderRadius: vals[i] >= 0
+                        ? const BorderRadius.vertical(top: Radius.circular(4))
+                        : const BorderRadius.vertical(bottom: Radius.circular(4)),
+                  ),
+                ]),
+            ],
           ),
-          barTouchData: BarTouchData(
-            touchTooltipData: BarTouchTooltipData(
-              getTooltipItem: (group, gi, rod, ri) {
-                final m = months[group.x];
-                final cur = m.month == currentMonth ? ' (so far)' : '';
-                return BarTooltipItem(
-                  '${monthLong(m.month)}$cur\nIn ${money(m.income, currency, decimals: 0)} · Out ${money(m.out, currency, decimals: 0)}\n${m.net >= 0 ? 'Saved' : 'Lost'} ${money(m.net.abs(), currency, decimals: 0)}',
-                  const TextStyle(fontSize: 12, color: Colors.white),
-                );
-              },
+        ),
+        if (trend.any((t) => t != null))
+          IgnorePointer(
+            child: LineChart(
+              LineChartData(
+                // spaceAround centres bar i in slot i of n, which is x = i on [-0.5, n - 0.5].
+                minX: -0.5,
+                maxX: periods.length - 0.5,
+                maxY: maxY,
+                minY: minY,
+                borderData: FlBorderData(show: false),
+                gridData: const FlGridData(show: false),
+                lineTouchData: const LineTouchData(enabled: false),
+                titlesData: FlTitlesData(
+                  leftTitles: hidden,
+                  rightTitles: hidden,
+                  topTitles: hidden,
+                  bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: _labels, getTitlesWidget: (v, m) => const SizedBox.shrink())),
+                ),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    color: c.ink.withValues(alpha: 0.7),
+                    barWidth: 2,
+                    dotData: FlDotData(
+                      getDotPainter: (s, p, b, i) => FlDotCirclePainter(radius: 2.5, color: c.ink.withValues(alpha: 0.8), strokeWidth: 0),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          barGroups: [
-            for (var i = 0; i < months.length; i++)
-              BarChartGroupData(x: i, barRods: [
-                BarChartRodData(
-                  toY: vals[i],
-                  width: 14,
-                  color: (vals[i] >= 0 ? c.pos : c.neg).withValues(alpha: months[i].month == currentMonth ? 0.45 : 1),
-                  borderRadius: vals[i] >= 0
-                      ? const BorderRadius.vertical(top: Radius.circular(4))
-                      : const BorderRadius.vertical(bottom: Radius.circular(4)),
-                ),
-              ]),
-          ],
-        ),
-      ),
+      ]),
     );
   }
 }

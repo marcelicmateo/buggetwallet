@@ -16,5 +16,11 @@ void main() {
   test('dates', () {
     expect(shortDate('2026-10-12'), '12 Oct');
     expect(monthLong('2026-10'), 'October 2026');
+    expect(dateRange('2026-10-12', '2026-11-01'), '12 Oct – 31 Oct');
+  });
+  test('percent', () {
+    expect(percent(0.144), '14%');
+    expect(percent(-0.05), '−5%');
+    expect(percent(null), '—');
   });
 }

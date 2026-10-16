@@ -1,3 +1,5 @@
+import 'package:wallet_core/wallet_core.dart' show addDays;
+
 const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const _monthsLong = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const _weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -64,3 +66,13 @@ String longDate(String iso) {
 String monthShort(String ym) => _months[int.parse(ym.substring(5, 7)) - 1];
 String monthLong(String ym) => '${_monthsLong[int.parse(ym.substring(5, 7)) - 1]} ${ym.substring(0, 4)}';
 String monthYear(int year, int month) => '${_monthsLong[month - 1]} $year';
+
+/// A share as a whole percent ("14%", "−5%"), or "—" when there is none.
+String percent(double? share) {
+  if (share == null) return '—';
+  final v = (share * 100).round();
+  return v < 0 ? '−${-v}%' : '$v%';
+}
+
+/// "12 Oct – 11 Nov" for a period with an exclusive end date.
+String dateRange(String start, String endExclusive) => '${shortDate(start)} – ${shortDate(addDays(endExclusive, -1))}';
