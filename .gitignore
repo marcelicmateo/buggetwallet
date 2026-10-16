@@ -23,3 +23,6 @@ node_modules/
 dist/
 .env
 .env.*
+
+# Synthetic test fixtures inside Dart packages are allowed
+!**/test/fixtures/**

@@ -1,4 +1,4 @@
-// Unit tests for the pure logic in app/index.html (between /*CORE-START*/ and /*CORE-END*/).
+// Unit tests for the pure logic in artifact/index.html (between /*CORE-START*/ and /*CORE-END*/).
 // All fixtures here are synthetic. Never paste real bank rows into this file.
 const test = require("node:test");
 const assert = require("node:assert/strict");

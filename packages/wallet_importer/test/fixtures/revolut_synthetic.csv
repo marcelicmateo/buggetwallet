@@ -1,0 +1,4 @@
+Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance
+Card Payment,Current,2026-02-01 10:00:00,2026-02-02 10:00:00,"Shop, with comma",-12.30,0.00,EUR,COMPLETED,100.00
+Topup,Current,2026-02-01 09:00:00,2026-02-01 09:00:00,Top-up by *0000,50.00,0.00,EUR,COMPLETED,112.30
+Card Payment,Current,2026-02-03 10:00:00,,Pending Shop,-5.00,0.00,EUR,PENDING,107.30

@@ -1,0 +1,15 @@
+name: wallet_importer
+description: Converts bank export files (PBZ .xls, Revolut .xlsx/.csv) into Budget Wallet normalized transactions.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  archive: any
+  xml: any
+
+dev_dependencies:
+  lints: any
+  test: any

@@ -1,0 +1,95 @@
+# Builds and tests everything. The full log is pushed to the `ci-logs` branch (latest.txt)
+# so it can be read without access to the Actions UI. Logs contain only build/test output.
+name: ci
+on:
+  push:
+    branches: [v2, master]
+    paths-ignore: ["**.md"]
+permissions:
+  contents: write
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      LOG: ${{ github.workspace }}/../ci.log
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: System libraries
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libsqlite3-dev ninja-build libgtk-3-dev libsecret-1-dev >/dev/null
+      - name: importer tests
+        id: importer
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "=== importer ===" | tee -a "$LOG"
+          cd packages/wallet_importer && dart pub get 2>&1 | tee -a "$LOG" && dart analyze 2>&1 | tee -a "$LOG" && dart test -r expanded 2>&1 | tee -a "$LOG"
+      - name: core tests
+        id: core
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "=== core ===" | tee -a "$LOG"
+          if [ -d packages/wallet_core ]; then cd packages/wallet_core && dart pub get 2>&1 | tee -a "$LOG" && dart analyze 2>&1 | tee -a "$LOG" && dart test -r expanded 2>&1 | tee -a "$LOG"; fi
+      - name: app analyze + test
+        id: app
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "=== app ===" | tee -a "$LOG"
+          cd app && flutter pub get 2>&1 | tee -a "$LOG" && flutter analyze --no-fatal-infos 2>&1 | tee -a "$LOG" && flutter test 2>&1 | tee -a "$LOG"
+      - name: build android apk
+        id: apk
+        if: steps.app.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "=== apk ===" | tee -a "$LOG"
+          cd app && flutter build apk --release 2>&1 | tail -40 | tee -a "$LOG"
+      - name: build linux
+        id: linux
+        if: steps.app.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          echo "=== linux ===" | tee -a "$LOG"
+          cd app && flutter build linux --release 2>&1 | tail -40 | tee -a "$LOG"
+      - name: Upload Android app
+        if: steps.apk.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: budget-wallet-android
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+      - name: Upload Linux app
+        if: steps.linux.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: budget-wallet-linux
+          path: app/build/linux/x64/release/bundle
+      - name: Publish log
+        if: always()
+        run: |
+          {
+            echo "commit: ${{ github.sha }}  branch: ${{ github.ref_name }}  run: ${{ github.run_id }}"
+            echo "importer=${{ steps.importer.outcome }} core=${{ steps.core.outcome }} app=${{ steps.app.outcome }} apk=${{ steps.apk.outcome }} linux=${{ steps.linux.outcome }}"
+            echo
+            cat "$LOG" 2>/dev/null
+          } > "$RUNNER_TEMP/latest.txt"
+          cd "$RUNNER_TEMP"
+          url="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}"
+          if git clone -q --depth 1 --branch ci-logs "$url" logs 2>/dev/null; then :; else
+            mkdir logs && cd logs && git init -q -b ci-logs && git remote add origin "$url" && cd ..
+          fi
+          cp latest.txt logs/latest.txt
+          cd logs
+          git config user.name ci-bot && git config user.email ci-bot@users.noreply.github.com
+          git add latest.txt && git commit -q -m "log ${{ github.sha }}" && git push -q origin HEAD:ci-logs
+      - name: Fail if a step failed
+        if: steps.importer.outcome == 'failure' || steps.core.outcome == 'failure' || steps.app.outcome == 'failure' || steps.apk.outcome == 'failure' || steps.linux.outcome == 'failure'
+        run: exit 1
