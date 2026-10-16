@@ -23,7 +23,7 @@ class TodayScreen extends StatelessWidget {
     final over = p.safeToday < 0;
     final used = p.flexBudget > 0 ? p.spent / p.flexBudget : 1.0;
     final ahead = p.aheadOfPace;
-    final newSalary = wc.txs.where((t) => t.kind == Kind.income && t.amount > 0 && t.date.compareTo(addDays(p.start, 20)) > 0).firstOrNull;
+    final newPayday = wc.newPayday(p.start);
     final now = DateTime.now();
     final deliveryHour = (now.hour >= 14 && now.hour < 19) || now.weekday == DateTime.sunday;
     final month = monthOf(today);
@@ -49,12 +49,11 @@ class TodayScreen extends StatelessWidget {
                 TextButton(onPressed: () => wc.updateSettings({'salaryConfirmed': true}), child: const Text('Looks right')),
               ]),
             ]),
-          if (newSalary != null)
+          if (newPayday != null)
             Panel(color: c.accentSoft, children: [
-              Text('Salary landed on ${shortDate(newSalary.date)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text('Salary landed on ${shortDate(newPayday)}', style: const TextStyle(fontWeight: FontWeight.w600)),
               const Text('Start a new month to reset your daily budget and run the payday checklist.', style: TextStyle(fontSize: 13)),
-              FilledButton(
-                  onPressed: () => wc.startNewMonth(newSalary.date), child: Text('Start new month on ${shortDate(newSalary.date)}')),
+              FilledButton(onPressed: () => wc.startNewMonth(newPayday), child: Text('Start new month on ${shortDate(newPayday)}')),
             ]),
           Panel(padding: const EdgeInsets.fromLTRB(18, 20, 18, 18), children: [
             Row(children: [

@@ -69,13 +69,15 @@ class WalletController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The period start: saved value, or the latest salary payment, or today.
+  /// The period start: saved value, or the latest payday (its first salary payment), or today.
   WalletSettings get effectiveSettings {
     if (settings.periodStart != null) return settings;
-    final sal = txs.where((t) => t.kind == Kind.income && t.amount > 0).firstOrNull;
-    final m = settings.toMap()..['periodStart'] = sal?.date ?? today();
+    final m = settings.toMap()..['periodStart'] = salaryPaydays(txs, today()).lastOrNull ?? today();
     return WalletSettings.fromMap(m);
   }
+
+  /// A payday more than 20 days after the current period start, not yet started as a new month.
+  String? newPayday(String periodStart) => salaryPaydays(txs, today()).where((d) => d.compareTo(addDays(periodStart, 20)) > 0).lastOrNull;
 
   PeriodBudget period() => computePeriod(txs, effectiveSettings, goals, today());
 

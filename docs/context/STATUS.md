@@ -62,4 +62,5 @@
   Note: APKs before the signing fix used throwaway keys — uninstall that one once; later updates install in place.
 - Owner tests M3 "Saving or losing" on the Spending tab: bars per pay period (salary to salary), savings rate,
   3-period trend line. Paydays come from salary payments; a missing month assumes the payday setting.
+- Fixed: Today and the "Salary landed" banner now start the period on the first salary part (same paydays as the chart).
 - Then: merge v2 to master; budget vs actual and top merchants.

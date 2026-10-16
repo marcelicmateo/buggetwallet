@@ -28,8 +28,9 @@ const _samePaydayDays = 20;
 /// After this many days without salary, paydays are assumed on `paydayDay`.
 const _missingSalaryDays = 45;
 
-/// Payday dates (sorted, all <= today) from salary payments, a hand-set period start and assumed paydays.
-List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String today) {
+/// Real paydays from salary payments (sorted, all <= today): the date of the first payment of each payday.
+/// Salary parts within 20 days of a payday's first payment belong to that payday.
+List<String> salaryPaydays(List<CategorizedTx> txs, String today) {
   final salary = txs
       .where((t) => t.tx.live && t.kind == Kind.income && t.amount > 0 && t.date.compareTo(today) <= 0)
       .map((t) => t.date)
@@ -39,6 +40,12 @@ List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String to
   for (final d in salary) {
     if (real.isEmpty || daysBetween(real.last, d) > _samePaydayDays) real.add(d);
   }
+  return real;
+}
+
+/// Payday dates (sorted, all <= today) from salary payments, a hand-set period start and assumed paydays.
+List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String today) {
+  final real = salaryPaydays(txs, today);
   final ps = st.periodStart;
   if (ps != null && ps.compareTo(today) <= 0 && (real.isEmpty || daysBetween(real.last, ps) > _samePaydayDays)) real.add(ps);
 
