@@ -1,121 +1,104 @@
 import 'package:flutter/material.dart';
+import 'package:wallet_core/wallet_core.dart' show addDays;
 
-void main() {
-  runApp(const MyApp());
+import 'src/controller.dart';
+import 'src/format.dart';
+import 'src/screens/goals.dart';
+import 'src/screens/onboarding.dart';
+import 'src/screens/plan.dart';
+import 'src/screens/spending.dart';
+import 'src/screens/today.dart';
+import 'src/screens/wishlist.dart';
+import 'src/theme.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final wc = await WalletController.load();
+  runApp(BudgetWalletApp(wc: wc));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class BudgetWalletApp extends StatelessWidget {
+  final WalletController wc;
+  const BudgetWalletApp({super.key, required this.wc});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+      title: 'Budget Wallet',
+      debugShowCheckedModeBanner: false,
+      theme: buildTheme(Brightness.light),
+      darkTheme: buildTheme(Brightness.dark),
+      home: ListenableBuilder(
+        listenable: wc,
+        builder: (context, _) => wc.hasWallet ? HomeShell(wc: wc) : OnboardingScreen(wc: wc),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
+class HomeShell extends StatefulWidget {
+  final WalletController wc;
+  const HomeShell({super.key, required this.wc});
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<HomeShell> createState() => _HomeShellState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _HomeShellState extends State<HomeShell> {
+  int tab = 0;
+  late final AppLifecycleListener _life;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  @override
+  void initState() {
+    super.initState();
+    _life = AppLifecycleListener(onResume: () => widget.wc.syncNow(quiet: true));
+  }
+
+  @override
+  void dispose() {
+    _life.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    final wc = widget.wc;
+    final p = wc.period();
+    final pages = [
+      TodayScreen(wc: wc, openPlan: () => setState(() => tab = 4)),
+      SpendingScreen(wc: wc),
+      WishlistScreen(wc: wc),
+      GoalsScreen(wc: wc),
+      PlanScreen(wc: wc),
+    ];
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        backgroundColor: context.c.bg,
+        surfaceTintColor: Colors.transparent,
+        titleSpacing: 16,
+        title: Row(children: [
+          Container(width: 22, height: 16, decoration: BoxDecoration(color: context.c.accent, borderRadius: BorderRadius.circular(4))),
+          const SizedBox(width: 8),
+          const Text('Budget Wallet', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
+        ]),
+        actions: [
+          if (wc.syncing) const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Chip(label: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}', style: const TextStyle(fontSize: 12.5)), visualDensity: VisualDensity.compact),
+          ),
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+      body: SafeArea(child: IndexedStack(index: tab, children: pages)),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: tab,
+        onDestinationSelected: (i) => setState(() => tab = i),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet), label: 'Today'),
+          NavigationDestination(icon: Icon(Icons.bar_chart_outlined), selectedIcon: Icon(Icons.bar_chart), label: 'Spending'),
+          NavigationDestination(icon: Icon(Icons.hourglass_empty), selectedIcon: Icon(Icons.hourglass_bottom), label: 'Wishlist'),
+          NavigationDestination(icon: Icon(Icons.flag_outlined), selectedIcon: Icon(Icons.flag), label: 'Goals'),
+          NavigationDestination(icon: Icon(Icons.tune), label: 'Plan'),
+        ],
       ),
     );
   }

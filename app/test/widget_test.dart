@@ -1,30 +1,20 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
+import 'package:budget_wallet/src/format.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:budget_wallet/main.dart';
-
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
-
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  test('money formatting', () {
+    expect(money(123456, 'EUR'), '€1,235');
+    expect(money(-2340, 'EUR', decimals: 2), '−€23.40');
+    expect(money(150, 'EUR', signed: true), '+€1.50');
+  });
+  test('money parsing', () {
+    expect(parseMoney('12,50'), 1250);
+    expect(parseMoney('1.234,56'), 123456);
+    expect(parseMoney('2300'), 230000);
+    expect(parseMoney('abc'), isNull);
+  });
+  test('dates', () {
+    expect(shortDate('2026-10-12'), '12 Oct');
+    expect(monthLong('2026-10'), 'October 2026');
   });
 }

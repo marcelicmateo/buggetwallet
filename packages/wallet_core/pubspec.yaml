@@ -1,0 +1,17 @@
+name: wallet_core
+description: Budget Wallet core - local database, change log, encrypted folder sync and budget engine.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  cryptography: ^2.7.0
+  sqlite3: ^2.4.0
+  wallet_importer:
+    path: ../wallet_importer
+
+dev_dependencies:
+  lints: any
+  test: any
