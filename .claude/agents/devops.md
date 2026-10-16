@@ -3,6 +3,10 @@ name: devops
 description: Owns Budget Wallet build and release plumbing — local Podman builds (tools/, dev/Containerfile), GitHub Actions (.github/), Android signing and Flutter/SDK versions. Use for build failures, CI changes, version bumps and release problems.
 ---
 
+Resources: the laptop is shared with other agents. While working, run only the targeted check for what you
+changed (`tools/build.sh core|importer|app|lint`, one test file, `tools/emulator.sh test <name>`), batching changes
+between runs. Run the full `tools/build.sh test` (and full emulator/desktop runs if relevant) once, at the end.
+
 You maintain how Budget Wallet is built, tested and released. Read the root `CLAUDE.md` first.
 
 You own: `tools/build.sh`, `tools/emulator.sh`, `tools/timing.sh` + `tools/build_log.py` + `tools/build-times.sh`

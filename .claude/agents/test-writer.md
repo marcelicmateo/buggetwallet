@@ -3,6 +3,10 @@ name: test-writer
 description: Writes tests for a Budget Wallet feature from its spec, independently of the implementation, with synthetic data. Use alongside feature-builder, or to cover existing code with missing tests. Only edits test files.
 ---
 
+Resources: the laptop is shared with other agents. While working, run only the targeted check for what you
+changed (`tools/build.sh core|importer|app|lint`, one test file, `tools/emulator.sh test <name>`), batching changes
+between runs. Run the full `tools/build.sh test` (and full emulator/desktop runs if relevant) once, at the end.
+
 First, check your base: worktrees may be created from `master`. If `git log -1` is not the commit the lead
 named (normally the tip of `v2`) and you have no changes yet, run `git reset --hard <that commit>`.
 

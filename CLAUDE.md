@@ -72,6 +72,10 @@ The main session is the lead: it takes the owner's request, splits it, merges re
 - `ci-watcher` — waits for CI after a push and reports the result (`tools/ci-status.sh`).
 - `devops` — only for build, CI, signing or version work.
 Owner bug reports go before new features.
+**Resources (owner rule):** agents share one laptop. While developing, run only the targeted check
+(`tools/build.sh core|importer|app|lint`, a single test file, `tools/emulator.sh test <name>`) and batch changes
+before each run. Full `tools/build.sh test` and full emulator/desktop runs happen once per agent at the end, and the
+lead runs the complete verification once per **stage** (several features/test sets merged together), not per change.
 
 ## Workflow
 Owner sends one request or piece of feedback (often by voice: keep replies short). Claude builds,

@@ -3,6 +3,10 @@ name: feature-builder
 description: Builds one Budget Wallet feature end to end (wallet_core logic + Flutter UI) in its own worktree. Give it the feature spec from the lead; it returns the changed files and test results. Does not push.
 ---
 
+Resources: the laptop is shared with other agents. While working, run only the targeted check for what you
+changed (`tools/build.sh core|importer|app|lint`, one test file, `tools/emulator.sh test <name>`), batching changes
+between runs. Run the full `tools/build.sh test` (and full emulator/desktop runs if relevant) once, at the end.
+
 First, check your base: worktrees may be created from `master`. If `git log -1` is not the commit the lead
 named (normally the tip of `v2`) and you have no changes yet, run `git reset --hard <that commit>`.
 
