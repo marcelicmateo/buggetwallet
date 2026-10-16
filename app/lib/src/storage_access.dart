@@ -1,6 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:wallet_core/wallet_core.dart';
+
+final _log = Logger('bw.storage');
 
 /// Android "All files access", needed to read and write a Syncthing folder in shared storage.
 class StorageAccess {
@@ -8,11 +11,15 @@ class StorageAccess {
 
   static Future<bool> granted() async {
     if (!Platform.isAndroid) return true;
-    return await _ch.invokeMethod<bool>('hasAllFilesAccess') ?? false;
+    final ok = await _ch.invokeMethod<bool>('hasAllFilesAccess') ?? false;
+    logEvent(_log, Level.FINE, 'storage.granted', {'granted': ok});
+    return ok;
   }
 
   /// Opens the system settings page where the user allows it.
   static Future<void> request() async {
-    if (Platform.isAndroid) await _ch.invokeMethod<void>('requestAllFilesAccess');
+    if (!Platform.isAndroid) return;
+    logEvent(_log, Level.INFO, 'storage.request');
+    await _ch.invokeMethod<void>('requestAllFilesAccess');
   }
 }

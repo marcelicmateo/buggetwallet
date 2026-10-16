@@ -8,9 +8,13 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
+import '../logging.dart';
 import '../storage_access.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'diagnostics.dart';
+
+final _log = Logger('bw.app');
 
 class PlanScreen extends StatefulWidget {
   final WalletController wc;
@@ -130,6 +134,7 @@ class _PlanScreenState extends State<PlanScreen> {
               icon: const Icon(Icons.event_repeat),
               label: const Text('Salary landed: start new month'),
               onPressed: () async {
+                logNav('month.pick');
                 final d = await showDatePicker(
                     context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now());
                 if (d == null) return;
@@ -153,6 +158,7 @@ class _PlanScreenState extends State<PlanScreen> {
             for (final l in wc.lastImport) StatusLabel(good: l.ok, text: '${l.file}: ${l.message}'),
           ]),
           _syncPanel(context),
+          DiagnosticsPanel(wc: wc),
         ]));
   }
 
@@ -169,6 +175,12 @@ class _PlanScreenState extends State<PlanScreen> {
       'paydayDay': n('paydayDay')
     };
     if (vals.values.any((v) => v == null)) {
+      logNav('plan.invalid', {
+        'keys': [
+          for (final e in vals.entries)
+            if (e.value == null) e.key
+        ].join(',')
+      }); // keys only
       toast(context, 'Enter numbers only, like 1500 or 1500.50.');
       return;
     }
@@ -180,13 +192,33 @@ class _PlanScreenState extends State<PlanScreen> {
   }
 
   Future<void> _import() async {
+    logNav('import.pick');
     final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['xls', 'xlsx', 'csv']);
-    if (picked.isEmpty) return;
+    if (picked.isEmpty) {
+      logNav('import.cancelled');
+      return;
+    }
     setState(() => importing = true);
     final files = <(String, Uint8List)>[];
-    for (final pf in picked) {
-      files.add((pf.name, await pf.readAsBytes()));
+    try {
+      for (final pf in picked) {
+        files.add((pf.name, await pf.readAsBytes()));
+      }
+    } catch (e, st) {
+      // describeError drops the path (it would name the bank file).
+      logError(_log, 'import.openFailed', e, st, fields: {'files': picked.length, 'read': files.length});
+      if (mounted) {
+        setState(() => importing = false);
+        toast(context, "Couldn't open that file.");
+      }
+      return;
     }
+    // Extensions and sizes only, never file names.
+    logNav('import.chosen', {
+      'files': files.length,
+      'exts': [for (final (n, _) in files) fileExt(n)],
+      'bytes': [for (final (_, b) in files) b.length],
+    });
     await widget.wc.importFiles(files);
     if (mounted) setState(() => importing = false);
   }
@@ -203,11 +235,18 @@ class _PlanScreenState extends State<PlanScreen> {
       LineItem('Sync folder', '', sub: folder ?? 'Not set'),
       Wrap(spacing: 8, runSpacing: 8, children: [
         if (Platform.isIOS)
-          OutlinedButton(onPressed: () async => wc.setSyncFolder(await wc.defaultSyncFolder()), child: const Text('Use the app folder'))
+          OutlinedButton(
+              onPressed: () async {
+                logNav('sync.useAppFolder');
+                await wc.setSyncFolder(await wc.defaultSyncFolder());
+              },
+              child: const Text('Use the app folder'))
         else
           OutlinedButton(
             onPressed: () async {
+              logNav('sync.chooseFolder');
               final path = await FilePicker.getDirectoryPath(dialogTitle: 'Choose your Syncthing folder');
+              logNav('sync.chooseFolder.done', {'picked': path != null}); // never the path
               if (path != null) await wc.setSyncFolder(path);
             },
             child: const Text('Choose folder'),
@@ -216,6 +255,7 @@ class _PlanScreenState extends State<PlanScreen> {
         if (Platform.isAndroid)
           OutlinedButton(
             onPressed: () async {
+              logNav('storage.pressed');
               if (await StorageAccess.granted()) {
                 if (context.mounted) toast(context, 'File access is already allowed');
                 return;
@@ -224,7 +264,14 @@ class _PlanScreenState extends State<PlanScreen> {
             },
             child: const Text('Allow file access'),
           ),
-        FilledButton.tonal(onPressed: folder == null || wc.syncing ? null : wc.syncNow, child: Text(wc.syncing ? 'Syncing…' : 'Sync now')),
+        FilledButton.tonal(
+            onPressed: folder == null || wc.syncing
+                ? null
+                : () {
+                    logNav('sync.pressed');
+                    wc.syncNow();
+                  },
+            child: Text(wc.syncing ? 'Syncing…' : 'Sync now')),
       ]),
       if (wc.syncError != null) StatusLabel(good: false, text: wc.syncError!),
       if (wc.syncError == null && last != null)
@@ -239,6 +286,7 @@ class _PlanScreenState extends State<PlanScreen> {
   Future<void> _typePath(BuildContext context) async {
     final ctl =
         TextEditingController(text: widget.wc.syncFolder ?? (Platform.isAndroid ? '/storage/emulated/0/Documents/BudgetWallet' : ''));
+    logNav('dialog.open', {'dialog': 'syncPath'});
     final path = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -250,12 +298,19 @@ class _PlanScreenState extends State<PlanScreen> {
         ],
       ),
     );
+    logNav('dialog.close', {'dialog': 'syncPath', 'set': path != null && path.isNotEmpty}); // never the path
     if (path == null || path.isEmpty) return;
-    await Directory(path).create(recursive: true).catchError((_) => Directory(path));
+    try {
+      await Directory(path).create(recursive: true);
+    } catch (e, st) {
+      // Sync then reports the missing folder; describeError drops the path.
+      logError(_log, 'sync.folderCreateFailed', e, st);
+    }
     await widget.wc.setSyncFolder(path);
   }
 
   Future<void> _showKey(BuildContext context) async {
+    logNav('dialog.open', {'dialog': 'walletKey'}); // the key itself is never logged
     final text = await widget.wc.keyText();
     if (!context.mounted) return;
     await showDialog<void>(
@@ -275,6 +330,7 @@ class _PlanScreenState extends State<PlanScreen> {
         actions: [
           TextButton(
             onPressed: () async {
+              logNav('key.copied');
               await Clipboard.setData(ClipboardData(text: text));
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) toast(context, 'Key copied');

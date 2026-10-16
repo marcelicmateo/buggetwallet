@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
+import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+
+final _log = Logger('bw.app');
 
 /// First run: create a new wallet (new key) or join an existing one with its key.
 class OnboardingScreen extends StatefulWidget {
@@ -17,6 +21,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool joining = false;
   bool busy = false;
   String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    AppLog.setScreen('onboarding');
+    logNav('onboarding.show');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +50,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       'Your money, on your devices. Everything is stored here first and works offline. Sync between your phone and computer is encrypted with a key only your devices have.',
                       size: 14.5),
                   if (!joining) ...[
+                    if (error != null) StatusLabel(good: false, text: error!),
                     FilledButton(
                       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                       onPressed: busy ? null : _create,
@@ -46,7 +58,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                      onPressed: () => setState(() => joining = true),
+                      onPressed: () {
+                        logNav('onboarding.join');
+                        setState(() => joining = true);
+                      },
                       child: const Text('Join my wallet from another device'),
                     ),
                   ] else ...[
@@ -72,8 +87,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _create() async {
+    logNav('onboarding.create');
     setState(() => busy = true);
-    await widget.wc.createWallet();
+    try {
+      await widget.wc.createWallet();
+    } catch (e, st) {
+      logError(_log, 'wallet.create.failed', e, st, level: Level.SEVERE);
+      if (mounted) {
+        setState(() {
+          busy = false;
+          error = "Couldn't save the wallet key on this device: $e";
+        });
+      }
+    }
   }
 
   Future<void> _join() async {
@@ -83,7 +109,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     });
     try {
       await widget.wc.joinWallet(keyText.text);
-    } catch (e) {
+    } catch (e, st) {
+      // Key errors are fixed texts (typo, too short, …); the typed key is never logged.
+      logError(_log, 'wallet.join.failed', e, st, fields: {'chars': keyText.text.length});
       if (mounted) {
         setState(() {
           busy = false;

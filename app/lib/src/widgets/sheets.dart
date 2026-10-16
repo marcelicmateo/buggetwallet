@@ -3,10 +3,14 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
+import '../logging.dart';
 import '../theme.dart';
 import 'common.dart';
 
-Future<T?> showSheet<T>(BuildContext context, Widget child) => showModalBottomSheet<T>(
+/// Opens a bottom sheet; logs `sheet.open` / `sheet.close` with the sheet's type and result word.
+Future<T?> showSheet<T>(BuildContext context, Widget child) => loggedRoute(
+    child.runtimeType.toString(),
+    showModalBottomSheet<T>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -16,7 +20,7 @@ Future<T?> showSheet<T>(BuildContext context, Widget child) => showModalBottomSh
         padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
         child: SingleChildScrollView(child: child),
       ),
-    );
+    ));
 
 // ---------------------------------------------------------------- add expense
 class AddExpenseSheet extends StatefulWidget {
@@ -107,10 +111,12 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         onPressed: () {
           final a = parseMoney(amount.text);
           if (a == null || a <= 0) {
+            logNav('expense.invalid');
             setState(() => error = 'Enter an amount, like 12.50.');
             return;
           }
           if (a > s.impulse && !warned) {
+            logNav('expense.impulseWarning');
             setState(() {
               warned = true;
               error = null;
