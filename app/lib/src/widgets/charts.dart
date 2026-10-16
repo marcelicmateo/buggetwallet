@@ -139,8 +139,9 @@ class CategoryBars extends StatelessWidget {
     final c = context.c;
     final cats = {...values.keys, ...average.keys}.where((k) => (values[k] ?? 0) > 50 || (average[k] ?? 0) > 50).toList()
       ..sort((a, b) => (values[b] ?? 0).compareTo(values[a] ?? 0));
-    if (cats.isEmpty)
+    if (cats.isEmpty) {
       return Padding(padding: const EdgeInsets.all(12), child: Text('Nothing spent this month yet.', style: TextStyle(color: c.muted)));
+    }
     final maxV = cats
         .map((k) => [values[k] ?? 0, average[k] ?? 0].reduce((a, b) => a > b ? a : b))
         .reduce((a, b) => a > b ? a : b)
