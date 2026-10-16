@@ -210,6 +210,22 @@ void main() {
       ]);
     });
 
+    test('no assumed payday a few days before a late real salary (paydayDay 10, salary on the 13th)', () {
+      const st10 = WalletSettings(paydayDay: 10);
+      final txs = [
+        ct('2026-08-12', 1000, 'Salary'),
+        ct('2026-09-20', -100, 'Groceries'),
+        ct('2026-10-11', -200, 'Groceries'),
+        ct('2026-10-13', 3000, 'Salary'), // September's salary is missing; October's is 3 days late
+      ];
+      // 09-10 is assumed (33 days before 10-13); 10-10 is not (only 3 days before the real 10-13 payday).
+      expect(views(periodSummaries(txs, st10, '2026-10-20')), [
+        period('2026-08-12', '2026-09-10', income: 1000),
+        period('2026-09-10', '2026-10-13', out: 300, byCategory: {'Groceries': 300}),
+        period('2026-10-13', '2026-11-10', income: 3000, running: true),
+      ]);
+    });
+
     test('a 45-day gap is not missing salary', () {
       final txs = [ct('2026-03-01', 1000, 'Salary'), ct('2026-04-15', 1000, 'Salary')]; // exactly 45 days
       expect(starts(periodSummaries(txs, st, '2026-04-20')), ['2026-03-01', '2026-04-15']);

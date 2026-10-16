@@ -28,6 +28,7 @@
 - 2026-10-16: Project context docs copied (redacted) to `docs/context/` for Claude Code.
 - 2026-10-16: master merged into v2. Local Podman builds; CI pinned to the same Flutter version.
 - 2026-10-16: Fixed Android release signing key (local + CI secrets), backed up by the owner in 1Password. APKs now update in place.
+- 2026-10-16: M3 started: saving or losing per pay period with savings rate and trend line (built + independently tested by agents, reviewed).
 - 2026-10-16: Agent team set up (`.claude/agents/`: feature-builder, test-writer, reviewer, ci-watcher, devops), per-package CLAUDE.md, `tools/ci-status.sh`.
 
 ## Decisions log
@@ -59,5 +60,6 @@
 ## Next
 - Owner installs Android APK + desktop build, creates wallet, imports bank files, sets up Syncthing.
   Note: APKs before the signing fix used throwaway keys — uninstall that one once; later updates install in place.
-- In progress (M3): saving or losing per pay period, savings rate, trend line.
+- Owner tests M3 "Saving or losing" on the Spending tab: bars per pay period (salary to salary), savings rate,
+  3-period trend line. Paydays come from salary payments; a missing month assumes the payday setting.
 - Then: merge v2 to master; budget vs actual and top merchants.

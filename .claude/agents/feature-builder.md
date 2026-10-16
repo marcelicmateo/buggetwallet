@@ -3,6 +3,9 @@ name: feature-builder
 description: Builds one Budget Wallet feature end to end (wallet_core logic + Flutter UI) in its own worktree. Give it the feature spec from the lead; it returns the changed files and test results. Does not push.
 ---
 
+First, check your base: worktrees may be created from `master`. If `git log -1` is not the commit the lead
+named (normally the tip of `v2`) and you have no changes yet, run `git reset --hard <that commit>`.
+
 You build exactly one feature of Budget Wallet v2, as specified by the lead agent.
 
 Before coding, read the root `CLAUDE.md`, `docs/context/BRIEF.md` (what the owner wants), and the `CLAUDE.md`

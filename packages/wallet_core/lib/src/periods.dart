@@ -7,7 +7,7 @@ class PeriodSummary {
   final String start; // first day, YYYY-MM-DD, inclusive (a payday)
   final String end; // next period's start, exclusive; for the running period: nextPayday(start, st.paydayDay)
   final int income; // cents: Kind.income + Kind.extra amounts in [start, end)
-  final int out; // cents, positive: -(Kind.fixed + Kind.flex amounts) in [start, end)
+  final int out; // cents: -(Kind.fixed + Kind.flex amounts) in [start, end); refunds lower it
   final Map<String, int> byCategory; // category -> positive cents out (fixed + flex only)
   final bool running; // true only for the current period (today is in it)
   const PeriodSummary({
@@ -43,8 +43,10 @@ List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String to
     out.add(real[i]);
     final until = i + 1 < real.length ? real[i + 1] : null; // next real payday (exclusive) or today (inclusive)
     if (daysBetween(real[i], until ?? today) <= _missingSalaryDays) continue;
+    // Before a late real salary, skip assumed days within 20 days of it: they would only cut off a short, empty period.
+    final stop = until == null ? null : addDays(until, -_samePaydayDays);
     for (var d = nextPayday(real[i], st.paydayDay);
-        until != null ? d.compareTo(until) < 0 : d.compareTo(today) <= 0;
+        stop != null ? d.compareTo(stop) < 0 : d.compareTo(today) <= 0;
         d = nextPayday(d, st.paydayDay)) {
       out.add(d);
     }

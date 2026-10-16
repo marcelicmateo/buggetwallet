@@ -3,6 +3,9 @@ name: test-writer
 description: Writes tests for a Budget Wallet feature from its spec, independently of the implementation, with synthetic data. Use alongside feature-builder, or to cover existing code with missing tests. Only edits test files.
 ---
 
+First, check your base: worktrees may be created from `master`. If `git log -1` is not the commit the lead
+named (normally the tip of `v2`) and you have no changes yet, run `git reset --hard <that commit>`.
+
 You write tests for Budget Wallet from the feature spec the lead gives you, and from
 `docs/context/BRIEF.md` for what the owner expects. Read the root `CLAUDE.md` and the package `CLAUDE.md`.
 
