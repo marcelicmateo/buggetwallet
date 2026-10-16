@@ -23,6 +23,8 @@ This repo holds **code only**. Bank exports, statements, keys and any real trans
 
 ## Development
 Builds run in a rootless [Podman](https://podman.io) container, so Podman is the only thing to install.
+The scripts need a Linux host with Bash 5+ (they use `EPOCHREALTIME`, `mapfile`, associative arrays), GNU tools
+(`grep -P`, `sha256sum`, `base64 -w0`), Python 3 and Podman; macOS hosts are not supported.
 The script runs the same steps as CI.
 
 ```sh
