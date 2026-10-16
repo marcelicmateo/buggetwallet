@@ -1,0 +1,169 @@
+commit: 3951699f1221eb36a98613aa70c69872742b4bc6  branch: v2  run: 38869462302
+importer=success core=success app=success apk=success linux=success
+
+=== importer ===
+Resolving dependencies...
+Downloading packages...
++ _fe_analyzer_shared 109.0.0
++ analyzer 14.5.0
++ archive 4.5.2
++ args 2.7.0
++ async 2.13.1
++ boolean_selector 2.1.2
++ cli_config 0.2.0
++ cli_util 0.6.0
++ collection 1.19.1
++ convert 3.1.2
++ coverage 1.16.0
++ crypto 3.0.7
++ ffi 2.2.0
++ file 7.0.1
++ frontend_server_client 4.1.0
++ glob 2.2.0
++ http_multi_server 3.2.2
++ http_parser 4.1.2
++ io 1.1.0
++ lints 6.1.0
++ logging 1.3.0
++ matcher 0.12.20
++ meta 1.19.0
++ mime 2.1.0
++ node_preamble 2.0.2
++ package_config 3.0.0
++ path 1.9.1
++ petitparser 7.1.0
++ pool 1.5.3
++ posix 6.5.2
++ pub_semver 2.2.1
++ shelf 1.4.2
++ shelf_packages_handler 3.0.2
++ shelf_static 1.1.3
++ shelf_web_socket 3.0.0
++ source_map_stack_trace 2.1.2
++ source_maps 0.10.14
++ source_span 1.10.2
++ stack_trace 1.12.2
++ stream_channel 2.1.4
++ string_scanner 1.4.1
++ term_glyph 1.2.2
++ test 1.33.0
++ test_api 0.7.15
++ test_core 0.6.21
++ typed_data 1.4.0
++ vm_service 15.4.0
++ watcher 1.2.1
++ web 1.1.1
++ web_socket 1.0.1
++ web_socket_channel 3.0.3
++ webkit_inspection_protocol 1.2.1
++ xml 7.1.0
++ yaml 3.1.4
+Changed 54 dependencies!
+Analyzing wallet_importer...
+No issues found!
+00:00 +0: loading test/importer_test.dart
+00:00 +0: test/importer_test.dart: ids match the v1 web app algorithm
+00:00 +1: test/importer_test.dart: ids formatCents mirrors toFixed(2)
+00:00 +2: test/importer_test.dart: helpers excelDate
+00:00 +3: test/importer_test.dart: helpers fixMojibake
+00:00 +4: test/importer_test.dart: PBZ .xls reads the BIFF8 sheet including SST continuation records
+00:00 +5: test/importer_test.dart: PBZ .xls normalizes transactions and skips card holds
+00:00 +6: test/importer_test.dart: PBZ .xls re-import gives identical ids
+00:00 +7: test/importer_test.dart: Revolut .xlsx: completed rows only, fee deducted, text repaired
+00:00 +8: test/importer_test.dart: Revolut .csv with quoted commas
+00:00 +9: test/importer_test.dart: unknown files are rejected
+00:00 +10: All tests passed!
+=== core ===
+=== app ===
+Resolving dependencies...
+Downloading packages...
+  cupertino_icons 1.0.9 (2.0.0 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  meta 1.18.3 (1.19.0 available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.3 available)
+Got dependencies!
+5 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Resolving dependencies...
+Downloading packages...
+  cupertino_icons 1.0.9 (2.0.0 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  meta 1.18.3 (1.19.0 available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.3 available)
+Got dependencies!
+5 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Analyzing app...                                                
+No issues found! (ran in 7.6s)
+Resolving dependencies...
+Downloading packages...
+  cupertino_icons 1.0.9 (2.0.0 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  meta 1.18.3 (1.19.0 available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.3 available)
+Got dependencies!
+5 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+
+::group::✅ Passing tests
+✅ Counter increments smoke test
+::endgroup::
+
+🎉 1 test passed.
+=== apk ===
+[==============                         ] 36% Unzipping... android-ndk-r28c/tool
+[==============                         ] 37% Unzipping... android-ndk-r28c/tool
+[===============                        ] 38% Unzipping... android-ndk-r28c/tool
+[===============                        ] 39% Unzipping... android-ndk-r28c/tool
+[===============                        ] 40% Unzipping... android-ndk-r28c/tool
+[================                       ] 40% Unzipping... android-ndk-r28c/tool
+[================                       ] 41% Unzipping... android-ndk-r28c/tool
+[================                       ] 42% Unzipping... android-ndk-r28c/tool
+[=================                      ] 43% Unzipping... android-ndk-r28c/tool
+[=================                      ] 44% Unzipping... android-ndk-r28c/tool
+[=================                      ] 45% Unzipping... android-ndk-r28c/tool
+[==================                     ] 45% Unzipping... android-ndk-r28c/tool
+[==================                     ] 46% Unzipping... android-ndk-r28c/tool
+[==================                     ] 47% Unzipping... android-ndk-r28c/tool
+[===================                    ] 48% Unzipping... android-ndk-r28c/tool
+[===================                    ] 49% Unzipping... android-ndk-r28c/tool
+[===================                    ] 50% Unzipping... android-ndk-r28c/tool
+[====================                   ] 50% Unzipping... android-ndk-r28c/tool
+[====================                   ] 51% Unzipping... android-ndk-r28c/tool
+[====================                   ] 52% Unzipping... android-ndk-r28c/tool
+[=====================                  ] 53% Unzipping... android-ndk-r28c/tool
+[=====================                  ] 54% Unzipping... android-ndk-r28c/tool
+[=====================                  ] 54% Unzipping... android-ndk-r28c/buil
+[=====================                  ] 54% Unzipping... android-ndk-r28c/sour
+[=====================                  ] 54% Unzipping... android-ndk-r28c/NOTI
+[=====================                  ] 54% Unzipping... android-ndk-r28c/ndk-
+[=====================                  ] 54% Unzipping... android-ndk-r28c/NOTI
+[=====================                  ] 54% Unzipping... android-ndk-r28c/pyth
+[=====================                  ] 54% Unzipping... android-ndk-r28c/preb
+[=====================                  ] 54% Unzipping... android-ndk-r28c/ndk-
+[=====================                  ] 54% Unzipping... android-ndk-r28c/sour
+[=====================                  ] 54% Unzipping... android-ndk-r28c/simp
+[=====================                  ] 55% Unzipping... android-ndk-r28c/simp
+[=====================                  ] 55% Unzipping... android-ndk-r28c/CHAN
+[=======================================] 100% Unzipping... android-ndk-r28c/CHA
+
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 1368 bytes (99.9% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+Caught exception: Already watching path: /home/runner/work/buggetwallet/buggetwallet/app/android
+Running Gradle task 'assembleRelease'...                          311.4s
+✓ Built build/app/outputs/flutter-apk/app-release.apk (44.1MB)
+=== linux ===
+Resolving dependencies...
+Downloading packages...
+  cupertino_icons 1.0.9 (2.0.0 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  meta 1.18.3 (1.19.0 available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.3 available)
+Got dependencies!
+5 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Building Linux application...                                   
+✓ Built build/linux/x64/release/bundle/budget_wallet
