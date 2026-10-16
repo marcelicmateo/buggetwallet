@@ -1,6 +1,7 @@
 # Lints, builds and tests everything: the same checks as `tools/build.sh all` locally.
-# The full log is pushed to the `ci-logs` branch (latest.txt)
-# so it can be read without access to the Actions UI. Logs contain only build/test output.
+# The full log is pushed to the `ci-logs` branch (latest.txt, with seconds per step) and one JSON line per step is
+# appended to history.jsonl there (tools/build-times.sh --ci), so both can be read without the Actions UI.
+# Logs contain only build/test output.
 name: ci
 on:
   push:
@@ -16,6 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LOG: ${{ github.workspace }}/../ci.log
+      # tools/build.sh history (steps.jsonl, test stats) goes here; Publish log turns it into ci-logs:history.jsonl
+      BW_DATA_DIR: ${{ github.workspace }}/../bw-data
+      BW_SOURCE: ci
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -26,33 +30,23 @@ jobs:
         id: lint
         continue-on-error: true
         run: |
-          set -o pipefail
-          echo "=== lint ===" | tee -a "$LOG"
           dev/install-lint-tools.sh "$RUNNER_TEMP/bin" 2>&1 | tee -a "$LOG"
-          PATH="$RUNNER_TEMP/bin:$PATH" BW_NATIVE=1 tools/build.sh lint 2>&1 | tee -a "$LOG"
+          .github/scripts/timed.sh lint "PATH=$RUNNER_TEMP/bin:\$PATH BW_NATIVE=1 tools/build.sh lint"
       - name: System libraries
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libsqlite3-dev ninja-build libgtk-3-dev libsecret-1-dev >/dev/null
+      # Same commands as locally: analyze + tests with a JSON report and per-test timings (tools/build_log.py)
       - name: importer tests
         id: importer
         continue-on-error: true
-        run: |
-          set -o pipefail
-          echo "=== importer ===" | tee -a "$LOG"
-          cd packages/wallet_importer && dart pub get 2>&1 | tee -a "$LOG" && dart analyze --fatal-infos 2>&1 | tee -a "$LOG" && dart test -r expanded 2>&1 | tee -a "$LOG"
+        run: .github/scripts/timed.sh importer 'BW_NATIVE=1 tools/build.sh importer'
       - name: core tests
         id: core
         continue-on-error: true
-        run: |
-          set -o pipefail
-          echo "=== core ===" | tee -a "$LOG"
-          if [ -d packages/wallet_core ]; then cd packages/wallet_core && dart pub get 2>&1 | tee -a "$LOG" && dart analyze --fatal-infos 2>&1 | tee -a "$LOG" && dart test -r expanded 2>&1 | tee -a "$LOG"; fi
+        run: .github/scripts/timed.sh core 'BW_NATIVE=1 tools/build.sh core'
       - name: app analyze + test
         id: app
         continue-on-error: true
-        run: |
-          set -o pipefail
-          echo "=== app ===" | tee -a "$LOG"
-          cd app && flutter pub get 2>&1 | tee -a "$LOG" && flutter analyze --fatal-infos 2>&1 | tee -a "$LOG" && flutter test 2>&1 | tee -a "$LOG"
+        run: .github/scripts/timed.sh app 'BW_NATIVE=1 tools/build.sh app'
       - name: Android signing key
         id: signing
         if: steps.app.outcome == 'success'
@@ -63,6 +57,24 @@ jobs:
           if [ -z "$KEYSTORE_B64" ]; then echo "::error::ANDROID_KEYSTORE_BASE64 secret missing (run tools/make-signing-key.sh --upload)" | tee -a "$LOG"; exit 1; fi
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "BW_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+      # Without this every run downloads the NDK, CMake, the Gradle distribution and all dependencies (~9 min)
+      - name: Android cache paths
+        id: android-cache
+        if: steps.signing.outcome == 'success'
+        run: |
+          flutter_root=$(dirname "$(dirname "$(command -v flutter)")")
+          ndk=$(grep -oP 'val ndkVersion\s*:\s*String\s*=\s*"\K[^"]+' "$flutter_root/packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt")
+          { echo "ndk=$ndk"; echo "ndk-dir=$ANDROID_HOME/ndk/$ndk"; echo "cmake-dir=$ANDROID_HOME/cmake/3.22.1"; } >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        if: steps.signing.outcome == 'success'
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ${{ steps.android-cache.outputs.ndk-dir }}
+            ${{ steps.android-cache.outputs.cmake-dir }}
+          key: android-${{ steps.android-cache.outputs.ndk }}-${{ hashFiles('app/android/**/*.gradle.kts', 'app/android/gradle.properties', 'app/android/gradle/wrapper/gradle-wrapper.properties', 'app/pubspec.lock') }}
+          restore-keys: android-${{ steps.android-cache.outputs.ndk }}-
       - name: build android apk
         id: apk
         if: steps.signing.outcome == 'success'
@@ -71,18 +83,12 @@ jobs:
           BW_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BW_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BW_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-        run: |
-          set -o pipefail
-          echo "=== apk ===" | tee -a "$LOG"
-          cd app && flutter build apk --release 2>&1 | tail -40 | tee -a "$LOG"
+        run: .github/scripts/timed.sh apk 'cd app && flutter build apk --release 2>&1 | tail -40'
       - name: build linux
         id: linux
         if: steps.app.outcome == 'success'
         continue-on-error: true
-        run: |
-          set -o pipefail
-          echo "=== linux ===" | tee -a "$LOG"
-          cd app && flutter build linux --release 2>&1 | tail -40 | tee -a "$LOG"
+        run: .github/scripts/timed.sh linux 'cd app && flutter build linux --release 2>&1 | tail -40'
       - name: Upload Android app
         if: steps.apk.outcome == 'success'
         uses: actions/upload-artifact@v4
@@ -111,12 +117,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          t() { awk -v s="$1" '$1 == s { printf "(%ss)", $2 }' "$RUNNER_TEMP/times.txt" 2>/dev/null; }
           {
-            echo "lint=${{ steps.lint.outcome }} importer=${{ steps.importer.outcome }} core=${{ steps.core.outcome }} app=${{ steps.app.outcome }} signing=${{ steps.signing.outcome }} apk=${{ steps.apk.outcome }} linux=${{ steps.linux.outcome }}"
+            echo "lint=${{ steps.lint.outcome }}$(t lint) importer=${{ steps.importer.outcome }}$(t importer) core=${{ steps.core.outcome }}$(t core) app=${{ steps.app.outcome }}$(t app) signing=${{ steps.signing.outcome }} apk=${{ steps.apk.outcome }}$(t apk) linux=${{ steps.linux.outcome }}$(t linux)"
+            echo
+            echo "step seconds exit"
+            cat "$RUNNER_TEMP/times.txt" 2>/dev/null
             echo
             cat "$LOG" 2>/dev/null
           } > "$RUNNER_TEMP/ci.txt"
-          .github/scripts/publish-log.sh latest "$RUNNER_TEMP/ci.txt"
+          python3 -I tools/build_log.py ci-history "$RUNNER_TEMP/times.txt" > "$RUNNER_TEMP/history.jsonl" || true
+          .github/scripts/publish-log.sh latest "$RUNNER_TEMP/ci.txt" "$RUNNER_TEMP/history.jsonl"
       - name: Fail if a step failed
         if: steps.lint.outcome == 'failure' || steps.importer.outcome == 'failure' || steps.core.outcome == 'failure' || steps.app.outcome == 'failure' || steps.signing.outcome == 'failure' || steps.apk.outcome == 'failure' || steps.linux.outcome == 'failure'
         run: exit 1

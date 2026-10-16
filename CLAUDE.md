@@ -14,18 +14,28 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 - `artifact/` — v1 single-file web app (claude.ai artifact) and its JS tests (`npm test`).
 - `docs/architecture.md`, `docs/setup.md`.
 - Each package has its own short `CLAUDE.md` (files, rules, how to test). Read the one for the code you touch.
-- `tools/` — `build.sh` (local builds, lint, format, LSP), `ci-status.sh` (CI results), `make-signing-key.sh`,
-  `install-hooks.sh`, `make_fixtures.py`, `log-summary.py` (summary of an app log). `dev/` — `Containerfile` and
-  `install-lint-tools.sh` (pinned linters).
-- **Logs:** the app logs to `<app support dir>/logs/bw-YYYY-MM-DD.log` (debug level by default while testing; Plan ›
+- `tools/` — `build.sh` (local builds, lint, format, LSP), `emulator.sh`, `build-times.sh` + `build_log.py` +
+  `timing.sh` (run logs and timing history), `ci-status.sh` (CI results), `make-signing-key.sh`, `install-hooks.sh`,
+  `make_fixtures.py`, `log-summary.py` (summary of an app log). `dev/` — `Containerfile` and `install-lint-tools.sh`.
+- **App logs:** the app logs to `<app support dir>/logs/bw-YYYY-MM-DD.log` (debug level by default while testing; Plan ›
   Diagnostics changes the level and saves all logs as one file). `tools/emulator.sh screens` also writes
-  `dist/logs/app-emulator.log`. Read one with `python3 -I tools/log-summary.py <file>`. Logs must never contain
-  amounts, descriptions, merchants, notes, names, the key, paths or file names (see package `CLAUDE.md`s).
+  `dist/logs/app-emulator.log`. Read one with `python3 -I tools/log-summary.py <file>`; logs the owner sends go in
+  `~/.local/share/budget-wallet/device-logs/`. Logs must never contain amounts, descriptions, merchants, notes,
+  names, the key, paths or file names (see package `CLAUDE.md`s).
 
 ## Local builds (owner's laptop)
 `tools/build.sh test|lint|format|apk|linux|all|shell|lsp` runs the CI steps in a rootless **Podman** container
 (not Docker), image from `dev/Containerfile`, Flutter version pinned by `environment: flutter:` in `app/pubspec.yaml`
-(CI reads the same line). Outputs and logs land in `dist/` (git-ignored). Run `tools/build.sh test` before pushing.
+(CI reads the same line). Outputs land in `dist/` (git-ignored). Run `tools/build.sh test` before pushing.
+The scripts assume a Linux host: Bash 5, GNU tools (`grep -P`, `sha256sum`, `base64 -w0`), Python 3, Podman.
+Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't spend effort on them.
+- **Logs and timings** are kept outside the repo in `~/.local/share/budget-wallet/` (`BW_DATA_DIR`), shared by all
+  worktrees and never committed: `runs/<time>-<cmd>-<commit>/` (step logs, image build logs, emulator log, test
+  reports, screenshots; newest 30 kept; `dist/logs` links to this worktree's latest run, so `dist/logs/<step>.log`
+  works), `history/steps.jsonl` and `history/tests.jsonl` (append-only timings per step and per test),
+  `device-logs/` (reserved for app logs). Each run ends with a seconds-per-step table and per-test p50/p90/max.
+  `tools/build-times.sh [--ci] [--step app]` shows recent runs and medians, `tools/build-times.sh trend` the slowest
+  tests; CI appends its own lines to `history.jsonl` on the `ci-logs` branch.
 - `test` = `lint` + analyze (infos are fatal) + tests. `lint` = `dart format` check, shellcheck, actionlint (fast).
   Unformatted code fails: run `tools/build.sh format`. Shared analyzer/lint/formatter rules (page width 140) are in
   the root `analysis_options.yaml`; fix lints rather than ignoring them, tune the rule there if one is wrong for us.
@@ -34,6 +44,8 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 - **See the app:** `tools/emulator.sh screens` boots an Android emulator (Podman + /dev/kvm, `dev/Containerfile.emulator`),
   runs `app/integration_test/screens_test.dart` with a synthetic demo wallet and saves every tab to `dist/screens/*.png`
   — read them to check UI changes before pushing. `start`/`install`/`shot`/`adb`/`stop` drive a running emulator.
+  The emulator, system image and AVD live in Podman volumes (`bw-emulator*`), set up once (~2 GB download, then a
+  cold boot saved as a snapshot); runs boot that snapshot read-only in ~3 s. `tools/emulator.sh reset` starts over.
   Known emulator 37.x limits: renderer `lavapipe`, and Flutter runs with `--no-enable-impeller` (Impeller trips an
   abort in the emulator's GLES decoder); real phones use Impeller.
 Android release builds are signed with one fixed key (`tools/make-signing-key.sh`, kept in

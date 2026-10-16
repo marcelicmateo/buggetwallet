@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # CI result for a commit, without the Actions UI (the Actions API is blocked for Claude sessions).
 #
-#   tools/ci-status.sh                 status of HEAD's check runs + failing lines from the CI log
+#   tools/ci-status.sh                 status of HEAD's check runs, seconds per step, failing lines from the CI log
+#                                      (timing history: tools/build-times.sh --ci)
 #   tools/ci-status.sh <sha>           same for another commit
 #   tools/ci-status.sh --wait [<sha>]  wait (up to 30 min) until every check run has finished
 #   tools/ci-status.sh --log [name]    print a whole log from the ci-logs branch (default: latest)
@@ -53,3 +54,5 @@ if [[ $failed -gt 0 ]]; then
 fi
 [[ $pending -gt 0 ]] && { echo "still running"; exit 2; }
 echo "all green"
+log=$(show_log latest 2>/dev/null || true)
+if grep -q "${sha}" <<<"$(head -1 <<<"$log")"; then sed -n '3p' <<<"$log"; fi  # step outcomes with seconds

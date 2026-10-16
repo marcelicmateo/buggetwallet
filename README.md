@@ -23,6 +23,8 @@ This repo holds **code only**. Bank exports, statements, keys and any real trans
 
 ## Development
 Builds run in a rootless [Podman](https://podman.io) container, so Podman is the only thing to install.
+The scripts need a Linux host with Bash 5+ (they use `EPOCHREALTIME`, `mapfile`, associative arrays), GNU tools
+(`grep -P`, `sha256sum`, `base64 -w0`), Python 3 and Podman; macOS hosts are not supported.
 The script runs the same steps as CI.
 
 ```sh
@@ -33,6 +35,7 @@ tools/build.sh lint             # quick: Dart format check, shellcheck, actionli
 tools/build.sh format           # reformat Dart code (dart format)
 tools/build.sh apk              # Android APK   -> dist/BudgetWallet-android.apk
 tools/build.sh linux            # Linux bundle  -> dist/BudgetWallet-linux-x64.tar.gz
+tools/build-times.sh            # recent build/test timings and medians (trend: slowest tests)
 tools/build.sh all              # tests, then both builds
 tools/build.sh shell            # shell inside the container
 tools/build.sh lsp              # Dart language server for your editor (stdin/stdout)
@@ -40,7 +43,20 @@ tools/emulator.sh screens       # Android emulator: demo wallet (fake data), scr
 tools/emulator.sh start --window  # an emulator on your desktop; then `install`, `shot <name>`, `stop`
 ```
 
-- The first run builds the image (~15 min). Logs are in `dist/logs/`.
+- The first run builds the image (~15 min).
+- **Logs and timings** live outside the repo, in `~/.local/share/budget-wallet/` (override with `BW_DATA_DIR`),
+  shared by every worktree and never committed to a code branch:
+  - `runs/<YYYYMMDD-HHMMSS>-<cmd>-<commit>/`: one folder per run with each step's log (start/end stamps), image
+    build logs, the emulator log, test reports and per-test timing summaries, screenshots. The newest 30 are kept.
+    `dist/logs` is a link to this checkout's latest run.
+  - `history/steps.jsonl`, `history/tests.jsonl`: one JSON line per step / per test per run, append-only.
+  - `device-logs/`: reserved for logs exported from the app.
+
+  Every run prints seconds per step and per-test p50/p90/p99/max. `tools/build-times.sh` shows the last runs and
+  the median per step (`--step app`, `--commit`, `--ci` adds CI's history from the `ci-logs` branch);
+  `tools/build-times.sh trend` shows the slowest tests over time.
+- The first `tools/emulator.sh` run downloads the emulator and system image (~2 GB) into Podman volumes and saves a
+  clean-boot snapshot; later runs boot from it in seconds. `tools/emulator.sh reset` deletes them.
 - **Code style.** `dart format` with page width 140, and stricter analyzer rules (strict casts/inference/raw
   types plus extra lints) shared by the app and both packages in the root `analysis_options.yaml`. Infos fail the
   build too. Shell scripts are checked by shellcheck, workflows by actionlint; both are pinned in

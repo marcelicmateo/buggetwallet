@@ -1,11 +1,9 @@
 # Android emulator on top of the build image (tools/emulator.sh). Needs /dev/kvm on the host.
-# Headless by default; `tools/emulator.sh start --window` shows it on the desktop through XWayland.
+# Only the libraries live here: the emulator, the system image and the AVD (~2 GB) are installed by
+# tools/emulator.sh into the `bw-emulator` Podman volume on first use, so rebuilding the build image never
+# downloads them again.
 ARG BASE
 FROM ${BASE}
-
-ARG API=35
-ENV ANDROID_AVD_HOME=/opt/avd
-ENV PATH=$ANDROID_HOME/emulator:$PATH
 
 # Libraries the emulator binary links against, even when running without a window
 RUN apt-get update \
@@ -14,8 +12,3 @@ RUN apt-get update \
       libxfixes3 libxrandr2 libxkbfile1 libxkbcommon0 libnss3 libpulse0 libgl1 libegl1 libdbus-1-3 \
       libasound2t64 libfontconfig1 libbsd0 \
  && rm -rf /var/lib/apt/lists/*
-
-RUN sdkmanager "emulator" "system-images;android-${API};google_apis;x86_64" >/dev/null \
- && mkdir -p "$ANDROID_AVD_HOME" \
- && echo no | avdmanager create avd -n bw -k "system-images;android-${API};google_apis;x86_64" -d pixel_6 \
- && printf 'hw.keyboard=yes\nhw.ramSize=3072\ndisk.dataPartition.size=6G\n' >> "$ANDROID_AVD_HOME/bw.avd/config.ini"

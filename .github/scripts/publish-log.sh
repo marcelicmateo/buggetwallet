@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Usage: publish-log.sh <name> <logfile>
-# Pushes the log to the ci-logs branch as <name>.txt so it can be read without the Actions UI.
+# Usage: publish-log.sh <name> <logfile> [<history.jsonl>]
+# Pushes the log to the ci-logs branch as <name>.txt so it can be read without the Actions UI, and appends the
+# optional JSON lines to history.jsonl there (step timings, read by tools/build-times.sh --ci).
 set -u
-name="$1"; log="$2"
+name="$1"; log="$2"; hist="${3:-}"
 url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}"
 work="${RUNNER_TEMP:-/tmp}/logs-$name"
 rm -rf "$work"
@@ -14,6 +15,7 @@ for attempt in 1 2 3 4 5; do
   git -C "$work" config user.name ci-bot
   git -C "$work" config user.email ci-bot@users.noreply.github.com
   git -C "$work" add "$name.txt"
+  if [[ -s "$hist" ]]; then cat "$hist" >> "$work/history.jsonl"; git -C "$work" add history.jsonl; fi
   git -C "$work" commit -q -m "log $name ${GITHUB_SHA}" || exit 0
   if git -C "$work" push -q origin HEAD:ci-logs 2>/dev/null; then exit 0; fi
   rm -rf "$work"; sleep $((attempt * 3))
