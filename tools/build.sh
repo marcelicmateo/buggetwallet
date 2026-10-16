@@ -10,6 +10,7 @@
 #   tools/build.sh shell    interactive shell in the container
 #   tools/build.sh image    (re)build the container image (first build ~15 min)
 #   tools/build.sh lsp      Dart language server on stdin/stdout, for editors (repo mounted at its host path)
+#   tools/build.sh image-name   build the image if needed and print its tag (used by tools/emulator.sh)
 #
 # The image is rebuilt automatically when dev/Containerfile, dev/install-lint-tools.sh or the Flutter version changes.
 # The Flutter version comes from `environment: flutter:` in app/pubspec.yaml (CI reads the same line).
@@ -23,13 +24,14 @@ FLUTTER_VERSION=$(grep -oP '^\s+flutter:\s*"?\K[0-9]+\.[0-9]+\.[0-9]+' "$ROOT/ap
 IMAGE="localhost/budget-wallet-dev:$FLUTTER_VERSION-$(cat "$ROOT/dev/Containerfile" "$ROOT/dev/install-lint-tools.sh" | sha256sum | cut -c1-8)"
 CMD=${1:-test}
 
-usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---- host side: hand the command to the container ----
 if [[ "${BW_NATIVE:-}" != 1 ]]; then
   build_image() { podman build --build-arg FLUTTER_VERSION="$FLUTTER_VERSION" -t "$IMAGE" "$ROOT/dev"; }
   case "$CMD" in
     image) build_image; exit ;;
+    image-name) podman image exists "$IMAGE" || build_image >&2; echo "$IMAGE"; exit ;;
     test|lint|format|apk|linux|all|shell|lsp) ;;
     *) usage ;;
   esac

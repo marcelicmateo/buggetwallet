@@ -36,6 +36,8 @@ tools/build.sh linux            # Linux bundle  -> dist/BudgetWallet-linux-x64.t
 tools/build.sh all              # tests, then both builds
 tools/build.sh shell            # shell inside the container
 tools/build.sh lsp              # Dart language server for your editor (stdin/stdout)
+tools/emulator.sh screens       # Android emulator: demo wallet (fake data), screenshot of every tab -> dist/screens/
+tools/emulator.sh start --window  # an emulator on your desktop; then `install`, `shot <name>`, `stop`
 ```
 
 - The first run builds the image (~15 min). Logs are in `dist/logs/`.

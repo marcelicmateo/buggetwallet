@@ -18,7 +18,9 @@ How to build:
    (reuse `test/support/synthetic.dart`). A test-writer agent may already have put tests there: make them pass;
    change one only if it contradicts the spec, and say so in your report.
 3. UI in `app/`: controller method → screen/widget. No calculations in widgets.
-4. Run `tools/build.sh test` and fix until green (analyze included).
+4. Run `tools/build.sh test` and fix until green (lint + analyze included).
+5. For UI changes, run `tools/emulator.sh screens` and look at `dist/screens/*.png`; extend
+   `app/integration_test/screens_test.dart` if the new screen state isn't shown (synthetic data only).
 
 Rules: never add real bank data, balances or personal figures, even as examples. Keep the change to this one
 feature; note other problems you see instead of fixing them. Don't commit or push unless the lead asks.
