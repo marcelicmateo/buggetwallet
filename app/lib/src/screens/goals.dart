@@ -59,7 +59,7 @@ class GoalsScreen extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(5),
                   child: LinearProgressIndicator(
-                    value: g.target > 0 ? (g.saved / g.target).clamp(0.0, 1.0) : 0,
+                    value: g.target > 0 ? (g.saved / g.target).clamp(0.0, 1.0) : 0.0,
                     minHeight: 8,
                     backgroundColor: c.surface2,
                     color: c.accent,

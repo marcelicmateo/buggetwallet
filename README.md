@@ -1,31 +1,37 @@
 # Budget Wallet
 
-Personal finance tracker and budgeting app for one person. Phone-first, published as a private claude.ai web app with its own database.
+Personal finance tracker and budgeting app for one person. Offline first, runs on Android, iPhone, Windows, macOS and Linux, and syncs between your devices through Syncthing with end-to-end encryption.
 
 ## What it does
-- Imports bank exports: PBZ (.xls) and Revolut (.xlsx), plus quick manual entry for cash.
-- Home screen shows one number: **safe to spend today**.
-- Goal funds for big purchases, "Can I afford it?" check, and a wishlist with a cooling-off period for impulse buys.
-- Views: spending by category, over time, budget vs actual, saving or losing per pay period.
-
-## Project docs
-Planning docs live in the claude.ai Project, not in this repo:
-- `WORKFLOW.md` — how we work
-- `BRIEF.md` — what we're building
-- `STATUS.md` — current version, decisions, next steps
-- `BASELINE.md` — analysis of past spending
-
-## Privacy
-This repo holds **code only**. Bank exports, statements and any real transaction data must never be committed. `.gitignore` blocks the common export formats.
+- Imports bank exports: PBZ (.xls) and Revolut (.xlsx / .csv), plus quick manual entry for card payments.
+- Home screen shows one number: **safe to spend today**, which rolls over day to day until payday.
+- Payday plan: salary minus bills minus savings goals = spending money.
+- Wishlist with a cooling-off period for impulse buys, and a "Can I afford it?" check.
+- Goals for big purchases and an emergency fund.
+- Views: saving or losing per month, where the money goes by category, top places.
 
 ## Structure
-- `app/index.html` — the app (single file, published as a private claude.ai artifact)
-- `tests/` — unit tests for the parsing and budget logic, synthetic data only. Run `npm test`.
-- `CLAUDE.md` — rules and notes for Claude working in this repo
+- `app/` — Flutter app
+- `packages/wallet_importer/` — bank file importer (pure Dart, synthetic test fixtures)
+- `packages/wallet_core/` — local database, change log, encrypted sync, budget engine
+- `artifact/` — v1 web app (claude.ai artifact), kept for reference
+- `docs/architecture.md` — how it fits together
+- `docs/setup.md` — install, first run, Syncthing setup
+
+## Privacy
+This repo holds **code only**. Bank exports, statements, keys and any real transaction data must never be committed. `.gitignore` blocks the common export formats; only synthetic fixtures under `test/fixtures` are allowed.
+
+## Development
+```
+cd packages/wallet_importer && dart test
+cd packages/wallet_core && dart test
+cd app && flutter test && flutter run
+```
+CI builds an Android APK and a Linux bundle on every push.
 
 ## Milestones
 - M0 Setup
-- M1 Core — imports, categories, list view, safe-to-spend, quick entry, wishlist (v1 live)
-- M2 Budgets
-- M3 Views
+- M1 Core (v1 web app)
+- M2 Standalone app: offline database, encrypted Syncthing sync, importer — in progress
+- M3 More views and graphs
 - M4 Polish
