@@ -1,0 +1,20 @@
+# Dev container for Budget Wallet. Run from the repo folder:
+#   docker compose build                          (first time, ~10–15 min)
+#   docker compose run --rm dev flutter test      (run tests)
+#   docker compose run --rm dev flutter build apk --debug
+#   docker compose run --rm dev                   (interactive shell)
+services:
+  dev:
+    build: ./dev
+    image: budget-wallet-dev
+    working_dir: /work
+    volumes:
+      - .:/work
+      - pub-cache:/root/.pub-cache
+      - gradle-cache:/root/.gradle
+    stdin_open: true
+    tty: true
+
+volumes:
+  pub-cache:
+  gradle-cache:

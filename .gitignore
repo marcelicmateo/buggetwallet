@@ -23,3 +23,12 @@ node_modules/
 dist/
 .env
 .env.*
+
+# Flutter / Dart
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.apk
+*.aab
+*.ipa

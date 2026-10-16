@@ -1,6 +1,20 @@
 # Budget Wallet
 
-Personal finance tracker and budgeting app for one person. Phone-first, published as a private claude.ai web app with its own database.
+Personal finance tracker and budgeting app for one person. Standalone Flutter app (Android, iPhone, desktop), offline-first with its own database and end-to-end encrypted sync. See `ARCHITECTURE.md` in the project docs.
+
+## Development
+Everything runs in a Docker container, so the only thing you need to install is Docker (Docker Desktop on Windows/Mac).
+
+```sh
+docker compose build                                  # first time, ~10–15 min
+docker compose run --rm dev flutter test              # run tests
+docker compose run --rm dev flutter build apk --debug # Android app → build/app/outputs/flutter-apk/
+docker compose run --rm dev                           # shell inside the container
+```
+
+- **Android phone:** copy the built `.apk` to the phone and install it.
+- **iPhone / macOS builds** need a Mac with Xcode; they can't run in Docker.
+- The container runs as root. On a Linux host, files it creates are root-owned; fix with `sudo chown -R $USER .` if needed.
 
 ## What it does
 - Imports bank exports: PBZ (.xls) and Revolut (.xlsx), plus quick manual entry for cash.
