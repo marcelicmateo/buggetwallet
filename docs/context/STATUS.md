@@ -66,6 +66,15 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - Merge `v2` into `master` once happy (master also has the Docker dev setup).
 - Make the repo public? Then all-platform builds are free on every push.
 
+## Resume here (if a session stopped mid-stage)
+Stage "automated tests" was in progress on 2026-10-16 with three agents in worktrees under `.claude/worktrees/`
+(branches `worktree-agent-*`): Android emulator UI tests (`tools/emulator.sh test`), Linux desktop tests
+(Xvfb in Podman + release smoke + CI step), core/importer hardening (randomized sync, period invariants, importer
+fuzz, migrations). To resume: `git worktree list`; for each branch check `git log v2..<branch>` and whether its work
+looks finished; merge finished branches into v2 (expect small conflicts in README/CLAUDE.md), then verify once:
+`tools/build.sh test`, `tools/emulator.sh test`, the Linux desktop test, `tools/build.sh apk`; push; `tools/ci-status.sh --wait`.
+Unfinished branches: restart the task from its last commit. Bugs the tests find: fix one at a time afterwards.
+
 ## Next
 - Owner installs Android APK + desktop build, creates wallet, imports bank files, sets up Syncthing.
   Note: APKs before the signing fix used throwaway keys — uninstall that one once; later updates install in place.
