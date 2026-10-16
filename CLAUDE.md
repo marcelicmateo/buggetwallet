@@ -14,13 +14,20 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 - `artifact/` — v1 single-file web app (claude.ai artifact) and its JS tests (`npm test`).
 - `docs/architecture.md`, `docs/setup.md`.
 - Each package has its own short `CLAUDE.md` (files, rules, how to test). Read the one for the code you touch.
-- `tools/` — `build.sh` (local builds, lint, format, LSP), `ci-status.sh` (CI results), `make-signing-key.sh`,
+- `tools/` — `build.sh` (local builds, lint, format, LSP), `emulator.sh`, `build-times.sh` + `build_log.py` + `timing.sh` (run logs and timing history), `ci-status.sh` (CI results), `make-signing-key.sh`,
   `install-hooks.sh`, `make_fixtures.py`. `dev/` — `Containerfile` and `install-lint-tools.sh` (pinned linters).
 
 ## Local builds (owner's laptop)
 `tools/build.sh test|lint|format|apk|linux|all|shell|lsp` runs the CI steps in a rootless **Podman** container
 (not Docker), image from `dev/Containerfile`, Flutter version pinned by `environment: flutter:` in `app/pubspec.yaml`
-(CI reads the same line). Outputs and logs land in `dist/` (git-ignored). Run `tools/build.sh test` before pushing.
+(CI reads the same line). Outputs land in `dist/` (git-ignored). Run `tools/build.sh test` before pushing.
+- **Logs and timings** are kept outside the repo in `~/.local/share/budget-wallet/` (`BW_DATA_DIR`), shared by all
+  worktrees and never committed: `runs/<time>-<cmd>-<commit>/` (step logs, image build logs, emulator log, test
+  reports, screenshots; newest 30 kept; `dist/logs` links to this worktree's latest run, so `dist/logs/<step>.log`
+  works), `history/steps.jsonl` and `history/tests.jsonl` (append-only timings per step and per test),
+  `device-logs/` (reserved for app logs). Each run ends with a seconds-per-step table and per-test p50/p90/max.
+  `tools/build-times.sh [--ci] [--step app]` shows recent runs and medians, `tools/build-times.sh trend` the slowest
+  tests; CI appends its own lines to `history.jsonl` on the `ci-logs` branch.
 - `test` = `lint` + analyze (infos are fatal) + tests. `lint` = `dart format` check, shellcheck, actionlint (fast).
   Unformatted code fails: run `tools/build.sh format`. Shared analyzer/lint/formatter rules (page width 140) are in
   the root `analysis_options.yaml`; fix lints rather than ignoring them, tune the rule there if one is wrong for us.
