@@ -26,36 +26,45 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
-            child: ListView(padding: const EdgeInsets.all(20), shrinkWrap: true, children: gapped([
-              Row(children: [
-                Container(width: 26, height: 18, decoration: BoxDecoration(color: c.accent, borderRadius: BorderRadius.circular(5))),
-                const SizedBox(width: 10),
-                const Heading('Budget Wallet', size: 24),
-              ]),
-              const Muted('Your money, on your devices. Everything is stored here first and works offline. Sync between your phone and computer is encrypted with a key only your devices have.', size: 14.5),
-              if (!joining) ...[
-                FilledButton(
-                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                  onPressed: busy ? null : _create,
-                  child: const Text('Start a new wallet', style: TextStyle(fontSize: 16)),
-                ),
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                  onPressed: () => setState(() => joining = true),
-                  child: const Text('Join my wallet from another device'),
-                ),
-              ] else ...[
-                const Muted('On a device that already has your wallet, open Plan › Show wallet key, then type or paste the key here.'),
-                TextField(controller: keyText, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Wallet key', hintText: 'BW1-…')),
-                if (error != null) StatusLabel(good: false, text: error!),
-                FilledButton(
-                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                  onPressed: busy ? null : _join,
-                  child: const Text('Join wallet', style: TextStyle(fontSize: 16)),
-                ),
-                TextButton(onPressed: () => setState(() => joining = false), child: const Text('Back')),
-              ],
-            ])),
+            child: ListView(
+                padding: const EdgeInsets.all(20),
+                shrinkWrap: true,
+                children: gapped([
+                  Row(children: [
+                    Container(width: 26, height: 18, decoration: BoxDecoration(color: c.accent, borderRadius: BorderRadius.circular(5))),
+                    const SizedBox(width: 10),
+                    const Heading('Budget Wallet', size: 24),
+                  ]),
+                  const Muted(
+                      'Your money, on your devices. Everything is stored here first and works offline. Sync between your phone and computer is encrypted with a key only your devices have.',
+                      size: 14.5),
+                  if (!joining) ...[
+                    FilledButton(
+                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                      onPressed: busy ? null : _create,
+                      child: const Text('Start a new wallet', style: TextStyle(fontSize: 16)),
+                    ),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                      onPressed: () => setState(() => joining = true),
+                      child: const Text('Join my wallet from another device'),
+                    ),
+                  ] else ...[
+                    const Muted('On a device that already has your wallet, open Plan › Show wallet key, then type or paste the key here.'),
+                    TextField(
+                        controller: keyText,
+                        minLines: 2,
+                        maxLines: 4,
+                        decoration: const InputDecoration(labelText: 'Wallet key', hintText: 'BW1-…')),
+                    if (error != null) StatusLabel(good: false, text: error!),
+                    FilledButton(
+                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                      onPressed: busy ? null : _join,
+                      child: const Text('Join wallet', style: TextStyle(fontSize: 16)),
+                    ),
+                    TextButton(onPressed: () => setState(() => joining = false), child: const Text('Back')),
+                  ],
+                ])),
           ),
         ),
       ),

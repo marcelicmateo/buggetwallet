@@ -28,9 +28,16 @@ var _ctSeq = 0;
 
 /// A categorized transaction for pure-function tests (no database). The kind follows the category
 /// (`kindOf`). Amounts are cents; expenses negative.
-CategorizedTx ct(String date, int cents, String category, {bool deleted = false, String? matchedTo, bool manual = false}) =>
-    CategorizedTx(
-      Tx(id: 'syn-${_ctSeq++}', source: 'pbz', date: date, amount: cents, description: 'Synthetic $category', deleted: deleted, matchedTo: matchedTo, manual: manual),
+CategorizedTx ct(String date, int cents, String category, {bool deleted = false, String? matchedTo, bool manual = false}) => CategorizedTx(
+      Tx(
+          id: 'syn-${_ctSeq++}',
+          source: 'pbz',
+          date: date,
+          amount: cents,
+          description: 'Synthetic $category',
+          deleted: deleted,
+          matchedTo: matchedTo,
+          manual: manual),
       category,
       kindOf(category),
     );

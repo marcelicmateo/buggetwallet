@@ -18,7 +18,8 @@ class Op {
   const Op(this.entity, this.id, this.fields, this.hlc);
 
   Map<String, Object?> toJson() => {'e': entity, 'id': id, 'f': fields, 'h': hlc};
-  static Op fromJson(Map<String, Object?> j) => Op(j['e'] as String, j['id'] as String, Map<String, Object?>.from(j['f'] as Map), j['h'] as String);
+  static Op fromJson(Map<String, Object?> j) =>
+      Op(j['e'] as String, j['id'] as String, Map<String, Object?>.from(j['f'] as Map), j['h'] as String);
 }
 
 class ImportSummary {
@@ -155,8 +156,10 @@ class WalletRepo {
     return changed;
   }
 
-  bool peerFileSeen(String device, String file) => db.select('SELECT 1 FROM peer_files WHERE device = ? AND file = ?', [device, file]).isNotEmpty;
-  void markPeerFile(String device, String file) => db.execute('INSERT OR IGNORE INTO peer_files(device, file) VALUES(?, ?)', [device, file]);
+  bool peerFileSeen(String device, String file) =>
+      db.select('SELECT 1 FROM peer_files WHERE device = ? AND file = ?', [device, file]).isNotEmpty;
+  void markPeerFile(String device, String file) =>
+      db.execute('INSERT OR IGNORE INTO peer_files(device, file) VALUES(?, ?)', [device, file]);
 
   int nextFileNumber() {
     final n = int.tryParse(_meta('file_seq') ?? '0') ?? 0;
@@ -180,7 +183,8 @@ class WalletRepo {
   List<WishItem> wishlist() => [for (final r in db.select('SELECT * FROM wish WHERE deleted = 0 ORDER BY added')) WishItem.fromRow(r)];
 
   Map<String, String> merchantRules() => {
-        for (final r in db.select('SELECT id, category FROM merchant_rules WHERE deleted = 0 AND category IS NOT NULL')) r['id'] as String: r['category'] as String,
+        for (final r in db.select('SELECT id, category FROM merchant_rules WHERE deleted = 0 AND category IS NOT NULL'))
+          r['id'] as String: r['category'] as String,
       };
 
   WalletSettings settings() {
@@ -200,7 +204,9 @@ class WalletRepo {
 
   // ---------- writes ----------
   void updateSettings(Map<String, Object?> changes) {
-    _write([for (final e in changes.entries) ('setting', e.key, {'value': jsonEncode(e.value), 'deleted': 0})]);
+    _write([
+      for (final e in changes.entries) ('setting', e.key, {'value': jsonEncode(e.value), 'deleted': 0})
+    ]);
   }
 
   /// Imports a normalized batch. Already-known ids are skipped. Hand-added expenses with the
@@ -213,7 +219,14 @@ class WalletRepo {
     final changes = <(String, String, Map<String, Object?>)>[];
     var matched = 0;
     for (final n in fresh) {
-      final tx = Tx(id: n.id, source: n.source, date: n.date, amount: n.amountMinor, currency: n.currency, bankType: n.bankType, description: n.description);
+      final tx = Tx(
+          id: n.id,
+          source: n.source,
+          date: n.date,
+          amount: n.amountMinor,
+          currency: n.currency,
+          bankType: n.bankType,
+          description: n.description);
       String? category;
       final k = kindOf(cz.autoCategory(tx));
       if (n.amountMinor < 0 && (k == Kind.flex || k == Kind.fixed)) {
@@ -225,17 +238,21 @@ class WalletRepo {
           matched++;
         }
       }
-      changes.add(('tx', n.id, {
-        'source': n.source,
-        'date': n.date,
-        'amount': n.amountMinor,
-        'currency': n.currency,
-        'bank_type': n.bankType,
-        'description': n.description,
-        'manual': 0,
-        'deleted': 0,
-        if (category != null) 'category': category,
-      }));
+      changes.add((
+        'tx',
+        n.id,
+        {
+          'source': n.source,
+          'date': n.date,
+          'amount': n.amountMinor,
+          'currency': n.currency,
+          'bank_type': n.bankType,
+          'description': n.description,
+          'manual': 0,
+          'deleted': 0,
+          if (category != null) 'category': category,
+        }
+      ));
     }
     _write(changes);
     return ImportSummary(fresh.length, batch.transactions.length - fresh.length, matched, batch.skipped);
@@ -250,27 +267,61 @@ class WalletRepo {
   String addManual({required String date, required int amount, required String category, String note = '', String currency = 'EUR'}) {
     final id = _newId('m');
     _write([
-      ('tx', id, {'source': 'manual', 'date': date, 'amount': -amount, 'currency': currency, 'category': category, 'note': note, 'manual': 1, 'deleted': 0}),
+      (
+        'tx',
+        id,
+        {
+          'source': 'manual',
+          'date': date,
+          'amount': -amount,
+          'currency': currency,
+          'category': category,
+          'note': note,
+          'manual': 1,
+          'deleted': 0
+        }
+      ),
     ]);
     return id;
   }
 
-  void setCategory(String txId, String? category) => _write([('tx', txId, {'category': category})]);
-  void deleteTransaction(String txId) => _write([('tx', txId, {'deleted': 1})]);
-  void setMerchantRule(String key, String category) => _write([('rule', key, {'category': category, 'deleted': 0})]);
+  void setCategory(String txId, String? category) => _write([
+        ('tx', txId, {'category': category})
+      ]);
+  void deleteTransaction(String txId) => _write([
+        ('tx', txId, {'deleted': 1})
+      ]);
+  void setMerchantRule(String key, String category) => _write([
+        ('rule', key, {'category': category, 'deleted': 0})
+      ]);
 
   String saveGoal({String? id, required String name, required int target, required int saved, required int monthly, int? sort}) {
     final gid = id ?? _newId('g');
     _write([
-      ('goal', gid, {'name': name, 'target': target, 'saved': saved, 'monthly': monthly, 'sort': sort ?? DateTime.now().millisecondsSinceEpoch, 'deleted': 0}),
+      (
+        'goal',
+        gid,
+        {
+          'name': name,
+          'target': target,
+          'saved': saved,
+          'monthly': monthly,
+          'sort': sort ?? DateTime.now().millisecondsSinceEpoch,
+          'deleted': 0
+        }
+      ),
     ]);
     return gid;
   }
 
-  void deleteGoal(String id) => _write([('goal', id, {'deleted': 1})]);
+  void deleteGoal(String id) => _write([
+        ('goal', id, {'deleted': 1})
+      ]);
 
   /// Adds each goal's monthly amount to its saved total (the payday transfer).
-  void payGoals() => _write([for (final g in goals()) ('goal', g.id, {'saved': g.saved + g.monthly})]);
+  void payGoals() => _write([
+        for (final g in goals()) ('goal', g.id, {'saved': g.saved + g.monthly})
+      ]);
 
   String addWish(String name, int price) {
     final id = _newId('w');
@@ -280,5 +331,7 @@ class WalletRepo {
     return id;
   }
 
-  void decideWish(String id, String status) => _write([('wish', id, {'status': status, 'decided': DateTime.now().millisecondsSinceEpoch})]);
+  void decideWish(String id, String status) => _write([
+        ('wish', id, {'status': status, 'decided': DateTime.now().millisecondsSinceEpoch})
+      ]);
 }

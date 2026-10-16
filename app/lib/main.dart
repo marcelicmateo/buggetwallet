@@ -81,10 +81,15 @@ class _HomeShellState extends State<HomeShell> {
           const Text('Budget Wallet', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
         ]),
         actions: [
-          if (wc.syncing) const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
+          if (wc.syncing)
+            const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
           Padding(
             padding: const EdgeInsets.only(right: 16),
-            child: Chip(label: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}', style: const TextStyle(fontSize: 12.5)), visualDensity: VisualDensity.compact),
+            child: Chip(
+                label: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}', style: const TextStyle(fontSize: 12.5)),
+                visualDensity: VisualDensity.compact),
           ),
         ],
       ),
@@ -93,7 +98,8 @@ class _HomeShellState extends State<HomeShell> {
         selectedIndex: tab,
         onDestinationSelected: (i) => setState(() => tab = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet), label: 'Today'),
+          NavigationDestination(
+              icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet), label: 'Today'),
           NavigationDestination(icon: Icon(Icons.bar_chart_outlined), selectedIcon: Icon(Icons.bar_chart), label: 'Spending'),
           NavigationDestination(icon: Icon(Icons.hourglass_empty), selectedIcon: Icon(Icons.hourglass_bottom), label: 'Wishlist'),
           NavigationDestination(icon: Icon(Icons.flag_outlined), selectedIcon: Icon(Icons.flag), label: 'Goals'),

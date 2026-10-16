@@ -17,7 +17,9 @@ Map<String, Object?> view(PeriodSummary p) => {
       'running': p.running,
     };
 
-Map<String, Object?> period(String start, String end, {int income = 0, int out = 0, Map<String, int> byCategory = const {}, bool running = false}) => {
+Map<String, Object?> period(String start, String end,
+        {int income = 0, int out = 0, Map<String, int> byCategory = const {}, bool running = false}) =>
+    {
       'start': start,
       'end': end,
       'income': income,
@@ -62,8 +64,7 @@ void main() {
     ];
     final expected = [
       // income 100000+50000+25000+12000; out 40000+3000+2000−500+1500
-      period('2026-09-10', '2026-10-11',
-          income: 187000, out: 46000, byCategory: {'Rent': 40000, 'Groceries': 4500, 'Eating out': 1500}),
+      period('2026-09-10', '2026-10-11', income: 187000, out: 46000, byCategory: {'Rent': 40000, 'Groceries': 4500, 'Eating out': 1500}),
       // running: end = nextPayday(2026-10-11, 15)
       period('2026-10-11', '2026-11-15',
           income: 160000, out: 2099, byCategory: {'Bills & subscriptions': 1299, 'Groceries': 800}, running: true),
@@ -358,4 +359,3 @@ void main() {
     });
   });
 }
-

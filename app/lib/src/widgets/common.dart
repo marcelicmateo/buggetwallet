@@ -33,8 +33,8 @@ class Eyebrow extends StatelessWidget {
   final String text;
   const Eyebrow(this.text, {super.key});
   @override
-  Widget build(BuildContext context) => Text(text.toUpperCase(),
-      style: TextStyle(fontSize: 11.5, letterSpacing: 0.9, fontWeight: FontWeight.w600, color: context.c.muted));
+  Widget build(BuildContext context) =>
+      Text(text.toUpperCase(), style: TextStyle(fontSize: 11.5, letterSpacing: 0.9, fontWeight: FontWeight.w600, color: context.c.muted));
 }
 
 class Heading extends StatelessWidget {
@@ -75,7 +75,8 @@ class Tag extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-        decoration: BoxDecoration(color: context.c.surface2, borderRadius: BorderRadius.circular(5), border: Border.all(color: context.c.line)),
+        decoration:
+            BoxDecoration(color: context.c.surface2, borderRadius: BorderRadius.circular(5), border: Border.all(color: context.c.line)),
         child: Text(text, style: TextStyle(fontSize: 11, color: context.c.ink2)),
       );
 }
@@ -103,7 +104,9 @@ class TxTile extends StatelessWidget {
               Text(merchantName(t.tx), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500)),
               const SizedBox(height: 2),
               Row(children: [
-                Flexible(child: Text('${shortDate(t.date)} · ${t.category}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: context.c.muted))),
+                Flexible(
+                    child: Text('${shortDate(t.date)} · ${t.category}',
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: context.c.muted))),
                 const SizedBox(width: 6),
                 Tag(src),
               ]),
@@ -143,7 +146,8 @@ class LineItem extends StatelessWidget {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: TextStyle(fontWeight: w)),
-            if (sub != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub!, style: TextStyle(fontSize: 12.5, color: context.c.muted))),
+            if (sub != null)
+              Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub!, style: TextStyle(fontSize: 12.5, color: context.c.muted))),
           ]),
         ),
         Text(value, style: numStyle.copyWith(fontWeight: w)),
@@ -156,8 +160,9 @@ class EmptyNote extends StatelessWidget {
   final String text;
   const EmptyNote(this.text, {super.key});
   @override
-  Widget build(BuildContext context) =>
-      Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: context.c.muted)));
+  Widget build(BuildContext context) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: context.c.muted)));
 }
 
 void toast(BuildContext context, String msg) {

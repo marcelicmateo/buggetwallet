@@ -41,7 +41,8 @@ class FolderSync {
     if (await f.exists()) {
       final j = jsonDecode(await f.readAsString()) as Map<String, Object?>;
       if (j['kid'] != kid) {
-        throw const SyncException('This sync folder belongs to a wallet with a different key. Join that wallet with its key, or pick another folder.');
+        throw const SyncException(
+            'This sync folder belongs to a wallet with a different key. Join that wallet with its key, or pick another folder.');
       }
     } else {
       await f.writeAsString(jsonEncode({'v': 1, 'kid': kid}));
@@ -77,7 +78,8 @@ class FolderSync {
       if (dev is! Directory) continue;
       final device = dev.path.split(sep).last;
       if (device == repo.deviceId) continue;
-      final files = await dev.list().where((f) => f is File && f.path.endsWith('.bwop') && !f.path.split(sep).last.startsWith('.')).toList();
+      final files =
+          await dev.list().where((f) => f is File && f.path.endsWith('.bwop') && !f.path.split(sep).last.startsWith('.')).toList();
       files.sort((a, b) => a.path.compareTo(b.path));
       for (final f in files) {
         final name = f.path.split(sep).last;

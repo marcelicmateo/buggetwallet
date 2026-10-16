@@ -10,17 +10,24 @@ import 'support/synthetic.dart';
 void main() {
   group('categories', () {
     final cz = Categorizer();
-    String cat(NormalizedTransaction t) => cz.categoryOf(Tx(id: t.id, source: t.source, date: t.date, amount: t.amountMinor, bankType: t.bankType, description: t.description));
+    String cat(NormalizedTransaction t) => cz
+        .categoryOf(Tx(id: t.id, source: t.source, date: t.date, amount: t.amountMinor, bankType: t.bankType, description: t.description));
     test('PBZ rules', () {
-      expect(january.transactions.map(cat).toList(), ['Salary', 'Rent', 'Internal transfer', 'Groceries', 'Loan', 'Bank fees', 'Extra income']);
+      expect(january.transactions.map(cat).toList(),
+          ['Salary', 'Rent', 'Internal transfer', 'Groceries', 'Loan', 'Bank fees', 'Extra income']);
     });
     test('user patterns win over built-in rules', () {
       const t = Tx(id: 'x', source: 'revolut', date: '2026-01-01', amount: -100, bankType: 'Card Payment', description: 'Corner Spot');
       expect(Categorizer().categoryOf(t), 'Shopping');
-      expect(Categorizer(patterns: [['Eating out', 'corner']]).categoryOf(t), 'Eating out');
+      expect(
+          Categorizer(patterns: [
+            ['Eating out', 'corner']
+          ]).categoryOf(t),
+          'Eating out');
     });
     test('merchant key matches v1', () {
-      const t = Tx(id: 'x', source: 'pbz', date: '2026-01-01', amount: -100, bankType: 'POS plaćanje', description: 'PBZ POS PBZ7BAUHAUS ZADAR');
+      const t =
+          Tx(id: 'x', source: 'pbz', date: '2026-01-01', amount: -100, bankType: 'POS plaćanje', description: 'PBZ POS PBZ7BAUHAUS ZADAR');
       expect(merchantKey(t), 'bauhaus_zadar');
     });
   });
@@ -48,7 +55,13 @@ void main() {
 
     test('settings and goals round-trip', () {
       final r = WalletRepo.inMemory();
-      r.updateSettings({'salary': 150000, 'merchantPatterns': [['Groceries', 'corner']], 'salaryConfirmed': true});
+      r.updateSettings({
+        'salary': 150000,
+        'merchantPatterns': [
+          ['Groceries', 'corner']
+        ],
+        'salaryConfirmed': true
+      });
       expect(r.settings().salary, 150000);
       expect(r.settings().salaryConfirmed, isTrue);
       expect(r.settings().merchantPatterns.first, ['Groceries', 'corner']);

@@ -166,7 +166,10 @@ class WalletController extends ChangeNotifier {
         final batch = importBankFile(bytes);
         final s = repo.importBatch(batch);
         final bank = batch.source == 'pbz' ? 'PBZ' : 'Revolut';
-        lines.add(ImportLine(name, '$bank: ${s.added} new, ${s.duplicates} already here${s.matched > 0 ? ', ${s.matched} matched to expenses you added' : ''}.', true));
+        lines.add(ImportLine(
+            name,
+            '$bank: ${s.added} new, ${s.duplicates} already here${s.matched > 0 ? ', ${s.matched} matched to expenses you added' : ''}.',
+            true));
       } on ImportException catch (e) {
         lines.add(ImportLine(name, e.message, false));
       } catch (e) {

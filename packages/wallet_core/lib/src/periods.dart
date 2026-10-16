@@ -30,7 +30,11 @@ const _missingSalaryDays = 45;
 
 /// Payday dates (sorted, all <= today) from salary payments, a hand-set period start and assumed paydays.
 List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String today) {
-  final salary = txs.where((t) => t.tx.live && t.kind == Kind.income && t.amount > 0 && t.date.compareTo(today) <= 0).map((t) => t.date).toList()..sort();
+  final salary = txs
+      .where((t) => t.tx.live && t.kind == Kind.income && t.amount > 0 && t.date.compareTo(today) <= 0)
+      .map((t) => t.date)
+      .toList()
+    ..sort();
   final real = <String>[];
   for (final d in salary) {
     if (real.isEmpty || daysBetween(real.last, d) > _samePaydayDays) real.add(d);

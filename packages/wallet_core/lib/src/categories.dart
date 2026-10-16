@@ -26,7 +26,10 @@ const Map<String, Kind> categories = {
   'Loan received': Kind.transfer,
 };
 
-List<String> get flexCategories => [for (final e in categories.entries) if (e.value == Kind.flex) e.key];
+List<String> get flexCategories => [
+      for (final e in categories.entries)
+        if (e.value == Kind.flex) e.key
+    ];
 
 Kind kindOf(String category) => categories[category] ?? Kind.flex;
 
@@ -34,10 +37,16 @@ Kind kindOf(String category) => categories[category] ?? Kind.flex;
 /// settings (merchantPatterns) so nobody's habits end up in the code.
 final List<(String, RegExp)> builtInMerchantRules = [
   ('Food delivery', RegExp(r'wolt|bolt food|glovo')),
-  ('Bills & subscriptions', RegExp(r'netflix|spotify|1password|anthropic|linkedin|proton|telekom|\ba1\b|hbo|disney|youtube|icloud|openai|chatgpt|^google$')),
+  (
+    'Bills & subscriptions',
+    RegExp(r'netflix|spotify|1password|anthropic|linkedin|proton|telekom|\ba1\b|hbo|disney|youtube|icloud|openai|chatgpt|^google$')
+  ),
   ('Games & apps', RegExp(r'steam|valve|google play|playstation|nintendo|epic games')),
   ('Groceries', RegExp(r'\bspar|lidl|plodine|kaufland|konzum|studenac|tommy|pan-pek|mlinar|eurospin|ribola|pekar')),
-  ('Car & transport', RegExp(r'\bina\b|petrol|tifon|shell|crodux|autocest|e-vinjeta|jadrolinija|getbybus|\bbolt\b|uber|parking|\bhak\b|\bzet\b|flixbus')),
+  (
+    'Car & transport',
+    RegExp(r'\bina\b|petrol|tifon|shell|crodux|autocest|e-vinjeta|jadrolinija|getbybus|\bbolt\b|uber|parking|\bhak\b|\bzet\b|flixbus')
+  ),
   ('Eating out', RegExp(r'restoran|bistro|bar\b|fast food|mcdonald|pizz|grill|caffe|cafe|kafi|burger|kebab|sushi|konoba|\bpub\b')),
   ('Health & care', RegExp(r'ljekarn|pharm|farmac|dm drog|m.ller|poliklinik|hzzo')),
   ('Sport & fitness', RegExp(r'decathlon|fitness|gymbeam')),
@@ -89,7 +98,11 @@ class Categorizer {
         if (d.contains('isplata kredita')) return 'Loan received';
         if (type == 'Isplata u poslovnici') return 'Cash';
         if (type == 'Isplata ATM') return t.amount <= -50000 ? 'Rent' : 'Cash';
-        if (type == 'Naplaćene naknade' || type == 'Povrat naknade' || type == 'Pripisane kamate' || d.contains('naknad') || d.contains('članarin')) {
+        if (type == 'Naplaćene naknade' ||
+            type == 'Povrat naknade' ||
+            type == 'Pripisane kamate' ||
+            d.contains('naknad') ||
+            d.contains('članarin')) {
           return 'Bank fees';
         }
         if (type == 'Trajni nalog' || RegExp(r'naplata kredita|rate kredita|kreditni račun').hasMatch(d)) return 'Loan';

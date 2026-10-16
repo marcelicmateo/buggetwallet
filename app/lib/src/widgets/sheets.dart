@@ -30,7 +30,8 @@ class AddExpenseSheet extends StatefulWidget {
 }
 
 class _AddExpenseSheetState extends State<AddExpenseSheet> {
-  late final TextEditingController amount = TextEditingController(text: widget.amount == null ? '' : (widget.amount! / 100).toStringAsFixed(2));
+  late final TextEditingController amount =
+      TextEditingController(text: widget.amount == null ? '' : (widget.amount! / 100).toStringAsFixed(2));
   late final TextEditingController note = TextEditingController(text: widget.note ?? '');
   String cat = 'Groceries';
   DateTime date = DateTime.now();
@@ -72,7 +73,8 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
           icon: const Icon(Icons.event, size: 18),
           label: Text(shortDate(isoDate(date))),
           onPressed: () async {
-            final d = await showDatePicker(context: context, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 1)));
+            final d = await showDatePicker(
+                context: context, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 1)));
             if (d != null) setState(() => date = d);
           },
         ),
@@ -81,8 +83,10 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       if (warned && !widget.skipImpulse && (parseMoney(amount.text) ?? 0) > s.impulse) ...[
         const SizedBox(height: 12),
         Panel(color: context.c.warnBg, children: [
-          Text('Over ${money(s.impulse, cur, decimals: 0)}: wishlist first?', style: TextStyle(fontWeight: FontWeight.w600, color: context.c.warnInk)),
-          Text('Your rule says big buys wait ${s.coolHours} hours. If you already paid, tap Add expense again.', style: TextStyle(color: context.c.warnInk, fontSize: 13)),
+          Text('Over ${money(s.impulse, cur, decimals: 0)}: wishlist first?',
+              style: TextStyle(fontWeight: FontWeight.w600, color: context.c.warnInk)),
+          Text('Your rule says big buys wait ${s.coolHours} hours. If you already paid, tap Add expense again.',
+              style: TextStyle(color: context.c.warnInk, fontSize: 13)),
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton(
@@ -118,7 +122,9 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         },
       ),
       const SizedBox(height: 10),
-      const Muted('Cash from an ATM is already counted when you withdraw it. Log card payments here; the weekly import matches them so nothing is counted twice.', size: 12.5),
+      const Muted(
+          'Cash from an ATM is already counted when you withdraw it. Log card payments here; the weekly import matches them so nothing is counted twice.',
+          size: 12.5),
     ]);
   }
 }
@@ -147,7 +153,8 @@ class _TxSheetState extends State<TxSheet> {
       Text(money(t.amount, widget.wc.currency, decimals: 2, signed: true), style: numStyle.copyWith(fontSize: 22)),
       const SizedBox(height: 4),
       Muted('${longDate(t.date)} · $src${t.bankType.isNotEmpty ? ' · ${t.bankType}' : ''}'),
-      if (!manual) Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(t.description, style: const TextStyle(fontSize: 13))),
+      if (!manual)
+        Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(t.description, style: const TextStyle(fontSize: 13))),
       const SizedBox(height: 14),
       DropdownButtonFormField<String>(
         initialValue: cat,
@@ -208,7 +215,9 @@ class _GoalSheetState extends State<GoalSheet> {
   static String _plain(int cents) => cents == 0 ? '' : (cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2));
 
   String hint() {
-    final t = parseMoney(target.text) ?? 0, m = parseMoney(monthly.text) ?? 0, s = (parseMoney(saved.text) ?? 0) + (parseMoney(add.text) ?? 0);
+    final t = parseMoney(target.text) ?? 0,
+        m = parseMoney(monthly.text) ?? 0,
+        s = (parseMoney(saved.text) ?? 0) + (parseMoney(add.text) ?? 0);
     if (m <= 0 || t <= s) return '';
     return 'At ${money(m, widget.wc.currency, decimals: 0)} a month you reach it in ${((t - s) / m).ceil()} months. This comes out of your daily spending money.';
   }
@@ -222,15 +231,33 @@ class _GoalSheetState extends State<GoalSheet> {
       TextField(controller: name, decoration: const InputDecoration(labelText: 'Name', hintText: 'New laptop')),
       const SizedBox(height: 10),
       Row(children: [
-        Expanded(child: TextField(controller: target, onChanged: upd, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Target'))),
+        Expanded(
+            child: TextField(
+                controller: target,
+                onChanged: upd,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Target'))),
         const SizedBox(width: 10),
-        Expanded(child: TextField(controller: monthly, onChanged: upd, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Each month'))),
+        Expanded(
+            child: TextField(
+                controller: monthly,
+                onChanged: upd,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Each month'))),
       ]),
       const SizedBox(height: 10),
-      TextField(controller: saved, onChanged: upd, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Put aside so far')),
+      TextField(
+          controller: saved,
+          onChanged: upd,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'Put aside so far')),
       if (g != null) ...[
         const SizedBox(height: 10),
-        TextField(controller: add, onChanged: upd, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Add money now', hintText: 'e.g. a bonus or tax refund')),
+        TextField(
+            controller: add,
+            onChanged: upd,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Add money now', hintText: 'e.g. a bonus or tax refund')),
       ],
       const SizedBox(height: 8),
       Muted(hint()),

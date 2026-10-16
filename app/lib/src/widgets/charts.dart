@@ -19,7 +19,11 @@ class PeriodNetChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.c;
     final vals = periods.map((p) => p.net / 100).toList();
-    final all = [...vals, for (final t in trend) if (t != null) t / 100];
+    final all = [
+      ...vals,
+      for (final t in trend)
+        if (t != null) t / 100
+    ];
     final maxY = all.fold<double>(50, (a, b) => b > a ? b : a) * 1.08;
     final minY = -all.fold<double>(50, (a, b) => -b > a ? -b : a) * 1.08;
     const hidden = AxisTitles(sideTitles: SideTitles(showTitles: false));
@@ -102,7 +106,8 @@ class PeriodNetChart extends StatelessWidget {
                   leftTitles: hidden,
                   rightTitles: hidden,
                   topTitles: hidden,
-                  bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: _labels, getTitlesWidget: (v, m) => const SizedBox.shrink())),
+                  bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: true, reservedSize: _labels, getTitlesWidget: (v, m) => const SizedBox.shrink())),
                 ),
                 lineBarsData: [
                   LineChartBarData(
@@ -134,8 +139,12 @@ class CategoryBars extends StatelessWidget {
     final c = context.c;
     final cats = {...values.keys, ...average.keys}.where((k) => (values[k] ?? 0) > 50 || (average[k] ?? 0) > 50).toList()
       ..sort((a, b) => (values[b] ?? 0).compareTo(values[a] ?? 0));
-    if (cats.isEmpty) return Padding(padding: const EdgeInsets.all(12), child: Text('Nothing spent this month yet.', style: TextStyle(color: c.muted)));
-    final maxV = cats.map((k) => [values[k] ?? 0, average[k] ?? 0].reduce((a, b) => a > b ? a : b)).reduce((a, b) => a > b ? a : b).clamp(1, 1 << 60);
+    if (cats.isEmpty)
+      return Padding(padding: const EdgeInsets.all(12), child: Text('Nothing spent this month yet.', style: TextStyle(color: c.muted)));
+    final maxV = cats
+        .map((k) => [values[k] ?? 0, average[k] ?? 0].reduce((a, b) => a > b ? a : b))
+        .reduce((a, b) => a > b ? a : b)
+        .clamp(1, 1 << 60);
     return Column(children: [
       for (final k in cats)
         Padding(
@@ -143,7 +152,9 @@ class CategoryBars extends StatelessWidget {
           child: Tooltip(
             message: '$k: ${money(values[k] ?? 0, currency, decimals: 0)} · average ${money(average[k] ?? 0, currency, decimals: 0)}',
             child: Row(children: [
-              SizedBox(width: 118, child: Text(k, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, color: c.ink2))),
+              SizedBox(
+                  width: 118,
+                  child: Text(k, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, color: c.ink2))),
               const SizedBox(width: 8),
               Expanded(
                 child: LayoutBuilder(builder: (ctx, box) {
@@ -152,14 +163,29 @@ class CategoryBars extends StatelessWidget {
                   return SizedBox(
                     height: 16,
                     child: Stack(children: [
-                      Positioned(left: 0, top: 2, bottom: 2, width: (w * v).clamp(2, w), child: Container(decoration: BoxDecoration(color: c.bar, borderRadius: const BorderRadius.horizontal(right: Radius.circular(4))))),
-                      Positioned(left: (w * a - 1).clamp(0, w - 2), top: 0, bottom: 0, width: 2, child: Container(color: c.ink.withValues(alpha: 0.55))),
+                      Positioned(
+                          left: 0,
+                          top: 2,
+                          bottom: 2,
+                          width: (w * v).clamp(2, w),
+                          child: Container(
+                              decoration:
+                                  BoxDecoration(color: c.bar, borderRadius: const BorderRadius.horizontal(right: Radius.circular(4))))),
+                      Positioned(
+                          left: (w * a - 1).clamp(0, w - 2),
+                          top: 0,
+                          bottom: 0,
+                          width: 2,
+                          child: Container(color: c.ink.withValues(alpha: 0.55))),
                     ]),
                   );
                 }),
               ),
               const SizedBox(width: 8),
-              SizedBox(width: 64, child: Text(money(values[k] ?? 0, currency, decimals: 0), textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontFeatures: [FontFeature.tabularFigures()]))),
+              SizedBox(
+                  width: 64,
+                  child: Text(money(values[k] ?? 0, currency, decimals: 0),
+                      textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontFeatures: [FontFeature.tabularFigures()]))),
             ]),
           ),
         ),
@@ -184,8 +210,20 @@ class PaceBar extends StatelessWidget {
         return SizedBox(
           height: 14,
           child: Stack(children: [
-            Positioned(left: 0, right: 0, top: 2, bottom: 2, child: Container(decoration: BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(6), border: Border.all(color: c.line)))),
-            Positioned(left: 0, top: 2, bottom: 2, width: w * used.clamp(0, 1), child: Container(decoration: BoxDecoration(color: over ? c.bad : c.accent, borderRadius: BorderRadius.circular(6)))),
+            Positioned(
+                left: 0,
+                right: 0,
+                top: 2,
+                bottom: 2,
+                child: Container(
+                    decoration:
+                        BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(6), border: Border.all(color: c.line)))),
+            Positioned(
+                left: 0,
+                top: 2,
+                bottom: 2,
+                width: w * used.clamp(0, 1),
+                child: Container(decoration: BoxDecoration(color: over ? c.bad : c.accent, borderRadius: BorderRadius.circular(6)))),
             Positioned(left: (w * elapsed - 1).clamp(0, w - 2), top: 0, bottom: 0, width: 2, child: Container(color: c.ink)),
           ]),
         );

@@ -10,7 +10,14 @@ var _seq = 0;
 /// A categorized transaction with an explicit kind.
 CategorizedTx tx(String date, int cents, Kind kind, {String? category, bool deleted = false}) => CategorizedTx(
       Tx(id: 't${_seq++}', source: 'pbz', date: date, amount: cents, deleted: deleted),
-      category ?? switch (kind) { Kind.income => 'Salary', Kind.extra => 'Extra income', Kind.fixed => 'Rent', Kind.flex => 'Groceries', Kind.transfer => 'Internal transfer' },
+      category ??
+          switch (kind) {
+            Kind.income => 'Salary',
+            Kind.extra => 'Extra income',
+            Kind.fixed => 'Rent',
+            Kind.flex => 'Groceries',
+            Kind.transfer => 'Internal transfer'
+          },
       kind,
     );
 
@@ -122,8 +129,8 @@ void main() {
   });
 
   group('trendNet', () {
-    PeriodSummary p(int net, {bool running = false}) =>
-        PeriodSummary(start: '2026-01-01', end: '2026-02-01', income: net > 0 ? net : 0, out: net > 0 ? 0 : -net, byCategory: const {}, running: running);
+    PeriodSummary p(int net, {bool running = false}) => PeriodSummary(
+        start: '2026-01-01', end: '2026-02-01', income: net > 0 ? net : 0, out: net > 0 ? 0 : -net, byCategory: const {}, running: running);
 
     test('rolling average over completed periods, null for running', () {
       final ps = [p(100), p(200), p(-100), p(401), p(50, running: true)];

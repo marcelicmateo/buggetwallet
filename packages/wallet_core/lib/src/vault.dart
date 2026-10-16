@@ -85,8 +85,11 @@ class VaultKey {
   }
 
   /// Short public fingerprint, safe to store next to the data.
-  Future<String> keyId() async =>
-      (await Sha256().hash([...utf8.encode('budget-wallet-key-id'), ...bytes])).bytes.sublist(0, 8).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  Future<String> keyId() async => (await Sha256().hash([...utf8.encode('budget-wallet-key-id'), ...bytes]))
+      .bytes
+      .sublist(0, 8)
+      .map((b) => b.toRadixString(16).padLeft(2, '0'))
+      .join();
 }
 
 final _magic = utf8.encode('BWOP1');
