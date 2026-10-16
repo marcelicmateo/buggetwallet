@@ -1,0 +1,31 @@
+# One-off: generate the Flutter platform scaffold (android/ios/linux/macos/windows) and commit it back.
+name: bootstrap
+on:
+  push:
+    branches: [v2]
+    paths: [".github/workflows/bootstrap.yml"]
+permissions:
+  contents: write
+jobs:
+  scaffold:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Create Flutter app scaffold
+        run: |
+          flutter --version | tee flutter-version.txt
+          if [ ! -f app/pubspec.yaml ]; then
+            flutter create --org hr.marcelic --project-name budget_wallet --platforms android,ios,linux,macos,windows app
+          fi
+      - name: Commit scaffold
+        run: |
+          git config user.name "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          mkdir -p ci && mv flutter-version.txt ci/
+          git add app ci
+          git commit -m "[ci] Flutter scaffold [skip ci]" || echo "nothing to commit"
+          git push origin HEAD:v2
