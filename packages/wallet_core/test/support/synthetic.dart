@@ -1,5 +1,6 @@
 // Shared SYNTHETIC test data for wallet_core tests. No real transactions, amounts or merchants
 // from the owner's spending: names are generic or well-known chains, amounts are made up.
+import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 /// A normalized transaction with a v1-compatible id. Amounts are cents.
@@ -22,3 +23,14 @@ final january = ImportBatch(source: 'pbz', transactions: [
   n('2026-01-18', -33, 'Naplaćene naknade', 'Naknada On-line bankarstvo - kreditni transfer'),
   n('2026-01-20', 30000, 'Ostalo', 'VAL_01.01.2026.POVRAT'),
 ]);
+
+var _ctSeq = 0;
+
+/// A categorized transaction for pure-function tests (no database). The kind follows the category
+/// (`kindOf`). Amounts are cents; expenses negative.
+CategorizedTx ct(String date, int cents, String category, {bool deleted = false, String? matchedTo, bool manual = false}) =>
+    CategorizedTx(
+      Tx(id: 'syn-${_ctSeq++}', source: 'pbz', date: date, amount: cents, description: 'Synthetic $category', deleted: deleted, matchedTo: matchedTo, manual: manual),
+      category,
+      kindOf(category),
+    );
