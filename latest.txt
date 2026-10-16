@@ -1,4 +1,4 @@
-commit: 74180f855510789b0baef10be7d2c23297164436  ref: v2  run: 38919500463
+commit: a54f7d1005a78c57cd21969fcacd8dcd5ceb66aa  ref: v2  run: 38921130691
 
 importer=success core=success app=success signing=success apk=success linux=success
 
@@ -139,21 +139,63 @@ Changed 57 dependencies!
 Try `dart pub outdated` for more information.
 Analyzing wallet_core...
 No issues found!
-00:00 +0: loading test/core_test.dart
-00:00 +0: test/core_test.dart: categories PBZ rules
-00:00 +1: test/core_test.dart: categories user patterns win over built-in rules
-00:00 +2: test/core_test.dart: categories merchant key matches v1
-00:00 +3: test/core_test.dart: repo import is idempotent
-00:00 +4: test/core_test.dart: repo hand-added expense is matched by the bank row and keeps its category
-00:00 +5: test/core_test.dart: repo settings and goals round-trip
-00:00 +6: test/core_test.dart: budget payday period: budget, rollover, days left
-00:00 +7: test/core_test.dart: budget month summary ignores internal transfers
-00:00 +8: test/core_test.dart: budget dates
-00:00 +9: test/core_test.dart: vault key text round-trip and typo detection
-00:00 +10: test/core_test.dart: vault seal/unseal and tamper detection
-00:00 +11: test/core_test.dart: sync two devices converge, last edit wins per field
-00:00 +12: test/core_test.dart: sync a different key is refused
-00:00 +13: All tests passed!
+00:00 +0: loading test/periods_impl_test.dart
+00:00 +0: test/periods_impl_test.dart: paydays salary parts within 20 days are one payday
+00:00 +1: test/periods_impl_test.dart: paydays ignores deleted salary, future salary and transfers
+00:00 +2: test/periods_impl_test.dart: paydays missing salary: paydays assumed on paydayDay until the next real one
+00:00 +3: test/periods_impl_test.dart: paydays missing salary at the end: assumed until today, clamped to month end
+00:00 +4: test/periods_impl_test.dart: paydays hand-set period start counts when more than 20 days after the last payday
+00:00 +5: test/periods_impl_test.dart: periodSummaries no paydays and no period start: empty
+00:00 +6: test/periods_impl_test.dart: periodSummaries sums per period, running last, transfers and later rows ignored
+00:00 +7: test/periods_impl_test.dart: periodSummaries savings rate is null without income
+00:00 +8: test/periods_impl_test.dart: periodSummaries keeps the last [count] periods
+00:00 +9: test/periods_impl_test.dart: periodSummaries works on imported synthetic data
+00:00 +10: test/periods_impl_test.dart: trendNet rolling average over completed periods, null for running
+00:00 +11: test/periods_impl_test.dart: savingsOverview completed periods only
+00:00 +12: loading test/periods_test.dart
+00:00 +12: test/periods_test.dart: periodSummaries: totals salary parts, transfers, extras, refunds, non-live and future rows
+00:00 +13: test/periods_test.dart: periodSummaries: totals input order does not matter (sync can deliver rows in any order)
+00:00 +14: test/periods_test.dart: periodSummaries: totals net and savings rate of the computed periods
+00:00 +15: test/periods_test.dart: periodSummaries: paydays a part more than 20 days after the payday START begins a new payday, even if close to the previous part
+00:00 +16: test/periods_test.dart: periodSummaries: paydays exactly 20 days after the payday start is still the same payday
+00:00 +17: test/periods_test.dart: periodSummaries: paydays 21 days after the payday start is a new payday
+00:00 +18: test/periods_test.dart: periodSummaries: paydays extras and transfers never create a payday
+00:00 +19: test/periods_test.dart: periodSummaries: paydays deleted or matched salary rows do not create a payday or count as income
+00:00 +20: test/periods_test.dart: periodSummaries: paydays salary dated after today is ignored
+00:00 +21: test/periods_test.dart: periodSummaries: paydays salary landing today starts the running period
+00:00 +22: test/periods_test.dart: periodSummaries: missing salary no salary for >45 days up to today: payday assumed on paydayDay, clamped (31 -> 30 Sep)
+00:00 +23: test/periods_test.dart: periodSummaries: missing salary missing salary between two real paydays: assumed payday on paydayDay, clamped (29 -> 28 Feb)
+00:00 +24: test/periods_test.dart: periodSummaries: missing salary typical missing June salary: June period starts on paydayDay of the month after the last payday
+00:00 +25: test/periods_test.dart: periodSummaries: missing salary no assumed payday a few days before a late real salary (paydayDay 10, salary on the 13th)
+00:00 +26: test/periods_test.dart: periodSummaries: missing salary a 45-day gap is not missing salary
+00:00 +27: test/periods_test.dart: periodSummaries: periodStart periodStart >20 days after the last payday starts the current period before salary import
+00:00 +28: test/periods_test.dart: periodSummaries: periodStart periodStart within 20 days of the last payday is not a new payday
+00:00 +29: test/periods_test.dart: periodSummaries: periodStart periodStart after today is ignored
+00:00 +30: test/periods_test.dart: periodSummaries: periodStart periodStart with no salary at all gives one running period from periodStart
+00:00 +31: test/periods_test.dart: periodSummaries: list shape no salary and no periodStart: empty list
+00:00 +32: test/periods_test.dart: periodSummaries: list shape running only on the last period; each end is the next start
+00:00 +33: test/periods_test.dart: periodSummaries: list shape count keeps the newest periods
+00:00 +34: test/periods_test.dart: periodSummaries: list shape default count is 12
+00:00 +35: test/periods_test.dart: PeriodSummary net and savingsRate
+00:00 +36: test/periods_test.dart: trendNet window 3: nulls until 3 completed periods, rounded averages, null for the running period
+00:00 +37: test/periods_test.dart: trendNet default window is 3
+00:00 +38: test/periods_test.dart: trendNet window 1 is each completed net
+00:00 +39: test/periods_test.dart: trendNet fewer completed periods than the window: all null
+00:00 +40: loading test/core_test.dart
+00:00 +40: test/core_test.dart: categories PBZ rules
+00:00 +41: test/core_test.dart: categories user patterns win over built-in rules
+00:00 +42: test/core_test.dart: categories merchant key matches v1
+00:00 +43: test/core_test.dart: repo import is idempotent
+00:00 +44: test/core_test.dart: repo hand-added expense is matched by the bank row and keeps its category
+00:00 +45: test/core_test.dart: repo settings and goals round-trip
+00:00 +46: test/core_test.dart: budget payday period: budget, rollover, days left
+00:00 +47: test/core_test.dart: budget month summary ignores internal transfers
+00:00 +48: test/core_test.dart: budget dates
+00:00 +49: test/core_test.dart: vault key text round-trip and typo detection
+00:00 +50: test/core_test.dart: vault seal/unseal and tamper detection
+00:00 +51: test/core_test.dart: sync two devices converge, last edit wins per field
+00:00 +52: test/core_test.dart: sync a different key is refused
+00:00 +53: All tests passed!
 === app ===
 Resolving dependencies...
 Downloading packages...
@@ -182,7 +224,7 @@ Got dependencies!
 8 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Analyzing app...                                                
-No issues found! (ran in 10.3s)
+No issues found! (ran in 9.2s)
 Resolving dependencies...
 Downloading packages...
   cross_file 0.3.5+5 (0.4.0 available)
@@ -201,9 +243,10 @@ Try `flutter pub outdated` for more information.
 ✅ money formatting
 ✅ money parsing
 ✅ dates
+✅ percent
 ::endgroup::
 
-🎉 3 tests passed.
+🎉 4 tests passed.
 === apk ===
 [================                       ] 42% Unzipping... android-ndk-r28c/tool
 [=================                      ] 43% Unzipping... android-ndk-r28c/tool
@@ -243,8 +286,8 @@ Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
 "Install CMake 3.22.1 v.3.22.1" complete.
 "Install CMake 3.22.1 v.3.22.1" finished.
 Caught exception: Already watching path: /home/runner/work/buggetwallet/buggetwallet/app/android
-Running Gradle task 'assembleRelease'...                          432.4s
-✓ Built build/app/outputs/flutter-apk/app-release.apk (59.6MB)
+Running Gradle task 'assembleRelease'...                          427.3s
+✓ Built build/app/outputs/flutter-apk/app-release.apk (59.8MB)
 === linux ===
 Resolving dependencies...
 Downloading packages...
