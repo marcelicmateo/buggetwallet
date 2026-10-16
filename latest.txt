@@ -1,5 +1,5 @@
-commit: de61d75f5aace39adf3169b353c3c036d7dc200b  branch: v2  run: 38870601597
-importer=success core=success app=failure apk=skipped linux=skipped
+commit: ead0274546877375662bd587e08e8525a1d6e2de  branch: v2  run: 38870838153
+importer=success core=success app=success apk=failure linux=success
 
 === importer ===
 Resolving dependencies...
@@ -228,11 +228,56 @@ Changed 64 dependencies!
 8 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Analyzing app...                                                
+No issues found! (ran in 10.2s)
 
-   info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/foundation.dart'. Try removing the import directive • lib/src/controller.dart:3:8 • unnecessary_import
-   info • The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/services.dart'. Try removing the import directive • lib/src/screens/plan.dart:2:8 • unnecessary_import
-   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check. Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext • lib/src/screens/plan.dart:113:32 • use_build_context_synchronously
-  error • The getter 'platform' isn't defined for the type 'FilePicker'. Try importing the library that defines 'platform', correcting the name to the name of an existing getter, or defining a getter or field named 'platform' • lib/src/screens/plan.dart:148:32 • undefined_getter
-  error • The getter 'platform' isn't defined for the type 'FilePicker'. Try importing the library that defines 'platform', correcting the name to the name of an existing getter, or defining a getter or field named 'platform' • lib/src/screens/plan.dart:175:45 • undefined_getter
+::group::✅ Passing tests
+✅ money formatting
+✅ money parsing
+✅ dates
+::endgroup::
 
-5 issues found. (ran in 9.9s)
+🎉 3 tests passed.
+=== apk ===
+"Install CMake 3.22.1 v.3.22.1" ready.
+Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
+"Install CMake 3.22.1 v.3.22.1" complete.
+"Install CMake 3.22.1 v.3.22.1" finished.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:checkReleaseAarMetadata'.
+> A failure occurred while executing com.android.build.gradle.internal.tasks.CheckAarMetadataWorkAction
+   > An issue was found when checking AAR metadata:
+
+       1.  Dependency ':permission_handler_android' requires libraries and applications that
+           depend on it to compile against version 37 or later of the
+           Android APIs.
+
+           :app is currently compiled against android-36.
+
+           Also, the maximum recommended compile SDK version for Android Gradle
+           plugin 9.1.0 is 36.
+
+           Recommended action: Update this project's version of the Android Gradle
+           plugin to one that supports 37, then update this project to use
+           compileSdk of at least 37.
+
+           Note that updating a library or application's compileSdk (which
+           allows newer APIs to be used) can be done separately from updating
+           targetSdk (which opts the app in to new runtime behavior) and
+           minSdk (which determines which devices the app can be installed
+           on).
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 6m 1s
+Running Gradle task 'assembleRelease'...                          362.8s
+Gradle task assembleRelease failed with exit code 1
+=== linux ===
+Building Linux application...                                   
+✓ Built build/linux/x64/release/bundle/budget_wallet
