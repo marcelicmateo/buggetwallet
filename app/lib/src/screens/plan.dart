@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -110,7 +109,7 @@ class _PlanScreenState extends State<PlanScreen> {
             final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now());
             if (d == null) return;
             wc.startNewMonth(isoDate(d));
-            if (mounted) toast(context, 'New month started ${shortDate(isoDate(d))}');
+            if (context.mounted) toast(context, 'New month started ${shortDate(isoDate(d))}');
           },
         ),
       ]),
@@ -145,13 +144,12 @@ class _PlanScreenState extends State<PlanScreen> {
   }
 
   Future<void> _import() async {
-    final r = await FilePicker.platform.pickFiles(allowMultiple: true, withData: true, type: FileType.custom, allowedExtensions: const ['xls', 'xlsx', 'csv']);
-    if (r == null) return;
+    final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['xls', 'xlsx', 'csv']);
+    if (picked.isEmpty) return;
     setState(() => importing = true);
     final files = <(String, Uint8List)>[];
-    for (final pf in r.files) {
-      final bytes = pf.bytes ?? (pf.path != null ? await File(pf.path!).readAsBytes() : null);
-      if (bytes != null) files.add((pf.name, bytes));
+    for (final pf in picked) {
+      files.add((pf.name, await pf.readAsBytes()));
     }
     await widget.wc.importFiles(files);
     if (mounted) setState(() => importing = false);
@@ -172,11 +170,12 @@ class _PlanScreenState extends State<PlanScreen> {
         else
           OutlinedButton(
             onPressed: () async {
-              final path = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Choose your Syncthing folder');
+              final path = await FilePicker.getDirectoryPath(dialogTitle: 'Choose your Syncthing folder');
               if (path != null) await wc.setSyncFolder(path);
             },
             child: const Text('Choose folder'),
           ),
+        if (!Platform.isIOS) OutlinedButton(onPressed: () => _typePath(context), child: const Text('Type path')),
         if (Platform.isAndroid)
           OutlinedButton(
             onPressed: () async {
@@ -194,6 +193,24 @@ class _PlanScreenState extends State<PlanScreen> {
           ? 'On iPhone, sync the app folder (Files › On My iPhone › Budget Wallet › BudgetWalletSync) with the Möbius Sync app.'
           : 'Install Syncthing on each device and share one folder between them. Pick that folder here on every device.'),
     ]);
+  }
+
+  Future<void> _typePath(BuildContext context) async {
+    final ctl = TextEditingController(text: widget.wc.syncFolder ?? (Platform.isAndroid ? '/storage/emulated/0/Documents/BudgetWallet' : ''));
+    final path = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sync folder path'),
+        content: TextField(controller: ctl, decoration: const InputDecoration(hintText: '/path/to/BudgetWallet')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, ctl.text.trim()), child: const Text('Use folder')),
+        ],
+      ),
+    );
+    if (path == null || path.isEmpty) return;
+    await Directory(path).create(recursive: true).catchError((_) => Directory(path));
+    await widget.wc.setSyncFolder(path);
   }
 
   Future<void> _showKey(BuildContext context) async {
