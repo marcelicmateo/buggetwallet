@@ -6,7 +6,7 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, or s
 - Real numbers live in the artifact database (`settings/main`), never in `DEFAULTS`.
 - Personal merchant rules live in `settings.merchantPatterns` in the database; `MERCHANT_RULES` in code
   covers only well-known chains and brands.
-- Test fixtures are synthetic (`tests/`). Planning docs (BRIEF, STATUS, BASELINE) stay in the claude.ai Project.
+- Test fixtures are synthetic (`tests/`). Planning docs live in the claude.ai Project; redacted copies are in `docs/context/` (read `docs/context/STATUS.md` first). Keep personal figures out of them.
 
 ## Layout
 - `app/index.html` — the whole app (single file, vanilla JS, SheetJS 0.18.5 from cdnjs). This is what gets
@@ -28,4 +28,4 @@ db rules: root read/write = owner only).
 
 ## Workflow
 Owner sends one request or piece of feedback; Claude builds, runs `npm test`, republishes, commits code,
-and updates STATUS.md in the claude.ai Project.
+and updates STATUS.md in the claude.ai Project and `docs/context/STATUS.md` (redacted).
