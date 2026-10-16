@@ -28,6 +28,8 @@
 - 2026-10-16: Project context docs copied (redacted) to `docs/context/` for Claude Code.
 - 2026-10-16: master merged into v2. Local Podman builds; CI pinned to the same Flutter version.
 - 2026-10-16: Fixed Android release signing key (local + CI secrets), backed up by the owner in 1Password. APKs now update in place.
+- 2026-10-16: Android emulator in Podman (screenshot test with synthetic wallet); dev tooling (lint, format, LSP, hooks).
+- 2026-10-16: App-wide logging + perf diagnostics (privacy-redacted, tested); build/test timing history and speedups.
 - 2026-10-16: M3 started: saving or losing per pay period with savings rate and trend line (built + independently tested by agents, reviewed).
 - 2026-10-16: Agent team set up (`.claude/agents/`: feature-builder, test-writer, reviewer, ci-watcher, devops), per-package CLAUDE.md, `tools/ci-status.sh`.
 
@@ -50,6 +52,8 @@
 - 2026-10-16: Local builds with rootless Podman, not Docker.
 - 2026-10-16: One fixed Android signing key for every build; builds refuse to publish a debug-signed APK.
 - 2026-10-16: Milestones after M2: M3 Views → M4 Habits (weekly review, recurring bills, nudges) → M5 Polish (backup/export, search, settings).
+- 2026-10-16: Scope: Linux laptop + Android only; Mac, iPhone, Windows and web parked (existing CI jobs untouched).
+- 2026-10-16: Logs at debug level by default during testing; logs never contain amounts, descriptions, merchants, names, keys, paths.
 - 2026-10-16: Multi-agent sessions: lead + feature-builder + test-writer in parallel, reviewer before push, ci-watcher after. Still one feature at a time.
 
 ## Open questions for owner
@@ -62,5 +66,7 @@
   Note: APKs before the signing fix used throwaway keys — uninstall that one once; later updates install in place.
 - Owner tests M3 "Saving or losing" on the Spending tab: bars per pay period (salary to salary), savings rate,
   3-period trend line. Paydays come from salary payments; a missing month assumes the payday setting.
+- Logging is in: app-wide logs (debug level while testing), perf (startup, frames, timings, memory), Plan › Diagnostics
+  "Save logs…". Owner: after testing, save logs and send the file; summarise with `tools/log-summary.py`.
 - Fixed: Today and the "Salary landed" banner now start the period on the first salary part (same paydays as the chart).
 - Then: merge v2 to master; budget vs actual and top merchants.
