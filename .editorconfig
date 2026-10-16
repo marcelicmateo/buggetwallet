@@ -1,0 +1,23 @@
+# Editor defaults (https://editorconfig.org). Dart formatting itself is decided by `dart format`
+# (page width in analysis_options.yaml); run tools/build.sh format.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.dart]
+max_line_length = 140
+
+[*.{kt,kts,gradle,java,py,swift,xml,plist}]
+indent_size = 4
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{bat,cmd,ps1}]
+end_of_line = crlf

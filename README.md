@@ -27,14 +27,27 @@ The script runs the same steps as CI.
 
 ```sh
 tools/make-signing-key.sh       # once: the Android signing key, kept in ~/.config/budget-wallet/
-tools/build.sh test             # importer + core + app: analyze and tests
+tools/install-hooks.sh          # once, optional: pre-commit hook that runs `tools/build.sh lint`
+tools/build.sh test             # lint, then importer + core + app: analyze and tests
+tools/build.sh lint             # quick: Dart format check, shellcheck, actionlint
+tools/build.sh format           # reformat Dart code (dart format)
 tools/build.sh apk              # Android APK   -> dist/BudgetWallet-android.apk
 tools/build.sh linux            # Linux bundle  -> dist/BudgetWallet-linux-x64.tar.gz
 tools/build.sh all              # tests, then both builds
 tools/build.sh shell            # shell inside the container
+tools/build.sh lsp              # Dart language server for your editor (stdin/stdout)
 ```
 
 - The first run builds the image (~15 min). Logs are in `dist/logs/`.
+- **Code style.** `dart format` with page width 140, and stricter analyzer rules (strict casts/inference/raw
+  types plus extra lints) shared by the app and both packages in the root `analysis_options.yaml`. Infos fail the
+  build too. Shell scripts are checked by shellcheck, workflows by actionlint; both are pinned in
+  `dev/install-lint-tools.sh`, which the container image and CI both use, so local and CI results match.
+- **Editor.** Point your editor's Dart LSP client at `tools/build.sh lsp` (for example Neovim, Helix, Zed, Emacs).
+  It runs the analysis server in the container with the repo mounted at the same path, so diagnostics, completion
+  and format-on-save need no local SDK. Jumping into SDK or pub package sources does not work (those live in the
+  container). The VS Code Dart extension needs a local Flutter SDK and can't use this. `.editorconfig` covers the basics.
+- `.git-blame-ignore-revs` hides the bulk reformat from blame: `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 - **Back up `~/.config/budget-wallet/`** (a password manager is fine). Every APK must be signed with that key, or
   Android refuses the update and the app has to be uninstalled, which deletes the wallet on the phone.
 - CI signs with the same key from GitHub secrets: run `tools/make-signing-key.sh --upload` once.

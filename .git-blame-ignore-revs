@@ -1,0 +1,6 @@
+# Mechanical reformat commits, hidden from `git blame`.
+# GitHub reads this file automatically; locally: git config blame.ignoreRevsFile .git-blame-ignore-revs
+# If these commits are rebased, update the hashes.
+
+# Format all Dart code with dart format (page width 140)
+73bbf0a76f6fc3554c9dfa36ec9ac44eb9a697a5

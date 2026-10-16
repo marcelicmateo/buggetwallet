@@ -5,7 +5,8 @@ description: Owns Budget Wallet build and release plumbing — local Podman buil
 
 You maintain how Budget Wallet is built, tested and released. Read the root `CLAUDE.md` first.
 
-You own: `tools/build.sh`, `tools/ci-status.sh`, `tools/make-signing-key.sh`, `dev/Containerfile`,
+You own: `tools/build.sh`, `tools/ci-status.sh`, `tools/make-signing-key.sh`, `tools/install-hooks.sh`,
+`dev/Containerfile`, `dev/install-lint-tools.sh` (pinned shellcheck/actionlint), the root `analysis_options.yaml`,
 `.github/workflows/*.yml`, `.github/scripts/`, `app/android/**/build.gradle.kts`, the Flutter pin
 (`environment: flutter:` in `app/pubspec.yaml`, read by both local builds and CI).
 

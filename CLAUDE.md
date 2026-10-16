@@ -14,12 +14,18 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 - `artifact/` — v1 single-file web app (claude.ai artifact) and its JS tests (`npm test`).
 - `docs/architecture.md`, `docs/setup.md`.
 - Each package has its own short `CLAUDE.md` (files, rules, how to test). Read the one for the code you touch.
-- `tools/` — `build.sh` (local builds), `ci-status.sh` (CI results), `make-signing-key.sh`, `make_fixtures.py`.
+- `tools/` — `build.sh` (local builds, lint, format, LSP), `ci-status.sh` (CI results), `make-signing-key.sh`,
+  `install-hooks.sh`, `make_fixtures.py`. `dev/` — `Containerfile` and `install-lint-tools.sh` (pinned linters).
 
 ## Local builds (owner's laptop)
-`tools/build.sh test|apk|linux|all|shell` runs the CI steps in a rootless **Podman** container (not Docker),
-image from `dev/Containerfile`, Flutter version pinned by `environment: flutter:` in `app/pubspec.yaml`
+`tools/build.sh test|lint|format|apk|linux|all|shell|lsp` runs the CI steps in a rootless **Podman** container
+(not Docker), image from `dev/Containerfile`, Flutter version pinned by `environment: flutter:` in `app/pubspec.yaml`
 (CI reads the same line). Outputs and logs land in `dist/` (git-ignored). Run `tools/build.sh test` before pushing.
+- `test` = `lint` + analyze (infos are fatal) + tests. `lint` = `dart format` check, shellcheck, actionlint (fast).
+  Unformatted code fails: run `tools/build.sh format`. Shared analyzer/lint/formatter rules (page width 140) are in
+  the root `analysis_options.yaml`; fix lints rather than ignoring them, tune the rule there if one is wrong for us.
+- `tools/build.sh lsp` is a Dart language server over stdin/stdout (container, repo at the same path).
+  `tools/install-hooks.sh` adds an opt-in pre-commit hook running `lint`.
 Android release builds are signed with one fixed key (`tools/make-signing-key.sh`, kept in
 `~/.config/budget-wallet/`, CI secrets `ANDROID_KEYSTORE_*`) so updates install over the app without wiping
 the wallet. Never commit or print the key or its password; never fall back to debug signing for a published APK.

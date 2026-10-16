@@ -1,5 +1,5 @@
 # Budget Wallet build environment: Flutter + Android SDK, run with rootless Podman by tools/build.sh.
-# Can do: package tests, app analyze/tests, Android APK, Linux desktop build.
+# Can do: package tests, app analyze/tests, format/shell/workflow lint, Dart LSP, Android APK, Linux desktop build.
 # Cannot do: iOS / macOS builds — those need a Mac with Xcode.
 FROM docker.io/library/ubuntu:24.04
 
@@ -49,6 +49,10 @@ RUN mkdir -p "$ANDROID_HOME/cmdline-tools" \
 
 # What the Android build (AGP + plugins) installs on first use; baked in so `--rm` containers don't redownload it
 RUN sdkmanager "build-tools;36.0.0" "platforms;android-35" "cmake;3.22.1" >/dev/null
+
+# shellcheck + actionlint, pinned and checksummed; CI installs them with the same script
+COPY install-lint-tools.sh /tmp/
+RUN /tmp/install-lint-tools.sh /usr/local/bin && rm /tmp/install-lint-tools.sh
 
 WORKDIR /work
 CMD ["bash"]

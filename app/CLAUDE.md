@@ -19,4 +19,4 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
 - Android release builds are signed by the fixed key (see root `CLAUDE.md`); don't touch signing here.
 
 ## Tests
-- `test/` — formatting and widget tests. Run: `tools/build.sh test` (runs `flutter analyze` + `flutter test`).
+- `test/` — formatting and widget tests. Run: `tools/build.sh test` (format check, `flutter analyze`, `flutter test`).
