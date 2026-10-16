@@ -1,3 +1,8 @@
+// Release signing uses one fixed key, so an update installs over the existing app and keeps the wallet.
+// The key never goes into git: tools/build.sh and CI pass it in through these environment variables
+// (see tools/make-signing-key.sh). Without them, release builds fall back to the debug key.
+val releaseKeystore: File? = System.getenv("BW_KEYSTORE")?.let { File(it) }?.takeIf { it.isFile }
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -29,11 +34,20 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("BW_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("BW_KEY_ALIAS")
+                keyPassword = System.getenv("BW_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
         }
     }
 }

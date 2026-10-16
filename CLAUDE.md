@@ -13,9 +13,19 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 - `packages/wallet_core/` — SQLite repo, change log + HLC, encrypted folder sync, categories, budget engine.
 - `artifact/` — v1 single-file web app (claude.ai artifact) and its JS tests (`npm test`).
 - `docs/architecture.md`, `docs/setup.md`.
+- Each package has its own short `CLAUDE.md` (files, rules, how to test). Read the one for the code you touch.
+- `tools/` — `build.sh` (local builds), `ci-status.sh` (CI results), `make-signing-key.sh`, `make_fixtures.py`.
 
-## Building without a local Flutter SDK
-The Claude workspace cannot download Flutter/Dart. Push to `v2` (or `master`); CI runs tests, analyze and
+## Local builds (owner's laptop)
+`tools/build.sh test|apk|linux|all|shell` runs the CI steps in a rootless **Podman** container (not Docker),
+image from `dev/Containerfile`, Flutter version pinned by `environment: flutter:` in `app/pubspec.yaml`
+(CI reads the same line). Outputs and logs land in `dist/` (git-ignored). Run `tools/build.sh test` before pushing.
+Android release builds are signed with one fixed key (`tools/make-signing-key.sh`, kept in
+`~/.config/budget-wallet/`, CI secrets `ANDROID_KEYSTORE_*`) so updates install over the app without wiping
+the wallet. Never commit or print the key or its password; never fall back to debug signing for a published APK.
+
+## Building without a local Flutter SDK (cloud sessions)
+A cloud Claude workspace cannot download Flutter/Dart. Push to `v2` (or `master`); CI runs tests, analyze and
 builds, then pushes the full log to the `ci-logs` branch:
 `git fetch origin ci-logs:refs/remotes/origin/ci-logs && git show origin/ci-logs:latest.txt`.
 Job status: `gh api repos/marcelicmateo/buggetwallet/commits/<sha>/check-runs`. The Actions API itself is blocked.
@@ -24,6 +34,16 @@ Job status: `gh api repos/marcelicmateo/buggetwallet/commits/<sha>/check-runs`. 
 - Amounts are integers in minor units (cents). Dates are `YYYY-MM-DD` strings.
 - All writes go through `WalletRepo._write` so they become sync ops; never write tables directly.
 - Transaction ids must stay compatible with v1 (`transactionId` in wallet_importer).
+
+## Team (subagents in `.claude/agents/`)
+The main session is the lead: it takes the owner's request, splits it, merges results, runs
+`tools/build.sh test`, commits, pushes and updates STATUS. One feature at a time (the owner tests each one).
+- `feature-builder` — builds the feature (core logic + UI) in its own worktree (`isolation: "worktree"`).
+- `test-writer` — writes tests from the spec in parallel, without basing them on the implementation.
+- `reviewer` — read-only review of the diff before every push.
+- `ci-watcher` — waits for CI after a push and reports the result (`tools/ci-status.sh`).
+- `devops` — only for build, CI, signing or version work.
+Owner bug reports go before new features.
 
 ## Workflow
 Owner sends one request or piece of feedback (often by voice: keep replies short). Claude builds,

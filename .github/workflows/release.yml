@@ -33,11 +33,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
-        with: { channel: stable, cache: true }
+        with: { flutter-version-file: app/pubspec.yaml, cache: true }
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build libgtk-3-dev libsecret-1-dev >/dev/null
       - name: Build
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          BW_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          BW_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          BW_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -o pipefail
+          if [ -z "$KEYSTORE_B64" ]; then echo "::error::ANDROID_KEYSTORE_BASE64 secret missing (run tools/make-signing-key.sh --upload)" | tee -a build.log; exit 1; fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          export BW_KEYSTORE="$RUNNER_TEMP/release.jks"
           cd app
           flutter pub get 2>&1 | tee -a ../build.log
           flutter build apk --release 2>&1 | tail -40 | tee -a ../build.log
@@ -58,7 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
-        with: { channel: stable, cache: true }
+        with: { flutter-version-file: app/pubspec.yaml, cache: true }
       - name: Build
         shell: bash
         run: |
@@ -82,7 +90,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
-        with: { channel: stable, cache: true }
+        with: { flutter-version-file: app/pubspec.yaml, cache: true }
       - name: Build macOS and iOS (unsigned)
         run: |
           set -o pipefail

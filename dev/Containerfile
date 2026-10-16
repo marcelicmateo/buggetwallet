@@ -1,0 +1,54 @@
+# Budget Wallet build environment: Flutter + Android SDK, run with rootless Podman by tools/build.sh.
+# Can do: package tests, app analyze/tests, Android APK, Linux desktop build.
+# Cannot do: iOS / macOS builds — those need a Mac with Xcode.
+FROM docker.io/library/ubuntu:24.04
+
+ARG FLUTTER_VERSION
+ARG ANDROID_CMDLINE_TOOLS=13114758
+
+# Rootless Podman cannot map the archive owners in Flutter's downloads; extract as the current user
+ENV DEBIAN_FRONTEND=noninteractive \
+    TAR_OPTIONS=--no-same-owner \
+    FLUTTER_HOME=/opt/flutter \
+    ANDROID_HOME=/opt/android-sdk \
+    JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+    PUB_CACHE=/cache/pub \
+    GRADLE_USER_HOME=/cache/gradle \
+    ANDROID_USER_HOME=/cache/android
+ENV PATH=$FLUTTER_HOME/bin:$FLUTTER_HOME/bin/cache/dart-sdk/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+
+# Same system libraries as CI, plus the Linux desktop toolchain and JDK 17 for Gradle
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates curl git unzip xz-utils zip file \
+      openjdk-17-jdk-headless \
+      clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev \
+      libsqlite3-dev sqlite3 libsecret-1-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN test -n "$FLUTTER_VERSION" \
+ && git clone --quiet --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$FLUTTER_HOME" \
+ && git config --system --add safe.directory '*' \
+ && flutter config --no-analytics \
+ && dart --disable-analytics \
+ && flutter precache --android --linux
+
+# Android SDK: the compileSdk and NDK versions this Flutter release asks for, so Gradle never downloads them
+RUN mkdir -p "$ANDROID_HOME/cmdline-tools" \
+ && curl -fsSL -o /tmp/tools.zip "https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_CMDLINE_TOOLS}_latest.zip" \
+ && unzip -q /tmp/tools.zip -d /tmp/tools \
+ && mv /tmp/tools/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest" \
+ && rm -rf /tmp/tools /tmp/tools.zip \
+ && ext="$FLUTTER_HOME/packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt" \
+ && sdk=$(grep -oP 'val compileSdkVersion\s*:\s*Int\s*=\s*\K[0-9]+' "$ext") \
+ && ndk=$(grep -oP 'val ndkVersion\s*:\s*String\s*=\s*"\K[^"]+' "$ext") \
+ && echo "compileSdk=$sdk ndk=$ndk" \
+ && yes | sdkmanager --licenses >/dev/null \
+ && sdkmanager "platform-tools" "platforms;android-$sdk" "ndk;$ndk" >/dev/null \
+ && yes | flutter doctor --android-licenses >/dev/null
+
+# What the Android build (AGP + plugins) installs on first use; baked in so `--rm` containers don't redownload it
+RUN sdkmanager "build-tools;36.0.0" "platforms;android-35" "cmake;3.22.1" >/dev/null
+
+WORKDIR /work
+CMD ["bash"]

@@ -24,5 +24,24 @@ dist/
 .env
 .env.*
 
+# Flutter / Dart
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.apk
+*.aab
+*.ipa
+*.jks
+*.keystore
+key.properties
+
 # Synthetic test fixtures inside Dart packages are allowed
 !**/test/fixtures/**
+
+# Claude Code: per-machine settings and agent worktrees
+.claude/settings.local.json
+.claude/worktrees/
+
+# Lockfiles of the internal Dart packages (the app lockfile is committed)
+packages/*/pubspec.lock

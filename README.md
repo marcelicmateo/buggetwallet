@@ -22,12 +22,23 @@ Personal finance tracker and budgeting app for one person. Offline first, runs o
 This repo holds **code only**. Bank exports, statements, keys and any real transaction data must never be committed. `.gitignore` blocks the common export formats; only synthetic fixtures under `test/fixtures` are allowed.
 
 ## Development
+Builds run in a rootless [Podman](https://podman.io) container, so Podman is the only thing to install.
+The script runs the same steps as CI.
+
+```sh
+tools/make-signing-key.sh       # once: the Android signing key, kept in ~/.config/budget-wallet/
+tools/build.sh test             # importer + core + app: analyze and tests
+tools/build.sh apk              # Android APK   -> dist/BudgetWallet-android.apk
+tools/build.sh linux            # Linux bundle  -> dist/BudgetWallet-linux-x64.tar.gz
+tools/build.sh all              # tests, then both builds
+tools/build.sh shell            # shell inside the container
 ```
-cd packages/wallet_importer && dart test
-cd packages/wallet_core && dart test
-cd app && flutter test && flutter run
-```
-CI builds an Android APK and a Linux bundle on every push.
+
+- The first run builds the image (~15 min). Logs are in `dist/logs/`.
+- **Back up `~/.config/budget-wallet/`** (a password manager is fine). Every APK must be signed with that key, or
+  Android refuses the update and the app has to be uninstalled, which deletes the wallet on the phone.
+- CI signs with the same key from GitHub secrets: run `tools/make-signing-key.sh --upload` once.
+- iPhone / macOS builds need a Mac with Xcode. CI builds every platform on `master`, tags, or `[release]` commits.
 
 ## Milestones
 - M0 Setup

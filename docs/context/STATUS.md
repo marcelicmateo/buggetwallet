@@ -8,7 +8,7 @@
 
 **v1 app link:** https://claude.ai/artifact/BNYCWfCudgsreWnmXuhLfG (private: owner-only read/write db rules)
 
-**Dev container (Flutter):** `compose.yaml` + `dev/Dockerfile` on `master` — Flutter + Android SDK for the owner's laptop.
+**Local builds:** `tools/build.sh test|apk|linux|all` in rootless Podman (`dev/Containerfile`), same steps and Flutter version (3.47.7, pinned in `app/pubspec.yaml`) as CI.
 
 ## v2 (standalone app) — what's built
 - `packages/wallet_importer` (pure Dart): PBZ .xls via own BIFF8 reader, Revolut .xlsx/.csv → normalized transactions, v1-compatible ids. 10 tests, synthetic fixtures.
@@ -26,6 +26,9 @@
 - 2026-10-16: Docker dev environment committed on master (650fd40).
 - 2026-10-16: v2 standalone app built on branch `v2`; all platform builds green and published as releases.
 - 2026-10-16: Project context docs copied (redacted) to `docs/context/` for Claude Code.
+- 2026-10-16: master merged into v2. Local Podman builds; CI pinned to the same Flutter version.
+- 2026-10-16: Fixed Android release signing key (local + CI secrets), backed up by the owner in 1Password. APKs now update in place.
+- 2026-10-16: Agent team set up (`.claude/agents/`: feature-builder, test-writer, reviewer, ci-watcher, devops), per-package CLAUDE.md, `tools/ci-status.sh`.
 
 ## Decisions log
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -43,6 +46,10 @@
 - 2026-10-16: All-platform builds only on master / tags / `[release]` commits (macOS minutes bill 10x on private repos); Android + Linux on every push.
 - 2026-10-16: permission_handler dropped (needs compileSdk 37); small Android channel opens the All files access setting.
 - 2026-10-16: Planning docs copied to git as redacted `docs/context/`; the claude.ai Project stays the source of truth.
+- 2026-10-16: Local builds with rootless Podman, not Docker.
+- 2026-10-16: One fixed Android signing key for every build; builds refuse to publish a debug-signed APK.
+- 2026-10-16: Milestones after M2: M3 Views → M4 Habits (weekly review, recurring bills, nudges) → M5 Polish (backup/export, search, settings).
+- 2026-10-16: Multi-agent sessions: lead + feature-builder + test-writer in parallel, reviewer before push, ci-watcher after. Still one feature at a time.
 
 ## Open questions for owner
 - Test v2 on phone and computer; feedback (✅ / ❌ / ✏️).
@@ -51,4 +58,6 @@
 
 ## Next
 - Owner installs Android APK + desktop build, creates wallet, imports bank files, sets up Syncthing.
-- Then: merge to master, more graphs (M3).
+  Note: APKs before the signing fix used throwaway keys — uninstall that one once; later updates install in place.
+- In progress (M3): saving or losing per pay period, savings rate, trend line.
+- Then: merge v2 to master; budget vs actual and top merchants.
