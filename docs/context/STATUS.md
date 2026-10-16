@@ -1,5 +1,8 @@
 # Budget Wallet — Status (redacted copy, 2026-10-16)
 
+**Plan (owner, 2026-10-16):** automated tests now → M3 Views → M4 Habits → M5 Polish → web version → cross-device
+sync (works on Android, Linux and web) → **M6 live test** by the owner. Platforms: Linux, Android, web.
+
 **Current milestone:** M2 Standalone app — v2.0 first builds published for all platforms (branch `v2`), waiting for owner testing. v1 web app still live.
 
 **v2 downloads (GitHub releases, private repo):**
@@ -52,7 +55,9 @@
 - 2026-10-16: Local builds with rootless Podman, not Docker.
 - 2026-10-16: One fixed Android signing key for every build; builds refuse to publish a debug-signed APK.
 - 2026-10-16: Milestones after M2: M3 Views → M4 Habits (weekly review, recurring bills, nudges) → M5 Polish (backup/export, search, settings).
-- 2026-10-16: Scope: Linux laptop + Android only; Mac, iPhone, Windows and web parked (existing CI jobs untouched).
+- 2026-10-16: Scope: Linux, Android and web. Mac, iPhone, Windows parked (existing CI jobs untouched).
+- 2026-10-16: Owner live test moved to M6 (last). Sync must work across devices incl. web: new transport, designed last.
+- 2026-10-16: As many automated tests as possible; new shared code stays web-friendly.
 - 2026-10-16: Logs at debug level by default during testing; logs never contain amounts, descriptions, merchants, names, keys, paths.
 - 2026-10-16: Multi-agent sessions: lead + feature-builder + test-writer in parallel, reviewer before push, ci-watcher after. Still one feature at a time.
 
