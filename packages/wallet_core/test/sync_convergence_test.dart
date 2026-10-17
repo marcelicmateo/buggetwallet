@@ -154,14 +154,22 @@ Future<void> _scenario(int seed, Directory tmp) async {
       log.add('${d.name}:${_edit(d, r, pool)}');
     }
   }
-  // Final full sync: everyone exports, every file reaches everyone (late joiner included), everyone applies.
-  for (final d in devices) {
-    await d.run();
-    d.upload(net);
-  }
-  for (final d in devices) {
-    d.deliver(net, r, dup: 0.2);
-    await d.run();
+  // Final full sync: everyone exports, every file reaches everyone (late joiner included), everyone applies. Applying
+  // can add writes of its own (a manual entry matched to a bank row that arrived from another device), which every
+  // device computes the same way; they need a few more rounds to settle.
+  var rounds = 0;
+  while (true) {
+    for (final d in devices) {
+      await d.run();
+      d.upload(net);
+    }
+    for (final d in devices) {
+      d.deliver(net, r, dup: 0.2);
+      await d.run();
+    }
+    rounds++;
+    if (devices.every((d) => d.repo.pendingOps().isEmpty)) break;
+    expect(rounds, lessThan(4), reason: 'seed $seed: sync does not settle');
   }
   final reason = 'seed $seed, $nDevices devices${lateJoiner ? ' (last joins late)' : ''}, steps: ${log.join(' ')}';
   final want = lastWriterWins(await opsInNet(net, key));

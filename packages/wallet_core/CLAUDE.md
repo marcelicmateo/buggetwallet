@@ -8,6 +8,8 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   becomes a sync op; never `db.execute` an INSERT/UPDATE on a data table directly.
 - `budget.dart` — period maths: `PeriodBudget` (safe to spend), `MonthSummary`, `Affordability`.
 - `categories.dart` — `Categorizer`: item override → merchant rules → patterns → built-in rules.
+- `matching.dart` — `planMatches`: hand-added expense ↔ bank row (same amount, ±3 days, one-to-one), deterministic;
+  `WalletRepo` runs it after imports, hand-added expenses and `applyRemote`.
 - `models.dart` — `Tx`, `Goal`, `WishItem`, `WalletSettings` (row ↔ object).
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption), `sync.dart` (FolderSync).
 - `logs.dart` — logging (`package:logging`): `logEvent`/`logError` (structured events), `formatLogRecord` (one line,

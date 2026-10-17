@@ -5,9 +5,9 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'categories.dart';
-import 'dates.dart';
 import 'hlc.dart';
 import 'logs.dart';
+import 'matching.dart';
 import 'models.dart';
 
 /// One field-level change. This is what syncs between devices.
@@ -180,7 +180,31 @@ class WalletRepo {
       _setMeta('hlc', clock.last.toString());
     });
     t.done({'ops': ops.length, 'changed': changed});
+    // A manual entry and its bank row can arrive in either order (imported on another device before the entry
+    // synced), so matching runs here too; it is deterministic, so every device writes the same matches.
+    if (changed > 0) _matchManual();
     return changed;
+  }
+
+  /// Matches hand-added expenses to bank rows ([planMatches]) and writes the changes. Returns the new matches.
+  int _matchManual() {
+    final manual = [for (final r in db.select('SELECT * FROM tx WHERE manual = 1 AND deleted = 0')) Tx.fromRow(r)];
+    final targets = {for (final m in manual) m.matchedTo};
+    if (!targets.contains(null) && targets.length == manual.length) return 0; // all matched, no two on one row
+    final cz = categorizer();
+    final bank = [for (final r in db.select('SELECT * FROM tx WHERE manual = 0 AND deleted = 0 AND amount < 0')) Tx.fromRow(r)];
+    final plan = planMatches(manual, bank, (b) {
+      final k = kindOf(cz.autoCategory(b));
+      return k == Kind.flex || k == Kind.fixed;
+    });
+    if (plan.isEmpty) return 0;
+    _write([
+      for (final e in plan.matchedTo.entries) ('tx', e.key, {'matched_to': e.value}),
+      for (final e in plan.bankCategory.entries) ('tx', e.key, {'category': e.value}),
+    ]);
+    logEvent(_log, Level.FINE, 'repo.match',
+        {'added': plan.added, 'unmatched': plan.matchedTo.values.where((v) => v == null).length, 'categories': plan.bankCategory.length});
+    return plan.added;
   }
 
   bool peerFileSeen(String device, String file) =>
@@ -244,35 +268,13 @@ class WalletRepo {
   }
 
   /// Imports a normalized batch. Already-known ids are skipped. Hand-added expenses with the
-  /// same amount within 3 days are matched to the new bank row, which keeps their category.
+  /// same amount within 3 days are then matched to a bank row, which keeps their category ([planMatches]).
   ImportSummary importBatch(ImportBatch batch) {
     final t = PerfTimer('repo.importBatch', warnMs: 500);
     final known = <String>{for (final r in db.select('SELECT id FROM tx')) r['id'] as String};
     final fresh = batch.transactions.where((t) => !known.contains(t.id)).toList();
-    final manual = transactions().where((t) => t.manual && t.matchedTo == null).toList();
-    final cz = categorizer();
     final changes = <(String, String, Map<String, Object?>)>[];
-    var matched = 0;
     for (final n in fresh) {
-      final tx = Tx(
-          id: n.id,
-          source: n.source,
-          date: n.date,
-          amount: n.amountMinor,
-          currency: n.currency,
-          bankType: n.bankType,
-          description: n.description);
-      String? category;
-      final k = kindOf(cz.autoCategory(tx));
-      if (n.amountMinor < 0 && (k == Kind.flex || k == Kind.fixed)) {
-        final i = manual.indexWhere((m) => m.amount == n.amountMinor && daysBetween(m.date, n.date).abs() <= 3);
-        if (i >= 0) {
-          final m = manual.removeAt(i);
-          changes.add(('tx', m.id, {'matched_to': n.id}));
-          category = m.category;
-          matched++;
-        }
-      }
       changes.add((
         'tx',
         n.id,
@@ -287,11 +289,11 @@ class WalletRepo {
           // Never 'deleted': a new row is live through the column default, and writing deleted: 0 here with a
           // fresh HLC would undo a delete made on another device that this one has not synced yet. Only
           // deleteTransaction (and a future undelete) write that field.
-          if (category != null) 'category': category,
         }
       ));
     }
     _write(changes);
+    final matched = _matchManual();
     final s = ImportSummary(fresh.length, batch.transactions.length - fresh.length, matched, batch.skipped);
     t.done({
       'source': batch.source,
@@ -328,6 +330,7 @@ class WalletRepo {
         }
       ),
     ]);
+    _matchManual(); // the bank row may already be here (imported earlier, here or on another device)
     return id;
   }
 

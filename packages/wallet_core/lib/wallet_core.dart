@@ -7,6 +7,7 @@ export 'src/categories.dart';
 export 'src/dates.dart';
 export 'src/hlc.dart' show Hlc;
 export 'src/logs.dart';
+export 'src/matching.dart';
 export 'src/models.dart';
 export 'src/periods.dart';
 export 'src/repo.dart';

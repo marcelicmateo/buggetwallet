@@ -487,8 +487,28 @@ void main() {
       await syncAll([phone, laptop]);
       final live = laptop.repo.transactions().where((t) => t.amount == -2340).toList();
       expect(live.length, 1, reason: 'manual entry and bank row both count');
-    },
-        skip: 'BUG: manual entries are matched to bank rows only inside importBatch; when the bank row is imported on a '
-            'device that has not received the manual entry yet, both stay live forever (the expense counts twice).');
+      expect(laptop.repo.categorizer().categoryOf(live.single), 'Eating out', reason: 'the bank row keeps the manual category');
+      await syncAll([phone, laptop]);
+      expect(phone.repo.transactions().where((t) => t.amount == -2340).length, 1);
+      expect(dump(phone.repo, clocks: false), dump(laptop.repo, clocks: false));
+    });
+
+    test('two devices each add the same expense by hand, one bank row: one pair matched, same on both devices', () async {
+      final phone = device('phone'), laptop = device('laptop');
+      laptop.repo.importBatch(january);
+      phone.repo.addManual(date: '2026-01-16', amount: 2340, category: 'Eating out', note: 'synthetic');
+      laptop.repo.addManual(date: '2026-01-18', amount: 2340, category: 'Shopping', note: 'synthetic');
+      for (var i = 0; i < 3; i++) {
+        await syncAll([phone, laptop]);
+      }
+      for (final d in [phone, laptop]) {
+        final rows = d.repo.transactions(includeHidden: true).where((t) => t.amount == -2340).toList();
+        expect(rows.length, 3);
+        expect(rows.where((t) => t.manual && t.matchedTo != null).length, 1, reason: d.name);
+        expect(rows.where((t) => t.live).length, 2, reason: '${d.name}: the bank row and the unmatched entry');
+      }
+      expect(dump(phone.repo), dump(laptop.repo));
+      expect(phone.repo.pendingOps(), isEmpty);
+    });
   });
 }
