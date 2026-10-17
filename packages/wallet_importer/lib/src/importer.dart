@@ -94,10 +94,15 @@ double? _toNum(Object v) {
   return double.tryParse(s);
 }
 
-/// Amount in cents, or null when it is not a usable number (NaN, Infinity, or beyond double range like "1e400").
+/// Largest amount accepted, in cents (10 billion in the account currency). Anything bigger is a damaged cell, and
+/// rounding it would saturate at the int64 limit, after which sums overflow.
+const maxAmountCents = 1000000000000;
+
+/// Amount in cents, or null when it is not a usable number: NaN, Infinity, beyond double range ("1e400"), or
+/// larger than [maxAmountCents].
 int? _cents(double x) {
   final c = x * 100;
-  if (!c.isFinite) return null;
+  if (!c.isFinite || c.abs() > maxAmountCents) return null;
   return c.round();
 }
 

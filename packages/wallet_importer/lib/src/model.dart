@@ -54,7 +54,8 @@ class ImportBatch {
   /// Rows deliberately left out (pending card holds, non-completed rows).
   final int skipped;
 
-  /// Transaction rows left out because a value in them is unusable (an amount that is not a finite number).
+  /// Transaction rows left out because a value in them is unusable (an amount that is not a finite number or is
+  /// beyond ±10 billion).
   /// The rest of the file still imports; the app tells the user how many rows were left out.
   final int invalid;
 

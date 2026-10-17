@@ -426,9 +426,20 @@ void main() {
           // rejecting is fine
         }
       }
-    },
-        skip: 'BUG (low): (x * 100).round() saturates at 9223372036854775807, so "1e22" imports as int64 max cents '
-            '(sums then overflow); such rows should be rejected.');
+    });
+
+    test('decision: an amount beyond 10 billion (10^12 cents) leaves the row out and counts it; up to it imports', () {
+      for (final (a, cents) in [
+        ('10000000000', 1000000000000),
+        ('-10000000000', -1000000000000),
+        ('10000000000.01', null),
+        ('1e22', null)
+      ]) {
+        final b = importBankFile(_b('${h}Card Payment,2026-01-01,x,$a,0,COMPLETED\n'));
+        expect([for (final t in b.transactions) t.amountMinor], [if (cents != null) cents], reason: a);
+        expect(b.invalid, cents == null ? 1 : 0, reason: a);
+      }
+    });
 
     test('impossible calendar dates are rejected or dropped', () {
       for (final d in ['2026-13-45', '2026-02-30', '2026-00-10']) {
