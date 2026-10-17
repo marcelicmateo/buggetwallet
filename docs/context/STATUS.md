@@ -73,7 +73,16 @@ Stage "automated tests" was in progress on 2026-10-16 with three agents in workt
 fuzz, migrations). To resume: `git worktree list`; for each branch check `git log v2..<branch>` and whether its work
 looks finished; merge finished branches into v2 (expect small conflicts in README/CLAUDE.md), then verify once:
 `tools/build.sh test`, `tools/emulator.sh test`, the Linux desktop test, `tools/build.sh apk`; push; `tools/ci-status.sh --wait`.
-Unfinished branches: restart the task from its last commit. Bugs the tests find: fix one at a time afterwards.
+Unfinished branches: restart the task from its last commit.
+
+Open bugs to fix next (found by tests 2026-10-17; core bugs 1–9 already fixed on branch worktree-agent-ae40178289afaed6b):
+- Rent cash threshold as a synced setting (`rentCashThreshold`, default 50000) — hardcoded in categories.dart.
+- App A: wishlist "2d 24h left" (`_left()` rounding, wishlist.dart). B: Plan fields stale + Save reverts other settings
+  (`late final f` in PlanScreen). C: negative "Wait (hours)" accepted. D: StatusLabel text can't wrap (common.dart).
+- Overflows at text scale 2.0 / 320 dp: Today "Safe to spend" header row (Eyebrow needs Flexible), Payday checklist
+  header (Heading + Tag), app bar title Row (title + period Chip), onboarding header Row, Today salary banner buttons
+  row, one Wishlist Panel row. UI tests branch worktree-agent-ae419093e9ee405fd (c20b791): layout test's sheet-tap
+  fix committed but not run; full build.sh test + emulator.sh test not run yet.
 
 ## Next
 - Owner installs Android APK + desktop build, creates wallet, imports bank files, sets up Syncthing.
