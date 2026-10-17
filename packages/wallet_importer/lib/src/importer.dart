@@ -122,7 +122,15 @@ const maxAmountCents = 1000000000000;
 int? _cents(double x) {
   final c = x * 100;
   if (!c.isFinite || c.abs() > maxAmountCents) return null;
-  return c.round();
+  return jsRound(c);
+}
+
+/// JavaScript's `Math.round`, which v1 used (`r2(x) = Math.round(x * 100) / 100`): nearest integer, exact halves
+/// towards +infinity (-12.5 → -12). Dart's `round()` takes halves away from zero (-12.5 → -13), which gave a
+/// different amount and id than v1 for negative exact half cents. `c - floor(c)` is exact for these magnitudes.
+int jsRound(double c) {
+  final f = c.floorToDouble();
+  return (c - f >= 0.5 ? f + 1 : f).toInt();
 }
 
 /// Repairs text that was UTF-8 but got decoded as Latin-1 (e.g. "GraÅ¡o" -> "Grašo").

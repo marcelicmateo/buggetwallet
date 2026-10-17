@@ -118,9 +118,7 @@ void main() {
       ['DATUM', 'VRSTA TRANSAKCIJE', 'OPIS PLAĆANJA', 'IZNOS', 'VALUTA'],
       [46813.0, 'POS plaćanje', 'Half cent', -0.125, 'EUR'],
     ];
-    // v1: r2(-0.125) = Math.round(-12.5) / 100 = -0.12 -> id 280301lxfin4. v2 rounds half away from zero (-13).
+    // v1: r2(-0.125) = Math.round(-12.5) / 100 = -0.12 -> id 280301lxfin4 (Math.round takes halves towards +infinity).
     expect(view(parseRows(rows)!), const <Golden>[('2028-03-01', -12, 'Half cent', '280301lxfin4')]);
-  },
-      skip: 'BUG (low): v2 _cents() uses double.round() (half away from zero), v1 uses Math.round (half up); '
-          'a negative amount with an exact half cent (-0.125) gets -13 cents and a different id than v1.');
+  });
 }
