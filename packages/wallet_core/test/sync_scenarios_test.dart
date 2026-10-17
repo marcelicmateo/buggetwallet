@@ -275,8 +275,11 @@ void main() {
       net.files[name] = await seal(clear, VaultKey.generate());
       b.deliver(net, Random(1));
       final before = dump(b.repo);
-      await expectLater(b.run(), throwsA(isA<VaultException>()));
+      final rep = await b.run();
+      expect(rep.badFiles, 1);
+      expect(rep.filesRead, 0);
       expect(dump(b.repo), before);
+      expect(b.repo.peerFileSeen(a.repo.deviceId, name.split('/').last), isFalse);
     });
   });
 
@@ -306,14 +309,9 @@ void main() {
       final before = dump(b.repo);
       for (final (i, bad) in cases.indexed) {
         File(path).writeAsBytesSync(bad);
-        Object? error;
-        try {
-          await b.run();
-        } catch (e) {
-          error = e;
-        }
-        expect(error, isNotNull, reason: 'case $i (${bad.length} bytes) was accepted');
-        expect(error, anyOf(isA<VaultException>(), isA<SyncException>()), reason: 'case $i: ${error.runtimeType}');
+        final rep = await b.run(); // skipped and counted, not thrown: it must not block other files
+        expect(rep.badFiles, 1, reason: 'case $i (${bad.length} bytes) was accepted');
+        expect(rep.filesRead, 0, reason: 'case $i');
         expect(dump(b.repo), before, reason: 'case $i');
         expect(b.repo.peerFileSeen(a.repo.deviceId, name.split('/').last), isFalse, reason: 'case $i');
       }
@@ -349,7 +347,7 @@ void main() {
       final before = dump(b.repo);
       for (final p in payloads) {
         File(path).writeAsBytesSync(await seal(utf8.encode(p as String), key));
-        await expectLater(b.run(), throwsA(anything), reason: p);
+        expect((await b.run()).badFiles, 1, reason: p);
         expect(dump(b.repo), before, reason: p);
         expect(b.repo.settings().salary, 0);
       }
@@ -363,15 +361,15 @@ void main() {
       c.upload(net);
       net.files[name] = Uint8List.sublistView(good, 0, good.length ~/ 2); // a's file arrives damaged
       b.deliver(net, Random(1));
-      try {
-        await b.run();
-      } catch (_) {
-        // the damaged file may be reported, but c's changes should still arrive
-      }
+      final rep = await b.run();
+      expect(rep.badFiles, 1);
       expect(b.repo.settings().rent, 40000);
-    },
-        skip: 'BUG: FolderSync.run rethrows on the first damaged file, so every later file (all devices, in folder '
-            'listing order) is never applied; one bad file blocks sync for good until someone deletes it by hand.');
+      // The repaired file applies on the next run.
+      File('${b.root.path}/$name').writeAsBytesSync(good);
+      final again = await b.run();
+      expect(again.badFiles, 0);
+      expect(b.repo.settings().salary, 150000);
+    });
   });
 
   group('clocks', () {

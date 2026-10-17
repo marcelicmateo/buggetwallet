@@ -276,6 +276,12 @@ class _PlanScreenState extends State<PlanScreen> {
       if (wc.syncError != null) StatusLabel(good: false, text: wc.syncError!),
       if (wc.syncError == null && last != null)
         StatusLabel(good: true, text: 'Synced at ${last.hour.toString().padLeft(2, '0')}:${last.minute.toString().padLeft(2, '0')}'),
+      if (wc.syncError == null && wc.syncBadFiles > 0)
+        StatusLabel(
+            good: false,
+            text: wc.syncBadFiles == 1
+                ? '1 sync file could not be read. It was skipped and will be tried again.'
+                : '${wc.syncBadFiles} sync files could not be read. They were skipped and will be tried again.'),
       OutlinedButton.icon(icon: const Icon(Icons.key), label: const Text('Show wallet key'), onPressed: () => _showKey(context)),
       Muted(Platform.isIOS
           ? 'On iPhone, sync the app folder (Files › On My iPhone › Budget Wallet › BudgetWalletSync) with the Möbius Sync app.'

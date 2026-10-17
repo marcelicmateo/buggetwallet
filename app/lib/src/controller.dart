@@ -36,6 +36,9 @@ class WalletController extends ChangeNotifier {
   String? syncFolder;
   DateTime? lastSync;
   String? syncError;
+
+  /// Files from other devices the last sync could not read (damaged or half-synced); retried on every sync.
+  int syncBadFiles = 0;
   bool syncing = false;
   List<ImportLine> lastImport = const [];
 
@@ -170,7 +173,9 @@ class WalletController extends ChangeNotifier {
       final r = await timedAsync('sync.run', () => FolderSync(folder, k).run(repo), fields: {'trigger': trigger}, warnMs: 3000);
       lastSync = DateTime.now();
       syncError = null;
-      logEvent(_sync, Level.INFO, 'sync.done', {'trigger': trigger, 'sent': r.sent, 'received': r.received, 'files': r.filesRead});
+      syncBadFiles = r.badFiles;
+      logEvent(_sync, Level.INFO, 'sync.done',
+          {'trigger': trigger, 'sent': r.sent, 'received': r.received, 'files': r.filesRead, 'bad': r.badFiles});
       if (r.received > 0 || r.sent > 0) reload();
     } catch (e, st) {
       logError(_sync, 'sync.failed', e, st, fields: {'trigger': trigger});

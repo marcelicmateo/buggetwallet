@@ -7,6 +7,10 @@ import 'vault.dart';
 
 final _log = Logger('bw.sync');
 
+/// What is logged of a sync file name: its sequence number only (`0000000042` of `0000000042.bwop`). Conflict
+/// copies add a file-sync device id to the name, and device folder names are random ids, so neither is logged.
+String _seq(String name) => RegExp(r'^\d+').stringMatch(name) ?? '?';
+
 class SyncException implements Exception {
   final String message;
   const SyncException(this.message);
@@ -16,7 +20,11 @@ class SyncException implements Exception {
 
 class SyncReport {
   final int sent, received, filesRead;
-  const SyncReport(this.sent, this.received, this.filesRead);
+
+  /// Files from other devices that could not be decrypted or read (damaged, half-synced, or sealed with
+  /// another key). They are skipped and retried on every run, so a repaired copy still applies later.
+  final int badFiles;
+  const SyncReport(this.sent, this.received, this.filesRead, {this.badFiles = 0});
 }
 
 /// Sync through a shared folder kept in step by Syncthing (or any file sync).
@@ -84,7 +92,7 @@ class FolderSync {
     }
 
     // 2. Read every file from other devices that hasn't been applied yet.
-    var received = 0, filesRead = 0, opsRead = 0, bytesRead = 0, devices = 0;
+    var received = 0, filesRead = 0, opsRead = 0, bytesRead = 0, devices = 0, bad = 0;
     final apply = PerfTimer('sync.apply', warnMs: 1000);
     await for (final dev in _devices.list()) {
       if (dev is! Directory) continue;
@@ -106,19 +114,22 @@ class FolderSync {
           list = jsonDecode(utf8.decode(clear)) as List;
           changed = repo.applyRemote([for (final j in list) Op.fromJson(Map<String, Object?>.from(j as Map))]);
         } catch (e, st) {
-          logError(_log, 'sync.file.failed', e, st, fields: {'file': name});
-          rethrow;
+          // Skip it (not marked as seen, so a repaired copy applies on a later run) and keep applying the
+          // others: one damaged file must not block every file after it. applyRemote rolled back its part.
+          logError(_log, 'sync.file.failed', e, st, fields: {'file': _seq(name)});
+          bad++;
+          continue;
         }
         received += changed;
         repo.markPeerFile(device, name);
         filesRead++;
         opsRead += list.length;
         bytesRead += bytes.length;
-        // File names are sequence numbers (0000000042.bwop); the device folder name is a random id, so it is not logged.
-        logEvent(_log, Level.FINE, 'sync.file', {'file': name, 'bytes': bytes.length, 'ops': list.length, 'changed': changed});
+        logEvent(_log, Level.FINE, 'sync.file', {'file': _seq(name), 'bytes': bytes.length, 'ops': list.length, 'changed': changed});
       }
     }
-    apply.done({'devices': devices, 'files': filesRead, 'ops': opsRead, 'changed': received, 'bytes': bytesRead});
-    return SyncReport(sent, received, filesRead);
+    apply.done({'devices': devices, 'files': filesRead, 'ops': opsRead, 'changed': received, 'bytes': bytesRead, 'bad': bad});
+    if (bad > 0) logEvent(_log, Level.WARNING, 'sync.files.skipped', {'bad': bad});
+    return SyncReport(sent, received, filesRead, badFiles: bad);
   }
 }
