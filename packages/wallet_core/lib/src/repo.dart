@@ -284,7 +284,9 @@ class WalletRepo {
           'bank_type': n.bankType,
           'description': n.description,
           'manual': 0,
-          'deleted': 0,
+          // Never 'deleted': a new row is live through the column default, and writing deleted: 0 here with a
+          // fresh HLC would undo a delete made on another device that this one has not synced yet. Only
+          // deleteTransaction (and a future undelete) write that field.
           if (category != null) 'category': category,
         }
       ));

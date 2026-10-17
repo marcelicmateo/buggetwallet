@@ -449,9 +449,15 @@ void main() {
       await syncAll([a, b, c]);
       expect(a.repo.transaction(lidl)!.deleted, isTrue);
       expect(c.repo.transaction(lidl)!.deleted, isTrue);
-    },
-        skip: 'BUG: importBatch writes deleted: 0 (with a new HLC) for rows it has not seen, so a device that imports '
-            'the same export before syncing undoes a deletion made on another device.');
+    });
+
+    test('import ops never carry the deleted field (only deletes write it)', () {
+      final r = WalletRepo.inMemory();
+      r.importBatch(january);
+      expect(r.pendingOps().where((o) => o.$2.fields.containsKey('deleted')), isEmpty);
+      expect(r.transactions().length, january.transactions.length, reason: 'new rows are live by default');
+      r.close();
+    });
 
     test('the same export imported on two devices before syncing gives one copy of each row', () async {
       final a = device('a'), b = device('b');
