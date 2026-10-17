@@ -219,6 +219,34 @@ void main() {
   });
 
   group('wrong key', () {
+    test('typed key text: typos are refused with VaultException, never another error or a different key', () async {
+      final r = Random(fuzzSeed(42));
+      const noise = ['', ' ', '-', '0', '1', '8', '9', 'O', 'I', 'l', 'a', 'z', '=', 'Š', '🙂', '\n', 'BW1', 'bw1-'];
+      for (var i = 0; i < fuzzIterations(200); i++) {
+        final k = VaultKey.generate();
+        final text = await k.toText();
+        final chars = text.split('');
+        final p = 4 + r.nextInt(chars.length - 4);
+        final mutated = switch (r.nextInt(5)) {
+          0 => ([...chars]..removeAt(p)).join(),
+          1 => ([...chars]..insert(p, noise[r.nextInt(noise.length)])).join(),
+          2 => ([...chars]..[p] = noise[r.nextInt(noise.length)]).join(),
+          3 => text.substring(0, r.nextInt(text.length)),
+          _ => ([...chars]..[p] = chars[p == chars.length - 1 ? p - 1 : p + 1]).join(),
+        };
+        try {
+          final back = await VaultKey.parse(mutated);
+          expect(back.bytes, k.bytes, reason: 'seed case $i: "$mutated" parsed to a different key');
+        } on VaultException {
+          // refused, fine
+        }
+      }
+      // Case, spaces, dashes and line breaks do not matter.
+      final k = VaultKey.generate();
+      final text = await k.toText();
+      expect((await VaultKey.parse(' ${text.toLowerCase().replaceAll('-', '\n')} ')).bytes, k.bytes);
+    });
+
     test('refused before anything is written or read; outbox kept; works with the right key', () async {
       final a = device('a');
       a.repo.importBatch(january);
