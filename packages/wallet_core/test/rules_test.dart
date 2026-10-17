@@ -160,8 +160,8 @@ void main() {
 
     test('rules do not touch salary, extras or hand-added expenses', () {
       final salary = _tx('pbz', 'Plaća/Mirovina', 'Neto plaća', 150000);
-      final manual =
-          const Tx(id: 'm', source: 'manual', date: '2026-01-10', amount: -500, category: 'Eating out', manual: true, note: 'Neto plaća');
+      const manual =
+          Tx(id: 'm', source: 'manual', date: '2026-01-10', amount: -500, category: 'Eating out', manual: true, note: 'Neto plaća');
       final c = Categorizer(merchantRules: {merchantKey(salary): 'Groceries', 'neto_pla_a': 'Groceries', merchantKey(manual): 'Groceries'});
       expect(c.categoryOf(salary), 'Salary');
       expect(c.categoryOf(manual), 'Eating out');
