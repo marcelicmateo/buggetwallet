@@ -1,0 +1,462 @@
+// Sync edge cases a tester would hit: idempotence, order independence, late joiners, clock skew, wrong key,
+// damaged or truncated files, writes during a sync, and import/delete/match races between devices.
+// All data is SYNTHETIC.
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
+
+import 'package:test/test.dart';
+import 'package:wallet_core/wallet_core.dart';
+
+import 'support/sim.dart';
+import 'support/synthetic.dart';
+
+/// The .bwop files in a device folder, oldest first.
+List<File> _bwops(Device d, Device writer) {
+  final dir = Directory('${d.root.path}/devices/${writer.repo.deviceId}');
+  if (!dir.existsSync()) return [];
+  return dir.listSync().whereType<File>().where((f) => f.path.endsWith('.bwop')).toList()..sort((a, b) => a.path.compareTo(b.path));
+}
+
+/// Random ops on a few ids from three nodes, every HLC unique.
+List<Op> _randomOps(Random r, int count) {
+  final ops = <Op>[];
+  final used = <String>{};
+  const values = <String, List<Object?>>{
+    'tx': ['date', 'amount', 'category', 'deleted', 'matched_to'],
+    'goal': ['name', 'saved', 'deleted'],
+    'setting': ['value', 'deleted'],
+    'rule': ['category'],
+    'wish': ['status', 'price'],
+  };
+  Object? value(String field, Random r) => switch (field) {
+        'date' => addDays('2026-01-01', r.nextInt(30)),
+        'amount' || 'saved' || 'price' => r.nextInt(10000) - 5000,
+        'deleted' => r.nextBool() ? 1 : (r.nextBool() ? true : false),
+        'value' => jsonEncode(r.nextInt(100)),
+        'matched_to' => r.nextBool() ? null : 'x${r.nextInt(3)}',
+        'status' => ['waiting', 'bought', 'skipped'][r.nextInt(3)],
+        'name' => 'Synthetic ${r.nextInt(3)}',
+        _ => ['Groceries', 'Shopping', null][r.nextInt(3)], // category: nullable
+      };
+  while (ops.length < count) {
+    final entity = values.keys.elementAt(r.nextInt(values.length));
+    final fields = values[entity]!.cast<String>();
+    final pick = {
+      for (final f in fields)
+        if (r.nextBool()) f: value(f, r)
+    };
+    if (pick.isEmpty) continue;
+    final h = Hlc(1000 + r.nextInt(50), r.nextInt(3), 'n${r.nextInt(3)}').toString();
+    if (!used.add(h)) continue;
+    ops.add(Op(entity, '$entity${r.nextInt(4)}', pick, h));
+  }
+  return ops;
+}
+
+void main() {
+  late Directory tmp;
+  late VaultKey key;
+  late Net net;
+  var now = 1767225600000;
+  final devices = <Device>[];
+  Device device(String name, {int skew = 0}) {
+    final d = Device(name, Directory('${tmp.path}/$name')..createSync(), key, () => now + skew);
+    devices.add(d);
+    return d;
+  }
+
+  Future<void> syncAll(List<Device> ds) async {
+    for (var round = 0; round < 2; round++) {
+      for (final d in ds) {
+        d.deliver(net, Random(round));
+        await d.run();
+        d.upload(net);
+      }
+    }
+  }
+
+  setUp(() {
+    tmp = Directory.systemTemp.createTempSync('bw-sync-');
+    key = VaultKey.generate();
+    net = Net();
+    now = 1767225600000;
+  });
+  tearDown(() {
+    for (final d in devices) {
+      d.close();
+    }
+    devices.clear();
+    tmp.deleteSync(recursive: true);
+  });
+
+  group('applying ops', () {
+    test('order and duplicates do not matter (property, many random op lists)', () {
+      final n = fuzzIterations(150);
+      final base = fuzzSeed(77);
+      for (var i = 0; i < n; i++) {
+        final r = Random(base + i);
+        final ops = _randomOps(r, 5 + r.nextInt(30));
+        final a = WalletRepo.inMemory(), b = WalletRepo.inMemory(), c = WalletRepo.inMemory();
+        a.applyRemote(ops);
+        final shuffled = [...ops]..shuffle(r);
+        b.applyRemote(shuffled);
+        // One op per call, reversed, every op twice.
+        for (final op in [...ops.reversed, ...ops]) {
+          c.applyRemote([op]);
+        }
+        expect(dump(b), dump(a), reason: 'seed ${base + i}');
+        expect(dump(c), dump(a), reason: 'seed ${base + i}');
+        expect(lwwDiff(a, lastWriterWins(ops)), isEmpty, reason: 'seed ${base + i}');
+        expect(a.applyRemote(ops), 0, reason: 'seed ${base + i}: applying again changes nothing');
+        expect(a.pendingOps(), isEmpty, reason: 'remote ops are never re-exported');
+        for (final x in [a, b, c]) {
+          x.close();
+        }
+      }
+    });
+
+    test('an op for an unknown entity or field is ignored (forward compatible)', () {
+      final r = WalletRepo.inMemory();
+      final changed = r.applyRemote([
+        Op('future_entity', 'x', const {'a': 1}, const Hlc(5, 0, 'n').toString()),
+        Op('goal', 'g1', const {'name': 'Synthetic goal', 'colour': 'blue'}, const Hlc(6, 0, 'n').toString()),
+      ]);
+      expect(changed, 1);
+      expect(r.goals().single.name, 'Synthetic goal');
+      r.close();
+    });
+  });
+
+  group('files', () {
+    test('the same file applied twice (Syncthing conflict copy) changes nothing the second time', () async {
+      final a = device('a'), b = device('b');
+      a.repo.importBatch(january);
+      a.repo.updateSettings({'salary': 150000});
+      await a.run();
+      a.upload(net);
+      b.deliver(net, Random(1));
+      expect((await b.run()).filesRead, 1);
+      final before = dump(b.repo);
+      final f = _bwops(b, a).single;
+      f.copySync(f.path.replaceFirst('.bwop', '.sync-conflict-20261016-000000-ABCDEFG.bwop'));
+      final again = await b.run();
+      expect(again.filesRead, 1);
+      expect(again.received, 0);
+      expect(dump(b.repo), before);
+    });
+
+    test('files delivered in reverse order give the same result as in order', () async {
+      final a = device('a'), inOrder = device('b'), reversed = device('c');
+      a.repo.importBatch(january);
+      final lidl = a.repo.transactions().firstWhere((t) => t.amount == -2340).id;
+      for (final c in ['Shopping', 'Eating out', 'Groceries']) {
+        now += 1000;
+        a.repo.setCategory(lidl, c);
+        await a.run();
+      }
+      a.upload(net);
+      inOrder.deliver(net, Random(1));
+      await inOrder.run();
+      // Deliver newest first, one file per sync.
+      final names = net.files.keys.where((k) => k.endsWith('.bwop')).toList()..sort();
+      for (final name in names.reversed) {
+        final f = File('${reversed.root.path}/$name')..parent.createSync(recursive: true);
+        f.writeAsBytesSync(net.files[name]!);
+        await reversed.run();
+      }
+      expect(inOrder.repo.transaction(lidl)!.category, 'Groceries');
+      expect(dump(reversed.repo), dump(inOrder.repo));
+    });
+
+    test('a device joining late gets everything, and its own edits reach the others', () async {
+      final a = device('a'), b = device('b');
+      a.repo.importBatch(january);
+      a.repo.saveGoal(name: 'Synthetic fund', target: 100000, saved: 0, monthly: 5000, sort: 1);
+      await syncAll([a, b]);
+      b.repo.updateSettings({'salary': 150000, 'paydayDay': 12});
+      now += 5000;
+      await syncAll([a, b]);
+      final late = device('late');
+      await syncAll([late]);
+      expect(dump(late.repo), dump(a.repo));
+      late.repo.addManual(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
+      await syncAll([late, a, b]);
+      expect(dump(a.repo), dump(late.repo));
+      expect(dump(b.repo), dump(late.repo));
+      expect(a.repo.transactions().where((t) => t.manual).length, 1);
+    });
+
+    test('writes made while a sync is running are not lost', () async {
+      final a = device('a'), b = device('b');
+      a.repo.importBatch(january);
+      var running = true;
+      final run = a.run().whenComplete(() => running = false);
+      var written = 0;
+      while (running) {
+        a.repo.addManual(date: '2026-01-2${written % 9}', amount: 100 + written, category: 'Groceries');
+        written++;
+        await Future<void>.delayed(Duration.zero);
+      }
+      await run;
+      await a.run(); // exports what was written during the first run
+      a.upload(net);
+      b.deliver(net, Random(1));
+      await b.run();
+      expect(written, greaterThan(0));
+      expect(b.repo.transactions().where((t) => t.manual).length, written);
+      expect(dump(b.repo, clocks: false), dump(a.repo, clocks: false));
+    });
+
+    test('a missing sync folder is a SyncException and keeps the outbox', () async {
+      final r = WalletRepo.inMemory();
+      r.updateSettings({'salary': 1});
+      await expectLater(FolderSync('${tmp.path}/nope', key).run(r), throwsA(isA<SyncException>()));
+      expect(r.pendingOps().length, 1);
+      r.close();
+    });
+  });
+
+  group('wrong key', () {
+    test('refused before anything is written or read; outbox kept; works with the right key', () async {
+      final a = device('a');
+      a.repo.importBatch(january);
+      await a.run();
+      final b = Device('b', a.dir, VaultKey.generate(), () => now); // same folder, other wallet's key
+      devices.add(b);
+      b.repo.updateSettings({'salary': 99});
+      final before = dump(b.repo);
+      await expectLater(b.run(), throwsA(isA<SyncException>()));
+      expect(dump(b.repo), before);
+      expect(b.repo.pendingOps().length, 1);
+      expect(Directory('${a.root.path}/devices/${b.repo.deviceId}').existsSync(), isFalse);
+      final good = await FolderSync(a.dir.path, key).run(b.repo);
+      expect(good.sent, 1);
+      expect(b.repo.transactions().length, january.transactions.length);
+    });
+
+    test('a file sealed with another key is rejected and nothing is applied', () async {
+      final a = device('a'), b = device('b');
+      a.repo.updateSettings({'salary': 5});
+      await a.run();
+      a.upload(net);
+      // Re-seal a's file with another key under the same name.
+      final name = net.files.keys.firstWhere((k) => k.endsWith('.bwop'));
+      final clear = await unseal(net.files[name]!, key);
+      net.files[name] = await seal(clear, VaultKey.generate());
+      b.deliver(net, Random(1));
+      final before = dump(b.repo);
+      await expectLater(b.run(), throwsA(isA<VaultException>()));
+      expect(dump(b.repo), before);
+    });
+  });
+
+  group('damaged files', () {
+    Future<(Device, Device, String, Uint8List)> setup() async {
+      final a = device('a'), b = device('b');
+      a.repo.importBatch(january);
+      a.repo.updateSettings({'salary': 150000});
+      await a.run();
+      a.upload(net);
+      final name = net.files.keys.firstWhere((k) => k.endsWith('.bwop'));
+      return (a, b, name, net.files[name]!);
+    }
+
+    test('truncated or bit-flipped files are rejected without changing anything; the repaired file then applies', () async {
+      final (a, b, name, good) = await setup();
+      final path = '${b.root.path}/$name';
+      final r = Random(fuzzSeed(5));
+      final cases = <Uint8List>[
+        Uint8List(0),
+        Uint8List.sublistView(good, 0, 4),
+        Uint8List.sublistView(good, 0, 44),
+        for (var i = 0; i < fuzzIterations(25); i++) Uint8List.sublistView(good, 0, r.nextInt(good.length)),
+        for (var i = 0; i < fuzzIterations(25); i++) Uint8List.fromList(good)..[r.nextInt(good.length)] ^= 1 << r.nextInt(8),
+      ];
+      b.deliver(net, Random(1)); // vault.json and the folder
+      final before = dump(b.repo);
+      for (final (i, bad) in cases.indexed) {
+        File(path).writeAsBytesSync(bad);
+        Object? error;
+        try {
+          await b.run();
+        } catch (e) {
+          error = e;
+        }
+        expect(error, isNotNull, reason: 'case $i (${bad.length} bytes) was accepted');
+        expect(error, anyOf(isA<VaultException>(), isA<SyncException>()), reason: 'case $i: ${error.runtimeType}');
+        expect(dump(b.repo), before, reason: 'case $i');
+        expect(b.repo.peerFileSeen(a.repo.deviceId, name.split('/').last), isFalse, reason: 'case $i');
+      }
+      File(path).writeAsBytesSync(good);
+      final rep = await b.run();
+      expect(rep.filesRead, 1);
+      expect(dump(b.repo, clocks: false), dump(a.repo, clocks: false));
+    });
+
+    test('a correctly sealed file with broken contents changes nothing (no partial writes)', () async {
+      final (a, b, name, _) = await setup();
+      b.deliver(net, Random(1));
+      final path = '${b.root.path}/$name';
+      final good = Op('setting', 'salary', const {'value': '1'}, Hlc(now + 10, 0, 'zz').toString()).toJson();
+      final payloads = <Object>[
+        'not json',
+        '{"e":"tx"}',
+        jsonEncode([good, 'not an op']),
+        jsonEncode([
+          good,
+          {
+            'e': 'setting',
+            'id': 'rent',
+            'f': {'value': '2'},
+            'h': 'not-a-clock'
+          }
+        ]),
+        jsonEncode([
+          good,
+          {'e': 'setting', 'id': 'rent', 'f': 'not a map', 'h': const Hlc(1, 0, 'zz').toString()}
+        ]),
+      ];
+      final before = dump(b.repo);
+      for (final p in payloads) {
+        File(path).writeAsBytesSync(await seal(utf8.encode(p as String), key));
+        await expectLater(b.run(), throwsA(anything), reason: p);
+        expect(dump(b.repo), before, reason: p);
+        expect(b.repo.settings().salary, 0);
+      }
+    });
+
+    test('one damaged file does not stop files from other devices being applied', () async {
+      final (_, b, name, good) = await setup();
+      final c = device('c');
+      c.repo.updateSettings({'rent': 40000});
+      await c.run();
+      c.upload(net);
+      net.files[name] = Uint8List.sublistView(good, 0, good.length ~/ 2); // a's file arrives damaged
+      b.deliver(net, Random(1));
+      try {
+        await b.run();
+      } catch (_) {
+        // the damaged file may be reported, but c's changes should still arrive
+      }
+      expect(b.repo.settings().rent, 40000);
+    },
+        skip: 'BUG: FolderSync.run rethrows on the first damaged file, so every later file (all devices, in folder '
+            'listing order) is never applied; one bad file blocks sync for good until someone deletes it by hand.');
+  });
+
+  group('clocks', () {
+    test('a device whose clock is an hour behind still wins with an edit made after it synced (causality)', () async {
+      final a = device('a'), b = device('b', skew: -3600000);
+      a.repo.importBatch(january);
+      final lidl = a.repo.transactions().firstWhere((t) => t.amount == -2340).id;
+      a.repo.setCategory(lidl, 'Shopping');
+      await syncAll([a, b]);
+      now += 1000; // real time moves on; b's wall clock is still an hour behind a's edit
+      b.repo.setCategory(lidl, 'Eating out');
+      await syncAll([a, b]);
+      expect(a.repo.transaction(lidl)!.category, 'Eating out');
+      expect(b.repo.transaction(lidl)!.category, 'Eating out');
+    });
+
+    test('a device a year in the future does not freeze the others: their later edits still win', () async {
+      final future = device('future', skew: 365 * 86400000), b = device('b');
+      future.repo.updateSettings({'salary': 1000});
+      await syncAll([future, b]);
+      expect(b.repo.clock.last.millis, greaterThanOrEqualTo(now + 365 * 86400000));
+      for (var i = 0; i < 5; i++) {
+        now += 10;
+        b.repo.updateSettings({'salary': 2000 + i});
+        await syncAll([b, future]);
+        expect(future.repo.settings().salary, 2000 + i);
+      }
+    });
+
+    test('HLCs written by the repo strictly increase, also across remote receives and a clock going backwards', () {
+      var t = 5000000;
+      final r = WalletRepo.inMemory(now: () => t);
+      final seen = <String>[];
+      for (var i = 0; i < 50; i++) {
+        t += [-1000, 0, 3, -7, 2000][i % 5];
+        if (i % 7 == 0) {
+          r.applyRemote([
+            Op('setting', 'x$i', const {'value': '1'}, Hlc(t + 500, 9, 'other').toString())
+          ]);
+        }
+        r.updateSettings({'k$i': i});
+        seen.add(r.pendingOps().last.$2.hlc);
+      }
+      expect([...seen]..sort(), seen);
+      expect(seen.toSet().length, seen.length);
+      r.close();
+    });
+
+    test('HLC order stays correct past 99999 events in one millisecond', () {
+      expect(const Hlc(1, 100000, 'a').compareTo(const Hlc(1, 99999, 'a')), greaterThan(0));
+      // A peer's op far ahead of this device's wall clock, then a later local edit of the same setting.
+      final r = WalletRepo.inMemory(now: () => 0);
+      r.applyRemote([
+        Op('setting', 'salary', const {'value': '1'}, const Hlc(9000000000000, 99998, 'peer').toString())
+      ]);
+      r.updateSettings({'salary': 2});
+      final local = r.pendingOps().last.$2.hlc;
+      r.close();
+      expect(local.compareTo(const Hlc(9000000000000, 99998, 'peer').toString()), greaterThan(0), reason: local);
+    },
+        skip: 'BUG (low): Hlc.compareTo compares strings with a 5-digit counter; at counter 100000 (100k writes while '
+            'the wall clock is behind the HLC, e.g. after receiving ops from a device whose clock is far in the future) '
+            'new edits sort BEFORE older ones and lose last-writer-wins.');
+  });
+
+  group('races between devices', () {
+    test('re-importing on another device does not resurrect a transaction deleted elsewhere', () async {
+      final a = device('a'), b = device('b'), c = device('c');
+      a.repo.importBatch(january);
+      await syncAll([a, b]);
+      final lidl = b.repo.transactions().firstWhere((t) => t.amount == -2340).id;
+      now += 1000;
+      b.repo.deleteTransaction(lidl);
+      await syncAll([b, a]);
+      now += 1000;
+      c.repo.importBatch(january); // c imports the same export before it has synced
+      await syncAll([a, b, c]);
+      expect(a.repo.transaction(lidl)!.deleted, isTrue);
+      expect(c.repo.transaction(lidl)!.deleted, isTrue);
+    },
+        skip: 'BUG: importBatch writes deleted: 0 (with a new HLC) for rows it has not seen, so a device that imports '
+            'the same export before syncing undoes a deletion made on another device.');
+
+    test('the same export imported on two devices before syncing gives one copy of each row', () async {
+      final a = device('a'), b = device('b');
+      a.repo.importBatch(january);
+      b.repo.importBatch(january);
+      await syncAll([a, b]);
+      expect(a.repo.transactions().length, january.transactions.length);
+      expect(dump(a.repo), dump(b.repo));
+    });
+
+    test('a category set on one device survives the other device importing the same rows later', () async {
+      final a = device('a'), b = device('b');
+      a.repo.importBatch(january);
+      final lidl = a.repo.transactions().firstWhere((t) => t.amount == -2340).id;
+      a.repo.setCategory(lidl, 'Eating out');
+      now += 1000;
+      b.repo.importBatch(january);
+      await syncAll([a, b]);
+      expect(b.repo.transaction(lidl)!.category, 'Eating out');
+      expect(a.repo.transaction(lidl)!.category, 'Eating out');
+    });
+
+    test('a hand-added expense that arrives by sync after the bank row was imported elsewhere is not counted twice', () async {
+      final phone = device('phone'), laptop = device('laptop');
+      phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
+      laptop.repo.importBatch(january); // laptop imports before the phone's entry arrived
+      await syncAll([phone, laptop]);
+      final live = laptop.repo.transactions().where((t) => t.amount == -2340).toList();
+      expect(live.length, 1, reason: 'manual entry and bank row both count');
+    },
+        skip: 'BUG: manual entries are matched to bank rows only inside importBatch; when the bank row is imported on a '
+            'device that has not received the manual entry yet, both stay live forever (the expense counts twice).');
+  });
+}
