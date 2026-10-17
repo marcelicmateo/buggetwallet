@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:logging/logging.dart';
 
+import 'grid.dart';
 import 'log.dart';
 
 final _log = Logger('bw.importer.xls');
@@ -339,10 +340,6 @@ class _Biff {
     // Counts only: cell contents are bank data.
     logImporter(_log, Level.FINE, 'xls.sheet',
         {'records': recs.length, 'strings': sst.length, 'rows': cells.length, 'cols': maxCol + 1, 'sheetDir': started});
-    if (cells.isEmpty) return [];
-    final maxRow = cells.keys.reduce((a, b) => a > b ? a : b);
-    return [
-      for (var r = 0; r <= maxRow; r++) [for (var c = 0; c <= maxCol; c++) cells[r]?[c] ?? ''],
-    ];
+    return sparseRows(cells);
   }
 }

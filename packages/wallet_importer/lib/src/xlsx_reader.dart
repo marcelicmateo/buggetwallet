@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:logging/logging.dart';
 import 'package:xml/xml.dart';
 
+import 'grid.dart';
 import 'log.dart';
 
 final _log = Logger('bw.importer.xlsx');
@@ -80,11 +81,7 @@ class XlsxReader {
     // Counts only: cell contents are bank data.
     logImporter(_log, Level.FINE, 'xlsx.sheet',
         {'zipFiles': archive.length, 'strings': shared.length, 'sheetBytes': sheetXml.length, 'rows': rows.length, 'cols': maxCol + 1});
-    if (rows.isEmpty) return [];
-    final maxRow = rows.keys.reduce((a, b) => a > b ? a : b);
-    return [
-      for (var r = 0; r <= maxRow; r++) [for (var c = 0; c <= maxCol; c++) rows[r]?[c] ?? ''],
-    ];
+    return sparseRows(rows);
   }
 
   static String? _firstSheetPath(String? Function(String) text) {

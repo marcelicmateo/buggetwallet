@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:test/test.dart';
+import 'package:wallet_importer/src/grid.dart';
 import 'package:wallet_importer/src/importer.dart' show fixMojibake, excelDate;
 import 'package:wallet_importer/src/xls_reader.dart';
 import 'package:wallet_importer/wallet_importer.dart';
@@ -29,6 +30,30 @@ void main() {
       expect(fixMojibake('GraÅ¡o'), 'Grašo');
       expect(fixMojibake('Plain'), 'Plain');
       expect(fixMojibake('Već ispravno'), 'Već ispravno');
+    });
+    test('sparseRows: rows 0..last, each only as long as its last cell, empty rows empty, size capped', () {
+      final far = sparseRows({
+        7: {1: 'b', 0: 'a'},
+        2: {3: 1.0},
+        1048575: {16383: 'far'},
+      });
+      expect(far.length, 1048576);
+      expect([
+        for (final r in [0, 2, 7, 8, 1048575]) far[r].length
+      ], [
+        0,
+        4,
+        2,
+        0,
+        16384
+      ]);
+      expect(far[2], ['', '', '', 1.0]);
+      expect(far[7], ['a', 'b']);
+      expect(
+          () => sparseRows({
+                for (var r = 0; r < 200; r++) r: {16383: 'x'}
+              }),
+          throwsFormatException);
     });
   });
 

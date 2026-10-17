@@ -382,9 +382,19 @@ void main() {
       final bytes = _xlsx(sheet);
       final f = await Isolate.run(() => checkImport(bytes, maxMs: 3000)).timeout(const Duration(seconds: 20));
       expect(f, isNull);
-    },
-        skip: 'BUG: XlsxReader (and XlsReader) materialise a dense maxRow x maxCol grid; one damaged/odd cell reference such '
-            'as XFD1048576 makes it allocate ~17e9 cells (out of memory / hang) instead of failing or reading sparsely.');
+      // Read sparsely: the real rows still import.
+      final b = importBankFile(bytes);
+      expect([for (final t in b.transactions) (t.date, t.amountMinor)], [('2026-01-03', -1450)]);
+    });
+
+    test('a sheet that would lay out to millions of cells is an ImportException, quickly', () {
+      final far = [for (var r = 3; r < 300; r++) '<row r="$r"><c r="XFD$r"><v>1</v></c></row>'].join();
+      final sheet = '$_sheetHead${_row(1, ['Type', 'Started Date', 'Description', 'Amount'])}$far$_sheetTail';
+      final bytes = _xlsx(sheet);
+      final sw = Stopwatch()..start();
+      expect(() => importBankFile(bytes), throwsA(isA<ImportException>()));
+      expect(sw.elapsedMilliseconds, lessThan(3000));
+    });
   });
 
   group('numbers and dates the importer should not accept', () {
