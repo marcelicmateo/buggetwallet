@@ -83,4 +83,6 @@ Unfinished branches: restart the task from its last commit. Bugs the tests find:
 - Logging is in: app-wide logs (debug level while testing), perf (startup, frames, timings, memory), Plan › Diagnostics
   "Save logs…". Owner: after testing, save logs and send the file; summarise with `tools/log-summary.py`.
 - Fixed: Today and the "Salary landed" banner now start the period on the first salary part (same paydays as the chart).
+- Design: 20 Today-screen ideas + directions A/B + desktop on the canvas (docs/design/); owner to pick favourites.
+- Stage in progress: UI tests agent + bug-fix agent (9 core bugs + 4 app bugs) in worktrees; see Resume here.
 - Then: merge v2 to master; budget vs actual and top merchants.

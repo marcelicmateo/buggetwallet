@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add expense · Clear Day</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#2A4BD7}a:hover{color:#1C36A8}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #8E8B85; font-family: Figtree, system-ui, sans-serif; color: #17191C; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden">
+  <div role="dialog" aria-label="Add expense" style="background: #FFFFFF; border-radius: 28px 28px 0 0; padding: 12px 20px 24px; display: flex; flex-direction: column; gap: 16px">
+    <div style="width: 40px; height: 5px; border-radius: 3px; background: #DCD8CF; align-self: center"></div>
+    <div style="display: flex; justify-content: space-between; align-items: center">
+      <span style="font-size: 18px; font-weight: 700">Add expense</span>
+      <button aria-label="Close" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #F3F1EC; display: flex; align-items: center; justify-content: center; color: #4A4F55">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg>
+      </button>
+    </div>
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0">
+      <span style="font-size: 64px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums">€12.50</span>
+      <span style="font-size: 14px; color: #5E646B">Today's money after this: €11</span>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 8px">
+      <button aria-pressed="true" style="height: 40px; padding: 0 14px; border-radius: 20px; border: none; background: #17191C; color: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 700">Eating out</button>
+      <button aria-pressed="false" style="height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid #DCD8CF; background: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 600; color: #17191C">Groceries</button>
+      <button aria-pressed="false" style="height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid #DCD8CF; background: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 600; color: #17191C">Transport</button>
+      <button aria-pressed="false" style="height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid #DCD8CF; background: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 600; color: #17191C">Cash</button>
+      <button aria-pressed="false" style="height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid #DCD8CF; background: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 600; color: #17191C">More…</button>
+    </div>
+
+    <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #4A4F55; font-weight: 600">Note (optional)
+      <input placeholder="e.g. lunch with team" style="height: 48px; border-radius: 12px; border: 1px solid #DCD8CF; padding: 0 12px; font-family: inherit; font-size: 16px; background: #FBFAF7">
+    </label>
+
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+      <button style="height: 52px; border-radius: 14px; border: none; background: #F3F1EC; font-family: inherit; font-size: 22px; font-weight: 600; color: #17191C">1</button>
+      <button style="height: 52px; border-radius: 14px; border: none; background: #F3F1EC; font-family: inherit; font-size: 22px; font-weight: 600; color: #17191C">2</button>
+      <button style="height: 52px; border-radius: 14px; border: none; background: #F3F1EC; font-family: inherit; font-size: 22px; font-weight: 600; color: #17191C">3</button>
+      <button style="height: 52px; border-radius: 14px; border: none; background: #F3F1EC; font-family: inherit; font-size: 22px; font-weight: 600; color: #17191C">4</button>
+      <button style="height: 52px; border-radius: 14px; border: none; background: #F3F1EC; font-family: inherit; font-size: 22px; font-weight: 600; color: #17191C">5</button>
+      <button style="height: 52px; border-radius: 14px; border: none; background: #F3F1EC; font-family: inherit; font-size: 22px; font-weight: 600; color: #17191C">6</button>
+      <button style="height: 52px; border-radius: 14px; border: none; background: #F3F1EC; font-family: inherit; font-size: 22px; font-weight: 600; color: #17191C">7</button>
+      <button style="height: 52px; border-radius: 14px; border: none; background: #F3F1EC; font-family: inherit; font-size: 22px; font-weight: 600; color: #17191C">8</button>
+      <button style="height: 52px; border-radius: 14px; border: none; background: #F3F1EC; font-family: inherit; font-size: 22px; font-weight: 600; color: #17191C">9</button>
+      <button style="height: 52px; border-radius: 14px; border: none; background: #F3F1EC; font-family: inherit; font-size: 22px; font-weight: 600; color: #17191C">,</button>
+      <button style="height: 52px; border-radius: 14px; border: none; background: #F3F1EC; font-family: inherit; font-size: 22px; font-weight: 600; color: #17191C">0</button>
+      <button aria-label="Delete digit" style="height: 52px; border-radius: 14px; border: none; background: #F3F1EC; display: flex; align-items: center; justify-content: center; color: #17191C">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5H9l-6 7 6 7h12z"></path><path d="M17 9l-5 6"></path><path d="M12 9l5 6"></path></svg>
+      </button>
+    </div>
+
+    <div style="display: flex; gap: 8px">
+      <button aria-label="Say it instead" style="width: 56px; height: 56px; border-radius: 16px; border: 1px solid #DCD8CF; background: #FFFFFF; display: flex; align-items: center; justify-content: center; color: #17191C">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg>
+      </button>
+      <button style="flex: 1; height: 56px; border-radius: 16px; border: none; background: #17191C; color: #FFFFFF; font-family: inherit; font-size: 17px; font-weight: 700">Save · €12.50 eating out</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
