@@ -35,6 +35,9 @@ tools/build.sh lint             # quick: Dart format check, shellcheck, actionli
 tools/build.sh format           # reformat Dart code (dart format)
 tools/build.sh apk              # Android APK   -> dist/BudgetWallet-android.apk
 tools/build.sh linux            # Linux bundle  -> dist/BudgetWallet-linux-x64.tar.gz
+tools/build.sh desktop-test     # integration tests on the Linux desktop app (Xvfb) -> dist/screens/linux/<test>/
+tools/build.sh desktop-test screens   # only app/integration_test/screens_test.dart
+tools/build.sh desktop-smoke    # build the Linux bundle, start it headless with an empty HOME for 10 s, check its log
 tools/build-times.sh            # recent build/test timings and medians (trend: slowest tests)
 tools/build.sh all              # tests, then both builds
 tools/build.sh shell            # shell inside the container
@@ -55,6 +58,14 @@ tools/emulator.sh start --window  # an emulator on your desktop; then `install`,
   Every run prints seconds per step and per-test p50/p90/p99/max. `tools/build-times.sh` shows the last runs and
   the median per step (`--step app`, `--commit`, `--ci` adds CI's history from the `ci-logs` branch);
   `tools/build-times.sh trend` shows the slowest tests over time.
+- **Linux desktop tests** run in the same container on a virtual display (Xvfb, Mesa software OpenGL, a private
+  D-Bus session). `desktop-test` runs every `app/integration_test/*_test.dart` with `flutter test -d linux`, each file
+  with its own empty wallet folder; screenshots go to `dist/screens/linux/<test>/` and the app's log to
+  `dist/logs/app-linux-<test>.log`. On desktop, `binding.takeScreenshot()` is served by
+  `app/integration_test/flutter_test_config.dart` (the integration_test plugin only captures on Android/iOS); a test
+  that only makes sense on Android should skip itself. `desktop-smoke` unpacks the release tarball and checks that it
+  starts, logs `app.start` with no SEVERE line and exits on SIGTERM. CI runs both (`BW_NATIVE=1`); the Ubuntu
+  packages for this are listed once in `dev/linux-packages.txt` (image and CI).
 - The first `tools/emulator.sh` run downloads the emulator and system image (~2 GB) into Podman volumes and saves a
   clean-boot snapshot; later runs boot from it in seconds. `tools/emulator.sh reset` deletes them.
 - **Code style.** `dart format` with page width 140, and stricter analyzer rules (strict casts/inference/raw

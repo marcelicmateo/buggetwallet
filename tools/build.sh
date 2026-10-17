@@ -6,14 +6,20 @@
 #   tools/build.sh format   rewrite Dart files with `dart format` (page width in analysis_options.yaml)
 #   tools/build.sh apk      Android release APK   -> dist/BudgetWallet-android.apk
 #   tools/build.sh linux    Linux release bundle  -> dist/BudgetWallet-linux-x64.tar.gz
-#   tools/build.sh all      test, then apk and linux
+#   tools/build.sh all      test, then apk, linux, desktop-test and desktop-smoke
+#   tools/build.sh desktop-test [name…]   app integration tests on the Linux desktop app under Xvfb: every
+#                           app/integration_test/*_test.dart, or just <name>_test.dart. Screenshots -> dist/screens/linux/<name>/,
+#                           app log -> dist/logs/app-linux-<name>.log; each file starts with an empty wallet folder
+#   tools/build.sh desktop-smoke   build the Linux release bundle, start it under Xvfb with empty HOME/XDG folders for
+#                           BW_SMOKE_SECONDS (10) s: it must stay up, log app.start with no SEVERE line, and exit on SIGTERM
 #   tools/build.sh importer|core|app   analyze and test one package (what CI runs, one step each)
 #   tools/build.sh shell    interactive shell in the container
 #   tools/build.sh image    (re)build the container image (first build ~15 min)
 #   tools/build.sh lsp      Dart language server on stdin/stdout, for editors (repo mounted at its host path)
 #   tools/build.sh image-name   build the image if needed and print its tag (used by tools/emulator.sh)
 #
-# The image is rebuilt automatically when dev/Containerfile, dev/install-lint-tools.sh or the Flutter version changes.
+# The image is rebuilt automatically when dev/Containerfile, dev/install-lint-tools.sh, dev/linux-packages.txt or the
+# Flutter version changes.
 # The Flutter version comes from `environment: flutter:` in app/pubspec.yaml (CI reads the same line).
 # Logs: dist/logs/<step>.log (with start/end stamps), image builds in dist/logs/image-dev.log, per-test timings in
 # dist/logs/tests-<suite>-summary.txt; every step is appended to dist/logs/history.jsonl (tools/build-times.sh).
@@ -24,12 +30,12 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 FLUTTER_VERSION=$(grep -oP '^\s+flutter:\s*"?\K[0-9]+\.[0-9]+\.[0-9]+' "$ROOT/app/pubspec.yaml")
 # Tag = Flutter version + hash of the image inputs, so editing any of them rebuilds the image on the next run
-IMAGE="localhost/budget-wallet-dev:$FLUTTER_VERSION-$(cat "$ROOT/dev/Containerfile" "$ROOT/dev/install-lint-tools.sh" | sha256sum | cut -c1-8)"
+IMAGE="localhost/budget-wallet-dev:$FLUTTER_VERSION-$(cat "$ROOT/dev/Containerfile" "$ROOT/dev/install-lint-tools.sh" "$ROOT/dev/linux-packages.txt" | sha256sum | cut -c1-8)"
 CMD=${1:-test}
 # shellcheck source=tools/timing.sh
 source "$ROOT/tools/timing.sh"
 
-usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---- host side: hand the command to the container ----
 if [[ "${BW_NATIVE:-}" != 1 ]]; then
@@ -44,7 +50,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   case "$CMD" in
     image) build_image; exit ;;
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
-    test|lint|apk|linux|all|importer|core|app) run_begin "$CMD" ;;
+    test|lint|apk|linux|all|importer|core|app|desktop-test|desktop-smoke) run_begin "$CMD" ;;
     format|shell|lsp) ;;
     *) usage ;;
   esac
@@ -71,7 +77,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     exit 1
   fi
   tty=(); [[ -t 0 && -t 1 ]] && tty=(-it)
-  inner=(tools/build.sh "$CMD"); [[ "$CMD" == shell ]] && inner=(bash)
+  inner=(tools/build.sh "$CMD" "${@:2}"); [[ "$CMD" == shell ]] && inner=(bash)
   [[ -n "${BW_RUN_DIR:-}" ]] && mapfile -t run < <(run_mounts)
   # Rootless: container root is the host user, so build outputs stay owned by you.
   # Named volumes keep the pub and Gradle caches between runs.
@@ -236,16 +242,102 @@ build_linux() {
   step linux 'cd app && flutter build linux --release && tar -C build/linux/x64/release -czf ../dist/BudgetWallet-linux-x64.tar.gz bundle' "$cold"
 }
 
+# ---- Linux desktop under Xvfb (desktop-test, desktop-smoke) ----
+# headless <dir> <cmd...>: run cmd on a virtual X display (Mesa software GL) inside a private D-Bus session, with the
+# app's data (XDG_DATA_HOME: wallet, key file, logs), documents and runtime folders inside <dir>.
+# shellcheck disable=SC2329  # called by name through a step
+headless() {
+  local dir=$1; shift
+  mkdir -p "$dir/data" "$dir/docs"; mkdir -m 700 "$dir/run"
+  XDG_DATA_HOME=$dir/data XDG_DOCUMENTS_DIR=$dir/docs XDG_RUNTIME_DIR=$dir/run NO_AT_BRIDGE=1 \
+    dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' "$@"
+}
+# The app's log files (path_provider: $XDG_DATA_HOME/<application id>/logs/), oldest first
+# shellcheck disable=SC2329
+app_logs() { find "$1/data" -path '*/logs/bw-*.log' -print0 2>/dev/null | sort -z | xargs -0r cat; }
+# desktop_test <name>: app/integration_test/<name>_test.dart on the Linux desktop, with a JSON report and per-test
+# timings. Screenshots come from integration_test/flutter_test_config.dart (BW_SCREENS_DIR).
+# shellcheck disable=SC2329
+desktop_test() {
+  local name=$1 dir rc=0 json=$LOGS/tests-desktop-$1.json shots=$ROOT/dist/screens/linux/$1
+  dir=$(mktemp -d)
+  rm -rf "$shots" "$LOGS/screens-linux-$name"; rm -f "$json" "$LOGS/tests-desktop-$name-summary.txt"
+  (cd app && BW_SCREENS_DIR=$shots headless "$dir" \
+    flutter test "integration_test/${name}_test.dart" -d linux --no-pub -r expanded --file-reporter "json:$json") || rc=$?
+  app_logs "$dir" > "$LOGS/app-linux-$name.log"
+  [[ -d $shots ]] && cp -r "$shots" "$LOGS/screens-linux-$name"
+  [[ -f $json ]] && python3 -I tools/build_log.py tests "desktop-$name" "$json"
+  rm -rf "$dir"
+  return "$rc"
+}
+# smoke_run <binary> <seconds>: start it, it must still run after <seconds>, then SIGTERM must end it within 10 s
+# (exit 0 or 143 = terminated; a crash shows as 134 abort, 139 segfault, ...).
+# shellcheck disable=SC2329
+smoke_run() {
+  local pid rc=0 i
+  "$1" > "$SMOKE_OUT" 2>&1 &
+  pid=$!
+  for ((i = 0; i < $2; i++)); do
+    sleep 1
+    kill -0 "$pid" 2>/dev/null || { wait "$pid" || rc=$?; echo "FAIL: the app exited after ${i}s with code $rc"; return 1; }
+  done
+  echo "app still running after $2 s; sending SIGTERM"
+  kill -TERM "$pid"
+  for ((i = 0; i < 100; i++)); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -KILL "$pid"; echo "FAIL: the app ignored SIGTERM for 10 s"; return 1
+  fi
+  wait "$pid" || rc=$?
+  echo "app exited with code $rc"
+  [[ $rc == 0 || $rc == 143 ]] || { echo "FAIL: unexpected exit code"; return 1; }
+}
+# desktop_smoke: the release bundle from dist/BudgetWallet-linux-x64.tar.gz, unpacked to a temp folder and run with
+# an empty HOME, like a first start on the owner's computer. smoke_run goes in by source: xvfb-run is a POSIX sh script,
+# which drops exported bash functions.
+# shellcheck disable=SC2329
+desktop_smoke() {
+  local dir rc=0 log=$LOGS/app-linux-smoke.log severe
+  dir=$(mktemp -d)
+  tar -xzf dist/BudgetWallet-linux-x64.tar.gz -C "$dir"
+  mkdir -p "$dir/home"
+  export SMOKE_OUT=$LOGS/app-linux-smoke-console.log
+  HOME=$dir/home XDG_CONFIG_HOME=$dir/home/.config XDG_CACHE_HOME=$dir/home/.cache \
+    headless "$dir" bash -c "$(declare -f smoke_run); "'smoke_run "$@"' _ "$dir/bundle/budget_wallet" "${BW_SMOKE_SECONDS:-10}" || rc=1
+  app_logs "$dir" > "$log"
+  rm -rf "$dir"
+  echo "app log: $(wc -l < "$log") lines (dist/logs/app-linux-smoke.log)"
+  grep -q 'app.start {"phase":"ready"' "$log" || { echo "FAIL: no app.start ready line in the app log"; rc=1; }
+  severe=$(grep -c '^[^ ]* SEVERE ' "$log" || true)
+  if [[ $severe != 0 ]]; then echo "FAIL: $severe SEVERE lines:"; grep -A3 '^[^ ]* SEVERE ' "$log" | head -40; rc=1; fi
+  grep -c '^[^ ]* WARNING ' "$log" | xargs printf 'WARNING lines: %s\n'
+  return "$rc"
+}
+export -f headless app_logs desktop_test smoke_run desktop_smoke
+# The integration test files to run: the names given, or every app/integration_test/*_test.dart
+desktop_tests() {
+  local names=("$@") f
+  if ((${#names[@]} == 0)); then
+    for f in app/integration_test/*_test.dart; do f=${f##*/}; names+=("${f%_test.dart}"); done
+  fi
+  for f in "${names[@]}"; do
+    f=${f%.dart}; f=${f%_test}
+    if [[ ! -f app/integration_test/${f}_test.dart ]]; then
+      echo "no such test: app/integration_test/${f}_test.dart" >&2; results+=("desktop-$f=FAILED"); failed=1; continue
+    fi
+    step "desktop-$f" "desktop_test $f"
+  done
+}
+
 # End of run: seconds per step, test timing headlines, total
 summary() {
   local t name secs result f
   echo
-  printf '%-14s %8s  %s\n' step seconds result
+  printf '%-16s %8s  %s\n' step seconds result
   for t in "${timings[@]}"; do
     read -r name secs result <<<"$t"
-    printf '%-14s %8s  %s\n' "$name" "$secs" "$result"
+    printf '%-16s %8s  %s\n' "$name" "$secs" "$result"
   done
-  printf '%-14s %8s\n' total "$(secs_since "$RUN_START")"
+  printf '%-16s %8s\n' total "$(secs_since "$RUN_START")"
   for t in "${timings[@]}"; do  # suite() deletes old summaries first, so these are from this run
     f="$LOGS/tests-${t%% *}-summary.txt"
     if [[ -f $f ]]; then head -1 "$f"; fi
@@ -262,7 +354,10 @@ case "$CMD" in
   importer|core|app) run_pub; [[ $failed == 0 ]] && steps "$CMD" "${SUITE[$CMD]}" ;;
   apk)    build_apk ;;
   linux)  build_linux ;;
-  all)    run_pub; [[ $failed == 0 ]] && steps "${LINT[@]}" "${TESTS[@]}"; if [[ $failed == 0 ]]; then build_apk; build_linux; fi ;;
+  desktop-test)  run_pub; [[ $failed == 0 ]] && desktop_tests "${@:2}" ;;
+  desktop-smoke) build_linux; [[ $failed == 0 ]] && step desktop-smoke desktop_smoke ;;
+  all)    run_pub; [[ $failed == 0 ]] && steps "${LINT[@]}" "${TESTS[@]}"
+          if [[ $failed == 0 ]]; then build_apk; build_linux; desktop_tests; step desktop-smoke desktop_smoke; fi ;;
   *)      usage ;;
 esac
 

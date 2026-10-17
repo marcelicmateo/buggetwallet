@@ -1,4 +1,5 @@
-# Lints, builds and tests everything: the same checks as `tools/build.sh all` locally.
+# Lints, builds and tests everything: the same checks as `tools/build.sh all` locally, plus the Linux desktop
+# integration tests and release smoke test (`tools/build.sh desktop-test`, `desktop-smoke`).
 # The full log is pushed to the `ci-logs` branch (latest.txt, with seconds per step) and one JSON line per step is
 # appended to history.jsonl there (tools/build-times.sh --ci), so both can be read without the Actions UI.
 # Logs contain only build/test output.
@@ -32,8 +33,11 @@ jobs:
         run: |
           dev/install-lint-tools.sh "$RUNNER_TEMP/bin" 2>&1 | tee -a "$LOG"
           .github/scripts/timed.sh lint "PATH=$RUNNER_TEMP/bin:\$PATH BW_NATIVE=1 tools/build.sh lint"
+      # The same list as the local image (dev/Containerfile): Linux build toolchain plus Xvfb, Mesa, D-Bus and fonts
       - name: System libraries
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libsqlite3-dev ninja-build libgtk-3-dev libsecret-1-dev >/dev/null
+        run: |
+          sudo apt-get update -qq
+          sed 's/#.*//' dev/linux-packages.txt | xargs sudo apt-get install -y -qq --no-install-recommends >/dev/null
       # Same commands as locally: analyze + tests with a JSON report and per-test timings (tools/build_log.py)
       - name: importer tests
         id: importer
@@ -47,6 +51,12 @@ jobs:
         id: app
         continue-on-error: true
         run: .github/scripts/timed.sh app 'BW_NATIVE=1 tools/build.sh app'
+      # Every app/integration_test/*_test.dart on the Linux desktop app under Xvfb (screenshots in the artifact below)
+      - name: linux desktop tests
+        id: desktop
+        if: steps.app.outcome == 'success'
+        continue-on-error: true
+        run: .github/scripts/timed.sh desktop 'BW_NATIVE=1 tools/build.sh desktop-test'
       - name: Android signing key
         id: signing
         if: steps.app.outcome == 'success'
@@ -88,7 +98,23 @@ jobs:
         id: linux
         if: steps.app.outcome == 'success'
         continue-on-error: true
-        run: .github/scripts/timed.sh linux 'cd app && flutter build linux --release 2>&1 | tail -40'
+        run: .github/scripts/timed.sh linux 'BW_NATIVE=1 tools/build.sh linux 2>&1 | tail -40'
+      # Starts the release bundle under Xvfb with an empty HOME: it must stay up, log app.start without SEVERE, exit on SIGTERM
+      - name: linux release smoke test
+        id: smoke
+        if: steps.linux.outcome == 'success'
+        continue-on-error: true
+        run: .github/scripts/timed.sh smoke 'BW_NATIVE=1 tools/build.sh desktop-smoke'
+      - name: Upload Linux test screenshots and logs
+        if: always() && (steps.desktop.outcome != 'skipped' || steps.smoke.outcome != 'skipped')
+        uses: actions/upload-artifact@v4
+        with:
+          name: budget-wallet-linux-tests
+          path: |
+            dist/screens/linux
+            dist/logs/app-linux-*.log
+            dist/logs/desktop-*.log
+          if-no-files-found: ignore
       - name: Upload Android app
         if: steps.apk.outcome == 'success'
         uses: actions/upload-artifact@v4
@@ -119,7 +145,7 @@ jobs:
         run: |
           t() { awk -v s="$1" '$1 == s { printf "(%ss)", $2 }' "$RUNNER_TEMP/times.txt" 2>/dev/null; }
           {
-            echo "lint=${{ steps.lint.outcome }}$(t lint) importer=${{ steps.importer.outcome }}$(t importer) core=${{ steps.core.outcome }}$(t core) app=${{ steps.app.outcome }}$(t app) signing=${{ steps.signing.outcome }} apk=${{ steps.apk.outcome }}$(t apk) linux=${{ steps.linux.outcome }}$(t linux)"
+            echo "lint=${{ steps.lint.outcome }}$(t lint) importer=${{ steps.importer.outcome }}$(t importer) core=${{ steps.core.outcome }}$(t core) app=${{ steps.app.outcome }}$(t app) desktop=${{ steps.desktop.outcome }}$(t desktop) signing=${{ steps.signing.outcome }} apk=${{ steps.apk.outcome }}$(t apk) linux=${{ steps.linux.outcome }}$(t linux) smoke=${{ steps.smoke.outcome }}$(t smoke)"
             echo
             echo "step seconds exit"
             cat "$RUNNER_TEMP/times.txt" 2>/dev/null
@@ -129,5 +155,5 @@ jobs:
           python3 -I tools/build_log.py ci-history "$RUNNER_TEMP/times.txt" > "$RUNNER_TEMP/history.jsonl" || true
           .github/scripts/publish-log.sh latest "$RUNNER_TEMP/ci.txt" "$RUNNER_TEMP/history.jsonl"
       - name: Fail if a step failed
-        if: steps.lint.outcome == 'failure' || steps.importer.outcome == 'failure' || steps.core.outcome == 'failure' || steps.app.outcome == 'failure' || steps.signing.outcome == 'failure' || steps.apk.outcome == 'failure' || steps.linux.outcome == 'failure'
+        if: steps.lint.outcome == 'failure' || steps.importer.outcome == 'failure' || steps.core.outcome == 'failure' || steps.app.outcome == 'failure' || steps.desktop.outcome == 'failure' || steps.smoke.outcome == 'failure' || steps.signing.outcome == 'failure' || steps.apk.outcome == 'failure' || steps.linux.outcome == 'failure'
         run: exit 1
