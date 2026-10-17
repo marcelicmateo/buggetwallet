@@ -72,13 +72,32 @@ String excelDate(double serial) {
   return '${d.year}-${_pad(d.month)}-${_pad(d.day)}';
 }
 
+/// What [_anyDate] returns for a cell shaped like a date that is not a real calendar day.
+const _impossible = '';
+
+/// Largest Excel serial day accepted (9999-12-31).
+const _maxSerial = 2958465.0;
+
+/// A real `YYYY-MM-DD` from the parts, or [_impossible] (2026-13-45, 31.02.2026, year 0000).
+String _ymd(String y, String m, String d) {
+  final yi = int.parse(y), mi = int.parse(m), di = int.parse(d);
+  final t = DateTime.utc(yi, mi, di);
+  if (yi < 1 || t.year != yi || t.month != mi || t.day != di) return _impossible;
+  return '$y-${m.padLeft(2, '0')}-${d.padLeft(2, '0')}';
+}
+
+/// Excel serial day to a date, or [_impossible] outside 1900-01-01 .. 9999-12-31 (or not finite).
+String _serialDate(double v) => v.isFinite && v >= 1 && v <= _maxSerial ? excelDate(v) : _impossible;
+
+/// The date in a cell: `null` when the cell is not a date at all (header, footer, empty), [_impossible] when it
+/// looks like one but is not a real calendar day, else `YYYY-MM-DD`.
 String? _anyDate(Object v) {
-  if (v is double) return v.isFinite ? excelDate(v) : null;
+  if (v is double) return _serialDate(v);
   final s = v.toString().trim();
   var m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
-  if (m != null) return '${m[1]}-${m[2]}-${m[3]}';
+  if (m != null) return _ymd(m[1]!, m[2]!, m[3]!);
   m = RegExp(r'^(\d{1,2})\.(\d{1,2})\.(\d{4})').firstMatch(s);
-  if (m != null) return '${m[3]}-${m[2]!.padLeft(2, '0')}-${m[1]!.padLeft(2, '0')}';
+  if (m != null) return _ymd(m[3]!, m[2]!, m[1]!);
   return null;
 }
 
@@ -169,6 +188,10 @@ ImportBatch? parseRows(List<List<Object>> rows) {
       final d = _anyDate(at(cD));
       final a = _toNum(at(cA));
       if (d == null || a == null) continue;
+      if (d == _impossible) {
+        invalid++;
+        continue;
+      }
       final fee = cF >= 0 ? (_toNum(at(cF)) ?? 0) : 0.0;
       final amount = _cents(a), feeCents = _cents(fee);
       if (amount == null || feeCents == null) {
@@ -192,13 +215,17 @@ ImportBatch? parseRows(List<List<Object>> rows) {
       final c0 = r[0];
       String? d;
       if (c0 is double && c0.isFinite && c0 > 30000) {
-        d = excelDate(c0);
+        d = _serialDate(c0);
       } else if (dmy.hasMatch(_s(c0))) {
         d = _anyDate(c0);
       }
       if (d == null) continue;
       final a = _toNum(r[3]);
       if (a == null) continue;
+      if (d == _impossible) {
+        invalid++;
+        continue;
+      }
       final desc = _s(r[2]);
       if (RegExp(r'^REZERVACIJA', caseSensitive: false).hasMatch(desc)) {
         skipped++; // card hold: the final booking arrives in a later export

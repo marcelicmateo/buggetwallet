@@ -456,9 +456,25 @@ void main() {
       } on ImportException {
         // fine
       }
-    },
-        skip: 'BUG (low): _anyDate only checks the shape, so "2026-13-45" or "31.02.2026" become stored dates '
-            '(monthOf gives "2026-13"; parseIso silently rolls them into another month).');
+    });
+
+    test('decision: an impossible date leaves the row out and counts it; real dates (29.02 in a leap year) import', () {
+      final rev = importBankFile(_b('${h}Card Payment,2026-13-45,x,-1,0,COMPLETED\nCard Payment,2028-02-29,y,-2,0,COMPLETED\n'
+          'Card Payment,2027-02-29,z,-3,0,COMPLETED\n'));
+      expect([for (final t in rev.transactions) (t.date, t.amountMinor)], [('2028-02-29', -200)]);
+      expect(rev.invalid, 2);
+      final pbz = importBankFile(_b('DATUM;VRSTA;OPIS;IZNOS;VALUTA\n31.02.2026;POS plaćanje;x;-1,00;EUR\n'
+          '0.1.2026;POS plaćanje;x;-1,00;EUR\n1.2.2026;POS plaćanje;y;-2,00;EUR\n'));
+      expect([for (final t in pbz.transactions) (t.date, t.amountMinor)], [('2026-02-01', -200)]);
+      expect(pbz.invalid, 2);
+      final serial = parseRows([
+        ['DATUM', 'VRSTA TRANSAKCIJE', 'OPIS PLAĆANJA', 'IZNOS', 'VALUTA'],
+        [1e15, 'POS plaćanje', 'x', -1.0, 'EUR'],
+        [46037.0, 'POS plaćanje', 'y', -2.0, 'EUR'],
+      ])!;
+      expect([for (final t in serial.transactions) (t.date, t.amountMinor)], [('2026-01-15', -200)]);
+      expect(serial.invalid, 1);
+    });
 
     test('excel serial dates out of range in a PBZ sheet: ImportException, not ArgumentError', () {
       final rows = <List<Object>>[
