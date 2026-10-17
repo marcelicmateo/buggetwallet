@@ -55,6 +55,7 @@ ImportBatch importBankFile(Uint8List bytes) {
     'rows': rows.length,
     'txs': batch.transactions.length,
     'skipped': batch.skipped,
+    'invalid': batch.invalid,
     'readMs': readMs,
     'ms': sw.elapsedMilliseconds,
   });
@@ -62,7 +63,7 @@ ImportBatch importBankFile(Uint8List bytes) {
 }
 
 String _s(Object? v) => v == null ? '' : (v is double ? _num(v) : v.toString()).trim();
-String _num(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toString();
+String _num(double v) => v.isFinite && v == v.roundToDouble() ? v.toInt().toString() : v.toString();
 String _pad(int n) => n.toString().padLeft(2, '0');
 
 /// Excel serial day number to `YYYY-MM-DD` (UTC, 1900 date system).
@@ -72,7 +73,7 @@ String excelDate(double serial) {
 }
 
 String? _anyDate(Object v) {
-  if (v is double) return excelDate(v);
+  if (v is double) return v.isFinite ? excelDate(v) : null;
   final s = v.toString().trim();
   var m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
   if (m != null) return '${m[1]}-${m[2]}-${m[3]}';
@@ -93,7 +94,12 @@ double? _toNum(Object v) {
   return double.tryParse(s);
 }
 
-int _cents(double x) => (x * 100).round();
+/// Amount in cents, or null when it is not a usable number (NaN, Infinity, or beyond double range like "1e400").
+int? _cents(double x) {
+  final c = x * 100;
+  if (!c.isFinite) return null;
+  return c.round();
+}
 
 /// Repairs text that was UTF-8 but got decoded as Latin-1 (e.g. "GraÅ¡o" -> "Grašo").
 String fixMojibake(String s) {
@@ -147,7 +153,7 @@ ImportBatch? parseRows(List<List<Object>> rows) {
     final cT = col('Type'), cD = col('Started Date'), cM = col('Description'), cA = col('Amount');
     final cF = col('Fee'), cS = col('State'), cC = col('Currency');
     final out = <_Row>[];
-    var skipped = 0;
+    var skipped = 0, invalid = 0;
     for (final r in rows.skip(revHdr + 1)) {
       Object at(int c) => c >= 0 && c < r.length ? r[c] : '';
       if (_s(at(cD)).isEmpty) continue;
@@ -159,23 +165,28 @@ ImportBatch? parseRows(List<List<Object>> rows) {
       final a = _toNum(at(cA));
       if (d == null || a == null) continue;
       final fee = cF >= 0 ? (_toNum(at(cF)) ?? 0) : 0.0;
+      final amount = _cents(a), feeCents = _cents(fee);
+      if (amount == null || feeCents == null) {
+        invalid++;
+        continue;
+      }
       final currency = cC >= 0 && _s(at(cC)).isNotEmpty ? _s(at(cC)) : 'EUR';
-      out.add(_Row(d, _cents(a) - _cents(fee), _s(at(cT)), fixMojibake(_s(at(cM))), currency));
+      out.add(_Row(d, amount - feeCents, _s(at(cT)), fixMojibake(_s(at(cM))), currency));
     }
-    return ImportBatch(source: 'revolut', transactions: _withIds('revolut', out), skipped: skipped);
+    return ImportBatch(source: 'revolut', transactions: _withIds('revolut', out), skipped: skipped, invalid: invalid);
   }
 
   // PBZ current account report
   final isPbz = head.any((r) => r.any((c) => RegExp(r'TRANSAKCIJSKI RA', caseSensitive: false).hasMatch(c) || c == 'DATUM'));
   if (isPbz) {
     final out = <_Row>[];
-    var skipped = 0;
+    var skipped = 0, invalid = 0;
     final dmy = RegExp(r'^\d{1,2}\.\d{1,2}\.\d{4}$');
     for (final r in rows) {
       if (r.length < 4) continue;
       final c0 = r[0];
       String? d;
-      if (c0 is double && c0 > 30000) {
+      if (c0 is double && c0.isFinite && c0 > 30000) {
         d = excelDate(c0);
       } else if (dmy.hasMatch(_s(c0))) {
         d = _anyDate(c0);
@@ -188,10 +199,15 @@ ImportBatch? parseRows(List<List<Object>> rows) {
         skipped++; // card hold: the final booking arrives in a later export
         continue;
       }
+      final amount = _cents(a);
+      if (amount == null) {
+        invalid++;
+        continue;
+      }
       final currency = r.length > 4 && _s(r[4]).isNotEmpty ? _s(r[4]) : 'EUR';
-      out.add(_Row(d, _cents(a), _s(r[1]), desc, currency));
+      out.add(_Row(d, amount, _s(r[1]), desc, currency));
     }
-    return ImportBatch(source: 'pbz', transactions: _withIds('pbz', out), skipped: skipped);
+    return ImportBatch(source: 'pbz', transactions: _withIds('pbz', out), skipped: skipped, invalid: invalid);
   }
   return null;
 }

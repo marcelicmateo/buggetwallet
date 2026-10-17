@@ -5,7 +5,6 @@
 // Randomized parts use fixed seeds; BW_FUZZ_ITERATIONS / BW_FUZZ_SEED run them longer or with other seeds.
 // Each failure message carries the seed and case number.
 import 'dart:convert';
-import 'dart:io' show stdout;
 import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
@@ -15,9 +14,6 @@ import 'package:test/test.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/fuzz.dart';
-
-/// The message of the known NaN/Infinity amount bug (see the skipped test 'NaN or Infinity amounts').
-const _nanBug = 'UnsupportedError: Unsupported operation: Infinity or NaN toInt';
 
 Uint8List _b(String s) => Uint8List.fromList(utf8.encode(s));
 
@@ -166,13 +162,7 @@ void main() {
     ]) {
       test(name, () async {
         final r = await _fuzzIsolated(name, seed, cases);
-        // Known bug (skipped test below): a damaged number cell can decode as NaN/Infinity, and _cents() throws.
-        final known = r.failures.where((f) => f.contains(_nanBug)).toList();
-        for (final k in known) {
-          stdout.writeln('known bug (NaN/Infinity amount): $k');
-        }
-        final unknown = r.failures.where((f) => !f.contains(_nanBug)).toList();
-        expect(unknown, isEmpty, reason: 'seed $seed; ${unknown.length} of ${r.cases} cases failed');
+        expect(r.failures, isEmpty, reason: 'seed $seed; ${r.failures.length} of ${r.cases} cases failed');
         expect(r.leaks, isEmpty, reason: 'file contents in the log (seed $seed)');
         expect(r.cases, greaterThan(cases));
       }, timeout: const Timeout(Duration(seconds: 90)));
@@ -403,11 +393,27 @@ void main() {
     test('NaN or Infinity amounts: ImportException or row dropped, not UnsupportedError', () {
       for (final a in ['NaN', 'Infinity', '-Infinity', '1e400']) {
         expect(checkImport(_b('${h}Card Payment,2026-01-01,x,$a,0,COMPLETED\n')), isNull, reason: a);
+        // Decision: the row is left out and counted; the other rows still import.
+        final b = importBankFile(_b('${h}Card Payment,2026-01-01,x,$a,0,COMPLETED\nCard Payment,2026-01-02,y,-1.5,0,COMPLETED\n'));
+        expect([for (final t in b.transactions) t.amountMinor], [-150], reason: a);
+        expect(b.invalid, 1, reason: a);
+        final fee = importBankFile(_b('${h}Card Payment,2026-01-01,x,-1,$a,COMPLETED\n'));
+        expect((fee.transactions.length, fee.invalid), (0, 1), reason: 'fee $a');
       }
-    },
-        skip: 'BUG: _toNum uses double.tryParse, which accepts "NaN"/"Infinity"/"1e400"; _cents() then throws '
-            'UnsupportedError ("Infinity or NaN toInt") from parseRows, outside the ImportException wrapper. '
-            'Damaged .xls number cells hit it too (fuzz pbz_synthetic.xls seed=20261016 case=157).');
+    });
+
+    test('NaN or Infinity number cells in a PBZ sheet (date or amount) do not throw', () {
+      for (final v in [double.nan, double.infinity, double.negativeInfinity]) {
+        final b = parseRows([
+          ['DATUM', 'VRSTA TRANSAKCIJE', 'OPIS PLAĆANJA', 'IZNOS', 'VALUTA'],
+          [46037.0, 'POS plaćanje', 'x', v, 'EUR'],
+          [v, 'POS plaćanje', 'y', -1.0, 'EUR'],
+          [46038.0, v, v, -2.0, v],
+        ])!;
+        expect([for (final t in b.transactions) t.amountMinor], [-200], reason: '$v');
+        expect(b.invalid, 1, reason: '$v');
+      }
+    });
 
     test('amounts beyond 64-bit cents are not silently clamped', () {
       for (final a in ['1e22', '99999999999999999999', '-1e30']) {

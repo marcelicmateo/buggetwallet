@@ -252,12 +252,14 @@ class WalletController extends ChangeNotifier {
           'added': s.added,
           'dupes': s.duplicates,
           'matched': s.matched,
-          'skipped': s.skipped
+          'skipped': s.skipped,
+          'invalid': batch.invalid
         });
         final bank = batch.source == 'pbz' ? 'PBZ' : 'Revolut';
         lines.add(ImportLine(
             name,
-            '$bank: ${s.added} new, ${s.duplicates} already here${s.matched > 0 ? ', ${s.matched} matched to expenses you added' : ''}.',
+            '$bank: ${s.added} new, ${s.duplicates} already here${s.matched > 0 ? ', ${s.matched} matched to expenses you added' : ''}'
+            '${batch.invalid > 0 ? ', ${batch.invalid} unreadable ${batch.invalid == 1 ? 'row' : 'rows'} left out' : ''}.',
             true));
       } on ImportException catch (e, st) {
         logError(_import, 'import.rejected', e, st, fields: f);

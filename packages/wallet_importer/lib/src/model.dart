@@ -54,5 +54,9 @@ class ImportBatch {
   /// Rows deliberately left out (pending card holds, non-completed rows).
   final int skipped;
 
-  const ImportBatch({required this.source, required this.transactions, this.skipped = 0});
+  /// Transaction rows left out because a value in them is unusable (an amount that is not a finite number).
+  /// The rest of the file still imports; the app tells the user how many rows were left out.
+  final int invalid;
+
+  const ImportBatch({required this.source, required this.transactions, this.skipped = 0, this.invalid = 0});
 }
