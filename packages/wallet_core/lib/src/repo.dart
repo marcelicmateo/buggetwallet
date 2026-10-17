@@ -117,7 +117,7 @@ class WalletRepo {
     for (final e in op.fields.entries) {
       if (!cols.contains(e.key)) continue;
       final rs = db.select('SELECT hlc FROM clocks WHERE entity = ? AND id = ? AND field = ?', [op.entity, op.id, e.key]);
-      if (rs.isNotEmpty && (rs.first['hlc'] as String).compareTo(op.hlc) >= 0) continue;
+      if (rs.isNotEmpty && Hlc.compareStrings(rs.first['hlc'] as String, op.hlc) >= 0) continue;
       accepted[e.key] = e.value is bool ? ((e.value as bool) ? 1 : 0) : e.value;
       db.execute('INSERT OR REPLACE INTO clocks(entity, id, field, hlc) VALUES(?, ?, ?, ?)', [op.entity, op.id, e.key, op.hlc]);
     }

@@ -5,7 +5,7 @@ library;
 export 'src/budget.dart';
 export 'src/categories.dart';
 export 'src/dates.dart';
-export 'src/hlc.dart' show Hlc;
+export 'src/hlc.dart' show Hlc, HlcClock;
 export 'src/logs.dart';
 export 'src/matching.dart';
 export 'src/models.dart';

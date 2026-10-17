@@ -429,10 +429,44 @@ void main() {
       final local = r.pendingOps().last.$2.hlc;
       r.close();
       expect(local.compareTo(const Hlc(9000000000000, 99998, 'peer').toString()), greaterThan(0), reason: local);
-    },
-        skip: 'BUG (low): Hlc.compareTo compares strings with a 5-digit counter; at counter 100000 (100k writes while '
-            'the wall clock is behind the HLC, e.g. after receiving ops from a device whose clock is far in the future) '
-            'new edits sort BEFORE older ones and lose last-writer-wins.');
+    });
+
+    test('the clock never writes a counter past 5 digits, so strings keep sorting right on older versions', () {
+      final c = HlcClock('me', now: () => 0, last: const Hlc(5000, 99997, 'me').toString());
+      final seen = [for (var i = 0; i < 5; i++) c.tick().toString()];
+      expect(seen, [
+        '000000000005000:99998:me',
+        '000000000005000:99999:me',
+        '000000000005001:00000:me',
+        '000000000005001:00001:me',
+        '000000000005001:00002:me'
+      ]);
+      expect([...seen]..sort(), seen);
+      c.receive(const Hlc(9000, 99999, 'peer'));
+      expect(c.last.toString(), '000000000009001:00000:me');
+      // A counter wider than 5 digits (no version writes one) still parses, compares by value and is overtaken.
+      c.receive(Hlc.parse('000000000009001:123456:peer'));
+      expect(c.last.compareTo(Hlc.parse('000000000009001:123456:peer')), greaterThan(0));
+      expect(c.last.toString(), '000000000009002:00000:me');
+    });
+
+    test('HLC strings compare by value: old 5-digit strings, and wider counters, in any mix', () {
+      expect(Hlc.compareStrings('000000000000001:00002:a', '000000000000001:00010:a'), lessThan(0));
+      expect(Hlc.compareStrings('000000000000001:100000:a', '000000000000001:99999:a'), greaterThan(0));
+      expect(Hlc.compareStrings('000000000000002:00000:a', '000000000000001:99999:z'), greaterThan(0));
+      expect(Hlc.compareStrings('000000000000001:00001:b', '000000000000001:00001:a'), greaterThan(0));
+      expect(Hlc.compareStrings('000000000000001:00001:a', '000000000000001:00001:a'), 0);
+      // A stored clock with a wide counter is not overwritten by an older op.
+      final r = WalletRepo.inMemory();
+      r.applyRemote([
+        const Op('setting', 'salary', {'value': '1'}, '000000000000001:100000:peer')
+      ]);
+      r.applyRemote([
+        const Op('setting', 'salary', {'value': '2'}, '000000000000001:99999:peer')
+      ]);
+      expect(r.settings().salary, 1);
+      r.close();
+    });
   });
 
   group('races between devices', () {

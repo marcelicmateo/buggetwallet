@@ -1,6 +1,12 @@
-/// Hybrid logical clock. String form sorts in causal order:
-/// `<millis 15 digits>:<counter 5 digits>:<node>`.
+/// Hybrid logical clock. String form: `<millis 15 digits>:<counter 5 digits>:<node>`.
+///
+/// Order is (millis, counter, node), compared as numbers. [HlcClock] never issues a counter above [maxCounter]
+/// (it moves millis on by one instead), so every HLC it writes also sorts correctly as a plain string, which is
+/// how devices on older versions compare them: the stored and synced format is unchanged.
 class Hlc implements Comparable<Hlc> {
+  /// The largest counter that fits the 5-digit field.
+  static const maxCounter = 99999;
+
   final int millis;
   final int counter;
   final String node;
@@ -15,7 +21,14 @@ class Hlc implements Comparable<Hlc> {
   String toString() => '${millis.toString().padLeft(15, '0')}:${counter.toString().padLeft(5, '0')}:$node';
 
   @override
-  int compareTo(Hlc o) => toString().compareTo(o.toString());
+  int compareTo(Hlc o) {
+    if (millis != o.millis) return millis.compareTo(o.millis);
+    if (counter != o.counter) return counter.compareTo(o.counter);
+    return node.compareTo(o.node);
+  }
+
+  /// Compares two HLC strings by value (correct for any counter width, old strings included).
+  static int compareStrings(String a, String b) => a == b ? 0 : parse(a).compareTo(parse(b));
 }
 
 /// Issues timestamps for local writes and absorbs remote ones.
@@ -34,7 +47,7 @@ class HlcClock {
     if (wall > _last.millis) {
       _last = Hlc(wall, 0, node);
     } else {
-      _last = Hlc(_last.millis, _last.counter + 1, node);
+      _last = _next(_last.millis, _last.counter + 1);
     }
     return _last;
   }
@@ -52,6 +65,10 @@ class HlcClock {
     } else {
       c = 0;
     }
-    _last = Hlc(m, c, node);
+    _last = _next(m, c);
   }
+
+  /// A counter past [Hlc.maxCounter] moves the clock on by one millisecond instead, which keeps the counter
+  /// within 5 digits (string order = value order) and still sorts after everything seen so far.
+  Hlc _next(int millis, int counter) => counter > Hlc.maxCounter ? Hlc(millis + 1, 0, node) : Hlc(millis, counter, node);
 }
