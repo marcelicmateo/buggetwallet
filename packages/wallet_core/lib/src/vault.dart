@@ -110,6 +110,16 @@ Future<Uint8List> seal(List<int> plain, VaultKey key) async {
   return out;
 }
 
+/// Whether [z] is one whole gzip member that decoded to [length] bytes: gzip magic, at least header + trailer, and
+/// the trailer's size field (length mod 2^32) agrees. The decoder can return what it got from a cut-off stream
+/// without an error.
+bool _wholeGzip(List<int> z, int length) {
+  final n = z.length;
+  if (n < 18 || z[0] != 0x1f || z[1] != 0x8b) return false;
+  final size = z[n - 4] | z[n - 3] << 8 | z[n - 2] << 16 | z[n - 1] << 24;
+  return size == length & 0xFFFFFFFF;
+}
+
 /// Logs `vault.unseal` on `bw.perf` with the sealed and plain sizes.
 Future<Uint8List> unseal(List<int> data, VaultKey key) async {
   final t = PerfTimer('vault.unseal', warnMs: 500);
@@ -127,10 +137,15 @@ Future<Uint8List> unseal(List<int> data, VaultKey key) async {
   try {
     final clear = await _aead.decrypt(SecretBox(cipher, nonce: nonce, mac: Mac(mac)), secretKey: SecretKey(key.bytes));
     final out = Uint8List.fromList(gzip.decode(clear));
+    if (!_wholeGzip(clear, out.length)) throw const FormatException('gzip data is cut off');
     t.done({'bytes': data.length, 'plainBytes': out.length});
     return out;
   } on SecretBoxAuthenticationError catch (e, st) {
     logError(_log, 'vault.unseal.auth', e, st, fields: {'bytes': data.length});
     throw const VaultException('Sync file was made with a different key, or was changed.');
+  } on FormatException catch (e, st) {
+    // Authenticated, so made with this key, but not gzip: a writer bug or a format this build does not know.
+    logError(_log, 'vault.unseal.format', e, st, fields: {'bytes': data.length});
+    throw const VaultException('Sync file is damaged.');
   }
 }
