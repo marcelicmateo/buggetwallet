@@ -186,17 +186,34 @@ class WalletRepo {
     return changed;
   }
 
+  /// Each row's first write, for [planMatches]: the clock of its `amount`. Only the write that creates a row sets it
+  /// (importBatch, addManual; matching, categories and deletes never touch it), and the clocks table converges to the
+  /// same value on every device. If the same bank row is imported on two devices before they sync, the later import
+  /// wins (highest HLC per field), so the row counts as written at that later import.
+  static const _writtenJoin = "LEFT JOIN clocks c ON c.entity = 'tx' AND c.id = tx.id AND c.field = 'amount'";
+
   /// Matches hand-added expenses to bank rows ([planMatches]) and writes the changes. Returns the new matches.
   int _matchManual() {
-    final manual = [for (final r in db.select('SELECT * FROM tx WHERE manual = 1 AND deleted = 0')) Tx.fromRow(r)];
+    final written = <String, String>{};
+    List<Tx> rows(String where) {
+      final out = <Tx>[];
+      for (final r in db.select('SELECT tx.*, c.hlc AS written FROM tx $_writtenJoin WHERE $where')) {
+        final tx = Tx.fromRow(r);
+        if (r['written'] case final String h) written[tx.id] = h;
+        out.add(tx);
+      }
+      return out;
+    }
+
+    final manual = rows('tx.manual = 1 AND tx.deleted = 0');
     final targets = {for (final m in manual) m.matchedTo};
     if (!targets.contains(null) && targets.length == manual.length) return 0; // all matched, no two on one row
     final cz = categorizer();
-    final bank = [for (final r in db.select('SELECT * FROM tx WHERE manual = 0 AND deleted = 0 AND amount < 0')) Tx.fromRow(r)];
+    final bank = rows('tx.manual = 0 AND tx.deleted = 0 AND tx.amount < 0');
     final plan = planMatches(manual, bank, (b) {
       final k = kindOf(cz.autoCategory(b));
       return k == Kind.flex || k == Kind.fixed;
-    });
+    }, written);
     if (plan.isEmpty) return 0;
     _write([
       for (final e in plan.matchedTo.entries) ('tx', e.key, {'matched_to': e.value}),
@@ -274,7 +291,8 @@ class WalletRepo {
   }
 
   /// Imports a normalized batch. Already-known ids are skipped. Hand-added expenses with the
-  /// same amount within 3 days are then matched to a bank row, which keeps their category ([planMatches]).
+  /// same amount within 3 days are then matched to a bank row written after them, which keeps their category
+  /// ([planMatches]).
   ImportSummary importBatch(ImportBatch batch) {
     final t = PerfTimer('repo.importBatch', warnMs: 500);
     final known = <String>{for (final r in db.select('SELECT id FROM tx')) r['id'] as String};
@@ -336,7 +354,8 @@ class WalletRepo {
         }
       ),
     ]);
-    _matchManual(); // the bank row may already be here (imported earlier, here or on another device)
+    // No matching here: a bank row already in the wallet is never this entry's row (planMatches). The entry is
+    // matched by the next import, here or on another device, that brings a bank row written after it.
     return id;
   }
 

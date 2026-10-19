@@ -514,24 +514,51 @@ void main() {
       expect(a.repo.transaction(lidl)!.category, 'Eating out');
     });
 
-    test('a hand-added expense that arrives by sync after the bank row was imported elsewhere is not counted twice', () async {
+    for (final phoneFirst in [true, false]) {
+      test(
+          'a hand-added expense added offline, then the bank row imported on another device: matched once, in either '
+          'sync order (${phoneFirst ? 'phone' : 'laptop'} syncs first)', () async {
+        final phone = device('phone'), laptop = device('laptop');
+        phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
+        now += 1000; // later, the laptop imports the export before the phone's entry arrived
+        laptop.repo.importBatch(january);
+        await syncAll(phoneFirst ? [phone, laptop] : [laptop, phone]);
+        for (final d in [phone, laptop]) {
+          final live = d.repo.transactions().where((t) => t.amount == -2340).toList();
+          expect(live.length, 1, reason: '${d.name}: the manual entry and the bank row are one expense');
+          expect(live.single.manual, isFalse, reason: d.name);
+          expect(d.repo.categorizer().categoryOf(live.single), 'Eating out', reason: '${d.name}: the bank row keeps the manual category');
+        }
+        await syncAll([phone, laptop]);
+        expect(dump(phone.repo, clocks: false), dump(laptop.repo, clocks: false));
+        expect(phone.repo.pendingOps(), isEmpty);
+      });
+    }
+
+    test('an expense added by hand when the bank row is already in the wallet (synced or not) is a separate expense', () async {
       final phone = device('phone'), laptop = device('laptop');
-      phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
-      laptop.repo.importBatch(january); // laptop imports before the phone's entry arrived
+      laptop.repo.importBatch(january); // Saturday's synthetic card payment of 23.40
+      await syncAll([laptop, phone]);
+      now += 1000;
+      phone.repo.addManual(date: '2026-01-19', amount: 2340, category: 'Eating out', note: 'synthetic cash'); // Monday, cash
+      now += 1000;
+      laptop.repo.addManual(date: '2026-01-18', amount: 2340, category: 'Shopping', note: 'synthetic cash'); // also cash
       await syncAll([phone, laptop]);
-      final live = laptop.repo.transactions().where((t) => t.amount == -2340).toList();
-      expect(live.length, 1, reason: 'manual entry and bank row both count');
-      expect(laptop.repo.categorizer().categoryOf(live.single), 'Eating out', reason: 'the bank row keeps the manual category');
-      await syncAll([phone, laptop]);
-      expect(phone.repo.transactions().where((t) => t.amount == -2340).length, 1);
-      expect(dump(phone.repo, clocks: false), dump(laptop.repo, clocks: false));
+      await syncAll([laptop, phone]);
+      for (final d in [phone, laptop]) {
+        final rows = d.repo.transactions(includeHidden: true).where((t) => t.amount == -2340).toList();
+        expect(rows.where((t) => t.matchedTo != null), isEmpty, reason: d.name);
+        expect(rows.where((t) => t.live).length, 3, reason: '${d.name}: card payment and both cash expenses count');
+      }
+      expect(dump(phone.repo), dump(laptop.repo));
     });
 
     test('two devices each add the same expense by hand, one bank row: one pair matched, same on both devices', () async {
       final phone = device('phone'), laptop = device('laptop');
-      laptop.repo.importBatch(january);
       phone.repo.addManual(date: '2026-01-16', amount: 2340, category: 'Eating out', note: 'synthetic');
       laptop.repo.addManual(date: '2026-01-18', amount: 2340, category: 'Shopping', note: 'synthetic');
+      now += 1000; // the bank row comes after both entries (rule: only a later bank row replaces an entry)
+      laptop.repo.importBatch(january);
       for (var i = 0; i < 3; i++) {
         await syncAll([phone, laptop]);
       }
