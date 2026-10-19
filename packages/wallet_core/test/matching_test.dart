@@ -313,6 +313,8 @@ void main() {
       ]);
       expect(r.transaction('m-peer')!.matchedTo, 'b-late', reason: 'the peer holds that row: no unmatch op to fight it');
       expect(r.pendingOps(), isEmpty);
+      expect(spending(r).map((t) => t.id), ['m-peer'], reason: 'until its row arrives, the entry counts');
+      expect(r.transaction('m-peer')!.matchPending, isTrue);
       r.applyRemote([
         Op(
             'tx',

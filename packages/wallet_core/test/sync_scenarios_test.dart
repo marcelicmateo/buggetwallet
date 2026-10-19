@@ -618,6 +618,52 @@ void main() {
   });
 
   group('matching while a sync file never arrives', () {
+    for (final partial in [false, true]) {
+      test(
+          'the phone holds the match but not the bank row${partial ? ' (only a partial row from the match op)' : ''}: the '
+          'entry counts once until the row arrives, then the row counts once', () async {
+        final phone = device('phone'), laptop = device('laptop');
+        final m = phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
+        await phone.run();
+        phone.upload(net);
+        now += 1000;
+        laptop.repo.importBatch(january);
+        final b = laptop.repo.transactions().singleWhere((t) => t.amount == -2340).id;
+        // Without its own category the match op also gives the row the entry's category: a partial row on the phone.
+        if (!partial) laptop.repo.setCategory(b, 'Groceries');
+        await laptop.run(); // the rows file
+        laptop.upload(net);
+        final rowsFile = net.files.keys.singleWhere((k) => k.contains(laptop.repo.deviceId) && k.endsWith('.bwop'));
+        laptop.deliver(net, Random(0));
+        await laptop.run(); // reads the entry and matches it
+        expect(laptop.repo.transaction(m)!.matchedTo, b);
+        await laptop.run(); // the match file
+        laptop.upload(net);
+        final rows = net.files.remove(rowsFile)!; // the rows file has not reached the phone
+        phone.deliver(net, Random(0));
+        await phone.run();
+        expect(phone.repo.transaction(m)!.matchedTo, b, reason: 'the match arrived');
+        expect(phone.repo.pendingOps(), isEmpty, reason: 'no writes');
+
+        int out(Device d) {
+          final cz = d.repo.categorizer();
+          return monthSummary(d.repo.transactions().map(cz.categorize).toList(), '2026-01').out;
+        }
+
+        expect(phone.repo.transactions().where((t) => t.amount == -2340).map((t) => t.id), [m], reason: 'counted once');
+        expect(phone.repo.transaction(m)!.live, isTrue);
+        expect(out(phone), 2340);
+
+        net.files[rowsFile] = rows; // it arrives
+        phone.deliver(net, Random(0));
+        await phone.run();
+        expect(phone.repo.transactions().where((t) => t.amount == -2340).map((t) => t.id), [b], reason: 'the row, once');
+        expect(phone.repo.transaction(m)!.live, isFalse);
+        expect(out(phone), out(laptop));
+        expect(phone.repo.pendingOps(), isEmpty);
+      });
+    }
+
     for (final damaged in [true, false]) {
       test(
           'the file with the bank row is ${damaged ? 'damaged' : 'missing'} on the phone for good: the match the laptop '

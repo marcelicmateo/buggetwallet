@@ -292,9 +292,15 @@ class WalletRepo {
   }
 
   // ---------- reads ----------
+  /// Rows with [Tx.matchPending]: a manual entry matched to a bank row this device does not hold yet (missing, or only
+  /// a partial row without a date, which reads leave out) counts until that row arrives. Matching keeps such a match
+  /// (no writes), so on every device the expense counts exactly once.
+  static const _txSelect = 'SELECT tx.*, (tx.manual = 1 AND tx.matched_to IS NOT NULL AND NOT EXISTS '
+      "(SELECT 1 FROM tx b WHERE b.id = tx.matched_to AND b.date != '')) AS match_pending FROM tx";
+
   List<Tx> transactions({bool includeHidden = false}) {
     final t = PerfTimer('repo.transactions');
-    final rows = db.select('SELECT * FROM tx WHERE date != \'\' ORDER BY date DESC, id DESC');
+    final rows = db.select('$_txSelect WHERE tx.date != \'\' ORDER BY tx.date DESC, tx.id DESC');
     final out = <Tx>[];
     for (final r in rows) {
       final tx = Tx.fromRow(r);
@@ -305,7 +311,7 @@ class WalletRepo {
   }
 
   Tx? transaction(String id) {
-    final rs = db.select('SELECT * FROM tx WHERE id = ?', [id]);
+    final rs = db.select('$_txSelect WHERE tx.id = ?', [id]);
     return rs.isEmpty ? null : Tx.fromRow(rs.first);
   }
 
