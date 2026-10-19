@@ -58,6 +58,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       TextField(
         controller: amount,
         autofocus: true,
+        onChanged: (_) => setState(() {}),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700),
         decoration: InputDecoration(prefixText: currencySymbol(cur), hintText: '0.00'),
@@ -177,7 +178,7 @@ class _TxSheetState extends State<TxSheet> {
           title: Text('Always use this for ${merchantName(t)}', style: const TextStyle(fontSize: 14)),
         ),
       const SizedBox(height: 8),
-      Row(children: [
+      Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, children: [
         FilledButton(
           onPressed: () {
             widget.wc.setCategory(t, cat, always: always && !manual);
@@ -185,7 +186,6 @@ class _TxSheetState extends State<TxSheet> {
           },
           child: const Text('Save'),
         ),
-        const Spacer(),
         if (manual)
           TextButton(
             style: TextButton.styleFrom(foregroundColor: context.c.bad),
@@ -218,6 +218,7 @@ class _GoalSheetState extends State<GoalSheet> {
   late final monthly = TextEditingController(text: _plain(g?.monthly ?? 5000));
   late final saved = TextEditingController(text: _plain(g?.saved ?? 0));
   final add = TextEditingController();
+  String? error;
 
   static String _plain(int cents) => cents == 0 ? '' : (cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2));
 
@@ -229,9 +230,42 @@ class _GoalSheetState extends State<GoalSheet> {
     return 'At ${money(m, widget.wc.currency, decimals: 0)} a month you reach it in ${((t - s) / m).ceil()} months. This comes out of your daily spending money.';
   }
 
+  /// An empty field means 0; text that is not an amount (or is negative, or too big) is refused, never turned into 0.
+  int? _amount(TextEditingController c) => c.text.trim().isEmpty ? 0 : parseMoney(c.text);
+
+  void _save() {
+    final t = parseMoney(target.text);
+    // A new goal needs a target; an old goal that has none may keep it empty.
+    final targetOk = t != null && (t > 0 || (g != null && g!.target == 0));
+    final m = _amount(monthly), sv = _amount(saved), ad = _amount(add);
+    final bad = !targetOk
+        ? 'Target'
+        : m == null
+            ? 'Each month'
+            : sv == null
+                ? 'Put aside so far'
+                : ad == null
+                    ? 'Add money now'
+                    : (sv + ad > maxAmountCents ? 'Put aside so far' : null);
+    if (bad != null) {
+      logNav('goal.invalid', {'field': bad});
+      setState(() => error = '$bad: enter an amount, like 500.');
+      return;
+    }
+    widget.wc.saveGoal(
+      id: g?.id,
+      name: name.text.trim().isEmpty ? 'Goal' : name.text.trim(),
+      target: t!,
+      monthly: m!,
+      saved: sv! + ad!,
+      sort: g?.sort,
+    );
+    Navigator.pop(context, 'saved');
+  }
+
   @override
   Widget build(BuildContext context) {
-    void upd(String _) => setState(() {});
+    void upd(String _) => setState(() => error = null);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(g == null ? 'New goal' : 'Edit goal'),
       const SizedBox(height: 14),
@@ -269,22 +303,12 @@ class _GoalSheetState extends State<GoalSheet> {
       const SizedBox(height: 8),
       Muted(hint()),
       const SizedBox(height: 12),
-      Row(children: [
+      if (error != null) ...[StatusLabel(good: false, text: error!), const SizedBox(height: 10)],
+      Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, children: [
         FilledButton(
-          onPressed: () {
-            widget.wc.saveGoal(
-              id: g?.id,
-              name: name.text.trim().isEmpty ? 'Goal' : name.text.trim(),
-              target: parseMoney(target.text) ?? 0,
-              monthly: parseMoney(monthly.text) ?? 0,
-              saved: (parseMoney(saved.text) ?? 0) + (parseMoney(add.text) ?? 0),
-              sort: g?.sort,
-            );
-            Navigator.pop(context, 'saved');
-          },
+          onPressed: _save,
           child: const Text('Save goal'),
         ),
-        const Spacer(),
         if (g != null)
           TextButton(
             style: TextButton.styleFrom(foregroundColor: context.c.bad),

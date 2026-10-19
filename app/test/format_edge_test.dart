@@ -96,7 +96,7 @@ void main() {
     });
     test('"0,005" is not five euros (a leading-zero group is no thousands group)', () {
       expect(parseMoney('0,005'), isNot(500));
-    }, skip: 'BUG: parseMoney("0,005") returns 500 (EUR 5.00) because three digits after a comma are read as a thousands group');
+    });
   });
 
   group('parseMoney: rounding', () {
@@ -130,18 +130,23 @@ void main() {
     test('"Infinity" is not a number and does not throw', () {
       expect(() => parseMoney('Infinity'), returnsNormally);
       expect(parseMoney('Infinity'), isNull);
-    }, skip: 'BUG: parseMoney("Infinity") throws UnsupportedError (double.round of infinity)');
+    });
     test('exponent overflow does not throw', () {
       expect(() => parseMoney('1e400'), returnsNormally);
       expect(parseMoney('1e400'), isNull);
-    }, skip: 'BUG: parseMoney("1e400") throws UnsupportedError (infinity.round())');
+    });
     test('an absurdly long number is rejected rather than saved as a wrong amount', () {
       final v = parseMoney('99999999999999999999');
       expect(v, isNull, reason: 'got $v');
-    }, skip: 'BUG: parseMoney of a 20-digit amount returns a clamped/wrong int instead of null');
+    });
     test('scientific notation is not an amount', () {
       expect(parseMoney('1e3'), isNull);
-    }, skip: 'BUG: parseMoney("1e3") returns 100000 (EUR 1000) because double.tryParse accepts exponents');
+    });
+    test('the cap is 10 billion, inclusive', () {
+      expect(parseMoney('10000000000'), 1000000000000);
+      expect(parseMoney('10000000000.01'), isNull);
+      expect(parseMoney('10,000,000,001'), isNull);
+    });
     test('hex is not an amount', () {
       expect(parseMoney('0x10'), isNull);
     });
@@ -190,7 +195,7 @@ void main() {
     });
     test('a negative amount that rounds to zero is not shown as minus zero', () {
       expect(money(-49, 'EUR', decimals: 0), '€0');
-    }, skip: 'BUG: money(-49, decimals: 0) shows "−€0"');
+    });
     test('signed: plus only for positive, nothing for zero', () {
       expect(money(0, 'EUR', signed: true), '€0.00');
       expect(money(1, 'EUR', signed: true), '+€0.01');
@@ -244,7 +249,7 @@ void main() {
     });
     test('NaN does not throw', () {
       expect(() => timeLeft(double.nan), returnsNormally);
-    }, skip: 'BUG: timeLeft(NaN) throws UnsupportedError (NaN.ceil()); also infinity');
+    });
   });
 
   group('percent', () {
@@ -262,7 +267,7 @@ void main() {
     test('NaN and infinity (0/0 shares) do not throw', () {
       expect(() => percent(double.nan), returnsNormally);
       expect(() => percent(double.infinity), returnsNormally);
-    }, skip: 'BUG: percent(NaN) throws UnsupportedError (NaN.round()); a 0/0 share would crash the screen');
+    });
   });
 
   group('dates', () {
@@ -308,7 +313,7 @@ void main() {
     });
     test('a day that does not exist is not given a weekday', () {
       expect(() => longDate('2026-02-30'), throwsA(anything));
-    }, skip: 'BUG: longDate("2026-02-30") returns "Monday, 30 February 2026" (weekday of 2 March)');
+    });
   });
 
   group('dateRange (exclusive end)', () {

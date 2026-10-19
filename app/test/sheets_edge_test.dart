@@ -154,7 +154,7 @@ void main() {
       expect(wc.txs.single.amount, -5000);
     });
 
-    testWidgets('BUG: the "wishlist first?" warning disappears when the amount is lowered to the limit', (tester) async {
+    testWidgets('the "wishlist first?" warning disappears when the amount is lowered to the limit', (tester) async {
       final wc = emptyWallet();
       await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '50.01');
@@ -163,7 +163,17 @@ void main() {
       await tester.enterText(find.byType(TextField).first, '50');
       await tester.pump();
       expect(find.textContaining('wishlist first?'), findsNothing);
-    }, skip: true); // AddExpenseSheet keeps the stale "Over €50" panel: typing does not rebuild it
+    });
+
+    testWidgets('an amount beyond 10 billion is refused like any other bad amount', (tester) async {
+      final wc = emptyWallet();
+      await _open(tester, AddExpenseSheet(wc: wc));
+      await tester.enterText(find.byType(TextField).first, '10000000001');
+      await _tap(tester, _primary);
+      expect(find.textContaining(_invalidAmount), findsOneWidget);
+      expect(wc.txs, isEmpty);
+      await _settle(tester);
+    });
 
     testWidgets('a limit changed by sync (20.00) is respected at the boundary', (tester) async {
       final wc = emptyWallet();
@@ -481,7 +491,7 @@ void main() {
     });
 
     for (final scale in [1.0, 2.0]) {
-      testWidgets('${scale > 1 ? 'BUG: ' : ''}a hand-added expense sheet (Save + Delete) fits 320 dp at text scale $scale', (tester) async {
+      testWidgets('a hand-added expense sheet (Save + Delete) fits 320 dp at text scale $scale', (tester) async {
         final wc = emptyWallet();
         wc.addExpense(amount: 12345678, category: 'Sport & fitness', note: 'Synthetic note ' * 20, date: '2028-02-29');
         await _open(tester, TxSheet(wc: wc, t: wc.txs.single), size: const Size(320, 640), textScale: scale);
@@ -489,7 +499,7 @@ void main() {
         await tester.pump();
         expect(tester.takeException(), isNull);
         await _settle(tester);
-      }, skip: scale > 1);
+      });
     }
 
     for (final scale in [1.0, 2.0]) {
@@ -664,17 +674,36 @@ void main() {
         expect(tester.takeException(), isNull);
       });
 
-      testWidgets('BUG: a garbled "Put aside so far" does not wipe the saved money (GoalSheet saves an unparsable amount as 0, no message)',
-          (tester) async {
+      testWidgets('a garbled "Put aside so far" does not wipe the saved money', (tester) async {
         final wc = emptyWallet();
         await _open(tester, GoalSheet(wc: wc, goal: makeGoal(wc)));
         await tester.enterText(_field('Put aside so far'), '1O0');
         await save(tester);
         await _settle(tester);
         expect(wc.goals.single.saved, isNot(0));
-      }, skip: true);
+        expect(find.textContaining('Put aside so far: enter an amount, like 500.'), findsOneWidget);
+      });
 
-      testWidgets('BUG: a garbled or empty target is refused, not saved as 0 (no message today)', (tester) async {
+      testWidgets('an amount beyond 10 billion is refused, and typing clears the message', (tester) async {
+        final wc = emptyWallet();
+        final o = await _open(tester, GoalSheet(wc: wc, goal: makeGoal(wc)));
+        await tester.enterText(_field('Target'), '10000000001');
+        await save(tester);
+        expect(wc.goals.single.target, 100000);
+        expect(find.textContaining('Target: enter an amount'), findsOneWidget);
+        expect(o.done, isFalse);
+        await tester.enterText(_field('Target'), '10000000000');
+        await tester.pump();
+        expect(find.textContaining('Target: enter an amount'), findsNothing);
+        await tester.enterText(_field('Put aside so far'), '10000000000');
+        await tester.enterText(_field('Add money now'), '1');
+        await save(tester);
+        expect(find.textContaining('Put aside so far: enter an amount'), findsOneWidget);
+        expect(wc.goals.single.saved, 5000);
+        await _settle(tester);
+      });
+
+      testWidgets('a garbled or empty target is refused, not saved as 0', (tester) async {
         final wc = emptyWallet();
         await _open(tester, GoalSheet(wc: wc));
         await tester.enterText(_field('Name'), 'Trip');
@@ -682,10 +711,11 @@ void main() {
         await save(tester);
         await tester.pumpAndSettle();
         expect(wc.goals, isEmpty);
+        expect(find.textContaining('Target: enter an amount, like 500.'), findsOneWidget);
         await tester.pump(const Duration(seconds: 4));
-      }, skip: true);
+      });
 
-      testWidgets('BUG: a negative target is refused, not saved as 0 (no message today)', (tester) async {
+      testWidgets('a negative target is refused, not saved as 0', (tester) async {
         final wc = emptyWallet();
         await _open(tester, GoalSheet(wc: wc));
         await tester.enterText(_field('Target'), '-100');
@@ -693,7 +723,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(wc.goals, isEmpty);
         await tester.pump(const Duration(seconds: 4));
-      }, skip: true);
+      });
     });
 
     group('the months hint', () {
@@ -736,7 +766,7 @@ void main() {
         await _settle(tester);
       });
 
-      testWidgets('BUG: Infinity or 1e999 typed in a goal field must not throw (parseMoney)', (tester) async {
+      testWidgets('Infinity or 1e999 typed in a goal field must not throw (parseMoney)', (tester) async {
         final wc = emptyWallet();
         await _open(tester, GoalSheet(wc: wc));
         for (final v in ['abc', '-5', '1e999', 'Infinity', '0,005', '99999999999999999999']) {
@@ -745,7 +775,7 @@ void main() {
         }
         expect(find.textContaining(RegExp('NaN|Infinity|null')), findsNothing);
         await _settle(tester);
-      }, skip: true);
+      });
     });
 
     for (final scale in [1.0, 2.0]) {
@@ -775,7 +805,7 @@ void main() {
       await _settle(tester);
     });
 
-    testWidgets('BUG: an edit goal sheet fits 320 dp at text scale 2.0 (Save goal + Delete row overflows by 173 px)', (tester) async {
+    testWidgets('an edit goal sheet fits 320 dp at text scale 2.0', (tester) async {
       final wc = emptyWallet();
       wc.repo.saveGoal(name: 'Trip', target: 123456, saved: 1, monthly: 5000, sort: 1);
       wc.reload();
@@ -784,6 +814,6 @@ void main() {
       await tester.pump();
       expect(tester.takeException(), isNull);
       await _settle(tester);
-    }, skip: true);
+    });
   });
 }
