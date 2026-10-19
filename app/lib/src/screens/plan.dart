@@ -35,6 +35,9 @@ class _PlanScreenState extends State<PlanScreen> {
   String _shownCurrency = 'EUR';
   bool importing = false;
 
+  /// Field errors from the last Save, by key (shown under the field until it is edited).
+  final Map<String, String> _errors = {};
+
   static String _plain(int cents) => cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2);
 
   static String _text(WalletSettings s, String k) {
@@ -94,7 +97,11 @@ class _PlanScreenState extends State<PlanScreen> {
     Widget field(String key, String label, {bool money = true}) => TextField(
           controller: f[key],
           keyboardType: TextInputType.numberWithOptions(decimal: money),
-          decoration: InputDecoration(labelText: label, prefixText: money ? currencySymbol(currency) : null),
+          onChanged: (_) {
+            if (_errors.containsKey(key)) setState(() => _errors.remove(key));
+          },
+          decoration: InputDecoration(
+              labelText: label, prefixText: money ? currencySymbol(currency) : null, errorText: _errors[key], errorMaxLines: 3),
         );
 
     return ListView(
@@ -213,15 +220,24 @@ class _PlanScreenState extends State<PlanScreen> {
       for (final k in _keys)
         if (f[k]!.text.trim() != _shown[k]) k: _moneyKeys.contains(k) ? parseMoney(f[k]!.text) : int.tryParse(f[k]!.text.trim()),
     };
-    final bad = [
+    // parseMoney already rejects negative amounts; whole-number fields can't be negative either.
+    final errors = <String, String>{
       for (final e in vals.entries)
-        if (e.value == null) e.key
-    ];
-    if (bad.isNotEmpty) {
-      logNav('plan.invalid', {'keys': bad.join(',')}); // keys only
-      toast(context, 'Enter numbers only, like 1500 or 1500.50.');
+        if (e.value == null) e.key: 'Numbers only' else if (e.value! < 0) e.key: "Can't be negative",
+    };
+    if (errors.isNotEmpty) {
+      logNav('plan.invalid', {'keys': errors.keys.join(',')}); // keys only
+      setState(() => _errors
+        ..clear()
+        ..addAll(errors));
+      toast(
+          context,
+          errors.containsKey('coolHours') && errors['coolHours'] != 'Numbers only'
+              ? "Wait (hours) can't be negative."
+              : 'Enter numbers only, like 1500 or 1500.50.');
       return;
     }
+    if (_errors.isNotEmpty) setState(_errors.clear);
     final changes = <String, Object?>{...vals};
     if (changes['paydayDay'] case final int d) changes['paydayDay'] = d.clamp(1, 28);
     if (currency != s.currency) changes['currency'] = currency;

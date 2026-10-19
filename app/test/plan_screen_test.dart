@@ -88,4 +88,37 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
     });
   });
+
+  group('negative wait hours are rejected (bug C)', () {
+    for (final input in ['-1', '-72', ' -5 ']) {
+      testWidgets('"$input" shows a message and saves nothing', (tester) async {
+        final wc = demoWallet();
+        await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)));
+        final before = wc.repo.pendingOps().length;
+        await tester.enterText(_field('Wait (hours)'), input);
+        await tester.enterText(_field('Loan'), '300');
+        await _tapSave(tester);
+        await tester.pump();
+        expect(find.text("Wait (hours) can't be negative."), findsOneWidget);
+        expect(find.text("Can't be negative"), findsOneWidget);
+        expect(wc.repo.pendingOps().length, before, reason: 'nothing saved, not even the valid loan');
+        expect(wc.settings.coolHours, 72);
+        expect(wc.settings.loan, 25000);
+        await tester.pump(const Duration(seconds: 4));
+      });
+    }
+
+    testWidgets('fixing the value clears the error and saves', (tester) async {
+      final wc = demoWallet();
+      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)));
+      await tester.enterText(_field('Wait (hours)'), '-3');
+      await _tapSave(tester);
+      await tester.pump();
+      await tester.enterText(_field('Wait (hours)'), '0');
+      await tester.pump();
+      expect(find.text("Can't be negative"), findsNothing);
+      await _save(tester);
+      expect(wc.settings.coolHours, 0);
+    });
+  });
 }
