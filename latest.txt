@@ -1,14 +1,16 @@
-commit: ac20778418e6cf72a5ebcce67c22f86b57280a55  ref: v2  run: 39007528811
+commit: 140154d13131bc6cd29603efa0eecf8d37d89c28  ref: v2  run: 39267135231
 
-lint=success(5s) importer=success(8s) core=success(10s) app=success(20s) signing=success apk=success(108s) linux=success(74s)
+lint=success(4s) importer=success(13s) core=success(31s) app=success(39s) desktop=success(578s) signing=success apk=success(120s) linux=success(84s) smoke=success(15s)
 
 step seconds exit
-lint 5 0
-importer 8 0
-core 10 0
-app 20 0
-apk 108 0
-linux 74 0
+lint 4 0
+importer 13 0
+core 31 0
+app 39 0
+desktop 578 0
+apk 120 0
+linux 84 0
+smoke 15 0
 
 version: 0.11.0
 actionlint 1.7.12
@@ -150,16 +152,16 @@ Got dependencies!
 8 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 === format ===
-Formatted 49 files (0 changed) in 0.23 seconds.
+Formatted 83 files (0 changed) in 0.51 seconds.
 === shellcheck ===
 === actionlint ===
 
-step            seconds  result
-pub                 3.8  ok
-format              0.3  ok
-shellcheck          0.8  ok
-actionlint          0.1  ok
-total               4.6
+step              seconds  result
+pub                   1.8  ok
+format                0.6  ok
+shellcheck            1.7  ok
+actionlint            0.4  ok
+total                 3.6
 pub=ok format=ok shellcheck=ok actionlint=ok
 === importer ===
 === importer ===
@@ -167,14 +169,51 @@ Analyzing wallet_importer...
 No issues found!
 
 ::group::✅ Passing tests
+✅ test/importer_fuzz_test.dart: fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.csv
+✅ test/importer_fuzz_test.dart: fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.xlsx
+✅ test/importer_fuzz_test.dart: fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents pbz_synthetic.xls
+✅ test/importer_fuzz_test.dart: fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents random binary, random text and magic-number prefixes
+✅ test/importer_fuzz_test.dart: fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents generated CSVs (quotes, separators, newlines, odd numbers and dates)
+✅ test/importer_fuzz_test.dart: CSV shapes give the same transactions the rebuilt fixture equals the file fixture
+✅ test/importer_fuzz_test.dart: CSV shapes give the same transactions shuffled columns (columns are found by header name)
+✅ test/importer_fuzz_test.dart: CSV shapes give the same transactions CRLF, CR-only, trailing blank lines, quoted fields
+✅ test/importer_fuzz_test.dart: CSV shapes give the same transactions UTF-8 byte order mark
+✅ test/importer_fuzz_test.dart: CSV shapes give the same transactions semicolon separator with comma decimals
+✅ test/importer_fuzz_test.dart: CSV shapes give the same transactions header only: an empty Revolut batch
+✅ test/importer_fuzz_test.dart: CSV shapes give the same transactions empty, whitespace and unknown files are rejected with ImportException
+✅ test/importer_fuzz_test.dart: CSV shapes give the same transactions unicode and mojibake descriptions
+✅ test/importer_fuzz_test.dart: CSV shapes give the same transactions Latin-1 bytes that are not UTF-8 do not throw
+✅ test/importer_fuzz_test.dart: CSV shapes give the same transactions a PBZ-style CSV (semicolons, d.m.yyyy, comma decimals, card hold)
+✅ test/importer_fuzz_test.dart: determinism pbz_synthetic.xls: same bytes, same ids (also from a copy of the bytes)
+✅ test/importer_fuzz_test.dart: determinism revolut_synthetic.xlsx: same bytes, same ids (also from a copy of the bytes)
+✅ test/importer_fuzz_test.dart: determinism revolut_synthetic.csv: same bytes, same ids (also from a copy of the bytes)
+✅ test/importer_fuzz_test.dart: determinism two identical rows get _1, a third _2; ids do not depend on rows elsewhere in the file
+✅ test/importer_fuzz_test.dart: xlsx edge cases cells without r attributes, shared strings, rich text, booleans and errors
+✅ test/importer_fuzz_test.dart: xlsx edge cases malformed XML inside a valid zip is an ImportException
+✅ test/importer_fuzz_test.dart: xlsx edge cases a cell far away (XFD1048576) does not blow up memory or time
+✅ test/importer_fuzz_test.dart: xlsx edge cases a sheet that would lay out to millions of cells is an ImportException, quickly
+✅ test/importer_fuzz_test.dart: numbers and dates the importer should not accept NaN or Infinity amounts: ImportException or row dropped, not UnsupportedError
+✅ test/importer_fuzz_test.dart: numbers and dates the importer should not accept NaN or Infinity number cells in a PBZ sheet (date or amount) do not throw
+✅ test/importer_fuzz_test.dart: numbers and dates the importer should not accept amounts beyond 64-bit cents are not silently clamped
+✅ test/importer_fuzz_test.dart: numbers and dates the importer should not accept decision: an amount beyond 10 billion (10^12 cents) leaves the row out and counts it; up to it imports
+✅ test/importer_fuzz_test.dart: numbers and dates the importer should not accept impossible calendar dates are rejected or dropped
+✅ test/importer_fuzz_test.dart: numbers and dates the importer should not accept decision: an impossible date leaves the row out and counts it; real dates (29.02 in a leap year) import
+✅ test/importer_fuzz_test.dart: numbers and dates the importer should not accept excel serial dates out of range in a PBZ sheet: ImportException, not ArgumentError
 ✅ test/importer_log_test.dart: pbz_synthetic.xls: format, sizes and counts are logged, no contents
 ✅ test/importer_log_test.dart: revolut_synthetic.xlsx: format, sizes and counts are logged, no contents
 ✅ test/importer_log_test.dart: revolut_synthetic.csv: format, sizes and counts are logged, no contents
 ✅ test/importer_log_test.dart: unknown and broken files log a warning
+✅ test/v1_golden_test.dart: PBZ rows: same dates, amounts, descriptions and ids as v1
+✅ test/v1_golden_test.dart: Revolut rows: same dates, amounts (fee deducted), repaired text and ids as v1
+✅ test/v1_golden_test.dart: transactionId on its own matches every v1 vector
+✅ test/v1_golden_test.dart: more v1 vectors: leap day 2028, large amount, float amount, Revolut fees around a DST night
+✅ test/v1_golden_test.dart: a negative half-cent amount rounds like v1 (Math.round: half towards +infinity)
 ✅ test/importer_test.dart: ids match the v1 web app algorithm
 ✅ test/importer_test.dart: ids formatCents mirrors toFixed(2)
 ✅ test/importer_test.dart: helpers excelDate
 ✅ test/importer_test.dart: helpers fixMojibake
+✅ test/importer_test.dart: helpers jsRound is JavaScript Math.round: halves towards +infinity, otherwise the same as round()
+✅ test/importer_test.dart: helpers sparseRows: rows 0..last, each only as long as its last cell, empty rows empty, size capped
 ✅ test/importer_test.dart: PBZ .xls reads the BIFF8 sheet including SST continuation records
 ✅ test/importer_test.dart: PBZ .xls normalizes transactions and skips card holds
 ✅ test/importer_test.dart: PBZ .xls re-import gives identical ids
@@ -183,31 +222,31 @@ No issues found!
 ✅ test/importer_test.dart: unknown files are rejected
 ::endgroup::
 
-🎉 14 tests passed.
---- importer: 14 tests, 0 failed, total 1.6 s; per test p50 4 ms, p90 59 ms, p99 60 ms, max 60 ms
-      <10 ms     7  ########################################
-    10-50 ms     4  #######################
-   50-100 ms     3  #################
-  100-500 ms     0  
-     0.5-1 s     0  
+🎉 51 tests passed.
+--- importer: 51 tests, 0 failed, total 4.4 s; per test p50 4 ms, p90 75 ms, p99 748 ms, max 748 ms
+      <10 ms    33  ########################################
+    10-50 ms    10  ############
+   50-100 ms     4  #####
+  100-500 ms     3  ####
+     0.5-1 s     1  #
        1-5 s     0  
         >5 s     0  
   slowest:
-        60 ms  pbz_synthetic.xls: format, sizes and counts are logged, no contents
-        59 ms  Revolut .xlsx: completed rows only, fee deducted, text repaired
-        55 ms  revolut_synthetic.xlsx: format, sizes and counts are logged, no contents
-        32 ms  PBZ .xls normalizes transactions and skips card holds
-        29 ms  PBZ .xls reads the BIFF8 sheet including SST continuation records
-        19 ms  PBZ .xls re-import gives identical ids
-        10 ms  ids match the v1 web app algorithm
-         4 ms  unknown and broken files log a warning
-         3 ms  helpers excelDate
-         3 ms  helpers fixMojibake
+       748 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents pbz_synthetic.xls
+       426 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.xlsx
+       199 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.csv
+       173 ms  xlsx edge cases a cell far away (XFD1048576) does not blow up memory or time
+        75 ms  pbz_synthetic.xls: format, sizes and counts are logged, no contents
+        75 ms  Revolut .xlsx: completed rows only, fee deducted, text repaired
+        70 ms  revolut_synthetic.xlsx: format, sizes and counts are logged, no contents
+        55 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents random binary, random text and magic-number prefixes
+        45 ms  helpers sparseRows: rows 0..last, each only as long as its last cell, empty rows empty, size capped
+        38 ms  helpers jsRound is JavaScript Math.round: halves towards +infinity, otherwise the same as round()
 
-step            seconds  result
-importer            7.9  ok
-total               8.0
---- importer: 14 tests, 0 failed, total 1.6 s; per test p50 4 ms, p90 59 ms, p99 60 ms, max 60 ms
+step              seconds  result
+importer             13.0  ok
+total                13.0
+--- importer: 51 tests, 0 failed, total 4.4 s; per test p50 4 ms, p90 75 ms, p99 748 ms, max 748 ms
 importer=ok
 === core ===
 === core ===
@@ -215,6 +254,132 @@ Analyzing wallet_core...
 No issues found!
 
 ::group::✅ Passing tests
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time salary = -1
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time salary = "x"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time salary = 12.5
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time salary = "NaN"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time salary = "Infinity"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time salary = true
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time salary = 1000000000000000.0
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time salary = [1]
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time rent = -100
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time rent = "550"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time rent = 0.5
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time loan = -1
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time loan = false
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time subs = -1
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time subs = "subs"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time impulse = -5000
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time impulse = "a"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time coolHours = -1
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time coolHours = -72
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time coolHours = 8761
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time coolHours = "72"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time coolHours = 1.5
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time paydayDay = 0
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time paydayDay = -3
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time paydayDay = 32
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time paydayDay = 100
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time paydayDay = "15"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time paydayDay = 10.5
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time rentCashThreshold = -1
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time rentCashThreshold = "500"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time rentCashThreshold = 1.25
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time loanEnd = "2027-13"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time loanEnd = "2027"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time loanEnd = "June"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time loanEnd = 202706
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time loanEnd = ""
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time periodStart = "2026-02-30"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time periodStart = "2026-1-5"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time periodStart = "today"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time periodStart = 20260115
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time periodStart = ""
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time savedFor = "2026-13-01"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time savedFor = 5
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time currency = "eur"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time currency = "EURO"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time currency = ""
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time currency = 978
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time incomeMode = "sometimes"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time incomeMode = 1
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time incomeMode = ""
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time salaryConfirmed = "true"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time salaryConfirmed = 1
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time merchantPatterns = "Groceries=example"
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time merchantPatterns = 42
+✅ test/settings_validation_test.dart: bad values fall back to the default, one setting at a time merchantPatterns = {"a":"b"}
+✅ test/settings_validation_test.dart: valid edge values are kept and not logged
+✅ test/settings_validation_test.dart: a damaged JSON value in the database falls back for that key only
+✅ test/settings_validation_test.dart: bad values from another device: sync keeps working, only those settings fall back
+✅ test/settings_validation_test.dart: a bad stored value is logged once per key and value, not on every settings() read
+✅ test/budget_invariants_test.dart: periodSummaries invariants on random wallets contiguous, each live non-transfer row counted once, totals add up, transfers never count (250 wallets)
+✅ test/budget_invariants_test.dart: computePeriod (safe to spend) identities budget maths on random wallets and days (250 cases)
+✅ test/budget_invariants_test.dart: computePeriod (safe to spend) identities a new wallet (nothing set) gives zero budget, not errors
+✅ test/budget_invariants_test.dart: affordability verdict is monotonic in price and "now" never means money you do not have (250 cases)
+✅ test/budget_invariants_test.dart: monthsToGoal smallest whole number of months that reaches the target (250 cases)
+✅ test/db_safety_test.dart: reopen everything survives close and reopen: data, device id, outbox, clock, file numbers, applied files
+✅ test/db_safety_test.dart: reopen files applied before a restart are not applied again; exported ops are not exported again
+✅ test/db_safety_test.dart: older databases a database written by the first v2 build opens, reads and accepts new writes
+✅ test/db_safety_test.dart: older databases missing tables (a database with only meta and tx) are created on open
+✅ test/db_safety_test.dart: older databases no column of the first v2 schema was dropped or renamed
+✅ test/db_safety_test.dart: older databases every syncable column in the current schema can be written by a remote op
+✅ test/db_safety_test.dart: rollback an import that fails halfway writes nothing (rows, matches, outbox, clocks, stored clock)
+✅ test/db_safety_test.dart: rollback a remote batch that fails halfway applies nothing
+✅ test/db_safety_test.dart: rollback the repo stays usable after a failed write
+✅ test/db_safety_test.dart: outbox and clocks random local writes: outbox in order, clocks = newest op per field, tables = last writer wins
+✅ test/matching_test.dart: closest day wins, then earliest date, then smallest id; one bank row per entry
+✅ test/matching_test.dart: a bank row with its own category keeps it; an ineligible row is never used
+✅ test/matching_test.dart: two entries on one bank row: the smallest id keeps it, the other is unmatched or takes another row
+✅ test/matching_test.dart: an existing match is kept while its bank row is there
+✅ test/matching_test.dart: a match whose bank row was deleted (or is not a bank row) is open again, and may take a later bank row
+✅ test/matching_test.dart: a match whose bank row has not arrived yet is kept (no unmatch while its sync file is missing)
+✅ test/matching_test.dart: property: the plan does not depend on row order, and applying it gives an empty plan
+✅ test/matching_test.dart: an entry without seen_bank (older builds): only a bank row first written after it replaces it (HLC order)
+✅ test/matching_test.dart: with seen_bank: a bank row replaces the entry iff the adding device did not hold it, whenever it was written
+✅ test/matching_test.dart: SeenBank.encode keeps the highest clock per device, in a stable order
+✅ test/matching_test.dart: repo: hand-added expenses are matched only by bank rows imported after them a cash coffee added on Monday is not swallowed by the card payment of the same amount imported on Saturday
+✅ test/matching_test.dart: repo: hand-added expenses are matched only by bank rows imported after them after an upgrade, old unmatched entries are not matched to bank history (no match ops synced)
+✅ test/matching_test.dart: repo: hand-added expenses are matched only by bank rows imported after them an entry from an older build (no seen_bank) keeps the old rule: only a bank row written after it
+✅ test/matching_test.dart: repo: hand-added expenses are matched only by bank rows imported after them addManual records the bank rows this device holds, per device, in the same op as the entry
+✅ test/matching_test.dart: repo: deleting the bank row that replaced a hand-added expense the hand-added expense counts again, and a later bank row can replace it
+✅ test/matching_test.dart: repo: deleting the bank row that replaced a hand-added expense a match to a bank row that has not arrived yet is kept; the row then counts once, and deleting it reopens the entry
+✅ test/matching_test.dart: repo: deleting the bank row that replaced a hand-added expense deleted on another device: after sync the expense counts again on both, same state
+✅ test/matching_test.dart: openEntries: unmatched, matched to a deleted row, or second on a shared row
+✅ test/matching_test.dart: matching cost a new device reading many sync files matches once per sync run, not once per file
+✅ test/matching_test.dart: matching cost a large wallet loads only the bank rows that could replace an open entry
+✅ test/rules_test.dart: impulse rule defaults: over EUR 50 waits 72 hours
+✅ test/rules_test.dart: impulse rule threshold and cooling-off are adjustable and sync like other settings
+✅ test/rules_test.dart: impulse rule hours left: full wait when added, zero exactly at the end, negative after
+✅ test/rules_test.dart: impulse rule wishlist: new items wait, decisions are kept, order is by time added
+✅ test/rules_test.dart: internal transfers are not spending PBZ -> Revolut top-ups (and money back) and Revolut top-ups/exchanges
+✅ test/rules_test.dart: internal transfers are not spending a merchant rule never turns a transfer into spending
+✅ test/rules_test.dart: internal transfers are not spending both sides of a top-up are left out of month and period totals
+✅ test/rules_test.dart: rent cash rule a PBZ ATM withdrawal of EUR 500 or more is rent; less is cash spending
+✅ test/rules_test.dart: rent cash rule rent is a fixed bill: not in safe-to-spend, shown as paid
+✅ test/rules_test.dart: extras are never daily money positive PBZ rows that are not salary are extras; salary type and "krive uplate" are salary
+✅ test/rules_test.dart: extras are never daily money a bonus raises income and net, but not flexible money or safe-to-spend
+✅ test/rules_test.dart: extras are never daily money a salary month above plan does not raise daily money in planned mode
+✅ test/rules_test.dart: categories learned from corrections a merchant rule applies to other visits of the same merchant (store numbers and amounts differ)
+✅ test/rules_test.dart: categories learned from corrections rules do not touch salary, extras or hand-added expenses
+✅ test/rules_test.dart: categories learned from corrections rule and override order: override > merchant rule > personal pattern > built-in
+✅ test/rules_test.dart: categories learned from corrections bad personal patterns and unknown categories are ignored, not fatal
+✅ test/rules_test.dart: categories learned from corrections a rule learned on one device categorises the same merchant on another after sync
+✅ test/rules_test.dart: manual entries matched to bank rows on import (same amount, within 3 days) 3 days before or after: matched; 4 days: not
+✅ test/rules_test.dart: manual entries matched to bank rows on import (same amount, within 3 days) across month and year ends
+✅ test/rules_test.dart: manual entries matched to bank rows on import (same amount, within 3 days) a different amount (by one cent), an income row or a transfer is never matched
+✅ test/rules_test.dart: manual entries matched to bank rows on import (same amount, within 3 days) rent cash (a fixed bill) can be matched to a hand-entered rent
+✅ test/rules_test.dart: manual entries matched to bank rows on import (same amount, within 3 days) one bank row matches one manual entry, two bank rows match two; never more
+✅ test/rules_test.dart: manual entries matched to bank rows on import (same amount, within 3 days) the bank row takes the manual category; the manual row is hidden and counted once
+✅ test/rules_test.dart: manual entries matched to bank rows on import (same amount, within 3 days) a deleted or already matched manual entry is not matched again; re-import changes nothing
+✅ test/rules_test.dart: re-imports never duplicate every synthetic fixture: second import adds nothing, also after edits and deletes
+✅ test/rules_test.dart: re-imports never duplicate an overlapping later export adds only the new rows
+✅ test/rules_test.dart: re-imports never duplicate ids from v1 (same algorithm) are recognised as already imported
+✅ test/rent_threshold_test.dart: rentCashThreshold setting default is 50000 and keeps the old rule
+✅ test/rent_threshold_test.dart: rentCashThreshold setting round-trips through toMap/fromMap
+✅ test/rent_threshold_test.dart: rentCashThreshold setting changing it changes which ATM withdrawal is rent
+✅ test/rent_threshold_test.dart: rentCashThreshold setting a manual category still wins over the threshold
+✅ test/rent_threshold_test.dart: rentCashThreshold setting syncs to a second device
 ✅ test/periods_impl_test.dart: paydays salary parts within 20 days are one payday
 ✅ test/periods_impl_test.dart: paydays ignores deleted salary, future salary and transfers
 ✅ test/periods_impl_test.dart: paydays missing salary: paydays assumed on paydayDay until the next real one
@@ -230,6 +395,40 @@ No issues found!
 ✅ test/periods_impl_test.dart: salaryPaydays a payday is its first salary part, even when later parts arrive days after
 ✅ test/periods_impl_test.dart: salaryPaydays ignores deleted salary, salary after today, and refunds
 ✅ test/periods_impl_test.dart: salaryPaydays no salary: empty
+✅ test/sync_scenarios_test.dart: applying ops order and duplicates do not matter (property, many random op lists)
+✅ test/sync_scenarios_test.dart: applying ops an op for an unknown entity or field is ignored (forward compatible)
+✅ test/sync_scenarios_test.dart: files the same file applied twice (Syncthing conflict copy) changes nothing the second time
+✅ test/sync_scenarios_test.dart: files files delivered in reverse order give the same result as in order
+✅ test/sync_scenarios_test.dart: files a device joining late gets everything, and its own edits reach the others
+✅ test/sync_scenarios_test.dart: files writes made while a sync is running are not lost
+✅ test/sync_scenarios_test.dart: files a missing sync folder is a SyncException and keeps the outbox
+✅ test/sync_scenarios_test.dart: wrong key typed key text: typos are refused with VaultException, never another error or a different key
+✅ test/sync_scenarios_test.dart: wrong key refused before anything is written or read; outbox kept; works with the right key
+✅ test/sync_scenarios_test.dart: wrong key a file sealed with another key is rejected and nothing is applied
+✅ test/sync_scenarios_test.dart: damaged files truncated or bit-flipped files are rejected without changing anything; the repaired file then applies
+✅ test/sync_scenarios_test.dart: damaged files a correctly sealed file with broken contents changes nothing (no partial writes)
+✅ test/sync_scenarios_test.dart: damaged files one damaged file does not stop files from other devices being applied
+✅ test/sync_scenarios_test.dart: clocks a device whose clock is an hour behind still wins with an edit made after it synced (causality)
+✅ test/sync_scenarios_test.dart: clocks a device a year in the future does not freeze the others: their later edits still win
+✅ test/sync_scenarios_test.dart: clocks HLCs written by the repo strictly increase, also across remote receives and a clock going backwards
+✅ test/sync_scenarios_test.dart: clocks HLC order stays correct past 99999 events in one millisecond
+✅ test/sync_scenarios_test.dart: clocks the clock never writes a counter past 5 digits, so strings keep sorting right on older versions
+✅ test/sync_scenarios_test.dart: clocks HLC strings compare by value: old 5-digit strings, and wider counters, in any mix
+✅ test/sync_scenarios_test.dart: races between devices re-importing on another device does not resurrect a transaction deleted elsewhere
+✅ test/sync_scenarios_test.dart: races between devices import ops never carry the deleted field (only deletes write it)
+✅ test/sync_scenarios_test.dart: races between devices the same export imported on two devices before syncing gives one copy of each row
+✅ test/sync_scenarios_test.dart: races between devices a category set on one device survives the other device importing the same rows later
+✅ test/sync_scenarios_test.dart: races between devices a hand-added expense added offline, then the bank row imported on another device: matched once, in either sync order (phone syncs first)
+✅ test/sync_scenarios_test.dart: races between devices a hand-added expense added offline, then the bank row imported on another device: matched once, in either sync order (laptop syncs first)
+✅ test/sync_scenarios_test.dart: races between devices an expense added by hand when the bank row is already in the wallet (synced or not) is a separate expense
+✅ test/sync_scenarios_test.dart: races between devices two devices each add the same expense by hand, one bank row: one pair matched, same on both devices
+✅ test/sync_scenarios_test.dart: a hand-added expense and bank rows imported on another device first the laptop imports in the morning, the phone (not synced) adds the same expense in the evening: one expense on both devices (phone syncs first)
+✅ test/sync_scenarios_test.dart: a hand-added expense and bank rows imported on another device first the laptop imports in the morning, the phone (not synced) adds the same expense in the evening: one expense on both devices (laptop syncs first)
+✅ test/sync_scenarios_test.dart: a hand-added expense and bank rows imported on another device first the phone already had Saturday's card coffee: a Monday cash coffee stays separate, also after later imports
+✅ test/sync_scenarios_test.dart: matching while a sync file never arrives the phone holds the match but not the bank row: the entry counts once until the row arrives, then the row counts once
+✅ test/sync_scenarios_test.dart: matching while a sync file never arrives the phone holds the match but not the bank row (only a partial row from the match op): the entry counts once until the row arrives, then the row counts once
+✅ test/sync_scenarios_test.dart: matching while a sync file never arrives the file with the bank row is damaged on the phone for good: the match the laptop wrote is kept, and repeated syncs write nothing new
+✅ test/sync_scenarios_test.dart: matching while a sync file never arrives the file with the bank row is missing on the phone for good: the match the laptop wrote is kept, and repeated syncs write nothing new
 ✅ test/logs_impl_test.dart: describeError unknown error types log only their type name (their text can hold paths, commands or values)
 ✅ test/logs_impl_test.dart: describeError our own exceptions and fixed-text errors keep their message
 ✅ test/logs_impl_test.dart: describeError a registered hook redacts error types the package cannot see
@@ -245,10 +444,25 @@ No issues found!
 ✅ test/logs_impl_test.dart: helpers FINE prints as DEBUG; non-JSON field values print as text
 ✅ test/logs_impl_test.dart: RotatingFileSink timer add() flushes by itself after flushDelay
 ✅ test/logs_impl_test.dart: RotatingFileSink timer lines added after close are dropped; write errors are counted, not thrown
-2026-10-17T05:48:48.241+00:00 SEVERE bw.logs log.writeFailed FileSystemException: Creation failed (OS Error: Not a directory, errno = 20)
+2026-10-19T14:15:49.996+00:00 SEVERE bw.logs log.writeFailed FileSystemException: Creation failed (OS Error: Not a directory, errno = 20)
 ✅ test/logs_impl_test.dart: core logs carry no private data import, edits, reads and period maths
 ✅ test/logs_impl_test.dart: core logs carry no private data sync and vault
 ✅ test/logs_impl_test.dart: core logs carry no private data a failed write logs a SEVERE rollback without the values
+✅ test/dates_edge_test.dart: nextPayday paydayDay 29-31 clamps to the month end
+✅ test/dates_edge_test.dart: nextPayday leap years: Feb 29 in 2028, not in 2027 or 2100; 2000 was a leap year
+✅ test/dates_edge_test.dart: nextPayday year boundary
+✅ test/dates_edge_test.dart: nextPayday a start late in the month still moves to the NEXT month (no skipped or repeated month)
+✅ test/dates_edge_test.dart: nextPayday property: lands in the following month on min(paydayDay, month length)
+✅ test/dates_edge_test.dart: day arithmetic DST weekends (EU: 29 Mar and 25 Oct 2026; US: 8 Mar, 1 Nov) are ordinary days
+✅ test/dates_edge_test.dart: day arithmetic month ends, leap days and year ends
+✅ test/dates_edge_test.dart: day arithmetic property: addDays and daysBetween agree, and round-trip
+✅ test/dates_edge_test.dart: safe to spend around the calendar a period over the March DST change has 31 days
+✅ test/dates_edge_test.dart: safe to spend around the calendar over the year end
+✅ test/dates_edge_test.dart: safe to spend around the calendar February in a leap year with paydayDay 29/30/31
+✅ test/dates_edge_test.dart: safe to spend around the calendar payday day itself and the last day of the period
+✅ test/dates_edge_test.dart: pay periods around the calendar salary on the 31st/1st across months: one payday each, periods are contiguous
+✅ test/dates_edge_test.dart: pay periods around the calendar missing salary over a leap February with paydayDay 31: assumed Feb 29, then Mar 31
+✅ test/dates_edge_test.dart: pay periods around the calendar salary parts over the new year are one payday
 ✅ test/periods_test.dart: periodSummaries: totals salary parts, transfers, extras, refunds, non-live and future rows
 ✅ test/periods_test.dart: periodSummaries: totals input order does not matter (sync can deliver rows in any order)
 ✅ test/periods_test.dart: periodSummaries: totals net and savings rate of the computed periods
@@ -316,6 +530,7 @@ No issues found!
 ✅ test/logs_test.dart: FrameStats ms are rounded to 0.1
 ✅ test/logs_test.dart: FrameStats empty summary
 ✅ test/logs_test.dart: FrameStats reset clears everything
+✅ test/sync_convergence_test.dart: random edits on 2-4 devices converge to last-writer-wins (60 seeds from 1016)
 ✅ test/core_test.dart: categories PBZ rules
 ✅ test/core_test.dart: categories user patterns win over built-in rules
 ✅ test/core_test.dart: categories merchant key matches v1
@@ -331,72 +546,540 @@ No issues found!
 ✅ test/core_test.dart: sync a different key is refused
 ::endgroup::
 
-🎉 113 tests passed.
---- core: 113 tests, 0 failed, total 3.2 s; per test p50 2 ms, p90 15 ms, p99 81 ms, max 206 ms
-      <10 ms    94  ########################################
-    10-50 ms    16  #######
-   50-100 ms     2  #
-  100-500 ms     1  
+🎉 289 tests passed.
+--- core: 289 tests, 0 failed, total 21.0 s; per test p50 2 ms, p90 55 ms, p99 1462 ms, max 7207 ms
+      <10 ms   200  ########################################
+    10-50 ms    57  ###########
+   50-100 ms    20  ####
+  100-500 ms     9  ##
      0.5-1 s     0  
-       1-5 s     0  
-        >5 s     0  
+       1-5 s     2  
+        >5 s     1  
   slowest:
-       206 ms  RotatingFileSink timer add() flushes by itself after flushDelay
-        81 ms  core logs carry no private data sync and vault
-        62 ms  sync two devices converge, last edit wins per field
-        42 ms  core logs carry no private data import, edits, reads and period maths
-        42 ms  timedAsync measures the awaited time and warns at warnMs
-        41 ms  repo import is idempotent
-        32 ms  timed WARNING when the body takes at least warnMs; ms is the elapsed time
-        27 ms  describeError SqliteException without statement parameters
-        18 ms  periodSummaries: totals salary parts, transfers, extras, refunds, non-live and future rows
-        16 ms  paydays salary parts within 20 days are one payday
+      7207 ms  random edits on 2-4 devices converge to last-writer-wins (60 seeds from 1016)
+      1935 ms  matching cost a large wallet loads only the bank rows that could replace an open entry
+      1462 ms  applying ops order and duplicates do not matter (property, many random op lists)
+       433 ms  periodSummaries invariants on random wallets contiguous, each live non-transfer row counted once, totals add up, transfers never count (250 wallets)
+       341 ms  outbox and clocks random local writes: outbox in order, clocks = newest op per field, tables = last writer wins
+       282 ms  re-imports never duplicate every synthetic fixture: second import adds nothing, also after edits and deletes
+       207 ms  matching cost a new device reading many sync files matches once per sync run, not once per file
+       207 ms  RotatingFileSink timer add() flushes by itself after flushDelay
+       123 ms  damaged files truncated or bit-flipped files are rejected without changing anything; the repaired file then applies
+       120 ms  computePeriod (safe to spend) identities budget maths on random wallets and days (250 cases)
 
-step            seconds  result
-core                9.6  ok
-total               9.6
---- core: 113 tests, 0 failed, total 3.2 s; per test p50 2 ms, p90 15 ms, p99 81 ms, max 206 ms
+step              seconds  result
+core                 30.3  ok
+total                30.3
+--- core: 289 tests, 0 failed, total 21.0 s; per test p50 2 ms, p90 55 ms, p99 1462 ms, max 7207 ms
 core=ok
 === app ===
 === app ===
 Analyzing app...                                                
-No issues found! (ran in 8.2s)
+No issues found! (ran in 10.6s)
 
 ::group::✅ Passing tests
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/widget_test.dart: money formatting
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/widget_test.dart: money parsing
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/widget_test.dart: dates
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/widget_test.dart: percent
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/widget_test.dart: wishlist time left (bug A: "2d 24h left") examples
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/widget_test.dart: wishlist time left (bug A: "2d 24h left") hours are always 1-23, never 24 or 0, over many durations
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/row_alignment_test.dart: "ahead of pace" is right-aligned on a wide window
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/row_alignment_test.dart: "behind pace" is right-aligned on a wide window
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/row_alignment_test.dart: goal and wishlist amounts end at the row end on a wide window
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/row_alignment_test.dart: SplitRow: a short end keeps its width, the start gets the rest; a long end stops at half
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/fixtures_sync_test.dart: embedded fixtures match packages/wallet_importer/test/fixtures
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/delivery_panel_test.dart: shown on a weekday at 15:00, hidden at 10:00
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/delivery_panel_test.dart: shown on Sunday morning
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/delivery_panel_test.dart: the typical order uses the wallet currency, not €
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/plan_screen_test.dart: rent cash threshold is editable in Plan and changes categorisation
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/plan_screen_test.dart: fields follow the latest settings and Save keeps changes made elsewhere (bug B) a setting changed by sync shows in its field
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/plan_screen_test.dart: fields follow the latest settings and Save keeps changes made elsewhere (bug B) editing one field and saving keeps settings changed elsewhere
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/plan_screen_test.dart: fields follow the latest settings and Save keeps changes made elsewhere (bug B) an edit in progress is not overwritten by sync, and Save writes only that field
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/plan_screen_test.dart: fields follow the latest settings and Save keeps changes made elsewhere (bug B) Save with nothing edited writes nothing
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/plan_screen_test.dart: negative wait hours are rejected (bug C) "-1" shows a message and saves nothing
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/plan_screen_test.dart: negative wait hours are rejected (bug C) "-72" shows a message and saves nothing
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/plan_screen_test.dart: negative wait hours are rejected (bug C) " -5 " shows a message and saves nothing
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/plan_screen_test.dart: negative wait hours are rejected (bug C) fixing the value clears the error and saves
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/layout_test.dart: every tab fits 320 dp at text scale 1.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/layout_test.dart: onboarding fits 320 dp at text scale 1.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/layout_test.dart: every tab fits 320 dp at text scale 2.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/layout_test.dart: onboarding fits 320 dp at text scale 2.0
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/logging_test.dart: appVersion matches pubspec.yaml
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/logging_test.dart: fileExt gives only the extension, never the name
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/logging_test.dart: log levels
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/logging_test.dart: nav events and routes log names and result words only
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/status_label_test.dart: long text wraps at 320 dp, text scale 1.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/status_label_test.dart: long text wraps at 320 dp, text scale 2.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/status_label_test.dart: short text stays on one line next to the icon
 ::endgroup::
 
-🎉 8 tests passed.
---- app: 8 tests, 0 failed, total 9.5 s; per test p50 4 ms, p90 16 ms, p99 16 ms, max 16 ms
-      <10 ms     6  ########################################
-    10-50 ms     2  #############
+🎉 34 tests passed.
+--- app: 34 tests, 0 failed, total 25.4 s; per test p50 106 ms, p90 906 ms, p99 2358 ms, max 2358 ms
+      <10 ms     7  #######################
+    10-50 ms     4  #############
+   50-100 ms     5  #################
+  100-500 ms    12  ########################################
+     0.5-1 s     3  ##########
+       1-5 s     3  ##########
+        >5 s     0  
+  slowest:
+      2358 ms  every tab fits 320 dp at text scale 1.0
+      1434 ms  rent cash threshold is editable in Plan and changes categorisation
+      1042 ms  shown on a weekday at 15:00, hidden at 10:00
+       906 ms  every tab fits 320 dp at text scale 2.0
+       813 ms  "ahead of pace" is right-aligned on a wide window
+       568 ms  long text wraps at 320 dp, text scale 1.0
+       297 ms  negative wait hours are rejected (bug C) fixing the value clears the error and saves
+       276 ms  goal and wishlist amounts end at the row end on a wide window
+       274 ms  fields follow the latest settings and Save keeps changes made elsewhere (bug B) editing one field and saving keeps settings changed elsewhere
+       260 ms  fields follow the latest settings and Save keeps changes made elsewhere (bug B) an edit in progress is not overwritten by sync, and Save writes only that field
+
+step              seconds  result
+app                  38.9  ok
+total                38.9
+--- app: 34 tests, 0 failed, total 25.4 s; per test p50 106 ms, p90 906 ms, p99 2358 ms, max 2358 ms
+app=ok
+=== desktop ===
+=== desktop-big_wallet ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/big_wallet_test.dart
+Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: big wallet: ~20k rows over 5 years stay fast
+PERF rows = 23642
+PERF seed_s = 5.0
+PERF seed_importBatch_max_ms = 930
+PERF restart_repo_open_ms = 3
+PERF restart_repo_transactions_ms = 115
+PERF restart_wc_reload_ms = 430
+PERF weekly_import_files_ms = 66
+PERF weekly_import_parse_ms = 8
+PERF weekly_repo_importBatch_ms = 55
+PERF weekly_wc_reload_ms = 575
+PERF year_import_files_ms = 774
+PERF reimport_import_files_ms = 114
+PERF tabs_wc_period_max_ms = 8
+PERF tabs_wc_payPeriods_max_ms = 2
+PERF tabs_spending_derive_max_ms = 35
+PERF months_spending_derive_max_ms = 55
+PERF frames_tabs = {"frames":71,"janky":71,"build_p50_ms":4.4,"build_p90_ms":121.0,"build_p99_ms":143.2,"build_max_ms":143.2,"raster_p50_ms":61.1,"raster_p90_ms":88.3,"raster_p99_ms":113.5,"raster_max_ms":113.5}
+PERF frames_spending_scroll = {"frames":502,"janky":502,"build_p50_ms":1.6,"build_p90_ms":3.3,"build_p99_ms":25.3,"build_max_ms":718.9,"raster_p50_ms":69.6,"raster_p90_ms":79.6,"raster_p99_ms":103.3,"raster_max_ms":118.8}
+PERF mem = {"rss_mb":648.6,"max_rss_mb":708.6}
+01:14 +1: (tearDownAll)
+01:14 +1: All tests passed!
+--- desktop-big_wallet: 1 tests, 0 failed, total 112.0 s; per test p50 74109 ms, p90 74109 ms, p99 74109 ms, max 74109 ms
+      <10 ms     0  
+    10-50 ms     0  
    50-100 ms     0  
   100-500 ms     0  
      0.5-1 s     0  
        1-5 s     0  
+        >5 s     1  ########################################
+  slowest:
+     74109 ms  big wallet: ~20k rows over 5 years stay fast
+=== desktop-flows ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/flows_test.dart
+Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: Add expense: validation, shows in Today and Spending, safe to spend drops by the amount
+00:09 +1: Add expense over the wishlist limit: asks first; put on wishlist, or add anyway
+00:16 +2: Category: once changes one row, always makes a merchant rule for all rows and new imports
+00:29 +3: Delete an added expense; its budget comes back
+00:32 +4: Payday checklist and the "Salary landed" banner
+00:34 +5: (tearDownAll)
+00:35 +5: All tests passed!
+--- desktop-flows: 5 tests, 0 failed, total 60.7 s; per test p50 6841 ms, p90 12835 ms, p99 12835 ms, max 12835 ms
+      <10 ms     0  
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     2  ###########################
+        >5 s     3  ########################################
+  slowest:
+     12835 ms  Category: once changes one row, always makes a merchant rule for all rows and new imports
+      9960 ms  Add expense: validation, shows in Today and Spending, safe to spend drops by the amount
+      6841 ms  Add expense over the wishlist limit: asks first; put on wishlist, or add anyway
+      2871 ms  Delete an added expense; its budget comes back
+      2479 ms  Payday checklist and the "Salary landed" banner
+=== desktop-import ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/import_test.dart
+Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: PBZ .xls, Revolut .xlsx and .csv: result lines, transactions, re-import adds nothing
+00:06 +1: A current-month Revolut CSV: Spending and Today show it; an added expense is matched, not doubled
+00:09 +2: (tearDownAll)
+00:09 +2: All tests passed!
+--- desktop-import: 2 tests, 0 failed, total 35.7 s; per test p50 3528 ms, p90 6416 ms, p99 6416 ms, max 6416 ms
+      <10 ms     0  
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     1  ########################################
+        >5 s     1  ########################################
+  slowest:
+      6416 ms  PBZ .xls, Revolut .xlsx and .csv: result lines, transactions, re-import adds nothing
+      3528 ms  A current-month Revolut CSV: Spending and Today show it; an added expense is matched, not doubled
+=== desktop-layout ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/layout_test.dart
+Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: layout: dark
+layout dark: media Size(1280.0, 720.0), render view Size(1280.0, 720.0)
+layout dark: onboarding
+layout dark: today
+layout dark: add-expense-sheet
+layout dark: spending
+layout dark: wishlist
+layout dark: goals
+layout dark: plan
+layout dark: tx-sheet
+layout dark: goal-sheet
+00:26 +1: layout: text130
+layout text130: media Size(1280.0, 720.0), render view Size(1280.0, 720.0)
+layout text130: onboarding
+layout text130: today
+layout text130: add-expense-sheet
+layout text130: spending
+layout text130: wishlist
+layout text130: goals
+layout text130: plan
+layout text130: tx-sheet
+layout text130: goal-sheet
+00:50 +2: layout: text200
+layout text200: media Size(1280.0, 720.0), render view Size(1280.0, 720.0)
+layout text200: onboarding
+layout text200: today
+layout text200: add-expense-sheet
+layout text200: spending
+layout text200: wishlist
+layout text200: goals
+layout text200: plan
+layout text200: tx-sheet
+layout text200: goal-sheet
+01:20 +3: layout: small
+layout small: media Size(320.0, 640.0), render view Size(320.0, 640.0)
+layout small: onboarding
+layout small: today
+layout small: add-expense-sheet
+layout small: spending
+layout small: wishlist
+layout small: goals
+layout small: plan
+layout small: tx-sheet
+layout small: goal-sheet
+01:38 +4: layout: small-dark-text200
+layout small-dark-text200: media Size(320.0, 640.0), render view Size(320.0, 640.0)
+layout small-dark-text200: onboarding
+layout small-dark-text200: today
+layout small-dark-text200: add-expense-sheet
+layout small-dark-text200: spending
+layout small-dark-text200: wishlist
+layout small-dark-text200: goals
+layout small-dark-text200: plan
+layout small-dark-text200: tx-sheet
+layout small-dark-text200: goal-sheet
+02:06 +5: (tearDownAll)
+02:06 +5: All tests passed!
+--- desktop-layout: 5 tests, 0 failed, total 152.8 s; per test p50 26650 ms, p90 29426 ms, p99 29426 ms, max 29426 ms
+      <10 ms     0  
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     0  
+        >5 s     5  ########################################
+  slowest:
+     29426 ms  layout: text200
+     28072 ms  layout: small-dark-text200
+     26650 ms  layout: dark
+     24251 ms  layout: text130
+     18466 ms  layout: small
+=== desktop-onboarding ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/onboarding_test.dart
+Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: Start a new wallet: key stored, default goals, salary banner
+00:04 +1: Join: a wrong key is refused, the right key joins
+00:06 +2: (tearDownAll)
+00:06 +2: All tests passed!
+--- desktop-onboarding: 2 tests, 0 failed, total 32.0 s; per test p50 1394 ms, p90 4653 ms, p99 4653 ms, max 4653 ms
+      <10 ms     0  
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     2  ########################################
         >5 s     0  
   slowest:
-        16 ms  appVersion matches pubspec.yaml
-        14 ms  money formatting
-         6 ms  nav events and routes log names and result words only
-         4 ms  money parsing
-         4 ms  dates
-         4 ms  log levels
-         3 ms  fileExt gives only the extension, never the name
-         2 ms  percent
+      4653 ms  Start a new wallet: key stored, default goals, salary banner
+      1394 ms  Join: a wrong key is refused, the right key joins
+=== desktop-plan ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/plan_test.dart
+Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: Plan numbers: bad input is refused, good input is saved and used everywhere
+00:35 +1: Start new month from Plan: cancel, today, another day
+00:42 +2: Sync folder, wallet key, Diagnostics: level, log size, logs to the sync folder, clear
+00:56 +3: (tearDownAll)
+00:56 +3: All tests passed!
+--- desktop-plan: 3 tests, 0 failed, total 82.4 s; per test p50 13746 ms, p90 35563 ms, p99 35563 ms, max 35563 ms
+      <10 ms     0  
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     0  
+        >5 s     3  ########################################
+  slowest:
+     35563 ms  Plan numbers: bad input is refused, good input is saved and used everywhere
+     13746 ms  Sync folder, wallet key, Diagnostics: level, log size, logs to the sync folder, clear
+      7367 ms  Start new month from Plan: cancel, today, another day
+=== desktop-screens ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/screens_test.dart
+Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: every tab with a synthetic wallet
+2026-10-19T14:25:05.769+00:00 INFO bw.app app.info {"version":"2.0.0+1","mode":"debug","platform":"linux","os":"Linux 6.17.0-1022-azure #22-Ubuntu SMP Mon Jul 27 17:24:03 UTC 2026","flutter":"3.47.7","dart":"3.13.5","cpus":2,"locale":"C","screen":"1280x720@1.0","logLevel":"ALL"}
+2026-10-19T14:25:05.774+00:00 INFO bw.app app.start {"phase":"logs","ms":72}
+2026-10-19T14:25:05.817+00:00 DEBUG bw.perf repo.open {"ms":40,"file":true,"new":true,"tx":0,"outbox":0}
+2026-10-19T14:25:05.818+00:00 INFO bw.app app.start {"phase":"db","ms":42}
+2026-10-19T14:25:05.822+00:00 DEBUG bw.perf key.read {"ms":2,"store":"file","found":false}
+2026-10-19T14:25:05.822+00:00 INFO bw.app app.start {"phase":"key","ms":3,"found":false}
+2026-10-19T14:25:05.828+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T14:25:05.829+00:00 DEBUG bw.perf repo.transactions {"ms":0,"rows":0,"live":0}
+2026-10-19T14:25:05.830+00:00 DEBUG bw.perf wc.categorize {"ms":0,"tx":0}
+2026-10-19T14:25:05.831+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T14:25:05.832+00:00 DEBUG bw.perf wc.reload {"ms":7,"tx":0,"goals":0,"wish":0}
+2026-10-19T14:25:05.832+00:00 INFO bw.app app.start {"phase":"reload","ms":9,"tx":0,"syncFolder":false,"logLevel":"all"}
+2026-10-19T14:25:05.834+00:00 INFO bw.app app.start {"phase":"ready","ms":132}
+2026-10-19T14:25:05.845+00:00 FINER bw.sync sync.skip {"trigger":"startup","reason":"noFolder"}
+2026-10-19T14:25:05.903+00:00 DEBUG bw.perf key.write {"ms":66,"store":"file"}
+2026-10-19T14:25:05.904+00:00 INFO bw.app wallet.create {"defaultGoals":true}
+2026-10-19T14:25:05.913+00:00 DEBUG bw.perf repo.write {"ms":7,"ops":1,"entities":"goal"}
+2026-10-19T14:25:05.917+00:00 DEBUG bw.perf repo.write {"ms":3,"ops":1,"entities":"goal"}
+2026-10-19T14:25:05.918+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T14:25:05.919+00:00 DEBUG bw.perf repo.transactions {"ms":0,"rows":0,"live":0}
+2026-10-19T14:25:05.919+00:00 DEBUG bw.perf wc.categorize {"ms":0,"tx":0}
+2026-10-19T14:25:05.920+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T14:25:05.921+00:00 DEBUG bw.perf wc.reload {"ms":3,"tx":0,"goals":2,"wish":0}
+2026-10-19T14:25:06.080+00:00 DEBUG bw.perf repo.write {"ms":140,"ops":191,"entities":"tx"}
+2026-10-19T14:25:06.083+00:00 DEBUG bw.perf repo.match {"ms":0,"manual":0,"open":0,"bank":0,"added":0}
+2026-10-19T14:25:06.083+00:00 DEBUG bw.perf repo.importBatch {"ms":147,"source":"pbz","rows":191,"added":191,"dupes":0,"matched":0,"skipped":0}
+2026-10-19T14:25:06.086+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":5,"entities":"setting"}
+2026-10-19T14:25:06.086+00:00 INFO bw.app settings.changed {"keys":"salary,rent,loan,subs,paydayDay"}
+2026-10-19T14:25:06.089+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T14:25:06.095+00:00 DEBUG bw.perf repo.transactions {"ms":5,"rows":191,"live":191}
+2026-10-19T14:25:06.106+00:00 DEBUG bw.perf wc.categorize {"ms":9,"tx":191}
+2026-10-19T14:25:06.106+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T14:25:06.108+00:00 DEBUG bw.perf wc.reload {"ms":21,"tx":191,"goals":2,"wish":0}
+2026-10-19T14:25:06.405+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:06.406+00:00 DEBUG bw.perf wc.period {"ms":8}
+2026-10-19T14:25:06.444+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:06.444+00:00 DEBUG bw.perf wc.period {"ms":1}
+2026-10-19T14:25:06.492+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T14:25:06.492+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
+2026-10-19T14:25:06.493+00:00 DEBUG bw.perf wc.payPeriods {"ms":2,"count":12}
+2026-10-19T14:25:06.496+00:00 DEBUG bw.perf spending.derive {"ms":7,"month":"2026-10","tx":191}
+2026-10-19T14:25:06.511+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:06.511+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:06.520+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:06.521+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:07.413+00:00 DEBUG bw.mem mem {"rss_mb":486.6,"max_rss_mb":495.9}
+2026-10-19T14:25:07.588+00:00 WARNING bw.frames frames.slow {"build_ms":1231.3,"raster_ms":92.1,"tab":"today"}
+2026-10-19T14:25:07.944+00:00 INFO bw.nav nav.tab {"from":"today","to":"spending","via":"bar"}
+2026-10-19T14:25:07.946+00:00 INFO bw.frames frames.window {"frames":2,"janky":2,"build_p50_ms":48.6,"build_p90_ms":1231.3,"build_p99_ms":1231.3,"build_max_ms":1231.3,"raster_p50_ms":70.4,"raster_p90_ms":92.1,"raster_p99_ms":92.1,"raster_max_ms":92.1,"tab":"today"}
+2026-10-19T14:25:07.964+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:07.965+00:00 DEBUG bw.perf wc.period {"ms":1}
+2026-10-19T14:25:07.974+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:07.974+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:08.004+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T14:25:08.005+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
+2026-10-19T14:25:08.005+00:00 DEBUG bw.perf wc.payPeriods {"ms":1,"count":12}
+2026-10-19T14:25:08.005+00:00 DEBUG bw.perf spending.derive {"ms":2,"month":"2026-10","tx":191}
+2026-10-19T14:25:08.052+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:08.053+00:00 DEBUG bw.perf wc.period {"ms":1}
+2026-10-19T14:25:08.061+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:08.061+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:08.405+00:00 WARNING bw.frames frames.slow {"build_ms":190.1,"raster_ms":78.7,"tab":"spending"}
+2026-10-19T14:25:08.803+00:00 INFO bw.nav nav.tab {"from":"spending","to":"wishlist","via":"bar"}
+2026-10-19T14:25:08.803+00:00 INFO bw.frames frames.window {"frames":6,"janky":6,"build_p50_ms":5.9,"build_p90_ms":190.1,"build_p99_ms":190.1,"build_max_ms":190.1,"raster_p50_ms":72.4,"raster_p90_ms":86.5,"raster_p99_ms":86.5,"raster_max_ms":86.5,"tab":"spending"}
+2026-10-19T14:25:08.813+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:08.813+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:08.818+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:08.818+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:08.832+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T14:25:08.833+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
+2026-10-19T14:25:08.833+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
+2026-10-19T14:25:08.834+00:00 DEBUG bw.perf spending.derive {"ms":2,"month":"2026-10","tx":191}
+2026-10-19T14:25:08.857+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:08.858+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:08.863+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:08.863+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:09.129+00:00 FINER bw.sync sync.skip {"trigger":"change","reason":"noFolder"}
+2026-10-19T14:25:09.220+00:00 WARNING bw.frames frames.slow {"build_ms":128.2,"raster_ms":71.4,"tab":"wishlist"}
+2026-10-19T14:25:09.221+00:00 WARNING bw.frames frames.slow {"build_ms":5.1,"raster_ms":108.4,"tab":"wishlist"}
+2026-10-19T14:25:09.581+00:00 INFO bw.nav nav.tab {"from":"wishlist","to":"goals","via":"bar"}
+2026-10-19T14:25:09.581+00:00 INFO bw.frames frames.window {"frames":6,"janky":6,"build_p50_ms":5.1,"build_p90_ms":128.2,"build_p99_ms":128.2,"build_max_ms":128.2,"raster_p50_ms":70.7,"raster_p90_ms":108.4,"raster_p99_ms":108.4,"raster_max_ms":108.4,"tab":"wishlist"}
+2026-10-19T14:25:09.596+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:09.596+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:09.598+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:09.598+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:09.608+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T14:25:09.609+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
+2026-10-19T14:25:09.609+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
+2026-10-19T14:25:09.609+00:00 DEBUG bw.perf spending.derive {"ms":1,"month":"2026-10","tx":191}
+2026-10-19T14:25:09.633+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:09.634+00:00 DEBUG bw.perf wc.period {"ms":1}
+2026-10-19T14:25:09.641+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:09.641+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:09.879+00:00 WARNING bw.frames frames.slow {"build_ms":119.6,"raster_ms":59.4,"tab":"goals"}
+2026-10-19T14:25:10.303+00:00 INFO bw.nav nav.tab {"from":"goals","to":"plan","via":"bar"}
+2026-10-19T14:25:10.303+00:00 INFO bw.frames frames.window {"frames":6,"janky":6,"build_p50_ms":2.7,"build_p90_ms":119.6,"build_p99_ms":119.6,"build_max_ms":119.6,"raster_p50_ms":35.1,"raster_p90_ms":70.8,"raster_p99_ms":70.8,"raster_max_ms":70.8,"tab":"goals"}
+2026-10-19T14:25:10.312+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:10.312+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:10.314+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:10.314+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:10.324+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T14:25:10.324+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
+2026-10-19T14:25:10.325+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
+2026-10-19T14:25:10.325+00:00 DEBUG bw.perf spending.derive {"ms":1,"month":"2026-10","tx":191}
+2026-10-19T14:25:10.345+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:10.345+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:10.349+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:10.349+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:12.004+00:00 INFO bw.app log.level {"from":"all","to":"info"}
+2026-10-19T14:25:12.659+00:00 INFO bw.app log.level {"from":"info","to":"all"}
+2026-10-19T14:25:12.680+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:12.680+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:12.682+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:12.682+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:12.704+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T14:25:12.706+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
+2026-10-19T14:25:12.706+00:00 DEBUG bw.perf wc.payPeriods {"ms":2,"count":12}
+2026-10-19T14:25:12.707+00:00 DEBUG bw.perf spending.derive {"ms":3,"month":"2026-10","tx":191}
+2026-10-19T14:25:12.729+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:12.729+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:12.734+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T14:25:12.734+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:12.888+00:00 WARNING bw.frames frames.slow {"build_ms":103.1,"raster_ms":91.2,"tab":"plan"}
+2026-10-19T14:25:13.197+00:00 DEBUG bw.perf repo.write {"ms":2,"ops":1,"entities":"tx"}
+2026-10-19T14:25:13.198+00:00 INFO bw.app expense.add {"category":"Home & tools"}
+2026-10-19T14:25:13.199+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T14:25:13.210+00:00 DEBUG bw.perf repo.transactions {"ms":10,"rows":192,"live":192}
+2026-10-19T14:25:13.222+00:00 DEBUG bw.perf wc.categorize {"ms":11,"tx":192}
+2026-10-19T14:25:13.224+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T14:25:13.225+00:00 DEBUG bw.perf wc.reload {"ms":25,"tx":192,"goals":2,"wish":0}
+2026-10-19T14:25:13.230+00:00 DEBUG bw.perf repo.write {"ms":5,"ops":1,"entities":"wish"}
+2026-10-19T14:25:13.233+00:00 INFO bw.app wish.add {"status":"waiting"}
+2026-10-19T14:25:13.234+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T14:25:13.242+00:00 DEBUG bw.perf repo.transactions {"ms":8,"rows":192,"live":192}
+2026-10-19T14:25:13.249+00:00 DEBUG bw.perf wc.categorize {"ms":6,"tx":192}
+2026-10-19T14:25:13.250+00:00 DEBUG bw.perf wc.goalsWish {"ms":1}
+2026-10-19T14:25:13.250+00:00 DEBUG bw.perf wc.reload {"ms":16,"tx":192,"goals":2,"wish":1}
+2026-10-19T14:25:13.253+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"goal"}
+2026-10-19T14:25:13.253+00:00 INFO bw.app goal.save {"new":true}
+2026-10-19T14:25:13.254+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T14:25:13.258+00:00 DEBUG bw.perf repo.transactions {"ms":4,"rows":192,"live":192}
+2026-10-19T14:25:13.264+00:00 DEBUG bw.perf wc.categorize {"ms":5,"tx":192}
+2026-10-19T14:25:13.265+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T14:25:13.265+00:00 DEBUG bw.perf wc.reload {"ms":11,"tx":192,"goals":3,"wish":1}
+2026-10-19T14:25:13.269+00:00 DEBUG bw.importer importer.detect {"format":"csv","bytes":189}
+2026-10-19T14:25:13.271+00:00 DEBUG bw.importer.csv csv.read {"chars":189,"sep":",","rows":2,"unclosedQuote":false}
+2026-10-19T14:25:13.274+00:00 INFO bw.importer importer.parse {"format":"csv","source":"revolut","rows":2,"txs":1,"skipped":0,"invalid":0,"readMs":2,"ms":5}
+2026-10-19T14:25:13.274+00:00 DEBUG bw.perf import.parse {"ms":6,"file":0,"ext":"csv","bytes":189}
+2026-10-19T14:25:13.276+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"tx"}
+2026-10-19T14:25:13.278+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T14:25:13.281+00:00 DEBUG bw.perf repo.write {"ms":0,"ops":2,"entities":"tx"}
+2026-10-19T14:25:13.282+00:00 DEBUG bw.perf repo.match {"ms":4,"manual":1,"open":1,"bank":1,"added":1,"unmatched":0,"categories":1}
+2026-10-19T14:25:13.282+00:00 DEBUG bw.perf repo.importBatch {"ms":7,"source":"revolut","rows":1,"added":1,"dupes":0,"matched":1,"skipped":0}
+2026-10-19T14:25:13.282+00:00 DEBUG bw.perf import.file {"ms":14,"file":0,"ext":"csv","bytes":189,"source":"revolut","rows":1,"added":1,"dupes":0,"matched":1,"skipped":0,"invalid":0}
+2026-10-19T14:25:13.282+00:00 DEBUG bw.perf import.files {"ms":14,"files":1,"ok":1}
+2026-10-19T14:25:13.283+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T14:25:13.287+00:00 DEBUG bw.perf repo.transactions {"ms":3,"rows":193,"live":192}
+2026-10-19T14:25:13.292+00:00 DEBUG bw.perf wc.categorize {"ms":5,"tx":192}
+2026-10-19T14:25:13.293+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T14:25:13.294+00:00 DEBUG bw.perf wc.reload {"ms":11,"tx":192,"goals":3,"wish":1}
+2026-10-19T14:25:13.296+00:00 INFO bw.app category.change {"from":"Home & tools","to":"Shopping","always":true,"source":"revolut"}
+2026-10-19T14:25:13.297+00:00 DEBUG bw.perf repo.write {"ms":0,"ops":1,"entities":"rule"}
+2026-10-19T14:25:13.298+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"tx"}
+2026-10-19T14:25:13.299+00:00 DEBUG bw.categories categories.build {"rules":1,"patterns":0,"patternsUsed":0}
+2026-10-19T14:25:13.302+00:00 DEBUG bw.perf repo.transactions {"ms":2,"rows":193,"live":192}
+2026-10-19T14:25:13.307+00:00 DEBUG bw.perf wc.categorize {"ms":5,"tx":192}
+2026-10-19T14:25:13.307+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T14:25:13.308+00:00 DEBUG bw.perf wc.reload {"ms":9,"tx":192,"goals":3,"wish":1}
+2026-10-19T14:25:13.315+00:00 INFO bw.nav nav.tab {"from":"plan","to":"today","via":"bar"}
+2026-10-19T14:25:13.315+00:00 INFO bw.frames frames.window {"frames":26,"janky":26,"build_p50_ms":4.6,"build_p90_ms":79.7,"build_p99_ms":103.1,"build_max_ms":103.1,"raster_p50_ms":72.1,"raster_p90_ms":95.9,"raster_p99_ms":96.7,"raster_max_ms":96.7,"tab":"plan"}
+2026-10-19T14:25:13.346+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":14,"incomeMode":"planned","goals":3}
+2026-10-19T14:25:13.347+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:13.350+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":14,"incomeMode":"planned","goals":3}
+2026-10-19T14:25:13.350+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:13.363+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T14:25:13.363+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":192}
+2026-10-19T14:25:13.363+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
+2026-10-19T14:25:13.364+00:00 DEBUG bw.perf spending.derive {"ms":2,"month":"2026-10","tx":192}
+2026-10-19T14:25:13.387+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":14,"incomeMode":"planned","goals":3}
+2026-10-19T14:25:13.388+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:13.395+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":14,"incomeMode":"planned","goals":3}
+2026-10-19T14:25:13.396+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T14:25:13.775+00:00 WARNING bw.frames frames.slow {"build_ms":105.3,"raster_ms":84.4,"tab":"today"}
+2026-10-19T14:25:16.309+00:00 FINER bw.sync sync.skip {"trigger":"change","reason":"noFolder"}
+2026-10-19T14:25:17.249+00:00 INFO bw.frames frames.window {"frames":26,"janky":26,"build_p50_ms":0.5,"build_p90_ms":6.8,"build_p99_ms":105.3,"build_max_ms":105.3,"raster_p50_ms":47.3,"raster_p90_ms":72.7,"raster_p99_ms":89.1,"raster_max_ms":89.1,"tab":"today"}
+2026-10-19T14:25:17.249+00:00 DEBUG bw.mem mem {"rss_mb":593.5,"max_rss_mb":612.5}
+00:11 +1: (tearDownAll)
+00:11 +1: All tests passed!
+--- desktop-screens: 1 tests, 0 failed, total 37.7 s; per test p50 11856 ms, p90 11856 ms, p99 11856 ms, max 11856 ms
+      <10 ms     0  
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     0  
+        >5 s     1  ########################################
+  slowest:
+     11856 ms  every tab with a synthetic wallet
+=== desktop-wishlist_goals ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/wishlist_goals_test.dart
+Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: Wishlist: price check, cooling off, then buy or skip
+00:14 +1: Wishlist: Save for it makes a goal with the price as target
+00:18 +2: Goals: create, edit, add money, reached, delete; months-to-goal text
+00:32 +3: (tearDownAll)
+00:32 +3: All tests passed!
+--- desktop-wishlist_goals: 3 tests, 0 failed, total 57.9 s; per test p50 14123 ms, p90 14696 ms, p99 14696 ms, max 14696 ms
+      <10 ms     0  
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     1  ####################
+        >5 s     2  ########################################
+  slowest:
+     14696 ms  Wishlist: price check, cooling off, then buy or skip
+     14123 ms  Goals: create, edit, add money, reached, delete; months-to-goal text
+      3556 ms  Wishlist: Save for it makes a goal with the price as target
 
-step            seconds  result
-app                19.7  ok
-total              19.8
---- app: 8 tests, 0 failed, total 9.5 s; per test p50 4 ms, p90 16 ms, p99 16 ms, max 16 ms
-app=ok
+step              seconds  result
+desktop-big_wallet    113.2  ok
+desktop-flows        61.4  ok
+desktop-import       36.4  ok
+desktop-layout      153.5  ok
+desktop-onboarding     32.7  ok
+desktop-plan         83.0  ok
+desktop-screens      38.4  ok
+desktop-wishlist_goals     58.6  ok
+total               577.6
+--- desktop-big_wallet: 1 tests, 0 failed, total 112.0 s; per test p50 74109 ms, p90 74109 ms, p99 74109 ms, max 74109 ms
+--- desktop-flows: 5 tests, 0 failed, total 60.7 s; per test p50 6841 ms, p90 12835 ms, p99 12835 ms, max 12835 ms
+--- desktop-import: 2 tests, 0 failed, total 35.7 s; per test p50 3528 ms, p90 6416 ms, p99 6416 ms, max 6416 ms
+--- desktop-layout: 5 tests, 0 failed, total 152.8 s; per test p50 26650 ms, p90 29426 ms, p99 29426 ms, max 29426 ms
+--- desktop-onboarding: 2 tests, 0 failed, total 32.0 s; per test p50 1394 ms, p90 4653 ms, p99 4653 ms, max 4653 ms
+--- desktop-plan: 3 tests, 0 failed, total 82.4 s; per test p50 13746 ms, p90 35563 ms, p99 35563 ms, max 35563 ms
+--- desktop-screens: 1 tests, 0 failed, total 37.7 s; per test p50 11856 ms, p90 11856 ms, p99 11856 ms, max 11856 ms
+--- desktop-wishlist_goals: 3 tests, 0 failed, total 57.9 s; per test p50 14123 ms, p90 14696 ms, p99 14696 ms, max 14696 ms
+desktop-big_wallet=ok desktop-flows=ok desktop-import=ok desktop-layout=ok desktop-onboarding=ok desktop-plan=ok desktop-screens=ok desktop-wishlist_goals=ok
 === apk ===
 Resolving dependencies...
 Downloading packages...
@@ -414,8 +1097,9 @@ Try `flutter pub outdated` for more information.
 Running Gradle task 'assembleRelease'...                        
 Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 4084 bytes (99.8% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
 Caught exception: Already watching path: /opt/hostedtoolcache/flutter/stable-3.47.7-x64/flutter/packages/flutter_tools/gradle
-Running Gradle task 'assembleRelease'...                          103.6s
-✓ Built build/app/outputs/flutter-apk/app-release.apk (60.3MB)
+Running Gradle task 'assembleRelease'...                          118.2s
+✓ Built build/app/outputs/flutter-apk/app-release.apk (60.4MB)
+=== linux ===
 === linux ===
 Resolving dependencies...
 Downloading packages...
@@ -432,3 +1116,36 @@ Got dependencies!
 Try `flutter pub outdated` for more information.
 Building Linux application...                                   
 ✓ Built build/linux/x64/release/bundle/budget_wallet
+
+step              seconds  result
+linux                83.9  ok
+total                83.9
+linux=ok
+=== smoke ===
+=== linux ===
+Resolving dependencies...
+Downloading packages...
+  cross_file 0.3.5+5 (0.4.0 available)
+  equatable 2.1.0 (3.0.0 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  qr 3.0.2 (4.0.0 available)
+  sqlite3 2.9.4 (3.7.1 available)
+  sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.3 available)
+Got dependencies!
+8 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Building Linux application...                                   
+✓ Built build/linux/x64/release/bundle/budget_wallet
+=== desktop-smoke ===
+app still running after 10 s; sending SIGTERM
+app exited with code 143
+app log: 20 lines (dist/logs/app-linux-smoke.log)
+WARNING lines: 1
+
+step              seconds  result
+linux                 4.1  ok
+desktop-smoke        10.4  ok
+total                14.5
+linux=ok desktop-smoke=ok
