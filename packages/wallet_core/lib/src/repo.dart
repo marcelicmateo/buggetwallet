@@ -205,11 +205,17 @@ class WalletRepo {
       return out;
     }
 
+    const live = 'tx.manual = 0 AND tx.deleted = 0';
+    const targetOf = 'SELECT matched_to FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to IS NOT NULL';
     final manual = rows('tx.manual = 1 AND tx.deleted = 0');
     final targets = {for (final m in manual) m.matchedTo};
-    if (!targets.contains(null) && targets.length == manual.length) return 0; // all matched, no two on one row
+    if (!targets.contains(null) && targets.length == manual.length) {
+      // All matched, no two on one row: done if every bank row they point at is still there (not deleted).
+      final there = db.select('SELECT COUNT(*) AS n FROM tx WHERE $live AND id IN ($targetOf)').first['n'] as int;
+      if (there == targets.length) return 0;
+    }
     final cz = categorizer();
-    final bank = rows('tx.manual = 0 AND tx.deleted = 0 AND tx.amount < 0');
+    final bank = rows('$live AND (tx.amount < 0 OR tx.id IN ($targetOf))');
     final plan = planMatches(manual, bank, (b) {
       final k = kindOf(cz.autoCategory(b));
       return k == Kind.flex || k == Kind.fixed;
@@ -362,9 +368,16 @@ class WalletRepo {
   void setCategory(String txId, String? category) => _write([
         ('tx', txId, {'category': category})
       ]);
-  void deleteTransaction(String txId) => _write([
-        ('tx', txId, {'deleted': 1})
-      ]);
+
+  /// Deletes a row. A hand-added expense that this bank row replaced counts again (and may be matched by a later
+  /// bank row): see [planMatches].
+  void deleteTransaction(String txId) {
+    _write([
+      ('tx', txId, {'deleted': 1})
+    ]);
+    _matchManual();
+  }
+
   void setMerchantRule(String key, String category) => _write([
         ('rule', key, {'category': category, 'deleted': 0})
       ]);

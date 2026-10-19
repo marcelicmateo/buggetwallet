@@ -14,6 +14,11 @@ Tx _manual(String id, String date, int amount, {String? to, String? category = '
 Tx _bank(String id, String date, int amount, {String? category}) =>
     Tx(id: id, source: 'pbz', date: date, amount: amount, bankType: 'POS plaćanje', description: 'POS EXAMPLE', category: category);
 bool _all(Tx _) => true;
+
+extension on Tx {
+  Tx asManual() => Tx(id: id, source: 'manual', date: date, amount: amount, manual: true);
+}
+
 String _h(int millis, [String node = 'n']) => Hlc(millis, 0, node).toString();
 
 /// First-write clocks: every manual entry before every bank row (the usual order: added by hand, then imported).
@@ -63,8 +68,22 @@ void main() {
     expect(_plan(manual, [_bank('b1', '2026-01-17', -990), _bank('b2', '2026-01-18', -990)], _all).matchedTo, {'m2': 'b2'});
   });
 
-  test('an existing match is kept, also when its bank row has not arrived yet', () {
-    expect(_plan([_manual('m1', '2026-01-17', -990, to: 'elsewhere')], [_bank('b1', '2026-01-17', -990)], _all).isEmpty, isTrue);
+  test('an existing match is kept while its bank row is there', () {
+    expect(_plan([_manual('m1', '2026-01-17', -990, to: 'b1')], [_bank('b1', '2026-01-17', -990)], _all).isEmpty, isTrue);
+    // Even when that row is no longer eligible or its amount differs (a category or rule changed): still the same pair.
+    expect(_plan([_manual('m1', '2026-01-17', -990, to: 'b1')], [_bank('b1', '2026-01-17', -990)], (_) => false).isEmpty, isTrue);
+  });
+
+  test('a match whose bank row was deleted or is missing is open again, and may take a later bank row', () {
+    const gone = Tx(id: 'b1', source: 'pbz', date: '2026-01-17', amount: -990, description: 'POS EXAMPLE', deleted: true);
+    for (final bank in [
+      <Tx>[], // missing
+      [gone], // deleted (callers leave deleted rows out; a deleted one passed in counts the same)
+      [_bank('m-other', '2026-01-17', -990).asManual()], // not a bank row
+    ]) {
+      expect(_plan([_manual('m1', '2026-01-17', -990, to: 'b1')], bank, _all).matchedTo, {'m1': null}, reason: '$bank');
+    }
+    expect(_plan([_manual('m1', '2026-01-17', -990, to: 'b1')], [_bank('b2', '2026-01-18', -990)], _all).matchedTo, {'m1': 'b2'});
   });
 
   test('property: the plan does not depend on row order, and applying it gives an empty plan', () {
@@ -171,6 +190,78 @@ void main() {
         expect(r.transaction(id)!.matchedTo, isNull, reason: id);
       }
       expect(r.transactions().where((t) => t.amount == -2340).length, 2);
+    });
+  });
+
+  group('repo: deleting the bank row that replaced a hand-added expense', () {
+    List<Tx> spending(WalletRepo r) => r.transactions().where((t) => t.amount == -2340).toList();
+
+    test('the hand-added expense counts again, and a later bank row can replace it', () {
+      final r = WalletRepo.inMemory();
+      addTearDown(r.close);
+      final m = r.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic');
+      expect(r.importBatch(january).matched, 1);
+      final bank = r.transaction(m)!.matchedTo!;
+      r.deleteTransaction(bank);
+      expect(r.transaction(m)!.matchedTo, isNull);
+      expect(spending(r).map((t) => t.id), [m], reason: 'the expense still counts, once');
+      final cz = r.categorizer();
+      expect(monthSummary(r.transactions().map(cz.categorize).toList(), '2026-01').byCategory['Eating out'], 2340);
+      // Re-importing the same export does not bring the deleted row back, nor match it.
+      expect(r.importBatch(january).matched, 0);
+      expect(spending(r).map((t) => t.id), [m]);
+      // A corrected export with the payment on another day (a new row, imported now) replaces the entry.
+      final s = r.importBatch(ImportBatch(source: 'pbz', transactions: [n('2026-01-18', -2340, 'POS plaćanje', 'POS EXAMPLE CORRECTED')]));
+      expect(s.matched, 1);
+      expect(spending(r).single.manual, isFalse);
+    });
+
+    test('a match to a bank row that never arrives does not hide the expense', () {
+      final r = WalletRepo.inMemory();
+      addTearDown(r.close);
+      r.applyRemote([
+        Op(
+            'tx',
+            'm-peer',
+            {'source': 'manual', 'date': '2026-01-17', 'amount': -2340, 'manual': 1, 'matched_to': 'b-unknown', 'deleted': 0},
+            const Hlc(1767225600000, 0, 'peer').toString()),
+      ]);
+      expect(r.transaction('m-peer')!.matchedTo, isNull);
+      expect(spending(r).map((t) => t.id), ['m-peer']);
+    });
+
+    test('deleted on another device: after sync the expense counts again on both, same state', () async {
+      final dir = Directory.systemTemp.createTempSync('bw-match-del-');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final key = VaultKey.generate();
+      var t = 1767225600000;
+      final phone = WalletRepo.inMemory(now: () => t), laptop = WalletRepo.inMemory(now: () => t);
+      addTearDown(phone.close);
+      addTearDown(laptop.close);
+      Future<void> sync() async {
+        for (var i = 0; i < 2; i++) {
+          await FolderSync(dir.path, key).run(phone);
+          await FolderSync(dir.path, key).run(laptop);
+        }
+      }
+
+      final m = phone.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic');
+      t += 1000;
+      laptop.importBatch(january);
+      await sync();
+      final bank = phone.transaction(m)!.matchedTo;
+      expect(bank, isNotNull);
+      expect(laptop.transaction(m)!.matchedTo, bank);
+      t += 1000;
+      laptop.deleteTransaction(bank!);
+      await sync();
+      for (final r in [phone, laptop]) {
+        expect(r.transaction(m)!.matchedTo, isNull);
+        expect(spending(r).map((t) => t.id), [m]);
+      }
+      expect(dump(phone, clocks: false), dump(laptop, clocks: false));
+      expect(phone.pendingOps(), isEmpty);
+      expect(laptop.pendingOps(), isEmpty);
     });
   });
 }

@@ -21,8 +21,10 @@ final _iso = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 /// A pure function of the rows, so every device holding the same rows plans the same writes (sync converges even
 /// when the manual entry and the bank row arrive on a device in either order), and applying the plan gives a state
 /// whose plan is empty (idempotent):
-/// - an existing match is kept (also if its bank row has not arrived yet); when several live manual entries point at
-///   the same bank row, the one with the smallest id keeps it and the others are unmatched and matched again below;
+/// - an existing match is kept while its bank row is in [bank]; a match whose bank row was deleted (or is missing)
+///   is open again, so the entry counts as spending instead of vanishing with the row; when several live manual
+///   entries point at the same bank row, the one with the smallest id keeps it and the others are unmatched;
+/// - open entries are matched again below (an entry whose row was deleted can take a later bank row);
 /// - every unmatched live manual entry, oldest first (date, then id), takes the free [eligible] bank row with the
 ///   same amount that is closest in days (then earliest date, then smallest id), among the bank rows first written
 ///   after the entry ([written]).
@@ -32,7 +34,8 @@ final _iso = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 /// that payment. "After" is by HLC, not by device or wall clock, so it holds when the entry was added offline on one
 /// device and the bank row was imported later on another (they then match in whichever order they sync).
 ///
-/// [manual]: live (not deleted) manual entries; [bank]: non-manual rows that are not deleted. [eligible] says which
+/// [manual]: live (not deleted) manual entries; [bank]: non-manual rows that are not deleted, including every one
+/// that a manual entry points at (a target not in [bank] counts as deleted or missing). [eligible] says which
 /// bank rows may replace a manual entry (expenses whose built-in kind is flex or fixed). [written]: the HLC of each
 /// row's first write (the clock of its `amount`, written only when the row is created); a row without one is never
 /// matched.
@@ -41,12 +44,16 @@ MatchPlan planMatches(List<Tx> manual, List<Tx> bank, bool Function(Tx) eligible
   final bankCategory = <String, String>{};
   final taken = <String>{};
   final open = <Tx>[];
+  final live = {
+    for (final b in bank)
+      if (!b.manual && !b.deleted) b.id
+  };
   for (final m in [...manual]..sort((a, b) => a.id.compareTo(b.id))) {
     final to = m.matchedTo;
     if (to == null) {
       open.add(m);
-    } else if (!taken.add(to)) {
-      matchedTo[m.id] = null; // a second entry on the same bank row
+    } else if (!live.contains(to) || !taken.add(to)) {
+      matchedTo[m.id] = null; // its bank row was deleted or is missing, or a second entry on the same bank row
       open.add(m);
     }
   }
