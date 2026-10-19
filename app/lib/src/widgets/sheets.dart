@@ -163,6 +163,7 @@ class _TxSheetState extends State<TxSheet> {
         Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(t.description, style: const TextStyle(fontSize: 13))),
       const SizedBox(height: 14),
       DropdownButtonFormField<String>(
+        isExpanded: true,
         initialValue: cat,
         decoration: const InputDecoration(labelText: 'Category'),
         items: [for (final c in categories.keys) DropdownMenuItem(value: c, child: Text(c))],
