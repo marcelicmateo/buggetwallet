@@ -94,4 +94,15 @@ Open bugs to fix next (found by tests 2026-10-17; core bugs 1–9 already fixed 
 - Fixed: Today and the "Salary landed" banner now start the period on the first salary part (same paydays as the chart).
 - Design: 20 Today-screen ideas + directions A/B + desktop on the canvas (docs/design/); owner to pick favourites.
 - Stage in progress: UI tests agent + bug-fix agent (9 core bugs + 4 app bugs) in worktrees; see Resume here.
+- Queued next (owner, 2026-10-19): profile-mode performance test on Linux desktop — `traceAction` around Spending
+  scroll + tab switches, save TimelineSummary (missed frames, build/raster p90/max, shader jank) to the run's logs and
+  history, keep the trace JSON for DevTools/Perfetto, fail on budget overruns. Debug-mode frame numbers (big_wallet
+  test) and emulator raster times (lavapipe) are not representative.
+- Queued after that (owner, 2026-10-19): adaptive layout per Flutter's adaptive/responsive best practices —
+  NavigationRail instead of the bottom bar past a width breakpoint, max content width or two columns on wide
+  windows (desktop direction on the design canvas), keyboard shortcuts / tooltips / hover for desktop, layout tests
+  at desktop and tablet sizes, and web-safe platform checks (`dart:io` `Platform` breaks the web build).
+- Queued (devops, owner 2026-10-19): Dart/Flutter MCP server (`dart mcp-server`, dart-lang/ai) run inside the Podman
+  build container like `tools/build.sh lsp`, registered for Claude Code. Owner installs the `flutter/agent-plugins`
+  Claude Code plugin; then add a CLAUDE.md note: use its skills, but run commands via `tools/build.sh`/`tools/emulator.sh`.
 - Then: merge v2 to master; budget vs actual and top merchants.

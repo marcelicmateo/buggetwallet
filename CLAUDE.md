@@ -57,6 +57,11 @@ Android release builds are signed with one fixed key (`tools/make-signing-key.sh
 `~/.config/budget-wallet/`, CI secrets `ANDROID_KEYSTORE_*`) so updates install over the app without wiping
 the wallet. Never commit or print the key or its password; never fall back to debug signing for a published APK.
 
+**Flutter/Dart skills:** the official `dart-flutter` plugin (flutter/agent-plugins) is installed. Use its skills'
+guidance, but there is no Flutter/Dart on the host: run every `flutter`/`dart` command through `tools/build.sh`
+(or `tools/build.sh shell`) and `tools/emulator.sh`, never directly. Keep this repo's own choices (no Riverpod,
+go_router, mockito/build_runner or new packages unless the owner asks).
+
 ## Building without a local Flutter SDK (cloud sessions)
 A cloud Claude workspace cannot download Flutter/Dart. Push to `v2` (or `master`); CI runs tests, analyze and
 builds, then pushes the full log to the `ci-logs` branch:
