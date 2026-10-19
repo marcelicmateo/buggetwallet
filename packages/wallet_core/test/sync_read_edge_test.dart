@@ -7,8 +7,6 @@ import 'dart:typed_data';
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
-const String _vaultJsonBug = 'BUG: an empty or garbled vault.json throws a raw FormatException/TypeError instead of a SyncException';
-
 int _clock = 3000000000000;
 
 /// A setting op from a peer, newer than anything local.
@@ -186,7 +184,7 @@ void main() {
         f.writeAsStringSync(text);
         await expectLater(run(), throwsA(isA<SyncException>()), reason: jsonEncode(text));
       }
-    }, skip: _vaultJsonBug);
+    });
 
     test('after a bad vault.json is repaired, the next run works and sends the kept changes', () async {
       await run();
