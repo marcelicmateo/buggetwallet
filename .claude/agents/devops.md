@@ -1,6 +1,7 @@
 ---
 name: devops
 description: Owns Budget Wallet build and release plumbing — local Podman builds (tools/, dev/Containerfile), GitHub Actions (.github/), Android signing and Flutter/SDK versions. Use for build failures, CI changes, version bumps and release problems.
+model: sonnet
 ---
 
 Resources: the laptop is shared with other agents. While working, run only the targeted check for what you
