@@ -1,4 +1,4 @@
-# Budget Wallet — Status (redacted copy, 2026-10-16)
+# Budget Wallet — Status (redacted copy, 2026-10-19)
 
 **Plan (owner, 2026-10-16):** automated tests now → M3 Views → M4 Habits → M5 Polish → web version → cross-device
 sync (works on Android, Linux and web) → **M6 live test** by the owner. Platforms: Linux, Android, web.
@@ -35,6 +35,15 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - 2026-10-16: App-wide logging + perf diagnostics (privacy-redacted, tested); build/test timing history and speedups.
 - 2026-10-16: M3 started: saving or losing per pay period with savings rate and trend line (built + independently tested by agents, reviewed).
 - 2026-10-16: Agent team set up (`.claude/agents/`: feature-builder, test-writer, reviewer, ci-watcher, devops), per-package CLAUDE.md, `tools/ci-status.sh`.
+- 2026-10-19: Stage "automated tests" done: core/importer hardening (~290 core tests), Android emulator + Linux desktop
+  integration tests (8 files, both platforms), desktop release smoke in CI. Bugs found and fixed: 9 core, rent cash
+  threshold as a synced setting, wishlist "24h left", Plan save/stale/negative wait, overflows at 320 dp / text 2.0,
+  amounts mid-row on wide windows, synced settings validation, manual-entry matching (only bank rows the adding
+  device hadn't seen, deleted targets reopen, no sync churn, matching once per sync), delivery panel currency.
+- 2026-10-19: Live mode (`tools/live.sh`: app in Podman on the owner's Wayland desktop, hot reload, screenshots,
+  profile traces) + Dart MCP server in the container (`.mcp.json`). Official `dart-flutter` plugin installed.
+- 2026-10-19: Agents: feature-builder split into core-builder (Opus/high) and ui-builder (Sonnet/high); model and effort
+  set before every orchestration (owner rule).
 
 ## Decisions log
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -66,24 +75,11 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - Merge `v2` into `master` once happy (master also has the Docker dev setup).
 - Make the repo public? Then all-platform builds are free on every push.
 
-## Resume here (if a session stopped mid-stage)
-Stage "automated tests" was in progress on 2026-10-16 with three agents in worktrees under `.claude/worktrees/`
-(branches `worktree-agent-*`): Android emulator UI tests (`tools/emulator.sh test`), Linux desktop tests
-(Xvfb in Podman + release smoke + CI step), core/importer hardening (randomized sync, period invariants, importer
-fuzz, migrations). To resume: `git worktree list`; for each branch check `git log v2..<branch>` and whether its work
-looks finished; merge finished branches into v2 (expect small conflicts in README/CLAUDE.md), then verify once:
-`tools/build.sh test`, `tools/emulator.sh test`, the Linux desktop test, `tools/build.sh apk`; push; `tools/ci-status.sh --wait`.
-Unfinished branches: restart the task from its last commit.
-
-Open bugs to fix next (found by tests 2026-10-17; core bugs 1–9 already fixed on branch worktree-agent-ae40178289afaed6b):
-- Rent cash threshold as a synced setting (`rentCashThreshold`, default 50000) — hardcoded in categories.dart.
-- App A: wishlist "2d 24h left" (`_left()` rounding, wishlist.dart). B: Plan fields stale + Save reverts other settings
-  (`late final f` in PlanScreen). C: negative "Wait (hours)" accepted. D: StatusLabel text can't wrap (common.dart).
-- Overflows at text scale 2.0 / 320 dp: Today "Safe to spend" header row (Eyebrow needs Flexible), Payday checklist
-  header (Heading + Tag), app bar title Row (title + period Chip), onboarding header Row, Today salary banner buttons
-  row, one Wishlist Panel row. UI tests branch worktree-agent-ae419093e9ee405fd (c20b791): layout test's sheet-tap
-  fix committed but not run; full build.sh test + emulator.sh test not run yet.
-- Importer: v1-compatible rounding changed ids of rows with an exact negative half cent (3-decimal amounts, very rare); such rows imported by earlier v2 builds may re-import once as duplicates.
+## Known limits
+- Importer: v1-compatible rounding changed ids of rows with an exact negative half cent (3-decimal amounts, very rare);
+  such rows imported by earlier v2 builds may re-import once as duplicates.
+- Manual-entry matching edge cases with two out-of-sync devices: listed in `packages/wallet_core/CLAUDE.md`
+  ("Known limits"), to solve in the sync redesign.
 
 ## Next
 - Owner installs Android APK + desktop build, creates wallet, imports bank files, sets up Syncthing.
@@ -94,8 +90,7 @@ Open bugs to fix next (found by tests 2026-10-17; core bugs 1–9 already fixed 
   "Save logs…". Owner: after testing, save logs and send the file; summarise with `tools/log-summary.py`.
 - Fixed: Today and the "Salary landed" banner now start the period on the first salary part (same paydays as the chart).
 - Design: 20 Today-screen ideas + directions A/B + desktop on the canvas (docs/design/); owner to pick favourites.
-- Stage in progress: UI tests agent + bug-fix agent (9 core bugs + 4 app bugs) in worktrees; see Resume here.
-- Queued next (owner, 2026-10-19): profile-mode performance test on Linux desktop — `traceAction` around Spending
+- **Next (owner, 2026-10-19):** profile-mode performance test on Linux desktop — `traceAction` around Spending
   scroll + tab switches, save TimelineSummary (missed frames, build/raster p90/max, shader jank) to the run's logs and
   history, keep the trace JSON for DevTools/Perfetto, fail on budget overruns. Debug-mode frame numbers (big_wallet
   test) and emulator raster times (lavapipe) are not representative.
@@ -103,7 +98,4 @@ Open bugs to fix next (found by tests 2026-10-17; core bugs 1–9 already fixed 
   NavigationRail instead of the bottom bar past a width breakpoint, max content width or two columns on wide
   windows (desktop direction on the design canvas), keyboard shortcuts / tooltips / hover for desktop, layout tests
   at desktop and tablet sizes, and web-safe platform checks (`dart:io` `Platform` breaks the web build).
-- Queued (devops, owner 2026-10-19): Dart/Flutter MCP server (`dart mcp-server`, dart-lang/ai) run inside the Podman
-  build container like `tools/build.sh lsp`, registered for Claude Code. Owner installs the `flutter/agent-plugins`
-  Claude Code plugin; then add a CLAUDE.md note: use its skills, but run commands via `tools/build.sh`/`tools/emulator.sh`.
 - Then: merge v2 to master; budget vs actual and top merchants.
