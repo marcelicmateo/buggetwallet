@@ -293,6 +293,6 @@ void main() {
       const max = Hlc(9223372036854775807, 99999, 'peer');
       c.receive(max);
       expect(c.last.compareTo(max), greaterThan(0));
-    }, skip: 'BUG: millis + 1 wraps negative at the 64-bit limit, so the clock goes backwards (only a hostile or broken peer sends it)');
+    });
   });
 }
