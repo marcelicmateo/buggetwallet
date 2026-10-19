@@ -1,16 +1,16 @@
-commit: 140154d13131bc6cd29603efa0eecf8d37d89c28  ref: v2  run: 39267135231
+commit: 6f98db3439197318afb0dfd1a939ba6d8bed037f  ref: v2  run: 39284822886
 
-lint=success(4s) importer=success(13s) core=success(31s) app=success(39s) desktop=success(578s) signing=success apk=success(120s) linux=success(84s) smoke=success(15s)
+lint=success(3s) importer=success(10s) core=success(20s) app=success(34s) desktop=success(485s) signing=success apk=success(92s) linux=success(58s) smoke=success(13s)
 
 step seconds exit
-lint 4 0
-importer 13 0
-core 31 0
-app 39 0
-desktop 578 0
-apk 120 0
-linux 84 0
-smoke 15 0
+lint 3 0
+importer 10 0
+core 20 0
+app 34 0
+desktop 485 0
+apk 92 0
+linux 58 0
+smoke 13 0
 
 version: 0.11.0
 actionlint 1.7.12
@@ -152,16 +152,16 @@ Got dependencies!
 8 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 === format ===
-Formatted 83 files (0 changed) in 0.51 seconds.
+Formatted 83 files (0 changed) in 0.34 seconds.
 === shellcheck ===
 === actionlint ===
 
 step              seconds  result
-pub                   1.8  ok
-format                0.6  ok
-shellcheck            1.7  ok
-actionlint            0.4  ok
-total                 3.6
+pub                   1.5  ok
+format                0.4  ok
+shellcheck            1.1  ok
+actionlint            0.2  ok
+total                 2.6
 pub=ok format=ok shellcheck=ok actionlint=ok
 === importer ===
 === importer ===
@@ -223,30 +223,30 @@ No issues found!
 ::endgroup::
 
 🎉 51 tests passed.
---- importer: 51 tests, 0 failed, total 4.4 s; per test p50 4 ms, p90 75 ms, p99 748 ms, max 748 ms
-      <10 ms    33  ########################################
-    10-50 ms    10  ############
-   50-100 ms     4  #####
-  100-500 ms     3  ####
-     0.5-1 s     1  #
+--- importer: 51 tests, 0 failed, total 3.4 s; per test p50 2 ms, p90 46 ms, p99 482 ms, max 482 ms
+      <10 ms    35  ########################################
+    10-50 ms    12  ##############
+   50-100 ms     0  
+  100-500 ms     4  #####
+     0.5-1 s     0  
        1-5 s     0  
         >5 s     0  
   slowest:
-       748 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents pbz_synthetic.xls
-       426 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.xlsx
-       199 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.csv
-       173 ms  xlsx edge cases a cell far away (XFD1048576) does not blow up memory or time
-        75 ms  pbz_synthetic.xls: format, sizes and counts are logged, no contents
-        75 ms  Revolut .xlsx: completed rows only, fee deducted, text repaired
-        70 ms  revolut_synthetic.xlsx: format, sizes and counts are logged, no contents
-        55 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents random binary, random text and magic-number prefixes
-        45 ms  helpers sparseRows: rows 0..last, each only as long as its last cell, empty rows empty, size capped
+       482 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents pbz_synthetic.xls
+       276 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.xlsx
+       119 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.csv
+       115 ms  xlsx edge cases a cell far away (XFD1048576) does not blow up memory or time
+        48 ms  Revolut .xlsx: completed rows only, fee deducted, text repaired
+        46 ms  helpers sparseRows: rows 0..last, each only as long as its last cell, empty rows empty, size capped
+        45 ms  pbz_synthetic.xls: format, sizes and counts are logged, no contents
+        42 ms  revolut_synthetic.xlsx: format, sizes and counts are logged, no contents
         38 ms  helpers jsRound is JavaScript Math.round: halves towards +infinity, otherwise the same as round()
+        34 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents random binary, random text and magic-number prefixes
 
 step              seconds  result
-importer             13.0  ok
-total                13.0
---- importer: 51 tests, 0 failed, total 4.4 s; per test p50 4 ms, p90 75 ms, p99 748 ms, max 748 ms
+importer              9.4  ok
+total                 9.4
+--- importer: 51 tests, 0 failed, total 3.4 s; per test p50 2 ms, p90 46 ms, p99 482 ms, max 482 ms
 importer=ok
 === core ===
 === core ===
@@ -444,7 +444,7 @@ No issues found!
 ✅ test/logs_impl_test.dart: helpers FINE prints as DEBUG; non-JSON field values print as text
 ✅ test/logs_impl_test.dart: RotatingFileSink timer add() flushes by itself after flushDelay
 ✅ test/logs_impl_test.dart: RotatingFileSink timer lines added after close are dropped; write errors are counted, not thrown
-2026-10-19T14:15:49.996+00:00 SEVERE bw.logs log.writeFailed FileSystemException: Creation failed (OS Error: Not a directory, errno = 20)
+2026-10-19T16:23:26.811+00:00 SEVERE bw.logs log.writeFailed FileSystemException: Creation failed (OS Error: Not a directory, errno = 20)
 ✅ test/logs_impl_test.dart: core logs carry no private data import, edits, reads and period maths
 ✅ test/logs_impl_test.dart: core logs carry no private data sync and vault
 ✅ test/logs_impl_test.dart: core logs carry no private data a failed write logs a SEVERE rollback without the values
@@ -547,35 +547,35 @@ No issues found!
 ::endgroup::
 
 🎉 289 tests passed.
---- core: 289 tests, 0 failed, total 21.0 s; per test p50 2 ms, p90 55 ms, p99 1462 ms, max 7207 ms
-      <10 ms   200  ########################################
-    10-50 ms    57  ###########
-   50-100 ms    20  ####
-  100-500 ms     9  ##
-     0.5-1 s     0  
+--- core: 289 tests, 0 failed, total 14.1 s; per test p50 2 ms, p90 37 ms, p99 804 ms, max 4359 ms
+      <10 ms   210  ########################################
+    10-50 ms    61  ############
+   50-100 ms     9  ##
+  100-500 ms     6  #
+     0.5-1 s     1  
        1-5 s     2  
-        >5 s     1  
+        >5 s     0  
   slowest:
-      7207 ms  random edits on 2-4 devices converge to last-writer-wins (60 seeds from 1016)
-      1935 ms  matching cost a large wallet loads only the bank rows that could replace an open entry
-      1462 ms  applying ops order and duplicates do not matter (property, many random op lists)
-       433 ms  periodSummaries invariants on random wallets contiguous, each live non-transfer row counted once, totals add up, transfers never count (250 wallets)
-       341 ms  outbox and clocks random local writes: outbox in order, clocks = newest op per field, tables = last writer wins
-       282 ms  re-imports never duplicate every synthetic fixture: second import adds nothing, also after edits and deletes
-       207 ms  matching cost a new device reading many sync files matches once per sync run, not once per file
-       207 ms  RotatingFileSink timer add() flushes by itself after flushDelay
-       123 ms  damaged files truncated or bit-flipped files are rejected without changing anything; the repaired file then applies
-       120 ms  computePeriod (safe to spend) identities budget maths on random wallets and days (250 cases)
+      4359 ms  random edits on 2-4 devices converge to last-writer-wins (60 seeds from 1016)
+      1372 ms  matching cost a large wallet loads only the bank rows that could replace an open entry
+       804 ms  applying ops order and duplicates do not matter (property, many random op lists)
+       269 ms  periodSummaries invariants on random wallets contiguous, each live non-transfer row counted once, totals add up, transfers never count (250 wallets)
+       206 ms  RotatingFileSink timer add() flushes by itself after flushDelay
+       190 ms  outbox and clocks random local writes: outbox in order, clocks = newest op per field, tables = last writer wins
+       164 ms  re-imports never duplicate every synthetic fixture: second import adds nothing, also after edits and deletes
+       155 ms  matching cost a new device reading many sync files matches once per sync run, not once per file
+       109 ms  bad values from another device: sync keeps working, only those settings fall back
+        84 ms  damaged files truncated or bit-flipped files are rejected without changing anything; the repaired file then applies
 
 step              seconds  result
-core                 30.3  ok
-total                30.3
---- core: 289 tests, 0 failed, total 21.0 s; per test p50 2 ms, p90 55 ms, p99 1462 ms, max 7207 ms
+core                 20.5  ok
+total                20.5
+--- core: 289 tests, 0 failed, total 14.1 s; per test p50 2 ms, p90 37 ms, p99 804 ms, max 4359 ms
 core=ok
 === app ===
 === app ===
 Analyzing app...                                                
-No issues found! (ran in 10.6s)
+No issues found! (ran in 8.1s)
 
 ::group::✅ Passing tests
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/widget_test.dart: money formatting
@@ -615,30 +615,30 @@ No issues found! (ran in 10.6s)
 ::endgroup::
 
 🎉 34 tests passed.
---- app: 34 tests, 0 failed, total 25.4 s; per test p50 106 ms, p90 906 ms, p99 2358 ms, max 2358 ms
+--- app: 34 tests, 0 failed, total 23.4 s; per test p50 93 ms, p90 732 ms, p99 1694 ms, max 1694 ms
       <10 ms     7  #######################
-    10-50 ms     4  #############
-   50-100 ms     5  #################
+    10-50 ms     6  ####################
+   50-100 ms     4  #############
   100-500 ms    12  ########################################
      0.5-1 s     3  ##########
-       1-5 s     3  ##########
+       1-5 s     2  #######
         >5 s     0  
   slowest:
-      2358 ms  every tab fits 320 dp at text scale 1.0
-      1434 ms  rent cash threshold is editable in Plan and changes categorisation
-      1042 ms  shown on a weekday at 15:00, hidden at 10:00
-       906 ms  every tab fits 320 dp at text scale 2.0
-       813 ms  "ahead of pace" is right-aligned on a wide window
-       568 ms  long text wraps at 320 dp, text scale 1.0
-       297 ms  negative wait hours are rejected (bug C) fixing the value clears the error and saves
-       276 ms  goal and wishlist amounts end at the row end on a wide window
-       274 ms  fields follow the latest settings and Save keeps changes made elsewhere (bug B) editing one field and saving keeps settings changed elsewhere
-       260 ms  fields follow the latest settings and Save keeps changes made elsewhere (bug B) an edit in progress is not overwritten by sync, and Save writes only that field
+      1694 ms  every tab fits 320 dp at text scale 1.0
+      1012 ms  rent cash threshold is editable in Plan and changes categorisation
+       912 ms  every tab fits 320 dp at text scale 2.0
+       732 ms  shown on a weekday at 15:00, hidden at 10:00
+       617 ms  "ahead of pace" is right-aligned on a wide window
+       392 ms  long text wraps at 320 dp, text scale 1.0
+       289 ms  goal and wishlist amounts end at the row end on a wide window
+       222 ms  negative wait hours are rejected (bug C) fixing the value clears the error and saves
+       218 ms  fields follow the latest settings and Save keeps changes made elsewhere (bug B) an edit in progress is not overwritten by sync, and Save writes only that field
+       205 ms  fields follow the latest settings and Save keeps changes made elsewhere (bug B) editing one field and saving keeps settings changed elsewhere
 
 step              seconds  result
-app                  38.9  ok
-total                38.9
---- app: 34 tests, 0 failed, total 25.4 s; per test p50 106 ms, p90 906 ms, p99 2358 ms, max 2358 ms
+app                  33.6  ok
+total                33.7
+--- app: 34 tests, 0 failed, total 23.4 s; per test p50 93 ms, p90 732 ms, p99 1694 ms, max 1694 ms
 app=ok
 === desktop ===
 === desktop-big_wallet ===
@@ -647,27 +647,27 @@ Building Linux application...
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
 00:00 +0: big wallet: ~20k rows over 5 years stay fast
 PERF rows = 23642
-PERF seed_s = 5.0
-PERF seed_importBatch_max_ms = 930
-PERF restart_repo_open_ms = 3
-PERF restart_repo_transactions_ms = 115
-PERF restart_wc_reload_ms = 430
-PERF weekly_import_files_ms = 66
+PERF seed_s = 3.1
+PERF seed_importBatch_max_ms = 552
+PERF restart_repo_open_ms = 2
+PERF restart_repo_transactions_ms = 73
+PERF restart_wc_reload_ms = 245
+PERF weekly_import_files_ms = 50
 PERF weekly_import_parse_ms = 8
-PERF weekly_repo_importBatch_ms = 55
-PERF weekly_wc_reload_ms = 575
-PERF year_import_files_ms = 774
-PERF reimport_import_files_ms = 114
-PERF tabs_wc_period_max_ms = 8
+PERF weekly_repo_importBatch_ms = 39
+PERF weekly_wc_reload_ms = 318
+PERF year_import_files_ms = 472
+PERF reimport_import_files_ms = 70
+PERF tabs_wc_period_max_ms = 6
 PERF tabs_wc_payPeriods_max_ms = 2
-PERF tabs_spending_derive_max_ms = 35
+PERF tabs_spending_derive_max_ms = 40
 PERF months_spending_derive_max_ms = 55
-PERF frames_tabs = {"frames":71,"janky":71,"build_p50_ms":4.4,"build_p90_ms":121.0,"build_p99_ms":143.2,"build_max_ms":143.2,"raster_p50_ms":61.1,"raster_p90_ms":88.3,"raster_p99_ms":113.5,"raster_max_ms":113.5}
-PERF frames_spending_scroll = {"frames":502,"janky":502,"build_p50_ms":1.6,"build_p90_ms":3.3,"build_p99_ms":25.3,"build_max_ms":718.9,"raster_p50_ms":69.6,"raster_p90_ms":79.6,"raster_p99_ms":103.3,"raster_max_ms":118.8}
-PERF mem = {"rss_mb":648.6,"max_rss_mb":708.6}
-01:14 +1: (tearDownAll)
-01:14 +1: All tests passed!
---- desktop-big_wallet: 1 tests, 0 failed, total 112.0 s; per test p50 74109 ms, p90 74109 ms, p99 74109 ms, max 74109 ms
+PERF frames_tabs = {"frames":75,"janky":75,"build_p50_ms":3.6,"build_p90_ms":84.8,"build_p99_ms":134.1,"build_max_ms":134.1,"raster_p50_ms":32.6,"raster_p90_ms":48.6,"raster_p99_ms":74.9,"raster_max_ms":74.9}
+PERF frames_spending_scroll = {"frames":549,"janky":549,"build_p50_ms":1.5,"build_p90_ms":2.8,"build_p99_ms":8.7,"build_max_ms":465.0,"raster_p50_ms":37.8,"raster_p90_ms":48.0,"raster_p99_ms":75.4,"raster_max_ms":102.7}
+PERF mem = {"rss_mb":651.3,"max_rss_mb":697.4}
+01:05 +1: (tearDownAll)
+01:05 +1: All tests passed!
+--- desktop-big_wallet: 1 tests, 0 failed, total 97.4 s; per test p50 65515 ms, p90 65515 ms, p99 65515 ms, max 65515 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -676,19 +676,19 @@ PERF mem = {"rss_mb":648.6,"max_rss_mb":708.6}
        1-5 s     0  
         >5 s     1  ########################################
   slowest:
-     74109 ms  big wallet: ~20k rows over 5 years stay fast
+     65515 ms  big wallet: ~20k rows over 5 years stay fast
 === desktop-flows ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/flows_test.dart
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
 00:00 +0: Add expense: validation, shows in Today and Spending, safe to spend drops by the amount
-00:09 +1: Add expense over the wishlist limit: asks first; put on wishlist, or add anyway
-00:16 +2: Category: once changes one row, always makes a merchant rule for all rows and new imports
-00:29 +3: Delete an added expense; its budget comes back
-00:32 +4: Payday checklist and the "Salary landed" banner
-00:34 +5: (tearDownAll)
-00:35 +5: All tests passed!
---- desktop-flows: 5 tests, 0 failed, total 60.7 s; per test p50 6841 ms, p90 12835 ms, p99 12835 ms, max 12835 ms
+00:07 +1: Add expense over the wishlist limit: asks first; put on wishlist, or add anyway
+00:13 +2: Category: once changes one row, always makes a merchant rule for all rows and new imports
+00:25 +3: Delete an added expense; its budget comes back
+00:27 +4: Payday checklist and the "Salary landed" banner
+00:30 +5: (tearDownAll)
+00:30 +5: All tests passed!
+--- desktop-flows: 5 tests, 0 failed, total 49.6 s; per test p50 5964 ms, p90 11816 ms, p99 11816 ms, max 11816 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -697,20 +697,20 @@ Building Linux application...
        1-5 s     2  ###########################
         >5 s     3  ########################################
   slowest:
-     12835 ms  Category: once changes one row, always makes a merchant rule for all rows and new imports
-      9960 ms  Add expense: validation, shows in Today and Spending, safe to spend drops by the amount
-      6841 ms  Add expense over the wishlist limit: asks first; put on wishlist, or add anyway
-      2871 ms  Delete an added expense; its budget comes back
-      2479 ms  Payday checklist and the "Salary landed" banner
+     11816 ms  Category: once changes one row, always makes a merchant rule for all rows and new imports
+      7428 ms  Add expense: validation, shows in Today and Spending, safe to spend drops by the amount
+      5964 ms  Add expense over the wishlist limit: asks first; put on wishlist, or add anyway
+      2635 ms  Payday checklist and the "Salary landed" banner
+      2466 ms  Delete an added expense; its budget comes back
 === desktop-import ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/import_test.dart
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
 00:00 +0: PBZ .xls, Revolut .xlsx and .csv: result lines, transactions, re-import adds nothing
-00:06 +1: A current-month Revolut CSV: Spending and Today show it; an added expense is matched, not doubled
-00:09 +2: (tearDownAll)
-00:09 +2: All tests passed!
---- desktop-import: 2 tests, 0 failed, total 35.7 s; per test p50 3528 ms, p90 6416 ms, p99 6416 ms, max 6416 ms
+00:05 +1: A current-month Revolut CSV: Spending and Today show it; an added expense is matched, not doubled
+00:08 +2: (tearDownAll)
+00:08 +2: All tests passed!
+--- desktop-import: 2 tests, 0 failed, total 27.0 s; per test p50 3247 ms, p90 5024 ms, p99 5024 ms, max 5024 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -719,8 +719,8 @@ Building Linux application...
        1-5 s     1  ########################################
         >5 s     1  ########################################
   slowest:
-      6416 ms  PBZ .xls, Revolut .xlsx and .csv: result lines, transactions, re-import adds nothing
-      3528 ms  A current-month Revolut CSV: Spending and Today show it; an added expense is matched, not doubled
+      5024 ms  PBZ .xls, Revolut .xlsx and .csv: result lines, transactions, re-import adds nothing
+      3247 ms  A current-month Revolut CSV: Spending and Today show it; an added expense is matched, not doubled
 === desktop-layout ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/layout_test.dart
 Building Linux application...                                   
@@ -736,7 +736,7 @@ layout dark: goals
 layout dark: plan
 layout dark: tx-sheet
 layout dark: goal-sheet
-00:26 +1: layout: text130
+00:22 +1: layout: text130
 layout text130: media Size(1280.0, 720.0), render view Size(1280.0, 720.0)
 layout text130: onboarding
 layout text130: today
@@ -747,7 +747,7 @@ layout text130: goals
 layout text130: plan
 layout text130: tx-sheet
 layout text130: goal-sheet
-00:50 +2: layout: text200
+00:44 +2: layout: text200
 layout text200: media Size(1280.0, 720.0), render view Size(1280.0, 720.0)
 layout text200: onboarding
 layout text200: today
@@ -758,7 +758,7 @@ layout text200: goals
 layout text200: plan
 layout text200: tx-sheet
 layout text200: goal-sheet
-01:20 +3: layout: small
+01:09 +3: layout: small
 layout small: media Size(320.0, 640.0), render view Size(320.0, 640.0)
 layout small: onboarding
 layout small: today
@@ -769,7 +769,7 @@ layout small: goals
 layout small: plan
 layout small: tx-sheet
 layout small: goal-sheet
-01:38 +4: layout: small-dark-text200
+01:28 +4: layout: small-dark-text200
 layout small-dark-text200: media Size(320.0, 640.0), render view Size(320.0, 640.0)
 layout small-dark-text200: onboarding
 layout small-dark-text200: today
@@ -780,9 +780,9 @@ layout small-dark-text200: goals
 layout small-dark-text200: plan
 layout small-dark-text200: tx-sheet
 layout small-dark-text200: goal-sheet
-02:06 +5: (tearDownAll)
-02:06 +5: All tests passed!
---- desktop-layout: 5 tests, 0 failed, total 152.8 s; per test p50 26650 ms, p90 29426 ms, p99 29426 ms, max 29426 ms
+01:55 +5: (tearDownAll)
+01:56 +5: All tests passed!
+--- desktop-layout: 5 tests, 0 failed, total 134.3 s; per test p50 22950 ms, p90 27923 ms, p99 27923 ms, max 27923 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -791,20 +791,20 @@ layout small-dark-text200: goal-sheet
        1-5 s     0  
         >5 s     5  ########################################
   slowest:
-     29426 ms  layout: text200
-     28072 ms  layout: small-dark-text200
-     26650 ms  layout: dark
-     24251 ms  layout: text130
-     18466 ms  layout: small
+     27923 ms  layout: small-dark-text200
+     25649 ms  layout: text200
+     22950 ms  layout: dark
+     21160 ms  layout: text130
+     18292 ms  layout: small
 === desktop-onboarding ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/onboarding_test.dart
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
 00:00 +0: Start a new wallet: key stored, default goals, salary banner
-00:04 +1: Join: a wrong key is refused, the right key joins
-00:06 +2: (tearDownAll)
-00:06 +2: All tests passed!
---- desktop-onboarding: 2 tests, 0 failed, total 32.0 s; per test p50 1394 ms, p90 4653 ms, p99 4653 ms, max 4653 ms
+00:03 +1: Join: a wrong key is refused, the right key joins
+00:04 +2: (tearDownAll)
+00:04 +2: All tests passed!
+--- desktop-onboarding: 2 tests, 0 failed, total 23.0 s; per test p50 1242 ms, p90 3632 ms, p99 3632 ms, max 3632 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -813,18 +813,18 @@ Building Linux application...
        1-5 s     2  ########################################
         >5 s     0  
   slowest:
-      4653 ms  Start a new wallet: key stored, default goals, salary banner
-      1394 ms  Join: a wrong key is refused, the right key joins
+      3632 ms  Start a new wallet: key stored, default goals, salary banner
+      1242 ms  Join: a wrong key is refused, the right key joins
 === desktop-plan ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/plan_test.dart
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
 00:00 +0: Plan numbers: bad input is refused, good input is saved and used everywhere
-00:35 +1: Start new month from Plan: cancel, today, another day
-00:42 +2: Sync folder, wallet key, Diagnostics: level, log size, logs to the sync folder, clear
-00:56 +3: (tearDownAll)
-00:56 +3: All tests passed!
---- desktop-plan: 3 tests, 0 failed, total 82.4 s; per test p50 13746 ms, p90 35563 ms, p99 35563 ms, max 35563 ms
+00:32 +1: Start new month from Plan: cancel, today, another day
+00:39 +2: Sync folder, wallet key, Diagnostics: level, log size, logs to the sync folder, clear
+00:52 +3: (tearDownAll)
+00:52 +3: All tests passed!
+--- desktop-plan: 3 tests, 0 failed, total 70.0 s; per test p50 12772 ms, p90 32635 ms, p99 32635 ms, max 32635 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -833,203 +833,198 @@ Building Linux application...
        1-5 s     0  
         >5 s     3  ########################################
   slowest:
-     35563 ms  Plan numbers: bad input is refused, good input is saved and used everywhere
-     13746 ms  Sync folder, wallet key, Diagnostics: level, log size, logs to the sync folder, clear
-      7367 ms  Start new month from Plan: cancel, today, another day
+     32635 ms  Plan numbers: bad input is refused, good input is saved and used everywhere
+     12772 ms  Sync folder, wallet key, Diagnostics: level, log size, logs to the sync folder, clear
+      6682 ms  Start new month from Plan: cancel, today, another day
 === desktop-screens ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/screens_test.dart
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
 00:00 +0: every tab with a synthetic wallet
-2026-10-19T14:25:05.769+00:00 INFO bw.app app.info {"version":"2.0.0+1","mode":"debug","platform":"linux","os":"Linux 6.17.0-1022-azure #22-Ubuntu SMP Mon Jul 27 17:24:03 UTC 2026","flutter":"3.47.7","dart":"3.13.5","cpus":2,"locale":"C","screen":"1280x720@1.0","logLevel":"ALL"}
-2026-10-19T14:25:05.774+00:00 INFO bw.app app.start {"phase":"logs","ms":72}
-2026-10-19T14:25:05.817+00:00 DEBUG bw.perf repo.open {"ms":40,"file":true,"new":true,"tx":0,"outbox":0}
-2026-10-19T14:25:05.818+00:00 INFO bw.app app.start {"phase":"db","ms":42}
-2026-10-19T14:25:05.822+00:00 DEBUG bw.perf key.read {"ms":2,"store":"file","found":false}
-2026-10-19T14:25:05.822+00:00 INFO bw.app app.start {"phase":"key","ms":3,"found":false}
-2026-10-19T14:25:05.828+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-19T14:25:05.829+00:00 DEBUG bw.perf repo.transactions {"ms":0,"rows":0,"live":0}
-2026-10-19T14:25:05.830+00:00 DEBUG bw.perf wc.categorize {"ms":0,"tx":0}
-2026-10-19T14:25:05.831+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
-2026-10-19T14:25:05.832+00:00 DEBUG bw.perf wc.reload {"ms":7,"tx":0,"goals":0,"wish":0}
-2026-10-19T14:25:05.832+00:00 INFO bw.app app.start {"phase":"reload","ms":9,"tx":0,"syncFolder":false,"logLevel":"all"}
-2026-10-19T14:25:05.834+00:00 INFO bw.app app.start {"phase":"ready","ms":132}
-2026-10-19T14:25:05.845+00:00 FINER bw.sync sync.skip {"trigger":"startup","reason":"noFolder"}
-2026-10-19T14:25:05.903+00:00 DEBUG bw.perf key.write {"ms":66,"store":"file"}
-2026-10-19T14:25:05.904+00:00 INFO bw.app wallet.create {"defaultGoals":true}
-2026-10-19T14:25:05.913+00:00 DEBUG bw.perf repo.write {"ms":7,"ops":1,"entities":"goal"}
-2026-10-19T14:25:05.917+00:00 DEBUG bw.perf repo.write {"ms":3,"ops":1,"entities":"goal"}
-2026-10-19T14:25:05.918+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-19T14:25:05.919+00:00 DEBUG bw.perf repo.transactions {"ms":0,"rows":0,"live":0}
-2026-10-19T14:25:05.919+00:00 DEBUG bw.perf wc.categorize {"ms":0,"tx":0}
-2026-10-19T14:25:05.920+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
-2026-10-19T14:25:05.921+00:00 DEBUG bw.perf wc.reload {"ms":3,"tx":0,"goals":2,"wish":0}
-2026-10-19T14:25:06.080+00:00 DEBUG bw.perf repo.write {"ms":140,"ops":191,"entities":"tx"}
-2026-10-19T14:25:06.083+00:00 DEBUG bw.perf repo.match {"ms":0,"manual":0,"open":0,"bank":0,"added":0}
-2026-10-19T14:25:06.083+00:00 DEBUG bw.perf repo.importBatch {"ms":147,"source":"pbz","rows":191,"added":191,"dupes":0,"matched":0,"skipped":0}
-2026-10-19T14:25:06.086+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":5,"entities":"setting"}
-2026-10-19T14:25:06.086+00:00 INFO bw.app settings.changed {"keys":"salary,rent,loan,subs,paydayDay"}
-2026-10-19T14:25:06.089+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-19T14:25:06.095+00:00 DEBUG bw.perf repo.transactions {"ms":5,"rows":191,"live":191}
-2026-10-19T14:25:06.106+00:00 DEBUG bw.perf wc.categorize {"ms":9,"tx":191}
-2026-10-19T14:25:06.106+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
-2026-10-19T14:25:06.108+00:00 DEBUG bw.perf wc.reload {"ms":21,"tx":191,"goals":2,"wish":0}
-2026-10-19T14:25:06.405+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:06.406+00:00 DEBUG bw.perf wc.period {"ms":8}
-2026-10-19T14:25:06.444+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:06.444+00:00 DEBUG bw.perf wc.period {"ms":1}
-2026-10-19T14:25:06.492+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
-2026-10-19T14:25:06.492+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
-2026-10-19T14:25:06.493+00:00 DEBUG bw.perf wc.payPeriods {"ms":2,"count":12}
-2026-10-19T14:25:06.496+00:00 DEBUG bw.perf spending.derive {"ms":7,"month":"2026-10","tx":191}
-2026-10-19T14:25:06.511+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:06.511+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:06.520+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:06.521+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:07.413+00:00 DEBUG bw.mem mem {"rss_mb":486.6,"max_rss_mb":495.9}
-2026-10-19T14:25:07.588+00:00 WARNING bw.frames frames.slow {"build_ms":1231.3,"raster_ms":92.1,"tab":"today"}
-2026-10-19T14:25:07.944+00:00 INFO bw.nav nav.tab {"from":"today","to":"spending","via":"bar"}
-2026-10-19T14:25:07.946+00:00 INFO bw.frames frames.window {"frames":2,"janky":2,"build_p50_ms":48.6,"build_p90_ms":1231.3,"build_p99_ms":1231.3,"build_max_ms":1231.3,"raster_p50_ms":70.4,"raster_p90_ms":92.1,"raster_p99_ms":92.1,"raster_max_ms":92.1,"tab":"today"}
-2026-10-19T14:25:07.964+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:07.965+00:00 DEBUG bw.perf wc.period {"ms":1}
-2026-10-19T14:25:07.974+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:07.974+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:08.004+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
-2026-10-19T14:25:08.005+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
-2026-10-19T14:25:08.005+00:00 DEBUG bw.perf wc.payPeriods {"ms":1,"count":12}
-2026-10-19T14:25:08.005+00:00 DEBUG bw.perf spending.derive {"ms":2,"month":"2026-10","tx":191}
-2026-10-19T14:25:08.052+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:08.053+00:00 DEBUG bw.perf wc.period {"ms":1}
-2026-10-19T14:25:08.061+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:08.061+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:08.405+00:00 WARNING bw.frames frames.slow {"build_ms":190.1,"raster_ms":78.7,"tab":"spending"}
-2026-10-19T14:25:08.803+00:00 INFO bw.nav nav.tab {"from":"spending","to":"wishlist","via":"bar"}
-2026-10-19T14:25:08.803+00:00 INFO bw.frames frames.window {"frames":6,"janky":6,"build_p50_ms":5.9,"build_p90_ms":190.1,"build_p99_ms":190.1,"build_max_ms":190.1,"raster_p50_ms":72.4,"raster_p90_ms":86.5,"raster_p99_ms":86.5,"raster_max_ms":86.5,"tab":"spending"}
-2026-10-19T14:25:08.813+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:08.813+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:08.818+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:08.818+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:08.832+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
-2026-10-19T14:25:08.833+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
-2026-10-19T14:25:08.833+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
-2026-10-19T14:25:08.834+00:00 DEBUG bw.perf spending.derive {"ms":2,"month":"2026-10","tx":191}
-2026-10-19T14:25:08.857+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:08.858+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:08.863+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:08.863+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:09.129+00:00 FINER bw.sync sync.skip {"trigger":"change","reason":"noFolder"}
-2026-10-19T14:25:09.220+00:00 WARNING bw.frames frames.slow {"build_ms":128.2,"raster_ms":71.4,"tab":"wishlist"}
-2026-10-19T14:25:09.221+00:00 WARNING bw.frames frames.slow {"build_ms":5.1,"raster_ms":108.4,"tab":"wishlist"}
-2026-10-19T14:25:09.581+00:00 INFO bw.nav nav.tab {"from":"wishlist","to":"goals","via":"bar"}
-2026-10-19T14:25:09.581+00:00 INFO bw.frames frames.window {"frames":6,"janky":6,"build_p50_ms":5.1,"build_p90_ms":128.2,"build_p99_ms":128.2,"build_max_ms":128.2,"raster_p50_ms":70.7,"raster_p90_ms":108.4,"raster_p99_ms":108.4,"raster_max_ms":108.4,"tab":"wishlist"}
-2026-10-19T14:25:09.596+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:09.596+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:09.598+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:09.598+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:09.608+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
-2026-10-19T14:25:09.609+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
-2026-10-19T14:25:09.609+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
-2026-10-19T14:25:09.609+00:00 DEBUG bw.perf spending.derive {"ms":1,"month":"2026-10","tx":191}
-2026-10-19T14:25:09.633+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:09.634+00:00 DEBUG bw.perf wc.period {"ms":1}
-2026-10-19T14:25:09.641+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:09.641+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:09.879+00:00 WARNING bw.frames frames.slow {"build_ms":119.6,"raster_ms":59.4,"tab":"goals"}
-2026-10-19T14:25:10.303+00:00 INFO bw.nav nav.tab {"from":"goals","to":"plan","via":"bar"}
-2026-10-19T14:25:10.303+00:00 INFO bw.frames frames.window {"frames":6,"janky":6,"build_p50_ms":2.7,"build_p90_ms":119.6,"build_p99_ms":119.6,"build_max_ms":119.6,"raster_p50_ms":35.1,"raster_p90_ms":70.8,"raster_p99_ms":70.8,"raster_max_ms":70.8,"tab":"goals"}
-2026-10-19T14:25:10.312+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:10.312+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:10.314+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:10.314+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:10.324+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
-2026-10-19T14:25:10.324+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
-2026-10-19T14:25:10.325+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
-2026-10-19T14:25:10.325+00:00 DEBUG bw.perf spending.derive {"ms":1,"month":"2026-10","tx":191}
-2026-10-19T14:25:10.345+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:10.345+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:10.349+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:10.349+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:12.004+00:00 INFO bw.app log.level {"from":"all","to":"info"}
-2026-10-19T14:25:12.659+00:00 INFO bw.app log.level {"from":"info","to":"all"}
-2026-10-19T14:25:12.680+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:12.680+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:12.682+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:12.682+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:12.704+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
-2026-10-19T14:25:12.706+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
-2026-10-19T14:25:12.706+00:00 DEBUG bw.perf wc.payPeriods {"ms":2,"count":12}
-2026-10-19T14:25:12.707+00:00 DEBUG bw.perf spending.derive {"ms":3,"month":"2026-10","tx":191}
-2026-10-19T14:25:12.729+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:12.729+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:12.734+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-19T14:25:12.734+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:12.888+00:00 WARNING bw.frames frames.slow {"build_ms":103.1,"raster_ms":91.2,"tab":"plan"}
-2026-10-19T14:25:13.197+00:00 DEBUG bw.perf repo.write {"ms":2,"ops":1,"entities":"tx"}
-2026-10-19T14:25:13.198+00:00 INFO bw.app expense.add {"category":"Home & tools"}
-2026-10-19T14:25:13.199+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-19T14:25:13.210+00:00 DEBUG bw.perf repo.transactions {"ms":10,"rows":192,"live":192}
-2026-10-19T14:25:13.222+00:00 DEBUG bw.perf wc.categorize {"ms":11,"tx":192}
-2026-10-19T14:25:13.224+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
-2026-10-19T14:25:13.225+00:00 DEBUG bw.perf wc.reload {"ms":25,"tx":192,"goals":2,"wish":0}
-2026-10-19T14:25:13.230+00:00 DEBUG bw.perf repo.write {"ms":5,"ops":1,"entities":"wish"}
-2026-10-19T14:25:13.233+00:00 INFO bw.app wish.add {"status":"waiting"}
-2026-10-19T14:25:13.234+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-19T14:25:13.242+00:00 DEBUG bw.perf repo.transactions {"ms":8,"rows":192,"live":192}
-2026-10-19T14:25:13.249+00:00 DEBUG bw.perf wc.categorize {"ms":6,"tx":192}
-2026-10-19T14:25:13.250+00:00 DEBUG bw.perf wc.goalsWish {"ms":1}
-2026-10-19T14:25:13.250+00:00 DEBUG bw.perf wc.reload {"ms":16,"tx":192,"goals":2,"wish":1}
-2026-10-19T14:25:13.253+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"goal"}
-2026-10-19T14:25:13.253+00:00 INFO bw.app goal.save {"new":true}
-2026-10-19T14:25:13.254+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-19T14:25:13.258+00:00 DEBUG bw.perf repo.transactions {"ms":4,"rows":192,"live":192}
-2026-10-19T14:25:13.264+00:00 DEBUG bw.perf wc.categorize {"ms":5,"tx":192}
-2026-10-19T14:25:13.265+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
-2026-10-19T14:25:13.265+00:00 DEBUG bw.perf wc.reload {"ms":11,"tx":192,"goals":3,"wish":1}
-2026-10-19T14:25:13.269+00:00 DEBUG bw.importer importer.detect {"format":"csv","bytes":189}
-2026-10-19T14:25:13.271+00:00 DEBUG bw.importer.csv csv.read {"chars":189,"sep":",","rows":2,"unclosedQuote":false}
-2026-10-19T14:25:13.274+00:00 INFO bw.importer importer.parse {"format":"csv","source":"revolut","rows":2,"txs":1,"skipped":0,"invalid":0,"readMs":2,"ms":5}
-2026-10-19T14:25:13.274+00:00 DEBUG bw.perf import.parse {"ms":6,"file":0,"ext":"csv","bytes":189}
-2026-10-19T14:25:13.276+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"tx"}
-2026-10-19T14:25:13.278+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-19T14:25:13.281+00:00 DEBUG bw.perf repo.write {"ms":0,"ops":2,"entities":"tx"}
-2026-10-19T14:25:13.282+00:00 DEBUG bw.perf repo.match {"ms":4,"manual":1,"open":1,"bank":1,"added":1,"unmatched":0,"categories":1}
-2026-10-19T14:25:13.282+00:00 DEBUG bw.perf repo.importBatch {"ms":7,"source":"revolut","rows":1,"added":1,"dupes":0,"matched":1,"skipped":0}
-2026-10-19T14:25:13.282+00:00 DEBUG bw.perf import.file {"ms":14,"file":0,"ext":"csv","bytes":189,"source":"revolut","rows":1,"added":1,"dupes":0,"matched":1,"skipped":0,"invalid":0}
-2026-10-19T14:25:13.282+00:00 DEBUG bw.perf import.files {"ms":14,"files":1,"ok":1}
-2026-10-19T14:25:13.283+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-19T14:25:13.287+00:00 DEBUG bw.perf repo.transactions {"ms":3,"rows":193,"live":192}
-2026-10-19T14:25:13.292+00:00 DEBUG bw.perf wc.categorize {"ms":5,"tx":192}
-2026-10-19T14:25:13.293+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
-2026-10-19T14:25:13.294+00:00 DEBUG bw.perf wc.reload {"ms":11,"tx":192,"goals":3,"wish":1}
-2026-10-19T14:25:13.296+00:00 INFO bw.app category.change {"from":"Home & tools","to":"Shopping","always":true,"source":"revolut"}
-2026-10-19T14:25:13.297+00:00 DEBUG bw.perf repo.write {"ms":0,"ops":1,"entities":"rule"}
-2026-10-19T14:25:13.298+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"tx"}
-2026-10-19T14:25:13.299+00:00 DEBUG bw.categories categories.build {"rules":1,"patterns":0,"patternsUsed":0}
-2026-10-19T14:25:13.302+00:00 DEBUG bw.perf repo.transactions {"ms":2,"rows":193,"live":192}
-2026-10-19T14:25:13.307+00:00 DEBUG bw.perf wc.categorize {"ms":5,"tx":192}
-2026-10-19T14:25:13.307+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
-2026-10-19T14:25:13.308+00:00 DEBUG bw.perf wc.reload {"ms":9,"tx":192,"goals":3,"wish":1}
-2026-10-19T14:25:13.315+00:00 INFO bw.nav nav.tab {"from":"plan","to":"today","via":"bar"}
-2026-10-19T14:25:13.315+00:00 INFO bw.frames frames.window {"frames":26,"janky":26,"build_p50_ms":4.6,"build_p90_ms":79.7,"build_p99_ms":103.1,"build_max_ms":103.1,"raster_p50_ms":72.1,"raster_p90_ms":95.9,"raster_p99_ms":96.7,"raster_max_ms":96.7,"tab":"plan"}
-2026-10-19T14:25:13.346+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":14,"incomeMode":"planned","goals":3}
-2026-10-19T14:25:13.347+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:13.350+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":14,"incomeMode":"planned","goals":3}
-2026-10-19T14:25:13.350+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:13.363+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
-2026-10-19T14:25:13.363+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":192}
-2026-10-19T14:25:13.363+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
-2026-10-19T14:25:13.364+00:00 DEBUG bw.perf spending.derive {"ms":2,"month":"2026-10","tx":192}
-2026-10-19T14:25:13.387+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":14,"incomeMode":"planned","goals":3}
-2026-10-19T14:25:13.388+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:13.395+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":14,"incomeMode":"planned","goals":3}
-2026-10-19T14:25:13.396+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-19T14:25:13.775+00:00 WARNING bw.frames frames.slow {"build_ms":105.3,"raster_ms":84.4,"tab":"today"}
-2026-10-19T14:25:16.309+00:00 FINER bw.sync sync.skip {"trigger":"change","reason":"noFolder"}
-2026-10-19T14:25:17.249+00:00 INFO bw.frames frames.window {"frames":26,"janky":26,"build_p50_ms":0.5,"build_p90_ms":6.8,"build_p99_ms":105.3,"build_max_ms":105.3,"raster_p50_ms":47.3,"raster_p90_ms":72.7,"raster_p99_ms":89.1,"raster_max_ms":89.1,"tab":"today"}
-2026-10-19T14:25:17.249+00:00 DEBUG bw.mem mem {"rss_mb":593.5,"max_rss_mb":612.5}
-00:11 +1: (tearDownAll)
-00:11 +1: All tests passed!
---- desktop-screens: 1 tests, 0 failed, total 37.7 s; per test p50 11856 ms, p90 11856 ms, p99 11856 ms, max 11856 ms
+2026-10-19T16:31:12.602+00:00 INFO bw.app app.info {"version":"2.0.0+1","mode":"debug","platform":"linux","os":"Linux 6.17.0-1022-azure #22-Ubuntu SMP Mon Jul 27 17:24:03 UTC 2026","flutter":"3.47.7","dart":"3.13.5","cpus":2,"locale":"C","screen":"1280x720@1.0","logLevel":"ALL"}
+2026-10-19T16:31:12.605+00:00 INFO bw.app app.start {"phase":"logs","ms":42}
+2026-10-19T16:31:12.640+00:00 DEBUG bw.perf repo.open {"ms":25,"file":true,"new":true,"tx":0,"outbox":0}
+2026-10-19T16:31:12.641+00:00 INFO bw.app app.start {"phase":"db","ms":34}
+2026-10-19T16:31:12.643+00:00 DEBUG bw.perf key.read {"ms":1,"store":"file","found":false}
+2026-10-19T16:31:12.643+00:00 INFO bw.app app.start {"phase":"key","ms":2,"found":false}
+2026-10-19T16:31:12.646+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T16:31:12.647+00:00 DEBUG bw.perf repo.transactions {"ms":0,"rows":0,"live":0}
+2026-10-19T16:31:12.647+00:00 DEBUG bw.perf wc.categorize {"ms":0,"tx":0}
+2026-10-19T16:31:12.648+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T16:31:12.648+00:00 DEBUG bw.perf wc.reload {"ms":4,"tx":0,"goals":0,"wish":0}
+2026-10-19T16:31:12.649+00:00 INFO bw.app app.start {"phase":"reload","ms":5,"tx":0,"syncFolder":false,"logLevel":"all"}
+2026-10-19T16:31:12.650+00:00 INFO bw.app app.start {"phase":"ready","ms":86}
+2026-10-19T16:31:12.657+00:00 FINER bw.sync sync.skip {"trigger":"startup","reason":"noFolder"}
+2026-10-19T16:31:12.698+00:00 DEBUG bw.perf key.write {"ms":47,"store":"file"}
+2026-10-19T16:31:12.700+00:00 INFO bw.app wallet.create {"defaultGoals":true}
+2026-10-19T16:31:12.707+00:00 DEBUG bw.perf repo.write {"ms":5,"ops":1,"entities":"goal"}
+2026-10-19T16:31:12.709+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"goal"}
+2026-10-19T16:31:12.709+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T16:31:12.709+00:00 DEBUG bw.perf repo.transactions {"ms":0,"rows":0,"live":0}
+2026-10-19T16:31:12.710+00:00 DEBUG bw.perf wc.categorize {"ms":0,"tx":0}
+2026-10-19T16:31:12.710+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T16:31:12.710+00:00 DEBUG bw.perf wc.reload {"ms":1,"tx":0,"goals":2,"wish":0}
+2026-10-19T16:31:12.795+00:00 DEBUG bw.perf repo.write {"ms":73,"ops":191,"entities":"tx"}
+2026-10-19T16:31:12.797+00:00 DEBUG bw.perf repo.match {"ms":0,"manual":0,"open":0,"bank":0,"added":0}
+2026-10-19T16:31:12.797+00:00 DEBUG bw.perf repo.importBatch {"ms":77,"source":"pbz","rows":191,"added":191,"dupes":0,"matched":0,"skipped":0}
+2026-10-19T16:31:12.799+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":5,"entities":"setting"}
+2026-10-19T16:31:12.799+00:00 INFO bw.app settings.changed {"keys":"salary,rent,loan,subs,paydayDay"}
+2026-10-19T16:31:12.801+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T16:31:12.806+00:00 DEBUG bw.perf repo.transactions {"ms":4,"rows":191,"live":191}
+2026-10-19T16:31:12.811+00:00 DEBUG bw.perf wc.categorize {"ms":5,"tx":191}
+2026-10-19T16:31:12.812+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T16:31:12.812+00:00 DEBUG bw.perf wc.reload {"ms":12,"tx":191,"goals":2,"wish":0}
+2026-10-19T16:31:12.986+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:12.987+00:00 DEBUG bw.perf wc.period {"ms":4}
+2026-10-19T16:31:13.010+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:13.010+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:13.041+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T16:31:13.043+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
+2026-10-19T16:31:13.043+00:00 DEBUG bw.perf wc.payPeriods {"ms":2,"count":12}
+2026-10-19T16:31:13.045+00:00 DEBUG bw.perf spending.derive {"ms":5,"month":"2026-10","tx":191}
+2026-10-19T16:31:13.056+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:13.056+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:13.063+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:13.063+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:13.672+00:00 DEBUG bw.mem mem {"rss_mb":486.2,"max_rss_mb":492.7}
+2026-10-19T16:31:13.772+00:00 WARNING bw.frames frames.slow {"build_ms":806.3,"raster_ms":47.9,"tab":"today"}
+2026-10-19T16:31:14.061+00:00 INFO bw.nav nav.tab {"from":"today","to":"spending","via":"bar"}
+2026-10-19T16:31:14.062+00:00 INFO bw.frames frames.window {"frames":2,"janky":2,"build_p50_ms":29.6,"build_p90_ms":806.3,"build_p99_ms":806.3,"build_max_ms":806.3,"raster_p50_ms":36.1,"raster_p90_ms":47.9,"raster_p99_ms":47.9,"raster_max_ms":47.9,"tab":"today"}
+2026-10-19T16:31:14.076+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:14.076+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:14.083+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:14.083+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:14.102+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T16:31:14.102+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
+2026-10-19T16:31:14.102+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
+2026-10-19T16:31:14.103+00:00 DEBUG bw.perf spending.derive {"ms":1,"month":"2026-10","tx":191}
+2026-10-19T16:31:14.134+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:14.134+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:14.140+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:14.140+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:14.342+00:00 WARNING bw.frames frames.slow {"build_ms":122.7,"raster_ms":41.3,"tab":"spending"}
+2026-10-19T16:31:14.717+00:00 INFO bw.nav nav.tab {"from":"spending","to":"wishlist","via":"bar"}
+2026-10-19T16:31:14.717+00:00 INFO bw.frames frames.window {"frames":5,"janky":5,"build_p50_ms":6.4,"build_p90_ms":122.7,"build_p99_ms":122.7,"build_max_ms":122.7,"raster_p50_ms":40.2,"raster_p90_ms":58.7,"raster_p99_ms":58.7,"raster_max_ms":58.7,"tab":"spending"}
+2026-10-19T16:31:14.727+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:14.727+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:14.728+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:14.729+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:14.740+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T16:31:14.741+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
+2026-10-19T16:31:14.741+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
+2026-10-19T16:31:14.742+00:00 DEBUG bw.perf spending.derive {"ms":1,"month":"2026-10","tx":191}
+2026-10-19T16:31:14.758+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:14.758+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:14.762+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:14.762+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:15.446+00:00 INFO bw.nav nav.tab {"from":"wishlist","to":"goals","via":"bar"}
+2026-10-19T16:31:15.446+00:00 INFO bw.frames frames.window {"frames":8,"janky":8,"build_p50_ms":3.0,"build_p90_ms":83.8,"build_p99_ms":83.8,"build_max_ms":83.8,"raster_p50_ms":29.5,"raster_p90_ms":52.0,"raster_p99_ms":52.0,"raster_max_ms":52.0,"tab":"wishlist"}
+2026-10-19T16:31:15.460+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:15.460+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:15.462+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:15.462+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:15.471+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T16:31:15.471+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
+2026-10-19T16:31:15.471+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
+2026-10-19T16:31:15.472+00:00 DEBUG bw.perf spending.derive {"ms":1,"month":"2026-10","tx":191}
+2026-10-19T16:31:15.489+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:15.489+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:15.494+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:15.494+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:15.815+00:00 FINER bw.sync sync.skip {"trigger":"change","reason":"noFolder"}
+2026-10-19T16:31:16.141+00:00 INFO bw.nav nav.tab {"from":"goals","to":"plan","via":"bar"}
+2026-10-19T16:31:16.142+00:00 INFO bw.frames frames.window {"frames":7,"janky":7,"build_p50_ms":2.5,"build_p90_ms":89.1,"build_p99_ms":89.1,"build_max_ms":89.1,"raster_p50_ms":21.3,"raster_p90_ms":34.0,"raster_p99_ms":34.0,"raster_max_ms":34.0,"tab":"goals"}
+2026-10-19T16:31:16.159+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:16.160+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:16.162+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:16.162+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:16.169+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T16:31:16.170+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
+2026-10-19T16:31:16.170+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
+2026-10-19T16:31:16.170+00:00 DEBUG bw.perf spending.derive {"ms":1,"month":"2026-10","tx":191}
+2026-10-19T16:31:16.185+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:16.186+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:16.190+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:16.190+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:17.505+00:00 INFO bw.app log.level {"from":"all","to":"info"}
+2026-10-19T16:31:18.289+00:00 INFO bw.app log.level {"from":"info","to":"all"}
+2026-10-19T16:31:18.319+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:18.319+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:18.321+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:18.321+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:18.328+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T16:31:18.328+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
+2026-10-19T16:31:18.328+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
+2026-10-19T16:31:18.329+00:00 DEBUG bw.perf spending.derive {"ms":0,"month":"2026-10","tx":191}
+2026-10-19T16:31:18.341+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:18.343+00:00 DEBUG bw.perf wc.period {"ms":1}
+2026-10-19T16:31:18.347+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-19T16:31:18.347+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:18.702+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"tx"}
+2026-10-19T16:31:18.702+00:00 INFO bw.app expense.add {"category":"Home & tools"}
+2026-10-19T16:31:18.703+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T16:31:18.711+00:00 DEBUG bw.perf repo.transactions {"ms":6,"rows":192,"live":192}
+2026-10-19T16:31:18.719+00:00 DEBUG bw.perf wc.categorize {"ms":8,"tx":192}
+2026-10-19T16:31:18.720+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T16:31:18.720+00:00 DEBUG bw.perf wc.reload {"ms":17,"tx":192,"goals":2,"wish":0}
+2026-10-19T16:31:18.728+00:00 DEBUG bw.perf repo.write {"ms":3,"ops":1,"entities":"wish"}
+2026-10-19T16:31:18.728+00:00 INFO bw.app wish.add {"status":"waiting"}
+2026-10-19T16:31:18.728+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T16:31:18.733+00:00 DEBUG bw.perf repo.transactions {"ms":5,"rows":192,"live":192}
+2026-10-19T16:31:18.740+00:00 DEBUG bw.perf wc.categorize {"ms":6,"tx":192}
+2026-10-19T16:31:18.742+00:00 DEBUG bw.perf wc.goalsWish {"ms":1}
+2026-10-19T16:31:18.742+00:00 DEBUG bw.perf wc.reload {"ms":13,"tx":192,"goals":2,"wish":1}
+2026-10-19T16:31:18.745+00:00 DEBUG bw.perf repo.write {"ms":2,"ops":1,"entities":"goal"}
+2026-10-19T16:31:18.745+00:00 INFO bw.app goal.save {"new":true}
+2026-10-19T16:31:18.745+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T16:31:18.749+00:00 DEBUG bw.perf repo.transactions {"ms":3,"rows":192,"live":192}
+2026-10-19T16:31:18.751+00:00 DEBUG bw.perf wc.categorize {"ms":2,"tx":192}
+2026-10-19T16:31:18.752+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T16:31:18.752+00:00 DEBUG bw.perf wc.reload {"ms":6,"tx":192,"goals":3,"wish":1}
+2026-10-19T16:31:18.754+00:00 DEBUG bw.importer importer.detect {"format":"csv","bytes":189}
+2026-10-19T16:31:18.755+00:00 DEBUG bw.importer.csv csv.read {"chars":189,"sep":",","rows":2,"unclosedQuote":false}
+2026-10-19T16:31:18.759+00:00 INFO bw.importer importer.parse {"format":"csv","source":"revolut","rows":2,"txs":1,"skipped":0,"invalid":0,"readMs":1,"ms":5}
+2026-10-19T16:31:18.759+00:00 DEBUG bw.perf import.parse {"ms":5,"file":0,"ext":"csv","bytes":189}
+2026-10-19T16:31:18.760+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"tx"}
+2026-10-19T16:31:18.762+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T16:31:18.764+00:00 DEBUG bw.perf repo.write {"ms":0,"ops":2,"entities":"tx"}
+2026-10-19T16:31:18.764+00:00 DEBUG bw.perf repo.match {"ms":3,"manual":1,"open":1,"bank":1,"added":1,"unmatched":0,"categories":1}
+2026-10-19T16:31:18.764+00:00 DEBUG bw.perf repo.importBatch {"ms":5,"source":"revolut","rows":1,"added":1,"dupes":0,"matched":1,"skipped":0}
+2026-10-19T16:31:18.764+00:00 DEBUG bw.perf import.file {"ms":11,"file":0,"ext":"csv","bytes":189,"source":"revolut","rows":1,"added":1,"dupes":0,"matched":1,"skipped":0,"invalid":0}
+2026-10-19T16:31:18.765+00:00 DEBUG bw.perf import.files {"ms":11,"files":1,"ok":1}
+2026-10-19T16:31:18.765+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-19T16:31:18.768+00:00 DEBUG bw.perf repo.transactions {"ms":3,"rows":193,"live":192}
+2026-10-19T16:31:18.771+00:00 DEBUG bw.perf wc.categorize {"ms":2,"tx":192}
+2026-10-19T16:31:18.771+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T16:31:18.771+00:00 DEBUG bw.perf wc.reload {"ms":6,"tx":192,"goals":3,"wish":1}
+2026-10-19T16:31:18.772+00:00 INFO bw.app category.change {"from":"Home & tools","to":"Shopping","always":true,"source":"revolut"}
+2026-10-19T16:31:18.773+00:00 DEBUG bw.perf repo.write {"ms":0,"ops":1,"entities":"rule"}
+2026-10-19T16:31:18.775+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"tx"}
+2026-10-19T16:31:18.775+00:00 DEBUG bw.categories categories.build {"rules":1,"patterns":0,"patternsUsed":0}
+2026-10-19T16:31:18.776+00:00 DEBUG bw.perf repo.transactions {"ms":1,"rows":193,"live":192}
+2026-10-19T16:31:18.779+00:00 DEBUG bw.perf wc.categorize {"ms":2,"tx":192}
+2026-10-19T16:31:18.780+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-19T16:31:18.780+00:00 DEBUG bw.perf wc.reload {"ms":5,"tx":192,"goals":3,"wish":1}
+2026-10-19T16:31:18.787+00:00 INFO bw.nav nav.tab {"from":"plan","to":"today","via":"bar"}
+2026-10-19T16:31:18.787+00:00 INFO bw.frames frames.window {"frames":27,"janky":27,"build_p50_ms":5.8,"build_p90_ms":62.3,"build_p99_ms":68.9,"build_max_ms":68.9,"raster_p50_ms":36.4,"raster_p90_ms":48.7,"raster_p99_ms":50.2,"raster_max_ms":50.2,"tab":"plan"}
+2026-10-19T16:31:18.809+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":14,"incomeMode":"planned","goals":3}
+2026-10-19T16:31:18.809+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:18.810+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":14,"incomeMode":"planned","goals":3}
+2026-10-19T16:31:18.811+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:18.818+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-19T16:31:18.819+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":192}
+2026-10-19T16:31:18.819+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
+2026-10-19T16:31:18.819+00:00 DEBUG bw.perf spending.derive {"ms":0,"month":"2026-10","tx":192}
+2026-10-19T16:31:18.837+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":14,"incomeMode":"planned","goals":3}
+2026-10-19T16:31:18.838+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:18.842+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":22,"tx":14,"incomeMode":"planned","goals":3}
+2026-10-19T16:31:18.842+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-19T16:31:21.782+00:00 FINER bw.sync sync.skip {"trigger":"change","reason":"noFolder"}
+2026-10-19T16:31:22.729+00:00 INFO bw.frames frames.window {"frames":28,"janky":28,"build_p50_ms":0.5,"build_p90_ms":11.9,"build_p99_ms":70.7,"build_max_ms":70.7,"raster_p50_ms":27.5,"raster_p90_ms":39.8,"raster_p99_ms":48.6,"raster_max_ms":48.6,"tab":"today"}
+2026-10-19T16:31:22.730+00:00 DEBUG bw.mem mem {"rss_mb":602.8,"max_rss_mb":619.4}
+00:10 +1: (tearDownAll)
+00:10 +1: All tests passed!
+--- desktop-screens: 1 tests, 0 failed, total 28.4 s; per test p50 10371 ms, p90 10371 ms, p99 10371 ms, max 10371 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -1038,17 +1033,17 @@ Building Linux application...
        1-5 s     0  
         >5 s     1  ########################################
   slowest:
-     11856 ms  every tab with a synthetic wallet
+     10371 ms  every tab with a synthetic wallet
 === desktop-wishlist_goals ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/wishlist_goals_test.dart
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
 00:00 +0: Wishlist: price check, cooling off, then buy or skip
-00:14 +1: Wishlist: Save for it makes a goal with the price as target
-00:18 +2: Goals: create, edit, add money, reached, delete; months-to-goal text
-00:32 +3: (tearDownAll)
-00:32 +3: All tests passed!
---- desktop-wishlist_goals: 3 tests, 0 failed, total 57.9 s; per test p50 14123 ms, p90 14696 ms, p99 14696 ms, max 14696 ms
+00:13 +1: Wishlist: Save for it makes a goal with the price as target
+00:16 +2: Goals: create, edit, add money, reached, delete; months-to-goal text
+00:29 +3: (tearDownAll)
+00:29 +3: All tests passed!
+--- desktop-wishlist_goals: 3 tests, 0 failed, total 47.8 s; per test p50 12798 ms, p90 13539 ms, p99 13539 ms, max 13539 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -1057,28 +1052,28 @@ Building Linux application...
        1-5 s     1  ####################
         >5 s     2  ########################################
   slowest:
-     14696 ms  Wishlist: price check, cooling off, then buy or skip
-     14123 ms  Goals: create, edit, add money, reached, delete; months-to-goal text
-      3556 ms  Wishlist: Save for it makes a goal with the price as target
+     13539 ms  Wishlist: price check, cooling off, then buy or skip
+     12798 ms  Goals: create, edit, add money, reached, delete; months-to-goal text
+      3163 ms  Wishlist: Save for it makes a goal with the price as target
 
 step              seconds  result
-desktop-big_wallet    113.2  ok
-desktop-flows        61.4  ok
-desktop-import       36.4  ok
-desktop-layout      153.5  ok
-desktop-onboarding     32.7  ok
-desktop-plan         83.0  ok
-desktop-screens      38.4  ok
-desktop-wishlist_goals     58.6  ok
-total               577.6
---- desktop-big_wallet: 1 tests, 0 failed, total 112.0 s; per test p50 74109 ms, p90 74109 ms, p99 74109 ms, max 74109 ms
---- desktop-flows: 5 tests, 0 failed, total 60.7 s; per test p50 6841 ms, p90 12835 ms, p99 12835 ms, max 12835 ms
---- desktop-import: 2 tests, 0 failed, total 35.7 s; per test p50 3528 ms, p90 6416 ms, p99 6416 ms, max 6416 ms
---- desktop-layout: 5 tests, 0 failed, total 152.8 s; per test p50 26650 ms, p90 29426 ms, p99 29426 ms, max 29426 ms
---- desktop-onboarding: 2 tests, 0 failed, total 32.0 s; per test p50 1394 ms, p90 4653 ms, p99 4653 ms, max 4653 ms
---- desktop-plan: 3 tests, 0 failed, total 82.4 s; per test p50 13746 ms, p90 35563 ms, p99 35563 ms, max 35563 ms
---- desktop-screens: 1 tests, 0 failed, total 37.7 s; per test p50 11856 ms, p90 11856 ms, p99 11856 ms, max 11856 ms
---- desktop-wishlist_goals: 3 tests, 0 failed, total 57.9 s; per test p50 14123 ms, p90 14696 ms, p99 14696 ms, max 14696 ms
+desktop-big_wallet    100.9  ok
+desktop-flows        50.2  ok
+desktop-import       27.4  ok
+desktop-layout      134.7  ok
+desktop-onboarding     23.4  ok
+desktop-plan         70.4  ok
+desktop-screens      28.9  ok
+desktop-wishlist_goals     48.2  ok
+total               484.4
+--- desktop-big_wallet: 1 tests, 0 failed, total 97.4 s; per test p50 65515 ms, p90 65515 ms, p99 65515 ms, max 65515 ms
+--- desktop-flows: 5 tests, 0 failed, total 49.6 s; per test p50 5964 ms, p90 11816 ms, p99 11816 ms, max 11816 ms
+--- desktop-import: 2 tests, 0 failed, total 27.0 s; per test p50 3247 ms, p90 5024 ms, p99 5024 ms, max 5024 ms
+--- desktop-layout: 5 tests, 0 failed, total 134.3 s; per test p50 22950 ms, p90 27923 ms, p99 27923 ms, max 27923 ms
+--- desktop-onboarding: 2 tests, 0 failed, total 23.0 s; per test p50 1242 ms, p90 3632 ms, p99 3632 ms, max 3632 ms
+--- desktop-plan: 3 tests, 0 failed, total 70.0 s; per test p50 12772 ms, p90 32635 ms, p99 32635 ms, max 32635 ms
+--- desktop-screens: 1 tests, 0 failed, total 28.4 s; per test p50 10371 ms, p90 10371 ms, p99 10371 ms, max 10371 ms
+--- desktop-wishlist_goals: 3 tests, 0 failed, total 47.8 s; per test p50 12798 ms, p90 13539 ms, p99 13539 ms, max 13539 ms
 desktop-big_wallet=ok desktop-flows=ok desktop-import=ok desktop-layout=ok desktop-onboarding=ok desktop-plan=ok desktop-screens=ok desktop-wishlist_goals=ok
 === apk ===
 Resolving dependencies...
@@ -1097,7 +1092,7 @@ Try `flutter pub outdated` for more information.
 Running Gradle task 'assembleRelease'...                        
 Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 4084 bytes (99.8% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
 Caught exception: Already watching path: /opt/hostedtoolcache/flutter/stable-3.47.7-x64/flutter/packages/flutter_tools/gradle
-Running Gradle task 'assembleRelease'...                          118.2s
+Running Gradle task 'assembleRelease'...                           90.2s
 ✓ Built build/app/outputs/flutter-apk/app-release.apk (60.4MB)
 === linux ===
 === linux ===
@@ -1118,8 +1113,8 @@ Building Linux application...
 ✓ Built build/linux/x64/release/bundle/budget_wallet
 
 step              seconds  result
-linux                83.9  ok
-total                83.9
+linux                58.2  ok
+total                58.2
 linux=ok
 === smoke ===
 === linux ===
@@ -1145,7 +1140,7 @@ app log: 20 lines (dist/logs/app-linux-smoke.log)
 WARNING lines: 1
 
 step              seconds  result
-linux                 4.1  ok
-desktop-smoke        10.4  ok
-total                14.5
+linux                 2.6  ok
+desktop-smoke        10.3  ok
+total                13.0
 linux=ok desktop-smoke=ok
