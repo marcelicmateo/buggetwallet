@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/sim.dart';
 import 'support/synthetic.dart';
@@ -570,6 +571,49 @@ void main() {
       }
       expect(dump(phone.repo), dump(laptop.repo));
       expect(phone.repo.pendingOps(), isEmpty);
+    });
+  });
+
+  group('a hand-added expense and bank rows imported on another device first', () {
+    for (final phoneFirst in [true, false]) {
+      test(
+          'the laptop imports in the morning, the phone (not synced) adds the same expense in the evening: one expense on '
+          'both devices (${phoneFirst ? 'phone' : 'laptop'} syncs first)', () async {
+        final phone = device('phone'), laptop = device('laptop');
+        laptop.repo.importBatch(january); // 09:00: holds the synthetic 23.40 card payment of 2026-01-17
+        now += 10 * 3600000; // 19:00, the phone has not synced since
+        final m = phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
+        await syncAll(phoneFirst ? [phone, laptop] : [laptop, phone]);
+        for (final d in [phone, laptop]) {
+          final live = d.repo.transactions().where((t) => t.amount == -2340).toList();
+          expect(live.length, 1, reason: '${d.name}: counted once');
+          expect(live.single.manual, isFalse, reason: d.name);
+          expect(d.repo.transaction(m)!.matchedTo, live.single.id, reason: d.name);
+          expect(d.repo.categorizer().categoryOf(live.single), 'Eating out', reason: d.name);
+        }
+        await syncAll([phone, laptop]);
+        expect(dump(phone.repo), dump(laptop.repo));
+        expect(phone.repo.pendingOps(), isEmpty);
+        expect(laptop.repo.pendingOps(), isEmpty);
+      });
+    }
+
+    test('the phone already had Saturday\'s card coffee: a Monday cash coffee stays separate, also after later imports', () async {
+      final phone = device('phone'), laptop = device('laptop');
+      laptop.repo.importBatch(ImportBatch(source: 'pbz', transactions: [bankRow('2026-01-17', -240, 'POS plaćanje', 'POS EXAMPLE CAFE')]));
+      await syncAll([laptop, phone]);
+      now += 3600000;
+      // The laptop imports the next statement (other rows) before the phone's entry arrives.
+      laptop.repo.importBatch(ImportBatch(source: 'pbz', transactions: [bankRow('2026-01-18', -5000, 'POS plaćanje', 'POS EXAMPLE SHOP')]));
+      now += 3600000;
+      final cash = phone.repo.addManual(date: '2026-01-19', amount: 240, category: 'Eating out', note: 'synthetic cash coffee');
+      await syncAll([phone, laptop]);
+      await syncAll([laptop, phone]);
+      for (final d in [phone, laptop]) {
+        expect(d.repo.transaction(cash)!.matchedTo, isNull, reason: d.name);
+        expect(d.repo.transactions().where((t) => t.amount == -240).length, 2, reason: '${d.name}: two coffees');
+      }
+      expect(dump(phone.repo), dump(laptop.repo));
     });
   });
 

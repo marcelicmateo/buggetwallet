@@ -31,7 +31,10 @@ class ImportSummary {
 
 /// Table name and syncable columns per entity.
 const Map<String, (String, List<String>)> _entities = {
-  'tx': ('tx', ['source', 'date', 'amount', 'currency', 'bank_type', 'description', 'category', 'note', 'manual', 'matched_to', 'deleted']),
+  'tx': (
+    'tx',
+    ['source', 'date', 'amount', 'currency', 'bank_type', 'description', 'category', 'note', 'manual', 'matched_to', 'deleted', 'seen_bank']
+  ),
   'goal': ('goals', ['name', 'target', 'saved', 'monthly', 'sort', 'deleted']),
   'wish': ('wish', ['name', 'price', 'added', 'status', 'decided', 'deleted']),
   'setting': ('settings', ['value', 'deleted']),
@@ -43,7 +46,7 @@ CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS tx(
   id TEXT PRIMARY KEY, source TEXT NOT NULL DEFAULT '', date TEXT NOT NULL DEFAULT '', amount INTEGER NOT NULL DEFAULT 0,
   currency TEXT NOT NULL DEFAULT 'EUR', bank_type TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '',
-  category TEXT, note TEXT, manual INTEGER NOT NULL DEFAULT 0, matched_to TEXT, deleted INTEGER NOT NULL DEFAULT 0);
+  category TEXT, note TEXT, manual INTEGER NOT NULL DEFAULT 0, matched_to TEXT, deleted INTEGER NOT NULL DEFAULT 0, seen_bank TEXT);
 CREATE INDEX IF NOT EXISTS tx_date ON tx(date);
 CREATE TABLE IF NOT EXISTS goals(id TEXT PRIMARY KEY, name TEXT, target INTEGER NOT NULL DEFAULT 0, saved INTEGER NOT NULL DEFAULT 0,
   monthly INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0);
@@ -70,6 +73,9 @@ class WalletRepo {
   WalletRepo._(this.db, int Function()? now) {
     db.execute('PRAGMA journal_mode=WAL;');
     db.execute(_schema);
+    // Columns added after the first release (CREATE TABLE IF NOT EXISTS leaves an older table as it was).
+    final txCols = {for (final r in db.select('PRAGMA table_info(tx)')) r['name'] as String};
+    if (!txCols.contains('seen_bank')) db.execute('ALTER TABLE tx ADD COLUMN seen_bank TEXT');
     var dev = _meta('device_id');
     if (dev == null) {
       final r = Random.secure();
@@ -192,7 +198,7 @@ class WalletRepo {
     return changed;
   }
 
-  /// Each row's first write, for [planMatches]: the clock of its `amount`. Only the write that creates a row sets it
+  /// Each row's first write, for [planMatches] and `seen_bank`: the clock of its `amount`. Only the write that creates a row sets it
   /// (importBatch, addManual; matching, categories and deletes never touch it), and the clocks table converges to the
   /// same value on every device. If the same bank row is imported on two devices before they sync, the later import
   /// wins (highest HLC per field), so the row counts as written at that later import.
@@ -204,12 +210,13 @@ class WalletRepo {
   /// rows that could replace it, so a large history costs little. Logged as `repo.match` on `bw.perf` once per run.
   int _matchManual() {
     final t = PerfTimer('repo.match');
-    final written = <String, String>{};
+    final written = <String, String>{}, seenBank = <String, String>{};
     List<Tx> rows(String where, [List<Object?> args = const []]) {
       final out = <Tx>[];
       for (final r in db.select('SELECT tx.*, c.hlc AS written FROM tx $_writtenJoin WHERE $where', args)) {
         final tx = Tx.fromRow(r);
         if (r['written'] case final String h) written[tx.id] = h;
+        if (r['seen_bank'] case final String v) seenBank[tx.id] = v;
         out.add(tx);
       }
       return out;
@@ -233,18 +240,22 @@ class WalletRepo {
     for (final m in open) {
       final since = written[m.id];
       if (since == null || !_isoDate.hasMatch(m.date)) continue;
-      // Candidates for this entry only: same amount, within the window, written in or after its millisecond (the
-      // exact HLC order is planMatches' job; comparing the 15-digit millis prefix as text is safe for any counter).
-      for (final b in rows('$live AND tx.amount = ? AND tx.date BETWEEN ? AND ? AND c.hlc >= ?',
-          [m.amount, addDays(m.date, -matchDays), addDays(m.date, matchDays), since.split(':').first])) {
-        bank[b.id] = b;
+      // Candidates for this entry only: same amount, within the window, and not on its device when it was added.
+      // Without a seen_bank value, only rows written in or after the entry's millisecond (comparing the 15-digit
+      // millis prefix as text is safe for any counter).
+      final seen = SeenBank.of(since, seenBank[m.id]);
+      final window = [m.amount, addDays(m.date, -matchDays), addDays(m.date, matchDays)];
+      for (final b in seen.recorded
+          ? rows('$live AND tx.amount = ? AND tx.date BETWEEN ? AND ?', window)
+          : rows('$live AND tx.amount = ? AND tx.date BETWEEN ? AND ? AND c.hlc >= ?', [...window, since.split(':').first])) {
+        if (written[b.id] case final String at when seen.unseen(at)) bank[b.id] = b;
       }
     }
     final cz = categorizer();
     final plan = planMatches(manual, [...bank.values], (b) {
       final k = kindOf(cz.autoCategory(b));
       return k == Kind.flex || k == Kind.fixed;
-    }, written);
+    }, written, seenBank: seenBank);
     _write([
       for (final e in plan.matchedTo.entries) ('tx', e.key, {'matched_to': e.value}),
       for (final e in plan.bankCategory.entries) ('tx', e.key, {'category': e.value}),
@@ -335,8 +346,8 @@ class WalletRepo {
     ]);
   }
 
-  /// Imports a normalized batch. Already-known ids are skipped. Hand-added expenses with the
-  /// same amount within 3 days are then matched to a bank row written after them, which keeps their category
+  /// Imports a normalized batch. Already-known ids are skipped. Hand-added expenses with the same amount within 3 days
+  /// are then matched to a bank row their device did not hold when they were added, which keeps their category
   /// ([planMatches]).
   ImportSummary importBatch(ImportBatch batch) {
     final t = PerfTimer('repo.importBatch', warnMs: 500);
@@ -380,9 +391,22 @@ class WalletRepo {
     return '$prefix${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${r.nextInt(1 << 20).toRadixString(36)}';
   }
 
-  /// A hand-entered expense (positive [amount] = money spent).
+  /// The `seen_bank` value for an entry added now ([SeenBank]): per device, the highest `amount` clock of the bank
+  /// rows (live or deleted) this device holds. Grouped in SQL by the node part of the clock (position 23 on: 15 millis
+  /// digits, `:`, 5 counter digits, `:`), so each group's strings have one width and MAX is their HLC maximum;
+  /// [SeenBank.encode] then takes the maximum per node exactly.
+  String _seenBank() => SeenBank.encode([
+        for (final r in db.select('SELECT MAX(c.hlc) AS h FROM clocks c JOIN tx ON tx.id = c.id '
+            "WHERE c.entity = 'tx' AND c.field = 'amount' AND tx.manual = 0 GROUP BY substr(c.hlc, 23)"))
+          r['h'] as String,
+      ]);
+
+  /// A hand-entered expense (positive [amount] = money spent). Records which bank rows this device holds now
+  /// (`seen_bank`, in the same op): none of them is this entry's row, but a bank row imported on another device that
+  /// has not synced yet may be ([planMatches]).
   String addManual({required String date, required int amount, required String category, String note = '', String currency = 'EUR'}) {
     final id = _newId('m');
+    final seen = _seenBank();
     _write([
       (
         'tx',
@@ -395,12 +419,13 @@ class WalletRepo {
           'category': category,
           'note': note,
           'manual': 1,
-          'deleted': 0
+          'deleted': 0,
+          'seen_bank': seen,
         }
       ),
     ]);
     // No matching here: a bank row already in the wallet is never this entry's row (planMatches). The entry is
-    // matched by the next import, here or on another device, that brings a bank row written after it.
+    // matched by the next import here, or by a sync that brings a bank row this device did not hold.
     return id;
   }
 

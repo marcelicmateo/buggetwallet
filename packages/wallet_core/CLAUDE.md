@@ -9,7 +9,9 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
 - `budget.dart` — period maths: `PeriodBudget` (safe to spend), `MonthSummary`, `Affordability`.
 - `categories.dart` — `Categorizer`: item override → merchant rules → patterns → built-in rules.
 - `matching.dart` — `planMatches`: hand-added expense ↔ bank row (same amount, ±3 days, one-to-one), deterministic;
-  only a bank row first written after the entry (HLC of the `amount` clock) replaces it. `WalletRepo` runs it after
+  only a bank row the adding device did not hold yet replaces the entry (`SeenBank`: the entry's synced `seen_bank`,
+  per device the highest bank `amount` clock held at add time; older entries: rows written after the entry). A match
+  is reopened only when its bank row is deleted, never because the row has not arrived yet. `WalletRepo` runs it after
   imports, deletes and `applyRemote` (FolderSync: once per run, `runPendingMatch`), loading only candidate rows.
 - `models.dart` — `Tx`, `Goal`, `WishItem`, `WalletSettings` (row ↔ object).
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption), `sync.dart` (FolderSync).

@@ -1,4 +1,5 @@
 // planMatches: deterministic manual ↔ bank matching. All data is SYNTHETIC.
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -103,26 +104,35 @@ void main() {
         for (var m = 0; m < r.nextInt(6); m++)
           _manual('m$m', date(), amount(), to: r.nextInt(4) == 0 && bank.isNotEmpty ? bank[r.nextInt(bank.length)].id : null)
       ];
-      // Random first-write clocks: some bank rows came before their entries, some after.
+      // Random first-write clocks on three devices: some bank rows came before their entries, some after.
       final written = {
-        for (final t in [...manual, ...bank]) t.id: _h(r.nextInt(20), t.id)
+        for (final t in [...manual, ...bank]) t.id: _h(r.nextInt(20), 'n${r.nextInt(3)}')
       };
-      final p = planMatches(manual, bank, _all, written);
-      final q = planMatches([...manual]..shuffle(r), [...bank]..shuffle(r), _all, written);
+      // Some entries record what their device held (any subset of the bank rows), the others are from older builds.
+      final seen = {
+        for (final m in manual)
+          if (r.nextBool())
+            m.id: SeenBank.encode([
+              for (final b in bank)
+                if (r.nextBool()) written[b.id]!
+            ])
+      };
+      final p = planMatches(manual, bank, _all, written, seenBank: seen);
+      final q = planMatches([...manual]..shuffle(r), [...bank]..shuffle(r), _all, written, seenBank: seen);
       expect(q.matchedTo, p.matchedTo, reason: 'case $i');
       expect(q.bankCategory, p.bankCategory, reason: 'case $i');
       for (final e in p.matchedTo.entries.where((e) => e.value != null)) {
-        expect(Hlc.parse(written[e.value]!).compareTo(Hlc.parse(written[e.key]!)), greaterThan(0),
-            reason: 'case $i: only a bank row written after the entry');
+        expect(SeenBank.of(written[e.key]!, seen[e.key]).unseen(written[e.value]!), isTrue,
+            reason: 'case $i: only a bank row the entry\'s device did not hold');
       }
       final after = _applied(manual, p);
-      expect(planMatches(after, bank, _all, written).matchedTo, isEmpty, reason: 'case $i: not idempotent');
+      expect(planMatches(after, bank, _all, written, seenBank: seen).matchedTo, isEmpty, reason: 'case $i: not idempotent');
       final targets = after.map((m) => m.matchedTo).whereType<String>().toList();
       expect(targets.toSet().length, targets.length, reason: 'case $i: one bank row per entry');
     }
   });
 
-  test('only a bank row first written after the entry replaces it (HLC order, not dates or devices)', () {
+  test('an entry without seen_bank (older builds): only a bank row first written after it replaces it (HLC order)', () {
     final m = _manual('m1', '2026-01-19', -240);
     final before = _bank('b-before', '2026-01-17', -240), after = _bank('b-after', '2026-01-20', -240);
     // b-before was in the wallet before the entry was added; b-after was imported after it.
@@ -135,6 +145,37 @@ void main() {
     // No first-write clock (a row known only from a partial op): never matched.
     expect(planMatches([m], [after], _all, {'b-after': _h(70)}).isEmpty, isTrue);
     expect(planMatches([m], [after], _all, {'m1': _h(60)}).isEmpty, isTrue);
+  });
+
+  test('with seen_bank: a bank row replaces the entry iff the adding device did not hold it, whenever it was written', () {
+    final m = _manual('m1', '2026-01-19', -240);
+    final sat = _bank('b-sat', '2026-01-17', -240), mon = _bank('b-mon', '2026-01-19', -240);
+    // Laptop imported both before the phone added the entry (19:00 vs 09:00 / 10:00), but the phone held only Saturday's.
+    final w = {'b-sat': _h(50, 'laptop'), 'b-mon': _h(55, 'laptop'), 'm1': _h(90, 'phone')};
+    final heldSat = SeenBank.encode([_h(50, 'laptop'), _h(40, 'phone')]);
+    expect(planMatches([m], [sat], _all, w, seenBank: {'m1': heldSat}).isEmpty, isTrue, reason: 'on the phone already: cash');
+    expect(planMatches([m], [sat, mon], _all, w, seenBank: {'m1': heldSat}).matchedTo, {'m1': 'b-mon'});
+    // Held nothing (or nothing from the laptop): either row may be the one; the closest day wins.
+    expect(planMatches([m], [sat, mon], _all, w, seenBank: {'m1': '[]'}).matchedTo, {'m1': 'b-mon'});
+    expect(
+        planMatches([m], [sat], _all, w,
+            seenBank: {
+              'm1': SeenBank.encode([_h(40, 'phone')])
+            }).matchedTo,
+        {'m1': 'b-sat'});
+    // Held both: neither (the HLC fallback would say the same here; it differs when rows were not yet on the phone).
+    final heldBoth = SeenBank.encode([_h(50, 'laptop'), _h(55, 'laptop')]);
+    expect(planMatches([m], [sat, mon], _all, w, seenBank: {'m1': heldBoth}).isEmpty, isTrue);
+    expect(planMatches([m], [sat, mon], _all, w).isEmpty, isTrue, reason: 'no seen_bank: both written before the entry');
+    // A damaged value falls back to the entry's own clock, the same on every device.
+    expect(planMatches([m], [sat, mon], _all, w, seenBank: {'m1': 'not json'}).isEmpty, isTrue);
+    expect(planMatches([m], [sat, mon], _all, w, seenBank: {'m1': '["x"]'}).isEmpty, isTrue);
+  });
+
+  test('SeenBank.encode keeps the highest clock per device, in a stable order', () {
+    final v = SeenBank.encode([_h(5, 'b'), _h(9, 'a'), _h(7, 'b'), _h(3, 'a'), '000000000000007:123456:b']);
+    expect(jsonDecode(v), ['000000000000007:123456:b', _h(9, 'a')]);
+    expect(SeenBank.encode([]), '[]');
   });
 
   group('repo: hand-added expenses are matched only by bank rows imported after them', () {
@@ -183,11 +224,14 @@ void main() {
         Op('tx', 'm-old-2', {'source': 'manual', 'date': '2026-01-16', 'amount': -5000, 'category': 'Shopping', 'manual': 1, 'deleted': 0},
             Hlc(t, 1, 'old-device').toString()),
       ]);
+      r.db.execute('ALTER TABLE tx DROP COLUMN seen_bank'); // the earlier build's table had no such column
       r.close();
 
       t += 60000;
       r = WalletRepo.open(path, now: () => t); // the new build
       addTearDown(r.close);
+      expect(r.transaction('m-old-1')!.matchedTo, isNull);
+      expect(r.db.select("SELECT seen_bank FROM tx WHERE id = 'm-old-1'").single['seen_bank'], isNull, reason: 'column added');
       r.importBatch(pos([('2026-02-03', -700, 'POS EXAMPLE BAKERY')])); // the first import after the upgrade
       r.addManual(date: '2026-02-04', amount: 310, category: 'Eating out');
       expect(matchOps(r), isEmpty, reason: 'no match ops for old history');
@@ -197,6 +241,42 @@ void main() {
         expect(r.transaction(id)!.matchedTo, isNull, reason: id);
       }
       expect(r.transactions().where((t) => t.amount == -2340).length, 2);
+    });
+
+    test('an entry from an older build (no seen_bank) keeps the old rule: only a bank row written after it', () {
+      final r = WalletRepo.inMemory();
+      addTearDown(r.close);
+      const t = 1767225600000;
+      Op bankOp(String id, String date, int millis) => Op(
+          'tx',
+          id,
+          {'source': 'pbz', 'date': date, 'amount': -2340, 'bank_type': 'POS plaćanje', 'description': 'POS EXAMPLE $id', 'manual': 0},
+          Hlc(millis, 0, 'laptop').toString());
+      r.applyRemote([
+        Op('tx', 'm-old', {'source': 'manual', 'date': '2026-01-17', 'amount': -2340, 'category': 'Eating out', 'manual': 1, 'deleted': 0},
+            const Hlc(t, 0, 'old-phone').toString()),
+      ]);
+      r.applyRemote([bankOp('b-before', '2026-01-17', t - 1000)]); // imported elsewhere before the entry
+      expect(r.transaction('m-old')!.matchedTo, isNull);
+      r.applyRemote([bankOp('b-after', '2026-01-18', t + 1000)]);
+      expect(r.transaction('m-old')!.matchedTo, 'b-after');
+    });
+
+    test('addManual records the bank rows this device holds, per device, in the same op as the entry', () {
+      final r = WalletRepo.inMemory(now: () => 1767225600000 + 5000);
+      addTearDown(r.close);
+      final none = r.addManual(date: '2026-01-10', amount: 100, category: 'Eating out');
+      r.applyRemote([
+        Op('tx', 'b-peer', {'source': 'pbz', 'date': '2026-01-11', 'amount': -500, 'description': 'POS EXAMPLE', 'manual': 0},
+            const Hlc(1767225600000, 0, 'peer').toString()),
+      ]);
+      r.importBatch(january);
+      final m = r.addManual(date: '2026-01-20', amount: 100, category: 'Eating out');
+      final ops = {for (final (_, op) in r.pendingOps()) op.id: op};
+      expect(ops[none]!.fields['seen_bank'], '[]');
+      final own = r.db.select("SELECT MAX(hlc) AS h FROM clocks WHERE field = 'amount' AND id != ? AND id != ?", [m, none]).single['h'];
+      expect(jsonDecode(ops[m]!.fields['seen_bank'] as String), unorderedEquals([own, const Hlc(1767225600000, 0, 'peer').toString()]));
+      expect(ops[m]!.fields['amount'], -100, reason: 'one op: entry and seen_bank sync together');
     });
   });
 
