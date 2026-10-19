@@ -84,14 +84,18 @@ Job status: `gh api repos/marcelicmateo/buggetwallet/commits/<sha>/check-runs`. 
 ## Team (subagents in `.claude/agents/`)
 The main session is the lead: it takes the owner's request, splits it, merges results, runs
 `tools/build.sh test`, commits, pushes and updates STATUS. One feature at a time (the owner tests each one).
-- `feature-builder` — builds the feature (core logic + UI) in its own worktree (`isolation: "worktree"`).
+- `core-builder` — logic half: `wallet_core` / `wallet_importer` + unit tests, own worktree (`isolation: "worktree"`).
+- `ui-builder` — UI half: `app/` screens, widgets, controller wiring, widget tests; iterates in live mode.
+  For a feature with both halves, the lead fixes the core API (names, params, result fields) in both specs and
+  runs them in parallel; UI-only or core-only work uses just one.
 - `test-writer` — writes tests from the spec in parallel, without basing them on the implementation.
 - `reviewer` — read-only review of the diff before every push.
 - `ci-watcher` — waits for CI after a push and reports the result (`tools/ci-status.sh`).
 - `devops` — only for build, CI, signing or version work.
 **Model and effort first (owner rule):** before starting agents, check each one's `model:` and `effort:` in its
 `.claude/agents/*.md` frontmatter and fit them to the task (cheapest that does the job well; current defaults:
-ci-watcher haiku/low, test-writer and devops sonnet/medium, feature-builder and reviewer high on the session model).
+ci-watcher haiku/low, test-writer and devops sonnet/medium, ui-builder sonnet/high, core-builder and reviewer high
+on the session model).
 Agents without a file (general-purpose, Explore, Plan) get `model` set on the Agent call. Say the choice in one line.
 Owner bug reports go before new features. **Bugs are fixed as soon as they're found** (owner rule), in the same
 stage: a test that reproduces the bug (may start as `skip: 'BUG: …'`) plus the fix that makes it pass. Agents that

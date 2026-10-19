@@ -1,6 +1,6 @@
 ---
 name: test-writer
-description: Writes tests for a Budget Wallet feature from its spec, independently of the implementation, with synthetic data. Use alongside feature-builder, or to cover existing code with missing tests. Only edits test files.
+description: Writes tests for a Budget Wallet feature from its spec, independently of the implementation, with synthetic data. Use alongside core-builder and ui-builder, or to cover existing code with missing tests. Only edits test files.
 model: sonnet
 effort: medium
 ---
