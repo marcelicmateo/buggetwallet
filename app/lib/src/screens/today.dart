@@ -11,7 +11,10 @@ import '../widgets/sheets.dart';
 class TodayScreen extends StatelessWidget {
   final WalletController wc;
   final VoidCallback openPlan;
-  const TodayScreen({super.key, required this.wc, required this.openPlan});
+
+  /// The time of day the screen shows (tests pass a fixed one).
+  final DateTime Function() clock;
+  const TodayScreen({super.key, required this.wc, required this.openPlan, this.clock = DateTime.now});
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +27,7 @@ class TodayScreen extends StatelessWidget {
     final used = p.flexBudget > 0 ? p.spent / p.flexBudget : 1.0;
     final ahead = p.aheadOfPace;
     final newPayday = wc.newPayday(p.start);
-    final now = DateTime.now();
+    final now = clock();
     final deliveryHour = (now.hour >= 14 && now.hour < 19) || now.weekday == DateTime.sunday;
     final month = monthOf(today);
     final deliveries = wc.txs.where((t) => t.category == 'Food delivery' && monthOf(t.date) == month && t.amount < 0).toList();
@@ -116,7 +119,7 @@ class TodayScreen extends StatelessWidget {
               ]),
               Text(
                 'This month: ${deliveries.length} ${deliveries.length == 1 ? 'order' : 'orders'}, ${money(deliverySum, cur)}. '
-                '${p.allowanceToday > 0 ? 'A typical €15 order is ${(1500 / p.allowanceToday * 100).round()}% of today\'s money.' : 'Today\'s money is already used.'}',
+                '${p.allowanceToday > 0 ? 'A typical ${money(1500, cur, decimals: 0)} order is ${(1500 / p.allowanceToday * 100).round()}% of today\'s money.' : 'Today\'s money is already used.'}',
                 style: const TextStyle(fontSize: 14),
               ),
             ]),
