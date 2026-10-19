@@ -74,16 +74,23 @@ void main() {
     expect(_plan([_manual('m1', '2026-01-17', -990, to: 'b1')], [_bank('b1', '2026-01-17', -990)], (_) => false).isEmpty, isTrue);
   });
 
-  test('a match whose bank row was deleted or is missing is open again, and may take a later bank row', () {
+  test('a match whose bank row was deleted (or is not a bank row) is open again, and may take a later bank row', () {
     const gone = Tx(id: 'b1', source: 'pbz', date: '2026-01-17', amount: -990, description: 'POS EXAMPLE', deleted: true);
     for (final bank in [
-      <Tx>[], // missing
-      [gone], // deleted (callers leave deleted rows out; a deleted one passed in counts the same)
-      [_bank('m-other', '2026-01-17', -990).asManual()], // not a bank row
+      [gone], // deleted
+      [_bank('b1', '2026-01-17', -990).asManual()], // not a bank row
     ]) {
       expect(_plan([_manual('m1', '2026-01-17', -990, to: 'b1')], bank, _all).matchedTo, {'m1': null}, reason: '$bank');
     }
-    expect(_plan([_manual('m1', '2026-01-17', -990, to: 'b1')], [_bank('b2', '2026-01-18', -990)], _all).matchedTo, {'m1': 'b2'});
+    expect(_plan([_manual('m1', '2026-01-17', -990, to: 'b1')], [gone, _bank('b2', '2026-01-18', -990)], _all).matchedTo, {'m1': 'b2'});
+  });
+
+  test('a match whose bank row has not arrived yet is kept (no unmatch while its sync file is missing)', () {
+    expect(_plan([_manual('m1', '2026-01-17', -990, to: 'b1')], [], _all).isEmpty, isTrue);
+    // Nor does it take another row meanwhile, and the row it points at stays taken.
+    final p = _plan([_manual('m1', '2026-01-17', -990, to: 'b1'), _manual('m2', '2026-01-17', -990, to: 'b1')],
+        [_bank('b2', '2026-01-18', -990)], _all);
+    expect(p.matchedTo, {'m2': 'b2'}, reason: 'two entries on one row: the second is open, even while the row is missing');
   });
 
   test('property: the plan does not depend on row order, and applying it gives an empty plan', () {
@@ -216,17 +223,36 @@ void main() {
       expect(spending(r).single.manual, isFalse);
     });
 
-    test('a match to a bank row that never arrives does not hide the expense', () {
+    test('a match to a bank row that has not arrived yet is kept; the row then counts once, and deleting it reopens the entry', () {
       final r = WalletRepo.inMemory();
       addTearDown(r.close);
+      const t = 1767225600000;
+      r.applyRemote([
+        Op('tx', 'm-peer', {'source': 'manual', 'date': '2026-01-17', 'amount': -2340, 'manual': 1, 'matched_to': 'b-late', 'deleted': 0},
+            const Hlc(t, 0, 'peer').toString()),
+      ]);
+      expect(r.transaction('m-peer')!.matchedTo, 'b-late', reason: 'the peer holds that row: no unmatch op to fight it');
+      expect(r.pendingOps(), isEmpty);
       r.applyRemote([
         Op(
             'tx',
-            'm-peer',
-            {'source': 'manual', 'date': '2026-01-17', 'amount': -2340, 'manual': 1, 'matched_to': 'b-unknown', 'deleted': 0},
-            const Hlc(1767225600000, 0, 'peer').toString()),
+            'b-late',
+            {
+              'source': 'pbz',
+              'date': '2026-01-17',
+              'amount': -2340,
+              'bank_type': 'POS plaćanje',
+              'description': 'POS EXAMPLE',
+              'manual': 0
+            },
+            const Hlc(t - 1000, 0, 'peer').toString()),
       ]);
-      expect(r.transaction('m-peer')!.matchedTo, isNull);
+      expect(spending(r).map((t) => t.id), ['b-late'], reason: 'one expense');
+      expect(r.pendingOps(), isEmpty);
+      r.applyRemote([
+        Op('tx', 'b-late', {'deleted': 1}, const Hlc(t + 1000, 0, 'peer').toString())
+      ]);
+      expect(r.transaction('m-peer')!.matchedTo, isNull, reason: 'its bank row was deleted: the expense counts again');
       expect(spending(r).map((t) => t.id), ['m-peer']);
     });
 
@@ -265,15 +291,16 @@ void main() {
     });
   });
 
-  test('openEntries: unmatched, matched to a deleted or missing row, or second on a shared row', () {
+  test('openEntries: unmatched, matched to a deleted row, or second on a shared row', () {
     final manual = [
       _manual('m1', '2026-01-10', -100),
       _manual('m2', '2026-01-14', -100, to: 'b-live'), // keeps its match
       _manual('m3', '2026-01-14', -100, to: 'b-live'), // second entry on the same row
-      _manual('m4', '2026-07-01', -100, to: 'b-gone'), // its row is gone
+      _manual('m4', '2026-07-01', -100, to: 'b-gone'), // its row was deleted
+      _manual('m5', '2026-07-01', -100, to: 'b-late'), // its row has not arrived: keeps its match
     ];
-    expect(openEntries(manual, {'b-live'}).map((m) => m.id), ['m1', 'm3', 'm4']);
-    expect(openEntries([manual[1]], {'b-live'}), isEmpty);
+    expect(openEntries(manual, {'b-gone'}).map((m) => m.id), ['m1', 'm3', 'm4']);
+    expect(openEntries([manual[1], manual[4]], {}), isEmpty);
   });
 
   group('matching cost', () {

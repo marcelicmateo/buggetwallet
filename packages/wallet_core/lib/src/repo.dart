@@ -217,8 +217,13 @@ class WalletRepo {
 
     const live = 'tx.manual = 0 AND tx.deleted = 0';
     final manual = rows('tx.manual = 1 AND tx.deleted = 0');
-    final targets = rows('$live AND tx.id IN (SELECT matched_to FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to IS NOT NULL)');
-    final open = openEntries(manual, {for (final b in targets) b.id});
+    // Every row an entry points at, deleted ones included: only a deleted target (or one that is not a bank row)
+    // reopens its entry. A target this device has not received yet keeps the match (no unmatch/rematch churn).
+    final targets = rows('tx.id IN (SELECT matched_to FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to IS NOT NULL)');
+    final open = openEntries(manual, {
+      for (final b in targets)
+        if (b.manual || b.deleted) b.id
+    });
     if (open.isEmpty) {
       _clearMatchPending();
       t.done({'manual': manual.length, 'open': 0, 'bank': 0, 'added': 0});

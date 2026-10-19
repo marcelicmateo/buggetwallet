@@ -572,4 +572,65 @@ void main() {
       expect(phone.repo.pendingOps(), isEmpty);
     });
   });
+
+  group('matching while a sync file never arrives', () {
+    for (final damaged in [true, false]) {
+      test(
+          'the file with the bank row is ${damaged ? 'damaged' : 'missing'} on the phone for good: the match the laptop '
+          'wrote is kept, and repeated syncs write nothing new', () async {
+        final phone = device('phone'), laptop = device('laptop');
+        List<String> bwops() => net.files.keys.where((k) => k.endsWith('.bwop')).toList()..sort();
+        phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
+        now += 1000;
+        laptop.repo.importBatch(january);
+        // Filed on the laptop (its own category), so the match op the laptop writes later carries nothing for that row:
+        // the phone does not hold the row at all.
+        laptop.repo.setCategory(laptop.repo.transactions().singleWhere((t) => t.amount == -2340).id, 'Groceries');
+        await laptop.run();
+        laptop.upload(net);
+        final rowsFile = bwops().single;
+        final good = net.files[rowsFile]!;
+        if (damaged) net.files[rowsFile] = Uint8List.sublistView(good, 0, good.length ~/ 2);
+        final onPhone = File('${phone.root.path}/$rowsFile');
+        var repaired = false;
+
+        Future<void> round() async {
+          for (final d in [phone, laptop]) {
+            d.deliver(net, Random(0));
+            if (d == phone && !damaged && !repaired && onPhone.existsSync()) onPhone.deleteSync(); // never arrives
+            now += 120000; // the 2-minute sync
+            await d.run();
+            d.upload(net);
+          }
+        }
+
+        for (var i = 0; i < 3; i++) {
+          await round();
+        }
+        final m = phone.repo.transactions(includeHidden: true).singleWhere((t) => t.manual);
+        final bank = laptop.repo.transaction(m.id)!.matchedTo;
+        expect(bank, isNotNull, reason: 'the laptop holds the bank row and matched the entry');
+        expect(m.matchedTo, bank, reason: 'the phone keeps the match although it lacks that row');
+        expect(phone.repo.transaction(bank!), isNull, reason: 'the phone has not got the row itself');
+        final settled = bwops();
+        for (var i = 0; i < 5; i++) {
+          await round();
+        }
+        expect(bwops(), settled, reason: 'no new sync files: nobody rewrites the match');
+        expect(phone.repo.pendingOps(), isEmpty);
+        expect(laptop.repo.pendingOps(), isEmpty);
+
+        // The file is repaired (or finally arrives): one expense on both devices, same state.
+        repaired = true;
+        if (damaged) onPhone.writeAsBytesSync(good);
+        await round();
+        await round();
+        for (final d in [phone, laptop]) {
+          final live = d.repo.transactions().where((t) => t.amount == -2340).toList();
+          expect(live.map((t) => t.id), [bank], reason: d.name);
+        }
+        expect(dump(phone.repo, clocks: false), dump(laptop.repo, clocks: false));
+      });
+    }
+  });
 }
