@@ -100,6 +100,8 @@ Agents without a file (general-purpose, Explore, Plan) get `model` set on the Ag
 Owner bug reports go before new features. **Bugs are fixed as soon as they're found** (owner rule), in the same
 stage: a test that reproduces the bug (may start as `skip: 'BUG: …'`) plus the fix that makes it pass. Agents that
 find bugs outside their own scope report them to the lead immediately (SendMessage to "main").
+While test agents are writing tests, the lead only collects bugs. When all of them are done: merge, one low-effort
+test-watcher run (haiku/low) lists failures and `BUG:` skips, then the lead plans the fixes and runs them.
 **Resources (owner rule):** agents share one laptop. While developing, run only the targeted check
 (`tools/build.sh core|importer|app|lint`, a single test file, `tools/emulator.sh test <name>`) and batch changes
 before each run. Full `tools/build.sh test` and full emulator/desktop runs happen once per agent at the end, and the
