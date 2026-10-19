@@ -5,6 +5,8 @@
 #   history/steps.jsonl   one JSON line per step per run (append-only): ts, run, source, worktree, commit, cmd, step,
 #                         seconds, result, image, cold; test suites add count/p50/p90/p99/max/slowest
 #   history/tests.jsonl   one line per test per run: ts, run, commit, suite, test, ms, result
+#   history/perf.jsonl    one line per perf-test action per run (tools/build.sh perf): frame counts, build/raster p90/max ms,
+#                         missed frames, ok (budget); frame numbers only
 #   runs/<YYYYMMDD-HHMMSS>-<cmd>-<commit>/   the run's step logs, image build logs, emulator log, test reports,
 #                         screenshots; the newest 30 are kept. dist/logs is a symlink to the latest run of this worktree.
 # Read the history with tools/build-times.sh. The container gets BW_DATA mounted at the same path and the BW_* variables.

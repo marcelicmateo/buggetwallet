@@ -3,6 +3,7 @@
 
   python3 -I tools/build_log.py tests <suite> <reporter.json>   summarise a `dart test`/`flutter test` JSON report
   python3 -I tools/build_log.py drive <suite> <drive.log>       same for a `flutter drive` log (1 s resolution)
+  python3 -I tools/build_log.py perf <perf-records.jsonl>       profile-mode perf test: table + history/perf.jsonl
   python3 -I tools/build_log.py times [-n RUNS] [--cmd C] [--step S] [--commit SHA] [--source local|ci] [--ci-file F]
                                                                 last runs + median per step (tools/build-times.sh)
   python3 -I tools/build_log.py trend [-n RUNS] [--top N] [--step SUITE]   slowest tests over the last runs
@@ -27,6 +28,7 @@ DATA = os.environ.get("BW_DATA_DIR") or os.path.join(
     os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share"), "budget-wallet")
 LOGS = os.environ.get("BW_RUN_DIR") or os.path.join(ROOT, "dist", "logs")
 HISTORY = os.path.join(DATA, "history", "steps.jsonl")
+PERF_HISTORY = os.path.join(DATA, "history", "perf.jsonl")
 TEST_HISTORY = os.path.join(DATA, "history", "tests.jsonl")
 BUCKETS = [(10, "<10 ms"), (50, "10-50 ms"), (100, "50-100 ms"), (500, "100-500 ms"),
            (1000, "0.5-1 s"), (5000, "1-5 s"), (float("inf"), ">5 s")]
@@ -158,6 +160,32 @@ def record(suite, tests, total, kind):
     append(TEST_HISTORY, [{**{k: m[k] for k in keep}, "suite": suite, "test": n, "ms": v, "result": r} for n, v, r in tests])
 
 
+def cmd_perf(args):
+    """Frame numbers of tools/build.sh perf (app/test_driver/perf_driver.dart writes the records, frames only, no wallet
+    data): print a table, save it as perf-summary.txt in the run dir and append the records to history/perf.jsonl."""
+    recs = read(args.path)
+    if not recs:
+        print(f"--- perf: no records at {args.path}")
+        return
+    m = meta()
+    keep = {k: m[k] for k in ("run", "source", "worktree")}
+    append(PERF_HISTORY, [{**keep, **r} for r in recs])
+    rows = [[r["action"], r["frame_count"], f"{r['build_p90_ms']:.1f}", f"{r['build_max_ms']:.1f}", f"{r['raster_p90_ms']:.1f}",
+             f"{r['raster_max_ms']:.1f}", r["missed_build_frames"], r["missed_raster_frames"], r.get("shader_events", ""),
+             "ok" if r.get("ok") else "OVER"] for r in recs]
+    header = ["perf action", "frames", "build p90", "build max", "raster p90", "raster max", "missed b", "missed r", "shader ev", ""]
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        table(rows, header)
+    text = buf.getvalue()
+    print(text, end="")
+    os.makedirs(LOGS, exist_ok=True)
+    with open(os.path.join(LOGS, "perf-summary.txt"), "w", encoding="utf-8") as f:
+        f.write(text)
+
+
 def table(rows, header):
     cols = [header] + rows
     widths = [max(len(str(r[i])) for r in cols) for i in range(len(header))]
@@ -287,6 +315,8 @@ def main():
             s.add_argument("--ci-file", action="append", help="also read this history file (CI history)")
         else:
             s.add_argument("--top", type=int, default=10)
+    s = sub.add_parser("perf")
+    s.add_argument("path")
     s = sub.add_parser("ci-history")
     s.add_argument("times")
     args = p.parse_args()
@@ -296,6 +326,8 @@ def main():
             return 0
         tests, total = (parse_reporter_json if args.action == "tests" else parse_drive_log)(args.path)
         record(args.suite, tests, total, args.action)
+    elif args.action == "perf":
+        cmd_perf(args)
     elif args.action == "times":
         cmd_times(args)
     elif args.action == "trend":

@@ -24,7 +24,7 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
   names, the key, paths or file names (see package `CLAUDE.md`s).
 
 ## Local builds (owner's laptop)
-`tools/build.sh test|lint|format|apk|linux|desktop-test|desktop-smoke|all|shell|lsp` runs the CI steps in a rootless **Podman** container
+`tools/build.sh test|lint|format|apk|linux|desktop-test|desktop-smoke|perf|all|shell|lsp` runs the CI steps in a rootless **Podman** container
 (not Docker), image from `dev/Containerfile`, Flutter version pinned by `environment: flutter:` in `app/pubspec.yaml`
 (CI reads the same line). Outputs land in `dist/` (git-ignored). Run `tools/build.sh test` before pushing.
 The scripts assume a Linux host: Bash 5, GNU tools (`grep -P`, `sha256sum`, `base64 -w0`), Python 3, Podman.
@@ -53,6 +53,11 @@ Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't 
   screenshots come from `integration_test/flutter_test_config.dart`). Android-only tests must skip themselves on
   desktop. `tools/build.sh desktop-smoke` starts the release bundle headless and checks its log. CI runs both.
   Ubuntu packages: `dev/linux-packages.txt` (image and CI).
+- **Frame performance:** `tools/build.sh perf` runs `app/integration_test/perf_test.dart` in profile mode on the Linux app
+  under Xvfb (`flutter drive --profile`; big synthetic wallet, Spending scroll + tab switches), saves each action's
+  `<action>.timeline.json` (DevTools/Perfetto) and `.timeline_summary.json` in the run's logs, appends `history/perf.jsonl`
+  and fails on budget overruns (`app/test_driver/perf_budget.dart`). Not in `test`/`all`/CI. Software GL under Xvfb: raster
+  numbers are not a GPU's.
 - **Live mode (fast UI work):** `tools/live.sh start [--demo] [--headless] [--profile] [--fresh]` runs `flutter run -d linux`
   in the container in the background (window on the owner's desktop; `--demo` = synthetic demo wallet). Then
   `reload`, `restart`, `shot [file]`, `trace start|stop [name]` (timeline + frame summary in the run dir; use
