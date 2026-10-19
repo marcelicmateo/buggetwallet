@@ -62,6 +62,8 @@ Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't 
   in the container in the background (window on the owner's desktop; `--demo` = synthetic demo wallet). Then
   `reload`, `restart`, `shot [file]`, `trace start|stop [name]` (timeline + frame summary in the run dir; use
   `--profile` for real numbers), `status`, `stop`. Wallet data is a throwaway folder in `dist/live/`, never the real one.
+  File pickers work: a portal + GTK backend run on the container's private bus (nothing from the host bus); the dialog sees
+  only the container and `/files` = `~/.local/share/budget-wallet/live-files` (copy test bank files in; saved logs land there).
   The `dart` MCP server (`.mcp.json` → `tools/build.sh mcp`, same pod) reaches it: `dtd` tool, `connect` with the dtd
   URI from `tools/live.sh status`, then `hot_reload`, `get_runtime_errors`, `widget_inspector`. **Privacy:** the
   window uses the Wayland socket only (never X11). Drive the app only through the VM service / MCP server, never
