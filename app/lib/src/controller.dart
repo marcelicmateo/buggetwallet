@@ -170,7 +170,8 @@ class WalletController extends ChangeNotifier {
     }
     if (_memo.containsKey(key)) return _memo[key] as T;
     final v = compute();
-    _memo[key] = v;
+    // The day may have changed while computing (an inner call cleared the memo): this value is for the old day.
+    if (_memoDay == day) _memo[key] = v;
     return v;
   }
 
@@ -315,6 +316,7 @@ class WalletController extends ChangeNotifier {
     }
     syncing = true;
     if (!quiet) notifyListeners();
+    final changesBefore = _dbChanges();
     try {
       final r = await timedAsync('sync.run', () => syncRunner(folder, k, repo), fields: {'trigger': trigger}, warnMs: 3000);
       lastSync = DateTime.now();
@@ -326,14 +328,18 @@ class WalletController extends ChangeNotifier {
     } catch (e, st) {
       logError(_sync, 'sync.failed', e, st, fields: {'trigger': trigger});
       syncError = e.toString();
-      // A run that failed partway (a folder that stopped being readable after file A) may already have applied A's changes;
-      // a SyncException is thrown by the checks before anything is applied.
-      if (e is! SyncException) reload();
+      // A run that failed partway (a folder that stopped being readable after file A) may already have applied A's changes.
+      // Reload only if the database changed during the run: a sync that keeps failing before applying anything (no folder
+      // access, read-only mount) must not reload the whole wallet every 2 minutes.
+      if (_dbChanges() != changesBefore) reload();
     } finally {
       syncing = false;
       notifyListeners();
     }
   }
+
+  /// SQLite's count of rows changed on this connection so far: a cheap way to see whether a sync run wrote anything.
+  int _dbChanges() => repo.db.select('SELECT total_changes() AS n').first['n'] as int;
 
   void _startAutoSync() {
     _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
