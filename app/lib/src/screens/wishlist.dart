@@ -166,11 +166,9 @@ class _WishRow extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children: [
-            Expanded(child: Text(w.name, style: const TextStyle(fontWeight: FontWeight.w500))),
-            const SizedBox(width: 8),
-            Flexible(child: Text(money(w.price, currency, decimals: 0), textAlign: TextAlign.end, style: numStyle)),
-          ]),
+          SplitRow(
+              start: Text(w.name, style: const TextStyle(fontWeight: FontWeight.w500)),
+              end: Text(money(w.price, currency, decimals: 0), textAlign: TextAlign.end, style: numStyle)),
           Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
             Text(sub, style: TextStyle(fontSize: 12.5, color: context.c.muted)),
             if (actions.isNotEmpty) Wrap(spacing: 4, children: actions),

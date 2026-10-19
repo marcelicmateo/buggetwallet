@@ -75,19 +75,12 @@ class TodayScreen extends StatelessWidget {
               _Stat(money(p.planDaily, cur, decimals: 0), 'plan per day'),
             ]),
             PaceBar(used: used, elapsed: p.elapsed, over: p.spent > p.flexBudget * p.elapsed),
-            Row(children: [
-              Expanded(child: Muted('${money(p.spent, cur, decimals: 0)} of ${money(p.flexBudget, cur, decimals: 0)} used')),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: ahead >= 0
-                      ? Text('${money(ahead, cur, decimals: 0)} ahead of pace',
-                          textAlign: TextAlign.end, style: const TextStyle(fontSize: 13))
-                      : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace', textAlign: TextAlign.end),
-                ),
-              ),
-            ]),
+            SplitRow(
+              start: Muted('${money(p.spent, cur, decimals: 0)} of ${money(p.flexBudget, cur, decimals: 0)} used'),
+              end: ahead >= 0
+                  ? Text('${money(ahead, cur, decimals: 0)} ahead of pace', textAlign: TextAlign.end, style: const TextStyle(fontSize: 13))
+                  : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace', textAlign: TextAlign.end),
+            ),
             FilledButton.icon(
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
               icon: const Icon(Icons.add),
@@ -128,7 +121,7 @@ class TodayScreen extends StatelessWidget {
               ),
             ]),
           Panel(children: [
-            Row(children: [const Heading('Recent', size: 15), const Spacer(), Flexible(child: Muted(_freshness(wc), size: 12))]),
+            SplitRow(start: const Heading('Recent', size: 15), end: Muted(_freshness(wc), size: 12, align: TextAlign.end)),
             if (recent.isEmpty)
               const EmptyNote('No transactions yet. Import your bank exports in Plan, or add your first expense.')
             else

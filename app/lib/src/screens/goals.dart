@@ -54,13 +54,10 @@ class GoalsScreen extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    Row(children: [
-                      Expanded(child: Text(g.name, style: const TextStyle(fontWeight: FontWeight.w600))),
-                      const SizedBox(width: 8),
-                      Flexible(
-                          child: Text('${money(g.saved, cur, decimals: 0)} / ${money(g.target, cur, decimals: 0)}',
-                              textAlign: TextAlign.end, style: numStyle)),
-                    ]),
+                    SplitRow(
+                        start: Text(g.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        end: Text('${money(g.saved, cur, decimals: 0)} / ${money(g.target, cur, decimals: 0)}',
+                            textAlign: TextAlign.end, style: numStyle)),
                     const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(5),

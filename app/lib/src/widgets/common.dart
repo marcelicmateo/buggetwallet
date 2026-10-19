@@ -48,9 +48,10 @@ class Heading extends StatelessWidget {
 class Muted extends StatelessWidget {
   final String text;
   final double size;
-  const Muted(this.text, {super.key, this.size = 13});
+  final TextAlign align;
+  const Muted(this.text, {super.key, this.size = 13, this.align = TextAlign.start});
   @override
-  Widget build(BuildContext context) => Text(text, style: TextStyle(fontSize: size, color: context.c.muted, height: 1.4));
+  Widget build(BuildContext context) => Text(text, textAlign: align, style: TextStyle(fontSize: size, color: context.c.muted, height: 1.4));
 }
 
 /// Status pill with icon + label, so state is never colour alone. The label wraps (the icon stays on the first
@@ -78,6 +79,28 @@ class StatusLabel extends StatelessWidget {
       style: TextStyle(color: col, fontWeight: FontWeight.w600, fontSize: 13),
     );
   }
+}
+
+/// A row with [start] taking the room and [end] (an amount, a note) at the right end at its natural width, up to
+/// [maxEnd] of the row, wrapping beyond that. Use instead of `Expanded` + `Flexible`, which splits the row in half.
+class SplitRow extends StatelessWidget {
+  final Widget start, end;
+  final double gap, maxEnd;
+  final CrossAxisAlignment crossAxisAlignment;
+  const SplitRow(
+      {super.key,
+      required this.start,
+      required this.end,
+      this.gap = 8,
+      this.maxEnd = 0.5,
+      this.crossAxisAlignment = CrossAxisAlignment.center});
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+      builder: (context, box) => Row(crossAxisAlignment: crossAxisAlignment, children: [
+            Expanded(child: start),
+            SizedBox(width: gap),
+            ConstrainedBox(constraints: BoxConstraints(maxWidth: box.maxWidth * maxEnd), child: end),
+          ]));
 }
 
 /// A panel heading with something on its right (a count, tag, icon or note). On a narrow screen or with large
@@ -125,24 +148,20 @@ class TxTile extends StatelessWidget {
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
-        child: Row(children: [
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(merchantName(t.tx), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500)),
-              const SizedBox(height: 2),
-              Wrap(spacing: 6, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                Text('${shortDate(t.date)} · ${t.category}',
-                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: context.c.muted)),
-                Tag(src),
-              ]),
+        child: SplitRow(
+          gap: 12,
+          start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(merchantName(t.tx), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500)),
+            const SizedBox(height: 2),
+            Wrap(spacing: 6, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Text('${shortDate(t.date)} · ${t.category}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: context.c.muted)),
+              Tag(src),
             ]),
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(money(t.amount, currency, decimals: 2, signed: true),
-                textAlign: TextAlign.end, style: numStyle.copyWith(color: inc ? context.c.good : context.c.ink)),
-          ),
-        ]),
+          ]),
+          end: Text(money(t.amount, currency, decimals: 2, signed: true),
+              textAlign: TextAlign.end, style: numStyle.copyWith(color: inc ? context.c.good : context.c.ink)),
+        ),
       ),
     );
   }
