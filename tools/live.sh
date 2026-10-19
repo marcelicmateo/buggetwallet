@@ -23,8 +23,9 @@
 # Privacy: the app's data (wallet, key file, logs, Documents) is a throwaway folder in dist/live/demo/ (--demo) or
 # dist/live/wallet/; the container sees only the repo, never your home folder or the real wallet, and gets its own
 # D-Bus session (no keyring, no host portal). File pickers (import, Syncthing folder, save logs) open a GTK dialog from
-# a portal running on that private bus, drawn in the app's Wayland window; it sees only the container's folders and
-# /files = ~/.local/share/budget-wallet/live-files on the host (copy test bank files there; saved logs land there). The window uses only the Wayland socket: no X11 (an X11 client can read other windows
+# a portal running on that private bus, drawn in the app's Wayland window; it sees only the container's folders (the
+# repo, this run's log folder and history/ — not device-logs/) and /files = ~/.local/share/budget-wallet/live-files on
+# the host (copy test bank files there; saved logs land there). The window uses only the Wayland socket: no X11 (an X11 client can read other windows
 # and keystrokes). Claude drives the app only from inside (VM service, the dart MCP server), never with host input
 # tools (xdotool, ydotool, uinput), and screenshots come from the app or the container's Xvfb, never your screen.
 # Network: the app and the MCP server (tools/build.sh mcp) share a pod (bw-<checkout folder>), so the MCP server
@@ -54,8 +55,8 @@ if [[ "${BW_NATIVE:-}" == 1 ]]; then
   # path_provider: support folder = $XDG_DATA_HOME/<app id> (wallet, key file, logs), Documents = XDG_DOCUMENTS_DIR
   export XDG_DATA_HOME=$dir/data XDG_DOCUMENTS_DIR=$dir/docs XDG_RUNTIME_DIR=/tmp/bw-runtime NO_AT_BRIDGE=1
   # File pickers (file_picker -> xdg-desktop-portal FileChooser): the portal and its GTK backend are started on demand
-  # by the private D-Bus session below, not by anything on the host. The dialog opens in /files (host folder
-  # live-files, the only host folder the container can browse besides the repo).
+  # by the private D-Bus session below, not by anything on the host. Host folders it can browse: /files (live-files),
+  # the repo, this run's log folder and history/.
   mkdir -p ~/.config/xdg-desktop-portal ~/.config/gtk-3.0
   printf '[preferred]\ndefault=gtk\n' > ~/.config/xdg-desktop-portal/portals.conf
   echo 'file:///files Test files' > ~/.config/gtk-3.0/bookmarks
@@ -139,10 +140,13 @@ case "$CMD" in
           -e BW_NATIVE=1 -e BW_LIVE_DIR="$data" -e BW_LIVE_MODE="$mode" -e BW_LIVE_TARGET="$target" -e BW_LIVE_PORT="$PORT"
           -e BW_LIVE_DEMO="$demo")
     # The one host folder for the file pickers (import bank files, Syncthing folder, saved logs), mounted at /files
-    files=${BW_DATA_DIR:-$HOME/.local/share/budget-wallet}/live-files
-    mkdir -p "$files"
+    files=$BW_DATA/live-files
+    mkdir -p "$files" "$BW_DATA/history"
     opts+=(-v "$files:/files:z")
-    mapfile -t run < <(run_mounts)
+    # Only this run's folder and the timing history, not all of $BW_DATA (device-logs/ holds logs the owner sends):
+    # the file dialog can browse every mounted folder. run_mounts' first two lines are its -v of $BW_DATA; keep its -e.
+    run=(-v "$BW_RUN_DIR:$BW_RUN_DIR:z" -v "$BW_DATA/history:$BW_DATA/history:z")
+    mapfile -t -O 4 run < <(run_mounts | sed '1,2d')
     way=${WAYLAND_DISPLAY:-}; [[ -n $way && $way != /* ]] && way=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$way
     if ((!headless)) && [[ -z $way || ! -S $way ]]; then
       echo "No Wayland session here: running headless (X11 is never passed through)." >&2
