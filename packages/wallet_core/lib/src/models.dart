@@ -31,6 +31,10 @@ class Tx {
   final String? matchedTo; // for manual entries: the bank row that replaced it
   final bool deleted;
 
+  /// A manual entry whose [matchedTo] bank row is not on this device yet (its sync file has not arrived): the entry
+  /// still counts, so the expense counts once until the row arrives. Set by `WalletRepo` reads, never stored.
+  final bool matchPending;
+
   const Tx({
     required this.id,
     required this.source,
@@ -44,10 +48,11 @@ class Tx {
     this.manual = false,
     this.matchedTo,
     this.deleted = false,
+    this.matchPending = false,
   });
 
-  /// Counts toward totals: not deleted and not replaced by a bank row.
-  bool get live => !deleted && matchedTo == null;
+  /// Counts toward totals: not deleted and not replaced by a bank row that is here (see [matchPending]).
+  bool get live => !deleted && (matchedTo == null || matchPending);
 
   static Tx fromRow(Map<String, Object?> r) => Tx(
         id: r['id'] as String,
@@ -62,6 +67,7 @@ class Tx {
         manual: (r['manual'] as int? ?? 0) == 1,
         matchedTo: r['matched_to'] as String?,
         deleted: (r['deleted'] as int? ?? 0) == 1,
+        matchPending: (r['match_pending'] as int? ?? 0) == 1,
       );
 }
 

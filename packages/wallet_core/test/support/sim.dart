@@ -15,7 +15,10 @@ int fuzzSeed(int base) => int.tryParse(Platform.environment['BW_FUZZ_SEED'] ?? '
 
 /// Entity name in ops -> table, and the syncable columns (written down independently of repo.dart).
 const entityTables = {
-  'tx': ('tx', ['source', 'date', 'amount', 'currency', 'bank_type', 'description', 'category', 'note', 'manual', 'matched_to', 'deleted']),
+  'tx': (
+    'tx',
+    ['source', 'date', 'amount', 'currency', 'bank_type', 'description', 'category', 'note', 'manual', 'matched_to', 'deleted', 'seen_bank']
+  ),
   'goal': ('goals', ['name', 'target', 'saved', 'monthly', 'sort', 'deleted']),
   'wish': ('wish', ['name', 'price', 'added', 'status', 'decided', 'deleted']),
   'setting': ('settings', ['value', 'deleted']),

@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/sim.dart';
 import 'support/synthetic.dart';
@@ -571,5 +572,155 @@ void main() {
       expect(dump(phone.repo), dump(laptop.repo));
       expect(phone.repo.pendingOps(), isEmpty);
     });
+  });
+
+  group('a hand-added expense and bank rows imported on another device first', () {
+    for (final phoneFirst in [true, false]) {
+      test(
+          'the laptop imports in the morning, the phone (not synced) adds the same expense in the evening: one expense on '
+          'both devices (${phoneFirst ? 'phone' : 'laptop'} syncs first)', () async {
+        final phone = device('phone'), laptop = device('laptop');
+        laptop.repo.importBatch(january); // 09:00: holds the synthetic 23.40 card payment of 2026-01-17
+        now += 10 * 3600000; // 19:00, the phone has not synced since
+        final m = phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
+        await syncAll(phoneFirst ? [phone, laptop] : [laptop, phone]);
+        for (final d in [phone, laptop]) {
+          final live = d.repo.transactions().where((t) => t.amount == -2340).toList();
+          expect(live.length, 1, reason: '${d.name}: counted once');
+          expect(live.single.manual, isFalse, reason: d.name);
+          expect(d.repo.transaction(m)!.matchedTo, live.single.id, reason: d.name);
+          expect(d.repo.categorizer().categoryOf(live.single), 'Eating out', reason: d.name);
+        }
+        await syncAll([phone, laptop]);
+        expect(dump(phone.repo), dump(laptop.repo));
+        expect(phone.repo.pendingOps(), isEmpty);
+        expect(laptop.repo.pendingOps(), isEmpty);
+      });
+    }
+
+    test('the phone already had Saturday\'s card coffee: a Monday cash coffee stays separate, also after later imports', () async {
+      final phone = device('phone'), laptop = device('laptop');
+      laptop.repo.importBatch(ImportBatch(source: 'pbz', transactions: [bankRow('2026-01-17', -240, 'POS plaćanje', 'POS EXAMPLE CAFE')]));
+      await syncAll([laptop, phone]);
+      now += 3600000;
+      // The laptop imports the next statement (other rows) before the phone's entry arrives.
+      laptop.repo.importBatch(ImportBatch(source: 'pbz', transactions: [bankRow('2026-01-18', -5000, 'POS plaćanje', 'POS EXAMPLE SHOP')]));
+      now += 3600000;
+      final cash = phone.repo.addManual(date: '2026-01-19', amount: 240, category: 'Eating out', note: 'synthetic cash coffee');
+      await syncAll([phone, laptop]);
+      await syncAll([laptop, phone]);
+      for (final d in [phone, laptop]) {
+        expect(d.repo.transaction(cash)!.matchedTo, isNull, reason: d.name);
+        expect(d.repo.transactions().where((t) => t.amount == -240).length, 2, reason: '${d.name}: two coffees');
+      }
+      expect(dump(phone.repo), dump(laptop.repo));
+    });
+  });
+
+  group('matching while a sync file never arrives', () {
+    for (final partial in [false, true]) {
+      test(
+          'the phone holds the match but not the bank row${partial ? ' (only a partial row from the match op)' : ''}: the '
+          'entry counts once until the row arrives, then the row counts once', () async {
+        final phone = device('phone'), laptop = device('laptop');
+        final m = phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
+        await phone.run();
+        phone.upload(net);
+        now += 1000;
+        laptop.repo.importBatch(january);
+        final b = laptop.repo.transactions().singleWhere((t) => t.amount == -2340).id;
+        // Without its own category the match op also gives the row the entry's category: a partial row on the phone.
+        if (!partial) laptop.repo.setCategory(b, 'Groceries');
+        await laptop.run(); // the rows file
+        laptop.upload(net);
+        final rowsFile = net.files.keys.singleWhere((k) => k.contains(laptop.repo.deviceId) && k.endsWith('.bwop'));
+        laptop.deliver(net, Random(0));
+        await laptop.run(); // reads the entry and matches it
+        expect(laptop.repo.transaction(m)!.matchedTo, b);
+        await laptop.run(); // the match file
+        laptop.upload(net);
+        final rows = net.files.remove(rowsFile)!; // the rows file has not reached the phone
+        phone.deliver(net, Random(0));
+        await phone.run();
+        expect(phone.repo.transaction(m)!.matchedTo, b, reason: 'the match arrived');
+        expect(phone.repo.pendingOps(), isEmpty, reason: 'no writes');
+
+        int out(Device d) {
+          final cz = d.repo.categorizer();
+          return monthSummary(d.repo.transactions().map(cz.categorize).toList(), '2026-01').out;
+        }
+
+        expect(phone.repo.transactions().where((t) => t.amount == -2340).map((t) => t.id), [m], reason: 'counted once');
+        expect(phone.repo.transaction(m)!.live, isTrue);
+        expect(out(phone), 2340);
+
+        net.files[rowsFile] = rows; // it arrives
+        phone.deliver(net, Random(0));
+        await phone.run();
+        expect(phone.repo.transactions().where((t) => t.amount == -2340).map((t) => t.id), [b], reason: 'the row, once');
+        expect(phone.repo.transaction(m)!.live, isFalse);
+        expect(out(phone), out(laptop));
+        expect(phone.repo.pendingOps(), isEmpty);
+      });
+    }
+
+    for (final damaged in [true, false]) {
+      test(
+          'the file with the bank row is ${damaged ? 'damaged' : 'missing'} on the phone for good: the match the laptop '
+          'wrote is kept, and repeated syncs write nothing new', () async {
+        final phone = device('phone'), laptop = device('laptop');
+        List<String> bwops() => net.files.keys.where((k) => k.endsWith('.bwop')).toList()..sort();
+        phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
+        now += 1000;
+        laptop.repo.importBatch(january);
+        // Filed on the laptop (its own category), so the match op the laptop writes later carries nothing for that row:
+        // the phone does not hold the row at all.
+        laptop.repo.setCategory(laptop.repo.transactions().singleWhere((t) => t.amount == -2340).id, 'Groceries');
+        await laptop.run();
+        laptop.upload(net);
+        final rowsFile = bwops().single;
+        final good = net.files[rowsFile]!;
+        if (damaged) net.files[rowsFile] = Uint8List.sublistView(good, 0, good.length ~/ 2);
+        final onPhone = File('${phone.root.path}/$rowsFile');
+        var repaired = false;
+
+        Future<void> round() async {
+          for (final d in [phone, laptop]) {
+            d.deliver(net, Random(0));
+            if (d == phone && !damaged && !repaired && onPhone.existsSync()) onPhone.deleteSync(); // never arrives
+            now += 120000; // the 2-minute sync
+            await d.run();
+            d.upload(net);
+          }
+        }
+
+        for (var i = 0; i < 3; i++) {
+          await round();
+        }
+        final m = phone.repo.transactions(includeHidden: true).singleWhere((t) => t.manual);
+        final bank = laptop.repo.transaction(m.id)!.matchedTo;
+        expect(bank, isNotNull, reason: 'the laptop holds the bank row and matched the entry');
+        expect(m.matchedTo, bank, reason: 'the phone keeps the match although it lacks that row');
+        expect(phone.repo.transaction(bank!), isNull, reason: 'the phone has not got the row itself');
+        final settled = bwops();
+        for (var i = 0; i < 5; i++) {
+          await round();
+        }
+        expect(bwops(), settled, reason: 'no new sync files: nobody rewrites the match');
+        expect(phone.repo.pendingOps(), isEmpty);
+        expect(laptop.repo.pendingOps(), isEmpty);
+
+        // The file is repaired (or finally arrives): one expense on both devices, same state.
+        repaired = true;
+        if (damaged) onPhone.writeAsBytesSync(good);
+        await round();
+        await round();
+        for (final d in [phone, laptop]) {
+          final live = d.repo.transactions().where((t) => t.amount == -2340).toList();
+          expect(live.map((t) => t.id), [bank], reason: d.name);
+        }
+        expect(dump(phone.repo, clocks: false), dump(laptop.repo, clocks: false));
+      });
+    }
   });
 }
