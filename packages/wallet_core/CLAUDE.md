@@ -5,7 +5,9 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
 
 ## Files
 - `repo.dart` — `WalletRepo`: schema, reads, and every write. Writes go through `_write(...)` so each one
-  becomes a sync op; never `db.execute` an INSERT/UPDATE on a data table directly.
+  becomes a sync op; never `db.execute` an INSERT/UPDATE on a data table directly. `_apply` checks each field's
+  type (`_fieldValue`): a wrong-typed one is ignored (`repo.badField`, entity + field only) without recording its
+  clock, the op's other fields apply, and a row is only created when some field applies. New column: add its type there.
 - `budget.dart` — period maths: `PeriodBudget` (safe to spend), `MonthSummary`, `Affordability`.
 - `categories.dart` — `Categorizer`: item override → merchant rules → patterns → built-in rules.
 - `matching.dart` — `planMatches`: hand-added expense ↔ bank row (same amount, ±3 days, one-to-one), deterministic;

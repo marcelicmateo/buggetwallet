@@ -271,29 +271,37 @@ void main() {
       }
     });
 
-    test('a value that cannot be stored (NULL in a required column) rolls the whole file back', () async {
-      await expectBad([
+    // Field values of the wrong type are checked per field (repo `_apply`): the bad field is ignored, the rest of the
+    // op and the file apply, on every device alike. (Before that check, such a value rolled the whole file back.)
+    Future<void> expectFieldIgnored(String id, Map<String, Object?> fields) async {
+      await peer('p1', '0000000001.bwop', ops: [
         _setting('salary', 5),
-        Op('tx', 'x1', {'source': 'pbz', 'date': '2026-01-01', 'amount': null}, Hlc(_clock++, 0, 'peer').toString()).toJson(),
+        Op('tx', id, fields, Hlc(_clock++, 0, 'peer').toString()).toJson(),
       ]);
+      final rep = await run();
+      expect((rep.badFiles, rep.filesRead), (0, 1));
+      expect(repo.settings().salary, 5);
+      expect(repo.peerFileSeen('p1', '0000000001.bwop'), isTrue);
+    }
+
+    test('a value that cannot be stored (NULL in a required column) is ignored; the rest of the file applies', () async {
+      await expectFieldIgnored('x1', {'source': 'pbz', 'date': '2026-01-01', 'amount': null});
+      final t = repo.transaction('x1')!;
+      expect((t.date, t.amount), ('2026-01-01', 0));
+      expect(repo.db.select("SELECT 1 FROM clocks WHERE id = 'x1' AND field = 'amount'"), isEmpty);
     });
 
-    test('a value of a type SQLite cannot bind rolls the whole file back', () async {
+    test('a value of a type SQLite cannot bind is ignored; the rest of the file applies', () async {
       // Nested lists and objects cannot be stored in a column.
-      await expectBad([
-        _setting('salary', 5),
-        Op(
-                'tx',
-                'x2',
-                {
-                  'source': 'pbz',
-                  'date': '2026-01-01',
-                  'amount': -5,
-                  'note': ['a']
-                },
-                Hlc(_clock++, 0, 'peer').toString())
-            .toJson(),
-      ]);
+      await expectFieldIgnored('x2', {
+        'source': 'pbz',
+        'date': '2026-01-01',
+        'amount': -5,
+        'note': ['a']
+      });
+      final t = repo.transaction('x2')!;
+      expect((t.amount, t.note), (-5, null));
+      expect(repo.db.select("SELECT 1 FROM clocks WHERE id = 'x2' AND field = 'note'"), isEmpty);
     });
   });
 
