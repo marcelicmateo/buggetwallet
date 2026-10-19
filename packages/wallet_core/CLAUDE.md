@@ -40,6 +40,9 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
 - Older builds ignore `seen_bank` and match by the old rule: devices on mixed versions can plan different matches,
   and keep doing so after upgrading for entries they received before.
 - A device that is behind can match a cash entry to an earlier same-amount card payment (±3 days) it never held.
+- A wrong-typed field (e.g. `amount: "abc"`) is refused with no clock only by builds that check types: older builds
+  stored it with its clock, so a later valid write with an older clock wins on new devices and loses on old ones
+  until the next write. Only a buggy writer causes this.
 - `VaultKey.parse` accepts junk after a valid key (extra characters past the 34 key + checksum bytes are ignored).
 - A remote clock far in the future (a peer with a wrong date) is taken as is: this device's later writes sort after it,
   and an edit made on a device with a correct clock loses to that peer's older edits until real time catches up.

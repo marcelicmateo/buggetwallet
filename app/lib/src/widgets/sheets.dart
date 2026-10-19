@@ -234,9 +234,10 @@ class _GoalSheetState extends State<GoalSheet> {
   int? _amount(TextEditingController c) => c.text.trim().isEmpty ? 0 : parseMoney(c.text);
 
   void _save() {
-    final t = parseMoney(target.text);
     // A new goal needs a target; an old goal that has none may keep it empty.
-    final targetOk = t != null && (t > 0 || (g != null && g!.target == 0));
+    final keepsNone = g != null && g!.target == 0;
+    final t = keepsNone && target.text.trim().isEmpty ? 0 : parseMoney(target.text);
+    final targetOk = t != null && (t > 0 || keepsNone);
     final m = _amount(monthly), sv = _amount(saved), ad = _amount(add);
     final bad = !targetOk
         ? 'Target'

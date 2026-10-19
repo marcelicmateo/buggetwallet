@@ -1,6 +1,7 @@
 // Edge cases and failure paths of the bottom sheets (add expense, transaction details, goal): bad input, odd text,
 // double taps, cancel, narrow screens and large text. All data is SYNTHETIC.
 import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -456,6 +457,16 @@ void main() {
       await _settle(tester);
     });
 
+    testWidgets('the list row of a transaction with an impossible date shows the date as stored', (tester) async {
+      final wc = emptyWallet();
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [_bank('2026-13-01', -700, 'PBZ POS PBZ7TESTSHOPA ZAGREB')]));
+      wc.reload();
+      await pumpApp(tester, Scaffold(body: TxTile(t: wc.txs.single, currency: 'EUR')));
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('2026-13-01'), findsOneWidget);
+      await _settle(tester);
+    });
+
     testWidgets('a zero-amount row and an empty description do not crash', (tester) async {
       final wc = emptyWallet();
       wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [_bank('2026-10-10', 0, '', type: '')]));
@@ -637,6 +648,16 @@ void main() {
         await _settle(tester);
         final g = wc.goals.single;
         expect((g.id, g.name, g.target, g.saved, g.monthly, g.sort), (g0.id, 'Trip', 123457, 1999, 2501, 3));
+      });
+
+      testWidgets('an old goal saved without a target can be saved with Target left empty', (tester) async {
+        final wc = emptyWallet();
+        await _open(tester, GoalSheet(wc: wc, goal: makeGoal(wc, target: 0)));
+        expect(tester.widget<TextField>(_field('Target')).controller!.text, '');
+        await tester.enterText(_field('Add money now'), '50');
+        await save(tester);
+        await _settle(tester);
+        expect((wc.goals.single.target, wc.goals.single.saved), (0, 5000 + 5000));
       });
 
       testWidgets('"Add money now" is added to what is put aside', (tester) async {

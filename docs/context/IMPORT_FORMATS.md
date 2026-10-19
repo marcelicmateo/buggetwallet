@@ -26,3 +26,6 @@ figures stay in the claude.ai Project (`claude/BASELINE.md`).
 - Type: Card Payment (spending), Topup "Top-up by *NNNN" (= from PBZ, internal), Transfer "Revolut Bank UAB" (to/from people), Exchange, Card Refund.
 - Merchant names can have broken UTF-8 (e.g. "GraÅ¡o") → re-decode latin1 → utf8.
 - Only Product = Current is used (no Savings / Pockets). Revolut is a pure spending card, funded from PBZ.
+- CSV ids vs v1: SheetJS (v1) converts descriptions that look like values (`TRUE` → "true", `00123` → "123",
+  `1e3` → "1000", `12/01/2026` → a serial) and keeps `"Shop"X` as is; v2 keeps the text as written (and reads
+  `"Shop"X` as `ShopX`). Such rows get different ids across v1 and v2. Not seen in real Revolut descriptions.

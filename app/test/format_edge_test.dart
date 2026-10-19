@@ -314,9 +314,11 @@ void main() {
     test('a day that does not exist is not given a weekday', () {
       expect(() => longDate('2026-02-30'), throwsA(anything));
     });
-    test('longDateOrRaw: a real date gets its weekday, anything else is shown as stored', () {
+    test('shortDateOrRaw / longDateOrRaw: a real date is formatted, anything else is shown as stored', () {
+      expect(shortDateOrRaw('2026-10-10'), '10 Oct');
       expect(longDateOrRaw('2026-10-10'), 'Saturday, 10 October 2026');
       for (final bad in ['2026-02-30', '2026-13-01', '2026-00-10', '', 'x', '2026', '2026-2-1', '2026-10-10T00:00']) {
+        expect(shortDateOrRaw(bad), bad, reason: bad);
         expect(longDateOrRaw(bad), bad, reason: bad);
       }
     });

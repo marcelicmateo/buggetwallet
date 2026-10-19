@@ -145,7 +145,7 @@ class TodayScreen extends StatelessWidget {
   static String _freshness(WalletController wc) {
     String last(String src) {
       final t = wc.txs.where((x) => x.tx.source == src).firstOrNull;
-      return t == null ? 'none' : shortDate(t.date);
+      return t == null ? 'none' : shortDateOrRaw(t.date);
     }
 
     return 'PBZ ${last('pbz')} · Revolut ${last('revolut')}';

@@ -154,7 +154,7 @@ class TxTile extends StatelessWidget {
             Text(merchantName(t.tx), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500)),
             const SizedBox(height: 2),
             Wrap(spacing: 6, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              Text('${shortDate(t.date)} · ${t.category}',
+              Text('${shortDateOrRaw(t.date)} · ${t.category}',
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: context.c.muted)),
               Tag(src),
             ]),

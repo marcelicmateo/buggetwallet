@@ -62,7 +62,7 @@ void main() {
       ]);
     });
 
-    test('a quote inside an unquoted field is literal; spaces before an opening quote are allowed', () {
+    test('a quote is literal unless it is the first character of the field (as v1 / SheetJS)', () {
       expect(readCsv('a,Pizza 5" wide,b\nc,d\n'), [
         ['a', 'Pizza 5" wide', 'b'],
         ['c', 'd'],
@@ -71,7 +71,7 @@ void main() {
         ['x"y"z', 'q'],
       ]);
       expect(readCsv(' "a,b" ,c\n'), [
-        [' a,b ', 'c'],
+        [' "a', 'b" ', 'c'],
       ]);
     });
 
@@ -122,7 +122,7 @@ void main() {
 
     test('header cells are trimmed and may be quoted, rows may be shorter or longer than the header', () {
       final b = _imp(
-        ' "Type" , Started Date ,"Description",Amount\n'
+        '"Type", Started Date ,"Description",Amount\n'
         'Card Payment,2026-02-01 10:00:00,Shop,-3.50\n'
         'Card Payment,2026-02-02 10:00:00,Shop,-4.00,extra,columns,here\n'
         'Card Payment,2026-02-03 10:00:00,Short\n',

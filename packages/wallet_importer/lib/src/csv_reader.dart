@@ -6,9 +6,10 @@ final _log = Logger('bw.importer.csv');
 
 /// Small RFC 4180 CSV reader. Detects `,` or `;` from the header line.
 ///
-/// A `"` opens a quoted field only at the start of a field (after optional spaces); anywhere else it is a literal
-/// character, so `Pizza 5" wide` stays one field instead of swallowing the rows after it. v1 (SheetJS) reads stray
-/// quotes the same way, so descriptions and ids match. A quoted field that never closes takes the rest of the text;
+/// A `"` opens a quoted field only as the field's first character; anywhere else it is a literal character, so
+/// `Pizza 5" wide` stays one field instead of swallowing the rows after it. v1 (SheetJS 0.18.5) reads stray quotes
+/// the same way, so descriptions and ids match. Known v1 difference: text after a closing quote (`"Shop"X` → `ShopX`;
+/// v1 keeps `"Shop"X`). A quoted field that never closes takes the rest of the text;
 /// with [strict] that is a [FormatException] instead, because the rows after it would be lost silently.
 List<List<Object>> readCsv(String text, {bool strict = false}) {
   if (text.startsWith('﻿')) text = text.substring(1);
@@ -31,7 +32,7 @@ List<List<Object>> readCsv(String text, {bool strict = false}) {
       } else {
         field.write(ch);
       }
-    } else if (ch == '"' && field.toString().trim().isEmpty) {
+    } else if (ch == '"' && field.isEmpty) {
       inQuotes = true;
     } else if (ch == sep) {
       row.add(field.toString());
