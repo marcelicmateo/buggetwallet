@@ -31,7 +31,7 @@ ImportBatch importBankFile(Uint8List bytes) {
     rows = switch (format) {
       'xls' => XlsReader.firstSheet(bytes),
       'xlsx' => XlsxReader.firstSheet(bytes),
-      _ => readCsv(utf8.decode(bytes, allowMalformed: true)),
+      _ => readCsv(utf8.decode(bytes, allowMalformed: true), strict: true),
     };
   } on FormatException catch (e, st) {
     // Our readers' messages are fixed texts; the formatter drops FormatException.source.
