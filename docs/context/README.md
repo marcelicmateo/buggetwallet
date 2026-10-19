@@ -11,6 +11,7 @@ update them here, on the `v2` branch.
 | `STATUS.md` | Current version, what's done, decisions log, open questions, next steps. |
 | `ARCHITECTURE.md` | v2 requirements and the decisions behind them (transport options etc.). The as-built design is `docs/architecture.md`. |
 | `IMPORT_FORMATS.md` | PBZ and Revolut export formats the importer has to handle. |
+| `DESIGN_DECISIONS.md` | 2026-10-19 planning session: decisions, data-flow gaps, web plan, proposals (bank profiles, bills, calendar, projects), kept UI directions, task order. |
 
 ## Privacy
 The repo holds no personal figures: no salary, rent, loan, balance or other amounts from the owner's life, no

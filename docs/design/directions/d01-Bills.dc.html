@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>D1 · Bills</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;800&amp;family=Roboto+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width:390px;height:844px;overflow:hidden;position:relative;background:#eef1ef;color:#121716;font-family:'Roboto',system-ui,sans-serif;">
+
+<header style="height:64px;padding:0 16px 0 4px;display:flex;align-items:center;gap:4px;">
+  <button type="button" aria-label="Back to Spending" style="width:48px;height:48px;border:none;border-radius:24px;background:transparent;color:#121716;display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="m11 6-6 6 6 6"></path></svg></button>
+  <h1 style="margin:0;font-size:22px;font-weight:700;">Bills</h1>
+  <span style="margin-left:6px;height:22px;padding:0 8px;border-radius:6px;background:#e5e9fb;color:{{accent}};font-size:11px;font-weight:700;letter-spacing:0.3px;display:inline-flex;align-items:center;">New</span>
+</header>
+
+<main style="position:absolute;top:64px;left:0;right:0;bottom:80px;overflow:hidden;padding:0 16px;display:grid;gap:14px;align-content:start;">
+
+  <div style="height:48px;border-radius:24px;background:#ffffff;border:1px solid #dde3e0;padding:0 16px;display:flex;align-items:center;gap:10px;box-sizing:border-box;">
+    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#48514e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>
+    <label for="bsearch" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Search bills</label>
+    <input id="bsearch" type="search" placeholder="Search bills" style="flex:1;min-width:0;border:none;outline:none;background:transparent;font-family:'Roboto',sans-serif;font-size:16px;color:#121716;padding:0;">
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+    <button type="button" style="height:48px;border:none;border-radius:24px;background:{{accent}};color:#ffffff;font-family:'Roboto',sans-serif;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5h3.5L9 6h6l1.5 2.5H20v11H4z"></path><circle cx="12" cy="13.5" r="3.5"></circle></svg>Scan bill</button>
+    <button type="button" style="height:48px;border:1px solid #c5ccc9;border-radius:24px;background:#ffffff;color:{{accent}};font-family:'Roboto',sans-serif;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4.5 4.5v12.5H7z"></path><path d="M14 3.5V8h4.5"></path></svg>Import file</button>
+  </div>
+
+  <section style="background:#ffffff;border:1px solid #dde3e0;border-radius:14px;padding:6px 16px 4px;">
+    <h2 style="margin:0;height:40px;display:flex;align-items:center;font-size:16px;font-weight:700;">To review (2)</h2>
+    <a href="#" style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #dde3e0;text-decoration:none;color:#121716;">
+      <span style="width:40px;height:40px;border-radius:20px;background:#fff4dc;color:#6b4a00;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"></path></svg></span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:15px;line-height:20px;font-weight:500;">HEP electricity</div>
+        <div style="font-size:13px;line-height:18px;color:#48514e;">e-invoice from inbox · due 28 Oct</div>
+      </div>
+      <span style="font-family:'Roboto Mono',monospace;font-size:15px;font-weight:500;white-space:nowrap;">42.18&nbsp;€</span>
+    </a>
+    <a href="#" style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #dde3e0;text-decoration:none;color:#121716;">
+      <span style="width:40px;height:40px;border-radius:20px;background:#fff4dc;color:#6b4a00;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 9.5a12 12 0 0 1 17 0"></path><path d="M6.5 12.8a7.5 7.5 0 0 1 11 0"></path><path d="M9.5 16a3 3 0 0 1 5 0"></path><circle cx="12" cy="19" r=".8"></circle></svg></span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:15px;line-height:20px;font-weight:500;">A1 internet</div>
+        <div style="font-size:13px;line-height:18px;color:#48514e;">PDF</div>
+      </div>
+      <span style="font-family:'Roboto Mono',monospace;font-size:15px;font-weight:500;white-space:nowrap;">25.99&nbsp;€</span>
+    </a>
+  </section>
+
+  <section style="background:#ffffff;border:1px solid #dde3e0;border-radius:14px;padding:6px 16px 4px;">
+    <h2 style="margin:0;height:40px;display:flex;align-items:center;font-size:16px;font-weight:700;">October</h2>
+    <a href="#" style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #dde3e0;text-decoration:none;color:#121716;">
+      <span style="width:40px;height:40px;border-radius:20px;background:#e5e9fb;color:{{accent}};display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"></path><path d="M9 8h6M9 12h6M9 16h4"></path></svg></span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:15px;line-height:20px;font-weight:500;">Lidl receipt</div>
+        <div style="font-size:13px;line-height:18px;color:#48514e;display:flex;align-items:center;gap:4px;">18 Oct · <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0f7a0f" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg><span style="color:#0f7a0f;font-weight:500;">Linked to bank</span></div>
+      </div>
+      <span style="font-family:'Roboto Mono',monospace;font-size:15px;font-weight:500;white-space:nowrap;">23.40&nbsp;€</span>
+    </a>
+    <a href="#" style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #dde3e0;text-decoration:none;color:#121716;">
+      <span style="width:40px;height:40px;border-radius:20px;background:#e5e9fb;color:{{accent}};display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z"></path><path d="M9 8h6M9 12h6M9 16h4"></path></svg></span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:15px;line-height:20px;font-weight:500;">Konzum receipt</div>
+        <div style="font-size:13px;line-height:18px;color:#48514e;display:flex;align-items:center;gap:4px;">15 Oct · <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0f7a0f" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg><span style="color:#0f7a0f;font-weight:500;">Linked to bank</span></div>
+      </div>
+      <span style="font-family:'Roboto Mono',monospace;font-size:15px;font-weight:500;white-space:nowrap;">31.20&nbsp;€</span>
+    </a>
+    <a href="#" style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #dde3e0;text-decoration:none;color:#121716;">
+      <span style="width:40px;height:40px;border-radius:20px;background:#e5e9fb;color:{{accent}};display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a6 6 0 0 0 6-6c0-4-3-6-4-10-2 2-3 3.5-3 6-1-1-1.5-2-1.5-3C7.5 10 6 12.4 6 15a6 6 0 0 0 6 6z"></path></svg></span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:15px;line-height:20px;font-weight:500;">Plin slip</div>
+        <div style="font-size:13px;line-height:18px;color:#48514e;display:flex;align-items:center;gap:4px;">12 Oct · <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b4a00" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg><span style="color:#6b4a00;font-weight:500;">Waiting for import</span></div>
+      </div>
+      <span style="font-family:'Roboto Mono',monospace;font-size:15px;font-weight:500;white-space:nowrap;">18.50&nbsp;€</span>
+    </a>
+  </section>
+</main>
+
+<nav aria-label="Main" style="position:absolute;left:0;right:0;bottom:0;height:80px;background:#ffffff;border-top:1px solid #dde3e0;display:flex;">
+  <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;color:#48514e;font-size:12px;font-weight:500;"><span style="width:56px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"></path><path d="M5 9.5V20h14V9.5"></path><path d="M10 20v-5h4v5"></path></svg></span>Today</a>
+  <a href="#" aria-current="page" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;color:#121716;font-size:12px;font-weight:700;"><span style="width:56px;height:32px;border-radius:16px;background:#dee1f9;display:flex;align-items:center;justify-content:center;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><path d="M7 16v-5"></path><path d="M12 16V6"></path><path d="M17 16v-8"></path></svg></span>Spending</a>
+  <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;color:#48514e;font-size:12px;font-weight:500;"><span style="width:56px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg></span>Wishlist</a>
+  <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;color:#48514e;font-size:12px;font-weight:500;"><span style="width:56px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="12" r="4.5"></circle><circle cx="12" cy="12" r="1"></circle></svg></span>Goals</a>
+  <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;color:#48514e;font-size:12px;font-weight:500;"><span style="width:56px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9"></path><path d="M17 7h3"></path><circle cx="15" cy="7" r="2"></circle><path d="M4 17h3"></path><path d="M11 17h9"></path><circle cx="9" cy="17" r="2"></circle></svg></span>Plan</a>
+</nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#2f45c8"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return { accent: this.props.accent ?? '#2f45c8' }; } }
+</script>
+</body>
+</html>

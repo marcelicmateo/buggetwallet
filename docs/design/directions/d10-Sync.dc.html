@@ -1,0 +1,54 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>D10 Sync</title>
+<script src="./support.js"></script></head><body><x-dc><helmet><link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"><style>body{margin:0} a{color:inherit} a:hover{text-decoration:underline}</style></helmet>
+<div style="width:390px;height:844px;overflow:hidden;position:relative;background:#ffffff;color:#0a0a0a;font-family:'Atkinson Hyperlegible',system-ui,sans-serif;">
+
+  <header style="position:absolute;top:0;left:0;right:0;height:76px;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;padding:0 16px 0 8px;border-bottom:2px solid #0a0a0a;background:#ffffff;z-index:2;">
+    <div style="display:flex;align-items:center;gap:4px;">
+      <button type="button" aria-label="Back" style="width:52px;height:52px;border:0;border-radius:26px;background:transparent;color:#0a0a0a;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+      <h1 style="margin:0;font-size:24px;font-weight:700;">Your devices</h1>
+    </div>
+    <button type="button" style="height:52px;padding:0 20px 0 16px;border:0;border-radius:26px;background:#0a0a0a;color:#ffffff;display:flex;align-items:center;gap:8px;font-family:inherit;font-size:18px;font-weight:700;cursor:pointer;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5"></path></svg>Say it</button>
+  </header>
+
+  <main style="position:absolute;top:76px;left:0;right:0;bottom:0;overflow:hidden;padding:18px 24px 0;box-sizing:border-box;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h2 style="margin:0;font-size:22px;font-weight:700;">Last synced</h2>
+      <button type="button" aria-label="Read aloud" style="width:48px;height:48px;border:2px solid #0a0a0a;border-radius:24px;background:#ffffff;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;color:#0a0a0a;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"></path><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"></path></svg></button>
+    </div>
+    <p style="margin:4px 0 0;font-size:64px;line-height:1;font-weight:700;letter-spacing:-2px;">2 min ago</p>
+    <p style="margin:12px 0 0;display:flex;align-items:center;gap:10px;font-size:20px;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;"><path d="M3 7.5a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+      <span>Syncthing / BudgetWallet</span></p>
+
+    <button type="button" style="margin-top:20px;width:100%;height:64px;border:0;border-radius:16px;background:{{accent}};color:#ffffff;font-family:inherit;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"></path><path d="M18 3v4h-4M6 21v-4h4"></path></svg>Sync now</button>
+
+    <section style="margin-top:24px;padding-top:16px;border-top:2px solid #0a0a0a;">
+      <h3 style="margin:0 0 4px;font-size:22px;">Devices</h3>
+      <div style="display:flex;align-items:center;gap:14px;min-height:68px;border-bottom:1px solid #c4c4c4;">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;"><rect x="6" y="2.5" width="12" height="19" rx="2.5"></rect><path d="M10.5 18.5h3"></path></svg>
+        <div style="flex:1;"><p style="margin:0;font-size:20px;font-weight:700;">Pixel 8</p><p style="margin:2px 0 0;font-size:16px;color:#404040;">This device</p></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;min-height:68px;">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;"><rect x="4" y="4.5" width="16" height="11" rx="1.5"></rect><path d="M2 19.5h20"></path></svg>
+        <div style="flex:1;"><p style="margin:0;font-size:20px;font-weight:700;">ThinkPad laptop</p><p style="margin:2px 0 0;font-size:16px;color:#404040;">Synced 5 min ago</p></div>
+      </div>
+    </section>
+
+    <section style="margin-top:16px;padding-top:16px;border-top:2px solid #0a0a0a;">
+      <button type="button" aria-expanded="true" style="width:100%;height:52px;border:0;background:transparent;padding:0;display:flex;align-items:center;justify-content:space-between;font-family:inherit;font-size:22px;font-weight:700;color:#0a0a0a;cursor:pointer;">
+        <span style="display:flex;align-items:center;gap:10px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4.5"></circle><path d="M11.2 11.8L20 3M16.5 6.5l2.5 2.5M14.5 8.5l2 2"></path></svg>Show wallet key</span>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"></path></svg></button>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+        <p style="flex:1;margin:0;height:56px;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;border:2px solid #0a0a0a;border-radius:12px;font-size:18px;font-weight:700;letter-spacing:0;white-space:nowrap;overflow:hidden;">BW1-•••••-•••••-•••••</p>
+        <button type="button" style="flex:none;height:56px;padding:0 18px;border:3px solid #0a0a0a;border-radius:12px;background:#ffffff;color:#0a0a0a;font-family:inherit;font-size:20px;font-weight:700;cursor:pointer;">Copy</button>
+      </div>
+      <p role="note" style="margin:12px 0 0;padding:12px 14px;display:flex;gap:10px;align-items:center;font-size:18px;line-height:1.35;background:#fff6bf;border-left:8px solid #ffd400;border-radius:12px;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;"><path d="M12 3l10 18H2z"></path><path d="M12 10v4.5M12 17.6v.1"></path></svg>
+        <span><b>Anyone with this key can read your wallet.</b></span></p>
+    </section>
+  </main>
+</div></x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#0047ff"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return { accent: this.props.accent ?? '#0047ff' }; } }</script></body></html>

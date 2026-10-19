@@ -1,0 +1,153 @@
+# Budget Wallet — design decisions and proposals (2026-10-19)
+
+Condensed from today's planning session (claude.ai). Put this file at `docs/context/DESIGN_DECISIONS.md`.
+All numbers below are made-up samples. No personal figures. "Proposed" = not built and not scheduled yet.
+
+## Links (private, owner only)
+- Design system "Budget Wallet": https://claude.ai/artifact/5tQpueayHHhYY3cgP9jw4q
+- Doc "App Data Flow": https://claude.ai/code/artifact/fc2bf022-bfed-4be0-a0cd-944075d7fd91
+- Doc "Features and User Flow": https://claude.ai/code/artifact/cfa7c0a1-e014-4e9e-9b73-4116942b9508
+- Design canvas "10 Directions" (pages Kept / Parked): https://claude.ai/artifact/Vfy7FfEXoXVDKAJgYG4NKU
+
+## 1. Decisions
+| Date | Decision |
+|---|---|
+| 2026-10-19 | Money format: euro sign AFTER the amount with a non-breaking space: `14 €`, `-23.40 €`, `+1,450.00 €`. Sign stays in front. Amount fields show € as a suffix. Design system updated; **app `format.dart` still puts € first: change it.** Decimal point and thousands comma unchanged (Croatian `1.250,00 €` not decided). |
+| 2026-10-19 | Screen design: 10 directions × 12 screens drawn. **Kept:** D1 Baseline (current Material 3), D3 Ledger, D5 Soft Blocks, D6 Receipt, D8 Calendar, D10 Voice First. **Parked:** D2 Night Shift, D4 Swiss, D7 Cockpit, D9 Editorial. Final pick still open. |
+| 2026-10-19 | D8 Calendar carries the new feature "calendar integration and future spending" (screen `d08-Upcoming`). |
+| 2026-10-19 | Projects live under the **Goals** tab (views: Goals / Projects). Five tabs stay. |
+
+## 2. Data flow as built (v2) — summary
+```mermaid
+flowchart LR
+  F[Bank files PBZ .xls / Revolut .xlsx .csv] --> I[wallet_importer: detect, normalize, deterministic id]
+  U[Screens] --> C[WalletController]
+  I --> W[WalletRepo._write: field op + HLC]
+  C --> W
+  W --> DB[(wallet.db: tx, goals, wish, settings, merchant_rules + outbox, clocks, peer_files, meta)]
+  DB --> E[Categorizer + budget engine, recomputed on reload] --> U
+  DB <--> S[FolderSync: seal outbox -> devices/<id>/<n>.bwop; apply others' files]
+  S <--> SF[Syncthing folder: ciphertext + key fingerprint]
+```
+- One write path (`_write`), categories and all numbers computed at read, per-field last-writer-wins by HLC.
+- Safe today = (flexBudget − spent before today) ÷ days left − spent today; flexBudget = income − (rent+loan+subs) − Σ goal monthly.
+
+**Gaps found (fix order):**
+1. Goal `saved` is read-modify-write → lost update across offline devices. Store contributions as rows, sum at read.
+2. One bad `.bwop` file stops the whole sync run. Quarantine it, continue, report the device.
+3. Sync is tied to `dart:io` folders. Add a transport interface (put / list new / get); folder = one implementation.
+4. Sync files kept forever; new device replays all. Periodic snapshots + pruning of files all devices applied.
+5. Hard-coded thresholds: hand-entry match (same amount, ±3 days) → synced setting. (Rent cash threshold already fixed.)
+6. Local `wallet.db` not encrypted (only sync files are). Decide: accept or encrypted SQLite.
+7. Key has no backup path. Prompt once to save `BW1-…` in a password manager.
+8. PBZ/Revolut hard-wired in core and app; identical rows from two banks would collide on id (see 4.1).
+Watch: reload re-categorizes every transaction on each change/sync (`wc.reload` timing).
+
+## 3. Web version — what must change
+Pure Dart and fine on web: importer, budget maths, categorizer, HLC merge. Needs a web twin behind conditional imports:
+| Part | Problem | Web replacement |
+|---|---|---|
+| `repo.dart` | native `sqlite3.open(path)` | `sqlite3` WASM build (OPFS/IndexedDB) |
+| `controller.dart` | `getApplicationSupportDirectory`, `File` | database name, no path |
+| `sync.dart` | `Directory`/`File`, no Syncthing in browser | transport interface; relay storing the same `.bwop` ciphertext |
+| `vault.dart` | `gzip` from `dart:io` | `archive` gzip (pure Dart); XChaCha20 from `cryptography` already works |
+| `key_store.dart` | keystore / private file | session-only key or passphrase-wrapped |
+| `logs.dart`, `logging.dart` | rotating files | in-memory buffer + download |
+| `storage_access.dart` | Android-only | not needed |
+Order: transport interface + `archive` gzip first, then WASM DB + web key store, then relay.
+
+## 4. Proposals (not built)
+
+### 4.1 Other banks — bank profiles
+- One `BankProfile` per bank in `wallet_importer` (id, label, detect(first rows), mapRow, skip rules); registry tries each.
+- Contract additive: `NormalizedTransaction.kindHint` (card, atm, salary, fee, standingOrder, ownTransfer, other) and `account`.
+- Categorizer reads only `kindHint`; profile cleans merchant names. No bank names in core or app (labels from profile).
+- New banks hash `source` into the id; PBZ/Revolut keep v1 ids.
+- Own-transfer rule: synced `accounts` setting; out of one account matched by equal in to another within 3 days.
+- Unknown layout → map columns once, saved as synced setting keyed by header row.
+- First step: move PBZ and Revolut into profiles with tests proving ids and categories unchanged.
+
+### 4.2 Bills database (source-agnostic)
+- Sources → readers → one `NormalizedBill` → `importBill()`; app never sees QR/barcode/XML.
+- Readers: fiscal receipt QR (date-time, total, JIR), HUB-3 2D barcode on slips (payee, IBAN, amount, model+reference, description), e-invoice XML (UBL / EN 16931), PDF text layer, OCR fallback; later supplier portals.
+- Inputs: camera scan (Add expense › Scan bill), file import (Plan), inbox folder (automatic, lands in "To review").
+- `NormalizedBill`: source, externalId (JIR / invoice no / reference, unique → dedupe), date, total cents, currency, payee, optional IBAN, reference, dueDate, items, original file hash.
+- Link to bank row: by reference in bank text, else same amount within 3 days. Photos/PDFs stored once as encrypted files in the sync folder, fetched by hash.
+- Open: totals only or line items? keep photo or data only? warranty/return reminders?
+
+### 4.3 Calendar integration and future spending
+- Planned costs from: calendar events given an amount, bills with due dates, recurring bills found in exports, manual entries, project cost lines and schedules.
+- Safe to spend = (flexible money − spent − planned before payday) ÷ days left. Sample: 92 € planned → 14 € becomes 10 €. After-payday costs go into the next period.
+- Real bank row / hand entry for a planned cost replaces it (no double counting). Learned amounts are only suggestions until confirmed.
+- Only events given an amount are stored (title, date, amount), synced encrypted. Android calendar provider; Linux/web via .ics.
+- UI: "Coming up" line on Today; Upcoming screen (pay period as calendar).
+- Open: which calendars? default amounts per event kind? heads-up before big costs?
+
+### 4.4 Projects — research and trackers
+```mermaid
+flowchart LR
+  Idea --> R[Research project: options, cost lines, files, notes]
+  R -->|drop| D[Dropped = saved by waiting]
+  R --> X{Decided}
+  X -->|fits now| Wl[Wishlist, 72 h cooling-off] --> B[Buy or book: rows and bills linked]
+  X -->|save first| G[Goal: target = total, deadline = date] --> B
+  B --> Done[Done: planned vs actual]
+  B -->|thing you keep| T[Ongoing tracker]
+```
+**Decision projects** (laptop, flight, trip): options (price, link, notes, pros/cons), cost lines (amount, optional date), files (cost .xlsx/.csv → lines, itinerary .ics → dated lines, PDFs, links), decide-by date. Total = chosen option or sum of lines (range while open). States: Researching, Decided, Waiting, Done, Dropped. Feeds wishlist ("Add to wishlist") or goal ("Save for it"); dated lines feed future spending.
+
+**Ongoing projects / trackers** (car, home server, flat) — garage-app style, for money:
+- Costs in: merchant rules (`project_rule`: fuel/tolls → Car, hosting → Server), project choice on Add expense and transaction sheet, bills/receipts, hand entries. Project is a second label; category stays.
+- Schedule: `project_schedule` (every N months or N km, next date, estimated amount from history) → future spending + reminders (registration, insurance renewal, warranty end).
+- Items: `project_item` (tyres, battery, disks, RAM, UPS: price, date, warranty). Optional `project_reading` (odometer → cost per km).
+- Gives back: totals per month/year/kind, coming costs, suggested monthly fund = scheduled costs next 12 months ÷ 12 (replaces guessing in "Yearly costs" goal).
+- A decision project becomes a tracker when bought.
+
+**Data (additive):** `project` (kind decision|ongoing, state, name, decideBy, notes), `project_option`, `project_line`, `project_item`, `project_schedule`, `project_reading`, `project_rule`; optional `project` link on wish, goal, tx, bill. Files as encrypted blobs in the sync folder.
+**Open:** cooling-off starts at creation or decision? keep option price history? share research read-only? only car + server or unlimited trackers? estimate schedule amounts automatically? track km from the start?
+
+## 5. Roadmap snapshot (19 Oct)
+| Feature | Status | Milestone |
+|---|---|---|
+| Import, safe to spend, wishlist, goals, spending, encrypted sync | Built | M2 |
+| Saving or losing per pay period | Built | M3 |
+| Automated tests Android + Linux, bug fixes | Built (19 Oct) | M2 |
+| Owner test of v2 | In progress | M2 |
+| Screen design final pick (6 kept) | In progress | design |
+| Performance test on Linux desktop | Planned | next |
+| Adaptive layout (rail, two columns, shortcuts) | Planned | after perf test |
+| Budget vs actual per category | Planned | M3 |
+| Weekly review, recurring bills, nudges | Planned | M4 |
+| Backup/export, search, settings | Planned | M5 |
+| Web version, then web sync | Planned | after M5 |
+| Bank profiles, bills database, calendar/future spending, projects | Proposed | — |
+| Owner live test | Planned | M6 |
+
+## 6. UI design (kept directions)
+Sources: `docs/design/directions/` — one `.dc.html` per screen (`dNN-<Screen>.dc.html`, static 390×844 HTML/CSS
+mockups for the claude.ai design canvas; read them as layout/style reference, they need the canvas runtime to render),
+`canvas.json` (layout), `SPEC.md` (the brief every direction was built from: screens, sample data, copy rules).
+Same 12 screens and the same sample data in every direction, so they compare 1:1.
+
+**Screens:** Welcome, Today, AddExpense (sheet with impulse warning), Spending, Transaction (sheet), Wishlist, Goals,
+GoalEdit (sheet), Plan, Sync (devices + wallet key), Bills (new), ScanBill (new); D8 also Upcoming (new).
+
+| Dir | Name | Type | Palette | Shape | Signature |
+|---|---|---|---|---|---|
+| D1 | Baseline | Roboto + Roboto Mono amounts | bg #eef1ef, surface #fff, ink #121716, accent #2f45c8, good #0f7a0f, bad #c23535 | panels radius 14 + 1px line, pill buttons, sheets radius 28 | the shipping Material 3 app (= design system) |
+| D3 | Ledger | IBM Plex Sans + Plex Mono | paper #f7f5ef, ink #1d2433, rules #d8d3c4, ink-blue #1f3fa8, red #b3261e | no cards: ruled rows, right-aligned mono columns, double rule under totals | every screen reads like a ledger page |
+| D5 | Soft Blocks | Manrope | bg #f4f1fb, ink #221b3a, pastels lavender #e3dcff, mint #d4f3e4, peach #ffe1cf, sky #d9ecff, butter #fff1b8, accent #5b3fd6 | radius 24 blocks, floating pill nav | one pastel per category/goal |
+| D6 | Receipt | JetBrains Mono (+ Space Grotesk display) | bg #e9e6df, paper #fffdf7, ink #1a1a1a, accent #0a6cff, bad #c62828 | zig-zag torn paper strips, dotted leaders, dashed rules, double rule totals | every screen a printed till slip |
+| D8 | Calendar | DM Sans + DM Mono | white, ink #1c1f24, line #e6e8ec, teal #0f766e, soft #ccfbf1, warn #b54708, bad #b42318 | radius 10–14, day grid tiles | money laid out over the days; Upcoming = planned costs on a calendar |
+| D10 | Voice First | Atkinson Hyperlegible | white, ink #0a0a0a, accent #0047ff, good #006b2e, bad #b00020, focus #ffd400 | hero 96px, body 20px, 64px full-width buttons | one answer + one action per screen, "Say it" mic button |
+
+Common rules in all of them: amounts `14 €` (NBSP, € after), sentence case, no emoji, status never colour-only
+(icon or word), touch targets ≥44px, text contrast ≥4.5:1, 5-tab nav (Today, Spending, Wishlist, Goals, Plan).
+Final direction not chosen; when it is, its tokens go into `app/lib/src/theme.dart` and the design system.
+
+## 7. Tasks for Claude Code (suggested order, one at a time)
+1. `format.dart`: euro sign after the amount (`14 €`, NBSP), amount fields with € suffix; update tests and screenshots.
+2. ~~Add this file to `docs/context/`, link it from `STATUS.md`, decisions into the Decisions log.~~ Done 2026-10-19.
+3. Gap fixes from §2 in order 1–3 (goal contributions as rows; bad sync file quarantine; transport interface).
+4. Refactor PBZ/Revolut into bank profiles + `kindHint` with no behaviour change (§4.1 first step).
+5. Proposals §4.2–4.4: write specs/tests first, build only after owner approval.

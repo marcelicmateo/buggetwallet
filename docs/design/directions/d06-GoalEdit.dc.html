@@ -1,0 +1,76 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Budget Wallet · Receipt · Edit goal</title>
+<script src="./support.js"></script></head><body><x-dc><helmet><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"><style>body{margin:0}a{color:inherit}</style></helmet>
+<div style="width:390px;height:844px;overflow:hidden;position:relative;background:#e9e6df;font-family:'JetBrains Mono',ui-monospace,monospace;color:#1a1a1a;font-size:13px;line-height:1.4;">
+
+  <div aria-hidden="true">
+    <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="width:30px;height:30px;background:#1a1a1a;color:#fffdf7;display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v18l-2.33-1.5L14.33 21 12 19.5 9.67 21l-2.34-1.5L5 21z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span>
+        <span style="font-weight:800;font-size:15px;">Goals</span>
+      </div>
+      <span style="display:flex;align-items:center;height:44px;padding:0 12px;border:1.5px dashed #1a1a1a;background:#fffdf7;font-size:12px;box-sizing:border-box;">10 Oct – 9 Nov</span>
+    </div>
+    <div style="margin:0 16px;filter:drop-shadow(0 1px 1px rgba(26,26,26,.16)) drop-shadow(0 6px 12px rgba(26,26,26,.07));">
+      <div style="background:#fffdf7;padding:18px 18px 18px;-webkit-mask:conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/12px 51% repeat-x,conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/12px 51% repeat-x;mask:conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/12px 51% repeat-x,conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/12px 51% repeat-x;">
+        <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:#4a463e;">Put aside</div>
+        <div style="margin-top:2px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:72px;line-height:.9;letter-spacing:-3px;">1,950&nbsp;€</div>
+        <div style="margin-top:8px;font-size:12px;line-height:1.5;color:#4a463e;">Each goal takes its monthly amount off the top on payday.</div>
+        <div style="border-top:1.5px dashed #a29c8f;margin:14px 0 12px;"></div>
+        <div style="display:flex;justify-content:space-between;font-size:13.5px;"><b>Emergency fund</b><span>1,200 / 3,000&nbsp;€</span></div>
+        <div style="height:12px;margin-top:6px;border:1.5px solid #1a1a1a;box-sizing:border-box;"><div style="width:40%;height:100%;background:#1a1a1a;"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div aria-hidden="true" style="position:absolute;inset:0;background:rgba(26,26,26,.6);"></div>
+
+  <section role="dialog" aria-modal="true" aria-labelledby="ge-title" style="position:absolute;left:8px;right:8px;bottom:0;filter:drop-shadow(0 -8px 20px rgba(0,0,0,.28));">
+    <div style="background:#fffdf7;padding:22px 18px 22px;-webkit-mask:conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/12px 100% repeat-x;mask:conic-gradient(from 135deg at top,#0000,#000 1deg 89deg,#0000 90deg) top/12px 100% repeat-x;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <h2 id="ge-title" style="margin:0;font-size:18px;font-weight:800;">Edit goal</h2>
+        <button type="button" aria-label="Close" style="width:44px;height:44px;margin-right:-10px;border:0;background:transparent;color:#1a1a1a;display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div aria-hidden="true" style="border-top:1.5px dashed #a29c8f;margin:6px 0 14px;"></div>
+
+      <label for="ge-name" style="display:block;font-size:11px;line-height:1.3;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:#4a463e;">Name</label>
+      <input id="ge-name" type="text" value="New laptop" style="display:block;width:100%;box-sizing:border-box;height:44px;border:0;border-bottom:1.5px dashed #1a1a1a;padding:0;background:transparent;color:#1a1a1a;font:700 17px/1 'JetBrains Mono',monospace;">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+        <div>
+          <label for="ge-target" style="display:block;font-size:11px;line-height:1.3;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:#4a463e;">Target</label>
+          <div style="display:flex;align-items:center;gap:6px;height:44px;border-bottom:1.5px dashed #1a1a1a;">
+            <input id="ge-target" type="text" inputmode="decimal" value="1,400" style="flex:1;min-width:0;height:42px;border:0;padding:0;background:transparent;color:#1a1a1a;font:700 16px/1 'JetBrains Mono',monospace;">
+            <span style="font-size:16px;font-weight:700;">€</span>
+          </div>
+        </div>
+        <div>
+          <label for="ge-month" style="display:block;font-size:11px;line-height:1.3;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:#4a463e;">Each month</label>
+          <div style="display:flex;align-items:center;gap:6px;height:44px;border-bottom:1.5px dashed #1a1a1a;">
+            <input id="ge-month" type="text" inputmode="decimal" value="80" style="flex:1;min-width:0;height:42px;border:0;padding:0;background:transparent;color:#1a1a1a;font:700 16px/1 'JetBrains Mono',monospace;">
+            <span style="font-size:16px;font-weight:700;">€</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;">
+        <label for="ge-saved" style="display:block;font-size:11px;line-height:1.3;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:#4a463e;">Put aside so far</label>
+        <div style="display:flex;align-items:center;gap:6px;height:44px;border-bottom:1.5px dashed #1a1a1a;width:calc(50% - 8px);">
+          <input id="ge-saved" type="text" inputmode="decimal" value="450" style="flex:1;min-width:0;height:42px;border:0;padding:0;background:transparent;color:#1a1a1a;font:700 16px/1 'JetBrains Mono',monospace;">
+          <span style="font-size:16px;font-weight:700;">€</span>
+        </div>
+      </div>
+
+      <div aria-hidden="true" style="border-top:4px double #1a1a1a;margin:20px 0 10px;"></div>
+      <p role="status" style="display:flex;align-items:baseline;gap:6px;margin:0;font-size:15px;font-weight:800;"><span>Reached in</span><span aria-hidden="true" style="flex:1;min-width:12px;border-bottom:1.5px dotted #8f897c;transform:translateY(-4px);"></span><span>Oct 2027</span></p>
+      <div role="img" aria-label="450 € of 1,400 €" style="position:relative;height:12px;margin-top:12px;border:1.5px solid #1a1a1a;box-sizing:border-box;"><div style="position:absolute;left:0;top:0;bottom:0;width:32.1%;background:repeating-linear-gradient(135deg,#1a1a1a 0 2.5px,#fffdf7 2.5px 4.5px);border-right:1.5px solid #1a1a1a;"></div></div>
+
+      <div style="display:flex;gap:10px;align-items:center;margin-top:22px;">
+        <button type="button" style="flex:none;display:flex;align-items:center;justify-content:center;gap:8px;height:52px;padding:0 14px;border:0;background:transparent;color:#c62828;font:700 14px/1 'JetBrains Mono',monospace;cursor:pointer;"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>Delete</button>
+        <button type="button" style="flex:1;display:flex;align-items:center;justify-content:center;gap:10px;height:52px;padding:0 12px;border:0;border-radius:2px;background:{{accent}};color:#ffffff;font:700 14px/1 'JetBrains Mono',monospace;cursor:pointer;box-shadow:0 2px 0 #1a1a1a;">Save goal</button>
+      </div>
+    </div>
+  </section>
+
+</div></x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#0a6cff"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return { accent: this.props.accent ?? '#0a6cff' }; } }</script></body></html>
