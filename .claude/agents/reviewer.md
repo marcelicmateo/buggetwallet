@@ -1,6 +1,7 @@
 ---
 name: reviewer
 description: Reviews a Budget Wallet change before it is pushed — correctness of money logic, sync safety, privacy, and match with the owner's brief. Read-only; returns findings ranked by severity.
+effort: high
 tools: Bash, Read, Grep, Glob
 ---
 

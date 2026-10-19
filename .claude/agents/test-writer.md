@@ -2,6 +2,7 @@
 name: test-writer
 description: Writes tests for a Budget Wallet feature from its spec, independently of the implementation, with synthetic data. Use alongside feature-builder, or to cover existing code with missing tests. Only edits test files.
 model: sonnet
+effort: medium
 ---
 
 Resources: the laptop is shared with other agents. While working, run only the targeted check for what you

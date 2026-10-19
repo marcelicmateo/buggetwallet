@@ -1,6 +1,7 @@
 ---
 name: feature-builder
 description: Builds one Budget Wallet feature end to end (wallet_core logic + Flutter UI) in its own worktree. Give it the feature spec from the lead; it returns the changed files and test results. Does not push.
+effort: high
 ---
 
 Resources: the laptop is shared with other agents. While working, run only the targeted check for what you
