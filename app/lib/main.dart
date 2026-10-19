@@ -119,18 +119,26 @@ class _HomeShellState extends State<HomeShell> {
         title: Row(children: [
           Container(width: 22, height: 16, decoration: BoxDecoration(color: context.c.accent, borderRadius: BorderRadius.circular(4))),
           const SizedBox(width: 8),
-          const Text('Budget Wallet', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
+          const Flexible(
+              child: Text('Budget Wallet',
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17))),
         ]),
         actions: [
           if (wc.syncing)
             const Padding(
                 padding: EdgeInsets.only(right: 8),
                 child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
+          // The period always shows in full: with large text on a narrow screen it shrinks to fit half the bar.
           Padding(
             padding: const EdgeInsets.only(right: 16),
-            child: Chip(
-                label: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}', style: const TextStyle(fontSize: 12.5)),
-                visualDensity: VisualDensity.compact),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width / 2),
+              child: Chip(
+                  label: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}', style: const TextStyle(fontSize: 12.5))),
+                  visualDensity: VisualDensity.compact),
+            ),
           ),
         ],
       ),

@@ -43,9 +43,8 @@ class TodayScreen extends StatelessWidget {
                       ? 'Check this matches a normal month of pay. Fix it in Plan if not.'
                       : 'Enter your monthly salary in Plan so the daily budget can be worked out.',
                   style: TextStyle(color: c.warnInk, fontSize: 13)),
-              Row(children: [
+              Wrap(alignment: WrapAlignment.spaceBetween, spacing: 8, runSpacing: 8, children: [
                 OutlinedButton(onPressed: openPlan, child: const Text('Open Plan')),
-                const Spacer(),
                 TextButton(onPressed: () => wc.updateSettings({'salaryConfirmed': true}), child: const Text('Looks right')),
               ]),
             ]),
@@ -56,10 +55,10 @@ class TodayScreen extends StatelessWidget {
               FilledButton(onPressed: () => wc.startNewMonth(newPayday), child: Text('Start new month on ${shortDate(newPayday)}')),
             ]),
           Panel(padding: const EdgeInsets.fromLTRB(18, 20, 18, 18), children: [
-            Row(children: [
-              const Eyebrow('Safe to spend today'),
-              const Spacer(),
-              StatusLabel(good: !over, text: over ? 'Over today' : 'On plan')
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const Flexible(child: Eyebrow('Safe to spend today')),
+              const SizedBox(width: 8),
+              Flexible(child: StatusLabel(good: !over, text: over ? 'Over today' : 'On plan')),
             ]),
             FittedBox(
               alignment: Alignment.centerLeft,
@@ -78,9 +77,13 @@ class TodayScreen extends StatelessWidget {
             PaceBar(used: used, elapsed: p.elapsed, over: p.spent > p.flexBudget * p.elapsed),
             Row(children: [
               Expanded(child: Muted('${money(p.spent, cur, decimals: 0)} of ${money(p.flexBudget, cur, decimals: 0)} used')),
-              ahead >= 0
-                  ? Text('${money(ahead, cur, decimals: 0)} ahead of pace', style: const TextStyle(fontSize: 13))
-                  : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace'),
+              const SizedBox(width: 8),
+              Flexible(
+                child: ahead >= 0
+                    ? Text('${money(ahead, cur, decimals: 0)} ahead of pace',
+                        textAlign: TextAlign.end, style: const TextStyle(fontSize: 13))
+                    : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace'),
+              ),
             ]),
             FilledButton.icon(
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
@@ -96,7 +99,7 @@ class TodayScreen extends StatelessWidget {
           ]),
           if (s.savedFor != p.start && wc.goals.isNotEmpty)
             Panel(children: [
-              const Row(children: [Heading('Payday checklist', size: 15), Spacer(), Tag('pay yourself first')]),
+              const HeadingRow(Heading('Payday checklist', size: 15), Tag('pay yourself first')),
               Text('Move ${money(p.goalMonthly, cur, decimals: 0)} to your savings account before you spend anything else.',
                   style: const TextStyle(fontSize: 14)),
               Rows(children: [for (final g in wc.goals) LineItem(g.name, money(g.monthly, cur, decimals: 0))]),
@@ -112,8 +115,7 @@ class TodayScreen extends StatelessWidget {
           if (deliveryHour)
             Panel(children: [
               Row(children: [
-                Heading(now.weekday == DateTime.sunday ? 'Sunday delivery hour' : 'After-work delivery hour', size: 15),
-                const Spacer(),
+                Expanded(child: Heading(now.weekday == DateTime.sunday ? 'Sunday delivery hour' : 'After-work delivery hour', size: 15)),
                 Icon(Icons.schedule, size: 18, color: c.muted)
               ]),
               Text(

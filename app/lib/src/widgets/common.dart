@@ -78,6 +78,22 @@ class StatusLabel extends StatelessWidget {
   }
 }
 
+/// A panel heading with something on its right (a count, tag, icon or note). On a narrow screen or with large
+/// text the right part moves under the heading instead of overflowing.
+class HeadingRow extends StatelessWidget {
+  final Widget heading;
+  final Widget trailing;
+  const HeadingRow(this.heading, this.trailing, {super.key});
+  @override
+  Widget build(BuildContext context) => Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 4,
+        children: [heading, trailing],
+      );
+}
+
 class Tag extends StatelessWidget {
   final String text;
   const Tag(this.text, {super.key});
@@ -112,17 +128,18 @@ class TxTile extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(merchantName(t.tx), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500)),
               const SizedBox(height: 2),
-              Row(children: [
-                Flexible(
-                    child: Text('${shortDate(t.date)} · ${t.category}',
-                        maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: context.c.muted))),
-                const SizedBox(width: 6),
+              Wrap(spacing: 6, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                Text('${shortDate(t.date)} · ${t.category}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: context.c.muted)),
                 Tag(src),
               ]),
             ]),
           ),
           const SizedBox(width: 12),
-          Text(money(t.amount, currency, decimals: 2, signed: true), style: numStyle.copyWith(color: inc ? context.c.good : context.c.ink)),
+          Flexible(
+            child: Text(money(t.amount, currency, decimals: 2, signed: true),
+                textAlign: TextAlign.end, style: numStyle.copyWith(color: inc ? context.c.good : context.c.ink)),
+          ),
         ]),
       ),
     );

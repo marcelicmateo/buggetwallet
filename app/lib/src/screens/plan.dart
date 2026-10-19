@@ -163,6 +163,7 @@ class _PlanScreenState extends State<PlanScreen> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   key: ValueKey(currency),
+                  isExpanded: true,
                   initialValue: currency,
                   decoration: const InputDecoration(labelText: 'Currency'),
                   items: [
