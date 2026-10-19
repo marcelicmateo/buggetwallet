@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +8,7 @@ import '../controller.dart';
 import '../file_chooser.dart';
 import '../format.dart';
 import '../logging.dart';
+import '../platform.dart';
 import '../storage_access.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -316,7 +315,7 @@ class _PlanScreenState extends State<PlanScreen> {
           'Changes are encrypted on this device and written to a folder that Syncthing keeps in step across your phone and computer. Only devices with your wallet key can read them.'),
       LineItem('Sync folder', '', sub: folder ?? 'Not set'),
       Wrap(spacing: 8, runSpacing: 8, children: [
-        if (Platform.isIOS)
+        if (isIOS)
           OutlinedButton(
               onPressed: () async {
                 logNav('sync.useAppFolder');
@@ -342,8 +341,8 @@ class _PlanScreenState extends State<PlanScreen> {
             },
             child: const Text('Choose folder'),
           ),
-        if (!Platform.isIOS) OutlinedButton(onPressed: () => _typePath(context), child: const Text('Type path')),
-        if (Platform.isAndroid)
+        if (!isIOS) OutlinedButton(onPressed: () => _typePath(context), child: const Text('Type path')),
+        if (isAndroid)
           OutlinedButton(
             onPressed: () async {
               logNav('storage.pressed');
@@ -374,15 +373,14 @@ class _PlanScreenState extends State<PlanScreen> {
                 ? '1 sync file could not be read. It was skipped and will be tried again.'
                 : '${wc.syncBadFiles} sync files could not be read. They were skipped and will be tried again.'),
       OutlinedButton.icon(icon: const Icon(Icons.key), label: const Text('Show wallet key'), onPressed: () => _showKey(context)),
-      Muted(Platform.isIOS
+      Muted(isIOS
           ? 'On iPhone, sync the app folder (Files › On My iPhone › Budget Wallet › BudgetWalletSync) with the Möbius Sync app.'
           : 'Install Syncthing on each device and share one folder between them. Pick that folder here on every device.'),
     ]);
   }
 
   Future<void> _typePath(BuildContext context) async {
-    final ctl =
-        TextEditingController(text: widget.wc.syncFolder ?? (Platform.isAndroid ? '/storage/emulated/0/Documents/BudgetWallet' : ''));
+    final ctl = TextEditingController(text: widget.wc.syncFolder ?? (isAndroid ? '/storage/emulated/0/Documents/BudgetWallet' : ''));
     logNav('dialog.open', {'dialog': 'syncPath'});
     final path = await showDialog<String>(
       context: context,
@@ -397,13 +395,7 @@ class _PlanScreenState extends State<PlanScreen> {
     );
     logNav('dialog.close', {'dialog': 'syncPath', 'set': path != null && path.isNotEmpty}); // never the path
     if (path == null || path.isEmpty) return;
-    try {
-      await Directory(path).create(recursive: true);
-    } catch (e, st) {
-      // Sync then reports the missing folder; describeError drops the path.
-      logError(_log, 'sync.folderCreateFailed', e, st);
-    }
-    await widget.wc.setSyncFolder(path);
+    await widget.wc.setSyncFolder(path, create: true);
   }
 
   Future<void> _showKey(BuildContext context) async {

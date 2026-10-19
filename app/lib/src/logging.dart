@@ -36,6 +36,11 @@ Future<T?> loggedRoute<T>(String name, Future<T?> future) async {
   return r;
 }
 
+/// OS version, Dart version and CPU count: facts only dart:io has, so empty on the web.
+Map<String, Object?> nativeInfo() => kIsWeb
+    ? const {}
+    : {'os': Platform.operatingSystemVersion, 'dart': Platform.version.split(' ').first, 'cpus': Platform.numberOfProcessors};
+
 /// The extension of a file name, or '' (never the name itself).
 String fileExt(String name) {
   final i = name.lastIndexOf('.');
@@ -145,11 +150,9 @@ class AppLog {
     logEvent(_app, Level.INFO, 'app.info', {
       'version': appVersion,
       'mode': kReleaseMode ? 'release' : (kProfileMode ? 'profile' : 'debug'),
-      'platform': Platform.operatingSystem,
-      'os': Platform.operatingSystemVersion,
+      'platform': defaultTargetPlatform.name,
+      ...nativeInfo(),
       'flutter': FlutterVersion.version,
-      'dart': Platform.version.split(' ').first,
-      'cpus': Platform.numberOfProcessors,
       'locale': pd.locale.toLanguageTag(),
       if (view != null) 'screen': '${view.physicalSize.width.round()}x${view.physicalSize.height.round()}@${view.devicePixelRatio}',
       'logLevel': Logger.root.level.name,
