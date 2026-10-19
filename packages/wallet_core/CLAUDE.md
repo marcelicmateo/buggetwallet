@@ -33,9 +33,10 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
 ## Known limits (for the sync redesign)
 - The same export imported on two devices before they sync: the later import's `amount` clock wins, so a cash entry
   added in between on the first device can be matched to that row although that device held it.
-- A damaged sync file skipped while later files from the same device apply: `seen_bank` (per-device maximum) then
+- A damaged or late sync file (files from a device are applied even past a gap) while later files from that device apply: `seen_bank` (per-device maximum) then
   claims rows the adding device never got, those never replace the entry, and the expense counts twice.
-- Older builds ignore `seen_bank` and match by the old rule: devices on mixed versions can plan different matches.
+- Older builds ignore `seen_bank` and match by the old rule: devices on mixed versions can plan different matches,
+  and keep doing so after upgrading for entries they received before.
 - A device that is behind can match a cash entry to an earlier same-amount card payment (±3 days) it never held.
 
 ## Tests

@@ -28,8 +28,8 @@ const matchDays = 3;
 /// written with the entry (`WalletRepo.addManual`) and synced with it, so every device decides the same.
 ///
 /// Per device that imported bank rows (the node of their `amount` clock), the highest such clock the adding device
-/// held. A device reads each other device's sync files in order, so holding that device's row written at `h` means
-/// holding all its rows written up to `h`; a bank row whose clock is above its node's value, or from a node not listed,
+/// held. Assuming a device's sync files arrive in order, holding that device's row written at `h` means holding all
+/// its rows written up to `h` (a damaged or late file breaks this: see Known limits in the package CLAUDE.md); a bank row whose clock is above its node's value, or from a node not listed,
 /// was not on the adding device. Entries without the field (added by older builds, or with a damaged value) fall back
 /// to the entry's own `amount` clock: only a bank row written after the entry was not seen.
 class SeenBank {
