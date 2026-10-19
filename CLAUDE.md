@@ -88,7 +88,7 @@ Job status: `gh api repos/marcelicmateo/buggetwallet/commits/<sha>/check-runs`. 
 
 ## Team (subagents in `.claude/agents/`)
 The main session is the lead: it takes the owner's request, splits it, merges results, runs
-`tools/build.sh test`, commits, pushes and updates STATUS. One feature at a time (the owner tests each one).
+`tools/build.sh test`, commits, pushes and updates STATUS. One feature at a time; the owner tests at the end (2026-10-19), so stages go on without waiting for owner checks.
 - `core-builder` — logic half: `wallet_core` / `wallet_importer` + unit tests, own worktree (`isolation: "worktree"`).
 - `ui-builder` — UI half: `app/` screens, widgets, controller wiring, widget tests; iterates in live mode.
   For a feature with both halves, the lead fixes the core API (names, params, result fields) in both specs and
