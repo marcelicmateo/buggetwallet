@@ -16,6 +16,7 @@ All numbers below are made-up samples. No personal figures. "Proposed" = not bui
 | 2026-10-19 | Screen design: 10 directions × 12 screens drawn. **Kept:** D1 Baseline (current Material 3), D3 Ledger, D5 Soft Blocks, D6 Receipt, D8 Calendar, D10 Voice First. **Parked:** D2 Night Shift, D4 Swiss, D7 Cockpit, D9 Editorial. Final pick still open. |
 | 2026-10-19 | D8 Calendar carries the new feature "calendar integration and future spending" (screen `d08-Upcoming`). |
 | 2026-10-19 | Projects live under the **Goals** tab (views: Goals / Projects). Five tabs stay. |
+| 2026-10-19 | **Final direction: D3 Ledger** (owner). Built after the adaptive layout: its tokens go into `theme.dart` and the design system. |
 
 ## 2. Data flow as built (v2) — summary
 ```mermaid
