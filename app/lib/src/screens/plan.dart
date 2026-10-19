@@ -40,6 +40,7 @@ class _PlanScreenState extends State<PlanScreen> {
       'impulse': TextEditingController(text: _plain(s.impulse)),
       'coolHours': TextEditingController(text: '${s.coolHours}'),
       'paydayDay': TextEditingController(text: '${s.paydayDay}'),
+      'rentCashThreshold': TextEditingController(text: _plain(s.rentCashThreshold)),
     };
   }
 
@@ -124,6 +125,8 @@ class _PlanScreenState extends State<PlanScreen> {
                 ),
               ),
             ]),
+            field('rentCashThreshold', 'Cash withdrawal counts as rent from'),
+            const Muted('ATM withdrawals this big or bigger count as rent. 0 turns it off.', size: 12),
             FilledButton(onPressed: _savePlan, child: const Text('Save numbers')),
           ]),
           Panel(children: [
@@ -172,7 +175,8 @@ class _PlanScreenState extends State<PlanScreen> {
       'subs': m('subs'),
       'impulse': m('impulse'),
       'coolHours': n('coolHours'),
-      'paydayDay': n('paydayDay')
+      'paydayDay': n('paydayDay'),
+      'rentCashThreshold': m('rentCashThreshold'),
     };
     if (vals.values.any((v) => v == null)) {
       logNav('plan.invalid', {

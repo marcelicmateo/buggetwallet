@@ -77,6 +77,10 @@ class WalletController extends ChangeNotifier {
     return c;
   }
 
+  /// For widget tests: an already-open repo (e.g. [WalletRepo.inMemory]), no auto-sync.
+  @visibleForTesting
+  factory WalletController.forTest(WalletRepo repo, {VaultKey? key}) => WalletController._(repo, key)..reload();
+
   bool get hasWallet => key != null;
   String get currency => settings.currency;
 

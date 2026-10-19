@@ -57,12 +57,18 @@ final List<(String, RegExp)> builtInMerchantRules = [
   ('To people', RegExp(r'keks pay')),
 ];
 
+/// Default for the `rentCashThreshold` setting (minor units).
+const int defaultRentCashThreshold = 50000;
+
 /// Resolves categories. Built once per settings/rules change.
 class Categorizer {
   final Map<String, String> merchantRules; // merchantKey -> category
   final List<(String, RegExp)> userPatterns;
 
-  Categorizer({this.merchantRules = const {}, List<List<String>> patterns = const []})
+  /// ATM withdrawals of at least this much (minor units, positive) count as rent (setting `rentCashThreshold`).
+  final int rentCashThreshold;
+
+  Categorizer({this.merchantRules = const {}, List<List<String>> patterns = const [], this.rentCashThreshold = defaultRentCashThreshold})
       : userPatterns = [
           for (final p in patterns)
             if (categories.containsKey(p[0]))
@@ -106,7 +112,7 @@ class Categorizer {
         if (d.contains('revolut')) return 'Internal transfer';
         if (d.contains('isplata kredita')) return 'Loan received';
         if (type == 'Isplata u poslovnici') return 'Cash';
-        if (type == 'Isplata ATM') return t.amount <= -50000 ? 'Rent' : 'Cash';
+        if (type == 'Isplata ATM') return rentCashThreshold > 0 && t.amount <= -rentCashThreshold ? 'Rent' : 'Cash';
         if (type == 'Naplaćene naknade' ||
             type == 'Povrat naknade' ||
             type == 'Pripisane kamate' ||
