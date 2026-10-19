@@ -55,6 +55,7 @@ ImportBatch importBankFile(Uint8List bytes) {
     'rows': rows.length,
     'txs': batch.transactions.length,
     'skipped': batch.skipped,
+    'invalid': batch.invalid,
     'readMs': readMs,
     'ms': sw.elapsedMilliseconds,
   });
@@ -62,7 +63,7 @@ ImportBatch importBankFile(Uint8List bytes) {
 }
 
 String _s(Object? v) => v == null ? '' : (v is double ? _num(v) : v.toString()).trim();
-String _num(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toString();
+String _num(double v) => v.isFinite && v == v.roundToDouble() ? v.toInt().toString() : v.toString();
 String _pad(int n) => n.toString().padLeft(2, '0');
 
 /// Excel serial day number to `YYYY-MM-DD` (UTC, 1900 date system).
@@ -71,13 +72,32 @@ String excelDate(double serial) {
   return '${d.year}-${_pad(d.month)}-${_pad(d.day)}';
 }
 
+/// What [_anyDate] returns for a cell shaped like a date that is not a real calendar day.
+const _impossible = '';
+
+/// Largest Excel serial day accepted (9999-12-31).
+const _maxSerial = 2958465.0;
+
+/// A real `YYYY-MM-DD` from the parts, or [_impossible] (2026-13-45, 31.02.2026, year 0000).
+String _ymd(String y, String m, String d) {
+  final yi = int.parse(y), mi = int.parse(m), di = int.parse(d);
+  final t = DateTime.utc(yi, mi, di);
+  if (yi < 1 || t.year != yi || t.month != mi || t.day != di) return _impossible;
+  return '$y-${m.padLeft(2, '0')}-${d.padLeft(2, '0')}';
+}
+
+/// Excel serial day to a date, or [_impossible] outside 1900-01-01 .. 9999-12-31 (or not finite).
+String _serialDate(double v) => v.isFinite && v >= 1 && v <= _maxSerial ? excelDate(v) : _impossible;
+
+/// The date in a cell: `null` when the cell is not a date at all (header, footer, empty), [_impossible] when it
+/// looks like one but is not a real calendar day, else `YYYY-MM-DD`.
 String? _anyDate(Object v) {
-  if (v is double) return excelDate(v);
+  if (v is double) return _serialDate(v);
   final s = v.toString().trim();
   var m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(s);
-  if (m != null) return '${m[1]}-${m[2]}-${m[3]}';
+  if (m != null) return _ymd(m[1]!, m[2]!, m[3]!);
   m = RegExp(r'^(\d{1,2})\.(\d{1,2})\.(\d{4})').firstMatch(s);
-  if (m != null) return '${m[3]}-${m[2]!.padLeft(2, '0')}-${m[1]!.padLeft(2, '0')}';
+  if (m != null) return _ymd(m[3]!, m[2]!, m[1]!);
   return null;
 }
 
@@ -93,7 +113,25 @@ double? _toNum(Object v) {
   return double.tryParse(s);
 }
 
-int _cents(double x) => (x * 100).round();
+/// Largest amount accepted, in cents (10 billion in the account currency). Anything bigger is a damaged cell, and
+/// rounding it would saturate at the int64 limit, after which sums overflow.
+const maxAmountCents = 1000000000000;
+
+/// Amount in cents, or null when it is not a usable number: NaN, Infinity, beyond double range ("1e400"), or
+/// larger than [maxAmountCents].
+int? _cents(double x) {
+  final c = x * 100;
+  if (!c.isFinite || c.abs() > maxAmountCents) return null;
+  return jsRound(c);
+}
+
+/// JavaScript's `Math.round`, which v1 used (`r2(x) = Math.round(x * 100) / 100`): nearest integer, exact halves
+/// towards +infinity (-12.5 → -12). Dart's `round()` takes halves away from zero (-12.5 → -13), which gave a
+/// different amount and id than v1 for negative exact half cents. `c - floor(c)` is exact for these magnitudes.
+int jsRound(double c) {
+  final f = c.floorToDouble();
+  return (c - f >= 0.5 ? f + 1 : f).toInt();
+}
 
 /// Repairs text that was UTF-8 but got decoded as Latin-1 (e.g. "GraÅ¡o" -> "Grašo").
 String fixMojibake(String s) {
@@ -147,7 +185,7 @@ ImportBatch? parseRows(List<List<Object>> rows) {
     final cT = col('Type'), cD = col('Started Date'), cM = col('Description'), cA = col('Amount');
     final cF = col('Fee'), cS = col('State'), cC = col('Currency');
     final out = <_Row>[];
-    var skipped = 0;
+    var skipped = 0, invalid = 0;
     for (final r in rows.skip(revHdr + 1)) {
       Object at(int c) => c >= 0 && c < r.length ? r[c] : '';
       if (_s(at(cD)).isEmpty) continue;
@@ -158,40 +196,58 @@ ImportBatch? parseRows(List<List<Object>> rows) {
       final d = _anyDate(at(cD));
       final a = _toNum(at(cA));
       if (d == null || a == null) continue;
+      if (d == _impossible) {
+        invalid++;
+        continue;
+      }
       final fee = cF >= 0 ? (_toNum(at(cF)) ?? 0) : 0.0;
+      final amount = _cents(a), feeCents = _cents(fee);
+      if (amount == null || feeCents == null) {
+        invalid++;
+        continue;
+      }
       final currency = cC >= 0 && _s(at(cC)).isNotEmpty ? _s(at(cC)) : 'EUR';
-      out.add(_Row(d, _cents(a) - _cents(fee), _s(at(cT)), fixMojibake(_s(at(cM))), currency));
+      out.add(_Row(d, amount - feeCents, _s(at(cT)), fixMojibake(_s(at(cM))), currency));
     }
-    return ImportBatch(source: 'revolut', transactions: _withIds('revolut', out), skipped: skipped);
+    return ImportBatch(source: 'revolut', transactions: _withIds('revolut', out), skipped: skipped, invalid: invalid);
   }
 
   // PBZ current account report
   final isPbz = head.any((r) => r.any((c) => RegExp(r'TRANSAKCIJSKI RA', caseSensitive: false).hasMatch(c) || c == 'DATUM'));
   if (isPbz) {
     final out = <_Row>[];
-    var skipped = 0;
+    var skipped = 0, invalid = 0;
     final dmy = RegExp(r'^\d{1,2}\.\d{1,2}\.\d{4}$');
     for (final r in rows) {
       if (r.length < 4) continue;
       final c0 = r[0];
       String? d;
-      if (c0 is double && c0 > 30000) {
-        d = excelDate(c0);
+      if (c0 is double && c0.isFinite && c0 > 30000) {
+        d = _serialDate(c0);
       } else if (dmy.hasMatch(_s(c0))) {
         d = _anyDate(c0);
       }
       if (d == null) continue;
       final a = _toNum(r[3]);
       if (a == null) continue;
+      if (d == _impossible) {
+        invalid++;
+        continue;
+      }
       final desc = _s(r[2]);
       if (RegExp(r'^REZERVACIJA', caseSensitive: false).hasMatch(desc)) {
         skipped++; // card hold: the final booking arrives in a later export
         continue;
       }
+      final amount = _cents(a);
+      if (amount == null) {
+        invalid++;
+        continue;
+      }
       final currency = r.length > 4 && _s(r[4]).isNotEmpty ? _s(r[4]) : 'EUR';
-      out.add(_Row(d, _cents(a), _s(r[1]), desc, currency));
+      out.add(_Row(d, amount, _s(r[1]), desc, currency));
     }
-    return ImportBatch(source: 'pbz', transactions: _withIds('pbz', out), skipped: skipped);
+    return ImportBatch(source: 'pbz', transactions: _withIds('pbz', out), skipped: skipped, invalid: invalid);
   }
   return null;
 }

@@ -36,6 +36,9 @@ class WalletController extends ChangeNotifier {
   String? syncFolder;
   DateTime? lastSync;
   String? syncError;
+
+  /// Files from other devices the last sync could not read (damaged or half-synced); retried on every sync.
+  int syncBadFiles = 0;
   bool syncing = false;
   List<ImportLine> lastImport = const [];
 
@@ -170,7 +173,9 @@ class WalletController extends ChangeNotifier {
       final r = await timedAsync('sync.run', () => FolderSync(folder, k).run(repo), fields: {'trigger': trigger}, warnMs: 3000);
       lastSync = DateTime.now();
       syncError = null;
-      logEvent(_sync, Level.INFO, 'sync.done', {'trigger': trigger, 'sent': r.sent, 'received': r.received, 'files': r.filesRead});
+      syncBadFiles = r.badFiles;
+      logEvent(_sync, Level.INFO, 'sync.done',
+          {'trigger': trigger, 'sent': r.sent, 'received': r.received, 'files': r.filesRead, 'bad': r.badFiles});
       if (r.received > 0 || r.sent > 0) reload();
     } catch (e, st) {
       logError(_sync, 'sync.failed', e, st, fields: {'trigger': trigger});
@@ -247,12 +252,14 @@ class WalletController extends ChangeNotifier {
           'added': s.added,
           'dupes': s.duplicates,
           'matched': s.matched,
-          'skipped': s.skipped
+          'skipped': s.skipped,
+          'invalid': batch.invalid
         });
         final bank = batch.source == 'pbz' ? 'PBZ' : 'Revolut';
         lines.add(ImportLine(
             name,
-            '$bank: ${s.added} new, ${s.duplicates} already here${s.matched > 0 ? ', ${s.matched} matched to expenses you added' : ''}.',
+            '$bank: ${s.added} new, ${s.duplicates} already here${s.matched > 0 ? ', ${s.matched} matched to expenses you added' : ''}'
+            '${batch.invalid > 0 ? ', ${batch.invalid} unreadable ${batch.invalid == 1 ? 'row' : 'rows'} left out' : ''}.',
             true));
       } on ImportException catch (e, st) {
         logError(_import, 'import.rejected', e, st, fields: f);

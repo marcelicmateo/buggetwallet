@@ -5,7 +5,8 @@ Pure Dart. **The only code that knows bank formats.** Turns PBZ .xls, Revolut .x
 
 ## Files
 - `importer.dart` — `importBankFile(name, bytes)`: detects the format, maps columns → `parseRows`.
-- `xls_reader.dart` (own BIFF8 reader), `xlsx_reader.dart` (`archive` + `xml`), `csv_reader.dart`.
+- `xls_reader.dart` (own BIFF8 reader), `xlsx_reader.dart` (`archive` + `xml`), `csv_reader.dart`. `grid.dart` —
+  `sparseRows`: cells → rows without a dense grid, capped at `maxSheetCells` (bigger = ImportException).
 - `model.dart` — `NormalizedTransaction`, `ImportBatch`. `ids.dart` — `transactionId`, `fnv1a36`.
 - `log.dart` — `logImporter`: same line shape as wallet_core's `logEvent` (loggers `bw.importer[.xls|.xlsx|.csv]`).
   Formats, sizes, counts and timings only — never cell contents or file names (`test/importer_log_test.dart`).

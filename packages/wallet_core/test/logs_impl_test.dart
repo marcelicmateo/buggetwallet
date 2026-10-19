@@ -233,6 +233,11 @@ void main() {
       final r = await FolderSync(dir.path, key).run(b);
       expect(r.filesRead, 1);
 
+      // A damaged conflict copy is skipped and logged by its sequence number only (the suffix holds a device id).
+      final mine = Directory('${dir.path}/budget-wallet/devices/${a.deviceId}');
+      File('${mine.path}/0000000001.sync-conflict-20261016-000000-SYNTHID.bwop').writeAsBytesSync([1, 2, 3]);
+      expect((await FolderSync(dir.path, key).run(b)).badFiles, 1);
+
       // A different key: the failure is logged without key material.
       await expectLater(FolderSync(dir.path, VaultKey.generate()).run(WalletRepo.inMemory()), throwsA(isA<SyncException>()));
 
@@ -242,6 +247,9 @@ void main() {
       expect(text, contains('vault.seal'));
       expect(text, contains('vault.unseal'));
       expect(text, contains('sync.vault.mismatch'));
+      expect(text, contains('WARNING bw.sync sync.file.failed {"file":"0000000001"}'));
+      expect(text, contains('sync.files.skipped {"bad":1}'));
+      expect(text, isNot(contains('SYNTHID')), reason: 'conflict-copy names are not logged');
       _expectClean(lines);
       expect(text, isNot(contains(await key.toText())));
       expect(text, isNot(contains(base64Encode(key.bytes))));

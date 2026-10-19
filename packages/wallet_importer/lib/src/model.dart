@@ -54,5 +54,10 @@ class ImportBatch {
   /// Rows deliberately left out (pending card holds, non-completed rows).
   final int skipped;
 
-  const ImportBatch({required this.source, required this.transactions, this.skipped = 0});
+  /// Transaction rows left out because a value in them is unusable: an amount that is not a finite number or is
+  /// beyond ±10 billion, or a date that is not a real calendar day (2026-13-45, 31.02.2026).
+  /// The rest of the file still imports; the app tells the user how many rows were left out.
+  final int invalid;
+
+  const ImportBatch({required this.source, required this.transactions, this.skipped = 0, this.invalid = 0});
 }
