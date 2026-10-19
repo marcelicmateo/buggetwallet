@@ -114,6 +114,9 @@ test-watcher run (haiku/low) lists failures and `BUG:` skips, then the lead plan
 (`tools/build.sh core|importer|app|lint`, a single test file, `tools/emulator.sh test <name>`) and batch changes
 before each run. Full `tools/build.sh test` and full emulator/desktop runs happen once per agent at the end, and the
 lead runs the complete verification once per **stage** (several features/test sets merged together), not per change.
+**No polling (owner rule):** never wait with `sleep`/`until` loops on local work. Start long commands with `run_in_background`
+and wait for the completion notification; to wait for another process use the Monitor tool. Only CI (external) is checked
+on an interval (`tools/ci-status.sh`).
 
 ## Workflow
 Owner sends one request or piece of feedback (often by voice: keep replies short). Claude builds,
