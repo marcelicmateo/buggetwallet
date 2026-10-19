@@ -15,9 +15,11 @@ import 'package:integration_test/integration_test_driver.dart';
 import 'perf_budget.dart';
 
 /// Budgets per action, from baseline runs on 2026-10-19 after the tab-switch fix (build p90 ≤ 1.4 ms, 0 missed build
-/// frames, ~190–250 frames; build max: tab switch ≤ 10 ms, Spending scroll 8.9–13.9 ms). Build limits are strict; raster
+/// frames, ~190–250 frames; build max: tab switch ≤ 10 ms, Spending scroll 8.9–14.0 ms). Build limits are strict; raster
 /// limits are loose because Xvfb uses software GL and the shared laptop's load moves raster p90 between 8 and 20 ms.
-/// Scrolling gets a wider build max (28 ms) than switching tabs (20 ms). An action without an entry gets the default.
+/// Scrolling gets a wider build max (28 ms) than switching tabs (20 ms): post-fix runs under load reached 14.0 ms
+/// (history/perf.jsonl), so 20 left only about 1.4x headroom on a shared laptop. Lasting jank is still caught by the
+/// missed-build-frames limit of 2. An action without an entry gets the default.
 const _baseline = PerfBudget(buildP90Ms: 4, buildMaxMs: 20, rasterP90Ms: 30, rasterMaxMs: 60, missedBuildFrames: 2, minFrames: 100);
 const _scroll = PerfBudget(buildP90Ms: 4, buildMaxMs: 28, rasterP90Ms: 30, rasterMaxMs: 60, missedBuildFrames: 2, minFrames: 100);
 const budgets = <String, PerfBudget>{'spending_scroll': _scroll, 'tab_switch': _baseline};
