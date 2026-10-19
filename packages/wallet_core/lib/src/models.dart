@@ -1,4 +1,8 @@
 import 'categories.dart';
+import 'dates.dart';
+import 'logs.dart';
+
+final _log = Logger('bw.settings');
 
 /// A transaction as stored in the wallet database. Amounts are in minor units (cents).
 class Tx {
@@ -137,29 +141,71 @@ class WalletSettings {
     this.syncFolder,
   });
 
+  /// Largest accepted amount (minor units) and wait (hours: a year) in a stored or synced value.
+  static const maxAmount = 100000000000, maxCoolHours = 24 * 365;
+
+  /// Reads settings from stored/synced values. A value of the wrong type or outside its range (another device's
+  /// bug, a damaged op) falls back to that setting's default alone, logged as `settings.invalid` with the key only
+  /// (never the value); the other settings are kept.
   static WalletSettings fromMap(Map<String, Object?> m) {
-    int i(String k, int d) => (m[k] as num?)?.toInt() ?? d;
+    T bad<T>(String k, T d) {
+      logEvent(_log, Level.WARNING, 'settings.invalid', {'key': k});
+      return d;
+    }
+
+    int i(String k, int d, {int min = 0, int max = maxAmount}) {
+      final v = m[k];
+      if (v == null) return d;
+      if (v is int && v >= min && v <= max) return v;
+      if (v is double && v.isFinite && v == v.roundToDouble() && v >= min && v <= max) return v.toInt();
+      return bad(k, d);
+    }
+
+    String? str(String k, bool Function(String) ok) {
+      final v = m[k];
+      if (v == null) return null;
+      if (v is String && ok(v)) return v;
+      return bad(k, null);
+    }
+
+    String one(String k, String d, Set<String> allowed) {
+      final v = m[k];
+      if (v == null) return d;
+      if (v is String && allowed.contains(v)) return v;
+      return bad(k, d);
+    }
+
+    final patterns = m['merchantPatterns'];
+    final confirmed = m['salaryConfirmed'];
     return WalletSettings(
       salary: i('salary', 0),
       rent: i('rent', 0),
       loan: i('loan', 0),
-      loanEnd: m['loanEnd'] as String?,
+      loanEnd: str('loanEnd', _isMonth),
       subs: i('subs', 0),
       impulse: i('impulse', 5000),
-      coolHours: i('coolHours', 72),
-      paydayDay: i('paydayDay', 15),
-      periodStart: m['periodStart'] as String?,
-      currency: (m['currency'] as String?) ?? 'EUR',
-      incomeMode: (m['incomeMode'] as String?) ?? 'planned',
-      savedFor: m['savedFor'] as String?,
-      salaryConfirmed: m['salaryConfirmed'] == true,
-      merchantPatterns: [
-        for (final p in (m['merchantPatterns'] as List?) ?? const [])
-          if (p is List && p.length == 2) [p[0].toString(), p[1].toString()],
-      ],
+      coolHours: i('coolHours', 72, max: maxCoolHours),
+      paydayDay: i('paydayDay', 15, min: 1, max: 31),
+      periodStart: str('periodStart', _isDate),
+      currency: str('currency', (v) => RegExp(r'^[A-Z]{3}$').hasMatch(v)) ?? 'EUR',
+      incomeMode: one('incomeMode', 'planned', const {'planned', 'received'}),
+      savedFor: str('savedFor', _isDate),
+      salaryConfirmed: confirmed == null || confirmed is bool ? confirmed == true : bad('salaryConfirmed', false),
+      merchantPatterns: switch (patterns) {
+        null => const [],
+        final List<Object?> l => [
+            for (final p in l)
+              if (p is List && p.length == 2) [p[0].toString(), p[1].toString()],
+          ],
+        _ => bad('merchantPatterns', const []),
+      },
       rentCashThreshold: i('rentCashThreshold', defaultRentCashThreshold),
     );
   }
+
+  static bool _isDate(String v) => RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v) && isoDate(parseIso(v)) == v; // no 2026-02-30
+
+  static bool _isMonth(String v) => RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(v);
 
   Map<String, Object?> toMap() => {
         'salary': salary,
