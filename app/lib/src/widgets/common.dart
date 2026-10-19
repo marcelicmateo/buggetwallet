@@ -58,7 +58,8 @@ class Muted extends StatelessWidget {
 class StatusLabel extends StatelessWidget {
   final bool good;
   final String text;
-  const StatusLabel({super.key, required this.good, required this.text});
+  final TextAlign textAlign;
+  const StatusLabel({super.key, required this.good, required this.text, this.textAlign = TextAlign.start});
   @override
   Widget build(BuildContext context) {
     final col = good ? context.c.good : context.c.bad;
@@ -73,6 +74,7 @@ class StatusLabel extends StatelessWidget {
         ),
         TextSpan(text: text),
       ]),
+      textAlign: textAlign,
       style: TextStyle(color: col, fontWeight: FontWeight.w600, fontSize: 13),
     );
   }

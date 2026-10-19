@@ -79,10 +79,13 @@ class TodayScreen extends StatelessWidget {
               Expanded(child: Muted('${money(p.spent, cur, decimals: 0)} of ${money(p.flexBudget, cur, decimals: 0)} used')),
               const SizedBox(width: 8),
               Flexible(
-                child: ahead >= 0
-                    ? Text('${money(ahead, cur, decimals: 0)} ahead of pace',
-                        textAlign: TextAlign.end, style: const TextStyle(fontSize: 13))
-                    : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace'),
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: ahead >= 0
+                      ? Text('${money(ahead, cur, decimals: 0)} ahead of pace',
+                          textAlign: TextAlign.end, style: const TextStyle(fontSize: 13))
+                      : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace', textAlign: TextAlign.end),
+                ),
               ),
             ]),
             FilledButton.icon(
