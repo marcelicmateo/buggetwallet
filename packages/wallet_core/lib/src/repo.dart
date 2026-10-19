@@ -257,7 +257,7 @@ class WalletRepo {
 
   Categorizer categorizer() {
     final st = settings();
-    return Categorizer(merchantRules: merchantRules(), patterns: st.merchantPatterns);
+    return Categorizer(merchantRules: merchantRules(), patterns: st.merchantPatterns, rentCashThreshold: st.rentCashThreshold);
   }
 
   // ---------- writes ----------

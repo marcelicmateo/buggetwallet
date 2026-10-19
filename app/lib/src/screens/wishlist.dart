@@ -56,7 +56,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
             if (p != null && p > 0) _verdict(context, p),
           ]),
           Panel(children: [
-            Row(children: [const Heading('Ready to decide', size: 15), const Spacer(), Tag('${ready.length}')]),
+            HeadingRow(const Heading('Ready to decide', size: 15), Tag('${ready.length}')),
             if (ready.isEmpty)
               const EmptyNote('Nothing has finished waiting yet.')
             else
@@ -69,24 +69,23 @@ class _WishlistScreenState extends State<WishlistScreen> {
               ]),
           ]),
           Panel(children: [
-            Row(children: [const Heading('Cooling off', size: 15), const Spacer(), Tag('${waiting.length}')]),
+            HeadingRow(const Heading('Cooling off', size: 15), Tag('${waiting.length}')),
             if (waiting.isEmpty)
               const EmptyNote('Your wishlist is empty. Check something above to add it.')
             else
               Rows(children: [
                 for (final w in waiting)
-                  _WishRow(w: w, currency: cur, sub: _left(w.hoursLeft(s.coolHours, now)), actions: [
+                  _WishRow(w: w, currency: cur, sub: timeLeft(w.hoursLeft(s.coolHours, now)), actions: [
                     TextButton(onPressed: () => _skip(w), child: const Text("Don't need it")),
                   ]),
               ]),
           ]),
           Panel(children: [
-            Row(children: [
+            HeadingRow(
               const Heading('Decided', size: 15),
-              const Spacer(),
               Text('Saved by waiting: ${money(skipped, cur, decimals: 0)}',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))
-            ]),
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            ),
             if (done.isEmpty)
               const EmptyNote('Items you buy or skip show up here.')
             else
@@ -97,8 +96,6 @@ class _WishlistScreenState extends State<WishlistScreen> {
           ]),
         ]));
   }
-
-  String _left(double h) => h >= 24 ? '${h ~/ 24}d ${(h % 24).round()}h left' : '${h.ceil()}h left';
 
   Widget _verdict(BuildContext context, int price) {
     final wc = widget.wc;
@@ -171,9 +168,13 @@ class _WishRow extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
             Expanded(child: Text(w.name, style: const TextStyle(fontWeight: FontWeight.w500))),
-            Text(money(w.price, currency, decimals: 0), style: numStyle),
+            const SizedBox(width: 8),
+            Flexible(child: Text(money(w.price, currency, decimals: 0), textAlign: TextAlign.end, style: numStyle)),
           ]),
-          Row(children: [Text(sub, style: TextStyle(fontSize: 12.5, color: context.c.muted)), const Spacer(), ...actions]),
+          Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
+            Text(sub, style: TextStyle(fontSize: 12.5, color: context.c.muted)),
+            if (actions.isNotEmpty) Wrap(spacing: 4, children: actions),
+          ]),
         ]),
       );
 }

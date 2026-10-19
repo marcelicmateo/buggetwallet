@@ -17,7 +17,7 @@ Future<T?> showSheet<T>(BuildContext context, Widget child) => loggedRoute(
       showDragHandle: true,
       backgroundColor: context.c.surface,
       builder: (ctx) => Padding(
-        padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+        padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20),
         child: SingleChildScrollView(child: child),
       ),
     ));

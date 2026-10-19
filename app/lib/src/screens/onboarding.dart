@@ -44,7 +44,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   Row(children: [
                     Container(width: 26, height: 18, decoration: BoxDecoration(color: c.accent, borderRadius: BorderRadius.circular(5))),
                     const SizedBox(width: 10),
-                    const Heading('Budget Wallet', size: 24),
+                    const Flexible(child: Heading('Budget Wallet', size: 24)),
                   ]),
                   const Muted(
                       'Your money, on your devices. Everything is stored here first and works offline. Sync between your phone and computer is encrypted with a key only your devices have.',

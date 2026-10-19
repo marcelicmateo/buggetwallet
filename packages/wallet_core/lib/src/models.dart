@@ -115,6 +115,7 @@ class WalletSettings {
   final String? savedFor; // periodStart for which the payday savings were confirmed
   final bool salaryConfirmed;
   final List<List<String>> merchantPatterns; // [[category, regex], ...]
+  final int rentCashThreshold; // ATM withdrawals this big or bigger are rent; 0 = never
   final String? syncFolder; // device-local, not synced
 
   const WalletSettings({
@@ -132,6 +133,7 @@ class WalletSettings {
     this.savedFor,
     this.salaryConfirmed = false,
     this.merchantPatterns = const [],
+    this.rentCashThreshold = defaultRentCashThreshold,
     this.syncFolder,
   });
 
@@ -155,6 +157,7 @@ class WalletSettings {
         for (final p in (m['merchantPatterns'] as List?) ?? const [])
           if (p is List && p.length == 2) [p[0].toString(), p[1].toString()],
       ],
+      rentCashThreshold: i('rentCashThreshold', defaultRentCashThreshold),
     );
   }
 
@@ -173,5 +176,6 @@ class WalletSettings {
         'savedFor': savedFor,
         'salaryConfirmed': salaryConfirmed,
         'merchantPatterns': merchantPatterns,
+        'rentCashThreshold': rentCashThreshold,
       };
 }

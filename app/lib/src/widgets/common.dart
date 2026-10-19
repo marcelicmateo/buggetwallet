@@ -53,7 +53,8 @@ class Muted extends StatelessWidget {
   Widget build(BuildContext context) => Text(text, style: TextStyle(fontSize: size, color: context.c.muted, height: 1.4));
 }
 
-/// Status pill with icon + label, so state is never colour alone.
+/// Status pill with icon + label, so state is never colour alone. The label wraps (the icon stays on the first
+/// line), so long messages fit narrow screens and large text; inside a Row, wrap it in Flexible.
 class StatusLabel extends StatelessWidget {
   final bool good;
   final String text;
@@ -61,12 +62,36 @@ class StatusLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final col = good ? context.c.good : context.c.bad;
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(good ? Icons.check_circle_outline : Icons.error_outline, size: 16, color: col),
-      const SizedBox(width: 5),
-      Text(text, style: TextStyle(color: col, fontWeight: FontWeight.w600, fontSize: 13)),
-    ]);
+    return Text.rich(
+      TextSpan(children: [
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 5),
+            child: Icon(good ? Icons.check_circle_outline : Icons.error_outline, size: 16, color: col),
+          ),
+        ),
+        TextSpan(text: text),
+      ]),
+      style: TextStyle(color: col, fontWeight: FontWeight.w600, fontSize: 13),
+    );
   }
+}
+
+/// A panel heading with something on its right (a count, tag, icon or note). On a narrow screen or with large
+/// text the right part moves under the heading instead of overflowing.
+class HeadingRow extends StatelessWidget {
+  final Widget heading;
+  final Widget trailing;
+  const HeadingRow(this.heading, this.trailing, {super.key});
+  @override
+  Widget build(BuildContext context) => Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 4,
+        children: [heading, trailing],
+      );
 }
 
 class Tag extends StatelessWidget {
@@ -103,17 +128,18 @@ class TxTile extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(merchantName(t.tx), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500)),
               const SizedBox(height: 2),
-              Row(children: [
-                Flexible(
-                    child: Text('${shortDate(t.date)} · ${t.category}',
-                        maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: context.c.muted))),
-                const SizedBox(width: 6),
+              Wrap(spacing: 6, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                Text('${shortDate(t.date)} · ${t.category}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: context.c.muted)),
                 Tag(src),
               ]),
             ]),
           ),
           const SizedBox(width: 12),
-          Text(money(t.amount, currency, decimals: 2, signed: true), style: numStyle.copyWith(color: inc ? context.c.good : context.c.ink)),
+          Flexible(
+            child: Text(money(t.amount, currency, decimals: 2, signed: true),
+                textAlign: TextAlign.end, style: numStyle.copyWith(color: inc ? context.c.good : context.c.ink)),
+          ),
         ]),
       ),
     );
