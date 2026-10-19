@@ -79,7 +79,13 @@ class Categorizer {
         {'rules': merchantRules.length, 'patterns': patterns.length, 'patternsUsed': userPatterns.length});
   }
 
+  /// A pattern as a case-insensitive RegExp, or null (logged as `categories.badPattern`) if it does not compile or is
+  /// empty (only spaces included): an empty pattern would match every merchant.
   static RegExp? _tryRegex(String s) {
+    if (s.trim().isEmpty) {
+      logEvent(_log, Level.WARNING, 'categories.badPattern', {'empty': true, 'length': s.length});
+      return null;
+    }
     try {
       return RegExp(s, caseSensitive: false);
     } on FormatException catch (e) {
@@ -89,8 +95,10 @@ class Categorizer {
     }
   }
 
+  /// The category for merchant text, from personal patterns then built-in rules; null if none matches. The text is
+  /// lower-cased and trimmed first, so `'Google '` matches `^google$`.
   String? merchantCategory(String description) {
-    final s = description.toLowerCase();
+    final s = description.toLowerCase().trim();
     for (final (c, re) in userPatterns) {
       if (re.hasMatch(s)) return c;
     }
@@ -126,7 +134,9 @@ class Categorizer {
         if (type == 'POS plaćanje') return merchantCategory(d) ?? 'Shopping';
         return 'Bills & one-offs';
       default:
-        return t.category ?? 'Shopping';
+        // Hand-added and unknown-source rows: their stored category if it is a known one, else Shopping.
+        final c = t.category;
+        return c != null && categories.containsKey(c) ? c : 'Shopping';
     }
   }
 

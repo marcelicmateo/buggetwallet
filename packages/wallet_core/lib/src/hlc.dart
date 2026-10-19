@@ -12,8 +12,10 @@ class Hlc implements Comparable<Hlc> {
   final String node;
   const Hlc(this.millis, this.counter, this.node);
 
+  /// Reads `<millis>:<counter>:<node>`; anything else (no colons, non-numeric parts) is a [FormatException].
   static Hlc parse(String s) {
     final p = s.split(':');
+    if (p.length < 3) throw const FormatException('An HLC has three parts');
     return Hlc(int.parse(p[0]), int.parse(p[1]), p.sublist(2).join(':'));
   }
 
@@ -47,7 +49,7 @@ class HlcClock {
     if (wall > _last.millis) {
       _last = Hlc(wall, 0, node);
     } else {
-      _last = _next(_last.millis, _last.counter + 1);
+      _last = _next(_last.millis, _inc(_last.counter));
     }
     return _last;
   }
@@ -57,11 +59,11 @@ class HlcClock {
     final m = [wall, _last.millis, remote.millis].reduce((a, b) => a > b ? a : b);
     int c;
     if (m == _last.millis && m == remote.millis) {
-      c = (_last.counter > remote.counter ? _last.counter : remote.counter) + 1;
+      c = _inc(_last.counter > remote.counter ? _last.counter : remote.counter);
     } else if (m == _last.millis) {
-      c = _last.counter + 1;
+      c = _inc(_last.counter);
     } else if (m == remote.millis) {
-      c = remote.counter + 1;
+      c = _inc(remote.counter);
     } else {
       c = 0;
     }
@@ -69,6 +71,15 @@ class HlcClock {
   }
 
   /// A counter past [Hlc.maxCounter] moves the clock on by one millisecond instead, which keeps the counter
-  /// within 5 digits (string order = value order) and still sorts after everything seen so far.
-  Hlc _next(int millis, int counter) => counter > Hlc.maxCounter ? Hlc(millis + 1, 0, node) : Hlc(millis, counter, node);
+  /// within 5 digits (string order = value order) and still sorts after everything seen so far. At the largest
+  /// millis value (only a broken or hostile peer sends one) millis cannot move on without wrapping negative, so the
+  /// counter grows past 5 digits instead: the clock never goes backwards by value.
+  Hlc _next(int millis, int counter) =>
+      counter > Hlc.maxCounter && millis < _maxInt ? Hlc(millis + 1, 0, node) : Hlc(millis, counter, node);
+
+  /// The largest 64-bit int (millis and counters never wrap past it).
+  static const _maxInt = 9223372036854775807;
+
+  /// counter + 1, stopping at the largest int instead of wrapping negative.
+  static int _inc(int counter) => counter == _maxInt ? counter : counter + 1;
 }

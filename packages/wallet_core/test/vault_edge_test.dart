@@ -343,7 +343,7 @@ void main() {
         final file = await _sealRaw(inner, key);
         await expectLater(unseal(file, key), _refused, reason: 'inner ${inner.length} bytes');
       }
-    }, skip: 'BUG: unseal lets a FormatException from gzip.decode escape instead of a VaultException (authenticated but not gzip)');
+    });
 
     test('refusal messages do not contain key bytes or the payload', () async {
       final sealed = await seal(utf8.encode('Synthetic Payload Text'), key);

@@ -9,11 +9,6 @@ import 'package:wallet_importer/wallet_importer.dart';
 const _maxInt = 9223372036854775807;
 const _minInt = -9223372036854775808;
 
-const String _wrongTypeBug =
-    'BUG: a wrong-typed value synced into tx/goal/wish makes Tx/Goal/WishItem.fromRow throw, so a whole list (and the screen) fails';
-const String _ghostBug =
-    'BUG: _apply inserts the row (INSERT OR IGNORE) before checking fields, so an op with no known field leaves a visible empty goal/wish';
-
 int _seq = 0;
 
 /// An op from another device, newer than anything local.
@@ -152,7 +147,7 @@ void main() {
         expect(r.wishlist().any((w) => w.name == 'Synthetic wish'), isTrue);
         expect(() => r.transaction('bad'), returnsNormally);
         expect(() => r.categorizer(), returnsNormally);
-      }, skip: _wrongTypeBug);
+      });
     }
 
     test('a wrong-typed value in an unrelated setting does not stop reading transactions', () {
@@ -197,7 +192,7 @@ void main() {
       expect(r.goals(), isEmpty);
       expect(r.wishlist(), isEmpty);
       expect(r.merchantRules(), isEmpty);
-    }, skip: _ghostBug);
+    });
 
     test('unknown fields next to known ones are ignored; the known ones apply', () {
       r.applyRemote([

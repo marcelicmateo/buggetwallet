@@ -50,7 +50,18 @@ class FolderSync {
     final f = File('${_root.path}${Platform.pathSeparator}vault.json');
     final kid = await key.keyId();
     if (await f.exists()) {
-      final j = jsonDecode(await f.readAsString()) as Map<String, Object?>;
+      Object? j;
+      try {
+        j = jsonDecode(await f.readAsString());
+      } on FormatException catch (e, st) {
+        j = null;
+        logError(_log, 'sync.vault.unreadable', e, st);
+      }
+      if (j is! Map) {
+        // Empty, cut off (half-synced) or not an object: never guess, and never overwrite another wallet's file.
+        logEvent(_log, Level.WARNING, 'sync.vault.invalid');
+        throw const SyncException('The sync folder\'s wallet file is damaged or not synced yet. Try again after it has synced.');
+      }
       if (j['kid'] != kid) {
         logEvent(_log, Level.WARNING, 'sync.vault.mismatch');
         throw const SyncException(

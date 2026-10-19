@@ -37,7 +37,7 @@ void main() {
 
     test('a string with no colon at all is a FormatException, not a RangeError', () {
       expect(() => Hlc.parse('12345'), throwsFormatException);
-    }, skip: 'BUG: Hlc.parse("12345") throws RangeError (p[1]) instead of FormatException');
+    });
 
     test('compareStrings refuses a malformed side instead of ordering it', () {
       expect(() => Hlc.compareStrings('garbage', '000000000000001:00001:a'), throwsFormatException);
@@ -293,6 +293,6 @@ void main() {
       const max = Hlc(9223372036854775807, 99999, 'peer');
       c.receive(max);
       expect(c.last.compareTo(max), greaterThan(0));
-    }, skip: 'BUG: millis + 1 wraps negative at the 64-bit limit, so the clock goes backwards (only a hostile or broken peer sends it)');
+    });
   });
 }

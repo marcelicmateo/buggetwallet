@@ -5,7 +5,9 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
 
 ## Files
 - `repo.dart` — `WalletRepo`: schema, reads, and every write. Writes go through `_write(...)` so each one
-  becomes a sync op; never `db.execute` an INSERT/UPDATE on a data table directly.
+  becomes a sync op; never `db.execute` an INSERT/UPDATE on a data table directly. `_apply` checks each field's
+  type (`_fieldValue`): a wrong-typed one is ignored (`repo.badField`, entity + field only) without recording its
+  clock, the op's other fields apply, and a row is only created when some field applies. New column: add its type there.
 - `budget.dart` — period maths: `PeriodBudget` (safe to spend), `MonthSummary`, `Affordability`.
 - `categories.dart` — `Categorizer`: item override → merchant rules → patterns → built-in rules.
 - `matching.dart` — `planMatches`: hand-added expense ↔ bank row (same amount, ±3 days, one-to-one), deterministic;
@@ -38,6 +40,9 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
 - Older builds ignore `seen_bank` and match by the old rule: devices on mixed versions can plan different matches,
   and keep doing so after upgrading for entries they received before.
 - A device that is behind can match a cash entry to an earlier same-amount card payment (±3 days) it never held.
+- `VaultKey.parse` accepts junk after a valid key (extra characters past the 34 key + checksum bytes are ignored).
+- A remote clock far in the future (a peer with a wrong date) is taken as is: this device's later writes sort after it,
+  and an edit made on a device with a correct clock loses to that peer's older edits until real time catches up.
 
 ## Tests
 - `test/core_test.dart`, one `group` per area. Shared synthetic data in `test/support/synthetic.dart`

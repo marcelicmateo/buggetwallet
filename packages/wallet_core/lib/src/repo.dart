@@ -116,23 +116,68 @@ class WalletRepo {
   void setLocalValue(String key, String? value) => _setMeta('local.$key', value);
 
   // ---------- change log ----------
+  /// Applies [op] field by field: a field wins if its HLC is newer than the one stored for it ([clocks]).
+  ///
+  /// Each known field's value is checked first ([_fieldValue]): one of the wrong type (another device's bug, a damaged
+  /// op) is ignored and logged as `repo.badField` with the entity and field name only, and its clock is not recorded,
+  /// so a later valid write still wins. The decision depends only on the op, so every device makes the same one. The
+  /// row is created only when at least one field applies: an op with no usable field leaves nothing behind.
   bool _apply(Op op) {
     final def = _entities[op.entity];
     if (def == null) return false;
     final (table, cols) = def;
-    db.execute('INSERT OR IGNORE INTO $table(id) VALUES(?)', [op.id]);
     final accepted = <String, Object?>{};
     for (final e in op.fields.entries) {
       if (!cols.contains(e.key)) continue;
+      final v = _fieldValue(op.entity, e.key, e.value);
+      if (identical(v, _bad)) {
+        logEvent(_log, Level.WARNING, 'repo.badField', {'entity': op.entity, 'field': e.key});
+        continue;
+      }
       final rs = db.select('SELECT hlc FROM clocks WHERE entity = ? AND id = ? AND field = ?', [op.entity, op.id, e.key]);
       if (rs.isNotEmpty && Hlc.compareStrings(rs.first['hlc'] as String, op.hlc) >= 0) continue;
-      accepted[e.key] = e.value is bool ? ((e.value as bool) ? 1 : 0) : e.value;
-      db.execute('INSERT OR REPLACE INTO clocks(entity, id, field, hlc) VALUES(?, ?, ?, ?)', [op.entity, op.id, e.key, op.hlc]);
+      accepted[e.key] = v;
     }
     if (accepted.isEmpty) return false;
+    db.execute('INSERT OR IGNORE INTO $table(id) VALUES(?)', [op.id]);
+    for (final k in accepted.keys) {
+      db.execute('INSERT OR REPLACE INTO clocks(entity, id, field, hlc) VALUES(?, ?, ?, ?)', [op.entity, op.id, k, op.hlc]);
+    }
     final sets = accepted.keys.map((k) => '$k = ?').join(', ');
     db.execute('UPDATE $table SET $sets WHERE id = ?', [...accepted.values, op.id]);
     return true;
+  }
+
+  static const _bad = Object();
+
+  /// Column types, for checking synced values: integer columns, 0/1 flags (a bool is stored as 0/1), and the
+  /// columns that may hold NULL. Every other synced column is text.
+  static const _intCols = {'amount', 'target', 'saved', 'monthly', 'sort', 'price', 'added', 'decided'};
+  static const _flagCols = {'manual', 'deleted'};
+  static const _nullable = {
+    'tx': {'category', 'note', 'matched_to', 'seen_bank'},
+    'goal': {'name'},
+    'wish': {'name', 'decided'},
+    'setting': {'value'},
+    'rule': {'category'},
+  };
+
+  /// [value] as it is stored for [entity].[field], or [_bad] if it has the wrong type. A whole number sent as a
+  /// float (`12.0`) within the range a double holds exactly is accepted; fractions, huge or non-finite floats are not.
+  static Object? _fieldValue(String entity, String field, Object? value) {
+    if (value == null) return _nullable[entity]?.contains(field) == true ? null : _bad;
+    if (_flagCols.contains(field)) {
+      return switch (value) { true || 1 => 1, false || 0 => 0, _ => _bad };
+    }
+    if (_intCols.contains(field)) {
+      const exact = 9007199254740992; // 2^53
+      return switch (value) {
+        final int v => v,
+        final double v when v.isFinite && v == v.roundToDouble() && v.abs() <= exact => v.toInt(),
+        _ => _bad,
+      };
+    }
+    return value is String ? value : _bad;
   }
 
   void _write(List<(String, String, Map<String, Object?>)> changes) {
@@ -321,7 +366,7 @@ class WalletRepo {
 
   Map<String, String> merchantRules() => {
         for (final r in db.select('SELECT id, category FROM merchant_rules WHERE deleted = 0 AND category IS NOT NULL'))
-          r['id'] as String: r['category'] as String,
+          if ((r['id'], r['category']) case (final String id, final String c)) id: c,
       };
 
   WalletSettings settings() {

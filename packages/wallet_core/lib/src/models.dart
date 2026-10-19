@@ -16,6 +16,10 @@ void logInvalidSetting(String key, Object? value) {
 /// Forgets which bad settings were logged, so tests can expect the warning again.
 void resetInvalidSettingLog() => _invalidLogged.clear();
 
+/// A stored column read as text or a whole number; any other type (a damaged value) reads as null.
+String? _str(Object? v) => v is String ? v : null;
+int? _int(Object? v) => v is int ? v : null;
+
 /// A transaction as stored in the wallet database. Amounts are in minor units (cents).
 class Tx {
   final String id;
@@ -54,20 +58,22 @@ class Tx {
   /// Counts toward totals: not deleted and not replaced by a bank row that is here (see [matchPending]).
   bool get live => !deleted && (matchedTo == null || matchPending);
 
+  /// Reads a stored row. A column of the wrong type (stored by an older build before synced values were checked)
+  /// reads as its default, so one damaged row never breaks a whole list.
   static Tx fromRow(Map<String, Object?> r) => Tx(
         id: r['id'] as String,
-        source: (r['source'] as String?) ?? '',
-        date: (r['date'] as String?) ?? '',
-        amount: (r['amount'] as int?) ?? 0,
-        currency: (r['currency'] as String?) ?? 'EUR',
-        bankType: (r['bank_type'] as String?) ?? '',
-        description: (r['description'] as String?) ?? '',
-        category: r['category'] as String?,
-        note: r['note'] as String?,
-        manual: (r['manual'] as int? ?? 0) == 1,
-        matchedTo: r['matched_to'] as String?,
-        deleted: (r['deleted'] as int? ?? 0) == 1,
-        matchPending: (r['match_pending'] as int? ?? 0) == 1,
+        source: _str(r['source']) ?? '',
+        date: _str(r['date']) ?? '',
+        amount: _int(r['amount']) ?? 0,
+        currency: _str(r['currency']) ?? 'EUR',
+        bankType: _str(r['bank_type']) ?? '',
+        description: _str(r['description']) ?? '',
+        category: _str(r['category']),
+        note: _str(r['note']),
+        manual: r['manual'] == 1,
+        matchedTo: _str(r['matched_to']),
+        deleted: r['deleted'] == 1,
+        matchPending: r['match_pending'] == 1,
       );
 }
 
@@ -92,11 +98,11 @@ class Goal {
 
   static Goal fromRow(Map<String, Object?> r) => Goal(
         id: r['id'] as String,
-        name: (r['name'] as String?) ?? 'Goal',
-        target: (r['target'] as int?) ?? 0,
-        saved: (r['saved'] as int?) ?? 0,
-        monthly: (r['monthly'] as int?) ?? 0,
-        sort: (r['sort'] as int?) ?? 0,
+        name: _str(r['name']) ?? 'Goal',
+        target: _int(r['target']) ?? 0,
+        saved: _int(r['saved']) ?? 0,
+        monthly: _int(r['monthly']) ?? 0,
+        sort: _int(r['sort']) ?? 0,
       );
 }
 
@@ -111,11 +117,11 @@ class WishItem {
 
   static WishItem fromRow(Map<String, Object?> r) => WishItem(
         id: r['id'] as String,
-        name: (r['name'] as String?) ?? '',
-        price: (r['price'] as int?) ?? 0,
-        added: (r['added'] as int?) ?? 0,
-        status: (r['status'] as String?) ?? 'waiting',
-        decided: r['decided'] as int?,
+        name: _str(r['name']) ?? '',
+        price: _int(r['price']) ?? 0,
+        added: _int(r['added']) ?? 0,
+        status: _str(r['status']) ?? 'waiting',
+        decided: _int(r['decided']),
       );
 
   double hoursLeft(int coolHours, int nowMillis) => (added + coolHours * 3600000 - nowMillis) / 3600000;
