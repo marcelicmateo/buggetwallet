@@ -24,24 +24,63 @@ class PlanScreen extends StatefulWidget {
 }
 
 class _PlanScreenState extends State<PlanScreen> {
-  late final Map<String, TextEditingController> f = _fields(widget.wc.settings);
+  static const _moneyKeys = {'salary', 'rent', 'loan', 'subs', 'impulse', 'rentCashThreshold'};
+  static const _keys = ['salary', 'rent', 'loan', 'subs', 'impulse', 'coolHours', 'paydayDay', 'rentCashThreshold'];
+  final Map<String, TextEditingController> f = {for (final k in _keys) k: TextEditingController()};
+
+  /// The text each field last got from the settings. A field whose text differs was edited by the user:
+  /// only those are saved, and only the others follow setting changes (sync, other screens).
+  final Map<String, String> _shown = {};
   String currency = 'EUR';
+  String _shownCurrency = 'EUR';
   bool importing = false;
 
   static String _plain(int cents) => cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2);
 
-  Map<String, TextEditingController> _fields(WalletSettings s) {
-    currency = s.currency;
-    return {
-      'salary': TextEditingController(text: _plain(s.salary)),
-      'rent': TextEditingController(text: _plain(s.rent)),
-      'loan': TextEditingController(text: _plain(s.loan)),
-      'subs': TextEditingController(text: _plain(s.subs)),
-      'impulse': TextEditingController(text: _plain(s.impulse)),
-      'coolHours': TextEditingController(text: '${s.coolHours}'),
-      'paydayDay': TextEditingController(text: '${s.paydayDay}'),
-      'rentCashThreshold': TextEditingController(text: _plain(s.rentCashThreshold)),
-    };
+  static String _text(WalletSettings s, String k) {
+    final v = s.toMap()[k] as int;
+    return _moneyKeys.contains(k) ? _plain(v) : '$v';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _fill(widget.wc.settings, force: true);
+    widget.wc.addListener(_onChange);
+  }
+
+  @override
+  void didUpdateWidget(PlanScreen old) {
+    super.didUpdateWidget(old);
+    if (old.wc != widget.wc) {
+      old.wc.removeListener(_onChange);
+      widget.wc.addListener(_onChange);
+      _fill(widget.wc.settings, force: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.wc.removeListener(_onChange);
+    for (final c in f.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _onChange() {
+    if (mounted) setState(() => _fill(widget.wc.settings));
+  }
+
+  /// Shows [s] in every field the user has not edited ([force]: in every field).
+  void _fill(WalletSettings s, {bool force = false}) {
+    for (final k in _keys) {
+      final t = _text(s, k), c = f[k]!;
+      if ((force || c.text.trim() == _shown[k]) && c.text != t) c.text = t;
+      _shown[k] = t;
+    }
+    if (force || currency == _shownCurrency) currency = s.currency;
+    _shownCurrency = s.currency;
   }
 
   @override
@@ -116,6 +155,7 @@ class _PlanScreenState extends State<PlanScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  key: ValueKey(currency),
                   initialValue: currency,
                   decoration: const InputDecoration(labelText: 'Currency'),
                   items: [
@@ -165,32 +205,39 @@ class _PlanScreenState extends State<PlanScreen> {
         ]));
   }
 
+  /// Saves only the fields the user edited, on top of the latest settings, so changes made elsewhere
+  /// (another screen, another device) are kept.
   void _savePlan() {
-    int? m(String k) => parseMoney(f[k]!.text);
-    int? n(String k) => int.tryParse(f[k]!.text.trim());
-    final vals = {
-      'salary': m('salary'),
-      'rent': m('rent'),
-      'loan': m('loan'),
-      'subs': m('subs'),
-      'impulse': m('impulse'),
-      'coolHours': n('coolHours'),
-      'paydayDay': n('paydayDay'),
-      'rentCashThreshold': m('rentCashThreshold'),
+    final s = widget.wc.settings;
+    final vals = <String, int?>{
+      for (final k in _keys)
+        if (f[k]!.text.trim() != _shown[k]) k: _moneyKeys.contains(k) ? parseMoney(f[k]!.text) : int.tryParse(f[k]!.text.trim()),
     };
-    if (vals.values.any((v) => v == null)) {
-      logNav('plan.invalid', {
-        'keys': [
-          for (final e in vals.entries)
-            if (e.value == null) e.key
-        ].join(',')
-      }); // keys only
+    final bad = [
+      for (final e in vals.entries)
+        if (e.value == null) e.key
+    ];
+    if (bad.isNotEmpty) {
+      logNav('plan.invalid', {'keys': bad.join(',')}); // keys only
       toast(context, 'Enter numbers only, like 1500 or 1500.50.');
       return;
     }
-    final changes = <String, Object?>{...vals, 'currency': currency};
-    changes['paydayDay'] = (vals['paydayDay']!).clamp(1, 28);
-    if (vals['salary'] != widget.wc.settings.salary) changes['salaryConfirmed'] = true;
+    final changes = <String, Object?>{...vals};
+    if (changes['paydayDay'] case final int d) changes['paydayDay'] = d.clamp(1, 28);
+    if (currency != s.currency) changes['currency'] = currency;
+    final now = s.toMap();
+    changes.removeWhere((k, v) => now[k] == v);
+    if (changes.containsKey('salary')) changes['salaryConfirmed'] = true;
+    // Edited fields show the saved value (e.g. "1500.0" -> "1500", payday 31 -> 28) and are no longer "edited".
+    for (final k in vals.keys) {
+      final t = _text(WalletSettings.fromMap({...now, ...changes}), k);
+      f[k]!.text = t;
+      _shown[k] = t;
+    }
+    if (changes.isEmpty) {
+      toast(context, 'Nothing to save');
+      return;
+    }
     widget.wc.updateSettings(changes);
     toast(context, 'Plan saved');
   }
