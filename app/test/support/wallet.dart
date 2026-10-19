@@ -17,6 +17,9 @@ NormalizedTransaction _n(String date, int cents, String type, String desc, {Stri
     bankType: type,
     description: desc);
 
+/// One synthetic bank row (for wallets whose dates are fixed by a test clock).
+NormalizedTransaction syntheticTx(String date, int cents, String type, String desc) => _n(date, cents, type, desc);
+
 /// An empty in-memory wallet with a key (no sync folder, no timers).
 WalletController emptyWallet({bool withKey = true}) =>
     WalletController.forTest(WalletRepo.inMemory(), key: withKey ? VaultKey.generate() : null);

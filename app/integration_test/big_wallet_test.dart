@@ -63,10 +63,9 @@ Future<Map<String, Object?>> frames(WidgetTester t, Future<void> Function() acti
   return stats.summary();
 }
 
-/// The slowest [name] timing in [phase]. [cached]: the controller caches it, so a phase without data changes may log none (0).
-int maxOf(Map<String, Map<String, List<int>>> p, String phase, String name, {bool cached = false}) {
+/// The slowest [name] timing in [phase].
+int maxOf(Map<String, Map<String, List<int>>> p, String phase, String name) {
   final xs = p[phase]?[name];
-  if (cached && xs == null) return 0;
   expect(xs, isNotNull, reason: 'no $name in phase $phase');
   return xs!.reduce((a, b) => a > b ? a : b);
 }
@@ -113,6 +112,11 @@ void main() {
     final total = rows + 42 + 2920;
     expect(wc.txs, hasLength(total));
     await t.pumpAndSettle();
+
+    // A data change recomputes everything the tabs show: this phase bounds the uncached work.
+    phase('derive');
+    wc.reload();
+    await t.pump();
 
     phase('tabs');
     final framesTabs = await frames(t, () async {
@@ -165,9 +169,11 @@ void main() {
       'weekly_wc_reload_ms': maxOf(p, 'weekly-import', 'wc.reload'),
       'year_import_files_ms': maxOf(p, 'year-import', 'import.files'),
       'reimport_import_files_ms': maxOf(p, 're-import', 'import.files'),
-      'tabs_wc_period_max_ms': maxOf(p, 'tabs', 'wc.period', cached: true),
-      'tabs_wc_payPeriods_max_ms': maxOf(p, 'tabs', 'wc.payPeriods', cached: true),
-      'tabs_spending_derive_max_ms': maxOf(p, 'tabs', 'spending.derive', cached: true),
+      'derive_wc_reload_ms': maxOf(p, 'derive', 'wc.reload'),
+      'derive_wc_period_max_ms': maxOf(p, 'derive', 'wc.period'),
+      'derive_wc_payPeriods_max_ms': maxOf(p, 'derive', 'wc.payPeriods'),
+      'derive_wc_monthSummary_max_ms': maxOf(p, 'derive', 'wc.monthSummary'),
+      'derive_spending_derive_max_ms': maxOf(p, 'derive', 'spending.derive'),
       'months_spending_derive_max_ms': maxOf(p, 'spending-months', 'spending.derive'),
       'frames_tabs': framesTabs,
       'frames_spending_scroll': framesScroll,
@@ -191,9 +197,15 @@ void main() {
     under('weekly_wc_reload_ms', 2000);
     under('year_import_files_ms', 3000);
     under('reimport_import_files_ms', 1500);
-    under('tabs_wc_period_max_ms', 100);
-    under('tabs_wc_payPeriods_max_ms', 200);
-    under('tabs_spending_derive_max_ms', 300);
+    under('derive_wc_reload_ms', 2000);
+    under('derive_wc_period_max_ms', 100);
+    under('derive_wc_payPeriods_max_ms', 200);
+    under('derive_wc_monthSummary_max_ms', 300);
+    under('derive_spending_derive_max_ms', 300);
+    // Switching tabs only moves the IndexedStack: nothing derived is worked out again, so a broken cache shows here.
+    for (final name in ['wc.period', 'wc.payPeriods', 'wc.monthSummary', 'spending.derive']) {
+      expect(p['tabs']?[name], isNull, reason: '$name was recomputed while switching tabs: ${p['tabs']?[name]} ms');
+    }
     under('months_spending_derive_max_ms', 300);
     expect(framesScroll['frames'] as int, greaterThan(20), reason: 'frame timings arrived');
     expect(framesScroll['build_p90_ms'] as num, lessThan(50), reason: 'Spending scroll frames: $framesScroll');

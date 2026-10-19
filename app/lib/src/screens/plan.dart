@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
+import '../file_chooser.dart';
 import '../format.dart';
 import '../logging.dart';
 import '../storage_access.dart';
@@ -18,7 +19,10 @@ final _log = Logger('bw.app');
 
 class PlanScreen extends StatefulWidget {
   final WalletController wc;
-  const PlanScreen({super.key, required this.wc});
+
+  /// The system file and folder choosers (tests pass one that fails).
+  final FileChooser chooser;
+  const PlanScreen({super.key, required this.wc, this.chooser = const FileChooser()});
   @override
   State<PlanScreen> createState() => _PlanScreenState();
 }
@@ -209,7 +213,7 @@ class _PlanScreenState extends State<PlanScreen> {
             for (final l in wc.lastImport) StatusLabel(good: l.ok, text: '${l.file}: ${l.message}'),
           ]),
           _syncPanel(context),
-          DiagnosticsPanel(wc: wc),
+          DiagnosticsPanel(wc: wc, chooser: widget.chooser),
         ]));
   }
 
@@ -261,7 +265,14 @@ class _PlanScreenState extends State<PlanScreen> {
 
   Future<void> _import() async {
     logNav('import.pick');
-    final picked = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['xls', 'xlsx', 'csv']);
+    final List<PlatformFile> picked;
+    try {
+      picked = await widget.chooser.pickBankFiles();
+    } catch (e, st) {
+      logError(_log, 'import.pickerFailed', e, st, fields: {'type': e.runtimeType.toString()});
+      if (mounted) toast(context, chooserFailedMessage);
+      return;
+    }
     if (picked.isEmpty) {
       logNav('import.cancelled');
       return;
@@ -287,8 +298,11 @@ class _PlanScreenState extends State<PlanScreen> {
       'exts': [for (final (n, _) in files) fileExt(n)],
       'bytes': [for (final (_, b) in files) b.length],
     });
-    await widget.wc.importFiles(files);
-    if (mounted) setState(() => importing = false);
+    try {
+      await widget.wc.importFiles(files);
+    } finally {
+      if (mounted) setState(() => importing = false);
+    }
   }
 
   Widget _syncPanel(BuildContext context) {
@@ -313,7 +327,16 @@ class _PlanScreenState extends State<PlanScreen> {
           OutlinedButton(
             onPressed: () async {
               logNav('sync.chooseFolder');
-              final path = await FilePicker.getDirectoryPath(dialogTitle: 'Choose your Syncthing folder');
+              final String? path;
+              try {
+                path = await widget.chooser.pickFolder(title: 'Choose your Syncthing folder');
+              } catch (e, st) {
+                logError(_log, 'sync.pickerFailed', e, st, fields: {'type': e.runtimeType.toString()});
+                if (!context.mounted) return;
+                toast(context, chooserFailedMessage);
+                await _typePath(context); // the folder can still be typed or pasted
+                return;
+              }
               logNav('sync.chooseFolder.done', {'picked': path != null}); // never the path
               if (path != null) await wc.setSyncFolder(path);
             },

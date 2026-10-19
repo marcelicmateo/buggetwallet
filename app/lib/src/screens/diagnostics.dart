@@ -1,8 +1,8 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
+import '../file_chooser.dart';
 import '../logging.dart';
 import '../widgets/common.dart';
 
@@ -14,7 +14,8 @@ String _size(int bytes) =>
 /// Plan › Diagnostics: log level, log size, save and clear.
 class DiagnosticsPanel extends StatefulWidget {
   final WalletController wc;
-  const DiagnosticsPanel({super.key, required this.wc});
+  final FileChooser chooser;
+  const DiagnosticsPanel({super.key, required this.wc, this.chooser = const FileChooser()});
   @override
   State<DiagnosticsPanel> createState() => _DiagnosticsPanelState();
 }
@@ -65,11 +66,11 @@ class _DiagnosticsPanelState extends State<DiagnosticsPanel> {
     logNav('log.save');
     final bytes = await wc.logBytes();
     try {
-      final uri = await FilePicker.saveFile(fileName: wc.logFileName(), bytes: bytes, mimeType: 'text/plain', dialogTitle: 'Save logs');
+      final uri = await widget.chooser.saveText(fileName: wc.logFileName(), bytes: bytes, title: 'Save logs');
       logEvent(_log, Level.INFO, 'log.saveDialog', {'saved': uri != null, 'bytes': bytes.length});
       return uri == null ? null : 'Logs saved.';
     } catch (e, st) {
-      logError(_log, 'log.saveDialogFailed', e, st, level: Level.INFO);
+      logError(_log, 'log.saveDialogFailed', e, st, fields: {'type': e.runtimeType.toString()}, level: Level.INFO);
       return 'Saved to ${await wc.saveLogsToFolder()}';
     }
   }

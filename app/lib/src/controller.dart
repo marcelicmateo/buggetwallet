@@ -69,6 +69,18 @@ class WalletController extends ChangeNotifier {
   int dataVersion = 0;
   final Map<String, Object?> _memo = {};
 
+  /// The day [_memo] was filled for: a new day drops every cached value (old days would only pile up).
+  String? _memoDay;
+
+  /// The day the screens last showed (set by [reload] and [checkDay]); a different [today] means the pages are out of date.
+  String? _seenDay;
+  final DateTime Function() _clock;
+
+  /// Runs the sync of one folder; tests replace it.
+  @visibleForTesting
+  Future<SyncReport> Function(String folder, VaultKey key, WalletRepo repo) syncRunner = _runFolderSync;
+  static Future<SyncReport> _runFolderSync(String folder, VaultKey key, WalletRepo repo) => FolderSync(folder, key).run(repo);
+
   String? syncFolder;
   DateTime? lastSync;
   String? syncError;
@@ -81,7 +93,7 @@ class WalletController extends ChangeNotifier {
   Timer? _syncTimer;
   Timer? _debounce;
 
-  WalletController._(this.repo, this.key) {
+  WalletController._(this.repo, this.key, {DateTime Function()? clock}) : _clock = clock ?? DateTime.now {
     syncFolder = repo.localValue('syncFolder');
   }
 
@@ -113,14 +125,25 @@ class WalletController extends ChangeNotifier {
     return c;
   }
 
-  /// For widget tests: an already-open repo (e.g. [WalletRepo.inMemory]), no auto-sync.
+  /// For widget tests: an already-open repo (e.g. [WalletRepo.inMemory]), no auto-sync. [clock] stands in for the current time.
   @visibleForTesting
-  factory WalletController.forTest(WalletRepo repo, {VaultKey? key}) => WalletController._(repo, key)..reload();
+  factory WalletController.forTest(WalletRepo repo, {VaultKey? key, DateTime Function()? clock}) =>
+      WalletController._(repo, key, clock: clock)..reload();
 
   bool get hasWallet => key != null;
   String get currency => settings.currency;
 
-  String today() => isoDate(DateTime.now());
+  String today() => isoDate(_clock());
+
+  /// Tells the screens when the day has changed since they were last built (the app stayed open over midnight), so periods,
+  /// months and the delivery panel move on without a data change. Called on resume and by the periodic timer.
+  void checkDay() {
+    final d = today();
+    if (_seenDay == null || d == _seenDay) return;
+    logEvent(_log, Level.INFO, 'day.changed', {'from': _seenDay, 'to': d});
+    _seenDay = d;
+    notifyListeners();
+  }
 
   void reload() {
     final t = PerfTimer('wc.reload');
@@ -133,18 +156,40 @@ class WalletController extends ChangeNotifier {
     wish = w;
     dataVersion++;
     _memo.clear();
+    _seenDay = _memoDay = today();
     t.done({'tx': txs.length, 'goals': goals.length, 'wish': wish.length});
     notifyListeners();
   }
 
   /// Derived values are computed once per [dataVersion] and day, however often a screen asks (every build, every tab).
   T _cached<T>(String key, T Function() compute) {
-    final k = '$key|${today()}';
-    if (_memo.containsKey(k)) return _memo[k] as T;
+    final day = today();
+    if (day != _memoDay) {
+      _memo.clear();
+      _memoDay = day;
+    }
+    if (_memo.containsKey(key)) return _memo[key] as T;
     final v = compute();
-    _memo[k] = v;
+    _memo[key] = v;
     return v;
   }
+
+  /// This month's Food delivery orders: how many, and the total spent (positive cents).
+  (int, int) get deliveries => _cached('deliveries', () {
+        final month = monthOf(today());
+        final xs = txs.where((t) => t.category == 'Food delivery' && monthOf(t.date) == month && t.amount < 0);
+        return (xs.length, -xs.fold<int>(0, (a, t) => a + t.amount));
+      });
+
+  /// The date of the newest transaction per bank source (`pbz`, `revolut`); a source without rows is missing.
+  Map<String, String> get latestBySource => _cached('latestBySource', () {
+        final out = <String, String>{};
+        for (final t in txs) {
+          out.putIfAbsent(t.tx.source, () => t.date); // txs are newest first
+          if (out.containsKey('pbz') && out.containsKey('revolut')) break;
+        }
+        return out;
+      });
 
   List<String> get _paydays => _cached('paydays', () => salaryPaydays(txs, today()));
 
@@ -173,7 +218,10 @@ class WalletController extends ChangeNotifier {
     return _cached(
         'spending$month',
         () => timed('spending.derive', () {
-              final sums = [for (final m in months) _cached('monthSummary$m', () => monthSummary(txs, m))];
+              final sums = [
+                for (final m in months)
+                  _cached('monthSummary$m', () => timed('wc.monthSummary', () => monthSummary(txs, m), fields: {'month': m}))
+              ];
               final selSum = sums.firstWhere((s) => s.month == month);
               final prev = sums.where((s) => s.month.compareTo(month) < 0).toList();
               final prev6 = prev.length > 6 ? prev.sublist(prev.length - 6) : prev;
@@ -268,7 +316,7 @@ class WalletController extends ChangeNotifier {
     syncing = true;
     if (!quiet) notifyListeners();
     try {
-      final r = await timedAsync('sync.run', () => FolderSync(folder, k).run(repo), fields: {'trigger': trigger}, warnMs: 3000);
+      final r = await timedAsync('sync.run', () => syncRunner(folder, k, repo), fields: {'trigger': trigger}, warnMs: 3000);
       lastSync = DateTime.now();
       syncError = null;
       syncBadFiles = r.badFiles;
@@ -278,6 +326,9 @@ class WalletController extends ChangeNotifier {
     } catch (e, st) {
       logError(_sync, 'sync.failed', e, st, fields: {'trigger': trigger});
       syncError = e.toString();
+      // A run that failed partway (a folder that stopped being readable after file A) may already have applied A's changes;
+      // a SyncException is thrown by the checks before anything is applied.
+      if (e is! SyncException) reload();
     } finally {
       syncing = false;
       notifyListeners();
@@ -285,7 +336,10 @@ class WalletController extends ChangeNotifier {
   }
 
   void _startAutoSync() {
-    _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) => syncNow(quiet: true, trigger: 'timer'));
+    _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+      checkDay();
+      syncNow(quiet: true, trigger: 'timer');
+    });
     scheduleMicrotask(() => syncNow(quiet: true, trigger: 'startup'));
   }
 
