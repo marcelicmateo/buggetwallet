@@ -4,6 +4,11 @@
 #
 #   tools/emulator.sh screens          boot, run the screenshot test with synthetic data, stop
 #                                      -> dist/screens/*.png  (app/integration_test/screens_test.dart)
+#   tools/emulator.sh test [name...]   boot once, run every app/integration_test/<name>_test.dart (or the named
+#                                      ones: flows, flows_test or a path) with `flutter drive`, each on a freshly
+#                                      installed app -> dist/screens/<name>/*.png, dist/logs/app-<name>.log (app log),
+#                                      dist/logs/report-<name>.json (perf numbers, known bugs), drive-<name>.log and
+#                                      tests-<name>-summary.txt (per-test times); exit 1 if any failed
 #   tools/emulator.sh start [--window] boot an emulator that keeps running (--window: show it on the desktop)
 #   tools/emulator.sh install [apk]    install an APK on it (default dist/BudgetWallet-android.apk)
 #   tools/emulator.sh shot <name>      screenshot of the running emulator -> dist/screens/<name>.png
@@ -27,7 +32,7 @@ SERIAL=emulator-5554
 SYSIMG="system-images;android-35;google_apis;x86_64"
 # Change this (or the AVD settings in setup) to set the volumes up again on the next run.
 SETUP_ID="1 $SYSIMG pixel_6 hw.keyboard=yes hw.ramSize=3072 disk.dataPartition.size=6G lavapipe"
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 # shellcheck source=tools/timing.sh
 source "$ROOT/tools/timing.sh"
 
@@ -76,6 +81,30 @@ boot() {  # inside the container
   echo "emulator booted"
 }
 
+# drive <suite> <test name|"">: `flutter drive` one integration test (in app/), log in $LOGS/<suite>.log, then the
+# build/install/test history lines and the per-test summary (tools/build_log.py). An empty test name keeps the
+# screenshot test's old output paths (dist/screens/*.png, dist/logs/app-emulator.log).
+drive() {
+  local suite=$1 name=$2 t rc=0 total build install result log
+  log="$LOGS/${name:+drive-}$suite.log"
+  # Skia, not Impeller: Impeller's GLES calls trip an abort in the emulator's software GLES decoder (37.x).
+  # Override with BW_DRIVE_ARGS="" once a newer emulator fixes it.
+  read -ra drive_args <<<"${BW_DRIVE_ARGS---no-enable-impeller}"
+  t=$(now_us)
+  BW_TEST_NAME=$name flutter drive --driver=test_driver/integration_test.dart --target="integration_test/${suite}_test.dart" \
+    -d "$SERIAL" "${drive_args[@]}" 2>&1 | tee "$log" || rc=$?
+  # `flutter drive` builds, installs and runs in one go: split its time using the durations it prints
+  total=$(secs_since "$t")
+  build=$(grep -oP "Running Gradle task 'assembleDebug'\.\.\. *\K[0-9.]+(?=s$)" "$log" | tail -1 || true)
+  install=$(grep -oP '^Installing .*?\K[0-9]+(?=ms$)' "$log" | tail -1 || true)
+  result=$([[ $rc == 0 ]] && echo ok || echo FAILED)
+  [[ -n $build ]] && log_history build "$build" ok
+  [[ -n $install ]] && log_history install "$(awk -v ms="$install" 'BEGIN { printf "%.1f", ms / 1000 }')" ok
+  log_history "test${name:+-$name}" "$(awk -v t="$total" -v b="${build:-0}" -v i="${install:-0}" 'BEGIN { printf "%.1f", t - b - i / 1000 }')" "$result"
+  python3 -I "$ROOT/tools/build_log.py" drive "$suite" "$log" || true
+  return "$rc"
+}
+
 # ---- inside the container ----
 if [[ "${BW_NATIVE:-}" == 1 ]]; then
   export ANDROID_AVD_HOME=/opt/avd PATH=$ANDROID_HOME/emulator:$PATH
@@ -91,23 +120,35 @@ if [[ "${BW_NATIVE:-}" == 1 ]]; then
       t=$(now_us); boot; log_history boot "$(secs_since "$t")" ok
       mkdir -p "$ROOT/dist/screens"
       cd "$ROOT/app"
-      t=$(now_us)
       flutter pub get >/dev/null
-      # Skia, not Impeller: Impeller's GLES calls trip an abort in the emulator's software GLES decoder (37.x).
-      # Override with BW_DRIVE_ARGS="" once a newer emulator fixes it.
-      read -ra drive_args <<<"${BW_DRIVE_ARGS---no-enable-impeller}"
       rc=0
-      flutter drive --driver=test_driver/integration_test.dart --target=integration_test/screens_test.dart \
-        -d "$SERIAL" "${drive_args[@]}" 2>&1 | tee "$LOGS/screens.log" || rc=$?
-      # `flutter drive` builds, installs and runs in one go: split its time using the durations it prints
-      total=$(secs_since "$t")
-      build=$(grep -oP "Running Gradle task 'assembleDebug'\.\.\. *\K[0-9.]+(?=s$)" "$LOGS/screens.log" | tail -1 || true)
-      install=$(grep -oP '^Installing .*?\K[0-9]+(?=ms$)' "$LOGS/screens.log" | tail -1 || true)
-      result=$([[ $rc == 0 ]] && echo ok || echo FAILED)
-      [[ -n $build ]] && log_history build "$build" ok
-      [[ -n $install ]] && log_history install "$(awk -v ms="$install" 'BEGIN { printf "%.1f", ms / 1000 }')" ok
-      log_history test "$(awk -v t="$total" -v b="${build:-0}" -v i="${install:-0}" 'BEGIN { printf "%.1f", t - b - i / 1000 }')" "$result"
-      python3 -I "$ROOT/tools/build_log.py" drive screens "$LOGS/screens.log" || true
+      drive screens "" || rc=$?
+      exit "$rc" ;;
+    test)
+      trap 'cp /tmp/emulator.log "$LOGS/emulator.log" 2>/dev/null || true' EXIT
+      shift
+      names=()
+      for n in "$@"; do n=${n##*/}; n=${n%.dart}; names+=("${n%_test}"); done
+      if ((${#names[@]} == 0)); then
+        for f in "$ROOT"/app/integration_test/*_test.dart; do n=${f##*/}; names+=("${n%_test.dart}"); done
+      fi
+      for n in "${names[@]}"; do
+        [[ -f "$ROOT/app/integration_test/${n}_test.dart" ]] || { echo "no such test: app/integration_test/${n}_test.dart" >&2; exit 2; }
+      done
+      t=$(now_us); boot; log_history boot "$(secs_since "$t")" ok
+      cd "$ROOT/app"
+      flutter pub get >/dev/null
+      rc=0 table=()
+      for n in "${names[@]}"; do
+        rm -rf "$ROOT/dist/screens/$n"
+        adb uninstall hr.marcelic.budget_wallet >/dev/null 2>&1 || true  # each test file starts on a clean app
+        t=$(now_us); r=0
+        drive "$n" "$n" || r=$?
+        ((r == 0)) || rc=1
+        table+=("$(printf '%-12s %-7s %6s s' "$n" "$([[ $r == 0 ]] && echo ok || echo FAILED)" "$(secs_since "$t")")")
+      done
+      echo "--- integration tests (emulator): ${#names[@]} files"
+      printf '  %s\n' "${table[@]}"
       exit "$rc" ;;
   esac
   usage
@@ -150,15 +191,20 @@ need_running() { running || { echo "No emulator running. Start one with: tools/e
 with_run() { mapfile -t run < <(run_mounts); common+=("${run[@]}"); }  # before prepare
 
 case "$CMD" in
-  screens)
-    run_begin screens
+  screens|test)
+    run_begin "$CMD"
     t0=$(now_us)
     with_run
     prepare
     tty=(); [[ -t 0 && -t 1 ]] && tty=(-it)
     rc=0
-    podman run --rm "${tty[@]}" "${common[@]}" "$img" tools/emulator.sh screens || rc=$?
-    cp "$ROOT"/dist/screens/*.png "$BW_RUN_DIR/" 2>/dev/null || true
+    podman run --rm "${tty[@]}" "${common[@]}" "$img" tools/emulator.sh "$@" || rc=$?
+    if [[ $CMD == screens ]]; then
+      cp "$ROOT"/dist/screens/*.png "$BW_RUN_DIR/" 2>/dev/null || true
+    else
+      mkdir -p "$BW_RUN_DIR/screens"
+      cp -r "$ROOT"/dist/screens/*/ "$BW_RUN_DIR/screens/" 2>/dev/null || true
+    fi
     log_history total "$(secs_since "$t0")" "$([[ $rc == 0 ]] && echo ok || echo FAILED)"
     exit "$rc" ;;
   start)
