@@ -24,7 +24,7 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
   names, the key, paths or file names (see package `CLAUDE.md`s).
 
 ## Local builds (owner's laptop)
-`tools/build.sh test|lint|format|apk|linux|all|shell|lsp` runs the CI steps in a rootless **Podman** container
+`tools/build.sh test|lint|format|apk|linux|desktop-test|desktop-smoke|all|shell|lsp` runs the CI steps in a rootless **Podman** container
 (not Docker), image from `dev/Containerfile`, Flutter version pinned by `environment: flutter:` in `app/pubspec.yaml`
 (CI reads the same line). Outputs land in `dist/` (git-ignored). Run `tools/build.sh test` before pushing.
 The scripts assume a Linux host: Bash 5, GNU tools (`grep -P`, `sha256sum`, `base64 -w0`), Python 3, Podman.
@@ -48,6 +48,11 @@ Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't 
   cold boot saved as a snapshot); runs boot that snapshot read-only in ~3 s. `tools/emulator.sh reset` starts over.
   Known emulator 37.x limits: renderer `lavapipe`, and Flutter runs with `--no-enable-impeller` (Impeller trips an
   abort in the emulator's GLES decoder); real phones use Impeller.
+- **Linux desktop:** `tools/build.sh desktop-test [name…]` runs `app/integration_test/*_test.dart` on the Linux app under
+  Xvfb in the build container (screenshots `dist/screens/linux/<test>/`, log `dist/logs/app-linux-<test>.log`; desktop
+  screenshots come from `integration_test/flutter_test_config.dart`). Android-only tests must skip themselves on
+  desktop. `tools/build.sh desktop-smoke` starts the release bundle headless and checks its log. CI runs both.
+  Ubuntu packages: `dev/linux-packages.txt` (image and CI).
 Android release builds are signed with one fixed key (`tools/make-signing-key.sh`, kept in
 `~/.config/budget-wallet/`, CI secrets `ANDROID_KEYSTORE_*`) so updates install over the app without wiping
 the wallet. Never commit or print the key or its password; never fall back to debug signing for a published APK.

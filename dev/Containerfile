@@ -1,5 +1,6 @@
 # Budget Wallet build environment: Flutter + Android SDK, run with rootless Podman by tools/build.sh.
-# Can do: package tests, app analyze/tests, format/shell/workflow lint, Dart LSP, Android APK, Linux desktop build.
+# Can do: package tests, app analyze/tests, format/shell/workflow lint, Dart LSP, Android APK, Linux desktop build,
+# Linux desktop integration tests and release smoke test under Xvfb.
 # Cannot do: iOS / macOS builds — those need a Mac with Xcode.
 FROM docker.io/library/ubuntu:24.04
 
@@ -17,7 +18,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     ANDROID_USER_HOME=/cache/android
 ENV PATH=$FLUTTER_HOME/bin:$FLUTTER_HOME/bin/cache/dart-sdk/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
 
-# Same system libraries as CI, plus the Linux desktop toolchain and JDK 17 for Gradle
+# Basics and JDK 17 for Gradle. The Linux packages here are repeated in dev/linux-packages.txt (installed below);
+# that list is the source of truth, they stay here only so this layer and the Flutter/Android layers stay cached.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates curl git unzip xz-utils zip file \
@@ -49,6 +51,13 @@ RUN mkdir -p "$ANDROID_HOME/cmdline-tools" \
 
 # What the Android build (AGP + plugins) installs on first use; baked in so `--rm` containers don't redownload it
 RUN sdkmanager "build-tools;36.0.0" "platforms;android-35" "cmake;3.22.1" >/dev/null
+
+# Linux desktop toolchain and headless display (Xvfb, Mesa, D-Bus, fonts): the list CI installs too. Late in the
+# file, so editing the list only rebuilds from here.
+COPY linux-packages.txt /tmp/
+RUN apt-get update \
+ && sed 's/#.*//' /tmp/linux-packages.txt | xargs apt-get install -y --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/* /tmp/linux-packages.txt
 
 # shellcheck + actionlint, pinned and checksummed; CI installs them with the same script
 COPY install-lint-tools.sh /tmp/
