@@ -193,14 +193,17 @@ ImportBatch? parseRows(List<List<Object>> rows) {
         skipped++;
         continue;
       }
+      // An empty Amount is not a transaction (owner decision): ignored without a count.
+      if (_s(at(cA)).isEmpty) continue;
+      // From here the row has a Started Date and an Amount: if any of it cannot be read, it is counted.
       final d = _anyDate(at(cD));
       final a = _toNum(at(cA));
-      if (d == null || a == null) continue;
-      if (d == _impossible) {
+      // An empty Fee is 0; a Fee that is there but not a number would silently change the amount.
+      final fee = cF >= 0 && _s(at(cF)).isNotEmpty ? _toNum(at(cF)) : 0.0;
+      if (d == null || d == _impossible || a == null || fee == null) {
         invalid++;
         continue;
       }
-      final fee = cF >= 0 ? (_toNum(at(cF)) ?? 0) : 0.0;
       final amount = _cents(a), feeCents = _cents(fee);
       if (amount == null || feeCents == null) {
         invalid++;
@@ -228,9 +231,10 @@ ImportBatch? parseRows(List<List<Object>> rows) {
         d = _anyDate(c0);
       }
       if (d == null) continue;
+      // An empty amount is not a transaction; a dated row with an amount we cannot read is counted.
+      if (_s(r[3]).isEmpty) continue;
       final a = _toNum(r[3]);
-      if (a == null) continue;
-      if (d == _impossible) {
+      if (a == null || d == _impossible) {
         invalid++;
         continue;
       }
