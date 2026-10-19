@@ -141,6 +141,39 @@ void main() {
       }
     });
 
+    test('an empty (or blank) pattern is refused and logged like a broken one, instead of matching every merchant', () {
+      final lines = <String>[];
+      final was = Logger.root.level;
+      Logger.root.level = Level.ALL;
+      final sub = Logger.root.onRecord.listen((rec) => lines.add(formatLogRecord(rec)));
+      final Categorizer c;
+      try {
+        c = Categorizer(patterns: [
+          ['Cash', ''],
+          ['Rent', '   '],
+          ['Shopping', 'good'],
+        ]);
+      } finally {
+        sub.cancel();
+        Logger.root.level = was;
+      }
+      expect(c.userPatterns.map((p) => p.$1), ['Shopping']);
+      expect(c.merchantCategory('example place'), isNull);
+      expect(c.merchantCategory('a good place'), 'Shopping');
+      expect(c.merchantCategory('lidl'), 'Groceries');
+      expect(lines.where((l) => l.contains('categories.badPattern')), hasLength(2));
+    });
+
+    test('merchant text is trimmed before matching, so anchored rules match text with spaces around it', () {
+      expect(cz.merchantCategory('Google '), 'Bills & subscriptions');
+      expect(cz.merchantCategory('\tgoogle\n'), 'Bills & subscriptions');
+      expect(
+          Categorizer(patterns: [
+            ['Cash', r'^exact$']
+          ]).merchantCategory('  Exact '),
+          'Cash');
+    });
+
     test('patterns for a category that does not exist (wrong case, spaces, empty) are skipped', () {
       final c = Categorizer(patterns: [
         ['groceries', 'zzz'],
