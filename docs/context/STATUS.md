@@ -83,6 +83,7 @@ Open bugs to fix next (found by tests 2026-10-17; core bugs 1–9 already fixed 
   header (Heading + Tag), app bar title Row (title + period Chip), onboarding header Row, Today salary banner buttons
   row, one Wishlist Panel row. UI tests branch worktree-agent-ae419093e9ee405fd (c20b791): layout test's sheet-tap
   fix committed but not run; full build.sh test + emulator.sh test not run yet.
+- Importer: v1-compatible rounding changed ids of rows with an exact negative half cent (3-decimal amounts, very rare); such rows imported by earlier v2 builds may re-import once as duplicates.
 
 ## Next
 - Owner installs Android APK + desktop build, creates wallet, imports bank files, sets up Syncthing.

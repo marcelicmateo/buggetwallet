@@ -1,4 +1,5 @@
 import 'dates.dart';
+import 'hlc.dart';
 import 'models.dart';
 
 /// What [planMatches] wants written: `matched_to` per manual entry id (null = unmatch) and the category a bank
@@ -15,31 +16,60 @@ class MatchPlan {
 
 final _iso = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 
-/// Matches hand-added expenses to the bank rows that replace them: same amount, at most 3 days apart, one-to-one.
-///
-/// A pure function of the rows, so every device holding the same rows plans the same writes (sync converges even
-/// when the manual entry and the bank row arrive on a device in either order), and applying the plan gives a state
-/// whose plan is empty (idempotent):
-/// - an existing match is kept (also if its bank row has not arrived yet); when several live manual entries point at
-///   the same bank row, the one with the smallest id keeps it and the others are unmatched and matched again below;
-/// - every unmatched live manual entry, oldest first (date, then id), takes the free [eligible] bank row with the
-///   same amount that is closest in days (then earliest date, then smallest id).
-///
-/// [manual]: live (not deleted) manual entries; [bank]: non-manual rows that are not deleted. [eligible] says which
-/// bank rows may replace a manual entry (expenses whose built-in kind is flex or fixed).
-MatchPlan planMatches(List<Tx> manual, List<Tx> bank, bool Function(Tx) eligible) {
-  final matchedTo = <String, String?>{};
-  final bankCategory = <String, String>{};
+/// Days a bank row may be from the hand-added expense it replaces.
+const matchDays = 3;
+
+/// The manual entries [planMatches] will try to match: unmatched ones, ones whose bank row is not in [liveBank]
+/// (deleted or missing), and every entry but the smallest id on a bank row shared by several. [taken]: the bank rows
+/// that keep their entry.
+({List<Tx> open, Set<String> taken}) _split(List<Tx> manual, Set<String> liveBank) {
   final taken = <String>{};
   final open = <Tx>[];
   for (final m in [...manual]..sort((a, b) => a.id.compareTo(b.id))) {
     final to = m.matchedTo;
-    if (to == null) {
-      open.add(m);
-    } else if (!taken.add(to)) {
-      matchedTo[m.id] = null; // a second entry on the same bank row
-      open.add(m);
-    }
+    if (to == null || !liveBank.contains(to) || !taken.add(to)) open.add(m);
+  }
+  return (open: open, taken: taken);
+}
+
+/// The manual entries that [planMatches] tries to match, given the ids of the live bank rows entries point at, so
+/// callers can load only the bank rows that could replace one of them (same amount, within [matchDays], written
+/// after it). Empty when every entry keeps its match.
+List<Tx> openEntries(List<Tx> manual, Set<String> liveBank) => _split(manual, liveBank).open;
+
+/// Matches hand-added expenses to the bank rows that replace them: same amount, at most [matchDays] days apart,
+/// one-to-one.
+///
+/// A pure function of the rows, so every device holding the same rows plans the same writes (sync converges even
+/// when the manual entry and the bank row arrive on a device in either order), and applying the plan gives a state
+/// whose plan is empty (idempotent):
+/// - an existing match is kept while its bank row is in [bank]; a match whose bank row was deleted (or is missing)
+///   is open again, so the entry counts as spending instead of vanishing with the row; when several live manual
+///   entries point at the same bank row, the one with the smallest id keeps it and the others are unmatched;
+/// - open entries are matched again below (an entry whose row was deleted can take a later bank row);
+/// - every unmatched live manual entry, oldest first (date, then id), takes the free [eligible] bank row with the
+///   same amount that is closest in days (then earliest date, then smallest id), among the bank rows first written
+///   after the entry ([written]).
+///
+/// Only a bank row that arrives after the entry replaces it: an expense added by hand while the wallet already holds
+/// a same-amount card payment from the days around it is a different expense (cash next to a card payment), not
+/// that payment. "After" is by HLC, not by device or wall clock, so it holds when the entry was added offline on one
+/// device and the bank row was imported later on another (they then match in whichever order they sync).
+///
+/// [manual]: live (not deleted) manual entries; [bank]: non-manual rows that are not deleted, including every one
+/// that a manual entry points at (a target not in [bank] counts as deleted or missing). [eligible] says which
+/// bank rows may replace a manual entry (expenses whose built-in kind is flex or fixed). [written]: the HLC of each
+/// row's first write (the clock of its `amount`, written only when the row is created); a row without one is never
+/// matched.
+MatchPlan planMatches(List<Tx> manual, List<Tx> bank, bool Function(Tx) eligible, Map<String, String> written) {
+  final matchedTo = <String, String?>{};
+  final bankCategory = <String, String>{};
+  final (:open, :taken) = _split(manual, {
+    for (final b in bank)
+      if (!b.manual && !b.deleted) b.id
+  });
+  for (final m in open) {
+    if (m.matchedTo != null) matchedTo[m.id] = null; // its bank row was deleted or is missing, or taken by another entry
   }
   if (open.isEmpty) return MatchPlan(matchedTo, bankCategory, 0);
   final byAmount = <int, List<Tx>>{};
@@ -55,13 +85,16 @@ MatchPlan planMatches(List<Tx> manual, List<Tx> bank, bool Function(Tx) eligible
   var added = 0;
   for (final m in open) {
     final pool = byAmount[m.amount];
-    if (pool == null || !_iso.hasMatch(m.date)) continue;
+    final since = written[m.id];
+    if (pool == null || since == null || !_iso.hasMatch(m.date)) continue;
     Tx? best;
     var bestDays = 0;
     for (final b in pool) {
       if (taken.contains(b.id)) continue;
       final days = daysBetween(m.date, b.date).abs();
-      if (days > 3) continue;
+      if (days > matchDays) continue;
+      final at = written[b.id];
+      if (at == null || Hlc.compareStrings(at, since) <= 0) continue; // in the wallet before the entry: not its row
       if (best == null ||
           days < bestDays ||
           (days == bestDays && (b.date.compareTo(best.date) < 0 || (b.date == best.date && b.id.compareTo(best.id) < 0)))) {

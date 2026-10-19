@@ -4,6 +4,18 @@ import 'logs.dart';
 
 final _log = Logger('bw.settings');
 
+/// (key, value) pairs already logged as `settings.invalid` in this process. A bad stored value is read on every
+/// `WalletRepo.settings()` call (each screen refresh, each match run), so it is logged once, not every time.
+final _invalidLogged = <String>{};
+
+/// Logs `settings.invalid` for [key] (the key only, never [value]) the first time this key holds this value.
+void logInvalidSetting(String key, Object? value) {
+  if (_invalidLogged.add('$key\u0000$value')) logEvent(_log, Level.WARNING, 'settings.invalid', {'key': key});
+}
+
+/// Forgets which bad settings were logged, so tests can expect the warning again.
+void resetInvalidSettingLog() => _invalidLogged.clear();
+
 /// A transaction as stored in the wallet database. Amounts are in minor units (cents).
 class Tx {
   final String id;
@@ -146,10 +158,10 @@ class WalletSettings {
 
   /// Reads settings from stored/synced values. A value of the wrong type or outside its range (another device's
   /// bug, a damaged op) falls back to that setting's default alone, logged as `settings.invalid` with the key only
-  /// (never the value); the other settings are kept.
+  /// (never the value), once per key and value ([logInvalidSetting]); the other settings are kept.
   static WalletSettings fromMap(Map<String, Object?> m) {
     T bad<T>(String k, T d) {
-      logEvent(_log, Level.WARNING, 'settings.invalid', {'key': k});
+      logInvalidSetting(k, m[k]);
       return d;
     }
 

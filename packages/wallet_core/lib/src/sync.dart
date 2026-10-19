@@ -91,42 +91,47 @@ class FolderSync {
       logEvent(_log, Level.FINE, 'sync.export.none');
     }
 
-    // 2. Read every file from other devices that hasn't been applied yet.
+    // 2. Read every file from other devices that hasn't been applied yet. Hand-added expenses are matched to bank
+    //    rows once at the end, not after every file (a new device's first sync can read hundreds).
     var received = 0, filesRead = 0, opsRead = 0, bytesRead = 0, devices = 0, bad = 0;
     final apply = PerfTimer('sync.apply', warnMs: 1000);
-    await for (final dev in _devices.list()) {
-      if (dev is! Directory) continue;
-      final device = dev.path.split(sep).last;
-      if (device == repo.deviceId) continue;
-      devices++;
-      final files =
-          await dev.list().where((f) => f is File && f.path.endsWith('.bwop') && !f.path.split(sep).last.startsWith('.')).toList();
-      files.sort((a, b) => a.path.compareTo(b.path));
-      for (final f in files) {
-        final name = f.path.split(sep).last;
-        if (repo.peerFileSeen(device, name)) continue;
-        final List<int> bytes;
-        final List<Object?> list;
-        final int changed;
-        try {
-          bytes = await (f as File).readAsBytes();
-          final clear = await unseal(bytes, key);
-          list = jsonDecode(utf8.decode(clear)) as List;
-          changed = repo.applyRemote([for (final j in list) Op.fromJson(Map<String, Object?>.from(j as Map))]);
-        } catch (e, st) {
-          // Skip it (not marked as seen, so a repaired copy applies on a later run) and keep applying the
-          // others: one damaged file must not block every file after it. applyRemote rolled back its part.
-          logError(_log, 'sync.file.failed', e, st, fields: {'file': _seq(name)});
-          bad++;
-          continue;
+    try {
+      await for (final dev in _devices.list()) {
+        if (dev is! Directory) continue;
+        final device = dev.path.split(sep).last;
+        if (device == repo.deviceId) continue;
+        devices++;
+        final files =
+            await dev.list().where((f) => f is File && f.path.endsWith('.bwop') && !f.path.split(sep).last.startsWith('.')).toList();
+        files.sort((a, b) => a.path.compareTo(b.path));
+        for (final f in files) {
+          final name = f.path.split(sep).last;
+          if (repo.peerFileSeen(device, name)) continue;
+          final List<int> bytes;
+          final List<Object?> list;
+          final int changed;
+          try {
+            bytes = await (f as File).readAsBytes();
+            final clear = await unseal(bytes, key);
+            list = jsonDecode(utf8.decode(clear)) as List;
+            changed = repo.applyRemote([for (final j in list) Op.fromJson(Map<String, Object?>.from(j as Map))], match: false);
+          } catch (e, st) {
+            // Skip it (not marked as seen, so a repaired copy applies on a later run) and keep applying the
+            // others: one damaged file must not block every file after it. applyRemote rolled back its part.
+            logError(_log, 'sync.file.failed', e, st, fields: {'file': _seq(name)});
+            bad++;
+            continue;
+          }
+          received += changed;
+          repo.markPeerFile(device, name);
+          filesRead++;
+          opsRead += list.length;
+          bytesRead += bytes.length;
+          logEvent(_log, Level.FINE, 'sync.file', {'file': _seq(name), 'bytes': bytes.length, 'ops': list.length, 'changed': changed});
         }
-        received += changed;
-        repo.markPeerFile(device, name);
-        filesRead++;
-        opsRead += list.length;
-        bytesRead += bytes.length;
-        logEvent(_log, Level.FINE, 'sync.file', {'file': _seq(name), 'bytes': bytes.length, 'ops': list.length, 'changed': changed});
       }
+    } finally {
+      repo.runPendingMatch(); // also if reading the folder failed midway: what was applied gets matched
     }
     apply.done({'devices': devices, 'files': filesRead, 'ops': opsRead, 'changed': received, 'bytes': bytesRead, 'bad': bad});
     if (bad > 0) logEvent(_log, Level.WARNING, 'sync.files.skipped', {'bad': bad});

@@ -5,6 +5,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'categories.dart';
+import 'dates.dart';
 import 'hlc.dart';
 import 'logs.dart';
 import 'matching.dart';
@@ -56,7 +57,7 @@ CREATE TABLE IF NOT EXISTS peer_files(device TEXT NOT NULL, file TEXT NOT NULL, 
 ''';
 
 final _log = Logger('bw.repo');
-final _settingsLog = Logger('bw.settings');
+final _isoDate = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 
 /// The wallet database on one device. All writes go through [_write] so they are
 /// recorded as [Op]s and can be synced; remote ops come in through [applyRemote].
@@ -170,7 +171,12 @@ class WalletRepo {
   }
 
   /// Applies ops from another device. Returns how many changed something here.
-  int applyRemote(List<Op> ops) {
+  ///
+  /// A manual entry and its bank row can arrive in either order (imported on another device before the entry
+  /// synced), so matching runs after remote changes too; it is deterministic, so every device writes the same
+  /// matches. With [match] false (a sync applying many files) it only records that matching is due, and the caller
+  /// runs it once at the end with [runPendingMatch].
+  int applyRemote(List<Op> ops, {bool match = true}) {
     final t = PerfTimer('repo.applyRemote');
     var changed = 0;
     _tx(() {
@@ -179,33 +185,83 @@ class WalletRepo {
         if (_apply(op)) changed++;
       }
       _setMeta('hlc', clock.last.toString());
+      if (changed > 0) _setMeta('match_pending', '1');
     });
     t.done({'ops': ops.length, 'changed': changed});
-    // A manual entry and its bank row can arrive in either order (imported on another device before the entry
-    // synced), so matching runs here too; it is deterministic, so every device writes the same matches.
-    if (changed > 0) _matchManual();
+    if (match) runPendingMatch();
     return changed;
   }
 
+  /// Each row's first write, for [planMatches]: the clock of its `amount`. Only the write that creates a row sets it
+  /// (importBatch, addManual; matching, categories and deletes never touch it), and the clocks table converges to the
+  /// same value on every device. If the same bank row is imported on two devices before they sync, the later import
+  /// wins (highest HLC per field), so the row counts as written at that later import.
+  static const _writtenJoin = "LEFT JOIN clocks c ON c.entity = 'tx' AND c.id = tx.id AND c.field = 'amount'";
+
   /// Matches hand-added expenses to bank rows ([planMatches]) and writes the changes. Returns the new matches.
+  ///
+  /// Loads the manual entries, the bank rows they point at, and for each open entry ([openEntries]) only the bank
+  /// rows that could replace it, so a large history costs little. Logged as `repo.match` on `bw.perf` once per run.
   int _matchManual() {
-    final manual = [for (final r in db.select('SELECT * FROM tx WHERE manual = 1 AND deleted = 0')) Tx.fromRow(r)];
-    final targets = {for (final m in manual) m.matchedTo};
-    if (!targets.contains(null) && targets.length == manual.length) return 0; // all matched, no two on one row
+    final t = PerfTimer('repo.match');
+    final written = <String, String>{};
+    List<Tx> rows(String where, [List<Object?> args = const []]) {
+      final out = <Tx>[];
+      for (final r in db.select('SELECT tx.*, c.hlc AS written FROM tx $_writtenJoin WHERE $where', args)) {
+        final tx = Tx.fromRow(r);
+        if (r['written'] case final String h) written[tx.id] = h;
+        out.add(tx);
+      }
+      return out;
+    }
+
+    const live = 'tx.manual = 0 AND tx.deleted = 0';
+    final manual = rows('tx.manual = 1 AND tx.deleted = 0');
+    final targets = rows('$live AND tx.id IN (SELECT matched_to FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to IS NOT NULL)');
+    final open = openEntries(manual, {for (final b in targets) b.id});
+    if (open.isEmpty) {
+      _clearMatchPending();
+      t.done({'manual': manual.length, 'open': 0, 'bank': 0, 'added': 0});
+      return 0;
+    }
+    final bank = {for (final b in targets) b.id: b};
+    for (final m in open) {
+      final since = written[m.id];
+      if (since == null || !_isoDate.hasMatch(m.date)) continue;
+      // Candidates for this entry only: same amount, within the window, written in or after its millisecond (the
+      // exact HLC order is planMatches' job; comparing the 15-digit millis prefix as text is safe for any counter).
+      for (final b in rows('$live AND tx.amount = ? AND tx.date BETWEEN ? AND ? AND c.hlc >= ?',
+          [m.amount, addDays(m.date, -matchDays), addDays(m.date, matchDays), since.split(':').first])) {
+        bank[b.id] = b;
+      }
+    }
     final cz = categorizer();
-    final bank = [for (final r in db.select('SELECT * FROM tx WHERE manual = 0 AND deleted = 0 AND amount < 0')) Tx.fromRow(r)];
-    final plan = planMatches(manual, bank, (b) {
+    final plan = planMatches(manual, [...bank.values], (b) {
       final k = kindOf(cz.autoCategory(b));
       return k == Kind.flex || k == Kind.fixed;
-    });
-    if (plan.isEmpty) return 0;
+    }, written);
     _write([
       for (final e in plan.matchedTo.entries) ('tx', e.key, {'matched_to': e.value}),
       for (final e in plan.bankCategory.entries) ('tx', e.key, {'category': e.value}),
     ]);
-    logEvent(_log, Level.FINE, 'repo.match',
-        {'added': plan.added, 'unmatched': plan.matchedTo.values.where((v) => v == null).length, 'categories': plan.bankCategory.length});
+    _clearMatchPending();
+    t.done({
+      'manual': manual.length,
+      'open': open.length,
+      'bank': bank.length,
+      'added': plan.added,
+      'unmatched': plan.matchedTo.values.where((v) => v == null).length,
+      'categories': plan.bankCategory.length,
+    });
     return plan.added;
+  }
+
+  void _clearMatchPending() => db.execute("DELETE FROM meta WHERE key = 'match_pending'");
+
+  /// Runs matching if ops applied with `applyRemote(match: false)` changed something since it last ran (also after a
+  /// crash mid-sync: the flag is stored). [FolderSync.run] calls it once after applying all files.
+  void runPendingMatch() {
+    if (_meta('match_pending') != null) _matchManual();
   }
 
   bool peerFileSeen(String device, String file) =>
@@ -254,8 +310,8 @@ class WalletRepo {
       try {
         m[k] = jsonDecode(v);
       } on FormatException {
-        // A damaged value: that setting falls back to its default. The key only, never the value.
-        logEvent(_settingsLog, Level.WARNING, 'settings.invalid', {'key': k});
+        // A damaged value: that setting falls back to its default. The key only, never the value; once per value.
+        logInvalidSetting(k, 'json:$v');
       }
     }
     final s = WalletSettings.fromMap(m);
@@ -275,7 +331,8 @@ class WalletRepo {
   }
 
   /// Imports a normalized batch. Already-known ids are skipped. Hand-added expenses with the
-  /// same amount within 3 days are then matched to a bank row, which keeps their category ([planMatches]).
+  /// same amount within 3 days are then matched to a bank row written after them, which keeps their category
+  /// ([planMatches]).
   ImportSummary importBatch(ImportBatch batch) {
     final t = PerfTimer('repo.importBatch', warnMs: 500);
     final known = <String>{for (final r in db.select('SELECT id FROM tx')) r['id'] as String};
@@ -337,16 +394,24 @@ class WalletRepo {
         }
       ),
     ]);
-    _matchManual(); // the bank row may already be here (imported earlier, here or on another device)
+    // No matching here: a bank row already in the wallet is never this entry's row (planMatches). The entry is
+    // matched by the next import, here or on another device, that brings a bank row written after it.
     return id;
   }
 
   void setCategory(String txId, String? category) => _write([
         ('tx', txId, {'category': category})
       ]);
-  void deleteTransaction(String txId) => _write([
-        ('tx', txId, {'deleted': 1})
-      ]);
+
+  /// Deletes a row. A hand-added expense that this bank row replaced counts again (and may be matched by a later
+  /// bank row): see [planMatches].
+  void deleteTransaction(String txId) {
+    _write([
+      ('tx', txId, {'deleted': 1})
+    ]);
+    _matchManual();
+  }
+
   void setMerchantRule(String key, String category) => _write([
         ('rule', key, {'category': category, 'deleted': 0})
       ]);
