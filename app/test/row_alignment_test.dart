@@ -61,7 +61,7 @@ void main() {
     final goal = find.textContaining(' / ').first;
     expect(tester.getTopRight(goal).dx, closeTo(rowRight(tester, goal), 1));
     await pumpApp(tester, Scaffold(body: WishlistScreen(wc: wc)), size: const Size(1200, 3000));
-    final price = find.text('€120');
+    final price = find.text('120\u00A0€');
     expect(price, findsWidgets);
     expect(tester.getTopRight(price.first).dx, closeTo(rowRight(tester, price.first), 1));
   });
@@ -73,7 +73,7 @@ void main() {
             body: SizedBox(
                 width: 360,
                 child: Column(children: [
-                  SplitRow(gap: 8, start: Text('Name', key: Key('s1')), end: Text('€1', key: Key('e1'))),
+                  SplitRow(gap: 8, start: Text('Name', key: Key('s1')), end: Text('1\u00A0€', key: Key('e1'))),
                   SplitRow(gap: 8, start: Text('Name', key: Key('s2')), end: Text('a very long note that has to wrap', key: Key('e2'))),
                 ]))),
         size: const Size(360, 640));

@@ -39,17 +39,17 @@ void main() {
   itest('Wishlist: price check, cooling off, then buy or skip', (t) async {
     final wc = await Harness.start(t, settings: plan(todayIso()));
     await goTab(t, 'Wishlist');
-    expect(find.text('Anything over €50 waits 72 hours on the wishlist first.'), findsOneWidget);
+    expect(find.text('Anything over 50\u00A0€ waits 72 hours on the wishlist first.'), findsOneWidget);
     expect(find.text('Your wishlist is empty. Check something above to add it.'), findsOneWidget);
 
     await check(t, 'Robot vacuum synthetic', '30');
     expect(status('Fits this month'), findsOneWidget);
-    expect(find.text('Under €50, no wait needed.'), findsOneWidget);
+    expect(find.text('Under 50\u00A0€, no wait needed.'), findsOneWidget);
     expect(find.textContaining('Put on wishlist'), findsNothing);
 
     await check(t, 'Robot vacuum synthetic', '2500');
     expect(status('Not this month'), findsOneWidget);
-    expect(find.text("It's more than the €1,300 you have left until payday."), findsOneWidget);
+    expect(find.text("It's more than the 1,300\u00A0€ you have left until payday."), findsOneWidget);
 
     await check(t, 'Espresso synthetic', '120');
     expect(status('Fits this month'), findsOneWidget);
@@ -67,7 +67,7 @@ void main() {
     await tapVisible(t, find.text("Don't need it"));
     await t.pumpAndSettle();
     expect(wc.wish.single.status, 'skipped');
-    expect(find.text('Saved by waiting: €120'), findsOneWidget);
+    expect(find.text('Saved by waiting: 120\u00A0€'), findsOneWidget);
     expect(find.text('Skipped'), findsOneWidget);
 
     // No waiting time: items are ready to decide right away.
@@ -98,7 +98,7 @@ void main() {
     await scrollTo(t, find.text('Skip'), WishlistScreen);
     await tapVisible(t, find.text('Skip'));
     await t.pumpAndSettle();
-    expect(find.text('Saved by waiting: €210'), findsOneWidget);
+    expect(find.text('Saved by waiting: 210\u00A0€'), findsOneWidget);
     expect(wc.wish.map((x) => x.status), ['skipped', 'bought', 'skipped']);
     await Harness.checkLog();
   });
@@ -123,7 +123,7 @@ void main() {
     final wc = await Harness.start(t, settings: plan(todayIso()));
     final flex0 = wc.period().flexBudget;
     await goTab(t, 'Goals');
-    expect(find.text('€0 put aside'), findsOneWidget);
+    expect(find.text('0\u00A0€ put aside'), findsOneWidget);
     expect(find.text('Emergency fund'), findsOneWidget);
 
     await scrollTo(t, find.text('New goal'), GoalsScreen);
@@ -133,15 +133,15 @@ void main() {
     await t.enterText(inSheet(GoalSheet, field('Target')), '600');
     await t.enterText(inSheet(GoalSheet, field('Each month')), '150');
     await t.pumpAndSettle();
-    expect(find.text('At €150 a month you reach it in 4 months. This comes out of your daily spending money.'), findsOneWidget);
+    expect(find.text('At 150\u00A0€ a month you reach it in 4 months. This comes out of your daily spending money.'), findsOneWidget);
     await tapVisible(t, find.text('Save goal'));
     await t.pumpAndSettle();
     var g = wc.goals.firstWhere((x) => x.name == 'Bike synthetic goal');
     expect((g.target, g.saved, g.monthly), (60000, 0, 15000));
     expect(wc.period().flexBudget, flex0 - 15000, reason: 'a goal takes its monthly amount off the spending money');
     final end = wc.period().end;
-    expect(find.text('€0 / €600'), findsOneWidget);
-    expect(find.text('€150 a month · ${byMonth(end, 4)}'), findsOneWidget);
+    expect(find.text('0\u00A0€ / 600\u00A0€'), findsOneWidget);
+    expect(find.text('150\u00A0€ a month · ${byMonth(end, 4)}'), findsOneWidget);
 
     Future<void> edit(void Function() fill) async {
       await scrollTo(t, find.text('Bike synthetic goal'), GoalsScreen);
@@ -155,27 +155,27 @@ void main() {
     await edit(() {});
     await t.enterText(inSheet(GoalSheet, field('Add money now')), '300');
     await t.pumpAndSettle();
-    expect(find.text('At €150 a month you reach it in 2 months. This comes out of your daily spending money.'), findsOneWidget);
+    expect(find.text('At 150\u00A0€ a month you reach it in 2 months. This comes out of your daily spending money.'), findsOneWidget);
     await tapVisible(t, find.text('Save goal'));
     await t.pumpAndSettle();
     g = wc.goals.firstWhere((x) => x.id == g.id);
     expect(g.saved, 30000);
-    expect(find.text('€300 / €600'), findsOneWidget);
-    expect(find.text('€300 put aside'), findsOneWidget);
-    expect(find.text('€150 a month · ${byMonth(end, 2)}'), findsOneWidget);
+    expect(find.text('300\u00A0€ / 600\u00A0€'), findsOneWidget);
+    expect(find.text('300\u00A0€ put aside'), findsOneWidget);
+    expect(find.text('150\u00A0€ a month · ${byMonth(end, 2)}'), findsOneWidget);
 
     await edit(() {});
     await t.enterText(inSheet(GoalSheet, field('Each month')), '0');
     await tapVisible(t, find.text('Save goal'));
     await t.pumpAndSettle();
-    expect(find.text('€0 a month · Set a monthly amount'), findsOneWidget);
+    expect(find.text('0\u00A0€ a month · Set a monthly amount'), findsOneWidget);
 
     await edit(() {});
     await t.enterText(inSheet(GoalSheet, field('Put aside so far')), '600');
     await tapVisible(t, find.text('Save goal'));
     await t.pumpAndSettle();
-    expect(find.text('€0 a month · Reached'), findsOneWidget);
-    expect(find.text('€600 / €600'), findsOneWidget);
+    expect(find.text('0\u00A0€ a month · Reached'), findsOneWidget);
+    expect(find.text('600\u00A0€ / 600\u00A0€'), findsOneWidget);
 
     await goTab(t, 'Plan');
     expect(find.descendant(of: find.byType(PlanScreen), matching: find.text('Bike synthetic goal')), findsOneWidget);

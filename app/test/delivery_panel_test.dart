@@ -27,7 +27,7 @@ void main() {
 
   testWidgets('the typical order uses the wallet currency, not €', (tester) async {
     await pump(tester, DateTime(2026, 10, 14, 15), currency: 'USD');
-    expect(find.textContaining('A typical \$15 order'), findsOneWidget);
+    expect(find.textContaining('A typical 15\u00A0\$ order'), findsOneWidget);
     expect(find.textContaining('€'), findsNothing);
   });
 }

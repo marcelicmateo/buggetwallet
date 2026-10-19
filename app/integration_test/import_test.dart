@@ -118,10 +118,10 @@ void main() {
     expect(wc.txs.where((x) => x.tx.description == 'IKEA ZAGREB'), isEmpty);
 
     await goTab(t, 'Spending');
-    expect(find.text('${monthLong(monthOf(today))}: €87 out'), findsOneWidget);
+    expect(find.text('${monthLong(monthOf(today))}: 87\u00A0€ out'), findsOneWidget);
     await scrollTo(t, find.text('Top places in ${monthLong(monthOf(today))}'), SpendingScreen);
     expect(find.widgetWithText(LineItem, 'DECATHLON ZAGREB'), findsOneWidget);
-    expect(find.widgetWithText(LineItem, '€55'), findsWidgets);
+    expect(find.widgetWithText(LineItem, '55\u00A0€'), findsWidgets);
     await scrollTo(t, find.widgetWithText(TxTile, 'LIDL ZAGREB'), SpendingScreen);
     expect(find.text('Weekly shop synthetic'), findsNothing);
     expect(find.text('Top-up by *0000'), findsNothing, reason: 'transfers are hidden');

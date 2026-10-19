@@ -3,9 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('money formatting', () {
-    expect(money(123456, 'EUR'), '€1,235');
-    expect(money(-2340, 'EUR', decimals: 2), '−€23.40');
-    expect(money(150, 'EUR', signed: true), '+€1.50');
+    expect(money(123456, 'EUR'), '1,235\u00A0€');
+    expect(money(-2340, 'EUR', decimals: 2), '−23.40\u00A0€');
+    expect(money(150, 'EUR', signed: true), '+1.50\u00A0€');
   });
   test('money parsing', () {
     expect(parseMoney('12,50'), 1250);

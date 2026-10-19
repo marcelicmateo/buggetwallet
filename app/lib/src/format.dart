@@ -17,11 +17,12 @@ const _monthsLong = [
 ];
 const _weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+/// Symbol (or the code itself when there is no symbol). Always written after the amount.
 String currencySymbol(String code) => switch (code) {
       'EUR' => '€',
       'USD' => r'$',
       'GBP' => '£',
-      _ => '$code ',
+      _ => code,
     };
 
 String _group(int n) {
@@ -34,7 +35,8 @@ String _group(int n) {
   return b.toString();
 }
 
-/// Money from minor units. Whole units at 100+ unless [decimals] is given.
+/// Money from minor units, symbol after the amount with a no-break space: "14 €", "−23.40 €".
+/// Whole units at 100+ unless [decimals] is given.
 String money(int cents, String currency, {int? decimals, bool signed = false}) {
   final neg = cents < 0;
   final abs = cents.abs();
@@ -45,10 +47,10 @@ String money(int cents, String currency, {int? decimals, bool signed = false}) {
   } else {
     body = '${_group(abs ~/ 100)}.${(abs % 100).toString().padLeft(2, '0')}';
   }
-  // A negative amount that rounds to zero is shown as zero, not "−€0".
+  // A negative amount that rounds to zero is shown as zero, not "−0 €".
   final isZero = d == 0 ? (abs / 100).round() == 0 : abs == 0;
   final sign = neg && !isZero ? '−' : (signed && cents > 0 ? '+' : '');
-  return '$sign${currencySymbol(currency)}$body';
+  return '$sign$body\u00A0${currencySymbol(currency)}';
 }
 
 /// Wishlist countdown: whole hours rounded up (so "0h" never shows while time is left), then days.

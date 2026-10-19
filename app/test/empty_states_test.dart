@@ -101,7 +101,7 @@ void main() {
     for (final c in [1000, 2000, 300]) {
       wc.repo.addManual(date: d, amount: c, category: 'Shopping', note: 'Item $c');
     }
-  }, check: (t, seen) => expect(_has(seen, 'Spent €33.00 today'), isTrue, reason: '10.00 + 20.00 + 3.00 spent today'));
+  }, check: (t, seen) => expect(_has(seen, 'Spent 33.00\u00A0€ today'), isTrue, reason: '10.00 + 20.00 + 3.00 spent today'));
 
   _scenario('all bank rows on the first day of the period', (wc) {
     final d = wc.today();
@@ -116,7 +116,7 @@ void main() {
     wc.repo.updateSettings({'salary': 150000, 'periodStart': addDays(wc.today(), -5)});
     wc.repo.addManual(date: addDays(wc.today(), 5), amount: 9900, category: 'Shopping', note: 'Future thing');
   }, check: (t, seen) {
-    expect(_has(seen, 'Spent €99.00 today'), isFalse);
+    expect(_has(seen, 'Spent 99.00\u00A0€ today'), isFalse);
     expect(_has(seen, 'Future thing'), isTrue, reason: 'still listed somewhere, not dropped');
   });
 

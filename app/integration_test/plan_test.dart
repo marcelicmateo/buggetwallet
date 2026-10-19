@@ -78,7 +78,7 @@ void main() {
     await scrollTo(t, find.text('PAYDAY PLAN'), PlanScreen, delta: -250);
     expect(find.text('${money(140351, 'EUR', decimals: 0)} to spend · ${money(p.planDaily, 'EUR', decimals: 0)}/day'), findsOneWidget);
     await goTab(t, 'Wishlist');
-    expect(find.text('Anything over €80 waits 48 hours on the wishlist first.'), findsOneWidget);
+    expect(find.text('Anything over 80\u00A0€ waits 48 hours on the wishlist first.'), findsOneWidget);
     await goTab(t, 'Today');
     expect(find.textContaining('Planning on'), findsNothing);
 

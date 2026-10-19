@@ -37,7 +37,7 @@ void main() {
     expect(wc.goals.map((g) => g.monthly), [10000, 10000]);
 
     // No salary yet: the banner asks for it and links to Plan.
-    expect(find.text('Planning on €0 a month'), findsOneWidget);
+    expect(find.text('Planning on 0\u00A0€ a month'), findsOneWidget);
     expect(find.textContaining('Enter your monthly salary in Plan'), findsOneWidget);
     await t.tap(find.text('Open Plan'));
     await t.pumpAndSettle();
@@ -46,7 +46,7 @@ void main() {
     await t.tap(find.text('Looks right'));
     await t.pumpAndSettle();
     expect(wc.settings.salaryConfirmed, isTrue);
-    expect(find.text('Planning on €0 a month'), findsNothing);
+    expect(find.text('Planning on 0\u00A0€ a month'), findsNothing);
 
     await scrollTo(t, find.textContaining('No transactions yet'), TodayScreen);
     expect(find.text('PBZ none · Revolut none'), findsOneWidget);

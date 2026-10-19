@@ -101,7 +101,7 @@ class _PlanScreenState extends State<PlanScreen> {
             if (_errors.containsKey(key)) setState(() => _errors.remove(key));
           },
           decoration: InputDecoration(
-              labelText: label, prefixText: money ? currencySymbol(currency) : null, errorText: _errors[key], errorMaxLines: 3),
+              labelText: label, suffixText: money ? currencySymbol(currency) : null, errorText: _errors[key], errorMaxLines: 3),
         );
 
     return ListView(
