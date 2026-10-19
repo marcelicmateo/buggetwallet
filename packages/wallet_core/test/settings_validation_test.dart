@@ -26,6 +26,7 @@ Op _remote(String key, String json, {int at = 0}) =>
     Op('setting', key, {'value': json, 'deleted': 0}, Hlc(DateTime.now().millisecondsSinceEpoch + 60000 + at, 0, 'peer').toString());
 
 void main() {
+  setUp(resetInvalidSettingLog); // each test expects its own warnings
   const defaults = WalletSettings();
   final good = WalletSettings.fromMap(const {
     'salary': 150000,
@@ -166,5 +167,31 @@ void main() {
     await FolderSync(dir.path, key).run(a);
     expect(a.settings().paydayDay, 12);
     expect(b.settings().paydayDay, 12);
+  });
+
+  test('a bad stored value is logged once per key and value, not on every settings() read', () {
+    final r = WalletRepo.inMemory();
+    addTearDown(r.close);
+    final first = _logs(() {
+      r.applyRemote([_remote('coolHours', '{not json'), _remote('paydayDay', '0')]);
+      r.settings();
+      r.settings();
+    }).where((l) => l.contains('settings.invalid')).toList();
+    expect(first, hasLength(2));
+    final again = _logs(() {
+      for (var i = 0; i < 20; i++) {
+        r.settings();
+        r.categorizer();
+      }
+    });
+    expect(again.where((l) => l.contains('settings.invalid')), isEmpty, reason: 'the same bad values: already logged');
+    // A different bad value for the same key is new information: logged once more.
+    final changed = _logs(() {
+      r.applyRemote([_remote('paydayDay', '40', at: 1)]);
+      r.settings();
+      r.settings();
+    }).where((l) => l.contains('settings.invalid')).toList();
+    expect(changed, [endsWith(' WARNING bw.settings settings.invalid {"key":"paydayDay"}')]);
+    expect(r.settings().paydayDay, 15, reason: 'still falls back to the default every time');
   });
 }

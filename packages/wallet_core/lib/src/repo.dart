@@ -56,7 +56,6 @@ CREATE TABLE IF NOT EXISTS peer_files(device TEXT NOT NULL, file TEXT NOT NULL, 
 ''';
 
 final _log = Logger('bw.repo');
-final _settingsLog = Logger('bw.settings');
 
 /// The wallet database on one device. All writes go through [_write] so they are
 /// recorded as [Op]s and can be synced; remote ops come in through [applyRemote].
@@ -254,8 +253,8 @@ class WalletRepo {
       try {
         m[k] = jsonDecode(v);
       } on FormatException {
-        // A damaged value: that setting falls back to its default. The key only, never the value.
-        logEvent(_settingsLog, Level.WARNING, 'settings.invalid', {'key': k});
+        // A damaged value: that setting falls back to its default. The key only, never the value; once per value.
+        logInvalidSetting(k, 'json:$v');
       }
     }
     final s = WalletSettings.fromMap(m);
