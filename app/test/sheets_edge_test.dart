@@ -446,6 +446,16 @@ void main() {
       await _settle(tester);
     });
 
+    testWidgets('a row with an impossible date (e.g. synced from elsewhere) opens and shows the date as stored', (tester) async {
+      final wc = emptyWallet();
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [_bank('2026-02-30', -700, 'PBZ POS PBZ7TESTSHOPA ZAGREB')]));
+      wc.reload();
+      await _open(tester, TxSheet(wc: wc, t: wc.txs.single));
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('2026-02-30'), findsOneWidget);
+      await _settle(tester);
+    });
+
     testWidgets('a zero-amount row and an empty description do not crash', (tester) async {
       final wc = emptyWallet();
       wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [_bank('2026-10-10', 0, '', type: '')]));

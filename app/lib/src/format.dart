@@ -94,6 +94,15 @@ String shortDate(String iso) {
   return '${p[2]} ${_months[p[1] - 1]}';
 }
 
+/// [longDate] for a calendar date, otherwise [iso] as stored, so a bad date synced from elsewhere can't break a sheet.
+String longDateOrRaw(String iso) {
+  final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(iso);
+  if (m == null) return iso;
+  final (y, mo, d) = (int.parse(m[1]!), int.parse(m[2]!), int.parse(m[3]!));
+  final date = DateTime.utc(y, mo, d);
+  return date.month == mo && date.day == d ? longDate(iso) : iso;
+}
+
 String longDate(String iso) {
   final p = _ymd(iso);
   final date = DateTime.utc(p[0], p[1], p[2]);

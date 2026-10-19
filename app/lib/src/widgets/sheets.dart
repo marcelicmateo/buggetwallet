@@ -159,7 +159,7 @@ class _TxSheetState extends State<TxSheet> {
       const SizedBox(height: 6),
       Text(money(t.amount, widget.wc.currency, decimals: 2, signed: true), style: numStyle.copyWith(fontSize: 22)),
       const SizedBox(height: 4),
-      Muted('${longDate(t.date)} · $src${t.bankType.isNotEmpty ? ' · ${t.bankType}' : ''}'),
+      Muted('${longDateOrRaw(t.date)} · $src${t.bankType.isNotEmpty ? ' · ${t.bankType}' : ''}'),
       if (!manual)
         Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(t.description, style: const TextStyle(fontSize: 13))),
       const SizedBox(height: 14),
