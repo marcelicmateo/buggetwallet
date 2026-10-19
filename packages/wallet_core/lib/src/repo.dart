@@ -39,6 +39,8 @@ const Map<String, (String, List<String>)> _entities = {
   'wish': ('wish', ['name', 'price', 'added', 'status', 'decided', 'deleted']),
   'setting': ('settings', ['value', 'deleted']),
   'rule': ('merchant_rules', ['category', 'deleted']),
+  // Amounts added to a goal's saved total, one row each (see [WalletRepo.addGoalContribution]).
+  'goal_contrib': ('goal_contrib', ['goal_id', 'amount', 'date', 'deleted']),
 };
 
 const _schema = '''
@@ -54,6 +56,9 @@ CREATE TABLE IF NOT EXISTS wish(id TEXT PRIMARY KEY, name TEXT, price INTEGER NO
   status TEXT NOT NULL DEFAULT 'waiting', decided INTEGER, deleted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS settings(id TEXT PRIMARY KEY, value TEXT, deleted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS merchant_rules(id TEXT PRIMARY KEY, category TEXT, deleted INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS goal_contrib(id TEXT PRIMARY KEY, goal_id TEXT NOT NULL DEFAULT '', amount INTEGER NOT NULL DEFAULT 0,
+  date TEXT NOT NULL DEFAULT '', deleted INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS goal_contrib_goal ON goal_contrib(goal_id);
 CREATE TABLE IF NOT EXISTS clocks(entity TEXT NOT NULL, id TEXT NOT NULL, field TEXT NOT NULL, hlc TEXT NOT NULL, PRIMARY KEY(entity, id, field));
 CREATE TABLE IF NOT EXISTS outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS peer_files(device TEXT NOT NULL, file TEXT NOT NULL, PRIMARY KEY(device, file));
@@ -85,6 +90,26 @@ class WalletRepo {
     }
     deviceId = dev;
     clock = HlcClock(dev, now: now, last: _meta('hlc'));
+    _migrate();
+  }
+
+  /// Bump when a new synced entity is added. Version 2 added `goal_contrib`.
+  static const schemaVersion = 2;
+
+  /// Builds before a synced entity existed skipped its ops but still marked the peer files holding them as read. So
+  /// when an existing database is opened by a build with a newer [schemaVersion], it forgets which peer files it read
+  /// (`peer_files`): the next sync reads every file once more, ops already applied change nothing (their clocks are
+  /// not newer), and the skipped ones apply. A new database just records the version.
+  void _migrate() {
+    final from = int.tryParse(_meta('schema') ?? '') ?? 1;
+    if (from >= schemaVersion) return;
+    var replay = 0;
+    if (!_created) {
+      replay = db.select('SELECT COUNT(*) AS n FROM peer_files').first['n'] as int;
+      db.execute('DELETE FROM peer_files');
+    }
+    _setMeta('schema', '$schemaVersion');
+    logEvent(_log, Level.INFO, 'repo.migrate', {'from': from, 'to': schemaVersion, 'new': _created, 'replayFiles': replay});
   }
 
   static WalletRepo _timedOpen(Database Function() opener, bool file, int Function()? now) {
@@ -360,7 +385,41 @@ class WalletRepo {
     return rs.isEmpty ? null : Tx.fromRow(rs.first);
   }
 
-  List<Goal> goals() => [for (final r in db.select('SELECT * FROM goals WHERE deleted = 0 ORDER BY sort, id')) Goal.fromRow(r)];
+  /// Live goals. [Goal.saved] is [goalTotal]: the stored `saved` column plus the goal's live contributions.
+  List<Goal> goals() {
+    final adds = <String, List<int>>{};
+    for (final r in db.select('SELECT c.goal_id, c.amount FROM goal_contrib c JOIN goals g ON g.id = c.goal_id '
+        'WHERE c.deleted = 0 AND g.deleted = 0')) {
+      if ((r['goal_id'], r['amount']) case (final String g, final int a)) (adds[g] ??= []).add(a);
+    }
+    return [
+      for (final r in db.select('SELECT * FROM goals WHERE deleted = 0 ORDER BY sort, id'))
+        if (Goal.fromRow(r) case final g) g.withSaved(goalTotal(g.saved, adds[g.id] ?? const [])),
+    ];
+  }
+
+  /// The live contributions of goal [goalId] (none while it is deleted or not here), oldest first. A row without a
+  /// valid amount (only a partial or damaged op arrived) is not listed; it counts 0.
+  List<GoalContribution> goalContributions(String goalId) => [
+        for (final r in db.select(
+            'SELECT c.*, k.hlc AS created FROM goal_contrib c JOIN goals g ON g.id = c.goal_id AND g.deleted = 0 '
+            "JOIN clocks k ON k.entity = 'goal_contrib' AND k.id = c.id AND k.field = 'amount' "
+            'WHERE c.goal_id = ? AND c.deleted = 0 ORDER BY c.date, created, c.id',
+            [goalId]))
+          GoalContribution.fromRow(r),
+      ];
+
+  /// Goal [id]'s saved total, deleted or not, unclamped and as shown ([goalTotal]); null if there is no such row.
+  (int, int)? _goalSaved(String id) {
+    final rs = db.select('SELECT saved FROM goals WHERE id = ?', [id]);
+    if (rs.isEmpty) return null;
+    final base = switch (rs.first['saved']) { final int v => v, _ => 0 };
+    final adds = [
+      for (final r in db.select('SELECT amount FROM goal_contrib WHERE goal_id = ? AND deleted = 0', [id]))
+        if (r['amount'] case final int a) a,
+    ];
+    return (goalTotal(base, adds, clamped: false), goalTotal(base, adds));
+  }
 
   List<WishItem> wishlist() => [for (final r in db.select('SELECT * FROM wish WHERE deleted = 0 ORDER BY added')) WishItem.fromRow(r)];
 
@@ -497,8 +556,16 @@ class WalletRepo {
         ('rule', key, {'category': category, 'deleted': 0})
       ]);
 
+  /// Creates or edits a goal. [saved] is the total the user sees: a new goal stores it as its base (the `saved`
+  /// column); for an existing goal it is never written back. A different total becomes ONE contribution of the
+  /// difference, so an add made meanwhile on another device still counts (A +50 and B +30 offline: both). An
+  /// unchanged total writes no contribution. [saved] is clamped to ±[Goal.maxSaved]. The difference is taken from the
+  /// unclamped total and written as at most [Goal.maxContribution]: from a total beyond the cap (only reachable with
+  /// adds on several devices at once) a set can take a second edit to land exactly.
   String saveGoal({String? id, required String name, required int target, required int saved, required int monthly, int? sort}) {
     final gid = id ?? _newId('g');
+    final want = saved.clamp(-Goal.maxSaved, Goal.maxSaved);
+    final now = id == null ? null : _goalSaved(gid);
     _write([
       (
         'goal',
@@ -506,24 +573,53 @@ class WalletRepo {
         {
           'name': name,
           'target': target,
-          'saved': saved,
+          if (now == null) 'saved': want,
           'monthly': monthly,
           'sort': sort ?? DateTime.now().millisecondsSinceEpoch,
           'deleted': 0
         }
       ),
+      if (now != null && want != now.$2) _contribution(gid, (want - now.$1).clamp(-Goal.maxContribution, Goal.maxContribution)),
     ]);
     return gid;
+  }
+
+  (String, String, Map<String, Object?>) _contribution(String goalId, int cents, {String? date, String? id}) =>
+      ('goal_contrib', id ?? _newId('c'), {'goal_id': goalId, 'amount': cents, 'date': date ?? isoDate(DateTime.now()), 'deleted': 0});
+
+  /// Adds [cents] (negative for a correction) to goal [goalId]'s saved total as its own synced row, dated [date]
+  /// (`YYYY-MM-DD`, default today). Returns the contribution id, or null for 0 (nothing written). Throws
+  /// [ArgumentError] for a goal that is missing or deleted here, a bad date, or a total that would leave
+  /// ±[Goal.maxSaved] (adds made at the same time on other devices can still pass it: reads clamp).
+  String? addGoalContribution(String goalId, int cents, {String? date}) {
+    if (date != null && !_isoDate.hasMatch(date)) throw ArgumentError('The date is not YYYY-MM-DD.');
+    final rs = db.select('SELECT deleted FROM goals WHERE id = ?', [goalId]);
+    if (rs.isEmpty || rs.first['deleted'] != 0) throw ArgumentError('No such goal.');
+    if (cents == 0) return null;
+    final (raw, _) = _goalSaved(goalId)!;
+    if (cents.abs() > Goal.maxContribution || (raw + cents).abs() > Goal.maxSaved && (raw + cents).abs() > raw.abs()) {
+      throw ArgumentError('The goal total is limited to the cap either way.');
+    }
+    final c = _contribution(goalId, cents, date: date);
+    _write([c]);
+    return c.$2;
   }
 
   void deleteGoal(String id) => _write([
         ('goal', id, {'deleted': 1})
       ]);
 
-  /// Adds each goal's monthly amount to its saved total (the payday transfer).
-  void payGoals() => _write([
-        for (final g in goals()) ('goal', g.id, {'saved': g.saved + g.monthly})
-      ]);
+  /// The payday transfer: adds each goal's monthly amount to its saved total, as a contribution. For a pay
+  /// [period] (default: the `periodStart` setting) the row id is fixed per goal and period, so paying the same
+  /// period on two devices (or twice) counts once; with no period known each call adds a new row.
+  void payGoals({String? period}) {
+    final p = period ?? settings().periodStart;
+    _write([
+      for (final g in goals())
+        if (g.monthly != 0)
+          _contribution(g.id, g.monthly.clamp(-Goal.maxContribution, Goal.maxContribution), id: p == null ? null : 'pay:${g.id}:$p'),
+    ]);
+  }
 
   String addWish(String name, int price) {
     final id = _newId('w');

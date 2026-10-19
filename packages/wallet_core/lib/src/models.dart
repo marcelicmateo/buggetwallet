@@ -91,10 +91,19 @@ class Goal {
   final String id;
   final String name;
   final int target;
+
+  /// The saved total. From `WalletRepo.goals()` it is [goalTotal]: the stored `saved` column (the base) plus the
+  /// goal's live contributions ([GoalContribution]). [fromRow] reads the stored base only.
   final int saved;
   final int monthly;
   final int sort;
   const Goal({required this.id, required this.name, this.target = 0, this.saved = 0, this.monthly = 0, this.sort = 0});
+
+  /// Largest saved total either way, in cents: 10 billion in major units (the importer's and the app's cap).
+  static const maxSaved = 1000000000000;
+
+  /// Largest single contribution either way: enough to move between any two allowed totals in one row.
+  static const maxContribution = 2 * maxSaved;
 
   static Goal fromRow(Map<String, Object?> r) => Goal(
         id: r['id'] as String,
@@ -103,6 +112,42 @@ class Goal {
         saved: _int(r['saved']) ?? 0,
         monthly: _int(r['monthly']) ?? 0,
         sort: _int(r['sort']) ?? 0,
+      );
+
+  Goal withSaved(int saved) => Goal(id: id, name: name, target: target, saved: saved, monthly: monthly, sort: sort);
+}
+
+/// A goal's saved total: [base] (its stored `saved` column) plus [contributions]. Each contribution counts at most
+/// [Goal.maxContribution] either way and [base] at most 2^53 (the largest synced whole number), so the sum cannot
+/// overflow; the result is clamped to ±[Goal.maxSaved] unless [clamped] is false. Negative totals are allowed: two
+/// offline corrections can overshoot below zero, and showing that lets the next edit set the exact value.
+int goalTotal(int base, Iterable<int> contributions, {bool clamped = true}) {
+  const exact = 9007199254740992; // 2^53
+  var sum = base.clamp(-exact, exact);
+  for (final c in contributions) {
+    sum += c.clamp(-Goal.maxContribution, Goal.maxContribution);
+  }
+  return clamped ? sum.clamp(-Goal.maxSaved, Goal.maxSaved) : sum;
+}
+
+/// An amount added to a goal's saved total (negative for a correction), synced as its own row (`goal_contrib`), so
+/// adds made on two offline devices both count. Hidden while its goal is deleted or missing.
+class GoalContribution {
+  final String id;
+  final String goalId;
+  final int amount;
+  final String date; // YYYY-MM-DD
+
+  /// The clock of the write that created it (its `amount` field), or null if this device has no clock for it.
+  final String? created;
+  const GoalContribution({required this.id, required this.goalId, required this.amount, required this.date, this.created});
+
+  static GoalContribution fromRow(Map<String, Object?> r) => GoalContribution(
+        id: r['id'] as String,
+        goalId: _str(r['goal_id']) ?? '',
+        amount: _int(r['amount']) ?? 0,
+        date: _str(r['date']) ?? '',
+        created: _str(r['created']),
       );
 }
 
