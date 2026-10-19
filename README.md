@@ -44,6 +44,8 @@ tools/build.sh shell            # shell inside the container
 tools/build.sh lsp              # Dart language server for your editor (stdin/stdout)
 tools/emulator.sh screens       # Android emulator: demo wallet (fake data), screenshot of every tab -> dist/screens/
 tools/emulator.sh start --window  # an emulator on your desktop; then `install`, `shot <name>`, `stop`
+tools/live.sh start --demo      # live mode: the Linux app in debug mode on your desktop, demo wallet (fake data)
+tools/live.sh reload            # hot reload after an edit; also restart, shot, trace start|stop, status, stop
 ```
 
 - The first run builds the image (~15 min).
@@ -68,6 +70,19 @@ tools/emulator.sh start --window  # an emulator on your desktop; then `install`,
   packages for this are listed once in `dev/linux-packages.txt` (image and CI).
 - The first `tools/emulator.sh` run downloads the emulator and system image (~2 GB) into Podman volumes and saves a
   clean-boot snapshot; later runs boot from it in seconds. `tools/emulator.sh reset` deletes them.
+- **Live mode** (`tools/live.sh`) keeps `flutter run -d linux` going in the container so you and Claude use the same
+  running app: you click in the window, Claude hot-reloads, reads errors and the widget tree (through the `dart` MCP
+  server in `.mcp.json`, which runs `tools/build.sh mcp` in the container) and takes screenshots. The window opens
+  on your desktop through the Wayland socket alone, with the GPU passed in; `--headless` (or no Wayland session) uses
+  Xvfb instead. X11 is never passed through: an X11 client can read other windows and keystrokes.
+  The app's wallet, key and logs are a throwaway folder in `dist/live/` (`demo/` with `--demo`, else `wallet/`;
+  `--fresh` empties it); the container never sees your home folder and gets its own D-Bus session, so the real
+  wallet and your keyring are out of reach. Claude drives the app only from inside it (VM service, the MCP server),
+  never with host input tools (xdotool, ydotool, uinput), and its screenshots come from the app (or Xvfb), never
+  your screen. The app and the MCP server share a Podman pod (`bw-<checkout folder>`); only the VM service port is
+  published, on 127.0.0.1, for DevTools in your browser (the URL `start` prints). `--profile` builds a profile app (no hot reload) for performance work:
+  `tools/live.sh trace start`, use the app, `tools/live.sh trace stop scroll` saves `trace-scroll.json` (open it in
+  DevTools or ui.perfetto.dev) and a summary (frames, build/raster p50/p90/max, frames over 16 ms) in the run folder.
 - **Code style.** `dart format` with page width 140, and stricter analyzer rules (strict casts/inference/raw
   types plus extra lints) shared by the app and both packages in the root `analysis_options.yaml`. Infos fail the
   build too. Shell scripts are checked by shellcheck, workflows by actionlint; both are pinned in

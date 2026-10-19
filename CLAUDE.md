@@ -14,7 +14,7 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 - `artifact/` — v1 single-file web app (claude.ai artifact) and its JS tests (`npm test`).
 - `docs/architecture.md`, `docs/setup.md`.
 - Each package has its own short `CLAUDE.md` (files, rules, how to test). Read the one for the code you touch.
-- `tools/` — `build.sh` (local builds, lint, format, LSP), `emulator.sh`, `build-times.sh` + `build_log.py` +
+- `tools/` — `build.sh` (local builds, lint, format, LSP, MCP), `emulator.sh`, `live.sh` + `live_vm.py`, `build-times.sh` + `build_log.py` +
   `timing.sh` (run logs and timing history), `ci-status.sh` (CI results), `make-signing-key.sh`, `install-hooks.sh`,
   `make_fixtures.py`, `log-summary.py` (summary of an app log). `dev/` — `Containerfile` and `install-lint-tools.sh`.
 - **App logs:** the app logs to `<app support dir>/logs/bw-YYYY-MM-DD.log` (debug level by default while testing; Plan ›
@@ -53,6 +53,14 @@ Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't 
   screenshots come from `integration_test/flutter_test_config.dart`). Android-only tests must skip themselves on
   desktop. `tools/build.sh desktop-smoke` starts the release bundle headless and checks its log. CI runs both.
   Ubuntu packages: `dev/linux-packages.txt` (image and CI).
+- **Live mode (fast UI work):** `tools/live.sh start [--demo] [--headless] [--profile] [--fresh]` runs `flutter run -d linux`
+  in the container in the background (window on the owner's desktop; `--demo` = synthetic demo wallet). Then
+  `reload`, `restart`, `shot [file]`, `trace start|stop [name]` (timeline + frame summary in the run dir; use
+  `--profile` for real numbers), `status`, `stop`. Wallet data is a throwaway folder in `dist/live/`, never the real one.
+  The `dart` MCP server (`.mcp.json` → `tools/build.sh mcp`, same pod) reaches it: `dtd` tool, `connect` with the dtd
+  URI from `tools/live.sh status`, then `hot_reload`, `get_runtime_errors`, `widget_inspector`. **Privacy:** the
+  window uses the Wayland socket only (never X11). Drive the app only through the VM service / MCP server, never
+  host input tools (xdotool, ydotool, uinput); screenshots only from `tools/live.sh shot`, never a host screen grab.
 Android release builds are signed with one fixed key (`tools/make-signing-key.sh`, kept in
 `~/.config/budget-wallet/`, CI secrets `ANDROID_KEYSTORE_*`) so updates install over the app without wiping
 the wallet. Never commit or print the key or its password; never fall back to debug signing for a published APK.
