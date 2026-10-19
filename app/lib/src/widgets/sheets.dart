@@ -61,7 +61,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         onChanged: (_) => setState(() {}),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700),
-        decoration: InputDecoration(prefixText: currencySymbol(cur), hintText: '0.00'),
+        decoration: InputDecoration(suffixText: currencySymbol(cur), hintText: '0.00'),
       ),
       const SizedBox(height: 14),
       const Muted('Category'),
@@ -278,28 +278,29 @@ class _GoalSheetState extends State<GoalSheet> {
                 controller: target,
                 onChanged: upd,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Target'))),
+                decoration: InputDecoration(labelText: 'Target', suffixText: currencySymbol(widget.wc.currency)))),
         const SizedBox(width: 10),
         Expanded(
             child: TextField(
                 controller: monthly,
                 onChanged: upd,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Each month'))),
+                decoration: InputDecoration(labelText: 'Each month', suffixText: currencySymbol(widget.wc.currency)))),
       ]),
       const SizedBox(height: 10),
       TextField(
           controller: saved,
           onChanged: upd,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Put aside so far')),
+          decoration: InputDecoration(labelText: 'Put aside so far', suffixText: currencySymbol(widget.wc.currency))),
       if (g != null) ...[
         const SizedBox(height: 10),
         TextField(
             controller: add,
             onChanged: upd,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Add money now', hintText: 'e.g. a bonus or tax refund')),
+            decoration: InputDecoration(
+                labelText: 'Add money now', hintText: 'e.g. a bonus or tax refund', suffixText: currencySymbol(widget.wc.currency))),
       ],
       const SizedBox(height: 8),
       Muted(hint()),

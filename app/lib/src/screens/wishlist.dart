@@ -50,7 +50,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                     controller: price,
                     onChanged: (_) => setState(() {}),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(labelText: 'Price', prefixText: currencySymbol(cur))),
+                    decoration: InputDecoration(labelText: 'Price', suffixText: currencySymbol(cur))),
               ),
             ]),
             if (p != null && p > 0) _verdict(context, p),

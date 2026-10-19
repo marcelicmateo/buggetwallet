@@ -147,7 +147,7 @@ void main() {
       await tester.enterText(find.byType(TextField).first, '50.01');
       await _tap(tester, _primary);
       expect(wc.txs, isEmpty);
-      expect(find.textContaining('Over €50'), findsOneWidget);
+      expect(find.textContaining('Over 50\u00A0€'), findsOneWidget);
       await tester.enterText(find.byType(TextField).first, '50');
       await tester.pump();
       await _tap(tester, _primary);
@@ -183,7 +183,7 @@ void main() {
       await tester.enterText(find.byType(TextField).first, '20.01');
       await _tap(tester, _primary);
       expect(wc.txs, isEmpty);
-      expect(find.textContaining('Over €20'), findsOneWidget);
+      expect(find.textContaining('Over 20\u00A0€'), findsOneWidget);
       await tester.enterText(find.byType(TextField).first, '20');
       await _tap(tester, _primary);
       await _settle(tester);
@@ -442,7 +442,7 @@ void main() {
       wc.reload();
       await _open(tester, TxSheet(wc: wc, t: wc.txs.single));
       expect(find.text('Delete'), findsNothing);
-      expect(find.text('+€1,500.00'), findsOneWidget);
+      expect(find.text('+1,500.00\u00A0€'), findsOneWidget);
       expect(find.textContaining('Saturday, 10 October 2026'), findsOneWidget);
       await _settle(tester);
     });
@@ -474,7 +474,7 @@ void main() {
       expect(wc.txs, hasLength(1));
       await _open(tester, TxSheet(wc: wc, t: wc.txs.single));
       expect(find.text('(no description)'), findsWidgets);
-      expect(find.text('€0.00'), findsOneWidget);
+      expect(find.text('0.00\u00A0€'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await _settle(tester);
     });
@@ -763,7 +763,7 @@ void main() {
         await _open(tester, GoalSheet(wc: wc));
         await tester.enterText(_field('Target'), '1001');
         await tester.pump();
-        expect(find.textContaining('At €50 a month you reach it in 21 months'), findsOneWidget);
+        expect(find.textContaining('At 50\u00A0€ a month you reach it in 21 months'), findsOneWidget);
         await tester.enterText(_field('Target'), '1000');
         await tester.pump();
         expect(find.textContaining('in 20 months'), findsOneWidget);

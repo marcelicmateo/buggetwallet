@@ -68,8 +68,8 @@ void main() {
     expect(after.allowanceToday, before.allowanceToday, reason: "today's spending doesn't change today's allowance");
     expect(after.safeToday, before.safeToday - 2347);
     expect(safeText(t), money(after.safeToday, 'EUR', decimals: 0));
-    expect(
-        find.text('Spent €23.47 today of ${money(after.allowanceToday, 'EUR')}. Spend less today and tomorrow gets more.'), findsOneWidget);
+    expect(find.text('Spent 23.47\u00A0€ today of ${money(after.allowanceToday, 'EUR')}. Spend less today and tomorrow gets more.'),
+        findsOneWidget);
 
     await scrollTo(t, find.text('Lunch synthetic note'), TodayScreen);
     expect(find.widgetWithText(TxTile, '${shortDate(today)} · Eating out'), findsOneWidget);
@@ -77,8 +77,8 @@ void main() {
     await Harness.shot(t, 'today-after-expense');
 
     await goTab(t, 'Spending');
-    expect(find.text('${monthLong(monthOf(today))}: €23 out'), findsOneWidget);
-    await scrollTo(t, tile('−€23.47'), SpendingScreen);
+    expect(find.text('${monthLong(monthOf(today))}: 23\u00A0€ out'), findsOneWidget);
+    await scrollTo(t, tile('−23.47\u00A0€'), SpendingScreen);
     expect(find.widgetWithText(TxTile, 'Lunch synthetic note'), findsOneWidget);
     await Harness.checkLog();
   });
@@ -90,7 +90,7 @@ void main() {
     await t.enterText(inSheet(AddExpenseSheet, field('Note')), 'Headphones synthetic');
     await tapVisible(t, sheetButton('Add expense'));
     await t.pumpAndSettle();
-    expect(find.text('Over €50: wishlist first?'), findsOneWidget);
+    expect(find.text('Over 50\u00A0€: wishlist first?'), findsOneWidget);
     expect(wc.txs, isEmpty);
     await tapVisible(t, find.text('Put on wishlist'));
     await t.pumpAndSettle();
@@ -105,7 +105,7 @@ void main() {
     await t.enterText(inSheet(AddExpenseSheet, find.byType(TextField)).first, '75.10');
     await tapVisible(t, sheetButton('Add expense'));
     await t.pumpAndSettle();
-    expect(find.text('Over €50: wishlist first?'), findsOneWidget);
+    expect(find.text('Over 50\u00A0€: wishlist first?'), findsOneWidget);
     await tapVisible(t, sheetButton('Add expense')); // "If you already paid, tap Add expense again."
     await t.pumpAndSettle();
     expect(find.byType(AddExpenseSheet), findsNothing);
@@ -130,8 +130,8 @@ void main() {
     expect([for (final id in ids) cat(id)], ['Shopping', 'Shopping', 'Shopping', 'Groceries']);
 
     await goTab(t, 'Spending');
-    await scrollTo(t, tile('−€19.99'), SpendingScreen);
-    await tapVisible(t, tile('−€19.99'));
+    await scrollTo(t, tile('−19.99\u00A0€'), SpendingScreen);
+    await tapVisible(t, tile('−19.99\u00A0€'));
     expect(find.byType(TxSheet), findsOneWidget);
     expect(inSheet(TxSheet, find.text('ZARA ZAGREB')), findsOneWidget);
     expect(inSheet(TxSheet, find.text('Delete')), findsNothing, reason: 'bank rows cannot be deleted');
@@ -148,7 +148,7 @@ void main() {
     expect(wc.repo.merchantRules(), isEmpty);
     expect(find.widgetWithText(TxTile, '${shortDate(today)} · Home & tools'), findsOneWidget);
 
-    await tapVisible(t, tile('−€29.99'));
+    await tapVisible(t, tile('−29.99\u00A0€'));
     await pickDropdown(t, inSheet(TxSheet, find.byType(DropdownButtonFormField<String>)), 'Sport & fitness');
     await tapVisible(t, inSheet(TxSheet, find.text('Save')));
     await t.pumpAndSettle();
@@ -165,8 +165,8 @@ void main() {
     expect(cat(more.transactions.single.id), 'Sport & fitness');
 
     // "Always" on the row with its own category: the rule changes and the row's own choice is cleared.
-    await scrollTo(t, tile('−€19.99'), SpendingScreen);
-    await tapVisible(t, tile('−€19.99'));
+    await scrollTo(t, tile('−19.99\u00A0€'), SpendingScreen);
+    await tapVisible(t, tile('−19.99\u00A0€'));
     await pickDropdown(t, inSheet(TxSheet, find.byType(DropdownButtonFormField<String>)), 'Shopping');
     await tapVisible(t, inSheet(TxSheet, find.text('Save')));
     await t.pumpAndSettle();
@@ -224,8 +224,8 @@ void main() {
     expect(find.textContaining('${shortDate(payday)} – '), findsOneWidget, reason: 'the period chip in the app bar');
 
     await scrollTo(t, find.text('Payday checklist'), TodayScreen);
-    expect(find.text('Move €200 to your savings account before you spend anything else.'), findsOneWidget);
-    await tapVisible(t, find.text('I moved €200'));
+    expect(find.text('Move 200\u00A0€ to your savings account before you spend anything else.'), findsOneWidget);
+    await tapVisible(t, find.text('I moved 200\u00A0€'));
     expect(find.text('Savings logged'), findsOneWidget);
     expect(wc.goals.map((g) => g.saved), [10000, 10000]);
     expect(wc.settings.savedFor, payday);

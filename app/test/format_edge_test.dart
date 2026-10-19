@@ -163,65 +163,82 @@ void main() {
 
   group('money: extremes', () {
     test('zero, one cent, negative one cent', () {
-      expect(money(0, 'EUR'), '€0.00');
-      expect(money(1, 'EUR'), '€0.01');
-      expect(money(-1, 'EUR'), '−€0.01');
-      expect(money(9, 'EUR'), '€0.09');
-      expect(money(10, 'EUR'), '€0.10');
+      expect(money(0, 'EUR'), '0.00\u00A0€');
+      expect(money(1, 'EUR'), '0.01\u00A0€');
+      expect(money(-1, 'EUR'), '−0.01\u00A0€');
+      expect(money(9, 'EUR'), '0.09\u00A0€');
+      expect(money(10, 'EUR'), '0.10\u00A0€');
     });
     test('the switch to whole units is at exactly 100.00', () {
-      expect(money(9999, 'EUR'), '€99.99');
-      expect(money(10000, 'EUR'), '€100');
-      expect(money(-9999, 'EUR'), '−€99.99');
-      expect(money(-10000, 'EUR'), '−€100');
+      expect(money(9999, 'EUR'), '99.99\u00A0€');
+      expect(money(10000, 'EUR'), '100\u00A0€');
+      expect(money(-9999, 'EUR'), '−99.99\u00A0€');
+      expect(money(-10000, 'EUR'), '−100\u00A0€');
     });
     test('whole units round half away from zero, with thousands separators', () {
-      expect(money(10049, 'EUR'), '€100');
-      expect(money(10050, 'EUR'), '€101');
-      expect(money(99950, 'EUR'), '€1,000');
-      expect(money(123456, 'EUR'), '€1,235');
-      expect(money(-123450, 'EUR'), '−€1,235');
-      expect(money(100000000, 'EUR'), '€1,000,000');
+      expect(money(10049, 'EUR'), '100\u00A0€');
+      expect(money(10050, 'EUR'), '101\u00A0€');
+      expect(money(99950, 'EUR'), '1,000\u00A0€');
+      expect(money(123456, 'EUR'), '1,235\u00A0€');
+      expect(money(-123450, 'EUR'), '−1,235\u00A0€');
+      expect(money(100000000, 'EUR'), '1,000,000\u00A0€');
     });
     test('decimals: 2 keeps cents at any size', () {
-      expect(money(123456789, 'EUR', decimals: 2), '€1,234,567.89');
-      expect(money(100000, 'EUR', decimals: 2), '€1,000.00');
-      expect(money(100, 'EUR', decimals: 2), '€1.00');
+      expect(money(123456789, 'EUR', decimals: 2), '1,234,567.89\u00A0€');
+      expect(money(100000, 'EUR', decimals: 2), '1,000.00\u00A0€');
+      expect(money(100, 'EUR', decimals: 2), '1.00\u00A0€');
     });
     test('decimals: 0 on small amounts', () {
-      expect(money(0, 'EUR', decimals: 0), '€0');
-      expect(money(49, 'EUR', decimals: 0), '€0');
-      expect(money(50, 'EUR', decimals: 0), '€1');
+      expect(money(0, 'EUR', decimals: 0), '0\u00A0€');
+      expect(money(49, 'EUR', decimals: 0), '0\u00A0€');
+      expect(money(50, 'EUR', decimals: 0), '1\u00A0€');
     });
     test('a negative amount that rounds to zero is not shown as minus zero', () {
-      expect(money(-49, 'EUR', decimals: 0), '€0');
+      expect(money(-49, 'EUR', decimals: 0), '0\u00A0€');
     });
     test('signed: plus only for positive, nothing for zero', () {
-      expect(money(0, 'EUR', signed: true), '€0.00');
-      expect(money(1, 'EUR', signed: true), '+€0.01');
-      expect(money(-1, 'EUR', signed: true), '−€0.01');
+      expect(money(0, 'EUR', signed: true), '0.00\u00A0€');
+      expect(money(1, 'EUR', signed: true), '+0.01\u00A0€');
+      expect(money(-1, 'EUR', signed: true), '−0.01\u00A0€');
     });
     test('the minus is the real minus sign, not a hyphen', () {
       expect(money(-500, 'EUR').codeUnitAt(0), 0x2212);
     });
     test('max int does not throw', () {
       const max = 9223372036854775807;
-      expect(money(max, 'EUR', decimals: 2), '€92,233,720,368,547,758.07');
+      expect(money(max, 'EUR', decimals: 2), '92,233,720,368,547,758.07\u00A0€');
       expect(() => money(max, 'EUR'), returnsNormally);
       expect(() => money(-max, 'EUR'), returnsNormally);
-      expect(money(-max, 'EUR', decimals: 2), '−€92,233,720,368,547,758.07');
+      expect(money(-max, 'EUR', decimals: 2), '−92,233,720,368,547,758.07\u00A0€');
     });
     test('currencies: known symbols, unknown code is spelled out', () {
-      expect(money(1250, 'USD'), r'$12.50');
-      expect(money(1250, 'GBP'), '£12.50');
-      expect(money(1250, 'CHF'), 'CHF 12.50');
-      expect(money(-1250, 'CHF'), '−CHF 12.50');
+      expect(money(1250, 'USD'), '12.50\u00A0\$');
+      expect(money(1250, 'GBP'), '12.50\u00A0£');
+      expect(money(1250, 'CHF'), '12.50\u00A0CHF');
+      expect(money(-1250, 'CHF'), '−12.50\u00A0CHF');
+      expect(money(1250, 'CHF', signed: true), '+12.50\u00A0CHF');
+    });
+    test('the symbol follows the amount after a no-break space (U+00A0), never a plain space', () {
+      final s = money(1400, 'EUR', decimals: 0);
+      expect(s, '14\u00A0€');
+      expect(s.contains('\u00A0'), isTrue);
+      expect(s.contains(' '), isFalse);
+      expect(s.codeUnits, [0x31, 0x34, 0xA0, 0x20AC]);
+      expect(money(1250000 * 100, 'EUR'), '1,250,000\u00A0€');
+      expect(money(145000, 'EUR', signed: true, decimals: 2), '+1,450.00\u00A0€');
+      expect(money(-2340, 'EUR'), '−23.40\u00A0€');
+    });
+    test('parseMoney still reads what money() prints and what people type', () {
+      expect(parseMoney(money(2340, 'EUR')), 2340);
+      expect(parseMoney('12\u00A0€'), 1200);
+      expect(parseMoney('12 €'), 1200);
+      expect(parseMoney('€12'), 1200);
     });
     test('no formatted amount contains NaN, Infinity or null, over a sweep', () {
       for (final c in [0, 1, -1, 99, 100, 101, 9999, 10000, 12345, -12345, 999999, 1000000, -100000000]) {
         for (final d in [null, 0, 2]) {
           final s = money(c, 'EUR', decimals: d, signed: true);
-          expect(s, matches(RegExp(r'^[+−]?€[0-9,]+(\.[0-9]{2})?$')), reason: '$c/$d -> $s');
+          expect(s, matches(RegExp(r'^[+−]?[0-9,]+(\.[0-9]{2})?\u00A0€$')), reason: '$c/$d -> $s');
         }
       }
     });

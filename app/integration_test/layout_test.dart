@@ -109,7 +109,7 @@ void main() {
         await tapVisible(t, find.descendant(of: find.byType(TodayScreen), matching: find.text('Add expense')));
         await t.enterText(find.descendant(of: find.byType(AddExpenseSheet), matching: find.byType(TextField)).first, '120');
         await tapVisible(t, find.descendant(of: find.byType(AddExpenseSheet), matching: find.text('Add expense')).last);
-        expect(find.text('Over €50: wishlist first?'), findsOneWidget);
+        expect(find.text('Over 50\u00A0€: wishlist first?'), findsOneWidget);
         await Harness.shot(t, '$name-sheet-add-expense');
         await closeSheet(t, AddExpenseSheet);
 
