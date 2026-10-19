@@ -5,6 +5,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'categories.dart';
+import 'dates.dart';
 import 'hlc.dart';
 import 'logs.dart';
 import 'matching.dart';
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS peer_files(device TEXT NOT NULL, file TEXT NOT NULL, 
 ''';
 
 final _log = Logger('bw.repo');
+final _isoDate = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 
 /// The wallet database on one device. All writes go through [_write] so they are
 /// recorded as [Op]s and can be synced; remote ops come in through [applyRemote].
@@ -169,7 +171,12 @@ class WalletRepo {
   }
 
   /// Applies ops from another device. Returns how many changed something here.
-  int applyRemote(List<Op> ops) {
+  ///
+  /// A manual entry and its bank row can arrive in either order (imported on another device before the entry
+  /// synced), so matching runs after remote changes too; it is deterministic, so every device writes the same
+  /// matches. With [match] false (a sync applying many files) it only records that matching is due, and the caller
+  /// runs it once at the end with [runPendingMatch].
+  int applyRemote(List<Op> ops, {bool match = true}) {
     final t = PerfTimer('repo.applyRemote');
     var changed = 0;
     _tx(() {
@@ -178,11 +185,10 @@ class WalletRepo {
         if (_apply(op)) changed++;
       }
       _setMeta('hlc', clock.last.toString());
+      if (changed > 0) _setMeta('match_pending', '1');
     });
     t.done({'ops': ops.length, 'changed': changed});
-    // A manual entry and its bank row can arrive in either order (imported on another device before the entry
-    // synced), so matching runs here too; it is deterministic, so every device writes the same matches.
-    if (changed > 0) _matchManual();
+    if (match) runPendingMatch();
     return changed;
   }
 
@@ -193,11 +199,15 @@ class WalletRepo {
   static const _writtenJoin = "LEFT JOIN clocks c ON c.entity = 'tx' AND c.id = tx.id AND c.field = 'amount'";
 
   /// Matches hand-added expenses to bank rows ([planMatches]) and writes the changes. Returns the new matches.
+  ///
+  /// Loads the manual entries, the bank rows they point at, and for each open entry ([openEntries]) only the bank
+  /// rows that could replace it, so a large history costs little. Logged as `repo.match` on `bw.perf` once per run.
   int _matchManual() {
+    final t = PerfTimer('repo.match');
     final written = <String, String>{};
-    List<Tx> rows(String where) {
+    List<Tx> rows(String where, [List<Object?> args = const []]) {
       final out = <Tx>[];
-      for (final r in db.select('SELECT tx.*, c.hlc AS written FROM tx $_writtenJoin WHERE $where')) {
+      for (final r in db.select('SELECT tx.*, c.hlc AS written FROM tx $_writtenJoin WHERE $where', args)) {
         final tx = Tx.fromRow(r);
         if (r['written'] case final String h) written[tx.id] = h;
         out.add(tx);
@@ -206,28 +216,52 @@ class WalletRepo {
     }
 
     const live = 'tx.manual = 0 AND tx.deleted = 0';
-    const targetOf = 'SELECT matched_to FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to IS NOT NULL';
     final manual = rows('tx.manual = 1 AND tx.deleted = 0');
-    final targets = {for (final m in manual) m.matchedTo};
-    if (!targets.contains(null) && targets.length == manual.length) {
-      // All matched, no two on one row: done if every bank row they point at is still there (not deleted).
-      final there = db.select('SELECT COUNT(*) AS n FROM tx WHERE $live AND id IN ($targetOf)').first['n'] as int;
-      if (there == targets.length) return 0;
+    final targets = rows('$live AND tx.id IN (SELECT matched_to FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to IS NOT NULL)');
+    final open = openEntries(manual, {for (final b in targets) b.id});
+    if (open.isEmpty) {
+      _clearMatchPending();
+      t.done({'manual': manual.length, 'open': 0, 'bank': 0, 'added': 0});
+      return 0;
+    }
+    final bank = {for (final b in targets) b.id: b};
+    for (final m in open) {
+      final since = written[m.id];
+      if (since == null || !_isoDate.hasMatch(m.date)) continue;
+      // Candidates for this entry only: same amount, within the window, written in or after its millisecond (the
+      // exact HLC order is planMatches' job; comparing the 15-digit millis prefix as text is safe for any counter).
+      for (final b in rows('$live AND tx.amount = ? AND tx.date BETWEEN ? AND ? AND c.hlc >= ?',
+          [m.amount, addDays(m.date, -matchDays), addDays(m.date, matchDays), since.split(':').first])) {
+        bank[b.id] = b;
+      }
     }
     final cz = categorizer();
-    final bank = rows('$live AND (tx.amount < 0 OR tx.id IN ($targetOf))');
-    final plan = planMatches(manual, bank, (b) {
+    final plan = planMatches(manual, [...bank.values], (b) {
       final k = kindOf(cz.autoCategory(b));
       return k == Kind.flex || k == Kind.fixed;
     }, written);
-    if (plan.isEmpty) return 0;
     _write([
       for (final e in plan.matchedTo.entries) ('tx', e.key, {'matched_to': e.value}),
       for (final e in plan.bankCategory.entries) ('tx', e.key, {'category': e.value}),
     ]);
-    logEvent(_log, Level.FINE, 'repo.match',
-        {'added': plan.added, 'unmatched': plan.matchedTo.values.where((v) => v == null).length, 'categories': plan.bankCategory.length});
+    _clearMatchPending();
+    t.done({
+      'manual': manual.length,
+      'open': open.length,
+      'bank': bank.length,
+      'added': plan.added,
+      'unmatched': plan.matchedTo.values.where((v) => v == null).length,
+      'categories': plan.bankCategory.length,
+    });
     return plan.added;
+  }
+
+  void _clearMatchPending() => db.execute("DELETE FROM meta WHERE key = 'match_pending'");
+
+  /// Runs matching if ops applied with `applyRemote(match: false)` changed something since it last ran (also after a
+  /// crash mid-sync: the flag is stored). [FolderSync.run] calls it once after applying all files.
+  void runPendingMatch() {
+    if (_meta('match_pending') != null) _matchManual();
   }
 
   bool peerFileSeen(String device, String file) =>

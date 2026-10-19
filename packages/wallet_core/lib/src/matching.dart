@@ -16,7 +16,29 @@ class MatchPlan {
 
 final _iso = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 
-/// Matches hand-added expenses to the bank rows that replace them: same amount, at most 3 days apart, one-to-one.
+/// Days a bank row may be from the hand-added expense it replaces.
+const matchDays = 3;
+
+/// The manual entries [planMatches] will try to match: unmatched ones, ones whose bank row is not in [liveBank]
+/// (deleted or missing), and every entry but the smallest id on a bank row shared by several. [taken]: the bank rows
+/// that keep their entry.
+({List<Tx> open, Set<String> taken}) _split(List<Tx> manual, Set<String> liveBank) {
+  final taken = <String>{};
+  final open = <Tx>[];
+  for (final m in [...manual]..sort((a, b) => a.id.compareTo(b.id))) {
+    final to = m.matchedTo;
+    if (to == null || !liveBank.contains(to) || !taken.add(to)) open.add(m);
+  }
+  return (open: open, taken: taken);
+}
+
+/// The manual entries that [planMatches] tries to match, given the ids of the live bank rows entries point at, so
+/// callers can load only the bank rows that could replace one of them (same amount, within [matchDays], written
+/// after it). Empty when every entry keeps its match.
+List<Tx> openEntries(List<Tx> manual, Set<String> liveBank) => _split(manual, liveBank).open;
+
+/// Matches hand-added expenses to the bank rows that replace them: same amount, at most [matchDays] days apart,
+/// one-to-one.
 ///
 /// A pure function of the rows, so every device holding the same rows plans the same writes (sync converges even
 /// when the manual entry and the bank row arrive on a device in either order), and applying the plan gives a state
@@ -42,20 +64,12 @@ final _iso = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 MatchPlan planMatches(List<Tx> manual, List<Tx> bank, bool Function(Tx) eligible, Map<String, String> written) {
   final matchedTo = <String, String?>{};
   final bankCategory = <String, String>{};
-  final taken = <String>{};
-  final open = <Tx>[];
-  final live = {
+  final (:open, :taken) = _split(manual, {
     for (final b in bank)
       if (!b.manual && !b.deleted) b.id
-  };
-  for (final m in [...manual]..sort((a, b) => a.id.compareTo(b.id))) {
-    final to = m.matchedTo;
-    if (to == null) {
-      open.add(m);
-    } else if (!live.contains(to) || !taken.add(to)) {
-      matchedTo[m.id] = null; // its bank row was deleted or is missing, or a second entry on the same bank row
-      open.add(m);
-    }
+  });
+  for (final m in open) {
+    if (m.matchedTo != null) matchedTo[m.id] = null; // its bank row was deleted or is missing, or taken by another entry
   }
   if (open.isEmpty) return MatchPlan(matchedTo, bankCategory, 0);
   final byAmount = <int, List<Tx>>{};
@@ -78,7 +92,7 @@ MatchPlan planMatches(List<Tx> manual, List<Tx> bank, bool Function(Tx) eligible
     for (final b in pool) {
       if (taken.contains(b.id)) continue;
       final days = daysBetween(m.date, b.date).abs();
-      if (days > 3) continue;
+      if (days > matchDays) continue;
       final at = written[b.id];
       if (at == null || Hlc.compareStrings(at, since) <= 0) continue; // in the wallet before the entry: not its row
       if (best == null ||

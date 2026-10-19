@@ -264,4 +264,91 @@ void main() {
       expect(laptop.pendingOps(), isEmpty);
     });
   });
+
+  test('openEntries: unmatched, matched to a deleted or missing row, or second on a shared row', () {
+    final manual = [
+      _manual('m1', '2026-01-10', -100),
+      _manual('m2', '2026-01-14', -100, to: 'b-live'), // keeps its match
+      _manual('m3', '2026-01-14', -100, to: 'b-live'), // second entry on the same row
+      _manual('m4', '2026-07-01', -100, to: 'b-gone'), // its row is gone
+    ];
+    expect(openEntries(manual, {'b-live'}).map((m) => m.id), ['m1', 'm3', 'm4']);
+    expect(openEntries([manual[1]], {'b-live'}), isEmpty);
+  });
+
+  group('matching cost', () {
+    /// `repo.match` perf events (one per matching run) logged while [body] runs.
+    Future<List<Map<String, Object?>>> matchRuns(Future<void> Function() body) async {
+      final runs = <Map<String, Object?>>[];
+      final was = Logger.root.level;
+      Logger.root.level = Level.ALL;
+      final sub = Logger.root.onRecord.listen((r) {
+        if (r.object case LogEvent(event: 'repo.match', :final fields)) runs.add(fields);
+      });
+      try {
+        await body();
+      } finally {
+        await sub.cancel();
+        Logger.root.level = was;
+      }
+      return runs;
+    }
+
+    test('a new device reading many sync files matches once per sync run, not once per file', () async {
+      final dir = Directory.systemTemp.createTempSync('bw-match-sync-');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final key = VaultKey.generate();
+      var t = 1767225600000;
+      final a = WalletRepo.inMemory(now: () => t), b = WalletRepo.inMemory(now: () => t);
+      addTearDown(a.close);
+      addTearDown(b.close);
+      const files = 40;
+      for (var i = 0; i < files; i++) {
+        t += 1000;
+        final day = addDays('2026-01-01', i);
+        // One sync file per step: a hand-added expense, then (next file) the bank row that replaces it.
+        if (i.isEven) {
+          a.addManual(date: day, amount: 1000 + i, category: 'Eating out');
+        } else {
+          a.importBatch(ImportBatch(source: 'pbz', transactions: [n(day, -(1000 + i - 1), 'POS plaćanje', 'POS EXAMPLE $i')]));
+        }
+        await FolderSync(dir.path, key).run(a);
+      }
+      late SyncReport rep;
+      final runs = await matchRuns(() async => rep = await FolderSync(dir.path, key).run(b));
+      expect(rep.filesRead, files);
+      expect(runs, hasLength(1), reason: 'one matching run for the whole sync');
+      expect(b.transactions().where((t) => t.manual), isEmpty, reason: 'every entry matched by its bank row');
+      expect(b.transactions().length, files ~/ 2);
+      // Nothing new: no matching at all.
+      expect(await matchRuns(() => FolderSync(dir.path, key).run(b)), isEmpty);
+    });
+
+    test('a large wallet loads only the bank rows that could replace an open entry', () async {
+      final r = WalletRepo.inMemory();
+      addTearDown(r.close);
+      final rnd = Random(fuzzSeed(5));
+      // Two years of synthetic history, many rows with the amounts of the entries below.
+      r.importBatch(ImportBatch(source: 'pbz', transactions: [
+        for (var i = 0; i < 4000; i++)
+          n(addDays('2025-01-01', i * 730 ~/ 4000), -[240, 990, 2340, 100 + rnd.nextInt(9000)][i % 4], 'POS plaćanje', 'POS EXAMPLE $i'),
+      ]));
+      // 200 hand-added expenses among that history that no bank row replaced (cash): they stay open for good.
+      for (var i = 0; i < 200; i++) {
+        r.addManual(date: addDays('2025-01-01', i * 3), amount: [240, 990, 2340][i % 3], category: 'Eating out');
+      }
+      final m = r.addManual(date: '2026-12-30', amount: 990, category: 'Eating out');
+      late ImportSummary s;
+      final runs = await matchRuns(() async {
+        s = r.importBatch(ImportBatch(source: 'pbz', transactions: [n('2026-12-31', -990, 'POS plaćanje', 'POS EXAMPLE NEW')]));
+      });
+      expect(s.matched, 1);
+      expect(r.transaction(m)!.matchedTo, isNotNull);
+      final run = runs.single;
+      expect(run['open'], 201);
+      expect(run['bank'], 1, reason: 'history rows were in the wallet before the entries: not loaded');
+      expect(run['ms'] as int, lessThan(2000), reason: 'rough bound on a shared machine');
+      expect(r.transactions(includeHidden: true).where((t) => t.manual && t.matchedTo != null).length, 1);
+    });
+  });
 }
