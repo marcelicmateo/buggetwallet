@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>D1 · Wishlist</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;800&amp;family=Roboto+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width:390px;height:844px;overflow:hidden;position:relative;background:#eef1ef;color:#121716;font-family:'Roboto',system-ui,sans-serif;">
+
+<header style="height:64px;padding:0 16px;display:flex;align-items:center;gap:10px;">
+  <span style="width:36px;height:36px;border-radius:10px;background:{{accent}};color:#ffffff;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V5a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2"></path><path d="M3 6v12a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-3"></path></svg></span>
+  <h1 style="margin:0;font-size:22px;font-weight:700;flex:1;">Wishlist</h1>
+</header>
+
+<main style="position:absolute;top:64px;left:0;right:0;bottom:80px;overflow:hidden;padding:0 16px;display:grid;gap:14px;align-content:start;">
+
+  <section style="background:#ffffff;border:1px solid #dde3e0;border-radius:14px;padding:16px;">
+    <h2 style="margin:0;font-size:17px;line-height:24px;font-weight:700;">Can I afford it?</h2>
+    <div style="margin-top:16px;display:grid;grid-template-columns:1.7fr 1fr;gap:10px;">
+      <div style="position:relative;height:56px;border:1px solid #c5ccc9;border-radius:10px;padding:0 14px;display:flex;align-items:center;box-sizing:border-box;">
+        <label for="item" style="position:absolute;top:-8px;left:10px;padding:0 4px;background:#ffffff;font-size:12px;color:#48514e;">Item</label>
+        <input id="item" type="text" value="Running shoes" style="width:100%;border:none;outline:none;background:transparent;font-family:'Roboto',sans-serif;font-size:16px;color:#121716;padding:0;">
+      </div>
+      <div style="position:relative;height:56px;border:1px solid #c5ccc9;border-radius:10px;padding:0 14px;display:flex;align-items:center;gap:4px;box-sizing:border-box;">
+        <label for="price" style="position:absolute;top:-8px;left:10px;padding:0 4px;background:#ffffff;font-size:12px;color:#48514e;">Price</label>
+        <input id="price" type="text" inputmode="decimal" value="89" style="flex:1;min-width:0;border:none;outline:none;background:transparent;font-family:'Roboto Mono',monospace;font-size:16px;font-weight:500;color:#121716;padding:0;">
+        <span style="font-family:'Roboto Mono',monospace;font-size:16px;color:#48514e;">€</span>
+      </div>
+    </div>
+    <div role="status" style="margin-top:12px;border-radius:12px;background:#e3f1e3;color:#0f7a0f;padding:12px 14px;display:flex;align-items:center;gap:10px;">
+      <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="9"></circle><path d="m7.5 12.3 3 3 6-6.3"></path></svg>
+      <span style="flex:1;font-size:15px;font-weight:700;">Fits this month</span>
+      <span style="font-size:13px;color:#121716;">New daily <b style="font-family:'Roboto Mono',monospace;">12&nbsp;€</b></span>
+    </div>
+    <p style="margin:12px 0 0;display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:18px;color:#48514e;"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg>Anything over 50&nbsp;€ waits 72 hours on the wishlist first.</p>
+  </section>
+
+  <section style="background:#ffffff;border:1px solid #dde3e0;border-radius:14px;padding:14px 16px 16px;">
+    <h2 style="margin:0;font-size:13px;line-height:18px;font-weight:700;letter-spacing:0.4px;color:#48514e;">READY TO DECIDE</h2>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:12px;">
+      <span style="width:40px;height:40px;border-radius:20px;background:#e5e9fb;color:{{accent}};display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 8h13l-1 12h-11z"></path><path d="M9 8V6.5a3 3 0 0 1 6 0V8"></path></svg></span>
+      <span style="flex:1;font-size:16px;font-weight:500;">Running shoes</span>
+      <span style="font-family:'Roboto Mono',monospace;font-size:16px;font-weight:700;">89&nbsp;€</span>
+    </div>
+    <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <button type="button" style="height:44px;border:none;border-radius:22px;background:{{accent}};color:#ffffff;font-family:'Roboto',sans-serif;font-size:15px;font-weight:700;cursor:pointer;">Buy it</button>
+      <button type="button" style="height:44px;border:1px solid #c5ccc9;border-radius:22px;background:#ffffff;color:{{accent}};font-family:'Roboto',sans-serif;font-size:15px;font-weight:700;cursor:pointer;">Skip</button>
+    </div>
+  </section>
+
+  <section style="background:#ffffff;border:1px solid #dde3e0;border-radius:14px;padding:14px 16px 6px;">
+    <h2 style="margin:0;font-size:13px;line-height:18px;font-weight:700;letter-spacing:0.4px;color:#48514e;">COOLING OFF</h2>
+    <div style="padding:12px 0;">
+      <div style="display:flex;align-items:baseline;gap:8px;">
+        <span style="flex:1;font-size:15px;font-weight:500;">Headphones</span>
+        <span style="font-family:'Roboto Mono',monospace;font-size:15px;font-weight:500;">129&nbsp;€</span>
+      </div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;height:6px;border-radius:3px;background:#eef1ef;position:relative;"><div style="position:absolute;left:0;top:0;bottom:0;width:43%;border-radius:3px;background:#7b8582;"></div></div>
+        <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#48514e;white-space:nowrap;"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg>41 h left</span>
+      </div>
+    </div>
+    <div style="padding:12px 0;border-top:1px solid #dde3e0;">
+      <div style="display:flex;align-items:baseline;gap:8px;">
+        <span style="flex:1;font-size:15px;font-weight:500;">Desk lamp</span>
+        <span style="font-family:'Roboto Mono',monospace;font-size:15px;font-weight:500;">55&nbsp;€</span>
+      </div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;height:6px;border-radius:3px;background:#eef1ef;position:relative;"><div style="position:absolute;left:0;top:0;bottom:0;width:33%;border-radius:3px;background:#7b8582;"></div></div>
+        <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#48514e;white-space:nowrap;"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg>2 d left</span>
+      </div>
+    </div>
+  </section>
+
+  <section style="background:#ffffff;border:1px solid #dde3e0;border-radius:14px;padding:14px 16px;">
+    <h2 style="margin:0;font-size:13px;line-height:18px;font-weight:700;letter-spacing:0.4px;color:#48514e;">DECIDED</h2>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+      <span style="flex:1;font-size:15px;font-weight:500;">Smartwatch</span>
+      <span style="font-family:'Roboto Mono',monospace;font-size:15px;color:#48514e;text-decoration:line-through;">199&nbsp;€</span>
+      <span style="height:24px;padding:0 8px;border-radius:6px;background:#f6f8f7;border:1px solid #dde3e0;font-size:12px;font-weight:500;color:#48514e;display:inline-flex;align-items:center;">Skipped</span>
+    </div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid #dde3e0;display:flex;align-items:center;justify-content:space-between;font-size:15px;font-weight:700;color:#0f7a0f;">
+      <span>Saved by waiting</span><span style="font-family:'Roboto Mono',monospace;">199&nbsp;€</span>
+    </div>
+  </section>
+</main>
+
+<nav aria-label="Main" style="position:absolute;left:0;right:0;bottom:0;height:80px;background:#ffffff;border-top:1px solid #dde3e0;display:flex;">
+  <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;color:#48514e;font-size:12px;font-weight:500;"><span style="width:56px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"></path><path d="M5 9.5V20h14V9.5"></path><path d="M10 20v-5h4v5"></path></svg></span>Today</a>
+  <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;color:#48514e;font-size:12px;font-weight:500;"><span style="width:56px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><path d="M7 16v-5"></path><path d="M12 16V6"></path><path d="M17 16v-8"></path></svg></span>Spending</a>
+  <a href="#" aria-current="page" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;color:#121716;font-size:12px;font-weight:700;"><span style="width:56px;height:32px;border-radius:16px;background:#dee1f9;display:flex;align-items:center;justify-content:center;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"></path></svg></span>Wishlist</a>
+  <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;color:#48514e;font-size:12px;font-weight:500;"><span style="width:56px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="12" r="4.5"></circle><circle cx="12" cy="12" r="1"></circle></svg></span>Goals</a>
+  <a href="#" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;color:#48514e;font-size:12px;font-weight:500;"><span style="width:56px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9"></path><path d="M17 7h3"></path><circle cx="15" cy="7" r="2"></circle><path d="M4 17h3"></path><path d="M11 17h9"></path><circle cx="9" cy="17" r="2"></circle></svg></span>Plan</a>
+</nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#2f45c8"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return { accent: this.props.accent ?? '#2f45c8' }; } }
+</script>
+</body>
+</html>
