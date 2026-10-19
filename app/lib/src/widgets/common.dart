@@ -53,7 +53,8 @@ class Muted extends StatelessWidget {
   Widget build(BuildContext context) => Text(text, style: TextStyle(fontSize: size, color: context.c.muted, height: 1.4));
 }
 
-/// Status pill with icon + label, so state is never colour alone.
+/// Status pill with icon + label, so state is never colour alone. The label wraps (the icon stays on the first
+/// line), so long messages fit narrow screens and large text; inside a Row, wrap it in Flexible.
 class StatusLabel extends StatelessWidget {
   final bool good;
   final String text;
@@ -61,11 +62,19 @@ class StatusLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final col = good ? context.c.good : context.c.bad;
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(good ? Icons.check_circle_outline : Icons.error_outline, size: 16, color: col),
-      const SizedBox(width: 5),
-      Text(text, style: TextStyle(color: col, fontWeight: FontWeight.w600, fontSize: 13)),
-    ]);
+    return Text.rich(
+      TextSpan(children: [
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 5),
+            child: Icon(good ? Icons.check_circle_outline : Icons.error_outline, size: 16, color: col),
+          ),
+        ),
+        TextSpan(text: text),
+      ]),
+      style: TextStyle(color: col, fontWeight: FontWeight.w600, fontSize: 13),
+    );
   }
 }
 
