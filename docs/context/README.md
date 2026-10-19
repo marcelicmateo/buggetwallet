@@ -1,7 +1,8 @@
-# Project context (for Claude Code)
+# Project context (for Claude Code and chat sessions)
 
-Copies of the planning docs from the claude.ai Project "Buget Wallet", so a Claude Code session has the
-same context as the chat sessions. Read these at the start of a session, after `CLAUDE.md`.
+**This folder is the source of truth** for the plan, status, decisions and workflow (owner decision, 2026-10-19).
+Read these at the start of a session, after `CLAUDE.md`. Claude Code and claude.ai chat sessions both read and
+update them here, on the `v2` branch.
 
 | File | What |
 |---|---|
@@ -12,11 +13,13 @@ same context as the chat sessions. Read these at the start of a session, after `
 | `IMPORT_FORMATS.md` | PBZ and Revolut export formats the importer has to handle. |
 
 ## Privacy
-These are **redacted** copies. The repo rule still holds: no salary, rent, loan, balance or other personal
-figures, no personal merchant names, no account or card numbers. Those stay in the claude.ai Project
-(`claude/BASELINE.md`, the payday plan in `claude/STATUS.md`) and in the owner's local wallet database.
-Don't add them here.
+The repo holds no personal figures: no salary, rent, loan, balance or other amounts from the owner's life, no
+personal merchant names, no account or card numbers. Those live only in the claude.ai Project "Buget Wallet"
+(`claude/BASELINE.md` and the payday plan in `claude/STATUS.md`) and in the owner's local wallet database.
+Don't add them here. A session that needs those figures (budget planning, checking real numbers) asks the owner
+or runs in the claude.ai Project.
 
 ## Keeping in sync
-The claude.ai Project is the source of truth. At the end of a session (chat or Claude Code), update
-`STATUS.md` in both places — redacted here, full in the Project.
+- End of every session: update `STATUS.md` here (done, decisions, open questions, next) and push.
+- Nothing needs copying back to the claude.ai Project. Update the Project's `claude/STATUS.md` only when a
+  personal figure changes (salary, payday plan, loan, savings account).

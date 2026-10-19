@@ -1,4 +1,4 @@
-# Budget Wallet — Status (redacted copy, 2026-10-19)
+# Budget Wallet — Status (source of truth since 2026-10-19; no personal figures here)
 
 **Plan (owner, 2026-10-16):** automated tests now → M3 Views → M4 Habits → M5 Polish → web version → cross-device
 sync (works on Android, Linux and web) → **M6 live test** by the owner. Platforms: Linux, Android, web.
@@ -60,7 +60,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - 2026-10-16: Sync via Syncthing shared folder (option D), end-to-end encrypted; importer runs on edge devices.
 - 2026-10-16: All-platform builds only on master / tags / `[release]` commits (macOS minutes bill 10x on private repos); Android + Linux on every push.
 - 2026-10-16: permission_handler dropped (needs compileSdk 37); small Android channel opens the All files access setting.
-- 2026-10-16: Planning docs copied to git as redacted `docs/context/`; the claude.ai Project stays the source of truth.
+- 2026-10-16: Planning docs copied to git as redacted `docs/context/` (superseded 2026-10-19: git is now the source of truth).
 - 2026-10-16: Local builds with rootless Podman, not Docker.
 - 2026-10-16: One fixed Android signing key for every build; builds refuse to publish a debug-signed APK.
 - 2026-10-16: Milestones after M2: M3 Views → M4 Habits (weekly review, recurring bills, nudges) → M5 Polish (backup/export, search, settings).
@@ -68,6 +68,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - 2026-10-16: Owner live test moved to M6 (last). Sync must work across devices incl. web: new transport, designed last.
 - 2026-10-16: As many automated tests as possible; new shared code stays web-friendly.
 - 2026-10-16: Logs at debug level by default during testing; logs never contain amounts, descriptions, merchants, names, keys, paths.
+- 2026-10-19: Git `docs/context/` is the source of truth for plan, status, decisions and workflow. The claude.ai Project keeps only personal figures (bank analysis, payday plan); chat sessions there clone the repo and read this file first.
 - 2026-10-16: Multi-agent sessions: lead + feature-builder + test-writer in parallel, reviewer before push, ci-watcher after. Still one feature at a time.
 
 ## Open questions for owner

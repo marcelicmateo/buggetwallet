@@ -5,9 +5,9 @@
 - **Claude (builder):** designs, builds, tests, documents. Makes small decisions alone; asks only when a choice is hard to undo or really the owner's (money categories, privacy, scope).
 
 ## Source of truth
-- The claude.ai Project "Buget Wallet" holds the planning docs: `claude/WORKFLOW.md`, `claude/BRIEF.md`, `claude/STATUS.md`, `claude/BASELINE.md`, `claude/ARCHITECTURE.md`.
-- This folder (`docs/context/`) holds redacted copies for Claude Code sessions. Personal figures stay in the Project only.
-- Every new session starts by reading STATUS.md, so nothing has to be re-explained.
+- **Git (`docs/context/` on `v2`) holds the plan, status, decisions and workflow.** Claude Code and claude.ai chat sessions both read and update them here.
+- The claude.ai Project "Buget Wallet" holds only personal figures: `claude/BASELINE.md` (bank analysis) and `claude/STATUS.md` (payday plan, salary, loan, savings). They never go into git.
+- Every session starts by reading `docs/context/STATUS.md`, so nothing has to be re-explained. A chat session in the Project clones the repo first.
 
 ## The product
 - v1: private claude.ai web app (artifact) with its own database — `artifact/` (v2 branch) or `app/index.html` (master).
@@ -20,7 +20,7 @@
 
 ## Session loop
 1. **Owner:** one line — what's next, or feedback on the last version.
-2. **Claude:** builds it, checks it (tests / CI green), commits + pushes, publishes (v1: artifact link; v2: GitHub releases via CI).
+2. **Claude:** builds it, checks it (tests / CI green), commits + pushes, publishes (v1: artifact link; v2: GitHub releases via CI), updates `docs/context/STATUS.md`.
 3. **Claude:** short summary — what changed, what to test, what's suggested next.
 4. **Owner:** tries it, replies with feedback. Repeat.
 

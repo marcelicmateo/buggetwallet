@@ -5,7 +5,7 @@ This repo holds **code only**. Never commit bank exports, statements, real trans
 salary/rent/loan figures, merchant lists derived from the owner's spending, keys or seed data.
 - Real numbers live only in the user's local wallet database (and v1's artifact database).
 - Personal merchant rules live in the `merchantPatterns` setting; built-in rules cover only well-known chains and brands.
-- Test fixtures are synthetic: `tools/make_fixtures.py` generates them. Planning docs live in the claude.ai Project; redacted copies are in `docs/context/` (read `docs/context/STATUS.md` first). Keep personal figures out of them.
+- Test fixtures are synthetic: `tools/make_fixtures.py` generates them. Plan, status, decisions and workflow live in `docs/context/` (source of truth; read `docs/context/STATUS.md` first). Personal figures live only in the claude.ai Project; keep them out of git.
 
 ## Layout
 - `app/` — Flutter app (Android, iOS, Windows, macOS, Linux).
@@ -107,4 +107,5 @@ lead runs the complete verification once per **stage** (several features/test se
 
 ## Workflow
 Owner sends one request or piece of feedback (often by voice: keep replies short). Claude builds,
-gets CI green, commits code, and updates STATUS.md in the claude.ai Project and `docs/context/STATUS.md` (redacted).
+gets CI green, commits code, and updates `docs/context/STATUS.md`. No copy back to the claude.ai Project is needed;
+it holds only personal figures (payday plan, bank analysis) and is updated only when one of those changes.
