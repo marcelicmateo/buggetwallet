@@ -62,7 +62,21 @@ void main() {
       ]);
     });
 
-    test('unterminated quote: the rest of the file becomes one field, nothing throws', () {
+    test('a quote inside an unquoted field is literal; spaces before an opening quote are allowed', () {
+      expect(readCsv('a,Pizza 5" wide,b\nc,d\n'), [
+        ['a', 'Pizza 5" wide', 'b'],
+        ['c', 'd'],
+      ]);
+      expect(readCsv('x"y"z,"q"\n'), [
+        ['x"y"z', 'q'],
+      ]);
+      expect(readCsv(' "a,b" ,c\n'), [
+        [' a,b ', 'c'],
+      ]);
+    });
+
+    test('unterminated quote: the rest of the file becomes one field, nothing throws (strict: FormatException)', () {
+      expect(() => readCsv('a,b\nc,"d\ne,f\n', strict: true), throwsFormatException);
       final rows = readCsv('a,b\nc,"d\ne,f\ng,h\n');
       expect(rows.first, ['a', 'b']);
       expect(rows.length, 2);
@@ -262,13 +276,31 @@ void main() {
         expect(b.transactions, isEmpty, reason: bad);
         expect(b.invalid, 1, reason: 'amount "$bad" vanished without being counted');
       }
-    }, skip: 'BUG: an unparseable amount ("abc", "(12.30)", unicode minus) drops the row without counting it in `invalid`');
+    });
+
+    test('an empty Amount is not a transaction: ignored without being counted (owner decision)', () {
+      for (final empty in ['', '   ']) {
+        final b = _rev([_r('2026-02-01 10:00:00', 'a', empty), _r('2026-02-02 10:00:00', 'b', '-2.00')]);
+        expect(_amounts(b), [-200], reason: '"$empty"');
+        expect(b.invalid, 0, reason: '"$empty"');
+      }
+      // Also when the date cannot be read: an empty Amount decides first.
+      final b = _rev([_r('01/02/2026', 'a', '')]);
+      expect((b.transactions.length, b.invalid), (0, 0));
+    });
+
+    test('PBZ: a dated row with an unreadable amount is counted, an empty amount is ignored', () {
+      final b = _imp('TRANSAKCIJSKI RAČUN;HR00\nDATUM;VRSTA;OPIS;IZNOS;VALUTA\n'
+          '15.01.2026;POS;Shop;abc;EUR\n15.01.2026;POS;Shop;;EUR\n15.01.2026;POS;Shop;-1,00;EUR\n');
+      expect(_amounts(b), [-100]);
+      expect(b.invalid, 1);
+    });
 
     test('a garbage Fee is not silently treated as 0', () {
       final b = one('-10.00', fee: 'abc');
       // Either the row is left out and counted, or the import fails; importing -10.00 hides a fee.
       expect(b.transactions.isEmpty && b.invalid == 1, isTrue, reason: 'amounts: ${_amounts(b)}');
-    }, skip: 'BUG: a non-numeric Fee is treated as 0, so the row imports with the wrong amount');
+    });
   });
 
   group('Revolut CSV: dates', () {
@@ -328,7 +360,7 @@ void main() {
         expect(b.transactions, isEmpty, reason: bad);
         expect(b.invalid, 1, reason: 'date "$bad" vanished without being counted');
       }
-    }, skip: 'BUG: a non-empty date in an unknown format drops the row without counting it in `invalid`');
+    });
   });
 
   group('Revolut CSV: quoting and text', () {
@@ -339,18 +371,24 @@ void main() {
       expect(b.transactions.single.amountMinor, -999);
     });
 
-    test('an unterminated quote must not silently swallow the rows after it', () {
+    test('a stray quote inside an unquoted field is a literal character and does not swallow the rows after it', () {
       final text = '$_hdr\n${_r('2026-02-01 10:00:00', 'ok', '-1.00')}\n'
           'Card Payment,Current,2026-02-02 10:00:00,2026-02-02 10:00:00,Pizza 5" wide,-2.00,0.00,EUR,COMPLETED,0\n'
           '${_r('2026-02-03 10:00:00', 'after1', '-3.00')}\n${_r('2026-02-04 10:00:00', 'after2', '-4.00')}\n';
-      // Acceptable: refuse the file, or count what was lost. Not acceptable: a clean batch with three rows missing.
-      try {
-        final b = _imp(text);
-        expect(b.invalid, greaterThan(0), reason: 'imported ${_amounts(b)} and said nothing about the lost rows');
-      } on ImportException {
-        // refused: fine
-      }
-    }, skip: 'BUG: an unmatched " inside an unquoted description swallows all following rows without a trace in `invalid`');
+      // Read leniently like v1 (SheetJS): the quote stays in the description and every row imports.
+      final b = _imp(text);
+      expect(_amounts(b), [-100, -200, -300, -400]);
+      expect(b.transactions[1].description, 'Pizza 5" wide');
+      expect(b.transactions[1].id, transactionId('2026-02-02', -200, 'Pizza 5" wide', 0));
+      expect(b.invalid, 0);
+    });
+
+    test('a quoted field that never closes refuses the file instead of losing the rows after it', () {
+      final text = '$_hdr\n${_r('2026-02-01 10:00:00', 'ok', '-1.00')}\n'
+          'Card Payment,Current,2026-02-02 10:00:00,2026-02-02 10:00:00,"Pizza wide,-2.00,0.00,EUR,COMPLETED,0\n'
+          'Card Payment,Current,2026-02-03 10:00:00,2026-02-03 10:00:00,after1,-3.00,0.00,EUR,COMPLETED,0\n';
+      expect(() => _imp(text), throwsA(isA<ImportException>()));
+    });
 
     test('descriptions are trimmed at the ends only and keep inner spacing and case', () {
       final b = _rev([_r('2026-02-01 10:00:00', '"  Lidl   d.o.o.  "', '-1.00')]);
