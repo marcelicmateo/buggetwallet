@@ -12,6 +12,10 @@
 #                           app log -> dist/logs/app-linux-<name>.log; each file starts with an empty wallet folder
 #   tools/build.sh desktop-smoke   build the Linux release bundle, start it under Xvfb with empty HOME/XDG folders for
 #                           BW_SMOKE_SECONDS (10) s: it must stay up, log app.start with no SEVERE line, and exit on SIGTERM
+#   tools/build.sh perf     profile-mode frame performance on the Linux desktop app (big synthetic wallet, Spending scroll and
+#                           tab switches; flutter drive --profile under Xvfb). Writes <action>.timeline.json (open in DevTools or
+#                           Perfetto) and .timeline_summary.json to dist/logs, appends history/perf.jsonl, fails on a budget
+#                           overrun (app/test_driver/perf_budget.dart). Not part of test or all.
 #   tools/build.sh importer|core|app   analyze and test one package (what CI runs, one step each)
 #   tools/build.sh shell    interactive shell in the container
 #   tools/build.sh image    (re)build the container image (first build ~15 min)
@@ -37,7 +41,7 @@ CMD=${1:-test}
 # shellcheck source=tools/timing.sh
 source "$ROOT/tools/timing.sh"
 
-usage() { sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---- host side: hand the command to the container ----
 if [[ "${BW_NATIVE:-}" != 1 ]]; then
@@ -52,7 +56,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   case "$CMD" in
     image) build_image; exit ;;
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
-    test|lint|apk|linux|all|importer|core|app|desktop-test|desktop-smoke) run_begin "$CMD" ;;
+    test|lint|apk|linux|all|importer|core|app|desktop-test|desktop-smoke|perf) run_begin "$CMD" ;;
     format|shell|lsp|mcp) ;;
     *) usage ;;
   esac
@@ -288,6 +292,21 @@ desktop_test() {
   rm -rf "$dir"
   return "$rc"
 }
+# perf_run: app/integration_test/perf_test.dart in profile mode (`flutter drive`, the host side is
+# app/test_driver/perf_driver.dart), then the numbers into perf-summary.txt and history/perf.jsonl. The driver exits
+# non-zero on a budget overrun.
+# shellcheck disable=SC2329
+perf_run() {
+  local dir rc=0
+  dir=$(mktemp -d)
+  rm -f "$LOGS"/perf-records.jsonl "$LOGS"/perf-summary.txt "$LOGS"/*.timeline.json "$LOGS"/*.timeline_summary.json
+  (cd app && BW_PERF_OUT=$LOGS headless "$dir" \
+    flutter drive --profile -d linux --no-pub --driver=test_driver/perf_driver.dart --target=integration_test/perf_test.dart) || rc=$?
+  app_logs "$dir" > "$LOGS/app-linux-perf.log"
+  python3 -I tools/build_log.py perf "$LOGS/perf-records.jsonl" > /dev/null  # table: perf-summary.txt, shown by summary
+  rm -rf "$dir"
+  return "$rc"
+}
 # smoke_run <binary> <seconds>: start it, it must still run after <seconds>, then SIGTERM must end it within 10 s
 # (exit 0 or 143 = terminated; a crash shows as 134 abort, 139 segfault, ...).
 # shellcheck disable=SC2329
@@ -330,7 +349,7 @@ desktop_smoke() {
   grep -c '^[^ ]* WARNING ' "$log" | xargs printf 'WARNING lines: %s\n'
   return "$rc"
 }
-export -f headless app_logs desktop_test smoke_run desktop_smoke
+export -f headless app_logs desktop_test perf_run smoke_run desktop_smoke
 # The integration test files to run: the names given, or every app/integration_test/*_test.dart
 desktop_tests() {
   local names=("$@") f
@@ -360,6 +379,7 @@ summary() {
     f="$LOGS/tests-${t%% *}-summary.txt"
     if [[ -f $f ]]; then head -1 "$f"; fi
   done
+  [[ -f $LOGS/perf-summary.txt ]] && cat "$LOGS/perf-summary.txt"
   echo "${results[*]}"
 }
 
@@ -375,6 +395,7 @@ case "$CMD" in
   apk)    build_apk ;;
   linux)  build_linux ;;
   desktop-test)  run_pub; [[ $failed == 0 ]] && desktop_tests "${@:2}" ;;
+  perf)   run_pub; [[ $failed == 0 ]] && step perf perf_run ;;
   desktop-smoke) build_linux; [[ $failed == 0 ]] && step desktop-smoke desktop_smoke ;;
   all)    run_pub; [[ $failed == 0 ]] && steps "${LINT[@]}" "${TESTS[@]}"
           if [[ $failed == 0 ]]; then build_apk; build_linux; desktop_tests; step desktop-smoke desktop_smoke; fi ;;

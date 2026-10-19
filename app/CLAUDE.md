@@ -25,4 +25,9 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   notes, goal/wish names, the key, paths or file names. `integration_test/screens_test.dart` checks the emulator log.
 
 ## Tests
+- `integration_test/perf_test.dart` + `test_driver/perf_driver.dart` (host side) + `test_driver/perf_budget.dart` (pure budgets,
+  unit-tested in `test/`): profile-mode frame performance, `tools/build.sh perf`. Actions are `binding.traceAction`
+  reports keyed `perf_<action>`; add an action there and the driver picks it up. Budgets (`PerfBudget`, per-action map
+  `budgets` in the driver) are set from baseline runs in `history/perf.jsonl`. It needs `flutter drive --profile`, so
+  outside it the test skips itself (`desktop-test` and `emulator.sh` run every file).
 - `test/` — formatting and widget tests. Run: `tools/build.sh test` (format check, `flutter analyze`, `flutter test`).
