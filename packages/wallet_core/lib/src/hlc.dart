@@ -12,8 +12,10 @@ class Hlc implements Comparable<Hlc> {
   final String node;
   const Hlc(this.millis, this.counter, this.node);
 
+  /// Reads `<millis>:<counter>:<node>`; anything else (no colons, non-numeric parts) is a [FormatException].
   static Hlc parse(String s) {
     final p = s.split(':');
+    if (p.length < 3) throw const FormatException('An HLC has three parts');
     return Hlc(int.parse(p[0]), int.parse(p[1]), p.sublist(2).join(':'));
   }
 
