@@ -7,6 +7,9 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
 - `lib/main.dart` — app shell, bottom navigation (Today, Spending, Wishlist, Goals, Plan).
 - `lib/src/controller.dart` — `WalletController` (ChangeNotifier): owns the `WalletRepo`, the cached lists,
   sync timers. Screens call controller methods; the controller calls the repo and `notifyListeners()`.
+- Derived values (`period()`, `payPeriods()`, `spending(month)`) are cached in the controller per `dataVersion` (bumped by
+  `reload()`) and day: never compute from `txs` in `build()`. `HomeShell` builds the five pages once per wallet change, so a
+  tab switch only moves the `IndexedStack` (keep it that way: 20,000 rows made every switch miss frames).
 - `lib/src/screens/*.dart` — one file per tab. `lib/src/widgets/` — `charts.dart` (fl_chart), `common.dart`,
   `sheets.dart` (bottom sheets: add expense, transaction details, goal).
 - `lib/src/format.dart` — money/date formatting and parsing (unit-tested in `test/widget_test.dart`).

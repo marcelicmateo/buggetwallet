@@ -80,10 +80,25 @@ class _HomeShellState extends State<HomeShell> {
   int tab = 0;
   late final AppLifecycleListener _life;
 
+  /// The five tab pages, built once per wallet change (not on every tab switch): switching tabs only moves the
+  /// IndexedStack, so the pages are not rebuilt and their derived data is not worked out again.
+  late List<Widget> _pages;
+
+  List<Widget> _buildPages() => [for (var i = 0; i < _tabs.length; i++) _page(i)];
+
+  Widget _page(int i) => switch (i) {
+        0 => TodayScreen(wc: widget.wc, openPlan: () => _go(4, 'today')),
+        1 => SpendingScreen(wc: widget.wc),
+        2 => WishlistScreen(wc: widget.wc),
+        3 => GoalsScreen(wc: widget.wc),
+        _ => PlanScreen(wc: widget.wc),
+      };
+
   @override
   void initState() {
     super.initState();
     AppLog.setScreen(_tabs[tab]);
+    _pages = _buildPages();
     _life = AppLifecycleListener(onResume: () => widget.wc.syncNow(quiet: true, trigger: 'resume'));
   }
 
@@ -91,7 +106,17 @@ class _HomeShellState extends State<HomeShell> {
     if (i == tab) return;
     logNav('nav.tab', {'from': _tabs[tab], 'to': _tabs[i], 'via': via});
     AppLog.setScreen(_tabs[i]);
+    // Today and Wishlist show the time of day (delivery hour, hours left): they get a fresh build when opened.
+    // The data they use is cached in the controller, so this is cheap.
+    if (i == 0 || i == 2) _pages[i] = _page(i);
     setState(() => tab = i);
+  }
+
+  // The parent rebuilds this widget when the wallet changes: new pages then, so they show the new data.
+  @override
+  void didUpdateWidget(HomeShell old) {
+    super.didUpdateWidget(old);
+    _pages = _buildPages();
   }
 
   @override
@@ -104,13 +129,6 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final wc = widget.wc;
     final p = wc.period();
-    final pages = [
-      TodayScreen(wc: wc, openPlan: () => _go(4, 'today')),
-      SpendingScreen(wc: wc),
-      WishlistScreen(wc: wc),
-      GoalsScreen(wc: wc),
-      PlanScreen(wc: wc),
-    ];
     return Scaffold(
       appBar: AppBar(
         backgroundColor: context.c.bg,
@@ -142,7 +160,7 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ],
       ),
-      body: SafeArea(child: IndexedStack(index: tab, children: pages)),
+      body: SafeArea(child: IndexedStack(index: tab, children: _pages)),
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
         onDestinationSelected: (i) => _go(i, 'bar'),

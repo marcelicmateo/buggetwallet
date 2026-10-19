@@ -63,8 +63,10 @@ Future<Map<String, Object?>> frames(WidgetTester t, Future<void> Function() acti
   return stats.summary();
 }
 
-int maxOf(Map<String, Map<String, List<int>>> p, String phase, String name) {
+/// The slowest [name] timing in [phase]. [cached]: the controller caches it, so a phase without data changes may log none (0).
+int maxOf(Map<String, Map<String, List<int>>> p, String phase, String name, {bool cached = false}) {
   final xs = p[phase]?[name];
+  if (cached && xs == null) return 0;
   expect(xs, isNotNull, reason: 'no $name in phase $phase');
   return xs!.reduce((a, b) => a > b ? a : b);
 }
@@ -163,9 +165,9 @@ void main() {
       'weekly_wc_reload_ms': maxOf(p, 'weekly-import', 'wc.reload'),
       'year_import_files_ms': maxOf(p, 'year-import', 'import.files'),
       'reimport_import_files_ms': maxOf(p, 're-import', 'import.files'),
-      'tabs_wc_period_max_ms': maxOf(p, 'tabs', 'wc.period'),
-      'tabs_wc_payPeriods_max_ms': maxOf(p, 'tabs', 'wc.payPeriods'),
-      'tabs_spending_derive_max_ms': maxOf(p, 'tabs', 'spending.derive'),
+      'tabs_wc_period_max_ms': maxOf(p, 'tabs', 'wc.period', cached: true),
+      'tabs_wc_payPeriods_max_ms': maxOf(p, 'tabs', 'wc.payPeriods', cached: true),
+      'tabs_spending_derive_max_ms': maxOf(p, 'tabs', 'spending.derive', cached: true),
       'months_spending_derive_max_ms': maxOf(p, 'spending-months', 'spending.derive'),
       'frames_tabs': framesTabs,
       'frames_spending_scroll': framesScroll,

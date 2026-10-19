@@ -22,6 +22,38 @@ class ImportLine {
   const ImportLine(this.file, this.message, this.ok);
 }
 
+/// Everything the Spending tab shows for one month, worked out in [WalletController.spending].
+class SpendingView {
+  final String month;
+
+  /// The last 13 months, oldest first; the last one is this month.
+  final List<String> months;
+  final MonthSummary summary;
+
+  /// Average per category over the (up to 6) months before [month].
+  final Map<String, int> average;
+  final List<PeriodSummary> periods;
+  final List<int?> trend;
+  final SavingsOverview overview;
+
+  /// The 8 biggest card-spending places this month: (name, payments, total).
+  final List<(String, int, int)> topPlaces;
+
+  /// Every transaction of the month except transfers between own accounts.
+  final List<CategorizedTx> transactions;
+  const SpendingView({
+    required this.month,
+    required this.months,
+    required this.summary,
+    required this.average,
+    required this.periods,
+    required this.trend,
+    required this.overview,
+    required this.topPlaces,
+    required this.transactions,
+  });
+}
+
 /// App state. Reads everything from the local database and writes through [WalletRepo].
 class WalletController extends ChangeNotifier {
   final WalletRepo repo;
@@ -32,6 +64,10 @@ class WalletController extends ChangeNotifier {
   List<CategorizedTx> txs = const [];
   List<Goal> goals = const [];
   List<WishItem> wish = const [];
+
+  /// Counts [reload]s: the derived values below are cached per version (and per day) and recomputed only after the data changed.
+  int dataVersion = 0;
+  final Map<String, Object?> _memo = {};
 
   String? syncFolder;
   DateTime? lastSync;
@@ -95,25 +131,83 @@ class WalletController extends ChangeNotifier {
     final (g, w) = timed('wc.goalsWish', () => (repo.goals(), repo.wishlist()));
     goals = g;
     wish = w;
+    dataVersion++;
+    _memo.clear();
     t.done({'tx': txs.length, 'goals': goals.length, 'wish': wish.length});
     notifyListeners();
   }
 
-  /// The period start: saved value, or the latest payday (its first salary payment), or today.
-  WalletSettings get effectiveSettings {
-    if (settings.periodStart != null) return settings;
-    final m = settings.toMap()..['periodStart'] = salaryPaydays(txs, today()).lastOrNull ?? today();
-    return WalletSettings.fromMap(m);
+  /// Derived values are computed once per [dataVersion] and day, however often a screen asks (every build, every tab).
+  T _cached<T>(String key, T Function() compute) {
+    final k = '$key|${today()}';
+    if (_memo.containsKey(k)) return _memo[k] as T;
+    final v = compute();
+    _memo[k] = v;
+    return v;
   }
 
-  /// A payday more than 20 days after the current period start, not yet started as a new month.
-  String? newPayday(String periodStart) => salaryPaydays(txs, today()).where((d) => d.compareTo(addDays(periodStart, 20)) > 0).lastOrNull;
+  List<String> get _paydays => _cached('paydays', () => salaryPaydays(txs, today()));
 
-  PeriodBudget period() => timed('wc.period', () => computePeriod(txs, effectiveSettings, goals, today()), warnMs: 50);
+  /// The period start: saved value, or the latest payday (its first salary payment), or today.
+  WalletSettings get effectiveSettings => _cached('effective', () {
+        if (settings.periodStart != null) return settings;
+        final m = settings.toMap()..['periodStart'] = _paydays.lastOrNull ?? today();
+        return WalletSettings.fromMap(m);
+      });
+
+  /// A payday more than 20 days after the current period start, not yet started as a new month.
+  String? newPayday(String periodStart) => _paydays.where((d) => d.compareTo(addDays(periodStart, 20)) > 0).lastOrNull;
+
+  PeriodBudget period() =>
+      _cached('period', () => timed('wc.period', () => computePeriod(txs, effectiveSettings, goals, today()), warnMs: 50));
 
   /// Saved or lost per pay period (salary to salary), oldest first; the last one is still running.
-  List<PeriodSummary> payPeriods({int count = 12}) =>
-      timed('wc.payPeriods', () => periodSummaries(txs, settings, today(), count: count), fields: {'count': count}, warnMs: 50);
+  List<PeriodSummary> payPeriods({int count = 12}) => _cached('payPeriods$count',
+      () => timed('wc.payPeriods', () => periodSummaries(txs, settings, today(), count: count), fields: {'count': count}, warnMs: 50));
+
+  /// What the Spending tab shows for month [sel] (`YYYY-MM`, default: this month). Cached per month until the data changes.
+  SpendingView spending([String? sel]) {
+    final current = monthOf(today());
+    final months = monthsEnding(current, 13);
+    final month = sel != null && months.contains(sel) ? sel : current;
+    return _cached(
+        'spending$month',
+        () => timed('spending.derive', () {
+              final sums = [for (final m in months) _cached('monthSummary$m', () => monthSummary(txs, m))];
+              final selSum = sums.firstWhere((s) => s.month == month);
+              final prev = sums.where((s) => s.month.compareTo(month) < 0).toList();
+              final prev6 = prev.length > 6 ? prev.sublist(prev.length - 6) : prev;
+              final avg = <String, int>{};
+              for (final p in prev6) {
+                p.byCategory.forEach((k, v) => avg[k] = (avg[k] ?? 0) + (v / (prev6.isEmpty ? 1 : prev6.length)).round());
+              }
+              final periods = payPeriods(count: 12);
+
+              final merch = <String, (int, int)>{};
+              final monthTxs = <CategorizedTx>[];
+              for (final t in txs) {
+                if (monthOf(t.date) != month) continue;
+                if (t.kind != Kind.transfer) monthTxs.add(t);
+                if (t.kind == Kind.flex && t.amount < 0) {
+                  final k = merchantName(t.tx);
+                  final (n, v) = merch[k] ?? (0, 0);
+                  merch[k] = (n + 1, v - t.amount);
+                }
+              }
+              final top = merch.entries.toList()..sort((a, b) => b.value.$2.compareTo(a.value.$2));
+              return SpendingView(
+                month: month,
+                months: months,
+                summary: selSum,
+                average: avg,
+                periods: periods,
+                trend: trendNet(periods),
+                overview: savingsOverview(periods),
+                topPlaces: [for (final e in top.take(8)) (e.key, e.value.$1, e.value.$2)],
+                transactions: monthTxs,
+              );
+            }, fields: {'month': month, 'tx': txs.length}, warnMs: 100));
+  }
 
   void _changed() {
     reload();

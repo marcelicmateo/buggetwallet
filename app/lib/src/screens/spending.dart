@@ -22,32 +22,10 @@ class _SpendingScreenState extends State<SpendingScreen> {
   Widget build(BuildContext context) {
     final wc = widget.wc;
     final cur = wc.currency;
-    final current = monthOf(wc.today());
-    final months = monthsEnding(current, 13);
-    final sel = selected != null && months.contains(selected) ? selected! : current;
-    final (selSum, avg, periods, trend, done, top, monthTxs) = timed('spending.derive', () {
-      final sums = [for (final m in months) monthSummary(wc.txs, m)];
-      final selSum = sums.firstWhere((s) => s.month == sel);
-      final prev = sums.where((s) => s.month.compareTo(sel) < 0).toList();
-      final prev6 = prev.length > 6 ? prev.sublist(prev.length - 6) : prev;
-      final avg = <String, int>{};
-      for (final p in prev6) {
-        p.byCategory.forEach((k, v) => avg[k] = (avg[k] ?? 0) + (v / (prev6.isEmpty ? 1 : prev6.length)).round());
-      }
-      final periods = wc.payPeriods(count: 12);
-      final trend = trendNet(periods);
-      final done = savingsOverview(periods);
-
-      final merch = <String, (int, int)>{};
-      for (final t in wc.txs.where((t) => monthOf(t.date) == sel && t.kind == Kind.flex && t.amount < 0)) {
-        final k = merchantName(t.tx);
-        final (n, v) = merch[k] ?? (0, 0);
-        merch[k] = (n + 1, v - t.amount);
-      }
-      final top = merch.entries.toList()..sort((a, b) => b.value.$2.compareTo(a.value.$2));
-      final monthTxs = wc.txs.where((t) => monthOf(t.date) == sel && t.kind != Kind.transfer).toList();
-      return (selSum, avg, periods, trend, done, top, monthTxs);
-    }, fields: {'month': sel, 'tx': wc.txs.length}, warnMs: 100);
+    final v = wc.spending(selected);
+    final current = v.months.last, sel = v.month;
+    final (selSum, avg, periods, trend, done, top, monthTxs) =
+        (v.summary, v.average, v.periods, v.trend, v.overview, v.topPlaces, v.transactions);
 
     return ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -71,7 +49,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(children: [
-                for (final m in months.sublist(months.length - 7))
+                for (final m in v.months.sublist(v.months.length - 7))
                   Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: ChoiceChip(
@@ -92,8 +70,8 @@ class _SpendingScreenState extends State<SpendingScreen> {
               const EmptyNote('No card spending this month yet.')
             else
               Rows(children: [
-                for (final e in top.take(8))
-                  LineItem(e.key, money(e.value.$2, cur, decimals: 0), sub: '${e.value.$1} ${e.value.$1 == 1 ? 'payment' : 'payments'}')
+                for (final (name, n, total) in top)
+                  LineItem(name, money(total, cur, decimals: 0), sub: '$n ${n == 1 ? 'payment' : 'payments'}')
               ]),
           ]),
           Panel(children: [
