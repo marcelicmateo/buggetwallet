@@ -126,7 +126,9 @@ class Categorizer {
         if (type == 'POS plaćanje') return merchantCategory(d) ?? 'Shopping';
         return 'Bills & one-offs';
       default:
-        return t.category ?? 'Shopping';
+        // Hand-added and unknown-source rows: their stored category if it is a known one, else Shopping.
+        final c = t.category;
+        return c != null && categories.containsKey(c) ? c : 'Shopping';
     }
   }
 

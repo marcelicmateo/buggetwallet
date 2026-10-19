@@ -16,9 +16,6 @@ Tx _tx(String source, String type, String desc, int amount, {String? category, S
     note: note,
     manual: manual);
 
-const String _unknownCategoryBug =
-    'BUG: a manual or unknown-source row with an unknown stored category comes out with that unknown name (autoCategory returns t.category)';
-
 void main() {
   final cz = Categorizer();
 
@@ -195,7 +192,7 @@ void main() {
         final c = cz.categoryOf(_tx('manual', '', '', -500, category: bad, manual: true));
         expect(categories.containsKey(c), isTrue, reason: 'category "$bad" came out as "$c"');
       }
-    }, skip: _unknownCategoryBug);
+    });
 
     test('hand-added entries without a category are Shopping; an unknown source falls back the same way', () {
       expect(cz.categoryOf(_tx('manual', '', '', -500, manual: true)), 'Shopping');
