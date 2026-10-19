@@ -4,6 +4,6 @@
 clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
 libsqlite3-dev sqlite3 libsecret-1-dev
 # Headless run (tools/build.sh desktop-test / desktop-smoke): X server, software OpenGL (Mesa llvmpipe), session bus
-xvfb xauth dbus libgl1-mesa-dri libegl1 libegl-mesa0 libglx-mesa0 libgles2
+xvfb xauth dbus xdg-user-dirs libgl1-mesa-dri libegl1 libegl-mesa0 libglx-mesa0 libgles2
 # Fonts: GTK and Flutter's text fall back to fontconfig's default sans
 fontconfig fonts-dejavu-core
