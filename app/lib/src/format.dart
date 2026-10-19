@@ -49,6 +49,16 @@ String money(int cents, String currency, {int? decimals, bool signed = false}) {
   return '$sign${currencySymbol(currency)}$body';
 }
 
+/// Wishlist countdown: whole hours rounded up (so "0h" never shows while time is left), then days.
+/// 71.9 -> "3d left", 47.2 -> "2d left", 46.5 -> "1d 23h left", 5.1 -> "6h left". Hours are always 1-23.
+String timeLeft(double hours) {
+  if (hours <= 0) return 'Ready';
+  final total = (hours - 1e-9).ceil().clamp(1, 1 << 30);
+  final d = total ~/ 24, h = total % 24;
+  if (d == 0) return '${h}h left';
+  return h == 0 ? '${d}d left' : '${d}d ${h}h left';
+}
+
 /// Parses "12", "12.5", "12,50", "1.234,56" into cents. Null if not a number.
 int? parseMoney(String input) {
   var s = input.trim().replaceAll(RegExp(r'[\s€$£]'), '');

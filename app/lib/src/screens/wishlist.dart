@@ -75,7 +75,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
             else
               Rows(children: [
                 for (final w in waiting)
-                  _WishRow(w: w, currency: cur, sub: _left(w.hoursLeft(s.coolHours, now)), actions: [
+                  _WishRow(w: w, currency: cur, sub: timeLeft(w.hoursLeft(s.coolHours, now)), actions: [
                     TextButton(onPressed: () => _skip(w), child: const Text("Don't need it")),
                   ]),
               ]),
@@ -97,8 +97,6 @@ class _WishlistScreenState extends State<WishlistScreen> {
           ]),
         ]));
   }
-
-  String _left(double h) => h >= 24 ? '${h ~/ 24}d ${(h % 24).round()}h left' : '${h.ceil()}h left';
 
   Widget _verdict(BuildContext context, int price) {
     final wc = widget.wc;
