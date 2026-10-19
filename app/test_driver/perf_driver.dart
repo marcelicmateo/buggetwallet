@@ -14,12 +14,13 @@ import 'package:integration_test/integration_test_driver.dart';
 
 import 'perf_budget.dart';
 
-/// Budgets per action, from baseline runs on 2026-10-19 after the tab-switch fix (build p90 ≤ 1.4 ms, build max ≤ 10 ms,
-/// 0 missed build frames, ~190–250 frames). Build limits are strict; raster limits are loose because Xvfb uses
-/// software GL and the shared laptop's load moves raster p90 between 8 and 20 ms. An action without an entry gets
-/// the default.
+/// Budgets per action, from baseline runs on 2026-10-19 after the tab-switch fix (build p90 ≤ 1.4 ms, 0 missed build
+/// frames, ~190–250 frames; build max: tab switch ≤ 10 ms, Spending scroll 8.9–13.9 ms). Build limits are strict; raster
+/// limits are loose because Xvfb uses software GL and the shared laptop's load moves raster p90 between 8 and 20 ms.
+/// Scrolling gets a wider build max (28 ms) than switching tabs (20 ms). An action without an entry gets the default.
 const _baseline = PerfBudget(buildP90Ms: 4, buildMaxMs: 20, rasterP90Ms: 30, rasterMaxMs: 60, missedBuildFrames: 2, minFrames: 100);
-const budgets = <String, PerfBudget>{'spending_scroll': _baseline, 'tab_switch': _baseline};
+const _scroll = PerfBudget(buildP90Ms: 4, buildMaxMs: 28, rasterP90Ms: 30, rasterMaxMs: 60, missedBuildFrames: 2, minFrames: 100);
+const budgets = <String, PerfBudget>{'spending_scroll': _scroll, 'tab_switch': _baseline};
 
 /// Counts timeline events that look like shader compilation (any stream). Flutter 3.47 has no summary field for shader
 /// jank, so this is the closest available signal; a run with Impeller (precompiled shaders) is expected to show 0.

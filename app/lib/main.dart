@@ -80,9 +80,18 @@ class _HomeShellState extends State<HomeShell> {
   int tab = 0;
   late final AppLifecycleListener _life;
 
-  /// The five tab pages, built once per wallet change (not on every tab switch): switching tabs only moves the
+  /// The five tab pages, built once per data version and day (not on every tab switch): switching tabs only moves the
   /// IndexedStack, so the pages are not rebuilt and their derived data is not worked out again.
   late List<Widget> _pages;
+  String? _pagesKey;
+
+  /// Builds the pages again when the data or the day changed since they were built (a new day moves the period and months).
+  void _refreshPages() {
+    final key = '${widget.wc.dataVersion}|${widget.wc.today()}';
+    if (key == _pagesKey) return;
+    _pagesKey = key;
+    _pages = _buildPages();
+  }
 
   List<Widget> _buildPages() => [for (var i = 0; i < _tabs.length; i++) _page(i)];
 
@@ -98,8 +107,11 @@ class _HomeShellState extends State<HomeShell> {
   void initState() {
     super.initState();
     AppLog.setScreen(_tabs[tab]);
-    _pages = _buildPages();
-    _life = AppLifecycleListener(onResume: () => widget.wc.syncNow(quiet: true, trigger: 'resume'));
+    _refreshPages();
+    _life = AppLifecycleListener(onResume: () {
+      widget.wc.checkDay(); // a new day also shows without a sync folder
+      widget.wc.syncNow(quiet: true, trigger: 'resume');
+    });
   }
 
   void _go(int i, String via) {
@@ -112,11 +124,11 @@ class _HomeShellState extends State<HomeShell> {
     setState(() => tab = i);
   }
 
-  // The parent rebuilds this widget when the wallet changes: new pages then, so they show the new data.
+  // The parent rebuilds this widget when the wallet changes; build() then makes new pages if the data or the day moved on.
   @override
   void didUpdateWidget(HomeShell old) {
     super.didUpdateWidget(old);
-    _pages = _buildPages();
+    if (old.wc != widget.wc) _pagesKey = null;
   }
 
   @override
@@ -128,6 +140,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final wc = widget.wc;
+    _refreshPages();
     final p = wc.period();
     return Scaffold(
       appBar: AppBar(

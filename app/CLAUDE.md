@@ -8,8 +8,12 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
 - `lib/src/controller.dart` — `WalletController` (ChangeNotifier): owns the `WalletRepo`, the cached lists,
   sync timers. Screens call controller methods; the controller calls the repo and `notifyListeners()`.
 - Derived values (`period()`, `payPeriods()`, `spending(month)`) are cached in the controller per `dataVersion` (bumped by
-  `reload()`) and day: never compute from `txs` in `build()`. `HomeShell` builds the five pages once per wallet change, so a
-  tab switch only moves the `IndexedStack` (keep it that way: 20,000 rows made every switch miss frames).
+  `reload()`) and day: never compute from `txs` in `build()`. `HomeShell` builds the five pages once per data version and day
+  (`'${dataVersion}|${today()}'`), so a tab switch only moves the `IndexedStack` (keep it that way: 20,000 rows made every
+  switch miss frames). The controller takes a clock (`forTest(clock:)`); `checkDay()` (resume, 2-minute timer) notifies when
+  the day changed, so a wallet without a sync folder also moves on at midnight.
+- `lib/src/file_chooser.dart` — `FileChooser`: the system file/folder/save dialogs behind one injectable class. They can throw
+  (Linux without xdg-desktop-portal), so every call site catches, logs the type and shows `chooserFailedMessage`.
 - `lib/src/screens/*.dart` — one file per tab. `lib/src/widgets/` — `charts.dart` (fl_chart), `common.dart`,
   `sheets.dart` (bottom sheets: add expense, transaction details, goal).
 - `lib/src/format.dart` — money/date formatting and parsing (unit-tested in `test/widget_test.dart`).

@@ -22,16 +22,13 @@ class TodayScreen extends StatelessWidget {
     final s = wc.settings;
     final cur = wc.currency;
     final p = wc.period();
-    final today = wc.today();
     final over = p.safeToday < 0;
     final used = p.flexBudget > 0 ? p.spent / p.flexBudget : 1.0;
     final ahead = p.aheadOfPace;
     final newPayday = wc.newPayday(p.start);
     final now = clock();
     final deliveryHour = (now.hour >= 14 && now.hour < 19) || now.weekday == DateTime.sunday;
-    final month = monthOf(today);
-    final deliveries = wc.txs.where((t) => t.category == 'Food delivery' && monthOf(t.date) == month && t.amount < 0).toList();
-    final deliverySum = -deliveries.fold<int>(0, (a, t) => a + t.amount);
+    final (deliveryCount, deliverySum) = wc.deliveries;
     final recent = wc.txs.where((t) => t.kind != Kind.transfer).take(12).toList();
 
     return ListView(
@@ -118,7 +115,7 @@ class TodayScreen extends StatelessWidget {
                 Icon(Icons.schedule, size: 18, color: c.muted)
               ]),
               Text(
-                'This month: ${deliveries.length} ${deliveries.length == 1 ? 'order' : 'orders'}, ${money(deliverySum, cur)}. '
+                'This month: $deliveryCount ${deliveryCount == 1 ? 'order' : 'orders'}, ${money(deliverySum, cur)}. '
                 '${p.allowanceToday > 0 ? 'A typical ${money(1500, cur, decimals: 0)} order is ${(1500 / p.allowanceToday * 100).round()}% of today\'s money.' : 'Today\'s money is already used.'}',
                 style: const TextStyle(fontSize: 14),
               ),
@@ -143,10 +140,8 @@ class TodayScreen extends StatelessWidget {
   }
 
   static String _freshness(WalletController wc) {
-    String last(String src) {
-      final t = wc.txs.where((x) => x.tx.source == src).firstOrNull;
-      return t == null ? 'none' : shortDateOrRaw(t.date);
-    }
+    final latest = wc.latestBySource;
+    String last(String src) => latest[src] == null ? 'none' : shortDateOrRaw(latest[src]!);
 
     return 'PBZ ${last('pbz')} · Revolut ${last('revolut')}';
   }
