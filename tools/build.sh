@@ -16,6 +16,8 @@
 #   tools/build.sh shell    interactive shell in the container
 #   tools/build.sh image    (re)build the container image (first build ~15 min)
 #   tools/build.sh lsp      Dart language server on stdin/stdout, for editors (repo mounted at its host path)
+#   tools/build.sh mcp      Dart/Flutter MCP server (`dart mcp-server`) on stdin/stdout for Claude Code (.mcp.json);
+#                           runs in the live-mode pod, so it reaches the app of tools/live.sh
 #   tools/build.sh image-name   build the image if needed and print its tag (used by tools/emulator.sh)
 #
 # The image is rebuilt automatically when dev/Containerfile, dev/install-lint-tools.sh, dev/linux-packages.txt or the
@@ -35,7 +37,7 @@ CMD=${1:-test}
 # shellcheck source=tools/timing.sh
 source "$ROOT/tools/timing.sh"
 
-usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---- host side: hand the command to the container ----
 if [[ "${BW_NATIVE:-}" != 1 ]]; then
@@ -51,7 +53,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     image) build_image; exit ;;
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
     test|lint|apk|linux|all|importer|core|app|desktop-test|desktop-smoke) run_begin "$CMD" ;;
-    format|shell|lsp) ;;
+    format|shell|lsp|mcp) ;;
     *) usage ;;
   esac
   # Build output goes to stderr (stdout belongs to the LSP client in `lsp` mode)
@@ -65,6 +67,19 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
       -v bw-dart-server:/root/.dartServer \
       -e BW_NATIVE=1 \
       -w "$ROOT" "$IMAGE" tools/build.sh lsp
+  fi
+  if [[ "$CMD" == mcp ]]; then
+    # Like lsp, in the pod of tools/live.sh: the live app's VM service and DTD listen on the pod's 127.0.0.1 (connect
+    # with the dtd URI of `tools/live.sh status`; the dtd tool's listDtdUris finds nothing across containers).
+    # dart mcp-server installs its pinned dart_mcp_server bundle on first use; the volume keeps it.
+    pod=$("$ROOT/tools/live.sh" pod)
+    exec podman run --rm -i --pod "$pod" \
+      -v "$ROOT:$ROOT:z" \
+      -v bw-pub-cache:/cache/pub \
+      -v bw-dart-server:/root/.dartServer \
+      -v bw-dart-state:/root/.local/state/Dart \
+      -e BW_NATIVE=1 \
+      -w "$ROOT" "$IMAGE" tools/build.sh mcp "${@:2}"
   fi
   # Android release signing key (tools/make-signing-key.sh), mounted read-only
   SIGNING_DIR="${BW_SIGNING_DIR:-$HOME/.config/budget-wallet}"
@@ -94,8 +109,11 @@ fi
 # ---- inside the container (or native) ----
 cd "$ROOT"
 LOGS=${BW_RUN_DIR:-$ROOT/dist/logs}  # natively (CI) without a run dir: plain dist/logs
-[[ -L $LOGS && ! -d $LOGS ]] && rm "$LOGS"  # a run-dir link that doesn't resolve here
-mkdir -p "$LOGS"
+# lsp/mcp keep no logs, and must leave this checkout's dist/logs link (unresolvable in their container) alone
+if [[ $CMD != lsp && $CMD != mcp ]]; then
+  [[ -L $LOGS && ! -d $LOGS ]] && rm "$LOGS"  # a run-dir link that doesn't resolve here
+  mkdir -p "$LOGS"
+fi
 timing_init "$CMD"
 export ROOT LOGS
 RUN_START=$(now_us)
@@ -348,6 +366,8 @@ summary() {
 case "$CMD" in
   # The SDK's own dart binary: the Flutter wrapper may print to stdout, which would corrupt the LSP stream
   lsp)    pub_ready >&2; exec "${FLUTTER_HOME:+$FLUTTER_HOME/bin/cache/dart-sdk/bin/}dart" language-server --protocol=lsp ;;
+  # launch_app & co. would start apps in this display-less container: live mode (tools/live.sh) does that instead
+  mcp)    pub_ready >&2; exec "${FLUTTER_HOME:+$FLUTTER_HOME/bin/cache/dart-sdk/bin/}dart" mcp-server --disable flutter_app_lifecycle "${@:2}" ;;
   format) pub_ready; dart_files | xargs -0 dart format; exit ;;
   lint)   run_pub; steps "${LINT[@]}" ;;
   test)   run_pub; [[ $failed == 0 ]] && steps "${LINT[@]}" "${TESTS[@]}" ;;
