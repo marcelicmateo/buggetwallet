@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Build and test timing history for tools/build.sh, tools/emulator.sh and CI. Standard library only.
 
-  python3 -I tools/build_log.py tests <suite> <reporter.json>   summarise a `dart test`/`flutter test` JSON report
+  python3 -I tools/build_log.py tests <suite> <reporter.json>...  summarise `dart test`/`flutter test` JSON reports (several
+                                                                = shards of one suite, run in parallel)
   python3 -I tools/build_log.py drive <suite> <drive.log>       same for a `flutter drive` log (1 s resolution)
   python3 -I tools/build_log.py perf <perf-records.jsonl>       profile-mode perf test: table + history/perf.jsonl
   python3 -I tools/build_log.py times [-n RUNS] [--cmd C] [--step S] [--commit SHA] [--source local|ci] [--ci-file F]
                                                                 last runs + median per step (tools/build-times.sh)
   python3 -I tools/build_log.py trend [-n RUNS] [--top N] [--step SUITE]   slowest tests over the last runs
   python3 -I tools/build_log.py ci-history <times.txt>          CI: history lines for the ci-logs branch
+  python3 -I tools/build_log.py order <name>[:<shards>]...      desktop-test units (name:index:total), slowest first by
+                                                                recent history, so parallel workers finish together
 
 `tests` and `drive` print the summary, write tests-<suite>-summary.txt into the run dir and append to
 history/steps.jsonl (one line per suite) and history/tests.jsonl (one line per test) in the data dir; layout and
@@ -160,6 +163,25 @@ def record(suite, tests, total, kind):
     append(TEST_HISTORY, [{**{k: m[k] for k in keep}, "suite": suite, "test": n, "ms": v, "result": r} for n, v, r in tests])
 
 
+def cmd_order(args):
+    """Units for tools/build.sh desktop-test, longest first (greedy scheduling ends evenly): one `name:index:total` line per
+    shard. A file's weight is the median of its last 5 history seconds (step desktop-<name>, the sum over its shards)
+    divided by its shards; files without history come first."""
+    secs = {}
+    for r in read(HISTORY):
+        step = str(r.get("step", ""))
+        if step.startswith("desktop-") and r.get("kind") is None and isinstance(r.get("seconds"), (int, float)):
+            secs.setdefault(step[len("desktop-"):], []).append(r["seconds"])
+    units = []
+    for spec in args.names:
+        name, _, n = spec.partition(":")
+        shards = max(1, int(n or 1))
+        weight = statistics.median(secs[name][-5:]) / shards if name in secs else float("inf")
+        units += [(weight, name, i, shards) for i in range(shards)]
+    for _, name, i, shards in sorted(units, key=lambda u: -u[0]):
+        print(f"{name}:{i}:{shards}")
+
+
 def cmd_perf(args):
     """Frame numbers of tools/build.sh perf (app/test_driver/perf_driver.dart writes the records, frames only, no wallet
     data): print a table, save it as perf-summary.txt in the run dir and append the records to history/perf.jsonl."""
@@ -303,7 +325,7 @@ def main():
     for name in ("tests", "drive"):
         s = sub.add_parser(name)
         s.add_argument("suite")
-        s.add_argument("path")
+        s.add_argument("path", nargs="+" if name == "tests" else 1)
     for name in ("times", "trend"):
         s = sub.add_parser(name)
         s.add_argument("-n", type=int, default=10, help="number of runs")
@@ -319,15 +341,26 @@ def main():
     s.add_argument("path")
     s = sub.add_parser("ci-history")
     s.add_argument("times")
+    s = sub.add_parser("order")
+    s.add_argument("names", nargs="+")
     args = p.parse_args()
     if args.action in ("tests", "drive"):
-        if not os.path.exists(args.path):
-            print(f"--- {args.suite}: no test report at {args.path}")
+        found = [p for p in args.path if os.path.exists(p)]
+        if not found:
+            print(f"--- {args.suite}: no test report at {args.path[0]}")
             return 0
-        tests, total = (parse_reporter_json if args.action == "tests" else parse_drive_log)(args.path)
+        parse = parse_reporter_json if args.action == "tests" else parse_drive_log
+        tests, total = [], None
+        for path in found:  # shards: the tests add up, and so does the time (seconds of work, not of waiting)
+            t, tt = parse(path)
+            tests += t
+            if tt is not None:
+                total = (total or 0) + tt
         record(args.suite, tests, total, args.action)
     elif args.action == "perf":
         cmd_perf(args)
+    elif args.action == "order":
+        cmd_order(args)
     elif args.action == "times":
         cmd_times(args)
     elif args.action == "trend":
