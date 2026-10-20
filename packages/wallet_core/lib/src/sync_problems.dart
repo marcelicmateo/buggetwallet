@@ -31,7 +31,7 @@ enum SyncProblemReason {
 
 /// A file from another device that this run did not apply, for the UI ("1 file from device X could not be read").
 class SyncProblem {
-  /// The other device's id (its folder name in the sync folder). Never a path or a file name.
+  /// The other device's short id ([shortId] of its folder name in the sync folder). Never a path or a file name.
   final String device;
   final SyncProblemReason reason;
 
@@ -42,16 +42,22 @@ class SyncProblem {
   final bool isNew;
   const SyncProblem(this.device, this.reason, {required this.bytes, this.isNew = true});
 
+  /// What of a device's folder name the UI gets: its first 8 characters (device ids are random hex, so a prefix tells
+  /// devices apart as well as the whole id does).
+  static String shortId(String folder) => folder.length <= 8 ? folder : folder.substring(0, 8);
+
   @override
   String toString() => 'SyncProblem(${reason.name}, $bytes bytes${isNew ? ', new' : ''})';
 }
 
 /// A refused file, kept on this device only (a local value, never synced) so it is not retried on every run.
 ///
-/// It is read again only when it changes: by content hash where reads are cheap (a local folder), else by the
-/// transport's size and change stamp. Files refused as [SyncProblemReason.unknownVersion] or
-/// [SyncProblemReason.applyFailed] are also read again once after the app (or [syncReaderVersion]) changes.
+/// It is read again only when it changes: by content hash where reads are cheap (a local folder); [size] and [stamp]
+/// are kept for a transport that lists files without reading them (none yet: `FolderSync` always hashes). Files
+/// refused as [SyncProblemReason.unknownVersion] or [SyncProblemReason.applyFailed] are also read again once after
+/// [build] (the reader, the schema or the app version, see `FolderSync.build`) changes.
 class BadFile {
+  /// The device's folder name and the file's name: the quarantine key. Never logged or shown.
   final String device, file;
   final SyncProblemReason reason;
   final int size;
@@ -70,7 +76,7 @@ class BadFile {
   /// Whether a file listed with [size] and [stamp] (no content read) differs from the refused one.
   bool listedChanged(int? size, String? stamp) => size != this.size || stamp != this.stamp;
 
-  SyncProblem problem({required bool isNew}) => SyncProblem(device, reason, bytes: size, isNew: isNew);
+  SyncProblem problem({required bool isNew}) => SyncProblem(SyncProblem.shortId(device), reason, bytes: size, isNew: isNew);
 
   Map<String, Object?> toJson() => {'d': device, 'f': file, 'r': reason.name, 'n': size, 's': stamp, 'h': hash, 'b': build};
 

@@ -205,7 +205,7 @@ class FolderSync {
           } on Object catch (e, st) {
             // Removed or locked while syncing: not the file's fault, so not quarantined; read again next run.
             logError(_log, 'sync.file.unreadable', e, st, fields: {'file': _seq(name)});
-            problems.add(SyncProblem(device, SyncProblemReason.unreadable, bytes: 0));
+            problems.add(SyncProblem(SyncProblem.shortId(device), SyncProblemReason.unreadable, bytes: 0));
             continue;
           }
           final was = bad.byKey[k];
@@ -222,7 +222,7 @@ class FolderSync {
                 fields: {'file': _seq(name), 'reason': r.reason.name, 'bytes': bytes.length});
             bad.byKey[k] = BadFile(device, name, r.reason, size: bytes.length, hash: await fileHash(bytes), build: build);
             badChanged = true;
-            problems.add(SyncProblem(device, r.reason, bytes: bytes.length));
+            problems.add(SyncProblem(SyncProblem.shortId(device), r.reason, bytes: bytes.length));
             continue;
           }
           if (bad.byKey.remove(k) != null) badChanged = true;

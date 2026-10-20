@@ -255,7 +255,7 @@ void main() {
       File('${b.root.path}/${names[1]}').writeAsBytesSync(good.sublist(0, good.length ~/ 2));
       final rep = await b.run();
       expect((rep.filesRead, rep.badFiles), (2, 1));
-      expect(rep.problems.single.device, a.repo.deviceId);
+      expect(rep.problems.single.device, SyncProblem.shortId(a.repo.deviceId), reason: 'a short id, never the folder name');
       expect(b.repo.transactions().where((t) => t.manual).length, 1, reason: 'the file after the damaged one applied');
       expect(b.repo.settings().salary, 0);
       File('${b.root.path}/${names[1]}').writeAsBytesSync(good);
