@@ -313,6 +313,7 @@ jobs:
           R_LINUX: ${{ needs.linux.result }}
           R_PUBLISH: ${{ needs.publish.result }}
         run: |
+          set +e  # skipped jobs have no artifact: a failing cat must not end the step (bash -e did, silently)
           L="$RUNNER_TEMP/logs"; out="$RUNNER_TEMP/ci.txt"; jobs="lint importer core app desktop apk linux"
           {
             # one fragment per job (a job that was skipped or died before its last step has none: show its job result)
@@ -323,8 +324,8 @@ jobs:
             for j in $jobs publish; do r=R_${j^^}; printf '%s=%s ' "job:$j" "${!r}"; done; echo
             echo
             echo "step seconds exit"
-            for j in $jobs; do cat "$L/ci-log-$j/times.txt" 2>/dev/null; done
-            for j in $jobs; do echo; cat "$L/ci-log-$j/ci.log" 2>/dev/null; done
+            for j in $jobs; do cat "$L/ci-log-$j/times.txt" 2>/dev/null || true; done
+            for j in $jobs; do echo; cat "$L/ci-log-$j/ci.log" 2>/dev/null || true; done
           } > "$out"
-          for j in $jobs; do cat "$L/ci-log-$j/history.jsonl" 2>/dev/null; done > "$RUNNER_TEMP/history.jsonl"
+          for j in $jobs; do cat "$L/ci-log-$j/history.jsonl" 2>/dev/null || true; done > "$RUNNER_TEMP/history.jsonl"
           .github/scripts/publish-log.sh latest "$out" "$RUNNER_TEMP/history.jsonl"

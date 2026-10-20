@@ -4,7 +4,7 @@
 #   tools/ci-status.sh                 status of HEAD's check runs, seconds per step, failing lines from the CI log
 #                                      (timing history: tools/build-times.sh --ci)
 #   tools/ci-status.sh <sha>           same for another commit
-#   tools/ci-status.sh --wait [<sha>]  wait (up to 30 min) until every check run has finished
+#   tools/ci-status.sh --wait [<sha>]  wait (up to 30 min) until the ci and release workflow runs of the commit have concluded
 #   tools/ci-status.sh --log [name]    print a whole log from the ci-logs branch (default: latest)
 #
 # Exit code: 0 all green, 1 something failed, 2 still running (without --wait).
@@ -27,10 +27,26 @@ fi
 
 runs() { gh api "repos/$REPO/commits/$sha/check-runs" --jq '.check_runs[] | "\(.name)\t\(.status)\t\(.conclusion // "-")"'; }
 
+# Workflow runs (ci, release) of this commit that have not concluded yet; with --wait the check runs alone are not
+# enough: a run can exist before its jobs do (or jobs of a later stage appear after the first ones finished).
+wf_pending() {
+  local w
+  for w in ci release; do
+    gh run list --repo "$REPO" --workflow "$w" --commit "$sha" --json status --jq '.[] | select(.status != "completed") | .status' 2>/dev/null
+  done | wc -l
+}
+# The ci workflow must have a run for the commit (a push can take a few seconds to start one).
+ci_runs() { gh run list --repo "$REPO" --workflow ci --commit "$sha" --json databaseId --jq 'length' 2>/dev/null || echo 0; }
+
 deadline=$((SECONDS + 1800))
 while :; do
   table=$(runs)
   pending=$(awk -F'\t' '$2 != "completed"' <<<"$table" | wc -l)
+  if [[ $wait == 1 ]]; then
+    wp=$(wf_pending)
+    [[ $wp -gt 0 ]] && pending=$((pending + wp))
+    if [[ $wp == 0 && $(ci_runs) == 0 && $SECONDS -lt $((deadline - 1500)) ]]; then pending=$((pending + 1)); fi  # allow ~5 min for the run to appear
+  fi
   if [[ $wait == 0 || ( -n "$table" && $pending == 0 ) || $SECONDS -ge $deadline ]]; then break; fi
   sleep 20
 done
