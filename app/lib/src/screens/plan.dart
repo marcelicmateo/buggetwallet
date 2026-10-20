@@ -13,8 +13,10 @@ import '../storage_access.dart';
 import '../sync_path.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'backup_panel.dart';
 import 'budgets.dart';
 import 'diagnostics.dart';
+import 'export_panel.dart';
 import 'habits_panels.dart';
 import 'import_flow.dart';
 
@@ -256,6 +258,8 @@ class _PlanScreenState extends State<PlanScreen> {
               ]),
               NudgesPanel(wc: wc),
               _syncPanel(context),
+              BackupPanel(wc: wc),
+              ExportPanel(wc: wc, chooser: widget.chooser),
               DiagnosticsPanel(wc: wc, chooser: widget.chooser),
             ])));
   }

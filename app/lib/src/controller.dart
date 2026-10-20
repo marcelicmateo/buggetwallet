@@ -18,9 +18,29 @@ final _import = Logger('bw.import');
 final _key = Logger('bw.key');
 final _habits = Logger('bw.habits');
 final _nudgeLog = Logger('bw.nudges');
+final _backupLog = Logger('bw.backup');
+final _searchLog = Logger('bw.search');
 
 /// The core function; the controller method of the same name would hide it inside the class.
 const _computeBudget = budgetVsActual;
+
+/// The core backup functions; the controller methods of the same names would hide them inside the class.
+const _writeBackupFn = writeBackup;
+const _restoreBackupFn = restoreBackup;
+const _listBackupsFn = listBackups;
+
+/// Which transactions Plan › Export writes.
+enum ExportRange { period, year, all }
+
+/// A CSV ready for the save dialog.
+class ExportFile {
+  final String name;
+  final Uint8List bytes;
+
+  /// Transactions in the file; 0 means there is nothing to save.
+  final int rows;
+  const ExportFile(this.name, this.bytes, this.rows);
+}
 
 /// Same for the review state: the controller has a method of the same name.
 const reviewStateOf = reviewState;
@@ -96,6 +116,14 @@ class WalletController extends ChangeNotifier {
   Future<SyncReport> Function(String folder, VaultKey key, WalletRepo repo) syncRunner = _runFolderSync;
   static Future<SyncReport> _runFolderSync(String folder, VaultKey key, WalletRepo repo) =>
       FolderSync(folder, key, appVersion: appVersion).run(repo);
+
+  /// Backup work; tests replace them (the real ones write and read encrypted files in the sync folder).
+  @visibleForTesting
+  Future<String> Function(WalletRepo repo, String folder, VaultKey key, {required String today}) backupWriter = _writeBackupFn;
+  @visibleForTesting
+  Future<int> Function(WalletRepo repo, String file, VaultKey key) backupReader = _restoreBackupFn;
+  @visibleForTesting
+  Future<List<BackupInfo>> Function(String folder) backupLister = _listBackupsFn;
 
   String? syncFolder;
   DateTime? lastSync;
@@ -583,6 +611,95 @@ class WalletController extends ChangeNotifier {
     });
     scheduleMicrotask(() => syncNow(quiet: true, trigger: 'startup'));
   }
+
+  // ---------- backup, export, search (M5) ----------
+  /// True while the wallet holds nothing (no transactions, goals or wishes): the only time a backup can be restored.
+  bool get walletIsEmpty => _cached('walletIsEmpty', () => repo.isEmpty);
+
+  /// Writes an encrypted backup into the sync folder; returns the file name (never log it). Throws [StateError] without a
+  /// folder or a key.
+  Future<String> backupNow() async {
+    final folder = syncFolder, k = key;
+    if (folder == null || k == null) {
+      logEvent(_backupLog, Level.INFO, 'backup.skip', {'reason': folder == null ? 'noFolder' : 'noKey'});
+      throw StateError('No sync folder');
+    }
+    final sw = Stopwatch()..start();
+    try {
+      final name = await backupWriter(repo, folder, k, today: today());
+      logEvent(_backupLog, Level.INFO, 'backup.done',
+          {'ms': sw.elapsedMilliseconds, 'tx': txs.length, 'goals': goals.length, 'wish': wish.length});
+      return name;
+    } catch (e, st) {
+      logError(_backupLog, 'backup.failed', e, st);
+      rethrow;
+    }
+  }
+
+  /// The backups found in the sync folder, newest first; empty without a folder or when it can't be read.
+  Future<List<BackupInfo>> listBackups() async {
+    final folder = syncFolder;
+    if (folder == null) return const [];
+    try {
+      return await backupLister(folder);
+    } catch (e, st) {
+      logError(_backupLog, 'backup.listFailed', e, st);
+      return const [];
+    }
+  }
+
+  /// Reads the backup [info] (one from [listBackups]) into the empty wallet; returns the number of rows restored.
+  /// Throws [StateError] when the wallet is not empty, [VaultException] on a wrong key, [BackupException] on a bad file.
+  Future<int> restoreBackup(BackupInfo info) async {
+    final k = key;
+    if (k == null) throw const BackupException(BackupFailure.unreadable, 'No wallet key on this device.');
+    final sw = Stopwatch()..start();
+    try {
+      final rows = await backupReader(repo, info.path, k);
+      logEvent(_backupLog, Level.INFO, 'backup.restored', {'ms': sw.elapsedMilliseconds, 'rows': rows});
+      _changed();
+      return rows;
+    } catch (e, st) {
+      logError(_backupLog, 'backup.restoreFailed', e, st, fields: {'type': e.runtimeType.toString()});
+      rethrow;
+    }
+  }
+
+  /// The transactions of [range] as a CSV (category and cleaned description as the app shows them). [ExportFile.rows] is 0
+  /// when the range holds none.
+  ExportFile exportTransactions(ExportRange range) {
+    final to0 = today();
+    final (String from, String to) = switch (range) {
+      ExportRange.period => (period().start, addDays(period().end, -1)),
+      ExportRange.year => ('${to0.substring(0, 4)}-01-01', to0),
+      ExportRange.all => (txs.isEmpty ? to0 : txs.last.date, txs.isEmpty ? to0 : txs.first.date),
+    };
+    final rows = [
+      for (final t in txs)
+        if (t.date.compareTo(from) >= 0 && t.date.compareTo(to) <= 0) t
+    ];
+    logEvent(_log, Level.INFO, 'export.transactions', {'range': range.name, 'rows': rows.length});
+    return ExportFile('bw-transactions-$from-$to.csv', _csvBytes(transactionsCsv(rows)), rows.length);
+  }
+
+  /// The spending summary per month and category over every transaction.
+  ExportFile exportSummary() {
+    final csv = monthlySummaryCsv(txs);
+    final months = csv.split('\n').where((l) => l.isNotEmpty).length - 1; // data lines after the header
+    logEvent(_log, Level.INFO, 'export.summary', {'rows': months});
+    return ExportFile('bw-summary.csv', _csvBytes(csv), months);
+  }
+
+  /// UTF-8 with a byte order mark, so a spreadsheet reads accents correctly.
+  static Uint8List _csvBytes(String csv) => Uint8List.fromList([0xEF, 0xBB, 0xBF, ...utf8.encode(csv)]);
+
+  /// Everything that matches [query] (transactions, goals, wishlist, expected bills). Cached per data version. Logs counts only.
+  SearchResult search(String query) => _cached('search$query', () {
+        final r = searchAll(query, txs: txs, goals: goals, wishlist: wish, bills: recurringBills());
+        logEvent(_searchLog, Level.FINE, 'search.run',
+            {'chars': query.length, 'tx': r.txs.length, 'goals': r.goals.length, 'wish': r.wishlist.length, 'bills': r.bills.length});
+        return r;
+      });
 
   // ---------- diagnostics ----------
   /// Device-local log level: 'all' (debug, the default while testing), 'info' or 'warning'.

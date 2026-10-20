@@ -4,9 +4,11 @@ library;
 
 export 'package:wallet_importer/wallet_importer.dart' show TxKind;
 
+export 'src/backup.dart';
 export 'src/budget.dart';
 export 'src/categories.dart';
 export 'src/dates.dart';
+export 'src/export.dart';
 export 'src/hlc.dart' show Hlc, HlcClock;
 export 'src/logs.dart';
 export 'src/matching.dart';
@@ -14,6 +16,7 @@ export 'src/models.dart';
 export 'src/periods.dart';
 export 'src/recurring.dart';
 export 'src/repo.dart';
+export 'src/search.dart';
 export 'src/sync.dart';
 export 'src/transfers.dart';
 export 'src/vault.dart';

@@ -120,6 +120,10 @@ class _PlanIntent extends Intent {
   const _PlanIntent();
 }
 
+class _SearchIntent extends Intent {
+  const _SearchIntent();
+}
+
 /// Ctrl combinations and F5 only: plain keys must stay free for typing.
 final _shortcuts = <ShortcutActivator, Intent>{
   for (final (i, k) in [
@@ -134,6 +138,7 @@ final _shortcuts = <ShortcutActivator, Intent>{
   const SingleActivator(LogicalKeyboardKey.keyR, control: true): const _SyncIntent(),
   const SingleActivator(LogicalKeyboardKey.f5): const _SyncIntent(),
   const SingleActivator(LogicalKeyboardKey.comma, control: true): const _PlanIntent(),
+  const SingleActivator(LogicalKeyboardKey.keyF, control: true): const _SearchIntent(),
 };
 
 class _HomeShellState extends State<HomeShell> {
@@ -146,6 +151,9 @@ class _HomeShellState extends State<HomeShell> {
 
   /// Counts the taps on Today's "Due by payday" line; Plan scrolls to Expected bills on each.
   final _billsRequest = ValueNotifier<int>(0);
+
+  /// Counts the Ctrl+F presses; Spending opens its search view on each.
+  final _searchRequest = ValueNotifier<int>(0);
 
   /// The five tab pages, built once per data version and day (not on every tab switch): switching tabs only moves the
   /// IndexedStack, so the pages are not rebuilt and their derived data is not worked out again.
@@ -172,7 +180,14 @@ class _HomeShellState extends State<HomeShell> {
               _go(4, 'today');
               _billsRequest.value++; // Plan scrolls to Expected bills
             }),
-        1 => SpendingScreen(wc: widget.wc),
+        1 => SpendingScreen(
+            wc: widget.wc,
+            searchRequest: _searchRequest,
+            openTab: (i) => _go(i, 'search'),
+            openBills: () {
+              _go(4, 'search');
+              _billsRequest.value++;
+            }),
         2 => WishlistScreen(wc: widget.wc),
         3 => GoalsScreen(wc: widget.wc),
         _ => PlanScreen(wc: widget.wc, showBills: _billsRequest),
@@ -231,6 +246,11 @@ class _HomeShellState extends State<HomeShell> {
     _AddIntent: CallbackAction<_AddIntent>(onInvoke: (_) => _key('ctrlN', _addExpense)),
     _SyncIntent: CallbackAction<_SyncIntent>(onInvoke: (_) => _key('sync', _syncNow)),
     _PlanIntent: CallbackAction<_PlanIntent>(onInvoke: (_) => _key('ctrlComma', () => _go(4, 'key'))),
+    _SearchIntent: CallbackAction<_SearchIntent>(
+        onInvoke: (_) => _key('ctrlF', () {
+              _go(1, 'key');
+              _searchRequest.value++;
+            })),
   };
 
   // The parent rebuilds this widget when the wallet changes; build() then makes new pages if the data or the day moved on.
@@ -245,6 +265,7 @@ class _HomeShellState extends State<HomeShell> {
     _life.dispose();
     _focus.dispose();
     _billsRequest.dispose();
+    _searchRequest.dispose();
     super.dispose();
   }
 

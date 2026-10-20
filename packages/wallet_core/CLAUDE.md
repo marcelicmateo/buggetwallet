@@ -98,6 +98,40 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   clears `peer_files` once, so the next sync re-reads every file and applies ops (or fields) the older build skipped.
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption; `UnsealFailure` says why a
   file was refused), `sync.dart` (FolderSync).
+- `backup.dart` — backups (M5, owner decision 2026-10-20: only into the sync folder, encrypted with the wallet key,
+  restore only into an empty wallet). `writeBackup(repo, syncFolder, key, today:)` writes
+  `<syncFolder>/budget-wallet/backups/bw-backup-<today>.bwb` (`backupPath`, `backupsFolder`; temp file + rename, the
+  same day's file is replaced) sealed with `seal()` like a sync file; payload UTF-8 JSON `{"v":1,"ops":[...]}` =
+  `WalletRepo.snapshotOps()`: every row of every synced entity, deleted rows and settings included, as one op per
+  distinct field clock (the fields written with that clock and their current values; a field with no clock, i.e. the
+  column default, is left out), so a restore records the very same clocks; device-local values never. Returns the file
+  name; logs `backup.write` with the op count. `restoreBackup(repo, file, key)` (full path): `StateError` unless
+  `repo.isEmpty` (no row at all, deleted included, in tx, goals, goal_contrib, wish, recurring, merchant_rules,
+  settings) before the file is touched; unseal errors are the `VaultException`; a file that cannot be read, is not a
+  backup or has a clock that does not parse is a `BackupException` (`reason`: `BackupFailure.unreadable`, `damaged`,
+  `newerVersion` for `v` > `backupVersion`; nothing applied unless the whole file parses). The ops go through
+  `applyRemote(ops, resend: true)`: matching, pairing and bill detection run once at the end, and the ops are queued in
+  the outbox with their clocks unchanged, so the next sync exports them as this device's file and the restored state
+  reaches the other devices like local writes (devices already holding those fields at the same clocks change nothing:
+  a clock is only accepted when newer; a restore in a sync folder that still has every device's files converges either
+  way, the resend covers pruned files or a new folder). Returns the op count. `listBackups(syncFolder)` →
+  `BackupInfo(name, date, path)` (full path for `restoreBackup`) newest first, only `bw-backup-YYYY-MM-DD.bwb` names, missing folder → `[]`.
+- `export.dart` — CSV (M5, pure, the app saves the text through the system dialog; unencrypted, the app warns once).
+  `transactionsCsv(List<CategorizedTx>)`: `date,amount,category,description,source,note`, live rows only (`Tx.live`:
+  no deleted rows, no hand-added entries replaced by a bank row that is here), sorted date then id, `amount` the
+  stored signed cents as an exact decimal (`centsToDecimal`: int arithmetic, dot, two digits, never `-0.00`),
+  `category` the resolved one, RFC 4180 fields (`csvField`: quoted when holding `"`, `,`, LF or CR; quotes doubled),
+  LF ends, UTF-8 without BOM. `monthlySummaryCsv(List<CategorizedTx>)`: `month,<spendingCategories in order>,total`,
+  one record per month with a live row in a spending category, ascending; a cell = Σ −amount of that category (refunds
+  reduce it, a net refund prints negative, `0.00` without spending), `total` = Σ cells; income, transfers, deleted and
+  replaced rows never count.
+- `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:)` → `SearchResult` (`txs` newest first capped at
+  `searchTxLimit` 200, `goals`, `wishlist`, `bills`, `isEmpty`; blank query → `SearchResult.empty`). Text: `foldText`
+  (lower case, č ć š ž đ → c c s z d, `dj` → `d`, common Latin accents) substring over tx description/note/category
+  (resolved), goal name, wish name, bill label/category; live rows only. Amount: `parseAmountQuery` (`12`, `12.5`,
+  `12,50`, `-12.50`, `12.50 €`; null for `12.`, more than two decimals — never rounded —, words, thousands separators,
+  > 15 digits) → cents; matches `Tx.amount.abs()`, goal target or saved, wish price, bill expectedAmount. A query
+  that is both matches either way; a row is listed once.
 - `sync_problems.dart` — a peer file that cannot be used is skipped (the run goes on with the other files and devices)
   and quarantined: `BadFiles`, one device-local value (`localValue('syncBadFiles')`, never synced), records device,
   file, `SyncProblemReason` (`badKey`, `corrupt`, `unknownVersion`, `applyFailed`; `unreadable` = I/O error, not
@@ -120,7 +154,11 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
 - **Money is never reclassified on amount alone** (owner rule). Hiding a row as a transfer, or moving it to another
   category, needs evidence from the bank row itself (the importer's `kindHint`, its type or text); an equal amount in
   another account within a few days is never enough on its own. The same goes for any future "looks like" rule.
-- Keep `vault.dart` / `sync.dart` file formats backward compatible (`BWOP1`, `BW1-` keys).
+- Keep `vault.dart` / `sync.dart` file formats backward compatible (`BWOP1`, `BW1-` keys), and the backup payload
+  (`{"v":1,"ops":[...]}`): a new shape bumps `backupVersion`, and older builds refuse it as `newerVersion`.
+- Backups: never restore into a wallet with data (the sync folder is the merge path); `snapshotOps` must keep each
+  field's own clock (grouping fields by clock), never one fresh clock per row, or a restored device would overrule
+  edits other devices made in between.
 - Logging: loggers `bw.<area>`; every catch block logs (`logError`). Log counts, durations, sizes, dates, built-in
   categories, setting keys. **Never** amounts, descriptions, merchants, notes, goal/wish names, the key, device ids,
   paths or file names. Noisy per-render logs at FINER. `test/logs_impl_test.dart` checks core logs stay clean.
@@ -169,7 +207,8 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   (`n(...)` builds a transaction, `january` is a sample month). Add new feature tests as `test/<feature>_test.dart`
   (goals: `test/goal_contrib_test.dart`, quarantine: `test/sync_quarantine_test.dart`, hints: `test/kind_hint_test.dart`,
   own transfers incl. two devices: `test/transfers_test.dart`, budgets per category incl. the setting and two devices:
-  `test/budget_vs_actual_test.dart`, recurring bills + weekly review incl. two devices: `test/habits_test.dart`; `<feature>_edge_test.dart` are
-  spec-written edge cases). Multi-device sim in `test/support/sim.dart` (lists entities on its own): `Device` (own
+  `test/budget_vs_actual_test.dart`, recurring bills + weekly review incl. two devices: `test/habits_test.dart`, M5 backup
+  round trip incl. two devices + resend: `test/backup_test.dart`, CSV: `test/export_test.dart`, search: `test/search_test.dart`;
+  `<feature>_edge_test.dart` and `<feature>_spec_test.dart` are spec-written tests). Multi-device sim in `test/support/sim.dart` (lists entities on its own): `Device` (own
   folder and database; `dbPath:` + `reopen()` simulate a restart or upgrade), `Net`, `dump`, `bookkeeping`.
 - Run: `tools/build.sh test` from the repo root (or `tools/build.sh shell`, then `cd packages/wallet_core && dart test`).

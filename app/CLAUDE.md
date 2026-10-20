@@ -35,6 +35,13 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   bill; confirmed rows with Paid/Overdue/Covered and Remove) and Nudges (a device-local switch, `setNudges`). The "Due by payday" tap
   switches to Plan and scrolls to Expected bills (`PlanScreen.showBills`, a notifier owned by `HomeShell`).
   Controller log events (counts and enum words only): `review.done`, `review.day`, `recurring.confirm|dismiss|delete`, `nudges.enabled|scheduled`.
+- Polish (M5): Plan › Backup (`screens/backup_panel.dart`: "Last backup: 20 Oct"/"No backup yet" from `listBackups()`, "Back up now" off without a sync
+  folder, "Restore from backup…" only while `walletIsEmpty`, pick → confirm → `restoreBackup(name)` → toast with the row count; the core functions sit
+  behind `backupWriter/backupReader/backupLister` so tests use fakes) and Plan › Export (`screens/export_panel.dart`: range chips This period/year/Everything,
+  `exportTransactions(range)`/`exportSummary()` return an `ExportFile` (UTF-8 with BOM) saved through `FileChooser.saveText`). Search (`screens/search.dart`
+  `SearchPane`): the icon in Spending's header or Ctrl+F (`HomeShell._searchRequest`) swaps the page for a pinned field + ruled result sections via an
+  `IndexedStack` (the page keeps its scroll); 2+ characters, 150 ms debounce, `wc.search(q)` cached per data version; goal/wish/bill rows jump to their tab.
+  Log events (counts only): `backup.done|restored|failed`, `export.transactions|summary|saved`, `search.run`.
 - Nudges: `nudges.dart` (pure: ~14 funny, encouraging lines with no digits or names, `nudgeFor(date)`, `nudgeSlots(now)` = 15:00 on
   weekdays and 11:00 on Sunday for 4 weeks, `NudgePlatform`/`NoNudges`) and `notifier.dart` (native-only: `AndroidNudges` with
   `flutter_local_notifications`, one inexact `zonedSchedule` per slot, no exact-alarm permission; the time zone name comes from
