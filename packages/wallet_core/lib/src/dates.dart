@@ -26,6 +26,12 @@ String nextPayday(String periodStart, int paydayDay) {
 /// `YYYY-MM` of an ISO date.
 String monthOf(String iso) => iso.substring(0, 7);
 
+/// Day of the month (1-31) of an ISO date.
+int dayOf(String iso) => int.parse(iso.substring(8, 10));
+
+/// Days in a `YYYY-MM` month (28-31).
+int daysInMonth(String ym) => DateTime.utc(int.parse(ym.substring(0, 4)), int.parse(ym.substring(5, 7)) + 1, 0).day;
+
 /// The `n` months ending with `ym` (inclusive), oldest first.
 List<String> monthsEnding(String ym, int n) {
   var y = int.parse(ym.substring(0, 4)), m = int.parse(ym.substring(5, 7));

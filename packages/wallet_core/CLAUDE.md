@@ -8,7 +8,15 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   becomes a sync op; never `db.execute` an INSERT/UPDATE on a data table directly. `_apply` checks each field's
   type (`_fieldValue`): a wrong-typed one is ignored (`repo.badField`, entity + field only) without recording its
   clock, the op's other fields apply, and a row is only created when some field applies. New column: add its type there.
-- `budget.dart` — period maths: `PeriodBudget` (safe to spend), `MonthSummary`, `Affordability`.
+- `budget.dart` — period maths: `PeriodBudget` (safe to spend), `MonthSummary`, `Affordability`. Budget vs actual per
+  category (calendar months, owner decision 2026-10-20): `budgetVsActual(txs, month, budgets, today:)` →
+  `BudgetVsActual` (one `CategoryBudgetLine` per category with a budget or any spend, actual desc then name; `actual` =
+  `monthSummary(...).byCategory`, i.e. the "Where it goes" sums: live rows, fixed + flex, refunds subtracted, transfers
+  and income out; `average6` = `averageByCategory`, the mean of the 6 months before, always ÷ 6; `remaining` = budget −
+  actual; `pace` = actual ÷ (budget × elapsedDays ÷ daysInMonth), null without a budget, with budget 0 or for a future
+  month; elapsedDays = day of `today` in the current month, the whole month for a past one; `remainingTotal` = Σ
+  remaining over budgeted lines, null when none is budgeted). `suggestBudgets(txs, month)` = that average rounded UP to
+  1000 cents, zero or negative averages omitted. Ints in cents everywhere, floats only in `pace`.
 - `categories.dart` — `Categorizer`: item override → (paired transfer → importer `kindHint` → source/pattern rules) →
   per-merchant rules. `kindHint` (importer `TxKind`, stored as `tx.kind_hint` by `importBatch`, edited only by the schema-4 rewrite) decides
   first where it can: `salary` → Salary, `atm` → Rent at or above `rentCashThreshold` else Cash, `fee` → Bank fees,
@@ -36,6 +44,10 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   mark the entry `Tx.matchPending` and it counts (`Tx.live`). `WalletRepo` runs it after imports, deletes and
   `applyRemote` (FolderSync: once per run, `runPendingMatch`), loading only candidate rows.
 - `models.dart` — `Tx`, `Goal`, `GoalContribution`, `WishItem`, `WalletSettings` (row ↔ object), `goalTotal`.
+  `WalletSettings.categoryBudgets` (synced setting, `{category: cents per month}`, default `{}`) is validated entry
+  by entry: only `spendingCategories` (fixed + flex) with whole cents 0..`maxBudget` are kept, other entries are
+  dropped (one `settings.invalid` with the key), a non-map value falls back to `{}`. Written whole by
+  `updateSettings({'categoryBudgets': ...})`, last writer wins across devices like any setting.
 - Goals: `Goal.saved` = stored `saved` column (the base) + live `goal_contrib` rows (synced entity: `goal_id`, `amount`
   cents, may be negative, `date`, `deleted`; created clock = its `amount` clock), summed at read (`goalTotal`, clamped to
   ±`Goal.maxSaved`; each row counts at most `Goal.maxContribution`; negative totals allowed, not clamped to 0). New
@@ -113,7 +125,8 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
 - `test/core_test.dart`, one `group` per area. Shared synthetic data in `test/support/synthetic.dart`
   (`n(...)` builds a transaction, `january` is a sample month). Add new feature tests as `test/<feature>_test.dart`
   (goals: `test/goal_contrib_test.dart`, quarantine: `test/sync_quarantine_test.dart`, hints: `test/kind_hint_test.dart`,
-  own transfers incl. two devices: `test/transfers_test.dart`; `<feature>_edge_test.dart` are
+  own transfers incl. two devices: `test/transfers_test.dart`, budgets per category incl. the setting and two devices:
+  `test/budget_vs_actual_test.dart`; `<feature>_edge_test.dart` are
   spec-written edge cases). Multi-device sim in `test/support/sim.dart` (lists entities on its own): `Device` (own
   folder and database; `dbPath:` + `reopen()` simulate a restart or upgrade), `Net`, `dump`, `bookkeeping`.
 - Run: `tools/build.sh test` from the repo root (or `tools/build.sh shell`, then `cd packages/wallet_core && dart test`).
