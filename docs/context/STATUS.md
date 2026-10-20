@@ -66,6 +66,14 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   category editor with "Suggest from the last 6 months", Spending rows with budget mark / "47.50 € left" / "over by" +
   hatch / "behind pace", summary line and budgeted total, Today line for the tightest budget. Exact amounts
   (`moneyExact`), one 6-month average for tick and suggestions. Core 637 / app 541 tests, desktop and emulator green.
+- 2026-10-20: **M4 Habits**: weekly review (Today card from the review day until done, 4-step review screen: import,
+  confirm categories, pace, wishlist; streak), expected bills (detected from the bank rows, confirmed by the owner only,
+  Plan › Expected bills with Confirm / Not a bill / Paid / Overdue / Skip this cycle / Remove; confirmed flex-category
+  bills are reserved from safe-to-spend, fixed-category ones are "covered by your plan"; Today "Due by payday" line),
+  review day per user (Mon–Sun chips), nudges (Android, `flutter_local_notifications`, 15:00 weekdays + Sunday 11:00,
+  funny lines without amounts or names, device-local switch). Review fixes before merge: next due date follows the paying
+  row (no drift), confirmed bill category follows merchant rules, streak resets on a skipped week, skip action for an
+  unmatched bill. Schema 5. Core 687 / app 593 tests, desktop and emulator green.
 
 ## Decisions log
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -102,7 +110,6 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 
 ## Open questions for owner
 - Test v2 on phone and computer; feedback (✅ / ❌ / ✏️).
-- Merge `v2` into `master` once happy (master also has the Docker dev setup).
 - Make the repo public? Then all-platform builds are free on every push.
 
 ## Known limits
@@ -119,7 +126,10 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   "Save logs…", send the file; summarise with `tools/log-summary.py`.
 - Owner checks on the phone after Stage C: Ledger theme at large text (stat strip, stacked rows), bottom bar accent mark,
   dark mode, sheets with the double rule, Plex digits and €; on desktop: rail, two columns, dialogs, margin line.
-- Then: merge v2 to master (owner's call); M4 Habits (weekly review, recurring bills, nudges): spec first.
+- Owner checks on the phone after M4: Plan › Nudges on → allow notifications (Android 13 asks) → one arrives around 15:00
+  with no amounts (battery saver may delay it a few minutes); Plan › Expected bills shows the real standing orders as
+  candidates → Confirm the true ones, "Not a bill" the rest; Today shows the review card on Sunday and "Due by payday".
+- Then: M5 Polish (backup/export, search, settings) → web → sync redesign → M6 owner live test.
 
 ## In flight (2026-10-20)
 - Queue and procedure: `docs/context/PIPELINE.md`.

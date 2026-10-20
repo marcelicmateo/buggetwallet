@@ -53,7 +53,8 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | D1e | BUG: perf hung after "Built" because of stale build state from killed runs; perf_run now starts from a clean profile build; idle-laptop perf green (31 s, 0 missed) | lead | v2 | – | done |
 | D3 | Merge v2 into master | lead | – | – | done 2026-10-20 |
 | F0 | M4 Habits spec: DESIGN_DECISIONS §4.6 | lead | – | – | approved 2026-10-20 |
-| F1 | M4 Habits build: core (review state, recurring detection + confirm, reservation in safe-to-spend) + UI (review card/screen, Plan expected bills + settings, Today due line, nudges) | core-builder + ui-builder | habits-core, habits-ui (from v2) | F0 | running |
+| F1 | M4 Habits build: core (review state, recurring detection + confirm, reservation in safe-to-spend) + UI (review card/screen, Plan expected bills + settings, Today due line, nudges) | core-builder + ui-builder | habits-core, habits-ui (from v2) | F0 | built (core 41e4fb4, UI 67c1448); reviewed → F1b |
+| F1b | Review fixes: nextDue from paying row (HIGH), confirmed-bill category follows rules (coveredByPlan), streak `< 14`, status-only op fill, `skipRecurring` API + "Skip this cycle" row action | core-builder + ui-builder | habits-core, habits-ui | F1 | done (b3fd42f, d5bd283, 3ea60a3; merged into v2) |
 | E0 | Spec for budget vs actual per category: DESIGN_DECISIONS §4.5 | lead | – | – | approved 2026-10-20 (monthly) |
 | E1 | Budget vs actual per category (M3): core `budgetVsActual`/`suggestBudgets` + `categoryBudgets` setting; UI Plan editor, Spending bars, Today line | core-builder + ui-builder | budgets-core, budgets-ui | E0 | done (merged, full run green) |
 | E2 | Top merchants (M3) | – | – | – | already built ("Top places" on Spending) |

@@ -24,6 +24,7 @@ All numbers below are made-up samples. No personal figures. "Proposed" = not bui
 - 2026-10-20: Budget vs actual per category (§4.5) approved: **monthly** budgets (calendar month, like the chart), prefilled from the 6-month average on request, "left" line on Today. The two matching/sync known limits (lagging-device cash match, damaged-file double count) are solved in the sync redesign, not before.
 
 - 2026-10-20: M4 Habits (§4.6) approved: review day Sunday by default, changeable per user; confirmed recurring bills **reduce safe-to-spend** until paid (reserved money is not spendable); nudges at 15:00 weekdays and Sunday 11:00; `flutter_local_notifications` allowed; notification text = funny, encouraging words only, never amounts.
+- 2026-10-20: M4 Habits as built (review fixes): a confirmed bill's next due date follows the paying row's date (never the expected date, so it cannot drift out of the match window and be reserved and spent at once); a confirmed bill's category follows the current merchant rules, so a bill ruled into a fixed category is "covered by your plan" and not reserved twice; an unmatched confirmed bill is released by "Skip this cycle" (one interval forward, synced), never by amount matching; a skipped review week resets the streak; nudges are device-local (not synced).
 - 2026-10-20: `v2` merged into `master` (owner).
 
 ## 2. Data flow as built (v2) — summary
@@ -131,7 +132,7 @@ Today "Where it goes" shows each category's spend this month against a dark tick
 - **Not in scope:** rollover of unspent budget, per-period (salary-to-salary) budgets (monthly only, like the chart), alerts.
 **Open for the owner:** monthly or per pay period? prefill from averages or start empty? show "left" on Today at all?
 
-### 4.6 M4 Habits — proposal 2026-10-20, needs owner approval
+### 4.6 M4 Habits — approved and built 2026-10-20
 Brief: weekly review (~5 min), recurring bills detected from exports, nudges at risk moments (food-delivery window 15–18 h, Sundays).
 Nothing here changes a number by itself: detection and nudges inform; only the owner's taps write.
 - **Weekly review** (Today shows a "Weekly review" card from the review day until done; Plan sets the day, default Sunday):
