@@ -1,16 +1,12 @@
-commit: 9b46de70847caeca03ae0b9afc2783a0885275aa  ref: master  run: 39476442501
+commit: 2bff25d04011a01f27f07adc49c1b68d91f66c10  ref: v2  run: 39492372474
 
-lint=success(9s) importer=success(13s) core=success(35s) app=success(148s) desktop=success(591s) signing=success apk=success(474s) linux=success(74s) smoke=success(15s)
+lint=success(13s) importer=success(17s) core=success(48s) app=success(198s) desktop=cancelled signing=skipped apk=skipped linux=skipped smoke=skipped
 
 step seconds exit
-lint 9 0
-importer 13 0
-core 35 0
-app 148 0
-desktop 591 0
-apk 474 0
-linux 74 0
-smoke 15 0
+lint 13 0
+importer 17 0
+core 48 0
+app 198 0
 
 version: 0.11.0
 actionlint 1.7.12
@@ -152,16 +148,16 @@ Got dependencies!
 8 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 === format ===
-Formatted 140 files (0 changed) in 0.65 seconds.
+Formatted 150 files (0 changed) in 0.88 seconds.
 === shellcheck ===
 === actionlint ===
 
 step              seconds  result
-pub                   7.3  ok
-format                0.7  ok
-shellcheck            1.7  ok
+pub                  11.0  ok
+format                1.0  ok
+shellcheck            2.2  ok
 actionlint            0.3  ok
-total                 9.1
+total                13.3
 pub=ok format=ok shellcheck=ok actionlint=ok
 === importer ===
 === importer ===
@@ -365,30 +361,30 @@ No issues found!
 ::endgroup::
 
 🎉 193 tests passed.
---- importer: 193 tests, 0 failed, total 6.4 s; per test p50 3 ms, p90 26 ms, p99 555 ms, max 667 ms
-      <10 ms   155  ########################################
-    10-50 ms    25  ######
-   50-100 ms     7  ##
-  100-500 ms     4  #
-     0.5-1 s     2  #
+--- importer: 193 tests, 0 failed, total 7.7 s; per test p50 3 ms, p90 30 ms, p99 496 ms, max 842 ms
+      <10 ms   150  ########################################
+    10-50 ms    29  ########
+   50-100 ms     6  ##
+  100-500 ms     7  ##
+     0.5-1 s     1  
        1-5 s     0  
         >5 s     0  
   slowest:
-       667 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents pbz_synthetic.xls
-       555 ms  damage truncated at every length: an ImportException, or a batch that only contains rows of the full file
-       384 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.xlsx
-       178 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.csv
-       140 ms  xlsx edge cases a cell far away (XFD1048576) does not blow up memory or time
-       113 ms  format detection and wrong files many thousands of rows import in one go with unique ids
-        90 ms  no behaviour change against the golden files from d632e32 pbz_synthetic.xls
-        76 ms  workbook structure no sharedStrings.xml: t="s" cells read as empty, inline strings still work
-        68 ms  pbz_synthetic.xls: format, sizes and counts are logged, no contents
-        63 ms  no behaviour change against the golden files from d632e32 revolut_synthetic.xlsx
+       842 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents pbz_synthetic.xls
+       496 ms  damage truncated at every length: an ImportException, or a batch that only contains rows of the full file
+       480 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.xlsx
+       221 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.csv
+       181 ms  xlsx edge cases a cell far away (XFD1048576) does not blow up memory or time
+       150 ms  format detection and wrong files many thousands of rows import in one go with unique ids
+       114 ms  no behaviour change against the golden files from d632e32 pbz_synthetic.xls
+       108 ms  workbook structure no sharedStrings.xml: t="s" cells read as empty, inline strings still work
+        93 ms  pbz_synthetic.xls: format, sizes and counts are logged, no contents
+        86 ms  no behaviour change against the golden files from d632e32 revolut_synthetic.xlsx
 
 step              seconds  result
-importer             13.4  ok
-total                13.4
---- importer: 193 tests, 0 failed, total 6.4 s; per test p50 3 ms, p90 26 ms, p99 555 ms, max 667 ms
+importer             17.0  ok
+total                17.1
+--- importer: 193 tests, 0 failed, total 7.7 s; per test p50 3 ms, p90 30 ms, p99 496 ms, max 842 ms
 importer=ok
 === core ===
 === core ===
@@ -635,6 +631,56 @@ No issues found!
 ✅ test/periods_impl_test.dart: salaryPaydays a payday is its first salary part, even when later parts arrive days after
 ✅ test/periods_impl_test.dart: salaryPaydays ignores deleted salary, salary after today, and refunds
 ✅ test/periods_impl_test.dart: salaryPaydays no salary: empty
+✅ test/habits_test.dart: detectRecurring three monthly payments make a candidate: id from the payee key, median amount, next due 30 days on
+✅ test/habits_test.dart: detectRecurring two occurrences are not enough, three are
+✅ test/habits_test.dart: detectRecurring gaps of 27 and 33 days pass, 26 and 34 do not
+✅ test/habits_test.dart: detectRecurring amounts within 10 % of the median pass (inclusive), one outside breaks the candidate
+✅ test/habits_test.dart: detectRecurring the median of an even count is the mean of the two middle values
+✅ test/habits_test.dart: detectRecurring an extra purchase at the same payee breaks the monthly chain (shops are not bills)
+✅ test/habits_test.dart: detectRecurring inflows, transfers, hand-added, deleted and future rows never count
+✅ test/habits_test.dart: detectRecurring only the last 7 calendar months count
+✅ test/habits_test.dart: detectRecurring a fixed-category bill is a candidate too (rent by standing order)
+✅ test/habits_test.dart: detectRecurring candidates are ordered by label and derived the same from a shuffled list
+✅ test/habits_test.dart: computePeriod reservation a confirmed bill due before payday is reserved exactly like a fixed cost
+✅ test/habits_test.dart: computePeriod reservation a bill due on or after payday is not reserved; a candidate or dismissed bill never is
+✅ test/habits_test.dart: computePeriod reservation an overdue bill (due before the period) stays reserved until paid
+✅ test/habits_test.dart: computePeriod reservation a bill paid early is released: its next due date lies past payday
+✅ test/habits_test.dart: computePeriod reservation a bill paid in this period is not reserved again even when its next due date falls before payday
+✅ test/habits_test.dart: computePeriod reservation a confirmed bill in a fixed category is due but covered by the plan: nothing changes, a flex one reserves
+✅ test/habits_test.dart: computePeriod reservation several bills add up; dueBills is ordered by due date then label
+✅ test/habits_test.dart: planRecurringPayments a row within ± 3 days of the due date and within 10 % pays the cycle; 4 days or 10 % + 1 cent do not
+✅ test/habits_test.dart: planRecurringPayments the closest row wins, then the earliest, then the smallest id; another payee, a refund, a deleted or hand-added row never pay
+✅ test/habits_test.dart: planRecurringPayments only confirmed bills are paid, and the row that paid the last cycle never pays again
+✅ test/habits_test.dart: reviewState never reviewed: due at once, dated the last review day on or before today
+✅ test/habits_test.dart: reviewState reviewed on Sunday: not due Monday to Saturday, due again from the next Sunday until done
+✅ test/habits_test.dart: reviewState a review done on a weekday is due again on the next review day, not a week after it
+✅ test/habits_test.dart: reviewState changing the review day moves the next review
+✅ test/habits_test.dart: reviewState categories step counts spending rows of the last 7 days without a user-set category
+✅ test/habits_test.dart: reviewState pace step counts categories behind pace or over budget this month
+✅ test/habits_test.dart: reviewState wishlist step counts waiting items past their cooling-off
+✅ test/habits_test.dart: review settings defaults: Sunday, never reviewed, streak 0; values round-trip
+✅ test/habits_test.dart: review settings bad values fall back to the default, logged with the key only
+✅ test/habits_test.dart: WalletRepo an import detects candidates; an entity row syncs with the column names
+✅ test/habits_test.dart: WalletRepo confirm, dismiss, delete; dismissed bills are listed only on request; unknown ids are refused
+✅ test/habits_test.dart: WalletRepo a dismissed or deleted payee is never added again, even by a later import
+✅ test/habits_test.dart: WalletRepo a candidate follows the latest detection; a confirmed bill is not rewritten by detection
+✅ test/habits_test.dart: WalletRepo a bank row within the window pays the cycle: lastPaidTx, nextDue = paying date + 30, the row keeps its category
+✅ test/habits_test.dart: WalletRepo a row 4 days off or 11 % off leaves the cycle open; it is reserved in the period
+✅ test/habits_test.dart: WalletRepo a history import with several cycles catches up one cycle per payment
+✅ test/habits_test.dart: WalletRepo markReviewDone: first review starts the streak at 1, within 14 days +1, a longer gap restarts, same day is a no-op
+✅ test/habits_test.dart: WalletRepo markReviewDone: a skipped week resets the streak (done, skipped, done = 1, not 2)
+✅ test/habits_test.dart: WalletRepo a bill paid on the 15th for a year (real calendar) stays matched: nextDue follows the paying row, never reserved while paid
+✅ test/habits_test.dart: WalletRepo a confirmed bill follows the payee's current category: a rule into a fixed category makes it covered by the plan
+✅ test/habits_test.dart: WalletRepo a confirm that arrives before the bill's creation op is filled in by the next refresh and then paid
+✅ test/habits_test.dart: WalletRepo skipRecurring: an unpaid bill is reserved; skipped, it leaves this period's dueBills and nextDue moves one interval
+✅ test/habits_test.dart: WalletRepo an existing database is upgraded to schema 5 with the recurring table and replays peer files once
+✅ test/habits_test.dart: two devices a candidate detected on one device arrives on the other; confirm there is seen by both
+✅ test/habits_test.dart: two devices dismissed on one device, detected late on the other (import before sync): stays dismissed on both
+✅ test/habits_test.dart: two devices deleted on one device survives a late detection on the other
+✅ test/habits_test.dart: two devices the payment lands on both devices before they sync: both mark the same cycle paid and converge
+✅ test/habits_test.dart: two devices a confirmed Rent bill is covered by the plan on both devices: same dueBills, nothing reserved
+✅ test/habits_test.dart: two devices a skip on one device moves the due date on the other
+✅ test/habits_test.dart: two devices the payment is imported on one device only: the sync marks it paid on the other (once, via runPendingMatch)
 ✅ test/budget_invariants_test.dart: periodSummaries invariants on random wallets contiguous, each live non-transfer row counted once, totals add up, transfers never count (250 wallets)
 ✅ test/budget_invariants_test.dart: computePeriod (safe to spend) identities budget maths on random wallets and days (250 cases)
 ✅ test/budget_invariants_test.dart: computePeriod (safe to spend) identities a new wallet (nothing set) gives zero budget, not errors
@@ -727,7 +773,7 @@ No issues found!
 ✅ test/logs_impl_test.dart: helpers FINE prints as DEBUG; non-JSON field values print as text
 ✅ test/logs_impl_test.dart: RotatingFileSink timer add() flushes by itself after flushDelay
 ✅ test/logs_impl_test.dart: RotatingFileSink timer lines added after close are dropped; write errors are counted, not thrown
-2026-10-20T18:40:28.430+00:00 SEVERE bw.logs log.writeFailed FileSystemException: Creation failed (OS Error: Not a directory, errno = 20)
+2026-10-20T20:48:59.134+00:00 SEVERE bw.logs log.writeFailed FileSystemException: Creation failed (OS Error: Not a directory, errno = 20)
 ✅ test/logs_impl_test.dart: core logs carry no private data import, edits, reads and period maths
 ✅ test/logs_impl_test.dart: core logs carry no private data sync and vault
 ✅ test/logs_impl_test.dart: core logs carry no private data a failed write logs a SEVERE rollback without the values
@@ -1036,36 +1082,36 @@ No issues found!
 ✅ test/goal_contrib_test.dart: sync between devices a goal deleted on A while B adds to it: hidden on both, same tables
 ::endgroup::
 
-🎉 637 tests passed.
---- core: 637 tests, 0 failed, total 27.4 s; per test p50 4 ms, p90 44 ms, p99 358 ms, max 6046 ms
-      <10 ms   441  ########################################
-    10-50 ms   140  #############
-   50-100 ms    35  ###
-  100-500 ms    17  ##
-     0.5-1 s     1  
+🎉 687 tests passed.
+--- core: 687 tests, 0 failed, total 38.3 s; per test p50 5 ms, p90 57 ms, p99 496 ms, max 8282 ms
+      <10 ms   432  ########################################
+    10-50 ms   183  #################
+   50-100 ms    41  ####
+  100-500 ms    25  ##
+     0.5-1 s     3  
        1-5 s     2  
         >5 s     1  
   slowest:
-      6046 ms  random edits on 2-4 devices converge to last-writer-wins (60 seeds from 1016)
-      1830 ms  applying ops order and duplicates do not matter (property, many random op lists)
-      1709 ms  matching cost a large wallet loads only the bank rows that could replace an open entry
-       626 ms  seal / unseal empty, one byte, binary and multi-MB payloads round-trip
-       401 ms  periodSummaries invariants on random wallets contiguous, each live non-transfer row counted once, totals add up, transfers never count (250 wallets)
-       386 ms  outbox and clocks random local writes: outbox in order, clocks = newest op per field, tables = last writer wins
-       358 ms  two devices a delete on one device reopens the partner on both
-       328 ms  forward compatibility a very large file (thousands of ops) applies in one run
-       319 ms  what is read a file is read once: replacing it later with other content is ignored (files are never rewritten)
-       258 ms  re-imports never duplicate every synthetic fixture: second import adds nothing, also after edits and deletes
+      8282 ms  random edits on 2-4 devices converge to last-writer-wins (60 seeds from 1016)
+      2971 ms  applying ops order and duplicates do not matter (property, many random op lists)
+      2584 ms  matching cost a large wallet loads only the bank rows that could replace an open entry
+       782 ms  seal / unseal empty, one byte, binary and multi-MB payloads round-trip
+       556 ms  outbox and clocks random local writes: outbox in order, clocks = newest op per field, tables = last writer wins
+       526 ms  re-imports never duplicate every synthetic fixture: second import adds nothing, also after edits and deletes
+       496 ms  periodSummaries invariants on random wallets contiguous, each live non-transfer row counted once, totals add up, transfers never count (250 wallets)
+       486 ms  forward compatibility a very large file (thousands of ops) applies in one run
+       290 ms  remote contribution ops remote amounts far beyond the cap cannot overflow the total
+       255 ms  matching cost a new device reading many sync files matches once per sync run, not once per file
 
 step              seconds  result
-core                 35.2  ok
-total                35.2
---- core: 637 tests, 0 failed, total 27.4 s; per test p50 4 ms, p90 44 ms, p99 358 ms, max 6046 ms
+core                 48.3  ok
+total                48.3
+--- core: 687 tests, 0 failed, total 38.3 s; per test p50 5 ms, p90 57 ms, p99 496 ms, max 8282 ms
 core=ok
 === app ===
 === app ===
 Analyzing app...                                                
-No issues found! (ran in 8.5s)
+No issues found! (ran in 11.3s)
 
 ::group::✅ Passing tests
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/status_label_test.dart: long text wraps at 320 dp, text scale 1.0
@@ -1162,6 +1208,48 @@ No issues found! (ran in 8.5s)
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/widget_test.dart: percent
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/widget_test.dart: wishlist time left (bug A: "2d 24h left") examples
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/widget_test.dart: wishlist time left (bug A: "2d 24h left") hours are always 1-23, never 24 or 0, over many durations
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: controller reviewState is cached per data version and day, due until the review is done
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: controller confirming the guessed category of a row takes it off the review list
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: controller the review rows are exactly the rows core counts for the categories step
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: controller confirming a row keeps its category and teaches the merchant
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: controller review day: Sunday by default, changing it is kept and clamped to 1..7
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: controller recurring: the gym is a candidate; confirm sets money aside until payday, dismiss hides, delete removes
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: controller nudges: on asks for permission and schedules, off cancels, a refusal leaves it off
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: controller nudges are device-local: the setting is not a synced setting
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: Today due: the review card lists the steps with work and Start review opens the review
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: Today not due: no card; reviewed today shows the streak line
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: Today a review that is not done yet shows no "Reviewed" line
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: Today nothing to fix: the card says so
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: Today Due by payday: confirmed bills only, count and exact sum; a tap calls openBills; hidden at zero
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: bills the plan covers, and overdue ones core lists all three as due, reserves only the two that the plan does not count
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: bills the plan covers, and overdue ones Today: the sum leaves out the covered bill, which is named apart; the late one is marked overdue
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: bills the plan covers, and overdue ones Plan: covered and overdue are written on the bill rows
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: bills the plan covers, and overdue ones only covered bills: no amount in the Today line
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: ReviewScreen four steps with their counts; only finished ones are ticked
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: ReviewScreen Looks right removes a row, the count drops and the step ticks when none are left
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: ReviewScreen wishlist: Skip decides the wish and the step ticks
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: ReviewScreen pace: rows name the over and the behind categories; Got it ticks the step
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: ReviewScreen Done writes the review, pops and the streak grows
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: ReviewScreen a pace row closes the review and asks for Spending
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: ReviewScreen a failing file chooser shows the standard message
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: ReviewScreen wide window: the review opens as a dialog
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: Plan review day chips: Sunday selected, a tap changes the day
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: Plan expected bills: Confirm moves the candidate to Confirmed with its amount
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: Plan expected bills: Not a bill hides it; Remove deletes a confirmed one
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: Plan expected bills: Skip this cycle moves the due date on and the Today line stops counting the bill
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: Plan nudges switch: on asks, schedules and stays on; says amounts never show
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: Plan nudges switch: permission refused keeps it off and says how to allow it
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: Plan nudges on a computer: the switch is off and disabled, with a note
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: Plan Today's bills line scrolls Plan to Expected bills
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: layout 320 dp at text 2.0: Today with the review card and the bills line
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: layout 320 dp at text 2.0: the review with every step filled
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: layout 320 dp at text 2.0: Plan with the review day, expected bills and nudges
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: layout 360 dp: Today with the review card and the bills line
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: layout 360 dp: the review with every step filled
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: layout 360 dp: Plan with the review day, expected bills and nudges
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: layout 1280 wide: Today with the review card and the bills line
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: layout 1280 wide: the review with every step filled
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/habits_test.dart: layout 1280 wide: Plan with the review day, expected bills and nudges
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/adaptive_edge_test.dart: navigation at exact boundaries width 320.0: bottom bar, no rail
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/adaptive_edge_test.dart: navigation at exact boundaries width 599.0: bottom bar, no rail
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/adaptive_edge_test.dart: navigation at exact boundaries width 599.5: bottom bar, no rail
@@ -1312,6 +1400,11 @@ No issues found! (ran in 8.5s)
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/platform_test.dart: Plan › Sync text by platform Android also offers file access
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/platform_test.dart: Plan › Sync text by platform Linux has the folder chooser and typed path only
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/platform_test.dart: main.dart, screens and widgets do not import dart:io (they must build for the web)
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/notifier_test.dart: on Android the real platform is the plugin one, elsewhere nothing
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/notifier_test.dart: permission: asks the system once and passes its answer on
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/notifier_test.dart: schedule: clears the old ones, then one inexact notification per slot, with the plain text only
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/notifier_test.dart: cancelAll goes to the plugin, also in a fresh run that scheduled nothing yet
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/notifier_test.dart: an unknown time zone falls back to UTC and still schedules
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/sheets_edge_test.dart: AddExpenseSheet: invalid amounts show one message and save nothing ""
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/sheets_edge_test.dart: AddExpenseSheet: invalid amounts show one message and save nothing " "
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/sheets_edge_test.dart: AddExpenseSheet: invalid amounts show one message and save nothing "   "
@@ -1393,6 +1486,11 @@ No issues found! (ran in 8.5s)
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/sheets_edge_test.dart: GoalSheet a new goal sheet with a long name fits 320 dp at text scale 2.0
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/sheets_edge_test.dart: GoalSheet an edit goal sheet fits 320 dp at text scale 1.0
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/sheets_edge_test.dart: GoalSheet an edit goal sheet fits 320 dp at text scale 2.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/nudges_test.dart: no reminder line carries a digit, a money sign or a bank/merchant word
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/nudges_test.dart: the same day always gets the same line, the next day another one
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/nudges_test.dart: slots: 15:00 on weekdays, 11:00 on Sunday, none on Saturday, a passed time today is skipped
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/nudges_test.dart: every slot is a plain title and one of the lines: no digits
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/nudges_test.dart: NoNudges does nothing and never fails
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/format_edge_test.dart: parseMoney: empty and junk "" is not a number
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/format_edge_test.dart: parseMoney: empty and junk " " is not a number
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/format_edge_test.dart: parseMoney: empty and junk "   " is not a number
@@ -1611,31 +1709,31 @@ No issues found! (ran in 8.5s)
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/day_change_test.dart: a day change inside a computation does not store the old day's value under the new day
 ::endgroup::
 
-🎉 541 tests passed.
---- app: 541 tests, 0 failed, total 136.8 s; per test p50 76 ms, p90 476 ms, p99 1699 ms, max 1996 ms
-      <10 ms   216  ########################################
-    10-50 ms    31  ######
-   50-100 ms    50  #########
-  100-500 ms   193  ####################################
-     0.5-1 s    31  ######
-       1-5 s    20  ####
+🎉 593 tests passed.
+--- app: 593 tests, 0 failed, total 182.4 s; per test p50 107 ms, p90 609 ms, p99 2221 ms, max 3030 ms
+      <10 ms   217  #######################################
+    10-50 ms    37  #######
+   50-100 ms    31  ######
+  100-500 ms   220  ########################################
+     0.5-1 s    58  ###########
+       1-5 s    30  #####
         >5 s     0  
   slowest:
-      1996 ms  every tab fits 320 dp at text scale 1.0
-      1964 ms  text scale 2.0 with real fonts 320 wide dark: every tab scrolls through
-      1963 ms  360x800 dark: tabs scroll through, right navigation, no Card, square Panels
-      1892 ms  resizing rapid resizes across boundaries keep the State of the pages
-      1758 ms  empty wallet: no transactions, goals, wishes or settings (400 dp)
-      1699 ms  dark: money texts are Plex Mono with tabular figures
-      1411 ms  rent cash threshold is editable in Plan and changes categorisation
-      1410 ms  Spending shows the new month after a tab switch, without any data change
-      1344 ms  switching tabs keeps the other pages as they are
-      1340 ms  Choose files: a failing chooser shows a message, logs the type only and keeps the button usable
+      3030 ms  text scale 2.0 with real fonts 320 wide dark: every tab scrolls through
+      2845 ms  every tab fits 320 dp at text scale 1.0
+      2798 ms  360x800 dark: tabs scroll through, right navigation, no Card, square Panels
+      2733 ms  resizing rapid resizes across boundaries keep the State of the pages
+      2636 ms  empty wallet: no transactions, goals, wishes or settings (400 dp)
+      2221 ms  dark: money texts are Plex Mono with tabular figures
+      2105 ms  Choose files: a failing chooser shows a message, logs the type only and keeps the button usable
+      1925 ms  Spending shows the new month after a tab switch, without any data change
+      1923 ms  rent cash threshold is editable in Plan and changes categorisation
+      1874 ms  switching tabs keeps the other pages as they are
 
 step              seconds  result
-app                 147.8  ok
-total               147.8
---- app: 541 tests, 0 failed, total 136.8 s; per test p50 76 ms, p90 476 ms, p99 1699 ms, max 1996 ms
+app                 197.2  ok
+total               197.2
+--- app: 593 tests, 0 failed, total 182.4 s; per test p50 107 ms, p90 609 ms, p99 2221 ms, max 3030 ms
 app=ok
 === desktop ===
 === desktop-adaptive ===
@@ -1643,12 +1741,12 @@ app=ok
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
 00:00 +0: adaptive 1280x800: every tab and the Add expense dialog
-00:07 +1: adaptive 1920x1080: every tab and the Add expense dialog
-00:12 +2: adaptive 800x1280: every tab and the Add expense dialog
-00:17 +3: adaptive: Ctrl+1..5, Ctrl+N and resizing across the boundaries on the real app
-00:21 +4: (tearDownAll)
-00:21 +4: All tests passed!
---- desktop-adaptive: 4 tests, 0 failed, total 58.0 s; per test p50 4640 ms, p90 7663 ms, p99 7663 ms, max 7663 ms
+00:09 +1: adaptive 1920x1080: every tab and the Add expense dialog
+00:15 +2: adaptive 800x1280: every tab and the Add expense dialog
+00:20 +3: adaptive: Ctrl+1..5, Ctrl+N and resizing across the boundaries on the real app
+00:24 +4: (tearDownAll)
+00:24 +4: All tests passed!
+--- desktop-adaptive: 4 tests, 0 failed, total 66.6 s; per test p50 4928 ms, p90 9663 ms, p99 9663 ms, max 9663 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -1657,39 +1755,39 @@ Building Linux application...
        1-5 s     2  ########################################
         >5 s     2  ########################################
   slowest:
-      7663 ms  adaptive 1280x800: every tab and the Add expense dialog
-      5118 ms  adaptive 1920x1080: every tab and the Add expense dialog
-      4640 ms  adaptive 800x1280: every tab and the Add expense dialog
-      4164 ms  adaptive: Ctrl+1..5, Ctrl+N and resizing across the boundaries on the real app
+      9663 ms  adaptive 1280x800: every tab and the Add expense dialog
+      5737 ms  adaptive 1920x1080: every tab and the Add expense dialog
+      4928 ms  adaptive 800x1280: every tab and the Add expense dialog
+      4302 ms  adaptive: Ctrl+1..5, Ctrl+N and resizing across the boundaries on the real app
 === desktop-big_wallet ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/big_wallet_test.dart
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
 00:00 +0: big wallet: ~20k rows over 5 years stay fast
 PERF rows = 23495
-PERF seed_s = 4.9
-PERF seed_importBatch_max_ms = 933
-PERF restart_repo_open_ms = 2
-PERF restart_repo_transactions_ms = 109
-PERF restart_wc_reload_ms = 370
-PERF weekly_import_files_ms = 60
-PERF weekly_import_parse_ms = 11
-PERF weekly_repo_importBatch_ms = 48
-PERF weekly_wc_reload_ms = 342
-PERF year_import_files_ms = 835
-PERF reimport_import_files_ms = 71
-PERF derive_wc_reload_ms = 414
-PERF derive_wc_period_max_ms = 2
+PERF seed_s = 8.4
+PERF seed_importBatch_max_ms = 1640
+PERF restart_repo_open_ms = 3
+PERF restart_repo_transactions_ms = 136
+PERF restart_wc_reload_ms = 420
+PERF weekly_import_files_ms = 710
+PERF weekly_import_parse_ms = 14
+PERF weekly_repo_importBatch_ms = 694
+PERF weekly_wc_reload_ms = 438
+PERF year_import_files_ms = 1724
+PERF reimport_import_files_ms = 739
+PERF derive_wc_reload_ms = 522
+PERF derive_wc_period_max_ms = 8
 PERF derive_wc_payPeriods_max_ms = 1
 PERF derive_wc_monthSummary_max_ms = 1
-PERF derive_spending_derive_max_ms = 15
-PERF months_spending_derive_max_ms = 5
-PERF frames_tabs = {"frames":58,"janky":26,"build_p50_ms":5.4,"build_p90_ms":49.5,"build_p99_ms":245.4,"build_max_ms":245.4,"raster_p50_ms":14.7,"raster_p90_ms":26.0,"raster_p99_ms":64.8,"raster_max_ms":64.8}
-PERF frames_spending_scroll = {"frames":644,"janky":128,"build_p50_ms":1.1,"build_p90_ms":1.5,"build_p99_ms":2.4,"build_max_ms":12.3,"raster_p50_ms":13.7,"raster_p90_ms":19.1,"raster_p99_ms":30.3,"raster_max_ms":35.3}
-PERF mem = {"rss_mb":752.5,"max_rss_mb":752.2}
-01:07 +1: (tearDownAll)
-01:07 +1: All tests passed!
---- desktop-big_wallet: 1 tests, 0 failed, total 89.8 s; per test p50 67929 ms, p90 67929 ms, p99 67929 ms, max 67929 ms
+PERF derive_spending_derive_max_ms = 16
+PERF months_spending_derive_max_ms = 6
+PERF frames_tabs = {"frames":52,"janky":45,"build_p50_ms":6.7,"build_p90_ms":57.7,"build_p99_ms":314.7,"build_max_ms":314.7,"raster_p50_ms":22.2,"raster_p90_ms":38.1,"raster_p99_ms":94.6,"raster_max_ms":94.6}
+PERF frames_spending_scroll = {"frames":611,"janky":602,"build_p50_ms":1.3,"build_p90_ms":1.6,"build_p99_ms":3.2,"build_max_ms":10.5,"raster_p50_ms":19.0,"raster_p90_ms":26.6,"raster_p99_ms":39.0,"raster_max_ms":53.5}
+PERF mem = {"rss_mb":766.2,"max_rss_mb":777.5}
+01:21 +1: (tearDownAll)
+01:21 +1: All tests passed!
+--- desktop-big_wallet: 1 tests, 0 failed, total 110.0 s; per test p50 81646 ms, p90 81646 ms, p99 81646 ms, max 81646 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -1698,19 +1796,19 @@ PERF mem = {"rss_mb":752.5,"max_rss_mb":752.2}
        1-5 s     0  
         >5 s     1  ########################################
   slowest:
-     67929 ms  big wallet: ~20k rows over 5 years stay fast
+     81646 ms  big wallet: ~20k rows over 5 years stay fast
 === desktop-flows ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/flows_test.dart
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
 00:00 +0: Add expense: validation, shows in Today and Spending, safe to spend drops by the amount
-00:06 +1: Add expense over the wishlist limit: asks first; put on wishlist, or add anyway
-00:12 +2: Category: once changes one row, always makes a merchant rule for all rows and new imports
-00:22 +3: Delete an added expense; its budget comes back
-00:25 +4: Payday checklist and the "Salary landed" banner
-00:27 +5: (tearDownAll)
-00:27 +5: All tests passed!
---- desktop-flows: 5 tests, 0 failed, total 49.8 s; per test p50 6153 ms, p90 10129 ms, p99 10129 ms, max 10129 ms
+00:07 +1: Add expense over the wishlist limit: asks first; put on wishlist, or add anyway
+00:14 +2: Category: once changes one row, always makes a merchant rule for all rows and new imports
+00:24 +3: Delete an added expense; its budget comes back
+00:27 +4: Payday checklist and the "Salary landed" banner
+00:30 +5: (tearDownAll)
+00:30 +5: All tests passed!
+--- desktop-flows: 5 tests, 0 failed, total 58.7 s; per test p50 6447 ms, p90 10587 ms, p99 10587 ms, max 10587 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -1719,477 +1817,14 @@ Building Linux application...
        1-5 s     2  ###########################
         >5 s     3  ########################################
   slowest:
-     10129 ms  Category: once changes one row, always makes a merchant rule for all rows and new imports
-      6635 ms  Add expense: validation, shows in Today and Spending, safe to spend drops by the amount
-      6153 ms  Add expense over the wishlist limit: asks first; put on wishlist, or add anyway
-      2354 ms  Delete an added expense; its budget comes back
-      2022 ms  Payday checklist and the "Salary landed" banner
+     10587 ms  Category: once changes one row, always makes a merchant rule for all rows and new imports
+      7874 ms  Add expense: validation, shows in Today and Spending, safe to spend drops by the amount
+      6447 ms  Add expense over the wishlist limit: asks first; put on wishlist, or add anyway
+      2807 ms  Delete an added expense; its budget comes back
+      2294 ms  Payday checklist and the "Salary landed" banner
 === desktop-import ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/import_test.dart
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
 00:00 +0: PBZ .xls, Revolut .xlsx and .csv: result lines, transactions, re-import adds nothing
-00:05 +1: A current-month Revolut CSV: Spending and Today show it; an added expense is matched, not doubled
-00:08 +2: (tearDownAll)
-00:08 +2: All tests passed!
---- desktop-import: 2 tests, 0 failed, total 31.1 s; per test p50 3069 ms, p90 5702 ms, p99 5702 ms, max 5702 ms
-      <10 ms     0  
-    10-50 ms     0  
-   50-100 ms     0  
-  100-500 ms     0  
-     0.5-1 s     0  
-       1-5 s     1  ########################################
-        >5 s     1  ########################################
-  slowest:
-      5702 ms  PBZ .xls, Revolut .xlsx and .csv: result lines, transactions, re-import adds nothing
-      3069 ms  A current-month Revolut CSV: Spending and Today show it; an added expense is matched, not doubled
-=== desktop-layout ===
-00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/layout_test.dart
-Building Linux application...                                   
-✓ Built build/linux/x64/debug/bundle/budget_wallet
-00:00 +0: layout: dark
-layout dark: media Size(1280.0, 720.0), render view Size(1280.0, 720.0)
-layout dark: onboarding
-layout dark: today
-layout dark: add-expense-sheet
-layout dark: spending
-layout dark: wishlist
-layout dark: goals
-layout dark: plan
-layout dark: tx-sheet
-layout dark: goal-sheet
-00:20 +1: layout: text130
-layout text130: media Size(1280.0, 720.0), render view Size(1280.0, 720.0)
-layout text130: onboarding
-layout text130: today
-layout text130: add-expense-sheet
-layout text130: spending
-layout text130: wishlist
-layout text130: goals
-layout text130: plan
-layout text130: tx-sheet
-layout text130: goal-sheet
-00:38 +2: layout: text200
-layout text200: media Size(1280.0, 720.0), render view Size(1280.0, 720.0)
-layout text200: onboarding
-layout text200: today
-layout text200: add-expense-sheet
-layout text200: spending
-layout text200: wishlist
-layout text200: goals
-layout text200: plan
-layout text200: tx-sheet
-layout text200: goal-sheet
-01:01 +3: layout: small
-layout small: media Size(320.0, 640.0), render view Size(320.0, 640.0)
-layout small: onboarding
-layout small: today
-layout small: add-expense-sheet
-layout small: spending
-layout small: wishlist
-layout small: goals
-layout small: plan
-layout small: tx-sheet
-layout small: goal-sheet
-01:22 +4: layout: small-dark-text200
-layout small-dark-text200: media Size(320.0, 640.0), render view Size(320.0, 640.0)
-layout small-dark-text200: onboarding
-layout small-dark-text200: today
-layout small-dark-text200: add-expense-sheet
-layout small-dark-text200: spending
-layout small-dark-text200: wishlist
-layout small-dark-text200: goals
-layout small-dark-text200: plan
-layout small-dark-text200: tx-sheet
-layout small-dark-text200: goal-sheet
-01:51 +5: layout: wide-dark
-layout wide-dark: media Size(1280.0, 800.0), render view Size(1280.0, 800.0)
-layout wide-dark: onboarding
-layout wide-dark: today
-layout wide-dark: add-expense-sheet
-layout wide-dark: spending
-layout wide-dark: wishlist
-layout wide-dark: goals
-layout wide-dark: plan
-layout wide-dark: tx-sheet
-layout wide-dark: goal-sheet
-02:07 +6: (tearDownAll)
-02:07 +6: All tests passed!
---- desktop-layout: 6 tests, 0 failed, total 149.4 s; per test p50 20137 ms, p90 29395 ms, p99 29395 ms, max 29395 ms
-      <10 ms     0  
-    10-50 ms     0  
-   50-100 ms     0  
-  100-500 ms     0  
-     0.5-1 s     0  
-       1-5 s     0  
-        >5 s     6  ########################################
-  slowest:
-     29395 ms  layout: small-dark-text200
-     22920 ms  layout: text200
-     21377 ms  layout: small
-     20137 ms  layout: dark
-     18034 ms  layout: text130
-     15920 ms  layout: wide-dark
-=== desktop-onboarding ===
-00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/onboarding_test.dart
-Building Linux application...                                   
-✓ Built build/linux/x64/debug/bundle/budget_wallet
-00:00 +0: Start a new wallet: key stored, default goals, salary banner
-00:03 +1: Join: a wrong key is refused, the right key joins
-00:05 +2: (tearDownAll)
-00:05 +2: All tests passed!
---- desktop-onboarding: 2 tests, 0 failed, total 27.5 s; per test p50 1544 ms, p90 3468 ms, p99 3468 ms, max 3468 ms
-      <10 ms     0  
-    10-50 ms     0  
-   50-100 ms     0  
-  100-500 ms     0  
-     0.5-1 s     0  
-       1-5 s     2  ########################################
-        >5 s     0  
-  slowest:
-      3468 ms  Start a new wallet: key stored, default goals, salary banner
-      1544 ms  Join: a wrong key is refused, the right key joins
-=== desktop-perf ===
-00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/perf_test.dart
-Building Linux application...                                   
-✓ Built build/linux/x64/debug/bundle/budget_wallet
-00:00 +0: perf: only in profile mode (tools/build.sh perf)
-  Skip: profile mode only: run tools/build.sh perf
-00:00 +0 ~1: (tearDownAll)
-00:00 +0 ~1: All tests skipped.
---- desktop-perf: 1 tests, 0 failed, total 22.1 s; per test p50 1 ms, p90 1 ms, p99 1 ms, max 1 ms
-      <10 ms     1  ########################################
-    10-50 ms     0  
-   50-100 ms     0  
-  100-500 ms     0  
-     0.5-1 s     0  
-       1-5 s     0  
-        >5 s     0  
-  slowest:
-         1 ms  perf: only in profile mode (tools/build.sh perf)  [skipped]
-=== desktop-plan ===
-00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/plan_test.dart
-Building Linux application...                                   
-✓ Built build/linux/x64/debug/bundle/budget_wallet
-00:00 +0: Plan numbers: bad input is refused, good input is saved and used everywhere
-00:36 +1: Start new month from Plan: cancel, today, another day
-00:42 +2: Sync folder, wallet key, Diagnostics: level, log size, logs to the sync folder, clear
-00:54 +3: (tearDownAll)
-00:54 +3: All tests passed!
---- desktop-plan: 3 tests, 0 failed, total 76.6 s; per test p50 12215 ms, p90 36031 ms, p99 36031 ms, max 36031 ms
-      <10 ms     0  
-    10-50 ms     0  
-   50-100 ms     0  
-  100-500 ms     0  
-     0.5-1 s     0  
-       1-5 s     0  
-        >5 s     3  ########################################
-  slowest:
-     36031 ms  Plan numbers: bad input is refused, good input is saved and used everywhere
-     12215 ms  Sync folder, wallet key, Diagnostics: level, log size, logs to the sync folder, clear
-      6518 ms  Start new month from Plan: cancel, today, another day
-=== desktop-screens ===
-00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/screens_test.dart
-Building Linux application...                                   
-✓ Built build/linux/x64/debug/bundle/budget_wallet
-00:00 +0: every tab with a synthetic wallet
-2026-10-20T18:52:06.192+00:00 INFO bw.app app.info {"version":"2.0.0+1","mode":"debug","platform":"linux","os":"Linux 7.0.0-1017-azure #17~24.04.1-Ubuntu SMP PREEMPT Thu Sep 24 18:46:57 UTC 2026","dart":"3.13.5","cpus":2,"flutter":"3.47.7","locale":"C","screen":"1280x720@1.0","logLevel":"ALL"}
-2026-10-20T18:52:06.196+00:00 INFO bw.app app.start {"phase":"logs","ms":48}
-2026-10-20T18:52:06.244+00:00 INFO bw.repo repo.migrate {"from":1,"to":4,"new":true,"replayFiles":0,"rehinted":0}
-2026-10-20T18:52:06.245+00:00 DEBUG bw.perf repo.open {"ms":36,"file":true,"new":true,"tx":0,"outbox":0}
-2026-10-20T18:52:06.245+00:00 INFO bw.app app.start {"phase":"db","ms":48}
-2026-10-20T18:52:06.250+00:00 DEBUG bw.perf key.read {"ms":3,"store":"file","found":false}
-2026-10-20T18:52:06.251+00:00 INFO bw.app app.start {"phase":"key","ms":5,"found":false}
-2026-10-20T18:52:06.256+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-20T18:52:06.257+00:00 DEBUG bw.perf repo.transactions {"ms":0,"rows":0,"live":0}
-2026-10-20T18:52:06.258+00:00 DEBUG bw.perf wc.categorize {"ms":0,"tx":0}
-2026-10-20T18:52:06.259+00:00 DEBUG bw.perf wc.goalsWish {"ms":1}
-2026-10-20T18:52:06.260+00:00 DEBUG bw.perf wc.reload {"ms":7,"tx":0,"goals":0,"wish":0}
-2026-10-20T18:52:06.260+00:00 INFO bw.app app.start {"phase":"reload","ms":9,"tx":0,"syncFolder":false,"logLevel":"all"}
-2026-10-20T18:52:06.262+00:00 INFO bw.app app.start {"phase":"ready","ms":115}
-2026-10-20T18:52:06.269+00:00 FINER bw.sync sync.skip {"trigger":"startup","reason":"noFolder"}
-2026-10-20T18:52:06.316+00:00 DEBUG bw.perf key.write {"ms":51,"store":"file"}
-2026-10-20T18:52:06.317+00:00 INFO bw.app wallet.create {"defaultGoals":true}
-2026-10-20T18:52:06.325+00:00 DEBUG bw.perf repo.write {"ms":5,"ops":1,"entities":"goal"}
-2026-10-20T18:52:06.327+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"goal"}
-2026-10-20T18:52:06.327+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-20T18:52:06.328+00:00 DEBUG bw.perf repo.transactions {"ms":0,"rows":0,"live":0}
-2026-10-20T18:52:06.328+00:00 DEBUG bw.perf wc.categorize {"ms":0,"tx":0}
-2026-10-20T18:52:06.330+00:00 DEBUG bw.perf wc.goalsWish {"ms":1}
-2026-10-20T18:52:06.331+00:00 DEBUG bw.perf wc.reload {"ms":3,"tx":0,"goals":2,"wish":0}
-2026-10-20T18:52:06.462+00:00 DEBUG bw.perf repo.write {"ms":119,"ops":191,"entities":"tx"}
-2026-10-20T18:52:06.467+00:00 DEBUG bw.transfers transfers.plan {"rows":0,"open":0,"paired":0,"reopened":0}
-2026-10-20T18:52:06.467+00:00 DEBUG bw.perf repo.transfers {"ms":4,"candidates":0,"rows":0,"paired":0,"reopened":0}
-2026-10-20T18:52:06.469+00:00 DEBUG bw.perf repo.match {"ms":0,"manual":0,"open":0,"bank":0,"added":0}
-2026-10-20T18:52:06.470+00:00 DEBUG bw.perf repo.importBatch {"ms":129,"source":"pbz","rows":191,"added":191,"dupes":0,"matched":0,"transfers":0,"skipped":0}
-2026-10-20T18:52:06.472+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":5,"entities":"setting"}
-2026-10-20T18:52:06.472+00:00 INFO bw.app settings.changed {"keys":"salary,rent,loan,subs,paydayDay"}
-2026-10-20T18:52:06.475+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-20T18:52:06.480+00:00 DEBUG bw.perf repo.transactions {"ms":5,"rows":191,"live":191}
-2026-10-20T18:52:06.488+00:00 DEBUG bw.perf wc.categorize {"ms":7,"tx":191}
-2026-10-20T18:52:06.488+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
-2026-10-20T18:52:06.489+00:00 DEBUG bw.perf wc.reload {"ms":16,"tx":191,"goals":2,"wish":0}
-2026-10-20T18:52:06.491+00:00 DEBUG bw.perf repo.write {"ms":0,"ops":1,"entities":"setting"}
-2026-10-20T18:52:06.492+00:00 INFO bw.app budgets.saved {"count":3}
-2026-10-20T18:52:06.493+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-20T18:52:06.496+00:00 DEBUG bw.perf repo.transactions {"ms":3,"rows":191,"live":191}
-2026-10-20T18:52:06.501+00:00 DEBUG bw.perf wc.categorize {"ms":4,"tx":191}
-2026-10-20T18:52:06.501+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
-2026-10-20T18:52:06.502+00:00 DEBUG bw.perf wc.reload {"ms":9,"tx":191,"goals":2,"wish":0}
-2026-10-20T18:52:06.748+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":21,"tx":13,"incomeMode":"planned","goals":2}
-2026-10-20T18:52:06.748+00:00 DEBUG bw.perf wc.period {"ms":3}
-2026-10-20T18:52:06.786+00:00 FINER bw.budget budget.vsActual {"month":"2026-10","lines":6,"budgeted":3,"over":1,"elapsed":20}
-2026-10-20T18:52:06.787+00:00 DEBUG bw.perf wc.budgetVsActual {"ms":1,"month":"2026-10","tx":191}
-2026-10-20T18:52:06.820+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2025-10"}
-2026-10-20T18:52:06.821+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2025-11"}
-2026-10-20T18:52:06.821+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2025-12"}
-2026-10-20T18:52:06.821+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-01"}
-2026-10-20T18:52:06.821+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-02"}
-2026-10-20T18:52:06.821+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-03"}
-2026-10-20T18:52:06.821+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-04"}
-2026-10-20T18:52:06.821+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-05"}
-2026-10-20T18:52:06.822+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-06"}
-2026-10-20T18:52:06.822+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-07"}
-2026-10-20T18:52:06.822+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-08"}
-2026-10-20T18:52:06.822+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-09"}
-2026-10-20T18:52:06.822+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-10"}
-2026-10-20T18:52:06.824+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
-2026-10-20T18:52:06.825+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
-2026-10-20T18:52:06.826+00:00 DEBUG bw.perf wc.payPeriods {"ms":3,"count":12}
-2026-10-20T18:52:06.830+00:00 DEBUG bw.perf spending.derive {"ms":9,"month":"2026-10","tx":191}
-2026-10-20T18:52:07.709+00:00 DEBUG bw.mem mem {"rss_mb":517.5,"max_rss_mb":523.9}
-2026-10-20T18:52:07.805+00:00 WARNING bw.frames frames.slow {"build_ms":1123.5,"raster_ms":58.8,"tab":"today"}
-2026-10-20T18:52:08.102+00:00 INFO bw.nav nav.tab {"from":"today","to":"spending","via":"rail"}
-2026-10-20T18:52:08.103+00:00 INFO bw.frames frames.window {"frames":2,"janky":2,"build_p50_ms":32.4,"build_p90_ms":1123.5,"build_p99_ms":1123.5,"build_max_ms":1123.5,"raster_p50_ms":17.6,"raster_p90_ms":58.8,"raster_p99_ms":58.8,"raster_max_ms":58.8,"tab":"today"}
-2026-10-20T18:52:08.564+00:00 INFO bw.nav nav.tab {"from":"spending","to":"wishlist","via":"rail"}
-2026-10-20T18:52:08.564+00:00 INFO bw.frames frames.window {"frames":3,"janky":3,"build_p50_ms":16.9,"build_p90_ms":85.2,"build_p99_ms":85.2,"build_max_ms":85.2,"raster_p50_ms":33.0,"raster_p90_ms":40.3,"raster_p99_ms":40.3,"raster_max_ms":40.3,"tab":"spending"}
-2026-10-20T18:52:08.927+00:00 INFO bw.nav nav.tab {"from":"wishlist","to":"goals","via":"rail"}
-2026-10-20T18:52:08.928+00:00 INFO bw.frames frames.window {"frames":4,"janky":3,"build_p50_ms":13.2,"build_p90_ms":52.6,"build_p99_ms":52.6,"build_max_ms":52.6,"raster_p50_ms":18.2,"raster_p90_ms":19.9,"raster_p99_ms":19.9,"raster_max_ms":19.9,"tab":"wishlist"}
-2026-10-20T18:52:09.274+00:00 INFO bw.nav nav.tab {"from":"goals","to":"plan","via":"rail"}
-2026-10-20T18:52:09.274+00:00 INFO bw.frames frames.window {"frames":5,"janky":1,"build_p50_ms":8.7,"build_p90_ms":21.2,"build_p99_ms":21.2,"build_max_ms":21.2,"raster_p50_ms":12.2,"raster_p90_ms":19.1,"raster_p99_ms":19.1,"raster_max_ms":19.1,"tab":"goals"}
-2026-10-20T18:52:09.504+00:00 FINER bw.sync sync.skip {"trigger":"change","reason":"noFolder"}
-2026-10-20T18:52:09.998+00:00 WARNING bw.frames frames.slow {"build_ms":119.3,"raster_ms":21.9,"tab":"plan"}
-2026-10-20T18:52:10.473+00:00 INFO bw.app log.level {"from":"all","to":"info"}
-2026-10-20T18:52:10.721+00:00 INFO bw.app log.level {"from":"info","to":"all"}
-2026-10-20T18:52:11.311+00:00 DEBUG bw.perf repo.write {"ms":2,"ops":1,"entities":"tx"}
-2026-10-20T18:52:11.311+00:00 INFO bw.app expense.add {"category":"Home & tools"}
-2026-10-20T18:52:11.312+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-20T18:52:11.320+00:00 DEBUG bw.perf repo.transactions {"ms":8,"rows":192,"live":192}
-2026-10-20T18:52:11.325+00:00 DEBUG bw.perf wc.categorize {"ms":5,"tx":192}
-2026-10-20T18:52:11.326+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
-2026-10-20T18:52:11.326+00:00 DEBUG bw.perf wc.reload {"ms":14,"tx":192,"goals":2,"wish":0}
-2026-10-20T18:52:11.329+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"wish"}
-2026-10-20T18:52:11.330+00:00 INFO bw.app wish.add {"status":"waiting"}
-2026-10-20T18:52:11.330+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-20T18:52:11.334+00:00 DEBUG bw.perf repo.transactions {"ms":3,"rows":192,"live":192}
-2026-10-20T18:52:11.340+00:00 DEBUG bw.perf wc.categorize {"ms":5,"tx":192}
-2026-10-20T18:52:11.342+00:00 DEBUG bw.perf wc.goalsWish {"ms":1}
-2026-10-20T18:52:11.342+00:00 DEBUG bw.perf wc.reload {"ms":12,"tx":192,"goals":2,"wish":1}
-2026-10-20T18:52:11.344+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"goal"}
-2026-10-20T18:52:11.344+00:00 INFO bw.app goal.save {"new":true}
-2026-10-20T18:52:11.345+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-20T18:52:11.347+00:00 DEBUG bw.perf repo.transactions {"ms":2,"rows":192,"live":192}
-2026-10-20T18:52:11.351+00:00 DEBUG bw.perf wc.categorize {"ms":3,"tx":192}
-2026-10-20T18:52:11.351+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
-2026-10-20T18:52:11.351+00:00 DEBUG bw.perf wc.reload {"ms":7,"tx":192,"goals":3,"wish":1}
-2026-10-20T18:52:11.354+00:00 DEBUG bw.importer importer.detect {"format":"csv","bytes":189}
-2026-10-20T18:52:11.355+00:00 DEBUG bw.importer.csv csv.read {"chars":189,"sep":",","rows":2,"unclosedQuote":false}
-2026-10-20T18:52:11.359+00:00 INFO bw.importer importer.parse {"format":"csv","source":"revolut","rows":2,"txs":1,"skipped":0,"invalid":0,"readMs":1,"ms":5}
-2026-10-20T18:52:11.359+00:00 DEBUG bw.perf import.parse {"ms":6,"file":0,"ext":"csv","bytes":189}
-2026-10-20T18:52:11.361+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"tx"}
-2026-10-20T18:52:11.362+00:00 DEBUG bw.transfers transfers.plan {"rows":0,"open":0,"paired":0,"reopened":0}
-2026-10-20T18:52:11.363+00:00 DEBUG bw.perf repo.transfers {"ms":1,"candidates":0,"rows":0,"paired":0,"reopened":0}
-2026-10-20T18:52:11.365+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-20T18:52:11.369+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":2,"entities":"tx"}
-2026-10-20T18:52:11.369+00:00 DEBUG bw.perf repo.match {"ms":6,"manual":1,"open":1,"bank":1,"added":1,"unmatched":0,"categories":1}
-2026-10-20T18:52:11.369+00:00 DEBUG bw.perf repo.importBatch {"ms":10,"source":"revolut","rows":1,"added":1,"dupes":0,"matched":1,"transfers":0,"skipped":0}
-2026-10-20T18:52:11.370+00:00 DEBUG bw.perf import.file {"ms":16,"file":0,"ext":"csv","bytes":189,"source":"revolut","rows":1,"added":1,"dupes":0,"matched":1,"skipped":0,"invalid":0}
-2026-10-20T18:52:11.371+00:00 DEBUG bw.perf import.files {"ms":17,"files":1,"ok":1}
-2026-10-20T18:52:11.372+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
-2026-10-20T18:52:11.374+00:00 DEBUG bw.perf repo.transactions {"ms":2,"rows":193,"live":192}
-2026-10-20T18:52:11.379+00:00 DEBUG bw.perf wc.categorize {"ms":4,"tx":192}
-2026-10-20T18:52:11.380+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
-2026-10-20T18:52:11.380+00:00 DEBUG bw.perf wc.reload {"ms":9,"tx":192,"goals":3,"wish":1}
-2026-10-20T18:52:11.383+00:00 INFO bw.app category.change {"from":"Home & tools","to":"Shopping","always":true,"source":"revolut"}
-2026-10-20T18:52:11.386+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"rule"}
-2026-10-20T18:52:11.388+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"tx"}
-2026-10-20T18:52:11.389+00:00 DEBUG bw.categories categories.build {"rules":1,"patterns":0,"patternsUsed":0}
-2026-10-20T18:52:11.391+00:00 DEBUG bw.perf repo.transactions {"ms":1,"rows":193,"live":192}
-2026-10-20T18:52:11.399+00:00 DEBUG bw.perf wc.categorize {"ms":7,"tx":192}
-2026-10-20T18:52:11.399+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
-2026-10-20T18:52:11.400+00:00 DEBUG bw.perf wc.reload {"ms":11,"tx":192,"goals":3,"wish":1}
-2026-10-20T18:52:11.408+00:00 INFO bw.nav nav.tab {"from":"plan","to":"today","via":"rail"}
-2026-10-20T18:52:11.408+00:00 INFO bw.frames frames.window {"frames":24,"janky":11,"build_p50_ms":6.8,"build_p90_ms":39.7,"build_p99_ms":119.3,"build_max_ms":119.3,"raster_p50_ms":12.5,"raster_p90_ms":21.9,"raster_p99_ms":28.1,"raster_max_ms":28.1,"tab":"plan"}
-2026-10-20T18:52:11.438+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":21,"tx":14,"incomeMode":"planned","goals":3}
-2026-10-20T18:52:11.438+00:00 DEBUG bw.perf wc.period {"ms":0}
-2026-10-20T18:52:11.441+00:00 FINER bw.budget budget.vsActual {"month":"2026-10","lines":7,"budgeted":3,"over":1,"elapsed":20}
-2026-10-20T18:52:11.441+00:00 DEBUG bw.perf wc.budgetVsActual {"ms":0,"month":"2026-10","tx":192}
-2026-10-20T18:52:11.448+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2025-10"}
-2026-10-20T18:52:11.448+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2025-11"}
-2026-10-20T18:52:11.448+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2025-12"}
-2026-10-20T18:52:11.448+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-01"}
-2026-10-20T18:52:11.448+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-02"}
-2026-10-20T18:52:11.448+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-03"}
-2026-10-20T18:52:11.448+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-04"}
-2026-10-20T18:52:11.449+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-05"}
-2026-10-20T18:52:11.449+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-06"}
-2026-10-20T18:52:11.449+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-07"}
-2026-10-20T18:52:11.449+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-08"}
-2026-10-20T18:52:11.449+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-09"}
-2026-10-20T18:52:11.449+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-10"}
-2026-10-20T18:52:11.450+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
-2026-10-20T18:52:11.450+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":192}
-2026-10-20T18:52:11.450+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
-2026-10-20T18:52:11.450+00:00 DEBUG bw.perf spending.derive {"ms":2,"month":"2026-10","tx":192}
-2026-10-20T18:52:11.769+00:00 WARNING bw.frames frames.slow {"build_ms":199.1,"raster_ms":23.7,"tab":"today"}
-2026-10-20T18:52:14.402+00:00 FINER bw.sync sync.skip {"trigger":"change","reason":"noFolder"}
-2026-10-20T18:52:15.140+00:00 INFO bw.frames frames.window {"frames":24,"janky":4,"build_p50_ms":0.4,"build_p90_ms":0.9,"build_p99_ms":199.1,"build_max_ms":199.1,"raster_p50_ms":13.8,"raster_p90_ms":23.7,"raster_p99_ms":26.7,"raster_max_ms":26.7,"tab":"today"}
-2026-10-20T18:52:15.140+00:00 DEBUG bw.mem mem {"rss_mb":590.2,"max_rss_mb":616.7}
-00:09 +1: (tearDownAll)
-00:09 +1: All tests passed!
---- desktop-screens: 1 tests, 0 failed, total 31.1 s; per test p50 9261 ms, p90 9261 ms, p99 9261 ms, max 9261 ms
-      <10 ms     0  
-    10-50 ms     0  
-   50-100 ms     0  
-  100-500 ms     0  
-     0.5-1 s     0  
-       1-5 s     0  
-        >5 s     1  ########################################
-  slowest:
-      9261 ms  every tab with a synthetic wallet
-=== desktop-wishlist_goals ===
-00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/wishlist_goals_test.dart
-Building Linux application...                                   
-✓ Built build/linux/x64/debug/bundle/budget_wallet
-00:00 +0: Wishlist: price check, cooling off, then buy or skip
-00:12 +1: Wishlist: Save for it makes a goal with the price as target
-00:15 +2: Goals: create, edit, add money, reached, delete; months-to-goal text
-00:25 +3: (tearDownAll)
-00:25 +3: All tests passed!
---- desktop-wishlist_goals: 3 tests, 0 failed, total 46.9 s; per test p50 10063 ms, p90 12198 ms, p99 12198 ms, max 12198 ms
-      <10 ms     0  
-    10-50 ms     0  
-   50-100 ms     0  
-  100-500 ms     0  
-     0.5-1 s     0  
-       1-5 s     1  ####################
-        >5 s     2  ########################################
-  slowest:
-     12198 ms  Wishlist: price check, cooling off, then buy or skip
-     10063 ms  Goals: create, edit, add money, reached, delete; months-to-goal text
-      2882 ms  Wishlist: Save for it makes a goal with the price as target
-
-step              seconds  result
-desktop-adaptive     60.8  ok
-desktop-big_wallet     90.4  ok
-desktop-flows        50.4  ok
-desktop-import       31.6  ok
-desktop-layout      150.0  ok
-desktop-onboarding     28.1  ok
-desktop-perf         22.7  ok
-desktop-plan         77.2  ok
-desktop-screens      31.6  ok
-desktop-wishlist_goals     47.4  ok
-total               590.8
---- desktop-adaptive: 4 tests, 0 failed, total 58.0 s; per test p50 4640 ms, p90 7663 ms, p99 7663 ms, max 7663 ms
---- desktop-big_wallet: 1 tests, 0 failed, total 89.8 s; per test p50 67929 ms, p90 67929 ms, p99 67929 ms, max 67929 ms
---- desktop-flows: 5 tests, 0 failed, total 49.8 s; per test p50 6153 ms, p90 10129 ms, p99 10129 ms, max 10129 ms
---- desktop-import: 2 tests, 0 failed, total 31.1 s; per test p50 3069 ms, p90 5702 ms, p99 5702 ms, max 5702 ms
---- desktop-layout: 6 tests, 0 failed, total 149.4 s; per test p50 20137 ms, p90 29395 ms, p99 29395 ms, max 29395 ms
---- desktop-onboarding: 2 tests, 0 failed, total 27.5 s; per test p50 1544 ms, p90 3468 ms, p99 3468 ms, max 3468 ms
---- desktop-perf: 1 tests, 0 failed, total 22.1 s; per test p50 1 ms, p90 1 ms, p99 1 ms, max 1 ms
---- desktop-plan: 3 tests, 0 failed, total 76.6 s; per test p50 12215 ms, p90 36031 ms, p99 36031 ms, max 36031 ms
---- desktop-screens: 1 tests, 0 failed, total 31.1 s; per test p50 9261 ms, p90 9261 ms, p99 9261 ms, max 9261 ms
---- desktop-wishlist_goals: 3 tests, 0 failed, total 46.9 s; per test p50 10063 ms, p90 12198 ms, p99 12198 ms, max 12198 ms
-desktop-adaptive=ok desktop-big_wallet=ok desktop-flows=ok desktop-import=ok desktop-layout=ok desktop-onboarding=ok desktop-perf=ok desktop-plan=ok desktop-screens=ok desktop-wishlist_goals=ok
-=== apk ===
-[================                       ] 42% Unzipping... android-ndk-r28c/tool
-[=================                      ] 43% Unzipping... android-ndk-r28c/tool
-[=================                      ] 44% Unzipping... android-ndk-r28c/tool
-[=================                      ] 45% Unzipping... android-ndk-r28c/tool
-[==================                     ] 45% Unzipping... android-ndk-r28c/tool
-[==================                     ] 46% Unzipping... android-ndk-r28c/tool
-[==================                     ] 47% Unzipping... android-ndk-r28c/tool
-[===================                    ] 48% Unzipping... android-ndk-r28c/tool
-[===================                    ] 49% Unzipping... android-ndk-r28c/tool
-[===================                    ] 50% Unzipping... android-ndk-r28c/tool
-[====================                   ] 50% Unzipping... android-ndk-r28c/tool
-[====================                   ] 51% Unzipping... android-ndk-r28c/tool
-[====================                   ] 52% Unzipping... android-ndk-r28c/tool
-[=====================                  ] 53% Unzipping... android-ndk-r28c/tool
-[=====================                  ] 54% Unzipping... android-ndk-r28c/tool
-[=====================                  ] 54% Unzipping... android-ndk-r28c/buil
-[=====================                  ] 54% Unzipping... android-ndk-r28c/sour
-[=====================                  ] 54% Unzipping... android-ndk-r28c/NOTI
-[=====================                  ] 54% Unzipping... android-ndk-r28c/ndk-
-[=====================                  ] 54% Unzipping... android-ndk-r28c/NOTI
-[=====================                  ] 54% Unzipping... android-ndk-r28c/pyth
-[=====================                  ] 54% Unzipping... android-ndk-r28c/preb
-[=====================                  ] 54% Unzipping... android-ndk-r28c/ndk-
-[=====================                  ] 54% Unzipping... android-ndk-r28c/sour
-[=====================                  ] 54% Unzipping... android-ndk-r28c/simp
-[=====================                  ] 55% Unzipping... android-ndk-r28c/simp
-[=====================                  ] 55% Unzipping... android-ndk-r28c/CHAN
-[=======================================] 100% Unzipping... android-ndk-r28c/CHA
-
-Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 4464 bytes (99.7% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
-Checking the license for package CMake 3.22.1 in /usr/local/lib/android/sdk/licenses
-License for package CMake 3.22.1 accepted.
-Preparing "Install CMake 3.22.1 v.3.22.1".
-"Install CMake 3.22.1 v.3.22.1" ready.
-Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
-"Install CMake 3.22.1 v.3.22.1" complete.
-"Install CMake 3.22.1 v.3.22.1" finished.
-Caught exception: Already watching path: /opt/hostedtoolcache/flutter/stable-3.47.7-x64/flutter/packages/flutter_tools/gradle
-Running Gradle task 'assembleRelease'...                          472.2s
-✓ Built build/app/outputs/flutter-apk/app-release.apk (61.5MB)
-=== linux ===
-=== linux ===
-Resolving dependencies...
-Downloading packages...
-  cross_file 0.3.5+5 (0.4.0 available)
-  equatable 2.1.0 (3.0.0 available)
-  material_color_utilities 0.13.0 (0.13.1 available)
-  qr 3.0.2 (4.0.0 available)
-  sqlite3 2.9.4 (3.7.1 available)
-  sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
-  test_api 0.7.12 (0.7.15 available)
-  vector_math 2.4.0 (2.4.3 available)
-Got dependencies!
-8 packages have newer versions incompatible with dependency constraints.
-Try `flutter pub outdated` for more information.
-Building Linux application...                                   
-✓ Built build/linux/x64/release/bundle/budget_wallet
-
-step              seconds  result
-linux                73.5  ok
-total                73.5
-linux=ok
-=== smoke ===
-=== linux ===
-Resolving dependencies...
-Downloading packages...
-  cross_file 0.3.5+5 (0.4.0 available)
-  equatable 2.1.0 (3.0.0 available)
-  material_color_utilities 0.13.0 (0.13.1 available)
-  qr 3.0.2 (4.0.0 available)
-  sqlite3 2.9.4 (3.7.1 available)
-  sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
-  test_api 0.7.12 (0.7.15 available)
-  vector_math 2.4.0 (2.4.3 available)
-Got dependencies!
-8 packages have newer versions incompatible with dependency constraints.
-Try `flutter pub outdated` for more information.
-Building Linux application...                                   
-✓ Built build/linux/x64/release/bundle/budget_wallet
-=== desktop-smoke ===
-app still running after 10 s; sending SIGTERM
-app exited with code 143
-app log: 21 lines (dist/logs/app-linux-smoke.log)
-WARNING lines: 1
-
-step              seconds  result
-linux                 3.7  ok
-desktop-smoke        10.8  ok
-total                14.6
-linux=ok desktop-smoke=ok
+00:07 +1: A current-month Revolut CSV: Spending and Today show it; an added expense is matched, not doubled
