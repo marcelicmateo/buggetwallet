@@ -14,8 +14,9 @@ class PeriodBudget {
   final double elapsed;
   final Map<String, int> fixedPaid;
 
-  /// Σ `expectedAmount` of the confirmed recurring bills due before the next payday and not paid yet ([dueBills]):
-  /// taken off the flexible money like the planned fixed costs (owner decision 2026-10-20).
+  /// Σ `expectedAmount` of the confirmed recurring bills due before the next payday and not paid yet ([dueBills]) in
+  /// flex categories: taken off the flexible money like the planned fixed costs (owner decision 2026-10-20). A due bill
+  /// in a fixed category ([RecurringBill.coveredByPlan]) is already in `fixedPlan`, so it is listed but not added.
   final int reservedBills;
   final List<RecurringBill> dueBills;
 
@@ -69,9 +70,10 @@ List<RecurringBill> dueBills(List<RecurringBill> bills, List<CategorizedTx> txs,
 }
 
 /// The budget for the pay period that holds [today]. [bills] (`WalletRepo.recurringBills()`): confirmed recurring
-/// bills due before the next payday and not paid yet are reserved ([PeriodBudget.reservedBills]), taken off the
-/// flexible money on the same path as the planned fixed costs, so the daily plan and safe-to-spend drop by them until
-/// the bank row that pays each one lands.
+/// bills due before the next payday and not paid yet are listed ([PeriodBudget.dueBills]); those in flex categories are
+/// reserved ([PeriodBudget.reservedBills]), taken off the flexible money on the same path as the planned fixed costs, so
+/// the daily plan and safe-to-spend drop by them until the bank row that pays each one lands. Bills in fixed categories
+/// are already counted in the fixed-cost settings and change nothing ([RecurringBill.coveredByPlan]).
 PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today,
     {List<RecurringBill> bills = const []}) {
   final start = st.periodStart ?? today;
@@ -85,7 +87,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final goalMonthly = goals.fold<int>(0, (s, g) => s + g.monthly);
   final fixedPlan = st.rent + st.loan + st.subs;
   final due = dueBills(bills, txs, start, end);
-  final reservedBills = due.fold<int>(0, (s, b) => s + b.expectedAmount);
+  final reservedBills = due.fold<int>(0, (s, b) => s + (b.coveredByPlan ? 0 : b.expectedAmount));
   final flexBudget = income - fixedPlan - goalMonthly - reservedBills;
   final flex = inPeriod.where((t) => t.kind == Kind.flex);
   final spent = -_sum(flex);

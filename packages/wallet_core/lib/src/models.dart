@@ -226,6 +226,10 @@ class RecurringBill {
 
   bool get confirmed => status == 'confirmed';
 
+  /// A bill in a fixed category (Rent, Loan, Bills & subscriptions) is already planned through the fixed-cost
+  /// settings, so `computePeriod` lists it as due but does not reserve it a second time (owner rule: exact).
+  bool get coveredByPlan => kindOf(category) == Kind.fixed;
+
   static RecurringBill fromRow(Map<String, Object?> r) => RecurringBill(
         id: r['id'] as String,
         payee: _str(r['payee']) ?? '',

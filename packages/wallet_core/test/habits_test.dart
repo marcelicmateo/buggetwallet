@@ -38,12 +38,13 @@ List<CategorizedTx> monthly(String desc, int cents, {String category = 'Shopping
 
 const today = '2026-03-01';
 
-RecurringBill bill(String nextDue, int cents, {String status = 'confirmed', String? lastPaidTx, String payee = 'synthetic_gym'}) =>
+RecurringBill bill(String nextDue, int cents,
+        {String status = 'confirmed', String? lastPaidTx, String payee = 'synthetic_gym', String category = 'Sport & fitness'}) =>
     RecurringBill(
       id: RecurringBill.idFor(payee),
       payee: payee,
       label: 'Synthetic Gym',
-      category: 'Sport & fitness',
+      category: category,
       expectedAmount: cents,
       nextDue: nextDue,
       status: status,
@@ -193,6 +194,23 @@ void main() {
       // The same bill whose payment row is from before the period: due again, reserved.
       final earlier = [row('2026-01-14', -5000, 'Synthetic Gym', id: 'pay1', category: 'Sport & fitness')];
       expect(computePeriod(earlier, long, const [], '2026-01-20', bills: [b]).reservedBills, 5000);
+    });
+
+    test('a confirmed bill in a fixed category is due but covered by the plan: nothing changes, a flex one reserves', () {
+      final rent = bill('2026-03-05', 55000, payee: 'synthetic_landlord', category: 'Rent');
+      final loan = bill('2026-03-06', 20000, payee: 'synthetic_bank', category: 'Loan');
+      final subs = bill('2026-03-07', 999, payee: 'synthetic_stream', category: 'Bills & subscriptions');
+      final gym = bill('2026-03-08', 5000);
+      expect((rent.coveredByPlan, loan.coveredByPlan, subs.coveredByPlan, gym.coveredByPlan), (true, true, true, false));
+      final none = computePeriod(txs, st, const [], today);
+      final fixedOnly = computePeriod(txs, st, const [], today, bills: [rent, loan, subs]);
+      expect(fixedOnly.reservedBills, 0);
+      expect((fixedOnly.safeToday, fixedOnly.planDaily, fixedOnly.flexBudget), (none.safeToday, none.planDaily, none.flexBudget));
+      expect([for (final b in fixedOnly.dueBills) b.id], [rent.id, loan.id, subs.id], reason: 'listed, so the UI can show them');
+      final mixed = computePeriod(txs, st, const [], today, bills: [gym, rent]);
+      expect(mixed.reservedBills, 5000, reason: 'only the flex bill');
+      expect([for (final b in mixed.dueBills) (b.id, b.coveredByPlan)], [(rent.id, true), (gym.id, false)]);
+      expect(mixed.safeToday, computePeriod(txs, st, const [], today, bills: [gym]).safeToday);
     });
 
     test('several bills add up; dueBills is ordered by due date then label', () {
@@ -610,6 +628,28 @@ void main() {
       }
       expect(table(a), table(b));
       expect(lwwDiff(a.repo, lastWriterWins(await opsInNet(net, key))), isEmpty);
+    });
+
+    test('a confirmed Rent bill is covered by the plan on both devices: same dueBills, nothing reserved', () async {
+      final a = device('a'), b = device('b');
+      final rent = [
+        for (final d in ['2025-12-01', '2025-12-31', '2026-01-30']) n(d, -55000, 'Trajni nalog', 'Synthetic Landlord 1')
+      ];
+      a.repo.importBatch(batch(rent));
+      a.repo.confirmRecurring('rec:synthetic_landlord');
+      await round();
+      await round();
+      final st = WalletSettings.fromMap({'salary': 200000, 'rent': 55000, 'periodStart': '2026-02-15', 'paydayDay': 15});
+      for (final d in [a, b]) {
+        final bill = d.repo.recurringBills().single;
+        expect((bill.category, bill.coveredByPlan, bill.nextDue), ('Loan', true, '2026-03-01'), reason: d.name);
+        final cz = d.repo.categorizer();
+        final p = computePeriod([for (final t in d.repo.transactions()) cz.categorize(t)], st, const [], '2026-02-20', bills: [bill]);
+        expect(p.reservedBills, 0, reason: d.name);
+        expect(p.dueBills.single.id, bill.id);
+        expect(p.flexBudget, 145000, reason: 'salary minus the planned rent only');
+      }
+      expect(table(a), table(b));
     });
 
     test('the payment is imported on one device only: the sync marks it paid on the other (once, via runPendingMatch)', () async {

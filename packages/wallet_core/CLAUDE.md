@@ -18,9 +18,11 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   remaining over budgeted lines, null when none is budgeted). `suggestBudgets(txs, month)` = that average rounded UP to
   1000 cents, zero or negative averages omitted. Ints in cents everywhere, floats only in `pace`.
   `computePeriod(txs, st, goals, today, bills:)`: the confirmed recurring bills due before the next payday (exclusive)
-  and not paid in this period (`dueBills`, Σ = `reservedBills`) come off the flexible money on the same path as the
-  planned fixed costs (owner decision 2026-10-20), so `planDaily`/`safeToday` drop until the paying row lands (a bill
-  with `lastPaidTx` dated in the period is released even if its next due date still falls before payday).
+  and not paid in this period are `dueBills`; those in flex categories sum to `reservedBills`, which comes off the
+  flexible money on the same path as the planned fixed costs (owner decision 2026-10-20), so `planDaily`/`safeToday`
+  drop until the paying row lands (a bill with `lastPaidTx` dated in the period is released even if its next due date
+  still falls before payday). A due bill in a fixed category (`RecurringBill.coveredByPlan`: Rent, Loan, Bills &
+  subscriptions) is already in `rent`/`loan`/`subs` and is listed but never reserved twice (owner rule: exact).
   `reviewState(txs, st, wishes, budgets, today:)` (M4 weekly review) → `ReviewState`: `due` from the first `reviewDay`
   after `lastReview` until done (never reviewed: due at once), `nextReviewDate` = that day (or the coming one),
   `steps` = `import` 0 (the UI fills it), `categories` = live spending rows of the last 7 days without a user-set
@@ -150,9 +152,8 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
 - Recurring bills: a device that imports a payee's rows before syncing writes the candidate's amount/due/label again
   with a newer clock (same values from the same rows; different ones if it holds other rows), but never its status.
   A confirmed bill whose payments stop matching (amount moved > 10 %, date drifted > 3 days, or the bill ended) keeps
-  its old `nextDue`, so it stays reserved as overdue until the owner dismisses or deletes it. A confirmed bill in a
-  fixed category that is already counted in the `rent`/`loan`/`subs` settings is reserved on top of them (safe-to-spend
-  errs low). Older builds ignore the `recurring` entity (replayed once on upgrade).
+  its old `nextDue`, so it stays reserved as overdue until the owner dismisses or deletes it. Older builds ignore the
+  `recurring` entity (replayed once on upgrade).
 
 ## Tests
 - `test/core_test.dart`, one `group` per area. Shared synthetic data in `test/support/synthetic.dart`
