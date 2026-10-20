@@ -21,6 +21,8 @@ All numbers below are made-up samples. No personal figures. "Proposed" = not bui
 
 - 2026-10-20: **Money is never reclassified on amount alone.** A transfer between own accounts needs bank evidence (kind hint from the importer profile, or a rule the owner set); equal amounts across banks are not evidence. Applies to every future heuristic.
 
+- 2026-10-20: Budget vs actual per category (§4.5) approved: **monthly** budgets (calendar month, like the chart), prefilled from the 6-month average on request, "left" line on Today. The two matching/sync known limits (lagging-device cash match, damaged-file double count) are solved in the sync redesign, not before.
+
 ## 2. Data flow as built (v2) — summary
 ```mermaid
 flowchart LR

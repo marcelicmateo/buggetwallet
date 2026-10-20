@@ -60,6 +60,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   amounts across sources within 3 days, deterministic, schema 3); controller totals; perf step on a bus without
   activatable services + 20-min timeout (two hung runs today); run pruning keeps in-progress runs. Full run: unit 509/596/193,
   desktop 10 files, emulator screens green.
+- 2026-10-20: Own-transfer pairing made exact (owner rule: never reclassify on amount alone): a pair needs a bank-hinted
+  side, exchanges never pair, old loose pairs dissolve (schema 4). perf step rebuilt from clean state after a hang.
+- 2026-10-20: **M3 Budget vs actual per category** (monthly): `categoryBudgets` synced setting, Plan › Budgets per
+  category editor with "Suggest from the last 6 months", Spending rows with budget mark / "47.50 € left" / "over by" +
+  hatch / "behind pace", summary line and budgeted total, Today line for the tightest budget. Exact amounts
+  (`moneyExact`), one 6-month average for tick and suggestions. Core 637 / app 541 tests, desktop and emulator green.
 
 ## Decisions log
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -113,8 +119,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   "Save logs…", send the file; summarise with `tools/log-summary.py`.
 - Owner checks on the phone after Stage C: Ledger theme at large text (stat strip, stacked rows), bottom bar accent mark,
   dark mode, sheets with the double rule, Plex digits and €; on desktop: rail, two columns, dialogs, margin line.
-- Then: merge v2 to master; budget vs actual (after §4.5 approval); M4 Habits.
+- Then: merge v2 to master (owner's call); M4 Habits (weekly review, recurring bills, nudges): spec first.
 
 ## In flight (2026-10-20)
-- Proposal waiting for the owner: budget vs actual per category (DESIGN_DECISIONS.md §4.5).
 - Queue and procedure: `docs/context/PIPELINE.md`.

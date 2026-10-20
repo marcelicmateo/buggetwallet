@@ -47,13 +47,14 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | C3 | (follow-up) hero amount gap, margin line in NarrowPage | ui-builder | ledger-ui | – | running |
 | D1d | BUG: `tools/build.sh perf` hung at startup (portal activation on the headless bus); fixed 79e1fb2 + 20-min timeout; re-run perf when idle | devops | perf-hang | – | done |
 | C | Stage C merged and pushed (5b8fc13); CI all green; design system re-synced (v10); all 37 worktrees removed | lead | v2 | B2 | done |
-| D2b | BUG (owner): loose own-transfer pairing hides unrelated equal amounts; pair only with a bank-hinted side, dissolve loose pairs; exchange kind; migration for old Exchange hints; hinted-first ranking | core-builder | transfer-fix | – | fixing review findings |
-| S1 | OWNER DECISION: matching can replace a cash entry with an unrelated same-amount card payment a lagging device never held (spending hidden once) — amount-alone class; schedule for the sync redesign or fix now? | owner | – | – | waiting |
-| S2 | OWNER DECISION: a damaged/late sync file lets `seen_bank` count an expense twice (wallet_core CLAUDE.md known limits) — fix now or in the sync redesign? | owner | – | – | waiting |
+| D2b | BUG (owner): loose own-transfer pairing → hinted-side rule, exchange kind, schema-4 rehint, hinted-first ranking | core-builder | transfer-fix | – | done (b81ac90, pushed) |
+| S1 | Lagging-device cash match to an unrelated equal card payment → sync redesign (owner 2026-10-20) | – | – | – | scheduled: sync redesign |
+| S2 | Damaged/late sync file double count → sync redesign (owner 2026-10-20) | – | – | – | scheduled: sync redesign |
 | D1e | BUG: perf hung after "Built" because of stale build state from killed runs; perf_run now starts from a clean profile build; idle-laptop perf green (31 s, 0 missed) | lead | v2 | – | done |
-| D3 | Merge v2 into master | lead + ci-watcher | – | B2, C | queued |
-| E0 | Spec for budget vs actual per category: DESIGN_DECISIONS §4.5 | lead | – | – | drafted; waiting for owner approval |
-| E1 | Budget vs actual per category (M3) | core + ui | v2 | C, E0 | queued |
+| D3 | Merge v2 into master | lead + ci-watcher | – | owner's go | waiting for owner |
+| F0 | M4 Habits spec (weekly review, recurring bills, nudges) for owner approval | lead | – | – | next |
+| E0 | Spec for budget vs actual per category: DESIGN_DECISIONS §4.5 | lead | – | – | approved 2026-10-20 (monthly) |
+| E1 | Budget vs actual per category (M3): core `budgetVsActual`/`suggestBudgets` + `categoryBudgets` setting; UI Plan editor, Spending bars, Today line | core-builder + ui-builder | budgets-core, budgets-ui | E0 | done (merged, full run green) |
 | E2 | Top merchants (M3) | – | – | – | already built ("Top places" on Spending) |
 | F | M4 Habits (weekly review, recurring bills, nudges) | – | – | E | later |
 | G | M5 Polish (backup/export, search, settings) → web → sync redesign → M6 owner live test | – | – | F | later |
