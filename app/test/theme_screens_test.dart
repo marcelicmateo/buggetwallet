@@ -32,11 +32,10 @@ void main() {
           expect(tester.takeException(), isNull, reason: tab);
           expect(find.byType(Card), findsNothing, reason: '$tab has a Card');
           for (final p in find.byType(Panel).evaluate()) {
-            final boxes = find.descendant(of: find.byElementPredicate((e) => e == p), matching: find.byType(DecoratedBox));
-            for (final d in boxes.evaluate()) {
-              final dec = (d.widget as DecoratedBox).decoration;
-              if (dec is BoxDecoration) expect(dec.borderRadius, anyOf(isNull, BorderRadius.zero), reason: '$tab Panel radius');
-            }
+            // The Panel's own box (the first DecoratedBox under it). Tags, chips and fields inside it keep their own 2 px radius.
+            final own = find.descendant(of: find.byElementPredicate((e) => e == p), matching: find.byType(DecoratedBox)).evaluate().first;
+            final dec = (own.widget as DecoratedBox).decoration;
+            if (dec is BoxDecoration) expect(dec.borderRadius, anyOf(isNull, BorderRadius.zero), reason: '$tab Panel radius');
           }
         }
         errors.check();
