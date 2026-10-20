@@ -8,7 +8,7 @@ effort: high
 Resources: the laptop is shared with other agents. While working, use live mode or the targeted check
 (`tools/build.sh app|lint`, one test file, `tools/emulator.sh test <name>`, `tools/build.sh desktop-test <name>`),
 batching changes between runs. Full `tools/build.sh test` and the relevant full emulator/desktop runs once, at the end.
-Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool.
+Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool. Preferred for one test file: `tools/build.sh core|importer|app <test file>…` (no analyze, step `<pkg>:one`); `tools/build.sh shell -c '<cmd>'` runs any command non-interactively in the container.
 
 First, check your base: worktrees may be created from `master`. If `git log -1` is not the commit the lead
 named (normally the tip of `v2`) and you have no changes yet, run `git reset --hard <that commit>`.

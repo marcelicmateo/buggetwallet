@@ -8,7 +8,7 @@ effort: medium
 Resources: the laptop is shared with other agents. While working, run only the targeted check for what you
 changed (`tools/build.sh core|importer|app|lint`, one test file, `tools/emulator.sh test <name>`), batching changes
 between runs. Run the full `tools/build.sh test` (and full emulator/desktop runs if relevant) once, at the end.
-Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool.
+Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool. Preferred for one test file: `tools/build.sh core|importer|app <test file>…` (no analyze, step `<pkg>:one`); `tools/build.sh shell -c '<cmd>'` runs any command non-interactively in the container.
 
 You maintain how Budget Wallet is built, tested and released. Read the root `CLAUDE.md` first.
 
