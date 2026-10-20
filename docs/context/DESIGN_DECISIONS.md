@@ -67,7 +67,7 @@ Order: transport interface + `archive` gzip first, then WASM DB + web key store,
 - Contract additive: `NormalizedTransaction.kindHint` (card, atm, salary, fee, standingOrder, ownTransfer, other) and `account`.
 - Categorizer reads only `kindHint`; profile cleans merchant names. No bank names in core or app (labels from profile).
 - New banks hash `source` into the id; PBZ/Revolut keep v1 ids.
-- Own-transfer rule: synced `accounts` setting; out of one account matched by equal in to another within 3 days.
+- Own-transfer rule (as built 2026-10-20, replaces the earlier amount-only idea): a pair needs a bank-hinted side (`kindHint` ownTransfer: Revolut top-up, PBZ payment to Revolut) plus the equal opposite row in another source within 3 days; two unhinted rows never pair; currency exchanges never pair. Equal amounts alone are not evidence (decision 2026-10-20).
 - Unknown layout → map columns once, saved as synced setting keyed by header row.
 - First step: move PBZ and Revolut into profiles with tests proving ids and categories unchanged.
 
