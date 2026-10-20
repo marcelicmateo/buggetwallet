@@ -1,12 +1,12 @@
-commit: addccc8a5d2304580623a8cbb0e9b696a85027b6  ref: v2  run: 39497842020
+commit: 4b16240522cb4669162dea295f2d22391593c6e0  ref: v2  run: 39499539994
 
-lint=skipped importer=skipped core=skipped app=skipped desktop=skipped signing=success apk=success(92s) linux=success(62s) smoke=success(16s)
+lint=skipped importer=skipped core=skipped app=skipped desktop=skipped signing=success apk=success(131s) linux=success(86s) smoke=success(18s)
 job:lint=skipped job:importer=skipped job:core=skipped job:app=skipped job:desktop=skipped job:apk=success job:linux=success job:publish=success 
 
 step seconds exit
-apk 92 0
-linux 62 0
-smoke 16 0
+apk 131 0
+linux 86 0
+smoke 18 0
 
 
 
@@ -28,10 +28,10 @@ Got dependencies!
 8 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Running Gradle task 'assembleRelease'...                        
-Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 4704 bytes (99.7% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 4812 bytes (99.7% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
 Caught exception: Already watching path: /opt/hostedtoolcache/flutter/stable-3.47.7-x64/flutter/packages/flutter_tools/gradle
-Running Gradle task 'assembleRelease'...                           85.4s
-✓ Built build/app/outputs/flutter-apk/app-release.apk (63.6MB)
+Running Gradle task 'assembleRelease'...                          126.6s
+✓ Built build/app/outputs/flutter-apk/app-release.apk (63.8MB)
 
 === linux ===
 === linux ===
@@ -52,8 +52,8 @@ Building Linux application...
 ✓ Built build/linux/x64/release/bundle/budget_wallet
 
 step              seconds  result
-linux                61.1  ok
-total                61.1
+linux                85.8  ok
+total                85.8
 linux=ok
 === smoke ===
 === linux ===
@@ -79,7 +79,7 @@ app log: 24 lines (dist/logs/app-linux-smoke.log)
 WARNING lines: 1
 
 step              seconds  result
-linux                 3.1  ok
-desktop-smoke        12.7  ok
-total                15.9
+linux                 4.6  ok
+desktop-smoke        13.4  ok
+total                18.0
 linux=ok desktop-smoke=ok
