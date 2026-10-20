@@ -271,7 +271,11 @@ void itest(String description, Future<void> Function(WidgetTester t) body, {Time
 
 String todayIso() => isoDate(DateTime.now());
 
-Finder navTab(String label) => find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
+/// The bottom bar (phones, narrow windows) or the rail (wide windows).
+Finder get navigation =>
+    find.byWidgetPredicate((w) => w is NavigationBar || w is NavigationRail, description: 'NavigationBar or NavigationRail');
+
+Finder navTab(String label) => find.descendant(of: navigation, matching: find.text(label));
 
 Future<void> goTab(WidgetTester t, String label) async {
   await t.tap(navTab(label));

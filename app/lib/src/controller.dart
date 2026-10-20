@@ -289,7 +289,16 @@ class WalletController extends ChangeNotifier {
   Future<String> keyText() async => key == null ? '' : await key!.toText();
 
   // ---------- sync ----------
-  Future<void> setSyncFolder(String? path) async {
+  /// [create]: make the folder first if it is missing (a typed path); a failure is logged and sync then reports it.
+  Future<void> setSyncFolder(String? path, {bool create = false}) async {
+    if (create && path != null) {
+      try {
+        await Directory(path).create(recursive: true);
+      } catch (e, st) {
+        // Sync then reports the missing folder; describeError drops the path.
+        logError(_sync, 'sync.folderCreateFailed', e, st);
+      }
+    }
     repo.setLocalValue('syncFolder', path);
     syncFolder = path;
     syncError = null;

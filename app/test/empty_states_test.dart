@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'support/layout.dart';
 import 'support/wallet.dart';
 
 NormalizedTransaction _bank(String date, int cents, String type, String desc) => NormalizedTransaction(
@@ -47,7 +48,7 @@ Future<Set<String>> _tour(WidgetTester tester, WalletController wc, {Size size =
 
   await scroll();
   for (final tab in ['Spending', 'Wishlist', 'Goals', 'Plan', 'Today']) {
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text(tab)));
+    await tapTab(tester, tab);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     await scroll();

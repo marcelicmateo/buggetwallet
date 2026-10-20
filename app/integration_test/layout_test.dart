@@ -3,6 +3,7 @@
 // Screenshots: dist/screens/layout/<variant>-<screen>-<n>.png. Run: tools/emulator.sh test layout
 import 'dart:math';
 
+import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
@@ -23,6 +24,7 @@ const variants = <(String, Brightness, double, Size?)>[
   ('text200', Brightness.light, 2.0, null),
   ('small', Brightness.light, 1.0, Size(320, 640)),
   ('small-dark-text200', Brightness.dark, 2.0, Size(320, 640)),
+  ('wide-dark', Brightness.dark, 1.0, Size(1280, 800)), // rail, two columns, dialogs
 ];
 
 const longGoal = 'Emergency fund for the long winter and the car repairs synthetic';
@@ -71,7 +73,7 @@ void main() {
       t.platformDispatcher.textScaleFactorTestValue = scale;
       if (size != null) {
         t.view.physicalSize = size * t.view.devicePixelRatio; // what MediaQuery and layout read
-        Harness.shots = false; // a resized view hangs takeScreenshot on the emulator
+        Harness.shots = !isAndroid; // a resized view hangs takeScreenshot on the emulator; desktop is fine
       }
       try {
         final wc = await Harness.start(t, wallet: false);

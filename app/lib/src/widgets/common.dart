@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../format.dart';
+import '../layout.dart';
 import '../theme.dart';
 
 /// A plain bordered card with consistent padding and spacing.
@@ -146,6 +147,9 @@ class TxTile extends StatelessWidget {
     final src = switch (t.tx.source) { 'manual' => 'added', 'revolut' => 'Revolut', 'pbz' => 'PBZ', final s => s };
     return InkWell(
       onTap: onTap,
+      hoverColor: context.c.surface2,
+      focusColor: context.c.accentSoft,
+      mouseCursor: onTap == null ? null : SystemMouseCursors.click,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
         child: SplitRow(
@@ -165,6 +169,26 @@ class TxTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Tints its child with the hover colour while a mouse is over it (rows that are not tappable themselves).
+class HoverTint extends StatefulWidget {
+  final Widget child;
+  const HoverTint({super.key, required this.child});
+  @override
+  State<HoverTint> createState() => _HoverTintState();
+}
+
+class _HoverTintState extends State<HoverTint> {
+  bool _over = false;
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+        onEnter: (_) => setState(() => _over = true),
+        onExit: (_) => setState(() => _over = false),
+        child: DecoratedBox(
+            decoration: BoxDecoration(color: _over ? context.c.surface2 : null, borderRadius: BorderRadius.circular(8)),
+            child: widget.child),
+      );
 }
 
 /// Rows separated by hairlines.
@@ -212,10 +236,13 @@ class EmptyNote extends StatelessWidget {
       child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: context.c.muted)));
 }
 
+/// A short message at the bottom: full width on a phone, a 400 dp floating card on wide windows.
 void toast(BuildContext context, String msg) {
+  final wide = layoutOf(context) != LayoutSize.compact;
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 3)));
+    ..showSnackBar(
+        SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating, width: wide ? 400 : null, duration: const Duration(seconds: 3)));
 }
 
 /// Children with a fixed gap between them, for ListView pages.

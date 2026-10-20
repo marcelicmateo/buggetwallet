@@ -3,24 +3,72 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
+import '../layout.dart';
 import '../logging.dart';
+import '../platform.dart';
 import '../theme.dart';
 import 'common.dart';
 
-/// Opens a bottom sheet; logs `sheet.open` / `sheet.close` with the sheet's type and result word.
-Future<T?> showSheet<T>(BuildContext context, Widget child) => loggedRoute(
-    child.runtimeType.toString(),
-    showModalBottomSheet<T>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      backgroundColor: context.c.surface,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20),
-        child: SingleChildScrollView(child: child),
-      ),
-    ));
+/// Opens a bottom sheet on a phone, a dialog on windows [dialogMin] wide or more; logs `sheet.open` / `sheet.close` with
+/// the sheet's type and result word. Both pop with the same result (the dialog's close button pops null).
+Future<T?> showSheet<T>(BuildContext context, Widget child) {
+  final name = child.runtimeType.toString();
+  if (MediaQuery.sizeOf(context).width >= dialogMin) {
+    return loggedRoute(
+        name,
+        showDialog<T>(
+          context: context,
+          // Dialog itself fills the window (it aligns its card), so the 480 limit is also set around it.
+          builder: (ctx) => Center(
+              child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Dialog(
+              backgroundColor: ctx.c.surface,
+              insetPadding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4, right: 4),
+                      child: IconButton(
+                          icon: const Icon(Icons.close),
+                          tooltip: hasKeyboard ? 'Close (Esc)' : 'Close',
+                          onPressed: () => Navigator.pop(ctx)),
+                    ),
+                  ),
+                  Flexible(
+                    child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(20, 0, 20, 20), child: child),
+                  ),
+                ]),
+              ),
+            ),
+          )),
+        ));
+  }
+  return loggedRoute(
+      name,
+      showModalBottomSheet<T>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        backgroundColor: context.c.surface,
+        builder: (ctx) => Padding(
+          padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20),
+          child: SingleChildScrollView(child: child),
+        ),
+      ));
+}
+
+/// Add expense from anywhere (the Today button, Ctrl+N): opens the sheet and shows the toast for its result.
+Future<void> addExpenseFlow(BuildContext context, WalletController wc) async {
+  final r = await showSheet<String>(context, AddExpenseSheet(wc: wc));
+  if (!context.mounted) return;
+  if (r == 'added') toast(context, 'Expense added');
+  if (r == 'wish') toast(context, 'On the wishlist. Decide in ${wc.settings.coolHours} hours.');
+}
 
 // ---------------------------------------------------------------- add expense
 class AddExpenseSheet extends StatefulWidget {

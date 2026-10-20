@@ -192,12 +192,19 @@ void main() {
     expect(wc.logLevel, 'all');
     expect(Logger.root.level, Level.ALL);
 
-    // Sync folder by typed path: the folder is created and synced into.
+    // Sync folder by typed path: a missing folder is refused (never created), an existing one is used and synced into.
     await scrollTo(t, find.text('Type path'), PlanScreen, delta: -250);
     expect(find.text('Put in sync folder'), findsNothing);
     await tapVisible(t, find.text('Type path'));
     await t.pumpAndSettle();
-    await t.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), sync);
+    final field = find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField));
+    await t.enterText(field, sync);
+    await tapVisible(t, find.text('Use folder'));
+    await t.pumpAndSettle();
+    expect(find.text("This folder doesn't exist."), findsOneWidget);
+    expect(wc.syncFolder, isNull);
+    expect(Directory(sync).existsSync(), isFalse, reason: 'a typed path is never created');
+    Directory(sync).createSync(recursive: true);
     await tapVisible(t, find.text('Use folder'));
     await waitFor(t, () => wc.lastSync != null || wc.syncError != null, what: 'the first sync');
     expect(wc.syncError, isNull);
