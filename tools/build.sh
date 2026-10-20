@@ -20,7 +20,9 @@
 #                           Perfetto) and .timeline_summary.json to dist/logs, appends history/perf.jsonl, fails on a budget
 #                           overrun (app/test_driver/perf_budget.dart). Not part of test or all.
 #   tools/build.sh importer|core|app   analyze and test one package (what CI runs, one step each)
-#   tools/build.sh shell    interactive shell in the container
+#   tools/build.sh importer|core|app <test file or dir>…   only those tests (paths relative to the package or the repo root),
+#                           no analyze; step name <pkg>:one, so the full-suite medians stay clean
+#   tools/build.sh shell    interactive shell in the container;  shell -c '<command>' runs one command non-interactively
 #   tools/build.sh image    (re)build the container image (first build ~15 min)
 #   tools/build.sh lsp      Dart language server on stdin/stdout, for editors (repo mounted at its host path)
 #   tools/build.sh mcp      Dart/Flutter MCP server (`dart mcp-server`) on stdin/stdout for Claude Code (.mcp.json);
@@ -44,7 +46,7 @@ CMD=${1:-test}
 # shellcheck source=tools/timing.sh
 source "$ROOT/tools/timing.sh"
 
-usage() { sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---- host side: hand the command to the container ----
 if [[ "${BW_NATIVE:-}" != 1 ]]; then
@@ -99,7 +101,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     exit 1
   fi
   tty=(); [[ -t 0 && -t 1 ]] && tty=(-it)
-  inner=(tools/build.sh "$CMD" "${@:2}"); [[ "$CMD" == shell ]] && inner=(bash)
+  inner=(tools/build.sh "$CMD" "${@:2}"); [[ "$CMD" == shell ]] && inner=(bash "${@:2}")
   [[ -n "${BW_RUN_DIR:-}" ]] && mapfile -t run < <(run_mounts)
   # Rootless: container root is the host user, so build outputs stay owned by you.
   # Named volumes keep the pub and Gradle caches between runs.
@@ -229,6 +231,21 @@ declare -A SUITE=(
   [importer]='suite importer packages/wallet_importer "dart analyze --fatal-infos" dart test'
   [core]='suite core packages/wallet_core "dart analyze --fatal-infos" dart test'
   [app]='suite app app "flutter analyze --fatal-infos --no-pub" flutter test --no-pub')
+# one_suite <importer|core|app> <test file or dir>…: just those tests, no analyze, as step "<pkg>:one"
+one_suite() {
+  local pkg=$1 dir f files=() tcmd=dart
+  shift
+  case "$pkg" in importer) dir=packages/wallet_importer ;; core) dir=packages/wallet_core ;; *) dir=app; tcmd='flutter' ;; esac
+  for f in "$@"; do
+    f=${f#"$ROOT/"}; f=${f#"$dir/"}
+    [[ -e $dir/$f ]] || { echo "no such test file or dir in $dir: $f" >&2; failed=1; return; }
+    files+=("$f")
+  done
+  echo "($pkg: ${#files[@]} path(s), no analyze)"
+  local cmd="suite $pkg:one $dir true $tcmd test"
+  [[ $pkg == app ]] && cmd+=" --no-pub"
+  steps "$pkg:one" "$cmd $(printf '%q ' "${files[@]}")"
+}
 TESTS=(importer "${SUITE[importer]}" core "${SUITE[core]}" app "${SUITE[app]}")
 run_pub() {
   local cold=false d
@@ -515,7 +532,9 @@ case "$CMD" in
   format) pub_ready; dart_files | xargs -0 dart format; exit ;;
   lint)   run_pub; steps "${LINT[@]}" ;;
   test)   run_pub; [[ $failed == 0 ]] && steps "${LINT[@]}" "${TESTS[@]}" ;;
-  importer|core|app) run_pub; [[ $failed == 0 ]] && steps "$CMD" "${SUITE[$CMD]}" ;;
+  importer|core|app)
+    if (($# > 1)); then run_pub; [[ $failed == 0 ]] && one_suite "$CMD" "${@:2}"
+    else run_pub; [[ $failed == 0 ]] && steps "$CMD" "${SUITE[$CMD]}"; fi ;;
   apk)    build_apk ;;
   linux)  build_linux ;;
   desktop-test)  run_pub; [[ $failed == 0 ]] && desktop_tests "${@:2}" ;;
