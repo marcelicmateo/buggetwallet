@@ -36,6 +36,15 @@ List<String> get flexCategories => [
         if (e.value == Kind.flex) e.key
     ];
 
+/// Categories money goes out through (fixed and flex): the ones a monthly budget can be set for.
+List<String> get spendingCategories => [
+      for (final e in categories.entries)
+        if (e.value == Kind.fixed || e.value == Kind.flex) e.key
+    ];
+
+/// Whether [category] is a built-in spending category (see [spendingCategories]).
+bool isSpendingCategory(String category) => switch (categories[category]) { Kind.fixed || Kind.flex => true, _ => false };
+
 Kind kindOf(String category) => categories[category] ?? Kind.flex;
 
 /// Built-in rules: well-known chains and brands only. Personal merchants live in

@@ -206,6 +206,7 @@ class WalletSettings {
   final bool salaryConfirmed;
   final List<List<String>> merchantPatterns; // [[category, regex], ...]
   final int rentCashThreshold; // ATM withdrawals this big or bigger are rent; 0 = never
+  final Map<String, int> categoryBudgets; // spending category -> cents per calendar month; no entry = no budget
   final String? syncFolder; // device-local, not synced
 
   const WalletSettings({
@@ -224,11 +225,15 @@ class WalletSettings {
     this.salaryConfirmed = false,
     this.merchantPatterns = const [],
     this.rentCashThreshold = defaultRentCashThreshold,
+    this.categoryBudgets = const {},
     this.syncFolder,
   });
 
   /// Largest accepted amount (minor units) and wait (hours: a year) in a stored or synced value.
   static const maxAmount = 100000000000, maxCoolHours = 24 * 365;
+
+  /// Largest monthly budget of one category (minor units).
+  static const maxBudget = 1000000000000;
 
   /// Reads settings from stored/synced values. A value of the wrong type or outside its range (another device's
   /// bug, a damaged op) falls back to that setting's default alone, logged as `settings.invalid` with the key only
@@ -263,6 +268,7 @@ class WalletSettings {
 
     final patterns = m['merchantPatterns'];
     final confirmed = m['salaryConfirmed'];
+    final budgets = m['categoryBudgets'];
     return WalletSettings(
       salary: i('salary', 0),
       rent: i('rent', 0),
@@ -286,7 +292,34 @@ class WalletSettings {
         _ => bad('merchantPatterns', const []),
       },
       rentCashThreshold: i('rentCashThreshold', defaultRentCashThreshold),
+      categoryBudgets: switch (budgets) {
+        null => const {},
+        final Map<Object?, Object?> b => _budgets(b),
+        _ => bad('categoryBudgets', const {}),
+      },
     );
+  }
+
+  /// The valid entries of a `categoryBudgets` value: a spending category ([spendingCategories]) -> whole cents
+  /// 0..[maxBudget]. Every other entry (unknown category, negative, fraction, text, too big) is dropped, the rest is
+  /// kept, and the drop is logged once as `settings.invalid` with the key only. Never throws.
+  static Map<String, int> _budgets(Map<Object?, Object?> raw) {
+    final out = <String, int>{};
+    var dropped = false;
+    for (final MapEntry(:key, :value) in raw.entries) {
+      final cents = switch (value) {
+        final int v => v,
+        final double v when v.isFinite && v == v.roundToDouble() => v.toInt(),
+        _ => null,
+      };
+      if (key is String && isSpendingCategory(key) && cents != null && cents >= 0 && cents <= maxBudget) {
+        out[key] = cents;
+      } else {
+        dropped = true;
+      }
+    }
+    if (dropped) logInvalidSetting('categoryBudgets', raw);
+    return out;
   }
 
   static bool _isDate(String v) => RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v) && isoDate(parseIso(v)) == v; // no 2026-02-30
@@ -309,5 +342,6 @@ class WalletSettings {
         'salaryConfirmed': salaryConfirmed,
         'merchantPatterns': merchantPatterns,
         'rentCashThreshold': rentCashThreshold,
+        'categoryBudgets': categoryBudgets,
       };
 }
