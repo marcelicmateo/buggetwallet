@@ -359,17 +359,19 @@ class WalletRepo {
   void _clearMatchPending() => db.execute("DELETE FROM meta WHERE key = 'match_pending'");
 
   /// A live bank row that needs a transfer partner: no `transfer_to`, or a link that no longer holds because the
-  /// partner here is deleted, is a manual row, or points elsewhere (mirrors `openTransfers`; a partner not here at
-  /// all keeps the link). `x` is the row's alias.
+  /// partner here is deleted, is a manual row, points elsewhere, or neither side is a hinted own transfer (mirrors
+  /// `openTransfers`; a partner not here at all keeps the link). `x` is the row's alias.
   static String _openTransfer(String x) => '($x.manual = 0 AND $x.deleted = 0 AND $x.amount != 0 AND ($x.transfer_to IS NULL '
       'OR $x.transfer_to = $x.id OR EXISTS (SELECT 1 FROM tx p WHERE p.id = $x.transfer_to AND (p.deleted = 1 OR p.manual = 1 '
-      "OR IFNULL(p.transfer_to, '') != $x.id))))";
+      "OR IFNULL(p.transfer_to, '') != $x.id OR ($x.kind_hint IS NOT '$_own' AND p.kind_hint IS NOT '$_own')))))";
+  static const _own = 'ownTransfer';
 
   /// Pairs own-account transfers ([planTransfers]) and writes the links. Returns the new pairs.
   ///
   /// Loads only the rows that can pair: open rows with an open opposite-amount row of the same currency in another
-  /// source within [transferDays] (a self-join on `amount`, indexed), plus open rows with a stale link (to clear it)
-  /// and the rows those links point at (so the plan checks them the same way). Logged as `repo.transfers` on `bw.perf`.
+  /// source within [transferDays], one of the two a hinted own transfer (a self-join on `amount`, indexed), plus open
+  /// rows with a stale link (to clear it; a pair with no hint on either side is stale) and the rows those links point
+  /// at (so the plan checks them the same way). Logged as `repo.transfers` on `bw.perf`.
   int _pairTransfers() {
     final t = PerfTimer('repo.transfers');
     final rows = <String, Tx>{};
@@ -382,7 +384,7 @@ class WalletRepo {
 
     load('SELECT DISTINCT a.* FROM tx a JOIN tx b ON b.amount = -a.amount AND b.currency = a.currency AND b.source != a.source '
         "AND b.date BETWEEN date(a.date, '-$transferDays days') AND date(a.date, '+$transferDays days') AND ${_openTransfer('b')} "
-        "WHERE a.date != '' AND ${_openTransfer('a')}");
+        "WHERE a.date != '' AND (a.kind_hint = '$_own' OR b.kind_hint = '$_own') AND ${_openTransfer('a')}");
     final candidates = rows.length;
     load('SELECT a.* FROM tx a WHERE a.transfer_to IS NOT NULL AND ${_openTransfer('a')}');
     final targets = [

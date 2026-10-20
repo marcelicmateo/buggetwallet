@@ -16,8 +16,13 @@ enum TxKind {
   /// Standing order (recurring payment the bank runs).
   standingOrder,
 
-  /// Movement between the owner's own accounts (top-up of another own account, currency exchange).
+  /// Money moved to or from another of the owner's accounts at a different bank (a top-up of the owner's Revolut,
+  /// the card payment that funds it). Evidence for pairing the two sides across sources.
   ownTransfer,
+
+  /// A currency conversion inside the same bank (a Revolut Exchange leg): the owner's money, not spending, but no
+  /// evidence of money moving to another bank, so it never pairs across sources.
+  exchange,
 
   /// The bank marked it as something the other kinds do not cover (bills, transfers to people, branch cash, ...).
   other,

@@ -114,7 +114,7 @@ class Categorizer {
   ///
   /// A row paired with its other side ([Tx.transferTo]) is an `Internal transfer`. Then the importer's [Tx.kindHint]
   /// decides where it can: `salary` → Salary (every employer payment), `atm` → Rent when the withdrawal is at least
-  /// [rentCashThreshold], else Cash, `fee` → Bank fees, `ownTransfer` → Internal transfer. `standingOrder` says how the
+  /// [rentCashThreshold], else Cash, `fee` → Bank fees, `ownTransfer` and `exchange` → Internal transfer. `standingOrder` says how the
   /// bank paid, not what for, and `card`, `other` and no hint fall through to the per-source rules below (built-in
   /// merchant patterns and the `merchantPatterns` setting through [merchantCategory]).
   String autoCategory(Tx t) {
@@ -126,7 +126,7 @@ class Categorizer {
         return rentCashThreshold > 0 && t.amount <= -rentCashThreshold ? 'Rent' : 'Cash';
       case TxKind.fee:
         return 'Bank fees';
-      case TxKind.ownTransfer:
+      case TxKind.ownTransfer || TxKind.exchange:
         return 'Internal transfer';
       case TxKind.standingOrder || TxKind.card || TxKind.other || null:
         break;
