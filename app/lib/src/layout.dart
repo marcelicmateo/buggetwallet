@@ -2,6 +2,8 @@
 // really has (MediaQuery.sizeOf / LayoutBuilder), never on the device type, so a resized desktop window adapts live.
 import 'package:flutter/material.dart';
 
+import 'theme.dart';
+
 /// compact: bottom bar, one column. medium: rail, one column. expanded: wide rail, content up to [expandedMaxWidth].
 enum LayoutSize { compact, medium, expanded }
 
@@ -50,8 +52,17 @@ class TwoCol extends StatelessWidget {
         final l = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(left));
         final r = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(right));
         if (box.maxWidth + 2 * pagePad >= twoColMin) {
-          return Row(
-              crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: l), SizedBox(width: colGap), Expanded(child: r)]);
+          // A 1 px hairline in the middle of the gap (the columns are equally wide, so the middle is half the width).
+          return Stack(children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: l), SizedBox(width: colGap), Expanded(child: r)]),
+            Positioned(
+              top: 0,
+              bottom: 0,
+              left: (box.maxWidth - 1) / 2,
+              width: 1,
+              child: IgnorePointer(child: ColoredBox(key: const ValueKey('twoColDivider'), color: context.c.line)),
+            ),
+          ]);
         }
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [l, SizedBox(height: gap), r]);
       });

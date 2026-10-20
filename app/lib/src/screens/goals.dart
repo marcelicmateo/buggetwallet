@@ -5,6 +5,7 @@ import '../controller.dart';
 import '../format.dart';
 import '../layout.dart';
 import '../theme.dart';
+import '../widgets/charts.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 
@@ -30,30 +31,23 @@ class GoalsScreen extends StatelessWidget {
     }
 
     Widget card(Goal g) => InkWell(
-          borderRadius: BorderRadius.circular(8),
           hoverColor: c.surface2,
           focusColor: c.accentSoft,
           mouseCursor: SystemMouseCursors.click,
           onTap: () => showSheet<void>(context, GoalSheet(wc: wc, goal: g)),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 44),
+            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               SplitRow(
                   start: Text(g.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                   end: Text('${money(g.saved, cur, decimals: 0)} / ${money(g.target, cur, decimals: 0)}',
-                      textAlign: TextAlign.end, style: numStyle)),
+                      textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
               const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(5),
-                child: LinearProgressIndicator(
-                  value: g.target > 0 ? (g.saved / g.target).clamp(0.0, 1.0) : 0.0,
-                  minHeight: 8,
-                  backgroundColor: c.surface2,
-                  color: c.accent,
-                ),
-              ),
+              RuledBar(value: g.target > 0 ? g.saved / g.target : 0.0),
               const SizedBox(height: 6),
-              Text('${money(g.monthly, cur, decimals: 0)} a month · ${eta(g)}', style: TextStyle(fontSize: 12.5, color: c.muted)),
+              Text('${money(g.monthly, cur, decimals: 0)} a month · ${eta(g)}', style: TextStyle(fontSize: 12.5, color: c.ink2)),
             ]),
           ),
         );
@@ -82,10 +76,18 @@ class GoalsScreen extends StatelessWidget {
                 // Cards side by side from the medium size up.
                 final cols = layoutOf(context) == LayoutSize.compact ? 1 : 2;
                 final w = (box.maxWidth - (cols - 1) * 16) / cols;
-                return Wrap(spacing: 16, runSpacing: 6, children: [
+                return Wrap(spacing: 16, children: [
                   for (final g in wc.goals) SizedBox(width: w, child: card(g)),
                 ]);
               }),
+            if (wc.goals.isNotEmpty)
+              TotalRule(
+                  child: SplitRow(
+                      start: const Text('Put aside in total', style: TextStyle(fontWeight: FontWeight.w600)),
+                      end: Text(
+                          '${money(total, cur, decimals: 0)} / ${money(wc.goals.fold<int>(0, (a, g) => a + g.target), cur, decimals: 0)}',
+                          textAlign: TextAlign.end,
+                          style: numStyle.copyWith(fontWeight: FontWeight.w600)))),
             OutlinedButton.icon(
                 icon: const Icon(Icons.add), label: const Text('New goal'), onPressed: () => showSheet<void>(context, GoalSheet(wc: wc))),
           ]),

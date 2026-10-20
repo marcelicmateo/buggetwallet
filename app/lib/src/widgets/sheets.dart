@@ -18,12 +18,12 @@ Future<T?> showSheet<T>(BuildContext context, Widget child) {
         name,
         showDialog<T>(
           context: context,
+          barrierColor: Colors.black.withValues(alpha: 0.4),
           // Dialog itself fills the window (it aligns its card), so the 480 limit is also set around it.
           builder: (ctx) => Center(
               child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: Dialog(
-              backgroundColor: ctx.c.surface,
               insetPadding: const EdgeInsets.all(24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 480),
@@ -53,8 +53,7 @@ Future<T?> showSheet<T>(BuildContext context, Widget child) {
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
-        showDragHandle: true,
-        backgroundColor: context.c.surface,
+        barrierColor: Colors.black.withValues(alpha: 0.4),
         builder: (ctx) => Padding(
           padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20),
           child: SingleChildScrollView(child: child),
@@ -108,9 +107,12 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         autofocus: true,
         onChanged: (_) => setState(() {}),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700),
+        textAlign: TextAlign.end,
+        style: numStyle.copyWith(fontSize: 30, fontWeight: FontWeight.w500),
         decoration: InputDecoration(suffixText: currencySymbol(cur), hintText: '0.00'),
       ),
+      const SizedBox(height: 6),
+      const DoubleRule(),
       const SizedBox(height: 14),
       const Muted('Category'),
       const SizedBox(height: 6),
@@ -154,7 +156,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       ],
       const SizedBox(height: 14),
       FilledButton.icon(
-        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
         icon: const Icon(Icons.add),
         label: const Text('Add expense', style: TextStyle(fontSize: 16)),
         onPressed: () {
@@ -205,8 +207,11 @@ class _TxSheetState extends State<TxSheet> {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(merchantName(t)),
       const SizedBox(height: 6),
-      Text(money(t.amount, widget.wc.currency, decimals: 2, signed: true), style: numStyle.copyWith(fontSize: 22)),
-      const SizedBox(height: 4),
+      Text(money(t.amount, widget.wc.currency, decimals: 2, signed: true),
+          textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: 26, fontWeight: FontWeight.w500)),
+      const SizedBox(height: 6),
+      const DoubleRule(),
+      const SizedBox(height: 6),
       Muted('${longDateOrRaw(t.date)} · $src${t.bankType.isNotEmpty ? ' · ${t.bankType}' : ''}'),
       if (!manual)
         Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(t.description, style: const TextStyle(fontSize: 13))),
@@ -326,6 +331,8 @@ class _GoalSheetState extends State<GoalSheet> {
                 controller: target,
                 onChanged: upd,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textAlign: TextAlign.end,
+                style: numStyle,
                 decoration: InputDecoration(labelText: 'Target', suffixText: currencySymbol(widget.wc.currency)))),
         const SizedBox(width: 10),
         Expanded(
@@ -333,6 +340,8 @@ class _GoalSheetState extends State<GoalSheet> {
                 controller: monthly,
                 onChanged: upd,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textAlign: TextAlign.end,
+                style: numStyle,
                 decoration: InputDecoration(labelText: 'Each month', suffixText: currencySymbol(widget.wc.currency)))),
       ]),
       const SizedBox(height: 10),
@@ -340,6 +349,8 @@ class _GoalSheetState extends State<GoalSheet> {
           controller: saved,
           onChanged: upd,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          textAlign: TextAlign.end,
+          style: numStyle,
           decoration: InputDecoration(labelText: 'Put aside so far', suffixText: currencySymbol(widget.wc.currency))),
       if (g != null) ...[
         const SizedBox(height: 10),
@@ -347,6 +358,8 @@ class _GoalSheetState extends State<GoalSheet> {
             controller: add,
             onChanged: upd,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            textAlign: TextAlign.end,
+            style: numStyle,
             decoration: InputDecoration(
                 labelText: 'Add money now', hintText: 'e.g. a bonus or tax refund', suffixText: currencySymbol(widget.wc.currency))),
       ],

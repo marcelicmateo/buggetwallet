@@ -60,25 +60,29 @@ class TodayScreen extends StatelessWidget {
               FilledButton(onPressed: () => wc.startNewMonth(newPayday), child: Text('Start new month on ${shortDate(newPayday)}')),
             ]),
           TwoCol(left: [
-            Panel(padding: const EdgeInsets.fromLTRB(18, 20, 18, 18), children: [
+            Panel(padding: const EdgeInsets.fromLTRB(0, 14, 0, 14), children: [
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 const Flexible(child: Eyebrow('Safe to spend today')),
                 const SizedBox(width: 8),
                 Flexible(child: StatusLabel(good: !over, text: over ? 'Over today' : 'On plan')),
               ]),
-              FittedBox(
-                alignment: Alignment.centerLeft,
-                fit: BoxFit.scaleDown,
-                child: Text(money(p.safeToday, cur, decimals: 0),
-                    style: TextStyle(fontSize: 68, height: 1, fontWeight: FontWeight.w800, letterSpacing: -2, color: over ? c.bad : c.ink)),
+              TotalRule(
+                padding: const EdgeInsets.fromLTRB(0, 8, 0, 10),
+                child: FittedBox(
+                  alignment: Alignment.centerLeft,
+                  fit: BoxFit.scaleDown,
+                  child: Text(money(p.safeToday, cur, decimals: 0),
+                      style: numStyle.copyWith(
+                          fontSize: 78, height: 0.95, fontWeight: FontWeight.w500, letterSpacing: -3, color: over ? c.bad : c.ink)),
+                ),
               ),
               Muted(p.spentToday > 0
                   ? 'Spent ${money(p.spentToday, cur)} today of ${money(p.allowanceToday, cur)}. Spend less today and tomorrow gets more.'
                   : "Today's allowance is ${money(p.allowanceToday, cur)}. Spend less today and tomorrow gets more."),
-              Row(children: [
-                _Stat(money(p.remaining, cur, decimals: 0), 'left until payday'),
-                _Stat('${p.daysLeft} ${p.daysLeft == 1 ? 'day' : 'days'}', 'to ${shortDate(p.end)}'),
-                _Stat(money(p.planDaily, cur, decimals: 0), 'plan per day'),
+              _Stats([
+                (money(p.remaining, cur, decimals: 0), 'left until payday'),
+                ('${p.daysLeft} ${p.daysLeft == 1 ? 'day' : 'days'}', 'to ${shortDate(p.end)}'),
+                (money(p.planDaily, cur, decimals: 0), 'plan per day'),
               ]),
               PaceBar(used: used, elapsed: p.elapsed, over: p.spent > p.flexBudget * p.elapsed),
               SplitRow(
@@ -103,7 +107,9 @@ class TodayScreen extends StatelessWidget {
                 const HeadingRow(Heading('Payday checklist', size: 15), Tag('pay yourself first')),
                 Text('Move ${money(p.goalMonthly, cur, decimals: 0)} to your savings account before you spend anything else.',
                     style: const TextStyle(fontSize: 14)),
-                Rows(children: [for (final g in wc.goals) LineItem(g.name, money(g.monthly, cur, decimals: 0))]),
+                Rows(children: [
+                  for (final g in wc.goals) LineItem(g.name, money(g.monthly, cur, decimals: 0), leading: const CheckSquare())
+                ]),
                 OutlinedButton.icon(
                   icon: const Icon(Icons.check),
                   label: Text('I moved ${money(p.goalMonthly, cur, decimals: 0)}'),
@@ -131,7 +137,8 @@ class TodayScreen extends StatelessWidget {
               if (recent.isEmpty)
                 const EmptyNote('No transactions yet. Import your bank exports in Plan, or add your first expense.')
               else
-                Rows(children: [
+                Column(children: [
+                  const TxHeaderRow(),
                   for (final t in recent)
                     TxTile(
                         t: t,
@@ -158,14 +165,36 @@ List<Widget> _gap(List<Widget> xs) => [
       for (var i = 0; i < xs.length; i++) ...[if (i > 0) const SizedBox(height: 14), xs[i]],
     ];
 
-class _Stat extends StatelessWidget {
-  final String value, label;
-  const _Stat(this.value, this.label);
+/// Three figures in a ruled strip: a strong rule above, a hairline below, hairline dividers between. Figures are mono,
+/// right-aligned, and shrink rather than overflow at large text.
+class _Stats extends StatelessWidget {
+  final List<(String, String)> items;
+  const _Stats(this.items);
   @override
-  Widget build(BuildContext context) => Expanded(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(value, style: numStyle.copyWith(fontSize: 16, fontWeight: FontWeight.w500)),
-          Text(label, style: TextStyle(fontSize: 12, color: context.c.muted)),
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return DecoratedBox(
+      decoration: BoxDecoration(border: Border(top: BorderSide(color: c.lineStrong), bottom: BorderSide(color: c.line))),
+      child: IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          for (final (i, (value, label)) in items.indexed)
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(border: i == 0 ? null : Border(left: BorderSide(color: c.line))),
+                padding: EdgeInsets.fromLTRB(i == 0 ? 0 : 10, 9, i == items.length - 1 ? 0 : 10, 9),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Text(label, style: TextStyle(fontSize: 12, color: c.ink2)),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(value, textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: 20, fontWeight: FontWeight.w500)),
+                  ),
+                ]),
+              ),
+            ),
         ]),
-      );
+      ),
+    );
+  }
 }

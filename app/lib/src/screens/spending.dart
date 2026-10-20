@@ -74,7 +74,8 @@ class _SpendingScreenState extends State<SpendingScreen> {
           if (monthTxs.isEmpty)
             const EmptyNote('No transactions.')
           else
-            Rows(children: [
+            Column(children: [
+              const TxHeaderRow(),
               for (final t in monthTxs)
                 TxTile(
                     t: t,

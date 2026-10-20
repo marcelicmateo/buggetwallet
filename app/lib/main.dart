@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show LicenseEntryWithLineBreaks, LicenseRegistry;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -242,8 +243,7 @@ class _HomeShellState extends State<HomeShell> {
     });
   }
 
-  Widget _logo(WalletColors c) =>
-      Container(width: 22, height: 16, decoration: BoxDecoration(color: c.accent, borderRadius: BorderRadius.circular(4)));
+  Widget _logo(WalletColors c) => const LedgerLogo();
 
   /// The rail: labels always shown, wide (extended) at expanded. It scrolls when the window is short.
   Widget _rail(BuildContext context, LayoutSize size) {
@@ -253,7 +253,7 @@ class _HomeShellState extends State<HomeShell> {
     return DecoratedBox(
       key: const ValueKey('rail'),
       position: DecorationPosition.foreground,
-      decoration: BoxDecoration(border: Border(right: BorderSide(color: c.line))),
+      decoration: BoxDecoration(border: Border(right: BorderSide(color: c.lineStrong))),
       child: LayoutBuilder(
         builder: (context, box) => SingleChildScrollView(
           child: ConstrainedBox(
@@ -278,7 +278,7 @@ class _HomeShellState extends State<HomeShell> {
                         const SizedBox(width: 8),
                         const Flexible(
                             child: Text('Budget Wallet',
-                                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17))),
+                                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 17))),
                       ],
                     ]),
                   ),
@@ -314,6 +314,8 @@ class _HomeShellState extends State<HomeShell> {
         backgroundColor: context.c.bg,
         surfaceTintColor: Colors.transparent,
         titleSpacing: 16,
+        // A 2 px rule under the header.
+        bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: Container(height: 2, color: context.c.lineStrong)),
         // With a rail, the logo and name sit in the rail.
         title: compact
             ? Row(children: [
@@ -321,7 +323,7 @@ class _HomeShellState extends State<HomeShell> {
                 const SizedBox(width: 8),
                 const Flexible(
                     child: Text('Budget Wallet',
-                        maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17))),
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 17))),
               ])
             : null,
         actions: [
@@ -340,7 +342,9 @@ class _HomeShellState extends State<HomeShell> {
                 child: Chip(
                     label: FittedBox(
                         fit: BoxFit.scaleDown,
-                        child: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}', style: const TextStyle(fontSize: 12.5))),
+                        child: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}',
+                            style: numStyle.copyWith(fontSize: 12, fontWeight: FontWeight.w500))),
+                    side: BorderSide(color: context.c.ink),
                     visualDensity: VisualDensity.compact),
               ),
             ),
@@ -364,7 +368,10 @@ class _HomeShellState extends State<HomeShell> {
                   child: SafeArea(
                     child: Center(
                       child: ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: maxContentWidth(size)), child: IndexedStack(index: tab, children: _pages)),
+                        constraints: BoxConstraints(maxWidth: maxContentWidth(size)),
+                        // The red notebook margin line is for wide windows only.
+                        child: MarginLine(show: !compact, child: IndexedStack(index: tab, children: _pages)),
+                      ),
                     ),
                   ),
                 ),
@@ -374,14 +381,18 @@ class _HomeShellState extends State<HomeShell> {
         ),
       ),
       bottomNavigationBar: compact
-          ? NavigationBar(
-              selectedIndex: tab,
-              onDestinationSelected: (i) => _go(i, 'bar'),
-              destinations: [
-                for (final (i, d) in _destinations.indexed)
-                  NavigationDestination(
-                      icon: Icon(d.icon), selectedIcon: Icon(d.selected), label: d.label, tooltip: _hint(d.label, 'Ctrl+${i + 1}')),
-              ],
+          ? NavBarFrame(
+              selected: tab,
+              count: _destinations.length,
+              child: NavigationBar(
+                selectedIndex: tab,
+                onDestinationSelected: (i) => _go(i, 'bar'),
+                destinations: [
+                  for (final (i, d) in _destinations.indexed)
+                    NavigationDestination(
+                        icon: Icon(d.icon), selectedIcon: Icon(d.selected), label: d.label, tooltip: _hint(d.label, 'Ctrl+${i + 1}')),
+                ],
+              ),
             )
           : null,
     );
