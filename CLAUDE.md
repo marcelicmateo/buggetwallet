@@ -59,7 +59,7 @@ Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't 
 - **Frame performance:** `tools/build.sh perf` runs `app/integration_test/perf_test.dart` in profile mode on the Linux app
   under Xvfb (`flutter drive --profile`; big synthetic wallet, Spending scroll + tab switches), saves each action's
   `<action>.timeline.json` (DevTools/Perfetto) and `.timeline_summary.json` in the run's logs, appends `history/perf.jsonl`
-  and fails on budget overruns (`app/test_driver/perf_budget.dart`). Not in `test`/`all`/CI. Software GL under Xvfb: raster
+  and fails on budget overruns (`app/test_driver/perf_budget.dart`). Not in `test`/`all`/CI. It rebuilds the profile bundle from scratch each time (stale build state after a killed run made `flutter drive` stall after "Built"); a headless step that hangs is killed after 20 min (`BW_HEADLESS_TIMEOUT`). Software GL under Xvfb: raster
   numbers are not a GPU's.
 - **Live mode (fast UI work):** `tools/live.sh start [--demo] [--headless] [--profile] [--fresh]` runs `flutter run -d linux`
   in the container in the background (window on the owner's desktop; `--demo` = synthetic demo wallet). Then

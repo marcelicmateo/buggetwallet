@@ -46,7 +46,9 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | D1c | BUG: run pruning deleted an in-progress run dir (newest-30 rule, concurrent worktrees) | devops | prune-fix (from stage-b) | – | running |
 | C3 | (follow-up) hero amount gap, margin line in NarrowPage | ui-builder | ledger-ui | – | running |
 | D1d | BUG: `tools/build.sh perf` hung at startup (portal activation on the headless bus); fixed 79e1fb2 + 20-min timeout; re-run perf when idle | devops | perf-hang | – | done |
-| C | Stage C merged into v2 (9bdedb8 + perf fix 67adb05 + flows finders 2c53537); full run green (perf skipped) | lead | v2 | B2 | done |
+| C | Stage C merged and pushed (5b8fc13); CI all green; design system re-synced (v10); all 37 worktrees removed | lead | v2 | B2 | done |
+| D2b | BUG (owner): loose own-transfer pairing hides unrelated equal amounts; pair only with a bank-hinted side, dissolve loose pairs | core-builder | transfer-fix (from v2) | – | running |
+| D1e | BUG: perf hung after "Built" because of stale build state from killed runs; perf_run now starts from a clean profile build; idle-laptop perf green (31 s, 0 missed) | lead | v2 | – | done |
 | D3 | Merge v2 into master | lead + ci-watcher | – | B2, C | queued |
 | E0 | Spec for budget vs actual per category: DESIGN_DECISIONS §4.5 | lead | – | – | drafted; waiting for owner approval |
 | E1 | Budget vs actual per category (M3) | core + ui | v2 | C, E0 | queued |

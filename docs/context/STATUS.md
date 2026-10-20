@@ -115,5 +115,4 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 
 ## In flight (2026-10-20)
 - Proposal waiting for the owner: budget vs actual per category (DESIGN_DECISIONS.md §4.5).
-- `tools/build.sh perf` to be re-run on an idle laptop (today's budgets failed only under load); the headless bus fix is in.
 - Queue and procedure: `docs/context/PIPELINE.md`.

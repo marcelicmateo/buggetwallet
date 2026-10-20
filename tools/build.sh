@@ -338,6 +338,10 @@ perf_run() {
   local dir rc=0
   dir=$(mktemp -d)
   rm -f "$LOGS"/perf-records.jsonl "$LOGS"/perf-summary.txt "$LOGS"/*.timeline.json "$LOGS"/*.timeline_summary.json
+  # A killed run (SIGKILL of the container) leaves build state that makes the next `flutter drive` stall after
+  # "Built ..." without ever launching the app (seen 2026-10-20, three times). Start from a clean profile build:
+  # it costs ~1 min of rebuild on a step that is not in `test`/CI.
+  rm -rf app/build/linux/x64/profile app/.dart_tool/flutter_build; rm -f app/build/flutter_driver_commands_*.log
   (cd app && BW_PERF_OUT=$LOGS headless "$dir" \
     flutter drive --profile -d linux --no-pub --driver=test_driver/perf_driver.dart --target=integration_test/perf_test.dart) || rc=$?
   app_logs "$dir" > "$LOGS/app-linux-perf.log"

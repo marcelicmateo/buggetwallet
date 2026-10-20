@@ -19,6 +19,8 @@ All numbers below are made-up samples. No personal figures. "Proposed" = not bui
 | 2026-10-19 | **Final direction: D3 Ledger** (owner). Built after the adaptive layout: its tokens go into `theme.dart` and the design system. |
 | 2026-10-19 | Ledger details (owner): dark mode = navy "night ledger" following the system; six unmodified IBM Plex fonts (~1 MB); red margin line only on wide windows. Spec: `docs/design/ledger-spec.md`. |
 
+- 2026-10-20: **Money is never reclassified on amount alone.** A transfer between own accounts needs bank evidence (kind hint from the importer profile, or a rule the owner set); equal amounts across banks are not evidence. Applies to every future heuristic.
+
 ## 2. Data flow as built (v2) — summary
 ```mermaid
 flowchart LR
