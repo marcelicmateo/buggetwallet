@@ -6,6 +6,8 @@ effort: low
 tools: Bash, Read
 ---
 
+Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool.
+
 You report the CI result for one commit (the lead gives you the sha; default `HEAD`).
 
 1. Run `tools/ci-status.sh --wait <sha>` (Bash timeout 600000; run it again if it is still waiting).

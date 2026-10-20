@@ -1,0 +1,61 @@
+# Pipeline — what the lead starts when (orchestration runbook)
+
+The lead (main session) keeps the queue moving within a **cap of 4 agents at once** (owner, 2026-10-20): on every agent
+report, read this file, mark the item, and start the next ready item only if fewer than 4 agents are running. Full test
+suites stay serialized (one Haiku run per stage); builders run only targeted checks.
+
+## Token rules (owner, 2026-10-20)
+- Cap 4 concurrent agents, typically: one core (Fable), one UI (Sonnet), one or two cheap slots (Haiku watcher, devops,
+  test-writer). Dependent or not-yet-needed work waits in the queue; waiting costs nothing.
+- Parallel only for independent items needed in the current stage.
+- test-writer only for money and sync logic; UI features get tests from the builder.
+- Briefs are pointer-style: exact files, the API to match, the one allowed check; reports under 15 lines.
+- One targeted check per agent at the end, one Haiku full run per stage, one reviewer pass per stage on the whole diff.
+  Live-mode screenshots only for visual changes.
+- Batch follow-ups into one message per agent instead of resuming it repeatedly.
+- Fewer, bigger stages: each stage costs a full run, a review and a CI cycle.
+
+## Procedure on each event
+| Event | Do |
+|---|---|
+| Builder reports | Read its report. Bug outside scope → queue a fix item (test + fix, same stage). Mark the item done. Start the next item whose deps are met (table below). |
+| All items of a stage done | Merge branches into `v2` in the listed order → reviewer (Fable/high) on the stage diff → fix findings → Haiku/low full run (`test`, `desktop-test`, `perf`) → `tools/emulator.sh screens` for UI stages (read the PNGs) → commit → push → ci-watcher → STATUS.md (Done + Next) → `git worktree remove` the merged worktrees. |
+| Haiku run red | Fix items first (owner rule: bugs before features), then re-run only the failing suite. |
+| Owner message | Owner bug reports go before anything queued. |
+
+Agent models: ci-watcher haiku/low; test-writer, devops sonnet/medium; ui-builder sonnet/high; core-builder, reviewer Fable/high.
+Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the lead from the branch named in "Base".
+
+## Queue (2026-10-20)
+| # | Item | Agent | Base | Depends on | Status |
+|---|---|---|---|---|---|
+| B1 | Commit Stage A leftovers, Haiku full run, push | lead + haiku | v2 | – | committed d632e32; run in progress |
+| B2a | Adaptive layout finish + edge tests + month-chip fix | ui-builder | agent-a7db2fe… | – | done (6ebb9bc) |
+| B2b | Goal contributions merge + sync quarantine + transport + edge tests | core-builder | agent-a99ad86… | – | done (804961d, core 564/0) |
+| B2c | Parallel desktop tests (BW_JOBS) | devops | agent-aefe0df… | – | done (8e212c1) |
+| B2e | BUG: desktop plan test typed a missing folder (test bug since 561d768) | ui-builder | agent-a7db2fe… | – | done (2759d5c) |
+| B2d | `paydayDone` → `payGoals(period:)`; pass appVersion to FolderSync | lead | stage-b | B2b | running |
+| B2 | Merge B2a–e on `stage-b`, review, Haiku, emulator, push, STATUS | lead | stage-b → v2 | B2a–e, B1 | running |
+| C1 | Ledger theme tests from spec | test-writer | ledger-tests (from 6ebb9bc) | – | done (5 files; ui-builder merges them) |
+| C2 | Ledger theme build (fonts, tokens, components, screens) | ui-builder | ledger-ui (from 6ebb9bc) | – | running |
+| C3 | Merge C1 into C2, make tests pass; three widths, dark, text scale | ui-builder | ledger-ui | C1, C2 | queued |
+| C | Merge C, review, Haiku, emulator, push, STATUS, re-sync design-system artifact | lead | v2 | C3, B2 | queued |
+| D1 | Bank profiles: PBZ/Revolut as profiles, kindHint, golden no-change tests | core-builder | bank-profiles (from v2) | – | running |
+| D2 | Categorizer reads kindHint; own-transfer rule (accounts setting) | core-builder | after D1 merge | D1 | queued |
+| D1b | `tools/build.sh core|app|importer <test file>` runs one test file non-interactively (core-builder found `shell` ignores piped stdin) | devops | from B2c | B2 | queued |
+| D3 | Merge v2 into master | lead + ci-watcher | – | B2, C | queued |
+| E0 | Spec for budget vs actual per category (where budgets come from: payday plan settings vs per-category amounts; owner approves) | lead | – | – | queued |
+| E1 | Budget vs actual per category (M3) | core + ui | v2 | C, E0 | queued |
+| E2 | Top merchants (M3) | – | – | – | already built ("Top places" on Spending) |
+| F | M4 Habits (weekly review, recurring bills, nudges) | – | – | E | later |
+| G | M5 Polish (backup/export, search, settings) → web → sync redesign → M6 owner live test | – | – | F | later |
+
+Merge order for B2: B2b → B2a → B2c, then B2d. C merges after B2 (ledger branches are based on B2a, so merging v2 into them
+only brings packages/ and tools/ changes).
+
+## Rules the lead keeps
+- One Haiku full run per stage; targeted checks only while building (`tools/build.sh core|importer|app|lint`, one test file).
+- No polling anywhere: background runs + notifications, Monitor for other processes.
+- Say the model/effort choice before starting agents; cheapest that does the job.
+- Bugs found by any agent are fixed in the same stage with a reproducing test.
+- STATUS.md is updated at the end of every stage; this file at every queue change.
