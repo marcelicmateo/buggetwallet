@@ -297,8 +297,11 @@ headless() {
   [[ -n ${BW_XDISPLAY:-} ]] && display=(-n "$BW_XDISPLAY")
   mkdir -p "$dir/data" "$dir/docs"; mkdir -m 700 "$dir/run"
   XDG_DATA_HOME=$dir/data XDG_DOCUMENTS_DIR=$dir/docs XDG_RUNTIME_DIR=$dir/run NO_AT_BRIDGE=1 \
-    dbus-run-session -- xvfb-run "${display[@]}" -s '-screen 0 1920x1080x24' "$@"
+    timeout -k 10 "${BW_HEADLESS_TIMEOUT:-1200}" dbus-run-session --config-file="$ROOT/tools/dbus-headless.conf" -- \
+    xvfb-run "${display[@]}" -s '-screen 0 1920x1080x24' "$@"
 }
+# The bus has no activatable services (tools/dbus-headless.conf: the image's xdg-desktop-portal is for live mode only), and the
+# whole command is killed after $BW_HEADLESS_TIMEOUT seconds (default 20 min) so a hang fails the step instead of blocking.
 # The app's log files (path_provider: $XDG_DATA_HOME/<application id>/logs/), oldest first
 # shellcheck disable=SC2329
 app_logs() { find "$1/data" -path '*/logs/bw-*.log' -print0 2>/dev/null | sort -z | xargs -0r cat; }
