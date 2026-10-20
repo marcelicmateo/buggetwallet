@@ -135,6 +135,9 @@ class PeriodNetChart extends StatelessWidget {
 /// "48 € left" / "over by 12 €" for a budget line (the whole amount is rounded to units).
 String budgetLeftText(CategoryBudgetLine l, String currency) => leftText(l.remaining ?? 0, currency);
 
+/// A budgeted category that is not over budget yet but is spending faster than the month passes (pace above 1.0).
+bool behindPace(CategoryBudgetLine l) => !l.over && (l.pace ?? 0) > 1.0;
+
 /// "48 € left" for money still free, "over by 12 €" for a negative amount.
 String leftText(int remaining, String currency) =>
     remaining < 0 ? 'over by ${money(-remaining, currency, decimals: 0)}' : '${money(remaining, currency, decimals: 0)} left';
@@ -231,7 +234,7 @@ class _CategoryRow extends StatelessWidget {
     final tip = '$name: ${money(value, currency, decimals: 0)} · average ${money(average, currency, decimals: 0)}'
         '${l == null ? '' : ' · budget ${money(budget!, currency, decimals: 0)}, ${budgetLeftText(l, currency)}'}';
     return Container(
-      constraints: BoxConstraints(minHeight: l == null ? 36 : 44),
+      constraints: BoxConstraints(minHeight: l == null ? 36 : (behindPace(l) ? 58 : 44)),
       padding: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
       child: Tooltip(
@@ -285,6 +288,20 @@ class _CategoryRow extends StatelessWidget {
                       child: Text('of ${money(budget!, currency, decimals: 0)}', style: numStyle.copyWith(fontSize: 11, color: c.ink2)),
                     ),
                   ),
+                  if (behindPace(l))
+                    SizedBox(
+                      key: const ValueKey('behindPace'),
+                      width: _rightCol,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.warning_amber_outlined, size: 13, color: c.warnInk),
+                          const SizedBox(width: 3),
+                          Text('behind pace', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: c.warnInk)),
+                        ]),
+                      ),
+                    ),
                 ]),
               ),
           ]),

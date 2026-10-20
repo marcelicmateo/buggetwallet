@@ -82,7 +82,7 @@ final budgetToday = DateTime(2026, 10, 20, 12);
 /// A wallet with a fixed clock (20 Oct 2026): 6 months of history (Groceries 290, Eating out 85 a month) and this month
 /// Groceries 252, Eating out 112, Shopping 60. With [budgets]: Groceries 300 (48 left) and [eatingOutBudget] for Eating out
 /// (default 100: over by 12). Without: nothing budgeted.
-WalletController budgetWallet({bool budgets = true, int eatingOutBudget = 10000}) {
+WalletController budgetWallet({bool budgets = true, int eatingOutBudget = 10000, int groceriesBudget = 30000}) {
   final wc = WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => budgetToday);
   for (final m in const ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']) {
     wc.repo.addManual(date: '$m-10', amount: 29000, category: 'Groceries');
@@ -96,7 +96,7 @@ WalletController budgetWallet({bool budgets = true, int eatingOutBudget = 10000}
     'salary': 150000,
     'salaryConfirmed': true,
     'periodStart': '2026-10-01',
-    if (budgets) 'categoryBudgets': {'Groceries': 30000, 'Eating out': eatingOutBudget},
+    if (budgets) 'categoryBudgets': {'Groceries': groceriesBudget, 'Eating out': eatingOutBudget},
   });
   wc.reload();
   return wc;

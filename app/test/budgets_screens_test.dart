@@ -72,7 +72,9 @@ void main() {
         expect(find.text(_eur('of 100 €')), findsOneWidget);
         expect(find.byIcon(Icons.error_outline), findsNWidgets(2), reason: 'the over row and the summary line');
         expect(find.byKey(const ValueKey('overHatch')), findsOneWidget);
-        expect(find.textContaining('1 of 2 categories over budget, ${_eur('36 € left')} in total'), findsOneWidget);
+        expect(find.textContaining('1 over, 1 behind pace, ${_eur('36 € left')} in total'), findsOneWidget);
+        expect(find.byKey(const ValueKey('behindPace')), findsOneWidget, reason: 'Groceries: 84 % spent, 65 % of the month gone');
+        expect(find.byIcon(Icons.warning_amber_outlined), findsOneWidget);
         expect(find.byKey(const ValueKey('budgetTotal')), findsOneWidget);
         expect(find.text(_eur('364 € of 400 €')), findsOneWidget);
         expect(find.descendant(of: find.byType(CategoryBars), matching: find.text(_eur('60 €'))), findsOneWidget,
@@ -93,12 +95,33 @@ void main() {
       }
     });
 
-    testWidgets('everything within budget: no hatch, the summary counts none over', (tester) async {
+    testWidgets('within budget but behind pace: "behind pace" with a warning icon in warnInk, no hatch', (tester) async {
       final wc = budgetWallet(eatingOutBudget: 20000);
       await pumpApp(tester, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(360, 3000));
       expect(find.byKey(const ValueKey('overHatch')), findsNothing);
-      expect(find.textContaining('0 of 2 categories over budget, ${_eur('136 € left')} in total'), findsOneWidget);
+      expect(find.textContaining('0 over, 1 behind pace, ${_eur('136 € left')} in total'), findsOneWidget);
+      final label = find.descendant(of: find.byKey(const ValueKey('behindPace')), matching: find.text('behind pace'));
+      expect(label, findsOneWidget);
+      expect(tester.widget<Text>(label).style!.color, WalletColors.light.warnInk);
+      expect(find.byIcon(Icons.warning_amber_outlined), findsOneWidget);
+    });
+
+    testWidgets('on pace: nothing extra, the summary counts none over', (tester) async {
+      // Groceries 252 of 400 is 63 % of the budget at 65 % of the month: on pace. Eating out 112 of 200 likewise.
+      final wc = budgetWallet(eatingOutBudget: 20000, groceriesBudget: 40000);
+      await pumpApp(tester, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(360, 3000));
+      expect(find.byKey(const ValueKey('behindPace')), findsNothing);
+      expect(find.byKey(const ValueKey('overHatch')), findsNothing);
+      expect(find.textContaining('0 of 2 categories over budget, ${_eur('236 € left')} in total'), findsOneWidget);
       expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+      expect(find.byIcon(Icons.warning_amber_outlined), findsNothing);
+    });
+
+    testWidgets('behind pace fits 320 dp at text 2.0', (tester) async {
+      final wc = budgetWallet(eatingOutBudget: 20000);
+      await pumpApp(tester, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(320, 4000), textScale: 2.0);
+      expect(find.byKey(const ValueKey('behindPace')), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('a budgeted category with no spending yet still shows its budget', (tester) async {
@@ -130,6 +153,14 @@ void main() {
       expect(t, findsOneWidget);
       expect(tester.widget<Text>(t).style!.color, WalletColors.light.bad);
       expect(find.descendant(of: find.byKey(const ValueKey('budgetLine')), matching: find.byIcon(Icons.error_outline)), findsOneWidget);
+    });
+
+    testWidgets('the line sits below the pace line and above Add expense', (tester) async {
+      final wc = budgetWallet();
+      await pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday)), size: const Size(360, 3000));
+      final y = tester.getTopLeft(find.byKey(const ValueKey('budgetLine'))).dy;
+      expect(y, greaterThan(tester.getBottomLeft(find.textContaining('used').first).dy));
+      expect(y, lessThan(tester.getTopLeft(find.text('Add expense').first).dy));
     });
 
     testWidgets('no budgets: no line', (tester) async {

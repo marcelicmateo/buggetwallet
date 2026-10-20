@@ -90,7 +90,6 @@ class TodayScreen extends StatelessWidget {
                     ('${p.daysLeft} ${p.daysLeft == 1 ? 'day' : 'days'}', 'to ${shortDate(p.end)}'),
                     (money(p.planDaily, cur, decimals: 0), 'plan per day'),
                   ]),
-                  if (tight != null) _BudgetLine(tight, cur, openSpending),
                   PaceBar(used: used, elapsed: p.elapsed, over: p.spent > p.flexBudget * p.elapsed),
                   SplitRow(
                     start: Muted('${money(p.spent, cur, decimals: 0)} of ${money(p.flexBudget, cur, decimals: 0)} used'),
@@ -99,6 +98,7 @@ class TodayScreen extends StatelessWidget {
                             textAlign: TextAlign.end, style: const TextStyle(fontSize: 13))
                         : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace', textAlign: TextAlign.end),
                   ),
+                  if (tight != null) _BudgetLine(tight, cur, openSpending),
                   Tooltip(
                     message: hasKeyboard ? 'Add expense (Ctrl+N)' : '',
                     child: FilledButton.icon(

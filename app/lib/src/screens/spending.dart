@@ -95,16 +95,21 @@ class _SpendingScreenState extends State<SpendingScreen> {
   }
 }
 
-/// "3 of 7 categories over budget, 180 € left in total" (or "over by" when the total is over).
+/// "3 of 7 categories over budget, 180 € left in total"; when some are behind pace: "1 over, 2 behind pace, 46 € left in total".
 class _BudgetSummary extends StatelessWidget {
   final BudgetVsActual b;
   final String currency;
   const _BudgetSummary(this.b, this.currency);
   @override
-  Widget build(BuildContext context) => StatusLabel(
-      good: b.overCount == 0,
-      text: '${b.overCount} of ${b.budgetedCount} ${b.budgetedCount == 1 ? 'category' : 'categories'} over budget, '
-          '${leftText(b.remainingTotal ?? 0, currency)} in total');
+  Widget build(BuildContext context) {
+    final behind = b.lines.where(behindPace).length;
+    final left = leftText(b.remainingTotal ?? 0, currency);
+    return StatusLabel(
+        good: b.overCount == 0 && behind == 0,
+        text: behind > 0
+            ? '${b.overCount} over, $behind behind pace, $left in total'
+            : '${b.overCount} of ${b.budgetedCount} ${b.budgetedCount == 1 ? 'category' : 'categories'} over budget, $left in total');
+  }
 }
 
 /// The month chips in a row that scrolls sideways; the selected chip is scrolled fully into view when the row is first
