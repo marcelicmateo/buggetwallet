@@ -396,8 +396,9 @@ class _PlanScreenState extends State<PlanScreen> {
   }
 
   Future<void> _typePath(BuildContext context) async {
-    final ctl =
-        TextEditingController(text: widget.wc.syncFolder ?? (Platform.isAndroid ? '/storage/emulated/0/Documents/BudgetWallet' : ''));
+    const androidFolder = '/storage/emulated/0/Documents/BudgetWallet';
+    final ctl = TextEditingController(text: widget.wc.syncFolder ?? (Platform.isAndroid ? androidFolder : ''));
+    final example = Platform.isAndroid ? androidFolder : '/home/you/Sync';
     logNav('dialog.open', {'dialog': 'syncPath'});
     String? error;
     final path = await showDialog<String>(
@@ -411,11 +412,19 @@ class _PlanScreenState extends State<PlanScreen> {
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
-                final r = checkSyncPath(ctl.text);
+                var r = checkSyncPath(ctl.text);
+                // The suggested phone folder may not exist before Syncthing makes it: create that one, never a typed path.
+                if (r.reason == 'missing' && Platform.isAndroid && ctl.text.trim() == androidFolder) {
+                  try {
+                    Directory(androidFolder).createSync(recursive: true);
+                    r = checkSyncPath(androidFolder);
+                  } on FileSystemException catch (e, st) {
+                    logError(_log, 'sync.pathCreateFailed', e, st);
+                  }
+                }
                 if (r.path != null) return Navigator.pop(ctx, r.path);
                 logEvent(_log, Level.INFO, 'sync.pathRejected', {'reason': r.reason}); // never the path
-                setState(
-                    () => error = r.reason == 'missing' ? "This folder doesn't exist." : 'Enter a full folder path, like /home/you/Sync');
+                setState(() => error = r.reason == 'missing' ? "This folder doesn't exist." : 'Enter a full folder path, like $example');
               },
               child: const Text('Use folder'),
             ),

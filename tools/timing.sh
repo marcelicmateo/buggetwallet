@@ -55,9 +55,13 @@ run_begin() {
   ln -sfn "$dir" "$ROOT/dist/logs"
 }
 # Arguments for `podman run` so the container writes into the same run and history
-run_mounts() {
-  printf '%s\n' -v "$BW_DATA:$BW_DATA:z" -e BW_DATA_DIR -e BW_RUN_DIR -e BW_RUN_ID -e BW_RUN -e BW_COMMIT -e BW_CMD \
+run_env() {
+  printf '%s\n' -e BW_DATA_DIR -e BW_RUN_DIR -e BW_RUN_ID -e BW_RUN -e BW_COMMIT -e BW_CMD \
     -e BW_IMAGE -e BW_COLD -e BW_SOURCE -e BW_WORKTREE
+}
+run_mounts() {
+  printf '%s\n' -v "$BW_DATA:$BW_DATA:z"
+  run_env
 }
 log_history() {  # <step> <seconds> <ok|FAILED> [cold: true|false] [started: iso]
   local cold=${4:-false}

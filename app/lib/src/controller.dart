@@ -316,7 +316,7 @@ class WalletController extends ChangeNotifier {
     }
     syncing = true;
     if (!quiet) notifyListeners();
-    final changesBefore = _dbChanges();
+    final dataBefore = _dataMark();
     try {
       final r = await timedAsync('sync.run', () => syncRunner(folder, k, repo), fields: {'trigger': trigger}, warnMs: 3000);
       lastSync = DateTime.now();
@@ -329,17 +329,21 @@ class WalletController extends ChangeNotifier {
       logError(_sync, 'sync.failed', e, st, fields: {'trigger': trigger});
       syncError = e.toString();
       // A run that failed partway (a folder that stopped being readable after file A) may already have applied A's changes.
-      // Reload only if the database changed during the run: a sync that keeps failing before applying anything (no folder
+      // Reload only if wallet data changed during the run: a sync that keeps failing before applying anything (no folder
       // access, read-only mount) must not reload the whole wallet every 2 minutes.
-      if (_dbChanges() != changesBefore) reload();
+      if (_dataMark() != dataBefore) reload();
     } finally {
       syncing = false;
       notifyListeners();
     }
   }
 
-  /// SQLite's count of rows changed on this connection so far: a cheap way to see whether a sync run wrote anything.
-  int _dbChanges() => repo.db.select('SELECT total_changes() AS n').first['n'] as int;
+  /// Changes when wallet data changes: every data write (local or applied from a peer) records its field clock. Bookkeeping
+  /// a failed run still makes (the next file number in `meta`, the outbox) doesn't count.
+  String _dataMark() {
+    final r = repo.db.select('SELECT count(*) AS n, max(hlc) AS m FROM clocks').first;
+    return '${r['n']}|${r['m']}';
+  }
 
   void _startAutoSync() {
     _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) {

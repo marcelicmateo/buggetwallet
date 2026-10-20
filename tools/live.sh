@@ -144,9 +144,9 @@ case "$CMD" in
     mkdir -p "$files" "$BW_DATA/history"
     opts+=(-v "$files:/files:z")
     # Only this run's folder and the timing history, not all of $BW_DATA (device-logs/ holds logs the owner sends):
-    # the file dialog can browse every mounted folder. run_mounts' first two lines are its -v of $BW_DATA; keep its -e.
+    # the file dialog can browse every mounted folder.
     run=(-v "$BW_RUN_DIR:$BW_RUN_DIR:z" -v "$BW_DATA/history:$BW_DATA/history:z")
-    mapfile -t -O 4 run < <(run_mounts | sed '1,2d')
+    mapfile -t -O "${#run[@]}" run < <(run_env)
     way=${WAYLAND_DISPLAY:-}; [[ -n $way && $way != /* ]] && way=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$way
     if ((!headless)) && [[ -z $way || ! -S $way ]]; then
       echo "No Wayland session here: running headless (X11 is never passed through)." >&2

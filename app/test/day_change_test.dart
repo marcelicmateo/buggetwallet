@@ -195,6 +195,20 @@ void main() {
       expect(wc.syncError, isNotNull);
       expect(wc.dataVersion, before);
     });
+
+    test('a read-only folder that fails after the run took a file number does not reload either', () async {
+      final wc = emptyWallet();
+      wc.syncFolder = '/not-used-by-the-fake-sync';
+      final before = wc.dataVersion;
+      wc.syncRunner = (folder, key, repo) async {
+        repo.nextFileNumber(); // what FolderSync.run writes before its file write fails
+        throw const FileSystemException('read-only file system');
+      };
+      await wc.syncNow();
+      await wc.syncNow();
+      expect(wc.syncError, isNotNull);
+      expect(wc.dataVersion, before);
+    });
   });
 
   test('a day change inside a computation does not store the old day\'s value under the new day', () {

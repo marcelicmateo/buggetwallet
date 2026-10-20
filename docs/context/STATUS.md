@@ -111,3 +111,20 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   windows (desktop direction on the design canvas), keyboard shortcuts / tooltips / hover for desktop, layout tests
   at desktop and tablet sizes, and web-safe platform checks (`dart:io` `Platform` breaks the web build).
 - Then: merge v2 to master; budget vs actual and top merchants.
+
+## Resume here (session stopped 2026-10-19, usage limit; nothing pushed since 140154d)
+- Local `v2` (d7de780, unpushed): Stage A = perf test + budgets, ~450 edge-case tests, 23 bug fixes, tab-switch jank fix,
+  file-chooser fix, € after the amount, live-mode file picker, review fixes. Last full Haiku run (43e5760 base) was green.
+- **Uncommitted in the main checkout** (owner interrupted the commit): reload only on data changes after a failed sync
+  (`_dataMark`, field clocks), Android default sync folder created when chosen, `timing.sh run_env` for live.sh. App tests
+  326/0 and lint passed. Next: commit, Haiku full run (test + desktop-test + perf), push, ci-watcher.
+- Worktrees with unfinished agent work (`.claude/worktrees/`, branch `worktree-agent-<id>`):
+  - `agent-a7db2fe874b6933d5` adaptive layout: commit 5bc7e8d (web-safe platform checks) + ~20 uncommitted files. Spec in the
+    agent prompt; edge tests in `agent-a78cbf3768828c660` commit 3cbdbf6 (`app/test/adaptive_edge_test.dart`).
+  - `agent-aefe0df78677e92ac` parallel desktop tests (BW_JOBS): 3 uncommitted files.
+  - `agent-a99ad8621ed827cd9` sync bad-file quarantine + transport interface: 7 uncommitted files, was writing tests.
+    Edge tests in `agent-ac94fe4e2ce5bfd99` commit c6bb2ac (cap: 10 billion € = 1e12 cents).
+  - Done, not merged: `agent-a498e517000245618` goal contributions as rows, commit f56f9ba (core 492/0). It clears
+    `peer_files` once on upgrade (check against quarantine records) and needs the app's `paydayDone` to call
+    `repo.payGoals(period: periodStart)`.
+- Then: D3 Ledger theme (`docs/design/ledger-spec.md`), bank profiles.
