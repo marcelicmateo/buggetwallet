@@ -14,13 +14,44 @@ class PbzProfile extends BankProfile {
   static final _accountLabel = RegExp(r'TRANSAKCIJSKI RA', caseSensitive: false);
   static final _dmy = RegExp(r'^\d{1,2}\.\d{1,2}\.\d{4}$');
   static final _hold = RegExp(r'^REZERVACIJA', caseSensitive: false);
+  static final _iban = RegExp(r'^[A-Z]{2}\d{2}[A-Z0-9]{6,30}$');
+
+  /// VRSTA TRANSAKCIJE → kind. Types the bank marks but the enum does not cover are [TxKind.other]; a type not
+  /// listed here gives no hint.
+  static const _kinds = <String, TxKind>{
+    'POS plaćanje': TxKind.card,
+    'Isplata ATM': TxKind.atm,
+    'Plaća/Mirovina': TxKind.salary,
+    'Trajni nalog': TxKind.standingOrder,
+    'Naplaćene naknade': TxKind.fee,
+    'Povrat naknade': TxKind.fee,
+    'Pripisane kamate': TxKind.fee,
+    'Plaćanje putem direktnih kanala': TxKind.other,
+    'Isplata u poslovnici': TxKind.other,
+    'Ostalo': TxKind.other,
+  };
 
   /// The header block names the account (`TRANSAKCIJSKI RAČUN:`) or the column row starts with `DATUM`.
   @override
   bool detect(ImportContext ctx) => ctx.head.any((r) => r.any((c) => _accountLabel.hasMatch(c) || c == 'DATUM'));
 
   /// Columns are fixed (DATUM, VRSTA TRANSAKCIJE, OPIS PLAĆANJA, IZNOS, VALUTA); every row is tried, a dated first
-  /// cell marks a transaction.
+  /// cell marks a transaction. The IBAN is the cell under or after the `TRANSAKCIJSKI RAČUN:` label.
+  @override
+  void prepare(ImportContext ctx) {
+    for (var r = 0; r < ctx.head.length; r++) {
+      final row = ctx.head[r];
+      for (var c = 0; c < row.length; c++) {
+        if (!_accountLabel.hasMatch(row[c])) continue;
+        final below = r + 1 < ctx.head.length && c < ctx.head[r + 1].length ? ctx.head[r + 1][c] : '';
+        final after = row.skip(c + 1).firstWhere((v) => v.isNotEmpty, orElse: () => '');
+        final found = [below, after].where(_iban.hasMatch);
+        ctx.account = found.isEmpty ? null : found.first;
+        return;
+      }
+    }
+  }
+
   @override
   RowResult mapRow(List<Object> row, ImportContext ctx) {
     if (row.length < 4) return const RowResult.ignored();
@@ -50,6 +81,15 @@ class PbzProfile extends BankProfile {
       currency: currency,
       bankType: type,
       description: desc,
+      kindHint: _kind(type, desc),
+      account: ctx.account,
     ));
+  }
+
+  /// A card payment to the owner's own Revolut ("POS Revolut**xxxx* Dublin") is a transfer between own accounts.
+  static TxKind? _kind(String type, String desc) {
+    final k = _kinds[type];
+    if (k == TxKind.card && desc.toLowerCase().contains('revolut')) return TxKind.ownTransfer;
+    return k;
   }
 }

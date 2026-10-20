@@ -73,6 +73,7 @@ class _TestProfile extends BankProfile {
       currency: 'EUR',
       bankType: '',
       description: text,
+      kindHint: TxKind.other,
     ));
   }
 }
@@ -91,6 +92,24 @@ void main() {
         expect(b.transactions.map(v1View).toList(), isNotEmpty);
       });
     }
+
+    test('toJson keeps the v1 shape when no hint is set and adds kindHint and account only when they are', () {
+      const t = NormalizedTransaction(
+          id: 'x', source: 'pbz', date: '2026-01-01', amountMinor: -100, currency: 'EUR', bankType: 'T', description: 'd');
+      expect(t.toJson().keys, ['v', 'id', 'source', 'date', 'amountMinor', 'currency', 'bankType', 'description']);
+      const h = NormalizedTransaction(
+          id: 'x',
+          source: 'pbz',
+          date: '2026-01-01',
+          amountMinor: -100,
+          currency: 'EUR',
+          bankType: 'T',
+          description: 'd',
+          kindHint: TxKind.atm,
+          account: 'A');
+      expect(h.toJson()['kindHint'], 'atm');
+      expect(h.toJson()['account'], 'A');
+    });
 
     test('the unknown-layout message still names both banks, from their labels', () {
       expect(unknownLayoutMessage, 'This is not a PBZ or Revolut export I recognise.');
@@ -136,6 +155,57 @@ void main() {
       ]);
       expect(ctx.head.length, headRows);
       expect(ctx.head.first, ['a', '1', '2.5']);
+    });
+  });
+
+  group('kindHint and account (additive, from what each profile knows)', () {
+    test('PBZ: type gives the kind, a POS payment to Revolut is an own transfer, the IBAN under the label is the account', () {
+      final b = importBankFile(fixture('pbz_synthetic.xls'));
+      TxKind? kind(String desc) => b.transactions.firstWhere((t) => t.description.startsWith(desc)).kindHint;
+      expect(kind('Neto plaća'), TxKind.salary);
+      expect(kind('PBZ ATM'), TxKind.atm);
+      expect(kind('POS Revolut'), TxKind.ownTransfer);
+      expect(kind('PBZ POS'), TxKind.card);
+      expect(kind('Naplata kredita'), TxKind.standingOrder);
+      expect(kind('Naknada'), TxKind.fee);
+      expect(kind('VAL_'), TxKind.other);
+      expect(kind('Plaćanje po računu'), TxKind.other);
+      expect(b.transactions.map((t) => t.account).toSet(), {'HR0000000000000000000'});
+    });
+
+    test('PBZ: an unknown type gives no hint; no account label, no account', () {
+      final b = parseRows([
+        ['DATUM', 'VRSTA TRANSAKCIJE', 'OPIS PLAĆANJA', 'IZNOS', 'VALUTA'],
+        [46037.0, 'Nešto novo', 'x', -1.0, 'EUR'],
+        [46037.0, 'Isplata u poslovnici', 'y', -1.0, 'EUR'],
+      ])!;
+      expect(b.transactions.map((t) => t.kindHint), [null, TxKind.other]);
+      expect(b.transactions.map((t) => t.account), [null, null]);
+    });
+
+    test('Revolut: card payments, top-ups as own transfers, transfers other; Product is the account', () {
+      final b = importBankFile(fixture('revolut_synthetic.xlsx'));
+      expect(b.transactions.map((t) => (t.bankType, t.kindHint)).toSet(), {
+        ('Topup', TxKind.ownTransfer),
+        ('Card Payment', TxKind.card),
+        ('Transfer', TxKind.other),
+      });
+      expect(b.transactions.map((t) => t.account).toSet(), {'Current'});
+      final csv = importBankFile(fixture('revolut_synthetic.csv'));
+      expect(csv.transactions.map((t) => t.kindHint), [TxKind.card, TxKind.ownTransfer]);
+    });
+
+    test('Revolut: fees, ATM, exchange and refunds; unknown types give no hint; no Product column, no account', () {
+      final b = parseRows([
+        ['Type', 'Started Date', 'Description', 'Amount', 'Fee', 'State'],
+        ['Fee', '2026-01-01', 'a', -1.0, 0.0, 'COMPLETED'],
+        ['ATM', '2026-01-01', 'b', -1.0, 0.0, 'COMPLETED'],
+        ['Exchange', '2026-01-01', 'c', -1.0, 0.0, 'COMPLETED'],
+        ['Card Refund', '2026-01-01', 'd', 1.0, 0.0, 'COMPLETED'],
+        ['Something Else', '2026-01-01', 'e', 1.0, 0.0, 'COMPLETED'],
+      ])!;
+      expect(b.transactions.map((t) => t.kindHint), [TxKind.fee, TxKind.atm, TxKind.ownTransfer, TxKind.card, null]);
+      expect(b.transactions.map((t) => t.account), everyElement(isNull));
     });
   });
 
@@ -191,6 +261,7 @@ void main() {
         sourceTransactionId('testbank', '2026-01-01', -100, 'coffee', 0),
         sourceTransactionId('testbank', '2026-01-01', -100, 'coffee', 1),
       ]);
+      expect(b.transactions.first.kindHint, TxKind.other);
     });
 
     test('a profile outside the registry is not consulted by parseRows', () {

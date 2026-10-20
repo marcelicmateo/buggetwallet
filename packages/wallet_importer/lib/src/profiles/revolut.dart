@@ -12,7 +12,18 @@ class RevolutProfile extends BankProfile {
   String get label => 'Revolut';
 
   static const _required = ['Started Date', 'Description', 'Amount'];
-  static const _columns = ['Type', 'Started Date', 'Description', 'Amount', 'Fee', 'State', 'Currency'];
+  static const _columns = ['Type', 'Product', 'Started Date', 'Description', 'Amount', 'Fee', 'State', 'Currency'];
+
+  /// Type → kind. A type not listed here gives no hint.
+  static const _kinds = <String, TxKind>{
+    'Card Payment': TxKind.card,
+    'Card Refund': TxKind.card,
+    'ATM': TxKind.atm,
+    'Topup': TxKind.ownTransfer, // funded from the owner's other account
+    'Exchange': TxKind.ownTransfer, // between the owner's own currency balances
+    'Fee': TxKind.fee,
+    'Transfer': TxKind.other, // to or from other people
+  };
 
   static int _headerRow(ImportContext ctx) => ctx.head.indexWhere((r) => _required.every(r.contains));
 
@@ -51,6 +62,7 @@ class RevolutProfile extends BankProfile {
     final currency = ctx.column('Currency') >= 0 && cellText(at('Currency')).isNotEmpty ? cellText(at('Currency')) : 'EUR';
     final type = cellText(at('Type'));
     final desc = fixMojibake(cellText(at('Description')));
+    final product = cellText(at('Product'));
     final cents = amount - feeCents;
     return RowResult.transaction(NormalizedTransaction(
       id: ctx.v1Id(d, cents, desc),
@@ -60,6 +72,8 @@ class RevolutProfile extends BankProfile {
       currency: currency,
       bankType: type,
       description: desc,
+      kindHint: _kinds[type],
+      account: product.isEmpty ? null : product,
     ));
   }
 }
