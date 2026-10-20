@@ -652,7 +652,7 @@ class WalletController extends ChangeNotifier {
   /// Throws [StateError] when the wallet is not empty, [VaultException] on a wrong key, [BackupException] on a bad file.
   Future<int> restoreBackup(BackupInfo info) async {
     final k = key;
-    if (k == null) throw StateError('No key');
+    if (k == null) throw const BackupException(BackupFailure.unreadable, 'No wallet key on this device.');
     final sw = Stopwatch()..start();
     try {
       final rows = await backupReader(repo, info.path, k);
@@ -684,8 +684,10 @@ class WalletController extends ChangeNotifier {
 
   /// The spending summary per month and category over every transaction.
   ExportFile exportSummary() {
-    logEvent(_log, Level.INFO, 'export.summary', {'rows': txs.length});
-    return ExportFile('bw-summary.csv', _csvBytes(monthlySummaryCsv(txs)), txs.length);
+    final csv = monthlySummaryCsv(txs);
+    final months = csv.split('\n').where((l) => l.isNotEmpty).length - 1; // data lines after the header
+    logEvent(_log, Level.INFO, 'export.summary', {'rows': months});
+    return ExportFile('bw-summary.csv', _csvBytes(csv), months);
   }
 
   /// UTF-8 with a byte order mark, so a spreadsheet reads accents correctly.

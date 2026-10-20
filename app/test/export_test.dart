@@ -8,6 +8,7 @@ import 'package:budget_wallet/src/screens/export_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/layout.dart';
 import 'support/wallet.dart';
@@ -130,6 +131,20 @@ void main() {
       expect(log, isNot(contains('SYNTHGYM')));
       await t.pump(const Duration(seconds: 4));
     });
+  });
+
+  testWidgets('a wallet with only income has no summary to export', (t) async {
+    final wc = wallet(empty: true);
+    wc.repo.importBatch(
+        ImportBatch(source: 'pbz', transactions: [syntheticTx('2026-10-05', 140000, 'Plaća/Mirovina', 'Neto placa synthetic')]));
+    wc.reload();
+    final saver = FakeSaver();
+    await pumpPanel(t, wc, saver);
+    await t.tap(sumBtn);
+    await t.pump();
+    expect(saver.names, isEmpty);
+    expect(find.text('Nothing to export in this range'), findsOneWidget);
+    await t.pump(const Duration(seconds: 4));
   });
 
   testWidgets('the monthly summary saves bw-summary.csv', (t) async {
