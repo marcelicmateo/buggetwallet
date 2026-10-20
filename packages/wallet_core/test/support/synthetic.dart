@@ -4,7 +4,8 @@ import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 /// A normalized transaction with a v1-compatible id. Amounts are cents.
-NormalizedTransaction n(String date, int cents, String type, String desc, {String source = 'pbz', int occ = 0}) => NormalizedTransaction(
+NormalizedTransaction n(String date, int cents, String type, String desc, {String source = 'pbz', int occ = 0, TxKind? kind}) =>
+    NormalizedTransaction(
       id: transactionId(date, cents, desc, occ),
       source: source,
       date: date,
@@ -12,6 +13,7 @@ NormalizedTransaction n(String date, int cents, String type, String desc, {Strin
       currency: 'EUR',
       bankType: type,
       description: desc,
+      kindHint: kind,
     );
 
 final january = ImportBatch(source: 'pbz', transactions: [

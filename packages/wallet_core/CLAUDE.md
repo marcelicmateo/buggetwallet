@@ -15,16 +15,20 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   `ownTransfer` → Internal transfer; `standingOrder`, `card`, `other` and null fall through to the description rules
   (built-in merchant patterns, `merchantPatterns`). A row with `transferTo` is an Internal transfer before any hint.
   `account` from the importer is never stored (it names the owner's account).
-- `transfers.dart` — `planTransfers`: own transfers between accounts, generic across sources: an outflow in one source
-  and the equal inflow (same currency) in another source within `transferDays` (3, inclusive, either way in time) are
-  paired through `tx.transfer_to` (each side holds the other's id). Pure and deterministic: open outflows oldest first
-  (date, id), each takes the closest open inflow (days, then earliest date, then smallest id); a row pairs once; a
-  holding pair is never re-planned; a partner that is deleted, manual or points elsewhere reopens the row (`transfer_to`
-  cleared, or re-paired at once); a partner not here yet keeps the link. A `kindHint == ownTransfer` row needs no
-  partner but may be one. `WalletRepo._pairTransfers` runs it before `_matchManual` (`_reconcile`: after imports,
-  deletes and `runPendingMatch`), loading only rows with a possible partner (self-join on `amount`, index `tx_amount`)
-  plus stale links and their targets. A paired row counts as gone for the manual match it replaced (the cash entry
-  counts again). `ImportSummary.transfers` = new pairs.
+- `transfers.dart` — `planTransfers`: own transfers between accounts. Only a row the bank itself marks as one
+  (`kindHint == ownTransfer`: Revolut `Topup`/`Exchange`, PBZ card payments to Revolut) may pair: with the equal,
+  opposite-sign row of the same currency in another source within `transferDays` (3, inclusive, either way in time),
+  hinted or not. The two then hold each other's id in `tx.transfer_to`. Two unhinted rows never pair, whatever the
+  amounts. Pure and deterministic: open outflows oldest first (date, id), each takes the closest open inflow it may pair
+  with (days, then earliest date, then smallest id); a row pairs once; a holding pair is never re-planned; a partner
+  that is deleted, manual or points elsewhere reopens the row (`transfer_to` cleared, or re-paired at once); a pair
+  with no hint on either side (an earlier build's amount-only rule) is dissolved on every device holding both rows
+  (both `transfer_to` cleared through `_write`, so it syncs; the rows return to their normal categories); a partner not
+  here yet keeps the link. A hinted row needs no partner (Internal transfer by its hint). `WalletRepo._pairTransfers`
+  runs it before `_matchManual` (`_reconcile`: after imports, deletes and `runPendingMatch`), loading only rows with a
+  possible partner (self-join on `amount`, index `tx_amount`, one side hinted) plus stale links and their targets
+  (`_openTransfer` mirrors `openTransfers`). A paired row counts as gone for the manual match it replaced (the cash
+  entry counts again). `ImportSummary.transfers` = new pairs.
 - `matching.dart` — `planMatches`: hand-added expense ↔ bank row (same amount, ±3 days, one-to-one), deterministic;
   only a bank row the adding device did not hold yet replaces the entry (`SeenBank`: the entry's synced `seen_bank`,
   per device the highest bank `amount` clock held at add time; older entries: rows written after the entry). A match
@@ -65,6 +69,9 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
 - New table or field: add it to the entity map at the top of `repo.dart` (so it syncs) and to the schema;
   existing devices must still open old databases (add columns, never rename).
 - Pure functions for new calculations (inputs → result object), so tests need no database.
+- **Money is never reclassified on amount alone** (owner rule). Hiding a row as a transfer, or moving it to another
+  category, needs evidence from the bank row itself (the importer's `kindHint`, its type or text); an equal amount in
+  another account within a few days is never enough on its own. The same goes for any future "looks like" rule.
 - Keep `vault.dart` / `sync.dart` file formats backward compatible (`BWOP1`, `BW1-` keys).
 - Logging: loggers `bw.<area>`; every catch block logs (`logError`). Log counts, durations, sizes, dates, built-in
   categories, setting keys. **Never** amounts, descriptions, merchants, notes, goal/wish names, the key, device ids,
@@ -92,12 +99,12 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   shown as is, and the next edit sets the exact value). Paying goals offline on two devices counts once only when both
   pass the same `period` (or share the `periodStart` setting); otherwise twice.
 - Replay on upgrade needs the old sync files: once files are pruned (gap 4), snapshots must carry `goal_contrib` rows.
-- Own transfers pair on amount, currency, source and date only: an unrelated equal inflow in another bank within 3 days
-  (a friend's repayment on the day of a top-up) can be taken as the partner, and the real one stays open. The user
-  override (`category`) corrects the category but not the link. Two devices that pair offline from different row sets
-  can write different partners for one row; after sync the non-mutual link is cleared and the pair that both hold stays.
-  Older builds drop `kind_hint`/`transfer_to` from ops they apply (replayed once on upgrade) and categorize a paired
-  row by its text, so they can show a transfer as spending until they upgrade.
+- Own transfers: two devices that pair offline from different row sets can write different partners for one row;
+  after sync the non-mutual link is cleared and the pair that both hold stays. A hinted row with two equal candidates
+  takes the closest, which can be the wrong one (the real one then stays open; the user override corrects the
+  category but not the link). A pair made by the earlier amount-only rule stays on a device that holds only one of its
+  rows until the partner arrives. Older builds drop `kind_hint`/`transfer_to` from ops they apply (replayed once on
+  upgrade) and categorize a paired row by its text, so they can show a transfer as spending until they upgrade.
 - A remote clock far in the future (a peer with a wrong date) is taken as is: this device's later writes sort after it,
   and an edit made on a device with a correct clock loses to that peer's older edits until real time catches up.
 

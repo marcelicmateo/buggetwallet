@@ -1,3 +1,5 @@
+import 'package:wallet_importer/wallet_importer.dart' show TxKind;
+
 import 'dates.dart';
 import 'logs.dart';
 import 'models.dart';
@@ -23,15 +25,20 @@ class TransferPlan {
   int get reopened => transferTo.values.where((v) => v == null).length;
 }
 
-/// Whether [t]'s `transfer_to` link holds: the partner is live, a bank row, and points back. A partner that is not in
-/// [byId] at all (its sync file has not arrived yet) keeps the link: the devices holding it wrote the pair, and
-/// reopening the row here would only start a rewrite war over sync.
+/// Whether [t] carries the bank's own evidence of a transfer between the owner's accounts (the importer's
+/// `kindHint`). Only such a row may pair: money is never reclassified on amount alone.
+bool _own(Tx t) => t.kindHint == TxKind.ownTransfer;
+
+/// Whether [t]'s `transfer_to` link holds: the partner is live, a bank row, points back, and one of the two is a
+/// hinted own transfer ([_own]). A pair with no hint on either side was made by the amount-only rule of an earlier
+/// build and dissolves. A partner that is not in [byId] at all (its sync file has not arrived yet) keeps the link:
+/// the devices holding it decide, and reopening the row here would only start a rewrite war over sync.
 bool _linked(Tx t, Map<String, Tx> byId) {
   final to = t.transferTo;
   if (to == null || to == t.id) return false;
   final p = byId[to];
   if (p == null) return true;
-  return !p.deleted && !p.manual && p.transferTo == t.id;
+  return !p.deleted && !p.manual && p.transferTo == t.id && (_own(t) || _own(p));
 }
 
 /// The rows of [rows] that need a partner: live bank rows (not manual, not deleted, with a date) that have no
@@ -44,17 +51,25 @@ List<Tx> openTransfers(List<Tx> rows) {
   ];
 }
 
-/// Pairs the two sides of a transfer between the owner's own accounts: money out of one source (bank profile) and
-/// the same amount, in the same currency, into another source within [transferDays]. Both rows then carry the other's
-/// id in `transfer_to`, and the categorizer shows them as `Internal transfer`.
+/// Pairs the two sides of a transfer between the owner's own accounts: a row the bank itself marks as one
+/// (`kindHint == ownTransfer`: a Revolut top-up, a PBZ card payment to Revolut) and the same amount, in the same
+/// currency, with the opposite sign, in another source within [transferDays]. Both rows then carry the other's id in
+/// `transfer_to`, and the categorizer shows them as `Internal transfer`.
+///
+/// Money is never reclassified on amount alone (owner rule): two rows without a hint never pair, whatever their
+/// amounts and dates (a 50 € card payment and an unrelated 50 € received elsewhere two days later both stay spending).
+/// A hinted row with no partner is an `Internal transfer` by its hint alone; an unhinted row is hidden only as the
+/// partner of a hinted one.
 ///
 /// A pure function of the rows, so every device holding the same rows plans the same pairs (sync converges in
 /// whichever order the two banks' rows arrive), and applying the plan gives a state whose plan is empty:
 /// - a holding pair is kept as it is (never re-planned), also while the partner has not arrived on this device;
-/// - a row whose partner is deleted, is not a bank row, or points at another row is open again;
+/// - a row whose partner is deleted, is not a bank row, or points at another row is open again; so are both rows of
+///   a pair with no hint on either side (made by an earlier build's amount-only rule): they get `transfer_to` cleared
+///   and return to their normal categories, on every device that holds both;
 /// - open outflows are taken oldest first (date, then id); each takes the free open inflow from another source with
-///   the opposite amount and the same currency that is closest in days, then earliest in date, then smallest in id.
-///   A row pairs at most once; a hinted own transfer (`kindHint == ownTransfer`) may be the partner but needs none;
+///   the opposite amount and the same currency, one of the two hinted, that is closest in days, then earliest in
+///   date, then smallest in id. A row pairs at most once;
 /// - an open row whose stale link found no new partner gets `transfer_to` cleared.
 ///
 /// [rows]: the candidate rows plus every row one of them points at (deleted or not), so links can be checked. A
@@ -79,7 +94,7 @@ TransferPlan planTransfers(List<Tx> rows) {
     Tx? best;
     var bestDays = 0;
     for (final i in pool) {
-      if (i.source == o.source || taken.contains(i.id)) continue;
+      if (i.source == o.source || taken.contains(i.id) || !(_own(o) || _own(i))) continue;
       final days = daysBetween(o.date, i.date).abs();
       if (days > transferDays) continue;
       if (best == null ||
