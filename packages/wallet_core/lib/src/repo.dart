@@ -291,20 +291,68 @@ class WalletRepo {
   /// synced), so matching runs after remote changes too; it is deterministic, so every device writes the same
   /// matches. With [match] false (a sync applying many files) it only records that matching is due, and the caller
   /// runs it once at the end with [runPendingMatch].
-  int applyRemote(List<Op> ops, {bool match = true}) {
+  ///
+  /// With [resend] the ops are also queued in the outbox, clocks unchanged, so this device's next sync carries them
+  /// to the other devices like its own writes (a restore from a backup, see `restoreBackup`). Devices that already
+  /// hold those fields with the same clocks change nothing when they read them (a clock is only accepted when newer).
+  int applyRemote(List<Op> ops, {bool match = true, bool resend = false}) {
     final t = PerfTimer('repo.applyRemote');
     var changed = 0;
     _tx(() {
       for (final op in ops) {
         clock.receive(Hlc.parse(op.hlc));
         if (_apply(op)) changed++;
+        if (resend) db.execute('INSERT INTO outbox(op) VALUES(?)', [jsonEncode(op.toJson())]);
       }
       _setMeta('hlc', clock.last.toString());
       if (changed > 0) _setMeta('match_pending', '1');
     });
-    t.done({'ops': ops.length, 'changed': changed});
+    t.done({'ops': ops.length, 'changed': changed, 'resend': resend});
     if (match) runPendingMatch();
     return changed;
+  }
+
+  /// The whole wallet as ops: for every row of every synced entity (deleted rows included, so a restore reproduces
+  /// the state exactly) one op per distinct field clock, holding the fields written with that clock and their current
+  /// values. A field with no clock (never written: the column default) is left out, so a restore records the same
+  /// clocks as this device holds; a row with no clocked field at all gives no op. Device-local values (`local.*`
+  /// meta, the outbox, peer files) are not included. Ordered by entity, id, clock.
+  List<Op> snapshotOps() {
+    final t = PerfTimer('repo.snapshot', warnMs: 1000);
+    final out = <Op>[];
+    for (final e in _entities.entries) {
+      final entity = e.key;
+      final (table, cols) = e.value;
+      final clocks = <String, Map<String, String>>{}; // id -> field -> hlc
+      for (final r in db.select('SELECT id, field, hlc FROM clocks WHERE entity = ? ORDER BY id', [entity])) {
+        if ((r['id'], r['field'], r['hlc']) case (final String id, final String f, final String h)) {
+          if (cols.contains(f)) (clocks[id] ??= {})[f] = h;
+        }
+      }
+      for (final r in db.select('SELECT * FROM $table ORDER BY id')) {
+        final id = r['id'] as String;
+        final byClock = <String, Map<String, Object?>>{};
+        for (final MapEntry(key: f, value: h) in (clocks[id] ?? const {}).entries) {
+          (byClock[h] ??= {})[f] = r[f];
+        }
+        final hlcs = byClock.keys.toList()..sort(Hlc.compareStrings);
+        for (final h in hlcs) {
+          out.add(Op(entity, id, byClock[h]!, h));
+        }
+      }
+    }
+    t.done({'ops': out.length});
+    return out;
+  }
+
+  /// Whether nothing has been put into this wallet yet: no transactions, goals, goal contributions, wishes, recurring
+  /// bills, merchant rules (deleted rows count: they were data once) and no synced settings. Only such a wallet may
+  /// take a restore from a backup; anything else merges through the sync folder.
+  bool get isEmpty {
+    for (final table in ['tx', 'goals', 'goal_contrib', 'wish', 'recurring', 'merchant_rules', 'settings']) {
+      if (db.select('SELECT 1 FROM $table LIMIT 1').isNotEmpty) return false;
+    }
+    return true;
   }
 
   /// Each row's first write, for [planMatches] and `seen_bank`: the clock of its `amount`. Only the write that creates a row sets it
