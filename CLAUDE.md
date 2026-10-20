@@ -54,7 +54,7 @@ Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't 
   screenshots come from `integration_test/flutter_test_config.dart`). Files run in parallel on `BW_JOBS` workers (default
   min(idle cores/4, free RAM/3 GB, 6); `BW_JOBS=1` = one after another in `app/`), each in its own copy of `app/` under
   `dist/desktop-test/w<N>` (delete it to reset) with its own Xvfb display; `layout` runs as 5 shards. Android-only tests must skip themselves on
-  desktop. `tools/build.sh desktop-smoke` starts the release bundle headless and checks its log. CI runs both.
+  desktop. `tools/build.sh desktop-smoke` starts the release bundle headless and checks its log. CI runs the smoke test on every push and the desktop tests on demand (`[ci tests]`).
   Ubuntu packages: `dev/linux-packages.txt` (image and CI).
 - **Frame performance:** `tools/build.sh perf` runs `app/integration_test/perf_test.dart` in profile mode on the Linux app
   under Xvfb (`flutter drive --profile`; big synthetic wallet, Spending scroll + tab switches), saves each action's
@@ -82,9 +82,15 @@ guidance, but there is no Flutter/Dart on the host: run every `flutter`/`dart` c
 go_router, mockito/build_runner or new packages unless the owner asks).
 
 ## Building without a local Flutter SDK (cloud sessions)
-A cloud Claude workspace cannot download Flutter/Dart. Push to `v2` (or `master`); CI runs tests, analyze and
-builds, then pushes the full log to the `ci-logs` branch:
-`git fetch origin ci-logs:refs/remotes/origin/ci-logs && git show origin/ci-logs:latest.txt`.
+A cloud Claude workspace cannot download Flutter/Dart. On every push to `v2`/`master`, CI builds only what the laptop
+does not verify: jobs `apk` (signed release APK), `linux` (release bundle + smoke test), `publish` (dev release on `v2`)
+and `log`. Lint, importer/core/app tests and the desktop tests are **on demand**: put `[ci tests]` in the head commit
+message (or start the `ci` workflow manually with the `tests` input) to also run jobs `lint`, `importer`, `core`, `app`
+and `desktop`; `publish` then waits for them and is skipped if one fails. Cloud sessions should always add `[ci tests]`.
+Each job runs on its own runner and stores its log as an artifact; the `log` job merges them and pushes the result to
+the `ci-logs` branch:
+`git fetch origin ci-logs:refs/remotes/origin/ci-logs && git show origin/ci-logs:latest.txt`
+(line 3 = step outcomes with seconds, line 4 = job results). `tools/ci-status.sh [--wait] [<sha>]` shows the check runs.
 Job status: `gh api repos/marcelicmateo/buggetwallet/commits/<sha>/check-runs`. The Actions API itself is blocked.
 
 ## Conventions

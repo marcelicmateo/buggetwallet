@@ -1,0 +1,36 @@
+# Last step of every ci.yml job (use with `if: always()`): stores the job's step log, seconds per step, step outcomes
+# and history lines as the artifact ci-log-<job>. The `log` job of ci.yml merges them into ci-logs:latest.txt.
+# Needs LOG, BW_DATA_DIR and BW_SOURCE from the job's env (see ci.yml). `outcomes` is "step=outcome ..." for the job's steps.
+name: job-log
+description: Collect a ci.yml job's log for the ci-logs branch
+inputs:
+  job:
+    description: Job name (artifact ci-log-<job>)
+    required: true
+  outcomes:
+    description: 'Step outcomes, e.g. "signing=success apk=failure"'
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        JOB: ${{ inputs.job }}
+        OUTCOMES: ${{ inputs.outcomes }}
+      run: |
+        d="$RUNNER_TEMP/joblog"; mkdir -p "$d"
+        touch "$RUNNER_TEMP/times.txt"
+        line=""
+        for kv in $OUTCOMES; do
+          s=$(awk -v s="${kv%%=*}" '$1 == s { printf "(%ss)", $2 }' "$RUNNER_TEMP/times.txt")
+          line="$line${line:+ }$kv$s"
+        done
+        echo "$line" > "$d/outcome.txt"
+        cp "$RUNNER_TEMP/times.txt" "$d/times.txt"
+        cp "$LOG" "$d/ci.log" 2>/dev/null || true
+        python3 -I "$GITHUB_WORKSPACE/tools/build_log.py" ci-history "$RUNNER_TEMP/times.txt" > "$d/history.jsonl" || true
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ci-log-${{ inputs.job }}
+        path: ${{ runner.temp }}/joblog
+        retention-days: 1
