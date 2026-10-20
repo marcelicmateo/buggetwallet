@@ -1,7 +1,6 @@
 // Plan › Backup: panel states, the button without a sync folder, restore only into an empty wallet, errors, the log.
 // The core's backup functions are replaced by fakes (their round trip is tested in wallet_core). All data is SYNTHETIC.
 import 'package:budget_wallet/src/controller.dart';
-import 'package:budget_wallet/src/core_shim.dart'; // TEMPORARY: BackupInfo and BackupException come from wallet_core after the merge
 import 'package:budget_wallet/src/screens/backup_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,7 +17,7 @@ class DiskTrouble implements Exception {
   String toString() => 'DiskTrouble: cannot write /home/someone/x';
 }
 
-BackupInfo _info(String date) => BackupInfo('bw-backup-$date.bwb', date);
+BackupInfo _info(String date) => BackupInfo('bw-backup-$date.bwb', date, '$_folder/budget-wallet/backups/bw-backup-$date.bwb');
 
 /// A wallet with a sync folder and the given backups "found" in it. [full]: it holds data (restore must not show).
 WalletController wallet({bool full = false, bool folder = true, List<BackupInfo> found = const []}) {
@@ -175,7 +174,9 @@ void main() {
 
   for (final (name, error, message) in <(String, Object, String)>[
     ('wrong key', const VaultException('wrong key'), 'This backup was made with a different wallet key.'),
-    ('bad file', const BackupException('damaged'), "This backup file can't be read."),
+    ('unreadable file', const BackupException(BackupFailure.unreadable, 'x'), "This backup file can't be read."),
+    ('damaged file', const BackupException(BackupFailure.damaged, 'x'), 'This backup file is damaged.'),
+    ('newer version', const BackupException(BackupFailure.newerVersion, 'x'), 'Made by a newer app version. Update first.'),
     ('not empty any more', StateError('not empty'), 'The wallet is not empty, so nothing was restored.'),
     ('anything else', const FormatException('boom'), "Couldn't restore the backup."),
   ]) {
@@ -196,12 +197,6 @@ void main() {
       await t.pump(const Duration(seconds: 4));
     });
   }
-
-  test('the controller refuses a backup name that is a path', () async {
-    final wc = wallet(found: [_info('2026-10-20')]);
-    expect(() => wc.restoreBackup('../x.bwb'), throwsArgumentError);
-    expect(() => wc.restoreBackup(r'..\x.bwb'), throwsArgumentError);
-  });
 
   test('without a sync folder the controller has no backups and backupNow throws', () async {
     final wc = wallet(folder: false);

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
-import '../core_shim.dart'; // TEMPORARY: BackupInfo/BackupException come from wallet_core after the merge
 import '../format.dart';
 import '../logging.dart';
 import '../theme.dart';
@@ -74,7 +73,7 @@ class _BackupPanelState extends State<BackupPanel> {
   Future<void> _restore() async {
     logNav('restore.pressed');
     final list = _backups ?? const <BackupInfo>[];
-    final name = await showDialog<String>(
+    final picked = await showDialog<BackupInfo>(
       context: context,
       builder: (ctx) => SimpleDialog(
         title: const Text('Restore from backup'),
@@ -82,13 +81,13 @@ class _BackupPanelState extends State<BackupPanel> {
           for (final b in list)
             SimpleDialogOption(
               key: ValueKey('backup:${b.name}'),
-              onPressed: () => Navigator.pop(ctx, b.name),
+              onPressed: () => Navigator.pop(ctx, b),
               child: Text('${shortDateOrRaw(b.date)} · ${b.name}'),
             ),
         ],
       ),
     );
-    if (name == null || !mounted) return;
+    if (picked == null || !mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -108,13 +107,17 @@ class _BackupPanelState extends State<BackupPanel> {
     String? error;
     int rows = 0;
     try {
-      rows = await widget.wc.restoreBackup(name);
+      rows = await widget.wc.restoreBackup(picked);
     } on StateError {
       error = 'The wallet is not empty, so nothing was restored.';
     } on VaultException {
       error = 'This backup was made with a different wallet key.';
-    } on BackupException {
-      error = "This backup file can't be read.";
+    } on BackupException catch (e) {
+      error = switch (e.reason) {
+        BackupFailure.unreadable => "This backup file can't be read.",
+        BackupFailure.damaged => 'This backup file is damaged.',
+        BackupFailure.newerVersion => 'Made by a newer app version. Update first.',
+      };
     } catch (e, st) {
       logError(_log, 'restore.unexpected', e, st);
       error = "Couldn't restore the backup.";

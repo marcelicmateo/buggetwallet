@@ -7,7 +7,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
-import 'core_shim.dart'; // TEMPORARY: delete with the shim after merging polish-core
 import 'key_store.dart';
 import 'logging.dart';
 import 'notifier.dart';
@@ -649,17 +648,14 @@ class WalletController extends ChangeNotifier {
     }
   }
 
-  /// Reads the backup [name] (a name from [listBackups]) into the empty wallet; returns the number of rows restored.
+  /// Reads the backup [info] (one from [listBackups]) into the empty wallet; returns the number of rows restored.
   /// Throws [StateError] when the wallet is not empty, [VaultException] on a wrong key, [BackupException] on a bad file.
-  // TODO(core): ask core for the backup folder path instead of building it here.
-  Future<int> restoreBackup(String name) async {
-    final folder = syncFolder, k = key;
-    if (folder == null || k == null) throw StateError('No sync folder');
-    if (name.contains('/') || name.contains('\\')) throw ArgumentError('bad backup name');
-    final sep = Platform.pathSeparator;
+  Future<int> restoreBackup(BackupInfo info) async {
+    final k = key;
+    if (k == null) throw StateError('No key');
     final sw = Stopwatch()..start();
     try {
-      final rows = await backupReader(repo, '$folder${sep}budget-wallet${sep}backups$sep$name', k);
+      final rows = await backupReader(repo, info.path, k);
       logEvent(_backupLog, Level.INFO, 'backup.restored', {'ms': sw.elapsedMilliseconds, 'rows': rows});
       _changed();
       return rows;
