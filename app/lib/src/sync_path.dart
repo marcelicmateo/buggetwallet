@@ -1,14 +1,11 @@
 // Sync folder path checks that touch the file system (dart:io lives here, not in the screens, so they build for the web).
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-
 /// The folder suggested on a phone: Syncthing's usual place in shared storage.
 const androidSyncFolder = '/storage/emulated/0/Documents/BudgetWallet';
 
 /// Checks a typed or pasted sync folder: trims it, expands a leading `~` from HOME, wants an absolute path to a folder that
 /// exists (a missing one is never created). Returns the path, or the `reason` it was refused: empty, relative or missing.
-@visibleForTesting
 ({String? path, String? reason}) checkSyncPath(String raw, {String? home}) {
   var p = raw.trim();
   if (p.isEmpty) return (path: null, reason: 'empty');

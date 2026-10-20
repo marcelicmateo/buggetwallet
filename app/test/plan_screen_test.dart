@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -147,17 +148,27 @@ void main() {
     }
 
     testWidgets('a relative path is refused with a hint and nothing is saved', (tester) async {
-      final wc = await open(tester);
-      await use(tester, 'Sync/folder');
-      expect(find.text('Enter a full folder path, like /home/you/Sync'), findsOneWidget);
-      expect(wc.syncFolder, isNull);
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux; // flutter_test reports android; the hint differs by platform
+      try {
+        final wc = await open(tester);
+        await use(tester, 'Sync/folder');
+        expect(find.text('Enter a full folder path, like /home/you/Sync'), findsOneWidget);
+        expect(wc.syncFolder, isNull);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
 
     testWidgets('empty or blank input is refused', (tester) async {
-      final wc = await open(tester);
-      await use(tester, '   ');
-      expect(find.text('Enter a full folder path, like /home/you/Sync'), findsOneWidget);
-      expect(wc.syncFolder, isNull);
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux; // flutter_test reports android; the hint differs by platform
+      try {
+        final wc = await open(tester);
+        await use(tester, '   ');
+        expect(find.text('Enter a full folder path, like /home/you/Sync'), findsOneWidget);
+        expect(wc.syncFolder, isNull);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
 
     testWidgets('a missing folder is refused and not created', (tester) async {

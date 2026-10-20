@@ -12,10 +12,11 @@ import '../logging.dart';
 import '../platform.dart';
 import '../storage_access.dart';
 import '../sync_path.dart';
-export '../sync_path.dart' show checkSyncPath;
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'diagnostics.dart';
+
+export '../sync_path.dart' show checkSyncPath; // the sync path tests import it from here
 
 final _log = Logger('bw.app');
 
