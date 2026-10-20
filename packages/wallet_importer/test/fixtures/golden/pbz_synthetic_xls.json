@@ -1,0 +1,4088 @@
+{
+  "fixture": "pbz_synthetic.xls",
+  "source": "pbz",
+  "skipped": 1,
+  "invalid": 0,
+  "transactions": [
+    {
+      "v": 1,
+      "id": "2601151qhfet5",
+      "source": "pbz",
+      "date": "2026-01-15",
+      "amountMinor": 150000,
+      "currency": "EUR",
+      "bankType": "Plaća/Mirovina",
+      "description": "Neto plaća za 12/2025"
+    },
+    {
+      "v": 1,
+      "id": "260115xd5vha",
+      "source": "pbz",
+      "date": "2026-01-15",
+      "amountMinor": -55000,
+      "currency": "EUR",
+      "bankType": "Isplata ATM",
+      "description": "PBZ ATM TEST ULICA ZAGREB"
+    },
+    {
+      "v": 1,
+      "id": "260116i4z9uw",
+      "source": "pbz",
+      "date": "2026-01-16",
+      "amountMinor": -5000,
+      "currency": "EUR",
+      "bankType": "POS plaćanje",
+      "description": "POS Revolut**0000* Dublin"
+    },
+    {
+      "v": 1,
+      "id": "260116i4z9uw_1",
+      "source": "pbz",
+      "date": "2026-01-16",
+      "amountMinor": -5000,
+      "currency": "EUR",
+      "bankType": "POS plaćanje",
+      "description": "POS Revolut**0000* Dublin"
+    },
+    {
+      "v": 1,
+      "id": "260117hpzdpn",
+      "source": "pbz",
+      "date": "2026-01-17",
+      "amountMinor": -2340,
+      "currency": "EUR",
+      "bankType": "POS plaćanje",
+      "description": "PBZ POS PBZ7LIDL HRVATSKA ZAGREB"
+    },
+    {
+      "v": 1,
+      "id": "2601181i2k6ha",
+      "source": "pbz",
+      "date": "2026-01-18",
+      "amountMinor": -25000,
+      "currency": "EUR",
+      "bankType": "Trajni nalog",
+      "description": "Naplata kredita 0000000000"
+    },
+    {
+      "v": 1,
+      "id": "2601181g2gxot",
+      "source": "pbz",
+      "date": "2026-01-18",
+      "amountMinor": -33,
+      "currency": "EUR",
+      "bankType": "Naplaćene naknade",
+      "description": "Naknada On-line bankarstvo - kreditni transfer"
+    },
+    {
+      "v": 1,
+      "id": "2601201e59y3t",
+      "source": "pbz",
+      "date": "2026-01-20",
+      "amountMinor": 30000,
+      "currency": "EUR",
+      "bankType": "Ostalo",
+      "description": "VAL_01.01.2026.POVRAT"
+    },
+    {
+      "v": 1,
+      "id": "2601211yw7ric",
+      "source": "pbz",
+      "date": "2026-01-21",
+      "amountMinor": -598,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00000-ŠĐČĆŽ-xxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260122ufxi3p",
+      "source": "pbz",
+      "date": "2026-01-22",
+      "amountMinor": -4973,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00001-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601236dn7pn",
+      "source": "pbz",
+      "date": "2026-01-23",
+      "amountMinor": -14756,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00002-ŠĐČĆŽ-xxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260124cghs0u",
+      "source": "pbz",
+      "date": "2026-01-24",
+      "amountMinor": -1830,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00003-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260125154rdqq",
+      "source": "pbz",
+      "date": "2026-01-25",
+      "amountMinor": -732,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00004-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260126awtnh4",
+      "source": "pbz",
+      "date": "2026-01-26",
+      "amountMinor": -4451,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00005-ŠĐČĆŽ-xxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601271lzjju5",
+      "source": "pbz",
+      "date": "2026-01-27",
+      "amountMinor": -12080,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00006-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601281wzf3b6",
+      "source": "pbz",
+      "date": "2026-01-28",
+      "amountMinor": -4057,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00007-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601291m5vl2w",
+      "source": "pbz",
+      "date": "2026-01-29",
+      "amountMinor": -8448,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00008-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601305iymxz",
+      "source": "pbz",
+      "date": "2026-01-30",
+      "amountMinor": -11826,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00009-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601311jt6hpa",
+      "source": "pbz",
+      "date": "2026-01-31",
+      "amountMinor": -15200,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00010-ŠĐČĆŽ-xxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602012az7la",
+      "source": "pbz",
+      "date": "2026-02-01",
+      "amountMinor": -13993,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00011-ŠĐČĆŽ-xxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260202jhhrfr",
+      "source": "pbz",
+      "date": "2026-02-02",
+      "amountMinor": -5630,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00012-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602031rx9wvn",
+      "source": "pbz",
+      "date": "2026-02-03",
+      "amountMinor": -19149,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00013-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260204m3wlqh",
+      "source": "pbz",
+      "date": "2026-02-04",
+      "amountMinor": -2134,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00014-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602051yy0xzu",
+      "source": "pbz",
+      "date": "2026-02-05",
+      "amountMinor": -2025,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00015-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602061k82zza",
+      "source": "pbz",
+      "date": "2026-02-06",
+      "amountMinor": -12114,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00016-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260207u376o8",
+      "source": "pbz",
+      "date": "2026-02-07",
+      "amountMinor": -14622,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00017-ŠĐČĆŽ-xxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260208z818ii",
+      "source": "pbz",
+      "date": "2026-02-08",
+      "amountMinor": -2584,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00018-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602091wtfasm",
+      "source": "pbz",
+      "date": "2026-02-09",
+      "amountMinor": -1668,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00019-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260210357kgp",
+      "source": "pbz",
+      "date": "2026-02-10",
+      "amountMinor": -16605,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00020-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260211phlhjf",
+      "source": "pbz",
+      "date": "2026-02-11",
+      "amountMinor": -11589,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00021-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26021219q48o1",
+      "source": "pbz",
+      "date": "2026-02-12",
+      "amountMinor": -1012,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00022-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260213k3d9hz",
+      "source": "pbz",
+      "date": "2026-02-13",
+      "amountMinor": -15484,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00023-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260214144coxt",
+      "source": "pbz",
+      "date": "2026-02-14",
+      "amountMinor": -17121,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00024-ŠĐČĆŽ-xxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260215epplv",
+      "source": "pbz",
+      "date": "2026-02-15",
+      "amountMinor": -7665,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00025-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260216a29620",
+      "source": "pbz",
+      "date": "2026-02-16",
+      "amountMinor": -12750,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00026-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26021719i3jj3",
+      "source": "pbz",
+      "date": "2026-02-17",
+      "amountMinor": -3337,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00027-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602181o55j9s",
+      "source": "pbz",
+      "date": "2026-02-18",
+      "amountMinor": -4269,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00028-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260219q51z9y",
+      "source": "pbz",
+      "date": "2026-02-19",
+      "amountMinor": -14066,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00029-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602201rl1mt0",
+      "source": "pbz",
+      "date": "2026-02-20",
+      "amountMinor": -12222,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00030-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602211sfrulk",
+      "source": "pbz",
+      "date": "2026-02-21",
+      "amountMinor": -10729,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00031-ŠĐČĆŽ-xxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602221gjs4dw",
+      "source": "pbz",
+      "date": "2026-02-22",
+      "amountMinor": -3352,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00032-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602231oasbip",
+      "source": "pbz",
+      "date": "2026-02-23",
+      "amountMinor": -5472,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00033-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602241kk8mq6",
+      "source": "pbz",
+      "date": "2026-02-24",
+      "amountMinor": -4470,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00034-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602251ip6dpe",
+      "source": "pbz",
+      "date": "2026-02-25",
+      "amountMinor": -16873,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00035-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602261xjz3a2",
+      "source": "pbz",
+      "date": "2026-02-26",
+      "amountMinor": -4658,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00036-ŠĐČĆŽ-xxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260227f4u9xp",
+      "source": "pbz",
+      "date": "2026-02-27",
+      "amountMinor": -16120,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00037-ŠĐČĆŽ-xxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602281qm8vho",
+      "source": "pbz",
+      "date": "2026-02-28",
+      "amountMinor": -5428,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00038-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603014w2w0r",
+      "source": "pbz",
+      "date": "2026-03-01",
+      "amountMinor": -18271,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00039-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26030257h9no",
+      "source": "pbz",
+      "date": "2026-03-02",
+      "amountMinor": -4331,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00040-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260303to07x9",
+      "source": "pbz",
+      "date": "2026-03-03",
+      "amountMinor": -7973,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00041-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260304fncf6l",
+      "source": "pbz",
+      "date": "2026-03-04",
+      "amountMinor": -2943,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00042-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603051ss2j4c",
+      "source": "pbz",
+      "date": "2026-03-05",
+      "amountMinor": -5008,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00043-ŠĐČĆŽ-xxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260306e5r9nc",
+      "source": "pbz",
+      "date": "2026-03-06",
+      "amountMinor": -10826,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00044-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260307l9w505",
+      "source": "pbz",
+      "date": "2026-03-07",
+      "amountMinor": -17967,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00045-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603081wgmyqd",
+      "source": "pbz",
+      "date": "2026-03-08",
+      "amountMinor": -7304,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00046-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260309rmhhcs",
+      "source": "pbz",
+      "date": "2026-03-09",
+      "amountMinor": -10240,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00047-ŠĐČĆŽ-xxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260310mf7va5",
+      "source": "pbz",
+      "date": "2026-03-10",
+      "amountMinor": -15140,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00048-ŠĐČĆŽ-xxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260311aslv20",
+      "source": "pbz",
+      "date": "2026-03-11",
+      "amountMinor": -3142,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00049-ŠĐČĆŽ-xxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26031218c9ixr",
+      "source": "pbz",
+      "date": "2026-03-12",
+      "amountMinor": -15862,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00050-ŠĐČĆŽ-xxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260313fyyrcr",
+      "source": "pbz",
+      "date": "2026-03-13",
+      "amountMinor": -11969,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00051-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603142eykav",
+      "source": "pbz",
+      "date": "2026-03-14",
+      "amountMinor": -7694,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00052-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603159dhw2f",
+      "source": "pbz",
+      "date": "2026-03-15",
+      "amountMinor": -10629,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00053-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603161u1naca",
+      "source": "pbz",
+      "date": "2026-03-16",
+      "amountMinor": -17230,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00054-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260317rigi7c",
+      "source": "pbz",
+      "date": "2026-03-17",
+      "amountMinor": -13638,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00055-ŠĐČĆŽ-xxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603181cmtmt",
+      "source": "pbz",
+      "date": "2026-03-18",
+      "amountMinor": -13666,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00056-ŠĐČĆŽ-xxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260319cjqxfr",
+      "source": "pbz",
+      "date": "2026-03-19",
+      "amountMinor": -15042,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00057-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603201eotraz",
+      "source": "pbz",
+      "date": "2026-03-20",
+      "amountMinor": -2320,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00058-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603211is4i5u",
+      "source": "pbz",
+      "date": "2026-03-21",
+      "amountMinor": -3247,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00059-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260121r74ryx",
+      "source": "pbz",
+      "date": "2026-01-21",
+      "amountMinor": -19081,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00060-ŠĐČĆŽ-xxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601221xllj4h",
+      "source": "pbz",
+      "date": "2026-01-22",
+      "amountMinor": -19441,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00061-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260123822nw8",
+      "source": "pbz",
+      "date": "2026-01-23",
+      "amountMinor": -10203,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00062-ŠĐČĆŽ-xxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601241gjwjhn",
+      "source": "pbz",
+      "date": "2026-01-24",
+      "amountMinor": -17423,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00063-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260125qig2cu",
+      "source": "pbz",
+      "date": "2026-01-25",
+      "amountMinor": -16849,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00064-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601268j4air",
+      "source": "pbz",
+      "date": "2026-01-26",
+      "amountMinor": -12219,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00065-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601271ypzbvd",
+      "source": "pbz",
+      "date": "2026-01-27",
+      "amountMinor": -7541,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00066-ŠĐČĆŽ-xxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601281ox5qs",
+      "source": "pbz",
+      "date": "2026-01-28",
+      "amountMinor": -10834,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00067-ŠĐČĆŽ-xxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260129bvyx2j",
+      "source": "pbz",
+      "date": "2026-01-29",
+      "amountMinor": -18378,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00068-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260130zcdh0v",
+      "source": "pbz",
+      "date": "2026-01-30",
+      "amountMinor": -9823,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00069-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601311l8eh2j",
+      "source": "pbz",
+      "date": "2026-01-31",
+      "amountMinor": -18589,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00070-ŠĐČĆŽ-xxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260201p7v9we",
+      "source": "pbz",
+      "date": "2026-02-01",
+      "amountMinor": -4865,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00071-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26020214lpr6f",
+      "source": "pbz",
+      "date": "2026-02-02",
+      "amountMinor": -17572,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00072-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260203il61nb",
+      "source": "pbz",
+      "date": "2026-02-03",
+      "amountMinor": -1805,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00073-ŠĐČĆŽ-xxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602046dhohz",
+      "source": "pbz",
+      "date": "2026-02-04",
+      "amountMinor": -16339,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00074-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602051wmx7so",
+      "source": "pbz",
+      "date": "2026-02-05",
+      "amountMinor": -15340,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00075-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260206oux184",
+      "source": "pbz",
+      "date": "2026-02-06",
+      "amountMinor": -13229,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00076-ŠĐČĆŽ-xxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602071rw6mj",
+      "source": "pbz",
+      "date": "2026-02-07",
+      "amountMinor": -3386,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00077-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602081nmwrwy",
+      "source": "pbz",
+      "date": "2026-02-08",
+      "amountMinor": -17461,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00078-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260209kgg7ez",
+      "source": "pbz",
+      "date": "2026-02-09",
+      "amountMinor": -19291,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00079-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602101r37jyl",
+      "source": "pbz",
+      "date": "2026-02-10",
+      "amountMinor": -15130,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00080-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260211usqkke",
+      "source": "pbz",
+      "date": "2026-02-11",
+      "amountMinor": -14288,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00081-ŠĐČĆŽ-xxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26021214d5j5",
+      "source": "pbz",
+      "date": "2026-02-12",
+      "amountMinor": -19903,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00082-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602131ua66s4",
+      "source": "pbz",
+      "date": "2026-02-13",
+      "amountMinor": -8818,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00083-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602141anzsvl",
+      "source": "pbz",
+      "date": "2026-02-14",
+      "amountMinor": -9085,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00084-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602151jsy2ds",
+      "source": "pbz",
+      "date": "2026-02-15",
+      "amountMinor": -4571,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00085-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260216c4g8a0",
+      "source": "pbz",
+      "date": "2026-02-16",
+      "amountMinor": -519,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00086-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260217sha3mj",
+      "source": "pbz",
+      "date": "2026-02-17",
+      "amountMinor": -4679,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00087-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602181hsiecg",
+      "source": "pbz",
+      "date": "2026-02-18",
+      "amountMinor": -243,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00088-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602191yqifus",
+      "source": "pbz",
+      "date": "2026-02-19",
+      "amountMinor": -4656,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00089-ŠĐČĆŽ-xxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602201oqo4e4",
+      "source": "pbz",
+      "date": "2026-02-20",
+      "amountMinor": -17207,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00090-ŠĐČĆŽ-xxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260221rrwuje",
+      "source": "pbz",
+      "date": "2026-02-21",
+      "amountMinor": -10332,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00091-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260222ho1etb",
+      "source": "pbz",
+      "date": "2026-02-22",
+      "amountMinor": -13413,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00092-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260223merr7o",
+      "source": "pbz",
+      "date": "2026-02-23",
+      "amountMinor": -10831,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00093-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602241ycm7fl",
+      "source": "pbz",
+      "date": "2026-02-24",
+      "amountMinor": -4936,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00094-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26022518szs0q",
+      "source": "pbz",
+      "date": "2026-02-25",
+      "amountMinor": -16169,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00095-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260226tbcgxd",
+      "source": "pbz",
+      "date": "2026-02-26",
+      "amountMinor": -1977,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00096-ŠĐČĆŽ-xxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260227wbk95d",
+      "source": "pbz",
+      "date": "2026-02-27",
+      "amountMinor": -7151,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00097-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260228e1h0uq",
+      "source": "pbz",
+      "date": "2026-02-28",
+      "amountMinor": -9394,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00098-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603011cz7qor",
+      "source": "pbz",
+      "date": "2026-03-01",
+      "amountMinor": -13500,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00099-ŠĐČĆŽ-xxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260302g243ng",
+      "source": "pbz",
+      "date": "2026-03-02",
+      "amountMinor": -1306,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00100-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260303r1sffc",
+      "source": "pbz",
+      "date": "2026-03-03",
+      "amountMinor": -16032,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00101-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26030429bivr",
+      "source": "pbz",
+      "date": "2026-03-04",
+      "amountMinor": -5048,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00102-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603051lymjrb",
+      "source": "pbz",
+      "date": "2026-03-05",
+      "amountMinor": -10772,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00103-ŠĐČĆŽ-xxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260306jp1fdk",
+      "source": "pbz",
+      "date": "2026-03-06",
+      "amountMinor": -8495,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00104-ŠĐČĆŽ-xxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260307f15k9g",
+      "source": "pbz",
+      "date": "2026-03-07",
+      "amountMinor": -9306,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00105-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260308folx4a",
+      "source": "pbz",
+      "date": "2026-03-08",
+      "amountMinor": -8918,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00106-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603096glk1k",
+      "source": "pbz",
+      "date": "2026-03-09",
+      "amountMinor": -2048,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00107-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260310144l00j",
+      "source": "pbz",
+      "date": "2026-03-10",
+      "amountMinor": -16737,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00108-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260311v9g4ap",
+      "source": "pbz",
+      "date": "2026-03-11",
+      "amountMinor": -18535,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00109-ŠĐČĆŽ-xxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260312m6a91m",
+      "source": "pbz",
+      "date": "2026-03-12",
+      "amountMinor": -3410,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00110-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603138ka4fn",
+      "source": "pbz",
+      "date": "2026-03-13",
+      "amountMinor": -9679,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00111-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260314mkef7t",
+      "source": "pbz",
+      "date": "2026-03-14",
+      "amountMinor": -18059,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00112-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603151sf75eh",
+      "source": "pbz",
+      "date": "2026-03-15",
+      "amountMinor": -7642,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00113-ŠĐČĆŽ-xxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603161dh6vob",
+      "source": "pbz",
+      "date": "2026-03-16",
+      "amountMinor": -5378,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00114-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260317t19gbf",
+      "source": "pbz",
+      "date": "2026-03-17",
+      "amountMinor": -5776,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00115-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603181hv7b8k",
+      "source": "pbz",
+      "date": "2026-03-18",
+      "amountMinor": -13271,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00116-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260319111g9wi",
+      "source": "pbz",
+      "date": "2026-03-19",
+      "amountMinor": -3180,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00117-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26032019r8n40",
+      "source": "pbz",
+      "date": "2026-03-20",
+      "amountMinor": -4432,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00118-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26032113debjp",
+      "source": "pbz",
+      "date": "2026-03-21",
+      "amountMinor": -11626,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00119-ŠĐČĆŽ-xxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26012172r59x",
+      "source": "pbz",
+      "date": "2026-01-21",
+      "amountMinor": -1313,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00120-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260122j3lfgt",
+      "source": "pbz",
+      "date": "2026-01-22",
+      "amountMinor": -1238,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00121-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601231kpeq5m",
+      "source": "pbz",
+      "date": "2026-01-23",
+      "amountMinor": -10107,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00122-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260124418p3g",
+      "source": "pbz",
+      "date": "2026-01-24",
+      "amountMinor": -3233,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00123-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601251dx5fgh",
+      "source": "pbz",
+      "date": "2026-01-25",
+      "amountMinor": -1694,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00124-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26012612qxmx8",
+      "source": "pbz",
+      "date": "2026-01-26",
+      "amountMinor": -1464,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00125-ŠĐČĆŽ-xxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601271ce5goo",
+      "source": "pbz",
+      "date": "2026-01-27",
+      "amountMinor": -13537,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00126-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601281hsytec",
+      "source": "pbz",
+      "date": "2026-01-28",
+      "amountMinor": -8135,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00127-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260129mu4i09",
+      "source": "pbz",
+      "date": "2026-01-29",
+      "amountMinor": -11620,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00128-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601301s0xdrl",
+      "source": "pbz",
+      "date": "2026-01-30",
+      "amountMinor": -12426,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00129-ŠĐČĆŽ-xxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601311wjwpk2",
+      "source": "pbz",
+      "date": "2026-01-31",
+      "amountMinor": -13182,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00130-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260201br5krw",
+      "source": "pbz",
+      "date": "2026-02-01",
+      "amountMinor": -6396,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00131-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260202gsy7iu",
+      "source": "pbz",
+      "date": "2026-02-02",
+      "amountMinor": -4165,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00132-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602031k9dmsh",
+      "source": "pbz",
+      "date": "2026-02-03",
+      "amountMinor": -4850,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00133-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602041jst3f3",
+      "source": "pbz",
+      "date": "2026-02-04",
+      "amountMinor": -2704,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00134-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260205k5qvve",
+      "source": "pbz",
+      "date": "2026-02-05",
+      "amountMinor": -9199,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00135-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602061tgzhw5",
+      "source": "pbz",
+      "date": "2026-02-06",
+      "amountMinor": -285,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00136-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260207wtdcl3",
+      "source": "pbz",
+      "date": "2026-02-07",
+      "amountMinor": -1558,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00137-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260208g7rla9",
+      "source": "pbz",
+      "date": "2026-02-08",
+      "amountMinor": -10167,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00138-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260209wb2nee",
+      "source": "pbz",
+      "date": "2026-02-09",
+      "amountMinor": -18672,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00139-ŠĐČĆŽ-xxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260210ejc09d",
+      "source": "pbz",
+      "date": "2026-02-10",
+      "amountMinor": -17597,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00140-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602117q2q38",
+      "source": "pbz",
+      "date": "2026-02-11",
+      "amountMinor": -5771,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00141-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26021211ne4j0",
+      "source": "pbz",
+      "date": "2026-02-12",
+      "amountMinor": -16692,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00142-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260213upnjqg",
+      "source": "pbz",
+      "date": "2026-02-13",
+      "amountMinor": -12272,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00143-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260214s3wfln",
+      "source": "pbz",
+      "date": "2026-02-14",
+      "amountMinor": -256,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00144-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602151oarkwb",
+      "source": "pbz",
+      "date": "2026-02-15",
+      "amountMinor": -6058,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00145-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602161ortclh",
+      "source": "pbz",
+      "date": "2026-02-16",
+      "amountMinor": -18785,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00146-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602171dz4pi5",
+      "source": "pbz",
+      "date": "2026-02-17",
+      "amountMinor": -5363,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00147-ŠĐČĆŽ-xxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260218gzv4is",
+      "source": "pbz",
+      "date": "2026-02-18",
+      "amountMinor": -14874,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00148-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260219nuutr4",
+      "source": "pbz",
+      "date": "2026-02-19",
+      "amountMinor": -5520,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00149-ŠĐČĆŽ-xxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602201a1gqbs",
+      "source": "pbz",
+      "date": "2026-02-20",
+      "amountMinor": -14380,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00150-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26022110e7ivw",
+      "source": "pbz",
+      "date": "2026-02-21",
+      "amountMinor": -13781,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00151-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602221qujmqh",
+      "source": "pbz",
+      "date": "2026-02-22",
+      "amountMinor": -10158,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00152-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602231rsfvq9",
+      "source": "pbz",
+      "date": "2026-02-23",
+      "amountMinor": -18116,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00153-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260224d6d6eu",
+      "source": "pbz",
+      "date": "2026-02-24",
+      "amountMinor": -1937,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00154-ŠĐČĆŽ-xxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602251h3212d",
+      "source": "pbz",
+      "date": "2026-02-25",
+      "amountMinor": -16604,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00155-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26022617q7kyt",
+      "source": "pbz",
+      "date": "2026-02-26",
+      "amountMinor": -171,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00156-ŠĐČĆŽ-xxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602271gf8x0o",
+      "source": "pbz",
+      "date": "2026-02-27",
+      "amountMinor": -12779,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00157-ŠĐČĆŽ-xxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260228oqfdyy",
+      "source": "pbz",
+      "date": "2026-02-28",
+      "amountMinor": -3315,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00158-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603011uao6x6",
+      "source": "pbz",
+      "date": "2026-03-01",
+      "amountMinor": -11078,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00159-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260302gsxelu",
+      "source": "pbz",
+      "date": "2026-03-02",
+      "amountMinor": -11262,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00160-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260303yi2dja",
+      "source": "pbz",
+      "date": "2026-03-03",
+      "amountMinor": -1597,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00161-ŠĐČĆŽ-xxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603041u86pia",
+      "source": "pbz",
+      "date": "2026-03-04",
+      "amountMinor": -10957,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00162-ŠĐČĆŽ-xxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260305l183r3",
+      "source": "pbz",
+      "date": "2026-03-05",
+      "amountMinor": -11692,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00163-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260306iky5nm",
+      "source": "pbz",
+      "date": "2026-03-06",
+      "amountMinor": -8653,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00164-ŠĐČĆŽ-xxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603076dqrph",
+      "source": "pbz",
+      "date": "2026-03-07",
+      "amountMinor": -6234,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00165-ŠĐČĆŽ-xxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603081rcj2bk",
+      "source": "pbz",
+      "date": "2026-03-08",
+      "amountMinor": -17989,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00166-ŠĐČĆŽ-xxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603091ha90js",
+      "source": "pbz",
+      "date": "2026-03-09",
+      "amountMinor": -13673,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00167-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603105mqwma",
+      "source": "pbz",
+      "date": "2026-03-10",
+      "amountMinor": -7138,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00168-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603111rrdcv0",
+      "source": "pbz",
+      "date": "2026-03-11",
+      "amountMinor": -17694,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00169-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603121xg3gde",
+      "source": "pbz",
+      "date": "2026-03-12",
+      "amountMinor": -19479,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00170-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603131dkvibp",
+      "source": "pbz",
+      "date": "2026-03-13",
+      "amountMinor": -18523,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00171-ŠĐČĆŽ-xxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260314n5ohg5",
+      "source": "pbz",
+      "date": "2026-03-14",
+      "amountMinor": -17306,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00172-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26031519dypjc",
+      "source": "pbz",
+      "date": "2026-03-15",
+      "amountMinor": -17640,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00173-ŠĐČĆŽ-xxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603162u567e",
+      "source": "pbz",
+      "date": "2026-03-16",
+      "amountMinor": -3669,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00174-ŠĐČĆŽ-xxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260317yre32f",
+      "source": "pbz",
+      "date": "2026-03-17",
+      "amountMinor": -15669,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00175-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603181ec75jf",
+      "source": "pbz",
+      "date": "2026-03-18",
+      "amountMinor": -16064,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00176-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603191d4uspk",
+      "source": "pbz",
+      "date": "2026-03-19",
+      "amountMinor": -5409,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00177-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260320rig9yf",
+      "source": "pbz",
+      "date": "2026-03-20",
+      "amountMinor": -7713,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00178-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603213zu1cg",
+      "source": "pbz",
+      "date": "2026-03-21",
+      "amountMinor": -17186,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00179-ŠĐČĆŽ-xxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601211gkchv3",
+      "source": "pbz",
+      "date": "2026-01-21",
+      "amountMinor": -4071,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00180-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26012210xk657",
+      "source": "pbz",
+      "date": "2026-01-22",
+      "amountMinor": -7058,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00181-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601231lwpw77",
+      "source": "pbz",
+      "date": "2026-01-23",
+      "amountMinor": -4536,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00182-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260124updg3y",
+      "source": "pbz",
+      "date": "2026-01-24",
+      "amountMinor": -8029,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00183-ŠĐČĆŽ-xxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601251w18lad",
+      "source": "pbz",
+      "date": "2026-01-25",
+      "amountMinor": -17301,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00184-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26012618r5kk6",
+      "source": "pbz",
+      "date": "2026-01-26",
+      "amountMinor": -7088,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00185-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601277ha0e4",
+      "source": "pbz",
+      "date": "2026-01-27",
+      "amountMinor": -8054,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00186-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601281rfllgm",
+      "source": "pbz",
+      "date": "2026-01-28",
+      "amountMinor": -6690,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00187-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601291tufj96",
+      "source": "pbz",
+      "date": "2026-01-29",
+      "amountMinor": -2395,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00188-ŠĐČĆŽ-xxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260130y4yj4z",
+      "source": "pbz",
+      "date": "2026-01-30",
+      "amountMinor": -3653,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00189-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601316jjng6",
+      "source": "pbz",
+      "date": "2026-01-31",
+      "amountMinor": -861,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00190-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260201fshk5r",
+      "source": "pbz",
+      "date": "2026-02-01",
+      "amountMinor": -6979,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00191-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602021nb4rcl",
+      "source": "pbz",
+      "date": "2026-02-02",
+      "amountMinor": -8784,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00192-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26020319r1m1j",
+      "source": "pbz",
+      "date": "2026-02-03",
+      "amountMinor": -2401,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00193-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260204oyc0y1",
+      "source": "pbz",
+      "date": "2026-02-04",
+      "amountMinor": -5169,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00194-ŠĐČĆŽ-xxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602051d7sa7c",
+      "source": "pbz",
+      "date": "2026-02-05",
+      "amountMinor": -134,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00195-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260206dvuph7",
+      "source": "pbz",
+      "date": "2026-02-06",
+      "amountMinor": -13768,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00196-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260207fyejw2",
+      "source": "pbz",
+      "date": "2026-02-07",
+      "amountMinor": -7348,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00197-ŠĐČĆŽ-xxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602081rl0gxj",
+      "source": "pbz",
+      "date": "2026-02-08",
+      "amountMinor": -18983,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00198-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260209us4ci3",
+      "source": "pbz",
+      "date": "2026-02-09",
+      "amountMinor": -12501,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00199-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260210ugt8l7",
+      "source": "pbz",
+      "date": "2026-02-10",
+      "amountMinor": -14423,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00200-ŠĐČĆŽ-xxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26021115cq4hc",
+      "source": "pbz",
+      "date": "2026-02-11",
+      "amountMinor": -10192,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00201-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602121jspjeq",
+      "source": "pbz",
+      "date": "2026-02-12",
+      "amountMinor": -6591,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00202-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260213y1y3pa",
+      "source": "pbz",
+      "date": "2026-02-13",
+      "amountMinor": -11133,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00203-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602141sjcbb8",
+      "source": "pbz",
+      "date": "2026-02-14",
+      "amountMinor": -8467,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00204-ŠĐČĆŽ-xxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260215nlnkzu",
+      "source": "pbz",
+      "date": "2026-02-15",
+      "amountMinor": -13579,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00205-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260216y1ohci",
+      "source": "pbz",
+      "date": "2026-02-16",
+      "amountMinor": -12349,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00206-ŠĐČĆŽ-xxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260217sltf8h",
+      "source": "pbz",
+      "date": "2026-02-17",
+      "amountMinor": -8181,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00207-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260218mkrzzf",
+      "source": "pbz",
+      "date": "2026-02-18",
+      "amountMinor": -6147,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00208-ŠĐČĆŽ-xxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260219drub0r",
+      "source": "pbz",
+      "date": "2026-02-19",
+      "amountMinor": -8655,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00209-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26022016508wn",
+      "source": "pbz",
+      "date": "2026-02-20",
+      "amountMinor": -9353,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00210-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260221262ptj",
+      "source": "pbz",
+      "date": "2026-02-21",
+      "amountMinor": -13545,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00211-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260222122nmfo",
+      "source": "pbz",
+      "date": "2026-02-22",
+      "amountMinor": -9516,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00212-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260223swsjmp",
+      "source": "pbz",
+      "date": "2026-02-23",
+      "amountMinor": -13211,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00213-ŠĐČĆŽ-xxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602249bik5t",
+      "source": "pbz",
+      "date": "2026-02-24",
+      "amountMinor": -10357,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00214-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26022512ei0uu",
+      "source": "pbz",
+      "date": "2026-02-25",
+      "amountMinor": -1958,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00215-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602261iwqtoi",
+      "source": "pbz",
+      "date": "2026-02-26",
+      "amountMinor": -13489,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00216-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602279o6oo9",
+      "source": "pbz",
+      "date": "2026-02-27",
+      "amountMinor": -16151,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00217-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260228z5jaou",
+      "source": "pbz",
+      "date": "2026-02-28",
+      "amountMinor": -586,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00218-ŠĐČĆŽ-xxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260301ns2o48",
+      "source": "pbz",
+      "date": "2026-03-01",
+      "amountMinor": -19680,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00219-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260302hcqine",
+      "source": "pbz",
+      "date": "2026-03-02",
+      "amountMinor": -9163,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00220-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26030318r20yl",
+      "source": "pbz",
+      "date": "2026-03-03",
+      "amountMinor": -14395,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00221-ŠĐČĆŽ-xxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603041c7s2v6",
+      "source": "pbz",
+      "date": "2026-03-04",
+      "amountMinor": -9938,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00222-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26030514oawl4",
+      "source": "pbz",
+      "date": "2026-03-05",
+      "amountMinor": -3037,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00223-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603061rg2oz1",
+      "source": "pbz",
+      "date": "2026-03-06",
+      "amountMinor": -17864,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00224-ŠĐČĆŽ-xxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603077lsbia",
+      "source": "pbz",
+      "date": "2026-03-07",
+      "amountMinor": -15591,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00225-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260308198eoe8",
+      "source": "pbz",
+      "date": "2026-03-08",
+      "amountMinor": -3600,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00226-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260309qgs2bo",
+      "source": "pbz",
+      "date": "2026-03-09",
+      "amountMinor": -9345,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00227-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260310hvpc4r",
+      "source": "pbz",
+      "date": "2026-03-10",
+      "amountMinor": -5059,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00228-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26031118qnnj8",
+      "source": "pbz",
+      "date": "2026-03-11",
+      "amountMinor": -9184,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00229-ŠĐČĆŽ-xxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603121l4jkbb",
+      "source": "pbz",
+      "date": "2026-03-12",
+      "amountMinor": -13385,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00230-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603131d7nfgf",
+      "source": "pbz",
+      "date": "2026-03-13",
+      "amountMinor": -11950,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00231-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26031411r1xlv",
+      "source": "pbz",
+      "date": "2026-03-14",
+      "amountMinor": -12292,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00232-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260315ft3rtv",
+      "source": "pbz",
+      "date": "2026-03-15",
+      "amountMinor": -8592,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00233-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603161q4ecl1",
+      "source": "pbz",
+      "date": "2026-03-16",
+      "amountMinor": -8974,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00234-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26031747w6vm",
+      "source": "pbz",
+      "date": "2026-03-17",
+      "amountMinor": -14899,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00235-ŠĐČĆŽ-xxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603181ltzbzp",
+      "source": "pbz",
+      "date": "2026-03-18",
+      "amountMinor": -9056,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00236-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603191nihxxq",
+      "source": "pbz",
+      "date": "2026-03-19",
+      "amountMinor": -16813,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00237-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26032017sr6v7",
+      "source": "pbz",
+      "date": "2026-03-20",
+      "amountMinor": -15340,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00238-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260321z18mpd",
+      "source": "pbz",
+      "date": "2026-03-21",
+      "amountMinor": -9743,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00239-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601211az4a2y",
+      "source": "pbz",
+      "date": "2026-01-21",
+      "amountMinor": -5564,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00240-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601221lhp6w",
+      "source": "pbz",
+      "date": "2026-01-22",
+      "amountMinor": -14300,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00241-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260123m744up",
+      "source": "pbz",
+      "date": "2026-01-23",
+      "amountMinor": -5507,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00242-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601241sqpy4u",
+      "source": "pbz",
+      "date": "2026-01-24",
+      "amountMinor": -17871,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00243-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26012518kmek9",
+      "source": "pbz",
+      "date": "2026-01-25",
+      "amountMinor": -2854,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00244-ŠĐČĆŽ-xxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601261gug3si",
+      "source": "pbz",
+      "date": "2026-01-26",
+      "amountMinor": -7722,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00245-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26012713xnren",
+      "source": "pbz",
+      "date": "2026-01-27",
+      "amountMinor": -14158,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00246-ŠĐČĆŽ-xxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601281ecv78",
+      "source": "pbz",
+      "date": "2026-01-28",
+      "amountMinor": -8356,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00247-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26012925jvxi",
+      "source": "pbz",
+      "date": "2026-01-29",
+      "amountMinor": -10898,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00248-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260130yjv2sz",
+      "source": "pbz",
+      "date": "2026-01-30",
+      "amountMinor": -1339,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00249-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260131c2lgcb",
+      "source": "pbz",
+      "date": "2026-01-31",
+      "amountMinor": -7851,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00250-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602011iovfsr",
+      "source": "pbz",
+      "date": "2026-02-01",
+      "amountMinor": -17149,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00251-ŠĐČĆŽ-xxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602021hipcvm",
+      "source": "pbz",
+      "date": "2026-02-02",
+      "amountMinor": -9592,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00252-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602031uiyyt1",
+      "source": "pbz",
+      "date": "2026-02-03",
+      "amountMinor": -6042,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00253-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260204vze5qt",
+      "source": "pbz",
+      "date": "2026-02-04",
+      "amountMinor": -17084,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00254-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260205v9b68y",
+      "source": "pbz",
+      "date": "2026-02-05",
+      "amountMinor": -10811,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00255-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260206fyarh8",
+      "source": "pbz",
+      "date": "2026-02-06",
+      "amountMinor": -16017,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00256-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260207133q711",
+      "source": "pbz",
+      "date": "2026-02-07",
+      "amountMinor": -9816,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00257-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260208v7m88a",
+      "source": "pbz",
+      "date": "2026-02-08",
+      "amountMinor": -8773,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00258-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260209jdmqet",
+      "source": "pbz",
+      "date": "2026-02-09",
+      "amountMinor": -7838,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00259-ŠĐČĆŽ-xxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602101bf0y0p",
+      "source": "pbz",
+      "date": "2026-02-10",
+      "amountMinor": -14511,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00260-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602111b0i49x",
+      "source": "pbz",
+      "date": "2026-02-11",
+      "amountMinor": -18399,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00261-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260212zbewlx",
+      "source": "pbz",
+      "date": "2026-02-12",
+      "amountMinor": -637,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00262-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602131dacoln",
+      "source": "pbz",
+      "date": "2026-02-13",
+      "amountMinor": -11879,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00263-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602141cqg93l",
+      "source": "pbz",
+      "date": "2026-02-14",
+      "amountMinor": -1771,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00264-ŠĐČĆŽ-xxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260215nwaqzz",
+      "source": "pbz",
+      "date": "2026-02-15",
+      "amountMinor": -2800,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00265-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602166ccfwc",
+      "source": "pbz",
+      "date": "2026-02-16",
+      "amountMinor": -3716,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00266-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602171oho6x2",
+      "source": "pbz",
+      "date": "2026-02-17",
+      "amountMinor": -7644,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00267-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602181xyvdek",
+      "source": "pbz",
+      "date": "2026-02-18",
+      "amountMinor": -9149,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00268-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602191fsx15p",
+      "source": "pbz",
+      "date": "2026-02-19",
+      "amountMinor": -15248,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00269-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260220f1437s",
+      "source": "pbz",
+      "date": "2026-02-20",
+      "amountMinor": -5637,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00270-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260221ow7lap",
+      "source": "pbz",
+      "date": "2026-02-21",
+      "amountMinor": -5120,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00271-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260222rek1ri",
+      "source": "pbz",
+      "date": "2026-02-22",
+      "amountMinor": -9459,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00272-ŠĐČĆŽ-xxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260223o1yft1",
+      "source": "pbz",
+      "date": "2026-02-23",
+      "amountMinor": -1137,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00273-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26022482hvn6",
+      "source": "pbz",
+      "date": "2026-02-24",
+      "amountMinor": -4562,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00274-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602251pajb7w",
+      "source": "pbz",
+      "date": "2026-02-25",
+      "amountMinor": -15647,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00275-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602264eg7nd",
+      "source": "pbz",
+      "date": "2026-02-26",
+      "amountMinor": -15109,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00276-ŠĐČĆŽ-xxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26022715lv634",
+      "source": "pbz",
+      "date": "2026-02-27",
+      "amountMinor": -4067,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00277-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602281cfdhld",
+      "source": "pbz",
+      "date": "2026-02-28",
+      "amountMinor": -12465,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00278-ŠĐČĆŽ-xxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603011g13pql",
+      "source": "pbz",
+      "date": "2026-03-01",
+      "amountMinor": -2612,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00279-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260302zj5exx",
+      "source": "pbz",
+      "date": "2026-03-02",
+      "amountMinor": -11323,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00280-ŠĐČĆŽ-xxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260303htd26o",
+      "source": "pbz",
+      "date": "2026-03-03",
+      "amountMinor": -9354,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00281-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603041ushuyh",
+      "source": "pbz",
+      "date": "2026-03-04",
+      "amountMinor": -15361,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00282-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603051q8z6e5",
+      "source": "pbz",
+      "date": "2026-03-05",
+      "amountMinor": -12157,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00283-ŠĐČĆŽ-xxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603061y0e0i7",
+      "source": "pbz",
+      "date": "2026-03-06",
+      "amountMinor": -15578,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00284-ŠĐČĆŽ-xxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260307rrqt44",
+      "source": "pbz",
+      "date": "2026-03-07",
+      "amountMinor": -19298,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00285-ŠĐČĆŽ-xxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260308nhkou8",
+      "source": "pbz",
+      "date": "2026-03-08",
+      "amountMinor": -11616,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00286-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603091b8nodr",
+      "source": "pbz",
+      "date": "2026-03-09",
+      "amountMinor": -11558,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00287-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260310eb27f4",
+      "source": "pbz",
+      "date": "2026-03-10",
+      "amountMinor": -7993,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00288-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603111hmw0pu",
+      "source": "pbz",
+      "date": "2026-03-11",
+      "amountMinor": -1612,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00289-ŠĐČĆŽ-xxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603121pbh9yk",
+      "source": "pbz",
+      "date": "2026-03-12",
+      "amountMinor": -2128,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00290-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26031333gawu",
+      "source": "pbz",
+      "date": "2026-03-13",
+      "amountMinor": -17021,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00291-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260314lwfjk1",
+      "source": "pbz",
+      "date": "2026-03-14",
+      "amountMinor": -15945,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00292-ŠĐČĆŽ-xxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603151wh9yxp",
+      "source": "pbz",
+      "date": "2026-03-15",
+      "amountMinor": -7009,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00293-ŠĐČĆŽ-xxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603161cb2y7l",
+      "source": "pbz",
+      "date": "2026-03-16",
+      "amountMinor": -13264,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00294-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603171obqui",
+      "source": "pbz",
+      "date": "2026-03-17",
+      "amountMinor": -10169,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00295-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26031811nxxwt",
+      "source": "pbz",
+      "date": "2026-03-18",
+      "amountMinor": -352,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00296-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603191dksl2q",
+      "source": "pbz",
+      "date": "2026-03-19",
+      "amountMinor": -16464,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00297-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603201myy53u",
+      "source": "pbz",
+      "date": "2026-03-20",
+      "amountMinor": -8727,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00298-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260321ceyls2",
+      "source": "pbz",
+      "date": "2026-03-21",
+      "amountMinor": -12748,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00299-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601211g8janj",
+      "source": "pbz",
+      "date": "2026-01-21",
+      "amountMinor": -14175,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00300-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601225rfq7l",
+      "source": "pbz",
+      "date": "2026-01-22",
+      "amountMinor": -3605,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00301-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260123s8wkei",
+      "source": "pbz",
+      "date": "2026-01-23",
+      "amountMinor": -19313,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00302-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26012419nv9or",
+      "source": "pbz",
+      "date": "2026-01-24",
+      "amountMinor": -12357,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00303-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601251nt3ctu",
+      "source": "pbz",
+      "date": "2026-01-25",
+      "amountMinor": -15515,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00304-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260126amjma0",
+      "source": "pbz",
+      "date": "2026-01-26",
+      "amountMinor": -8768,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00305-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601271q5ammh",
+      "source": "pbz",
+      "date": "2026-01-27",
+      "amountMinor": -6514,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00306-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260128wvo6pf",
+      "source": "pbz",
+      "date": "2026-01-28",
+      "amountMinor": -16632,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00307-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601291azwis8",
+      "source": "pbz",
+      "date": "2026-01-29",
+      "amountMinor": -5651,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00308-ŠĐČĆŽ-xxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260130tee15j",
+      "source": "pbz",
+      "date": "2026-01-30",
+      "amountMinor": -4953,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00309-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601311mqwrsf",
+      "source": "pbz",
+      "date": "2026-01-31",
+      "amountMinor": -11440,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00310-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602011scyw3e",
+      "source": "pbz",
+      "date": "2026-02-01",
+      "amountMinor": -6794,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00311-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260202gm5485",
+      "source": "pbz",
+      "date": "2026-02-02",
+      "amountMinor": -17034,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00312-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260203tool8f",
+      "source": "pbz",
+      "date": "2026-02-03",
+      "amountMinor": -9802,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00313-ŠĐČĆŽ-xxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260204kww0ut",
+      "source": "pbz",
+      "date": "2026-02-04",
+      "amountMinor": -15977,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00314-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602059poxvy",
+      "source": "pbz",
+      "date": "2026-02-05",
+      "amountMinor": -5665,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00315-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26020681voc7",
+      "source": "pbz",
+      "date": "2026-02-06",
+      "amountMinor": -11160,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00316-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602071gm1odo",
+      "source": "pbz",
+      "date": "2026-02-07",
+      "amountMinor": -18966,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00317-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26020895vq8m",
+      "source": "pbz",
+      "date": "2026-02-08",
+      "amountMinor": -4903,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00318-ŠĐČĆŽ-xxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602091smnkg6",
+      "source": "pbz",
+      "date": "2026-02-09",
+      "amountMinor": -9823,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00319-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602101pw0z2v",
+      "source": "pbz",
+      "date": "2026-02-10",
+      "amountMinor": -13843,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00320-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602111xkemz1",
+      "source": "pbz",
+      "date": "2026-02-11",
+      "amountMinor": -9019,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00321-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26021217nnp35",
+      "source": "pbz",
+      "date": "2026-02-12",
+      "amountMinor": -1952,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00322-ŠĐČĆŽ-xxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260213kueg3n",
+      "source": "pbz",
+      "date": "2026-02-13",
+      "amountMinor": -8148,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00323-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260214ffi3z7",
+      "source": "pbz",
+      "date": "2026-02-14",
+      "amountMinor": -6193,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00324-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602151w6hpaj",
+      "source": "pbz",
+      "date": "2026-02-15",
+      "amountMinor": -9518,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00325-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602161ufbloc",
+      "source": "pbz",
+      "date": "2026-02-16",
+      "amountMinor": -6941,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00326-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602171f0u8l5",
+      "source": "pbz",
+      "date": "2026-02-17",
+      "amountMinor": -6683,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00327-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602181did249",
+      "source": "pbz",
+      "date": "2026-02-18",
+      "amountMinor": -5491,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00328-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260219vj0rf6",
+      "source": "pbz",
+      "date": "2026-02-19",
+      "amountMinor": -4688,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00329-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26022010rf3ap",
+      "source": "pbz",
+      "date": "2026-02-20",
+      "amountMinor": -6379,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00330-ŠĐČĆŽ-xxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602211hilopu",
+      "source": "pbz",
+      "date": "2026-02-21",
+      "amountMinor": -19022,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00331-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260222b76a85",
+      "source": "pbz",
+      "date": "2026-02-22",
+      "amountMinor": -3912,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00332-ŠĐČĆŽ-xxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260223awbmur",
+      "source": "pbz",
+      "date": "2026-02-23",
+      "amountMinor": -5602,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00333-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602241qk0uws",
+      "source": "pbz",
+      "date": "2026-02-24",
+      "amountMinor": -11976,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00334-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260225g9j9b8",
+      "source": "pbz",
+      "date": "2026-02-25",
+      "amountMinor": -16669,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00335-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602269z6ord",
+      "source": "pbz",
+      "date": "2026-02-26",
+      "amountMinor": -4627,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00336-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602271mh87or",
+      "source": "pbz",
+      "date": "2026-02-27",
+      "amountMinor": -6115,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00337-ŠĐČĆŽ-xxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260228wiy6sc",
+      "source": "pbz",
+      "date": "2026-02-28",
+      "amountMinor": -2619,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00338-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603011pv4s5j",
+      "source": "pbz",
+      "date": "2026-03-01",
+      "amountMinor": -19488,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00339-ŠĐČĆŽ-xxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260302f5p5tr",
+      "source": "pbz",
+      "date": "2026-03-02",
+      "amountMinor": -5914,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00340-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603031s10l4j",
+      "source": "pbz",
+      "date": "2026-03-03",
+      "amountMinor": -12794,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00341-ŠĐČĆŽ-xxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260304w0rsug",
+      "source": "pbz",
+      "date": "2026-03-04",
+      "amountMinor": -2141,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00342-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603057x6xkv",
+      "source": "pbz",
+      "date": "2026-03-05",
+      "amountMinor": -11524,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00343-ŠĐČĆŽ-xxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26030610t0547",
+      "source": "pbz",
+      "date": "2026-03-06",
+      "amountMinor": -9626,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00344-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603078k0qcf",
+      "source": "pbz",
+      "date": "2026-03-07",
+      "amountMinor": -3769,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00345-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260308bvormk",
+      "source": "pbz",
+      "date": "2026-03-08",
+      "amountMinor": -5124,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00346-ŠĐČĆŽ-xxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26030914d9rp2",
+      "source": "pbz",
+      "date": "2026-03-09",
+      "amountMinor": -2370,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00347-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26031015tfoq6",
+      "source": "pbz",
+      "date": "2026-03-10",
+      "amountMinor": -8074,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00348-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260311vl3h2r",
+      "source": "pbz",
+      "date": "2026-03-11",
+      "amountMinor": -11583,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00349-ŠĐČĆŽ-xxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603121sxp4qa",
+      "source": "pbz",
+      "date": "2026-03-12",
+      "amountMinor": -3119,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00350-ŠĐČĆŽ-xxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260313tpi28m",
+      "source": "pbz",
+      "date": "2026-03-13",
+      "amountMinor": -1795,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00351-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260314wj5h16",
+      "source": "pbz",
+      "date": "2026-03-14",
+      "amountMinor": -2457,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00352-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603151dr52ng",
+      "source": "pbz",
+      "date": "2026-03-15",
+      "amountMinor": -12166,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00353-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260316134buly",
+      "source": "pbz",
+      "date": "2026-03-16",
+      "amountMinor": -15536,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00354-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260317dyct72",
+      "source": "pbz",
+      "date": "2026-03-17",
+      "amountMinor": -9065,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00355-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603183ui3r6",
+      "source": "pbz",
+      "date": "2026-03-18",
+      "amountMinor": -6017,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00356-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603194oge9d",
+      "source": "pbz",
+      "date": "2026-03-19",
+      "amountMinor": -6177,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00357-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603201k8e43p",
+      "source": "pbz",
+      "date": "2026-03-20",
+      "amountMinor": -12232,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00358-ŠĐČĆŽ-xxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2603212o2xqp",
+      "source": "pbz",
+      "date": "2026-03-21",
+      "amountMinor": -18957,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00359-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601211ggn5yb",
+      "source": "pbz",
+      "date": "2026-01-21",
+      "amountMinor": -12548,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00360-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601221j1u0qe",
+      "source": "pbz",
+      "date": "2026-01-22",
+      "amountMinor": -13243,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00361-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601232mgh8d",
+      "source": "pbz",
+      "date": "2026-01-23",
+      "amountMinor": -4873,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00362-ŠĐČĆŽ-xxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260124j9yuso",
+      "source": "pbz",
+      "date": "2026-01-24",
+      "amountMinor": -1594,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00363-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26012511jw23a",
+      "source": "pbz",
+      "date": "2026-01-25",
+      "amountMinor": -8229,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00364-ŠĐČĆŽ-xxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601261tk0a9t",
+      "source": "pbz",
+      "date": "2026-01-26",
+      "amountMinor": -5896,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00365-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260127ik9er8",
+      "source": "pbz",
+      "date": "2026-01-27",
+      "amountMinor": -5833,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00366-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601281vh5kix",
+      "source": "pbz",
+      "date": "2026-01-28",
+      "amountMinor": -14089,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00367-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260129y9rq70",
+      "source": "pbz",
+      "date": "2026-01-29",
+      "amountMinor": -1516,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00368-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26013017vb4f",
+      "source": "pbz",
+      "date": "2026-01-30",
+      "amountMinor": -18486,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00369-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2601311w5s39y",
+      "source": "pbz",
+      "date": "2026-01-31",
+      "amountMinor": -8560,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00370-ŠĐČĆŽ-xxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260201foxrt6",
+      "source": "pbz",
+      "date": "2026-02-01",
+      "amountMinor": -4574,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00371-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602021xs0xpq",
+      "source": "pbz",
+      "date": "2026-02-02",
+      "amountMinor": -18177,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00372-ŠĐČĆŽ-xxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260203mbrkpb",
+      "source": "pbz",
+      "date": "2026-02-03",
+      "amountMinor": -1521,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00373-ŠĐČĆŽ-xxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602041nb76zo",
+      "source": "pbz",
+      "date": "2026-02-04",
+      "amountMinor": -15873,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00374-ŠĐČĆŽ-xxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260205lpvyl8",
+      "source": "pbz",
+      "date": "2026-02-05",
+      "amountMinor": -8839,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00375-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602061h41ri3",
+      "source": "pbz",
+      "date": "2026-02-06",
+      "amountMinor": -13805,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00376-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602071qyku4h",
+      "source": "pbz",
+      "date": "2026-02-07",
+      "amountMinor": -18859,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00377-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602081x1a3el",
+      "source": "pbz",
+      "date": "2026-02-08",
+      "amountMinor": -10846,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00378-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26020918rstch",
+      "source": "pbz",
+      "date": "2026-02-09",
+      "amountMinor": -1701,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00379-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602101d6r3u4",
+      "source": "pbz",
+      "date": "2026-02-10",
+      "amountMinor": -17800,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00380-ŠĐČĆŽ-xxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260211ux29ij",
+      "source": "pbz",
+      "date": "2026-02-11",
+      "amountMinor": -12114,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00381-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26021215f02fc",
+      "source": "pbz",
+      "date": "2026-02-12",
+      "amountMinor": -1917,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00382-ŠĐČĆŽ-xxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602135hig4j",
+      "source": "pbz",
+      "date": "2026-02-13",
+      "amountMinor": -19991,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00383-ŠĐČĆŽ-xxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602141055iks",
+      "source": "pbz",
+      "date": "2026-02-14",
+      "amountMinor": -11567,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00384-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602151c0anwi",
+      "source": "pbz",
+      "date": "2026-02-15",
+      "amountMinor": -9463,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00385-ŠĐČĆŽ-xxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602161br3e5f",
+      "source": "pbz",
+      "date": "2026-02-16",
+      "amountMinor": -18330,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00386-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602171jc8avh",
+      "source": "pbz",
+      "date": "2026-02-17",
+      "amountMinor": -19939,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00387-ŠĐČĆŽ-xxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26021813qcmjh",
+      "source": "pbz",
+      "date": "2026-02-18",
+      "amountMinor": -12732,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00388-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602191ulrvjj",
+      "source": "pbz",
+      "date": "2026-02-19",
+      "amountMinor": -19384,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00389-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602201bmjydp",
+      "source": "pbz",
+      "date": "2026-02-20",
+      "amountMinor": -7024,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00390-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602211ur6lt1",
+      "source": "pbz",
+      "date": "2026-02-21",
+      "amountMinor": -6489,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00391-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "26022216bkkog",
+      "source": "pbz",
+      "date": "2026-02-22",
+      "amountMinor": -17169,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00392-ŠĐČĆŽ-xxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260223ncd1gt",
+      "source": "pbz",
+      "date": "2026-02-23",
+      "amountMinor": -8292,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00393-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602241cjtzby",
+      "source": "pbz",
+      "date": "2026-02-24",
+      "amountMinor": -5836,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00394-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602251rfmfde",
+      "source": "pbz",
+      "date": "2026-02-25",
+      "amountMinor": -16290,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00395-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260226iwwnfn",
+      "source": "pbz",
+      "date": "2026-02-26",
+      "amountMinor": -830,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00396-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260227dqi0zn",
+      "source": "pbz",
+      "date": "2026-02-27",
+      "amountMinor": -6359,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00397-ŠĐČĆŽ-xxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "2602281qkrubp",
+      "source": "pbz",
+      "date": "2026-02-28",
+      "amountMinor": -2407,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00398-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "v": 1,
+      "id": "260301filtr9",
+      "source": "pbz",
+      "date": "2026-03-01",
+      "amountMinor": -17312,
+      "currency": "EUR",
+      "bankType": "Plaćanje putem direktnih kanala",
+      "description": "Plaćanje po računu br. 00399-ŠĐČĆŽ-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  ]
+}
