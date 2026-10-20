@@ -51,4 +51,4 @@ re-importing a file never duplicates rows. The id scheme matches v1.
 
 ## Build and test
 
-CI (`.github/workflows/ci.yml`) runs the lint step (`tools/build.sh lint`: dart format, shellcheck, actionlint), package tests, `flutter analyze`, `flutter test`, and builds the Android APK and Linux bundle. The log is pushed to the `ci-logs` branch (`latest.txt`); builds are attached to the workflow run.
+CI (`.github/workflows/ci.yml`) builds the signed Android APK and the Linux bundle (with its smoke test) on every push as separate jobs; lint (`tools/build.sh lint`), package tests, `flutter analyze`, `flutter test` and the desktop tests run there only on demand (`[ci tests]` in the commit message), since the laptop verifies them before pushing. The log is pushed to the `ci-logs` branch (`latest.txt`); builds are attached to the workflow run.

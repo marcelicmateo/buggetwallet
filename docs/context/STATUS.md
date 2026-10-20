@@ -17,7 +17,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - `packages/wallet_importer` (pure Dart): PBZ .xls via own BIFF8 reader, Revolut .xlsx/.csv → normalized transactions, v1-compatible ids. 10 tests, synthetic fixtures.
 - `packages/wallet_core`: SQLite, field-level change log with hybrid logical clock (last writer wins), XChaCha20-Poly1305 encrypted sync files in a Syncthing folder (each device writes only its own subfolder), wallet key as `BW1-…` text + QR, budget engine ported from v1. 13 tests incl. two-device sync and wrong-key refusal.
 - `app` (Flutter 3.47): onboarding (new wallet / join with key), Today, Spending (fl_chart), Wishlist, Goals, Plan (numbers, start month, import files, sync folder, show key). Analyze clean, tests pass.
-- CI (`.github/workflows/ci.yml`): tests + analyze + Android/Linux builds on every push; publishes `dev` release from v2. `release.yml`: all 5 platforms on master, tags `v*`, or commits containing `[release]`; publishes a release. Logs on `ci-logs` branch.
+- CI (`.github/workflows/ci.yml`): Android/Linux builds (separate jobs) on every push, tests/lint/desktop on demand via `[ci tests]`; publishes `dev` release from v2. `release.yml`: all 5 platforms on master, tags `v*`, or commits containing `[release]`; publishes a release. Logs on `ci-logs` branch.
 - 2026-10-16 commit a20d0e6: all jobs green; `dev-all` and `dev` releases published.
 
 ## Done
