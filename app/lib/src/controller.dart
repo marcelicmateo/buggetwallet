@@ -33,7 +33,7 @@ class SpendingView {
   final List<String> months;
   final MonthSummary summary;
 
-  /// Average per category over the (up to 6) months before [month].
+  /// Average per category over the 6 months before [month] (a month without spend counts as zero), from `averageByCategory`.
   final Map<String, int> average;
   final List<PeriodSummary> periods;
   final List<int?> trend;
@@ -240,12 +240,7 @@ class WalletController extends ChangeNotifier {
                   _cached('monthSummary$m', () => timed('wc.monthSummary', () => monthSummary(txs, m), fields: {'month': m}))
               ];
               final selSum = sums.firstWhere((s) => s.month == month);
-              final prev = sums.where((s) => s.month.compareTo(month) < 0).toList();
-              final prev6 = prev.length > 6 ? prev.sublist(prev.length - 6) : prev;
-              final avg = <String, int>{};
-              for (final p in prev6) {
-                p.byCategory.forEach((k, v) => avg[k] = (avg[k] ?? 0) + (v / (prev6.isEmpty ? 1 : prev6.length)).round());
-              }
+              final avg = averageByCategory(txs, month); // the same 6-month average the suggested budgets use
               final periods = payPeriods(count: 12);
 
               final merch = <String, (int, int)>{};

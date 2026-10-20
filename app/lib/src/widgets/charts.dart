@@ -138,9 +138,9 @@ String budgetLeftText(CategoryBudgetLine l, String currency) => leftText(l.remai
 /// A budgeted category that is not over budget yet but is spending faster than the month passes (pace above 1.0).
 bool behindPace(CategoryBudgetLine l) => !l.over && (l.pace ?? 0) > 1.0;
 
-/// "48 € left" for money still free, "over by 12 €" for a negative amount.
+/// "48 € left" for money still free, "over by 12 €" for a negative amount; cents are shown when there are any (never rounded).
 String leftText(int remaining, String currency) =>
-    remaining < 0 ? 'over by ${money(-remaining, currency, decimals: 0)}' : '${money(remaining, currency, decimals: 0)} left';
+    remaining < 0 ? 'over by ${moneyExact(-remaining, currency)}' : '${moneyExact(remaining, currency)} left';
 
 /// Horizontal bars by category with a tick for the comparison average. A category with a budget in [budget] gets a ruled
 /// track whose solid mark is the budget (the bar is accent up to it and hatched `bad` beyond it), and "48 € left" or
@@ -181,7 +181,7 @@ class CategoryBars extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                  '${money(total.budgetTotal - total.remainingTotal!, currency, decimals: 0)} of ${money(total.budgetTotal, currency, decimals: 0)}',
+                  '${moneyExact(total.budgetTotal - total.remainingTotal!, currency)} of ${moneyExact(total.budgetTotal, currency)}',
                   textAlign: TextAlign.end,
                   style: numStyle.copyWith(fontSize: 11.5, color: c.ink2)),
             ),
@@ -232,7 +232,7 @@ class _CategoryRow extends StatelessWidget {
     final l = line;
     final budget = l?.budget;
     final tip = '$name: ${money(value, currency, decimals: 0)} · average ${money(average, currency, decimals: 0)}'
-        '${l == null ? '' : ' · budget ${money(budget!, currency, decimals: 0)}, ${budgetLeftText(l, currency)}'}';
+        '${l == null ? '' : ' · budget ${moneyExact(budget!, currency)}, ${budgetLeftText(l, currency)}'}';
     return Container(
       constraints: BoxConstraints(minHeight: l == null ? 36 : (behindPace(l) ? 58 : 44)),
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -285,7 +285,7 @@ class _CategoryRow extends StatelessWidget {
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerRight,
-                      child: Text('of ${money(budget!, currency, decimals: 0)}', style: numStyle.copyWith(fontSize: 11, color: c.ink2)),
+                      child: Text('of ${moneyExact(budget!, currency)}', style: numStyle.copyWith(fontSize: 11, color: c.ink2)),
                     ),
                   ),
                   if (behindPace(l))

@@ -1,5 +1,6 @@
 // Budget vs actual on Spending and Today, and the controller's cached budget values. All data is SYNTHETIC (budgetWallet).
 import 'package:budget_wallet/main.dart';
+import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/theme.dart';
@@ -124,6 +125,19 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('amounts are exact: 47.50 € left and over by 0.49 €, never rounded to whole euros', (tester) async {
+      // Groceries 252 of 299.50 (4750 left), Eating out 112 of 111.51 (49 over).
+      final wc = budgetWallet(groceriesBudget: 29950, eatingOutBudget: 11151);
+      await pumpApp(tester, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(360, 3000));
+      expect(find.text(_eur('47.50 € left')), findsOneWidget);
+      expect(find.text(_eur('over by 0.49 €')), findsOneWidget);
+      expect(find.text(_eur('of 299.50 €')), findsOneWidget);
+      expect(find.text(_eur('of 111.51 €')), findsOneWidget);
+      expect(find.textContaining('1 over, 1 behind pace, ${_eur('47.01 € left')} in total'), findsOneWidget);
+      expect(find.textContaining('over by 0 €'), findsNothing);
+      expect(find.textContaining('48 € left'), findsNothing);
+    });
+
     testWidgets('a budgeted category with no spending yet still shows its budget', (tester) async {
       final wc = budgetWallet(budgets: false);
       wc.repo.updateSettings({
@@ -145,6 +159,15 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
+
+    testWidgets('amounts are exact on the line: 47.50 € left, over by 0.49 €', (tester) async {
+      Future<void> pumpToday(WalletController wc) =>
+          pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday)), size: const Size(360, 3000));
+      await pumpToday(budgetWallet(groceriesBudget: 29950, eatingOutBudget: 20000));
+      expect(find.text(_eur('Groceries: 47.50 € left this month')), findsOneWidget);
+      await pumpToday(budgetWallet(groceriesBudget: 29950, eatingOutBudget: 11151));
+      expect(find.text(_eur('Eating out: over by 0.49 €')), findsOneWidget);
+    });
 
     testWidgets('over budget: the line says so, in the bad colour with an icon', (tester) async {
       final wc = budgetWallet();
