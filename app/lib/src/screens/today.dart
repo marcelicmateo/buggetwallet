@@ -73,6 +73,7 @@ class TodayScreen extends StatelessWidget {
                       alignment: Alignment.centerLeft,
                       fit: BoxFit.scaleDown,
                       child: MoneyText(money(p.safeToday, cur, decimals: 0),
+                          key: const ValueKey('safeToSpend'),
                           style: numStyle.copyWith(
                               fontSize: 78, height: 0.95, fontWeight: FontWeight.w500, letterSpacing: -3, color: over ? c.bad : c.ink)),
                     ),

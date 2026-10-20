@@ -16,13 +16,22 @@ import 'support/harness.dart';
 Map<String, Object?> plan(String start) =>
     {'salary': 200000, 'rent': 50000, 'loan': 0, 'subs': 0, 'paydayDay': 28, 'periodStart': start, 'salaryConfirmed': true};
 
-/// The big "safe to spend today" number (the app bar's period chip has a FittedBox too).
-Finder safeAmount() =>
-    find.descendant(of: find.descendant(of: find.byType(TodayScreen), matching: find.byType(FittedBox)), matching: find.byType(Text));
-String safeText(WidgetTester t) => t.widget<Text>(safeAmount()).data!;
+/// The big "safe to spend today" number: a [MoneyText] (Text.rich in three spans), read as its plain text.
+Finder safeAmount() => find.descendant(of: find.byKey(const ValueKey('safeToSpend')), matching: find.byType(Text));
+String safeText(WidgetTester t) {
+  final w = t.widget<Text>(safeAmount());
+  return w.data ?? w.textSpan!.toPlainText();
+}
+
 Finder inSheet(Type sheet, Finder f) => find.descendant(of: find.byType(sheet), matching: f);
 Finder sheetButton(String label) => inSheet(AddExpenseSheet, find.text(label)).last;
 Finder tile(String amountText) => find.widgetWithText(TxTile, amountText);
+
+/// A row with this date and category. Wide windows show the date in its own column, narrow ones as "date · category";
+/// the row's data decides which, and the category text must be on screen either way.
+Finder tileOn(String date, String category) => find.byWidgetPredicate(
+    (w) => w is TxTile && w.t.date == date && w.t.category == category && _hasText(w, category) && _hasText(w, shortDate(date)));
+bool _hasText(TxTile w, String s) => find.descendant(of: find.byWidget(w), matching: find.textContaining(s)).evaluate().isNotEmpty;
 
 Future<void> openAddExpense(WidgetTester t) async {
   await tapVisible(t, find.text('Add expense'));
@@ -72,7 +81,7 @@ void main() {
         findsOneWidget);
 
     await scrollTo(t, find.text('Lunch synthetic note'), TodayScreen);
-    expect(find.widgetWithText(TxTile, '${shortDate(today)} · Eating out'), findsOneWidget);
+    expect(tileOn(today, 'Eating out'), findsOneWidget);
     expect(find.widgetWithText(TxTile, 'added'), findsOneWidget);
     await Harness.shot(t, 'today-after-expense');
 
@@ -146,7 +155,7 @@ void main() {
     expect([for (final id in ids) cat(id)], ['Home & tools', 'Shopping', 'Shopping', 'Groceries']);
     expect(wc.repo.transaction(ids[0])!.category, 'Home & tools');
     expect(wc.repo.merchantRules(), isEmpty);
-    expect(find.widgetWithText(TxTile, '${shortDate(today)} · Home & tools'), findsOneWidget);
+    expect(tileOn(today, 'Home & tools'), findsOneWidget);
 
     await tapVisible(t, tile('−29.99\u00A0€'));
     await pickDropdown(t, inSheet(TxSheet, find.byType(DropdownButtonFormField<String>)), 'Sport & fitness');
@@ -155,7 +164,7 @@ void main() {
     expect(wc.repo.merchantRules(), {'zara_zagreb': 'Sport & fitness'});
     // The row changed "once" keeps its own category (a row's own choice beats the merchant rule).
     expect([for (final id in ids) cat(id)], ['Home & tools', 'Sport & fitness', 'Sport & fitness', 'Groceries']);
-    expect(find.widgetWithText(TxTile, '${shortDate(today)} · Sport & fitness'), findsNWidgets(2));
+    expect(tileOn(today, 'Sport & fitness'), findsNWidgets(2));
 
     // New imports of the merchant follow the rule.
     final more = pbzBatch([(today, -4999, 'POS plaćanje', 'POS ZARA ZAGREB')]);
