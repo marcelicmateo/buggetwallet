@@ -1,9 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:sqlite3/common.dart' show SqliteException;
+
+import 'hlc.dart';
 import 'logs.dart';
 import 'repo.dart';
+import 'sync_problems.dart';
 import 'vault.dart';
+
+export 'sync_problems.dart' show SyncProblem, SyncProblemReason, syncReaderVersion;
 
 final _log = Logger('bw.sync');
 
@@ -21,10 +27,71 @@ class SyncException implements Exception {
 class SyncReport {
   final int sent, received, filesRead;
 
-  /// Files from other devices that could not be decrypted or read (damaged, half-synced, or sealed with
-  /// another key). They are skipped and retried on every run, so a repaired copy still applies later.
-  final int badFiles;
-  const SyncReport(this.sent, this.received, this.filesRead, {this.badFiles = 0});
+  /// Files from other devices that were not applied: refused in this run, or refused earlier and unchanged since
+  /// (those are not read again; a repaired copy, or for a newer format an app update, applies on a later run).
+  final List<SyncProblem> problems;
+  const SyncReport(this.sent, this.received, this.filesRead, {this.problems = const []});
+
+  /// How many files were not applied ([problems]).
+  int get badFiles => problems.length;
+
+  /// Files not applied, per other device id.
+  Map<String, int> get problemsByDevice {
+    final out = <String, int>{};
+    for (final p in problems) {
+      out[p.device] = (out[p.device] ?? 0) + 1;
+    }
+    return out;
+  }
+}
+
+/// SQLite result codes that are about this device's database, not about the file being applied (busy, locked, out of
+/// memory, read-only, I/O error, damaged database, disk full, cannot open, not a database). Those stop the run, and
+/// the file is read again next time, instead of being refused for good.
+const _dbTrouble = {5, 6, 7, 8, 10, 11, 13, 14, 26};
+
+/// A file refused for [reason]; [error] is what was thrown.
+class _Refused implements Exception {
+  final SyncProblemReason reason;
+  final Object error;
+  final StackTrace stack;
+  _Refused(this.reason, this.error, this.stack);
+}
+
+/// Unseals, parses and applies one sync file (matching is left to the caller). Returns (fields changed, ops read).
+/// Throws [_Refused] when the file cannot be used. Database errors from [_dbTrouble] are rethrown as they are.
+/// The file is applied in one transaction: a refused file changes nothing.
+Future<(int, int)> _applyFile(WalletRepo repo, VaultKey key, List<int> bytes) async {
+  final List<int> clear;
+  try {
+    clear = await unseal(bytes, key);
+  } on VaultException catch (e, st) {
+    throw _Refused(
+        switch (e.failure) {
+          UnsealFailure.badKey => SyncProblemReason.badKey,
+          UnsealFailure.newerFormat => SyncProblemReason.unknownVersion,
+          _ => SyncProblemReason.corrupt,
+        },
+        e,
+        st);
+  }
+  final List<Op> ops;
+  try {
+    ops = [for (final j in jsonDecode(utf8.decode(clear)) as List) Op.fromJson(Map<String, Object?>.from(j as Map))];
+    for (final op in ops) {
+      Hlc.parse(op.hlc); // a clock that does not parse makes the whole file damaged, before anything is applied
+    }
+  } on Object catch (e, st) {
+    throw _Refused(SyncProblemReason.corrupt, e, st);
+  }
+  try {
+    return (repo.applyRemote(ops, match: false), ops.length);
+  } on SqliteException catch (e, st) {
+    if (_dbTrouble.contains(e.resultCode)) rethrow;
+    throw _Refused(SyncProblemReason.applyFailed, e, st);
+  } on Object catch (e, st) {
+    throw _Refused(SyncProblemReason.applyFailed, e, st);
+  }
 }
 
 /// Sync through a shared folder kept in step by Syncthing (or any file sync).
@@ -40,7 +107,13 @@ class SyncReport {
 class FolderSync {
   final String folder;
   final VaultKey key;
-  FolderSync(this.folder, this.key);
+
+  /// The app's version, if the caller knows it: files refused because the database rejected them, or as a newer
+  /// format, are read again once after it changes.
+  final String appVersion;
+  FolderSync(this.folder, this.key, {this.appVersion = ''});
+
+  String get build => '$syncReaderVersion+$appVersion';
 
   Directory get _root => Directory('$folder${Platform.pathSeparator}budget-wallet');
   Directory get _devices => Directory('${_root.path}${Platform.pathSeparator}devices');
@@ -104,7 +177,13 @@ class FolderSync {
 
     // 2. Read every file from other devices that hasn't been applied yet. Hand-added expenses are matched to bank
     //    rows once at the end, not after every file (a new device's first sync can read hundreds).
-    var received = 0, filesRead = 0, opsRead = 0, bytesRead = 0, devices = 0, bad = 0;
+    //    A file that cannot be used is skipped (the others still apply: ops are per-field last-writer-wins, so order
+    //    does not matter) and quarantined ([BadFiles]): it is read again only once it changes, or after an update for
+    //    a newer format.
+    var received = 0, filesRead = 0, opsRead = 0, bytesRead = 0, devices = 0, known = 0;
+    final problems = <SyncProblem>[];
+    final bad = BadFiles.load(repo), listed = <String>{};
+    var badChanged = false, complete = false;
     final apply = PerfTimer('sync.apply', warnMs: 1000);
     try {
       await for (final dev in _devices.list()) {
@@ -118,34 +197,72 @@ class FolderSync {
         for (final f in files) {
           final name = f.path.split(sep).last;
           if (repo.peerFileSeen(device, name)) continue;
+          final k = BadFile.keyOf(device, name);
+          listed.add(k);
           final List<int> bytes;
-          final List<Object?> list;
-          final int changed;
           try {
             bytes = await (f as File).readAsBytes();
-            final clear = await unseal(bytes, key);
-            list = jsonDecode(utf8.decode(clear)) as List;
-            changed = repo.applyRemote([for (final j in list) Op.fromJson(Map<String, Object?>.from(j as Map))], match: false);
-          } catch (e, st) {
-            // Skip it (not marked as seen, so a repaired copy applies on a later run) and keep applying the
-            // others: one damaged file must not block every file after it. applyRemote rolled back its part.
-            logError(_log, 'sync.file.failed', e, st, fields: {'file': _seq(name)});
-            bad++;
+          } on Object catch (e, st) {
+            // Removed or locked while syncing: not the file's fault, so not quarantined; read again next run.
+            logError(_log, 'sync.file.unreadable', e, st, fields: {'file': _seq(name)});
+            problems.add(SyncProblem(device, SyncProblemReason.unreadable, bytes: 0));
             continue;
           }
+          final was = bad.byKey[k];
+          if (was != null && !was.retryAfterUpgrade(build) && was.hash == await fileHash(bytes)) {
+            problems.add(was.problem(isNew: false));
+            known++;
+            continue;
+          }
+          final int changed, count;
+          try {
+            (changed, count) = await _applyFile(repo, key, bytes);
+          } on _Refused catch (r) {
+            logError(_log, 'sync.file.failed', r.error, r.stack,
+                fields: {'file': _seq(name), 'reason': r.reason.name, 'bytes': bytes.length});
+            bad.byKey[k] = BadFile(device, name, r.reason, size: bytes.length, hash: await fileHash(bytes), build: build);
+            badChanged = true;
+            problems.add(SyncProblem(device, r.reason, bytes: bytes.length));
+            continue;
+          }
+          if (bad.byKey.remove(k) != null) badChanged = true;
           received += changed;
           repo.markPeerFile(device, name);
           filesRead++;
-          opsRead += list.length;
+          opsRead += count;
           bytesRead += bytes.length;
-          logEvent(_log, Level.FINE, 'sync.file', {'file': _seq(name), 'bytes': bytes.length, 'ops': list.length, 'changed': changed});
+          logEvent(_log, Level.FINE, 'sync.file', {'file': _seq(name), 'bytes': bytes.length, 'ops': count, 'changed': changed});
         }
       }
+      complete = true;
     } finally {
+      // Quarantined files that are gone (or applied by now) are forgotten, but only after a complete listing.
+      if (complete) {
+        final gone = [
+          for (final k in bad.byKey.keys)
+            if (!listed.contains(k)) k
+        ];
+        for (final k in gone) {
+          bad.byKey.remove(k);
+        }
+        badChanged |= gone.isNotEmpty;
+      }
+      if (badChanged) bad.save(repo);
       repo.runPendingMatch(); // also if reading the folder failed midway: what was applied gets matched
     }
-    apply.done({'devices': devices, 'files': filesRead, 'ops': opsRead, 'changed': received, 'bytes': bytesRead, 'bad': bad});
-    if (bad > 0) logEvent(_log, Level.WARNING, 'sync.files.skipped', {'bad': bad});
-    return SyncReport(sent, received, filesRead, badFiles: bad);
+    final fresh = problems.where((p) => p.isNew).length;
+    apply.done({
+      'devices': devices,
+      'files': filesRead,
+      'ops': opsRead,
+      'changed': received,
+      'bytes': bytesRead,
+      'bad': problems.length,
+      'known': known,
+    });
+    if (problems.isNotEmpty) {
+      logEvent(_log, fresh > 0 ? Level.WARNING : Level.INFO, 'sync.files.skipped', {'bad': problems.length, 'new': fresh});
+    }
+    return SyncReport(sent, received, filesRead, problems: problems);
   }
 }

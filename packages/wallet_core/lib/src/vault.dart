@@ -9,9 +9,24 @@ import 'logs.dart';
 
 final _log = Logger('bw.vault');
 
+/// Why [unseal] refused a file, for sync bookkeeping (the message is for people).
+enum UnsealFailure {
+  /// Authentication failed: sealed with another key, or changed after sealing.
+  badKey,
+
+  /// Too short, not a sync file, or authenticated content that is not whole gzip.
+  damaged,
+
+  /// A sync file of a newer format (`BWOP2` and up) that this build cannot read yet.
+  newerFormat,
+}
+
 class VaultException implements Exception {
   final String message;
-  const VaultException(this.message);
+
+  /// Set by [unseal]; null for key errors.
+  final UnsealFailure? failure;
+  const VaultException(this.message, {this.failure});
   @override
   String toString() => message;
 }
@@ -125,12 +140,14 @@ Future<Uint8List> unseal(List<int> data, VaultKey key) async {
   final t = PerfTimer('vault.unseal', warnMs: 500);
   if (data.length < 5 + 24 + 16) {
     logEvent(_log, Level.WARNING, 'vault.unseal.short', {'bytes': data.length});
-    throw const VaultException('Sync file is damaged.');
+    throw const VaultException('Sync file is damaged.', failure: UnsealFailure.damaged);
   }
   for (var i = 0; i < 5; i++) {
     if (data[i] != _magic[i]) {
-      logEvent(_log, Level.WARNING, 'vault.unseal.magic', {'bytes': data.length});
-      throw const VaultException('Not a Budget Wallet sync file.');
+      // "BWOP" and a version digit above 1: a format from a newer build, readable after an upgrade.
+      final newer = i == 4 && data[4] >= 0x32 && data[4] <= 0x39;
+      logEvent(_log, Level.WARNING, 'vault.unseal.magic', {'bytes': data.length, 'newer': newer});
+      throw VaultException('Not a Budget Wallet sync file.', failure: newer ? UnsealFailure.newerFormat : UnsealFailure.damaged);
     }
   }
   final nonce = data.sublist(5, 29), mac = data.sublist(29, 45), cipher = data.sublist(45);
@@ -142,10 +159,10 @@ Future<Uint8List> unseal(List<int> data, VaultKey key) async {
     return out;
   } on SecretBoxAuthenticationError catch (e, st) {
     logError(_log, 'vault.unseal.auth', e, st, fields: {'bytes': data.length});
-    throw const VaultException('Sync file was made with a different key, or was changed.');
-  } on FormatException catch (e, st) {
+    throw const VaultException('Sync file was made with a different key, or was changed.', failure: UnsealFailure.badKey);
+  } on Object catch (e, st) {
     // Authenticated, so made with this key, but not gzip: a writer bug or a format this build does not know.
     logError(_log, 'vault.unseal.format', e, st, fields: {'bytes': data.length});
-    throw const VaultException('Sync file is damaged.');
+    throw const VaultException('Sync file is damaged.', failure: UnsealFailure.damaged);
   }
 }

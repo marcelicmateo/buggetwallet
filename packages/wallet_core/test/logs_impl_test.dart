@@ -247,8 +247,8 @@ void main() {
       expect(text, contains('vault.seal'));
       expect(text, contains('vault.unseal'));
       expect(text, contains('sync.vault.mismatch'));
-      expect(text, contains('WARNING bw.sync sync.file.failed {"file":"0000000001"}'));
-      expect(text, contains('sync.files.skipped {"bad":1}'));
+      expect(text, contains('WARNING bw.sync sync.file.failed {"file":"0000000001","reason":"corrupt","bytes":3}'));
+      expect(text, contains('sync.files.skipped {"bad":1,"new":1}'));
       expect(text, isNot(contains('SYNTHID')), reason: 'conflict-copy names are not logged');
       _expectClean(lines);
       expect(text, isNot(contains(await key.toText())));

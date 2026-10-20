@@ -17,7 +17,15 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   mark the entry `Tx.matchPending` and it counts (`Tx.live`). `WalletRepo` runs it after imports, deletes and
   `applyRemote` (FolderSync: once per run, `runPendingMatch`), loading only candidate rows.
 - `models.dart` — `Tx`, `Goal`, `WishItem`, `WalletSettings` (row ↔ object).
-- `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption), `sync.dart` (FolderSync).
+- `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption; `UnsealFailure` says why a
+  file was refused), `sync.dart` (FolderSync).
+- `sync_problems.dart` — a peer file that cannot be used is skipped (the run goes on with the other files and devices)
+  and quarantined: `BadFiles`, one device-local value (`localValue('syncBadFiles')`, never synced), records device,
+  file, `SyncProblemReason` (`badKey`, `corrupt`, `unknownVersion`, `applyFailed`; `unreadable` = I/O error, not
+  quarantined), size and content hash. It is read again only when its content changes, or (unknownVersion,
+  applyFailed) once after `syncReaderVersion` or the app version passed to `FolderSync` changes. `SyncReport.problems`
+  lists every file not applied (device id + reason, `isNew`), `badFiles` is their count. Database errors that are
+  about this device (read-only, disk full, I/O, locked) stop the run instead, so the file is not refused for good.
 - `logs.dart` — logging (`package:logging`): `logEvent`/`logError` (structured events), `formatLogRecord` (one line,
   errors via `describeError`, which drops SQL parameters, paths and FormatException sources), `RotatingFileSink`,
   `timed`/`timedAsync`/`PerfTimer` (on `bw.perf`), `FrameStats`.
@@ -35,8 +43,11 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
 ## Known limits (for the sync redesign)
 - The same export imported on two devices before they sync: the later import's `amount` clock wins, so a cash entry
   added in between on the first device can be matched to that row although that device held it.
-- A damaged or late sync file (files from a device are applied even past a gap) while later files from that device apply: `seen_bank` (per-device maximum) then
-  claims rows the adding device never got, those never replace the entry, and the expense counts twice.
+- A damaged, quarantined or late sync file (files from a device are applied even past a gap) while later files from that
+  device apply: `seen_bank` (per-device maximum) then claims rows the adding device never got, those never replace the
+  entry, and the expense counts twice. Quarantine does not change this (before it, a bad file was retried every run
+  with the same result); a repaired copy still applies.
+- A sync file changed after sealing fails authentication like one sealed with another key: both are `badKey`.
 - Older builds ignore `seen_bank` and match by the old rule: devices on mixed versions can plan different matches,
   and keep doing so after upgrading for entries they received before.
 - A device that is behind can match a cash entry to an earlier same-amount card payment (±3 days) it never held.

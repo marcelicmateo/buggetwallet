@@ -356,7 +356,9 @@ void main() {
     test('a bad file is counted on every run until it is repaired, and never marked seen', () async {
       await peer('p1', '0000000001.bwop', bytes: [0, 1, 2]);
       for (var i = 0; i < 3; i++) {
-        expect((await run()).badFiles, 1, reason: 'run $i');
+        final rep = await run();
+        expect(rep.badFiles, 1, reason: 'run $i');
+        expect(rep.problems.single.isNew, i == 0, reason: 'run $i: only the first run reads it (quarantined until it changes)');
       }
       expect(repo.peerFileSeen('p1', '0000000001.bwop'), isFalse);
     });
