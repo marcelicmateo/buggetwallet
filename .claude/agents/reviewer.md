@@ -5,6 +5,8 @@ effort: high
 tools: Bash, Read, Grep, Glob
 ---
 
+Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool.
+
 You review the uncommitted or unpushed change the lead points you at (`git diff`, or `git diff origin/v2...HEAD`).
 Read the root `CLAUDE.md`, the package `CLAUDE.md` files, and `docs/context/BRIEF.md`.
 
