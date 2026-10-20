@@ -79,7 +79,8 @@ class WalletController extends ChangeNotifier {
   /// Runs the sync of one folder; tests replace it.
   @visibleForTesting
   Future<SyncReport> Function(String folder, VaultKey key, WalletRepo repo) syncRunner = _runFolderSync;
-  static Future<SyncReport> _runFolderSync(String folder, VaultKey key, WalletRepo repo) => FolderSync(folder, key).run(repo);
+  static Future<SyncReport> _runFolderSync(String folder, VaultKey key, WalletRepo repo) =>
+      FolderSync(folder, key, appVersion: appVersion).run(repo);
 
   String? syncFolder;
   DateTime? lastSync;
@@ -485,7 +486,7 @@ class WalletController extends ChangeNotifier {
   }
 
   void paydayDone(String periodStart) {
-    repo.payGoals();
+    repo.payGoals(period: periodStart);
     repo.updateSettings({'savedFor': periodStart});
     logEvent(_log, Level.INFO, 'payday.done', {'periodStart': periodStart, 'goals': goals.length});
     _changed();
