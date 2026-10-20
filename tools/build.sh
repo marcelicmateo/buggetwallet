@@ -417,7 +417,8 @@ desktop_worker() {
 }
 # desktop_merge <name> <shards>: the shards' logs, reports and status as one desktop-<name> step (as run_step writes it)
 desktop_merge() {
-  local name=$1 shards=$2 i s secs rc started tenths=0 bad=0 start='' jsons=() log=$LOGS/desktop-$name.log
+  local name=$1 shards=$2 i s secs rc started tenths=0 bad=0 start='' jsons=()
+  local log=$LOGS/desktop-$name.log
   {
     for ((i = 0; i < shards; i++)); do
       s=desktop-$name.s$i
