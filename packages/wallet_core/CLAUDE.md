@@ -28,7 +28,7 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   `steps` = `import` 0 (the UI fills it), `categories` = live spending rows of the last 7 days without a user-set
   category, `pace` = `budgetVsActual` lines over or behind pace this calendar month, `wishlist` = waiting items past
   their cooling-off at the end of `today`. `WalletRepo.markReviewDone(today)`: `lastReview` = today, `reviewStreak` +1
-  when the previous review was ≤ 14 days before, else 1; the same day twice is a no-op.
+  when the previous review was < 14 days before (no review day skipped), else 1; the same day twice is a no-op.
 - `recurring.dart` — recurring bills (M4). `detectRecurring(txs, today:)`: candidates = a payee (`merchantKey`) with ≥ 3
   live bank outflows (no transfers, no hand-added rows) in the last 7 calendar months, every gap 30 ± 3 days, every
   amount within 10 % of the median (`withinBand`, inclusive, int arithmetic); `expectedAmount` = median, `nextDue` =
@@ -41,10 +41,16 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   `WalletRepo.refreshRecurring(today)` runs after `importBatch` and once per sync run (`runPendingMatch`): adds new
   candidates (the creation op carries no `status`/`deleted`, so a late detection cannot undo a dismiss or delete made
   elsewhere; a payee with any row, deleted included, is never added again), keeps a candidate's amount/due/label/category
-  at the latest detection, and marks a confirmed bill's cycle paid (`last_paid_tx`, `next_due` += `interval_days`,
-  `expected_amount` unchanged, cycle after cycle for a history import). The paying row keeps its category: a bill is
-  information, never a reclassification. `recurringBills(includeDismissed:)`, `confirmRecurring`, `dismissRecurring`,
-  `deleteRecurring` (unknown id → `ArgumentError`). Settings `reviewDay` (1..7, default 7), `lastReview` (date),
+  at the latest detection (a row with an empty `payee`, made by a status op that arrived before its creation op, is
+  filled the same way whatever its status), keeps a confirmed bill's `category` at the payee's current categorization
+  (latest live bank outflow through the categorizer, so a merchant rule made later moves `coveredByPlan` with it:
+  never reserved and in the fixed plan at once), and marks a confirmed bill's cycle paid (`last_paid_tx`, `next_due` =
+  the paying row's date + `interval_days` — from the real payment like detection, so a bill paid on the 15th never
+  drifts out of the ± 3-day window; `expected_amount` unchanged, cycle after cycle for a history import). The paying
+  row keeps its category: a bill is information, never a reclassification. `recurringBills(includeDismissed:)`,
+  `confirmRecurring`, `dismissRecurring`, `deleteRecurring` (unknown id → `ArgumentError`), `skipRecurring` (async;
+  `next_due` += `interval_days` from its current value, no row needed, `last_paid_tx` untouched; no due date yet →
+  `StateError`). Settings `reviewDay` (1..7, default 7), `lastReview` (date),
   `reviewStreak` (0..`maxStreak`) are validated like the others.
 - `categories.dart` — `Categorizer`: item override → (paired transfer → importer `kindHint` → source/pattern rules) →
   per-merchant rules. `kindHint` (importer `TxKind`, stored as `tx.kind_hint` by `importBatch`, edited only by the schema-4 rewrite) decides
@@ -151,9 +157,12 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   and an edit made on a device with a correct clock loses to that peer's older edits until real time catches up.
 - Recurring bills: a device that imports a payee's rows before syncing writes the candidate's amount/due/label again
   with a newer clock (same values from the same rows; different ones if it holds other rows), but never its status.
-  A confirmed bill whose payments stop matching (amount moved > 10 %, date drifted > 3 days, or the bill ended) keeps
-  its old `nextDue`, so it stays reserved as overdue until the owner dismisses or deletes it. Older builds ignore the
-  `recurring` entity (replayed once on upgrade).
+  A confirmed bill whose payment is not matched (amount moved > 10 %, paid > 3 days off the expected date, paid from an
+  account not imported, or the bill ended) keeps its `nextDue`, so it stays reserved as overdue until the owner acts:
+  `skipRecurring` moves it one interval on (the match then looks around the new date; the unmatched row still counts as
+  spending, the bill is not reserved for that cycle), dismiss or delete end it. The amount band is not adjusted by a
+  skip: a bill whose amount moved for good needs delete + re-confirm once detection sees three new rows. Older builds
+  ignore the `recurring` entity (replayed once on upgrade).
 
 ## Tests
 - `test/core_test.dart`, one `group` per area. Shared synthetic data in `test/support/synthetic.dart`

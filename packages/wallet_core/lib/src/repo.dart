@@ -753,11 +753,17 @@ class WalletRepo {
   ///   or `deleted` (the column defaults apply), so a device that detects the payee late cannot undo a dismiss or
   ///   delete made elsewhere.
   /// - A candidate's expected amount, due date, label and category follow the latest detection, so one confirmed
-  ///   months later starts from a current due date. Confirmed and dismissed bills are never rewritten by detection.
+  ///   months later starts from a current due date. A confirmed or dismissed bill's amount, due date and label are
+  ///   never rewritten by detection. A row with an empty `payee` (a status op that arrived before the creation op)
+  ///   is filled from the detection whatever its status.
+  /// - A confirmed bill's `category` follows the payee's current categorization (its latest live bank outflow through
+  ///   the categorizer: user override, rules, built-in patterns), so a merchant rule made after the confirm moves the
+  ///   bill with it and [RecurringBill.coveredByPlan] stays true to the plan (owner rule: never reserved and planned).
   /// - A confirmed bill is marked paid when a bank row with its payee key lands within ± [recurringDays] of `nextDue`
   ///   with an outflow within [recurringPercent] of `expectedAmount` ([planRecurringPayments]): `lastPaidTx` = that
-  ///   row, `nextDue` += `intervalDays`, `expectedAmount` unchanged; cycle after cycle when several payments are here.
-  ///   The bank row keeps its category: nothing is reclassified.
+  ///   row, `nextDue` = the row's date + `intervalDays` (from the real payment, like detection, so a bill paid on the
+  ///   15th stays matched month after month), `expectedAmount` unchanged; cycle after cycle when several payments are
+  ///   here. The bank row keeps its category: nothing is reclassified.
   void refreshRecurring(String today) {
     if (!_isoDate.hasMatch(today)) throw ArgumentError('The date is not YYYY-MM-DD.');
     final t = PerfTimer('repo.recurring');
@@ -770,31 +776,52 @@ class WalletRepo {
     final existing = {for (final r in db.select('SELECT * FROM recurring')) r['id'] as String: RecurringBill.fromRow(r)};
     final deleted = {for (final r in db.select('SELECT id FROM recurring WHERE deleted = 1')) r['id'] as String};
     final cz = categorizer();
-    final detected = detectRecurring([for (final r in rows) cz.categorize(r)], today: today);
+    final categorized = [for (final r in rows) cz.categorize(r)];
+    final detected = detectRecurring(categorized, today: today);
+    // The latest live bank outflow per payee: its category is the payee's current one.
+    final latest = <String, CategorizedTx>{};
+    for (final t in categorized) {
+      if (!t.tx.live || t.tx.manual || t.amount >= 0 || t.kind == Kind.transfer) continue;
+      final key = merchantKey(t.tx);
+      final have = latest[key];
+      if (have == null || t.date.compareTo(have.date) > 0 || (t.date == have.date && t.tx.id.compareTo(have.tx.id) > 0)) {
+        latest[key] = t;
+      }
+    }
     final changes = <(String, String, Map<String, Object?>)>[];
+    // The bills as they stand after the detection updates below (before payments).
+    final current = {for (final e in existing.entries) e.key: e.value};
     var added = 0, updated = 0;
     for (final c in detected) {
       final have = existing[c.id];
       if (have == null) {
         added++;
         changes.add(('recurring', c.id, _candidateFields(c)));
-      } else if (have.status == 'candidate' && !deleted.contains(c.id)) {
-        final diff = <String, Object?>{
-          if (have.expectedAmount != c.expectedAmount) 'expected_amount': c.expectedAmount,
-          if (have.nextDue != c.nextDue) 'next_due': c.nextDue,
-          if (have.label != c.label) 'label': c.label,
-          if (have.category != c.category) 'category': c.category,
+      } else if ((have.status == 'candidate' || have.payee.isEmpty) && !deleted.contains(c.id)) {
+        final want = _candidateFields(c), has = _candidateFields(have);
+        final diff = {
+          for (final e in want.entries)
+            if (has[e.key] != e.value) e.key: e.value
         };
         if (diff.isNotEmpty) {
           updated++;
           changes.add(('recurring', c.id, diff));
+          current[c.id] = c.copyWith(status: have.status, lastPaidTx: have.lastPaidTx);
         }
       }
     }
-    var bills = [
-      for (final b in existing.values)
-        if (b.confirmed && !deleted.contains(b.id)) b
-    ];
+    var recategorized = 0;
+    var bills = <RecurringBill>[];
+    for (final b in current.values) {
+      if (!b.confirmed || deleted.contains(b.id) || b.payee.isEmpty) continue;
+      final category = latest[b.payee]?.category;
+      if (category != null && category != b.category) {
+        recategorized++;
+        changes.add(('recurring', b.id, {'category': category}));
+        current[b.id] = b.copyWith(category: category);
+      }
+      bills.add(current[b.id]!);
+    }
     var paid = 0;
     // One payment per bill per pass; repeated so a history import with several cycles catches up (bounded).
     for (var pass = 0; pass < 120 && bills.isNotEmpty; pass++) {
@@ -802,19 +829,26 @@ class WalletRepo {
       if (plan.isEmpty) break;
       bills = [
         for (final b in bills)
-          if (plan.paidBy[b.id] case final Tx row) b.copyWith(lastPaidTx: row.id, nextDue: addDays(b.nextDue, b.intervalDays)) else b
+          if (plan.paidBy[b.id] case final Tx row) b.copyWith(lastPaidTx: row.id, nextDue: addDays(row.date, b.intervalDays)) else b
       ];
       paid += plan.paidBy.length;
     }
     for (final b in bills) {
-      final was = existing[b.id]!;
+      final was = current[b.id]!;
       if (b.nextDue != was.nextDue || b.lastPaidTx != was.lastPaidTx) {
         changes.add(('recurring', b.id, {'next_due': b.nextDue, 'last_paid_tx': b.lastPaidTx}));
       }
     }
     _write(changes);
-    t.done(
-        {'rows': rows.length, 'bills': existing.length, 'candidates': detected.length, 'added': added, 'updated': updated, 'paid': paid});
+    t.done({
+      'rows': rows.length,
+      'bills': existing.length,
+      'candidates': detected.length,
+      'added': added,
+      'updated': updated,
+      'recategorized': recategorized,
+      'paid': paid,
+    });
   }
 
   /// The fields a new candidate is created with: no `status` and no `deleted`, see [refreshRecurring].
@@ -841,14 +875,31 @@ class WalletRepo {
   /// Removes a bill; its payee is never detected again (the row stays, deleted).
   void deleteRecurring(String id) => _setRecurring(id, {'deleted': 1});
 
+  /// The owner skips the bill's current cycle (no payment is coming, or it was paid in a way the match cannot see):
+  /// `nextDue` moves one `intervalDays` on from its current value, so the bill is no longer due or reserved in this
+  /// period and the match looks for the next payment around the new date. No bank row is needed. `lastPaidTx` (the
+  /// row that paid the previous cycle) stays as it is: the skipped cycle has none. Synced like every write; an
+  /// unknown id is an [ArgumentError], a bill with no due date yet (see [refreshRecurring]) a [StateError].
+  Future<void> skipRecurring(String id) async {
+    final r = db.select('SELECT * FROM recurring WHERE id = ?', [id]);
+    if (r.isEmpty) throw ArgumentError('No such bill.');
+    final b = RecurringBill.fromRow(r.first);
+    if (!_isoDate.hasMatch(b.nextDue)) throw StateError('The bill has no due date yet.');
+    _write([
+      ('recurring', id, {'next_due': addDays(b.nextDue, b.intervalDays)})
+    ]);
+    logEvent(_log, Level.INFO, 'recurring.skip', {'intervalDays': b.intervalDays});
+  }
+
   /// The weekly review was done on [today]: `lastReview` = today, `reviewStreak` grows by one when the previous review
-  /// was at most 14 days before (else starts again at 1). Done twice on one day changes nothing.
+  /// was less than 14 days before, i.e. no weekly review day was skipped in between (else starts again at 1). Done
+  /// twice on one day changes nothing.
   void markReviewDone(String today) {
     if (!_isoDate.hasMatch(today)) throw ArgumentError('The date is not YYYY-MM-DD.');
     final st = settings();
     final last = st.lastReview;
     if (last == today) return;
-    final streak = last != null && daysBetween(last, today) <= 14 ? st.reviewStreak + 1 : 1;
+    final streak = last != null && daysBetween(last, today) < 14 ? st.reviewStreak + 1 : 1;
     updateSettings({'lastReview': today, 'reviewStreak': streak.clamp(0, WalletSettings.maxStreak)});
     logEvent(_log, Level.INFO, 'review.done', {'streak': streak});
   }
