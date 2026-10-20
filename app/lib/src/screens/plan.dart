@@ -17,6 +17,21 @@ import 'diagnostics.dart';
 
 final _log = Logger('bw.app');
 
+/// Checks a typed or pasted sync folder: trims it, expands a leading `~` from HOME, wants an absolute path to a folder that
+/// exists (a missing one is never created). Returns the path, or the `reason` it was refused: empty, relative or missing.
+@visibleForTesting
+({String? path, String? reason}) checkSyncPath(String raw, {String? home}) {
+  var p = raw.trim();
+  if (p.isEmpty) return (path: null, reason: 'empty');
+  if (p == '~' || p.startsWith('~/')) {
+    final h = home ?? Platform.environment['HOME'];
+    if (h != null && h.isNotEmpty) p = h + p.substring(1);
+  }
+  if (!p.startsWith('/') && !RegExp(r'^[A-Za-z]:[\\/]').hasMatch(p)) return (path: null, reason: 'relative');
+  if (!Directory(p).existsSync()) return (path: null, reason: 'missing');
+  return (path: p, reason: null);
+}
+
 class PlanScreen extends StatefulWidget {
   final WalletController wc;
 
@@ -381,28 +396,44 @@ class _PlanScreenState extends State<PlanScreen> {
   }
 
   Future<void> _typePath(BuildContext context) async {
-    final ctl =
-        TextEditingController(text: widget.wc.syncFolder ?? (Platform.isAndroid ? '/storage/emulated/0/Documents/BudgetWallet' : ''));
+    const androidFolder = '/storage/emulated/0/Documents/BudgetWallet';
+    final ctl = TextEditingController(text: widget.wc.syncFolder ?? (Platform.isAndroid ? androidFolder : ''));
+    final example = Platform.isAndroid ? androidFolder : '/home/you/Sync';
     logNav('dialog.open', {'dialog': 'syncPath'});
+    String? error;
     final path = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Sync folder path'),
-        content: TextField(controller: ctl, decoration: const InputDecoration(hintText: '/path/to/BudgetWallet')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctl.text.trim()), child: const Text('Use folder')),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Sync folder path'),
+          content: TextField(
+              controller: ctl, decoration: InputDecoration(hintText: '/path/to/BudgetWallet', errorText: error, errorMaxLines: 3)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                var r = checkSyncPath(ctl.text);
+                // The suggested phone folder may not exist before Syncthing makes it: create that one, never a typed path.
+                if (r.reason == 'missing' && Platform.isAndroid && ctl.text.trim() == androidFolder) {
+                  try {
+                    Directory(androidFolder).createSync(recursive: true);
+                    r = checkSyncPath(androidFolder);
+                  } on FileSystemException catch (e, st) {
+                    logError(_log, 'sync.pathCreateFailed', e, st);
+                  }
+                }
+                if (r.path != null) return Navigator.pop(ctx, r.path);
+                logEvent(_log, Level.INFO, 'sync.pathRejected', {'reason': r.reason}); // never the path
+                setState(() => error = r.reason == 'missing' ? "This folder doesn't exist." : 'Enter a full folder path, like $example');
+              },
+              child: const Text('Use folder'),
+            ),
+          ],
+        ),
       ),
     );
-    logNav('dialog.close', {'dialog': 'syncPath', 'set': path != null && path.isNotEmpty}); // never the path
-    if (path == null || path.isEmpty) return;
-    try {
-      await Directory(path).create(recursive: true);
-    } catch (e, st) {
-      // Sync then reports the missing folder; describeError drops the path.
-      logError(_log, 'sync.folderCreateFailed', e, st);
-    }
+    logNav('dialog.close', {'dialog': 'syncPath', 'set': path != null}); // never the path
+    if (path == null) return;
     await widget.wc.setSyncFolder(path);
   }
 
