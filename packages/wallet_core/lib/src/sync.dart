@@ -113,7 +113,11 @@ class FolderSync {
   final String appVersion;
   FolderSync(this.folder, this.key, {this.appVersion = ''});
 
-  String get build => '$syncReaderVersion+$appVersion';
+  /// What a quarantined file's record says about the build that refused it ([BadFile.build]): the file format this
+  /// build reads, the database schema (a bump replays every peer file once, see [WalletRepo.schemaVersion], and may
+  /// make a refused file apply) and the app version. Files refused as [SyncProblemReason.badKey] or
+  /// [SyncProblemReason.corrupt] are never retried for a build change: only a changed file is.
+  String get build => '$syncReaderVersion.${WalletRepo.schemaVersion}+$appVersion';
 
   Directory get _root => Directory('$folder${Platform.pathSeparator}budget-wallet');
   Directory get _devices => Directory('${_root.path}${Platform.pathSeparator}devices');
@@ -179,7 +183,8 @@ class FolderSync {
     //    rows once at the end, not after every file (a new device's first sync can read hundreds).
     //    A file that cannot be used is skipped (the others still apply: ops are per-field last-writer-wins, so order
     //    does not matter) and quarantined ([BadFiles]): it is read again only once it changes, or after an update for
-    //    a newer format.
+    //    a newer format. The quarantine is separate from `peer_files`, so a schema upgrade (which forgets the files
+    //    read, [WalletRepo.schemaVersion]) lists a quarantined file again but, unchanged, still skips it.
     var received = 0, filesRead = 0, opsRead = 0, bytesRead = 0, devices = 0, known = 0;
     final problems = <SyncProblem>[];
     final bad = BadFiles.load(repo), listed = <String>{};

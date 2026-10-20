@@ -33,11 +33,12 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   and quarantined: `BadFiles`, one device-local value (`localValue('syncBadFiles')`, never synced), records device,
   file, `SyncProblemReason` (`badKey`, `corrupt`, `unknownVersion`, `applyFailed`; `unreadable` = I/O error, not
   quarantined), size and content hash. It is read again only when its content changes, or (unknownVersion,
-  applyFailed) once after `syncReaderVersion` or the app version passed to `FolderSync` changes (`FolderSync.build`).
-  `SyncReport.problems` lists every file not applied, also the known ones on every run
+  applyFailed) once after `FolderSync.build` changes (`<syncReaderVersion>.<WalletRepo.schemaVersion>+<app version
+  passed to FolderSync>`). `SyncReport.problems` lists every file not applied, also the known ones on every run
   (`SyncProblem`: short device id = first 8 characters of its folder name, reason, bytes, `isNew`), `badFiles` is
   their count. Database errors that are about this device (read-only, disk full, I/O, locked) stop the run instead,
-  so the file is not refused for good.
+  so the file is not refused for good. The quarantine is separate from `peer_files`: a schema upgrade lists every
+  peer file again, an unchanged badKey/corrupt file stays skipped, unknownVersion/applyFailed are tried once more.
 - `logs.dart` — logging (`package:logging`): `logEvent`/`logError` (structured events), `formatLogRecord` (one line,
   errors via `describeError`, which drops SQL parameters, paths and FormatException sources), `RotatingFileSink`,
   `timed`/`timedAsync`/`PerfTimer` (on `bw.perf`), `FrameStats`.
@@ -82,5 +83,5 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   (`n(...)` builds a transaction, `january` is a sample month). Add new feature tests as `test/<feature>_test.dart`
   (goals: `test/goal_contrib_test.dart`, quarantine: `test/sync_quarantine_test.dart`; `<feature>_edge_test.dart` are
   spec-written edge cases). Multi-device sim in `test/support/sim.dart` (lists entities on its own): `Device` (own
-  folder and database), `Net`, `dump`, `bookkeeping`.
+  folder and database; `dbPath:` + `reopen()` simulate a restart or upgrade), `Net`, `dump`, `bookkeeping`.
 - Run: `tools/build.sh test` from the repo root (or `tools/build.sh shell`, then `cd packages/wallet_core && dart test`).

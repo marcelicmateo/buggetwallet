@@ -54,15 +54,25 @@ class Net {
   final Map<String, Uint8List> files = {};
 }
 
-/// One simulated device: its own database, its own copy of the shared folder, and a skewed wall clock.
+/// One simulated device: its own database, its own copy of the shared folder, and a skewed wall clock. With
+/// [dbPath] the database is a file, so [reopen] can simulate an app restart (or upgrade).
 class Device {
   final String name;
   final Directory dir;
   final VaultKey key;
+  final String? dbPath;
   int Function() clock;
-  late final WalletRepo repo;
-  Device(this.name, this.dir, this.key, this.clock) {
-    repo = WalletRepo.inMemory(now: () => clock());
+  late WalletRepo repo;
+  Device(this.name, this.dir, this.key, this.clock, {this.dbPath}) {
+    repo = _open();
+  }
+
+  WalletRepo _open() => dbPath == null ? WalletRepo.inMemory(now: () => clock()) : WalletRepo.open(dbPath!, now: () => clock());
+
+  /// Closes and opens the database again (file-backed devices only), as an app restart would.
+  void reopen() {
+    repo.close();
+    repo = _open();
   }
 
   FolderSync get sync => FolderSync(dir.path, key);

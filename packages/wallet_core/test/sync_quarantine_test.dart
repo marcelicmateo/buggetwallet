@@ -265,6 +265,67 @@ void main() {
     });
   });
 
+  group('schema upgrade (every peer file is listed again)', () {
+    test('two devices: a quarantined file stays quarantined through the replay, the re-read files change nothing, a repaired copy applies',
+        () async {
+      final lines = _capture();
+      final net = Net();
+      final a = Device('a', Directory('${tmp.path}/a')..createSync(), key, () => 1767225600000);
+      final b = Device('b', Directory('${tmp.path}/b')..createSync(), key, () => 1767225600000, dbPath: '${tmp.path}/b.db');
+      addTearDown(a.close);
+      addTearDown(b.close);
+      a.repo.importBatch(january);
+      await a.run();
+      a.repo.updateSettings({'salary': 150000});
+      await a.run();
+      a.repo.addManual(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
+      await a.run();
+      a.upload(net);
+      final names = net.files.keys.where((k) => k.endsWith('.bwop')).toList()..sort();
+      final good = net.files[names[1]]!;
+      b.deliver(net, Random(1));
+      final damaged = File('${b.root.path}/${names[1]}')..writeAsBytesSync(good.sublist(0, good.length - 3));
+      final first = await b.run();
+      expect((first.filesRead, first.badFiles, first.problems.single.reason), (2, 1, SyncProblemReason.badKey));
+      expect(failedLogs(lines), 1);
+      final before = dump(b.repo, clocks: false);
+      // The database as the build before `goal_contrib` left it: this build then forgets which peer files it read.
+      b.repo.db.execute("UPDATE meta SET value = '1' WHERE key = 'schema'");
+      b.reopen();
+      expect(bookkeeping(b.repo)['peer_files'], 0);
+      final replay = await b.run();
+      expect((replay.filesRead, replay.received, replay.badFiles), (2, 0, 1), reason: 're-read, nothing new, still one problem');
+      expect(replay.problems.single.isNew, isFalse, reason: 'unchanged, so not unsealed again');
+      expect(failedLogs(lines), 1);
+      expect(dump(b.repo, clocks: false), before);
+      expect(bookkeeping(b.repo)['peer_files'], 2);
+      damaged.writeAsBytesSync(good);
+      final fixed = await b.run();
+      expect((fixed.filesRead, fixed.badFiles), (1, 0));
+      expect(dump(b.repo, clocks: false), dump(a.repo, clocks: false));
+      expect(b.repo.localValue(BadFiles.localKey), isNull);
+    });
+
+    test('a file the previous build\'s database refused is retried once after the upgrade, also without an app version', () async {
+      final rule = Op('rule', 'synthetic shop', {'category': 'Groceries'}, Hlc(_clock++, 0, 'peer').toString()).toJson();
+      await peer('p1', '0000000001.bwop', ops: [rule, _setting('salary', 3)]);
+      repo.db.execute('ALTER TABLE merchant_rules RENAME TO merchant_rules_hidden');
+      expect((await run()).problems.single.reason, SyncProblemReason.applyFailed);
+      repo.db.execute('ALTER TABLE merchant_rules_hidden RENAME TO merchant_rules');
+      expect((await run()).problems.single.isNew, isFalse, reason: 'same build: not read again');
+      // The record as the build with the previous schema would have written it.
+      final bad = BadFiles.load(repo);
+      final was = bad.byKey.values.single;
+      expect(was.build, '$syncReaderVersion.${WalletRepo.schemaVersion}+');
+      bad.byKey[was.key] = BadFile(was.device, was.file, was.reason,
+          size: was.size, hash: was.hash, build: '$syncReaderVersion.${WalletRepo.schemaVersion - 1}+');
+      bad.save(repo);
+      final again = await run();
+      expect((again.filesRead, again.badFiles), (1, 0));
+      expect(repo.settings().salary, 3);
+    });
+  });
+
   test('logs carry reason words, sizes and sequence numbers only (no device ids, file names or paths)', () async {
     final lines = _capture();
     await peer('device-secret-name', '0000000007.sync-conflict-20260101-ABCDEFG.bwop', bytes: [5, 5, 5]);
