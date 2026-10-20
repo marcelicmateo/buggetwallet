@@ -106,23 +106,38 @@ class WalletRepo {
   }
 
   /// Bump when a new synced entity or field is added. Version 2 added `goal_contrib`, version 3 `tx.kind_hint` and
-  /// `tx.transfer_to` (an older build dropped those fields from the ops it read, so they are replayed once).
-  static const schemaVersion = 3;
+  /// `tx.transfer_to` (an older build dropped those fields from the ops it read, so they are replayed once), version 4
+  /// the `exchange` hint (Revolut Exchange rows imported by version 3 as `ownTransfer` are rewritten once).
+  static const schemaVersion = 4;
 
   /// Builds before a synced entity existed skipped its ops but still marked the peer files holding them as read. So
   /// when an existing database is opened by a build with a newer [schemaVersion], it forgets which peer files it read
   /// (`peer_files`): the next sync reads every file once more, ops already applied change nothing (their clocks are
   /// not newer), and the skipped ones apply. A new database just records the version.
+  ///
+  /// Below version 4, Revolut Exchange legs were imported with the `ownTransfer` hint, which lets them anchor a pair
+  /// across sources; `importBatch` skips known ids and never edits `kind_hint`, so they are rewritten here once to
+  /// `exchange` through [_write] (the change syncs) and reconciled at once, which dissolves their pairs.
   void _migrate() {
     final from = int.tryParse(_meta('schema') ?? '') ?? 1;
     if (from >= schemaVersion) return;
-    var replay = 0;
+    var replay = 0, rehinted = 0;
     if (!_created) {
       replay = db.select('SELECT COUNT(*) AS n FROM peer_files').first['n'] as int;
       db.execute('DELETE FROM peer_files');
+      if (from < 4) {
+        final stale = db.select("SELECT id FROM tx WHERE source = 'revolut' AND bank_type = ? AND kind_hint = ?",
+            [revolutExchangeType, TxKind.ownTransfer.name]);
+        rehinted = stale.length;
+        _write([
+          for (final r in stale) ('tx', r['id'] as String, {'kind_hint': TxKind.exchange.name})
+        ]);
+      }
     }
     _setMeta('schema', '$schemaVersion');
-    logEvent(_log, Level.INFO, 'repo.migrate', {'from': from, 'to': schemaVersion, 'new': _created, 'replayFiles': replay});
+    logEvent(_log, Level.INFO, 'repo.migrate',
+        {'from': from, 'to': schemaVersion, 'new': _created, 'replayFiles': replay, 'rehinted': rehinted});
+    if (rehinted > 0) _reconcile();
   }
 
   static WalletRepo _timedOpen(Database Function() opener, bool file, int Function()? now) {

@@ -10,7 +10,7 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   clock, the op's other fields apply, and a row is only created when some field applies. New column: add its type there.
 - `budget.dart` — period maths: `PeriodBudget` (safe to spend), `MonthSummary`, `Affordability`.
 - `categories.dart` — `Categorizer`: item override → (paired transfer → importer `kindHint` → source/pattern rules) →
-  per-merchant rules. `kindHint` (importer `TxKind`, stored as `tx.kind_hint` by `importBatch`, never edited) decides
+  per-merchant rules. `kindHint` (importer `TxKind`, stored as `tx.kind_hint` by `importBatch`, edited only by the schema-4 rewrite) decides
   first where it can: `salary` → Salary, `atm` → Rent at or above `rentCashThreshold` else Cash, `fee` → Bank fees,
   `ownTransfer` and `exchange` → Internal transfer; `standingOrder`, `card`, `other` and null fall through to the description rules
   (built-in merchant patterns, `merchantPatterns`). A row with `transferTo` is an Internal transfer before any hint.
@@ -20,7 +20,7 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   opposite-sign row of the same currency in another source within `transferDays` (3, inclusive, either way in time),
   hinted or not. The two then hold each other's id in `tx.transfer_to`. Two unhinted rows never pair, whatever the
   amounts. Pure and deterministic: open outflows oldest first (date, id), each takes the closest open inflow it may pair
-  with (days, then earliest date, then smallest id); a row pairs once; a holding pair is never re-planned; a partner
+  with (both sides hinted first, then days, then earliest date, then smallest id); a row pairs once; a holding pair is never re-planned; a partner
   that is deleted, manual or points elsewhere reopens the row (`transfer_to` cleared, or re-paired at once); a pair
   with no hint on either side (an earlier build's amount-only rule) is dissolved on every device holding both rows
   (both `transfer_to` cleared through `_write`, so it syncs; the rows return to their normal categories); a partner not
@@ -46,8 +46,9 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   contributions add on top. `addGoalContribution` writes nothing (returns null) for 0 or a goal deleted here (a sync
   may have removed it meanwhile); a goal that never existed here is an `ArgumentError`.
 - `WalletRepo.schemaVersion` (meta `schema`): bump it when adding a synced entity or field (3 = `tx.kind_hint`,
-  `tx.transfer_to`). Opening an existing database with an older version clears `peer_files` once, so the next sync
-  re-reads every file and applies ops (or fields) the older build skipped.
+  `tx.transfer_to`; 4 = the `exchange` hint: Revolut Exchange rows a version-3 build hinted `ownTransfer` are rewritten
+  once through `_write` and reconciled, `revolutExchangeType`). Opening an existing database with an older version
+  clears `peer_files` once, so the next sync re-reads every file and applies ops (or fields) the older build skipped.
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption; `UnsealFailure` says why a
   file was refused), `sync.dart` (FolderSync).
 - `sync_problems.dart` — a peer file that cannot be used is skipped (the run goes on with the other files and devices)

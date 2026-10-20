@@ -68,9 +68,11 @@ List<Tx> openTransfers(List<Tx> rows) {
 /// - a row whose partner is deleted, is not a bank row, or points at another row is open again; so are both rows of
 ///   a pair with no hint on either side (made by an earlier build's amount-only rule): they get `transfer_to` cleared
 ///   and return to their normal categories, on every device that holds both;
-/// - open outflows are taken oldest first (date, then id); each takes the free open inflow from another source with
-///   the opposite amount and the same currency, one of the two hinted, that is closest in days, then earliest in
-///   date, then smallest in id. A row pairs at most once;
+/// - pairs with a hint on both sides come first: open hinted outflows oldest first (date, then id), each takes the
+///   free open hinted inflow from another source with the opposite amount and the same currency that is closest in
+///   days, then earliest in date, then smallest in id. Then the remaining open outflows, oldest first, take the
+///   closest free inflow with a hint on either side the same way (an unrelated card payment never takes a top-up
+///   away from the hinted payment that funded it). A row pairs at most once;
 /// - an open row whose stale link found no new partner gets `transfer_to` cleared.
 ///
 /// [rows]: the candidate rows plus every row one of them points at (deleted or not), so links can be checked. A
@@ -88,30 +90,37 @@ TransferPlan planTransfers(List<Tx> rows) {
   final out = <String, String?>{};
   final taken = <String>{};
   var paired = 0;
-  for (final o in open) {
-    if (o.amount >= 0) continue;
-    final pool = inflows[(-o.amount, o.currency)];
-    if (pool == null) continue;
-    Tx? best;
-    var bestDays = 0;
-    for (final i in pool) {
-      if (i.source == o.source || taken.contains(i.id) || !(_own(o) || _own(i))) continue;
-      final days = daysBetween(o.date, i.date).abs();
-      if (days > transferDays) continue;
-      if (best == null ||
-          days < bestDays ||
-          (days == bestDays && (i.date.compareTo(best.date) < 0 || (i.date == best.date && i.id.compareTo(best.id) < 0)))) {
-        best = i;
-        bestDays = days;
+  // Two passes over the open outflows: first pairs with the bank's evidence on both sides, then those with it on one.
+  void pass({required bool bothHinted}) {
+    for (final o in open) {
+      if (o.amount >= 0 || taken.contains(o.id) || (bothHinted && !_own(o))) continue;
+      final pool = inflows[(-o.amount, o.currency)];
+      if (pool == null) continue;
+      Tx? best;
+      var bestDays = 0;
+      for (final i in pool) {
+        if (i.source == o.source || taken.contains(i.id)) continue;
+        if (bothHinted ? !_own(i) : !(_own(o) || _own(i))) continue;
+        final days = daysBetween(o.date, i.date).abs();
+        if (days > transferDays) continue;
+        if (best == null ||
+            days < bestDays ||
+            (days == bestDays && (i.date.compareTo(best.date) < 0 || (i.date == best.date && i.id.compareTo(best.id) < 0)))) {
+          best = i;
+          bestDays = days;
+        }
       }
+      if (best == null) continue;
+      taken.add(o.id);
+      taken.add(best.id);
+      out[o.id] = best.id;
+      out[best.id] = o.id;
+      paired++;
     }
-    if (best == null) continue;
-    taken.add(o.id);
-    taken.add(best.id);
-    out[o.id] = best.id;
-    out[best.id] = o.id;
-    paired++;
   }
+
+  pass(bothHinted: true);
+  pass(bothHinted: false);
   for (final t in open) {
     if (t.transferTo != null && !out.containsKey(t.id)) out[t.id] = null;
   }

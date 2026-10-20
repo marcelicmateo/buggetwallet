@@ -153,6 +153,44 @@ void main() {
       }
     });
 
+    test('a pair with the hint on both sides comes first: an unrelated card payment never takes the top-up', () {
+      // Lead's case: Topup +100 on the 13th, hinted "POS Revolut" -100 on the 10th, unrelated PBZ card payment on the 12th.
+      final lead = [
+        _row('topup', 'revolut', '2026-01-13', 10000, kind: own, type: 'Topup'),
+        _row('pos', 'pbz', '2026-01-10', -10000, kind: own, type: 'POS plaćanje', desc: 'POS Revolut**0000* Dublin'),
+        _row('card', 'pbz', '2026-01-12', -10000, kind: TxKind.card, type: 'POS plaćanje', desc: 'PBZ POS PBZ7LIDL HRVATSKA ZAGREB'),
+      ];
+      expect(_plan(lead), {'pos': 'topup', 'topup': 'pos'});
+      // The card payment is the oldest outflow and the closest in days: still passed over for the hinted payment.
+      final cardFirst = [
+        _row('topup', 'revolut', '2026-01-13', 10000, kind: own, type: 'Topup'),
+        _row('pos', 'pbz', '2026-01-14', -10000, kind: own),
+        _row('card', 'pbz', '2026-01-12', -10000, kind: TxKind.card),
+      ];
+      expect(_plan(cardFirst), {'pos': 'topup', 'topup': 'pos'});
+      // The other way round: a hinted outflow with a hinted and an unhinted inflow, the unhinted one closer.
+      final inflows = [
+        _row('pos', 'pbz', '2026-01-10', -10000, kind: own),
+        _row('friend', 'revolut', '2026-01-10', 10000),
+        _row('topup', 'revolut', '2026-01-13', 10000, kind: own),
+      ];
+      expect(_plan(inflows), {'pos': 'topup', 'topup': 'pos'});
+      // Both-hinted pairs first, then the rest: a second, unhinted outflow still takes a lone hinted inflow.
+      final rest = [
+        _row('topup1', 'revolut', '2026-01-13', 10000, kind: own),
+        _row('topup2', 'revolut', '2026-01-13', 10000, kind: own),
+        _row('pos', 'pbz', '2026-01-14', -10000, kind: own),
+        _row('card', 'pbz', '2026-01-12', -10000),
+      ];
+      expect(_plan(rest), {'pos': 'topup1', 'topup1': 'pos', 'card': 'topup2', 'topup2': 'card'});
+      for (final rows in [lead, cardFirst, inflows, rest]) {
+        for (var seed = 0; seed < 8; seed++) {
+          expect(_plan([...rows]..shuffle(Random(seed))), _plan(rows), reason: 'seed $seed');
+        }
+        expect(_plan(_apply(rows, _plan(rows))), isEmpty);
+      }
+    });
+
     test('applying the plan gives a state whose plan is empty; a kept pair is never re-planned', () {
       final rows = [
         _row('a', 'pbz', '2026-01-10', -10000, kind: own),
@@ -388,6 +426,46 @@ void main() {
       expect(cats()[10000], isNot('Internal transfer'));
     });
 
+    test('schema 4: an Exchange leg the earlier build hinted ownTransfer is rehinted once at open and its pair dissolved', () {
+      final path = '${Directory.systemTemp.createTempSync('bw-schema4-').path}/w.db';
+      addTearDown(() => File(path).parent.deleteSync(recursive: true));
+      final old = WalletRepo.open(path);
+      // What a version-3 build stored: the Exchange leg hinted ownTransfer, so it paired with an equal PBZ inflow.
+      old.importBatch(ImportBatch(source: 'revolut', transactions: [
+        n('2026-03-02', -10000, 'Exchange', 'Exchanged to USD', source: 'revolut', kind: own),
+        n('2026-03-02', 10000, 'Exchange', 'Exchanged from EUR', source: 'revolut', kind: own),
+        n('2026-03-09', 20000, 'Topup', 'Top-Up by *0000', source: 'revolut', kind: own),
+      ]));
+      old.importBatch(ImportBatch(source: 'pbz', transactions: [
+        n('2026-03-04', 10000, 'Ostalo', 'VAL_01.01.2026.POVRAT', kind: TxKind.other),
+        n('2026-03-08', -20000, 'POS plaćanje', 'POS Revolut**0000* Dublin', kind: own),
+      ]));
+      Tx by(WalletRepo w, int amount, String source) => w.transactions().firstWhere((t) => t.amount == amount && t.source == source);
+      expect(by(old, 10000, 'pbz').transferTo, by(old, -10000, 'revolut').id, reason: 'the old build paired on the stale hint');
+      final ops = old.pendingOps().length;
+      old.db.execute("UPDATE meta SET value = '3' WHERE key = 'schema'");
+      old.close();
+      final r = WalletRepo.open(path);
+      addTearDown(r.close);
+      expect(by(r, -10000, 'revolut').kindHint, TxKind.exchange);
+      expect(by(r, 10000, 'revolut').kindHint, TxKind.exchange);
+      expect(by(r, 20000, 'revolut').kindHint, own, reason: 'top-ups keep their hint');
+      expect(by(r, -10000, 'revolut').transferTo, isNull);
+      expect(by(r, 10000, 'pbz').transferTo, isNull);
+      expect(by(r, -20000, 'pbz').transferTo, by(r, 20000, 'revolut').id, reason: 'the real pair holds');
+      final cz = r.categorizer();
+      expect(cz.categoryOf(by(r, -10000, 'revolut')), 'Internal transfer');
+      expect(cz.categoryOf(by(r, 10000, 'pbz')), isNot('Internal transfer'));
+      final written = r.pendingOps().skip(ops).map((o) => o.$2.fields).toList();
+      expect(written.where((f) => f['kind_hint'] == 'exchange').length, 2, reason: 'the rewrite syncs');
+      expect(written.where((f) => f.containsKey('transfer_to') && f['transfer_to'] == null).length, 2);
+      expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '${WalletRepo.schemaVersion}');
+      r.close();
+      final again = WalletRepo.open(path);
+      addTearDown(again.close);
+      expect(again.pendingOps().length, ops + 4, reason: 'a second open writes nothing');
+    });
+
     test('one source alone writes nothing even with equal opposite amounts and a hint', () {
       r.importBatch(ImportBatch(source: 'revolut', transactions: [
         n('2026-03-02', -20000, 'Transfer', 'OUT', source: 'revolut', kind: TxKind.other),
@@ -513,6 +591,48 @@ void main() {
       expect(dump(a.repo, clocks: false), dump(b.repo, clocks: false));
       final ops = await opsInNet(net, key);
       expect(lwwDiff(a.repo, lastWriterWins(ops)), isEmpty);
+    });
+
+    test('schema 4 on two devices: the rehinted Exchange leg and the dissolved pair converge', () async {
+      Device fileDevice(String name) {
+        final dir = Directory('${tmp.path}/$name')..createSync();
+        final d = Device(name, dir, key, () => now, dbPath: '${dir.path}/w.db');
+        devices.add(d);
+        return d;
+      }
+
+      final a = fileDevice('a'), b = fileDevice('b');
+      a.repo.importBatch(ImportBatch(source: 'revolut', transactions: [
+        n('2026-03-02', -10000, 'Exchange', 'Exchanged to USD', source: 'revolut', kind: own),
+      ]));
+      b.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        n('2026-03-04', 10000, 'Ostalo', 'VAL_01.01.2026.POVRAT', kind: TxKind.other),
+      ]));
+      await round();
+      await round();
+      await round();
+      expect(dump(a.repo, clocks: false), dump(b.repo, clocks: false));
+      expect(links(a.repo).values.where((v) => v != null).length, 2, reason: 'the version-3 pair on both devices');
+      // Only a upgrades first; b follows a round later.
+      a.repo.db.execute("UPDATE meta SET value = '3' WHERE key = 'schema'");
+      b.repo.db.execute("UPDATE meta SET value = '3' WHERE key = 'schema'");
+      a.reopen();
+      expect(links(a.repo).values.toSet(), {null});
+      await round();
+      expect(links(b.repo).values.toSet(), {null}, reason: 'the rehint and the clear reached b before it upgraded');
+      b.reopen();
+      await round();
+      await round();
+      for (final d in devices) {
+        final fx = d.repo.transactions().firstWhere((t) => t.source == 'revolut');
+        expect(fx.kindHint, TxKind.exchange, reason: d.name);
+        expect(links(d.repo).values.toSet(), {null}, reason: d.name);
+        expect(d.repo.transactions().where((t) => d.repo.categorizer().categoryOf(t) == 'Internal transfer').map((t) => t.id), [fx.id],
+            reason: d.name);
+        expect((await d.run()).sent, 0, reason: '${d.name} has nothing more to write');
+      }
+      expect(dump(a.repo, clocks: false), dump(b.repo, clocks: false));
+      expect(lwwDiff(a.repo, lastWriterWins(await opsInNet(net, key))), isEmpty);
     });
 
     test('a pair an earlier build made on amount alone dissolves on every device and they converge', () async {

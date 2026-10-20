@@ -62,6 +62,11 @@ final List<(String, RegExp)> builtInMerchantRules = [
 /// Default for the `rentCashThreshold` setting (minor units).
 const int defaultRentCashThreshold = 50000;
 
+/// Revolut's `Type` wording for a currency conversion between the owner's own balances (`bankType` of such rows). The
+/// one bank wording wallet_core keys on besides the importer's hints: the category rule below and
+/// `WalletRepo._migrate` (schema 4 rewrites the earlier build's `ownTransfer` hint on these rows to `exchange`).
+const revolutExchangeType = 'Exchange';
+
 /// Resolves categories. Built once per settings/rules change.
 class Categorizer {
   final Map<String, String> merchantRules; // merchantKey -> category
@@ -135,7 +140,7 @@ class Categorizer {
     final type = t.bankType;
     switch (t.source) {
       case 'revolut':
-        if (type == 'Topup' || type == 'Exchange') return 'Internal transfer';
+        if (type == 'Topup' || type == revolutExchangeType) return 'Internal transfer';
         if (type == 'Transfer') return 'To people';
         return merchantCategory(d) ?? 'Shopping';
       case 'pbz':
