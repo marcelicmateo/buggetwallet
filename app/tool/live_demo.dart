@@ -21,6 +21,7 @@ Future<void> main() async {
       await wc.createWallet();
       wc.repo.importBatch(demoBatch(wc.today()));
       wc.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
+      wc.saveCategoryBudgets(demoBudgets);
     }
     final sinceRunApp = Stopwatch()..start();
     runApp(BudgetWalletApp(wc: wc));

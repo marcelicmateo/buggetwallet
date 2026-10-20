@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import '../budget_shim.dart'; // SHIM
 import '../controller.dart';
 import '../format.dart';
 import '../layout.dart';
@@ -14,12 +15,15 @@ class TodayScreen extends StatelessWidget {
   final WalletController wc;
   final VoidCallback openPlan;
 
+  /// Opens the Spending tab (the budget line); without it the line is not tappable.
+  final VoidCallback? openSpending;
+
   /// Opens the Add expense sheet (HomeShell owns it so Ctrl+N does the same); without it the button opens it itself.
   final VoidCallback? addExpense;
 
   /// The time of day the screen shows (tests pass a fixed one).
   final DateTime Function() clock;
-  const TodayScreen({super.key, required this.wc, required this.openPlan, this.addExpense, this.clock = DateTime.now});
+  const TodayScreen({super.key, required this.wc, required this.openPlan, this.openSpending, this.addExpense, this.clock = DateTime.now});
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +38,7 @@ class TodayScreen extends StatelessWidget {
     final now = clock();
     final deliveryHour = (now.hour >= 14 && now.hour < 19) || now.weekday == DateTime.sunday;
     final (deliveryCount, deliverySum) = wc.deliveries;
+    final tight = wc.tightestBudget();
     final recent = wc.txs.where((t) => t.kind != Kind.transfer).take(12).toList();
 
     return MarginLine(
@@ -86,6 +91,7 @@ class TodayScreen extends StatelessWidget {
                     ('${p.daysLeft} ${p.daysLeft == 1 ? 'day' : 'days'}', 'to ${shortDate(p.end)}'),
                     (money(p.planDaily, cur, decimals: 0), 'plan per day'),
                   ]),
+                  if (tight != null) _BudgetLine(tight, cur, openSpending),
                   PaceBar(used: used, elapsed: p.elapsed, over: p.spent > p.flexBudget * p.elapsed),
                   SplitRow(
                     start: Muted('${money(p.spent, cur, decimals: 0)} of ${money(p.flexBudget, cur, decimals: 0)} used'),
@@ -167,6 +173,37 @@ class TodayScreen extends StatelessWidget {
 List<Widget> _gap(List<Widget> xs) => [
       for (var i = 0; i < xs.length; i++) ...[if (i > 0) const SizedBox(height: 14), xs[i]],
     ];
+
+/// "Groceries: 48 € left this month" for the budgeted category with the least left (`bad` with an icon when over); a tap opens
+/// Spending.
+class _BudgetLine extends StatelessWidget {
+  final CategoryBudgetLine line;
+  final String currency;
+  final VoidCallback? onTap;
+  const _BudgetLine(this.line, this.currency, this.onTap);
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final over = line.over;
+    final text = over
+        ? '${line.category}: ${leftText(line.remaining ?? 0, currency)}'
+        : '${line.category}: ${leftText(line.remaining ?? 0, currency)} this month';
+    final col = over ? c.bad : c.ink2;
+    return InkWell(
+      key: const ValueKey('budgetLine'),
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Row(children: [
+          Icon(over ? Icons.error_outline : Icons.pie_chart_outline, size: 18, color: col),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: TextStyle(fontSize: 14, color: col, fontWeight: over ? FontWeight.w600 : FontWeight.w400))),
+          if (onTap != null) Icon(Icons.chevron_right, size: 20, color: c.muted),
+        ]),
+      ),
+    );
+  }
+}
 
 /// Three figures in a ruled strip: a strong rule above, a hairline below, hairline dividers between. Figures are mono,
 /// right-aligned, and shrink rather than overflow at large text.

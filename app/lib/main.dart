@@ -160,7 +160,7 @@ class _HomeShellState extends State<HomeShell> {
   List<Widget> _buildPages() => [for (var i = 0; i < _tabs.length; i++) _page(i)];
 
   Widget _page(int i) => switch (i) {
-        0 => TodayScreen(wc: widget.wc, openPlan: () => _go(4, 'today'), addExpense: _addExpense),
+        0 => TodayScreen(wc: widget.wc, openPlan: () => _go(4, 'today'), openSpending: () => _go(1, 'today'), addExpense: _addExpense),
         1 => SpendingScreen(wc: widget.wc),
         2 => WishlistScreen(wc: widget.wc),
         3 => GoalsScreen(wc: widget.wc),

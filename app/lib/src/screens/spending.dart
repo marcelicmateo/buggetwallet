@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import '../budget_shim.dart'; // SHIM
 import '../controller.dart';
 import '../format.dart';
 import '../layout.dart';
@@ -25,6 +26,8 @@ class _SpendingScreenState extends State<SpendingScreen> {
     final cur = wc.currency;
     final v = wc.spending(selected);
     final current = v.months.last, sel = v.month;
+    final budget = wc.budgetVsActual(sel);
+    final budgeted = budget.budgetedCount > 0;
     final (selSum, avg, periods, trend, done, top, monthTxs) =
         (v.summary, v.average, v.periods, v.trend, v.overview, v.topPlaces, v.transactions);
 
@@ -45,8 +48,9 @@ class _SpendingScreenState extends State<SpendingScreen> {
         Panel(children: [
           const Eyebrow('Where it goes'),
           Heading('${monthLong(sel)}: ${money(selSum.out, cur, decimals: 0)} out'),
-          Muted(
-              'Income ${money(selSum.income, cur, decimals: 0)}. Spending and bills by category; the dark tick is your average of the 6 months before.'),
+          if (budgeted) _BudgetSummary(budget, cur),
+          Muted('Income ${money(selSum.income, cur, decimals: 0)}. Spending and bills by category; '
+              '${budgeted ? 'the solid mark is the budget, the dark tick' : 'the dark tick'} is your average of the 6 months before.'),
           _MonthChips(
             months: v.months.sublist(v.months.length - 7),
             current: current,
@@ -56,7 +60,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
               setState(() => selected = m);
             },
           ),
-          CategoryBars(values: selSum.byCategory, average: avg, currency: cur),
+          CategoryBars(values: selSum.byCategory, average: avg, currency: cur, budget: budgeted ? budget : null),
         ]),
         Panel(children: [
           Heading('Top places in ${monthLong(sel)}', size: 15),
@@ -90,6 +94,18 @@ class _SpendingScreenState extends State<SpendingScreen> {
       ]),
     ]));
   }
+}
+
+/// "3 of 7 categories over budget, 180 € left in total" (or "over by" when the total is over).
+class _BudgetSummary extends StatelessWidget {
+  final BudgetVsActual b;
+  final String currency;
+  const _BudgetSummary(this.b, this.currency);
+  @override
+  Widget build(BuildContext context) => StatusLabel(
+      good: b.overCount == 0,
+      text: '${b.overCount} of ${b.budgetedCount} ${b.budgetedCount == 1 ? 'category' : 'categories'} over budget, '
+          '${leftText(b.remainingTotal ?? 0, currency)} in total');
 }
 
 /// The month chips in a row that scrolls sideways; the selected chip is scrolled fully into view when the row is first

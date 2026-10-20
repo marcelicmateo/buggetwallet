@@ -31,6 +31,7 @@ void main() {
     if (!wc.hasWallet) await wc.createWallet();
     wc.repo.importBatch(demoBatch(wc.today()));
     wc.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
+    wc.saveCategoryBudgets(demoBudgets);
 
     await tester.pumpWidget(BudgetWalletApp(wc: wc));
     AppLog.startMonitors();
@@ -44,9 +45,14 @@ void main() {
       await binding.takeScreenshot('${i + 2}-${tab.toLowerCase()}');
     }
 
+    // Plan › Budgets per category (new in E1): the editor with the saved budgets.
+    final plan = find.descendant(of: find.byType(PlanScreen), matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.text('Suggest from the last 6 months'), 300, scrollable: plan);
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-plan-budgets');
+
     // Plan › Diagnostics at the bottom of the Plan tab; switch the level there and back.
-    final planList = find.descendant(of: find.byType(PlanScreen), matching: find.byType(Scrollable)).first;
-    await tester.scrollUntilVisible(find.text('Clear logs'), 400, scrollable: planList);
+    await tester.scrollUntilVisible(find.text('Clear logs'), 400, scrollable: plan);
     await tester.pumpAndSettle();
     await binding.takeScreenshot('6-plan-diagnostics');
     await tester.tap(find.text('Info'));

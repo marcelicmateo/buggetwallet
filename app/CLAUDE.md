@@ -16,6 +16,10 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   Use these, not `Platform.isX`. Tests set `debugDefaultTargetPlatformOverride` (and must unset it before the test body ends).
 - `lib/src/controller.dart` — `WalletController` (ChangeNotifier): owns the `WalletRepo`, the cached lists,
   sync timers. Screens call controller methods; the controller calls the repo and `notifyListeners()`.
+- Budgets (E1): `categoryBudgets` (monthly cents per category), `budgetVsActual(month)`, `suggestedBudgets(month)`, `tightestBudget()`
+  (cached like `spending()`), `saveCategoryBudgets(map)` (logs `budgets.saved` with the count only). Spending's "Where it goes" bars use the
+  budget as the 100 % mark (`CategoryBars(budget:)`: ruled track, hatched `bad` stretch and "over by 12 €" when over, "48 € left" otherwise,
+  summary line and a total row under a `TotalRule`); Today shows one tappable line for `tightestBudget()` (`TodayScreen.openSpending`).
 - Derived values (`period()`, `payPeriods()`, `spending(month)`) are cached in the controller per `dataVersion` (bumped by
   `reload()`) and day: never compute from `txs` in `build()`. `HomeShell` builds the five pages once per data version and day
   (`'${dataVersion}|${today()}'`), so a tab switch only moves the `IndexedStack` (keep it that way: 20,000 rows made every
@@ -28,7 +32,10 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   (all component themes live there: buttons radius 3, chips/inputs radius 2, dialog/sheet/nav/snackbar), `accentOutlined` (the old tonal
   button), `marginLineColor`. Fonts: six unmodified IBM Plex TTFs in `assets/fonts/` + `OFL.txt` (licence registered in `main()`;
   source and version in `third_party/fonts/README.md`). No `Card`, no pills, no shadows: ruled lines instead.
-- `lib/src/screens/*.dart` — one file per tab. `lib/src/widgets/` — `charts.dart` (fl_chart charts, `CategoryBars`, `RuledBar`, `PaceBar`),
+- `lib/src/budget_shim.dart` — TEMPORARY stand-in for the wallet_core budget API of feature E1 (`BudgetVsActual`, `budgetVsActual`,
+  `suggestBudgets`, budgets read from the settings table). Delete it when core is merged, with every line marked `SHIM`.
+- `lib/src/screens/*.dart` — one file per tab; `budgets.dart` is Plan's "Budgets per category" panel (`BudgetsPanel`: one field per fixed/flex
+  category, empty = no budget, "Suggest" fills only empty fields, only edited fields are saved, nothing written when nothing changed). `lib/src/widgets/` — `charts.dart` (fl_chart charts, `CategoryBars`, `RuledBar`, `PaceBar`),
   `common.dart` (`Panel` = ruled section, `SectionHead`, `Eyebrow`, `Heading`, `TotalRule`/`DoubleRule`, `TxTile` + `TxHeaderRow`
   (Date | Particulars | Amount columns, stacked above text scale 1.15), `LineItem`, `Rows`, `SplitRow`, `HeadingRow`, `Tag`, `LedgerLogo`,
   `NavBarFrame` (bar top rule + accent mark), `MarginLine` (red margin rule, wide windows only), `toast`),
@@ -60,6 +67,8 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
 - `test/adaptive_test.dart` (four window sizes × two text scales), `test/adaptive_edge_test.dart` (boundaries, shortcuts, dialogs,
   resizing), helpers in `test/support/layout.dart`; `integration_test/adaptive_test.dart` takes desktop screenshots at
   1280×800, 1920×1080 and 800×1280 (`tools/build.sh desktop-test adaptive`). Tests find tabs with `tapTab`/`navTab`: they work for the bar and the rail.
+- `test/budgets_plan_test.dart` (the editor), `test/budgets_screens_test.dart` (Spending rows, Today line, controller caching); the
+  `budgetWallet()` helper in `test/support/wallet.dart` has a fixed clock (20 Oct 2026) and known amounts.
 - `test/theme_*_test.dart` — the Ledger theme: contrast ratios of every token, structure (no `Card`, nav by width, Panel without radius), text
   scale 2.0 at 320/360 with the real fonts, amounts in Plex Mono with tabular figures and a shared right edge, the six font files and `OFL.txt`.
 - `test/` — formatting and widget tests. Run: `tools/build.sh test` (format check, `flutter analyze`, `flutter test`).

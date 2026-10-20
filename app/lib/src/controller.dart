@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'budget_shim.dart'; // SHIM
 import 'key_store.dart';
 import 'logging.dart';
 
@@ -14,6 +15,9 @@ final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');
 final _import = Logger('bw.import');
 final _key = Logger('bw.key');
+
+/// The core function; the controller method of the same name would hide it inside the class.
+final _computeBudget = budgetVsActual;
 
 class ImportLine {
   final String file;
@@ -64,6 +68,9 @@ class WalletController extends ChangeNotifier {
   List<CategorizedTx> txs = const [];
   List<Goal> goals = const [];
   List<WishItem> wish = const [];
+
+  /// The saved monthly budgets per category (cents).
+  Map<String, int> categoryBudgets = const {};
 
   /// Counts [reload]s: the derived values below are cached per version (and per day) and recomputed only after the data changed.
   int dataVersion = 0;
@@ -149,6 +156,7 @@ class WalletController extends ChangeNotifier {
   void reload() {
     final t = PerfTimer('wc.reload');
     settings = repo.settings();
+    categoryBudgets = shimBudgets(repo); // SHIM: becomes `settings.categoryBudgets`
     categorizer = repo.categorizer();
     final raw = repo.transactions(); // logs repo.transactions
     txs = timed('wc.categorize', () => raw.map(categorizer.categorize).toList(), fields: {'tx': raw.length});
@@ -266,6 +274,33 @@ class WalletController extends ChangeNotifier {
                 transactions: monthTxs,
               );
             }, fields: {'month': month, 'tx': txs.length}, warnMs: 100));
+  }
+
+  /// Budget against spending per category for [month] (`YYYY-MM`). Cached per month until the data changes.
+  BudgetVsActual budgetVsActual(String month) => _cached(
+      'budget$month',
+      () => timed('wc.budgetVsActual', () => _computeBudget(txs, month, categoryBudgets, today: today()),
+          fields: {'month': month, 'tx': txs.length}, warnMs: 50));
+
+  /// Budgets worked out from the 6 months before [month], per category (cents, rounded up to 10).
+  Map<String, int> suggestedBudgets(String month) =>
+      _cached('suggest$month', () => timed('wc.suggestBudgets', () => suggestBudgets(txs, month), fields: {'month': month}, warnMs: 50));
+
+  /// The budgeted category with the least money left this month, or null when nothing is budgeted.
+  CategoryBudgetLine? tightestBudget() => _cached('tightest', () {
+        CategoryBudgetLine? best;
+        for (final l in budgetVsActual(monthOf(today())).lines) {
+          final r = l.remaining;
+          if (r != null && (best == null || r < best.remaining!)) best = l;
+        }
+        return best;
+      });
+
+  /// Saves the whole map of budgets (an empty map clears them). Logs the count only.
+  void saveCategoryBudgets(Map<String, int> budgets) {
+    repo.updateSettings({'categoryBudgets': budgets});
+    logEvent(_log, Level.INFO, 'budgets.saved', {'count': budgets.length}); // never the categories or amounts
+    _changed();
   }
 
   void _changed() {

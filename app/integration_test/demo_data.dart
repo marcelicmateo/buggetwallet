@@ -50,3 +50,6 @@ ImportBatch demoBatch(String today) {
   }
   return ImportBatch(source: 'pbz', transactions: txs);
 }
+
+/// Monthly budgets for the demo wallet (cents): Groceries is usually under, Eating out and Food delivery often over.
+const demoBudgets = {'Groceries': 40000, 'Eating out': 6000, 'Food delivery': 4000};

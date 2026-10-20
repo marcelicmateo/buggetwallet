@@ -14,6 +14,7 @@ import '../storage_access.dart';
 import '../sync_path.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'budgets.dart';
 import 'diagnostics.dart';
 
 export '../sync_path.dart' show checkSyncPath; // the sync path tests import it from here
@@ -189,6 +190,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 const Muted('ATM withdrawals this big or bigger count as rent. 0 turns it off.', size: 12),
                 FilledButton(onPressed: _savePlan, child: const Text('Save numbers')),
               ]),
+              BudgetsPanel(wc: wc),
               Panel(children: [
                 const SectionHead('Month'),
                 Muted(

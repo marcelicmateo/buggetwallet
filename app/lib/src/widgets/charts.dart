@@ -2,8 +2,10 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import '../budget_shim.dart'; // SHIM
 import '../format.dart';
 import '../theme.dart';
+import 'common.dart';
 
 /// Saved (above the line) or lost (below) per pay period, with the rolling average as a line.
 /// The running period is faded.
@@ -131,17 +133,32 @@ class PeriodNetChart extends StatelessWidget {
   }
 }
 
-/// Horizontal bars by category with a tick for the comparison average.
+/// "48 € left" / "over by 12 €" for a budget line (the whole amount is rounded to units).
+String budgetLeftText(CategoryBudgetLine l, String currency) => leftText(l.remaining ?? 0, currency);
+
+/// "48 € left" for money still free, "over by 12 €" for a negative amount.
+String leftText(int remaining, String currency) =>
+    remaining < 0 ? 'over by ${money(-remaining, currency, decimals: 0)}' : '${money(remaining, currency, decimals: 0)} left';
+
+/// Horizontal bars by category with a tick for the comparison average. A category with a budget in [budget] gets a ruled
+/// track whose solid mark is the budget (the bar is accent up to it and hatched `bad` beyond it), and "48 € left" or
+/// "over by 12 €" on the right; the others keep the plain bar and the amount. [budget] is `null` when nothing is budgeted.
 class CategoryBars extends StatelessWidget {
   final Map<String, int> values;
   final Map<String, int> average;
   final String currency;
-  const CategoryBars({super.key, required this.values, required this.average, required this.currency});
+  final BudgetVsActual? budget;
+  const CategoryBars({super.key, required this.values, required this.average, required this.currency, this.budget});
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
+    final lines = {
+      for (final l in budget?.lines ?? const <CategoryBudgetLine>[])
+        if (l.budget != null) l.category: l
+    };
     final cats = {...values.keys, ...average.keys}.where((k) => (values[k] ?? 0) > 50 || (average[k] ?? 0) > 50).toList()
+      ..addAll(lines.keys.where((k) => !((values[k] ?? 0) > 50 || (average[k] ?? 0) > 50)))
       ..sort((a, b) => (values[b] ?? 0).compareTo(values[a] ?? 0));
     if (cats.isEmpty) {
       return Padding(padding: const EdgeInsets.all(12), child: Text('Nothing spent this month yet.', style: TextStyle(color: c.muted)));
@@ -150,51 +167,172 @@ class CategoryBars extends StatelessWidget {
         .map((k) => [values[k] ?? 0, average[k] ?? 0].reduce((a, b) => a > b ? a : b))
         .reduce((a, b) => a > b ? a : b)
         .clamp(1, 1 << 60);
+    final total = budget;
     return Column(children: [
       for (final k in cats)
-        Container(
-          constraints: const BoxConstraints(minHeight: 36),
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
-          child: Tooltip(
-            message: '$k: ${money(values[k] ?? 0, currency, decimals: 0)} · average ${money(average[k] ?? 0, currency, decimals: 0)}',
-            child: Row(children: [
-              SizedBox(
-                  width: 118,
-                  child: Text(k, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, color: c.ink2))),
-              const SizedBox(width: 8),
-              Expanded(
-                child: LayoutBuilder(builder: (ctx, box) {
-                  final w = box.maxWidth;
-                  final v = (values[k] ?? 0) / maxV, a = (average[k] ?? 0) / maxV;
-                  return SizedBox(
-                    height: 16,
-                    child: Stack(children: [
-                      Positioned(left: 0, top: 2, bottom: 2, width: (w * v).clamp(2, w), child: Container(color: c.bar)),
-                      Positioned(
-                          left: (w * a - 1).clamp(0, w - 2),
-                          top: 0,
-                          bottom: 0,
-                          width: 2,
-                          child: Container(color: c.ink.withValues(alpha: 0.55))),
-                    ]),
-                  );
-                }),
-              ),
-              const SizedBox(width: 8),
+        _CategoryRow(name: k, value: values[k] ?? 0, average: average[k] ?? 0, maxV: maxV, line: lines[k], currency: currency),
+      if (total != null && total.budgetedCount > 0 && total.remainingTotal != null)
+        TotalRule(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(key: const ValueKey('budgetTotal'), children: [
+            const SizedBox(width: 118, child: Text('Budgeted', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600))),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('${money(total.actualTotal, currency, decimals: 0)} of ${money(total.budgetTotal, currency, decimals: 0)}',
+                  textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: 11.5, color: c.ink2)),
+            ),
+            const SizedBox(width: 8),
+            _LeftText(text: leftText(total.remainingTotal!, currency), over: total.remainingTotal! < 0, width: _rightCol),
+          ]),
+        ),
+    ]);
+  }
+}
+
+const _rightCol = 96.0;
+
+/// "48 € left" in mono, `bad` with an icon when over; shrinks instead of overflowing.
+class _LeftText extends StatelessWidget {
+  final String text;
+  final bool over;
+  final double width;
+  const _LeftText({required this.text, required this.over, required this.width});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final style = numStyle.copyWith(fontSize: 13, fontWeight: FontWeight.w600, color: over ? c.bad : c.ink);
+    return SizedBox(
+      width: width,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerRight,
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          if (over) Padding(padding: const EdgeInsets.only(right: 4), child: Icon(Icons.error_outline, size: 15, color: c.bad)),
+          MoneyText(text, style: style),
+        ]),
+      ),
+    );
+  }
+}
+
+class _CategoryRow extends StatelessWidget {
+  final String name, currency;
+  final int value, average, maxV;
+  final CategoryBudgetLine? line;
+  const _CategoryRow(
+      {required this.name, required this.value, required this.average, required this.maxV, required this.line, required this.currency});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final l = line;
+    final budget = l?.budget;
+    final tip = '$name: ${money(value, currency, decimals: 0)} · average ${money(average, currency, decimals: 0)}'
+        '${l == null ? '' : ' · budget ${money(budget!, currency, decimals: 0)}, ${budgetLeftText(l, currency)}'}';
+    return Container(
+      constraints: BoxConstraints(minHeight: l == null ? 36 : 44),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
+      child: Tooltip(
+        message: tip,
+        child: Semantics(
+          label: l == null ? null : '$name: ${budgetLeftText(l, currency)}',
+          child: Row(children: [
+            SizedBox(
+                width: 118,
+                child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, color: c.ink2))),
+            const SizedBox(width: 8),
+            Expanded(
+              child: LayoutBuilder(builder: (ctx, box) {
+                final w = box.maxWidth;
+                if (l != null) return _BudgetBar(width: w, value: value, average: average, budget: budget!);
+                final v = value / maxV, a = average / maxV;
+                return SizedBox(
+                  height: 16,
+                  child: Stack(children: [
+                    Positioned(left: 0, top: 2, bottom: 2, width: (w * v).clamp(2, w), child: Container(color: c.bar)),
+                    Positioned(
+                        left: (w * a - 1).clamp(0, w - 2),
+                        top: 0,
+                        bottom: 0,
+                        width: 2,
+                        child: Container(color: c.ink.withValues(alpha: 0.55))),
+                  ]),
+                );
+              }),
+            ),
+            const SizedBox(width: 8),
+            if (l == null)
               SizedBox(
                 width: 72,
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerRight,
-                  child: Text(money(values[k] ?? 0, currency, decimals: 0),
-                      textAlign: TextAlign.right, style: numStyle.copyWith(fontSize: 13)),
+                  child: Text(money(value, currency, decimals: 0), textAlign: TextAlign.right, style: numStyle.copyWith(fontSize: 13)),
                 ),
+              )
+            else
+              SizedBox(
+                width: _rightCol,
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  _LeftText(text: budgetLeftText(l, currency), over: l.over, width: _rightCol),
+                  SizedBox(
+                    width: _rightCol,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text('of ${money(budget!, currency, decimals: 0)}', style: numStyle.copyWith(fontSize: 11, color: c.ink2)),
+                    ),
+                  ),
+                ]),
               ),
-            ]),
-          ),
+          ]),
         ),
-    ]);
+      ),
+    );
+  }
+}
+
+/// The bar of a budgeted category: a ruled track, accent up to the budget, a hatched `bad` stretch beyond it, the budget as
+/// a solid 2 px mark and the 6-month average as a lighter tick. The scale is the largest of the three.
+class _BudgetBar extends StatelessWidget {
+  final double width;
+  final int value, average, budget;
+  const _BudgetBar({required this.width, required this.value, required this.average, required this.budget});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final scale = [value, average, budget, 1].reduce((a, b) => a > b ? a : b);
+    final inner = width - 2;
+    double at(int v) => inner * v / scale;
+    final solid = value < budget ? value : budget;
+    return SizedBox(
+      height: 20,
+      child: Stack(children: [
+        Positioned(
+            left: 0,
+            right: 0,
+            top: 4,
+            height: 12,
+            child: DecoratedBox(decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.lineStrong)))),
+        if (solid > 0) Positioned(left: 1, top: 5, height: 10, width: at(solid).clamp(0, inner), child: ColoredBox(color: c.accent)),
+        if (value > budget)
+          Positioned(
+              key: const ValueKey('overHatch'),
+              left: 1 + at(budget),
+              top: 5,
+              height: 10,
+              width: at(value - budget).clamp(0, inner),
+              child: CustomPaint(painter: _HatchPainter(c.bad, c.surface2))),
+        Positioned(
+            left: (1 + at(average) - 1).clamp(0, width - 2),
+            top: 3,
+            bottom: 3,
+            width: 2,
+            child: ColoredBox(color: c.ink.withValues(alpha: 0.55))),
+        Positioned(left: (1 + at(budget) - 1).clamp(0, width - 2), top: 0, bottom: 0, width: 2, child: ColoredBox(color: c.ink)),
+      ]),
+    );
   }
 }
 
