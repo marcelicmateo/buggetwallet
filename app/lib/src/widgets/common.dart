@@ -196,6 +196,30 @@ class _LogoPainter extends CustomPainter {
   bool shouldRepaint(_LogoPainter old) => old.fill != fill || old.paper != paper;
 }
 
+/// A money string (number, one NBSP, sign) in one Text whose gap is a narrow space: in a mono font the space is a full
+/// character wide, which looks like a hole at big sizes. The plain text is still exactly [text].
+class MoneyText extends StatelessWidget {
+  final String text;
+  final TextStyle style;
+  final TextAlign? textAlign;
+  const MoneyText(this.text, {super.key, required this.style, this.textAlign});
+  @override
+  Widget build(BuildContext context) {
+    final i = text.indexOf('\u00A0');
+    if (i < 0) return Text(text, style: style, textAlign: textAlign);
+    final size = style.fontSize ?? 14;
+    return Text.rich(
+      TextSpan(children: [
+        TextSpan(text: text.substring(0, i)),
+        TextSpan(text: '\u00A0', style: TextStyle(fontSize: size * 0.4)),
+        TextSpan(text: text.substring(i + 1)),
+      ]),
+      style: style,
+      textAlign: textAlign,
+    );
+  }
+}
+
 /// Two 1 px rules with a 1 px gap: the line under a total.
 class DoubleRule extends StatelessWidget {
   const DoubleRule({super.key});
@@ -444,14 +468,16 @@ class NavBarFrame extends StatelessWidget {
   }
 }
 
-/// Draws the notebook margin line (a red double rule) in the left margin of [child] when [show]. The page margin is 16 dp,
-/// so the line sits at x = 6. [child] keeps the same place in the tree either way (pages keep their State).
+/// Draws the notebook margin line (a red double rule) in the left margin of [child], on windows [dialogMin] wide or more
+/// (or as [show] says). Each page puts it around its own column, so it sits at the content's left edge. The page margin is
+/// 16 dp, so the line is at x = 5..9. [child] keeps the same place in the tree either way (pages keep their State).
 class MarginLine extends StatelessWidget {
-  final bool show;
+  final bool? show;
   final Widget child;
-  const MarginLine({super.key, required this.show, required this.child});
+  const MarginLine({super.key, this.show, required this.child});
   @override
   Widget build(BuildContext context) {
+    final show = this.show ?? layoutOf(context) != LayoutSize.compact;
     final col = marginLineColor(Theme.of(context).brightness);
     return Stack(fit: StackFit.passthrough, children: [
       child,

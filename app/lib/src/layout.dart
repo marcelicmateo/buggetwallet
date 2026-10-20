@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
+import 'widgets/common.dart' show MarginLine;
 
 /// compact: bottom bar, one column. medium: rail, one column. expanded: wide rail, content up to [expandedMaxWidth].
 enum LayoutSize { compact, medium, expanded }
@@ -74,5 +75,6 @@ class NarrowPage extends StatelessWidget {
   const NarrowPage({super.key, required this.child});
   @override
   Widget build(BuildContext context) => Align(
-      alignment: Alignment.topCenter, child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: mediumMaxWidth), child: child));
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: mediumMaxWidth), child: MarginLine(child: child)));
 }

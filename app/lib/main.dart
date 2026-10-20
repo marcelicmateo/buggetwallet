@@ -369,8 +369,7 @@ class _HomeShellState extends State<HomeShell> {
                     child: Center(
                       child: ConstrainedBox(
                         constraints: BoxConstraints(maxWidth: maxContentWidth(size)),
-                        // The red notebook margin line is for wide windows only.
-                        child: MarginLine(show: !compact, child: IndexedStack(index: tab, children: _pages)),
+                        child: IndexedStack(index: tab, children: _pages),
                       ),
                     ),
                   ),

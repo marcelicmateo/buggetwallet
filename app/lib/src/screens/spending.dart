@@ -28,7 +28,8 @@ class _SpendingScreenState extends State<SpendingScreen> {
     final (selSum, avg, periods, trend, done, top, monthTxs) =
         (v.summary, v.average, v.periods, v.trend, v.overview, v.topPlaces, v.transactions);
 
-    return ListView(padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24), children: [
+    return MarginLine(
+        child: ListView(padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24), children: [
       TwoCol(left: [
         Panel(children: [
           const Eyebrow('Saving or losing'),
@@ -87,7 +88,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
             ]),
         ]),
       ]),
-    ]);
+    ]));
   }
 }
 
