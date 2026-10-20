@@ -7,7 +7,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
-import 'budget_shim.dart'; // SHIM
 import 'key_store.dart';
 import 'logging.dart';
 
@@ -17,7 +16,7 @@ final _import = Logger('bw.import');
 final _key = Logger('bw.key');
 
 /// The core function; the controller method of the same name would hide it inside the class.
-final _computeBudget = budgetVsActual;
+const _computeBudget = budgetVsActual;
 
 class ImportLine {
   final String file;
@@ -68,9 +67,6 @@ class WalletController extends ChangeNotifier {
   List<CategorizedTx> txs = const [];
   List<Goal> goals = const [];
   List<WishItem> wish = const [];
-
-  /// The saved monthly budgets per category (cents).
-  Map<String, int> categoryBudgets = const {};
 
   /// Counts [reload]s: the derived values below are cached per version (and per day) and recomputed only after the data changed.
   int dataVersion = 0;
@@ -138,6 +134,9 @@ class WalletController extends ChangeNotifier {
   factory WalletController.forTest(WalletRepo repo, {VaultKey? key, DateTime Function()? clock}) =>
       WalletController._(repo, key, clock: clock)..reload();
 
+  /// The saved monthly budgets per category (cents).
+  Map<String, int> get categoryBudgets => settings.categoryBudgets;
+
   bool get hasWallet => key != null;
   String get currency => settings.currency;
 
@@ -156,7 +155,6 @@ class WalletController extends ChangeNotifier {
   void reload() {
     final t = PerfTimer('wc.reload');
     settings = repo.settings();
-    categoryBudgets = shimBudgets(repo); // SHIM: becomes `settings.categoryBudgets`
     categorizer = repo.categorizer();
     final raw = repo.transactions(); // logs repo.transactions
     txs = timed('wc.categorize', () => raw.map(categorizer.categorize).toList(), fields: {'tx': raw.length});

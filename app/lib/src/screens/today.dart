@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
-import '../budget_shim.dart'; // SHIM
 import '../controller.dart';
 import '../format.dart';
 import '../layout.dart';

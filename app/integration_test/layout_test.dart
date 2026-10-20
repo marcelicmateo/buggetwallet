@@ -97,6 +97,7 @@ void main() {
         Harness.rememberKey(await wc.keyText());
         wc.repo.importBatch(demoBatch(wc.today()));
         wc.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
+        wc.saveCategoryBudgets(demoBudgets); // budgeted and over-budget rows on Spending, the line on Today, the editor on Plan
         wc.saveGoal(name: longGoal, target: 98765 * 10, saved: 98765, monthly: 9876);
         wc.addWish(longWish, 98765);
         wc.addExpense(amount: 9876, category: 'Bills & one-offs', note: longNote, date: wc.today());

@@ -7,12 +7,6 @@ import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
-/// The categories a budget can be set for: bills and everyday spending (not income or transfers), in the built-in order.
-List<String> budgetCategories() => [
-      for (final e in categories.entries)
-        if (e.value == Kind.fixed || e.value == Kind.flex) e.key
-    ];
-
 /// Plan › "Budgets per category": one amount field per category (empty = no budget), a button that fills the empty
 /// fields from the last 6 months, and Save. Only fields the user edited are saved, on top of the latest saved budgets.
 class BudgetsPanel extends StatefulWidget {
@@ -23,7 +17,7 @@ class BudgetsPanel extends StatefulWidget {
 }
 
 class _BudgetsPanelState extends State<BudgetsPanel> {
-  final _cats = budgetCategories();
+  final _cats = spendingCategories;
   late final Map<String, TextEditingController> _f = {for (final k in _cats) k: TextEditingController()};
 
   /// The text each field last got from the saved budgets: a field whose text differs was edited.

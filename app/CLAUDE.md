@@ -32,8 +32,6 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   (all component themes live there: buttons radius 3, chips/inputs radius 2, dialog/sheet/nav/snackbar), `accentOutlined` (the old tonal
   button), `marginLineColor`. Fonts: six unmodified IBM Plex TTFs in `assets/fonts/` + `OFL.txt` (licence registered in `main()`;
   source and version in `third_party/fonts/README.md`). No `Card`, no pills, no shadows: ruled lines instead.
-- `lib/src/budget_shim.dart` — TEMPORARY stand-in for the wallet_core budget API of feature E1 (`BudgetVsActual`, `budgetVsActual`,
-  `suggestBudgets`, budgets read from the settings table). Delete it when core is merged, with every line marked `SHIM`.
 - `lib/src/screens/*.dart` — one file per tab; `budgets.dart` is Plan's "Budgets per category" panel (`BudgetsPanel`: one field per fixed/flex
   category, empty = no budget, "Suggest" fills only empty fields, only edited fields are saved, nothing written when nothing changed). `lib/src/widgets/` — `charts.dart` (fl_chart charts, `CategoryBars`, `RuledBar`, `PaceBar`),
   `common.dart` (`Panel` = ruled section, `SectionHead`, `Eyebrow`, `Heading`, `TotalRule`/`DoubleRule`, `TxTile` + `TxHeaderRow`

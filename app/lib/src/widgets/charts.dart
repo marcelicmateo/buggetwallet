@@ -2,7 +2,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
-import '../budget_shim.dart'; // SHIM
 import '../format.dart';
 import '../theme.dart';
 import 'common.dart';
@@ -178,8 +177,10 @@ class CategoryBars extends StatelessWidget {
             const SizedBox(width: 118, child: Text('Budgeted', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600))),
             const SizedBox(width: 8),
             Expanded(
-              child: Text('${money(total.actualTotal, currency, decimals: 0)} of ${money(total.budgetTotal, currency, decimals: 0)}',
-                  textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: 11.5, color: c.ink2)),
+              child: Text(
+                  '${money(total.budgetTotal - total.remainingTotal!, currency, decimals: 0)} of ${money(total.budgetTotal, currency, decimals: 0)}',
+                  textAlign: TextAlign.end,
+                  style: numStyle.copyWith(fontSize: 11.5, color: c.ink2)),
             ),
             const SizedBox(width: 8),
             _LeftText(text: leftText(total.remainingTotal!, currency), over: total.remainingTotal! < 0, width: _rightCol),
