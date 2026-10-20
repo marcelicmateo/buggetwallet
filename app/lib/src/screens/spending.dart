@@ -5,22 +5,73 @@ import '../controller.dart';
 import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
+import '../platform.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
+import 'search.dart';
 
 class SpendingScreen extends StatefulWidget {
   final WalletController wc;
-  const SpendingScreen({super.key, required this.wc});
+
+  /// Counts the Ctrl+F presses; the search view opens on each.
+  final Listenable? searchRequest;
+
+  /// Jumps to a tab (a goal or wish found by the search); [openBills] goes to Plan › Expected bills.
+  final void Function(int tab)? openTab;
+  final VoidCallback? openBills;
+  const SpendingScreen({super.key, required this.wc, this.searchRequest, this.openTab, this.openBills});
   @override
   State<SpendingScreen> createState() => _SpendingScreenState();
 }
 
 class _SpendingScreenState extends State<SpendingScreen> {
   String? selected;
+  bool searching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.searchRequest?.addListener(_openSearch);
+  }
+
+  @override
+  void didUpdateWidget(SpendingScreen old) {
+    super.didUpdateWidget(old);
+    if (old.searchRequest != widget.searchRequest) {
+      old.searchRequest?.removeListener(_openSearch);
+      widget.searchRequest?.addListener(_openSearch);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.searchRequest?.removeListener(_openSearch);
+    super.dispose();
+  }
+
+  void _openSearch() {
+    if (mounted && !searching) setState(() => searching = true);
+  }
 
   @override
   Widget build(BuildContext context) {
+    // The page stays built under the search view (an IndexedStack), so closing it keeps the scroll position and the month.
+    return MarginLine(
+        child: IndexedStack(index: searching ? 1 : 0, sizing: StackFit.expand, children: [
+      _page(context),
+      if (searching)
+        SearchPane(
+            wc: widget.wc,
+            onClose: () => setState(() => searching = false),
+            onOpenTab: (i) => widget.openTab?.call(i),
+            onOpenBills: () => widget.openBills?.call())
+      else
+        const SizedBox.shrink(),
+    ]));
+  }
+
+  Widget _page(BuildContext context) {
     final wc = widget.wc;
     final cur = wc.currency;
     final v = wc.spending(selected);
@@ -30,8 +81,16 @@ class _SpendingScreenState extends State<SpendingScreen> {
     final (selSum, avg, periods, trend, done, top, monthTxs) =
         (v.summary, v.average, v.periods, v.trend, v.overview, v.topPlaces, v.transactions);
 
-    return MarginLine(
-        child: ListView(padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24), children: [
+    return ListView(padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24), children: [
+      Align(
+        alignment: Alignment.centerRight,
+        child: IconButton(
+          key: const ValueKey('searchOpen'),
+          tooltip: hasKeyboard ? 'Search (Ctrl+F)' : 'Search',
+          icon: const Icon(Icons.search),
+          onPressed: () => setState(() => searching = true),
+        ),
+      ),
       TwoCol(left: [
         Panel(children: [
           const Eyebrow('Saving or losing'),
@@ -91,7 +150,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
             ]),
         ]),
       ]),
-    ]));
+    ]);
   }
 }
 

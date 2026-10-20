@@ -1,7 +1,7 @@
 // Screenshots of every tab with the synthetic demo wallet, then the app's log. Run on the emulator: tools/emulator.sh screens
 // -> dist/screens/*.png and dist/logs/app-emulator.log (written by test_driver/integration_test.dart).
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/logging.dart';
@@ -9,6 +9,7 @@ import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -61,6 +62,24 @@ void main() {
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-plan-nudges');
 
+    // Plan › Backup and Export (M5): a throwaway sync folder, one backup, then the Export panel.
+    final folder = await Directory.systemTemp.createTemp('bw-screens-sync');
+    addTearDown(() => folder.delete(recursive: true));
+    await wc.setSyncFolder(folder.path);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Back up now'), 300, scrollable: plan);
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-plan-backup');
+    await tester.tap(find.text('Back up now'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Last backup'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4)); // the toast goes away, so it does not cover the next screenshots
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-plan-backup-done');
+    await tester.scrollUntilVisible(find.text('Plain files, not encrypted.'), 300, scrollable: plan);
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-plan-export');
+
     // Plan › Diagnostics at the bottom of the Plan tab; switch the level there and back.
     await tester.scrollUntilVisible(find.text('Clear logs'), 400, scrollable: plan);
     await tester.pumpAndSettle();
@@ -69,6 +88,19 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Debug'));
     await tester.pumpAndSettle();
+
+    // Search (M5): the icon on Spending, a query, the ruled results, Esc closes.
+    await tester.tap(navTab('Spending'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('searchOpen')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('searchField')), 'lidl');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('2-spending-search');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('searchField')), findsNothing);
 
     // The weekly review (M4): the Today card opens it; one row is confirmed, then it closes and Done is left for the real flow.
     await tester.tap(navTab('Today'));
@@ -118,6 +150,8 @@ void main() {
     expect(log, contains('frames.window'));
     expect(log, contains('import.file'));
     expect(log, contains('nav.tab'));
+    expect(log, contains('backup.done'));
+    expect(log, contains('search.run'));
     expect(log, contains('review.open'));
     expect(log, contains('log.level {"from":"info","to":"all"}'));
     for (final p in _private) {

@@ -345,7 +345,7 @@ void main() {
   });
 
   group('Plan', () {
-    Future<void> plan(WidgetTester tester, WalletController wc, {Size size = const Size(400, 4000), double scale = 1}) =>
+    Future<void> plan(WidgetTester tester, WalletController wc, {Size size = const Size(400, 6000), double scale = 1}) =>
         pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: size, textScale: scale);
 
     tw('review day chips: Sunday selected, a tap changes the day', (tester) async {
