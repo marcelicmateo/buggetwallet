@@ -1,12 +1,16 @@
-commit: a1ae340151a67702363418269ab991e345a82809  ref: v2  run: 39450949367
+commit: 5b8fc139eb8fc6b85916c70c45cf3590f02f1966  ref: v2  run: 39452067922
 
-lint=success(4s) importer=success(11s) core=success(27s) app=success(101s) desktop=cancelled signing=skipped apk=skipped linux=skipped smoke=skipped
+lint=success(3s) importer=success(13s) core=success(39s) app=success(128s) desktop=success(587s) signing=success apk=success(129s) linux=success(71s) smoke=success(14s)
 
 step seconds exit
-lint 4 0
-importer 11 0
-core 27 0
-app 101 0
+lint 3 0
+importer 13 0
+core 39 0
+app 128 0
+desktop 587 0
+apk 129 0
+linux 71 0
+smoke 14 0
 
 version: 0.11.0
 actionlint 1.7.12
@@ -148,16 +152,16 @@ Got dependencies!
 8 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 === format ===
-Formatted 126 files (0 changed) in 0.42 seconds.
+Formatted 136 files (0 changed) in 0.60 seconds.
 === shellcheck ===
 === actionlint ===
 
 step              seconds  result
-pub                   2.8  ok
-format                0.5  ok
-shellcheck            1.3  ok
-actionlint            0.2  ok
-total                 4.2
+pub                   1.7  ok
+format                0.7  ok
+shellcheck            1.7  ok
+actionlint            0.3  ok
+total                 3.5
 pub=ok format=ok shellcheck=ok actionlint=ok
 === importer ===
 === importer ===
@@ -361,30 +365,30 @@ No issues found!
 ::endgroup::
 
 🎉 193 tests passed.
---- importer: 193 tests, 0 failed, total 5.4 s; per test p50 2 ms, p90 17 ms, p99 285 ms, max 500 ms
-      <10 ms   165  ########################################
-    10-50 ms    18  ####
-   50-100 ms     5  #
-  100-500 ms     4  #
+--- importer: 193 tests, 0 failed, total 6.3 s; per test p50 2 ms, p90 22 ms, p99 364 ms, max 642 ms
+      <10 ms   159  ########################################
+    10-50 ms    21  #####
+   50-100 ms     7  ##
+  100-500 ms     5  #
      0.5-1 s     1  
        1-5 s     0  
         >5 s     0  
   slowest:
-       500 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents pbz_synthetic.xls
-       285 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.xlsx
-       270 ms  damage truncated at every length: an ImportException, or a batch that only contains rows of the full file
-       126 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.csv
-       115 ms  xlsx edge cases a cell far away (XFD1048576) does not blow up memory or time
-        88 ms  revolut_synthetic.xlsx: format, sizes and counts are logged, no contents
-        80 ms  format detection and wrong files many thousands of rows import in one go with unique ids
-        67 ms  no behaviour change against the golden files from d632e32 pbz_synthetic.xls
-        60 ms  pbz_synthetic.xls: format, sizes and counts are logged, no contents
-        60 ms  workbook structure no sharedStrings.xml: t="s" cells read as empty, inline strings still work
+       642 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents pbz_synthetic.xls
+       364 ms  damage truncated at every length: an ImportException, or a batch that only contains rows of the full file
+       351 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.xlsx
+       157 ms  fuzz: damaged fixtures give a batch or ImportException, never hang, never log contents revolut_synthetic.csv
+       147 ms  xlsx edge cases a cell far away (XFD1048576) does not blow up memory or time
+       108 ms  format detection and wrong files many thousands of rows import in one go with unique ids
+        84 ms  no behaviour change against the golden files from d632e32 pbz_synthetic.xls
+        76 ms  workbook structure no sharedStrings.xml: t="s" cells read as empty, inline strings still work
+        67 ms  pbz_synthetic.xls: format, sizes and counts are logged, no contents
+        60 ms  no behaviour change against the golden files from d632e32 revolut_synthetic.xlsx
 
 step              seconds  result
-importer             11.9  ok
-total                11.9
---- importer: 193 tests, 0 failed, total 5.4 s; per test p50 2 ms, p90 17 ms, p99 285 ms, max 500 ms
+importer             13.4  ok
+total                13.4
+--- importer: 193 tests, 0 failed, total 6.3 s; per test p50 2 ms, p90 22 ms, p99 364 ms, max 642 ms
 importer=ok
 === core ===
 === core ===
@@ -723,7 +727,7 @@ No issues found!
 ✅ test/logs_impl_test.dart: helpers FINE prints as DEBUG; non-JSON field values print as text
 ✅ test/logs_impl_test.dart: RotatingFileSink timer add() flushes by itself after flushDelay
 ✅ test/logs_impl_test.dart: RotatingFileSink timer lines added after close are dropped; write errors are counted, not thrown
-2026-10-20T15:44:45.558+00:00 SEVERE bw.logs log.writeFailed FileSystemException: Creation failed (OS Error: Not a directory, errno = 20)
+2026-10-20T15:52:48.408+00:00 SEVERE bw.logs log.writeFailed FileSystemException: Creation failed (OS Error: Not a directory, errno = 20)
 ✅ test/logs_impl_test.dart: core logs carry no private data import, edits, reads and period maths
 ✅ test/logs_impl_test.dart: core logs carry no private data sync and vault
 ✅ test/logs_impl_test.dart: core logs carry no private data a failed write logs a SEVERE rollback without the values
@@ -800,6 +804,21 @@ No issues found!
 ✅ test/sync_quarantine_test.dart: logs carry reason words, sizes and sequence numbers only (no device ids, file names or paths)
 ✅ test/sync_quarantine_test.dart: BadFile round-trips through JSON; garbage gives null
 ✅ test/sync_quarantine_test.dart: BadFile retried after an update only for unknownVersion and applyFailed; listed change by size or stamp
+✅ test/kind_hint_test.dart: kindHint precedence salary: every employer payment is Salary, whatever the bank type or text says
+✅ test/kind_hint_test.dart: kindHint precedence atm: Rent at or above the rent cash threshold, else Cash, on any bank
+✅ test/kind_hint_test.dart: kindHint precedence atm threshold edges follow the setting; 0 means never rent
+✅ test/kind_hint_test.dart: kindHint precedence fee: Bank fees (the existing fee category), also for a bank whose fee rows said nothing before
+✅ test/kind_hint_test.dart: kindHint precedence ownTransfer: Internal transfer without any text rule
+✅ test/kind_hint_test.dart: kindHint precedence standingOrder keeps the pattern-based category: it says how, not what
+✅ test/kind_hint_test.dart: kindHint precedence card, other and no hint: the description rules as before
+✅ test/kind_hint_test.dart: kindHint precedence merchant patterns (user and built-in) still decide card rows
+✅ test/kind_hint_test.dart: kindHint precedence the user override and per-merchant rules keep their place around the hint
+✅ test/kind_hint_test.dart: kindHint precedence a paired transfer (transferTo) wins over the hint and the text; the user override still wins over it
+✅ test/kind_hint_test.dart: kindHint precedence the existing fixture categorizes as before (no hints)
+✅ test/kind_hint_test.dart: kind_hint storage importBatch stores the hint name; account is never stored
+✅ test/kind_hint_test.dart: kind_hint storage a re-import does not rewrite the hint; a hint from a newer importer reads as null
+✅ test/kind_hint_test.dart: kind_hint storage the hint syncs as text; a wrong-typed value is refused with its clock
+✅ test/kind_hint_test.dart: schema a database from the previous build gains kind_hint and transfer_to and replays peer files once
 ✅ test/vault_edge_test.dart: VaultKey construction only exactly 32 bytes are a key
 ✅ test/vault_edge_test.dart: VaultKey construction the key keeps its own copy of the bytes
 ✅ test/vault_edge_test.dart: VaultKey construction generated keys differ and have the documented text shape
@@ -892,6 +911,23 @@ No issues found!
 ✅ test/matching_test.dart: openEntries: unmatched, matched to a deleted row, or second on a shared row
 ✅ test/matching_test.dart: matching cost a new device reading many sync files matches once per sync run, not once per file
 ✅ test/matching_test.dart: matching cost a large wallet loads only the bank rows that could replace an open entry
+✅ test/transfers_test.dart: planTransfers an outflow in one source and the equal inflow in another pair, both ways round
+✅ test/transfers_test.dart: planTransfers no pair within one source, across currencies, for unequal amounts, zero, manual or deleted rows
+✅ test/transfers_test.dart: planTransfers 3 days apart pairs (inclusive), 4 does not, in either direction of time
+✅ test/transfers_test.dart: planTransfers ambiguity is resolved the same way whatever the input order
+✅ test/transfers_test.dart: planTransfers applying the plan gives a state whose plan is empty; a kept pair is never re-planned
+✅ test/transfers_test.dart: planTransfers a hinted own transfer needs no partner but may be one
+✅ test/transfers_test.dart: planTransfers a partner that is deleted, manual or points elsewhere reopens the row; one not here yet keeps it
+✅ test/transfers_test.dart: planTransfers a reopened row takes a new partner at once
+✅ test/transfers_test.dart: planTransfers openTransfers lists exactly the rows the plan may touch
+✅ test/transfers_test.dart: WalletRepo an import pairs the two sides and both read as Internal transfer
+✅ test/transfers_test.dart: WalletRepo a re-import never double-matches or writes again
+✅ test/transfers_test.dart: WalletRepo deleting one side reopens the other, which pairs again with a later row
+✅ test/transfers_test.dart: WalletRepo the user override still wins; a paired row is not a cash entry's payment
+✅ test/transfers_test.dart: WalletRepo one source alone writes nothing even with equal opposite amounts
+✅ test/transfers_test.dart: two devices each device imports one bank: both pair the same rows after sync and then write nothing more
+✅ test/transfers_test.dart: two devices both devices import both banks offline: the same pairs, no rewrite war
+✅ test/transfers_test.dart: two devices a delete on one device reopens the partner on both
 ✅ test/goal_contrib_edge_test.dart: offline adds on several devices 2 devices each add to the same goal offline: everyone converges on the sum, no lost update
 ✅ test/goal_contrib_edge_test.dart: offline adds on several devices 3 devices each add to the same goal offline: everyone converges on the sum, no lost update
 ✅ test/goal_contrib_edge_test.dart: offline adds on several devices 4 devices each add to the same goal offline: everyone converges on the sum, no lost update
@@ -959,41 +995,43 @@ No issues found!
 ✅ test/goal_contrib_test.dart: sync between devices a goal deleted on A while B adds to it: hidden on both, same tables
 ::endgroup::
 
-🎉 564 tests passed.
---- core: 564 tests, 0 failed, total 20.3 s; per test p50 3 ms, p90 33 ms, p99 228 ms, max 4552 ms
-      <10 ms   419  ########################################
-    10-50 ms   113  ###########
-   50-100 ms    19  ##
-  100-500 ms    10  #
+🎉 596 tests passed.
+--- core: 596 tests, 0 failed, total 30.6 s; per test p50 4 ms, p90 54 ms, p99 354 ms, max 8792 ms
+      <10 ms   415  ########################################
+    10-50 ms   116  ###########
+   50-100 ms    38  ####
+  100-500 ms    23  ##
      0.5-1 s     1  
        1-5 s     2  
-        >5 s     0  
+        >5 s     1  
   slowest:
-      4552 ms  random edits on 2-4 devices converge to last-writer-wins (60 seeds from 1016)
-      1809 ms  matching cost a large wallet loads only the bank rows that could replace an open entry
-       939 ms  applying ops order and duplicates do not matter (property, many random op lists)
-       463 ms  seal / unseal empty, one byte, binary and multi-MB payloads round-trip
-       286 ms  periodSummaries invariants on random wallets contiguous, each live non-transfer row counted once, totals add up, transfers never count (250 wallets)
-       228 ms  forward compatibility a very large file (thousands of ops) applies in one run
-       227 ms  outbox and clocks random local writes: outbox in order, clocks = newest op per field, tables = last writer wins
-       206 ms  RotatingFileSink timer add() flushes by itself after flushDelay
-       179 ms  re-imports never duplicate every synthetic fixture: second import adds nothing, also after edits and deletes
-       147 ms  matching cost a new device reading many sync files matches once per sync run, not once per file
+      8792 ms  random edits on 2-4 devices converge to last-writer-wins (60 seeds from 1016)
+      1612 ms  matching cost a large wallet loads only the bank rows that could replace an open entry
+      1595 ms  applying ops order and duplicates do not matter (property, many random op lists)
+       604 ms  seal / unseal empty, one byte, binary and multi-MB payloads round-trip
+       378 ms  periodSummaries invariants on random wallets contiguous, each live non-transfer row counted once, totals add up, transfers never count (250 wallets)
+       354 ms  outbox and clocks random local writes: outbox in order, clocks = newest op per field, tables = last writer wins
+       320 ms  re-imports never duplicate every synthetic fixture: second import adds nothing, also after edits and deletes
+       313 ms  forward compatibility a very large file (thousands of ops) applies in one run
+       264 ms  damaged files truncated or bit-flipped files are rejected without changing anything; the repaired file then applies
+       212 ms  repo: hand-added expenses are matched only by bank rows imported after them after an upgrade, old unmatched entries are not matched to bank history (no match ops synced)
 
 step              seconds  result
-core                 27.7  ok
-total                27.7
---- core: 564 tests, 0 failed, total 20.3 s; per test p50 3 ms, p90 33 ms, p99 228 ms, max 4552 ms
+core                 38.3  ok
+total                38.3
+--- core: 596 tests, 0 failed, total 30.6 s; per test p50 4 ms, p90 54 ms, p99 354 ms, max 8792 ms
 core=ok
 === app ===
 === app ===
 Analyzing app...                                                
-No issues found! (ran in 8.4s)
+No issues found! (ran in 9.5s)
 
 ::group::✅ Passing tests
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/status_label_test.dart: long text wraps at 320 dp, text scale 1.0
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/status_label_test.dart: long text wraps at 320 dp, text scale 2.0
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/status_label_test.dart: short text stays on one line next to the icon
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/controller_totals_test.dart: goalTargetTotal sums every goal target
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/controller_totals_test.dart: waitingTotal sums wishes still cooling off, not the ready or decided ones
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/empty_states_test.dart: empty wallet: no transactions, goals, wishes or settings (400 dp)
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/empty_states_test.dart: empty wallet: no transactions, goals, wishes or settings (320 dp, text 2.0)
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/empty_states_test.dart: one income transaction only (400 dp)
@@ -1021,7 +1059,21 @@ No issues found! (ran in 8.4s)
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/empty_states_test.dart: transfers and fees only (nothing is spending) (400 dp)
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/empty_states_test.dart: transfers and fees only (nothing is spending) (320 dp, text 2.0)
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/empty_states_test.dart: a wallet with no key shows onboarding without errors on a narrow screen
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_thresholds_test.dart: margin line: absent at 599 dp, present at 600 dp, at x 22 with the content clear of it
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_thresholds_test.dart: margin line on the real pages: absent at 599 dp, present at 600 dp
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_thresholds_test.dart: TxTile at 320 dp columns at text scale 1.15
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_thresholds_test.dart: TxTile at 320 dp stacked at text scale 1.2
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_screens_test.dart: 360x800 dark: tabs scroll through, right navigation, no Card, square Panels
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_screens_test.dart: 360x800 light: tabs scroll through, right navigation, no Card, square Panels
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_screens_test.dart: 800x1000 dark: tabs scroll through, right navigation, no Card, square Panels
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_screens_test.dart: 800x1000 light: tabs scroll through, right navigation, no Card, square Panels
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_screens_test.dart: 1280x800 dark: tabs scroll through, right navigation, no Card, square Panels
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_screens_test.dart: 1280x800 light: tabs scroll through, right navigation, no Card, square Panels
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/fixtures_sync_test.dart: embedded fixtures match packages/wallet_importer/test/fixtures
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_amount_font_test.dart: dark: money texts are Plex Mono with tabular figures
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_amount_font_test.dart: light: money texts are Plex Mono with tabular figures
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_amount_font_test.dart: Today hero and stat strip: one narrow gap, no widget between number and sign
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_amount_font_test.dart: transaction amounts share one right edge
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/derived_cache_test.dart: period, payPeriods and spending are computed once per data change
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/derived_cache_test.dart: switching tabs keeps the other pages as they are
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/delivery_panel_test.dart: shown on a weekday at 15:00, hidden at 10:00
@@ -1112,6 +1164,37 @@ No issues found! (ran in 8.4s)
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/adaptive_edge_test.dart: dart:io source rule matcher: mentions in comments or other libraries do not count
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/adaptive_edge_test.dart: dart:io source rule main.dart, screens and widgets do not import dart:io
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/adaptive_edge_test.dart: dart:io source rule platform.dart exposes the helpers
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: contrastRatio: black/white 21, same colour 1, symmetric
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light text ink/bg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light text ink/surface >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light text ink/surface2 >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light text ink2/bg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light text muted/bg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light text accent/bg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light text neg/bg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light text good/bg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light text warnInk/warnBg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light text bg on accent (filled button) >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light non-text lineStrong/bg >= 3.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light non-text accent/bg >= 3.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light non-text pos/bg >= 3.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light non-text neg/bg >= 3.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: light every token is fully opaque
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark text ink/bg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark text ink/surface >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark text ink/surface2 >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark text ink2/bg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark text muted/bg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark text accent/bg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark text neg/bg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark text good/bg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark text warnInk/warnBg >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark text bg on accent (filled button) >= 4.5
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark non-text lineStrong/bg >= 3.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark non-text accent/bg >= 3.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark non-text pos/bg >= 3.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark non-text neg/bg >= 3.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_contrast_test.dart: dark every token is fully opaque
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/file_chooser_test.dart: Choose files: a failing chooser shows a message, logs the type only and keeps the button usable
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/file_chooser_test.dart: Choose folder: a failing chooser shows a message and opens the type-a-path dialog
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/file_chooser_test.dart: Save logs: a failing save dialog falls back to the sync folder and the panel stays usable
@@ -1342,6 +1425,21 @@ No issues found! (ran in 8.4s)
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/layout_test.dart: onboarding fits 320 dp at text scale 1.0
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/layout_test.dart: every tab fits 320 dp at text scale 2.0
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/layout_test.dart: onboarding fits 320 dp at text scale 2.0
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_fonts_test.dart: six font files exist, are non-empty TrueType
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_fonts_test.dart: OFL.txt exists with the licence text
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_fonts_test.dart: pubspec declares both families with weights 500 and 600, and the licence asset
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_fonts_test.dart: glyphs lay out after FontLoader IBM Plex Sans: euro has width
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_fonts_test.dart: glyphs lay out after FontLoader IBM Plex Sans: minus U+2212 has width
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_fonts_test.dart: glyphs lay out after FontLoader IBM Plex Sans: NBSP has width
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_fonts_test.dart: glyphs lay out after FontLoader IBM Plex Sans: amount has width
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_fonts_test.dart: glyphs lay out after FontLoader IBM Plex Mono: euro has width
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_fonts_test.dart: glyphs lay out after FontLoader IBM Plex Mono: minus U+2212 has width
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_fonts_test.dart: glyphs lay out after FontLoader IBM Plex Mono: NBSP has width
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_fonts_test.dart: glyphs lay out after FontLoader IBM Plex Mono: amount has width
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_text_scale_test.dart: text scale 2.0 with real fonts 320 wide dark: every tab scrolls through
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_text_scale_test.dart: text scale 2.0 with real fonts 320 wide light: every tab scrolls through
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_text_scale_test.dart: text scale 2.0 with real fonts 360 wide dark: every tab scrolls through
+✅ /home/runner/work/buggetwallet/buggetwallet/app/test/theme_text_scale_test.dart: text scale 2.0 with real fonts 360 wide light: every tab scrolls through
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/perf_budget_test.dart: PerfBudget defaults match the documented values
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/perf_budget_test.dart: PerfMetrics.fromSummary parses a realistic summary and ignores unknown keys
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/perf_budget_test.dart: PerfMetrics.fromSummary accepts ints and doubles in any numeric field
@@ -1440,343 +1538,85 @@ No issues found! (ran in 8.4s)
 ✅ /home/runner/work/buggetwallet/buggetwallet/app/test/day_change_test.dart: a day change inside a computation does not store the old day's value under the new day
 ::endgroup::
 
-🎉 447 tests passed.
---- app: 447 tests, 0 failed, total 90.3 s; per test p50 82 ms, p90 353 ms, p99 1137 ms, max 2154 ms
-      <10 ms   179  ########################################
-    10-50 ms    22  #####
-   50-100 ms    46  ##########
-  100-500 ms   177  ########################################
-     0.5-1 s    15  ###
-       1-5 s     8  ##
+🎉 509 tests passed.
+--- app: 509 tests, 0 failed, total 116.4 s; per test p50 73 ms, p90 409 ms, p99 1519 ms, max 1931 ms
+      <10 ms   216  ########################################
+    10-50 ms    27  #####
+   50-100 ms    41  ########
+  100-500 ms   190  ###################################
+     0.5-1 s    19  ####
+       1-5 s    16  ###
         >5 s     0  
   slowest:
-      2154 ms  resizing rapid resizes across boundaries keep the State of the pages
-      2062 ms  every tab fits 320 dp at text scale 1.0
-      1305 ms  empty wallet: no transactions, goals, wishes or settings (400 dp)
-      1253 ms  Spending shows the new month after a tab switch, without any data change
-      1137 ms  rent cash threshold is editable in Plan and changes categorisation
-      1082 ms  AddExpenseSheet: invalid amounts show one message and save nothing ""
-      1050 ms  360x800 text 1.0: the right navigation and a centered content column
-      1026 ms  switching tabs keeps the other pages as they are
-       975 ms  Choose files: a failing chooser shows a message, logs the type only and keeps the button usable
-       974 ms  every tab fits 320 dp at text scale 2.0
+      1931 ms  resizing rapid resizes across boundaries keep the State of the pages
+      1802 ms  every tab fits 320 dp at text scale 1.0
+      1785 ms  text scale 2.0 with real fonts 320 wide dark: every tab scrolls through
+      1712 ms  360x800 dark: tabs scroll through, right navigation, no Card, square Panels
+      1593 ms  empty wallet: no transactions, goals, wishes or settings (400 dp)
+      1519 ms  dark: money texts are Plex Mono with tabular figures
+      1392 ms  Spending shows the new month after a tab switch, without any data change
+      1360 ms  switching tabs keeps the other pages as they are
+      1278 ms  360x800 text 1.0: the right navigation and a centered content column
+      1182 ms  rent cash threshold is editable in Plan and changes categorisation
 
 step              seconds  result
-app                 100.9  ok
-total               100.9
---- app: 447 tests, 0 failed, total 90.3 s; per test p50 82 ms, p90 353 ms, p99 1137 ms, max 2154 ms
+app                 128.5  ok
+total               128.5
+--- app: 509 tests, 0 failed, total 116.4 s; per test p50 73 ms, p90 409 ms, p99 1519 ms, max 1931 ms
 app=ok
 === desktop ===
 === desktop-adaptive ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/adaptive_test.dart
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.0' (uid=1001 pid=5323 comm="/home/runner/work/buggetwallet/buggetwallet/app/bu" label="unconfined")
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.portal.Documents' requested by ':1.1' (uid=1001 pid=5328 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.impl.portal.PermissionStore' requested by ':1.2' (uid=1001 pid=5334 comm="/usr/libexec/xdg-document-portal" label="unconfined")
-dbus-daemon[4975]: [session uid=1001 pid=4975] Successfully activated service 'org.freedesktop.impl.portal.PermissionStore'
-dbus-daemon[4975]: [session uid=1001 pid=4975] Successfully activated service 'org.freedesktop.portal.Documents'
-Ignoring invalid max threads value 4294967295 > max (100000).
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.794: Choosing gtk.portal for org.freedesktop.impl.portal.Lockdown as a last-resort fallback
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.795: The preferred method to match portal implementations to desktop environments is to use the portals.conf(5) configuration file
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5328 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5351): Gtk-WARNING **: 15:47:13.833: cannot open display: 
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.860: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.860: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.860: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.860: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.860: Choosing gtk.portal for org.freedesktop.impl.portal.FileChooser as a last-resort fallback
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5328 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5354): Gtk-WARNING **: 15:47:13.872: cannot open display: 
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.873: Failed to create file chooser proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.873: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.873: Choosing gtk.portal for org.freedesktop.impl.portal.AppChooser as a last-resort fallback
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5328 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5356): Gtk-WARNING **: 15:47:13.880: cannot open display: 
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.881: Failed to create app chooser proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.881: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.881: Choosing gtk.portal for org.freedesktop.impl.portal.Print as a last-resort fallback
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5328 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5358): Gtk-WARNING **: 15:47:13.888: cannot open display: 
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.889: Failed to create print proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.889: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.889: Choosing gtk.portal for org.freedesktop.impl.portal.Notification as a last-resort fallback
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5328 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5361): Gtk-WARNING **: 15:47:13.895: cannot open display: 
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.897: Failed to create notification proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.897: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.897: Choosing gtk.portal for org.freedesktop.impl.portal.Inhibit as a last-resort fallback
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5328 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5364): Gtk-WARNING **: 15:47:13.903: cannot open display: 
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.905: Failed to create inhibit proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.905: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.905: Choosing gtk.portal for org.freedesktop.impl.portal.Access as a last-resort fallback
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5328 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5366): Gtk-WARNING **: 15:47:13.911: cannot open display: 
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.913: Failed to create access proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.913: No skeleton to export
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5328 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5368): Gtk-WARNING **: 15:47:13.920: cannot open display: 
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5328 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5370): Gtk-WARNING **: 15:47:13.927: cannot open display: 
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.929: Failed to create access proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.929: No skeleton to export
-[W][00309.814388] pw.conf      | [          conf.c: 1031 try_load_conf()] can't load config client.conf: No such file or directory
-[E][00309.814446] pw.conf      | [          conf.c: 1060 pw_conf_load_conf_for_context()] can't load config client.conf: No such file or directory
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.929: Failed connect to PipeWire: Couldn't create PipeWire context
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.929: Choosing gtk.portal for org.freedesktop.impl.portal.Account as a last-resort fallback
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5328 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5372): Gtk-WARNING **: 15:47:13.937: cannot open display: 
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.939: Failed to create account proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.939: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.939: Choosing gtk.portal for org.freedesktop.impl.portal.Email as a last-resort fallback
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5328 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5374): Gtk-WARNING **: 15:47:13.946: cannot open display: 
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.947: Failed to create email proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.947: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.947: Choosing gtk.portal for org.freedesktop.impl.portal.DynamicLauncher as a last-resort fallback
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5328 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5376): Gtk-WARNING **: 15:47:13.955: cannot open display: 
-dbus-daemon[4975]: [session uid=1001 pid=4975] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.956: Failed to create dynamic_launcher proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5328): xdg-desktop-portal-WARNING **: 15:47:13.956: No skeleton to export
-dbus-daemon[4975]: [session uid=1001 pid=4975] Successfully activated service 'org.freedesktop.portal.Desktop'
 00:00 +0: adaptive 1280x800: every tab and the Add expense dialog
-00:09 +1: adaptive 1920x1080: every tab and the Add expense dialog
-00:15 +2: adaptive 800x1280: every tab and the Add expense dialog
-00:21 +3: adaptive: Ctrl+1..5, Ctrl+N and resizing across the boundaries on the real app
-00:25 +4: (tearDownAll)
-00:25 +4: All tests passed!
---- desktop-adaptive: 4 tests, 0 failed, total 61.6 s; per test p50 6180 ms, p90 9106 ms, p99 9106 ms, max 9106 ms
+00:07 +1: adaptive 1920x1080: every tab and the Add expense dialog
+00:12 +2: adaptive 800x1280: every tab and the Add expense dialog
+00:17 +3: adaptive: Ctrl+1..5, Ctrl+N and resizing across the boundaries on the real app
+00:21 +4: (tearDownAll)
+00:21 +4: All tests passed!
+--- desktop-adaptive: 4 tests, 0 failed, total 55.5 s; per test p50 4588 ms, p90 7828 ms, p99 7828 ms, max 7828 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
   100-500 ms     0  
      0.5-1 s     0  
-       1-5 s     1  #############
-        >5 s     3  ########################################
+       1-5 s     3  ########################################
+        >5 s     1  #############
   slowest:
-      9106 ms  adaptive 1280x800: every tab and the Add expense dialog
-      6645 ms  adaptive 1920x1080: every tab and the Add expense dialog
-      6180 ms  adaptive 800x1280: every tab and the Add expense dialog
-      3737 ms  adaptive: Ctrl+1..5, Ctrl+N and resizing across the boundaries on the real app
+      7828 ms  adaptive 1280x800: every tab and the Add expense dialog
+      4872 ms  adaptive 1920x1080: every tab and the Add expense dialog
+      4588 ms  adaptive 800x1280: every tab and the Add expense dialog
+      3838 ms  adaptive: Ctrl+1..5, Ctrl+N and resizing across the boundaries on the real app
 === desktop-big_wallet ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/big_wallet_test.dart
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.0' (uid=1001 pid=5637 comm="/home/runner/work/buggetwallet/buggetwallet/app/bu" label="unconfined")
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.portal.Documents' requested by ':1.1' (uid=1001 pid=5642 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.impl.portal.PermissionStore' requested by ':1.2' (uid=1001 pid=5648 comm="/usr/libexec/xdg-document-portal" label="unconfined")
-dbus-daemon[5486]: [session uid=1001 pid=5486] Successfully activated service 'org.freedesktop.impl.portal.PermissionStore'
-dbus-daemon[5486]: [session uid=1001 pid=5486] Successfully activated service 'org.freedesktop.portal.Documents'
-Ignoring invalid max threads value 4294967295 > max (100000).
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.313: Choosing gtk.portal for org.freedesktop.impl.portal.Lockdown as a last-resort fallback
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.313: The preferred method to match portal implementations to desktop environments is to use the portals.conf(5) configuration file
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5642 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5667): Gtk-WARNING **: 15:48:02.321: cannot open display: 
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.325: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.325: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.326: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.326: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.326: Choosing gtk.portal for org.freedesktop.impl.portal.FileChooser as a last-resort fallback
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5642 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5670): Gtk-WARNING **: 15:48:02.333: cannot open display: 
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.334: Failed to create file chooser proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.334: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.334: Choosing gtk.portal for org.freedesktop.impl.portal.AppChooser as a last-resort fallback
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5642 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5672): Gtk-WARNING **: 15:48:02.341: cannot open display: 
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.343: Failed to create app chooser proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.343: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.343: Choosing gtk.portal for org.freedesktop.impl.portal.Print as a last-resort fallback
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5642 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5674): Gtk-WARNING **: 15:48:02.350: cannot open display: 
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.351: Failed to create print proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.351: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.351: Choosing gtk.portal for org.freedesktop.impl.portal.Notification as a last-resort fallback
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5642 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5676): Gtk-WARNING **: 15:48:02.358: cannot open display: 
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.360: Failed to create notification proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.360: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.360: Choosing gtk.portal for org.freedesktop.impl.portal.Inhibit as a last-resort fallback
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5642 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5678): Gtk-WARNING **: 15:48:02.367: cannot open display: 
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.368: Failed to create inhibit proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.368: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.368: Choosing gtk.portal for org.freedesktop.impl.portal.Access as a last-resort fallback
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5642 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5680): Gtk-WARNING **: 15:48:02.375: cannot open display: 
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.377: Failed to create access proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.377: No skeleton to export
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5642 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5682): Gtk-WARNING **: 15:48:02.385: cannot open display: 
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5642 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5684): Gtk-WARNING **: 15:48:02.394: cannot open display: 
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.396: Failed to create access proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.396: No skeleton to export
-[W][00358.281791] pw.conf      | [          conf.c: 1031 try_load_conf()] can't load config client.conf: No such file or directory
-[E][00358.281852] pw.conf      | [          conf.c: 1060 pw_conf_load_conf_for_context()] can't load config client.conf: No such file or directory
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.397: Failed connect to PipeWire: Couldn't create PipeWire context
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.397: Choosing gtk.portal for org.freedesktop.impl.portal.Account as a last-resort fallback
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5642 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5686): Gtk-WARNING **: 15:48:02.405: cannot open display: 
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.407: Failed to create account proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.407: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.407: Choosing gtk.portal for org.freedesktop.impl.portal.Email as a last-resort fallback
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5642 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5688): Gtk-WARNING **: 15:48:02.414: cannot open display: 
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.416: Failed to create email proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.416: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.416: Choosing gtk.portal for org.freedesktop.impl.portal.DynamicLauncher as a last-resort fallback
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5642 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5690): Gtk-WARNING **: 15:48:02.426: cannot open display: 
-dbus-daemon[5486]: [session uid=1001 pid=5486] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.428: Failed to create dynamic_launcher proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5642): xdg-desktop-portal-WARNING **: 15:48:02.428: No skeleton to export
-dbus-daemon[5486]: [session uid=1001 pid=5486] Successfully activated service 'org.freedesktop.portal.Desktop'
 00:00 +0: big wallet: ~20k rows over 5 years stay fast
 PERF rows = 23495
-PERF seed_s = 3.0
-PERF seed_importBatch_max_ms = 564
-PERF restart_repo_open_ms = 2
-PERF restart_repo_transactions_ms = 66
-PERF restart_wc_reload_ms = 262
-PERF weekly_import_files_ms = 49
-PERF weekly_import_parse_ms = 11
-PERF weekly_repo_importBatch_ms = 37
-PERF weekly_wc_reload_ms = 224
-PERF year_import_files_ms = 532
-PERF reimport_import_files_ms = 64
-PERF derive_wc_reload_ms = 266
+PERF seed_s = 4.5
+PERF seed_importBatch_max_ms = 895
+PERF restart_repo_open_ms = 3
+PERF restart_repo_transactions_ms = 127
+PERF restart_wc_reload_ms = 358
+PERF weekly_import_files_ms = 126
+PERF weekly_import_parse_ms = 14
+PERF weekly_repo_importBatch_ms = 110
+PERF weekly_wc_reload_ms = 328
+PERF year_import_files_ms = 771
+PERF reimport_import_files_ms = 69
+PERF derive_wc_reload_ms = 331
 PERF derive_wc_period_max_ms = 3
-PERF derive_wc_payPeriods_max_ms = 0
+PERF derive_wc_payPeriods_max_ms = 1
 PERF derive_wc_monthSummary_max_ms = 1
-PERF derive_spending_derive_max_ms = 11
+PERF derive_spending_derive_max_ms = 13
 PERF months_spending_derive_max_ms = 3
-PERF frames_tabs = {"frames":67,"janky":67,"build_p50_ms":5.2,"build_p90_ms":31.8,"build_p99_ms":198.1,"build_max_ms":198.1,"raster_p50_ms":29.4,"raster_p90_ms":57.5,"raster_p99_ms":89.9,"raster_max_ms":89.9}
-PERF frames_spending_scroll = {"frames":602,"janky":602,"build_p50_ms":1.4,"build_p90_ms":1.8,"build_p99_ms":3.4,"build_max_ms":4.7,"raster_p50_ms":24.7,"raster_p90_ms":35.3,"raster_p99_ms":49.8,"raster_max_ms":74.6}
-PERF mem = {"rss_mb":727.0,"max_rss_mb":745.0}
-01:06 +1: (tearDownAll)
-01:06 +1: All tests passed!
---- desktop-big_wallet: 1 tests, 0 failed, total 86.7 s; per test p50 66644 ms, p90 66644 ms, p99 66644 ms, max 66644 ms
+PERF frames_tabs = {"frames":58,"janky":28,"build_p50_ms":5.9,"build_p90_ms":43.1,"build_p99_ms":225.9,"build_max_ms":225.9,"raster_p50_ms":15.9,"raster_p90_ms":29.0,"raster_p99_ms":65.0,"raster_max_ms":65.0}
+PERF frames_spending_scroll = {"frames":633,"janky":174,"build_p50_ms":1.3,"build_p90_ms":1.5,"build_p99_ms":2.8,"build_max_ms":9.0,"raster_p50_ms":14.6,"raster_p90_ms":21.6,"raster_p99_ms":30.4,"raster_max_ms":37.1}
+PERF mem = {"rss_mb":713.2,"max_rss_mb":724.0}
+01:08 +1: (tearDownAll)
+01:08 +1: All tests passed!
+--- desktop-big_wallet: 1 tests, 0 failed, total 91.0 s; per test p50 68283 ms, p90 68283 ms, p99 68283 ms, max 68283 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -1785,148 +1625,19 @@ PERF mem = {"rss_mb":727.0,"max_rss_mb":745.0}
        1-5 s     0  
         >5 s     1  ########################################
   slowest:
-     66644 ms  big wallet: ~20k rows over 5 years stay fast
+     68283 ms  big wallet: ~20k rows over 5 years stay fast
 === desktop-flows ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/flows_test.dart
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.0' (uid=1001 pid=5946 comm="/home/runner/work/buggetwallet/buggetwallet/app/bu" label="unconfined")
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.portal.Documents' requested by ':1.1' (uid=1001 pid=5951 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.impl.portal.PermissionStore' requested by ':1.2' (uid=1001 pid=5957 comm="/usr/libexec/xdg-document-portal" label="unconfined")
-dbus-daemon[5793]: [session uid=1001 pid=5793] Successfully activated service 'org.freedesktop.impl.portal.PermissionStore'
-dbus-daemon[5793]: [session uid=1001 pid=5793] Successfully activated service 'org.freedesktop.portal.Documents'
-Ignoring invalid max threads value 4294967295 > max (100000).
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.093: Choosing gtk.portal for org.freedesktop.impl.portal.Lockdown as a last-resort fallback
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.093: The preferred method to match portal implementations to desktop environments is to use the portals.conf(5) configuration file
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5951 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5974): Gtk-WARNING **: 15:49:29.102: cannot open display: 
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.106: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.106: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.106: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.106: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.106: Choosing gtk.portal for org.freedesktop.impl.portal.FileChooser as a last-resort fallback
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5951 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5977): Gtk-WARNING **: 15:49:29.114: cannot open display: 
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.116: Failed to create file chooser proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.116: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.116: Choosing gtk.portal for org.freedesktop.impl.portal.AppChooser as a last-resort fallback
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5951 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5979): Gtk-WARNING **: 15:49:29.123: cannot open display: 
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.125: Failed to create app chooser proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.125: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.125: Choosing gtk.portal for org.freedesktop.impl.portal.Print as a last-resort fallback
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5951 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5981): Gtk-WARNING **: 15:49:29.132: cannot open display: 
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.134: Failed to create print proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.134: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.134: Choosing gtk.portal for org.freedesktop.impl.portal.Notification as a last-resort fallback
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5951 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5983): Gtk-WARNING **: 15:49:29.142: cannot open display: 
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.144: Failed to create notification proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.144: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.144: Choosing gtk.portal for org.freedesktop.impl.portal.Inhibit as a last-resort fallback
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5951 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5985): Gtk-WARNING **: 15:49:29.151: cannot open display: 
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.153: Failed to create inhibit proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.153: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.153: Choosing gtk.portal for org.freedesktop.impl.portal.Access as a last-resort fallback
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5951 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5987): Gtk-WARNING **: 15:49:29.160: cannot open display: 
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.162: Failed to create access proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.162: No skeleton to export
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5951 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5989): Gtk-WARNING **: 15:49:29.170: cannot open display: 
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5951 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5991): Gtk-WARNING **: 15:49:29.178: cannot open display: 
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.180: Failed to create access proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.180: No skeleton to export
-[W][00445.065042] pw.conf      | [          conf.c: 1031 try_load_conf()] can't load config client.conf: No such file or directory
-[E][00445.065105] pw.conf      | [          conf.c: 1060 pw_conf_load_conf_for_context()] can't load config client.conf: No such file or directory
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.180: Failed connect to PipeWire: Couldn't create PipeWire context
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.180: Choosing gtk.portal for org.freedesktop.impl.portal.Account as a last-resort fallback
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5951 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5993): Gtk-WARNING **: 15:49:29.188: cannot open display: 
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.189: Failed to create account proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.189: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.189: Choosing gtk.portal for org.freedesktop.impl.portal.Email as a last-resort fallback
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5951 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5995): Gtk-WARNING **: 15:49:29.196: cannot open display: 
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.198: Failed to create email proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.198: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.198: Choosing gtk.portal for org.freedesktop.impl.portal.DynamicLauncher as a last-resort fallback
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=5951 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:5997): Gtk-WARNING **: 15:49:29.205: cannot open display: 
-dbus-daemon[5793]: [session uid=1001 pid=5793] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.206: Failed to create dynamic_launcher proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:5951): xdg-desktop-portal-WARNING **: 15:49:29.206: No skeleton to export
-dbus-daemon[5793]: [session uid=1001 pid=5793] Successfully activated service 'org.freedesktop.portal.Desktop'
 00:00 +0: Add expense: validation, shows in Today and Spending, safe to spend drops by the amount
 00:06 +1: Add expense over the wishlist limit: asks first; put on wishlist, or add anyway
 00:12 +2: Category: once changes one row, always makes a merchant rule for all rows and new imports
-00:24 +3: Delete an added expense; its budget comes back
-00:27 +4: Payday checklist and the "Salary landed" banner
-00:29 +5: (tearDownAll)
-00:29 +5: All tests passed!
---- desktop-flows: 5 tests, 0 failed, total 48.9 s; per test p50 6207 ms, p90 11486 ms, p99 11486 ms, max 11486 ms
+00:22 +3: Delete an added expense; its budget comes back
+00:25 +4: Payday checklist and the "Salary landed" banner
+00:27 +5: (tearDownAll)
+00:27 +5: All tests passed!
+--- desktop-flows: 5 tests, 0 failed, total 50.1 s; per test p50 5861 ms, p90 10015 ms, p99 10015 ms, max 10015 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -1935,149 +1646,126 @@ dbus-daemon[5793]: [session uid=1001 pid=5793] Successfully activated service 'o
        1-5 s     2  ###########################
         >5 s     3  ########################################
   slowest:
-     11486 ms  Category: once changes one row, always makes a merchant rule for all rows and new imports
-      6676 ms  Add expense: validation, shows in Today and Spending, safe to spend drops by the amount
-      6207 ms  Add expense over the wishlist limit: asks first; put on wishlist, or add anyway
-      2817 ms  Delete an added expense; its budget comes back
-      2135 ms  Payday checklist and the "Salary landed" banner
+     10015 ms  Category: once changes one row, always makes a merchant rule for all rows and new imports
+      6852 ms  Add expense: validation, shows in Today and Spending, safe to spend drops by the amount
+      5861 ms  Add expense over the wishlist limit: asks first; put on wishlist, or add anyway
+      2702 ms  Delete an added expense; its budget comes back
+      2092 ms  Payday checklist and the "Salary landed" banner
 === desktop-import ===
 00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/import_test.dart
 Building Linux application...                                   
 ✓ Built build/linux/x64/debug/bundle/budget_wallet
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.0' (uid=1001 pid=6236 comm="/home/runner/work/buggetwallet/buggetwallet/app/bu" label="unconfined")
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.portal.Documents' requested by ':1.1' (uid=1001 pid=6241 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.impl.portal.PermissionStore' requested by ':1.2' (uid=1001 pid=6247 comm="/usr/libexec/xdg-document-portal" label="unconfined")
-dbus-daemon[6085]: [session uid=1001 pid=6085] Successfully activated service 'org.freedesktop.impl.portal.PermissionStore'
-dbus-daemon[6085]: [session uid=1001 pid=6085] Successfully activated service 'org.freedesktop.portal.Documents'
-Ignoring invalid max threads value 4294967295 > max (100000).
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.926: Choosing gtk.portal for org.freedesktop.impl.portal.Lockdown as a last-resort fallback
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.926: The preferred method to match portal implementations to desktop environments is to use the portals.conf(5) configuration file
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=6241 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:6264): Gtk-WARNING **: 15:50:18.934: cannot open display: 
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.938: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.938: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.938: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.RealtimeKit1 was not provided by any .service files
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.938: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.938: Choosing gtk.portal for org.freedesktop.impl.portal.FileChooser as a last-resort fallback
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=6241 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:6267): Gtk-WARNING **: 15:50:18.946: cannot open display: 
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.948: Failed to create file chooser proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.948: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.948: Choosing gtk.portal for org.freedesktop.impl.portal.AppChooser as a last-resort fallback
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=6241 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:6269): Gtk-WARNING **: 15:50:18.955: cannot open display: 
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.957: Failed to create app chooser proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.957: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.957: Choosing gtk.portal for org.freedesktop.impl.portal.Print as a last-resort fallback
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=6241 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:6271): Gtk-WARNING **: 15:50:18.964: cannot open display: 
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.965: Failed to create print proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.965: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.965: Choosing gtk.portal for org.freedesktop.impl.portal.Notification as a last-resort fallback
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=6241 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:6273): Gtk-WARNING **: 15:50:18.973: cannot open display: 
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.974: Failed to create notification proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.974: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.974: Choosing gtk.portal for org.freedesktop.impl.portal.Inhibit as a last-resort fallback
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=6241 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:6275): Gtk-WARNING **: 15:50:18.982: cannot open display: 
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.983: Failed to create inhibit proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.983: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.983: Choosing gtk.portal for org.freedesktop.impl.portal.Access as a last-resort fallback
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=6241 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:6277): Gtk-WARNING **: 15:50:18.990: cannot open display: 
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.992: Failed to create access proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:18.992: No skeleton to export
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=6241 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:6279): Gtk-WARNING **: 15:50:18.999: cannot open display: 
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=6241 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:6281): Gtk-WARNING **: 15:50:19.008: cannot open display: 
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:19.009: Failed to create access proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:19.009: No skeleton to export
-[W][00494.894454] pw.conf      | [          conf.c: 1031 try_load_conf()] can't load config client.conf: No such file or directory
-[E][00494.894964] pw.conf      | [          conf.c: 1060 pw_conf_load_conf_for_context()] can't load config client.conf: No such file or directory
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:19.010: Failed connect to PipeWire: Couldn't create PipeWire context
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:19.010: Choosing gtk.portal for org.freedesktop.impl.portal.Account as a last-resort fallback
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=6241 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:6283): Gtk-WARNING **: 15:50:19.018: cannot open display: 
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:19.019: Failed to create account proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:19.019: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:19.019: Choosing gtk.portal for org.freedesktop.impl.portal.Email as a last-resort fallback
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=6241 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:6285): Gtk-WARNING **: 15:50:19.026: cannot open display: 
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:19.027: Failed to create email proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:19.027: No skeleton to export
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:19.027: Choosing gtk.portal for org.freedesktop.impl.portal.DynamicLauncher as a last-resort fallback
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.1' (uid=1001 pid=6241 comm="/usr/libexec/xdg-desktop-portal" label="unconfined")
-
-(xdg-desktop-portal-gtk:6287): Gtk-WARNING **: 15:50:19.035: cannot open display: 
-dbus-daemon[6085]: [session uid=1001 pid=6085] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:19.036: Failed to create dynamic_launcher proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
-
-(/usr/libexec/xdg-desktop-portal:6241): xdg-desktop-portal-WARNING **: 15:50:19.036: No skeleton to export
-dbus-daemon[6085]: [session uid=1001 pid=6085] Successfully activated service 'org.freedesktop.portal.Desktop'
 00:00 +0: PBZ .xls, Revolut .xlsx and .csv: result lines, transactions, re-import adds nothing
-00:04 +1: A current-month Revolut CSV: Spending and Today show it; an added expense is matched, not doubled
-00:08 +2: (tearDownAll)
+00:05 +1: A current-month Revolut CSV: Spending and Today show it; an added expense is matched, not doubled
+00:07 +2: (tearDownAll)
 00:08 +2: All tests passed!
---- desktop-import: 2 tests, 0 failed, total 27.9 s; per test p50 3519 ms, p90 4856 ms, p99 4856 ms, max 4856 ms
+--- desktop-import: 2 tests, 0 failed, total 31.1 s; per test p50 2907 ms, p90 5034 ms, p99 5034 ms, max 5034 ms
+      <10 ms     0  
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     1  ########################################
+        >5 s     1  ########################################
+  slowest:
+      5034 ms  PBZ .xls, Revolut .xlsx and .csv: result lines, transactions, re-import adds nothing
+      2907 ms  A current-month Revolut CSV: Spending and Today show it; an added expense is matched, not doubled
+=== desktop-layout ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/layout_test.dart
+Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: layout: dark
+layout dark: media Size(1280.0, 720.0), render view Size(1280.0, 720.0)
+layout dark: onboarding
+layout dark: today
+layout dark: add-expense-sheet
+layout dark: spending
+layout dark: wishlist
+layout dark: goals
+layout dark: plan
+layout dark: tx-sheet
+layout dark: goal-sheet
+00:17 +1: layout: text130
+layout text130: media Size(1280.0, 720.0), render view Size(1280.0, 720.0)
+layout text130: onboarding
+layout text130: today
+layout text130: add-expense-sheet
+layout text130: spending
+layout text130: wishlist
+layout text130: goals
+layout text130: plan
+layout text130: tx-sheet
+layout text130: goal-sheet
+00:35 +2: layout: text200
+layout text200: media Size(1280.0, 720.0), render view Size(1280.0, 720.0)
+layout text200: onboarding
+layout text200: today
+layout text200: add-expense-sheet
+layout text200: spending
+layout text200: wishlist
+layout text200: goals
+layout text200: plan
+layout text200: tx-sheet
+layout text200: goal-sheet
+00:57 +3: layout: small
+layout small: media Size(320.0, 640.0), render view Size(320.0, 640.0)
+layout small: onboarding
+layout small: today
+layout small: add-expense-sheet
+layout small: spending
+layout small: wishlist
+layout small: goals
+layout small: plan
+layout small: tx-sheet
+layout small: goal-sheet
+01:18 +4: layout: small-dark-text200
+layout small-dark-text200: media Size(320.0, 640.0), render view Size(320.0, 640.0)
+layout small-dark-text200: onboarding
+layout small-dark-text200: today
+layout small-dark-text200: add-expense-sheet
+layout small-dark-text200: spending
+layout small-dark-text200: wishlist
+layout small-dark-text200: goals
+layout small-dark-text200: plan
+layout small-dark-text200: tx-sheet
+layout small-dark-text200: goal-sheet
+01:46 +5: layout: wide-dark
+layout wide-dark: media Size(1280.0, 800.0), render view Size(1280.0, 800.0)
+layout wide-dark: onboarding
+layout wide-dark: today
+layout wide-dark: add-expense-sheet
+layout wide-dark: spending
+layout wide-dark: wishlist
+layout wide-dark: goals
+layout wide-dark: plan
+layout wide-dark: tx-sheet
+layout wide-dark: goal-sheet
+02:01 +6: (tearDownAll)
+02:01 +6: All tests passed!
+--- desktop-layout: 6 tests, 0 failed, total 145.4 s; per test p50 17968 ms, p90 28142 ms, p99 28142 ms, max 28142 ms
+      <10 ms     0  
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     0  
+        >5 s     6  ########################################
+  slowest:
+     28142 ms  layout: small-dark-text200
+     22108 ms  layout: text200
+     21094 ms  layout: small
+     17968 ms  layout: dark
+     17264 ms  layout: text130
+     15207 ms  layout: wide-dark
+=== desktop-onboarding ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/onboarding_test.dart
+Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: Start a new wallet: key stored, default goals, salary banner
+00:03 +1: Join: a wrong key is refused, the right key joins
+00:05 +2: (tearDownAll)
+00:05 +2: All tests passed!
+--- desktop-onboarding: 2 tests, 0 failed, total 27.9 s; per test p50 1492 ms, p90 3529 ms, p99 3529 ms, max 3529 ms
       <10 ms     0  
     10-50 ms     0  
    50-100 ms     0  
@@ -2086,8 +1774,315 @@ dbus-daemon[6085]: [session uid=1001 pid=6085] Successfully activated service 'o
        1-5 s     2  ########################################
         >5 s     0  
   slowest:
-      4856 ms  PBZ .xls, Revolut .xlsx and .csv: result lines, transactions, re-import adds nothing
-      3519 ms  A current-month Revolut CSV: Spending and Today show it; an added expense is matched, not doubled
-=== desktop-layout ===
-00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/layout_test.dart
+      3529 ms  Start a new wallet: key stored, default goals, salary banner
+      1492 ms  Join: a wrong key is refused, the right key joins
+=== desktop-perf ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/perf_test.dart
 Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: perf: only in profile mode (tools/build.sh perf)
+  Skip: profile mode only: run tools/build.sh perf
+00:00 +0 ~1: (tearDownAll)
+00:00 +0 ~1: All tests skipped.
+--- desktop-perf: 1 tests, 0 failed, total 22.6 s; per test p50 2 ms, p90 2 ms, p99 2 ms, max 2 ms
+      <10 ms     1  ########################################
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     0  
+        >5 s     0  
+  slowest:
+         2 ms  perf: only in profile mode (tools/build.sh perf)  [skipped]
+=== desktop-plan ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/plan_test.dart
+Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: Plan numbers: bad input is refused, good input is saved and used everywhere
+00:31 +1: Start new month from Plan: cancel, today, another day
+00:38 +2: Sync folder, wallet key, Diagnostics: level, log size, logs to the sync folder, clear
+00:51 +3: (tearDownAll)
+00:51 +3: All tests passed!
+--- desktop-plan: 3 tests, 0 failed, total 74.2 s; per test p50 12487 ms, p90 31493 ms, p99 31493 ms, max 31493 ms
+      <10 ms     0  
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     0  
+        >5 s     3  ########################################
+  slowest:
+     31493 ms  Plan numbers: bad input is refused, good input is saved and used everywhere
+     12487 ms  Sync folder, wallet key, Diagnostics: level, log size, logs to the sync folder, clear
+      7470 ms  Start new month from Plan: cancel, today, another day
+=== desktop-screens ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/screens_test.dart
+Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: every tab with a synthetic wallet
+2026-10-20T16:04:05.303+00:00 INFO bw.app app.info {"version":"2.0.0+1","mode":"debug","platform":"linux","os":"Linux 7.0.0-1017-azure #17~24.04.1-Ubuntu SMP PREEMPT Thu Sep 24 18:46:57 UTC 2026","dart":"3.13.5","cpus":2,"flutter":"3.47.7","locale":"C","screen":"1280x720@1.0","logLevel":"ALL"}
+2026-10-20T16:04:05.307+00:00 INFO bw.app app.start {"phase":"logs","ms":54}
+2026-10-20T16:04:05.466+00:00 INFO bw.repo repo.migrate {"from":1,"to":3,"new":true,"replayFiles":0}
+2026-10-20T16:04:05.468+00:00 DEBUG bw.perf repo.open {"ms":148,"file":true,"new":true,"tx":0,"outbox":0}
+2026-10-20T16:04:05.468+00:00 INFO bw.app app.start {"phase":"db","ms":160}
+2026-10-20T16:04:05.475+00:00 DEBUG bw.perf key.read {"ms":2,"store":"file","found":false}
+2026-10-20T16:04:05.476+00:00 INFO bw.app app.start {"phase":"key","ms":5,"found":false}
+2026-10-20T16:04:05.480+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-20T16:04:05.481+00:00 DEBUG bw.perf repo.transactions {"ms":0,"rows":0,"live":0}
+2026-10-20T16:04:05.481+00:00 DEBUG bw.perf wc.categorize {"ms":0,"tx":0}
+2026-10-20T16:04:05.483+00:00 DEBUG bw.perf wc.goalsWish {"ms":1}
+2026-10-20T16:04:05.484+00:00 DEBUG bw.perf wc.reload {"ms":5,"tx":0,"goals":0,"wish":0}
+2026-10-20T16:04:05.484+00:00 INFO bw.app app.start {"phase":"reload","ms":8,"tx":0,"syncFolder":false,"logLevel":"all"}
+2026-10-20T16:04:05.486+00:00 INFO bw.app app.start {"phase":"ready","ms":232}
+2026-10-20T16:04:05.494+00:00 FINER bw.sync sync.skip {"trigger":"startup","reason":"noFolder"}
+2026-10-20T16:04:05.549+00:00 DEBUG bw.perf key.write {"ms":61,"store":"file"}
+2026-10-20T16:04:05.550+00:00 INFO bw.app wallet.create {"defaultGoals":true}
+2026-10-20T16:04:05.558+00:00 DEBUG bw.perf repo.write {"ms":6,"ops":1,"entities":"goal"}
+2026-10-20T16:04:05.559+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"goal"}
+2026-10-20T16:04:05.560+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-20T16:04:05.560+00:00 DEBUG bw.perf repo.transactions {"ms":0,"rows":0,"live":0}
+2026-10-20T16:04:05.561+00:00 DEBUG bw.perf wc.categorize {"ms":0,"tx":0}
+2026-10-20T16:04:05.563+00:00 DEBUG bw.perf wc.goalsWish {"ms":2}
+2026-10-20T16:04:05.564+00:00 DEBUG bw.perf wc.reload {"ms":4,"tx":0,"goals":2,"wish":0}
+2026-10-20T16:04:05.686+00:00 DEBUG bw.perf repo.write {"ms":109,"ops":191,"entities":"tx"}
+2026-10-20T16:04:05.689+00:00 DEBUG bw.transfers transfers.plan {"rows":0,"open":0,"paired":0,"reopened":0}
+2026-10-20T16:04:05.689+00:00 DEBUG bw.perf repo.transfers {"ms":1,"candidates":0,"rows":0,"paired":0,"reopened":0}
+2026-10-20T16:04:05.691+00:00 DEBUG bw.perf repo.match {"ms":1,"manual":0,"open":0,"bank":0,"added":0}
+2026-10-20T16:04:05.692+00:00 DEBUG bw.perf repo.importBatch {"ms":117,"source":"pbz","rows":191,"added":191,"dupes":0,"matched":0,"transfers":0,"skipped":0}
+2026-10-20T16:04:05.694+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":5,"entities":"setting"}
+2026-10-20T16:04:05.694+00:00 INFO bw.app settings.changed {"keys":"salary,rent,loan,subs,paydayDay"}
+2026-10-20T16:04:05.696+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-20T16:04:05.701+00:00 DEBUG bw.perf repo.transactions {"ms":4,"rows":191,"live":191}
+2026-10-20T16:04:05.708+00:00 DEBUG bw.perf wc.categorize {"ms":6,"tx":191}
+2026-10-20T16:04:05.710+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-20T16:04:05.710+00:00 DEBUG bw.perf wc.reload {"ms":15,"tx":191,"goals":2,"wish":0}
+2026-10-20T16:04:05.950+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":21,"tx":13,"incomeMode":"planned","goals":2}
+2026-10-20T16:04:05.951+00:00 DEBUG bw.perf wc.period {"ms":4}
+2026-10-20T16:04:06.023+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2025-10"}
+2026-10-20T16:04:06.024+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2025-11"}
+2026-10-20T16:04:06.024+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2025-12"}
+2026-10-20T16:04:06.024+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-01"}
+2026-10-20T16:04:06.024+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-02"}
+2026-10-20T16:04:06.025+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-03"}
+2026-10-20T16:04:06.025+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-04"}
+2026-10-20T16:04:06.025+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-05"}
+2026-10-20T16:04:06.025+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-06"}
+2026-10-20T16:04:06.025+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-07"}
+2026-10-20T16:04:06.025+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-08"}
+2026-10-20T16:04:06.025+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-09"}
+2026-10-20T16:04:06.025+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-10"}
+2026-10-20T16:04:06.028+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-20T16:04:06.029+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":191}
+2026-10-20T16:04:06.030+00:00 DEBUG bw.perf wc.payPeriods {"ms":3,"count":12}
+2026-10-20T16:04:06.033+00:00 DEBUG bw.perf spending.derive {"ms":10,"month":"2026-10","tx":191}
+2026-10-20T16:04:06.879+00:00 DEBUG bw.mem mem {"rss_mb":541.1,"max_rss_mb":542.2}
+2026-10-20T16:04:06.967+00:00 WARNING bw.frames frames.slow {"build_ms":1096.9,"raster_ms":53.1,"tab":"today"}
+2026-10-20T16:04:07.263+00:00 INFO bw.nav nav.tab {"from":"today","to":"spending","via":"rail"}
+2026-10-20T16:04:07.264+00:00 INFO bw.frames frames.window {"frames":2,"janky":2,"build_p50_ms":33.9,"build_p90_ms":1096.9,"build_p99_ms":1096.9,"build_max_ms":1096.9,"raster_p50_ms":18.3,"raster_p90_ms":53.1,"raster_p99_ms":53.1,"raster_max_ms":53.1,"tab":"today"}
+2026-10-20T16:04:07.722+00:00 INFO bw.nav nav.tab {"from":"spending","to":"wishlist","via":"rail"}
+2026-10-20T16:04:07.722+00:00 INFO bw.frames frames.window {"frames":3,"janky":3,"build_p50_ms":16.1,"build_p90_ms":81.0,"build_p99_ms":81.0,"build_max_ms":81.0,"raster_p50_ms":28.2,"raster_p90_ms":28.4,"raster_p99_ms":28.4,"raster_max_ms":28.4,"tab":"spending"}
+2026-10-20T16:04:08.094+00:00 INFO bw.nav nav.tab {"from":"wishlist","to":"goals","via":"rail"}
+2026-10-20T16:04:08.094+00:00 INFO bw.frames frames.window {"frames":4,"janky":3,"build_p50_ms":9.4,"build_p90_ms":51.3,"build_p99_ms":51.3,"build_max_ms":51.3,"raster_p50_ms":17.5,"raster_p90_ms":26.4,"raster_p99_ms":26.4,"raster_max_ms":26.4,"tab":"wishlist"}
+2026-10-20T16:04:08.420+00:00 INFO bw.nav nav.tab {"from":"goals","to":"plan","via":"rail"}
+2026-10-20T16:04:08.420+00:00 INFO bw.frames frames.window {"frames":5,"janky":1,"build_p50_ms":11.7,"build_p90_ms":20.8,"build_p99_ms":20.8,"build_max_ms":20.8,"raster_p50_ms":10.6,"raster_p90_ms":18.2,"raster_p99_ms":18.2,"raster_max_ms":18.2,"tab":"goals"}
+2026-10-20T16:04:08.713+00:00 FINER bw.sync sync.skip {"trigger":"change","reason":"noFolder"}
+2026-10-20T16:04:09.433+00:00 INFO bw.app log.level {"from":"all","to":"info"}
+2026-10-20T16:04:09.688+00:00 INFO bw.app log.level {"from":"info","to":"all"}
+2026-10-20T16:04:10.276+00:00 DEBUG bw.perf repo.write {"ms":2,"ops":1,"entities":"tx"}
+2026-10-20T16:04:10.276+00:00 INFO bw.app expense.add {"category":"Home & tools"}
+2026-10-20T16:04:10.277+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-20T16:04:10.283+00:00 DEBUG bw.perf repo.transactions {"ms":5,"rows":192,"live":192}
+2026-10-20T16:04:10.291+00:00 DEBUG bw.perf wc.categorize {"ms":6,"tx":192}
+2026-10-20T16:04:10.292+00:00 DEBUG bw.perf wc.goalsWish {"ms":1}
+2026-10-20T16:04:10.293+00:00 DEBUG bw.perf wc.reload {"ms":16,"tx":192,"goals":2,"wish":0}
+2026-10-20T16:04:10.297+00:00 DEBUG bw.perf repo.write {"ms":3,"ops":1,"entities":"wish"}
+2026-10-20T16:04:10.298+00:00 INFO bw.app wish.add {"status":"waiting"}
+2026-10-20T16:04:10.300+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-20T16:04:10.304+00:00 DEBUG bw.perf repo.transactions {"ms":4,"rows":192,"live":192}
+2026-10-20T16:04:10.309+00:00 DEBUG bw.perf wc.categorize {"ms":5,"tx":192}
+2026-10-20T16:04:10.311+00:00 DEBUG bw.perf wc.goalsWish {"ms":1}
+2026-10-20T16:04:10.311+00:00 DEBUG bw.perf wc.reload {"ms":13,"tx":192,"goals":2,"wish":1}
+2026-10-20T16:04:10.313+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"goal"}
+2026-10-20T16:04:10.313+00:00 INFO bw.app goal.save {"new":true}
+2026-10-20T16:04:10.314+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-20T16:04:10.318+00:00 DEBUG bw.perf repo.transactions {"ms":4,"rows":192,"live":192}
+2026-10-20T16:04:10.323+00:00 DEBUG bw.perf wc.categorize {"ms":4,"tx":192}
+2026-10-20T16:04:10.324+00:00 DEBUG bw.perf wc.goalsWish {"ms":1}
+2026-10-20T16:04:10.324+00:00 DEBUG bw.perf wc.reload {"ms":10,"tx":192,"goals":3,"wish":1}
+2026-10-20T16:04:10.327+00:00 DEBUG bw.importer importer.detect {"format":"csv","bytes":189}
+2026-10-20T16:04:10.328+00:00 DEBUG bw.importer.csv csv.read {"chars":189,"sep":",","rows":2,"unclosedQuote":false}
+2026-10-20T16:04:10.332+00:00 INFO bw.importer importer.parse {"format":"csv","source":"revolut","rows":2,"txs":1,"skipped":0,"invalid":0,"readMs":1,"ms":5}
+2026-10-20T16:04:10.332+00:00 DEBUG bw.perf import.parse {"ms":6,"file":0,"ext":"csv","bytes":189}
+2026-10-20T16:04:10.334+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"tx"}
+2026-10-20T16:04:10.334+00:00 DEBUG bw.transfers transfers.plan {"rows":0,"open":0,"paired":0,"reopened":0}
+2026-10-20T16:04:10.334+00:00 DEBUG bw.perf repo.transfers {"ms":0,"candidates":0,"rows":0,"paired":0,"reopened":0}
+2026-10-20T16:04:10.336+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-20T16:04:10.345+00:00 DEBUG bw.perf repo.write {"ms":6,"ops":2,"entities":"tx"}
+2026-10-20T16:04:10.345+00:00 DEBUG bw.perf repo.match {"ms":10,"manual":1,"open":1,"bank":1,"added":1,"unmatched":0,"categories":1}
+2026-10-20T16:04:10.346+00:00 DEBUG bw.perf repo.importBatch {"ms":13,"source":"revolut","rows":1,"added":1,"dupes":0,"matched":1,"transfers":0,"skipped":0}
+2026-10-20T16:04:10.346+00:00 DEBUG bw.perf import.file {"ms":20,"file":0,"ext":"csv","bytes":189,"source":"revolut","rows":1,"added":1,"dupes":0,"matched":1,"skipped":0,"invalid":0}
+2026-10-20T16:04:10.346+00:00 DEBUG bw.perf import.files {"ms":20,"files":1,"ok":1}
+2026-10-20T16:04:10.348+00:00 DEBUG bw.categories categories.build {"rules":0,"patterns":0,"patternsUsed":0}
+2026-10-20T16:04:10.351+00:00 DEBUG bw.perf repo.transactions {"ms":2,"rows":193,"live":192}
+2026-10-20T16:04:10.354+00:00 DEBUG bw.perf wc.categorize {"ms":2,"tx":192}
+2026-10-20T16:04:10.354+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-20T16:04:10.354+00:00 DEBUG bw.perf wc.reload {"ms":8,"tx":192,"goals":3,"wish":1}
+2026-10-20T16:04:10.356+00:00 INFO bw.app category.change {"from":"Home & tools","to":"Shopping","always":true,"source":"revolut"}
+2026-10-20T16:04:10.357+00:00 DEBUG bw.perf repo.write {"ms":1,"ops":1,"entities":"rule"}
+2026-10-20T16:04:10.365+00:00 DEBUG bw.perf repo.write {"ms":7,"ops":1,"entities":"tx"}
+2026-10-20T16:04:10.366+00:00 DEBUG bw.categories categories.build {"rules":1,"patterns":0,"patternsUsed":0}
+2026-10-20T16:04:10.368+00:00 DEBUG bw.perf repo.transactions {"ms":1,"rows":193,"live":192}
+2026-10-20T16:04:10.371+00:00 DEBUG bw.perf wc.categorize {"ms":3,"tx":192}
+2026-10-20T16:04:10.372+00:00 DEBUG bw.perf wc.goalsWish {"ms":0}
+2026-10-20T16:04:10.372+00:00 DEBUG bw.perf wc.reload {"ms":7,"tx":192,"goals":3,"wish":1}
+2026-10-20T16:04:10.380+00:00 INFO bw.nav nav.tab {"from":"plan","to":"today","via":"rail"}
+2026-10-20T16:04:10.380+00:00 INFO bw.frames frames.window {"frames":25,"janky":14,"build_p50_ms":7.2,"build_p90_ms":29.3,"build_p99_ms":32.3,"build_max_ms":32.3,"raster_p50_ms":16.8,"raster_p90_ms":28.4,"raster_p99_ms":42.8,"raster_max_ms":42.8,"tab":"plan"}
+2026-10-20T16:04:10.404+00:00 FINER bw.budget budget.period {"start":"2026-10-10","end":"2026-11-10","saved":true,"days":31,"daysLeft":21,"tx":14,"incomeMode":"planned","goals":3}
+2026-10-20T16:04:10.404+00:00 DEBUG bw.perf wc.period {"ms":0}
+2026-10-20T16:04:10.411+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2025-10"}
+2026-10-20T16:04:10.411+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2025-11"}
+2026-10-20T16:04:10.411+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2025-12"}
+2026-10-20T16:04:10.412+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-01"}
+2026-10-20T16:04:10.412+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-02"}
+2026-10-20T16:04:10.412+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-03"}
+2026-10-20T16:04:10.412+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-04"}
+2026-10-20T16:04:10.413+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-05"}
+2026-10-20T16:04:10.413+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-06"}
+2026-10-20T16:04:10.413+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-07"}
+2026-10-20T16:04:10.413+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-08"}
+2026-10-20T16:04:10.413+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-09"}
+2026-10-20T16:04:10.413+00:00 DEBUG bw.perf wc.monthSummary {"ms":0,"month":"2026-10"}
+2026-10-20T16:04:10.414+00:00 FINER bw.budget budget.paydays {"real":9,"assumed":0,"first":"2026-02-10","last":"2026-10-10"}
+2026-10-20T16:04:10.414+00:00 FINER bw.budget budget.periods {"count":9,"from":"2026-02-10","tx":192}
+2026-10-20T16:04:10.414+00:00 DEBUG bw.perf wc.payPeriods {"ms":0,"count":12}
+2026-10-20T16:04:10.414+00:00 DEBUG bw.perf spending.derive {"ms":3,"month":"2026-10","tx":192}
+2026-10-20T16:04:10.754+00:00 WARNING bw.frames frames.slow {"build_ms":176.7,"raster_ms":30.8,"tab":"today"}
+2026-10-20T16:04:13.375+00:00 FINER bw.sync sync.skip {"trigger":"change","reason":"noFolder"}
+2026-10-20T16:04:14.107+00:00 INFO bw.frames frames.window {"frames":24,"janky":6,"build_p50_ms":0.5,"build_p90_ms":0.9,"build_p99_ms":176.7,"build_max_ms":176.7,"raster_p50_ms":15.4,"raster_p90_ms":25.9,"raster_p99_ms":30.8,"raster_max_ms":30.8,"tab":"today"}
+2026-10-20T16:04:14.107+00:00 DEBUG bw.mem mem {"rss_mb":627.6,"max_rss_mb":647.4}
+00:09 +1: (tearDownAll)
+00:09 +1: All tests passed!
+--- desktop-screens: 1 tests, 0 failed, total 32.5 s; per test p50 9126 ms, p90 9126 ms, p99 9126 ms, max 9126 ms
+      <10 ms     0  
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     0  
+        >5 s     1  ########################################
+  slowest:
+      9126 ms  every tab with a synthetic wallet
+=== desktop-wishlist_goals ===
+00:00 +0: loading /home/runner/work/buggetwallet/buggetwallet/app/integration_test/wishlist_goals_test.dart
+Building Linux application...                                   
+✓ Built build/linux/x64/debug/bundle/budget_wallet
+00:00 +0: Wishlist: price check, cooling off, then buy or skip
+00:12 +1: Wishlist: Save for it makes a goal with the price as target
+00:15 +2: Goals: create, edit, add money, reached, delete; months-to-goal text
+00:25 +3: (tearDownAll)
+00:25 +3: All tests passed!
+--- desktop-wishlist_goals: 3 tests, 0 failed, total 48.0 s; per test p50 10165 ms, p90 12114 ms, p99 12114 ms, max 12114 ms
+      <10 ms     0  
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     1  ####################
+        >5 s     2  ########################################
+  slowest:
+     12114 ms  Wishlist: price check, cooling off, then buy or skip
+     10165 ms  Goals: create, edit, add money, reached, delete; months-to-goal text
+      3000 ms  Wishlist: Save for it makes a goal with the price as target
+
+step              seconds  result
+desktop-adaptive     58.9  ok
+desktop-big_wallet     91.8  ok
+desktop-flows        50.8  ok
+desktop-import       31.7  ok
+desktop-layout      146.0  ok
+desktop-onboarding     28.4  ok
+desktop-perf         23.2  ok
+desktop-plan         74.8  ok
+desktop-screens      33.1  ok
+desktop-wishlist_goals     48.5  ok
+total               587.8
+--- desktop-adaptive: 4 tests, 0 failed, total 55.5 s; per test p50 4588 ms, p90 7828 ms, p99 7828 ms, max 7828 ms
+--- desktop-big_wallet: 1 tests, 0 failed, total 91.0 s; per test p50 68283 ms, p90 68283 ms, p99 68283 ms, max 68283 ms
+--- desktop-flows: 5 tests, 0 failed, total 50.1 s; per test p50 5861 ms, p90 10015 ms, p99 10015 ms, max 10015 ms
+--- desktop-import: 2 tests, 0 failed, total 31.1 s; per test p50 2907 ms, p90 5034 ms, p99 5034 ms, max 5034 ms
+--- desktop-layout: 6 tests, 0 failed, total 145.4 s; per test p50 17968 ms, p90 28142 ms, p99 28142 ms, max 28142 ms
+--- desktop-onboarding: 2 tests, 0 failed, total 27.9 s; per test p50 1492 ms, p90 3529 ms, p99 3529 ms, max 3529 ms
+--- desktop-perf: 1 tests, 0 failed, total 22.6 s; per test p50 2 ms, p90 2 ms, p99 2 ms, max 2 ms
+--- desktop-plan: 3 tests, 0 failed, total 74.2 s; per test p50 12487 ms, p90 31493 ms, p99 31493 ms, max 31493 ms
+--- desktop-screens: 1 tests, 0 failed, total 32.5 s; per test p50 9126 ms, p90 9126 ms, p99 9126 ms, max 9126 ms
+--- desktop-wishlist_goals: 3 tests, 0 failed, total 48.0 s; per test p50 10165 ms, p90 12114 ms, p99 12114 ms, max 12114 ms
+desktop-adaptive=ok desktop-big_wallet=ok desktop-flows=ok desktop-import=ok desktop-layout=ok desktop-onboarding=ok desktop-perf=ok desktop-plan=ok desktop-screens=ok desktop-wishlist_goals=ok
+=== apk ===
+Resolving dependencies...
+Downloading packages...
+  cross_file 0.3.5+5 (0.4.0 available)
+  equatable 2.1.0 (3.0.0 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  qr 3.0.2 (4.0.0 available)
+  sqlite3 2.9.4 (3.7.1 available)
+  sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.3 available)
+Got dependencies!
+8 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Running Gradle task 'assembleRelease'...                        
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 4084 bytes (99.8% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+Caught exception: Already watching path: /opt/hostedtoolcache/flutter/stable-3.47.7-x64/flutter/packages/flutter_tools/gradle
+Running Gradle task 'assembleRelease'...                          126.8s
+✓ Built build/app/outputs/flutter-apk/app-release.apk (61.4MB)
+=== linux ===
+=== linux ===
+Resolving dependencies...
+Downloading packages...
+  cross_file 0.3.5+5 (0.4.0 available)
+  equatable 2.1.0 (3.0.0 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  qr 3.0.2 (4.0.0 available)
+  sqlite3 2.9.4 (3.7.1 available)
+  sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.3 available)
+Got dependencies!
+8 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Building Linux application...                                   
+✓ Built build/linux/x64/release/bundle/budget_wallet
+
+step              seconds  result
+linux                70.4  ok
+total                70.4
+linux=ok
+=== smoke ===
+=== linux ===
+Resolving dependencies...
+Downloading packages...
+  cross_file 0.3.5+5 (0.4.0 available)
+  equatable 2.1.0 (3.0.0 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  qr 3.0.2 (4.0.0 available)
+  sqlite3 2.9.4 (3.7.1 available)
+  sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.3 available)
+Got dependencies!
+8 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Building Linux application...                                   
+✓ Built build/linux/x64/release/bundle/budget_wallet
+=== desktop-smoke ===
+app still running after 10 s; sending SIGTERM
+app exited with code 143
+app log: 21 lines (dist/logs/app-linux-smoke.log)
+WARNING lines: 1
+
+step              seconds  result
+linux                 3.3  ok
+desktop-smoke        10.5  ok
+total                13.9
+linux=ok desktop-smoke=ok
