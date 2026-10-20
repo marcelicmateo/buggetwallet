@@ -80,7 +80,7 @@ void main() {
       final s = transactionsCsv([_tx('a', '2026-01-01', 0)]);
       final r = _parse(s)[1];
       expect(r[1], '0.00');
-      expect(s.contains('-0'), isFalse);
+      expect(r[1].contains('-'), isFalse, reason: 'the date column always holds -0 (2026-01-01); only the amount matters');
       expect(transactionsCsv([_tx('a', '2026-01-01', -1), _tx('b', '2026-01-02', 1)]).contains('-0.00'), isFalse);
     });
 
@@ -162,7 +162,7 @@ void main() {
         _tx('1', '2026-01-02', -1000, cat: 'Groceries'),
         _tx('2', '2026-01-03', 150000, cat: 'Salary'),
         _tx('3', '2026-01-04', -5000, cat: 'Internal transfer'),
-        CategorizedTx(
+        const CategorizedTx(
             Tx(id: '4', source: 'pbz', date: '2026-01-05', amount: -7777, category: 'Groceries', deleted: true), 'Groceries', Kind.flex),
       ]));
       expect(rows[1], row('2026-01', {'Groceries': '10.00'}, '10.00'));
