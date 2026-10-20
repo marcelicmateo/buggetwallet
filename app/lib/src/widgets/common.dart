@@ -5,6 +5,8 @@ import '../format.dart';
 import '../layout.dart';
 import '../theme.dart';
 
+export '../theme.dart' show numStyle;
+
 /// A plain bordered card with consistent padding and spacing.
 class Panel extends StatelessWidget {
   final List<Widget> children;
@@ -131,8 +133,6 @@ class Tag extends StatelessWidget {
         child: Text(text, style: TextStyle(fontSize: 11, color: context.c.ink2)),
       );
 }
-
-const numStyle = TextStyle(fontFeatures: [FontFeature.tabularFigures()], fontFamily: 'monospace');
 
 /// One transaction row.
 class TxTile extends StatelessWidget {

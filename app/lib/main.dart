@@ -21,10 +21,19 @@ import 'src/widgets/sheets.dart';
 
 final _log = Logger('bw.app');
 
+/// Adds the IBM Plex licence (SIL OFL 1.1) to the licences page.
+void registerFontLicense() {
+  LicenseRegistry.addLicense(() async* {
+    final text = await rootBundle.loadString('assets/fonts/OFL.txt');
+    yield LicenseEntryWithLineBreaks(['IBM Plex Sans', 'IBM Plex Mono'], text);
+  });
+}
+
 Future<void> main() async {
   final total = Stopwatch()..start();
   await runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
+    registerFontLicense();
     final wc = await bootstrap();
     final sinceRunApp = Stopwatch()..start();
     runApp(BudgetWalletApp(wc: wc));
