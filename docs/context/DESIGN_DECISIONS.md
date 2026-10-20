@@ -78,7 +78,7 @@ Order: transport interface + `archive` gzip first, then WASM DB + web key store,
 - Readers: fiscal receipt QR (date-time, total, JIR), HUB-3 2D barcode on slips (payee, IBAN, amount, model+reference, description), e-invoice XML (UBL / EN 16931), PDF text layer, OCR fallback; later supplier portals.
 - Inputs: camera scan (Add expense › Scan bill), file import (Plan), inbox folder (automatic, lands in "To review").
 - `NormalizedBill`: source, externalId (JIR / invoice no / reference, unique → dedupe), date, total cents, currency, payee, optional IBAN, reference, dueDate, items, original file hash.
-- Link to bank row: by reference in bank text, else same amount within 3 days. Photos/PDFs stored once as encrypted files in the sync folder, fetched by hash.
+- Link to bank row: by reference (JIR / invoice no / payment reference) found in the bank text; otherwise the bill stays "unlinked" for the owner to link by hand (never by amount alone, decision 2026-10-20). Photos/PDFs stored once as encrypted files in the sync folder, fetched by hash.
 - Open: totals only or line items? keep photo or data only? warranty/return reminders?
 
 ### 4.3 Calendar integration and future spending
@@ -127,6 +127,27 @@ Today "Where it goes" shows each category's spend this month against a dark tick
   for the category with the least left, tap → Spending.
 - **Not in scope:** rollover of unspent budget, per-period (salary-to-salary) budgets (monthly only, like the chart), alerts.
 **Open for the owner:** monthly or per pay period? prefill from averages or start empty? show "left" on Today at all?
+
+### 4.6 M4 Habits — proposal 2026-10-20, needs owner approval
+Brief: weekly review (~5 min), recurring bills detected from exports, nudges at risk moments (food-delivery window 15–18 h, Sundays).
+Nothing here changes a number by itself: detection and nudges inform; only the owner's taps write.
+- **Weekly review** (Today shows a "Weekly review" card from the review day until done; Plan sets the day, default Sunday):
+  one screen with four ruled steps, each with a count and a done tick — (1) Import: open the file chooser, show rows added;
+  (2) Confirm categories: rows from the last 7 days whose category came from a built-in rule or has none, one tap to fix
+  (learns a merchant rule as today); (3) Pace: the budget-vs-actual summary and the categories behind pace; (4) Wishlist:
+  items past the 72 h cooling-off, buy / skip. "Done" writes `lastReview` (synced); a streak counter ("4 weeks in a row").
+- **Recurring bills:** core `detectRecurring(txs)` — same normalised payee, monthly interval ±3 days, at least 3
+  occurrences, amount within 10 % of the median → a candidate with next expected date and expected amount. Shown in
+  Plan › "Expected bills" where the owner confirms or dismisses each (synced `recurring` rows); confirmed bills appear on
+  Today as "Due by payday: 3 bills, 182.40 €" and in Spending's month view as expected-but-not-yet-paid (dashed).
+  They do not change safe-to-spend until the owner says so (open question).
+- **Nudges:** local notifications, opt-in in Plan: a short line with today's safe-to-spend and the tightest budget at 15:00
+  on weekdays (before the food-delivery window) and Sunday 11:00; no amounts in the notification title (lock screen),
+  amounts only in the body if the owner enables it. Android first; Linux desktop notifications later. Needs the
+  `flutter_local_notifications` package (new dependency → owner approval).
+- **Not in scope:** bills database (§4.2), calendar (§4.3), any automatic change to categories or balances.
+**Open for the owner:** review day Sunday? should confirmed recurring bills reduce safe-to-spend before they are paid?
+nudge times as proposed? ok to add `flutter_local_notifications`? amounts in notification bodies?
 
 ## 5. Roadmap snapshot (19 Oct)
 | Feature | Status | Milestone |

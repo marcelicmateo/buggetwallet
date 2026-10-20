@@ -52,7 +52,7 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | S2 | Damaged/late sync file double count → sync redesign (owner 2026-10-20) | – | – | – | scheduled: sync redesign |
 | D1e | BUG: perf hung after "Built" because of stale build state from killed runs; perf_run now starts from a clean profile build; idle-laptop perf green (31 s, 0 missed) | lead | v2 | – | done |
 | D3 | Merge v2 into master | lead + ci-watcher | – | owner's go | waiting for owner |
-| F0 | M4 Habits spec (weekly review, recurring bills, nudges) for owner approval | lead | – | – | next |
+| F0 | M4 Habits spec: DESIGN_DECISIONS §4.6 (weekly review, recurring bills, nudges) | lead | – | – | drafted; waiting for owner approval |
 | E0 | Spec for budget vs actual per category: DESIGN_DECISIONS §4.5 | lead | – | – | approved 2026-10-20 (monthly) |
 | E1 | Budget vs actual per category (M3): core `budgetVsActual`/`suggestBudgets` + `categoryBudgets` setting; UI Plan editor, Spending bars, Today line | core-builder + ui-builder | budgets-core, budgets-ui | E0 | done (merged, full run green) |
 | E2 | Top merchants (M3) | – | – | – | already built ("Top places" on Spending) |
