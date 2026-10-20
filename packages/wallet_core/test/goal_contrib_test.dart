@@ -203,7 +203,7 @@ void main() {
       r.updateSettings({'periodStart': '2026-03-15'});
       r.payGoals();
       r.payGoals();
-      expect(_savedOf(r, a), 16000, reason: 'default period: the periodStart setting');
+      expect(_savedOf(r, a), 21000, reason: 'no period given: a new row per call, never the periodStart setting');
     });
 
     test('payGoals with no period known adds a row per call', () {

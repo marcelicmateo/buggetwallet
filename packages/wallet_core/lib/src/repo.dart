@@ -611,10 +611,11 @@ class WalletRepo {
       ]);
 
   /// The payday transfer: adds each goal's monthly amount to its saved total, as a contribution. For a pay
-  /// [period] (default: the `periodStart` setting) the row id is fixed per goal and period, so paying the same
-  /// period on two devices (or twice) counts once; with no period known each call adds a new row.
+  /// [period] the row id is fixed per goal and period, so paying the same period on two devices (or twice) counts
+  /// once. With no period each call adds a new row: never default to the `periodStart` setting, which can be stale
+  /// (the app only sets it when missing), so two paydays would share one id and the second would pay nothing.
   void payGoals({String? period}) {
-    final p = period ?? settings().periodStart;
+    final p = period;
     _write([
       for (final g in goals())
         if (g.monthly != 0)

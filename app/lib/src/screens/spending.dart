@@ -107,7 +107,9 @@ class _MonthChipsState extends State<_MonthChips> {
 
   void _reveal() => WidgetsBinding.instance.addPostFrameCallback((_) {
         final c = _selectedKey.currentContext;
-        if (mounted && c != null) Scrollable.ensureVisible(c, duration: Duration.zero, alignment: 1);
+        // Only the chip row scrolls: Scrollable.ensureVisible would also move every enclosing scrollable (the page).
+        final ro = c?.findRenderObject();
+        if (mounted && c != null && ro != null) Scrollable.of(c).position.ensureVisible(ro, alignment: 1);
       });
 
   @override

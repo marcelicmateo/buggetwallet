@@ -44,4 +44,25 @@ void main() {
       _expectFullyVisible(tester, _selected);
     });
   }
+
+  testWidgets('choosing a month scrolls only the chip row, never the page', (tester) async {
+    await pumpApp(tester, Scaffold(body: SpendingScreen(wc: demoWallet())), size: const Size(360, 800));
+    await tester.pumpAndSettle();
+    final page = find.byWidgetPredicate((w) => w is Scrollable && axisDirectionToAxis(w.axisDirection) == Axis.vertical).first;
+    await tester.drag(page, const Offset(0, -150));
+    await tester.pumpAndSettle();
+    final pos = tester.state<ScrollableState>(page).position;
+    final before = pos.pixels;
+    expect(before, greaterThan(0));
+
+    final chips = find.byType(ChoiceChip);
+    final row = find.ancestor(of: chips.first, matching: find.byType(SingleChildScrollView)).first;
+    await tester.drag(row, const Offset(600, 0)); // the row alone: back to the oldest month
+    await tester.pumpAndSettle();
+    expect(pos.pixels, before, reason: 'a sideways drag of the row leaves the page where it was');
+    await tester.tap(chips.first);
+    await tester.pumpAndSettle();
+    _expectFullyVisible(tester, _selected);
+    expect(pos.pixels, before, reason: 'revealing the chosen chip must not move the page');
+  });
 }
