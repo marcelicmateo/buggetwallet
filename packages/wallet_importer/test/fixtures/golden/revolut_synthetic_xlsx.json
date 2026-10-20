@@ -1,0 +1,68 @@
+{
+  "fixture": "revolut_synthetic.xlsx",
+  "source": "revolut",
+  "skipped": 1,
+  "invalid": 0,
+  "transactions": [
+    {
+      "v": 1,
+      "id": "260103qxa7gq",
+      "source": "revolut",
+      "date": "2026-01-03",
+      "amountMinor": 5000,
+      "currency": "EUR",
+      "bankType": "Topup",
+      "description": "Top-up by *0000"
+    },
+    {
+      "v": 1,
+      "id": "2601031kc6rso",
+      "source": "revolut",
+      "date": "2026-01-03",
+      "amountMinor": -1450,
+      "currency": "EUR",
+      "bankType": "Card Payment",
+      "description": "Wolt"
+    },
+    {
+      "v": 1,
+      "id": "260105rgzp7x",
+      "source": "revolut",
+      "date": "2026-01-05",
+      "amountMinor": -2050,
+      "currency": "EUR",
+      "bankType": "Card Payment",
+      "description": "Grašo"
+    },
+    {
+      "v": 1,
+      "id": "2601061eifh0e",
+      "source": "revolut",
+      "date": "2026-01-06",
+      "amountMinor": 1000,
+      "currency": "EUR",
+      "bankType": "Transfer",
+      "description": "Revolut Bank UAB"
+    },
+    {
+      "v": 1,
+      "id": "2601071tmyses",
+      "source": "revolut",
+      "date": "2026-01-07",
+      "amountMinor": -1450,
+      "currency": "EUR",
+      "bankType": "Card Payment",
+      "description": "Wolt"
+    },
+    {
+      "v": 1,
+      "id": "2601071tmyses_1",
+      "source": "revolut",
+      "date": "2026-01-07",
+      "amountMinor": -1450,
+      "currency": "EUR",
+      "bankType": "Card Payment",
+      "description": "Wolt"
+    }
+  ]
+}

@@ -3,6 +3,20 @@
 Taken from the owner's real exports (2023–2026). Only the format notes are kept here; the analysis and
 figures stay in the claude.ai Project (`claude/BASELINE.md`).
 
+## Bank profiles (how the importer is organised)
+One `BankProfile` per bank in `packages/wallet_importer/lib/src/profiles/` (`pbz.dart`, `revolut.dart`), tried in the
+order of `bankProfiles` (Revolut, then PBZ): `detect` looks at the first 15 rows, the container format and the file
+name; `mapRow` turns one row into a transaction, a skipped row (counted), an invalid row (counted) or nothing.
+Each profile fills the optional hints: `kindHint` (card, atm, salary, fee, standingOrder, ownTransfer, other; null
+when the export does not say) and `account` (the account the file names). Nothing reads them yet.
+- PBZ: VRSTA TRANSAKCIJE → POS plaćanje = card (a "POS Revolut**" row = ownTransfer), Isplata ATM = atm, Plaća/Mirovina =
+  salary, Trajni nalog = standingOrder, Naplaćene naknade / Povrat naknade / Pripisane kamate = fee, Plaćanje putem
+  direktnih kanala / Isplata u poslovnici / Ostalo = other; others null. `account` = the IBAN under or after
+  `TRANSAKCIJSKI RAČUN:` in the header block.
+- Revolut: Type → Card Payment / Card Refund = card, ATM = atm, Topup / Exchange = ownTransfer, Fee = fee, Transfer =
+  other; others null. `account` = Product.
+- Ids: PBZ and Revolut keep the v1 `transactionId`. A bank added later uses `sourceTransactionId` (profile id hashed in).
+
 ## PBZ (current account)
 - Real .xls (Excel 97 / BIFF8). v1 reads it with SheetJS; v2 has its own BIFF8 reader.
 - Header block of ~8 rows (account IBAN, OD/DO dates), then rows: DATUM (Excel serial date), VRSTA TRANSAKCIJE, OPIS PLAĆANJA, IZNOS (signed), VALUTA.

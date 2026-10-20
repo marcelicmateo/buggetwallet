@@ -1,0 +1,28 @@
+{
+  "fixture": "revolut_synthetic.csv",
+  "source": "revolut",
+  "skipped": 1,
+  "invalid": 0,
+  "transactions": [
+    {
+      "v": 1,
+      "id": "26020113u756s",
+      "source": "revolut",
+      "date": "2026-02-01",
+      "amountMinor": -1230,
+      "currency": "EUR",
+      "bankType": "Card Payment",
+      "description": "Shop, with comma"
+    },
+    {
+      "v": 1,
+      "id": "26020115zbwpz",
+      "source": "revolut",
+      "date": "2026-02-01",
+      "amountMinor": 5000,
+      "currency": "EUR",
+      "bankType": "Topup",
+      "description": "Top-up by *0000"
+    }
+  ]
+}
