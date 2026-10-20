@@ -3,6 +3,8 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
+import '../layout.dart';
+import '../platform.dart';
 import '../theme.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
@@ -12,9 +14,12 @@ class TodayScreen extends StatelessWidget {
   final WalletController wc;
   final VoidCallback openPlan;
 
+  /// Opens the Add expense sheet (HomeShell owns it so Ctrl+N does the same); without it the button opens it itself.
+  final VoidCallback? addExpense;
+
   /// The time of day the screen shows (tests pass a fixed one).
   final DateTime Function() clock;
-  const TodayScreen({super.key, required this.wc, required this.openPlan, this.clock = DateTime.now});
+  const TodayScreen({super.key, required this.wc, required this.openPlan, this.addExpense, this.clock = DateTime.now});
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +37,7 @@ class TodayScreen extends StatelessWidget {
     final recent = wc.txs.where((t) => t.kind != Kind.transfer).take(12).toList();
 
     return ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
         children: _gap([
           if (!s.salaryConfirmed)
             Panel(color: c.warnBg, children: [
@@ -54,87 +59,89 @@ class TodayScreen extends StatelessWidget {
               const Text('Start a new month to reset your daily budget and run the payday checklist.', style: TextStyle(fontSize: 13)),
               FilledButton(onPressed: () => wc.startNewMonth(newPayday), child: Text('Start new month on ${shortDate(newPayday)}')),
             ]),
-          Panel(padding: const EdgeInsets.fromLTRB(18, 20, 18, 18), children: [
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Flexible(child: Eyebrow('Safe to spend today')),
-              const SizedBox(width: 8),
-              Flexible(child: StatusLabel(good: !over, text: over ? 'Over today' : 'On plan')),
-            ]),
-            FittedBox(
-              alignment: Alignment.centerLeft,
-              fit: BoxFit.scaleDown,
-              child: Text(money(p.safeToday, cur, decimals: 0),
-                  style: TextStyle(fontSize: 68, height: 1, fontWeight: FontWeight.w800, letterSpacing: -2, color: over ? c.bad : c.ink)),
-            ),
-            Muted(p.spentToday > 0
-                ? 'Spent ${money(p.spentToday, cur)} today of ${money(p.allowanceToday, cur)}. Spend less today and tomorrow gets more.'
-                : "Today's allowance is ${money(p.allowanceToday, cur)}. Spend less today and tomorrow gets more."),
-            Row(children: [
-              _Stat(money(p.remaining, cur, decimals: 0), 'left until payday'),
-              _Stat('${p.daysLeft} ${p.daysLeft == 1 ? 'day' : 'days'}', 'to ${shortDate(p.end)}'),
-              _Stat(money(p.planDaily, cur, decimals: 0), 'plan per day'),
-            ]),
-            PaceBar(used: used, elapsed: p.elapsed, over: p.spent > p.flexBudget * p.elapsed),
-            SplitRow(
-              start: Muted('${money(p.spent, cur, decimals: 0)} of ${money(p.flexBudget, cur, decimals: 0)} used'),
-              end: ahead >= 0
-                  ? Text('${money(ahead, cur, decimals: 0)} ahead of pace', textAlign: TextAlign.end, style: const TextStyle(fontSize: 13))
-                  : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace', textAlign: TextAlign.end),
-            ),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-              icon: const Icon(Icons.add),
-              label: const Text('Add expense', style: TextStyle(fontSize: 16)),
-              onPressed: () async {
-                final r = await showSheet<String>(context, AddExpenseSheet(wc: wc));
-                if (!context.mounted) return;
-                if (r == 'added') toast(context, 'Expense added');
-                if (r == 'wish') toast(context, 'On the wishlist. Decide in ${s.coolHours} hours.');
-              },
-            ),
-          ]),
-          if (s.savedFor != p.start && wc.goals.isNotEmpty)
-            Panel(children: [
-              const HeadingRow(Heading('Payday checklist', size: 15), Tag('pay yourself first')),
-              Text('Move ${money(p.goalMonthly, cur, decimals: 0)} to your savings account before you spend anything else.',
-                  style: const TextStyle(fontSize: 14)),
-              Rows(children: [for (final g in wc.goals) LineItem(g.name, money(g.monthly, cur, decimals: 0))]),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.check),
-                label: Text('I moved ${money(p.goalMonthly, cur, decimals: 0)}'),
-                onPressed: () {
-                  wc.paydayDone(p.start);
-                  toast(context, 'Savings logged');
-                },
+          TwoCol(left: [
+            Panel(padding: const EdgeInsets.fromLTRB(18, 20, 18, 18), children: [
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Flexible(child: Eyebrow('Safe to spend today')),
+                const SizedBox(width: 8),
+                Flexible(child: StatusLabel(good: !over, text: over ? 'Over today' : 'On plan')),
+              ]),
+              FittedBox(
+                alignment: Alignment.centerLeft,
+                fit: BoxFit.scaleDown,
+                child: Text(money(p.safeToday, cur, decimals: 0),
+                    style: TextStyle(fontSize: 68, height: 1, fontWeight: FontWeight.w800, letterSpacing: -2, color: over ? c.bad : c.ink)),
               ),
-            ]),
-          if (deliveryHour)
-            Panel(children: [
+              Muted(p.spentToday > 0
+                  ? 'Spent ${money(p.spentToday, cur)} today of ${money(p.allowanceToday, cur)}. Spend less today and tomorrow gets more.'
+                  : "Today's allowance is ${money(p.allowanceToday, cur)}. Spend less today and tomorrow gets more."),
               Row(children: [
-                Expanded(child: Heading(now.weekday == DateTime.sunday ? 'Sunday delivery hour' : 'After-work delivery hour', size: 15)),
-                Icon(Icons.schedule, size: 18, color: c.muted)
+                _Stat(money(p.remaining, cur, decimals: 0), 'left until payday'),
+                _Stat('${p.daysLeft} ${p.daysLeft == 1 ? 'day' : 'days'}', 'to ${shortDate(p.end)}'),
+                _Stat(money(p.planDaily, cur, decimals: 0), 'plan per day'),
               ]),
-              Text(
-                'This month: $deliveryCount ${deliveryCount == 1 ? 'order' : 'orders'}, ${money(deliverySum, cur)}. '
-                '${p.allowanceToday > 0 ? 'A typical ${money(1500, cur, decimals: 0)} order is ${(1500 / p.allowanceToday * 100).round()}% of today\'s money.' : 'Today\'s money is already used.'}',
-                style: const TextStyle(fontSize: 14),
+              PaceBar(used: used, elapsed: p.elapsed, over: p.spent > p.flexBudget * p.elapsed),
+              SplitRow(
+                start: Muted('${money(p.spent, cur, decimals: 0)} of ${money(p.flexBudget, cur, decimals: 0)} used'),
+                end: ahead >= 0
+                    ? Text('${money(ahead, cur, decimals: 0)} ahead of pace',
+                        textAlign: TextAlign.end, style: const TextStyle(fontSize: 13))
+                    : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace', textAlign: TextAlign.end),
+              ),
+              Tooltip(
+                message: hasKeyboard ? 'Add expense (Ctrl+N)' : '',
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add expense', style: TextStyle(fontSize: 16)),
+                  onPressed: addExpense ?? () => addExpenseFlow(context, wc),
+                ),
               ),
             ]),
-          Panel(children: [
-            SplitRow(start: const Heading('Recent', size: 15), end: Muted(_freshness(wc), size: 12, align: TextAlign.end)),
-            if (recent.isEmpty)
-              const EmptyNote('No transactions yet. Import your bank exports in Plan, or add your first expense.')
-            else
-              Rows(children: [
-                for (final t in recent)
-                  TxTile(
-                      t: t,
-                      currency: cur,
-                      onTap: () async {
-                        final r = await showSheet<String>(context, TxSheet(wc: wc, t: t));
-                        if (r != null && context.mounted) toast(context, r == 'deleted' ? 'Deleted' : 'Category saved');
-                      }),
+            if (s.savedFor != p.start && wc.goals.isNotEmpty)
+              Panel(children: [
+                const HeadingRow(Heading('Payday checklist', size: 15), Tag('pay yourself first')),
+                Text('Move ${money(p.goalMonthly, cur, decimals: 0)} to your savings account before you spend anything else.',
+                    style: const TextStyle(fontSize: 14)),
+                Rows(children: [for (final g in wc.goals) LineItem(g.name, money(g.monthly, cur, decimals: 0))]),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.check),
+                  label: Text('I moved ${money(p.goalMonthly, cur, decimals: 0)}'),
+                  onPressed: () {
+                    wc.paydayDone(p.start);
+                    toast(context, 'Savings logged');
+                  },
+                ),
               ]),
+            if (deliveryHour)
+              Panel(children: [
+                Row(children: [
+                  Expanded(child: Heading(now.weekday == DateTime.sunday ? 'Sunday delivery hour' : 'After-work delivery hour', size: 15)),
+                  Icon(Icons.schedule, size: 18, color: c.muted)
+                ]),
+                Text(
+                  'This month: $deliveryCount ${deliveryCount == 1 ? 'order' : 'orders'}, ${money(deliverySum, cur)}. '
+                  '${p.allowanceToday > 0 ? 'A typical ${money(1500, cur, decimals: 0)} order is ${(1500 / p.allowanceToday * 100).round()}% of today\'s money.' : 'Today\'s money is already used.'}',
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ]),
+          ], right: [
+            Panel(children: [
+              SplitRow(start: const Heading('Recent', size: 15), end: Muted(_freshness(wc), size: 12, align: TextAlign.end)),
+              if (recent.isEmpty)
+                const EmptyNote('No transactions yet. Import your bank exports in Plan, or add your first expense.')
+              else
+                Rows(children: [
+                  for (final t in recent)
+                    TxTile(
+                        t: t,
+                        currency: cur,
+                        onTap: () async {
+                          final r = await showSheet<String>(context, TxSheet(wc: wc, t: t));
+                          if (r != null && context.mounted) toast(context, r == 'deleted' ? 'Deleted' : 'Category saved');
+                        }),
+                ]),
+            ]),
           ]),
         ]));
   }

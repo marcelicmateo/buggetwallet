@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'demo_data.dart';
+import 'support/harness.dart' show navTab;
 
 /// Distinctive texts of the synthetic data: none of them may reach the log.
 const _private = [
@@ -38,7 +39,7 @@ void main() {
     await binding.takeScreenshot('1-today');
 
     for (final (i, tab) in ['Spending', 'Wishlist', 'Goals', 'Plan'].indexed) {
-      await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text(tab)));
+      await tester.tap(navTab(tab));
       await tester.pumpAndSettle();
       await binding.takeScreenshot('${i + 2}-${tab.toLowerCase()}');
     }
@@ -62,7 +63,7 @@ void main() {
     await wc.importFiles([('statement-secret-name.csv', Uint8List.fromList(utf8.encode(csv)))]);
     final t = wc.txs.firstWhere((x) => x.tx.description.contains('IKEA ZAGREB'));
     wc.setCategory(t.tx, 'Shopping', always: true);
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Today')));
+    await tester.tap(navTab('Today'));
     await tester.pumpAndSettle();
 
     // Let the engine report frame timings (batched), then close the frame window.

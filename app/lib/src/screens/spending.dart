@@ -3,6 +3,7 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
+import '../layout.dart';
 import '../logging.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
@@ -27,71 +28,72 @@ class _SpendingScreenState extends State<SpendingScreen> {
     final (selSum, avg, periods, trend, done, top, monthTxs) =
         (v.summary, v.average, v.periods, v.trend, v.overview, v.topPlaces, v.transactions);
 
-    return ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        children: gapped([
-          Panel(children: [
-            const Eyebrow('Saving or losing'),
-            if (periods.isEmpty) ...[
-              const Heading('No pay periods yet'),
-              const Muted('Import a bank file with your salary. Each pay period runs from one salary to the next.'),
-            ] else ...[
-              Heading(_savedHeading(done, cur)),
-              Muted(_savedNote(done)),
-              PeriodNetChart(periods: periods, trend: trend, currency: cur),
-            ],
-          ]),
-          Panel(children: [
-            const Eyebrow('Where it goes'),
-            Heading('${monthLong(sel)}: ${money(selSum.out, cur, decimals: 0)} out'),
-            Muted(
-                'Income ${money(selSum.income, cur, decimals: 0)}. Spending and bills by category; the dark tick is your average of the 6 months before.'),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(children: [
-                for (final m in v.months.sublist(v.months.length - 7))
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: ChoiceChip(
-                        label: Text(m == current ? '${monthShort(m)} (now)' : monthShort(m)),
-                        selected: m == sel,
-                        onSelected: (_) {
-                          logNav('spending.month', {'month': m});
-                          setState(() => selected = m);
-                        }),
-                  ),
-              ]),
-            ),
-            CategoryBars(values: selSum.byCategory, average: avg, currency: cur),
-          ]),
-          Panel(children: [
-            Heading('Top places in ${monthLong(sel)}', size: 15),
-            if (top.isEmpty)
-              const EmptyNote('No card spending this month yet.')
-            else
-              Rows(children: [
-                for (final (name, n, total) in top)
-                  LineItem(name, money(total, cur, decimals: 0), sub: '$n ${n == 1 ? 'payment' : 'payments'}')
-              ]),
-          ]),
-          Panel(children: [
-            Heading('All transactions in ${monthLong(sel)}', size: 15),
-            const Muted('Tap one to change its category. Transfers between your own accounts are hidden.'),
-            if (monthTxs.isEmpty)
-              const EmptyNote('No transactions.')
-            else
-              Rows(children: [
-                for (final t in monthTxs)
-                  TxTile(
-                      t: t,
-                      currency: cur,
-                      onTap: () async {
-                        final r = await showSheet<String>(context, TxSheet(wc: wc, t: t));
-                        if (r != null && context.mounted) toast(context, r == 'deleted' ? 'Deleted' : 'Category saved');
+    return ListView(padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24), children: [
+      TwoCol(left: [
+        Panel(children: [
+          const Eyebrow('Saving or losing'),
+          if (periods.isEmpty) ...[
+            const Heading('No pay periods yet'),
+            const Muted('Import a bank file with your salary. Each pay period runs from one salary to the next.'),
+          ] else ...[
+            Heading(_savedHeading(done, cur)),
+            Muted(_savedNote(done)),
+            PeriodNetChart(periods: periods, trend: trend, currency: cur),
+          ],
+        ]),
+        Panel(children: [
+          const Eyebrow('Where it goes'),
+          Heading('${monthLong(sel)}: ${money(selSum.out, cur, decimals: 0)} out'),
+          Muted(
+              'Income ${money(selSum.income, cur, decimals: 0)}. Spending and bills by category; the dark tick is your average of the 6 months before.'),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              for (final m in v.months.sublist(v.months.length - 7))
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ChoiceChip(
+                      label: Text(m == current ? '${monthShort(m)} (now)' : monthShort(m)),
+                      selected: m == sel,
+                      onSelected: (_) {
+                        logNav('spending.month', {'month': m});
+                        setState(() => selected = m);
                       }),
-              ]),
-          ]),
-        ]));
+                ),
+            ]),
+          ),
+          CategoryBars(values: selSum.byCategory, average: avg, currency: cur),
+        ]),
+        Panel(children: [
+          Heading('Top places in ${monthLong(sel)}', size: 15),
+          if (top.isEmpty)
+            const EmptyNote('No card spending this month yet.')
+          else
+            Rows(children: [
+              for (final (name, n, total) in top)
+                LineItem(name, money(total, cur, decimals: 0), sub: '$n ${n == 1 ? 'payment' : 'payments'}')
+            ]),
+        ]),
+      ], right: [
+        Panel(children: [
+          Heading('All transactions in ${monthLong(sel)}', size: 15),
+          const Muted('Tap one to change its category. Transfers between your own accounts are hidden.'),
+          if (monthTxs.isEmpty)
+            const EmptyNote('No transactions.')
+          else
+            Rows(children: [
+              for (final t in monthTxs)
+                TxTile(
+                    t: t,
+                    currency: cur,
+                    onTap: () async {
+                      final r = await showSheet<String>(context, TxSheet(wc: wc, t: t));
+                      if (r != null && context.mounted) toast(context, r == 'deleted' ? 'Deleted' : 'Category saved');
+                    }),
+            ]),
+        ]),
+      ]),
+    ]);
   }
 }
 

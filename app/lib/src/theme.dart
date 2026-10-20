@@ -91,6 +91,10 @@ ThemeData buildTheme(Brightness b) {
     ),
     dividerColor: w.line,
     navigationBarTheme: NavigationBarThemeData(backgroundColor: w.surface, indicatorColor: w.accentSoft),
+    navigationRailTheme: NavigationRailThemeData(backgroundColor: w.surface, indicatorColor: w.accentSoft),
+    // Keyboard focus must be visible on rows, buttons and the rail (Tab); hover is lighter.
+    focusColor: w.accent.withValues(alpha: 0.2),
+    hoverColor: w.surface2,
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: w.surface2,
