@@ -125,7 +125,9 @@ void main() {
       File('${tmp.path}/budget-wallet/backups/notes.txt').writeAsStringSync('not a backup');
       final l = await listBackups(tmp.path);
       expect([for (final b in l) b.date], ['2026-03-05', '2026-02-01', '2026-01-31', '2025-12-31']);
-      expect([for (final b in l) b.name], [
+      expect([
+        for (final b in l) b.name
+      ], [
         'bw-backup-2026-03-05.bwb',
         'bw-backup-2026-02-01.bwb',
         'bw-backup-2026-01-31.bwb',
@@ -160,7 +162,8 @@ void main() {
       expect(fresh.settings().categoryBudgets, {'Groceries': 30000});
       expect(fresh.merchantRules()['lidl'], 'Groceries');
       final cat = fresh.categorizer();
-      expect([for (final t in fresh.transactions()) cat.categoryOf(t)], [for (final t in a.repo.transactions()) a.repo.categorizer().categoryOf(t)]);
+      expect([for (final t in fresh.transactions()) cat.categoryOf(t)],
+          [for (final t in a.repo.transactions()) a.repo.categorizer().categoryOf(t)]);
       expect(fresh.transactions().any((t) => t.note == 'lunch'), isFalse, reason: 'the deleted row stays deleted');
       fresh.close();
     });
@@ -225,7 +228,8 @@ void main() {
       for (final cut in [0, 5, bytes.length ~/ 2, bytes.length - 1]) {
         final f = File('${tmp.path}/cut$cut.bwb')..writeAsBytesSync(bytes.sublist(0, cut));
         final fresh = WalletRepo.inMemory();
-        await expectLater(restoreBackup(fresh, f.path, key), throwsA(anyOf(isA<VaultException>(), isA<BackupException>())), reason: 'cut at $cut');
+        await expectLater(restoreBackup(fresh, f.path, key), throwsA(anyOf(isA<VaultException>(), isA<BackupException>())),
+            reason: 'cut at $cut');
         expect(fresh.isEmpty, isTrue, reason: 'cut at $cut');
         fresh.close();
       }

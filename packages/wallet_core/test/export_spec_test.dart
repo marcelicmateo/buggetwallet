@@ -4,8 +4,9 @@ import 'package:wallet_core/wallet_core.dart';
 
 const _header = 'date,amount,category,description,source,note';
 
-Tx _tx(String id, String date, int cents, {String cat = 'Shopping', String desc = 'Test shop', String? note, String source = 'pbz'}) =>
-    Tx(id: id, source: source, date: date, amount: cents, description: desc, category: cat, note: note);
+CategorizedTx _tx(String id, String date, int cents,
+        {String cat = 'Shopping', String desc = 'Test shop', String? note, String source = 'pbz'}) =>
+    CategorizedTx(Tx(id: id, source: source, date: date, amount: cents, description: desc, category: cat, note: note), cat, kindOf(cat));
 
 /// Minimal RFC 4180 reader for the round-trip checks.
 List<List<String>> _parse(String csv) {
@@ -161,7 +162,8 @@ void main() {
         _tx('1', '2026-01-02', -1000, cat: 'Groceries'),
         _tx('2', '2026-01-03', 150000, cat: 'Salary'),
         _tx('3', '2026-01-04', -5000, cat: 'Internal transfer'),
-        Tx(id: '4', source: 'pbz', date: '2026-01-05', amount: -7777, category: 'Groceries', deleted: true),
+        CategorizedTx(
+            Tx(id: '4', source: 'pbz', date: '2026-01-05', amount: -7777, category: 'Groceries', deleted: true), 'Groceries', Kind.flex),
       ]));
       expect(rows[1], row('2026-01', {'Groceries': '10.00'}, '10.00'));
     });
