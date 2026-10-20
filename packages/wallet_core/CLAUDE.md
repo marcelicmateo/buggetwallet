@@ -24,7 +24,8 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   difference (from the unclamped total), `addGoalContribution` adds one, `payGoals(period:)` writes `pay:<goal>:<period>`
   rows (one per goal and period). Rows of a deleted or missing goal are hidden. Mixed versions: an older build writes
   `saved` as a full value of what it sees (the base only), so a later remote `saved` is simply the new base and
-  contributions add on top.
+  contributions add on top. `addGoalContribution` writes nothing (returns null) for 0 or a goal deleted here (a sync
+  may have removed it meanwhile); a goal that never existed here is an `ArgumentError`.
 - `WalletRepo.schemaVersion` (meta `schema`): bump it when adding a synced entity. Opening an existing database with an
   older version clears `peer_files` once, so the next sync re-reads every file and applies ops the older build skipped.
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption; `UnsealFailure` says why a

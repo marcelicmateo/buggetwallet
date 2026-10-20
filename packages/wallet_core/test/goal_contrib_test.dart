@@ -120,7 +120,7 @@ void main() {
       expect(r.pendingOps().length, before);
     });
 
-    test('addGoalContribution refuses a missing or deleted goal, a bad date and totals beyond the cap', () {
+    test('addGoalContribution refuses a missing goal, a bad date and totals beyond the cap; a deleted goal gets nothing', () {
       final id = r.saveGoal(name: 'Synthetic fund', target: 100000, saved: 0, monthly: 0, sort: 1);
       expect(() => r.addGoalContribution('nope', 100), throwsArgumentError);
       expect(() => r.addGoalContribution(id, 100, date: '20.01.2026'), throwsArgumentError);
@@ -129,7 +129,8 @@ void main() {
       expect(() => r.addGoalContribution(id, Goal.maxSaved + 1), throwsArgumentError);
       expect(() => r.addGoalContribution(id, -Goal.maxSaved - 1), throwsArgumentError);
       r.deleteGoal(id);
-      expect(() => r.addGoalContribution(id, 100), throwsArgumentError);
+      expect(r.addGoalContribution(id, 100), isNull, reason: 'deleted meanwhile: nothing to add to, no error');
+      expect(r.goals(), isEmpty, reason: 'not brought back');
       expect(r.db.select('SELECT * FROM goal_contrib'), isEmpty);
     });
 

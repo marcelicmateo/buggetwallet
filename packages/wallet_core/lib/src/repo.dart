@@ -588,14 +588,15 @@ class WalletRepo {
       ('goal_contrib', id ?? _newId('c'), {'goal_id': goalId, 'amount': cents, 'date': date ?? isoDate(DateTime.now()), 'deleted': 0});
 
   /// Adds [cents] (negative for a correction) to goal [goalId]'s saved total as its own synced row, dated [date]
-  /// (`YYYY-MM-DD`, default today). Returns the contribution id, or null for 0 (nothing written). Throws
-  /// [ArgumentError] for a goal that is missing or deleted here, a bad date, or a total that would leave
-  /// ±[Goal.maxSaved] (adds made at the same time on other devices can still pass it: reads clamp).
+  /// (`YYYY-MM-DD`, default today). Returns the contribution id, or null when nothing is written: for 0, or for a
+  /// goal deleted here (it was removed meanwhile, e.g. by a sync, so there is nothing to add to and the goal is not
+  /// brought back). Throws [ArgumentError] for a goal that never existed here, a bad date, or a total that would
+  /// leave ±[Goal.maxSaved] (adds made at the same time on other devices can still pass it: reads clamp).
   String? addGoalContribution(String goalId, int cents, {String? date}) {
     if (date != null && !_isoDate.hasMatch(date)) throw ArgumentError('The date is not YYYY-MM-DD.');
     final rs = db.select('SELECT deleted FROM goals WHERE id = ?', [goalId]);
-    if (rs.isEmpty || rs.first['deleted'] != 0) throw ArgumentError('No such goal.');
-    if (cents == 0) return null;
+    if (rs.isEmpty) throw ArgumentError('No such goal.');
+    if (rs.first['deleted'] != 0 || cents == 0) return null;
     final (raw, _) = _goalSaved(goalId)!;
     if (cents.abs() > Goal.maxContribution || (raw + cents).abs() > Goal.maxSaved && (raw + cents).abs() > raw.abs()) {
       throw ArgumentError('The goal total is limited to the cap either way.');
