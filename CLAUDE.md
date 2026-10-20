@@ -64,6 +64,9 @@ Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't 
   in the container in the background (window on the owner's desktop; `--demo` = synthetic demo wallet). Then
   `reload`, `restart`, `shot [file]`, `trace start|stop [name]` (timeline + frame summary in the run dir; use
   `--profile` for real numbers), `status`, `stop`. Wallet data is a throwaway folder in `dist/live/`, never the real one.
+  File pickers work: a portal + GTK backend run on the container's private bus (nothing from the host bus); the dialog sees
+  only the container (repo, this run's logs, `history/`; not `device-logs/`) and `/files` = `~/.local/share/budget-wallet/live-files`
+  (copy test bank files in; saved logs land there).
   The `dart` MCP server (`.mcp.json` → `tools/build.sh mcp`, same pod) reaches it: `dtd` tool, `connect` with the dtd
   URI from `tools/live.sh status`, then `hot_reload`, `get_runtime_errors`, `widget_inspector`. **Privacy:** the
   window uses the Wayland socket only (never X11). Drive the app only through the VM service / MCP server, never
@@ -113,6 +116,9 @@ test-watcher run (haiku/low) lists failures and `BUG:` skips, then the lead plan
 (`tools/build.sh core|importer|app|lint`, a single test file, `tools/emulator.sh test <name>`) and batch changes
 before each run. Full `tools/build.sh test` and full emulator/desktop runs happen once per agent at the end, and the
 lead runs the complete verification once per **stage** (several features/test sets merged together), not per change.
+**No polling (owner rule):** never wait with `sleep`/`until` loops on local work. Start long commands with `run_in_background`
+and wait for the completion notification; to wait for another process use the Monitor tool. Only CI (external) is checked
+on an interval (`tools/ci-status.sh`).
 
 ## Workflow
 Owner sends one request or piece of feedback (often by voice: keep replies short). Claude builds,

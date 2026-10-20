@@ -7,3 +7,6 @@ libsqlite3-dev sqlite3 libsecret-1-dev
 xvfb xauth dbus xdg-user-dirs libgl1-mesa-dri libegl1 libegl-mesa0 libglx-mesa0 libgles2
 # Fonts: GTK and Flutter's text fall back to fontconfig's default sans
 fontconfig fonts-dejavu-core
+# Live mode (tools/live.sh): file pickers. file_picker talks to the xdg-desktop-portal FileChooser on the session bus;
+# live mode runs its own private bus with these two on it, so the dialog shows in the app's Wayland window
+xdg-desktop-portal xdg-desktop-portal-gtk
