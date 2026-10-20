@@ -9,7 +9,22 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   type (`_fieldValue`): a wrong-typed one is ignored (`repo.badField`, entity + field only) without recording its
   clock, the op's other fields apply, and a row is only created when some field applies. New column: add its type there.
 - `budget.dart` — period maths: `PeriodBudget` (safe to spend), `MonthSummary`, `Affordability`.
-- `categories.dart` — `Categorizer`: item override → merchant rules → patterns → built-in rules.
+- `categories.dart` — `Categorizer`: item override → (paired transfer → importer `kindHint` → source/pattern rules) →
+  per-merchant rules. `kindHint` (importer `TxKind`, stored as `tx.kind_hint` by `importBatch`, never edited) decides
+  first where it can: `salary` → Salary, `atm` → Rent at or above `rentCashThreshold` else Cash, `fee` → Bank fees,
+  `ownTransfer` → Internal transfer; `standingOrder`, `card`, `other` and null fall through to the description rules
+  (built-in merchant patterns, `merchantPatterns`). A row with `transferTo` is an Internal transfer before any hint.
+  `account` from the importer is never stored (it names the owner's account).
+- `transfers.dart` — `planTransfers`: own transfers between accounts, generic across sources: an outflow in one source
+  and the equal inflow (same currency) in another source within `transferDays` (3, inclusive, either way in time) are
+  paired through `tx.transfer_to` (each side holds the other's id). Pure and deterministic: open outflows oldest first
+  (date, id), each takes the closest open inflow (days, then earliest date, then smallest id); a row pairs once; a
+  holding pair is never re-planned; a partner that is deleted, manual or points elsewhere reopens the row (`transfer_to`
+  cleared, or re-paired at once); a partner not here yet keeps the link. A `kindHint == ownTransfer` row needs no
+  partner but may be one. `WalletRepo._pairTransfers` runs it before `_matchManual` (`_reconcile`: after imports,
+  deletes and `runPendingMatch`), loading only rows with a possible partner (self-join on `amount`, index `tx_amount`)
+  plus stale links and their targets. A paired row counts as gone for the manual match it replaced (the cash entry
+  counts again). `ImportSummary.transfers` = new pairs.
 - `matching.dart` — `planMatches`: hand-added expense ↔ bank row (same amount, ±3 days, one-to-one), deterministic;
   only a bank row the adding device did not hold yet replaces the entry (`SeenBank`: the entry's synced `seen_bank`,
   per device the highest bank `amount` clock held at add time; older entries: rows written after the entry). A match
@@ -26,8 +41,9 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   `saved` as a full value of what it sees (the base only), so a later remote `saved` is simply the new base and
   contributions add on top. `addGoalContribution` writes nothing (returns null) for 0 or a goal deleted here (a sync
   may have removed it meanwhile); a goal that never existed here is an `ArgumentError`.
-- `WalletRepo.schemaVersion` (meta `schema`): bump it when adding a synced entity. Opening an existing database with an
-  older version clears `peer_files` once, so the next sync re-reads every file and applies ops the older build skipped.
+- `WalletRepo.schemaVersion` (meta `schema`): bump it when adding a synced entity or field (3 = `tx.kind_hint`,
+  `tx.transfer_to`). Opening an existing database with an older version clears `peer_files` once, so the next sync
+  re-reads every file and applies ops (or fields) the older build skipped.
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption; `UnsealFailure` says why a
   file was refused), `sync.dart` (FolderSync).
 - `sync_problems.dart` — a peer file that cannot be used is skipped (the run goes on with the other files and devices)
@@ -76,13 +92,20 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   shown as is, and the next edit sets the exact value). Paying goals offline on two devices counts once only when both
   pass the same `period` (or share the `periodStart` setting); otherwise twice.
 - Replay on upgrade needs the old sync files: once files are pruned (gap 4), snapshots must carry `goal_contrib` rows.
+- Own transfers pair on amount, currency, source and date only: an unrelated equal inflow in another bank within 3 days
+  (a friend's repayment on the day of a top-up) can be taken as the partner, and the real one stays open. The user
+  override (`category`) corrects the category but not the link. Two devices that pair offline from different row sets
+  can write different partners for one row; after sync the non-mutual link is cleared and the pair that both hold stays.
+  Older builds drop `kind_hint`/`transfer_to` from ops they apply (replayed once on upgrade) and categorize a paired
+  row by its text, so they can show a transfer as spending until they upgrade.
 - A remote clock far in the future (a peer with a wrong date) is taken as is: this device's later writes sort after it,
   and an edit made on a device with a correct clock loses to that peer's older edits until real time catches up.
 
 ## Tests
 - `test/core_test.dart`, one `group` per area. Shared synthetic data in `test/support/synthetic.dart`
   (`n(...)` builds a transaction, `january` is a sample month). Add new feature tests as `test/<feature>_test.dart`
-  (goals: `test/goal_contrib_test.dart`, quarantine: `test/sync_quarantine_test.dart`; `<feature>_edge_test.dart` are
+  (goals: `test/goal_contrib_test.dart`, quarantine: `test/sync_quarantine_test.dart`, hints: `test/kind_hint_test.dart`,
+  own transfers incl. two devices: `test/transfers_test.dart`; `<feature>_edge_test.dart` are
   spec-written edge cases). Multi-device sim in `test/support/sim.dart` (lists entities on its own): `Device` (own
   folder and database; `dbPath:` + `reopen()` simulate a restart or upgrade), `Net`, `dump`, `bookkeeping`.
 - Run: `tools/build.sh test` from the repo root (or `tools/build.sh shell`, then `cd packages/wallet_core && dart test`).

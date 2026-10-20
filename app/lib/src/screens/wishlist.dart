@@ -52,6 +52,8 @@ class _WishlistScreenState extends State<WishlistScreen> {
                         controller: price,
                         onChanged: (_) => setState(() {}),
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        textAlign: TextAlign.end,
+                        style: numStyle,
                         decoration: InputDecoration(labelText: 'Price', suffixText: currencySymbol(cur))),
                   ),
                 ]),
@@ -65,7 +67,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                   Rows(children: [
                     for (final w in ready)
                       _WishRow(w: w, currency: cur, sub: 'Waited ${s.coolHours}h', actions: [
-                        FilledButton.tonal(onPressed: () => _buy(w), child: const Text('Buy it')),
+                        OutlinedButton(style: accentOutlined(context), onPressed: () => _buy(w), child: const Text('Buy it')),
                         TextButton(onPressed: () => _skip(w), child: const Text('Skip')),
                       ]),
                   ]),
@@ -81,6 +83,12 @@ class _WishlistScreenState extends State<WishlistScreen> {
                         TextButton(onPressed: () => _skip(w), child: const Text("Don't need it")),
                       ]),
                   ]),
+                if (waiting.isNotEmpty)
+                  TotalRule(
+                      child: SplitRow(
+                          start: const Text('Waiting in total', style: TextStyle(fontWeight: FontWeight.w600)),
+                          end: Text(money(wc.waitingTotal, cur, decimals: 0),
+                              textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w600)))),
               ]),
               Panel(children: [
                 HeadingRow(
@@ -167,13 +175,14 @@ class _WishRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => HoverTint(
           child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SplitRow(
               start: Text(w.name, style: const TextStyle(fontWeight: FontWeight.w500)),
-              end: Text(money(w.price, currency, decimals: 0), textAlign: TextAlign.end, style: numStyle)),
+              end: Text(money(w.price, currency, decimals: 0),
+                  textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
           Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
-            Text(sub, style: TextStyle(fontSize: 12.5, color: context.c.muted)),
+            Text(sub, style: TextStyle(fontSize: 12.5, color: context.c.ink2)),
             if (actions.isNotEmpty) Wrap(spacing: 4, children: actions),
           ]),
         ]),

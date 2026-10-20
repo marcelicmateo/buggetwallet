@@ -1,3 +1,5 @@
+import 'package:wallet_importer/wallet_importer.dart' show TxKind;
+
 import 'categories.dart';
 import 'dates.dart';
 import 'logs.dart';
@@ -20,6 +22,9 @@ void resetInvalidSettingLog() => _invalidLogged.clear();
 String? _str(Object? v) => v is String ? v : null;
 int? _int(Object? v) => v is int ? v : null;
 
+/// A stored `kind_hint` as a [TxKind]; a name this build does not know (a newer importer) reads as null.
+TxKind? _kind(Object? v) => v is String ? TxKind.values.asNameMap()[v] : null;
+
 /// A transaction as stored in the wallet database. Amounts are in minor units (cents).
 class Tx {
   final String id;
@@ -34,6 +39,14 @@ class Tx {
   final bool manual;
   final String? matchedTo; // for manual entries: the bank row that replaced it
   final bool deleted;
+
+  /// What kind of movement the bank's export said this is (`kind_hint`, written once by the import), or null for
+  /// hand-added rows, rows imported before the field existed, and kinds the profile could not tell.
+  final TxKind? kindHint;
+
+  /// For a bank row that is one side of a transfer between the owner's own accounts: the other side's id
+  /// (`transfer_to`, written by `planTransfers`). Such a row is an `Internal transfer`.
+  final String? transferTo;
 
   /// A manual entry whose [matchedTo] bank row is not on this device yet (its sync file has not arrived): the entry
   /// still counts, so the expense counts once until the row arrives. Set by `WalletRepo` reads, never stored.
@@ -52,6 +65,8 @@ class Tx {
     this.manual = false,
     this.matchedTo,
     this.deleted = false,
+    this.kindHint,
+    this.transferTo,
     this.matchPending = false,
   });
 
@@ -73,6 +88,8 @@ class Tx {
         manual: r['manual'] == 1,
         matchedTo: _str(r['matched_to']),
         deleted: r['deleted'] == 1,
+        kindHint: _kind(r['kind_hint']),
+        transferTo: _str(r['transfer_to']),
         matchPending: r['match_pending'] == 1,
       );
 }

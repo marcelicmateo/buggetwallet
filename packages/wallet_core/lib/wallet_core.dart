@@ -2,6 +2,8 @@
 /// encrypted folder sync (for Syncthing) and the budget engine.
 library;
 
+export 'package:wallet_importer/wallet_importer.dart' show TxKind;
+
 export 'src/budget.dart';
 export 'src/categories.dart';
 export 'src/dates.dart';
@@ -12,4 +14,5 @@ export 'src/models.dart';
 export 'src/periods.dart';
 export 'src/repo.dart';
 export 'src/sync.dart';
+export 'src/transfers.dart';
 export 'src/vault.dart';

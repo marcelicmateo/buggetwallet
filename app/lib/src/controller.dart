@@ -183,6 +183,15 @@ class WalletController extends ChangeNotifier {
         return (xs.length, -xs.fold<int>(0, (a, t) => a + t.amount));
       });
 
+  /// The sum of every goal's target (cents).
+  int get goalTargetTotal => _cached('goalTargetTotal', () => goals.fold<int>(0, (a, g) => a + g.target));
+
+  /// The sum of the prices of wishes still cooling off (cents). Not cached: it depends on the wall clock.
+  int get waitingTotal {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return wish.where((w) => w.status == 'waiting' && w.hoursLeft(settings.coolHours, now) > 0).fold<int>(0, (a, w) => a + w.price);
+  }
+
   /// The date of the newest transaction per bank source (`pbz`, `revolut`); a source without rows is missing.
   Map<String, String> get latestBySource => _cached('latestBySource', () {
         final out = <String, String>{};

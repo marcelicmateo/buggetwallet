@@ -23,7 +23,15 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   the day changed, so a wallet without a sync folder also moves on at midnight.
 - `lib/src/file_chooser.dart` — `FileChooser`: the system file/folder/save dialogs behind one injectable class. They can throw
   (Linux without xdg-desktop-portal), so every call site catches, logs the type and shows `chooserFailedMessage`.
-- `lib/src/screens/*.dart` — one file per tab. `lib/src/widgets/` — `charts.dart` (fl_chart), `common.dart`,
+- `lib/src/theme.dart` — the D3 Ledger theme (`docs/design/ledger-spec.md`): `WalletColors` (paper/ink tokens incl. `lineStrong`; light and
+  night ledger, following the system), `contrastRatio`, `numStyle` (IBM Plex Mono + tabular figures: every amount uses it), `buildTheme`
+  (all component themes live there: buttons radius 3, chips/inputs radius 2, dialog/sheet/nav/snackbar), `accentOutlined` (the old tonal
+  button), `marginLineColor`. Fonts: six unmodified IBM Plex TTFs in `assets/fonts/` + `OFL.txt` (licence registered in `main()`;
+  source and version in `third_party/fonts/README.md`). No `Card`, no pills, no shadows: ruled lines instead.
+- `lib/src/screens/*.dart` — one file per tab. `lib/src/widgets/` — `charts.dart` (fl_chart charts, `CategoryBars`, `RuledBar`, `PaceBar`),
+  `common.dart` (`Panel` = ruled section, `SectionHead`, `Eyebrow`, `Heading`, `TotalRule`/`DoubleRule`, `TxTile` + `TxHeaderRow`
+  (Date | Particulars | Amount columns, stacked above text scale 1.15), `LineItem`, `Rows`, `SplitRow`, `HeadingRow`, `Tag`, `LedgerLogo`,
+  `NavBarFrame` (bar top rule + accent mark), `MarginLine` (red margin rule, wide windows only), `toast`),
   `sheets.dart` (bottom sheets: add expense, transaction details, goal).
 - `lib/src/format.dart` — money/date formatting and parsing (unit-tested in `test/widget_test.dart`).
 - `key_store.dart` — wallet key in the system keystore (phones) or a private file (desktop).
@@ -52,4 +60,6 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
 - `test/adaptive_test.dart` (four window sizes × two text scales), `test/adaptive_edge_test.dart` (boundaries, shortcuts, dialogs,
   resizing), helpers in `test/support/layout.dart`; `integration_test/adaptive_test.dart` takes desktop screenshots at
   1280×800, 1920×1080 and 800×1280 (`tools/build.sh desktop-test adaptive`). Tests find tabs with `tapTab`/`navTab`: they work for the bar and the rail.
+- `test/theme_*_test.dart` — the Ledger theme: contrast ratios of every token, structure (no `Card`, nav by width, Panel without radius), text
+  scale 2.0 at 320/360 with the real fonts, amounts in Plex Mono with tabular figures and a shared right edge, the six font files and `OFL.txt`.
 - `test/` — formatting and widget tests. Run: `tools/build.sh test` (format check, `flutter analyze`, `flutter test`).
