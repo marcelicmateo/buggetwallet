@@ -23,6 +23,9 @@ All numbers below are made-up samples. No personal figures. "Proposed" = not bui
 
 - 2026-10-20: Budget vs actual per category (§4.5) approved: **monthly** budgets (calendar month, like the chart), prefilled from the 6-month average on request, "left" line on Today. The two matching/sync known limits (lagging-device cash match, damaged-file double count) are solved in the sync redesign, not before.
 
+- 2026-10-20: M4 Habits (§4.6) approved: review day Sunday by default, changeable per user; confirmed recurring bills **reduce safe-to-spend** until paid (reserved money is not spendable); nudges at 15:00 weekdays and Sunday 11:00; `flutter_local_notifications` allowed; notification text = funny, encouraging words only, never amounts.
+- 2026-10-20: `v2` merged into `master` (owner).
+
 ## 2. Data flow as built (v2) — summary
 ```mermaid
 flowchart LR
