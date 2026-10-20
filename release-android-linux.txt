@@ -1,70 +1,16 @@
-commit: a20d0e6f353ab50e368116825c86d11819b7b362  ref: v2  run: 38872000543
+commit: 9b46de70847caeca03ae0b9afc2783a0885275aa  ref: master  run: 39476443472
 
 Resolving dependencies...
 Downloading packages...
-+ android_file_picker 2.1.1
-+ archive 4.5.2
-+ args 2.7.0
-+ code_assets 2.1.0
-+ cross_file 0.3.5+5 (0.4.0 available)
-+ crypto 3.0.7
-+ cryptography 2.9.0
-+ dbus 0.8.0
-+ equatable 2.1.0 (3.0.0 available)
-+ ffi 2.2.0
-+ ffi_leak_tracker 0.1.2
-+ file_picker 13.1.0
-+ file_picker_darwin 2.3.2
-+ file_picker_linux 2.0.2
-+ file_picker_platform_interface 4.2.0
-+ file_picker_web 4.2.0
-+ fl_chart 1.2.0
-+ flutter_secure_storage 11.2.0
-+ flutter_secure_storage_darwin 0.4.3
-+ flutter_secure_storage_linux 3.0.3
-+ flutter_secure_storage_platform_interface 2.1.1
-+ flutter_secure_storage_web 2.1.1
-+ flutter_secure_storage_windows 4.2.2
-+ flutter_web_plugins 0.0.0 from sdk flutter
-+ hooks 2.2.0
-+ jni 1.1.0
-+ jni_flutter 1.0.4+1
-+ jni_util 1.0.0
-+ logging 1.3.0
+  cross_file 0.3.5+5 (0.4.0 available)
+  equatable 2.1.0 (3.0.0 available)
   material_color_utilities 0.13.0 (0.13.1 available)
-> meta 1.19.0 (was 1.18.3)
-+ objective_c 9.6.2
-+ package_config 3.0.0
-+ path_provider 2.1.6
-+ path_provider_android 2.3.1
-+ path_provider_foundation 2.6.0
-+ path_provider_linux 2.2.2
-+ path_provider_platform_interface 2.1.3
-+ path_provider_windows 2.3.0
-+ petitparser 7.1.0
-+ platform 3.2.0
-+ plugin_platform_interface 2.1.8
-+ posix 6.5.2
-+ pub_semver 2.2.1
-+ qr 3.0.2 (4.0.0 available)
-+ qr_flutter 4.1.0
-+ record_use 1.1.1
-+ sqlite3 2.9.4 (3.7.1 available)
-+ sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
+  qr 3.0.2 (4.0.0 available)
+  sqlite3 2.9.4 (3.7.1 available)
+  sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
   test_api 0.7.12 (0.7.15 available)
-+ typed_data 1.4.0
   vector_math 2.4.0 (2.4.3 available)
-+ wallet_core 0.1.0 from path ../packages/wallet_core
-+ wallet_importer 0.1.0 from path ../packages/wallet_importer
-+ web 1.1.1
-+ win32 6.4.0
-+ windows_file_picker 2.0.1
-+ xdg_directories 1.1.0
-+ xml 7.1.0
-+ yaml 3.1.4
-These packages are no longer being depended on:
-- cupertino_icons 1.0.9
-Changed 58 dependencies!
+Got dependencies!
 8 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 [================                       ] 42% Unzipping... android-ndk-r28c/tool
@@ -96,16 +42,29 @@ Try `flutter pub outdated` for more information.
 [=====================                  ] 55% Unzipping... android-ndk-r28c/CHAN
 [=======================================] 100% Unzipping... android-ndk-r28c/CHA
 
-Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 4084 bytes (99.8% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
 Checking the license for package CMake 3.22.1 in /usr/local/lib/android/sdk/licenses
 License for package CMake 3.22.1 accepted.
 Preparing "Install CMake 3.22.1 v.3.22.1".
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 4464 bytes (99.7% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
 "Install CMake 3.22.1 v.3.22.1" ready.
 Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
 "Install CMake 3.22.1 v.3.22.1" complete.
 "Install CMake 3.22.1 v.3.22.1" finished.
-Caught exception: Already watching path: /home/runner/work/buggetwallet/buggetwallet/app/android
-Running Gradle task 'assembleRelease'...                          431.9s
-✓ Built build/app/outputs/flutter-apk/app-release.apk (59.6MB)
+Caught exception: Already watching path: /opt/hostedtoolcache/flutter/stable-3.47.7-x64/flutter/packages/flutter_tools/gradle
+Running Gradle task 'assembleRelease'...                          364.6s
+✓ Built build/app/outputs/flutter-apk/app-release.apk (61.5MB)
+Resolving dependencies...
+Downloading packages...
+  cross_file 0.3.5+5 (0.4.0 available)
+  equatable 2.1.0 (3.0.0 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  qr 3.0.2 (4.0.0 available)
+  sqlite3 2.9.4 (3.7.1 available)
+  sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.3 available)
+Got dependencies!
+8 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
 Building Linux application...                                   
 ✓ Built build/linux/x64/release/bundle/budget_wallet
