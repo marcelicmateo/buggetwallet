@@ -8,7 +8,7 @@
 #   history/perf.jsonl    one line per perf-test action per run (tools/build.sh perf): frame counts, build/raster p90/max ms,
 #                         missed frames, ok (budget); frame numbers only
 #   runs/<YYYYMMDD-HHMMSS>-<cmd>-<commit>/   the run's step logs, image build logs, emulator log, test reports,
-#                         screenshots; the newest 30 are kept. dist/logs is a symlink to the latest run of this worktree.
+#                         screenshots; the newest 30 finished runs plus every run in progress (.running marker, < 24 h) are kept. dist/logs is a symlink to the latest run of this worktree.
 # Read the history with tools/build-times.sh. The container gets BW_DATA mounted at the same path and the BW_* variables.
 
 BW_DATA=${BW_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/budget-wallet}
@@ -36,20 +36,36 @@ timing_init() {  # <cmd>
   BW_WORKTREE=${BW_WORKTREE:-$(basename "$ROOT")}
   export BW_RUN BW_COMMIT BW_CMD BW_COLD BW_SOURCE BW_WORKTREE BW_IMAGE
 }
+# prune_runs: under flock, keep every in-progress run (has .running, younger than 24 h) plus the newest 30 finished ones.
+prune_runs() {
+  (
+    flock 8
+    local d finished=()
+    shopt -s nullglob
+    for d in "$BW_DATA"/runs/*/; do  # names start with the timestamp, and globs sort
+      if [[ -e $d/.running && -z "$(find "$d/.running" -mmin +1440 2>/dev/null)" ]]; then continue; fi
+      finished+=("$d")
+    done
+    shopt -u nullglob
+    ((${#finished[@]} > 30)) && rm -rf "${finished[@]:0:${#finished[@]}-30}"
+    return 0
+  ) 8>"$BW_DATA/.prune.lock"
+}
 # run_begin <cmd>: new run dir (unique even when worktrees start at the same second), dist/logs -> it, prune old runs.
 # A nested call (tools/emulator.sh -> tools/build.sh image-name) keeps the outer run.
 run_begin() {
   [[ -n "${BW_RUN_DIR:-}" ]] && return
   timing_init "$1"
   mkdir -p "$BW_DATA/runs" "$BW_DATA/history" "$ROOT/dist"
-  local old=() dir n=1
-  # Keep the newest 30 (names start with the timestamp, and globs sort)
-  shopt -s nullglob; old=("$BW_DATA"/runs/*/); shopt -u nullglob
-  ((${#old[@]} > 29)) && rm -rf "${old[@]:0:${#old[@]}-29}"
+  local dir n=1
   dir="$BW_DATA/runs/$(date +%Y%m%d-%H%M%S)-$1-$BW_COMMIT"
   local base=$dir
   until mkdir "$dir" 2>/dev/null; do n=$((n + 1)); dir="$base-$n"; done
   BW_RUN_DIR=$dir; BW_RUN_ID=$(basename "$dir")
+  : > "$dir/.running"  # in progress: prune_runs keeps it (until 24 h old); removed when this script exits
+  # shellcheck disable=SC2064
+  trap "rm -f '$dir/.running'" EXIT
+  prune_runs
   export BW_RUN_DIR BW_RUN_ID
   [[ -d "$ROOT/dist/logs" && ! -L "$ROOT/dist/logs" ]] && rm -rf "$ROOT/dist/logs"  # pre-symlink layout
   ln -sfn "$dir" "$ROOT/dist/logs"

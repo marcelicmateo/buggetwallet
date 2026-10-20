@@ -130,6 +130,7 @@ case "$CMD" in
     podman rm -f "$NAME" >/dev/null 2>&1 || true
     img=$("$ROOT/tools/build.sh" image-name)
     run_begin live
+    trap - EXIT  # the live app outlives this command: keep the .running marker (prune ignores it after 24 h)
     t0=$(now_us)
     data=$ROOT/dist/live/wallet target=''
     ((demo)) && data=$ROOT/dist/live/demo target=tool/live_demo.dart

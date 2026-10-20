@@ -105,14 +105,17 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   [[ -n "${BW_RUN_DIR:-}" ]] && mapfile -t run < <(run_mounts)
   # Rootless: container root is the host user, so build outputs stay owned by you.
   # Named volumes keep the pub and Gradle caches between runs.
-  exec podman run --rm "${tty[@]}" \
+  # No exec: the shell must stay to remove the run's .running marker on exit (tools/timing.sh)
+  rc=0
+  podman run --rm "${tty[@]}" \
     -v "$ROOT:/work:z" \
     -v bw-pub-cache:/cache/pub \
     -v bw-gradle-cache:/cache/gradle \
     -v bw-android-user:/cache/android \
     "${signing[@]}" "${run[@]}" \
     -e BW_NATIVE=1 -e BW_JOBS -e BW_GL_THREADS \
-    -w /work "$IMAGE" "${inner[@]}"
+    -w /work "$IMAGE" "${inner[@]}" || rc=$?
+  exit "$rc"
 fi
 
 # ---- inside the container (or native) ----
