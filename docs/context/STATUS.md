@@ -54,6 +54,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   `BankProfile`, `kindHint`/`account`, golden tests prove ids unchanged); run pruning keeps in-progress runs. Bugs fixed:
   month chip scrolled off screen (and the fix scrolling the page), desktop plan test typing a missing folder, payGoals
   defaulting to a stale periodStart. Orchestration runbook `docs/context/PIPELINE.md` (cap 4 agents, token rules).
+- 2026-10-20: Stage C: **D3 Ledger theme** (six IBM Plex fonts +1.1 MB, OFL; paper/ink tokens with a contrast test; ruled
+  Panel/SectionHead/TotalRule/TxHeaderRow/MoneyText; night ledger follows the system; margin line at x=22 from 600 dp;
+  theme tests at three widths, dark, text scale 2.0); `kindHint` categorizer + generic own-transfer pairing (equal
+  amounts across sources within 3 days, deterministic, schema 3); controller totals; perf step on a bus without
+  activatable services + 20-min timeout (two hung runs today); run pruning keeps in-progress runs. Full run: unit 509/596/193,
+  desktop 10 files, emulator screens green.
 
 ## Decisions log
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -108,7 +114,6 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - Then: merge v2 to master; budget vs actual (after §4.5 approval); M4 Habits.
 
 ## In flight (2026-10-20)
-- Stage C on branch `stage-c`: D3 Ledger theme (IBM Plex, paper/ink tokens, ruled rows, night ledger) + `kindHint`
-  categorizer and generic own-transfer pairing (3 days, cross-source). Review and full run pending, then merge to `v2`.
 - Proposal waiting for the owner: budget vs actual per category (DESIGN_DECISIONS.md §4.5).
+- `tools/build.sh perf` to be re-run on an idle laptop (today's budgets failed only under load); the headless bus fix is in.
 - Queue and procedure: `docs/context/PIPELINE.md`.

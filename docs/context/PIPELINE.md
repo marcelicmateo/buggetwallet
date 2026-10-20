@@ -45,8 +45,8 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | D1b | `tools/build.sh core|app|importer <test file>` runs one test file non-interactively (core-builder found `shell` ignores piped stdin) | devops | single-test (from stage-b) | – | done (6e5572f; merge into stage-b after the fix batch) |
 | D1c | BUG: run pruning deleted an in-progress run dir (newest-30 rule, concurrent worktrees) | devops | prune-fix (from stage-b) | – | running |
 | C3 | (follow-up) hero amount gap, margin line in NarrowPage | ui-builder | ledger-ui | – | running |
-| D1d | BUG: `tools/build.sh perf` hangs at startup since today's tooling changes (portal/dbus, trap); add step timeouts | devops | perf-hang (from stage-c) | – | running |
-| C | Stage C assembled on `stage-c` (5111529): review done (4 low, fixed), core 596/0, app 503/0; merge into v2 after Stage B push, then full run | lead | stage-c → v2 | B2 | queued |
+| D1d | BUG: `tools/build.sh perf` hung at startup (portal activation on the headless bus); fixed 79e1fb2 + 20-min timeout; re-run perf when idle | devops | perf-hang | – | done |
+| C | Stage C merged into v2 (9bdedb8 + perf fix 67adb05 + flows finders 2c53537); full run green (perf skipped) | lead | v2 | B2 | done |
 | D3 | Merge v2 into master | lead + ci-watcher | – | B2, C | queued |
 | E0 | Spec for budget vs actual per category: DESIGN_DECISIONS §4.5 | lead | – | – | drafted; waiting for owner approval |
 | E1 | Budget vs actual per category (M3) | core + ui | v2 | C, E0 | queued |
