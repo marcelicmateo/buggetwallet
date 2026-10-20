@@ -189,6 +189,95 @@ class WishItem {
   double hoursLeft(int coolHours, int nowMillis) => (added + coolHours * 3600000 - nowMillis) / 3600000;
 }
 
+/// A bill that comes back every month: detected from bank rows (`detectRecurring`, status `candidate`), then
+/// confirmed or dismissed by the owner. Synced entity `recurring`; the id is `rec:<payee>` so every device derives the
+/// same row for the same merchant. [expectedAmount] is positive cents (an outflow). A confirmed bill is reserved in
+/// `computePeriod` until a bank row pays its cycle ([lastPaidTx], then [nextDue] moves on by [intervalDays]).
+class RecurringBill {
+  final String id;
+  final String payee; // merchantKey of the bank rows
+  final String label; // merchantName, for display
+  final String category;
+  final int expectedAmount; // cents, > 0
+  final int intervalDays;
+  final String nextDue; // YYYY-MM-DD
+  final String status; // candidate | confirmed | dismissed
+  final String? lastPaidTx; // the bank row that paid the last cycle
+
+  const RecurringBill({
+    required this.id,
+    required this.payee,
+    required this.label,
+    required this.category,
+    required this.expectedAmount,
+    this.intervalDays = defaultIntervalDays,
+    required this.nextDue,
+    this.status = 'candidate',
+    this.lastPaidTx,
+  });
+
+  /// The one interval detected for now: monthly.
+  static const defaultIntervalDays = 30;
+
+  static const statuses = {'candidate', 'confirmed', 'dismissed'};
+
+  /// The id of the bill for a payee key, the same on every device.
+  static String idFor(String payee) => 'rec:$payee';
+
+  bool get confirmed => status == 'confirmed';
+
+  static RecurringBill fromRow(Map<String, Object?> r) => RecurringBill(
+        id: r['id'] as String,
+        payee: _str(r['payee']) ?? '',
+        label: _str(r['label']) ?? '',
+        category: _str(r['category']) ?? '',
+        expectedAmount: _int(r['expected_amount']) ?? 0,
+        intervalDays: _int(r['interval_days']) ?? defaultIntervalDays,
+        nextDue: _str(r['next_due']) ?? '',
+        status: _str(r['status']) ?? 'candidate',
+        lastPaidTx: _str(r['last_paid_tx']),
+      );
+
+  RecurringBill copyWith({String? nextDue, String? status, String? lastPaidTx, int? expectedAmount}) => RecurringBill(
+        id: id,
+        payee: payee,
+        label: label,
+        category: category,
+        expectedAmount: expectedAmount ?? this.expectedAmount,
+        intervalDays: intervalDays,
+        nextDue: nextDue ?? this.nextDue,
+        status: status ?? this.status,
+        lastPaidTx: lastPaidTx ?? this.lastPaidTx,
+      );
+}
+
+/// One step of the weekly review with how many items it holds: `import` (0: the UI fills it after the import),
+/// `categories` (spending rows of the last 7 days without a user-set category), `pace` (categories behind pace or
+/// over), `wishlist` (items past their cooling-off still waiting).
+class ReviewStep {
+  final String id;
+  final int count;
+  const ReviewStep(this.id, this.count);
+}
+
+/// Whether the weekly review is due, from `reviewState`.
+class ReviewState {
+  final bool due;
+
+  /// The review day this state is about: the one that opened the due review (≤ today) or the next one (> today).
+  final String nextReviewDate;
+  final int streak;
+  final List<ReviewStep> steps;
+  const ReviewState({required this.due, required this.nextReviewDate, required this.streak, required this.steps});
+
+  ReviewStep? step(String id) {
+    for (final s in steps) {
+      if (s.id == id) return s;
+    }
+    return null;
+  }
+}
+
 /// User settings. Money in minor units. Each field syncs on its own.
 class WalletSettings {
   final int salary;
@@ -207,6 +296,9 @@ class WalletSettings {
   final List<List<String>> merchantPatterns; // [[category, regex], ...]
   final int rentCashThreshold; // ATM withdrawals this big or bigger are rent; 0 = never
   final Map<String, int> categoryBudgets; // spending category -> cents per calendar month; no entry = no budget
+  final int reviewDay; // weekly review day, 1 = Monday .. 7 = Sunday
+  final String? lastReview; // YYYY-MM-DD of the last completed weekly review
+  final int reviewStreak; // weekly reviews done in a row
   final String? syncFolder; // device-local, not synced
 
   const WalletSettings({
@@ -226,6 +318,9 @@ class WalletSettings {
     this.merchantPatterns = const [],
     this.rentCashThreshold = defaultRentCashThreshold,
     this.categoryBudgets = const {},
+    this.reviewDay = DateTime.sunday,
+    this.lastReview,
+    this.reviewStreak = 0,
     this.syncFolder,
   });
 
@@ -234,6 +329,9 @@ class WalletSettings {
 
   /// Largest monthly budget of one category (minor units).
   static const maxBudget = 1000000000000;
+
+  /// Largest review streak kept (weeks; about 2000 years).
+  static const maxStreak = 100000;
 
   /// Reads settings from stored/synced values. A value of the wrong type or outside its range (another device's
   /// bug, a damaged op) falls back to that setting's default alone, logged as `settings.invalid` with the key only
@@ -297,6 +395,9 @@ class WalletSettings {
         final Map<Object?, Object?> b => _budgets(b),
         _ => bad('categoryBudgets', const {}),
       },
+      reviewDay: i('reviewDay', DateTime.sunday, min: DateTime.monday, max: DateTime.sunday),
+      lastReview: str('lastReview', _isDate),
+      reviewStreak: i('reviewStreak', 0, max: maxStreak),
     );
   }
 
@@ -343,5 +444,8 @@ class WalletSettings {
         'merchantPatterns': merchantPatterns,
         'rentCashThreshold': rentCashThreshold,
         'categoryBudgets': categoryBudgets,
+        'reviewDay': reviewDay,
+        'lastReview': lastReview,
+        'reviewStreak': reviewStreak,
       };
 }

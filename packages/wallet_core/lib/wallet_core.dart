@@ -12,6 +12,7 @@ export 'src/logs.dart';
 export 'src/matching.dart';
 export 'src/models.dart';
 export 'src/periods.dart';
+export 'src/recurring.dart';
 export 'src/repo.dart';
 export 'src/sync.dart';
 export 'src/transfers.dart';

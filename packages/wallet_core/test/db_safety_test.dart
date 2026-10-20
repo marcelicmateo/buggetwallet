@@ -155,7 +155,8 @@ void main() {
     test('every syncable column in the current schema can be written by a remote op', () {
       final r = WalletRepo.inMemory();
       for (final e in entityTables.entries) {
-        final fields = {for (final c in e.value.$2) c: c == 'deleted' || c == 'manual' ? 0 : (c == 'amount' || c == 'target' ? 1 : 'x')};
+        const ints = {'amount', 'target', 'expected_amount', 'interval_days'};
+        final fields = {for (final c in e.value.$2) c: c == 'deleted' || c == 'manual' ? 0 : (ints.contains(c) ? 1 : 'x')};
         expect(r.applyRemote([Op(e.key, 'id-${e.key}', fields, const Hlc(5, 0, 'n').toString())]), 1, reason: e.key);
       }
       r.close();

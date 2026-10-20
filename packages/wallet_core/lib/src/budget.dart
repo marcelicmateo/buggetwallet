@@ -14,6 +14,11 @@ class PeriodBudget {
   final double elapsed;
   final Map<String, int> fixedPaid;
 
+  /// Σ `expectedAmount` of the confirmed recurring bills due before the next payday and not paid yet ([dueBills]):
+  /// taken off the flexible money like the planned fixed costs (owner decision 2026-10-20).
+  final int reservedBills;
+  final List<RecurringBill> dueBills;
+
   const PeriodBudget({
     required this.start,
     required this.end,
@@ -33,6 +38,8 @@ class PeriodBudget {
     required this.planDaily,
     required this.elapsed,
     required this.fixedPaid,
+    this.reservedBills = 0,
+    this.dueBills = const [],
   });
 
   /// Positive = under budget so far, negative = over.
@@ -41,7 +48,32 @@ class PeriodBudget {
 
 int _sum(Iterable<CategorizedTx> xs) => xs.fold(0, (s, x) => s + x.amount);
 
-PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today) {
+/// The confirmed bills of [bills] that still need paying out of this period's money: `nextDue` before [end] (the next
+/// payday, exclusive: a bill due on payday comes out of the next salary) and not paid in this period yet (no
+/// `lastPaidTx` row in [txs] dated on or after [start]; a payment moves `nextDue` on, so normally the date alone
+/// decides). Ordered by `nextDue`, then label, then id.
+List<RecurringBill> dueBills(List<RecurringBill> bills, List<CategorizedTx> txs, String start, String end) {
+  final paidOn = <String, String>{for (final t in txs) t.tx.id: t.date};
+  return [
+    for (final b in bills)
+      if (b.confirmed &&
+          b.nextDue.length == 10 &&
+          b.nextDue.compareTo(end) < 0 &&
+          !(b.lastPaidTx != null && (paidOn[b.lastPaidTx]?.compareTo(start) ?? -1) >= 0))
+        b,
+  ]..sort((a, b) {
+      var d = a.nextDue.compareTo(b.nextDue);
+      if (d == 0) d = a.label.compareTo(b.label);
+      return d != 0 ? d : a.id.compareTo(b.id);
+    });
+}
+
+/// The budget for the pay period that holds [today]. [bills] (`WalletRepo.recurringBills()`): confirmed recurring
+/// bills due before the next payday and not paid yet are reserved ([PeriodBudget.reservedBills]), taken off the
+/// flexible money on the same path as the planned fixed costs, so the daily plan and safe-to-spend drop by them until
+/// the bank row that pays each one lands.
+PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today,
+    {List<RecurringBill> bills = const []}) {
   final start = st.periodStart ?? today;
   final end = nextPayday(start, st.paydayDay);
   final length = daysBetween(start, end).clamp(1, 1000);
@@ -52,7 +84,9 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final income = st.incomeMode == 'received' && received > 0 ? received : st.salary;
   final goalMonthly = goals.fold<int>(0, (s, g) => s + g.monthly);
   final fixedPlan = st.rent + st.loan + st.subs;
-  final flexBudget = income - fixedPlan - goalMonthly;
+  final due = dueBills(bills, txs, start, end);
+  final reservedBills = due.fold<int>(0, (s, b) => s + b.expectedAmount);
+  final flexBudget = income - fixedPlan - goalMonthly - reservedBills;
   final flex = inPeriod.where((t) => t.kind == Kind.flex);
   final spent = -_sum(flex);
   final spentToday = -_sum(flex.where((t) => t.date == today));
@@ -72,7 +106,9 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
       'daysLeft': daysLeft,
       'tx': inPeriod.length,
       'incomeMode': st.incomeMode,
-      'goals': goals.length
+      'goals': goals.length,
+      'bills': bills.length,
+      'dueBills': due.length,
     });
   }
   return PeriodBudget(
@@ -94,6 +130,8 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     planDaily: (flexBudget / length).round(),
     elapsed: elapsed,
     fixedPaid: fixedPaid,
+    reservedBills: reservedBills,
+    dueBills: due,
   );
 }
 
@@ -260,6 +298,57 @@ BudgetVsActual budgetVsActual(List<CategorizedTx> txs, String month, Map<String,
     elapsedDays: elapsed,
     daysInMonth: days,
   );
+}
+
+/// The first date on or after [from] that falls on weekday [day] (1 = Monday .. 7 = Sunday).
+String _nextWeekday(String from, int day) {
+  final d = parseIso(from);
+  return addDays(from, (day - d.weekday + 7) % 7);
+}
+
+/// The weekly review: whether it is due on [today] and what each step holds.
+///
+/// Due from the first `reviewDay` after the last review (`lastReview` + 1 on) until it is done ([nextReviewDate] is
+/// that day; when the review is not due yet, the next one). Never reviewed: due at once ([nextReviewDate] = the last
+/// `reviewDay` on or before today), so a new wallet shows the review the first time it is opened. Steps: `import` is
+/// 0 (the UI fills it after importing); `categories` = live spending rows (fixed and flex) of the last 7 days whose
+/// category is not user-set (the rows a merchant rule can be learnt from); `pace` = categories of the current calendar
+/// month behind pace or over budget ([budgetVsActual]); `wishlist` = waiting items whose cooling-off (`coolHours`)
+/// has run out by [nowMillis] (default: the end of [today], UTC). [streak] is the stored `reviewStreak`.
+ReviewState reviewState(List<CategorizedTx> txs, WalletSettings st, List<WishItem> wishes, Map<String, int> budgets,
+    {required String today, int? nowMillis}) {
+  final last = st.lastReview;
+  final String next;
+  final bool due;
+  if (last == null) {
+    final coming = _nextWeekday(today, st.reviewDay);
+    next = coming == today ? coming : addDays(coming, -7);
+    due = true;
+  } else {
+    next = _nextWeekday(addDays(last, 1), st.reviewDay);
+    due = today.compareTo(next) >= 0;
+  }
+  final since = addDays(today, -7);
+  var automatic = 0;
+  for (final t in txs) {
+    if (!t.tx.live || t.date.compareTo(since) <= 0 || t.date.compareTo(today) > 0) continue;
+    if (t.kind != Kind.fixed && t.kind != Kind.flex) continue;
+    final own = t.tx.category;
+    if (own == null || !categories.containsKey(own)) automatic++; // no override, or one this build does not know
+  }
+  final pace = budgetVsActual(txs, monthOf(today), budgets, today: today).lines.where((l) => l.over || (l.pace ?? 0) > 1).length;
+  final now = nowMillis ?? parseIso(addDays(today, 1)).millisecondsSinceEpoch;
+  final waiting = wishes.where((w) => w.status == 'waiting' && w.hoursLeft(st.coolHours, now) <= 0).length;
+  final steps = [
+    const ReviewStep('import', 0),
+    ReviewStep('categories', automatic),
+    ReviewStep('pace', pace),
+    ReviewStep('wishlist', waiting),
+  ];
+  // Dates and counts only.
+  logEvent(_log, Level.FINER, 'review.state',
+      {'due': due, 'next': next, 'streak': st.reviewStreak, 'categories': automatic, 'pace': pace, 'wishlist': waiting});
+  return ReviewState(due: due, nextReviewDate: next, streak: st.reviewStreak, steps: steps);
 }
 
 enum Verdict { now, tight, later }

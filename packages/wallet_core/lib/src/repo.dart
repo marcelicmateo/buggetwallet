@@ -10,6 +10,7 @@ import 'hlc.dart';
 import 'logs.dart';
 import 'matching.dart';
 import 'models.dart';
+import 'recurring.dart';
 import 'transfers.dart';
 
 /// One field-level change. This is what syncs between devices.
@@ -49,6 +50,11 @@ const Map<String, (String, List<String>)> _entities = {
   'rule': ('merchant_rules', ['category', 'deleted']),
   // Amounts added to a goal's saved total, one row each (see [WalletRepo.addGoalContribution]).
   'goal_contrib': ('goal_contrib', ['goal_id', 'amount', 'date', 'deleted']),
+  // Recurring bills (v5): detected candidates and the owner's confirm/dismiss decisions (see [RecurringBill]).
+  'recurring': (
+    'recurring',
+    ['payee', 'label', 'category', 'expected_amount', 'interval_days', 'next_due', 'status', 'last_paid_tx', 'deleted']
+  ),
 };
 
 const _schema = '''
@@ -69,6 +75,9 @@ CREATE TABLE IF NOT EXISTS merchant_rules(id TEXT PRIMARY KEY, category TEXT, de
 CREATE TABLE IF NOT EXISTS goal_contrib(id TEXT PRIMARY KEY, goal_id TEXT NOT NULL DEFAULT '', amount INTEGER NOT NULL DEFAULT 0,
   date TEXT NOT NULL DEFAULT '', deleted INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS goal_contrib_goal ON goal_contrib(goal_id);
+CREATE TABLE IF NOT EXISTS recurring(id TEXT PRIMARY KEY, payee TEXT NOT NULL DEFAULT '', label TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT '', expected_amount INTEGER NOT NULL DEFAULT 0, interval_days INTEGER NOT NULL DEFAULT 30,
+  next_due TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'candidate', last_paid_tx TEXT, deleted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS clocks(entity TEXT NOT NULL, id TEXT NOT NULL, field TEXT NOT NULL, hlc TEXT NOT NULL, PRIMARY KEY(entity, id, field));
 CREATE TABLE IF NOT EXISTS outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS peer_files(device TEXT NOT NULL, file TEXT NOT NULL, PRIMARY KEY(device, file));
@@ -107,8 +116,9 @@ class WalletRepo {
 
   /// Bump when a new synced entity or field is added. Version 2 added `goal_contrib`, version 3 `tx.kind_hint` and
   /// `tx.transfer_to` (an older build dropped those fields from the ops it read, so they are replayed once), version 4
-  /// the `exchange` hint (Revolut Exchange rows imported by version 3 as `ownTransfer` are rewritten once).
-  static const schemaVersion = 4;
+  /// the `exchange` hint (Revolut Exchange rows imported by version 3 as `ownTransfer` are rewritten once), version 5
+  /// the `recurring` entity.
+  static const schemaVersion = 5;
 
   /// Builds before a synced entity existed skipped its ops but still marked the peer files holding them as read. So
   /// when an existing database is opened by a build with a newer [schemaVersion], it forgets which peer files it read
@@ -205,7 +215,7 @@ class WalletRepo {
 
   /// Column types, for checking synced values: integer columns, 0/1 flags (a bool is stored as 0/1), and the
   /// columns that may hold NULL. Every other synced column is text.
-  static const _intCols = {'amount', 'target', 'saved', 'monthly', 'sort', 'price', 'added', 'decided'};
+  static const _intCols = {'amount', 'target', 'saved', 'monthly', 'sort', 'price', 'added', 'decided', 'expected_amount', 'interval_days'};
   static const _flagCols = {'manual', 'deleted'};
   static const _nullable = {
     'tx': {'category', 'note', 'matched_to', 'seen_bank', 'kind_hint', 'transfer_to'},
@@ -213,6 +223,7 @@ class WalletRepo {
     'wish': {'name', 'decided'},
     'setting': {'value'},
     'rule': {'category'},
+    'recurring': {'last_paid_tx'},
   };
 
   /// [value] as it is stored for [entity].[field], or [_bad] if it has the wrong type. A whole number sent as a
@@ -427,8 +438,13 @@ class WalletRepo {
   /// Runs transfer pairing and matching if ops applied with `applyRemote(match: false)` changed something since it
   /// last ran (also after a crash mid-sync: the flag is stored). [FolderSync.run] calls it once after applying all files.
   void runPendingMatch() {
-    if (_meta('match_pending') != null) _reconcile();
+    if (_meta('match_pending') == null) return;
+    _reconcile();
+    refreshRecurring(_today());
   }
+
+  /// Today's date on this device's clock (the one the HLC uses, so tests can set it).
+  String _today() => isoDate(DateTime.fromMillisecondsSinceEpoch(clock.now()));
 
   bool peerFileSeen(String device, String file) =>
       db.select('SELECT 1 FROM peer_files WHERE device = ? AND file = ?', [device, file]).isNotEmpty;
@@ -503,6 +519,14 @@ class WalletRepo {
 
   List<WishItem> wishlist() => [for (final r in db.select('SELECT * FROM wish WHERE deleted = 0 ORDER BY added')) WishItem.fromRow(r)];
 
+  /// Recurring bills that are not deleted: candidates and confirmed ones, plus dismissed ones with [includeDismissed].
+  /// Ordered by `nextDue`, then label, then id.
+  List<RecurringBill> recurringBills({bool includeDismissed = false}) => [
+        for (final r in db.select(
+            "SELECT * FROM recurring WHERE deleted = 0 ${includeDismissed ? '' : "AND status != 'dismissed'"} ORDER BY next_due, label, id"))
+          RecurringBill.fromRow(r),
+      ];
+
   Map<String, String> merchantRules() => {
         for (final r in db.select('SELECT id, category FROM merchant_rules WHERE deleted = 0 AND category IS NOT NULL'))
           if ((r['id'], r['category']) case (final String id, final String c)) id: c,
@@ -566,6 +590,7 @@ class WalletRepo {
     }
     _write(changes);
     final (transfers, matched) = _reconcile();
+    refreshRecurring(_today());
     final s = ImportSummary(fresh.length, batch.transactions.length - fresh.length, matched, batch.skipped, transfers: transfers);
     t.done({
       'source': batch.source,
@@ -717,4 +742,114 @@ class WalletRepo {
   void decideWish(String id, String status) => _write([
         ('wish', id, {'status': status, 'decided': DateTime.now().millisecondsSinceEpoch})
       ]);
+
+  // ---------- recurring bills and the weekly review ----------
+
+  /// Brings the recurring bills up to date with the rows held now; runs after every import and sync (once per sync run,
+  /// with [runPendingMatch]). Deterministic: devices holding the same rows and bills write the same values.
+  ///
+  /// - New candidates ([detectRecurring]) are added, keyed `rec:<payee>` ([RecurringBill.idFor]); a payee with a row
+  ///   already (candidate, confirmed, dismissed or deleted) is never added again. The creation op carries no `status`
+  ///   or `deleted` (the column defaults apply), so a device that detects the payee late cannot undo a dismiss or
+  ///   delete made elsewhere.
+  /// - A candidate's expected amount, due date, label and category follow the latest detection, so one confirmed
+  ///   months later starts from a current due date. Confirmed and dismissed bills are never rewritten by detection.
+  /// - A confirmed bill is marked paid when a bank row with its payee key lands within ± [recurringDays] of `nextDue`
+  ///   with an outflow within [recurringPercent] of `expectedAmount` ([planRecurringPayments]): `lastPaidTx` = that
+  ///   row, `nextDue` += `intervalDays`, `expectedAmount` unchanged; cycle after cycle when several payments are here.
+  ///   The bank row keeps its category: nothing is reclassified.
+  void refreshRecurring(String today) {
+    if (!_isoDate.hasMatch(today)) throw ArgumentError('The date is not YYYY-MM-DD.');
+    final t = PerfTimer('repo.recurring');
+    final rows = transactions();
+    if (rows.isEmpty) {
+      // Nothing to detect or pay (and no settings read, which a wallet without rows has no reason for).
+      t.done({'rows': 0});
+      return;
+    }
+    final existing = {for (final r in db.select('SELECT * FROM recurring')) r['id'] as String: RecurringBill.fromRow(r)};
+    final deleted = {for (final r in db.select('SELECT id FROM recurring WHERE deleted = 1')) r['id'] as String};
+    final cz = categorizer();
+    final detected = detectRecurring([for (final r in rows) cz.categorize(r)], today: today);
+    final changes = <(String, String, Map<String, Object?>)>[];
+    var added = 0, updated = 0;
+    for (final c in detected) {
+      final have = existing[c.id];
+      if (have == null) {
+        added++;
+        changes.add(('recurring', c.id, _candidateFields(c)));
+      } else if (have.status == 'candidate' && !deleted.contains(c.id)) {
+        final diff = <String, Object?>{
+          if (have.expectedAmount != c.expectedAmount) 'expected_amount': c.expectedAmount,
+          if (have.nextDue != c.nextDue) 'next_due': c.nextDue,
+          if (have.label != c.label) 'label': c.label,
+          if (have.category != c.category) 'category': c.category,
+        };
+        if (diff.isNotEmpty) {
+          updated++;
+          changes.add(('recurring', c.id, diff));
+        }
+      }
+    }
+    var bills = [
+      for (final b in existing.values)
+        if (b.confirmed && !deleted.contains(b.id)) b
+    ];
+    var paid = 0;
+    // One payment per bill per pass; repeated so a history import with several cycles catches up (bounded).
+    for (var pass = 0; pass < 120 && bills.isNotEmpty; pass++) {
+      final plan = planRecurringPayments(bills, rows);
+      if (plan.isEmpty) break;
+      bills = [
+        for (final b in bills)
+          if (plan.paidBy[b.id] case final Tx row) b.copyWith(lastPaidTx: row.id, nextDue: addDays(b.nextDue, b.intervalDays)) else b
+      ];
+      paid += plan.paidBy.length;
+    }
+    for (final b in bills) {
+      final was = existing[b.id]!;
+      if (b.nextDue != was.nextDue || b.lastPaidTx != was.lastPaidTx) {
+        changes.add(('recurring', b.id, {'next_due': b.nextDue, 'last_paid_tx': b.lastPaidTx}));
+      }
+    }
+    _write(changes);
+    t.done(
+        {'rows': rows.length, 'bills': existing.length, 'candidates': detected.length, 'added': added, 'updated': updated, 'paid': paid});
+  }
+
+  /// The fields a new candidate is created with: no `status` and no `deleted`, see [refreshRecurring].
+  static Map<String, Object?> _candidateFields(RecurringBill c) => {
+        'payee': c.payee,
+        'label': c.label,
+        'category': c.category,
+        'expected_amount': c.expectedAmount,
+        'interval_days': c.intervalDays,
+        'next_due': c.nextDue,
+      };
+
+  void _setRecurring(String id, Map<String, Object?> fields) {
+    if (db.select('SELECT 1 FROM recurring WHERE id = ?', [id]).isEmpty) throw ArgumentError('No such bill.');
+    _write([('recurring', id, fields)]);
+  }
+
+  /// The owner says this candidate is a bill: from now on it is reserved in the period budget until paid.
+  void confirmRecurring(String id) => _setRecurring(id, {'status': 'confirmed'});
+
+  /// The owner says this is not a bill: hidden from [recurringBills] (unless asked for) and never detected again.
+  void dismissRecurring(String id) => _setRecurring(id, {'status': 'dismissed'});
+
+  /// Removes a bill; its payee is never detected again (the row stays, deleted).
+  void deleteRecurring(String id) => _setRecurring(id, {'deleted': 1});
+
+  /// The weekly review was done on [today]: `lastReview` = today, `reviewStreak` grows by one when the previous review
+  /// was at most 14 days before (else starts again at 1). Done twice on one day changes nothing.
+  void markReviewDone(String today) {
+    if (!_isoDate.hasMatch(today)) throw ArgumentError('The date is not YYYY-MM-DD.');
+    final st = settings();
+    final last = st.lastReview;
+    if (last == today) return;
+    final streak = last != null && daysBetween(last, today) <= 14 ? st.reviewStreak + 1 : 1;
+    updateSettings({'lastReview': today, 'reviewStreak': streak.clamp(0, WalletSettings.maxStreak)});
+    logEvent(_log, Level.INFO, 'review.done', {'streak': streak});
+  }
 }

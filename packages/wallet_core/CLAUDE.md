@@ -17,6 +17,33 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   month; elapsedDays = day of `today` in the current month, the whole month for a past one; `remainingTotal` = Σ
   remaining over budgeted lines, null when none is budgeted). `suggestBudgets(txs, month)` = that average rounded UP to
   1000 cents, zero or negative averages omitted. Ints in cents everywhere, floats only in `pace`.
+  `computePeriod(txs, st, goals, today, bills:)`: the confirmed recurring bills due before the next payday (exclusive)
+  and not paid in this period (`dueBills`, Σ = `reservedBills`) come off the flexible money on the same path as the
+  planned fixed costs (owner decision 2026-10-20), so `planDaily`/`safeToday` drop until the paying row lands (a bill
+  with `lastPaidTx` dated in the period is released even if its next due date still falls before payday).
+  `reviewState(txs, st, wishes, budgets, today:)` (M4 weekly review) → `ReviewState`: `due` from the first `reviewDay`
+  after `lastReview` until done (never reviewed: due at once), `nextReviewDate` = that day (or the coming one),
+  `steps` = `import` 0 (the UI fills it), `categories` = live spending rows of the last 7 days without a user-set
+  category, `pace` = `budgetVsActual` lines over or behind pace this calendar month, `wishlist` = waiting items past
+  their cooling-off at the end of `today`. `WalletRepo.markReviewDone(today)`: `lastReview` = today, `reviewStreak` +1
+  when the previous review was ≤ 14 days before, else 1; the same day twice is a no-op.
+- `recurring.dart` — recurring bills (M4). `detectRecurring(txs, today:)`: candidates = a payee (`merchantKey`) with ≥ 3
+  live bank outflows (no transfers, no hand-added rows) in the last 7 calendar months, every gap 30 ± 3 days, every
+  amount within 10 % of the median (`withinBand`, inclusive, int arithmetic); `expectedAmount` = median, `nextDue` =
+  last payment + 30, label/category from the latest row, id `rec:<payee>` (`RecurringBill.idFor`) so every device
+  derives the same row; ordered by label. One extra purchase at the payee breaks the chain (shops are never bills).
+  `planRecurringPayments(bills, rows)`: for each confirmed bill the live bank row with its payee key within ± 3 days of
+  `nextDue` and within 10 % of `expectedAmount` (closest, then earliest, then smallest id; never the row that paid the
+  last cycle). `RecurringBill` (`models.dart`): synced entity `recurring` (`payee`, `label`, `category`,
+  `expected_amount`, `interval_days`, `next_due`, `status` candidate|confirmed|dismissed, `last_paid_tx`, `deleted`).
+  `WalletRepo.refreshRecurring(today)` runs after `importBatch` and once per sync run (`runPendingMatch`): adds new
+  candidates (the creation op carries no `status`/`deleted`, so a late detection cannot undo a dismiss or delete made
+  elsewhere; a payee with any row, deleted included, is never added again), keeps a candidate's amount/due/label/category
+  at the latest detection, and marks a confirmed bill's cycle paid (`last_paid_tx`, `next_due` += `interval_days`,
+  `expected_amount` unchanged, cycle after cycle for a history import). The paying row keeps its category: a bill is
+  information, never a reclassification. `recurringBills(includeDismissed:)`, `confirmRecurring`, `dismissRecurring`,
+  `deleteRecurring` (unknown id → `ArgumentError`). Settings `reviewDay` (1..7, default 7), `lastReview` (date),
+  `reviewStreak` (0..`maxStreak`) are validated like the others.
 - `categories.dart` — `Categorizer`: item override → (paired transfer → importer `kindHint` → source/pattern rules) →
   per-merchant rules. `kindHint` (importer `TxKind`, stored as `tx.kind_hint` by `importBatch`, edited only by the schema-4 rewrite) decides
   first where it can: `salary` → Salary, `atm` → Rent at or above `rentCashThreshold` else Cash, `fee` → Bank fees,
@@ -59,7 +86,7 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   may have removed it meanwhile); a goal that never existed here is an `ArgumentError`.
 - `WalletRepo.schemaVersion` (meta `schema`): bump it when adding a synced entity or field (3 = `tx.kind_hint`,
   `tx.transfer_to`; 4 = the `exchange` hint: Revolut Exchange rows a version-3 build hinted `ownTransfer` are rewritten
-  once through `_write` and reconciled, `revolutExchangeType`). Opening an existing database with an older version
+  once through `_write` and reconciled, `revolutExchangeType`; 5 = the `recurring` entity). Opening an existing database with an older version
   clears `peer_files` once, so the next sync re-reads every file and applies ops (or fields) the older build skipped.
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption; `UnsealFailure` says why a
   file was refused), `sync.dart` (FolderSync).
@@ -120,13 +147,19 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   upgrade) and categorize a paired row by its text, so they can show a transfer as spending until they upgrade.
 - A remote clock far in the future (a peer with a wrong date) is taken as is: this device's later writes sort after it,
   and an edit made on a device with a correct clock loses to that peer's older edits until real time catches up.
+- Recurring bills: a device that imports a payee's rows before syncing writes the candidate's amount/due/label again
+  with a newer clock (same values from the same rows; different ones if it holds other rows), but never its status.
+  A confirmed bill whose payments stop matching (amount moved > 10 %, date drifted > 3 days, or the bill ended) keeps
+  its old `nextDue`, so it stays reserved as overdue until the owner dismisses or deletes it. A confirmed bill in a
+  fixed category that is already counted in the `rent`/`loan`/`subs` settings is reserved on top of them (safe-to-spend
+  errs low). Older builds ignore the `recurring` entity (replayed once on upgrade).
 
 ## Tests
 - `test/core_test.dart`, one `group` per area. Shared synthetic data in `test/support/synthetic.dart`
   (`n(...)` builds a transaction, `january` is a sample month). Add new feature tests as `test/<feature>_test.dart`
   (goals: `test/goal_contrib_test.dart`, quarantine: `test/sync_quarantine_test.dart`, hints: `test/kind_hint_test.dart`,
   own transfers incl. two devices: `test/transfers_test.dart`, budgets per category incl. the setting and two devices:
-  `test/budget_vs_actual_test.dart`; `<feature>_edge_test.dart` are
+  `test/budget_vs_actual_test.dart`, recurring bills + weekly review incl. two devices: `test/habits_test.dart`; `<feature>_edge_test.dart` are
   spec-written edge cases). Multi-device sim in `test/support/sim.dart` (lists entities on its own): `Device` (own
   folder and database; `dbPath:` + `reopen()` simulate a restart or upgrade), `Net`, `dump`, `bookkeeping`.
 - Run: `tools/build.sh test` from the repo root (or `tools/build.sh shell`, then `cd packages/wallet_core && dart test`).
