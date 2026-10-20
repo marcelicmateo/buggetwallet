@@ -11,6 +11,8 @@ import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../storage_access.dart';
+import '../sync_path.dart';
+export '../sync_path.dart' show checkSyncPath;
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'diagnostics.dart';
@@ -385,22 +387,43 @@ class _PlanScreenState extends State<PlanScreen> {
   }
 
   Future<void> _typePath(BuildContext context) async {
-    final ctl = TextEditingController(text: widget.wc.syncFolder ?? (isAndroid ? '/storage/emulated/0/Documents/BudgetWallet' : ''));
+    final ctl = TextEditingController(text: widget.wc.syncFolder ?? (isAndroid ? androidSyncFolder : ''));
+    final example = isAndroid ? androidSyncFolder : '/home/you/Sync';
     logNav('dialog.open', {'dialog': 'syncPath'});
+    String? error;
     final path = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Sync folder path'),
-        content: TextField(controller: ctl, decoration: const InputDecoration(hintText: '/path/to/BudgetWallet')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctl.text.trim()), child: const Text('Use folder')),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Sync folder path'),
+          content: TextField(
+              controller: ctl, decoration: InputDecoration(hintText: '/path/to/BudgetWallet', errorText: error, errorMaxLines: 3)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                var r = checkSyncPath(ctl.text);
+                // The suggested phone folder may not exist before Syncthing makes it: create that one, never a typed path.
+                if (r.reason == 'missing' && isAndroid && ctl.text.trim() == androidSyncFolder) {
+                  if (createSuggestedFolder()) {
+                    r = checkSyncPath(androidSyncFolder);
+                  } else {
+                    logEvent(_log, Level.WARNING, 'sync.pathCreateFailed');
+                  }
+                }
+                if (r.path != null) return Navigator.pop(ctx, r.path);
+                logEvent(_log, Level.INFO, 'sync.pathRejected', {'reason': r.reason}); // never the path
+                setState(() => error = r.reason == 'missing' ? "This folder doesn't exist." : 'Enter a full folder path, like $example');
+              },
+              child: const Text('Use folder'),
+            ),
+          ],
+        ),
       ),
     );
-    logNav('dialog.close', {'dialog': 'syncPath', 'set': path != null && path.isNotEmpty}); // never the path
-    if (path == null || path.isEmpty) return;
-    await widget.wc.setSyncFolder(path, create: true);
+    logNav('dialog.close', {'dialog': 'syncPath', 'set': path != null}); // never the path
+    if (path == null) return;
+    await widget.wc.setSyncFolder(path);
   }
 
   Future<void> _showKey(BuildContext context) async {

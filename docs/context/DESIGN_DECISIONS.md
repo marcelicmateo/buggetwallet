@@ -17,6 +17,7 @@ All numbers below are made-up samples. No personal figures. "Proposed" = not bui
 | 2026-10-19 | D8 Calendar carries the new feature "calendar integration and future spending" (screen `d08-Upcoming`). |
 | 2026-10-19 | Projects live under the **Goals** tab (views: Goals / Projects). Five tabs stay. |
 | 2026-10-19 | **Final direction: D3 Ledger** (owner). Built after the adaptive layout: its tokens go into `theme.dart` and the design system. |
+| 2026-10-19 | Ledger details (owner): dark mode = navy "night ledger" following the system; six unmodified IBM Plex fonts (~1 MB); red margin line only on wide windows. Spec: `docs/design/ledger-spec.md`. |
 
 ## 2. Data flow as built (v2) — summary
 ```mermaid

@@ -170,7 +170,8 @@ class WalletController extends ChangeNotifier {
     }
     if (_memo.containsKey(key)) return _memo[key] as T;
     final v = compute();
-    _memo[key] = v;
+    // The day may have changed while computing (an inner call cleared the memo): this value is for the old day.
+    if (_memoDay == day) _memo[key] = v;
     return v;
   }
 
@@ -324,6 +325,7 @@ class WalletController extends ChangeNotifier {
     }
     syncing = true;
     if (!quiet) notifyListeners();
+    final dataBefore = _dataMark();
     try {
       final r = await timedAsync('sync.run', () => syncRunner(folder, k, repo), fields: {'trigger': trigger}, warnMs: 3000);
       lastSync = DateTime.now();
@@ -335,13 +337,21 @@ class WalletController extends ChangeNotifier {
     } catch (e, st) {
       logError(_sync, 'sync.failed', e, st, fields: {'trigger': trigger});
       syncError = e.toString();
-      // A run that failed partway (a folder that stopped being readable after file A) may already have applied A's changes;
-      // a SyncException is thrown by the checks before anything is applied.
-      if (e is! SyncException) reload();
+      // A run that failed partway (a folder that stopped being readable after file A) may already have applied A's changes.
+      // Reload only if wallet data changed during the run: a sync that keeps failing before applying anything (no folder
+      // access, read-only mount) must not reload the whole wallet every 2 minutes.
+      if (_dataMark() != dataBefore) reload();
     } finally {
       syncing = false;
       notifyListeners();
     }
+  }
+
+  /// Changes when wallet data changes: every data write (local or applied from a peer) records its field clock. Bookkeeping
+  /// a failed run still makes (the next file number in `meta`, the outbox) doesn't count.
+  String _dataMark() {
+    final r = repo.db.select('SELECT count(*) AS n, max(hlc) AS m FROM clocks').first;
+    return '${r['n']}|${r['m']}';
   }
 
   void _startAutoSync() {

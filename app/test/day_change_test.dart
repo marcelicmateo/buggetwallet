@@ -184,5 +184,48 @@ void main() {
       expect(wc.syncError, isNotNull);
       expect(wc.dataVersion, before);
     });
+
+    test('a file-system failure before anything is applied does not reload (no access, read-only mount)', () async {
+      final wc = emptyWallet();
+      wc.syncFolder = '/not-used-by-the-fake-sync';
+      final before = wc.dataVersion;
+      wc.syncRunner = (folder, key, repo) async => throw const FileSystemException('cannot read vault.json');
+      await wc.syncNow();
+      await wc.syncNow();
+      expect(wc.syncError, isNotNull);
+      expect(wc.dataVersion, before);
+    });
+
+    test('a read-only folder that fails after the run took a file number does not reload either', () async {
+      final wc = emptyWallet();
+      wc.syncFolder = '/not-used-by-the-fake-sync';
+      final before = wc.dataVersion;
+      wc.syncRunner = (folder, key, repo) async {
+        repo.nextFileNumber(); // what FolderSync.run writes before its file write fails
+        throw const FileSystemException('read-only file system');
+      };
+      await wc.syncNow();
+      await wc.syncNow();
+      expect(wc.syncError, isNotNull);
+      expect(wc.dataVersion, before);
+    });
+  });
+
+  test('a day change inside a computation does not store the old day\'s value under the new day', () {
+    final clock = _Clock();
+    final wc = _wallet(clock);
+    // The date moves past midnight on the second read, while period() is computing (effectiveSettings asks for the day).
+    var reads = 0;
+    final racing = WalletController.forTest(wc.repo, key: VaultKey.generate(), clock: () {
+      reads++;
+      return reads > 1 ? DateTime(2026, 11, 1, 0, 0, 1) : DateTime(2026, 10, 31, 23, 59, 59);
+    });
+    racing.reload();
+    reads = 0;
+    final first = racing.period();
+    expect(identical(racing.period(), first), isFalse, reason: 'the value computed across midnight must not be cached');
+    final settled = racing.period();
+    expect(identical(racing.period(), settled), isTrue);
+    expect(racing.spending().month, '2026-11');
   });
 }

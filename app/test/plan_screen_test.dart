@@ -1,7 +1,11 @@
 // Plan screen: the numbers form. All data is SYNTHETIC.
+import 'dart:io';
+
+import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallet_core/wallet_core.dart';
 
 import 'support/wallet.dart';
 
@@ -119,6 +123,73 @@ void main() {
       expect(find.text("Can't be negative"), findsNothing);
       await _save(tester);
       expect(wc.settings.coolHours, 0);
+    });
+  });
+
+  group('typed sync folder path', () {
+    Future<WalletController> open(WidgetTester tester) async {
+      final wc = demoWallet();
+      wc.syncRunner = (folder, key, repo) async => const SyncReport(0, 0, 0);
+      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)));
+      final btn = find.widgetWithText(OutlinedButton, 'Type path');
+      await tester.scrollUntilVisible(btn, 300, scrollable: find.byType(Scrollable).first);
+      await tester.ensureVisible(btn);
+      await tester.pump();
+      await tester.tap(btn);
+      await tester.pumpAndSettle();
+      return wc;
+    }
+
+    Future<void> use(WidgetTester tester, String text) async {
+      await tester.enterText(find.byType(TextField).last, text);
+      await tester.tap(find.widgetWithText(FilledButton, 'Use folder'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a relative path is refused with a hint and nothing is saved', (tester) async {
+      final wc = await open(tester);
+      await use(tester, 'Sync/folder');
+      expect(find.text('Enter a full folder path, like /home/you/Sync'), findsOneWidget);
+      expect(wc.syncFolder, isNull);
+    });
+
+    testWidgets('empty or blank input is refused', (tester) async {
+      final wc = await open(tester);
+      await use(tester, '   ');
+      expect(find.text('Enter a full folder path, like /home/you/Sync'), findsOneWidget);
+      expect(wc.syncFolder, isNull);
+    });
+
+    testWidgets('a missing folder is refused and not created', (tester) async {
+      final wc = await open(tester);
+      final tmp = Directory.systemTemp.createTempSync('bw_sync_test');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      final missing = '${tmp.path}/nope';
+      await use(tester, missing);
+      expect(find.text("This folder doesn't exist."), findsOneWidget);
+      expect(wc.syncFolder, isNull);
+      expect(Directory(missing).existsSync(), isFalse);
+    });
+
+    testWidgets('an existing folder is saved, trimmed', (tester) async {
+      final wc = await open(tester);
+      final tmp = Directory.systemTemp.createTempSync('bw_sync_test');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      await use(tester, '  ${tmp.path}  ');
+      expect(wc.syncFolder, tmp.path);
+      expect(find.text('Sync folder path'), findsNothing);
+    });
+
+    test('checkSyncPath expands ~ from HOME and gives the reason it refused', () {
+      final tmp = Directory.systemTemp.createTempSync('bw_sync_test');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      Directory('${tmp.path}/Sync').createSync();
+      expect(checkSyncPath('~/Sync', home: tmp.path).path, '${tmp.path}/Sync');
+      expect(checkSyncPath('~', home: tmp.path).path, tmp.path);
+      expect(checkSyncPath('~/Nope', home: tmp.path).reason, 'missing');
+      expect(checkSyncPath('~/Sync', home: '').reason, 'relative');
+      expect(checkSyncPath('Sync', home: tmp.path).reason, 'relative');
+      expect(checkSyncPath('').reason, 'empty');
     });
   });
 }
