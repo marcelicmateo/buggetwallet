@@ -2,6 +2,7 @@
 import 'dart:convert';
 
 import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/nudges.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -99,5 +100,76 @@ WalletController budgetWallet({bool budgets = true, int eatingOutBudget = 10000,
     if (budgets) 'categoryBudgets': {'Groceries': groceriesBudget, 'Eating out': eatingOutBudget},
   });
   wc.reload();
+  return wc;
+}
+
+/// A reminders stand-in: records what the app asked for, no plugin.
+class FakeNudges implements NudgePlatform {
+  final bool allow;
+  final bool canShow;
+  int asked = 0, cancelled = 0;
+  final List<List<NudgeSlot>> scheduled = [];
+  FakeNudges({this.allow = true, this.canShow = true});
+  @override
+  bool get supported => canShow;
+  @override
+  Future<bool> requestPermission() async {
+    asked++;
+    return allow;
+  }
+
+  @override
+  Future<int> schedule(List<NudgeSlot> slots) async {
+    scheduled.add(slots);
+    return slots.length;
+  }
+
+  @override
+  Future<void> cancelAll() async => cancelled++;
+}
+
+/// The data of [budgetWallet] (Tuesday 20 Oct 2026; Groceries behind pace, Eating out over) plus what the weekly review and the bills need:
+/// three card payments in the last week without a learned category, a monthly gym payment three months running (a bill
+/// candidate), and a wish that finished waiting. The review is due (never done), the review day is Sunday.
+WalletController habitsWallet({FakeNudges? nudges, bool confirmBill = false}) {
+  final wc = WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => budgetToday, nudges: nudges);
+  for (final m in const ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']) {
+    wc.repo.addManual(date: '$m-10', amount: 29000, category: 'Groceries');
+    wc.repo.addManual(date: '$m-12', amount: 8500, category: 'Eating out');
+  }
+  wc.repo.addManual(date: '2026-10-03', amount: 15200, category: 'Groceries');
+  wc.repo.addManual(date: '2026-10-12', amount: 10000, category: 'Groceries');
+  wc.repo.addManual(date: '2026-10-08', amount: 11200, category: 'Eating out');
+  wc.repo.addManual(date: '2026-10-09', amount: 6000, category: 'Shopping');
+  wc.repo.updateSettings({
+    'salary': 150000,
+    'salaryConfirmed': true,
+    'periodStart': '2026-10-01',
+    'categoryBudgets': {'Groceries': 30000, 'Eating out': 10000},
+  });
+  wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+    syntheticTx('2026-10-18', -1850, 'POS plaćanje', 'PBZ POS PBZ7LIDL HRVATSKA ZAGREB'),
+    syntheticTx('2026-10-19', -940, 'POS plaćanje', 'POS KONZUM 0000 ZAGREB'),
+    syntheticTx('2026-10-19', -1500, 'POS plaćanje', 'PBZ POS PBZ7WOLT ZAGREB'),
+    for (final d in const ['2026-07-25', '2026-08-25', '2026-09-25']) syntheticTx(d, -2999, 'POS plaćanje', 'POS SYNTHGYM ZAGREB'),
+  ]));
+  wc.repo.applyRemote([
+    Op(
+        'wish',
+        'wish-ready',
+        {
+          'name': 'Synthetic lamp',
+          'price': 8000,
+          'added': budgetToday.millisecondsSinceEpoch - 100 * 3600000,
+          'status': 'waiting',
+          'deleted': 0
+        },
+        Hlc(budgetToday.millisecondsSinceEpoch + 1000, 0, 'peer').toString()),
+  ]);
+  wc.reload();
+  wc.refreshRecurring();
+  if (confirmBill) {
+    wc.confirmRecurring(wc.recurringBills().first.id);
+  }
   return wc;
 }

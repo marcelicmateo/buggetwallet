@@ -25,6 +25,22 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   (`'${dataVersion}|${today()}'`), so a tab switch only moves the `IndexedStack` (keep it that way: 20,000 rows made every
   switch miss frames). The controller takes a clock (`forTest(clock:)`); `checkDay()` (resume, 2-minute timer) notifies when
   the day changed, so a wallet without a sync folder also moves on at midnight.
+- Habits (M4): `screens/review.dart` (`openReview` = page on phones, 560 dp dialog from `dialogMin`; `ReviewScreen` = four ruled steps with a
+  square tick: Import (`screens/import_flow.dart` `pickAndImport`, shared with Plan), Confirm categories (`reviewRows()`: the rows core counts;
+  "Looks right"/"Change" call `confirmCategory` = pin the category + teach the merchant, so the row leaves), Pace (`paceRows()`, tap → Spending),
+  Wishlist (`readyWishes()`, `buyWish`/`skipWish` from wishlist.dart); Done → `markReviewDone()`). Today shows the "Weekly review" card while
+  `reviewState().due`, "Reviewed · N weeks in a row" after Done, and "Due by payday: 3 bills, 182.40 €" from `period().dueBills`/`reservedBills`
+  (bills in a fixed category are named "covered by your plan" and left out of the sum; an unpaid bill past its date says "overdue").
+  `screens/habits_panels.dart` = Plan's review-day chips (`setReviewDay`), Expected bills (`recurringBills()`: candidates → Confirm / Not a
+  bill; confirmed rows with Paid/Overdue/Covered and Remove) and Nudges (a device-local switch, `setNudges`). The "Due by payday" tap
+  switches to Plan and scrolls to Expected bills (`PlanScreen.showBills`, a notifier owned by `HomeShell`).
+  Controller log events (counts and enum words only): `review.done`, `review.day`, `recurring.confirm|dismiss|delete`, `nudges.enabled|scheduled`.
+- Nudges: `nudges.dart` (pure: ~14 funny, encouraging lines with no digits or names, `nudgeFor(date)`, `nudgeSlots(now)` = 15:00 on
+  weekdays and 11:00 on Sunday for 4 weeks, `NudgePlatform`/`NoNudges`) and `notifier.dart` (native-only: `AndroidNudges` with
+  `flutter_local_notifications`, one inexact `zonedSchedule` per slot, no exact-alarm permission; the time zone name comes from
+  the `budget_wallet/timezone` channel in MainActivity; POST_NOTIFICATIONS is asked when the switch is turned on). Everything but
+  Android gets `NoNudges` (the switch is off with a note). The controller schedules again on start and resume. A reminder never
+  carries amounts, merchants or names. Tests use `FakeNudges` (`test/support/wallet.dart`) through `forTest(nudges:)`.
 - `lib/src/file_chooser.dart` — `FileChooser`: the system file/folder/save dialogs behind one injectable class. They can throw
   (Linux without xdg-desktop-portal), so every call site catches, logs the type and shows `chooserFailedMessage`.
 - `lib/src/theme.dart` — the D3 Ledger theme (`docs/design/ledger-spec.md`): `WalletColors` (paper/ink tokens incl. `lineStrong`; light and
@@ -67,6 +83,9 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   1280×800, 1920×1080 and 800×1280 (`tools/build.sh desktop-test adaptive`). Tests find tabs with `tapTab`/`navTab`: they work for the bar and the rail.
 - `test/budgets_plan_test.dart` (the editor), `test/budgets_screens_test.dart` (Spending rows, Today line, controller caching); the
   `budgetWallet()` helper in `test/support/wallet.dart` has a fixed clock (20 Oct 2026) and known amounts.
+- `test/habits_test.dart` (controller, Today card and bills line, ReviewScreen steps, Plan chips/bills/nudges, layout at 320 dp @ 2.0, 360 and
+  1280), `test/nudges_test.dart` (texts, slots), `test/notifier_test.dart` (the Android plugin through its method channel); the
+  `habitsWallet()` helper (20 Oct 2026, a bill candidate, three unconfirmed card rows, a ready wish) and `FakeNudges` are in `test/support/wallet.dart`.
 - `test/theme_*_test.dart` — the Ledger theme: contrast ratios of every token, structure (no `Card`, nav by width, Panel without radius), text
   scale 2.0 at 320/360 with the real fonts, amounts in Plex Mono with tabular figures and a shared right edge, the six font files and `OFL.txt`.
 - `test/` — formatting and widget tests. Run: `tools/build.sh test` (format check, `flutter analyze`, `flutter test`).

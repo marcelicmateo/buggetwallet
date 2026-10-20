@@ -20,6 +20,8 @@ dependencies:
   flutter_secure_storage: ^11.2.0
   fl_chart: ^1.2.0
   qr_flutter: ^4.1.0
+  flutter_local_notifications: ^22.3.2
+  timezone: ^0.11.2 # the plugin schedules with it (already a dependency of the plugin)
 
 dev_dependencies:
   flutter_test:

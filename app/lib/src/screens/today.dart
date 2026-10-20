@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
+import '../file_chooser.dart';
 import '../format.dart';
 import '../layout.dart';
+import '../logging.dart';
 import '../platform.dart';
 import '../theme.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
+import 'review.dart';
 
 class TodayScreen extends StatelessWidget {
   final WalletController wc;
@@ -20,9 +23,24 @@ class TodayScreen extends StatelessWidget {
   /// Opens the Add expense sheet (HomeShell owns it so Ctrl+N does the same); without it the button opens it itself.
   final VoidCallback? addExpense;
 
+  /// Opens Plan at "Expected bills" (the "Due by payday" line); without it the line is not tappable.
+  final VoidCallback? openBills;
+
+  /// The file chooser of the review's Import step (tests pass one that fails).
+  final FileChooser chooser;
+
   /// The time of day the screen shows (tests pass a fixed one).
   final DateTime Function() clock;
-  const TodayScreen({super.key, required this.wc, required this.openPlan, this.openSpending, this.addExpense, this.clock = DateTime.now});
+  const TodayScreen({
+    super.key,
+    required this.wc,
+    required this.openPlan,
+    this.openSpending,
+    this.addExpense,
+    this.openBills,
+    this.chooser = const FileChooser(),
+    this.clock = DateTime.now,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +56,8 @@ class TodayScreen extends StatelessWidget {
     final deliveryHour = (now.hour >= 14 && now.hour < 19) || now.weekday == DateTime.sunday;
     final (deliveryCount, deliverySum) = wc.deliveries;
     final tight = wc.tightestBudget();
+    final review = wc.reviewState();
+    final reviewedToday = wc.lastReview == wc.today() && !review.due;
     final recent = wc.txs.where((t) => t.kind != Kind.transfer).take(12).toList();
 
     return MarginLine(
@@ -99,6 +119,9 @@ class TodayScreen extends StatelessWidget {
                         : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace', textAlign: TextAlign.end),
                   ),
                   if (tight != null) _BudgetLine(tight, cur, openSpending),
+                  if (p.dueBills.isNotEmpty) _BillsLine(p.dueBills, p.reservedBills, wc.today(), cur, openBills),
+                  if (reviewedToday)
+                    StatusLabel(key: const ValueKey('reviewed'), good: true, text: 'Reviewed · ${streakText(review.streak)}'),
                   Tooltip(
                     message: hasKeyboard ? 'Add expense (Ctrl+N)' : '',
                     child: FilledButton.icon(
@@ -109,6 +132,19 @@ class TodayScreen extends StatelessWidget {
                     ),
                   ),
                 ]),
+                if (review.due)
+                  Panel(key: const ValueKey('reviewCard'), children: [
+                    const SectionHead('Weekly review'),
+                    Text(reviewSummary(review) ?? 'Nothing to fix. Import your latest files and tick it off.',
+                        style: const TextStyle(fontSize: 14)),
+                    FilledButton(
+                      onPressed: () {
+                        logNav('review.open');
+                        openReview(context, wc, openSpending: openSpending, chooser: chooser);
+                      },
+                      child: const Text('Start review'),
+                    ),
+                  ]),
                 if (s.savedFor != p.start && wc.goals.isNotEmpty)
                   Panel(children: [
                     const HeadingRow(Heading('Payday checklist', size: 15), Tag('pay yourself first')),
@@ -197,6 +233,45 @@ class _BudgetLine extends StatelessWidget {
           Icon(over ? Icons.error_outline : Icons.pie_chart_outline, size: 18, color: col),
           const SizedBox(width: 8),
           Expanded(child: Text(text, style: TextStyle(fontSize: 14, color: col, fontWeight: over ? FontWeight.w600 : FontWeight.w400))),
+          if (onTap != null) Icon(Icons.chevron_right, size: 20, color: c.muted),
+        ]),
+      ),
+    );
+  }
+}
+
+/// "Due by payday: 3 bills, 182.40 €": confirmed bills expected before the next payday; a tap opens Plan › Expected bills.
+/// Bills the plan already counts (rent, loan, subscriptions) are named apart and are not in the sum; an unpaid bill past its
+/// date says "overdue" (it stays reserved).
+class _BillsLine extends StatelessWidget {
+  final List<RecurringBill> bills;
+  final int reserved;
+  final String today, currency;
+  final VoidCallback? onTap;
+  const _BillsLine(this.bills, this.reserved, this.today, this.currency, this.onTap);
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final counted = bills.where((b) => !b.coveredByPlan).length;
+    final covered = bills.length - counted;
+    final overdue = bills.where((b) => b.nextDue.compareTo(today) < 0).length;
+    final text = 'Due by payday: ${[
+      if (counted > 0) '$counted ${counted == 1 ? 'bill' : 'bills'}, ${moneyExact(reserved, currency)}',
+      if (covered > 0) '$covered covered by your plan',
+    ].join(' · ')}';
+    return InkWell(
+      key: const ValueKey('billsLine'),
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Row(children: [
+          Icon(Icons.event_note_outlined, size: 18, color: c.ink2),
+          const SizedBox(width: 8),
+          Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(text, style: TextStyle(fontSize: 14, color: c.ink2)),
+            if (overdue > 0) StatusLabel(key: const ValueKey('billsOverdue'), good: false, text: '$overdue overdue'),
+          ])),
           if (onTap != null) Icon(Icons.chevron_right, size: 20, color: c.muted),
         ]),
       ),

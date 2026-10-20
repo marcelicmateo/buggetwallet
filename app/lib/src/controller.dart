@@ -9,14 +9,26 @@ import 'package:wallet_importer/wallet_importer.dart';
 
 import 'key_store.dart';
 import 'logging.dart';
+import 'notifier.dart';
+import 'nudges.dart';
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');
 final _import = Logger('bw.import');
 final _key = Logger('bw.key');
+final _habits = Logger('bw.habits');
+final _nudgeLog = Logger('bw.nudges');
 
 /// The core function; the controller method of the same name would hide it inside the class.
 const _computeBudget = budgetVsActual;
+
+/// Same for the review state: the controller has a method of the same name.
+const reviewStateOf = reviewState;
+
+/// The count of one review step by its id (`import`, `categories`, `pace`, `wishlist`).
+extension ReviewCounts on ReviewState {
+  int count(String id) => steps.where((s) => s.id == id).fold(0, (a, s) => a + s.count);
+}
 
 class ImportLine {
   final String file;
@@ -97,7 +109,15 @@ class WalletController extends ChangeNotifier {
   Timer? _syncTimer;
   Timer? _debounce;
 
-  WalletController._(this.repo, this.key, {DateTime Function()? clock}) : _clock = clock ?? DateTime.now {
+  /// The phone's reminders (Plan › Nudges); [NoNudges] in tests and on desktop.
+  final NudgePlatform nudges;
+
+  /// True after the system refused the notification permission when the switch was turned on (Plan says how to allow it).
+  bool nudgesDenied = false;
+
+  WalletController._(this.repo, this.key, {DateTime Function()? clock, NudgePlatform? nudges})
+      : _clock = clock ?? DateTime.now,
+        nudges = nudges ?? const NoNudges() {
     syncFolder = repo.localValue('syncFolder');
   }
 
@@ -121,18 +141,20 @@ class WalletController extends ChangeNotifier {
     logEvent(_log, Level.INFO, 'app.start', {'phase': 'key', 'ms': sw.elapsedMilliseconds, 'found': key != null});
 
     sw = Stopwatch()..start();
-    final c = WalletController._(repo, key);
+    final c = WalletController._(repo, key, nudges: defaultNudgePlatform());
     c.reload();
     logEvent(_log, Level.INFO, 'app.start',
         {'phase': 'reload', 'ms': sw.elapsedMilliseconds, 'tx': c.txs.length, 'syncFolder': c.syncFolder != null, 'logLevel': c.logLevel});
     c._startAutoSync();
+    c.refreshRecurring();
+    scheduleMicrotask(c.rescheduleNudges);
     return c;
   }
 
   /// For widget tests: an already-open repo (e.g. [WalletRepo.inMemory]), no auto-sync. [clock] stands in for the current time.
   @visibleForTesting
-  factory WalletController.forTest(WalletRepo repo, {VaultKey? key, DateTime Function()? clock}) =>
-      WalletController._(repo, key, clock: clock)..reload();
+  factory WalletController.forTest(WalletRepo repo, {VaultKey? key, DateTime Function()? clock, NudgePlatform? nudges}) =>
+      WalletController._(repo, key, clock: clock, nudges: nudges)..reload();
 
   /// The saved monthly budgets per category (cents).
   Map<String, int> get categoryBudgets => settings.categoryBudgets;
@@ -220,8 +242,9 @@ class WalletController extends ChangeNotifier {
   /// A payday more than 20 days after the current period start, not yet started as a new month.
   String? newPayday(String periodStart) => _paydays.where((d) => d.compareTo(addDays(periodStart, 20)) > 0).lastOrNull;
 
-  PeriodBudget period() =>
-      _cached('period', () => timed('wc.period', () => computePeriod(txs, effectiveSettings, goals, today()), warnMs: 50));
+  /// The budget of the running pay period. Confirmed recurring bills are reserved in it (`reservedBills`, `dueBills`).
+  PeriodBudget period() => _cached(
+      'period', () => timed('wc.period', () => computePeriod(txs, effectiveSettings, goals, today(), bills: recurringBills()), warnMs: 50));
 
   /// Saved or lost per pay period (salary to salary), oldest first; the last one is still running.
   List<PeriodSummary> payPeriods({int count = 12}) => _cached('payPeriods$count',
@@ -300,6 +323,156 @@ class WalletController extends ChangeNotifier {
     reload();
     _debounce?.cancel();
     _debounce = Timer(const Duration(seconds: 3), () => syncNow(quiet: true, trigger: 'change'));
+  }
+
+  // ---------- habits: weekly review, recurring bills, nudges ----------
+  /// The day of the week the review is due from (1 = Monday … 7 = Sunday, default Sunday).
+  int get reviewDay => settings.reviewDay;
+
+  /// The date of the last finished review, or null.
+  String? get lastReview => settings.lastReview;
+
+  /// Spending rows of the last 7 days without a category the owner set: the rows the review's "Confirm categories" step
+  /// counts (same rule as core's `reviewState`). "Looks right" and the category sheet pin the category, so the row leaves
+  /// the list. Cached per data version and day.
+  List<CategorizedTx> reviewRows() => _cached('reviewRows', () {
+        final to = today(), from = addDays(to, -7);
+        return [
+          for (final t in txs)
+            if (t.tx.live &&
+                t.date.compareTo(from) > 0 &&
+                t.date.compareTo(to) <= 0 &&
+                (t.kind == Kind.fixed || t.kind == Kind.flex) &&
+                (t.tx.category == null || !categories.containsKey(t.tx.category)))
+              t
+        ];
+      });
+
+  /// "Looks right" / after the category sheet: the row keeps the category it has now as the owner's choice, and the bank
+  /// merchant learns it (as the category sheet does), so the row leaves the review list.
+  void confirmCategory(Tx t) {
+    final now = txs.where((x) => x.tx.id == t.id).firstOrNull ?? categorizer.categorize(t);
+    final cat = now.category;
+    logEvent(_log, Level.INFO, 'category.confirm', {'category': cat, 'source': t.source}); // never the merchant
+    if (t.source != 'manual') repo.setMerchantRule(merchantKey(t), cat);
+    repo.setCategory(t.id, cat);
+    _changed();
+  }
+
+  /// This month's budgeted categories that are over budget or spending faster than the month passes.
+  List<CategoryBudgetLine> paceRows() => _cached(
+      'paceRows',
+      () => [
+            for (final l in budgetVsActual(monthOf(today())).lines)
+              if (l.over || (l.pace ?? 0) > 1.0) l
+          ]);
+
+  /// Wishes that finished the cooling-off wait and wait for buy or skip. Depends on the clock, so it is not cached.
+  List<WishItem> readyWishes() {
+    final now = _clock().millisecondsSinceEpoch;
+    return wish.where((w) => w.status == 'waiting' && w.hoursLeft(settings.coolHours, now) <= 0).toList();
+  }
+
+  /// Is the weekly review due, its steps with counts, and the streak. Cached per data version and day.
+  ReviewState reviewState() => _cached(
+      'reviewState', () => reviewStateOf(txs, settings, wish, categoryBudgets, today: today(), nowMillis: _clock().millisecondsSinceEpoch));
+
+  /// Finishes this week's review (writes the date; the streak grows by one).
+  void markReviewDone() {
+    final r = reviewState();
+    repo.markReviewDone(today());
+    logEvent(_habits, Level.INFO, 'review.done', {
+      'categories': r.count('categories'),
+      'pace': r.count('pace'),
+      'wishlist': r.count('wishlist'),
+    }); // counts only
+    _changed();
+  }
+
+  void setReviewDay(int day) {
+    if (day < 1 || day > 7 || day == reviewDay) return;
+    repo.updateSettings({'reviewDay': day});
+    logEvent(_habits, Level.INFO, 'review.day', {'day': day});
+    _changed();
+  }
+
+  /// Recurring bills worth showing: candidates and confirmed (dismissed ones stay hidden). Cached per data version.
+  List<RecurringBill> recurringBills() => _cached('recurringBills', repo.recurringBills);
+
+  /// Looks for bills again in the imported rows (after an import and at start).
+  void refreshRecurring() {
+    try {
+      repo.refreshRecurring(today());
+      logEvent(_habits, Level.FINE, 'recurring.refresh', {'bills': repo.recurringBills().length});
+    } catch (e, st) {
+      logError(_habits, 'recurring.refreshFailed', e, st);
+    }
+  }
+
+  /// Was the bill's last payment made in the running pay period (the "Paid" mark in Plan)?
+  bool billPaidThisPeriod(RecurringBill b) {
+    final id = b.lastPaidTx;
+    if (id == null) return false;
+    final paid = txs.where((t) => t.tx.id == id).firstOrNull;
+    return paid != null && paid.date.compareTo(period().start) >= 0;
+  }
+
+  void confirmRecurring(String id) {
+    repo.confirmRecurring(id);
+    logEvent(_habits, Level.INFO, 'recurring.confirm', {'bills': recurringBills().length}); // never payee or amount
+    _changed();
+  }
+
+  void dismissRecurring(String id) {
+    repo.dismissRecurring(id);
+    logEvent(_habits, Level.INFO, 'recurring.dismiss', {'bills': recurringBills().length});
+    _changed();
+  }
+
+  void deleteRecurring(String id) {
+    repo.deleteRecurring(id);
+    logEvent(_habits, Level.INFO, 'recurring.delete', {'bills': recurringBills().length});
+    _changed();
+  }
+
+  /// Device-local (never synced): are reminders on?
+  bool get nudgesEnabled => repo.localValue('nudgesEnabled') == '1';
+
+  /// Turns reminders on or off. On: asks the system for permission first; when refused the switch stays off and
+  /// [nudgesDenied] says why. Returns whether reminders are on afterwards.
+  Future<bool> setNudges(bool on) async {
+    try {
+      if (!on) {
+        repo.setLocalValue('nudgesEnabled', null);
+        nudgesDenied = false;
+        await nudges.cancelAll();
+        logEvent(_nudgeLog, Level.INFO, 'nudges.enabled', {'on': false});
+        notifyListeners();
+        return false;
+      }
+      final granted = await nudges.requestPermission();
+      logEvent(_nudgeLog, Level.INFO, 'nudges.enabled', {'on': granted, 'granted': granted});
+      nudgesDenied = !granted;
+      if (granted) repo.setLocalValue('nudgesEnabled', '1');
+      notifyListeners();
+      if (granted) await rescheduleNudges();
+      return granted;
+    } catch (e, st) {
+      logError(_nudgeLog, 'nudges.setFailed', e, st, fields: {'on': on});
+      notifyListeners();
+      return nudgesEnabled;
+    }
+  }
+
+  /// Schedules the next days of reminders again (app start, resume): the list is only ever 4 weeks long.
+  Future<void> rescheduleNudges() async {
+    if (!nudgesEnabled || !nudges.supported) return;
+    try {
+      final n = await nudges.schedule(nudgeSlots(_clock()));
+      logEvent(_nudgeLog, Level.INFO, 'nudges.scheduled', {'count': n});
+    } catch (e, st) {
+      logError(_nudgeLog, 'nudges.scheduleFailed', e, st);
+    }
   }
 
   // ---------- wallet / key ----------
@@ -480,6 +653,7 @@ class WalletController extends ChangeNotifier {
     }
     all.done({'files': files.length, 'ok': lines.where((l) => l.ok).length});
     lastImport = lines;
+    refreshRecurring();
     _changed();
     return lines;
   }

@@ -66,7 +66,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                 else
                   Rows(children: [
                     for (final w in ready)
-                      _WishRow(w: w, currency: cur, sub: 'Waited ${s.coolHours}h', actions: [
+                      WishRow(w: w, currency: cur, sub: 'Waited ${s.coolHours}h', actions: [
                         OutlinedButton(style: accentOutlined(context), onPressed: () => _buy(w), child: const Text('Buy it')),
                         TextButton(onPressed: () => _skip(w), child: const Text('Skip')),
                       ]),
@@ -79,7 +79,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                 else
                   Rows(children: [
                     for (final w in waiting)
-                      _WishRow(w: w, currency: cur, sub: timeLeft(w.hoursLeft(s.coolHours, now)), actions: [
+                      WishRow(w: w, currency: cur, sub: timeLeft(w.hoursLeft(s.coolHours, now)), actions: [
                         TextButton(onPressed: () => _skip(w), child: const Text("Don't need it")),
                       ]),
                   ]),
@@ -101,7 +101,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                 else
                   Rows(children: [
                     for (final w in done.take(20))
-                      _WishRow(w: w, currency: cur, sub: w.status == 'bought' ? 'Bought' : 'Skipped', actions: const [])
+                      WishRow(w: w, currency: cur, sub: w.status == 'bought' ? 'Bought' : 'Skipped', actions: const [])
                   ]),
               ]),
             ])));
@@ -153,24 +153,29 @@ class _WishlistScreenState extends State<WishlistScreen> {
     ]);
   }
 
-  Future<void> _buy(WishItem w) async {
-    widget.wc.decideWish(w.id, 'bought');
-    toast(context, 'Log it with Add expense when you pay');
-    await showSheet<String>(context, AddExpenseSheet(wc: widget.wc, amount: w.price, note: w.name, skipImpulse: true));
-  }
+  Future<void> _buy(WishItem w) => buyWish(context, widget.wc, w);
 
-  void _skip(WishItem w) {
-    widget.wc.decideWish(w.id, 'skipped');
-    toast(context, 'Skipped. ${money(w.price, widget.wc.currency, decimals: 0)} stays in your pocket.');
-  }
+  void _skip(WishItem w) => skipWish(context, widget.wc, w);
 }
 
-class _WishRow extends StatelessWidget {
+/// "Buy it" on a wish that finished waiting: marks it bought and opens Add expense with its price (also used by the review).
+Future<void> buyWish(BuildContext context, WalletController wc, WishItem w) async {
+  wc.decideWish(w.id, 'bought');
+  toast(context, 'Log it with Add expense when you pay');
+  await showSheet<String>(context, AddExpenseSheet(wc: wc, amount: w.price, note: w.name, skipImpulse: true));
+}
+
+void skipWish(BuildContext context, WalletController wc, WishItem w) {
+  wc.decideWish(w.id, 'skipped');
+  toast(context, 'Skipped. ${money(w.price, wc.currency, decimals: 0)} stays in your pocket.');
+}
+
+class WishRow extends StatelessWidget {
   final WishItem w;
   final String currency;
   final String sub;
   final List<Widget> actions;
-  const _WishRow({required this.w, required this.currency, required this.sub, required this.actions});
+  const WishRow({super.key, required this.w, required this.currency, required this.sub, required this.actions});
 
   @override
   Widget build(BuildContext context) => HoverTint(

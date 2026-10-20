@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:budget_wallet/src/screens/review.dart';
+import 'package:budget_wallet/src/screens/today.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -51,6 +53,14 @@ void main() {
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-plan-budgets');
 
+    // Plan › Weekly review day, Expected bills and Nudges (M4).
+    await tester.scrollUntilVisible(find.text('Review day'), 300, scrollable: plan);
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-plan-habits');
+    await tester.scrollUntilVisible(find.textContaining('Remind me at'), 300, scrollable: plan);
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-plan-nudges');
+
     // Plan › Diagnostics at the bottom of the Plan tab; switch the level there and back.
     await tester.scrollUntilVisible(find.text('Clear logs'), 400, scrollable: plan);
     await tester.pumpAndSettle();
@@ -58,6 +68,24 @@ void main() {
     await tester.tap(find.text('Info'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Debug'));
+    await tester.pumpAndSettle();
+
+    // The weekly review (M4): the Today card opens it; one row is confirmed, then it closes and Done is left for the real flow.
+    await tester.tap(navTab('Today'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Start review'), 300,
+        scrollable: find.descendant(of: find.byType(TodayScreen), matching: find.byType(Scrollable)).first);
+    await tester.ensureVisible(find.text('Start review'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start review'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ReviewScreen), findsOneWidget);
+    await binding.takeScreenshot('7-review');
+    if (find.text('Looks right').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Looks right').first);
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
 
     // After the screenshots: logged actions with private-looking synthetic values, to prove they stay out of the log.
@@ -90,6 +118,7 @@ void main() {
     expect(log, contains('frames.window'));
     expect(log, contains('import.file'));
     expect(log, contains('nav.tab'));
+    expect(log, contains('review.open'));
     expect(log, contains('log.level {"from":"info","to":"all"}'));
     for (final p in _private) {
       expect(log, isNot(contains(p)), reason: 'private text "$p" in the log');

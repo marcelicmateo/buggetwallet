@@ -47,7 +47,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
         Panel(children: [
           const Eyebrow('Where it goes'),
           Heading('${monthLong(sel)}: ${money(selSum.out, cur, decimals: 0)} out'),
-          if (budgeted) _BudgetSummary(budget, cur),
+          if (budgeted) BudgetSummary(budget, cur),
           Muted('Income ${money(selSum.income, cur, decimals: 0)}. Spending and bills by category; '
               '${budgeted ? 'the solid mark is the budget, the dark tick' : 'the dark tick'} is your average of the 6 months before.'),
           _MonthChips(
@@ -96,10 +96,10 @@ class _SpendingScreenState extends State<SpendingScreen> {
 }
 
 /// "3 of 7 categories over budget, 180 € left in total"; when some are behind pace: "1 over, 2 behind pace, 46 € left in total".
-class _BudgetSummary extends StatelessWidget {
+class BudgetSummary extends StatelessWidget {
   final BudgetVsActual b;
   final String currency;
-  const _BudgetSummary(this.b, this.currency);
+  const BudgetSummary(this.b, this.currency, {super.key});
   @override
   Widget build(BuildContext context) {
     final behind = b.lines.where(behindPace).length;

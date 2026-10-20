@@ -1,0 +1,93 @@
+// Native-only: the phone's reminders through flutter_local_notifications (keep this file out of screens/ and widgets/).
+// Android only for now; everywhere else [defaultNudgePlatform] gives [NoNudges], which does nothing and never fails.
+// Reminders are scheduled one by one for the next days with `inexactAllowWhileIdle`: no exact-alarm permission is needed,
+// the system may move one by a few minutes. The app schedules again on start and resume, so the list never runs out.
+import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest_all.dart' as tzdata;
+import 'package:timezone/timezone.dart' as tz;
+import 'package:wallet_core/wallet_core.dart';
+
+import 'nudges.dart';
+import 'platform.dart';
+
+final _log = Logger('bw.nudges');
+
+/// The reminders for this device: the Android plugin on Android, nothing elsewhere.
+NudgePlatform defaultNudgePlatform() => isAndroid ? AndroidNudges() : const NoNudges();
+
+/// Android reminders. [plugin] and [zoneName] are replaced in tests.
+class AndroidNudges implements NudgePlatform {
+  static const _tzChannel = MethodChannel('budget_wallet/timezone');
+
+  final FlutterLocalNotificationsPlugin Function() _plugin;
+  final Future<String> Function() _zoneName;
+  FlutterLocalNotificationsPlugin? _p;
+  bool _ready = false;
+
+  AndroidNudges({FlutterLocalNotificationsPlugin Function()? plugin, Future<String> Function()? zoneName})
+      : _plugin = plugin ?? FlutterLocalNotificationsPlugin.new,
+        _zoneName = zoneName ?? _nativeZoneName;
+
+  static Future<String> _nativeZoneName() async => await _tzChannel.invokeMethod<String>('getTimeZone') ?? 'UTC';
+
+  @override
+  bool get supported => true;
+
+  Future<FlutterLocalNotificationsPlugin> _init() async {
+    final p = _p ??= _plugin();
+    if (_ready) return p;
+    tzdata.initializeTimeZones(); // latest_all: Android names zones by link too (Europe/Zagreb), which the smaller sets lack
+    var zone = 'UTC';
+    try {
+      zone = await _zoneName();
+      tz.setLocalLocation(tz.getLocation(zone));
+    } catch (e, st) {
+      // Reminders then follow UTC; the zone name is not logged (it says where the owner lives).
+      logError(_log, 'nudges.zoneFailed', e, st);
+      tz.setLocalLocation(tz.UTC);
+    }
+    await p.initialize(settings: const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')));
+    _ready = true;
+    return p;
+  }
+
+  @override
+  Future<bool> requestPermission() async {
+    final p = await _init();
+    final android = p.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    final granted = await android?.requestNotificationsPermission() ?? false;
+    logEvent(_log, Level.INFO, 'nudges.permission', {'granted': granted});
+    return granted;
+  }
+
+  @override
+  Future<int> schedule(List<NudgeSlot> slots) async {
+    final p = await _init();
+    await p.cancelAll();
+    const details = NotificationDetails(
+        android: AndroidNotificationDetails('nudges', 'Reminders',
+            channelDescription: 'Short, friendly reminders. They never show amounts.',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority));
+    var n = 0;
+    for (final (i, s) in slots.indexed) {
+      final d = parseIso(s.date);
+      await p.zonedSchedule(
+        id: i,
+        title: s.title,
+        body: s.body,
+        scheduledDate: tz.TZDateTime(tz.local, d.year, d.month, d.day, s.hour, s.minute),
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+      n++;
+    }
+    return n;
+  }
+
+  @override
+  Future<void> cancelAll() async {
+    await (await _init()).cancelAll(); // also clears what an earlier run scheduled
+  }
+}

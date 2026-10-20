@@ -1,4 +1,3 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -16,6 +15,8 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'budgets.dart';
 import 'diagnostics.dart';
+import 'habits_panels.dart';
+import 'import_flow.dart';
 
 export '../sync_path.dart' show checkSyncPath; // the sync path tests import it from here
 
@@ -26,7 +27,10 @@ class PlanScreen extends StatefulWidget {
 
   /// The system file and folder choosers (tests pass one that fails).
   final FileChooser chooser;
-  const PlanScreen({super.key, required this.wc, this.chooser = const FileChooser()});
+
+  /// Fires when Today's "Due by payday" line is tapped: the page then scrolls to Expected bills.
+  final Listenable? showBills;
+  const PlanScreen({super.key, required this.wc, this.chooser = const FileChooser(), this.showBills});
   @override
   State<PlanScreen> createState() => _PlanScreenState();
 }
@@ -42,6 +46,8 @@ class _PlanScreenState extends State<PlanScreen> {
   String currency = 'EUR';
   String _shownCurrency = 'EUR';
   bool importing = false;
+  final _billsKey = GlobalKey();
+  final _scroll = ScrollController();
 
   /// Field errors from the last Save, by key (shown under the field until it is edited).
   final Map<String, String> _errors = {};
@@ -58,6 +64,22 @@ class _PlanScreenState extends State<PlanScreen> {
     super.initState();
     _fill(widget.wc.settings, force: true);
     widget.wc.addListener(_onChange);
+    widget.showBills?.addListener(_scrollToBills);
+  }
+
+  /// Scrolls to Expected bills. A ListView builds only the rows near the window, so when the panel is not built yet the page
+  /// is moved down a screen at a time until it is.
+  Future<void> _scrollToBills() async {
+    for (var i = 0; i < 12 && mounted; i++) {
+      await WidgetsBinding.instance.endOfFrame;
+      final c = _billsKey.currentContext;
+      if (c != null && c.mounted) {
+        await Scrollable.ensureVisible(c, duration: const Duration(milliseconds: 250));
+        return;
+      }
+      if (!_scroll.hasClients || _scroll.position.pixels >= _scroll.position.maxScrollExtent) return;
+      _scroll.jumpTo((_scroll.position.pixels + 400).clamp(0.0, _scroll.position.maxScrollExtent));
+    }
   }
 
   @override
@@ -68,11 +90,17 @@ class _PlanScreenState extends State<PlanScreen> {
       widget.wc.addListener(_onChange);
       _fill(widget.wc.settings, force: true);
     }
+    if (old.showBills != widget.showBills) {
+      old.showBills?.removeListener(_scrollToBills);
+      widget.showBills?.addListener(_scrollToBills);
+    }
   }
 
   @override
   void dispose() {
     widget.wc.removeListener(_onChange);
+    widget.showBills?.removeListener(_scrollToBills);
+    _scroll.dispose();
     for (final c in f.values) {
       c.dispose();
     }
@@ -116,6 +144,7 @@ class _PlanScreenState extends State<PlanScreen> {
 
     return NarrowPage(
         child: ListView(
+            controller: _scroll,
             padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
             children: gapped([
               Panel(children: [
@@ -190,6 +219,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 const Muted('ATM withdrawals this big or bigger count as rent. 0 turns it off.', size: 12),
                 FilledButton(onPressed: _savePlan, child: const Text('Save numbers')),
               ]),
+              KeyedSubtree(key: _billsKey, child: ExpectedBillsPanel(wc: wc)),
               BudgetsPanel(wc: wc),
               Panel(children: [
                 const SectionHead('Month'),
@@ -210,6 +240,7 @@ class _PlanScreenState extends State<PlanScreen> {
               ]),
               Panel(children: [
                 const SectionHead('Weekly review'),
+                ReviewDayRow(wc: wc),
                 const Heading('Import bank exports', size: 15),
                 const Muted(
                     'PBZ: Excel export of the current account. Revolut: account statement as Excel or CSV. Importing the same dates twice is safe; nothing gets doubled. Expenses you added by hand are matched to the bank rows.'),
@@ -223,6 +254,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 ),
                 for (final l in wc.lastImport) StatusLabel(good: l.ok, text: '${l.file}: ${l.message}'),
               ]),
+              NudgesPanel(wc: wc),
               _syncPanel(context),
               DiagnosticsPanel(wc: wc, chooser: widget.chooser),
             ])));
@@ -275,42 +307,9 @@ class _PlanScreenState extends State<PlanScreen> {
   }
 
   Future<void> _import() async {
-    logNav('import.pick');
-    final List<PlatformFile> picked;
-    try {
-      picked = await widget.chooser.pickBankFiles();
-    } catch (e, st) {
-      logError(_log, 'import.pickerFailed', e, st, fields: {'type': e.runtimeType.toString()});
-      if (mounted) toast(context, chooserFailedMessage);
-      return;
-    }
-    if (picked.isEmpty) {
-      logNav('import.cancelled');
-      return;
-    }
     setState(() => importing = true);
-    final files = <(String, Uint8List)>[];
     try {
-      for (final pf in picked) {
-        files.add((pf.name, await pf.readAsBytes()));
-      }
-    } catch (e, st) {
-      // describeError drops the path (it would name the bank file).
-      logError(_log, 'import.openFailed', e, st, fields: {'files': picked.length, 'read': files.length});
-      if (mounted) {
-        setState(() => importing = false);
-        toast(context, "Couldn't open that file.");
-      }
-      return;
-    }
-    // Extensions and sizes only, never file names.
-    logNav('import.chosen', {
-      'files': files.length,
-      'exts': [for (final (n, _) in files) fileExt(n)],
-      'bytes': [for (final (_, b) in files) b.length],
-    });
-    try {
-      await widget.wc.importFiles(files);
+      await pickAndImport(context, widget.wc, widget.chooser);
     } finally {
       if (mounted) setState(() => importing = false);
     }
