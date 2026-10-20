@@ -81,8 +81,8 @@ class SeenBank {
   }
 }
 
-/// The manual entries [planMatches] will try to match: unmatched ones, ones whose bank row is in [gone] (deleted, or
-/// not a bank row), and every entry but the smallest id on a bank row shared by several. [taken]: the bank rows that
+/// The manual entries [planMatches] will try to match: unmatched ones, ones whose bank row is in [gone] (deleted, not
+/// a bank row, or one side of an own transfer), and every entry but the smallest id on a bank row shared by several. [taken]: the bank rows that
 /// keep their entry. A bank row that is not in the wallet yet (its sync file has not arrived, or is damaged) keeps its
 /// entry: reopening it there would undo, on every sync, the match that devices holding the row write again.
 ({List<Tx> open, Set<String> taken}) _split(List<Tx> manual, Set<String> gone) {
@@ -96,7 +96,8 @@ class SeenBank {
 }
 
 /// The manual entries that [planMatches] tries to match, given [gone]: the ids of the rows entries point at that are
-/// deleted or are not bank rows (a row not in the wallet at all is not gone). Callers then load only the bank rows
+/// deleted, are not bank rows, or are one side of an own transfer ([Tx.transferTo]; a row not in the wallet at all is
+/// not gone). Callers then load only the bank rows
 /// that could replace one of them (same amount, within [matchDays], written after it). Empty when every entry keeps
 /// its match.
 List<Tx> openEntries(List<Tx> manual, Set<String> gone) => _split(manual, gone).open;
@@ -107,8 +108,9 @@ List<Tx> openEntries(List<Tx> manual, Set<String> gone) => _split(manual, gone).
 /// A pure function of the rows, so every device holding the same rows plans the same writes (sync converges even
 /// when the manual entry and the bank row arrive on a device in either order), and applying the plan gives a state
 /// whose plan is empty (idempotent):
-/// - an existing match is kept unless its bank row is deleted or is not a bank row: then the entry is open again, so
-///   it counts as spending instead of vanishing with the row. A bank row this device does not hold yet keeps the match
+/// - an existing match is kept unless its bank row is deleted, is not a bank row, or has become one side of a transfer
+///   between the owner's accounts (`planTransfers` paired it after the match): then the entry is open again, so it
+///   counts as spending instead of vanishing with the row. A bank row this device does not hold yet keeps the match
 ///   (devices that hold it wrote that match, and reopening it here would only start a rewrite war over sync); when
 ///   several live manual entries point at the same bank row, the one with the smallest id keeps it and the others are
 ///   unmatched;
@@ -134,7 +136,7 @@ MatchPlan planMatches(List<Tx> manual, List<Tx> bank, bool Function(Tx) eligible
   final bankCategory = <String, String>{};
   final (:open, :taken) = _split(manual, {
     for (final b in bank)
-      if (b.manual || b.deleted) b.id
+      if (b.manual || b.deleted || b.transferTo != null) b.id
   });
   for (final m in open) {
     if (m.matchedTo != null) matchedTo[m.id] = null; // its bank row was deleted (or is not one), or taken by another entry

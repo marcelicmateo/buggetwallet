@@ -1,3 +1,5 @@
+import 'package:wallet_importer/wallet_importer.dart' show TxKind;
+
 import 'logs.dart';
 import 'models.dart';
 
@@ -108,7 +110,27 @@ class Categorizer {
     return null;
   }
 
+  /// The built-in category of a bank row, before the user's per-merchant rules ([categoryOf]).
+  ///
+  /// A row paired with its other side ([Tx.transferTo]) is an `Internal transfer`. Then the importer's [Tx.kindHint]
+  /// decides where it can: `salary` → Salary (every employer payment), `atm` → Rent when the withdrawal is at least
+  /// [rentCashThreshold], else Cash, `fee` → Bank fees, `ownTransfer` → Internal transfer. `standingOrder` says how the
+  /// bank paid, not what for, and `card`, `other` and no hint fall through to the per-source rules below (built-in
+  /// merchant patterns and the `merchantPatterns` setting through [merchantCategory]).
   String autoCategory(Tx t) {
+    if (t.transferTo != null) return 'Internal transfer';
+    switch (t.kindHint) {
+      case TxKind.salary:
+        return 'Salary';
+      case TxKind.atm:
+        return rentCashThreshold > 0 && t.amount <= -rentCashThreshold ? 'Rent' : 'Cash';
+      case TxKind.fee:
+        return 'Bank fees';
+      case TxKind.ownTransfer:
+        return 'Internal transfer';
+      case TxKind.standingOrder || TxKind.card || TxKind.other || null:
+        break;
+    }
     final d = t.description.toLowerCase();
     final type = t.bankType;
     switch (t.source) {

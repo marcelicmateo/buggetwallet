@@ -10,6 +10,7 @@ import 'hlc.dart';
 import 'logs.dart';
 import 'matching.dart';
 import 'models.dart';
+import 'transfers.dart';
 
 /// One field-level change. This is what syncs between devices.
 class Op {
@@ -26,14 +27,21 @@ class Op {
 
 class ImportSummary {
   final int added, duplicates, matched, skipped;
-  const ImportSummary(this.added, this.duplicates, this.matched, this.skipped);
+
+  /// Pairs of own-account transfers found after this import ([planTransfers]).
+  final int transfers;
+  const ImportSummary(this.added, this.duplicates, this.matched, this.skipped, {this.transfers = 0});
 }
 
 /// Table name and syncable columns per entity.
 const Map<String, (String, List<String>)> _entities = {
   'tx': (
     'tx',
-    ['source', 'date', 'amount', 'currency', 'bank_type', 'description', 'category', 'note', 'manual', 'matched_to', 'deleted', 'seen_bank']
+    [
+      'source', 'date', 'amount', 'currency', 'bank_type', 'description', 'category', 'note', 'manual', 'matched_to', 'deleted',
+      'seen_bank',
+      'kind_hint', 'transfer_to', // v3: the importer's TxKind name, written once by importBatch; the other side of an own transfer
+    ]
   ),
   'goal': ('goals', ['name', 'target', 'saved', 'monthly', 'sort', 'deleted']),
   'wish': ('wish', ['name', 'price', 'added', 'status', 'decided', 'deleted']),
@@ -48,8 +56,10 @@ CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS tx(
   id TEXT PRIMARY KEY, source TEXT NOT NULL DEFAULT '', date TEXT NOT NULL DEFAULT '', amount INTEGER NOT NULL DEFAULT 0,
   currency TEXT NOT NULL DEFAULT 'EUR', bank_type TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '',
-  category TEXT, note TEXT, manual INTEGER NOT NULL DEFAULT 0, matched_to TEXT, deleted INTEGER NOT NULL DEFAULT 0, seen_bank TEXT);
+  category TEXT, note TEXT, manual INTEGER NOT NULL DEFAULT 0, matched_to TEXT, deleted INTEGER NOT NULL DEFAULT 0, seen_bank TEXT,
+  kind_hint TEXT, transfer_to TEXT);
 CREATE INDEX IF NOT EXISTS tx_date ON tx(date);
+CREATE INDEX IF NOT EXISTS tx_amount ON tx(amount);
 CREATE TABLE IF NOT EXISTS goals(id TEXT PRIMARY KEY, name TEXT, target INTEGER NOT NULL DEFAULT 0, saved INTEGER NOT NULL DEFAULT 0,
   monthly INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS wish(id TEXT PRIMARY KEY, name TEXT, price INTEGER NOT NULL DEFAULT 0, added INTEGER NOT NULL DEFAULT 0,
@@ -80,7 +90,9 @@ class WalletRepo {
     db.execute(_schema);
     // Columns added after the first release (CREATE TABLE IF NOT EXISTS leaves an older table as it was).
     final txCols = {for (final r in db.select('PRAGMA table_info(tx)')) r['name'] as String};
-    if (!txCols.contains('seen_bank')) db.execute('ALTER TABLE tx ADD COLUMN seen_bank TEXT');
+    for (final col in ['seen_bank', 'kind_hint', 'transfer_to']) {
+      if (!txCols.contains(col)) db.execute('ALTER TABLE tx ADD COLUMN $col TEXT');
+    }
     var dev = _meta('device_id');
     if (dev == null) {
       final r = Random.secure();
@@ -93,8 +105,9 @@ class WalletRepo {
     _migrate();
   }
 
-  /// Bump when a new synced entity is added. Version 2 added `goal_contrib`.
-  static const schemaVersion = 2;
+  /// Bump when a new synced entity or field is added. Version 2 added `goal_contrib`, version 3 `tx.kind_hint` and
+  /// `tx.transfer_to` (an older build dropped those fields from the ops it read, so they are replayed once).
+  static const schemaVersion = 3;
 
   /// Builds before a synced entity existed skipped its ops but still marked the peer files holding them as read. So
   /// when an existing database is opened by a build with a newer [schemaVersion], it forgets which peer files it read
@@ -180,7 +193,7 @@ class WalletRepo {
   static const _intCols = {'amount', 'target', 'saved', 'monthly', 'sort', 'price', 'added', 'decided'};
   static const _flagCols = {'manual', 'deleted'};
   static const _nullable = {
-    'tx': {'category', 'note', 'matched_to', 'seen_bank'},
+    'tx': {'category', 'note', 'matched_to', 'seen_bank', 'kind_hint', 'transfer_to'},
     'goal': {'name'},
     'wish': {'name', 'decided'},
     'setting': {'value'},
@@ -294,12 +307,13 @@ class WalletRepo {
 
     const live = 'tx.manual = 0 AND tx.deleted = 0';
     final manual = rows('tx.manual = 1 AND tx.deleted = 0');
-    // Every row an entry points at, deleted ones included: only a deleted target (or one that is not a bank row)
-    // reopens its entry. A target this device has not received yet keeps the match (no unmatch/rematch churn).
+    // Every row an entry points at, deleted ones included: only a deleted target (or one that is not a bank row, or
+    // was paired as an own transfer) reopens its entry. A target this device has not received yet keeps the match
+    // (no unmatch/rematch churn).
     final targets = rows('tx.id IN (SELECT matched_to FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to IS NOT NULL)');
     final open = openEntries(manual, {
       for (final b in targets)
-        if (b.manual || b.deleted) b.id
+        if (b.manual || b.deleted || b.transferTo != null) b.id
     });
     if (open.isEmpty) {
       _clearMatchPending();
@@ -344,10 +358,59 @@ class WalletRepo {
 
   void _clearMatchPending() => db.execute("DELETE FROM meta WHERE key = 'match_pending'");
 
-  /// Runs matching if ops applied with `applyRemote(match: false)` changed something since it last ran (also after a
-  /// crash mid-sync: the flag is stored). [FolderSync.run] calls it once after applying all files.
+  /// A live bank row that needs a transfer partner: no `transfer_to`, or a link that no longer holds because the
+  /// partner here is deleted, is a manual row, or points elsewhere (mirrors `openTransfers`; a partner not here at
+  /// all keeps the link). `x` is the row's alias.
+  static String _openTransfer(String x) => '($x.manual = 0 AND $x.deleted = 0 AND $x.amount != 0 AND ($x.transfer_to IS NULL '
+      'OR $x.transfer_to = $x.id OR EXISTS (SELECT 1 FROM tx p WHERE p.id = $x.transfer_to AND (p.deleted = 1 OR p.manual = 1 '
+      "OR IFNULL(p.transfer_to, '') != $x.id))))";
+
+  /// Pairs own-account transfers ([planTransfers]) and writes the links. Returns the new pairs.
+  ///
+  /// Loads only the rows that can pair: open rows with an open opposite-amount row of the same currency in another
+  /// source within [transferDays] (a self-join on `amount`, indexed), plus open rows with a stale link (to clear it)
+  /// and the rows those links point at (so the plan checks them the same way). Logged as `repo.transfers` on `bw.perf`.
+  int _pairTransfers() {
+    final t = PerfTimer('repo.transfers');
+    final rows = <String, Tx>{};
+    void load(String sql, [List<Object?> args = const []]) {
+      for (final r in db.select(sql, args)) {
+        final tx = Tx.fromRow(r);
+        rows[tx.id] = tx;
+      }
+    }
+
+    load('SELECT DISTINCT a.* FROM tx a JOIN tx b ON b.amount = -a.amount AND b.currency = a.currency AND b.source != a.source '
+        "AND b.date BETWEEN date(a.date, '-$transferDays days') AND date(a.date, '+$transferDays days') AND ${_openTransfer('b')} "
+        "WHERE a.date != '' AND ${_openTransfer('a')}");
+    final candidates = rows.length;
+    load('SELECT a.* FROM tx a WHERE a.transfer_to IS NOT NULL AND ${_openTransfer('a')}');
+    final targets = [
+      for (final r in rows.values)
+        if (r.transferTo case final String to when !rows.containsKey(to)) to
+    ];
+    if (targets.isNotEmpty) {
+      load('SELECT * FROM tx WHERE id IN (${List.filled(targets.length, '?').join(',')})', targets);
+    }
+    final plan = planTransfers([...rows.values]);
+    _write([
+      for (final e in plan.transferTo.entries) ('tx', e.key, {'transfer_to': e.value})
+    ]);
+    t.done({'candidates': candidates, 'rows': rows.length, 'paired': plan.paired, 'reopened': plan.reopened});
+    return plan.paired;
+  }
+
+  /// After rows changed (import, delete, remote ops): pairs own-account transfers, then matches hand-added expenses
+  /// (a paired row is a transfer, so it is no longer a payment a cash entry could be). Returns (pairs, matches).
+  (int, int) _reconcile() {
+    final pairs = _pairTransfers();
+    return (pairs, _matchManual());
+  }
+
+  /// Runs transfer pairing and matching if ops applied with `applyRemote(match: false)` changed something since it
+  /// last ran (also after a crash mid-sync: the flag is stored). [FolderSync.run] calls it once after applying all files.
   void runPendingMatch() {
-    if (_meta('match_pending') != null) _matchManual();
+    if (_meta('match_pending') != null) _reconcile();
   }
 
   bool peerFileSeen(String device, String file) =>
@@ -456,9 +519,10 @@ class WalletRepo {
     ]);
   }
 
-  /// Imports a normalized batch. Already-known ids are skipped. Hand-added expenses with the same amount within 3 days
-  /// are then matched to a bank row their device did not hold when they were added, which keeps their category
-  /// ([planMatches]).
+  /// Imports a normalized batch. Already-known ids are skipped; `kindHint` is stored (`kind_hint`), `account` never is.
+  /// Then own-account transfers are paired across sources ([planTransfers]) and hand-added expenses with the same
+  /// amount within 3 days are matched to a bank row their device did not hold when they were added, which keeps their
+  /// category ([planMatches]).
   ImportSummary importBatch(ImportBatch batch) {
     final t = PerfTimer('repo.importBatch', warnMs: 500);
     final known = <String>{for (final r in db.select('SELECT id FROM tx')) r['id'] as String};
@@ -475,6 +539,7 @@ class WalletRepo {
           'currency': n.currency,
           'bank_type': n.bankType,
           'description': n.description,
+          if (n.kindHint case final k?) 'kind_hint': k.name, // never `account`: it names the owner's account
           'manual': 0,
           // Never 'deleted': a new row is live through the column default, and writing deleted: 0 here with a
           // fresh HLC would undo a delete made on another device that this one has not synced yet. Only
@@ -483,14 +548,15 @@ class WalletRepo {
       ));
     }
     _write(changes);
-    final matched = _matchManual();
-    final s = ImportSummary(fresh.length, batch.transactions.length - fresh.length, matched, batch.skipped);
+    final (transfers, matched) = _reconcile();
+    final s = ImportSummary(fresh.length, batch.transactions.length - fresh.length, matched, batch.skipped, transfers: transfers);
     t.done({
       'source': batch.source,
       'rows': batch.transactions.length,
       'added': s.added,
       'dupes': s.duplicates,
       'matched': s.matched,
+      'transfers': s.transfers,
       'skipped': s.skipped
     });
     return s;
@@ -544,12 +610,12 @@ class WalletRepo {
       ]);
 
   /// Deletes a row. A hand-added expense that this bank row replaced counts again (and may be matched by a later
-  /// bank row): see [planMatches].
+  /// bank row): see [planMatches]. The other side of an own transfer it was paired with is open again ([planTransfers]).
   void deleteTransaction(String txId) {
     _write([
       ('tx', txId, {'deleted': 1})
     ]);
-    _matchManual();
+    _reconcile();
   }
 
   void setMerchantRule(String key, String category) => _write([
