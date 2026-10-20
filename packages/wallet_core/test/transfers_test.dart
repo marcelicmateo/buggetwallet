@@ -174,6 +174,17 @@ void main() {
       expect(Categorizer().categoryOf(plain), isNot('Internal transfer'));
     });
 
+    test('an exchange leg never anchors a pair: it stays Internal transfer by its hint, the equal PBZ row stays open', () {
+      final fx = _row('a', 'revolut', '2026-01-10', -10000, kind: TxKind.exchange, type: 'Exchange');
+      final inflow = _row('b', 'pbz', '2026-01-11', 10000);
+      expect(_plan([fx, inflow]), isEmpty);
+      expect(_plan([_row('a', 'revolut', '2026-01-10', 10000, kind: TxKind.exchange), _row('b', 'pbz', '2026-01-12', -10000)]), isEmpty);
+      expect(Categorizer().categoryOf(fx), 'Internal transfer');
+      expect(Categorizer().categoryOf(inflow), isNot('Internal transfer'));
+      expect(_plan([fx, inflow, _row('c', 'bankx', '2026-01-10', -10000, kind: own)]), {'c': 'b', 'b': 'c'},
+          reason: 'a hinted own transfer in a third source takes the inflow; the exchange leg stays alone');
+    });
+
     test('a partner that is deleted, manual or points elsewhere reopens the row; one not here yet keeps it', () {
       final a = _row('a', 'pbz', '2026-01-10', -10000, transferTo: 'b', kind: own);
       expect(_plan([a, _row('b', 'revolut', '2026-01-11', 10000, transferTo: 'a', deleted: true)]), {'a': null});
@@ -362,6 +373,19 @@ void main() {
       final before = r.pendingOps().length;
       r.importBatch(loosePbz);
       expect(r.pendingOps().length, before, reason: 'converged: the next plan writes nothing');
+    });
+
+    test('a Revolut Exchange with an equal PBZ inflow within 3 days stays unpaired and Internal transfer', () {
+      r.importBatch(ImportBatch(source: 'revolut', transactions: [
+        n('2026-03-02', -10000, 'Exchange', 'Exchanged to USD', source: 'revolut', kind: TxKind.exchange),
+      ]));
+      final s = r.importBatch(ImportBatch(source: 'pbz', transactions: [
+        n('2026-03-04', 10000, 'Ostalo', 'VAL_01.01.2026.POVRAT', kind: TxKind.other),
+      ]));
+      expect(s.transfers, 0);
+      expect(links().values.toSet(), {null});
+      expect(cats()[-10000], 'Internal transfer');
+      expect(cats()[10000], isNot('Internal transfer'));
     });
 
     test('one source alone writes nothing even with equal opposite amounts and a hint', () {

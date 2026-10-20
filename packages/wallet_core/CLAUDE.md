@@ -12,11 +12,11 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
 - `categories.dart` — `Categorizer`: item override → (paired transfer → importer `kindHint` → source/pattern rules) →
   per-merchant rules. `kindHint` (importer `TxKind`, stored as `tx.kind_hint` by `importBatch`, never edited) decides
   first where it can: `salary` → Salary, `atm` → Rent at or above `rentCashThreshold` else Cash, `fee` → Bank fees,
-  `ownTransfer` → Internal transfer; `standingOrder`, `card`, `other` and null fall through to the description rules
+  `ownTransfer` and `exchange` → Internal transfer; `standingOrder`, `card`, `other` and null fall through to the description rules
   (built-in merchant patterns, `merchantPatterns`). A row with `transferTo` is an Internal transfer before any hint.
   `account` from the importer is never stored (it names the owner's account).
 - `transfers.dart` — `planTransfers`: own transfers between accounts. Only a row the bank itself marks as one
-  (`kindHint == ownTransfer`: Revolut `Topup`/`Exchange`, PBZ card payments to Revolut) may pair: with the equal,
+  (`kindHint == ownTransfer`: Revolut `Topup`, PBZ card payments to Revolut; not `exchange`, a conversion inside one bank) may pair: with the equal,
   opposite-sign row of the same currency in another source within `transferDays` (3, inclusive, either way in time),
   hinted or not. The two then hold each other's id in `tx.transfer_to`. Two unhinted rows never pair, whatever the
   amounts. Pure and deterministic: open outflows oldest first (date, id), each takes the closest open inflow it may pair

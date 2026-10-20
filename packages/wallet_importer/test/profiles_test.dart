@@ -204,7 +204,7 @@ void main() {
         ['Card Refund', '2026-01-01', 'd', 1.0, 0.0, 'COMPLETED'],
         ['Something Else', '2026-01-01', 'e', 1.0, 0.0, 'COMPLETED'],
       ])!;
-      expect(b.transactions.map((t) => t.kindHint), [TxKind.fee, TxKind.atm, TxKind.ownTransfer, TxKind.card, null]);
+      expect(b.transactions.map((t) => t.kindHint), [TxKind.fee, TxKind.atm, TxKind.exchange, TxKind.card, null]);
       expect(b.transactions.map((t) => t.account), everyElement(isNull));
     });
   });

@@ -20,7 +20,7 @@ class RevolutProfile extends BankProfile {
     'Card Refund': TxKind.card,
     'ATM': TxKind.atm,
     'Topup': TxKind.ownTransfer, // funded from the owner's other account
-    'Exchange': TxKind.ownTransfer, // between the owner's own currency balances
+    'Exchange': TxKind.exchange, // between the owner's own currency balances, inside Revolut
     'Fee': TxKind.fee,
     'Transfer': TxKind.other, // to or from other people
   };

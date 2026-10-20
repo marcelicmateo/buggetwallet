@@ -25,8 +25,9 @@ class TransferPlan {
   int get reopened => transferTo.values.where((v) => v == null).length;
 }
 
-/// Whether [t] carries the bank's own evidence of a transfer between the owner's accounts (the importer's
-/// `kindHint`). Only such a row may pair: money is never reclassified on amount alone.
+/// Whether [t] carries the bank's own evidence of money moving to another of the owner's accounts (the importer's
+/// `kindHint`). Only such a row may pair: money is never reclassified on amount alone. An `exchange` (a currency
+/// conversion inside one bank) is an Internal transfer by its hint but never anchors a cross-source pair.
 bool _own(Tx t) => t.kindHint == TxKind.ownTransfer;
 
 /// Whether [t]'s `transfer_to` link holds: the partner is live, a bank row, points back, and one of the two is a

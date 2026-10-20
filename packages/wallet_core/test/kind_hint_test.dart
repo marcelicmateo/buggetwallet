@@ -76,6 +76,9 @@ void main() {
           'Internal transfer');
       expect(cz.categoryOf(_tx('bankx', 'XFER', 'Savings pot', 10000, kind: TxKind.ownTransfer)), 'Internal transfer');
       expect(kindOf(cz.categoryOf(_tx('bankx', 'XFER', 'Savings pot', 10000, kind: TxKind.ownTransfer))), Kind.transfer);
+      expect(cz.categoryOf(_tx('revolut', 'Exchange', 'Exchanged to USD', -10000, kind: TxKind.exchange)), 'Internal transfer');
+      expect(cz.categoryOf(_tx('bankx', 'FX', 'Exchanged to USD', -10000, kind: TxKind.exchange)), 'Internal transfer',
+          reason: 'exchange: Internal transfer by the hint alone, without any text rule');
     });
 
     test('standingOrder keeps the pattern-based category: it says how, not what', () {
