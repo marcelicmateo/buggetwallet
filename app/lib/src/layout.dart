@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
-import 'widgets/common.dart' show MarginLine;
 
 /// compact: bottom bar, one column. medium: rail, one column. expanded: wide rail, content up to [expandedMaxWidth].
 enum LayoutSize { compact, medium, expanded }
@@ -52,7 +51,7 @@ class TwoCol extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
         final l = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(left));
         final r = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(right));
-        if (box.maxWidth + 2 * pagePad >= twoColMin) {
+        if (box.maxWidth + 2 * pagePad + _gutterOf(context) >= twoColMin) {
           // A 1 px hairline in the middle of the gap (the columns are equally wide, so the middle is half the width).
           return Stack(children: [
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: l), SizedBox(width: colGap), Expanded(child: r)]),
@@ -77,4 +76,43 @@ class NarrowPage extends StatelessWidget {
   Widget build(BuildContext context) => Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: mediumMaxWidth), child: MarginLine(child: child)));
+}
+
+/// Where the margin line sits (x, inside the content column) and how wide it is (two 1 px rules with a 2 px gap).
+const marginLineX = 22.0, marginLineWidth = 4.0;
+
+/// Extra room on the left of a page on windows that show the margin line, so the content stays clear of it
+/// (the line ends at x = 26; the page padding then puts the content at 32).
+const marginGutter = 16.0;
+
+double _gutterOf(BuildContext context) => layoutOf(context) == LayoutSize.compact ? 0 : marginGutter;
+
+/// Draws the notebook margin line (a red double rule at x = [marginLineX] of the column) on windows [dialogMin] wide or
+/// more (or as [show] says) and moves [child] right by [marginGutter] to clear it. Each page puts it around its own
+/// column. [child] keeps the same place in the tree either way (pages keep their State).
+class MarginLine extends StatelessWidget {
+  final bool? show;
+  final Widget child;
+  const MarginLine({super.key, this.show, required this.child});
+  @override
+  Widget build(BuildContext context) {
+    final show = this.show ?? layoutOf(context) != LayoutSize.compact;
+    final col = marginLineColor(Theme.of(context).brightness);
+    return Stack(fit: StackFit.passthrough, children: [
+      Padding(padding: EdgeInsets.only(left: show ? marginGutter : 0), child: child),
+      if (show)
+        Positioned(
+          left: marginLineX,
+          top: 0,
+          bottom: 0,
+          width: marginLineWidth,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              key: const ValueKey('marginLine'),
+              decoration: BoxDecoration(border: Border(left: BorderSide(color: col), right: BorderSide(color: col))),
+            ),
+          ),
+        ),
+    ]);
+  }
 }

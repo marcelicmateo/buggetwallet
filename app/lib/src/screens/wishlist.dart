@@ -87,7 +87,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                   TotalRule(
                       child: SplitRow(
                           start: const Text('Waiting in total', style: TextStyle(fontWeight: FontWeight.w600)),
-                          end: Text(money(waiting.fold<int>(0, (a, w) => a + w.price), cur, decimals: 0),
+                          end: Text(money(wc.waitingTotal, cur, decimals: 0),
                               textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w600)))),
               ]),
               Panel(children: [

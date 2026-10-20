@@ -468,36 +468,6 @@ class NavBarFrame extends StatelessWidget {
   }
 }
 
-/// Draws the notebook margin line (a red double rule) in the left margin of [child], on windows [dialogMin] wide or more
-/// (or as [show] says). Each page puts it around its own column, so it sits at the content's left edge. The page margin is
-/// 16 dp, so the line is at x = 5..9. [child] keeps the same place in the tree either way (pages keep their State).
-class MarginLine extends StatelessWidget {
-  final bool? show;
-  final Widget child;
-  const MarginLine({super.key, this.show, required this.child});
-  @override
-  Widget build(BuildContext context) {
-    final show = this.show ?? layoutOf(context) != LayoutSize.compact;
-    final col = marginLineColor(Theme.of(context).brightness);
-    return Stack(fit: StackFit.passthrough, children: [
-      child,
-      if (show)
-        Positioned(
-          left: 5,
-          top: 0,
-          bottom: 0,
-          width: 4,
-          child: IgnorePointer(
-            child: DecoratedBox(
-              key: const ValueKey('marginLine'),
-              decoration: BoxDecoration(border: Border(left: BorderSide(color: col), right: BorderSide(color: col))),
-            ),
-          ),
-        ),
-    ]);
-  }
-}
-
 /// Children with a fixed gap between them, for ListView pages.
 List<Widget> gapped(List<Widget> xs, {double gap = 14}) => [
       for (var i = 0; i < xs.length; i++) ...[if (i > 0) SizedBox(height: gap), xs[i]],

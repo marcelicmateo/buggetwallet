@@ -85,10 +85,8 @@ class GoalsScreen extends StatelessWidget {
                   TotalRule(
                       child: SplitRow(
                           start: const Text('Put aside in total', style: TextStyle(fontWeight: FontWeight.w600)),
-                          end: Text(
-                              '${money(total, cur, decimals: 0)} / ${money(wc.goals.fold<int>(0, (a, g) => a + g.target), cur, decimals: 0)}',
-                              textAlign: TextAlign.end,
-                              style: numStyle.copyWith(fontWeight: FontWeight.w600)))),
+                          end: Text('${money(total, cur, decimals: 0)} / ${money(wc.goalTargetTotal, cur, decimals: 0)}',
+                              textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w600)))),
                 OutlinedButton.icon(
                     icon: const Icon(Icons.add),
                     label: const Text('New goal'),
