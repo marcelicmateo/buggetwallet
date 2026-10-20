@@ -25,6 +25,8 @@ All numbers below are made-up samples. No personal figures. "Proposed" = not bui
 
 - 2026-10-20: M4 Habits (§4.6) approved: review day Sunday by default, changeable per user; confirmed recurring bills **reduce safe-to-spend** until paid (reserved money is not spendable); nudges at 15:00 weekdays and Sunday 11:00; `flutter_local_notifications` allowed; notification text = funny, encouraging words only, never amounts.
 - 2026-10-20: M4 Habits as built (review fixes): a confirmed bill's next due date follows the paying row's date (never the expected date, so it cannot drift out of the match window and be reserved and spent at once); a confirmed bill's category follows the current merchant rules, so a bill ruled into a fixed category is "covered by your plan" and not reserved twice; an unmatched confirmed bill is released by "Skip this cycle" (one interval forward, synced), never by amount matching; a skipped review week resets the streak; nudges are device-local (not synced).
+- 2026-10-20: M5 Polish (§4.7) approved: backups go **only into the sync folder** (`budget-wallet/backups/`, encrypted with the wallet key, restore only into an empty wallet); CSV exports carry the app's cleaned data (category, cleaned description, note), saved through the system save dialog; search covers **all data** (transactions, goals, wishlist, expected bills); no new settings for now.
+- 2026-10-20: CI runs only what is not verified locally (owner): the laptop's full run (lint, unit, desktop, perf, emulator) is the gate before every push; GitHub builds the signed APK, the Linux bundle + smoke test and publishes the dev release, each as its own job. Test jobs run only on demand (cloud sessions without Flutter).
 - 2026-10-20: `v2` merged into `master` (owner).
 
 ## 2. Data flow as built (v2) — summary
@@ -153,6 +155,28 @@ Nothing here changes a number by itself: detection and nudges inform; only the o
 **Open for the owner:** review day Sunday? should confirmed recurring bills reduce safe-to-spend before they are paid?
 nudge times as proposed? ok to add `flutter_local_notifications`? amounts in notification bodies?
 
+### 4.7 M5 Polish — approved 2026-10-20 (owner answers in the log above)
+Brief (2026-10-16): backup/export, search, settings. Nothing here changes a number; everything reads the wallet or writes
+settings the owner already has.
+- **Backup:** Plan › "Backup" with one button "Save a backup…" that writes a single encrypted file
+  (`bw-backup-YYYY-MM-DD.bwb`, same vault format and wallet key as the sync files, every table as ops) to a folder the
+  owner picks, and "Restore from backup…" which opens such a file into an **empty** wallet only (never merges into a
+  wallet with data; the sync folder is the merge path). The key prompt at wallet creation also offers "Copy key" once
+  (gap list §2, item 7). Core: `exportBackup(sink)` / `importBackup(source)` in `wallet_core`, round-trip tested with the sim.
+- **Export:** "Export CSV…" (transactions of a chosen date range: date, amount, category, description, source, note)
+  and "Export spending summary" (per month × category). Plain files, unencrypted, for the owner's spreadsheet; the app
+  warns once that the file is not encrypted. Money as exact decimals, never rounded.
+- **Search:** a search field at the top of Spending (and in the Today "Recent" list on wide layouts): matches
+  description, note, merchant rule name and amount (`12.50` or `12,50`, exact or prefix); results use the existing
+  transaction rows and open the same edit sheet. Core: `searchTransactions(query, {from, to})` with tests for amount
+  parsing (comma/dot, negative), accents and case.
+- **Settings:** Plan keeps all settings but gets a short index at the top (Numbers · Budgets · Weekly review ·
+  Expected bills · Nudges · Sync · Backup · Diagnostics) that scrolls to each section; a "Start of week", "Currency
+  symbol position" and "Text size" (follows the system, or fixed) setting; "Reset demo data" only in demo wallets.
+- **Not in scope:** cloud backup, scheduled backups, PDF reports, multi-currency.
+**Open for the owner:** backup to any folder or only the sync folder? CSV with the bank's original text or the cleaned
+description? search also over goals and wishlist? which settings are missing for you today?
+
 ## 5. Roadmap snapshot (19 Oct)
 | Feature | Status | Milestone |
 |---|---|---|
@@ -161,11 +185,11 @@ nudge times as proposed? ok to add `flutter_local_notifications`? amounts in not
 | Automated tests Android + Linux, bug fixes | Built (19 Oct) | M2 |
 | Owner test of v2 | In progress | M2 |
 | Screen design final pick (6 kept) | In progress | design |
-| Performance test on Linux desktop | Planned | next |
-| Adaptive layout (rail, two columns, shortcuts) | Planned | after perf test |
-| Budget vs actual per category | Planned | M3 |
-| Weekly review, recurring bills, nudges | Planned | M4 |
-| Backup/export, search, settings | Planned | M5 |
+| Performance test on Linux desktop | Built (20 Oct) | perf |
+| Adaptive layout (rail, two columns, shortcuts) | Built (20 Oct) | B |
+| Budget vs actual per category | Built (20 Oct) | M3 |
+| Weekly review, recurring bills, nudges | Built (20 Oct) | M4 |
+| Backup/export, search | Approved, building | M5 |
 | Web version, then web sync | Planned | after M5 |
 | Bank profiles, bills database, calendar/future spending, projects | Proposed | — |
 | Owner live test | Planned | M6 |

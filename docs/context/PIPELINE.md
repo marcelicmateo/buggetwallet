@@ -58,8 +58,11 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | E0 | Spec for budget vs actual per category: DESIGN_DECISIONS §4.5 | lead | – | – | approved 2026-10-20 (monthly) |
 | E1 | Budget vs actual per category (M3): core `budgetVsActual`/`suggestBudgets` + `categoryBudgets` setting; UI Plan editor, Spending bars, Today line | core-builder + ui-builder | budgets-core, budgets-ui | E0 | done (merged, full run green) |
 | E2 | Top merchants (M3) | – | – | – | already built ("Top places" on Spending) |
-| F | M4 Habits (weekly review, recurring bills, nudges) | – | – | E | later |
-| G | M5 Polish (backup/export, search, settings) → web → sync redesign → M6 owner live test | – | – | F | later |
+| F | M4 Habits stage: full run green, emulator read, pushed 2bff25d; CI watching | lead | v2 | F1b | done |
+| G0 | M5 Polish spec: DESIGN_DECISIONS §4.7 | lead | – | F | approved 2026-10-20 (sync-folder backups, clean CSV, search all data) |
+| G1 | M5 Polish build: core (`backup.dart`, `export.dart`, `search.dart`) + UI (Plan › Backup, Export, search on Spending) + spec tests (backup round-trip, CSV exactness, amount parsing) | core-builder + ui-builder + test-writer | polish-core, polish-ui, polish-tests (from 2bff25d) | G0 | running |
+| G | M5 merge, review, full run, push → web → sync redesign → M6 owner live test | lead | v2 | G1 | queued |
+| H1 | CI split (owner 2026-10-20): CI runs only what the laptop does not verify — signed APK, Linux release bundle + smoke, dev release publish, log to ci-logs — as separate jobs; lint/unit/desktop tests run only on demand (`workflow_dispatch` input or `[ci tests]` in the commit message) for cloud sessions without Flutter. Cause: the single `build` job ran out of runner disk (run 39492372474). | devops | ci-split (from v2) | – | running |
 
 Merge order for B2: B2b → B2a → B2c, then B2d. C merges after B2 (ledger branches are based on B2a, so merging v2 into them
 only brings packages/ and tools/ changes).
