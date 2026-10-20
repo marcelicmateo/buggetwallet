@@ -9,7 +9,10 @@
 #   tools/build.sh all      test, then apk, linux, desktop-test and desktop-smoke
 #   tools/build.sh desktop-test [name…]   app integration tests on the Linux desktop app under Xvfb: every
 #                           app/integration_test/*_test.dart, or just <name>_test.dart. Screenshots -> dist/screens/linux/<name>/,
-#                           app log -> dist/logs/app-linux-<name>.log; each file starts with an empty wallet folder
+#                           app log -> dist/logs/app-linux-<name>.log; each file starts with an empty wallet folder.
+#                           Files run in parallel on BW_JOBS workers (default: min(nproc/4, free RAM/3 GB, 6), less when the
+#                           machine is busy; 1 = one after another in app/). Each worker builds in its own copy of app/ under
+#                           dist/desktop-test/w<N> (own Xvfb display, own wallet folders); layout is split in shards
 #   tools/build.sh desktop-smoke   build the Linux release bundle, start it under Xvfb with empty HOME/XDG folders for
 #                           BW_SMOKE_SECONDS (10) s: it must stay up, log app.start with no SEVERE line, and exit on SIGTERM
 #   tools/build.sh perf     profile-mode frame performance on the Linux desktop app (big synthetic wallet, Spending scroll and
@@ -41,7 +44,7 @@ CMD=${1:-test}
 # shellcheck source=tools/timing.sh
 source "$ROOT/tools/timing.sh"
 
-usage() { sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---- host side: hand the command to the container ----
 if [[ "${BW_NATIVE:-}" != 1 ]]; then
@@ -106,7 +109,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     -v bw-gradle-cache:/cache/gradle \
     -v bw-android-user:/cache/android \
     "${signing[@]}" "${run[@]}" \
-    -e BW_NATIVE=1 \
+    -e BW_NATIVE=1 -e BW_JOBS -e BW_GL_THREADS \
     -w /work "$IMAGE" "${inner[@]}"
 fi
 
@@ -266,29 +269,41 @@ build_linux() {
 
 # ---- Linux desktop under Xvfb (desktop-test, desktop-smoke) ----
 # headless <dir> <cmd...>: run cmd on a virtual X display (Mesa software GL) inside a private D-Bus session, with the
-# app's data (XDG_DATA_HOME: wallet, key file, logs), documents and runtime folders inside <dir>.
+# app's data (XDG_DATA_HOME: wallet, key file, logs), documents and runtime folders inside <dir>. The display is the first
+# free one, or :$BW_XDISPLAY (parallel workers: xvfb-run's search for a free one races when several start at once).
 # shellcheck disable=SC2329  # called by name through a step
 headless() {
-  local dir=$1; shift
+  local dir=$1 display=(-a); shift
+  [[ -n ${BW_XDISPLAY:-} ]] && display=(-n "$BW_XDISPLAY")
   mkdir -p "$dir/data" "$dir/docs"; mkdir -m 700 "$dir/run"
   XDG_DATA_HOME=$dir/data XDG_DOCUMENTS_DIR=$dir/docs XDG_RUNTIME_DIR=$dir/run NO_AT_BRIDGE=1 \
-    dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' "$@"
+    dbus-run-session -- xvfb-run "${display[@]}" -s '-screen 0 1920x1080x24' "$@"
 }
 # The app's log files (path_provider: $XDG_DATA_HOME/<application id>/logs/), oldest first
 # shellcheck disable=SC2329
 app_logs() { find "$1/data" -path '*/logs/bw-*.log' -print0 2>/dev/null | sort -z | xargs -0r cat; }
-# desktop_test <name>: app/integration_test/<name>_test.dart on the Linux desktop, with a JSON report and per-test
-# timings. Screenshots come from integration_test/flutter_test_config.dart (BW_SCREENS_DIR).
+# desktop_test <name> [<shard> <shards>]: app/integration_test/<name>_test.dart on the Linux desktop (in $BW_APP_DIR, a
+# copy of app/ when workers run in parallel), with a JSON report and per-test timings. Screenshots come from
+# integration_test/flutter_test_config.dart (BW_SCREENS_DIR). With a shard (0-based, parallel runs only) it runs that slice
+# of the file's tests; the caller cleans the screenshot folder first and merges the reports (desktop_merge).
 # shellcheck disable=SC2329
 desktop_test() {
-  local name=$1 dir rc=0 json=$LOGS/tests-desktop-$1.json shots=$ROOT/dist/screens/linux/$1
+  local name=$1 shard=${2:-} shards=${3:-1} dir rc=0 sfx='' opts=() shots=$ROOT/dist/screens/linux/$1
+  [[ -n $shard ]] && sfx=.s$shard
+  local json=$LOGS/tests-desktop-$name$sfx.json
+  ((shards > 1)) && opts=(--total-shards "$shards" --shard-index "$shard")
   dir=$(mktemp -d)
-  rm -rf "$shots" "$LOGS/screens-linux-$name"; rm -f "$json" "$LOGS/tests-desktop-$name-summary.txt"
-  (cd app && BW_SCREENS_DIR=$shots headless "$dir" \
-    flutter test "integration_test/${name}_test.dart" -d linux --no-pub -r expanded --file-reporter "json:$json") || rc=$?
-  app_logs "$dir" > "$LOGS/app-linux-$name.log"
-  [[ -d $shots ]] && cp -r "$shots" "$LOGS/screens-linux-$name"
-  [[ -f $json ]] && python3 -I tools/build_log.py tests "desktop-$name" "$json"
+  if [[ -z $shard ]]; then
+    rm -rf "$shots" "$LOGS/screens-linux-$name"; rm -f "$LOGS/tests-desktop-$name-summary.txt"
+  fi
+  rm -f "$json"
+  (cd "${BW_APP_DIR:-app}" && BW_SCREENS_DIR=$shots headless "$dir" \
+    flutter test "integration_test/${name}_test.dart" -d linux --no-pub -r expanded --file-reporter "json:$json" "${opts[@]}") || rc=$?
+  app_logs "$dir" > "$LOGS/app-linux-$name$sfx.log"
+  if [[ -z $shard ]]; then
+    [[ -d $shots ]] && cp -r "$shots" "$LOGS/screens-linux-$name"
+    [[ -f $json ]] && python3 -I tools/build_log.py tests "desktop-$name" "$json"
+  fi
   rm -rf "$dir"
   return "$rc"
 }
@@ -350,19 +365,128 @@ desktop_smoke() {
   return "$rc"
 }
 export -f headless app_logs desktop_test perf_run smoke_run desktop_smoke
-# The integration test files to run: the names given, or every app/integration_test/*_test.dart
+# Parallel desktop tests: each worker is a background loop with its own copy of app/ (a shared app/build and .dart_tool
+# can't take two `flutter test` runs), its own Xvfb display and wallet/temp folders. Files are units on a shared list, the
+# slowest first (history, tools/build_log.py order); a worker claims the next one with mkdir. Files in DESKTOP_SHARDS run as
+# several units, each one a slice of the file's tests (flutter test --total-shards), and are merged back into one log,
+# one history line per file. Logs, reports, screenshots and history keep their names; the step seconds of a sharded
+# file are the sum over its shards.
+declare -A DESKTOP_SHARDS=([layout]=5)
+# Number of workers: BW_JOBS, else a quarter of the idle cores and one per 3 GB of free RAM, at most 6, at least 1.
+desktop_jobs() {
+  local jobs load=0 mem
+  if [[ -n ${BW_JOBS:-} ]]; then
+    [[ $BW_JOBS =~ ^[1-9][0-9]*$ ]] || { echo "BW_JOBS must be a positive number, not '$BW_JOBS'" >&2; return 1; }
+    echo "$BW_JOBS"; return
+  fi
+  read -r load _ < /proc/loadavg || true
+  mem=$(awk '/^MemAvailable:/ { print int($2 / 3145728) }' /proc/meminfo)  # kB per 3 GB
+  jobs=$((($(nproc) - ${load%%[.,]*}) / 4))
+  ((jobs > mem)) && jobs=$mem
+  ((jobs > 6)) && jobs=6
+  ((jobs < 1)) && jobs=1
+  echo "$jobs"
+}
+# desktop_worker_app <w>: refresh worker <w>'s copy of app/ in dist/desktop-test/w<w>/app (build/ and .dart_tool/flutter_build
+# stay there between runs, so only changed files rebuild). packages/ is a symlink next to it for the path dependencies.
+desktop_worker_app() {
+  local base=$ROOT/dist/desktop-test/w$1 f
+  mkdir -p "$base/app/.dart_tool"
+  ln -sfn ../../../packages "$base/packages"
+  rm -rf "$base"/app/{lib,test,integration_test,test_driver,tool}
+  tar -C app --exclude=./build --exclude=./.dart_tool --exclude=./linux/flutter/ephemeral -cf - . | tar -C "$base/app" -xf -
+  for f in package_config.json package_graph.json version; do
+    if [[ -f app/.dart_tool/$f ]]; then cp -p "app/.dart_tool/$f" "$base/app/.dart_tool/"; fi
+  done
+}
+# desktop_worker <w>: run units (name:shard:shards from $UNITS) until none is left, one console line per unit
+desktop_worker() {
+  local w=$1 i name shard shards cmd step label status rc secs
+  desktop_worker_app "$w" || { echo "  worker $w: copying app/ failed" >&2; return 1; }
+  export BW_APP_DIR=$ROOT/dist/desktop-test/w$w/app BW_XDISPLAY=$((100 + w))
+  for i in "${!UNITS[@]}"; do
+    mkdir "$LOGS/.claim-$i" 2>/dev/null || continue
+    IFS=: read -r name shard shards <<<"${UNITS[$i]}"
+    cmd="desktop_test $name"; step=desktop-$name; label=$name
+    if ((shards > 1)); then cmd+=" $shard $shards"; step+=.s$shard; label+=" $((shard + 1))/$shards"; fi
+    run_step "$step" "$cmd" || true
+    read -r secs rc _ < "$LOGS/$step.status"
+    status=ok; [[ $rc == 0 ]] || status=FAILED
+    printf '  desktop-%-14s %-6s %6s s  (worker %s)\n' "$label" "$status" "$secs" "$w"
+  done
+}
+# desktop_merge <name> <shards>: the shards' logs, reports and status as one desktop-<name> step (as run_step writes it)
+desktop_merge() {
+  local name=$1 shards=$2 i s secs rc started tenths=0 bad=0 start='' jsons=()
+  local log=$LOGS/desktop-$name.log
+  {
+    for ((i = 0; i < shards; i++)); do
+      s=desktop-$name.s$i
+      if [[ ! -f $LOGS/$s.status ]]; then echo "--- shard $((i + 1))/$shards: did not run"; bad=1; continue; fi
+      read -r secs rc started < "$LOGS/$s.status"
+      echo "--- shard $((i + 1))/$shards: $secs s, exit $rc"
+      sed '1d;$d' "$LOGS/$s.log"
+      tenths=$((tenths + 10#${secs/./})); [[ $rc == 0 ]] || bad=1
+      if [[ -z $start || $started < $start ]]; then start=$started; fi
+      if [[ -f $LOGS/tests-desktop-$name.s$i.json ]]; then jsons+=("$LOGS/tests-desktop-$name.s$i.json"); fi
+    done
+    python3 -I tools/build_log.py tests "desktop-$name" "${jsons[@]:-/nonexistent}"
+  } > "$log.tmp" 2>&1
+  if [[ -d dist/screens/linux/$name ]]; then cp -r "dist/screens/linux/$name" "$LOGS/screens-linux-$name"; fi
+  cat "$LOGS"/app-linux-"$name".s*.log > "$LOGS/app-linux-$name.log" 2>/dev/null || : > "$LOGS/app-linux-$name.log"
+  secs="$((tenths / 10)).$((tenths % 10))"; start=${start:-$(now_iso)}
+  { echo "# desktop-$name: started $start"; cat "$log.tmp"
+    echo "# desktop-$name: finished $(now_iso), $secs s, exit $bad"; } > "$log"
+  echo "$secs $bad $start" > "$LOGS/desktop-$name.status"
+  rm -f "$log.tmp" "$LOGS/desktop-$name".s*.{log,status} "$LOGS/app-linux-$name".s*.log
+}
+# desktop_parallel <jobs> <name…>: run these files on <jobs> workers, then record them in the order given
+desktop_parallel() {
+  local jobs=$1 name w specs=() n
+  shift
+  for name; do specs+=("$name${DESKTOP_SHARDS[$name]:+:${DESKTOP_SHARDS[$name]}}"); done
+  mapfile -t UNITS < <(python3 -I tools/build_log.py order "${specs[@]}")
+  ((jobs > ${#UNITS[@]})) && jobs=${#UNITS[@]}
+  echo "=== desktop-test: ${#UNITS[@]} units from $# files on $jobs workers (BW_JOBS) ==="
+  for name; do rm -rf "dist/screens/linux/$name" "$LOGS/screens-linux-$name"; rm -f "$LOGS/tests-desktop-$name-summary.txt"; done
+  rm -rf "$LOGS"/.claim-*
+  for ((w = 1; w <= jobs; w++)); do desktop_worker "$w" & done
+  wait
+  rm -rf "$LOGS"/.claim-*
+  for name; do
+    n=${DESKTOP_SHARDS[$name]:-1}
+    if ((n > 1)); then
+      desktop_merge "$name" "$n"
+    elif [[ ! -f $LOGS/desktop-$name.status ]]; then  # never started (every worker failed)
+      printf '# desktop-%s: did not run\n' "$name" > "$LOGS/desktop-$name.log"; echo "0.0 1 $(now_iso)" > "$LOGS/desktop-$name.status"
+    fi
+    if [[ $(cut -d' ' -f2 "$LOGS/desktop-$name.status") != 0 ]]; then
+      echo "=== desktop-$name ==="; sed '1d;$d' "$LOGS/desktop-$name.log"
+    fi
+    record "desktop-$name"
+  done
+}
+# The integration test files to run: the names given, or every app/integration_test/*_test.dart. Parallel on
+# desktop_jobs workers (a separate copy of app/ each), or one after another in app/ with a single job or a single unit.
 desktop_tests() {
-  local names=("$@") f
+  local names=() valid=() f jobs units=0
+  for f in "$@"; do f=${f%.dart}; names+=("${f%_test}"); done
   if ((${#names[@]} == 0)); then
     for f in app/integration_test/*_test.dart; do f=${f##*/}; names+=("${f%_test.dart}"); done
   fi
   for f in "${names[@]}"; do
-    f=${f%.dart}; f=${f%_test}
     if [[ ! -f app/integration_test/${f}_test.dart ]]; then
       echo "no such test: app/integration_test/${f}_test.dart" >&2; results+=("desktop-$f=FAILED"); failed=1; continue
     fi
-    step "desktop-$f" "desktop_test $f"
+    valid+=("$f"); units=$((units + ${DESKTOP_SHARDS[$f]:-1}))
   done
+  [[ -n ${BW_GL_THREADS:-} ]] && export LP_NUM_THREADS=$BW_GL_THREADS  # llvmpipe rasterizer threads per app
+  jobs=$(desktop_jobs) || { failed=1; return; }
+  if ((jobs > 1 && units > 1)); then
+    desktop_parallel "$jobs" "${valid[@]}"
+  else
+    for f in "${valid[@]}"; do step "desktop-$f" "desktop_test $f"; done
+  fi
 }
 
 # End of run: seconds per step, test timing headlines, total

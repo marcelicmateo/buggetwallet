@@ -50,7 +50,9 @@ Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't 
   abort in the emulator's GLES decoder); real phones use Impeller.
 - **Linux desktop:** `tools/build.sh desktop-test [name…]` runs `app/integration_test/*_test.dart` on the Linux app under
   Xvfb in the build container (screenshots `dist/screens/linux/<test>/`, log `dist/logs/app-linux-<test>.log`; desktop
-  screenshots come from `integration_test/flutter_test_config.dart`). Android-only tests must skip themselves on
+  screenshots come from `integration_test/flutter_test_config.dart`). Files run in parallel on `BW_JOBS` workers (default
+  min(idle cores/4, free RAM/3 GB, 6); `BW_JOBS=1` = one after another in `app/`), each in its own copy of `app/` under
+  `dist/desktop-test/w<N>` (delete it to reset) with its own Xvfb display; `layout` runs as 5 shards. Android-only tests must skip themselves on
   desktop. `tools/build.sh desktop-smoke` starts the release bundle headless and checks its log. CI runs both.
   Ubuntu packages: `dev/linux-packages.txt` (image and CI).
 - **Frame performance:** `tools/build.sh perf` runs `app/integration_test/perf_test.dart` in profile mode on the Linux app
