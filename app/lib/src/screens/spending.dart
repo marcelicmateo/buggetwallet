@@ -46,21 +46,14 @@ class _SpendingScreenState extends State<SpendingScreen> {
           Heading('${monthLong(sel)}: ${money(selSum.out, cur, decimals: 0)} out'),
           Muted(
               'Income ${money(selSum.income, cur, decimals: 0)}. Spending and bills by category; the dark tick is your average of the 6 months before.'),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(children: [
-              for (final m in v.months.sublist(v.months.length - 7))
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                      label: Text(m == current ? '${monthShort(m)} (now)' : monthShort(m)),
-                      selected: m == sel,
-                      onSelected: (_) {
-                        logNav('spending.month', {'month': m});
-                        setState(() => selected = m);
-                      }),
-                ),
-            ]),
+          _MonthChips(
+            months: v.months.sublist(v.months.length - 7),
+            current: current,
+            selected: sel,
+            onSelected: (m) {
+              logNav('spending.month', {'month': m});
+              setState(() => selected = m);
+            },
           ),
           CategoryBars(values: selSum.byCategory, average: avg, currency: cur),
         ]),
@@ -95,6 +88,61 @@ class _SpendingScreenState extends State<SpendingScreen> {
       ]),
     ]);
   }
+}
+
+/// The month chips in a row that scrolls sideways; the selected chip is scrolled fully into view when the row is first
+/// built, when the selection changes and when the row's width changes (a resized window).
+class _MonthChips extends StatefulWidget {
+  final List<String> months;
+  final String current, selected;
+  final ValueChanged<String> onSelected;
+  const _MonthChips({required this.months, required this.current, required this.selected, required this.onSelected});
+  @override
+  State<_MonthChips> createState() => _MonthChipsState();
+}
+
+class _MonthChipsState extends State<_MonthChips> {
+  final _selectedKey = GlobalKey();
+  double? _width;
+
+  void _reveal() => WidgetsBinding.instance.addPostFrameCallback((_) {
+        final c = _selectedKey.currentContext;
+        if (mounted && c != null) Scrollable.ensureVisible(c, duration: Duration.zero, alignment: 1);
+      });
+
+  @override
+  void initState() {
+    super.initState();
+    _reveal();
+  }
+
+  @override
+  void didUpdateWidget(_MonthChips old) {
+    super.didUpdateWidget(old);
+    if (old.selected != widget.selected) _reveal();
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+        if (_width != box.maxWidth) {
+          _width = box.maxWidth;
+          _reveal();
+        }
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final m in widget.months)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                    key: m == widget.selected ? _selectedKey : null,
+                    label: Text(m == widget.current ? '${monthShort(m)} (now)' : monthShort(m)),
+                    selected: m == widget.selected,
+                    onSelected: (_) => widget.onSelected(m)),
+              ),
+          ]),
+        );
+      });
 }
 
 String _periods(int n) => n == 1 ? 'pay period' : '$n pay periods';
