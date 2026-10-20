@@ -1,5 +1,6 @@
 // A bad peer sync file must not stop the run: it is skipped, recorded with a reason (badKey, corrupt, unknownVersion,
-// applyFailed), not retried until it changes, and reported in `problems` (device short id + reason, never a path).
+// applyFailed), not retried until it changes, and reported in `problems` on every run while it is there (device short
+// id + reason + isNew, never a path).
 // Files are written by hand so nothing depends on how the writing side builds them. All data is SYNTHETIC.
 import 'dart:convert';
 import 'dart:io';
@@ -115,7 +116,8 @@ void main() {
       final rep = await run();
       expect(repo.settings().salary, 0);
       expect(repo.settings().loan, 8);
-      expect(rep.problems.single.reason.name, 'applyFailed');
+      // A clock that does not parse is damage in the file (no update of this app would read it), so corrupt, not applyFailed.
+      expect(rep.problems.single.reason.name, 'corrupt');
     });
   });
 
@@ -181,14 +183,14 @@ void main() {
   });
 
   group('not retried until it changes', () {
-    test('an unchanged bad file is not reported or read again on later runs', () async {
+    test('an unchanged bad file is reported as known (isNew false) and not read again on later runs', () async {
       await put(_devA, '0000000001.bwop', [7, 7, 7, 7, 7, 7]);
       final first = await run();
-      expect(first.problems, hasLength(1));
+      expect(first.problems.single.isNew, isTrue);
       final lines = capture();
       for (var i = 0; i < 3; i++) {
         final again = await run();
-        expect(again.problems, isEmpty, reason: 'run ${i + 2}');
+        expect(again.problems.single.isNew, isFalse, reason: 'run ${i + 2}: still there, so still listed, but known');
         expect(again.filesRead, 0);
       }
       final decryptTries = lines.where((l) => RegExp(r'vault\.unseal\.(short|magic|auth|format)').hasMatch(l));
@@ -225,17 +227,17 @@ void main() {
 
     test('different bad bytes of the same size are looked at again (hash, not only size)', () async {
       final f = await put(_devA, '0000000001.bwop', [1, 1, 1, 1, 1, 1]);
-      expect((await run()).problems, hasLength(1));
-      expect((await run()).problems, isEmpty);
+      expect((await run()).problems.single.isNew, isTrue);
+      expect((await run()).problems.single.isNew, isFalse);
       f.writeAsBytesSync([2, 2, 2, 2, 2, 2]);
-      expect((await run()).problems, hasLength(1));
+      expect((await run()).problems.single.isNew, isTrue);
     });
 
     test('same bytes rewritten (touched) is not looked at again', () async {
       final f = await put(_devA, '0000000001.bwop', [1, 1, 1, 1, 1, 1]);
       await run();
       f.writeAsBytesSync([1, 1, 1, 1, 1, 1]);
-      expect((await run()).problems, isEmpty);
+      expect((await run()).problems.single.isNew, isFalse);
     });
 
     test('the record of a bad file survives reopening the database', () async {
@@ -246,7 +248,7 @@ void main() {
       r1.close();
       final r2 = WalletRepo.open(path);
       addTearDown(r2.close);
-      expect((await FolderSync(tmp.path, key).run(r2)).problems, isEmpty);
+      expect((await FolderSync(tmp.path, key).run(r2)).problems.single.isNew, isFalse, reason: 'known from the record, not read again');
     });
 
     test('a bad file on one device does not hide the same file name being good on another device', () async {

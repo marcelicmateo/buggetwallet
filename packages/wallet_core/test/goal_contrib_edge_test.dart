@@ -1,5 +1,5 @@
-// Edge cases for goal contributions stored as synced rows (`goal_contrib`: id, goal, amount in cents, date) instead of
-// one overwritten `saved` number. Written from the spec: Goal.saved = legacy stored saved + sum of live contributions.
+// Edge cases for goal contributions stored as synced rows (`goal_contrib`: id, goal_id, amount in cents, date) instead
+// of one overwritten `saved` number. Written from the spec: Goal.saved = stored base + sum of live contributions.
 // All data is SYNTHETIC.
 import 'dart:io';
 import 'dart:math';
@@ -17,7 +17,7 @@ Op _goal(String id, {int saved = 0, int monthly = 0, int deleted = 0, String? hl
     {'name': 'Synthetic goal', 'target': 100000, 'saved': saved, 'monthly': monthly, 'sort': 1, 'deleted': deleted}, hlc ?? _hlc());
 
 Op _contrib(String id, String goal, Object? amount, {String date = '2026-03-05', String? hlc}) =>
-    Op('goal_contrib', id, {'goal': goal, 'amount': amount, 'date': date}, hlc ?? _hlc());
+    Op('goal_contrib', id, {'goal_id': goal, 'amount': amount, 'date': date}, hlc ?? _hlc());
 
 int _saved(WalletRepo r, String id) => r.goals().firstWhere((g) => g.id == id).saved;
 
@@ -133,14 +133,13 @@ void main() {
       expect(_saved(r, gid), 4000);
     });
 
-    test('a brand-new goal with saved 0 writes no contribution; with saved > 0 exactly one', () {
+    test('a brand-new goal stores its saved amount as the base: no contribution, with 0 or more (per the package notes)', () {
       final g0 = r.saveGoal(name: 'Synthetic zero', target: 100000, saved: 0, monthly: 0);
       expect(_pendingContribs(r), isEmpty);
       final g1 = r.saveGoal(name: 'Synthetic some', target: 100000, saved: 2500, monthly: 0);
-      final cs = _pendingContribs(r);
-      expect(cs, hasLength(1));
-      expect(cs.single.fields['goal'], g1);
-      expect(cs.single.fields['amount'], 2500);
+      expect(_pendingContribs(r), isEmpty);
+      final goalOp = r.pendingOps().map((p) => p.$2).lastWhere((op) => op.entity == 'goal' && op.id == g1);
+      expect(goalOp.fields['saved'], 2500);
       expect(_saved(r, g0), 0);
       expect(_saved(r, g1), 2500);
     });
@@ -319,7 +318,7 @@ void main() {
     test('a wrong-typed goal field never applies the contribution to any goal and never crashes reads', () {
       r.applyRemote([_goal('g1', saved: 1000)]);
       r.applyRemote([
-        Op('goal_contrib', 'x1', {'goal': 42, 'amount': 900, 'date': '2026-03-05'}, _hlc()),
+        Op('goal_contrib', 'x1', {'goal_id': 42, 'amount': 900, 'date': '2026-03-05'}, _hlc()),
       ]);
       expect(r.goals(), hasLength(1));
       expect(_saved(r, 'g1'), 1000);
@@ -336,7 +335,7 @@ void main() {
     test('unknown extra fields on a contribution op are ignored', () {
       r.applyRemote([_goal('g1', saved: 0)]);
       r.applyRemote([
-        Op('goal_contrib', 'c1', {'goal': 'g1', 'amount': 70, 'date': '2026-03-05', 'colour': 'blue'}, _hlc())
+        Op('goal_contrib', 'c1', {'goal_id': 'g1', 'amount': 70, 'date': '2026-03-05', 'colour': 'blue'}, _hlc())
       ]);
       expect(_saved(r, 'g1'), 70);
     });
