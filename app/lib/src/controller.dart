@@ -11,7 +11,6 @@ import 'key_store.dart';
 import 'logging.dart';
 import 'notifier.dart';
 import 'nudges.dart';
-import 'skip_recurring_shim.dart'; // TEMPORARY until habits-core is merged
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');
