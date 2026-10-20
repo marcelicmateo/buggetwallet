@@ -46,6 +46,14 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   set before every orchestration (owner rule).
 - 2026-10-19: Planning session (claude.ai): data-flow review, web plan, proposals, 10 UI directions (6 kept). Summary in
   `docs/context/DESIGN_DECISIONS.md`; kept screens in `docs/design/directions/`.
+- 2026-10-20: Stage A landed (perf test + budgets, ~450 edge-case tests, 23 bug fixes, € after the amount, live mode).
+- 2026-10-20: Stage B: goal contributions as synced rows (`payGoals(period:)`, paid once per period on any device); sync
+  bad-file quarantine (`SyncReport.problems`, device-local, survives the schema replay); adaptive layout (rail from 600 dp,
+  two columns from 1040, sheets as dialogs, keyboard shortcuts, web-safe platform checks); parallel desktop tests
+  (`BW_JOBS`); single-test-file runs (`tools/build.sh app <file>`); bank profiles in the importer (PBZ/Revolut as
+  `BankProfile`, `kindHint`/`account`, golden tests prove ids unchanged); run pruning keeps in-progress runs. Bugs fixed:
+  month chip scrolled off screen (and the fix scrolling the page), desktop plan test typing a missing folder, payGoals
+  defaulting to a stale periodStart. Orchestration runbook `docs/context/PIPELINE.md` (cap 4 agents, token rules).
 
 ## Decisions log
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -92,39 +100,15 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   ("Known limits"), to solve in the sync redesign.
 
 ## Next
-- Owner installs Android APK + desktop build, creates wallet, imports bank files, sets up Syncthing.
-  Note: APKs before the signing fix used throwaway keys — uninstall that one once; later updates install in place.
-- Owner tests M3 "Saving or losing" on the Spending tab: bars per pay period (salary to salary), savings rate,
-  3-period trend line. Paydays come from salary payments; a missing month assumes the payday setting.
-- Logging is in: app-wide logs (debug level while testing), perf (startup, frames, timings, memory), Plan › Diagnostics
-  "Save logs…". Owner: after testing, save logs and send the file; summarise with `tools/log-summary.py`.
-- Fixed: Today and the "Salary landed" banner now start the period on the first salary part (same paydays as the chart).
-- Design: six directions kept (docs/design/directions/, DESIGN_DECISIONS.md §6); owner to pick the final one.
-- Proposals waiting for owner approval: DESIGN_DECISIONS.md §4 (open questions listed per proposal).
-- Small task from the planning session: € after the amount in `format.dart` (DESIGN_DECISIONS.md §7, task 1).
-- **Next (owner, 2026-10-19):** profile-mode performance test on Linux desktop — `traceAction` around Spending
-  scroll + tab switches, save TimelineSummary (missed frames, build/raster p90/max, shader jank) to the run's logs and
-  history, keep the trace JSON for DevTools/Perfetto, fail on budget overruns. Debug-mode frame numbers (big_wallet
-  test) and emulator raster times (lavapipe) are not representative.
-- Queued after that (owner, 2026-10-19): adaptive layout per Flutter's adaptive/responsive best practices —
-  NavigationRail instead of the bottom bar past a width breakpoint, max content width or two columns on wide
-  windows (desktop direction on the design canvas), keyboard shortcuts / tooltips / hover for desktop, layout tests
-  at desktop and tablet sizes, and web-safe platform checks (`dart:io` `Platform` breaks the web build).
-- Then: merge v2 to master; budget vs actual and top merchants.
+- Owner installs Android APK + desktop build, creates wallet, imports bank files, sets up Syncthing (APKs before the signing
+  fix used throwaway keys: uninstall that one once; later updates install in place). After testing: Plan › Diagnostics
+  "Save logs…", send the file; summarise with `tools/log-summary.py`.
+- Owner checks on the phone after Stage C: Ledger theme at large text (stat strip, stacked rows), bottom bar accent mark,
+  dark mode, sheets with the double rule, Plex digits and €; on desktop: rail, two columns, dialogs, margin line.
+- Then: merge v2 to master; budget vs actual (after §4.5 approval); M4 Habits.
 
-## Resume here (session stopped 2026-10-19, usage limit; nothing pushed since 140154d)
-- Local `v2` (d7de780, unpushed): Stage A = perf test + budgets, ~450 edge-case tests, 23 bug fixes, tab-switch jank fix,
-  file-chooser fix, € after the amount, live-mode file picker, review fixes. Last full Haiku run (43e5760 base) was green.
-- **Uncommitted in the main checkout** (owner interrupted the commit): reload only on data changes after a failed sync
-  (`_dataMark`, field clocks), Android default sync folder created when chosen, `timing.sh run_env` for live.sh. App tests
-  326/0 and lint passed. Next: commit, Haiku full run (test + desktop-test + perf), push, ci-watcher.
-- Worktrees with unfinished agent work (`.claude/worktrees/`, branch `worktree-agent-<id>`):
-  - `agent-a7db2fe874b6933d5` adaptive layout: commit 5bc7e8d (web-safe platform checks) + ~20 uncommitted files. Spec in the
-    agent prompt; edge tests in `agent-a78cbf3768828c660` commit 3cbdbf6 (`app/test/adaptive_edge_test.dart`).
-  - `agent-aefe0df78677e92ac` parallel desktop tests (BW_JOBS): 3 uncommitted files.
-  - `agent-a99ad8621ed827cd9` sync bad-file quarantine + transport interface: 7 uncommitted files, was writing tests.
-    Edge tests in `agent-ac94fe4e2ce5bfd99` commit c6bb2ac (cap: 10 billion € = 1e12 cents).
-  - Done, not merged: `agent-a498e517000245618` goal contributions as rows, commit f56f9ba (core 492/0). It clears
-    `peer_files` once on upgrade (check against quarantine records) and needs the app's `paydayDone` to call
-    `repo.payGoals(period: periodStart)`.
-- Then: D3 Ledger theme (`docs/design/ledger-spec.md`), bank profiles.
+## In flight (2026-10-20)
+- Stage C on branch `stage-c`: D3 Ledger theme (IBM Plex, paper/ink tokens, ruled rows, night ledger) + `kindHint`
+  categorizer and generic own-transfer pairing (3 days, cross-source). Review and full run pending, then merge to `v2`.
+- Proposal waiting for the owner: budget vs actual per category (DESIGN_DECISIONS.md §4.5).
+- Queue and procedure: `docs/context/PIPELINE.md`.

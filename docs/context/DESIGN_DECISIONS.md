@@ -108,6 +108,22 @@ flowchart LR
 **Data (additive):** `project` (kind decision|ongoing, state, name, decideBy, notes), `project_option`, `project_line`, `project_item`, `project_schedule`, `project_reading`, `project_rule`; optional `project` link on wish, goal, tx, bill. Files as encrypted blobs in the sync folder.
 **Open:** cooling-off starts at creation or decision? keep option price history? share research read-only? only car + server or unlimited trackers? estimate schedule amounts automatically? track km from the start?
 
+### 4.5 Budget vs actual per category (M3) — proposal 2026-10-20, needs owner approval
+Today "Where it goes" shows each category's spend this month against a dark tick = the 6-month average. Proposal:
+- **Budgets:** one synced setting `categoryBudgets` (`{category: cents per month}`, validated like other synced settings;
+  categories without an entry have no budget and keep only the average tick). Edited in Plan › "Budgets per category":
+  a ruled list, one amount field per category, prefilled by a "Suggest from the last 6 months" button (average rounded up
+  to the nearest 10 €). Fixed items (rent, loan) prefill from the payday plan figures already in settings.
+- **Core:** `budgetVsActual(month)` in `budget.dart` → per category `{budget, actual, average6, remaining, pace}` where
+  pace = actual ÷ (budget × dayOfMonth ÷ daysInMonth): "on pace" ≤ 1.0, "behind pace" > 1.0; totals row.
+- **Spending:** the category bar gets the budget as its 100 % mark (over budget = `bad` colour + hatch, per the Ledger
+  spec), the tick stays the average, a right column "left: 48 €" / "over by 12 €"; a one-line summary under the heading:
+  "3 of 7 categories over budget, 180 € left in total".
+- **Today:** safe-to-spend unchanged (it comes from the payday plan); only a small line "Groceries: 48 € left this month"
+  for the category with the least left, tap → Spending.
+- **Not in scope:** rollover of unspent budget, per-period (salary-to-salary) budgets (monthly only, like the chart), alerts.
+**Open for the owner:** monthly or per pay period? prefill from averages or start empty? show "left" on Today at all?
+
 ## 5. Roadmap snapshot (19 Oct)
 | Feature | Status | Milestone |
 |---|---|---|

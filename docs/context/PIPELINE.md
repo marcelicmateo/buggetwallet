@@ -34,17 +34,21 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | B2b | Goal contributions merge + sync quarantine + transport + edge tests | core-builder | agent-a99ad86… | – | done (804961d, core 564/0) |
 | B2c | Parallel desktop tests (BW_JOBS) | devops | agent-aefe0df… | – | done (8e212c1) |
 | B2e | BUG: desktop plan test typed a missing folder (test bug since 561d768) | ui-builder | agent-a7db2fe… | – | done (2759d5c) |
-| B2d | `paydayDone` → `payGoals(period:)`; pass appVersion to FolderSync | lead | stage-b | B2b | running |
-| B2 | Merge B2a–e on `stage-b`, review, Haiku, emulator, push, STATUS | lead | stage-b → v2 | B2a–e, B1 | running |
+| B2d | `paydayDone` → `payGoals(period:)`; pass appVersion to FolderSync | lead | stage-b | B2b | done (c1dd111, app 446/0) |
+| B2 | Merge B2a–e on `stage-b` (done), review (done, fixed: 6d273f4), test+desktop green on a275d29, perf step hangs (D1d), emulator running, then push | lead | stage-b → v2 | B2a–e, B1 | running |
 | C1 | Ledger theme tests from spec | test-writer | ledger-tests (from 6ebb9bc) | – | done (5 files; ui-builder merges them) |
-| C2 | Ledger theme build (fonts, tokens, components, screens) | ui-builder | ledger-ui (from 6ebb9bc) | – | running |
-| C3 | Merge C1 into C2, make tests pass; three widths, dark, text scale | ui-builder | ledger-ui | C1, C2 | queued |
+| C2 | Ledger theme build (fonts, tokens, components, screens) | ui-builder | ledger-ui (from 6ebb9bc) | – | done (cc64049, app 500/0, tests merged) |
+| C3 | Merge C1 into C2, make tests pass; three widths, dark, text scale | ui-builder | ledger-ui | C1, C2 | done (in cc64049) |
 | C | Merge C, review, Haiku, emulator, push, STATUS, re-sync design-system artifact | lead | v2 | C3, B2 | queued |
-| D1 | Bank profiles: PBZ/Revolut as profiles, kindHint, golden no-change tests | core-builder | bank-profiles (from v2) | – | running |
-| D2 | Categorizer reads kindHint; own-transfer rule (accounts setting) | core-builder | after D1 merge | D1 | queued |
-| D1b | `tools/build.sh core|app|importer <test file>` runs one test file non-interactively (core-builder found `shell` ignores piped stdin) | devops | from B2c | B2 | queued |
+| D1 | Bank profiles: PBZ/Revolut as profiles, kindHint, golden no-change tests | core-builder | bank-profiles (from v2) | – | done (00c111d, importer 193/0; merged into stage-b) |
+| D2 | Categorizer reads kindHint; generic own-transfer rule keyed on source (no IBANs stored) | core-builder | kind-hint (from stage-b) | D1 | done (853ea33, core 596/0); unreviewed → merged and reviewed with Stage C, not B |
+| D1b | `tools/build.sh core|app|importer <test file>` runs one test file non-interactively (core-builder found `shell` ignores piped stdin) | devops | single-test (from stage-b) | – | done (6e5572f; merge into stage-b after the fix batch) |
+| D1c | BUG: run pruning deleted an in-progress run dir (newest-30 rule, concurrent worktrees) | devops | prune-fix (from stage-b) | – | running |
+| C3 | (follow-up) hero amount gap, margin line in NarrowPage | ui-builder | ledger-ui | – | running |
+| D1d | BUG: `tools/build.sh perf` hangs at startup since today's tooling changes (portal/dbus, trap); add step timeouts | devops | perf-hang (from stage-c) | – | running |
+| C | Stage C assembled on `stage-c` (5111529): review done (4 low, fixed), core 596/0, app 503/0; merge into v2 after Stage B push, then full run | lead | stage-c → v2 | B2 | queued |
 | D3 | Merge v2 into master | lead + ci-watcher | – | B2, C | queued |
-| E0 | Spec for budget vs actual per category (where budgets come from: payday plan settings vs per-category amounts; owner approves) | lead | – | – | queued |
+| E0 | Spec for budget vs actual per category: DESIGN_DECISIONS §4.5 | lead | – | – | drafted; waiting for owner approval |
 | E1 | Budget vs actual per category (M3) | core + ui | v2 | C, E0 | queued |
 | E2 | Top merchants (M3) | – | – | – | already built ("Top places" on Spending) |
 | F | M4 Habits (weekly review, recurring bills, nudges) | – | – | E | later |
