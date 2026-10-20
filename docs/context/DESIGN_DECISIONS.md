@@ -177,6 +177,25 @@ settings the owner already has.
 **Open for the owner:** backup to any folder or only the sync folder? CSV with the bank's original text or the cleaned
 description? search also over goals and wishlist? which settings are missing for you today?
 
+### 4.8 Web version — proposal 2026-10-20, needs owner decisions
+§3 lists what must change in code. Proposal for the first web milestone (**web without sync**, usable on its own):
+- **Build and hosting:** `flutter build web --wasm` (falls back to JS where WASM is unavailable) as a CI job on `v2`,
+  published to GitHub Pages from the repo (the repo is private: Pages on a private repo needs a paid plan; alternative:
+  a static folder served by the owner's home server, or the Linux release tarball carrying the `web/` build to copy anywhere).
+- **Data:** `sqlite3` WASM with OPFS in the browser (same schema, same `WalletRepo` behind a conditional import); the wallet
+  stays in that browser profile. Key: generated or pasted (`BW1-…`), wrapped with a passphrase and kept in IndexedDB,
+  asked for once per browser session; "Forget this browser" clears the database and the key.
+- **In and out:** bank files via the browser file picker (same importer), backup file upload = "Restore from backup"
+  into the empty browser wallet, "Back up now" downloads the `.bwb` (no sync folder on web); CSV export downloads.
+  Nudges and the sync folder settings hide on web; Diagnostics keeps an in-memory log with "Download".
+- **Not in this milestone:** sync between web and the phone/laptop: that is the relay transport of the sync redesign
+  (next item), storing the same encrypted `.bwop` files; the web build then gets it like the other platforms.
+- **Tests:** the `app/test` suite runs on the web platform override already (`platform.dart`); add `flutter test --platform
+  chrome` for the web twins (repo open, key store, downloads) in the on-demand CI test job.
+**Open for the owner:** where to host (Pages paid plan, home server, or a copy-anywhere folder)? passphrase-wrapped key in
+the browser, or paste the key every session? is web-without-sync useful to you before the relay exists, or should web
+wait for the sync redesign and ship together?
+
 ## 5. Roadmap snapshot (19 Oct)
 | Feature | Status | Milestone |
 |---|---|---|
@@ -190,7 +209,7 @@ description? search also over goals and wishlist? which settings are missing for
 | Budget vs actual per category | Built (20 Oct) | M3 |
 | Weekly review, recurring bills, nudges | Built (20 Oct) | M4 |
 | Backup/export, search | Approved, building | M5 |
-| Web version, then web sync | Planned | after M5 |
+| Web version (§4.8), then web sync | Proposed | after M5 |
 | Bank profiles, bills database, calendar/future spending, projects | Proposed | — |
 | Owner live test | Planned | M6 |
 

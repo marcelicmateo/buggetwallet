@@ -74,6 +74,13 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   funny lines without amounts or names, device-local switch). Review fixes before merge: next due date follows the paying
   row (no drift), confirmed bill category follows merchant rules, streak resets on a skipped week, skip action for an
   unmatched bill. Schema 5. Core 687 / app 593 tests, desktop and emulator green.
+- 2026-10-20: **M5 Polish**: Plan › Backup ("Back up now" writes an encrypted `bw-backup-<date>.bwb` into the sync folder's
+  `budget-wallet/backups/`, one per day; "Restore from backup…" only while the wallet is empty; a restored wallet syncs out
+  with its original clocks, so other devices see no change), Plan › Export (transactions CSV for this period / this year /
+  everything and a monthly summary CSV, cleaned data, exact decimals, saved through the system dialog with a UTF-8 BOM for
+  spreadsheets), search over transactions, goals, wishlist and expected bills (Spending icon or Ctrl+F; text with accent
+  folding, or an exact amount such as `12,50`). Core 770 / app 634 tests. CI now builds only the APK, the Linux bundle and
+  the dev release (test jobs on demand with `[ci tests]`), each as its own job.
 
 ## Decisions log
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -117,6 +124,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   newer builds dissolve such pairs, but a device still on 5b8fc13 would re-create them on every sync.
 - Importer: v1-compatible rounding changed ids of rows with an exact negative half cent (3-decimal amounts, very rare);
   such rows imported by earlier v2 builds may re-import once as duplicates.
+- Search matches the cleaned description, note and category, not merchant-rule names, and opens from Spending only (not from Today's Recent list).
 - Manual-entry matching edge cases with two out-of-sync devices: listed in `packages/wallet_core/CLAUDE.md`
   ("Known limits"), to solve in the sync redesign.
 
@@ -129,7 +137,10 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - Owner checks on the phone after M4: Plan › Nudges on → allow notifications (Android 13 asks) → one arrives around 15:00
   with no amounts (battery saver may delay it a few minutes); Plan › Expected bills shows the real standing orders as
   candidates → Confirm the true ones, "Not a bill" the rest; Today shows the review card on Sunday and "Due by payday".
-- Then: M5 Polish (backup/export, search, settings) → web → sync redesign → M6 owner live test.
+- Owner checks on the phone after M5: Plan › Backup "Back up now" with the real Syncthing folder (the file appears under
+  `budget-wallet/backups/`); an export through the Android save dialog opens in a spreadsheet with Croatian letters intact;
+  Spending search by a word and by an amount.
+- Then: web version → sync redesign → M6 owner live test (specs first; both need owner decisions).
 
 ## In flight (2026-10-20)
 - Queue and procedure: `docs/context/PIPELINE.md`.
