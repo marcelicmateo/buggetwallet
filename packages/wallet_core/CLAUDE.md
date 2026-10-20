@@ -16,7 +16,17 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   is reopened only when its bank row is deleted, never because the row has not arrived yet; until it arrives, reads
   mark the entry `Tx.matchPending` and it counts (`Tx.live`). `WalletRepo` runs it after imports, deletes and
   `applyRemote` (FolderSync: once per run, `runPendingMatch`), loading only candidate rows.
-- `models.dart` — `Tx`, `Goal`, `WishItem`, `WalletSettings` (row ↔ object).
+- `models.dart` — `Tx`, `Goal`, `GoalContribution`, `WishItem`, `WalletSettings` (row ↔ object), `goalTotal`.
+- Goals: `Goal.saved` = stored `saved` column (the base) + live `goal_contrib` rows (synced entity: `goal_id`, `amount`
+  cents, may be negative, `date`, `deleted`; created clock = its `amount` clock), summed at read (`goalTotal`, clamped to
+  ±`Goal.maxSaved`; each row counts at most `Goal.maxContribution`; negative totals allowed, not clamped to 0). New
+  builds write `saved` only when creating a goal; `saveGoal` with a changed total writes ONE contribution of the
+  difference (from the unclamped total), `addGoalContribution` adds one, `payGoals(period:)` writes `pay:<goal>:<period>`
+  rows (one per goal and period). Rows of a deleted or missing goal are hidden. Mixed versions: an older build writes
+  `saved` as a full value of what it sees (the base only), so a later remote `saved` is simply the new base and
+  contributions add on top.
+- `WalletRepo.schemaVersion` (meta `schema`): bump it when adding a synced entity. Opening an existing database with an
+  older version clears `peer_files` once, so the next sync re-reads every file and applies ops the older build skipped.
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption; `UnsealFailure` says why a
   file was refused), `sync.dart` (FolderSync).
 - `sync_problems.dart` — a peer file that cannot be used is skipped (the run goes on with the other files and devices)
@@ -55,10 +65,18 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   stored it with its clock, so a later valid write with an older clock wins on new devices and loses on old ones
   until the next write. Only a buggy writer causes this.
 - `VaultKey.parse` accepts junk after a valid key (extra characters past the 34 key + checksum bytes are ignored).
+- Goal totals on mixed versions: older builds ignore `goal_contrib`, so they show only the base (adds made on new
+  devices are missing there until they upgrade; the upgrade replays all sync files once). A total typed on an old device
+  from a value seen on a new one counts those adds twice.
+- Goal contributions are deltas: two offline "set to X" edits both apply (two corrections to 0 from 50 give −50;
+  shown as is, and the next edit sets the exact value). Paying goals offline on two devices counts once only when both
+  pass the same `period` (or share the `periodStart` setting); otherwise twice.
+- Replay on upgrade needs the old sync files: once files are pruned (gap 4), snapshots must carry `goal_contrib` rows.
 - A remote clock far in the future (a peer with a wrong date) is taken as is: this device's later writes sort after it,
   and an edit made on a device with a correct clock loses to that peer's older edits until real time catches up.
 
 ## Tests
 - `test/core_test.dart`, one `group` per area. Shared synthetic data in `test/support/synthetic.dart`
-  (`n(...)` builds a transaction, `january` is a sample month). Add new feature tests as `test/<feature>_test.dart`.
+  (`n(...)` builds a transaction, `january` is a sample month). Add new feature tests as `test/<feature>_test.dart`
+  (goals: `test/goal_contrib_test.dart`; multi-device sim in `test/support/sim.dart`, which lists entities on its own).
 - Run: `tools/build.sh test` from the repo root (or `tools/build.sh shell`, then `cd packages/wallet_core && dart test`).
