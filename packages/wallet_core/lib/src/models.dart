@@ -227,7 +227,8 @@ class RecurringBill {
   bool get confirmed => status == 'confirmed';
 
   /// A bill in a fixed category (Rent, Loan, Bills & subscriptions) is already planned through the fixed-cost
-  /// settings, so `computePeriod` lists it as due but does not reserve it a second time (owner rule: exact).
+  /// settings, so `computePeriod` lists it as due but does not reserve it a second time (owner rule: exact). A
+  /// confirmed bill's `category` is kept current by `WalletRepo.refreshRecurring`, so this follows a later rule.
   bool get coveredByPlan => kindOf(category) == Kind.fixed;
 
   static RecurringBill fromRow(Map<String, Object?> r) => RecurringBill(
@@ -242,11 +243,11 @@ class RecurringBill {
         lastPaidTx: _str(r['last_paid_tx']),
       );
 
-  RecurringBill copyWith({String? nextDue, String? status, String? lastPaidTx, int? expectedAmount}) => RecurringBill(
+  RecurringBill copyWith({String? nextDue, String? status, String? lastPaidTx, int? expectedAmount, String? category}) => RecurringBill(
         id: id,
         payee: payee,
         label: label,
-        category: category,
+        category: category ?? this.category,
         expectedAmount: expectedAmount ?? this.expectedAmount,
         intervalDays: intervalDays,
         nextDue: nextDue ?? this.nextDue,

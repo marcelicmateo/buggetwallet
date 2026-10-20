@@ -444,14 +444,14 @@ void main() {
       expect(b.nextDue, '2026-05-09');
     });
 
-    test('a bank row within the window pays the cycle: lastPaidTx, nextDue + 30, the row keeps its category', () {
+    test('a bank row within the window pays the cycle: lastPaidTx, nextDue = paying date + 30, the row keeps its category', () {
       r.importBatch(batch(three));
       r.confirmRecurring('rec:synthetic_gym');
       final pay = gym('2026-03-12', 3100); // due 2026-03-10, +2 days, within 10 % of 2999
       r.importBatch(batch([pay]));
       final b = r.recurringBills().single;
       expect(b.lastPaidTx, pay.id);
-      expect(b.nextDue, '2026-04-09');
+      expect(b.nextDue, '2026-04-11', reason: 'from the payment date, not the expected one, so the match never drifts');
       expect(b.expectedAmount, 2999);
       final tx = r.transaction(pay.id)!;
       expect(tx.category, isNull, reason: 'nothing is reclassified');
@@ -491,14 +491,127 @@ void main() {
       expect(r.settings().reviewStreak, 1);
       r.markReviewDone('2026-03-08');
       expect(r.settings().reviewStreak, 2);
-      r.markReviewDone('2026-03-22'); // 14 days: still a streak
+      r.markReviewDone('2026-03-21'); // 13 days: still a streak
       expect(r.settings().reviewStreak, 3);
-      r.markReviewDone('2026-04-06'); // 15 days: starts again
-      expect((r.settings().lastReview, r.settings().reviewStreak), ('2026-04-06', 1));
+      r.markReviewDone('2026-04-04'); // 14 days: a review day (03-28) was skipped, starts again
+      expect((r.settings().lastReview, r.settings().reviewStreak), ('2026-04-04', 1));
+      r.markReviewDone('2026-04-05');
+      expect(r.settings().reviewStreak, 2);
+      r.markReviewDone('2026-04-20'); // 15 days: starts again
+      expect((r.settings().lastReview, r.settings().reviewStreak), ('2026-04-20', 1));
       expect(() => r.markReviewDone('06.04.2026'), throwsArgumentError);
       // The review day setting syncs like any other.
       r.updateSettings({'reviewDay': DateTime.wednesday});
       expect(r.settings().reviewDay, 3);
+    });
+
+    test('markReviewDone: a skipped week resets the streak (done, skipped, done = 1, not 2)', () {
+      r.markReviewDone('2026-10-04'); // Sunday
+      r.markReviewDone('2026-10-18'); // the Sunday after next: 2026-10-11 was skipped
+      expect(r.settings().reviewStreak, 1);
+      r.markReviewDone('2026-10-25');
+      expect(r.settings().reviewStreak, 2);
+    });
+
+    test('a bill paid on the 15th for a year (real calendar) stays matched: nextDue follows the paying row, never reserved while paid', () {
+      // 2025-03-15 .. 2026-02-15: gaps of 28 to 31 days. Advancing from the expected date instead would drift a day
+      // or so a month until the match window (± 3 days) is missed and the bill stays overdue while the rows count.
+      final dates = [for (var m = 3; m <= 14; m++) '${m <= 12 ? 2025 : 2026}-${(m > 12 ? m - 12 : m).toString().padLeft(2, '0')}-15'];
+      now = DateTime.utc(2025, 6, 1, 12).millisecondsSinceEpoch;
+      r.importBatch(batch([for (final d in dates.take(3)) gym(d, 2999)]));
+      r.confirmRecurring('rec:synthetic_gym');
+      expect(r.recurringBills().single.nextDue, '2025-06-14');
+      for (final d in dates.skip(3)) {
+        final pay = gym(d, 2999);
+        now = parseIso(d).add(const Duration(days: 1, hours: 12)).millisecondsSinceEpoch;
+        r.importBatch(batch([pay]));
+        final b = r.recurringBills().single;
+        expect(b.lastPaidTx, pay.id, reason: d);
+        expect(b.nextDue, addDays(d, 30), reason: d);
+        // The pay period that holds the payment (payday on the 1st): paid, so neither due nor reserved.
+        final st = WalletSettings.fromMap({'salary': 200000, 'periodStart': '${monthOf(d)}-01', 'paydayDay': 1});
+        final cz = r.categorizer();
+        final p = computePeriod([for (final t in r.transactions()) cz.categorize(t)], st, const [], d, bills: r.recurringBills());
+        expect(p.dueBills, isEmpty, reason: d);
+        expect(p.reservedBills, 0, reason: d);
+      }
+      expect(r.recurringBills().single.nextDue, '2026-03-17');
+    });
+
+    test('a confirmed bill follows the payee\'s current category: a rule into a fixed category makes it covered by the plan', () {
+      r.importBatch(batch(three));
+      r.confirmRecurring('rec:synthetic_gym');
+      final st = WalletSettings.fromMap({'salary': 200000, 'periodStart': '2026-02-15', 'paydayDay': 15});
+      PeriodBudget period() {
+        final cz = r.categorizer();
+        return computePeriod([for (final t in r.transactions()) cz.categorize(t)], st, const [], '2026-03-01', bills: r.recurringBills());
+      }
+
+      var b = r.recurringBills().single;
+      expect((b.category, b.coveredByPlan), ('Shopping', false));
+      expect(period().reservedBills, 2999);
+      r.setMerchantRule('synthetic_gym', 'Bills & subscriptions');
+      r.refreshRecurring('2026-03-01');
+      b = r.recurringBills().single;
+      expect((b.category, b.coveredByPlan, b.nextDue, b.expectedAmount), ('Bills & subscriptions', true, '2026-03-10', 2999));
+      expect(period().reservedBills, 0, reason: 'planned through the subs setting, never reserved as well');
+      expect(period().dueBills.single.id, b.id, reason: 'still listed as due');
+      final op = r.pendingOps().last.$2;
+      expect((op.entity, op.id), ('recurring', b.id));
+      expect(op.fields, {'category': 'Bills & subscriptions'}, reason: 'one synced op, the category only');
+      // Back to a flexible category: reserved again. An unchanged category writes nothing.
+      r.setMerchantRule('synthetic_gym', 'Sport & fitness');
+      r.refreshRecurring('2026-03-01');
+      expect((r.recurringBills().single.category, period().reservedBills), ('Sport & fitness', 2999));
+      final ops = r.pendingOps().length;
+      r.refreshRecurring('2026-03-02');
+      expect(r.pendingOps().length, ops);
+    });
+
+    test('a confirm that arrives before the bill\'s creation op is filled in by the next refresh and then paid', () {
+      final h = Hlc(DateTime.utc(2026, 2, 28, 12).millisecondsSinceEpoch, 0, 'peer').toString();
+      r.applyRemote([
+        Op('recurring', 'rec:synthetic_gym', {'status': 'confirmed'}, h)
+      ]);
+      var b = r.recurringBills().single;
+      expect((b.payee, b.nextDue, b.expectedAmount, b.confirmed), ('', '', 0, true));
+      r.importBatch(batch(three));
+      b = r.recurringBills().single;
+      expect((b.payee, b.expectedAmount, b.nextDue, b.category, b.confirmed), ('synthetic_gym', 2999, '2026-03-10', 'Shopping', true));
+      expect(b.label, isNotEmpty);
+      final pay = gym('2026-03-10', 2999);
+      now = DateTime.utc(2026, 3, 15, 12).millisecondsSinceEpoch;
+      r.importBatch(batch([pay]));
+      b = r.recurringBills().single;
+      expect((b.lastPaidTx, b.nextDue, b.confirmed), (pay.id, '2026-04-09', true));
+    });
+
+    test('skipRecurring: an unpaid bill is reserved; skipped, it leaves this period\'s dueBills and nextDue moves one interval', () async {
+      r.importBatch(batch(three));
+      r.confirmRecurring('rec:synthetic_gym');
+      PeriodBudget period(String start, String today) {
+        final st = WalletSettings.fromMap({'salary': 200000, 'periodStart': start, 'paydayDay': 15});
+        final cz = r.categorizer();
+        return computePeriod([for (final t in r.transactions()) cz.categorize(t)], st, const [], today, bills: r.recurringBills());
+      }
+
+      expect((period('2026-02-15', '2026-03-01').reservedBills, period('2026-02-15', '2026-03-01').dueBills.length), (2999, 1));
+      await r.skipRecurring('rec:synthetic_gym');
+      final b = r.recurringBills().single;
+      expect((b.nextDue, b.lastPaidTx, b.expectedAmount, b.confirmed), ('2026-04-09', null, 2999, true));
+      expect(period('2026-02-15', '2026-03-01').reservedBills, 0);
+      expect(period('2026-02-15', '2026-03-01').dueBills, isEmpty);
+      // Next period it is due again; the skip is one synced op with the new date only.
+      expect(period('2026-03-15', '2026-03-20').dueBills.single.nextDue, '2026-04-09');
+      final op = r.pendingOps().last.$2;
+      expect((op.entity, op.id), ('recurring', b.id));
+      expect(op.fields, {'next_due': '2026-04-09'});
+      expect(r.skipRecurring('rec:nope'), throwsArgumentError);
+      // A late row for the skipped cycle does not pay the next one (a month off); the next cycle's row does.
+      now = DateTime.utc(2026, 4, 15, 12).millisecondsSinceEpoch;
+      r.importBatch(batch([gym('2026-03-11', 2999), gym('2026-04-10', 2999)]));
+      final after = r.recurringBills().single;
+      expect((after.lastPaidTx, after.nextDue), (gym('2026-04-10', 2999).id, '2026-05-10'));
     });
 
     test('an existing database is upgraded to schema 5 with the recurring table and replays peer files once', () {
@@ -618,13 +731,13 @@ void main() {
       b.repo.importBatch(batch([pay]));
       for (final d in [a, b]) {
         final x = d.repo.recurringBills().single;
-        expect((x.lastPaidTx, x.nextDue), (pay.id, '2026-04-09'), reason: d.name);
+        expect((x.lastPaidTx, x.nextDue), (pay.id, '2026-04-10'), reason: d.name);
       }
       await round();
       await round();
       for (final d in [a, b]) {
         final x = d.repo.recurringBills().single;
-        expect((x.lastPaidTx, x.nextDue, x.expectedAmount), (pay.id, '2026-04-09', 2999), reason: d.name);
+        expect((x.lastPaidTx, x.nextDue, x.expectedAmount), (pay.id, '2026-04-10', 2999), reason: d.name);
       }
       expect(table(a), table(b));
       expect(lwwDiff(a.repo, lastWriterWins(await opsInNet(net, key))), isEmpty);
@@ -652,6 +765,23 @@ void main() {
       expect(table(a), table(b));
     });
 
+    test('a skip on one device moves the due date on the other', () async {
+      final a = device('a'), b = device('b');
+      a.repo.importBatch(batch(three));
+      a.repo.confirmRecurring('rec:synthetic_gym');
+      await round();
+      await round();
+      now += 1000;
+      await b.repo.skipRecurring('rec:synthetic_gym');
+      await round();
+      await round();
+      for (final d in [a, b]) {
+        final x = d.repo.recurringBills().single;
+        expect((x.nextDue, x.lastPaidTx, x.confirmed), ('2026-04-09', null, true), reason: d.name);
+      }
+      expect(table(a), table(b));
+    });
+
     test('the payment is imported on one device only: the sync marks it paid on the other (once, via runPendingMatch)', () async {
       final a = device('a'), b = device('b');
       a.repo.importBatch(batch(three));
@@ -666,7 +796,7 @@ void main() {
       await round();
       for (final d in [a, b]) {
         final x = d.repo.recurringBills().single;
-        expect((x.lastPaidTx, x.nextDue), (pay.id, '2026-04-09'), reason: d.name);
+        expect((x.lastPaidTx, x.nextDue), (pay.id, '2026-04-10'), reason: d.name);
       }
       expect(table(a), table(b));
     });
