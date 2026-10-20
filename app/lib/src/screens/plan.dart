@@ -104,6 +104,8 @@ class _PlanScreenState extends State<PlanScreen> {
     Widget field(String key, String label, {bool money = true}) => TextField(
           controller: f[key],
           keyboardType: TextInputType.numberWithOptions(decimal: money),
+          textAlign: TextAlign.end,
+          style: numStyle,
           onChanged: (_) {
             if (_errors.containsKey(key)) setState(() => _errors.remove(key));
           },
@@ -116,7 +118,7 @@ class _PlanScreenState extends State<PlanScreen> {
             padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
             children: gapped([
               Panel(children: [
-                const Eyebrow('Payday plan'),
+                const SectionHead('Payday plan'),
                 Heading('${money(p.flexBudget, cur, decimals: 0)} to spend · ${money(p.planDaily, cur, decimals: 0)}/day'),
                 const Muted('Salary minus bills minus savings. Whatever is left is your spending money until the next payday.'),
                 Rows(children: [
@@ -130,9 +132,11 @@ class _PlanScreenState extends State<PlanScreen> {
                   LineItem('Bills & subscriptions', money(-s.subs, cur, decimals: 0),
                       sub: 'Paid since payday: ${money(p.fixedPaid['Bills & subscriptions'] ?? 0, cur, decimals: 0)}'),
                   for (final g in wc.goals) LineItem(g.name, money(-g.monthly, cur, decimals: 0), sub: 'savings goal'),
-                  LineItem('Spending money', money(p.flexBudget, cur, decimals: 0),
-                      bold: true, sub: '${p.length} days, ${shortDate(p.start)} to ${shortDate(addDays(p.end, -1))}'),
                 ]),
+                TotalRule(
+                    padding: EdgeInsets.zero,
+                    child: LineItem('Spending money', money(p.flexBudget, cur, decimals: 0),
+                        bold: true, sub: '${p.length} days, ${shortDate(p.start)} to ${shortDate(addDays(p.end, -1))}')),
                 if (lowIncome)
                   Panel(color: context.c.warnBg, children: [
                     Text(
@@ -149,7 +153,7 @@ class _PlanScreenState extends State<PlanScreen> {
                   ]),
               ]),
               Panel(children: [
-                const Heading('Numbers', size: 15),
+                const SectionHead('Numbers'),
                 Row(children: [
                   Expanded(child: field('salary', 'Salary per month')),
                   const SizedBox(width: 10),
@@ -186,7 +190,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 FilledButton(onPressed: _savePlan, child: const Text('Save numbers')),
               ]),
               Panel(children: [
-                const Heading('Month', size: 15),
+                const SectionHead('Month'),
                 Muted(
                     'Your month runs from the day your salary lands. Started ${shortDate(p.start)}; next payday expected by ${shortDate(p.end)}.'),
                 OutlinedButton.icon(
@@ -203,11 +207,12 @@ class _PlanScreenState extends State<PlanScreen> {
                 ),
               ]),
               Panel(children: [
-                const Eyebrow('Weekly review'),
+                const SectionHead('Weekly review'),
                 const Heading('Import bank exports', size: 15),
                 const Muted(
                     'PBZ: Excel export of the current account. Revolut: account statement as Excel or CSV. Importing the same dates twice is safe; nothing gets doubled. Expenses you added by hand are matched to the bank rows.'),
-                FilledButton.tonalIcon(
+                OutlinedButton.icon(
+                  style: accentOutlined(context),
                   icon: importing
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.upload_file),
@@ -314,7 +319,7 @@ class _PlanScreenState extends State<PlanScreen> {
     final folder = wc.syncFolder;
     final last = wc.lastSync;
     return Panel(children: [
-      const Eyebrow('Sync'),
+      const SectionHead('Sync'),
       const Heading('Your devices', size: 15),
       const Muted(
           'Changes are encrypted on this device and written to a folder that Syncthing keeps in step across your phone and computer. Only devices with your wallet key can read them.'),
@@ -361,7 +366,8 @@ class _PlanScreenState extends State<PlanScreen> {
           ),
         Tooltip(
           message: hasKeyboard ? 'Sync now (F5)' : '',
-          child: FilledButton.tonal(
+          child: OutlinedButton(
+              style: accentOutlined(context),
               onPressed: folder == null || wc.syncing
                   ? null
                   : () {

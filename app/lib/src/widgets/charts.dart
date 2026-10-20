@@ -38,7 +38,8 @@ class PeriodNetChart extends StatelessWidget {
           final d = shortDate(periods[i].start).split(' ');
           return Padding(
             padding: const EdgeInsets.only(top: 3),
-            child: Text('${d[0]}\n${d[1]}', textAlign: TextAlign.center, style: TextStyle(fontSize: 10, height: 1.15, color: c.muted)),
+            child:
+                Text('${d[0]}\n${d[1]}', textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: 10, height: 1.15, color: c.muted)),
           );
         },
       ),
@@ -56,12 +57,14 @@ class PeriodNetChart extends StatelessWidget {
             gridData: FlGridData(
               show: true,
               drawVerticalLine: false,
-              checkToShowHorizontalLine: (v) => v == 0,
-              getDrawingHorizontalLine: (v) => FlLine(color: c.line, strokeWidth: 1),
+              // Solid hairlines; the zero line is the axis, drawn strong.
+              getDrawingHorizontalLine: (v) => FlLine(color: v == 0 ? c.lineStrong : c.line, strokeWidth: 1),
             ),
             titlesData: FlTitlesData(leftTitles: hidden, rightTitles: hidden, topTitles: hidden, bottomTitles: bottom),
             barTouchData: BarTouchData(
               touchTooltipData: BarTouchTooltipData(
+                getTooltipColor: (_) => c.ink,
+                tooltipBorderRadius: BorderRadius.circular(2),
                 fitInsideHorizontally: true,
                 fitInsideVertically: true,
                 getTooltipItem: (group, gi, rod, ri) {
@@ -70,7 +73,7 @@ class PeriodNetChart extends StatelessWidget {
                   return BarTooltipItem(
                     '$range\nIn ${money(p.income, currency, decimals: 0)} · Out ${money(p.out, currency, decimals: 0)}\n'
                     '${p.net >= 0 ? 'Saved' : 'Lost'} ${money(p.net.abs(), currency, decimals: 0)} · kept ${percent(p.savingsRate)}',
-                    const TextStyle(fontSize: 12, color: Colors.white),
+                    numStyle.copyWith(fontSize: 11, color: c.bg),
                   );
                 },
               ),
@@ -82,9 +85,10 @@ class PeriodNetChart extends StatelessWidget {
                     toY: vals[i],
                     width: 14,
                     color: (vals[i] >= 0 ? c.pos : c.neg).withValues(alpha: periods[i].running ? 0.45 : 1),
-                    borderRadius: vals[i] >= 0
-                        ? const BorderRadius.vertical(top: Radius.circular(4))
-                        : const BorderRadius.vertical(bottom: Radius.circular(4)),
+                    borderRadius: BorderRadius.zero,
+                    // The running period: faded, with a dashed outline.
+                    borderSide: periods[i].running ? BorderSide(color: vals[i] >= 0 ? c.pos : c.neg) : BorderSide.none,
+                    borderDashArray: periods[i].running ? const [3, 3] : null,
                   ),
                 ]),
             ],
@@ -148,8 +152,10 @@ class CategoryBars extends StatelessWidget {
         .clamp(1, 1 << 60);
     return Column(children: [
       for (final k in cats)
-        Padding(
+        Container(
+          constraints: const BoxConstraints(minHeight: 36),
           padding: const EdgeInsets.symmetric(vertical: 4),
+          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
           child: Tooltip(
             message: '$k: ${money(values[k] ?? 0, currency, decimals: 0)} · average ${money(average[k] ?? 0, currency, decimals: 0)}',
             child: Row(children: [
@@ -164,14 +170,7 @@ class CategoryBars extends StatelessWidget {
                   return SizedBox(
                     height: 16,
                     child: Stack(children: [
-                      Positioned(
-                          left: 0,
-                          top: 2,
-                          bottom: 2,
-                          width: (w * v).clamp(2, w),
-                          child: Container(
-                              decoration:
-                                  BoxDecoration(color: c.bar, borderRadius: const BorderRadius.horizontal(right: Radius.circular(4))))),
+                      Positioned(left: 0, top: 2, bottom: 2, width: (w * v).clamp(2, w), child: Container(color: c.bar)),
                       Positioned(
                           left: (w * a - 1).clamp(0, w - 2),
                           top: 0,
@@ -184,9 +183,14 @@ class CategoryBars extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               SizedBox(
-                  width: 64,
+                width: 72,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
                   child: Text(money(values[k] ?? 0, currency, decimals: 0),
-                      textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontFeatures: [FontFeature.tabularFigures()]))),
+                      textAlign: TextAlign.right, style: numStyle.copyWith(fontSize: 13)),
+                ),
+              ),
             ]),
           ),
         ),
@@ -194,7 +198,47 @@ class CategoryBars extends StatelessWidget {
   }
 }
 
-/// Spending money used vs time elapsed in the pay period.
+/// A 10 px bar with a 1 px ink border and a flat fill.
+class RuledBar extends StatelessWidget {
+  final double value;
+  final Color? color;
+  const RuledBar({super.key, required this.value, this.color});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Container(
+      height: 10,
+      decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.lineStrong)),
+      alignment: Alignment.centerLeft,
+      child: FractionallySizedBox(widthFactor: value.clamp(0.0, 1.0), heightFactor: 1, child: ColoredBox(color: color ?? c.accent)),
+    );
+  }
+}
+
+/// Diagonal hatch (135 degrees) in [color] over a pale ground: the "over budget" fill, readable without colour.
+class _HatchPainter extends CustomPainter {
+  final Color color, ground;
+  _HatchPainter(this.color, this.ground);
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = ground);
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = 2;
+    for (var x = -size.height; x < size.width + size.height; x += 4) {
+      canvas.drawLine(Offset(x, size.height), Offset(x + size.height, 0), p);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_HatchPainter old) => old.color != color || old.ground != ground;
+}
+
+/// Spending money used vs time elapsed in the pay period: accent up to the pace mark, a hatched `bad` stretch where
+/// spending is ahead of it. The mark is 2 px.
 class PaceBar extends StatelessWidget {
   final double used;
   final double elapsed;
@@ -204,28 +248,33 @@ class PaceBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
+    final u = used.clamp(0.0, 1.0), e = elapsed.clamp(0.0, 1.0);
     return Semantics(
       label: '${(used * 100).round()}% of spending money used, ${(elapsed * 100).round()}% of the month gone',
       child: LayoutBuilder(builder: (ctx, box) {
         final w = box.maxWidth;
+        final solid = over ? (u < e ? u : e) : u;
         return SizedBox(
-          height: 14,
+          height: 20,
           child: Stack(children: [
             Positioned(
-                left: 0,
-                right: 0,
-                top: 2,
-                bottom: 2,
-                child: Container(
-                    decoration:
-                        BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(6), border: Border.all(color: c.line)))),
-            Positioned(
-                left: 0,
-                top: 2,
-                bottom: 2,
-                width: w * used.clamp(0, 1),
-                child: Container(decoration: BoxDecoration(color: over ? c.bad : c.accent, borderRadius: BorderRadius.circular(6)))),
-            Positioned(left: (w * elapsed - 1).clamp(0, w - 2), top: 0, bottom: 0, width: 2, child: Container(color: c.ink)),
+              left: 0,
+              right: 0,
+              top: 5,
+              height: 10,
+              child: DecoratedBox(decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.lineStrong))),
+            ),
+            // Inside the 1 px border.
+            Positioned(left: 1, top: 6, height: 8, width: ((w - 2) * solid).clamp(0, w), child: ColoredBox(color: c.accent)),
+            if (over && u > e)
+              Positioned(
+                left: 1 + (w - 2) * e,
+                top: 6,
+                height: 8,
+                width: (w - 2) * (u - e),
+                child: CustomPaint(painter: _HatchPainter(c.bad, c.surface2)),
+              ),
+            Positioned(left: (w * e - 1).clamp(0, w - 2), top: 0, bottom: 0, width: 2, child: ColoredBox(color: c.ink)),
           ]),
         );
       }),

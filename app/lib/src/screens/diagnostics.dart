@@ -4,6 +4,7 @@ import 'package:wallet_core/wallet_core.dart';
 import '../controller.dart';
 import '../file_chooser.dart';
 import '../logging.dart';
+import '../theme.dart';
 import '../widgets/common.dart';
 
 final _log = Logger('bw.app');
@@ -80,7 +81,7 @@ class _DiagnosticsPanelState extends State<DiagnosticsPanel> {
     final wc = widget.wc;
     final s = stats;
     return Panel(children: [
-      const Eyebrow('Diagnostics'),
+      const SectionHead('Diagnostics'),
       const Heading('Logs', size: 15),
       const Muted(
           'Logs help find bugs and slow spots. Debug logs everything (the default while testing). They never contain amounts, names, notes or your key.'),
@@ -96,7 +97,7 @@ class _DiagnosticsPanelState extends State<DiagnosticsPanel> {
       LineItem('Log files', s == null ? '…' : '${s.files} · ${_size(s.bytes)}'),
       if (s != null && s.writeErrors > 0) LineItem('Log write errors', '${s.writeErrors} (logs may be incomplete)'),
       Wrap(spacing: 8, runSpacing: 8, children: [
-        FilledButton.tonal(onPressed: busy ? null : () => _run('save', _save), child: const Text('Save logs…')),
+        OutlinedButton(style: accentOutlined(context), onPressed: busy ? null : () => _run('save', _save), child: const Text('Save logs…')),
         if (wc.syncFolder != null)
           OutlinedButton(
             onPressed: busy

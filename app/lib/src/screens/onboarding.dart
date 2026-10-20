@@ -3,7 +3,6 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../logging.dart';
-import '../theme.dart';
 import '../widgets/common.dart';
 
 final _log = Logger('bw.app');
@@ -31,7 +30,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.c;
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -41,10 +39,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 padding: const EdgeInsets.all(20),
                 shrinkWrap: true,
                 children: gapped([
-                  Row(children: [
-                    Container(width: 26, height: 18, decoration: BoxDecoration(color: c.accent, borderRadius: BorderRadius.circular(5))),
-                    const SizedBox(width: 10),
-                    const Flexible(child: Heading('Budget Wallet', size: 24)),
+                  const Row(children: [
+                    LedgerLogo(),
+                    SizedBox(width: 10),
+                    Flexible(child: Heading('Budget Wallet', size: 24)),
                   ]),
                   const Muted(
                       'Your money, on your devices. Everything is stored here first and works offline. Sync between your phone and computer is encrypted with a key only your devices have.',
