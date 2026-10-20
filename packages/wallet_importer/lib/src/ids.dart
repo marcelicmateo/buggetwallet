@@ -22,3 +22,12 @@ String transactionId(String date, int amountMinor, String description, int occur
   final base = date.replaceAll('-', '').substring(2) + fnv1a36(key);
   return occurrence == 0 ? base : '${base}_$occurrence';
 }
+
+/// The id for a row of a bank added after v1: like [transactionId], but [source] (the profile id) is hashed into
+/// the key, so two banks' rows with the same date, amount and description never share an id. Not for PBZ and
+/// Revolut: their ids must stay the v1 ones ([transactionId]) or re-imports would duplicate.
+String sourceTransactionId(String source, String date, int amountMinor, String description, int occurrence) {
+  final key = '$source|$date|${formatCents(amountMinor)}|$description';
+  final base = date.replaceAll('-', '').substring(2) + fnv1a36(key);
+  return occurrence == 0 ? base : '${base}_$occurrence';
+}
