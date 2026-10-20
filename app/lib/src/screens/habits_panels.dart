@@ -113,6 +113,20 @@ class ExpectedBillsPanel extends StatelessWidget {
                       const StatusLabel(good: false, text: 'Overdue')
                     else if (wc.billPaidThisPeriod(b))
                       const StatusLabel(good: true, text: 'Paid'),
+                    TextButton(
+                      key: ValueKey('skip:${b.id}'),
+                      style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          minimumSize: const Size(48, 36),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          alignment: Alignment.centerLeft),
+                      onPressed: () {
+                        logNav('bill.skip');
+                        wc.skipRecurring(b.id);
+                        toast(context, 'Skipped to the next cycle');
+                      },
+                      child: const Text('Skip this cycle'),
+                    ),
                   ]),
                 ),
                 const SizedBox(width: 8),

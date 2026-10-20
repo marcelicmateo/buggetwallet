@@ -11,6 +11,7 @@ import 'key_store.dart';
 import 'logging.dart';
 import 'notifier.dart';
 import 'nudges.dart';
+import 'skip_recurring_shim.dart'; // TEMPORARY until habits-core is merged
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');
@@ -420,6 +421,17 @@ class WalletController extends ChangeNotifier {
   void confirmRecurring(String id) {
     repo.confirmRecurring(id);
     logEvent(_habits, Level.INFO, 'recurring.confirm', {'bills': recurringBills().length}); // never payee or amount
+    _changed();
+  }
+
+  /// A confirmed bill whose payment did not match: moves its due date on by one cycle, so it stops being reserved.
+  Future<void> skipRecurring(String id) async {
+    try {
+      await repo.skipRecurring(id);
+      logEvent(_habits, Level.INFO, 'recurring.skip', {'bills': recurringBills().length});
+    } catch (e, st) {
+      logError(_habits, 'recurring.skipFailed', e, st);
+    }
     _changed();
   }
 

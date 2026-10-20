@@ -396,6 +396,26 @@ void main() {
       expect(find.text('Bill removed'), findsOneWidget);
     });
 
+    tw('expected bills: Skip this cycle moves the due date on and the Today line stops counting the bill', (tester) async {
+      final wc = hw(confirmBill: true);
+      final bill = wc.recurringBills().single;
+      expect(bill.nextDue, '2026-10-25');
+      expect(wc.period().reservedBills, 2999, reason: 'unmatched payment: still reserved');
+      await pumpApp(tester, today(wc), size: const Size(400, 3000));
+      expect(find.text(eur('Due by payday: 1 bill, 29.99 €')), findsOneWidget);
+      await plan(tester, wc);
+      expect(find.textContaining('next 25 Oct'), findsOneWidget);
+      await tester.ensureVisible(find.byKey(ValueKey('skip:${bill.id}')));
+      await tester.tap(find.text('Skip this cycle'));
+      await tester.pumpAndSettle();
+      expect(wc.recurringBills().single.nextDue, '2026-11-24');
+      expect(wc.period().reservedBills, 0);
+      expect(find.textContaining('next 24 Nov'), findsOneWidget);
+      expect(find.textContaining('next 25 Oct'), findsNothing);
+      await pumpApp(tester, today(wc), size: const Size(400, 3000));
+      expect(find.textContaining('Due by payday'), findsNothing);
+    });
+
     tw('nudges switch: on asks, schedules and stays on; says amounts never show', (tester) async {
       final fake = FakeNudges();
       final wc = hw(nudges: fake);
