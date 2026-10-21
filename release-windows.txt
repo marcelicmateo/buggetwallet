@@ -1,4 +1,4 @@
-commit: 4b16240522cb4669162dea295f2d22391593c6e0  ref: master  run: 39553146297
+commit: 680223dadc00915188770868ab0b0641d50d269d  ref: master  run: 39553688137
 
 Resolving dependencies...
 Downloading packages...
@@ -26,5 +26,5 @@ Downloading packages...
 Got dependencies!
 8 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
-Building Windows application...                                   165.4s
+Building Windows application...                                   121.0s
 √ Built build\windows\x64\runner\Release\budget_wallet.exe
