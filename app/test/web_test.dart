@@ -560,8 +560,10 @@ void main() {
     webTest('fewer than 8 characters and two different passphrases are refused with a text', (t) async {
       final w = webWallet(withKey: false);
       await pumpOnboarding(t, w.wc);
+      expect(find.text('Start a new wallet'), findsOneWidget);
       await t.tap(find.text('Start a new wallet'));
       await t.pump();
+      expect(find.text('Choose a passphrase'), findsOneWidget);
       await t.enterText(field('passphrase'), '1234567');
       await t.enterText(field('passphrase2'), '1234567');
       await t.tap(field('passphraseContinue'));
@@ -659,9 +661,15 @@ void main() {
     webTest('fits 320 dp at text scale 2.0, first screen and passphrase step', (t) async {
       final w = webWallet(withKey: false);
       await pumpOnboarding(t, w.wc, size: const Size(320, 1600), scale: 2); // tall: the width is what is tested
+      expect(find.text('Start a new wallet'), findsOneWidget);
       await t.tap(find.text('Start a new wallet'));
       await t.pump();
+      expect(find.text('Choose a passphrase'), findsOneWidget);
+      // The text is so tall at 2.0 that the fields are below the built part of the lazy list: scroll to them, as a user does.
+      final list = find.byType(Scrollable).first;
+      await t.scrollUntilVisible(field('passphrase'), 200, scrollable: list);
       await t.enterText(field('passphrase'), '1234567');
+      await t.scrollUntilVisible(field('passphraseContinue'), 200, scrollable: list);
       await t.tap(field('passphraseContinue'));
       await t.pump();
       expect(t.takeException(), isNull); // an overflow would show up here
