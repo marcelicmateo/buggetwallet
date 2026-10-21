@@ -62,16 +62,43 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   `NavBarFrame` (bar top rule + accent mark), `MarginLine` (red margin rule, wide windows only), `toast`),
   `sheets.dart` (bottom sheets: add expense, transaction details, goal).
 - `lib/src/format.dart` — money/date formatting and parsing (unit-tested in `test/widget_test.dart`).
-- `key_store.dart` — wallet key in the system keystore (phones) or a private file (desktop).
-- `logging.dart` — `AppLog`: console (`debugPrint` → logcat) + `RotatingFileSink` in `<app support>/logs/`, error hooks,
+- `key_store.dart` — wallet key: `key_store_io.dart` = system keystore (phones) or a private file (desktop); `key_store_web.dart` = the
+  browser (see Web build). Same members everywhere: `read`, `write(key, {passphrase})`, `forget`, `isLocked`, `unlock`.
+- `logging.dart` — `AppLog`: console (`debugPrint` → logcat) + a `LogBackend` (`log_backend_io.dart`: `RotatingFileSink` in
+  `<app support>/logs/`; `log_backend_web.dart`: `MemoryLogSink`), error hooks,
   frame/memory/lifecycle monitors, `logNav` (UI actions), `loggedRoute` (sheets), `fileExt`. `main.dart`'s `bootstrap()`
   sets it up and logs the `app.start` phases. Plan › Diagnostics (`screens/diagnostics.dart`): level, save, clear.
 - `storage_access.dart` — Android "All files access" channel for the Syncthing folder.
 
+## Web build (`flutter build web`, localhost only, no sync)
+Same app and wallet logic; the files that touch the OS come in pairs chosen by `dart.library.js_interop` (`x.dart` re-exports
+`x_io.dart` or `x_web.dart`; nothing on the web path imports `dart:io`):
+- `wallet_db.dart` — `openWalletDb()` → `WalletDb {repo, persist(), forget()}`. io: `wallet.db` in the support folder (`persist` does
+  nothing, `forget` deletes the file). web: `sqlite3.wasm` (served next to `index.html`) on an `IndexedDbFileSystem('budget-wallet')`;
+  changes sit in memory until `persist()` = `fs.flush()`; `forget` closes, drops the file system and deletes the IndexedDB database.
+  The controller flushes from `notifyListeners()` (once within 800 ms of the first change) and in `persistNow()` (tab hidden/inactive/paused
+  via `HomeShell`'s lifecycle listener). Nothing can be flushed synchronously on `beforeunload`; a hidden tab is the last safe point.
+- `key_store_web.dart` + `key_vault.dart` (pure Dart, tested on the VM with maps for the two storages): the key is wrapped with a
+  passphrase (PBKDF2-HMAC-SHA256, 310000 rounds, random 16-byte salt, then core's `seal`) into localStorage as
+  `bwk1.<rounds>.<salt>.<sealed>`; unlocking puts the plain key into sessionStorage (this tab only). `KeyStore.isLocked` = wrapped key
+  but nothing in sessionStorage → `UnlockScreen` (`wc.locked`, `wc.unlock`, `WrongPassphrase`). Onboarding on web asks for a passphrase
+  (2 fields, ≥ 8 characters) after "Start a new wallet" / "Use my wallet key". Logs: `store: 'browser'`, found/locked flags only.
+- `log_backend_web.dart` — `MemoryLogSink` (1 MB, newest lines); Plan › Diagnostics "Save logs…" downloads them through `FileChooser.saveText`.
+- `sync_path_web.dart` (no folders), `nudge_platform_web.dart` (`NoNudges`). Plan hides Sync and Nudges when `isWeb` and adds "This browser"
+  (Show wallet key, Forget this browser → `ForgetBrowserSheet` → `wc.forgetBrowser()`: deletes database + key, opens an empty database, app
+  returns to onboarding). Backup on web: "Back up now" = `wc.backupDownload()` → `FileChooser.saveBackup` (download); "Restore from backup…"
+  (only while `walletIsEmpty`) = `FileChooser.pickBackupFile()` → `wc.restoreBackupFile(bytes)`, same error texts as the folder restore.
+  File downloads in a browser return null from `FilePicker.saveFile`, so `FileChooser` answers with the file name there.
+- `platform.dart` `isWeb` (= `kIsWeb`; tests set `debugIsWebOverride = true` to run the web branches on the VM and must reset it).
+- `core_shim.dart` — temporary stand-ins for web-core names (`walletRepoFromDatabase`, `backupBytes`, `restoreBackupBytes`, `MemoryLogSink`);
+  delete it when web-core is merged (see its header).
+- Tests: `test/web_test.dart` (screens, controller paths, flush with fakes), `test/key_vault_test.dart` (wrap/unwrap, locked state). The
+  browser itself (IndexedDB, downloads, wasm) is covered by `tools/build.sh web-test`, not by the VM tests.
+
 ## Rules
-- **No `dart:io` in `main.dart`, `screens/`, `widgets/`, `layout.dart` or `platform.dart`** (they must build for the web later;
-  `test/platform_test.dart` checks it). File and folder work goes into the controller or the native-only files
-  (`controller.dart`, `key_store.dart`, `logging.dart`, `file_chooser.dart`). OS facts for logs: `nativeInfo()`.
+- **No `dart:io` in `main.dart`, `screens/`, `widgets/`, `layout.dart` or `platform.dart`** (they must build for the web;
+  `test/platform_test.dart` checks it). File and folder work goes into the native-only files
+  (`controller.dart` via `sync_path.dart`/`wallet_db.dart`, `key_store_io.dart`, `log_backend_io.dart`, `file_chooser.dart`). OS facts for logs: `nativeInfo()`.
 - New screen state comes from the controller; don't open the database from a widget.
 - Text is short and plain (the owner often uses the app by voice and on a phone).
 - Android release builds are signed by the fixed key (see root `CLAUDE.md`); don't touch signing here.

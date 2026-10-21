@@ -17,6 +17,7 @@ import 'backup_panel.dart';
 import 'budgets.dart';
 import 'diagnostics.dart';
 import 'export_panel.dart';
+import 'forget_browser.dart';
 import 'habits_panels.dart';
 import 'import_flow.dart';
 
@@ -256,11 +257,12 @@ class _PlanScreenState extends State<PlanScreen> {
                 ),
                 for (final l in wc.lastImport) StatusLabel(good: l.ok, text: '${l.file}: ${l.message}'),
               ]),
-              NudgesPanel(wc: wc),
-              _syncPanel(context),
-              BackupPanel(wc: wc),
+              if (!isWeb) NudgesPanel(wc: wc),
+              if (!isWeb) _syncPanel(context),
+              BackupPanel(wc: wc, chooser: widget.chooser),
               ExportPanel(wc: wc, chooser: widget.chooser),
               DiagnosticsPanel(wc: wc, chooser: widget.chooser),
+              if (isWeb) _browserPanel(context),
             ])));
   }
 
@@ -397,6 +399,25 @@ class _PlanScreenState extends State<PlanScreen> {
           : 'Install Syncthing on each device and share one folder between them. Pick that folder here on every device.'),
     ]);
   }
+
+  /// Web only (there is no sync folder): the wallet key, and "Forget this browser".
+  Widget _browserPanel(BuildContext context) => Panel(children: [
+        const SectionHead('This browser'),
+        const Muted('The wallet is stored in this browser, on this computer only. There is no sync on the web yet: use Backup to move it. '
+            'Clearing the browser data deletes it.'),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          OutlinedButton.icon(
+              key: const ValueKey('showKey'),
+              icon: const Icon(Icons.key),
+              label: const Text('Show wallet key'),
+              onPressed: () => _showKey(context)),
+          OutlinedButton.icon(
+              key: const ValueKey('forgetBrowser'),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Forget this browser'),
+              onPressed: () => confirmForgetBrowser(context, widget.wc)),
+        ]),
+      ]);
 
   Future<void> _typePath(BuildContext context) async {
     final ctl = TextEditingController(text: widget.wc.syncFolder ?? (isAndroid ? androidSyncFolder : ''));

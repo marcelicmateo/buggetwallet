@@ -4,6 +4,7 @@ import 'package:wallet_core/wallet_core.dart';
 import '../controller.dart';
 import '../file_chooser.dart';
 import '../logging.dart';
+import '../platform.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
@@ -61,7 +62,7 @@ class _DiagnosticsPanelState extends State<DiagnosticsPanel> {
     await _refresh();
   }
 
-  /// The system save dialog; where there is none (or it fails), the sync folder's diagnostics/ or app documents.
+  /// The system save dialog (a download in a browser); where there is none (or it fails), the sync folder's diagnostics/ or app documents.
   Future<String?> _save() async {
     final wc = widget.wc;
     logNav('log.save');
@@ -69,9 +70,10 @@ class _DiagnosticsPanelState extends State<DiagnosticsPanel> {
     try {
       final uri = await widget.chooser.saveText(fileName: wc.logFileName(), bytes: bytes, title: 'Save logs');
       logEvent(_log, Level.INFO, 'log.saveDialog', {'saved': uri != null, 'bytes': bytes.length});
-      return uri == null ? null : 'Logs saved.';
+      return uri == null ? null : (isWeb ? 'Logs downloaded.' : 'Logs saved.');
     } catch (e, st) {
       logError(_log, 'log.saveDialogFailed', e, st, fields: {'type': e.runtimeType.toString()}, level: Level.INFO);
+      if (isWeb) return "Couldn't download the logs."; // no folder to fall back to in a browser
       return 'Saved to ${await wc.saveLogsToFolder()}';
     }
   }

@@ -14,7 +14,10 @@ dependencies:
     path: ../packages/wallet_core
   wallet_importer:
     path: ../packages/wallet_importer
+  sqlite3: ^2.4.0 # already used by wallet_core; the web database opens it directly (wasm)
   sqlite3_flutter_libs: ^0.5.0
+  cryptography: ^2.7.0 # already used by wallet_core; the web key store derives its passphrase key with it
+  web: ^1.1.0 # localStorage / sessionStorage in the browser key store
   path_provider: ^2.1.6
   file_picker: ^13.1.0
   flutter_secure_storage: ^11.2.0
