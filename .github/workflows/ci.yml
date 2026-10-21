@@ -1,7 +1,7 @@
-# Default on every push to v2/master (and PRs): `apk` (signed release APK), `linux` (release bundle + smoke test),
-# `publish` (dev release on v2) and `log`. Lint, package tests, analyze and the desktop integration tests are verified
-# on the laptop (`tools/build.sh test`, `desktop-test`) before every push, so they run here only on demand, for sessions
-# without a Flutter SDK: start the workflow with the `tests` input, or put `[ci tests]` in the head commit message
+# Manual only (owner, 2026-10-21): nothing runs on push; the owner starts this workflow from the Actions tab (or
+# `gh workflow run ci --ref v2`) when a release is ready. Jobs: `apk` (signed release APK), `linux` (release bundle +
+# smoke test), `publish` (dev release when run on v2) and `log`. Lint, package tests, analyze and the desktop integration
+# tests are verified on the laptop (`tools/build.sh test`, `desktop-test`), so they run here only with the `tests` input
 # (jobs lint, importer, core, app, desktop; publish then waits for them and is skipped if one failed).
 # Every job runs on its own runner (separate checkout, nothing shared on disk; one job used to fill the runner disk).
 # Each job stores its log as the artifact ci-log-<job> (.github/actions/job-log); the `log` job merges them into
@@ -9,11 +9,6 @@
 # (tools/ci-status.sh, tools/build-times.sh --ci). Logs contain only build/test output.
 name: ci
 on:
-  push:
-    branches: [v2, master]
-    paths-ignore: ["**.md"]
-  pull_request:
-    paths-ignore: ["**.md"]
   workflow_dispatch:
     inputs:
       tests:
@@ -267,7 +262,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     needs: [lint, importer, core, app, desktop, apk, linux]
-    if: ${{ !cancelled() && github.event_name == 'push' && github.ref_name == 'v2' && needs.apk.result == 'success' && needs.linux.result == 'success' && !contains(needs.*.result, 'failure') }}
+    if: ${{ !cancelled() && github.ref_name == 'v2' && needs.apk.result == 'success' && needs.linux.result == 'success' && !contains(needs.*.result, 'failure') }}
     steps:
       - uses: actions/download-artifact@v4
         with:

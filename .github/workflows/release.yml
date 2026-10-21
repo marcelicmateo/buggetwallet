@@ -1,13 +1,9 @@
 # Builds every platform and publishes the downloads as a GitHub Release.
-# Runs on version tags (v*), on any push whose commit message contains [release],
-# and when started by hand. macOS runners bill 10x minutes (Windows 2x) on private
-# repos, and Windows/macOS are parked (owner, 2026-10-21), so a push to master or v2
-# only passes the gate and builds nothing here; ci.yml builds the APK and Linux bundle.
+# Manual only (owner, 2026-10-21): started from the Actions tab (or `gh workflow run release --ref master`) when a
+# release is ready; nothing runs on push. macOS runners bill 10x minutes (Windows 2x) on private repos, and
+# Windows/macOS are parked. The gate keeps the old conditions for a future tag or [release] trigger.
 name: release
 on:
-  push:
-    branches: [master, v2]
-    tags: ["v*"]
   workflow_dispatch:
 permissions:
   contents: write

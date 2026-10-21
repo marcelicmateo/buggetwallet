@@ -13,13 +13,13 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 - One targeted check per agent at the end, one Haiku full run per stage, one reviewer pass per stage on the whole diff.
   Live-mode screenshots only for visual changes.
 - Batch follow-ups into one message per agent instead of resuming it repeatedly.
-- Fewer, bigger stages: each stage costs a full run, a review and a CI cycle.
+- Fewer, bigger stages: each stage costs a full run and a review. CI is manual only (owner, 2026-10-21): no ci-watcher after a push.
 
 ## Procedure on each event
 | Event | Do |
 |---|---|
 | Builder reports | Read its report. Bug outside scope → queue a fix item (test + fix, same stage). Mark the item done. Start the next item whose deps are met (table below). |
-| All items of a stage done | Merge branches into `v2` in the listed order → reviewer (Fable/high) on the stage diff → fix findings → Haiku/low full run (`test`, `desktop-test`, `perf`) → `tools/emulator.sh screens` for UI stages (read the PNGs) → commit → push → ci-watcher → STATUS.md (Done + Next) → `git worktree remove` the merged worktrees. |
+| All items of a stage done | Merge branches into `v2` in the listed order → reviewer (Fable/high) on the stage diff → fix findings → Haiku/low full run (`test`, `desktop-test`, `perf`) → `tools/emulator.sh screens` for UI stages (read the PNGs) → commit → push → STATUS.md (Done + Next) → `git worktree remove` the merged worktrees. |
 | Haiku run red | Fix items first (owner rule: bugs before features), then re-run only the failing suite. |
 | Owner message | Owner bug reports go before anything queued. |
 

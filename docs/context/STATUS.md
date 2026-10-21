@@ -17,7 +17,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - `packages/wallet_importer` (pure Dart): PBZ .xls via own BIFF8 reader, Revolut .xlsx/.csv → normalized transactions, v1-compatible ids. 10 tests, synthetic fixtures.
 - `packages/wallet_core`: SQLite, field-level change log with hybrid logical clock (last writer wins), XChaCha20-Poly1305 encrypted sync files in a Syncthing folder (each device writes only its own subfolder), wallet key as `BW1-…` text + QR, budget engine ported from v1. 13 tests incl. two-device sync and wrong-key refusal.
 - `app` (Flutter 3.47): onboarding (new wallet / join with key), Today, Spending (fl_chart), Wishlist, Goals, Plan (numbers, start month, import files, sync folder, show key). Analyze clean, tests pass.
-- CI (`.github/workflows/ci.yml`): Android/Linux builds (separate jobs) on every push, tests/lint/desktop on demand via `[ci tests]`; publishes `dev` release from v2. `release.yml`: all 5 platforms only on tags `v*`, commits containing `[release]` or a manual start (not on master pushes since 2026-10-21); publishes a release. Logs on `ci-logs` branch.
+- CI is **manual only** since 2026-10-21 (owner: no runs until a release is ready). `ci.yml` (start on `v2`: signed APK, Linux bundle + smoke, `dev` release; `tests` input adds lint/unit/desktop jobs) and `release.yml` (all 5 platforms, `dev-all`) run from the Actions tab or `gh workflow run ci --ref v2`. Logs on `ci-logs` branch.
 - 2026-10-16 commit a20d0e6: all jobs green; `dev-all` and `dev` releases published.
 
 ## Done
@@ -99,7 +99,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - 2026-10-16: Bank formats decoupled: importer package is the only code that knows them; app consumes only the wallet database.
 - 2026-10-16: Sync via Syncthing shared folder (option D), end-to-end encrypted; importer runs on edge devices.
 - 2026-10-16: All-platform builds only on master / tags / `[release]` commits (macOS minutes bill 10x on private repos); Android + Linux on every push.
-- 2026-10-21: Master pushes no longer build Windows/macOS (parked platforms; ~133 billed minutes per push). Only tags `v*`, `[release]` commits or a manual run do.
+- 2026-10-21: Master pushes no longer build Windows/macOS (parked platforms; ~133 billed minutes per push). Then, same day: **no CI on push at all**; the owner starts `ci`/`release` by hand when a release is ready. Local verification (`tools/build.sh test`, desktop, emulator) is the gate before every push.
 - 2026-10-16: permission_handler dropped (needs compileSdk 37); small Android channel opens the All files access setting.
 - 2026-10-16: Planning docs copied to git as redacted `docs/context/` (superseded 2026-10-19: git is now the source of truth).
 - 2026-10-16: Local builds with rootless Podman, not Docker.

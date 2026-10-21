@@ -54,7 +54,7 @@ Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't 
   screenshots come from `integration_test/flutter_test_config.dart`). Files run in parallel on `BW_JOBS` workers (default
   min(idle cores/4, free RAM/3 GB, 6); `BW_JOBS=1` = one after another in `app/`), each in its own copy of `app/` under
   `dist/desktop-test/w<N>` (delete it to reset) with its own Xvfb display; `layout` runs as 5 shards. Android-only tests must skip themselves on
-  desktop. `tools/build.sh desktop-smoke` starts the release bundle headless and checks its log. CI runs the smoke test on every push and the desktop tests on demand (`[ci tests]`).
+  desktop. `tools/build.sh desktop-smoke` starts the release bundle headless and checks its log. CI is manual only (see below).
   Ubuntu packages: `dev/linux-packages.txt` (image and CI).
 - **Frame performance:** `tools/build.sh perf` runs `app/integration_test/perf_test.dart` in profile mode on the Linux app
   under Xvfb (`flutter drive --profile`; big synthetic wallet, Spending scroll + tab switches), saves each action's
@@ -82,12 +82,13 @@ guidance, but there is no Flutter/Dart on the host: run every `flutter`/`dart` c
 go_router, mockito/build_runner or new packages unless the owner asks).
 
 ## Building without a local Flutter SDK (cloud sessions)
-A cloud Claude workspace cannot download Flutter/Dart. On every push to `v2`/`master`, CI builds only what the laptop
-does not verify: jobs `apk` (signed release APK), `linux` (release bundle + smoke test), `publish` (dev release on `v2`)
-and `log`. Lint, importer/core/app tests and the desktop tests are **on demand**: put `[ci tests]` in the head commit
-message (or start the `ci` workflow manually with the `tests` input) to also run jobs `lint`, `importer`, `core`, `app`
-and `desktop`; `publish` then waits for them and is skipped if one fails. Cloud sessions should always add `[ci tests]`.
-Each job runs on its own runner and stores its log as an artifact; the `log` job merges them and pushes the result to
+A cloud Claude workspace cannot download Flutter/Dart. **Nothing runs on push** (owner, 2026-10-21): the owner starts the
+`ci` workflow by hand when a release is ready (`gh workflow run ci --ref v2`, or the Actions tab). It builds what the laptop
+does not verify: jobs `apk` (signed release APK), `linux` (release bundle + smoke test), `publish` (dev release when run
+on `v2`) and `log`. Lint, importer/core/app tests and the desktop tests run only with the `tests` input (jobs `lint`,
+`importer`, `core`, `app`, `desktop`; `publish` then waits for them and is skipped if one fails). `release.yml` (all
+platforms, `dev-all`) is manual too. Claude never starts a workflow; cloud sessions without Flutter report that the change is
+unverified and ask the owner to run `ci` with `tests`. Each job runs on its own runner and stores its log as an artifact; the `log` job merges them and pushes the result to
 the `ci-logs` branch:
 `git fetch origin ci-logs:refs/remotes/origin/ci-logs && git show origin/ci-logs:latest.txt`
 (line 3 = step outcomes with seconds, line 4 = job results). `tools/ci-status.sh [--wait] [<sha>]` shows the check runs.
@@ -108,7 +109,7 @@ The main session is the lead: it takes the owner's request, splits it, merges re
   runs them in parallel; UI-only or core-only work uses just one.
 - `test-writer` — writes tests from the spec in parallel, without basing them on the implementation.
 - `reviewer` — read-only review of the diff before every push.
-- `ci-watcher` — waits for CI after a push and reports the result (`tools/ci-status.sh`).
+- `ci-watcher` — waits for a CI run the owner started and reports the result (`tools/ci-status.sh`); not used after pushes.
 - `devops` — only for build, CI, signing or version work.
 **Model and effort first (owner rule):** before starting agents, check each one's `model:` and `effort:` in its
 `.claude/agents/*.md` frontmatter and fit them to the task (cheapest that does the job well; current defaults:
@@ -130,5 +131,5 @@ on an interval (`tools/ci-status.sh`).
 
 ## Workflow
 Owner sends one request or piece of feedback (often by voice: keep replies short). Claude builds,
-gets CI green, commits code, and updates `docs/context/STATUS.md`. No copy back to the claude.ai Project is needed;
+verifies locally (`tools/build.sh test`, desktop, emulator), commits code, pushes and updates `docs/context/STATUS.md`; CI runs only when the owner starts it. No copy back to the claude.ai Project is needed;
 it holds only personal figures (payday plan, bank analysis) and is updated only when one of those changes.

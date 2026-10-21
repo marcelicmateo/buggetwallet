@@ -1,6 +1,6 @@
 ---
 name: ci-watcher
-description: Waits for CI on a pushed Budget Wallet commit and reports the result in a few lines, with the failing step and error lines if it went red. Read-only.
+description: Waits for a Budget Wallet CI run the owner started by hand (CI never runs on push) and reports the result in a few lines, with the failing step and error lines if it went red. Read-only.
 model: haiku
 effort: low
 tools: Bash, Read
