@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'core_shim.dart';
+import 'package:wallet_core/wallet_core.dart';
 import 'log_stats.dart';
 
 /// No dart:io facts in the browser.

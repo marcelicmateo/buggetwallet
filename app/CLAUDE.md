@@ -90,8 +90,6 @@ Same app and wallet logic; the files that touch the OS come in pairs chosen by `
   (only while `walletIsEmpty`) = `FileChooser.pickBackupFile()` → `wc.restoreBackupFile(bytes)`, same error texts as the folder restore.
   File downloads in a browser return null from `FilePicker.saveFile`, so `FileChooser` answers with the file name there.
 - `platform.dart` `isWeb` (= `kIsWeb`; tests set `debugIsWebOverride = true` to run the web branches on the VM and must reset it).
-- `core_shim.dart` — temporary stand-ins for web-core names (`walletRepoFromDatabase`, `backupBytes`, `restoreBackupBytes`, `MemoryLogSink`);
-  delete it when web-core is merged (see its header).
 - Tests: `test/web_test.dart` (screens, controller paths, flush with fakes), `test/key_vault_test.dart` (wrap/unwrap, locked state). The
   browser itself (IndexedDB, downloads, wasm) is covered by `tools/build.sh web-test`, not by the VM tests.
 

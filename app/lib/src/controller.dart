@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
-import 'core_shim.dart'; // TODO(web-core): remove with the shim
 import 'key_store.dart';
 import 'logging.dart';
 import 'nudge_platform.dart';

@@ -1,7 +1,6 @@
 import 'package:sqlite3/wasm.dart';
 import 'package:wallet_core/wallet_core.dart';
 
-import 'core_shim.dart';
 import 'wallet_db_base.dart';
 
 final _log = Logger('bw.app');
@@ -15,7 +14,7 @@ Future<WalletDb> openWalletDb() async {
   final sqlite = _sqlite ??= await WasmSqlite3.loadFromUrl(Uri.parse('sqlite3.wasm'));
   final fs = await IndexedDbFileSystem.open(dbName: _dbName);
   sqlite.registerVirtualFileSystem(fs, makeDefault: true);
-  final repo = walletRepoFromDatabase(sqlite.open('/wallet.db'), file: true);
+  final repo = WalletRepo.fromDatabase(sqlite.open('/wallet.db'), file: true);
   return WalletDb(
     repo,
     persist: fs.flush,
