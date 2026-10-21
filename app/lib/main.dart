@@ -11,6 +11,7 @@ import 'src/layout.dart';
 import 'src/logging.dart';
 import 'src/platform.dart';
 import 'src/screens/goals.dart';
+import 'src/screens/in_use.dart';
 import 'src/screens/onboarding.dart';
 import 'src/screens/plan.dart';
 import 'src/screens/spending.dart';
@@ -77,11 +78,13 @@ class BudgetWalletApp extends StatelessWidget {
       darkTheme: buildTheme(Brightness.dark),
       home: ListenableBuilder(
         listenable: wc,
-        builder: (context, _) => wc.hasWallet
-            ? HomeShell(wc: wc)
-            : wc.locked
-                ? UnlockScreen(wc: wc)
-                : OnboardingScreen(wc: wc),
+        builder: (context, _) => wc.inUseElsewhere
+            ? const InUseScreen()
+            : wc.hasWallet
+                ? HomeShell(wc: wc)
+                : wc.locked
+                    ? UnlockScreen(wc: wc)
+                    : OnboardingScreen(wc: wc),
       ),
     );
   }
