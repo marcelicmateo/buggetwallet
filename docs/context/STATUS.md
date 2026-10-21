@@ -84,6 +84,13 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - 2026-10-21: `v2` (M4 Habits + M5 Polish, 4b16240) merged into `master` by fast-forward (owner request). That push still ran
   `release.yml` for all five platforms (about 133 billed minutes: macOS 10x, Windows 2x); since then a master push builds only
   the APK and Linux bundle in `ci.yml`, and Windows/macOS + `dev-all` need a `v*` tag, `[release]` or a manual start.
+- 2026-10-21: **Stage W: web version (localhost only).** `wallet_core` barrel compiles with dart2js + dart2wasm (io code
+  behind conditional exports; gzip via `archive`, old phone sync files still unseal); app runs in a browser: SQLite wasm on
+  IndexedDB, wallet key wrapped by a passphrase (PBKDF2 310000), memory logs + download, Backup download/upload, "Forget this
+  browser", unlock screen, one tab at a time (Web Lock; a second tab shows "open in another tab"); no sync or nudges on web.
+  `tools/build.sh web|web-test`, `tools/web.sh serve|shot` (127.0.0.1 only). Fixed in stage: nudge slots already past in the
+  phone zone failed the whole schedule; unpinned sqlite3.wasm no longer pinned on first download. Full run green (app 707,
+  core 789, importer 193, desktop 25, web smoke, perf 0 missed frames). First stage with `scout` context packs.
 
 ## Decisions log
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -144,7 +151,10 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - Owner checks on the phone after M5: Plan › Backup "Back up now" with the real Syncthing folder (the file appears under
   `budget-wallet/backups/`); an export through the Android save dialog opens in a spreadsheet with Croatian letters intact;
   Spending search by a word and by an amount.
-- Then: web version → sync redesign → M6 owner live test (specs first; both need owner decisions).
+- Owner checks after Stage W (web): `tools/build.sh web && tools/web.sh serve`, open http://127.0.0.1:8080 → new wallet with a
+  passphrase; reload → unlock screen, wrong passphrase refused; open a second tab → "open in another tab", close the first,
+  Reload works; Plan › Backup "Back up now" downloads a `.bwb`, "Forget this browser" returns to onboarding, restore that file.
+- Then: sync redesign → M6 owner live test (spec first; needs owner decisions).
 
 ## In flight (2026-10-20)
 - Queue and procedure: `docs/context/PIPELINE.md`.

@@ -34,7 +34,7 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 - W1–W3 merged into local `v2` (925d546, 3071b53); scouts used for W2/W3 (29k + 47k tokens), builders 46k + 75k.
 - Review: 2 findings. Low (wasm pin trust-on-first-use) fixed 1c7086c; medium (two tabs overwrite the wallet) → W4 running.
 - Also fixed: nudge slots already past in the phone zone failed the whole schedule (c516b03).
-- Next: merge W4, Haiku full run (`test`, `desktop-test`, `perf`, `web-test`), `tools/build.sh web` + `tools/web.sh serve` + `shot`, push.
+- Done: W4 merged (40c3628), Haiku full run green, web build + localhost shots read, pushed. Next: sync redesign spec (owner decisions).
 
 ## Queue (2026-10-20)
 | # | Item | Agent | Base | Depends on | Status |
@@ -76,8 +76,8 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | W1 | Web build plumbing: `app/web/` scaffold, Chrome in the container, `tools/build.sh web` (pinned `sqlite3.wasm`, wasm build with JS fallback), `tools/web.sh serve|shot`, `tools/build.sh web-test` | devops | worktree-agent-af1e542b8b131808b (from 87adbbd) | I0 | done (f2a970a; Chrome 156 in image +0.48 GB, wasm plumbing verified with a stub; real build waits for W2) |
 | W2 | `wallet_core` compiles for the web: `CommonDatabase` + `WalletRepo.fromDatabase`, `archive` gzip, `backupBytes`/`restoreBackupBytes`, `LogSink` + `MemoryLogSink`, conditional exports for FolderSync / file backups / RotatingFileSink | core-builder | web-core (from 87adbbd) | I0 | done (3b1c936, core 789/0) |
 | W3 | App web twins: `wallet_db.dart` (wasm + IndexedDB VFS), passphrase `KeyStore`, memory log + download, no nudges/sync folder on web, Backup download/upload, "Forget this browser", onboarding passphrase step | ui-builder | web-ui (from 87adbbd) | I0 (shims W2 until it lands) | done (4f953ed, shim dropped; app 700/701, flake fixed c516b03) |
-| W4 | BUG (review): single-tab guard on web (Web Lock, InUseScreen) | ui-builder | worktree from 1c7086c | W3 | running |
-| W | Web stage: merge W2 → W1 → W3, review, Haiku full run + `web-test`, localhost screenshots, push (no CI) | lead | v2 | W1–W3 | queued |
+| W4 | BUG (review): single-tab guard on web (Web Lock, InUseScreen) | ui-builder | worktree from 1c7086c | W3 | done (8cb218c) |
+| W | Web stage: merge W2 → W1 → W3, review, Haiku full run + `web-test`, localhost screenshots, push (no CI) | lead | v2 | W1–W4 | done (full run green, pushed) |
 | H1 | CI split (owner 2026-10-20): CI runs only what the laptop does not verify — signed APK, Linux release bundle + smoke, dev release publish, log to ci-logs — as separate jobs; lint/unit/desktop tests run only on demand (`workflow_dispatch` input or `[ci tests]` in the commit message) for cloud sessions without Flutter. Cause: the single `build` job ran out of runner disk (run 39492372474). | devops | ci-split (from v2) | – | done (10033a4, merged); first run watched |
 | H2 | `tools/ci-status.sh --wait <sha>` must wait for the `ci` workflow run of that sha to conclude (`gh run list --workflow ci --commit`), not only for check-runs that already exist: on d46b787 it said "all green" while the ci run was still pending (only release.yml's gate had run). Batch with the next devops item. | devops | ci-log-fix | – | done (cb916c6) |
 | H3 | BUG: first split run 39496288936: apk, linux, publish green, test jobs skipped, but job `log` failed in `.github/scripts/publish-log.sh` (step printed nothing; git errors swallowed by `2>/dev/null`), so ci-logs has no entry for d46b787 | devops | ci-log-fix | – | done (cb916c6, merged, pushed) |
