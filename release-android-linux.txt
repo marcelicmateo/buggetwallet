@@ -1,4 +1,4 @@
-commit: 680223dadc00915188770868ab0b0641d50d269d  ref: v2  run: 39553688654
+commit: 680223dadc00915188770868ab0b0641d50d269d  ref: master  run: 39553688137
 
 Resolving dependencies...
 Downloading packages...
@@ -50,8 +50,8 @@ Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
 "Install CMake 3.22.1 v.3.22.1" complete.
 "Install CMake 3.22.1 v.3.22.1" finished.
 Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 4812 bytes (99.7% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
-Caught exception: Already watching path: /home/runner/work/buggetwallet/buggetwallet/app/android
-Running Gradle task 'assembleRelease'...                          530.7s
+Caught exception: Already watching path: /opt/hostedtoolcache/flutter/stable-3.47.7-x64/flutter/packages/flutter_tools/gradle
+Running Gradle task 'assembleRelease'...                          471.1s
 ✓ Built build/app/outputs/flutter-apk/app-release.apk (63.8MB)
 Resolving dependencies...
 Downloading packages...
