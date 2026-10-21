@@ -96,4 +96,25 @@ void main() {
     ];
     expect(bad, isEmpty, reason: 'dart:io in UI code: move the file work into the controller or a native-only file');
   });
+
+  test('files the web build loads import no dart:io, no native-only plugin and no *_io.dart except through a conditional import', () {
+    // Everything in lib/src except *_io.dart files and notifier.dart (the Android plugin) is on the web path.
+    final webPath = [
+      for (final f in Directory('lib/src').listSync().whereType<File>())
+        if (f.path.endsWith('.dart') && !f.path.endsWith('_io.dart') && !f.path.endsWith('/notifier.dart')) f,
+    ];
+    expect(webPath.length, greaterThan(15));
+    final statement = RegExp(r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]([^;]*);''', multiLine: true);
+    final native = RegExp(
+        r'^(dart:io|package:path_provider/.*|package:flutter_secure_storage/.*|package:flutter_local_notifications/.*|.*_io\.dart|.*notifier\.dart)$');
+    final bad = <String>[];
+    for (final f in webPath) {
+      for (final m in statement.allMatches(f.readAsStringSync())) {
+        final uri = m.group(1)!;
+        final conditional = m.group(2)!.contains('dart.library.js_interop');
+        if (native.hasMatch(uri) && !conditional) bad.add('${f.path}: $uri');
+      }
+    }
+    expect(bad, isEmpty, reason: 'web path files must not load native code directly');
+  });
 }

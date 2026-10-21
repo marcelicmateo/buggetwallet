@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'key_store.dart';
 import 'logging.dart';
-import 'notifier.dart';
+import 'nudge_platform.dart';
 import 'nudges.dart';
+import 'sync_path.dart';
+import 'wallet_db.dart';
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');
@@ -28,6 +28,8 @@ const _computeBudget = budgetVsActual;
 const _writeBackupFn = writeBackup;
 const _restoreBackupFn = restoreBackup;
 const _listBackupsFn = listBackups;
+const _backupBytesFn = backupBytes;
+const _restoreBackupBytesFn = restoreBackupBytes;
 
 /// Which transactions Plan › Export writes.
 enum ExportRange { period, year, all }
@@ -91,8 +93,13 @@ class SpendingView {
 
 /// App state. Reads everything from the local database and writes through [WalletRepo].
 class WalletController extends ChangeNotifier {
-  final WalletRepo repo;
+  /// The open wallet. Replaced by a fresh empty one after [forgetBrowser].
+  WalletRepo repo;
+  WalletDb? _db;
   VaultKey? key;
+
+  /// Web: a wrapped key is stored in this browser but not unlocked in this tab (the app shows the Unlock screen).
+  bool locked;
 
   WalletSettings settings = const WalletSettings();
   late Categorizer categorizer;
@@ -125,6 +132,24 @@ class WalletController extends ChangeNotifier {
   @visibleForTesting
   Future<List<BackupInfo>> Function(String folder) backupLister = _listBackupsFn;
 
+  /// The same for the browser, where a backup is a download and a restore reads picked bytes.
+  @visibleForTesting
+  Future<Uint8List> Function(WalletRepo repo, VaultKey key) backupBytesWriter = _backupBytesFn;
+  @visibleForTesting
+  Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey key) backupBytesReader = _restoreBackupBytesFn;
+
+  /// Key work; tests replace them (the real ones use the system keystore, a file, or the browser's storage).
+  @visibleForTesting
+  Future<void> Function(VaultKey key, {String? passphrase}) keyWriter = KeyStore.write;
+  @visibleForTesting
+  Future<VaultKey> Function(String passphrase) unlocker = KeyStore.unlock;
+  @visibleForTesting
+  Future<void> Function() keyForgetter = KeyStore.forget;
+
+  /// Opens a new empty database after [forgetBrowser]; tests replace it.
+  @visibleForTesting
+  Future<WalletDb> Function() dbOpener = openWalletDb;
+
   String? syncFolder;
   DateTime? lastSync;
   String? syncError;
@@ -136,6 +161,7 @@ class WalletController extends ChangeNotifier {
 
   Timer? _syncTimer;
   Timer? _debounce;
+  Timer? _persistTimer;
 
   /// The phone's reminders (Plan › Nudges); [NoNudges] in tests and on desktop.
   final NudgePlatform nudges;
@@ -143,8 +169,9 @@ class WalletController extends ChangeNotifier {
   /// True after the system refused the notification permission when the switch was turned on (Plan says how to allow it).
   bool nudgesDenied = false;
 
-  WalletController._(this.repo, this.key, {DateTime Function()? clock, NudgePlatform? nudges})
-      : _clock = clock ?? DateTime.now,
+  WalletController._(this.repo, this.key, {DateTime Function()? clock, NudgePlatform? nudges, WalletDb? db, this.locked = false})
+      : _db = db,
+        _clock = clock ?? DateTime.now,
         nudges = nudges ?? const NoNudges() {
     syncFolder = repo.localValue('syncFolder');
   }
@@ -152,9 +179,8 @@ class WalletController extends ChangeNotifier {
   /// Opens the database, reads the key and loads everything. Logs each startup phase as `app.start`.
   static Future<WalletController> load() async {
     var sw = Stopwatch()..start();
-    final dir = await getApplicationSupportDirectory();
-    await dir.create(recursive: true);
-    final repo = WalletRepo.open('${dir.path}${Platform.pathSeparator}wallet.db');
+    final db = await openWalletDb();
+    final repo = db.repo;
     logEvent(_log, Level.INFO, 'app.start', {'phase': 'db', 'ms': sw.elapsedMilliseconds});
 
     sw = Stopwatch()..start();
@@ -169,7 +195,7 @@ class WalletController extends ChangeNotifier {
     logEvent(_log, Level.INFO, 'app.start', {'phase': 'key', 'ms': sw.elapsedMilliseconds, 'found': key != null});
 
     sw = Stopwatch()..start();
-    final c = WalletController._(repo, key, nudges: defaultNudgePlatform());
+    final c = WalletController._(repo, key, nudges: defaultNudgePlatform(), db: db, locked: key == null && KeyStore.isLocked);
     c.reload();
     logEvent(_log, Level.INFO, 'app.start',
         {'phase': 'reload', 'ms': sw.elapsedMilliseconds, 'tx': c.txs.length, 'syncFolder': c.syncFolder != null, 'logLevel': c.logLevel});
@@ -181,8 +207,9 @@ class WalletController extends ChangeNotifier {
 
   /// For widget tests: an already-open repo (e.g. [WalletRepo.inMemory]), no auto-sync. [clock] stands in for the current time.
   @visibleForTesting
-  factory WalletController.forTest(WalletRepo repo, {VaultKey? key, DateTime Function()? clock, NudgePlatform? nudges}) =>
-      WalletController._(repo, key, clock: clock, nudges: nudges)..reload();
+  factory WalletController.forTest(WalletRepo repo,
+          {VaultKey? key, DateTime Function()? clock, NudgePlatform? nudges, WalletDb? db, bool locked = false}) =>
+      WalletController._(repo, key, clock: clock, nudges: nudges, db: db, locked: locked)..reload();
 
   /// The saved monthly budgets per category (cents).
   Map<String, int> get categoryBudgets => settings.categoryBudgets;
@@ -200,6 +227,28 @@ class WalletController extends ChangeNotifier {
     logEvent(_log, Level.INFO, 'day.changed', {'from': _seenDay, 'to': d});
     _seenDay = d;
     notifyListeners();
+  }
+
+  /// Every change reaches the screens through here; where the database lives in memory first (the browser) it is also written
+  /// to storage within a second.
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    final db = _db;
+    if (db == null || !db.persists || (_persistTimer?.isActive ?? false)) return;
+    _persistTimer = Timer(const Duration(milliseconds: 800), () => unawaited(persistNow()));
+  }
+
+  /// Writes pending database changes to storage now (a no-op where the database writes by itself). Also called when the page
+  /// is hidden or closing.
+  Future<void> persistNow() async {
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    try {
+      await _db?.persist();
+    } catch (e, st) {
+      logError(_log, 'db.persistFailed', e, st);
+    }
   }
 
   void reload() {
@@ -515,9 +564,10 @@ class WalletController extends ChangeNotifier {
   }
 
   // ---------- wallet / key ----------
-  Future<void> createWallet() async {
+  /// [passphrase]: the web build wraps the key with it (the other builds ignore it).
+  Future<void> createWallet({String? passphrase}) async {
     final k = VaultKey.generate();
-    await KeyStore.write(k);
+    await keyWriter(k, passphrase: passphrase);
     key = k;
     logEvent(_log, Level.INFO, 'wallet.create', {'defaultGoals': repo.goals().isEmpty});
     if (repo.goals().isEmpty) {
@@ -527,13 +577,67 @@ class WalletController extends ChangeNotifier {
     _changed();
   }
 
-  Future<void> joinWallet(String text) async {
+  Future<void> joinWallet(String text, {String? passphrase}) async {
     final k = await VaultKey.parse(text); // errors are logged by the caller (never the text)
-    await KeyStore.write(k);
+    await keyWriter(k, passphrase: passphrase);
     key = k;
     logEvent(_log, Level.INFO, 'wallet.join');
     notifyListeners();
     await syncNow(trigger: 'join');
+  }
+
+  /// Web: opens the key stored in this browser with [passphrase]. Throws [WrongPassphrase]; the typed text is never logged.
+  Future<void> unlock(String passphrase) async {
+    final k = await unlocker(passphrase);
+    key = k;
+    locked = false;
+    logEvent(_log, Level.INFO, 'wallet.unlock');
+    notifyListeners();
+    await syncNow(trigger: 'unlock');
+  }
+
+  /// Web "Forget this browser": deletes the database and the stored key, then starts over with an empty wallet and no key
+  /// (the app shows onboarding). Throws the first failure after the state was reset.
+  Future<void> forgetBrowser() async {
+    logEvent(_log, Level.INFO, 'wallet.forget');
+    _syncTimer?.cancel();
+    _debounce?.cancel();
+    _persistTimer?.cancel();
+    Object? failure;
+    StackTrace? failureStack;
+    try {
+      final db = _db;
+      if (db != null) {
+        await db.forget();
+      } else {
+        repo.close();
+      }
+    } catch (e, st) {
+      logError(_log, 'wallet.forget.dbFailed', e, st, level: Level.SEVERE);
+      failure = e;
+      failureStack = st;
+    }
+    try {
+      await keyForgetter();
+    } catch (e, st) {
+      logError(_log, 'wallet.forget.keyFailed', e, st, level: Level.SEVERE);
+      if (failure == null) {
+        failure = e;
+        failureStack = st;
+      }
+    }
+    key = null;
+    locked = false;
+    final fresh = await dbOpener();
+    _db = fresh;
+    repo = fresh.repo;
+    syncFolder = null;
+    lastSync = null;
+    syncError = null;
+    lastImport = const [];
+    reload();
+    _startAutoSync();
+    if (failure != null) Error.throwWithStackTrace(failure, failureStack ?? StackTrace.current);
   }
 
   Future<String> keyText() async => key == null ? '' : await key!.toText();
@@ -543,7 +647,7 @@ class WalletController extends ChangeNotifier {
   Future<void> setSyncFolder(String? path, {bool create = false}) async {
     if (create && path != null) {
       try {
-        await Directory(path).create(recursive: true);
+        await createFolder(path);
       } catch (e, st) {
         // Sync then reports the missing folder; describeError drops the path.
         logError(_sync, 'sync.folderCreateFailed', e, st);
@@ -558,12 +662,7 @@ class WalletController extends ChangeNotifier {
   }
 
   /// Default folder on iPhone: the app's Documents folder, visible in the Files app.
-  Future<String> defaultSyncFolder() async {
-    final docs = await getApplicationDocumentsDirectory();
-    final d = Directory('${docs.path}${Platform.pathSeparator}BudgetWalletSync');
-    await d.create(recursive: true);
-    return d.path;
-  }
+  Future<String> defaultSyncFolder() => appSyncFolder();
 
   /// [trigger] says why it ran (button, timer, change, resume, startup, folder, join) for the log.
   Future<void> syncNow({bool quiet = false, String trigger = 'button'}) async {
@@ -632,6 +731,42 @@ class WalletController extends ChangeNotifier {
       return name;
     } catch (e, st) {
       logError(_backupLog, 'backup.failed', e, st);
+      rethrow;
+    }
+  }
+
+  /// Web: a backup of the wallet as bytes for a download, with its file name (never log it). Throws [StateError] without a key.
+  Future<({String name, Uint8List bytes})> backupDownload() async {
+    final k = key;
+    if (k == null) {
+      logEvent(_backupLog, Level.INFO, 'backup.skip', {'reason': 'noKey'});
+      throw StateError('No wallet key');
+    }
+    final sw = Stopwatch()..start();
+    try {
+      final bytes = await backupBytesWriter(repo, k);
+      logEvent(_backupLog, Level.INFO, 'backup.done',
+          {'ms': sw.elapsedMilliseconds, 'tx': txs.length, 'goals': goals.length, 'wish': wish.length, 'bytes': bytes.length});
+      return (name: backupFileName(today()), bytes: bytes);
+    } catch (e, st) {
+      logError(_backupLog, 'backup.failed', e, st);
+      rethrow;
+    }
+  }
+
+  /// Web: reads a picked backup file ([bytes]) into the empty wallet; returns the number of rows restored. Same errors as
+  /// [restoreBackup].
+  Future<int> restoreBackupFile(Uint8List bytes) async {
+    final k = key;
+    if (k == null) throw const BackupException(BackupFailure.unreadable, 'No wallet key on this device.');
+    final sw = Stopwatch()..start();
+    try {
+      final rows = await backupBytesReader(repo, bytes, k);
+      logEvent(_backupLog, Level.INFO, 'backup.restored', {'ms': sw.elapsedMilliseconds, 'rows': rows, 'bytes': bytes.length});
+      _changed();
+      return rows;
+    } catch (e, st) {
+      logError(_backupLog, 'backup.restoreFailed', e, st, fields: {'type': e.runtimeType.toString()});
       rethrow;
     }
   }
@@ -722,15 +857,10 @@ class WalletController extends ChangeNotifier {
 
   /// Writes the logs into the sync folder's `diagnostics/` (or the app documents folder) and returns the path.
   Future<String> saveLogsToFolder() async {
-    final sep = Platform.pathSeparator;
-    final base = syncFolder ?? (await getApplicationDocumentsDirectory()).path;
-    final dir = Directory('$base${sep}diagnostics');
-    await dir.create(recursive: true);
-    final f = File('${dir.path}$sep${logFileName()}');
     final bytes = await logBytes();
-    await f.writeAsBytes(bytes, flush: true);
-    logEvent(_log, Level.INFO, 'log.saved', {'to': syncFolder != null ? 'syncFolder' : 'documents', 'bytes': bytes.length});
-    return f.path;
+    final saved = await saveDiagnosticsFile(syncFolder, logFileName(), bytes);
+    logEvent(_log, Level.INFO, 'log.saved', {'to': saved.inSyncFolder ? 'syncFolder' : 'documents', 'bytes': bytes.length});
+    return saved.path;
   }
 
   Future<void> clearLogs() => AppLog.clear();
@@ -740,6 +870,7 @@ class WalletController extends ChangeNotifier {
     logEvent(_log, Level.FINE, 'wc.dispose');
     _syncTimer?.cancel();
     _debounce?.cancel();
+    _persistTimer?.cancel();
     repo.close();
     super.dispose();
   }

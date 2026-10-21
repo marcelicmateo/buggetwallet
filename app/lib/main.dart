@@ -15,6 +15,7 @@ import 'src/screens/onboarding.dart';
 import 'src/screens/plan.dart';
 import 'src/screens/spending.dart';
 import 'src/screens/today.dart';
+import 'src/screens/unlock.dart';
 import 'src/screens/wishlist.dart';
 import 'src/theme.dart';
 import 'src/widgets/common.dart';
@@ -76,7 +77,11 @@ class BudgetWalletApp extends StatelessWidget {
       darkTheme: buildTheme(Brightness.dark),
       home: ListenableBuilder(
         listenable: wc,
-        builder: (context, _) => wc.hasWallet ? HomeShell(wc: wc) : OnboardingScreen(wc: wc),
+        builder: (context, _) => wc.hasWallet
+            ? HomeShell(wc: wc)
+            : wc.locked
+                ? UnlockScreen(wc: wc)
+                : OnboardingScreen(wc: wc),
       ),
     );
   }
@@ -198,11 +203,17 @@ class _HomeShellState extends State<HomeShell> {
     super.initState();
     AppLog.setScreen(_tabs[tab]);
     _refreshPages();
-    _life = AppLifecycleListener(onResume: () {
-      widget.wc.checkDay(); // a new day also shows without a sync folder
-      widget.wc.rescheduleNudges(); // reminders are scheduled for 4 weeks at a time
-      widget.wc.syncNow(quiet: true, trigger: 'resume');
-    });
+    _life = AppLifecycleListener(
+      onResume: () {
+        widget.wc.checkDay(); // a new day also shows without a sync folder
+        widget.wc.rescheduleNudges(); // reminders are scheduled for 4 weeks at a time
+        widget.wc.syncNow(quiet: true, trigger: 'resume');
+      },
+      // A browser tab that is hidden or closing: get the database into IndexedDB now.
+      onInactive: () => unawaited(widget.wc.persistNow()),
+      onHide: () => unawaited(widget.wc.persistNow()),
+      onPause: () => unawaited(widget.wc.persistNow()),
+    );
   }
 
   void _go(int i, String via) {
@@ -228,7 +239,7 @@ class _HomeShellState extends State<HomeShell> {
 
   void _syncNow() {
     if (widget.wc.syncFolder == null) {
-      toast(context, 'No sync folder yet. Set one in Plan.');
+      toast(context, isWeb ? 'There is no sync on the web yet.' : 'No sync folder yet. Set one in Plan.');
       return;
     }
     widget.wc.syncNow(trigger: 'key');

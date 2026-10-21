@@ -4,15 +4,17 @@
 // wish/goal names, account numbers, the wallet key, sync file contents, paths or bank file names.
 // Log event names, counts, durations, sizes, built-in categories, period dates, setting keys and enum states.
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui' show FrameTiming, PlatformDispatcher;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart' show FlutterVersion, PlatformException;
 import 'package:flutter/widgets.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:wallet_core/wallet_core.dart';
+
+import 'log_backend.dart';
+
+export 'log_backend.dart' show LogStats, nativeInfo;
 
 /// Keep in step with `version:` in pubspec.yaml (checked by test/logging_test.dart).
 const appVersion = '2.0.0+1';
@@ -36,11 +38,6 @@ Future<T?> loggedRoute<T>(String name, Future<T?> future) async {
   return r;
 }
 
-/// OS version, Dart version and CPU count: facts only dart:io has, so empty on the web.
-Map<String, Object?> nativeInfo() => kIsWeb
-    ? const {}
-    : {'os': Platform.operatingSystemVersion, 'dart': Platform.version.split(' ').first, 'cpus': Platform.numberOfProcessors};
-
 /// The extension of a file name, or '' (never the name itself).
 String fileExt(String name) {
   final i = name.lastIndexOf('.');
@@ -51,19 +48,10 @@ String fileExt(String name) {
 /// Log levels the user can pick in Plan › Diagnostics (stored per device as `logLevel`).
 const logLevels = {'all': Level.ALL, 'info': Level.INFO, 'warning': Level.WARNING};
 
-class LogStats {
-  final int files, bytes;
-
-  /// Failed writes to the log files since start (disk full, folder not writable…).
-  final int writeErrors;
-  const LogStats(this.files, this.bytes, [this.writeErrors = 0]);
-}
-
 /// Sets up and owns the log sinks and monitors. Everything here is static: there is one log per app.
 class AppLog {
-  static RotatingFileSink? _sink;
-  static Directory? _dir;
-  static final List<String> _early = []; // lines logged before the file sink is ready
+  static LogBackend? _sink; // rotating files, or a buffer in memory in the browser
+  static final List<String> _early = []; // lines logged before the sink is ready
   static StreamSubscription<LogRecord>? _sub;
   static final FrameStats _stats = FrameStats();
   static Timer? _frameTimer, _memTimer;
@@ -93,15 +81,12 @@ class AppLog {
     _sub = Logger.root.onRecord.listen(_onRecord);
     if (catchErrors) _hookErrors();
     try {
-      final support = await getApplicationSupportDirectory();
-      final dir = Directory('${support.path}${Platform.pathSeparator}logs');
-      _dir = dir;
-      final sink = RotatingFileSink(dir);
+      final backend = await LogBackend.open();
       for (final l in _early) {
-        sink.add(l);
+        backend.add(l);
       }
       _early.clear();
-      _sink = sink;
+      _sink = backend;
     } catch (e, st) {
       logError(_app, 'log.fileSinkFailed', e, st, level: Level.SEVERE);
     }
@@ -199,8 +184,8 @@ class AppLog {
   }
 
   static void logMemory() {
-    double mb(int b) => (b / 104857.6).round() / 10;
-    logEvent(_mem, Level.FINE, 'mem', {'rss_mb': mb(ProcessInfo.currentRss), 'max_rss_mb': mb(ProcessInfo.maxRss)});
+    final facts = memoryFacts();
+    if (facts.isNotEmpty) logEvent(_mem, Level.FINE, 'mem', facts);
   }
 
   static void _onLifecycle(AppLifecycleState s) {
@@ -224,49 +209,22 @@ class AppLog {
   }
 
   /// Number of log files and their total size.
-  static Future<LogStats> stats() async {
-    await flush();
-    final files = _sink?.files() ?? const <File>[];
-    var bytes = 0;
-    for (final f in files) {
-      bytes += await f.length();
-    }
-    return LogStats(files.length, bytes, _sink?.errors ?? 0);
-  }
+  static Future<LogStats> stats() async => await _sink?.stats() ?? const LogStats(0, 0);
 
-  /// All log files, oldest first, as one text.
-  static Future<String> combined() async {
-    await flush();
-    final b = StringBuffer();
-    for (final f in _sink?.files() ?? const <File>[]) {
-      try {
-        b.write(await f.readAsString());
-      } catch (e, st) {
-        logError(_app, 'log.readFailed', e, st);
-      }
-    }
-    return b.toString();
-  }
+  /// All log lines, oldest first, as one text.
+  static Future<String> combined() async => await _sink?.combined((e, st) => logError(_app, 'log.readFailed', e, st)) ?? '';
 
   /// Deletes all log files and starts a fresh one.
   static Future<void> clear() async {
-    final old = _sink, dir = _dir;
-    if (old == null || dir == null) return;
+    final old = _sink;
+    if (old == null) return;
     _sink = null; // lines logged meanwhile wait in _early
-    await old.close();
-    for (final f in old.files()) {
-      try {
-        await f.delete();
-      } catch (e, st) {
-        logError(_app, 'log.deleteFailed', e, st);
-      }
-    }
-    final sink = RotatingFileSink(dir);
+    final fresh = await old.clear((e, st) => logError(_app, 'log.deleteFailed', e, st));
     for (final l in _early) {
-      sink.add(l);
+      fresh.add(l);
     }
     _early.clear();
-    _sink = sink;
+    _sink = fresh;
     logEvent(_app, Level.INFO, 'log.cleared');
   }
 }
