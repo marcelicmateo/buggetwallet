@@ -78,8 +78,10 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     got=$(sha256sum "$cache" | cut -d' ' -f1)
     want=$(awk -v n="sqlite3-$ver" '$2 == n {print $1}' "$pinned" 2>/dev/null || true)
     if [[ -z $want ]]; then
-      echo "$got  sqlite3-$ver" >> "$pinned"
-      echo "pinned sqlite3.wasm $ver: $got (written to dev/sqlite3-wasm.sha256: commit it)" >&2
+      # No trust on first use: a new version is pinned by hand after checking the hash against the release page.
+      echo "sqlite3.wasm $ver is not pinned. Check its sha256 on the sqlite3.dart release page, then add this line" >&2
+      echo "to dev/sqlite3-wasm.sha256 and commit it:  $got  sqlite3-$ver" >&2
+      return 1
     elif [[ $want != "$got" ]]; then
       rm -f "$cache"
       echo "sqlite3.wasm $ver sha256 mismatch: pinned $want, got $got (cache deleted)" >&2
