@@ -1,12 +1,11 @@
-commit: 4b16240522cb4669162dea295f2d22391593c6e0  ref: v2  run: 39499539994
+commit: 4b16240522cb4669162dea295f2d22391593c6e0  ref: master  run: 39553146380
 
-lint=skipped importer=skipped core=skipped app=skipped desktop=skipped signing=success apk=success(131s) linux=success(86s) smoke=success(18s)
-job:lint=skipped job:importer=skipped job:core=skipped job:app=skipped job:desktop=skipped job:apk=success job:linux=success job:publish=success 
+lint=skipped importer=skipped core=skipped app=skipped desktop=skipped signing=success apk=cancelled linux=success(100s) smoke=success(21s)
+job:lint=skipped job:importer=skipped job:core=skipped job:app=skipped job:desktop=skipped job:apk=cancelled job:linux=success job:publish=cancelled 
 
 step seconds exit
-apk 131 0
-linux 86 0
-smoke 18 0
+linux 100 0
+smoke 21 0
 
 
 
@@ -14,24 +13,6 @@ smoke 18 0
 
 
 === apk ===
-Resolving dependencies...
-Downloading packages...
-  cross_file 0.3.5+5 (0.4.0 available)
-  equatable 2.1.0 (3.0.0 available)
-  material_color_utilities 0.13.0 (0.13.1 available)
-  qr 3.0.2 (4.0.0 available)
-  sqlite3 2.9.4 (3.7.1 available)
-  sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
-  test_api 0.7.12 (0.7.15 available)
-  vector_math 2.4.0 (2.4.3 available)
-Got dependencies!
-8 packages have newer versions incompatible with dependency constraints.
-Try `flutter pub outdated` for more information.
-Running Gradle task 'assembleRelease'...                        
-Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 4812 bytes (99.7% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
-Caught exception: Already watching path: /opt/hostedtoolcache/flutter/stable-3.47.7-x64/flutter/packages/flutter_tools/gradle
-Running Gradle task 'assembleRelease'...                          126.6s
-✓ Built build/app/outputs/flutter-apk/app-release.apk (63.8MB)
 
 === linux ===
 === linux ===
@@ -52,8 +33,8 @@ Building Linux application...
 ✓ Built build/linux/x64/release/bundle/budget_wallet
 
 step              seconds  result
-linux                85.8  ok
-total                85.8
+linux                99.8  ok
+total                99.8
 linux=ok
 === smoke ===
 === linux ===
@@ -79,7 +60,7 @@ app log: 24 lines (dist/logs/app-linux-smoke.log)
 WARNING lines: 1
 
 step              seconds  result
-linux                 4.6  ok
-desktop-smoke        13.4  ok
-total                18.0
+linux                 4.3  ok
+desktop-smoke        15.8  ok
+total                20.1
 linux=ok desktop-smoke=ok
