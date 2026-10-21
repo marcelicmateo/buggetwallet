@@ -10,6 +10,13 @@ changed (`tools/build.sh core|importer|app|lint`, one test file, `tools/emulator
 between runs. Run the full `tools/build.sh test` (and full emulator/desktop runs if relevant) once, at the end.
 Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool. Preferred for one test file: `tools/build.sh core|importer|app <test file>…` (no analyze, step `<pkg>:one`); `tools/build.sh shell -c '<cmd>'` runs any command non-interactively in the container.
 
+Reading (token rule, owner 2026-10-21): most agent tokens go to reading code, so read little and exactly.
+Start from the context pack in your brief and don't re-explore what it covers. Locate with `grep -n`, then read line
+ranges (Read with offset/limit, `sed -n a,bp`); never read a whole file over ~150 lines or `cat` several files.
+Build/test output: read the result line and the failures only (`tail -n 30`, `grep -nE 'FAIL|Error|\[E\]'`), not the log.
+Screenshots: read only the ones your change affects, downscaled first
+(`magick <png> -resize 540x <scratchpad>/<name>.png`, then Read that file).
+
 First, check your base: worktrees may be created from `master`. If `git log -1` is not the commit the lead
 named (normally the tip of `v2`) and you have no changes yet, run `git reset --hard <that commit>`.
 

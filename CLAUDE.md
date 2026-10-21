@@ -108,13 +108,15 @@ The main session is the lead: it takes the owner's request, splits it, merges re
 - `ui-builder` — UI half: `app/` screens, widgets, controller wiring, widget tests; iterates in live mode.
   For a feature with both halves, the lead fixes the core API (names, params, result fields) in both specs and
   runs them in parallel; UI-only or core-only work uses just one.
+- `scout` — haiku/low, read-only: before each builder/test-writer, returns a context pack (files, line ranges, APIs, tests)
+  that goes into the brief, so builders don't explore the codebase themselves (token rule in PIPELINE.md).
 - `test-writer` — writes tests from the spec in parallel, without basing them on the implementation.
 - `reviewer` — read-only review of the diff before every push.
 - `ci-watcher` — waits for a CI run the owner started and reports the result (`tools/ci-status.sh`); not used after pushes.
 - `devops` — only for build, CI, signing or version work.
 **Model and effort first (owner rule):** before starting agents, check each one's `model:` and `effort:` in its
 `.claude/agents/*.md` frontmatter and fit them to the task (cheapest that does the job well; current defaults:
-ci-watcher haiku/low, test-writer and devops sonnet/medium, ui-builder sonnet/high, core-builder and reviewer high
+scout and ci-watcher haiku/low, test-writer and devops sonnet/medium, ui-builder sonnet/high, core-builder and reviewer high
 on the session model).
 Agents without a file (general-purpose, Explore, Plan) get `model` set on the Agent call. Say the choice in one line.
 Owner bug reports go before new features. **Bugs are fixed as soon as they're found** (owner rule), in the same

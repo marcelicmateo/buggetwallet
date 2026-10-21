@@ -10,6 +10,10 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 - Parallel only for independent items needed in the current stage.
 - test-writer only for money and sync logic; UI features get tests from the builder.
 - Briefs are pointer-style: exact files, the API to match, the one allowed check; reports under 15 lines.
+- Scout first (owner, 2026-10-21): before a builder or test-writer starts, a `scout` (haiku/low, read-only) returns a
+  context pack (files, line ranges, APIs, tests, helpers); the lead pastes it into the brief. Builders read code by
+  `grep -n` + line ranges, never whole files, build output by result line + failures, screenshots downscaled to 540 px.
+  Measure with `python3 -I tools/token-usage.py` (baseline in memory: ~2.9M tokens/commit before 2026-10-21).
 - One targeted check per agent at the end, one Haiku full run per stage, one reviewer pass per stage on the whole diff.
   Live-mode screenshots only for visual changes.
 - Batch follow-ups into one message per agent instead of resuming it repeatedly.
@@ -23,7 +27,7 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 | Haiku run red | Fix items first (owner rule: bugs before features), then re-run only the failing suite. |
 | Owner message | Owner bug reports go before anything queued. |
 
-Agent models: ci-watcher haiku/low; test-writer, devops sonnet/medium; ui-builder sonnet/high; core-builder, reviewer Fable/high.
+Agent models: scout, ci-watcher haiku/low; test-writer, devops sonnet/medium; ui-builder sonnet/high; core-builder, reviewer Fable/high.
 Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the lead from the branch named in "Base".
 
 ## Resume here (2026-10-21, laptop shut down mid-stage W)
