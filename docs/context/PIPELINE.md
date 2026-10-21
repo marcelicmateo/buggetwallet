@@ -29,8 +29,10 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 ## Resume here (2026-10-21, laptop shut down mid-stage W)
 - W1 done: branch `worktree-agent-af1e542b8b131808b` (f2a970a). Merge first.
 - W2 core-builder was in `.claude/worktrees/agent-a69da03d9875b809c` (branch `worktree-agent-a69da03d9875b809c`), W3 ui-builder
-  in `.claude/worktrees/agent-a7b98358b77f12dd1` (branch `worktree-agent-a7b98358b77f12dd1`). Both were told to make a `WIP:`
-  commit; if the branch is still at 87adbbd, the work is uncommitted in the worktree: commit it there before anything else.
+  in `.claude/worktrees/agent-a7b98358b77f12dd1` (branch `worktree-agent-a7b98358b77f12dd1`). Both made a `WIP:` commit, worktrees
+  clean: core f0685c8 (barrel compiles with dart2js + dart2wasm; core tests not re-run after the last edits), UI fd2a51e (app 701
+  tests, 1 failing: `web_test.dart` onboarding 320 dp at text scale 2.0; shim `core_shim.dart` still in; new direct deps
+  `sqlite3`, `cryptography`, `web` in app/pubspec.yaml; `FileChooser.saveBackup`/`pickBackupFile` added).
 - Next session: resume each builder (new agent, same brief as in the session transcript: the W2/W3 rows below) on its
   worktree, finish, then stage W: merge W2 → W1 → W3 into `v2`, drop `app/lib/src/core_shim.dart`, reviewer, Haiku full run +
   `tools/build.sh web-test`, `tools/build.sh web` + `tools/web.sh serve` + `shot`, commit, push (no CI).
