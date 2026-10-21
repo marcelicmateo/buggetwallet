@@ -19,7 +19,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `test/web_core_test.dart` pins that dart:io members unseal and that pure-Dart members are accepted.
 - `hlc.dart`: no int literal above 2^53 (dart2js refuses it); `_maxInt` is 2^53 − 1 there, 2^63 − 1 elsewhere.
 - Compile check (after `dart pub get` in the package): `tools/build.sh shell -c 'cd packages/wallet_core && dart compile js
-  -o /tmp/web_smoke.js tool/web_smoke.dart && dart compile wasm -o /tmp/web_smoke.wasm tool/web_smoke.dart'`
+  -o /dev/null tool/web_smoke.dart && dart compile wasm -o ../../dist/web_smoke.wasm tool/web_smoke.dart'`
   (`tool/web_smoke.dart` imports the barrel and uses `WalletRepo.fromDatabase`, `backupBytes`, `MemoryLogSink`,
   `seal`/`unseal`; dart2wasm wants a `.wasm` output name). Run it whenever an import changes.
 
