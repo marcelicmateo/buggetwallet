@@ -101,6 +101,10 @@ class WalletController extends ChangeNotifier {
   /// Web: a wrapped key is stored in this browser but not unlocked in this tab (the app shows the Unlock screen).
   bool locked;
 
+  /// Web: another tab of this browser has the wallet open ([WalletInUse]); this tab opened nothing and shows the InUse screen.
+  /// [repo] is then an empty placeholder in memory, never the stored wallet.
+  final bool inUseElsewhere;
+
   WalletSettings settings = const WalletSettings();
   late Categorizer categorizer;
   List<CategorizedTx> txs = const [];
@@ -169,7 +173,8 @@ class WalletController extends ChangeNotifier {
   /// True after the system refused the notification permission when the switch was turned on (Plan says how to allow it).
   bool nudgesDenied = false;
 
-  WalletController._(this.repo, this.key, {DateTime Function()? clock, NudgePlatform? nudges, WalletDb? db, this.locked = false})
+  WalletController._(this.repo, this.key,
+      {DateTime Function()? clock, NudgePlatform? nudges, WalletDb? db, this.locked = false, this.inUseElsewhere = false})
       : _db = db,
         _clock = clock ?? DateTime.now,
         nudges = nudges ?? const NoNudges() {
@@ -177,9 +182,16 @@ class WalletController extends ChangeNotifier {
   }
 
   /// Opens the database, reads the key and loads everything. Logs each startup phase as `app.start`.
-  static Future<WalletController> load() async {
+  /// If another browser tab has the wallet open, nothing is opened or written and [inUseElsewhere] is true. [opener] is for tests.
+  static Future<WalletController> load({Future<WalletDb> Function() opener = openWalletDb}) async {
     var sw = Stopwatch()..start();
-    final db = await openWalletDb();
+    final WalletDb db;
+    try {
+      db = await opener();
+    } on WalletInUse {
+      logEvent(_log, Level.WARNING, 'app.start', {'phase': 'db', 'inUse': true});
+      return WalletController._(WalletRepo.inMemory(), null, inUseElsewhere: true);
+    }
     final repo = db.repo;
     logEvent(_log, Level.INFO, 'app.start', {'phase': 'db', 'ms': sw.elapsedMilliseconds});
 

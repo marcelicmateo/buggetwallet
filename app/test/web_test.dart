@@ -10,6 +10,7 @@ import 'package:budget_wallet/src/key_store.dart' show WrongPassphrase;
 import 'package:budget_wallet/src/platform.dart' as plat;
 import 'package:budget_wallet/src/screens/backup_panel.dart';
 import 'package:budget_wallet/src/screens/diagnostics.dart';
+import 'package:budget_wallet/src/screens/in_use.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/unlock.dart';
@@ -774,6 +775,48 @@ void main() {
       await t.pumpAndSettle();
       expect(find.textContaining('Wrong passphrase. Try again.'), findsOneWidget);
       expect(t.takeException(), isNull); // an overflow would show up here
+    });
+  });
+
+  group('Wallet open in another tab', () {
+    Future<WalletController> loadInUse() => WalletController.load(opener: () async => throw const WalletInUse());
+
+    webTest('load keeps the tab out: flag set, no wallet, nothing opened or flushed', (t) async {
+      final wc = await loadInUse();
+      expect(wc.inUseElsewhere, isTrue);
+      expect(wc.hasWallet, isFalse);
+      expect(wc.locked, isFalse);
+      expect(wc.txs, isEmpty);
+      expect(wc.repo.pendingOps(), isEmpty); // the placeholder repo has no writes
+      await wc.persistNow(); // no database to flush
+      expect(lines.join('\n'), contains('inUse'));
+    });
+
+    webTest('another failure from the opener is not swallowed', (t) async {
+      await expectLater(WalletController.load(opener: () async => throw StateError('disk')), throwsStateError);
+    });
+
+    webTest('the app shows the InUse screen instead of onboarding or unlock', (t) async {
+      final wc = await loadInUse();
+      await t.pumpWidget(BudgetWalletApp(wc: wc));
+      await t.pump();
+      expect(find.byType(InUseScreen), findsOneWidget);
+      expect(find.textContaining('open in another tab'), findsOneWidget);
+      expect(find.byType(OnboardingScreen), findsNothing);
+      expect(find.byType(UnlockScreen), findsNothing);
+    });
+
+    webTest('Reload calls the injected callback', (t) async {
+      var reloads = 0;
+      await pumpApp(t, InUseScreen(onReload: () => reloads++));
+      await t.tap(find.byKey(const ValueKey('inUseReload')));
+      expect(reloads, 1);
+    });
+
+    webTest('fits 320 dp at text scale 2', (t) async {
+      await pumpApp(t, InUseScreen(onReload: () {}), size: const Size(320, 1600), textScale: 2);
+      expect(find.text('Reload'), findsOneWidget);
+      expect(t.takeException(), isNull);
     });
   });
 }

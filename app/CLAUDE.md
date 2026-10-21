@@ -78,6 +78,8 @@ Same app and wallet logic; the files that touch the OS come in pairs chosen by `
   changes sit in memory until `persist()` = `fs.flush()`; `forget` closes, drops the file system and deletes the IndexedDB database.
   The controller flushes from `notifyListeners()` (once within 800 ms of the first change) and in `persistNow()` (tab hidden/inactive/paused
   via `HomeShell`'s lifecycle listener). Nothing can be flushed synchronously on `beforeunload`; a hidden tab is the last safe point.
+  One tab only: web `openWalletDb()` first takes the Web Lock `bw-wallet` (`ifAvailable`, kept for the page's life); if another tab has it, it throws
+  `WalletInUse` and `WalletController.load` returns `inUseElsewhere` (empty in-memory repo, nothing opened) → `InUseScreen` (Reload = `page_reload.dart`).
 - `key_store_web.dart` + `key_vault.dart` (pure Dart, tested on the VM with maps for the two storages): the key is wrapped with a
   passphrase (PBKDF2-HMAC-SHA256, 310000 rounds, random 16-byte salt, then core's `seal`) into localStorage as
   `bwk1.<rounds>.<salt>.<sealed>`; unlocking puts the plain key into sessionStorage (this tab only). `KeyStore.isLocked` = wrapped key
