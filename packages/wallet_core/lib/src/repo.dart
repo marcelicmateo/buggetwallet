@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite3/common.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'categories.dart';
@@ -11,6 +11,7 @@ import 'logs.dart';
 import 'matching.dart';
 import 'models.dart';
 import 'recurring.dart';
+import 'sqlite_io.dart' if (dart.library.js_interop) 'sqlite_web.dart' as sqlite;
 import 'transfers.dart';
 
 /// One field-level change. This is what syncs between devices.
@@ -89,7 +90,8 @@ final _isoDate = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 /// The wallet database on one device. All writes go through [_write] so they are
 /// recorded as [Op]s and can be synced; remote ops come in through [applyRemote].
 class WalletRepo {
-  final Database db;
+  /// The open database (`package:sqlite3/common.dart`, so the same code runs on the native and the WASM build).
+  final CommonDatabase db;
   late final String deviceId;
   late final HlcClock clock;
   bool _created = false;
@@ -150,7 +152,7 @@ class WalletRepo {
     if (rehinted > 0) _reconcile();
   }
 
-  static WalletRepo _timedOpen(Database Function() opener, bool file, int Function()? now) {
+  static WalletRepo _timedOpen(CommonDatabase Function() opener, bool file, int Function()? now) {
     final t = PerfTimer('repo.open');
     final repo = WalletRepo._(opener(), now);
     int count(String table) => repo.db.select('SELECT COUNT(*) AS n FROM $table').first['n'] as int;
@@ -158,8 +160,16 @@ class WalletRepo {
     return repo;
   }
 
-  static WalletRepo open(String path, {int Function()? now}) => _timedOpen(() => sqlite3.open(path), true, now);
-  static WalletRepo inMemory({int Function()? now}) => _timedOpen(sqlite3.openInMemory, false, now);
+  /// Opens (or creates) the database file at [path]. Native only: on the web use [fromDatabase].
+  static WalletRepo open(String path, {int Function()? now}) => _timedOpen(() => sqlite.openFileDb(path), true, now);
+
+  /// A fresh in-memory database (tests). Native only: on the web use [fromDatabase].
+  static WalletRepo inMemory({int Function()? now}) => _timedOpen(sqlite.openMemoryDb, false, now);
+
+  /// Wraps an already open [db] (e.g. a `package:sqlite3/wasm.dart` database on the web): the same pragmas and
+  /// migrations run as for [open] and [inMemory]. [file] says whether it is a persistent database (logged in
+  /// `repo.open`, like [open]) or a throwaway one (like [inMemory]). [close] disposes it.
+  static WalletRepo fromDatabase(CommonDatabase db, {required bool file, int Function()? now}) => _timedOpen(() => db, file, now);
 
   void close() {
     logEvent(_log, Level.FINE, 'repo.close');
