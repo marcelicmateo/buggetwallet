@@ -1,7 +1,8 @@
 # Builds every platform and publishes the downloads as a GitHub Release.
-# Runs on pushes to master, on version tags (v*), and on any push whose commit
-# message contains [release]. macOS runners bill 10x minutes on private repos,
-# so this does not run on every development push.
+# Runs on version tags (v*), on any push whose commit message contains [release],
+# and when started by hand. macOS runners bill 10x minutes (Windows 2x) on private
+# repos, and Windows/macOS are parked (owner, 2026-10-21), so a push to master or v2
+# only passes the gate and builds nothing here; ci.yml builds the APK and Linux bundle.
 name: release
 on:
   push:
@@ -15,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SHOULD_RUN: ${{ github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' || github.ref_name == 'master' || contains(github.event.head_commit.message, '[release]') }}
+  SHOULD_RUN: ${{ github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' || contains(github.event.head_commit.message, '[release]') }}
 
 jobs:
   gate:
