@@ -177,7 +177,7 @@ settings the owner already has.
 **Open for the owner:** backup to any folder or only the sync folder? CSV with the bank's original text or the cleaned
 description? search also over goals and wishlist? which settings are missing for you today?
 
-### 4.8 Web version — proposal 2026-10-20, needs owner decisions
+### 4.8 Web version — approved 2026-10-21 (owner: localhost only, no publishing; passphrase-wrapped key; web before the sync redesign)
 §3 lists what must change in code. Proposal for the first web milestone (**web without sync**, usable on its own):
 - **Build and hosting:** `flutter build web --wasm` (falls back to JS where WASM is unavailable) as a CI job on `v2`,
   published to GitHub Pages from the repo (the repo is private: Pages on a private repo needs a paid plan; alternative:
@@ -192,9 +192,12 @@ description? search also over goals and wishlist? which settings are missing for
   (next item), storing the same encrypted `.bwop` files; the web build then gets it like the other platforms.
 - **Tests:** the `app/test` suite runs on the web platform override already (`platform.dart`); add `flutter test --platform
   chrome` for the web twins (repo open, key store, downloads) in the on-demand CI test job.
-**Open for the owner:** where to host (Pages paid plan, home server, or a copy-anywhere folder)? passphrase-wrapped key in
-the browser, or paste the key every session? is web-without-sync useful to you before the relay exists, or should web
-wait for the sync redesign and ship together?
+**Owner decisions (2026-10-21):** develop now, before the sync redesign; host and test on **localhost only**
+(`tools/build.sh web` → `dist/web/`, `tools/web.sh serve` on 127.0.0.1), nothing published and no CI job; the key is
+passphrase-wrapped in the browser (PBKDF2 + XChaCha20-Poly1305 blob in localStorage, unwrapped key for the browser session
+only). As built: database = `sqlite3` WASM on the IndexedDB VFS (no COOP/COEP headers needed; OPFS later if it is slow);
+`archive` gzip replaces `dart:io` gzip in the vault on every platform; `wallet_core`'s barrel compiles for the web (file
+sync, file backups and the rotating log file live behind conditional exports with web stubs).
 
 ## 5. Roadmap snapshot (19 Oct)
 | Feature | Status | Milestone |
