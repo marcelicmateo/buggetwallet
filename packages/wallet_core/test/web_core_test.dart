@@ -98,8 +98,8 @@ void main() {
       expect(b.transactions().map((t) => (t.id, t.amount, t.date)).toSet(), a.transactions().map((t) => (t.id, t.amount, t.date)).toSet());
       expect(b.settings().reviewDay, 3);
       Set<String> clocks(WalletRepo r) => {
-        for (final row in r.db.select('SELECT entity, id, field, hlc FROM clocks')) row.values.join('|'),
-      };
+            for (final row in r.db.select('SELECT entity, id, field, hlc FROM clocks')) row.values.join('|'),
+          };
       expect(clocks(b), clocks(a), reason: 'the same field clocks, not fresh ones');
       expect(b.pendingOps(), isNotEmpty, reason: 'resend: the restored ops go out on the next sync');
     });
