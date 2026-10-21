@@ -6,6 +6,9 @@
 #   tools/build.sh format   rewrite Dart files with `dart format` (page width in analysis_options.yaml)
 #   tools/build.sh apk      Android release APK   -> dist/BudgetWallet-android.apk
 #   tools/build.sh linux    Linux release bundle  -> dist/BudgetWallet-linux-x64.tar.gz
+#   tools/build.sh web      Flutter web build (--wasm, JS if a dependency blocks it) -> dist/web/; fetches sqlite3.wasm first
+#                           (pinned by dev/sqlite3-wasm.sha256). Serve it with tools/web.sh
+#   tools/build.sh web-test [file…]   flutter test --platform chrome: app/test/web/ or the given files
 #   tools/build.sh all      test, then apk, linux, desktop-test and desktop-smoke
 #   tools/build.sh desktop-test [name…]   app integration tests on the Linux desktop app under Xvfb: every
 #                           app/integration_test/*_test.dart, or just <name>_test.dart. Screenshots -> dist/screens/linux/<name>/,
@@ -46,7 +49,7 @@ CMD=${1:-test}
 # shellcheck source=tools/timing.sh
 source "$ROOT/tools/timing.sh"
 
-usage() { sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 # ---- host side: hand the command to the container ----
 if [[ "${BW_NATIVE:-}" != 1 ]]; then
@@ -57,14 +60,42 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
       podman build --build-arg FLUTTER_VERSION="$FLUTTER_VERSION" -t "$IMAGE" "$ROOT/dev"
     BW_COLD=1
   }
+  # sqlite3.wasm (the web build's SQLite) for the sqlite3 version in app/pubspec.lock: a release asset of the sqlite3.dart
+  # project, pinned by dev/sqlite3-wasm.sha256 ("<sha256>  sqlite3-<version>"), cached outside the repo, copied to the
+  # git-ignored app/web/sqlite3.wasm. The first fetch of a version writes its hash into that file (commit it).
+  fetch_sqlite_wasm() {
+    local ver cache want got pinned="$ROOT/dev/sqlite3-wasm.sha256"
+    ver=$(awk '/^  sqlite3:$/ {f=1} f && /version:/ {gsub(/"/, "", $2); print $2; exit}' "$ROOT/app/pubspec.lock")
+    [[ -n $ver ]] || { echo "no sqlite3 version in app/pubspec.lock" >&2; return 1; }
+    cache="${BW_DATA_DIR:-$HOME/.local/share/budget-wallet}/cache/sqlite3-$ver.wasm"
+    mkdir -p "$(dirname "$cache")"
+    if [[ ! -f $cache ]]; then
+      echo "fetching sqlite3.wasm $ver" >&2
+      curl -fsSL -o "$cache.part" "https://github.com/simolus3/sqlite3.dart/releases/download/sqlite3-$ver/sqlite3.wasm" \
+        || { rm -f "$cache.part"; echo "download of sqlite3.wasm $ver failed" >&2; return 1; }
+      mv "$cache.part" "$cache"
+    fi
+    got=$(sha256sum "$cache" | cut -d' ' -f1)
+    want=$(awk -v n="sqlite3-$ver" '$2 == n {print $1}' "$pinned" 2>/dev/null || true)
+    if [[ -z $want ]]; then
+      echo "$got  sqlite3-$ver" >> "$pinned"
+      echo "pinned sqlite3.wasm $ver: $got (written to dev/sqlite3-wasm.sha256: commit it)" >&2
+    elif [[ $want != "$got" ]]; then
+      rm -f "$cache"
+      echo "sqlite3.wasm $ver sha256 mismatch: pinned $want, got $got (cache deleted)" >&2
+      return 1
+    fi
+    cp "$cache" "$ROOT/app/web/sqlite3.wasm"
+  }
   run=()  # the container writes logs and history into this run (tools/timing.sh)
   case "$CMD" in
     image) build_image; exit ;;
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
-    test|lint|apk|linux|all|importer|core|app|desktop-test|desktop-smoke|perf) run_begin "$CMD" ;;
+    test|lint|apk|linux|all|importer|core|app|desktop-test|desktop-smoke|perf|web|web-test) run_begin "$CMD" ;;
     format|shell|lsp|mcp) ;;
     *) usage ;;
   esac
+  [[ "$CMD" == web ]] && { fetch_sqlite_wasm || exit 1; }
   # Build output goes to stderr (stdout belongs to the LSP client in `lsp` mode)
   podman image exists "$IMAGE" || build_image
   if [[ "$CMD" == lsp ]]; then
@@ -286,6 +317,37 @@ build_linux() {
   local cold=false; [[ -d app/build/linux ]] || cold=true
   step linux 'cd app && flutter build linux --release && tar -C build/linux/x64/release -czf ../dist/BudgetWallet-linux-x64.tar.gz bundle' "$cold"
 }
+
+# web_blockers <log>: the packages with compile errors in a wasm build log (pub packages by name, path packages, the app)
+# shellcheck disable=SC2329
+web_blockers() {
+  { grep -E ': Error: ' "$1" | grep -oP '^(/cache/pub/hosted/[^/]+/\K[a-z0-9_]+(?=-[0-9])|\S*packages/\K[a-z0-9_]+|lib/\K[a-z]+)' || true; } |
+    sort -u | paste -sd, - | grep . || echo "unknown, see web-wasm.log"
+}
+# web: --wasm (WasmGC) first; a dependency that doesn't compile to it falls back to the JS build, with one line saying which.
+# shellcheck disable=SC2329  # called by name through a step
+build_web() {
+  local mode=wasm
+  [[ -f app/web/sqlite3.wasm ]] || { echo "app/web/sqlite3.wasm missing (tools/build.sh web fetches it on the host)"; return 1; }
+  if (cd app && flutter build web --wasm --release) > "$LOGS/web-wasm.log" 2>&1; then
+    cat "$LOGS/web-wasm.log"
+  else
+    mode=js
+    echo "wasm build failed; blocked by: $(web_blockers "$LOGS/web-wasm.log")"
+    (cd app && flutter build web --release) || return 1
+  fi
+  rm -rf dist/web && mkdir -p dist && cp -r app/build/web dist/web
+  echo "web build mode: $mode -> dist/web"
+}
+# web_test [file…]: flutter test --platform chrome on app/test/web (or the given files, relative to app/ or the repo root)
+# shellcheck disable=SC2329
+web_test() {
+  local f files=()
+  for f in "$@"; do f=${f#"$ROOT/"}; files+=("${f#app/}"); done
+  ((${#files[@]})) || files=(test/web)
+  (cd app && flutter test --platform chrome --no-pub "${files[@]}")
+}
+export -f web_blockers build_web web_test
 
 # ---- Linux desktop under Xvfb (desktop-test, desktop-smoke) ----
 # headless <dir> <cmd...>: run cmd on a virtual X display (Mesa software GL) inside a private D-Bus session, with the
@@ -549,6 +611,8 @@ case "$CMD" in
   linux)  build_linux ;;
   desktop-test)  run_pub; [[ $failed == 0 ]] && desktop_tests "${@:2}" ;;
   perf)   run_pub; [[ $failed == 0 ]] && step perf perf_run ;;
+  web)    run_pub; [[ $failed == 0 ]] && step web build_web ;;
+  web-test) run_pub; [[ $failed == 0 ]] && step web-test "web_test$( (($# > 1)) && printf " %q" "${@:2}")" ;;
   desktop-smoke) build_linux; [[ $failed == 0 ]] && step desktop-smoke desktop_smoke ;;
   all)    run_pub; [[ $failed == 0 ]] && steps "${LINT[@]}" "${TESTS[@]}"
           if [[ $failed == 0 ]]; then build_apk; build_linux; desktop_tests; step desktop-smoke desktop_smoke; fi ;;

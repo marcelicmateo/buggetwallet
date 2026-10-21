@@ -45,3 +45,6 @@ key.properties
 
 # Lockfiles of the internal Dart packages (the app lockfile is committed)
 packages/*/pubspec.lock
+
+# Web build: SQLite wasm fetched by tools/build.sh web (pinned in dev/sqlite3-wasm.sha256)
+app/web/sqlite3.wasm

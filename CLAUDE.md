@@ -25,7 +25,7 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
   names, the key, paths or file names (see package `CLAUDE.md`s).
 
 ## Local builds (owner's laptop)
-`tools/build.sh test|lint|format|apk|linux|desktop-test|desktop-smoke|perf|all|shell|lsp` runs the CI steps in a rootless **Podman** container
+`tools/build.sh test|lint|format|apk|linux|desktop-test|desktop-smoke|perf|web|web-test|all|shell|lsp` runs the CI steps in a rootless **Podman** container
 (not Docker), image from `dev/Containerfile`, Flutter version pinned by `environment: flutter:` in `app/pubspec.yaml`
 (CI reads the same line). Outputs land in `dist/` (git-ignored). Run `tools/build.sh test` before pushing.
 The scripts assume a Linux host: Bash 5, GNU tools (`grep -P`, `sha256sum`, `base64 -w0`), Python 3, Podman.
@@ -62,6 +62,7 @@ Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't 
   `<action>.timeline.json` (DevTools/Perfetto) and `.timeline_summary.json` in the run's logs, appends `history/perf.jsonl`
   and fails on budget overruns (`app/test_driver/perf_budget.dart`). Not in `test`/`all`/CI. It rebuilds the profile bundle from scratch each time (stale build state after a killed run made `flutter drive` stall after "Built"); a headless step that hangs is killed after 20 min (`BW_HEADLESS_TIMEOUT`). Software GL under Xvfb: raster
   numbers are not a GPU's.
+- **Web (local only, never published):** `tools/build.sh web` builds `flutter build web --wasm` (JS fallback) into `dist/web/` (fetches `sqlite3.wasm`, pinned in `dev/sqlite3-wasm.sha256`, git-ignored); `tools/web.sh serve|stop|status` serves it on 127.0.0.1, `tools/web.sh shot <path> <out.png>` screenshots it with the image's Chrome; `tools/build.sh web-test` runs `app/test/web/` with `flutter test --platform chrome`.
 - **Live mode (fast UI work):** `tools/live.sh start [--demo] [--headless] [--profile] [--fresh]` runs `flutter run -d linux`
   in the container in the background (window on the owner's desktop; `--demo` = synthetic demo wallet). Then
   `reload`, `restart`, `shot [file]`, `trace start|stop [name]` (timeline + frame summary in the run dir; use
