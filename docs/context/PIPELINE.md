@@ -26,6 +26,15 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 Agent models: ci-watcher haiku/low; test-writer, devops sonnet/medium; ui-builder sonnet/high; core-builder, reviewer Fable/high.
 Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the lead from the branch named in "Base".
 
+## Resume here (2026-10-21, laptop shut down mid-stage W)
+- W1 done: branch `worktree-agent-af1e542b8b131808b` (f2a970a). Merge first.
+- W2 core-builder was in `.claude/worktrees/agent-a69da03d9875b809c` (branch `worktree-agent-a69da03d9875b809c`), W3 ui-builder
+  in `.claude/worktrees/agent-a7b98358b77f12dd1` (branch `worktree-agent-a7b98358b77f12dd1`). Both were told to make a `WIP:`
+  commit; if the branch is still at 87adbbd, the work is uncommitted in the worktree: commit it there before anything else.
+- Next session: resume each builder (new agent, same brief as in the session transcript: the W2/W3 rows below) on its
+  worktree, finish, then stage W: merge W2 → W1 → W3 into `v2`, drop `app/lib/src/core_shim.dart`, reviewer, Haiku full run +
+  `tools/build.sh web-test`, `tools/build.sh web` + `tools/web.sh serve` + `shot`, commit, push (no CI).
+
 ## Queue (2026-10-20)
 | # | Item | Agent | Base | Depends on | Status |
 |---|---|---|---|---|---|
@@ -63,7 +72,7 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | G1 | M5 Polish build: core (`backup.dart`, `export.dart`, `search.dart`) + UI (Plan › Backup, Export, search on Spending) + spec tests (backup round-trip, CSV exactness, amount parsing) | core-builder + ui-builder + test-writer | polish-core, polish-ui, polish-tests (from 2bff25d) | G0 | done (6d1cd3e, 3a481fd; reviewed, 4 low notes: 2 fixed, 2 noted) |
 | G | M5 stage: full run green (193/770/635, desktop 14, perf ok, emulator 14 PNGs), pushed; CI watched | lead | v2 | G1 | done |
 | I0 | Web version spec: DESIGN_DECISIONS §4.8 | lead | – | G | approved 2026-10-21 (localhost only, passphrase key, before sync redesign) |
-| W1 | Web build plumbing: `app/web/` scaffold, Chrome in the container, `tools/build.sh web` (pinned `sqlite3.wasm`, wasm build with JS fallback), `tools/web.sh serve|shot`, `tools/build.sh web-test` | devops | web-build (from 87adbbd) | I0 | running |
+| W1 | Web build plumbing: `app/web/` scaffold, Chrome in the container, `tools/build.sh web` (pinned `sqlite3.wasm`, wasm build with JS fallback), `tools/web.sh serve|shot`, `tools/build.sh web-test` | devops | worktree-agent-af1e542b8b131808b (from 87adbbd) | I0 | done (f2a970a; Chrome 156 in image +0.48 GB, wasm plumbing verified with a stub; real build waits for W2) |
 | W2 | `wallet_core` compiles for the web: `CommonDatabase` + `WalletRepo.fromDatabase`, `archive` gzip, `backupBytes`/`restoreBackupBytes`, `LogSink` + `MemoryLogSink`, conditional exports for FolderSync / file backups / RotatingFileSink | core-builder | web-core (from 87adbbd) | I0 | running |
 | W3 | App web twins: `wallet_db.dart` (wasm + IndexedDB VFS), passphrase `KeyStore`, memory log + download, no nudges/sync folder on web, Backup download/upload, "Forget this browser", onboarding passphrase step | ui-builder | web-ui (from 87adbbd) | I0 (shims W2 until it lands) | running |
 | W | Web stage: merge W2 → W1 → W3, review, Haiku full run + `web-test`, localhost screenshots, push (no CI) | lead | v2 | W1–W3 | queued |
