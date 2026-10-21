@@ -63,6 +63,15 @@ RUN apt-get update \
 COPY install-lint-tools.sh /tmp/
 RUN /tmp/install-lint-tools.sh /usr/local/bin && rm /tmp/install-lint-tools.sh
 
+# Google Chrome stable (web builds' `flutter test --platform chrome`, tools/web.sh shot). The .deb from dl.google.com, no snap.
+# Root in a rootless container can't use Chrome's sandbox, so CHROME_EXECUTABLE is a wrapper that adds --no-sandbox.
+RUN curl -fsSL -o /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+ && apt-get update && apt-get install -y --no-install-recommends /tmp/chrome.deb \
+ && rm -rf /var/lib/apt/lists/* /tmp/chrome.deb \
+ && printf '#!/bin/sh\nexec /opt/google/chrome/chrome --no-sandbox --disable-gpu --disable-dev-shm-usage "$@"\n' > /usr/local/bin/chrome-bw \
+ && chmod +x /usr/local/bin/chrome-bw
+ENV CHROME_EXECUTABLE=/usr/local/bin/chrome-bw
+
 # Rootless Podman: root in here is the host user. Flutter's "running as root" warning is skipped in containers it
 # recognizes by this marker file (it only checks for /.dockerenv).
 RUN touch /.dockerenv
