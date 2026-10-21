@@ -70,14 +70,17 @@ class AndroidNudges implements NudgePlatform {
             channelDescription: 'Short, friendly reminders. They never show amounts.',
             importance: Importance.defaultImportance,
             priority: Priority.defaultPriority));
+    final now = tz.TZDateTime.now(tz.local);
     var n = 0;
-    for (final (i, s) in slots.indexed) {
+    for (final s in slots) {
       final d = parseIso(s.date);
+      final at = tz.TZDateTime(tz.local, d.year, d.month, d.day, s.hour, s.minute);
+      if (!at.isAfter(now)) continue; // the plugin throws on a past time, which would drop every later slot
       await p.zonedSchedule(
-        id: i,
+        id: n,
         title: s.title,
         body: s.body,
-        scheduledDate: tz.TZDateTime(tz.local, d.year, d.month, d.day, s.hour, s.minute),
+        scheduledDate: at,
         notificationDetails: details,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       );
