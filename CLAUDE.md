@@ -16,7 +16,8 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 - Each package has its own short `CLAUDE.md` (files, rules, how to test). Read the one for the code you touch.
 - `tools/` — `build.sh` (local builds, lint, format, LSP, MCP), `emulator.sh`, `live.sh` + `live_vm.py`, `build-times.sh` + `build_log.py` +
   `timing.sh` (run logs and timing history), `ci-status.sh` (CI results), `make-signing-key.sh`, `install-hooks.sh`,
-  `make_fixtures.py`, `log-summary.py` (summary of an app log). `dev/` — `Containerfile` and `install-lint-tools.sh`.
+  `make_fixtures.py`, `log-summary.py` (summary of an app log), `token-usage.py` (Claude token use per day/session/model/commit,
+  from local transcripts). `dev/` — `Containerfile` and `install-lint-tools.sh`.
 - **App logs:** the app logs to `<app support dir>/logs/bw-YYYY-MM-DD.log` (debug level by default while testing; Plan ›
   Diagnostics changes the level and saves all logs as one file). `tools/emulator.sh screens` also writes
   `dist/logs/app-emulator.log`. Read one with `python3 -I tools/log-summary.py <file>`; logs the owner sends go in
