@@ -81,6 +81,8 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   spreadsheets), search over transactions, goals, wishlist and expected bills (Spending icon or Ctrl+F; text with accent
   folding, or an exact amount such as `12,50`). Core 770 / app 634 tests. CI now builds only the APK, the Linux bundle and
   the dev release (test jobs on demand with `[ci tests]`), each as its own job.
+- 2026-10-21: `v2` (M4 Habits + M5 Polish, 4b16240) merged into `master` by fast-forward (owner request). The master push runs
+  `release.yml` for all five platforms and refreshes the `dev-all` release.
 
 ## Decisions log
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
