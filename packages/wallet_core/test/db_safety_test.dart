@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:sqlite3/common.dart' show CommonDatabase;
 import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -31,7 +32,7 @@ CREATE TABLE IF NOT EXISTS outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT
 CREATE TABLE IF NOT EXISTS peer_files(device TEXT NOT NULL, file TEXT NOT NULL, PRIMARY KEY(device, file));
 ''';
 
-Map<String, Set<String>> _columns(Database db) => {
+Map<String, Set<String>> _columns(CommonDatabase db) => {
       for (final t in db.select("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"))
         t['name'] as String: {for (final c in db.select('PRAGMA table_info(${t['name']})')) c['name'] as String},
     };
