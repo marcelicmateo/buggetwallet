@@ -1,13 +1,19 @@
 import 'dart:convert';
-import 'dart:io' show gzip;
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart' show GZipDecoder, GZipEncoder;
 import 'package:cryptography/cryptography.dart';
 
 import 'logs.dart';
 
 final _log = Logger('bw.vault');
+
+// gzip from `package:archive` so this file compiles for the web too: on the VM it delegates to `dart:io`'s codec
+// (the same bytes as before), in the browser it is pure Dart. Both write one standard gzip member, which is all
+// [_wholeGzip] and older builds rely on.
+const _gzip = GZipEncoder();
+const _gunzip = GZipDecoder();
 
 /// Why [unseal] refused a file, for sync bookkeeping (the message is for people).
 enum UnsealFailure {
@@ -118,7 +124,7 @@ final _aead = Xchacha20.poly1305Aead();
 /// Logs `vault.seal` on `bw.perf` with the plain and sealed sizes.
 Future<Uint8List> seal(List<int> plain, VaultKey key) async {
   final t = PerfTimer('vault.seal', warnMs: 500);
-  final zipped = gzip.encode(plain);
+  final zipped = _gzip.encodeBytes(plain);
   final box = await _aead.encrypt(zipped, secretKey: SecretKey(key.bytes));
   final out = Uint8List.fromList([..._magic, ...box.nonce, ...box.mac.bytes, ...box.cipherText]);
   t.done({'plainBytes': plain.length, 'bytes': out.length});
@@ -153,7 +159,7 @@ Future<Uint8List> unseal(List<int> data, VaultKey key) async {
   final nonce = data.sublist(5, 29), mac = data.sublist(29, 45), cipher = data.sublist(45);
   try {
     final clear = await _aead.decrypt(SecretBox(cipher, nonce: nonce, mac: Mac(mac)), secretKey: SecretKey(key.bytes));
-    final out = Uint8List.fromList(gzip.decode(clear));
+    final out = _gunzip.decodeBytes(clear);
     if (!_wholeGzip(clear, out.length)) throw const FormatException('gzip data is cut off');
     t.done({'bytes': data.length, 'plainBytes': out.length});
     return out;

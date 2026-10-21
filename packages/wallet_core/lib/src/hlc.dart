@@ -77,8 +77,10 @@ class HlcClock {
   Hlc _next(int millis, int counter) =>
       counter > Hlc.maxCounter && millis < _maxInt ? Hlc(millis + 1, 0, node) : Hlc(millis, counter, node);
 
-  /// The largest 64-bit int (millis and counters never wrap past it).
-  static const _maxInt = 9223372036854775807;
+  /// The largest int (millis and counters never wrap past it): 2^63 − 1 on the VM and dart2wasm. On dart2js ints are
+  /// doubles, the literal cannot be written (compile error) and the largest exact one is 2^53 − 1; `identical(1, 1.0)`
+  /// is true only there. Parsed at start-up because the literal is refused at compile time on that platform.
+  static final _maxInt = identical(1, 1.0) ? 9007199254740991 : int.parse('9223372036854775807');
 
   /// counter + 1, stopping at the largest int instead of wrapping negative.
   static int _inc(int counter) => counter == _maxInt ? counter : counter + 1;

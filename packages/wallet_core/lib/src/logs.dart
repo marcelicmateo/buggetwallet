@@ -1,18 +1,19 @@
-// Logging for Budget Wallet: structured events, one-line format, rotating log files, perf timers, frame stats.
+// Logging for Budget Wallet: structured events, one-line format, log sinks, perf timers, frame stats.
+// This file compiles for the web; the rotating file sink (dart:io) is in `logs_io.dart`.
 //
 // Privacy (hard rule): log event names, counts, durations, sizes, built-in category names, period dates, setting
 // keys and enum states only. Never money amounts, descriptions, merchant names, notes, wish/goal names, account
 // numbers, the wallet key, sync file contents, paths or bank file names. Errors are printed through [describeError],
 // which drops the parts of common exceptions that can carry data (FormatException source, SQL parameters, paths).
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:logging/logging.dart';
-import 'package:sqlite3/sqlite3.dart' show SqliteException;
+import 'package:sqlite3/common.dart' show SqliteException;
 import 'package:wallet_importer/wallet_importer.dart' show ImportException;
 
+import 'platform_error_io.dart' if (dart.library.js_interop) 'platform_error_web.dart' as platform;
 import 'sync.dart' show SyncException;
 import 'vault.dart' show VaultException;
 
@@ -64,6 +65,9 @@ String describeError(Object? e) {
   if (e != null) {
     final hooked = describeErrorHook?.call(e);
     if (hooked != null) return hooked;
+    // dart:io errors (FileSystemException: the path can name a bank export or contain the user's name); none on the web.
+    final io = platform.describePlatformError(e);
+    if (io != null) return io;
   }
   switch (e) {
     case SqliteException():
@@ -72,9 +76,6 @@ String describeError(Object? e) {
       if (e.explanation != null) b.write(', ${e.explanation}');
       if (e.causingStatement != null) b.write(' [statement: ${e.causingStatement}]');
       return b.toString();
-    case FileSystemException():
-      // The path can name a bank export or contain the user's name.
-      return '${e.runtimeType}: ${e.message}${e.osError != null ? ' (${e.osError})' : ''}';
     case FormatException():
       // The source excerpt can be decrypted sync data or a bank file line.
       return 'FormatException: ${e.message}${e.offset != null ? ' (at offset ${e.offset})' : ''}';
@@ -234,150 +235,60 @@ class FrameStats {
   }
 }
 
-class _Chunk {
-  final String day;
-  final List<String> lines = [];
-  _Chunk(this.day);
+/// Where formatted log lines go: `RotatingFileSink` (files, native) or [MemoryLogSink] (web, tests).
+abstract interface class LogSink {
+  /// Takes one formatted line; never blocks on I/O.
+  void add(String line);
+
+  /// Writes what [add] buffered.
+  Future<void> flush();
+
+  /// Flushes; later [add] calls are dropped.
+  Future<void> close();
 }
 
-final _logName = RegExp(r'^bw-(\d{4}-\d{2}-\d{2})(?:\.(\d+))?\.log$');
-
-/// Appends formatted lines to `<dir>/bw-YYYY-MM-DD.log`, buffered; rotates by day and when a file exceeds
-/// [maxFileBytes] (continues in `bw-YYYY-MM-DD.1.log`, `.2`, …); deletes oldest files so the total stays
-/// under [maxTotalBytes]. `flush()` writes the buffer; `close()` flushes and closes.
-///
-/// [add] never touches the disk: it appends to memory and schedules a flush within [flushDelay].
-class RotatingFileSink {
-  final Directory dir;
-  final int maxFileBytes, maxTotalBytes;
-  final DateTime Function() _now;
-
-  /// How long [add] waits before writing the buffer (spec: at most 1 s).
-  Duration flushDelay = const Duration(seconds: 1);
-
-  /// Last write error (the sink cannot log its own failures), and how many writes failed.
-  Object? lastError;
-  int errors = 0;
-
-  final List<_Chunk> _pending = [];
-  Future<void> _chain = Future.value();
-  Timer? _timer;
+/// Keeps the newest lines in memory, up to [maxBytes] of UTF-8 (default 2 MiB): the oldest lines go first, counted
+/// in [dropped]; the newest line is always kept, even when it is larger than [maxBytes] on its own. [dump] is the
+/// buffer as one text (lines joined with `\n`), what the web app offers for download.
+class MemoryLogSink implements LogSink {
+  final int maxBytes;
+  final Queue<String> _lines = Queue();
+  int _bytes = 0, _dropped = 0;
   bool _closed = false;
-  String? _curDay;
-  int _curIndex = 0, _curSize = 0, _total = 0;
 
-  RotatingFileSink(this.dir, {this.maxFileBytes = 2 * 1024 * 1024, this.maxTotalBytes = 20 * 1024 * 1024, DateTime Function()? now})
-      : _now = now ?? DateTime.now;
+  MemoryLogSink({this.maxBytes = 2 * 1024 * 1024}) {
+    if (maxBytes <= 0) throw ArgumentError.value(maxBytes, 'maxBytes', 'must be positive');
+  }
 
-  static String _day(DateTime t) => '${t.year.toString().padLeft(4, '0')}-${_two(t.month)}-${_two(t.day)}';
+  /// The lines held, oldest first (a copy).
+  List<String> get lines => List.unmodifiable(_lines);
 
-  String _path(String day, int index) => '${dir.path}${Platform.pathSeparator}bw-$day${index == 0 ? '' : '.$index'}.log';
+  /// Lines removed to stay under [maxBytes].
+  int get dropped => _dropped;
 
+  /// Bytes (UTF-8, plus one per line for the newline) currently held.
+  int get bytes => _bytes;
+
+  @override
   void add(String line) {
     if (_closed) return;
-    final day = _day(_now());
-    if (_pending.isEmpty || _pending.last.day != day) _pending.add(_Chunk(day));
-    _pending.last.lines.add(line);
-    _timer ??= Timer(flushDelay, () {
-      _timer = null;
-      unawaited(flush());
-    });
+    _lines.add(line);
+    _bytes += utf8.encode(line).length + 1;
+    while (_bytes > maxBytes && _lines.length > 1) {
+      _bytes -= utf8.encode(_lines.removeFirst()).length + 1;
+      _dropped++;
+    }
   }
 
-  Future<void> flush() {
-    _timer?.cancel();
-    _timer = null;
-    if (_pending.isEmpty) return _chain;
-    final work = [..._pending];
-    _pending.clear();
-    return _chain = _chain.then((_) => _write(work));
-  }
+  /// Everything held, joined with `\n` (no trailing newline).
+  String dump() => _lines.join('\n');
 
-  Future<void> close() async {
-    if (_closed) return _chain;
-    final f = flush();
+  @override
+  Future<void> flush() => Future.value();
+
+  @override
+  Future<void> close() {
     _closed = true;
-    await f;
-  }
-
-  Future<void> _write(List<_Chunk> work) async {
-    try {
-      await dir.create(recursive: true);
-      for (final c in work) {
-        if (c.day != _curDay) await _open(c.day);
-        final out = BytesBuilder(copy: false);
-        for (final line in c.lines) {
-          final bytes = utf8.encode('$line\n');
-          if (_curSize > 0 && _curSize + out.length + bytes.length > maxFileBytes) {
-            await _append(out.takeBytes());
-            _curIndex++;
-            _curSize = 0;
-            if (_total > maxTotalBytes) await _trim();
-          }
-          out.add(bytes);
-        }
-        await _append(out.takeBytes());
-      }
-      if (_total > maxTotalBytes) await _trim();
-    } catch (e) {
-      lastError = e;
-      if (errors++ == 0) {
-        // The sink can't log to itself; say it once on the console (stdout reaches logcat/terminal).
-        // ignore: avoid_print
-        print('${formatLogTime(DateTime.now())} SEVERE bw.logs log.writeFailed ${describeError(e)}');
-      }
-      _curDay = null; // re-scan the folder next time
-    }
-  }
-
-  /// Picks the newest file of [day] and measures the folder (once per day or after an error, not per flush).
-  Future<void> _open(String day) async {
-    var index = 0;
-    _total = 0;
-    for (final f in files()) {
-      _total += await f.length();
-      final m = _logName.firstMatch(_baseName(f));
-      if (m != null && m[1] == day) index = int.parse(m[2] ?? '0');
-    }
-    final f = File(_path(day, index));
-    _curDay = day;
-    _curIndex = index;
-    _curSize = await f.exists() ? await f.length() : 0;
-    if (_total > maxTotalBytes) await _trim();
-  }
-
-  Future<void> _append(List<int> bytes) async {
-    if (bytes.isEmpty) return;
-    await File(_path(_curDay!, _curIndex)).writeAsBytes(bytes, mode: FileMode.append);
-    _curSize += bytes.length;
-    _total += bytes.length;
-  }
-
-  /// Deletes the oldest files (never the one being written) until the total is under [maxTotalBytes].
-  Future<void> _trim() async {
-    final all = files();
-    final sizes = [for (final f in all) await f.length()];
-    _total = sizes.fold<int>(0, (s, x) => s + x);
-    final current = _path(_curDay!, _curIndex);
-    for (var i = 0; i < all.length && _total > maxTotalBytes; i++) {
-      if (all[i].path == current) continue;
-      await all[i].delete();
-      _total -= sizes[i];
-    }
-  }
-
-  static String _baseName(FileSystemEntity f) => f.path.split(Platform.pathSeparator).last;
-
-  /// All log files, oldest first.
-  List<File> files() {
-    if (!dir.existsSync()) return const [];
-    final found = <(String, int, File)>[];
-    for (final e in dir.listSync()) {
-      if (e is! File) continue;
-      final m = _logName.firstMatch(_baseName(e));
-      if (m != null) found.add((m[1]!, int.parse(m[2] ?? '0'), e));
-    }
-    found.sort((a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2));
-    return [for (final (_, _, f) in found) f];
+    return Future.value();
   }
 }

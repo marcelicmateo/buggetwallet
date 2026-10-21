@@ -3,6 +3,26 @@
 Pure Dart (no Flutter): SQLite repo, field-level change log with HLC, encrypted folder sync, categories,
 budget engine. **All money logic lives here**, so it can be unit-tested without the UI.
 
+## Web rule (§4.8: the barrel compiles for the web)
+`package:wallet_core/wallet_core.dart` must compile with dart2js and dart2wasm, with identical behaviour on native.
+Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:sqlite3/sqlite3.dart` unconditionally.
+- Database code uses `package:sqlite3/common.dart` (`WalletRepo.db` is a `CommonDatabase`). `WalletRepo.open(path)` /
+  `inMemory()` go through `sqlite_io.dart` (native) or `sqlite_web.dart` (throws); the web app opens a
+  `package:sqlite3/wasm.dart` database itself and calls `WalletRepo.fromDatabase(db, file:)` (same pragmas/migrations).
+- dart:io code lives in `*_io.dart` files with a `*_web.dart` twin of the same public names that throws
+  `UnsupportedError`; the barrel picks one with `export 'src/x_io.dart' if (dart.library.js_interop) 'src/x_web.dart';`:
+  `backup_io.dart` (`writeBackup`, `restoreBackup`, `listBackups`, `backupsFolder`, `backupPath`), `logs_io.dart`
+  (`RotatingFileSink`), `folder_sync_io.dart` (`FolderSync`). `platform_error_io/web.dart` give `describeError` its
+  dart:io case. New dart:io code goes in one of these (or a new pair), never in a shared file.
+- gzip comes from `package:archive` (`vault.dart`): on the VM it is `dart:io`'s codec (same bytes as before), in the
+  browser pure Dart; both write one standard gzip member, which is what `_wholeGzip` and older builds check.
+  `test/web_core_test.dart` pins that dart:io members unseal and that pure-Dart members are accepted.
+- `hlc.dart`: no int literal above 2^53 (dart2js refuses it); `_maxInt` is 2^53 − 1 there, 2^63 − 1 elsewhere.
+- Compile check (after `dart pub get` in the package): `tools/build.sh shell -c 'cd packages/wallet_core && dart compile js
+  -o /tmp/web_smoke.js tool/web_smoke.dart && dart compile wasm -o /tmp/web_smoke.wasm tool/web_smoke.dart'`
+  (`tool/web_smoke.dart` imports the barrel and uses `WalletRepo.fromDatabase`, `backupBytes`, `MemoryLogSink`,
+  `seal`/`unseal`; dart2wasm wants a `.wasm` output name). Run it whenever an import changes.
+
 ## Files
 - `repo.dart` — `WalletRepo`: schema, reads, and every write. Writes go through `_write(...)` so each one
   becomes a sync op; never `db.execute` an INSERT/UPDATE on a data table directly. `_apply` checks each field's
@@ -97,9 +117,12 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   once through `_write` and reconciled, `revolutExchangeType`; 5 = the `recurring` entity). Opening an existing database with an older version
   clears `peer_files` once, so the next sync re-reads every file and applies ops (or fields) the older build skipped.
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption; `UnsealFailure` says why a
-  file was refused), `sync.dart` (FolderSync).
+  file was refused), `sync.dart` (`SyncException`, `SyncReport`; web-safe) + `folder_sync_io.dart` (`FolderSync`).
 - `backup.dart` — backups (M5, owner decision 2026-10-20: only into the sync folder, encrypted with the wallet key,
-  restore only into an empty wallet). `writeBackup(repo, syncFolder, key, today:)` writes
+  restore only into an empty wallet). Pure half (web-safe): `backupFileName(today)` = `bw-backup-<today>.bwb`
+  (`ArgumentError` unless `YYYY-MM-DD`), `backupBytes(repo, key)` = the sealed payload, `restoreBackupBytes(repo,
+  bytes, key)` = everything a restore does once the bytes are in hand. File half (`backup_io.dart`):
+  `writeBackup(repo, syncFolder, key, today:)` writes `backupBytes` to
   `<syncFolder>/budget-wallet/backups/bw-backup-<today>.bwb` (`backupPath`, `backupsFolder`; temp file + rename, the
   same day's file is replaced) sealed with `seal()` like a sync file; payload UTF-8 JSON `{"v":1,"ops":[...]}` =
   `WalletRepo.snapshotOps()`: every row of every synced entity, deleted rows and settings included, as one op per
@@ -143,8 +166,11 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   so the file is not refused for good. The quarantine is separate from `peer_files`: a schema upgrade lists every
   peer file again, an unchanged badKey/corrupt file stays skipped, unknownVersion/applyFailed are tried once more.
 - `logs.dart` — logging (`package:logging`): `logEvent`/`logError` (structured events), `formatLogRecord` (one line,
-  errors via `describeError`, which drops SQL parameters, paths and FormatException sources), `RotatingFileSink`,
-  `timed`/`timedAsync`/`PerfTimer` (on `bw.perf`), `FrameStats`.
+  errors via `describeError`, which drops SQL parameters, paths and FormatException sources), `LogSink` (`add`,
+  `flush`, `close`) with `MemoryLogSink` (ring buffer by UTF-8 bytes, `maxBytes` default 2 MiB, oldest lines dropped
+  and counted in `dropped`, the newest line always kept; `lines`, `dump()` = lines joined with `\n`; the web app's
+  Diagnostics download) and `RotatingFileSink` (`logs_io.dart`, native), `timed`/`timedAsync`/`PerfTimer` (on
+  `bw.perf`), `FrameStats`.
 
 ## Rules
 - Amounts are `int` cents; expenses negative. Dates are `YYYY-MM-DD` strings.
@@ -208,7 +234,8 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
   (goals: `test/goal_contrib_test.dart`, quarantine: `test/sync_quarantine_test.dart`, hints: `test/kind_hint_test.dart`,
   own transfers incl. two devices: `test/transfers_test.dart`, budgets per category incl. the setting and two devices:
   `test/budget_vs_actual_test.dart`, recurring bills + weekly review incl. two devices: `test/habits_test.dart`, M5 backup
-  round trip incl. two devices + resend: `test/backup_test.dart`, CSV: `test/export_test.dart`, search: `test/search_test.dart`;
+  round trip incl. two devices + resend: `test/backup_test.dart`, CSV: `test/export_test.dart`, search: `test/search_test.dart`,
+  web-safe core (`fromDatabase`, `backupBytes`/`restoreBackupBytes`, `MemoryLogSink`, gzip compatibility): `test/web_core_test.dart`;
   `<feature>_edge_test.dart` and `<feature>_spec_test.dart` are spec-written tests). Multi-device sim in `test/support/sim.dart` (lists entities on its own): `Device` (own
   folder and database; `dbPath:` + `reopen()` simulate a restart or upgrade), `Net`, `dump`, `bookkeeping`.
 - Run: `tools/build.sh test` from the repo root (or `tools/build.sh shell`, then `cd packages/wallet_core && dart test`).
