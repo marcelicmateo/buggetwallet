@@ -28,7 +28,7 @@ class NormalizedBill {
   final BillSource source;
 
   /// Unique per bill, so the same bill read twice is one bill: `jir:<uuid>`, `zki:<hex>`,
-  /// `inv:<supplier id or IBAN>:<invoice no>`, `hub3:<IBAN>:<model reference>:<amount>`; `null` when unknown.
+  /// `inv:<supplier id or IBAN>:<invoice no>`, `hub3:<IBAN>:<model reference>:<amount>:<DESCRIPTION>`; `null` when unknown.
   final String? externalId;
 
   /// `YYYY-MM-DD`.

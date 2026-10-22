@@ -305,11 +305,15 @@ class SyncEngine {
 
     // 1. Upload: bill files first (a peer that reads a bill row can then fetch its file), then the ops.
     var (blobsSent, blobMissing) = await _uploadBlobs(repo);
+    final walletKnown = (state.devices[me]?.last ?? 0) > 0;
+    // 404 on a bill file of a wallet the relay knows: an older relay without blob storage.
+    var blobsUnsupported = blobMissing && walletKnown;
     final (sent, myLast) = await _upload(repo, state);
-    if (blobMissing && (state.devices[me]?.last ?? 0) == 0 && myLast > 0) {
+    if (blobMissing && !walletKnown && myLast > 0) {
       // A relay creates a wallet only with this device's first file: the files it refused before that go now.
-      final (more, _) = await _uploadBlobs(repo);
+      final (more, missingAgain) = await _uploadBlobs(repo);
       blobsSent += more;
+      blobsUnsupported = missingAgain;
     }
 
     // 2. + 3. Apply the other devices' files.
@@ -502,6 +506,7 @@ class SyncEngine {
       'blobsSent': blobsSent,
       'blobsDeleted': blobsDeleted,
       'blobsWaiting': repo.queuedBlobs().length,
+      'blobsUnsupported': blobsUnsupported,
     });
     return SyncReport(sent, received, filesRead,
         problems: problems,
@@ -509,6 +514,7 @@ class SyncEngine {
         waiting: waiting,
         blobsSent: blobsSent,
         blobsWaiting: repo.queuedBlobs().length,
+        blobsUnsupported: blobsUnsupported,
         devices: [
           for (final d in ids)
             SyncDevice(_short(d),
@@ -520,6 +526,8 @@ class SyncEngine {
   /// others. Returns (uploaded, whether one was refused as missing: a
   /// wallet the relay does not know yet, or an older relay without blobs).
   Future<(int, bool)> _uploadBlobs(WalletRepo repo) async {
+    // A queued file whose bill was deleted (or took another device's file) since it was added is never sent.
+    repo.dropOrphanBlobs();
     final queued = repo.queuedBlobs();
     if (queued.isEmpty) return (0, false);
     var sent = 0, failed = 0;

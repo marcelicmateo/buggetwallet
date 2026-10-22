@@ -96,11 +96,11 @@ def write_bills(d):
     hub3 = [
         {"payload": "\n".join(["HRVHUB30", "EUR", "000000000002550"] + payer + [
             "Primjer Energija d.o.o.", "Izmišljena 5", "21000 Mjesto", iban_a, "HR01", "2026-0042-1", "COST", "Pretplata 10/2026"]),
-         "bill": {"externalId": "hub3:%s:HR01 2026-0042-1:2550" % iban_a, "payee": "Primjer Energija d.o.o.", "iban": iban_a,
+         "bill": {"externalId": "hub3:%s:HR01 2026-0042-1:2550:PRETPLATA 10/2026" % iban_a, "payee": "Primjer Energija d.o.o.", "iban": iban_a,
                   "reference": "HR01 2026-0042-1", "description": "Pretplata 10/2026", "total": 2550, "currency": "EUR", "unsure": 0}},
         {"payload": "\r\n".join(["HRVHUB30", "EUR", "000000000012000"] + payer + [
             "Primjer Voda d.o.o.", "", "", iban_b, "HR99", "", "WTER", ""]) + "\r\n\r\n",
-         "bill": {"externalId": "hub3:%s:HR99:12000" % iban_b, "payee": "Primjer Voda d.o.o.", "iban": iban_b, "reference": "HR99",
+         "bill": {"externalId": "hub3:%s:HR99:12000:" % iban_b, "payee": "Primjer Voda d.o.o.", "iban": iban_b, "reference": "HR99",
                   "description": None, "total": 12000, "currency": "EUR", "unsure": 0}},
         {"payload": "\n".join(["HRVHUB30", "EUR", "000000000000999"] + payer + [
             "Primjer Klub", "Ulica 2", "31000 Mjesto", bad_iban, "HR00", "123", "OTHR", "Članarina"]),

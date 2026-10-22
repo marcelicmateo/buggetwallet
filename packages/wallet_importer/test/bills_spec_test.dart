@@ -152,15 +152,28 @@ void main() {
       expect(c.externalId, a.externalId);
     });
 
-    test('externalId is hub3:<IBAN>:<model reference>:<amount> and differs per amount or reference', () {
+    test('externalId is hub3:<IBAN>:<model reference>:<amount>:<description> and differs per amount, reference or description', () {
       final a = readHub3(lf(fields()))!;
       expect(a.externalId, startsWith('hub3:$iban:'));
       expect(a.externalId, contains('HR01'));
       expect(a.externalId, contains('1234-5678'));
-      // SPEC: the amount part is cents (the slip's own unit); only that the id ends with it is relied on.
-      expect(a.externalId, endsWith('12345'));
+      // B5a: the description (spaces made one, upper case) closes the id, after the amount in cents.
+      expect(a.externalId, endsWith(':12345:RACUN ZA STRUJU 10/2026'));
       expect(readHub3(lf(fields(amount: '000000000012346')))!.externalId, isNot(a.externalId));
       expect(readHub3(lf(fields(reference: '1234-5679')))!.externalId, isNot(a.externalId));
+      expect(readHub3(lf(fields(description: 'Racun za struju 11/2026')))!.externalId, isNot(a.externalId));
+      // Spacing and case of the same description give the same id.
+      expect(readHub3(lf(fields(description: 'racun  za struju 10/2026')))!.externalId, a.externalId);
+    });
+
+    test('B5a bug: a monthly flat fee (HR99, no reference, same amount) is a new bill each month', () {
+      // Before B5a the id had no period: next month's slip got the same id and was refused as a duplicate.
+      final march = readHub3(lf(fields(model: 'HR99', reference: '', description: 'Clanarina 03/2026')))!;
+      final april = readHub3(lf(fields(model: 'HR99', reference: '', description: 'Clanarina 04/2026')))!;
+      expect(march.externalId, isNotNull);
+      expect(april.externalId, isNot(march.externalId));
+      final none = readHub3(lf(fields(model: 'HR99', reference: '', description: '')))!;
+      expect(none.externalId, endsWith(':12345:'));
     });
 
     test('payer fields appear nowhere in the result', () {

@@ -7,6 +7,7 @@ import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'support/bill_helpers.dart';
 import 'support/sim.dart';
 import 'support/synthetic.dart';
 
@@ -70,7 +71,7 @@ void main() {
 
     test('a confirmed bill re-imported: money fields and dates never change; items and a file only when missing', () {
       final (id, _) = repo.importBill(slip(due: null, payee: null));
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       repo.importBill(slip(due: '2026-03-20', payee: 'Other', items: const [BillItem(name: 'X', amount: 1)]),
           file: const BlobRef(hash: 'aa', type: 'pdf', bytes: 10));
       final b = repo.bill(id)!;
@@ -100,7 +101,7 @@ void main() {
 
     test('a deleted bill read again comes back as a new review bill', () {
       final (id, _) = repo.importBill(slip());
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       repo.deleteBill(id);
       expect(repo.bills(), isEmpty);
       final (id2, isNew) = repo.importBill(slip(payee: 'Back'));
@@ -136,11 +137,11 @@ void main() {
     test('confirm needs a date and a total', () {
       final (a, _) = repo.importBill(slip(ext: 'jir:a', date: null));
       final (b, _) = repo.importBill(slip(ext: 'jir:b', total: null));
-      expect(() => repo.confirmBill(a), throwsArgumentError);
-      expect(() => repo.confirmBill(b), throwsArgumentError);
-      expect(() => repo.confirmBill('nope'), throwsArgumentError);
+      expect(() => repo.confirmWithCategory(a), throwsArgumentError);
+      expect(() => repo.confirmWithCategory(b), throwsArgumentError);
+      expect(() => repo.confirmWithCategory('nope'), throwsArgumentError);
       repo.updateBill(b, total: 100);
-      repo.confirmBill(b);
+      repo.confirmWithCategory(b);
       expect(repo.bill(b)!.confirmed, isTrue);
     });
   });
@@ -149,7 +150,7 @@ void main() {
     test('confirm creates it, edits follow, link closes it, unlink reopens it, delete removes it', () {
       final (id, _) = repo.importBill(slip());
       repo.updateBill(id, category: 'Groceries');
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       var p = plannedOf(id)!;
       expect((p.source, p.sourceRef, p.title, p.amount, p.date, p.category, p.status),
           (PlannedSource.bill, id, 'Synthetic Utility', 4599, '2026-03-10', 'Groceries', PlannedStatus.open));
@@ -170,13 +171,13 @@ void main() {
 
     test('no row for a due date already past, none without a due date; clearing the due date deletes it', () {
       final (past, _) = repo.importBill(slip(ext: 'jir:p', due: '2026-02-28'));
-      repo.confirmBill(past);
+      repo.confirmWithCategory(past);
       expect(plannedOf(past), isNull);
       final (none, _) = repo.importBill(slip(ext: 'jir:n', due: null));
-      repo.confirmBill(none);
+      repo.confirmWithCategory(none);
       expect(plannedOf(none), isNull);
       final (id, _) = repo.importBill(slip(ext: 'jir:c'));
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       expect(plannedOf(id)!.isOpen, isTrue);
       repo.updateBill(id, clearDueDate: true);
       expect(plannedOf(id)!.deleted, isTrue);
@@ -190,7 +191,7 @@ void main() {
       final (id, _) = repo.importBill(slip());
       repo.updateBill(id, category: 'Bills & subscriptions');
       repo.updateBill(id, category: 'Groceries');
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       var p = computePeriod(const [], st, const [], today, planned: repo.plannedCosts());
       expect(p.reservedPlanned, 4599);
       expect(p.flexBudget, base - 4599);
@@ -231,7 +232,7 @@ void main() {
 
     test('deleting the paying row makes the bill unpaid again at once', () {
       final (id, _) = repo.importBill(slip());
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       final tx = repo.addManual(date: '2026-03-01', amount: 4599, category: 'Groceries');
       repo.linkBill(id, tx);
       repo.deleteTransaction(tx);
@@ -243,7 +244,7 @@ void main() {
   group('auto link (deterministic, never by amount alone)', () {
     String confirmed(NormalizedBill b) {
       final (id, _) = repo.importBill(b);
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       return id;
     }
 
@@ -469,7 +470,7 @@ void main() {
       final key = VaultKey.generate();
       final (id, _) = repo.importBill(slip(), file: const BlobRef(hash: 'ab', type: 'jpg', bytes: 3));
       repo.putCachedBlob('ab', [1, 2, 3], queue: true);
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       final (gone, _) = repo.importBill(slip(ext: 'jir:gone'));
       repo.deleteBill(gone);
       expect(repo.isEmpty, isFalse);
@@ -495,7 +496,7 @@ void main() {
       addTearDown(sub.cancel);
       Logger.root.level = Level.ALL;
       final (id, _) = repo.importBill(slip());
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       repo.importBatch(rows([n('2026-03-05', -4599, 'Nalog', 'HR01 1234-5678')]));
       repo.updateBill(id, note: 'secret note');
       repo.deleteBill(id);
@@ -548,7 +549,7 @@ void main() {
       await round();
       await round();
       expect(a.repo.bills(), hasLength(1));
-      a.repo.confirmBill(idA);
+      a.repo.confirmWithCategory(idA);
       await round();
       await round();
       expect(b.repo.bill(idA)!.confirmed, isTrue, reason: "b's later import never undid the confirm");
@@ -566,7 +567,7 @@ void main() {
     test('auto link after sync: the bill from one device, the bank row from the other, linked once on both', () async {
       final a = device('a'), b = device('b');
       final (id, _) = a.repo.importBill(slip());
-      a.repo.confirmBill(id);
+      a.repo.confirmWithCategory(id);
       b.repo.importBatch(rows([n('2026-03-05', -4599, 'Nalog', 'HR01 1234-5678')]));
       for (var i = 0; i < 3; i++) {
         await round();

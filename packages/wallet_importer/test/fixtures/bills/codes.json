@@ -29,7 +29,7 @@
   {
    "payload": "HRVHUB30\nEUR\n000000000002550\nPero Probni\nProbna ulica 1\n10000 Grad\nPrimjer Energija d.o.o.\nIzmišljena 5\n21000 Mjesto\nHR9199900011000000017\nHR01\n2026-0042-1\nCOST\nPretplata 10/2026",
    "bill": {
-    "externalId": "hub3:HR9199900011000000017:HR01 2026-0042-1:2550",
+    "externalId": "hub3:HR9199900011000000017:HR01 2026-0042-1:2550:PRETPLATA 10/2026",
     "payee": "Primjer Energija d.o.o.",
     "iban": "HR9199900011000000017",
     "reference": "HR01 2026-0042-1",
@@ -42,7 +42,7 @@
   {
    "payload": "HRVHUB30\r\nEUR\r\n000000000012000\r\nPero Probni\r\nProbna ulica 1\r\n10000 Grad\r\nPrimjer Voda d.o.o.\r\n\r\n\r\nHR5199900023200000458\r\nHR99\r\n\r\nWTER\r\n\r\n\r\n",
    "bill": {
-    "externalId": "hub3:HR5199900023200000458:HR99:12000",
+    "externalId": "hub3:HR5199900023200000458:HR99:12000:",
     "payee": "Primjer Voda d.o.o.",
     "iban": "HR5199900023200000458",
     "reference": "HR99",

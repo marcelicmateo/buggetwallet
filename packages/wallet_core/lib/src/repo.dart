@@ -103,6 +103,7 @@ CREATE INDEX IF NOT EXISTS bills_linked ON bills(linked_tx);
 CREATE TABLE IF NOT EXISTS blob_cache(hash TEXT PRIMARY KEY, sealed BLOB NOT NULL, used_at INTEGER NOT NULL, bytes INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS blob_outbox(hash TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS blob_delete(hash TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS blob_own(hash TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS clocks(entity TEXT NOT NULL, id TEXT NOT NULL, field TEXT NOT NULL, hlc TEXT NOT NULL, PRIMARY KEY(entity, id, field));
 CREATE TABLE IF NOT EXISTS outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sync_cursor(device TEXT PRIMARY KEY, seq INTEGER NOT NULL);
@@ -578,6 +579,7 @@ class WalletRepo {
     if (_meta('match_pending') == null) return;
     _reconcile();
     refreshRecurring(_today());
+    dropOrphanBlobs();
     _purgeBlobCache();
   }
 
@@ -1216,7 +1218,12 @@ class WalletRepo {
   /// real `YYYY-MM-DD`, a total ≤ 0, items past the limits (cut to [maxBillItems], names to [maxBillItemName]). A
   /// [file] the bill does not take is dropped again (never uploaded, or deleted on the relay). A [file] type outside
   /// [blobTypes]: [ArgumentError].
-  (String, bool) importBill(NormalizedBill b, {BlobRef? file}) {
+  ///
+  /// [asNew] (the owner said "this is a new bill", e.g. next month's slip that reads exactly like this one): stored as
+  /// a separate bill even though a live bill has the same external id: id [Bill.idFor] of `<externalId>#<n>` with the
+  /// first n >= 1 not used by a live bill (a deleted copy is revived), external id unchanged. Two devices adding a copy
+  /// before they sync pick the same n, so their copies become one bill (the later import's read fields win).
+  (String, bool) importBill(NormalizedBill b, {BlobRef? file, bool asNew = false}) {
     if (file != null && !blobTypes.contains(file.type)) throw ArgumentError('Unknown file type.');
     String? text(String? s) => s == null || s.trim().isEmpty ? null : s.trim();
     final items = [
@@ -1240,8 +1247,14 @@ class WalletRepo {
       if (file != null) ...{'blob': file.hash, 'blob_type': file.type, 'blob_bytes': file.bytes},
     };
     final ext = read['external_id'] as String?;
-    final id = ext != null ? Bill.idFor(ext) : _newId('b');
-    final old = ext != null ? bill(id) : null;
+    var id = ext != null ? Bill.idFor(ext) : _newId('b');
+    var old = ext != null ? bill(id) : null;
+    if (asNew && old != null && !old.deleted) {
+      for (var n = 1; old != null && !old.deleted; n++) {
+        id = Bill.idFor('$ext#$n');
+        old = bill(id);
+      }
+    }
     final String event;
     var isNew = true, fileUsed = file != null;
     if (old == null) {
@@ -1289,12 +1302,15 @@ class WalletRepo {
       event = 'bills.reimport';
     }
     if (file != null && !fileUsed) _dropBlob(file.hash);
-    logEvent(_log, Level.INFO, event, {'source': b.source.name, 'file': fileUsed, 'items': items.length});
+    if (file != null && fileUsed) db.execute('INSERT OR IGNORE INTO blob_own(hash) VALUES(?)', [file.hash]);
+    logEvent(_log, Level.INFO, event, {'source': b.source.name, 'file': fileUsed, 'items': items.length, if (asNew) 'asNew': true});
     return (id, isNew);
   }
 
   /// Changes the given fields only (null = unchanged); the clear flags set those to none. A bad date, a total ≤ 0 or
-  /// items past the limits: [ArgumentError]. A confirmed bill's planned row follows ([_billWrites]).
+  /// items past the limits: [ArgumentError]. A confirmed bill's planned row follows ([_billWrites]). An update that
+  /// leaves a confirmed, unpaid bill with a total and a due date from today on without a category: [ArgumentError]
+  /// (its planned row reserves money, and only the category tells whether the payday plan already holds it).
   void updateBill(String id,
       {String? date,
       String? dueDate,
@@ -1334,18 +1350,22 @@ class WalletRepo {
       if (clearReturnBy) 'return_by': null else if (returnBy != null) 'return_by': returnBy,
     };
     if (fields.isEmpty) return;
-    _write(_billWrites(b, fields, _today()));
+    _write(_billWrites(b, fields, _today(), needCategory: true));
     logEvent(_log, Level.INFO, 'bills.update', {'fields': fields.length});
   }
 
   /// The owner checked the bill: review → confirmed. Needs a date and a total > 0, else [ArgumentError]. A due date
-  /// from today on gives it a planned row (reserved until paid); a matching bank row may now link it ([planBillLinks]):
-  /// at once while [syncCaughtUp], else at the next caught-up sync.
+  /// from today on gives it a planned row (reserved until paid), so an unpaid bill due from today on also needs a
+  /// category (set it with [updateBill] first; [suggestBillCategory] offers one), else [ArgumentError]: a slip in a
+  /// fixed category (Bills & subscriptions …) is already in the payday plan and must not be reserved again
+  /// ([PlannedCost.coveredByPlan]); one a confirmed recurring bill already plans is not reserved either
+  /// ([plannedCoveredBy], read time). A matching bank row may now link it ([planBillLinks]): at once while [syncCaughtUp], else at the next
+  /// caught-up sync.
   void confirmBill(String id) {
     final b = _liveBill(id);
     if (!_okDate(b.date)) throw ArgumentError('The bill needs a date.');
     if (!_okTotal(b.total)) throw ArgumentError('The bill needs a total.');
-    _write(_billWrites(b, {if (!b.confirmed) 'status': BillStatus.confirmed.name}, _today()));
+    _write(_billWrites(b, {if (!b.confirmed) 'status': BillStatus.confirmed.name}, _today(), needCategory: true));
     logEvent(_log, Level.INFO, 'bills.confirm', {'source': b.source.name});
     if (syncCaughtUp) {
       _autoLinkBills();
@@ -1423,12 +1443,18 @@ class WalletRepo {
   /// The writes for [fields] on bill [b], plus what keeps its planned row in step: a confirmed, unpaid, live bill with
   /// a total and a due date has one open row (created only while the due date is today or later; an existing row
   /// follows edits); a paid bill's row is marked paid with the payment; a deleted bill's row, or one whose due date or
-  /// total is gone, is deleted. Nothing is written for a row already as it should be.
-  List<(String, String, Map<String, Object?>)> _billWrites(Bill b, Map<String, Object?> fields, String today) {
+  /// total is gone, is deleted. Nothing is written for a row already as it should be. With [needCategory] (owner
+  /// edits): a bill that would reserve (confirmed, unpaid, total, due date from [today] on) without a category is an
+  /// [ArgumentError].
+  List<(String, String, Map<String, Object?>)> _billWrites(Bill b, Map<String, Object?> fields, String today, {bool needCategory = false}) {
     final n = Bill.fromRow({
       ...db.select('SELECT * FROM bills WHERE id = ?', [b.id]).first,
       ...fields
     });
+    final reserves = !n.deleted && n.confirmed && !n.paid && _okTotal(n.total) && _okDate(n.dueDate);
+    if (needCategory && reserves && n.dueDate!.compareTo(today) >= 0 && (n.category == null || n.category!.trim().isEmpty)) {
+      throw ArgumentError('The bill needs a category.');
+    }
     final pid = billPlannedId(b.id);
     final rs = db.select('SELECT * FROM planned WHERE id = ?', [pid]);
     final p = rs.isEmpty ? null : PlannedCost.fromRow(rs.first);
@@ -1468,6 +1494,19 @@ class WalletRepo {
   /// Links confirmed bills to their payments ([planBillLinks]) and closes their planned rows. Runs in [_reconcile]
   /// (only while caught up) and after a confirm. Logged as `bills.autoLink` on `bw.perf` with counts.
   void _autoLinkBills() {
+    // A payment deleted on any device: its bill is unpaid again here too (planned row reopened if still due). The
+    // deleting device did it at once (deleteTransaction); every other device does it on its next caught-up run.
+    final gone = [
+      for (final r in db.select('SELECT b.* FROM bills b JOIN tx t ON t.id = b.linked_tx WHERE b.deleted = 0 AND t.deleted = 1'))
+        Bill.fromRow(r)
+    ];
+    if (gone.isNotEmpty) {
+      final today = _today();
+      _write([
+        for (final b in gone) ..._billWrites(b, {'linked_tx': null}, today)
+      ]);
+      logEvent(_log, Level.INFO, 'bills.unlinkDeleted', {'bills': gone.length});
+    }
     final open = [
       for (final r in db.select("SELECT * FROM bills WHERE deleted = 0 AND status = 'confirmed' AND linked_tx IS NULL AND total > 0"))
         Bill.fromRow(r)
@@ -1548,11 +1587,30 @@ class WalletRepo {
   /// queued for deletion on the relay; the cached copy goes either way. Kept while a live bill points to it.
   void _dropBlob(String hash) {
     if (db.select('SELECT 1 FROM bills WHERE deleted = 0 AND blob = ?', [hash]).isNotEmpty) return;
+    db.execute('DELETE FROM blob_own WHERE hash = ?', [hash]);
     final queued = db.select('SELECT 1 FROM blob_outbox WHERE hash = ?', [hash]).isNotEmpty;
     db.execute('DELETE FROM blob_outbox WHERE hash = ?', [hash]);
     if (!queued) db.execute('INSERT OR IGNORE INTO blob_delete(hash) VALUES(?)', [hash]);
     db.execute('DELETE FROM blob_cache WHERE hash = ?', [hash]);
     logEvent(_log, Level.FINE, 'blob.drop', {'queued': queued});
+  }
+
+  /// Files this device attached to a bill (`blob_own`, device-local) that no live bill points to any more: the bill was
+  /// deleted on another device, or the same bill got another device's file (the later `blob` field wins). A queued
+  /// upload is forgotten (never sent), an uploaded one is queued for deletion on the relay; the cached copy goes. Runs
+  /// after a caught-up sync ([runPendingMatch]) and before uploading (`SyncEngine.run`); a file added but not yet
+  /// attached to a bill is never touched. Returns how many were dropped.
+  int dropOrphanBlobs() {
+    final orphans = [
+      for (final r in db.select('SELECT hash FROM blob_own WHERE hash NOT IN '
+          '(SELECT blob FROM bills WHERE deleted = 0 AND blob IS NOT NULL) ORDER BY hash'))
+        r['hash'] as String
+    ];
+    for (final h in orphans) {
+      _dropBlob(h);
+    }
+    if (orphans.isNotEmpty) logEvent(_log, Level.INFO, 'blob.orphans', {'files': orphans.length});
+    return orphans.length;
   }
 
   /// Cached files no live bill uses (bills deleted on another device): dropped, except those queued for upload.

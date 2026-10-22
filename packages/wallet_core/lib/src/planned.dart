@@ -151,8 +151,9 @@ List<String> billOccurrences(RecurringBill b, String from, String to) {
 /// too). Events with the same ref ([calendarEventRef]: same normalized title and date, from any calendar) are listed
 /// once: the one first by calendar id, uid, title, then notes, so every device picks the same whatever the list order.
 /// [billsDb] (`WalletRepo.bills()`): the `warrantyUntil` / `returnBy` dates of confirmed, live bills in range
-/// (title = payee, else description; amount null; a bill's planned row is already in [planned]). Sorted by date, then
-/// title, then key.
+/// (title = payee, else description; amount null; a bill's planned row is already in [planned]). A bill's planned row a
+/// confirmed recurring bill already plans ([plannedCoveredBy]) is left out: that bill's occurrence stands for it.
+/// Sorted by date, then title, then key.
 List<UpcomingItem> upcoming({
   required List<PlannedCost> planned,
   required List<RecurringBill> bills,
@@ -165,7 +166,7 @@ List<UpcomingItem> upcoming({
   bool inRange(String d) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
   final out = <UpcomingItem>[];
   for (final p in planned) {
-    if (!p.isOpen || !inRange(p.date)) continue;
+    if (!p.isOpen || !inRange(p.date) || plannedCoveredBy(p, bills) != null) continue;
     out.add(UpcomingItem(
         kind: UpcomingKind.planned, key: 'p:${p.id}', date: p.date, title: p.title, amount: p.amount, category: p.category, planned: p));
   }
