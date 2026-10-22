@@ -10,10 +10,16 @@ dependencies:
   archive: ^4.5.2
   cryptography: ^2.7.0
   logging: ^1.3.0
-  sqlite3: ^2.4.0
+  sqlite3: ^3.7.1
   wallet_importer:
     path: ../wallet_importer
 
 dev_dependencies:
   lints: any
   test: any
+
+# Same native SQLite as the app (SQLite3 Multiple Ciphers); applies when this package is the root (dart test).
+hooks:
+  user_defines:
+    sqlite3:
+      source: sqlite3mc

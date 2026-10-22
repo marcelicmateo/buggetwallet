@@ -93,7 +93,7 @@ void main() {
 
     test('SqliteException without statement parameters', () {
       final db = sqlite3.openInMemory();
-      addTearDown(db.dispose);
+      addTearDown(db.close);
       db.execute('CREATE TABLE t(id TEXT PRIMARY KEY)');
       db.execute('INSERT INTO t VALUES (?)', ['POS LIDL secret']);
       Object? err;

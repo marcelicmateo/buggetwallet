@@ -95,6 +95,15 @@ Same app and wallet logic; the files that touch the OS come in pairs chosen by `
 - Tests: `test/web_test.dart` (screens, controller paths, flush with fakes), `test/key_vault_test.dart` (wrap/unwrap, locked state). The
   browser itself (IndexedDB, downloads, wasm) is covered by `tools/build.sh web-test`, not by the VM tests.
 
+## Encrypted database plumbing (stage R1; app code not wired yet)
+`sqlite3` 3.x + `hooks: user_defines: sqlite3: source: sqlite3mc` in `pubspec.yaml` (also in `packages/wallet_core/pubspec.yaml` for
+`dart test`) = SQLite3 Multiple Ciphers on Android, Linux and (via `sqlite3mc.wasm`, pinned in `dev/sqlite3-wasm.sha256`, served as
+`sqlite3.wasm`) the web; `sqlite3_flutter_libs` is gone. Key right after open: `db.execute('PRAGMA key = "x\'<64 hex>\'"')`; wrong or missing
+key fails on the first read (`SqliteException` 26 "file is not a database"); plaintext → encrypted in place: open unkeyed, `PRAGMA rekey = "<key>"`.
+**Web: the key only works on the wrapped VFS** `sqlite.open(path, vfs: 'multipleciphers-${fs.name}')` after `registerVirtualFileSystem(fs)`
+(no `makeDefault`); the default VFS says "Encryption is not supported by the VFS". After `unregisterVirtualFileSystem`, open the next
+`IndexedDbFileSystem` with another `vfsName`. Proofs: `packages/wallet_core/test/encrypted_db_test.dart`, `test/web/encrypted_db_test.dart`.
+
 ## Rules
 - **No `dart:io` in `main.dart`, `screens/`, `widgets/`, `layout.dart` or `platform.dart`** (they must build for the web;
   `test/platform_test.dart` checks it). File and folder work goes into the native-only files
