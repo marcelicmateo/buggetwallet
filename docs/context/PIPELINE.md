@@ -41,7 +41,7 @@ Owner direction: structure and practices first. Merge order: A → ui → tests 
 | GA | G1 typed entity schema + generalised migration + clocks lookup + `repo.dart` parts; G2 core/importer surface | core-builder A | foundation-core | G0a | queued |
 | GU | G3 app surface; G4 the four sweep bugs with tests | ui-builder | foundation-ui | G0b | queued |
 | GT | G5 tests by contract (importer messages, `ValueKey`s, font test fails, `meetsGuideline`) | test-writer | foundation-tests | G0c | queued |
-| GD | G6 local CI: changed-files test selection, parallel suites, persistent container/pub cache, pre-commit hook default, enforce-lockfile, pub workspace, R8, outdated/OSV step, release-notes template (D1: nothing in GitHub CI) | devops | foundation-devops | G0d | queued |
+| GD | G6 local CI: changed-files test selection, parallel suites, persistent container/pub cache, pre-commit hook default, enforce-lockfile, pub workspace, R8, outdated/OSV step, release-notes template (D1: nothing in GitHub CI); G7 `tools/lsp.py refs|def` over `build.sh lsp` for the scout | devops | foundation-devops | G0d | queued |
 | G | Merge, reviewer (checklist = `PATH_FORWARD.md` §5), Haiku full run, push, STATUS | lead | v2 | GA, GU, GT, GD | queued |
 
 ## Stage H: hardening before M6 (after G; `PATH_FORWARD.md` §4 H1–H13; one schema bump → 8, one protocol doc bump)
@@ -64,7 +64,7 @@ Merge order: B → A → devops → tests → ui.
 | IT | Widget tests for I1–I8 from the spec | test-writer | quickwins-tests | H | queued |
 | I | I9 dark frames + emulator screens read; merge, reviewer, Haiku full run, push, STATUS → owner starts `ci` for the M6 build | lead | v2 | IU, IT | queued |
 
-Owner decisions (`PATH_FORWARD.md` §8): D1 and D5 decided 2026-10-22 (no GitHub test CI; Caddy, no VPN — LAN-CA or public domain still open, before HD); D2/D3/D6 before Stage P. Stages J and P are
+Owner decisions (`PATH_FORWARD.md` §8): D1 and D5 decided 2026-10-22 (no GitHub test CI; Caddy + Let's Encrypt on the owner's domain, port 443, no VPN — owner provides the domain and the router forward before HD); D2/D3/D6 before Stage P. Stages J and P are
 specified in `PATH_FORWARD.md` and are queued here when H and M6 finish.
 
 ## Stage R: sync redesign (2026-10-22, spec DESIGN_DECISIONS §4.9)
