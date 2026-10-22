@@ -105,8 +105,7 @@ class RelayTransport implements SyncTransport {
 
   Future<http.Response> _req(String method, String path, String kind, {List<int>? body, Map<String, String> headers = const {}}) async {
     final (wid, token) = await ids;
-    final req = http.Request(method, _url(base, 'v1/w/$wid/$path'))
-      ..headers.addAll({'Authorization': 'Bearer $token', ...headers});
+    final req = http.Request(method, _url(base, 'v1/w/$wid/$path'))..headers.addAll({'Authorization': 'Bearer $token', ...headers});
     if (body != null) req.bodyBytes = body;
     final r = await _send(() async => http.Response.fromStream(await _client.send(req)), timeout, kind);
     _check(r, kind);

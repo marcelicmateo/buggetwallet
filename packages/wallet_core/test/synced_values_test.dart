@@ -2,7 +2,6 @@
 // clock is not recorded, so a later valid write still wins), the op's other fields apply, and every device makes the
 // same decision. Rows stored with a bad value by an older build still load. All data is SYNTHETIC.
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';

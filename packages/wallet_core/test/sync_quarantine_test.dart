@@ -107,8 +107,7 @@ void main() {
         ],
       ];
       for (final (i, p) in payloads.indexed) {
-        await peer('p$i', 1,
-            ops: p is List ? p : null, bytes: p is List ? null : await seal(utf8.encode(jsonEncode(p)), key));
+        await peer('p$i', 1, ops: p is List ? p : null, bytes: p is List ? null : await seal(utf8.encode(jsonEncode(p)), key));
       }
       final rep = await run();
       expect([for (final p in rep.problems) p.reason], List.filled(payloads.length, SyncProblemReason.corrupt));

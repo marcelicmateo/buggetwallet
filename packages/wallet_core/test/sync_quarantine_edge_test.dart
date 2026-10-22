@@ -54,7 +54,8 @@ void main() {
     }
   }
 
-  Future<void> good(String device, int seq, String setting, Object? value) async => put(device, seq, await sealed([_setting(setting, value)]));
+  Future<void> good(String device, int seq, String setting, Object? value) async =>
+      put(device, seq, await sealed([_setting(setting, value)]));
 
   Future<SyncReport> run() => SyncEngine(relay, key).run(repo);
 
@@ -321,7 +322,13 @@ void main() {
   });
 
   group('relay errors end the run', () {
-    for (final f in [TransportFailure.unreachable, TransportFailure.refused, TransportFailure.full, TransportFailure.newerApi, TransportFailure.other]) {
+    for (final f in [
+      TransportFailure.unreachable,
+      TransportFailure.refused,
+      TransportFailure.full,
+      TransportFailure.newerApi,
+      TransportFailure.other
+    ]) {
       test('${f.name} on state is a SyncException with a short message; nothing is applied or marked sent', () async {
         repo.updateSettings({'salary': 1});
         final e = await SyncEngine(_Failing(f), key).run(repo).then<Object?>((_) => null, onError: (Object e) => e);

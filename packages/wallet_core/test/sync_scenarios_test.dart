@@ -212,8 +212,7 @@ void main() {
       expect(a.repo.pendingOps(), isEmpty);
     });
 
-    test('the first run on a relay uploads the whole wallet once (the migration from a folder); later runs only changes',
-        () async {
+    test('the first run on a relay uploads the whole wallet once (the migration from a folder); later runs only changes', () async {
       final a = device('a');
       a.repo.importBatch(january);
       a.repo.updateSettings({'salary': 150000});
@@ -225,6 +224,35 @@ void main() {
       final b = device('b');
       await b.run();
       expect(dump(b.repo), dump(a.repo));
+    });
+
+    test('a relay that lost this device\'s files (new or wiped) gets its whole state again', () async {
+      final a = device('a');
+      a.repo.importBatch(january);
+      await a.run();
+      a.repo.updateSettings({'rent': 1});
+      await a.run();
+      final fresh = Net();
+      a.net = fresh;
+      final rep = await a.run();
+      expect(rep.sent, a.repo.snapshotOps().length);
+      final b = Device('b', null, key, () => now, net: fresh);
+      devices.add(b);
+      await b.run();
+      expect(dump(b.repo), dump(a.repo));
+    });
+
+    test('a new device replays the files rather than trust a snapshot written by an older schema', () async {
+      final a = device('a'), b = device('b');
+      await b.run(); // b is known to the relay (its ack keeps a's files from being pruned) but has applied nothing
+      a.repo.importBatch(january);
+      await a.run();
+      // A snapshot an older build wrote: it claims to cover a's file 1 but holds nothing this schema needs.
+      await net.relay.putSnapshot('s1-0-aa', {a.repo.deviceId: 1}, await seal(backupPayload(const []), key));
+      final rep = await b.run();
+      expect(rep.filesRead, 1);
+      expect(b.repo.transactions().length, january.transactions.length);
+      expect(net.relay.calls['getSnapshot'], isNull);
     });
   });
 
@@ -350,6 +378,24 @@ void main() {
         expect(dump(b.repo), before, reason: p);
         expect(b.repo.settings().salary, 0);
       }
+    });
+
+    test('a damaged file the snapshot covers: the device starts from the snapshot and goes on after it', () async {
+      final (a, b, _) = await setup();
+      expect((await b.run()).filesRead, 1);
+      a.repo.updateSettings({'rent': 2});
+      await a.run();
+      a.repo.updateSettings({'loan': 3});
+      await a.run();
+      // A snapshot from a device that read file 2 before it was damaged on the relay.
+      await net.relay.putSnapshot('s${WalletRepo.schemaVersion}-0-aa', {a.repo.deviceId: 2, b.repo.deviceId: 0},
+          await seal(backupPayload(a.repo.snapshotOps()), key));
+      net.relay.corrupt(a.repo.deviceId, 2);
+      final rep = await b.run();
+      expect((rep.caughtUp, rep.waiting.length, rep.problems.length), (true, 0, 0));
+      expect(rep.filesRead, 2, reason: 'the snapshot, then file 3');
+      expect((b.repo.settings().rent, b.repo.settings().loan), (2, 3));
+      expect(b.repo.syncCursors()[a.repo.deviceId], 3);
     });
 
     test('one damaged file does not stop files from other devices being applied', () async {
@@ -613,14 +659,14 @@ void main() {
     });
   });
 
-
   group('matching while a sync file never arrives (strict order: the match never comes without its rows)', () {
     int out(Device d) {
       final cz = d.repo.categorizer();
       return monthSummary(d.repo.transactions().map(cz.categorize).toList(), '2026-01').out;
     }
 
-    test('the rows file cannot be fetched: the phone applies neither it nor the later match file; the entry counts once, '
+    test(
+        'the rows file cannot be fetched: the phone applies neither it nor the later match file; the entry counts once, '
         'then the row once', () async {
       final phone = device('phone'), laptop = device('laptop');
       final m = phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');

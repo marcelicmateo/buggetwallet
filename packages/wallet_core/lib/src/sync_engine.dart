@@ -35,8 +35,7 @@ class RelayDevice {
   final Map<String, int> acks;
   const RelayDevice({this.first = 1, this.last = 0, this.lastSeen, this.acks = const {}});
 
-  Map<String, Object?> toJson() =>
-      {'first': first, 'last': last, 'lastSeen': lastSeen?.toUtc().toIso8601String(), 'acks': acks};
+  Map<String, Object?> toJson() => {'first': first, 'last': last, 'lastSeen': lastSeen?.toUtc().toIso8601String(), 'acks': acks};
 }
 
 /// What `GET state` returns.
@@ -79,7 +78,7 @@ class RelayState {
       return RelaySnapshot(s['id'] as String, seqs(s['covers']));
     }
 
-    final devs = j['devices'] ?? const {};
+    final devs = j['devices'] ?? const <String, Object?>{};
     if (devs is! Map) throw const FormatException('bad devices');
     return RelayState(
       devices: {for (final MapEntry(:key, :value) in devs.entries) '$key': dev(value)},
@@ -245,8 +244,7 @@ class SyncEngine {
   static SyncException _fatal(String step, TransportException e) {
     logEvent(_log, Level.WARNING, 'sync.failed', {'step': step, 'failure': e.failure.name});
     return SyncException(switch (e.failure) {
-      TransportFailure.unreachable =>
-        'The relay cannot be reached. Check its address and that this device is on the home network or VPN.',
+      TransportFailure.unreachable => 'The relay cannot be reached. Check its address and that this device is on the home network or VPN.',
       TransportFailure.refused => 'The relay refused this wallet: it holds a wallet with another key at this address.',
       TransportFailure.full => 'The relay is full. Free space on the home server or raise the relay\'s limits.',
       TransportFailure.newerApi => 'The relay runs a newer version. Update the app.',
@@ -286,6 +284,68 @@ class SyncEngine {
     final waiting = <SyncWaiting>[];
     final bad = BadFiles.load(repo), listed = <String>{};
     var badChanged = false, complete = false;
+    // Per device that stopped: what it waits on, and the problem to report (none when a pruned file has no snapshot).
+    final blocked = <String, (SyncWaiting, SyncProblem?)>{};
+    Future<bool> snapshot() async {
+      final got = await _applySnapshot(repo, state, cursors);
+      if (got == null) return false;
+      received += got.$1;
+      opsRead += got.$2;
+      bytesRead += got.$3;
+      filesRead++;
+      return true;
+    }
+
+    /// Applies [d]'s files from its cursor, strictly in order, until one cannot be used.
+    Future<void> applyPeer(String d) async {
+      final dev = state.devices[d]!;
+      while (cur(d) < dev.last) {
+        final seq = cur(d) + 1;
+        if (seq < dev.first) {
+          logEvent(_log, Level.WARNING, 'sync.file.pruned', {'seq': seq});
+          blocked[d] = (SyncWaiting(_short(d), seq), null);
+          return;
+        }
+        final k = BadFile.keyOf(d, '$seq');
+        final List<int> bytes;
+        try {
+          bytes = await transport.get(d, seq);
+        } on TransportException catch (e) {
+          // Not the file's fault (or not known to be): not quarantined, fetched again next run.
+          logEvent(_log, Level.WARNING, 'sync.file.unreadable', {'seq': seq, 'failure': e.failure.name});
+          blocked[d] = (SyncWaiting(_short(d), seq), SyncProblem(_short(d), SyncProblemReason.unreadable, bytes: 0));
+          return;
+        }
+        final was = bad.byKey[k];
+        if (was != null && !was.retryAfterUpgrade(build) && was.hash == await fileHash(bytes)) {
+          listed.add(k);
+          blocked[d] = (SyncWaiting(_short(d), seq, reason: was.reason), was.problem(isNew: false));
+          known++;
+          return;
+        }
+        final int changed, count;
+        try {
+          (changed, count) = await _applyBytes(repo, key, bytes, _fileOps);
+        } on _Refused catch (r) {
+          logError(_log, 'sync.file.failed', r.error, r.stack, fields: {'seq': seq, 'reason': r.reason.name, 'bytes': bytes.length});
+          listed.add(k);
+          bad.byKey[k] = BadFile(d, '$seq', r.reason, size: bytes.length, hash: await fileHash(bytes), build: build);
+          badChanged = true;
+          blocked[d] = (SyncWaiting(_short(d), seq, reason: r.reason), SyncProblem(_short(d), r.reason, bytes: bytes.length));
+          return;
+        }
+        if (bad.byKey.remove(k) != null) badChanged = true;
+        repo.setSyncCursor(d, seq);
+        repo.recordSyncFile(d, seq, count);
+        cursors[d] = seq;
+        received += changed;
+        filesRead++;
+        opsRead += count;
+        bytesRead += bytes.length;
+        logEvent(_log, Level.FINE, 'sync.file', {'seq': seq, 'bytes': bytes.length, 'ops': count, 'changed': changed});
+      }
+    }
+
     try {
       final pruned = peers.any((d) {
         final dev = state.devices[d]!;
@@ -293,66 +353,28 @@ class SyncEngine {
       });
       final fresh = cursors.isEmpty && peers.any((d) => state.devices[d]!.last > 0);
       final snap = state.snapshot;
+      var usedSnapshot = false;
       if (snap != null && (pruned || (fresh && (_snapshotSchema(snap.id) ?? 0) >= WalletRepo.schemaVersion))) {
-        final got = await _applySnapshot(repo, state, cursors);
-        if (got != null) {
-          received += got.$1;
-          opsRead += got.$2;
-          bytesRead += got.$3;
-          filesRead++;
+        usedSnapshot = await snapshot();
+      }
+      for (final d in peers) {
+        await applyPeer(d);
+      }
+      // A file that cannot be used but that the snapshot covers (it was readable for the device that wrote the
+      // snapshot): start from the snapshot, then go on after it. Otherwise that device would wait for good.
+      if (!usedSnapshot && snap != null && blocked.entries.any((e) => e.value.$1.seq <= (snap.covers[e.key] ?? 0))) {
+        logEvent(_log, Level.INFO, 'sync.snapshot.unblock', {'devices': blocked.length});
+        if (await snapshot()) {
+          for (final d in blocked.keys.toList()) {
+            if (cur(d) < blocked[d]!.$1.seq) continue;
+            blocked.remove(d);
+            await applyPeer(d);
+          }
         }
       }
-
-      for (final d in peers) {
-        final dev = state.devices[d]!;
-        while (cur(d) < dev.last) {
-          final seq = cur(d) + 1;
-          if (seq < dev.first) {
-            logEvent(_log, Level.WARNING, 'sync.file.pruned', {'seq': seq});
-            waiting.add(SyncWaiting(_short(d), seq));
-            break;
-          }
-          final k = BadFile.keyOf(d, '$seq');
-          final List<int> bytes;
-          try {
-            bytes = await transport.get(d, seq);
-          } on TransportException catch (e) {
-            // Not the file's fault (or not known to be): not quarantined, fetched again next run.
-            logEvent(_log, Level.WARNING, 'sync.file.unreadable', {'seq': seq, 'failure': e.failure.name});
-            problems.add(SyncProblem(_short(d), SyncProblemReason.unreadable, bytes: 0));
-            waiting.add(SyncWaiting(_short(d), seq));
-            break;
-          }
-          final was = bad.byKey[k];
-          if (was != null && !was.retryAfterUpgrade(build) && was.hash == await fileHash(bytes)) {
-            listed.add(k);
-            problems.add(was.problem(isNew: false));
-            waiting.add(SyncWaiting(_short(d), seq, reason: was.reason));
-            known++;
-            break;
-          }
-          final int changed, count;
-          try {
-            (changed, count) = await _applyBytes(repo, key, bytes, _fileOps);
-          } on _Refused catch (r) {
-            logError(_log, 'sync.file.failed', r.error, r.stack, fields: {'seq': seq, 'reason': r.reason.name, 'bytes': bytes.length});
-            listed.add(k);
-            bad.byKey[k] = BadFile(d, '$seq', r.reason, size: bytes.length, hash: await fileHash(bytes), build: build);
-            badChanged = true;
-            problems.add(SyncProblem(_short(d), r.reason, bytes: bytes.length));
-            waiting.add(SyncWaiting(_short(d), seq, reason: r.reason));
-            break;
-          }
-          if (bad.byKey.remove(k) != null) badChanged = true;
-          repo.setSyncCursor(d, seq);
-          repo.recordSyncFile(d, seq, count);
-          cursors[d] = seq;
-          received += changed;
-          filesRead++;
-          opsRead += count;
-          bytesRead += bytes.length;
-          logEvent(_log, Level.FINE, 'sync.file', {'seq': seq, 'bytes': bytes.length, 'ops': count, 'changed': changed});
-        }
+      for (final (w, p) in blocked.values) {
+        waiting.add(w);
+        if (p != null) problems.add(p);
       }
       complete = true;
     } finally {
@@ -410,15 +432,11 @@ class SyncEngine {
       'waiting': waiting.length,
       'caughtUp': caughtUp,
     });
-    return SyncReport(sent, received, filesRead,
-        problems: problems,
-        caughtUp: caughtUp,
-        waiting: waiting,
-        devices: [
-          for (final d in ids)
-            SyncDevice(_short(d),
-                lastSeen: d == me ? (acked || sent > 0 ? now : state.devices[d]?.lastSeen) : state.devices[d]!.lastSeen, isThis: d == me),
-        ]);
+    return SyncReport(sent, received, filesRead, problems: problems, caughtUp: caughtUp, waiting: waiting, devices: [
+      for (final d in ids)
+        SyncDevice(_short(d),
+            lastSeen: d == me ? (acked || sent > 0 ? now : state.devices[d]?.lastSeen) : state.devices[d]!.lastSeen, isThis: d == me),
+    ]);
   }
 
   /// Uploads this device's next file. Returns (ops sent, this device's last seq on the relay after it).

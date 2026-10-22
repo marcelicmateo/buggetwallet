@@ -17,6 +17,8 @@ dependencies:
 
 dev_dependencies:
   lints: any
+  relay:
+    path: ../../relay
   test: any
 
 # Same native SQLite as the app (SQLite3 Multiple Ciphers); applies when this package is the root (dart test).

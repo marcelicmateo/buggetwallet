@@ -1,6 +1,6 @@
 # wallet_core — notes for Claude
 
-Pure Dart (no Flutter): SQLite repo, field-level change log with HLC, encrypted folder sync, categories,
+Pure Dart (no Flutter): SQLite repo, field-level change log with HLC, encrypted relay sync (`SyncEngine`), categories,
 budget engine. **All money logic lives here**, so it can be unit-tested without the UI.
 
 ## Web rule (§4.8: the barrel compiles for the web)
@@ -12,16 +12,19 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - dart:io code lives in `*_io.dart` files with a `*_web.dart` twin of the same public names that throws
   `UnsupportedError`; the barrel picks one with `export 'src/x_io.dart' if (dart.library.js_interop) 'src/x_web.dart';`:
   `backup_io.dart` (`writeBackup`, `restoreBackup`, `listBackups`, `backupsFolder`, `backupPath`), `logs_io.dart`
-  (`RotatingFileSink`), `folder_sync_io.dart` (`FolderSync`). `platform_error_io/web.dart` give `describeError` its
+  (`RotatingFileSink`). `platform_error_io/web.dart` give `describeError` its
   dart:io case. New dart:io code goes in one of these (or a new pair), never in a shared file.
 - gzip comes from `package:archive` (`vault.dart`): on the VM it is `dart:io`'s codec (same bytes as before), in the
   browser pure Dart; both write one standard gzip member, which is what `_wholeGzip` and older builds check.
   `test/web_core_test.dart` pins that dart:io members unseal and that pure-Dart members are accepted.
+- The sync engine and both transports are shared code (no dart:io): `RelayTransport` uses `package:http` (IOClient on
+  the VM, fetch in the browser). The real relay server (`relay/`) is only a dev dependency for the end-to-end test.
 - `hlc.dart`: no int literal above 2^53 (dart2js refuses it); `_maxInt` is 2^53 − 1 there, 2^63 − 1 elsewhere.
 - Compile check (after `dart pub get` in the package): `tools/build.sh shell -c 'cd packages/wallet_core && dart compile js
   -o /dev/null tool/web_smoke.dart && dart compile wasm -o ../../dist/web_smoke.wasm tool/web_smoke.dart'`
   (`tool/web_smoke.dart` imports the barrel and uses `WalletRepo.fromDatabase`, `backupBytes`, `MemoryLogSink`,
-  `seal`/`unseal`; dart2wasm wants a `.wasm` output name). Run it whenever an import changes.
+  `seal`/`unseal`, `SyncEngine` over `MemoryTransport` or `RelayTransport`, `deriveKey`; dart2wasm wants a `.wasm` output
+  name). Run it whenever an import changes.
 
 ## Files
 - `repo.dart` — `WalletRepo`: schema, reads, and every write. Writes go through `_write(...)` so each one
@@ -97,7 +100,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   per device the highest bank `amount` clock held at add time; older entries: rows written after the entry). A match
   is reopened only when its bank row is deleted, never because the row has not arrived yet; until it arrives, reads
   mark the entry `Tx.matchPending` and it counts (`Tx.live`). `WalletRepo` runs it after imports, deletes and
-  `applyRemote` (FolderSync: once per run, `runPendingMatch`), loading only candidate rows.
+  `applyRemote` (SyncEngine: once per run, only when caught up, `runPendingMatch`), loading only candidate rows.
 - `models.dart` — `Tx`, `Goal`, `GoalContribution`, `WishItem`, `WalletSettings` (row ↔ object), `goalTotal`.
   `WalletSettings.categoryBudgets` (synced setting, `{category: cents per month}`, default `{}`) is validated entry
   by entry: only `spendingCategories` (fixed + flex) with whole cents 0..`maxBudget` are kept, other entries are
@@ -115,9 +118,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - `WalletRepo.schemaVersion` (meta `schema`): bump it when adding a synced entity or field (3 = `tx.kind_hint`,
   `tx.transfer_to`; 4 = the `exchange` hint: Revolut Exchange rows a version-3 build hinted `ownTransfer` are rewritten
   once through `_write` and reconciled, `revolutExchangeType`; 5 = the `recurring` entity). Opening an existing database with an older version
-  clears `peer_files` once, so the next sync re-reads every file and applies ops (or fields) the older build skipped.
+  clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
+  written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption; `UnsealFailure` says why a
-  file was refused), `sync.dart` (`SyncException`, `SyncReport`; web-safe) + `folder_sync_io.dart` (`FolderSync`).
+  file was refused; `deriveKey` = HKDF-SHA256, empty salt), `sync.dart` (`SyncException`, `SyncReport`, `SyncWaiting`,
+  `SyncDevice`; web-safe) + `sync_engine.dart` (below).
 - `backup.dart` — backups (M5, owner decision 2026-10-20: only into the sync folder, encrypted with the wallet key,
   restore only into an empty wallet). Pure half (web-safe): `backupFileName(today)` = `bw-backup-<today>.bwb`
   (`ArgumentError` unless `YYYY-MM-DD`), `backupBytes(repo, key)` = the sealed payload, `restoreBackupBytes(repo,
@@ -159,12 +164,37 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   and quarantined: `BadFiles`, one device-local value (`localValue('syncBadFiles')`, never synced), records device,
   file, `SyncProblemReason` (`badKey`, `corrupt`, `unknownVersion`, `applyFailed`; `unreadable` = I/O error, not
   quarantined), size and content hash. It is read again only when its content changes, or (unknownVersion,
-  applyFailed) once after `FolderSync.build` changes (`<syncReaderVersion>.<WalletRepo.schemaVersion>+<app version
-  passed to FolderSync>`). `SyncReport.problems` lists every file not applied, also the known ones on every run
-  (`SyncProblem`: short device id = first 8 characters of its folder name, reason, bytes, `isNew`), `badFiles` is
+  applyFailed) once after `SyncEngine.build` changes (`<syncReaderVersion>.<WalletRepo.schemaVersion>+<app version
+  passed to SyncEngine>`). `SyncReport.problems` lists every file not applied, also the known ones on every run
+  (`SyncProblem`: short device id = first 8 characters of its id, reason, bytes, `isNew`), `badFiles` is
   their count. Database errors that are about this device (read-only, disk full, I/O, locked) stop the run instead,
-  so the file is not refused for good. The quarantine is separate from `peer_files`: a schema upgrade lists every
+  so the file is not refused for good. The quarantine is separate from the cursors: a schema upgrade reads every
   peer file again, an unchanged badKey/corrupt file stays skipped, unknownVersion/applyFailed are tried once more.
+- `sync_engine.dart` — relay sync (§4.9, wire protocol `docs/context/RELAY_PROTOCOL.md`), web-safe. `SyncTransport`
+  (`state`, `put`, `get`, `ack`, `putSnapshot`, `getSnapshot`; failures are `TransportException(TransportFailure)`),
+  `RelayState`/`RelayDevice`/`RelaySnapshot` (+ `fromJson`), implemented by `MemoryTransport` (`sync_memory.dart`: the
+  relay's rules in memory — no gaps, never overwritten, acks grow, snapshot 422 before 409, two kept snapshots, pruning
+  incl. the 90-day rule driven by `now`; no token check; test hooks `offline`, `corrupt`, `failGet`, `replace`, `files`,
+  `calls`) and `RelayTransport` (`sync_relay.dart`, `package:http`: wid/token from `deriveKey`, Bearer header,
+  `X-BW-Covers`, status → failure, `api` > 1 → `newerApi`, 404 state = empty relay, 30 s timeout; `health(base)`).
+  `SyncEngine(transport, key, appVersion:, now:).run(repo)`: reads `state`; uploads pending ops as `last + 1` (seq from
+  the relay, so a failed PUT leaves no gap; 409/422 keep the outbox for the next run); the **first run on a relay** (local
+  `syncSent` absent, or the relay's `last` for this device below it = a new or wiped relay) uploads `snapshotOps()`
+  instead (the migration from the folder sync). Cursors (`sync_cursor` table, device-local, `WalletRepo.syncCursors`):
+  per other device the last seq applied; files apply strictly in order; the first file that cannot be fetched (`waiting`
+  with reason null + an `unreadable` problem), is pruned without a usable snapshot, or is refused (quarantined in
+  `BadFiles` under `<device>/<seq>`, fetched and hashed again each run) stops that device. A cursor above a device's
+  `last` is reset to 0 (relay lost its files). Snapshot use: when a needed file is pruned; when this device applied
+  nothing yet (new device, schema-bump replay) and the snapshot id says this schema or newer (`s<schema>-<ms>-<hex>`);
+  and when a blocked file is covered by the snapshot (then the device goes on after it). Latest first, then `previous`;
+  covers raise the cursors. Acks every run (a failed ack is only logged). `caughtUp` = no waiting, no problem, every
+  device applied through `last`: only then `runPendingMatch()` and the snapshot check: written when files not covered by
+  the newest snapshot hold ≥ 500 ops (`sync_files`: ops per recorded file, own uploads included) or the newest is older
+  than 7 days (none yet: 7 days since this device's first relay sync, local `syncSince`); payload = backup format,
+  covers = every listed device's cursor + own last; refused (another device was faster) is only logged. `SyncReport`:
+  `sent` ops, `received` fields changed, `filesRead` (snapshots count), `problems`, `caughtUp`, `waiting`, `devices`
+  (short ids, `lastSeen`, `isThis`). Fatal `SyncException`s (short, no address): unreachable, refused (401), relay
+  full, newer relay API, other. Opening a folder-sync database drops `peer_files` (`repo.peerFiles.dropped`).
 - `logs.dart` — logging (`package:logging`): `logEvent`/`logError` (structured events), `formatLogRecord` (one line,
   errors via `describeError`, which drops SQL parameters, paths and FormatException sources), `LogSink` (`add`,
   `flush`, `close`) with `MemoryLogSink` (ring buffer by UTF-8 bytes, `maxBytes` default 2 MiB, oldest lines dropped
@@ -192,14 +222,15 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 ## Known limits (for the sync redesign)
 - The same export imported on two devices before they sync: the later import's `amount` clock wins, so a cash entry
   added in between on the first device can be matched to that row although that device held it.
-- A damaged, quarantined or late sync file (files from a device are applied even past a gap) while later files from that
-  device apply: `seen_bank` (per-device maximum) then claims rows the adding device never got, those never replace the
-  entry, and the expense counts twice. Quarantine does not change this (before it, a bad file was retried every run
-  with the same result); a repaired copy still applies.
-- A sync file changed after sealing fails authentication like one sealed with another key: both are `badKey`.
+- A sync file changed after sealing fails authentication like one sealed with another key: both are `badKey`
+  (`MemoryTransport.corrupt` flips the magic too, so it gives `corrupt`).
+- A refused relay file that no snapshot covers stops that device's later files on every device that has not applied it,
+  for good: the relay never overwrites a file, the blocked reader never acks past it (so the relay keeps every later
+  file), and matching and pairing wait there (cash entries keep counting: never twice, but not matched either). It
+  clears only when a snapshot covering it appears (written by a device that read the file before it was damaged), a
+  newer build reads it (unknownVersion/applyFailed), or the file is repaired on the server.
 - Older builds ignore `seen_bank` and match by the old rule: devices on mixed versions can plan different matches,
   and keep doing so after upgrading for entries they received before.
-- A device that is behind can match a cash entry to an earlier same-amount card payment (±3 days) it never held.
 - A wrong-typed field (e.g. `amount: "abc"`) is refused with no clock only by builds that check types: older builds
   stored it with its clock, so a later valid write with an older clock wins on new devices and loses on old ones
   until the next write. Only a buggy writer causes this.
@@ -210,7 +241,16 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - Goal contributions are deltas: two offline "set to X" edits both apply (two corrections to 0 from 50 give −50;
   shown as is, and the next edit sets the exact value). Paying goals offline on two devices counts once only when both
   pass the same `period` (or share the `periodStart` setting); otherwise twice.
-- Replay on upgrade needs the old sync files: once files are pruned (gap 4), snapshots must carry `goal_contrib` rows.
+- Snapshots are made from the writer's database, so one written by an older build lacks the fields that build does not
+  know. A schema-bump replay or a new device ignores a snapshot of an older schema while the files are still there, but a
+  device whose next file is pruned starts from it anyway and misses those fields until they are written again.
+- A wiped (or new) relay: each device notices its own files are gone (`last` below its `syncSent`) and uploads its whole
+  state again, and a peer cursor above that peer's `last` is reset. If a peer re-uploaded more files than the old cursor
+  before this device syncs, the cursor is trusted and the files between are skipped (seq numbers carry no relay identity).
+- Two installs with the same device id (a copied database) write into one seq stream; a 409/422 on upload keeps the
+  outbox for the next run, so both get through, interleaved.
+- The snapshot rule's "500 ops behind" counts only the files this device applied or sent itself (`sync_files`); files it
+  skipped by starting from a snapshot are not counted.
 - Own transfers: two devices that pair offline from different row sets can write different partners for one row;
   after sync the non-mutual link is cleared and the pair that both hold stays. A hinted row with two equal candidates
   takes the closest, which can be the wrong one (the real one then stays open; the user override corrects the
@@ -236,6 +276,12 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `test/budget_vs_actual_test.dart`, recurring bills + weekly review incl. two devices: `test/habits_test.dart`, M5 backup
   round trip incl. two devices + resend: `test/backup_test.dart`, CSV: `test/export_test.dart`, search: `test/search_test.dart`,
   web-safe core (`fromDatabase`, `backupBytes`/`restoreBackupBytes`, `MemoryLogSink`, gzip compatibility): `test/web_core_test.dart`;
-  `<feature>_edge_test.dart` and `<feature>_spec_test.dart` are spec-written tests). Multi-device sim in `test/support/sim.dart` (lists entities on its own): `Device` (own
-  folder and database; `dbPath:` + `reopen()` simulate a restart or upgrade), `Net`, `dump`, `bookkeeping`.
+  `<feature>_edge_test.dart` and `<feature>_spec_test.dart` are spec-written tests). Multi-device sim in `test/support/sim.dart` (lists entities on its own): `Net` (one
+  `MemoryTransport`; a `Device` uses the latest `Net` made unless given `net:`), `Device` (own database; `run()` uploads
+  and applies, `deliver(net, r, p:)` makes the next run's GETs fail with probability 1 − p, `upload` is a no-op kept for
+  the helpers; `dbPath:` + `reopen()` simulate a restart or upgrade), `opsInNet`, `dump`, `bookkeeping`. Sync engine:
+  `test/sync_scenarios_test.dart`, `sync_convergence_test.dart` (random, 2-4 devices), `sync_quarantine*_test.dart`,
+  `sync_read_edge_test.dart`, `sync_engine_spec_test.dart` (+ `support/engine_spec_sim.dart`, shared fake clock: snapshots,
+  pruning, first connect, S1/S2), `sync_relay_test.dart` (`deriveKey` vs. a hand-written HKDF, `RelayTransport` over
+  `MockClient`, `MemoryTransport` rules, end to end with the real `relay/` server on port 0).
 - Run: `tools/build.sh test` from the repo root (or `tools/build.sh shell`, then `cd packages/wallet_core && dart test`).
