@@ -31,7 +31,8 @@ Both sides follow this file exactly; change it here first.
 `lastSeen` of a known device is set to now by any `PUT d/<device>/...` that reaches the seq check (200, 201, 409, 410, 422)
 and by every accepted ack; snapshot PUTs and refused acks do not. A new device appears only on a 201 or an accepted ack.
 Clients ack on every sync run (even unchanged), which keeps `lastSeen` fresh. The `PUT d` that creates a wallet must have
-seq 1 (otherwise 422 and nothing is created). Acks: values ≥ 0 (`0` allowed), non-int/negative/bad names → 400, body over
+seq 1 (otherwise 422 and nothing is created); for an unknown wallet a seq other than 1 (422) and a relay already at
+`--max-wallets` (507) are refused before the body is buffered (it is read and discarded, up to 2× the file limit). Acks: values ≥ 0 (`0` allowed), non-int/negative/bad names → 400, body over
 64 KiB → 413. Unknown path → 404, wrong method on a known path → 405. Unknown wallet without a token → 404.
 
 ## State JSON
@@ -57,7 +58,9 @@ device appears once it has stored a file or sent an ack.
   if the latest cannot be read), then fetches the files after its `covers`.
 
 ## Limits and CORS
-- 413 body too big (the relay reads and discards up to 2× the limit first so the client sees the status); 429 more than 20 requests/s per client address (burst 100); 507 relay full (wallet count over
+- 413 body too big (the relay reads and discards up to 2× the limit first so the client sees the status); 429 more than 20 requests/s per client address (burst 100), or a body that would put the bytes one client address has
+buffered across its concurrent requests over 32 MiB (`maxInFlightBytes`; a lone request is limited only by its own size
+limit, so a 64 MiB snapshot still goes through); 507 relay full (wallet count over
   `--max-wallets`, default 16, or a wallet over `--max-bytes`, default 1 GiB: a `PUT d` counts files + kept snapshots, a
   snapshot PUT counts only the kept snapshots + the new one, so a nearly full wallet can still snapshot and prune).
 - CORS: `Access-Control-Allow-Origin` echoes the request `Origin` only if it is in the configured list (default
