@@ -2,6 +2,7 @@
 // All data is SYNTHETIC.
 import 'dart:typed_data';
 
+import 'package:logging/logging.dart';
 import 'package:test/test.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
@@ -63,6 +64,7 @@ void main() {
       const prose = 'Synthetic lines with no labelled field at all.\nSecond line.';
       expect(billFromTextResult(prose, source: BillSource.pdf).reason, ReadFailure.nothingFound);
       expect(billFromTextResult('', source: BillSource.pdf).reason, ReadFailure.nothingFound);
+      // SWIFT registry sample IBAN for Croatia, not a real account
       const labelled = 'Primatelj: Synthetic d.o.o.\nIBAN: HR1210010051863000160\nUkupno: 12,50 EUR';
       final r = billFromTextResult(labelled, source: BillSource.pdf);
       final b = billFromText(labelled, source: BillSource.pdf);
@@ -73,9 +75,17 @@ void main() {
 
   group('pdfTextResult', () {
     test('reasons: not a PDF, encrypted, no text; the value is what pdfText gives', () {
-      final notPdf = Uint8List.fromList(List.filled(2000, 0x41)); // bigger than the header window the reader probes
+      final warnings = <LogRecord>[];
+      final sub = Logger.root.onRecord.listen((r) {
+        if (r.level >= Level.WARNING) warnings.add(r);
+      });
+      addTearDown(sub.cancel);
+      final notPdf = Uint8List.fromList('hello, not a pdf'.codeUnits); // shorter than the 1024-byte header window
       expect(pdfTextResult(notPdf).reason, ReadFailure.notRecognized);
+      expect(pdfTextResult(Uint8List(0)).reason, ReadFailure.notRecognized);
+      expect(pdfTextResult(Uint8List.fromList(List.filled(2000, 0x41))).reason, ReadFailure.notRecognized);
       expect(pdfTextResult(notPdf).value, pdfText(notPdf));
+      expect(warnings, isEmpty, reason: 'a short non-PDF is notPdf, not an error');
       final encrypted = Uint8List.fromList('%PDF-1.4\n1 0 obj << /Encrypt 2 0 R >> endobj\n'.codeUnits);
       expect(pdfTextResult(encrypted).reason, ReadFailure.encrypted);
       final empty = Uint8List.fromList('%PDF-1.4\n%%EOF\n'.codeUnits);

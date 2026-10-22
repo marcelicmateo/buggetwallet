@@ -65,8 +65,8 @@ int? amountFromText(String text) {
   return found;
 }
 
-/// Most cents an amount typed by the owner may be ([parseMoneyCents]).
-const maxAmountCents = 1000000000000;
+/// Most cents an amount typed by the owner may be ([parseMoneyCents]): the one cap, the repo's [WalletSettings.maxAmount].
+const maxAmountCents = WalletSettings.maxAmount;
 
 final _plainNumber = RegExp(r'^[+-]?(\d+\.?\d*|\.\d+)$');
 

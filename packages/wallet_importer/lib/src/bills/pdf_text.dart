@@ -118,8 +118,9 @@ bool _hasEncrypt(Uint8List b) {
 }
 
 int _indexOf(Uint8List b, List<int> pat, int from, [int? limit]) {
-  final end = (limit ?? b.length) - pat.length;
+  final end = (limit == null || limit > b.length ? b.length : limit) - pat.length; // never past the data (short files)
   final first = pat[0];
+  if (end < from) return -1;
   outer:
   for (var i = from < 0 ? 0 : from; i <= end; i++) {
     if (b[i] != first) continue;
