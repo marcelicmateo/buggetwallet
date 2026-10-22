@@ -1,0 +1,54 @@
+{
+ "bill_winansi.pdf": {
+  "lines": [
+   "Prodavatelj: Primjer Usluge d.o.o.",
+   "Kupac: Pero Probni, Probna ulica 1",
+   "RAČUN br. 2026-0042",
+   "Datum računa: 3.10.2026.",
+   "Rok plaćanja: 18.10.2026.",
+   "IBAN: HR91 9990 0011 0000 0001 7",
+   "Poziv na broj: HR01 2026-0042",
+   "Opis: Održavanje – listopad, šifra Ž-7",
+   "Ukupno bez PDV-a: 20,00 EUR",
+   "PDV 25%: 5,00 EUR",
+   "Za platiti: 25,00 €",
+   "Stranica 2/2",
+   "JIR: 6bad6be2-8e7a-46e9-9f19-950499dd251d"
+  ],
+  "jir": "6bad6be2-8e7a-46e9-9f19-950499dd251d",
+  "iban": "HR9199900011000000017"
+ },
+ "receipt_type0.pdf": {
+  "lines": [
+   "Izdavatelj: Primjer Trgovina j.d.o.o.",
+   "Račun: 7/POS1/1",
+   "Datum: 2026-09-14",
+   "Čokolada 2 x 1,50 3,00",
+   "Kava 1 x 9,34 9,34",
+   "Ukupno: 12,34 €",
+   "JIR: d7a7a3cc-8c3d-4f16-9293-de8fc88b2875",
+   "ZKI: 7dabe929c4a334bfc6cd75e9bb049a79"
+  ],
+  "jir": "d7a7a3cc-8c3d-4f16-9293-de8fc88b2875"
+ },
+ "hub3_printed.pdf": {
+  "lines": [
+   "HRVHUB30",
+   "EUR",
+   "000000000004599",
+   "Pero Probni",
+   "Probna ulica 1",
+   "10000 Grad",
+   "Primjer Energija d.o.o.",
+   "Izmišljena 5",
+   "21000 Mjesto",
+   "HR9199900011000000017",
+   "HR01",
+   "2026-1001-77",
+   "ELEC",
+   "Račun za struju 10/2026",
+   "Datum dospijeća: 30.11.2026."
+  ],
+  "iban": "HR9199900011000000017"
+ }
+}

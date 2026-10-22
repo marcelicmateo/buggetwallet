@@ -208,7 +208,8 @@ void main() {
       r.close();
       expect(lines, isNotEmpty);
       for (final l in lines) {
-        expect(l.contains('Secret') || l.contains('8123') || l.contains('80'), isFalse, reason: l);
+        // `80` as a whole number only: a timestamp like `…:26.180` is not the amount.
+        expect(l.contains('Secret') || l.contains('8123') || l.contains('8000') || RegExp(r'\b80\b').hasMatch(l), isFalse, reason: l);
       }
     });
   });
@@ -410,7 +411,7 @@ void main() {
       old.db.execute('DROP TABLE planned');
       old.close();
       final up = WalletRepo.open(path);
-      expect(up.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '6');
+      expect(up.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '${WalletRepo.schemaVersion}');
       expect(up.syncCursors(), isEmpty);
       expect(up.plannedCosts(), isEmpty);
       up.addPlanned(title: 'x', date: '2026-03-01', amount: 1);

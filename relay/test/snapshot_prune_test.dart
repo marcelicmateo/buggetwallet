@@ -323,6 +323,7 @@ void main() {
           'id': 's1',
           'covers': {'dev1': 1},
         },
+        'blobs': {'count': 0, 'bytes': 0},
       });
     });
 

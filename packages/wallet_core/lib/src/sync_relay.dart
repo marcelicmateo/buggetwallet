@@ -244,6 +244,28 @@ class RelayTransport implements SyncTransport {
   @override
   Future<List<int>> getSnapshot(String id) async => Uint8List.fromList((await _req('GET', 'snapshot/$id', 'getSnapshot')).bodyBytes);
 
+  @override
+  Future<void> putBlob(String hash, List<int> bytes) async {
+    await _req('PUT', 'blob/$hash', 'putBlob', body: bytes, headers: _octets);
+  }
+
+  /// Null on 404 (never stored, deleted, or an older relay without blobs).
+  @override
+  Future<List<int>?> getBlob(String hash) async {
+    try {
+      return Uint8List.fromList((await _req('GET', 'blob/$hash', 'getBlob')).bodyBytes);
+    } on TransportException catch (e) {
+      if (e.failure == TransportFailure.missing) return null;
+      rethrow;
+    }
+  }
+
+  /// Signed like every request (`DELETE` in the signed text), empty body.
+  @override
+  Future<void> deleteBlob(String hash) async {
+    await _req('DELETE', 'blob/$hash', 'deleteBlob');
+  }
+
   /// Closes the HTTP client.
   void close() => _client.close();
 }

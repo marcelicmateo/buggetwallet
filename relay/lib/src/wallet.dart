@@ -11,6 +11,9 @@ const int apiVersion = 2;
 /// Names accepted on the wire (docs/context/RELAY_PROTOCOL.md, "Names").
 final RegExp widPattern = RegExp(r'^[0-9a-f]{32}$');
 final RegExp namePattern = RegExp(r'^[A-Za-z0-9_-]{1,64}$');
+
+/// A blob name: lowercase hex SHA-256 of the sealed bytes.
+final RegExp blobHashPattern = RegExp(r'^[0-9a-f]{64}$');
 final RegExp _seqPattern = RegExp(r'^[1-9][0-9]{0,15}$');
 
 /// Highest sequence number: 2^53 - 1 (what a JS client can count to).
@@ -89,12 +92,20 @@ class Wallet {
   Snap? snapshot;
   Snap? previous;
 
-  /// Bytes in sealed files and kept snapshots.
+  /// Bytes in sealed files and kept snapshots (blobs are counted apart: [blobBytes]).
   int bytes = 0;
+
+  /// Stored blobs (`blobs/<hash>`): how many and their total size.
+  int blobCount = 0;
+  int blobBytes = 0;
+
+  /// What `--max-bytes` limits: files + kept snapshots + blobs.
+  int get totalBytes => bytes + blobBytes;
 
   File get metaFile => File('${dir.path}/meta.json');
   File dataFile(String device, int seq) => File('${dir.path}/d/$device/$seq');
   File snapFile(String id) => File('${dir.path}/snap/$id');
+  File blobFile(String hash) => File('${dir.path}/blobs/$hash');
 
   Map<String, Object?> stateJson() {
     final names = devices.keys.toList()..sort();
@@ -111,6 +122,7 @@ class Wallet {
       },
       'snapshot': snapshot?.toJson(),
       'previous': previous?.toJson(),
+      'blobs': {'count': blobCount, 'bytes': blobBytes},
     };
   }
 
@@ -247,6 +259,18 @@ class Wallet {
     if (await dSnap.exists()) {
       await for (final f in dSnap.list(followLinks: false)) {
         if (f is File && !keep.contains(f.uri.pathSegments.last)) await f.delete();
+      }
+    }
+    final dBlobs = Directory('${dir.path}/blobs');
+    if (await dBlobs.exists()) {
+      await for (final f in dBlobs.list(followLinks: false)) {
+        if (f is! File) continue;
+        if (!blobHashPattern.hasMatch(f.uri.pathSegments.last)) {
+          await f.delete(); // temp file of an interrupted write
+          continue;
+        }
+        w.blobCount++;
+        w.blobBytes += await f.length();
       }
     }
     return w;

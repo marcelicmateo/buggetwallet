@@ -380,6 +380,8 @@ class WalletSettings {
   final int reviewStreak; // weekly reviews done in a row
   final int headsUpCents; // heads-up before a planned cost or bill this big or bigger (minor units)
   final int headsUpDays; // ... this many days before its date (0 = on the day)
+  final int returnReminderDays; // remind this many days before a bill's return window ends (0 = on the day)
+  final int warrantyReminderDays; // ... before a bill's warranty ends
   final String? syncFolder; // device-local, not synced
 
   const WalletSettings({
@@ -404,6 +406,8 @@ class WalletSettings {
     this.reviewStreak = 0,
     this.headsUpCents = defaultHeadsUpCents,
     this.headsUpDays = defaultHeadsUpDays,
+    this.returnReminderDays = defaultReturnReminderDays,
+    this.warrantyReminderDays = defaultWarrantyReminderDays,
     this.syncFolder,
   });
 
@@ -418,6 +422,9 @@ class WalletSettings {
 
   /// Heads-up defaults (owner, 2026-10-22: 3 days before a planned cost of 100 € or more) and their ranges.
   static const defaultHeadsUpCents = 10000, maxHeadsUpCents = 10000000, defaultHeadsUpDays = 3, maxHeadsUpDays = 14;
+
+  /// Bill reminder defaults (BILLS_API.md §3) and their ranges, in days before the date.
+  static const defaultReturnReminderDays = 3, maxReturnReminderDays = 30, defaultWarrantyReminderDays = 14, maxWarrantyReminderDays = 90;
 
   /// Reads settings from stored/synced values. A value of the wrong type or outside its range (another device's
   /// bug, a damaged op) falls back to that setting's default alone, logged as `settings.invalid` with the key only
@@ -486,6 +493,8 @@ class WalletSettings {
       reviewStreak: i('reviewStreak', 0, max: maxStreak),
       headsUpCents: i('headsUpCents', defaultHeadsUpCents, max: maxHeadsUpCents),
       headsUpDays: i('headsUpDays', defaultHeadsUpDays, max: maxHeadsUpDays),
+      returnReminderDays: i('returnReminderDays', defaultReturnReminderDays, max: maxReturnReminderDays),
+      warrantyReminderDays: i('warrantyReminderDays', defaultWarrantyReminderDays, max: maxWarrantyReminderDays),
     );
   }
 
@@ -537,5 +546,7 @@ class WalletSettings {
         'reviewStreak': reviewStreak,
         'headsUpCents': headsUpCents,
         'headsUpDays': headsUpDays,
+        'returnReminderDays': returnReminderDays,
+        'warrantyReminderDays': warrantyReminderDays,
       };
 }

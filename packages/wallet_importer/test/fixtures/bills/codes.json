@@ -1,0 +1,80 @@
+{
+ "qr": [
+  {
+   "payload": "https://porezna.gov.hr/rn?jir=f38b2ffc-80a4-4f5a-91c9-bc701e7ea419&datv=20260314_1532&izn=1250",
+   "bill": {
+    "externalId": "jir:f38b2ffc-80a4-4f5a-91c9-bc701e7ea419",
+    "date": "2026-03-14",
+    "total": 1250
+   }
+  },
+  {
+   "payload": "https://porezna.gov.hr/rn?zki=e512148239292d22e255accb1a466884&datv=20260401_0905&izn=7,99",
+   "bill": {
+    "externalId": "zki:e512148239292d22e255accb1a466884",
+    "date": "2026-04-01",
+    "total": 799
+   }
+  },
+  {
+   "payload": "https://porezna.gov.hr/rn?jir=F3F49249-DC28-4F90-A5AE-C7978306D03B&datv=20261231_2359&izn=100.5",
+   "bill": {
+    "externalId": "jir:f3f49249-dc28-4f90-a5ae-c7978306d03b",
+    "date": "2026-12-31",
+    "total": 10050
+   }
+  }
+ ],
+ "hub3": [
+  {
+   "payload": "HRVHUB30\nEUR\n000000000002550\nPero Probni\nProbna ulica 1\n10000 Grad\nPrimjer Energija d.o.o.\nIzmišljena 5\n21000 Mjesto\nHR9199900011000000017\nHR01\n2026-0042-1\nCOST\nPretplata 10/2026",
+   "bill": {
+    "externalId": "hub3:HR9199900011000000017:HR01 2026-0042-1:2550",
+    "payee": "Primjer Energija d.o.o.",
+    "iban": "HR9199900011000000017",
+    "reference": "HR01 2026-0042-1",
+    "description": "Pretplata 10/2026",
+    "total": 2550,
+    "currency": "EUR",
+    "unsure": 0
+   }
+  },
+  {
+   "payload": "HRVHUB30\r\nEUR\r\n000000000012000\r\nPero Probni\r\nProbna ulica 1\r\n10000 Grad\r\nPrimjer Voda d.o.o.\r\n\r\n\r\nHR5199900023200000458\r\nHR99\r\n\r\nWTER\r\n\r\n\r\n",
+   "bill": {
+    "externalId": "hub3:HR5199900023200000458:HR99:12000",
+    "payee": "Primjer Voda d.o.o.",
+    "iban": "HR5199900023200000458",
+    "reference": "HR99",
+    "description": null,
+    "total": 12000,
+    "currency": "EUR",
+    "unsure": 0
+   }
+  },
+  {
+   "payload": "HRVHUB30\nEUR\n000000000000999\nPero Probni\nProbna ulica 1\n10000 Grad\nPrimjer Klub\nUlica 2\n31000 Mjesto\nHR9299900011000000017\nHR00\n123\nOTHR\nČlanarina",
+   "bill": {
+    "externalId": null,
+    "payee": "Primjer Klub",
+    "iban": null,
+    "reference": "HR00 123",
+    "description": "Članarina",
+    "total": 999,
+    "currency": "EUR",
+    "unsure": 1
+   }
+  }
+ ],
+ "payer": [
+  "Pero Probni",
+  "Probna ulica 1",
+  "10000 Grad"
+ ],
+ "ibans": [
+  "HR9199900011000000017",
+  "HR5199900023200000458",
+  "HR5599900035500000123"
+ ],
+ "badIban": "HR9299900011000000017"
+}
