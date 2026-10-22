@@ -79,7 +79,7 @@ void main() {
       final sw = Stopwatch()..start();
       final res = parseIcs(text, calendarId: 'c1', from: '2026-03-01', to: '2026-03-31');
       sw.stop();
-      expect(sw.elapsedMilliseconds, lessThan(2000));
+      expect(sw.elapsedMilliseconds, lessThan(10000)); // ~1 s idle; generous for a shared, loaded laptop (before the fix: minutes)
       expect(res.events.map((e) => (e.title, e.date)), [('With attachment', '2026-03-10')]);
       expect(res.unsupported, 0);
     }, timeout: const Timeout(Duration(seconds: 30)));
@@ -98,7 +98,7 @@ void main() {
       final sw = Stopwatch()..start();
       final res = parseIcs(text, calendarId: 'c1', from: '2026-03-01', to: '2026-03-31');
       sw.stop();
-      expect(sw.elapsedMilliseconds, lessThan(2000));
+      expect(sw.elapsedMilliseconds, lessThan(10000)); // ~1 s idle; generous for a shared, loaded laptop (before the fix: minutes)
       expect(res.events.map((e) => (e.title, e.date)), [('Weekly', '2026-03-02'), ('Single', '2026-03-20')]);
       expect(res.unsupported, greaterThan(29000));
       expect(res.unsupported, lessThanOrEqualTo(30001));

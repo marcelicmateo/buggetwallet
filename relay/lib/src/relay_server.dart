@@ -184,7 +184,7 @@ class Relay {
       if (origin != null && origins.contains(origin)) {
         res.headers.set('Access-Control-Allow-Origin', origin);
         if (req.method == 'OPTIONS') {
-          res.headers.set('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS');
+          res.headers.set('Access-Control-Allow-Methods', 'GET, PUT, DELETE, OPTIONS');
           res.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-BW-Covers, X-BW-Time, X-BW-Sig, X-BW-Pub');
           res.headers.set('Access-Control-Max-Age', '600');
         } else {
@@ -260,6 +260,22 @@ class Relay {
         }
         info.kind = 'put-snap';
         return _putSnapshot(req, wid, id, info, sig);
+      case ('blob', 5):
+        final hash = seg[4];
+        if (!blobHashPattern.hasMatch(hash)) throw _HttpError(400, 'bad blob hash');
+        _method(req, ['GET', 'PUT', 'DELETE']);
+        final sig = _signature(req, path);
+        switch (req.method) {
+          case 'GET':
+            info.kind = 'get-blob';
+            return _getBlob(wid, hash, info, sig);
+          case 'PUT':
+            info.kind = 'put-blob';
+            return _putBlob(req, wid, hash, info, sig);
+          default:
+            info.kind = 'delete-blob';
+            return _deleteBlob(req, wid, hash, info, sig);
+        }
     }
     throw _HttpError(404, 'not found');
   }
@@ -467,7 +483,7 @@ class Relay {
         }
         throw _HttpError(422, 'seq beyond last + 1');
       }
-      if (w.bytes + body.length > maxBytes) throw _HttpError(507, 'wallet full');
+      if (w.totalBytes + body.length > maxBytes) throw _HttpError(507, 'wallet full');
       await writeAtomic(w.dataFile(device, seq), body);
       w.bytes += body.length;
       final dev = w.devices.putIfAbsent(device, () => DeviceState(_now()));
@@ -550,8 +566,8 @@ class Relay {
           if ((covers[e.key] ?? 0) < e.value) throw _HttpError(409, 'does not dominate');
         }
       }
-      // Snapshots are what frees room, so only the kept snapshots count here, not the files they will prune.
-      if ((cur?.size ?? 0) + body.length > maxBytes) throw _HttpError(507, 'wallet full');
+      // Snapshots are what frees room, so only the kept snapshots (and the blobs) count here, not the files they will prune.
+      if ((cur?.size ?? 0) + w.blobBytes + body.length > maxBytes) throw _HttpError(507, 'wallet full');
       await writeAtomic(w.snapFile(id), body);
       final dropped = w.previous;
       w.previous = cur;
@@ -583,6 +599,59 @@ class Relay {
       } on FileSystemException {
         throw _HttpError(500, 'storage');
       }
+    });
+  }
+
+  Future<_Out> _getBlob(String wid, String hash, _LogInfo info, _Sig sig) async {
+    final w = _known(wid);
+    await _verify(w.pubBytes, sig, 'GET', const []);
+    return _locked(wid, () async {
+      try {
+        final bytes = await w.blobFile(hash).readAsBytes();
+        info.bytes = bytes.length;
+        return _Out.octets(bytes);
+      } on PathNotFoundException {
+        throw _HttpError(404, 'no such blob');
+      } on FileSystemException {
+        throw _HttpError(500, 'storage');
+      }
+    });
+  }
+
+  Future<_Out> _putBlob(HttpRequest req, String wid, String hash, _LogInfo info, _Sig sig) async {
+    final known = _known(wid);
+    final body = await _readBody(req, maxFileBytes, info);
+    await _verify(known.pubBytes, sig, 'PUT', body);
+    if (sha256OfBytes(body) != hash) throw _HttpError(400, 'hash');
+    return _locked(wid, () async {
+      final w = _known(wid);
+      final file = w.blobFile(hash);
+      if (await file.exists()) return _Out.json(200, {'hash': hash});
+      if (w.totalBytes + body.length > maxBytes) throw _HttpError(507, 'wallet full');
+      await writeAtomic(file, body);
+      w.blobCount++;
+      w.blobBytes += body.length;
+      return _Out.json(201, {'hash': hash});
+    });
+  }
+
+  Future<_Out> _deleteBlob(HttpRequest req, String wid, String hash, _LogInfo info, _Sig sig) async {
+    final known = _known(wid);
+    final body = await _readBody(req, _maxJsonBytes, info);
+    if (body.isNotEmpty) throw _HttpError(400, 'body not allowed');
+    await _verify(known.pubBytes, sig, 'DELETE', body);
+    return _locked(wid, () async {
+      final w = _known(wid);
+      final file = w.blobFile(hash);
+      try {
+        final size = await file.length();
+        await file.delete();
+        w.blobCount--;
+        w.blobBytes -= size;
+      } on PathNotFoundException {
+        // never stored or already deleted
+      }
+      return _Out.empty(204);
     });
   }
 

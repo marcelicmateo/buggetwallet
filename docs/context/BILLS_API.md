@@ -87,7 +87,7 @@ List<CategorizedTx> billCandidates(Bill b, List<CategorizedTx> txs, List<Bill> a
 ## 3. Upcoming and reminders
 `UpcomingKind` gains `warranty` and `returnBy` (keys `w:<billId>`, `r:<billId>`, amount null, never counted; title =
 payee or description). `upcoming(..., billsDb: List<Bill>)` lists confirmed, not deleted bills' `warrantyUntil` /
-`returnBy` in range (the bill's planned row is already listed as `planned`). Settings (synced): `returnReminderDays`
+`returnBy` in range (the bill's planned row is already listed as `planned`); `UpcomingItem.billDb` holds the bill for those items. Settings (synced): `returnReminderDays`
 (default 3, 0..30), `warrantyReminderDays` (default 14, 0..90).
 ```dart
 class BillReminder { final Bill bill; final UpcomingKind kind; final String date; final int daysLeft; }
@@ -102,7 +102,7 @@ class BlobRef { final String hash; final String type; final int bytes; }   // by
 class BlobStore {                       // core, web-safe; needs the wallet key
   BlobStore(WalletRepo repo, VaultKey key);
   /// Seals [plain] (≤ 15 MiB, else ArgumentError), keeps it in the local cache, queues the upload; returns the ref.
-  BlobRef add(Uint8List plain, String type);
+  Future<BlobRef> add(Uint8List plain, String type);   // async: seal() is async (B1b, 2026-10-22)
   /// Plain bytes: from the cache, else fetched from [transport] (sha256(sealed) checked, unsealed with the key, cached);
   /// null when not on this device and not reachable / not on the relay.
   Future<Uint8List?> read(String hash, {SyncTransport? transport});
