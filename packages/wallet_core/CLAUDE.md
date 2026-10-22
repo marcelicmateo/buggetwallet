@@ -11,8 +11,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `package:sqlite3/wasm.dart` database itself and calls `WalletRepo.fromDatabase(db, file:)` (same pragmas/migrations).
 - dart:io code lives in `*_io.dart` files with a `*_web.dart` twin of the same public names that throws
   `UnsupportedError`; the barrel picks one with `export 'src/x_io.dart' if (dart.library.js_interop) 'src/x_web.dart';`:
-  `backup_io.dart` (`writeBackup`, `restoreBackup`, `listBackups`, `backupsFolder`, `backupPath`), `logs_io.dart`
-  (`RotatingFileSink`). `platform_error_io/web.dart` give `describeError` its
+  `logs_io.dart` (`RotatingFileSink`). `platform_error_io/web.dart` give `describeError` its
   dart:io case. New dart:io code goes in one of these (or a new pair), never in a shared file.
 - gzip comes from `package:archive` (`vault.dart`): on the VM it is `dart:io`'s codec (same bytes as before), in the
   browser pure Dart; both write one standard gzip member, which is what `_wholeGzip` and older builds check.
@@ -141,27 +140,23 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption; `UnsealFailure` says why a
   file was refused; `deriveKey` = HKDF-SHA256, empty salt), `sync.dart` (`SyncException`, `SyncReport`, `SyncWaiting`,
   `SyncDevice`; web-safe) + `sync_engine.dart` (below).
-- `backup.dart` — backups (M5, owner decision 2026-10-22: no sync folder any more, "Back up now" saves the sealed `.bwb` through the save dialog,
-  encrypted with the wallet key, restore only into an empty wallet; the `*_io.dart` folder helpers below are the older folder variant). Pure half (web-safe): `backupFileName(today)` = `bw-backup-<today>.bwb`
-  (`ArgumentError` unless `YYYY-MM-DD`), `backupBytes(repo, key)` = the sealed payload, `restoreBackupBytes(repo,
-  bytes, key)` = everything a restore does once the bytes are in hand. File half (`backup_io.dart`):
-  `writeBackup(repo, syncFolder, key, today:)` writes `backupBytes` to
-  `<syncFolder>/budget-wallet/backups/bw-backup-<today>.bwb` (`backupPath`, `backupsFolder`; temp file + rename, the
-  same day's file is replaced) sealed with `seal()` like a sync file; payload UTF-8 JSON `{"v":1,"ops":[...]}` =
-  `WalletRepo.snapshotOps()`: every row of every synced entity, deleted rows and settings included, as one op per
-  distinct field clock (the fields written with that clock and their current values; a field with no clock, i.e. the
-  column default, is left out), so a restore records the very same clocks; device-local values never. Returns the file
-  name; logs `backup.write` with the op count. `restoreBackup(repo, file, key)` (full path): `StateError` unless
-  `repo.isEmpty` (no row at all, deleted included, in tx, goals, goal_contrib, wish, recurring, merchant_rules,
-  settings) before the file is touched; unseal errors are the `VaultException`; a file that cannot be read, is not a
-  backup or has a clock that does not parse is a `BackupException` (`reason`: `BackupFailure.unreadable`, `damaged`,
-  `newerVersion` for `v` > `backupVersion`; nothing applied unless the whole file parses). The ops go through
-  `applyRemote(ops, resend: true)`: matching, pairing and bill detection run once at the end, and the ops are queued in
-  the outbox with their clocks unchanged, so the next sync exports them as this device's file and the restored state
-  reaches the other devices like local writes (devices already holding those fields at the same clocks change nothing:
-  a clock is only accepted when newer; a restore into a wallet whose relay still has every device's files converges either
-  way, the resend covers pruned files or a new relay). Returns the op count. `listBackups(syncFolder)` →
-  `BackupInfo(name, date, path)` (full path for `restoreBackup`) newest first, only `bw-backup-YYYY-MM-DD.bwb` names, missing folder → `[]`.
+- `backup.dart` — backups (M5, owner decision 2026-10-22: no sync folder, "Back up now" saves the sealed `.bwb` through
+  the save dialog, encrypted with the wallet key, restore only into an empty wallet; web-safe, no file code here).
+  `backupFileName(today)` = `bw-backup-<today>.bwb` (`ArgumentError` unless `YYYY-MM-DD`). `backupBytes(repo, key)`:
+  sealed with `seal()` like a sync file; payload UTF-8 JSON `{"v":1,"ops":[...]}` = `WalletRepo.snapshotOps()`: every
+  row of every synced entity, deleted rows and settings included, as one op per distinct field clock (the fields written
+  with that clock and their current values; a field with no clock, i.e. the column default, is left out), so a restore
+  records the very same clocks; device-local values never. Logs `backup.write` with the op count.
+  `restoreBackupBytes(repo, bytes, key)`: `StateError` unless `repo.isEmpty` (no row at all, deleted included, in tx,
+  goals, goal_contrib, wish, recurring, merchant_rules, settings) before anything is read; unseal errors are the
+  `VaultException`; content that is not a backup or has a clock that does not parse is a `BackupException` (`reason`:
+  `damaged`, `newerVersion` for `v` > `backupVersion`; `unreadable` is what the app uses when it cannot read the picked
+  file; nothing applied unless the whole file parses). The ops go through `applyRemote(ops, resend: true)`: matching,
+  pairing and bill detection run once at the end, and the ops are queued in the outbox with their clocks unchanged, so
+  the next sync exports them as this device's file and the restored state reaches the other devices like local writes
+  (devices already holding those fields at the same clocks change nothing: a clock is only accepted when newer; a
+  restore into a wallet whose relay still has every device's files converges either way, the resend covers pruned files
+  or a new relay). Returns the op count.
 - `export.dart` — CSV (M5, pure, the app saves the text through the system dialog; unencrypted, the app warns once).
   `transactionsCsv(List<CategorizedTx>)`: `date,amount,category,description,source,note`, live rows only (`Tx.live`:
   no deleted rows, no hand-added entries replaced by a bank row that is here), sorted date then id, `amount` the
@@ -226,7 +221,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (`syncHealAt`), and a second healer skips once the first one's snapshot covers the file. `SyncReport`:
   `sent` ops, `received` fields changed, `filesRead` (snapshots count), `problems`, `caughtUp`, `waiting`, `devices`
   (short ids, `lastSeen`, `isThis`). Fatal `SyncException`s (short, no address): unreachable, refused (401), relay
-  full, newer relay API, other. Opening a folder-sync database drops `peer_files` (`repo.peerFiles.dropped`).
+  full, newer relay API, other. Opening a database from the old folder-sync builds drops its `peer_files` table (`repo.peerFiles.dropped`).
 - `logs.dart` — logging (`package:logging`): `logEvent`/`logError` (structured events), `formatLogRecord` (one line,
   errors via `describeError`, which drops SQL parameters, paths and FormatException sources), `LogSink` (`add`,
   `flush`, `close`) with `MemoryLogSink` (ring buffer by UTF-8 bytes, `maxBytes` default 2 MiB, oldest lines dropped

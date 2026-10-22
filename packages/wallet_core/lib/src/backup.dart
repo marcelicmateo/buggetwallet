@@ -1,4 +1,4 @@
-// Backups: the sealed payload (this file, compiles for the web) and the files in the sync folder (`backup_io.dart`).
+// Backups: the sealed payload the app saves through the save dialog and restores from a picked file (compiles for the web).
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -35,17 +35,6 @@ class BackupException implements Exception {
   String toString() => message;
 }
 
-/// One backup file in the sync folder: its [name] (`bw-backup-YYYY-MM-DD.bwb`), the [date] in it (`YYYY-MM-DD`) and its
-/// full [path] (what `restoreBackup` takes).
-class BackupInfo {
-  final String name;
-  final String date;
-  final String path;
-  const BackupInfo(this.name, this.date, this.path);
-  @override
-  String toString() => 'BackupInfo($name)';
-}
-
 /// The name of the backup written on [today] (`YYYY-MM-DD`, else [ArgumentError]): `bw-backup-<today>.bwb`.
 String backupFileName(String today) {
   if (!_isoDate.hasMatch(today)) throw ArgumentError('The date is not YYYY-MM-DD.');
@@ -54,7 +43,7 @@ String backupFileName(String today) {
 
 /// A full snapshot of [repo] ([WalletRepo.snapshotOps]: every synced row, deleted ones included, settings included,
 /// no device-local values) as UTF-8 JSON `{"v":1,"ops":[...]}`, sealed with [key] like a sync file. What
-/// `writeBackup` saves and the web app downloads. Logs `backup.write` with the op count.
+/// the app saves through the save dialog. Logs `backup.write` with the op count.
 Future<Uint8List> backupBytes(WalletRepo repo, VaultKey key) async {
   final t = PerfTimer('backup.write', warnMs: 2000);
   final ops = repo.snapshotOps();

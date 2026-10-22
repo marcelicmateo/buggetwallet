@@ -84,76 +84,36 @@ void main() {
     return (a, tmp.path);
   }
 
-  group('writeBackup / listBackups', () {
-    test('file name, location, and the file is not plain text', () async {
+  group('backupBytes', () {
+    test('the file is not plain text', () async {
       final a = device('a');
       a.repo.importBatch(january);
-      final name = await writeBackup(a.repo, tmp.path, key, today: '2026-03-05');
-      expect(name, 'bw-backup-2026-03-05.bwb');
-      final f = File('${tmp.path}/budget-wallet/backups/$name');
-      expect(f.existsSync(), isTrue);
-      final bytes = f.readAsBytesSync();
+      final bytes = await backupBytes(a.repo, key);
       expect(bytes, isNotEmpty);
       final text = String.fromCharCodes(bytes);
       expect(text.contains('Neto'), isFalse, reason: 'sealed with the wallet key');
       expect(text.contains('LIDL'), isFalse);
     });
 
-    test('same-day backup overwrites; a different day adds a file', () async {
-      final a = device('a');
-      a.repo.importBatch(january);
-      await writeBackup(a.repo, tmp.path, key, today: '2026-03-05');
-      a.repo.addManual(date: '2026-03-05', amount: 100, category: 'Shopping');
-      await writeBackup(a.repo, tmp.path, key, today: '2026-03-05');
-      expect(await listBackups(tmp.path), hasLength(1));
-      final fresh = WalletRepo.inMemory();
-      final file = '${tmp.path}/budget-wallet/backups/bw-backup-2026-03-05.bwb';
-      await restoreBackup(fresh, file, key);
-      expect(view(fresh), view(a.repo), reason: 'the second write won');
-      fresh.close();
-      await writeBackup(a.repo, tmp.path, key, today: '2026-03-06');
-      expect(await listBackups(tmp.path), hasLength(2));
-    });
-
-    test('list: newest first, with name and date; empty when the folder is missing', () async {
-      expect(await listBackups('${tmp.path}/nope'), isEmpty);
-      expect(await listBackups(tmp.path), isEmpty);
-      final a = device('a');
-      for (final d in ['2026-01-31', '2026-03-05', '2025-12-31', '2026-02-01']) {
-        await writeBackup(a.repo, tmp.path, key, today: d);
-      }
-      File('${tmp.path}/budget-wallet/backups/notes.txt').writeAsStringSync('not a backup');
-      final l = await listBackups(tmp.path);
-      expect([for (final b in l) b.date], ['2026-03-05', '2026-02-01', '2026-01-31', '2025-12-31']);
-      expect([
-        for (final b in l) b.name
-      ], [
-        'bw-backup-2026-03-05.bwb',
-        'bw-backup-2026-02-01.bwb',
-        'bw-backup-2026-01-31.bwb',
-        'bw-backup-2025-12-31.bwb',
-      ]);
-    });
-
     test('an empty wallet can be backed up and restored (nothing to see)', () async {
       final a = device('a');
       expect(a.repo.isEmpty, isTrue);
-      final name = await writeBackup(a.repo, tmp.path, key, today: '2026-03-05');
+      final file = await backupBytes(a.repo, key);
       final fresh = WalletRepo.inMemory();
-      final n = await restoreBackup(fresh, '${tmp.path}/budget-wallet/backups/$name', key);
+      final n = await restoreBackupBytes(fresh, file, key);
       expect(n, 0);
       expect(fresh.isEmpty, isTrue);
       fresh.close();
     });
   });
 
-  group('restoreBackup', () {
+  group('restoreBackupBytes', () {
     test('round trip after two devices synced and a row was deleted: totals, categories, settings, contributions equal', () async {
       final (a, _) = await richWallet();
-      final name = await writeBackup(a.repo, tmp.path, key, today: '2026-02-01');
+      final file = await backupBytes(a.repo, key);
       final fresh = WalletRepo.inMemory();
       expect(fresh.isEmpty, isTrue);
-      final n = await restoreBackup(fresh, '${tmp.path}/budget-wallet/backups/$name', key);
+      final n = await restoreBackupBytes(fresh, file, key);
       expect(n, greaterThan(0));
       expect(fresh.isEmpty, isFalse);
       expect(view(fresh), view(a.repo));
@@ -170,9 +130,9 @@ void main() {
 
     test('restored wallet keeps working: a later sync does not duplicate or lose anything', () async {
       final (a, _) = await richWallet();
-      final name = await writeBackup(a.repo, tmp.path, key, today: '2026-02-01');
+      final file = await backupBytes(a.repo, key);
       final c = device('c');
-      await restoreBackup(c.repo, '${tmp.path}/budget-wallet/backups/$name', key);
+      await restoreBackupBytes(c.repo, file, key);
       await syncAll([a, c]);
       await syncAll([a, c]);
       expect(view(c.repo), view(a.repo));
@@ -180,28 +140,28 @@ void main() {
 
     test('refused on a wallet with data: StateError and the wallet is unchanged', () async {
       final (a, _) = await richWallet();
-      final name = await writeBackup(a.repo, tmp.path, key, today: '2026-02-01');
+      final file = await backupBytes(a.repo, key);
       final other = WalletRepo.inMemory();
       other.addManual(date: '2026-01-02', amount: 500, category: 'Groceries', note: 'mine');
       final before = dump(other);
       final pending = other.pendingOps().length;
-      await expectLater(restoreBackup(other, '${tmp.path}/budget-wallet/backups/$name', key), throwsA(isA<StateError>()));
+      await expectLater(restoreBackupBytes(other, file, key), throwsA(isA<StateError>()));
       expect(dump(other), before);
       expect(other.pendingOps(), hasLength(pending));
       other.close();
       // Also refused on the source wallet itself (restoring over yourself is not a merge path).
       final b = dump(a.repo);
-      await expectLater(restoreBackup(a.repo, '${tmp.path}/budget-wallet/backups/$name', key), throwsA(isA<StateError>()));
+      await expectLater(restoreBackupBytes(a.repo, file, key), throwsA(isA<StateError>()));
       expect(dump(a.repo), b);
     });
 
     test('a wallet holding only a setting or only a goal is not empty', () async {
       final a = device('a');
       a.repo.importBatch(january);
-      final name = await writeBackup(a.repo, tmp.path, key, today: '2026-02-01');
+      final file = await backupBytes(a.repo, key);
       final s = WalletRepo.inMemory()..updateSettings({'salary': 100});
       expect(s.isEmpty, isFalse);
-      await expectLater(restoreBackup(s, '${tmp.path}/budget-wallet/backups/$name', key), throwsA(isA<StateError>()));
+      await expectLater(restoreBackupBytes(s, file, key), throwsA(isA<StateError>()));
       final g = WalletRepo.inMemory()..saveGoal(name: 'x', target: 1, saved: 0, monthly: 0);
       expect(g.isEmpty, isFalse);
       s.close();
@@ -211,10 +171,10 @@ void main() {
     test('wrong key: VaultException, wallet stays empty', () async {
       final a = device('a');
       a.repo.importBatch(january);
-      final name = await writeBackup(a.repo, tmp.path, key, today: '2026-02-01');
+      final file = await backupBytes(a.repo, key);
       final fresh = WalletRepo.inMemory();
       await expectLater(
-          restoreBackup(fresh, '${tmp.path}/budget-wallet/backups/$name', VaultKey.generate()), throwsA(isA<VaultException>()));
+          restoreBackupBytes(fresh, file, VaultKey.generate()), throwsA(isA<VaultException>()));
       expect(fresh.isEmpty, isTrue);
       fresh.close();
     });
@@ -222,28 +182,22 @@ void main() {
     test('truncated or garbled file never half-restores', () async {
       final a = device('a');
       a.repo.importBatch(january);
-      final name = await writeBackup(a.repo, tmp.path, key, today: '2026-02-01');
-      final path = '${tmp.path}/budget-wallet/backups/$name';
-      final bytes = File(path).readAsBytesSync();
-      for (final cut in [0, 5, bytes.length ~/ 2, bytes.length - 1]) {
-        final f = File('${tmp.path}/cut$cut.bwb')..writeAsBytesSync(bytes.sublist(0, cut));
+      final file = await backupBytes(a.repo, key);
+      for (final cut in [0, 5, file.length ~/ 2, file.length - 1]) {
         final fresh = WalletRepo.inMemory();
-        await expectLater(restoreBackup(fresh, f.path, key), throwsA(anyOf(isA<VaultException>(), isA<BackupException>())),
+        await expectLater(restoreBackupBytes(fresh, file.sublist(0, cut), key), throwsA(anyOf(isA<VaultException>(), isA<BackupException>())),
             reason: 'cut at $cut');
         expect(fresh.isEmpty, isTrue, reason: 'cut at $cut');
         fresh.close();
       }
-      await expectLater(restoreBackup(WalletRepo.inMemory(), '${tmp.path}/missing.bwb', key), throwsA(isA<Exception>()));
     });
 
     test('a sealed non-backup payload is a BackupException', () async {
       final junk = await seal('{"not":"a list of ops"}'.codeUnits, key);
-      final f = File('${tmp.path}/junk.bwb')..writeAsBytesSync(junk);
       final fresh = WalletRepo.inMemory();
-      await expectLater(restoreBackup(fresh, f.path, key), throwsA(isA<BackupException>()));
+      await expectLater(restoreBackupBytes(fresh, junk, key), throwsA(isA<BackupException>()));
       final junk2 = await seal('not json at all'.codeUnits, key);
-      final f2 = File('${tmp.path}/junk2.bwb')..writeAsBytesSync(junk2);
-      await expectLater(restoreBackup(fresh, f2.path, key), throwsA(isA<BackupException>()));
+      await expectLater(restoreBackupBytes(fresh, junk2, key), throwsA(isA<BackupException>()));
       expect(fresh.isEmpty, isTrue);
       fresh.close();
     });

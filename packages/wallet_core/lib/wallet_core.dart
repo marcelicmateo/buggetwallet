@@ -8,7 +8,6 @@ library;
 export 'package:wallet_importer/wallet_importer.dart' show TxKind;
 
 export 'src/backup.dart';
-export 'src/backup_io.dart' if (dart.library.js_interop) 'src/backup_web.dart';
 export 'src/budget.dart';
 export 'src/categories.dart';
 export 'src/dates.dart';

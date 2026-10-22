@@ -45,11 +45,8 @@ void main() {
     tmp.deleteSync(recursive: true);
   });
 
-  /// Writes [json] (already a string) as a sealed file and returns its path.
-  Future<String> sealed(String json, String name) async {
-    final f = File('${tmp.path}/$name')..writeAsBytesSync(await seal(utf8.encode(json), key));
-    return f.path;
-  }
+  /// [json] (already a string) sealed with the wallet key, like a backup file.
+  Future<List<int>> sealed(String json) async => seal(utf8.encode(json), key);
 
   group('snapshotOps', () {
     test('one op per row and clock, fields grouped by the write that set them; defaults without a clock are left out', () {
@@ -94,15 +91,12 @@ void main() {
     });
   });
 
-  group('writeBackup', () {
-    test('payload is {"v":1,"ops":[...]} sealed with the wallet key; overwrite is atomic (no temp file left)', () async {
+  group('backupBytes', () {
+    test('payload is {"v":1,"ops":[...]} sealed with the wallet key', () async {
       final r = WalletRepo.inMemory(now: () => now);
       addTearDown(r.close);
       r.importBatch(january);
-      final name = await writeBackup(r, tmp.path, key, today: '2026-03-05');
-      final dir = Directory(backupsFolder(tmp.path));
-      expect(dir.listSync().map((f) => f.path.split('/').last), [name]);
-      final clear = await unseal(File(backupPath(tmp.path, name)).readAsBytesSync(), key);
+      final clear = await unseal(await backupBytes(r, key), key);
       final json = jsonDecode(utf8.decode(clear)) as Map;
       expect(json['v'], 1);
       expect((json['ops'] as List).length, january.transactions.length);
@@ -111,28 +105,10 @@ void main() {
       expect(op.fields['amount'], isA<int>());
     });
 
-    test('today must be a date (it becomes the file name)', () async {
-      final r = WalletRepo.inMemory();
-      addTearDown(r.close);
-      await expectLater(writeBackup(r, tmp.path, key, today: '../x'), throwsA(isA<ArgumentError>()));
-      await expectLater(writeBackup(r, tmp.path, key, today: '2026-3-5'), throwsA(isA<ArgumentError>()));
-      expect(Directory(backupsFolder(tmp.path)).existsSync(), isFalse);
-    });
-  });
-
-  group('listBackups', () {
-    test('temp files, folders and other names are not backups', () async {
-      final dir = Directory(backupsFolder(tmp.path))..createSync(recursive: true);
-      File('${dir.path}/.bw-backup-2026-03-05.bwb.tmp').writeAsStringSync('x');
-      File('${dir.path}/bw-backup-2026-03-05.bwb.bak').writeAsStringSync('x');
-      File('${dir.path}/bw-backup-20260305.bwb').writeAsStringSync('x');
-      Directory('${dir.path}/bw-backup-2026-03-06.bwb').createSync();
-      File('${dir.path}/bw-backup-2026-03-04.bwb').writeAsStringSync('x');
-      final l = await listBackups(tmp.path);
-      expect(l.map((b) => b.name), ['bw-backup-2026-03-04.bwb']);
-      expect(l.single.date, '2026-03-04');
-      expect(backupPath(tmp.path, l.single.name), '${dir.path}/bw-backup-2026-03-04.bwb');
-      expect(l.single.path, '${dir.path}/bw-backup-2026-03-04.bwb');
+    test('backupFileName: today must be a date (it becomes the file name)', () {
+      expect(backupFileName('2026-03-05'), 'bw-backup-2026-03-05.bwb');
+      expect(() => backupFileName('../x'), throwsA(isA<ArgumentError>()));
+      expect(() => backupFileName('2026-3-5'), throwsA(isA<ArgumentError>()));
     });
   });
 
@@ -158,10 +134,10 @@ void main() {
       await syncAll([a, b]);
       expect(dump(a.repo), dump(b.repo), reason: 'precondition');
 
-      final name = await writeBackup(a.repo, tmp.path, key, today: '2026-02-01');
+      final file = await backupBytes(a.repo, key);
       final fresh = WalletRepo.inMemory();
       addTearDown(fresh.close);
-      final n = await restoreBackup(fresh, backupPath(tmp.path, name), key);
+      final n = await restoreBackupBytes(fresh, file, key);
       expect(n, a.repo.snapshotOps().length);
       expect(dump(fresh), dump(a.repo), reason: 'every value and every field clock');
       expect(fresh.transactions(includeHidden: true).where((t) => t.deleted).map((t) => t.id), [mid]);
@@ -175,10 +151,10 @@ void main() {
       a.repo.importBatch(january);
       a.repo.updateSettings({'salary': 150000});
       await syncAll([a]);
-      final name = await writeBackup(a.repo, tmp.path, key, today: '2026-02-01');
+      final file = await backupBytes(a.repo, key);
 
       final c = device('c');
-      final n = await restoreBackup(c.repo, backupPath(tmp.path, name), key);
+      final n = await restoreBackupBytes(c.repo, file, key);
       expect(c.repo.pendingOps(), hasLength(n), reason: 'the snapshot goes out like local writes');
       c.deliver(net, Random(1));
       final sent = await c.run();
@@ -201,29 +177,27 @@ void main() {
       expect(r.isEmpty, isFalse);
     });
 
-    test('BackupException reasons: unreadable, newerVersion, damaged; messages carry no path or content', () async {
+    test('BackupException reasons: newerVersion, damaged; messages carry no content', () async {
       final fresh = WalletRepo.inMemory();
       addTearDown(fresh.close);
-      Future<BackupException> refused(String path) async {
+      Future<BackupException> refused(List<int> bytes) async {
         try {
-          await restoreBackup(fresh, path, key);
+          await restoreBackupBytes(fresh, bytes, key);
         } on BackupException catch (e) {
-          expect(e.toString(), isNot(contains(tmp.path)));
           expect(e.toString(), isNot(contains('ops')));
           return e;
         }
-        fail('restored $path');
+        fail('restored');
       }
 
-      expect((await refused('${tmp.path}/missing.bwb')).reason, BackupFailure.unreadable);
-      expect((await refused(await sealed('{"v":2,"ops":[]}', 'v2.bwb'))).reason, BackupFailure.newerVersion);
-      expect((await refused(await sealed('{"v":1}', 'noops.bwb'))).reason, BackupFailure.damaged);
-      expect((await refused(await sealed('{"ops":[]}', 'nov.bwb'))).reason, BackupFailure.damaged);
-      expect((await refused(await sealed('[]', 'list.bwb'))).reason, BackupFailure.damaged);
-      expect((await refused(await sealed('{"v":1,"ops":[{"e":"tx","id":"x","f":{"amount":1},"h":"junk"}]}', 'hlc.bwb'))).reason,
+      expect((await refused(await sealed('{"v":2,"ops":[]}'))).reason, BackupFailure.newerVersion);
+      expect((await refused(await sealed('{"v":1}'))).reason, BackupFailure.damaged);
+      expect((await refused(await sealed('{"ops":[]}'))).reason, BackupFailure.damaged);
+      expect((await refused(await sealed('[]'))).reason, BackupFailure.damaged);
+      expect((await refused(await sealed('{"v":1,"ops":[{"e":"tx","id":"x","f":{"amount":1},"h":"junk"}]}'))).reason,
           BackupFailure.damaged);
-      expect((await refused(await sealed('{"v":1,"ops":[1]}', 'op.bwb'))).reason, BackupFailure.damaged);
-      expect((await refused(await sealed('{"v":"1","ops":[]}', 'vstr.bwb'))).reason, BackupFailure.damaged);
+      expect((await refused(await sealed('{"v":1,"ops":[1]}'))).reason, BackupFailure.damaged);
+      expect((await refused(await sealed('{"v":"1","ops":[]}'))).reason, BackupFailure.damaged);
       expect(fresh.isEmpty, isTrue);
       expect(fresh.pendingOps(), isEmpty);
     });
@@ -232,11 +206,9 @@ void main() {
       final fresh = WalletRepo.inMemory();
       addTearDown(fresh.close);
       const h = '001767225600000:00000:synthetic';
-      final path = await sealed(
-          '{"v":1,"ops":[{"e":"future","id":"f","f":{"x":1},"h":"$h"},'
-              '{"e":"goal","id":"g","f":{"name":"Synthetic","target":100,"saved":0,"monthly":0,"sort":1,"deleted":0},"h":"$h"}]}',
-          'mixed.bwb');
-      expect(await restoreBackup(fresh, path, key), 2);
+      final file = await sealed('{"v":1,"ops":[{"e":"future","id":"f","f":{"x":1},"h":"$h"},'
+          '{"e":"goal","id":"g","f":{"name":"Synthetic","target":100,"saved":0,"monthly":0,"sort":1,"deleted":0},"h":"$h"}]}');
+      expect(await restoreBackupBytes(fresh, file, key), 2);
       expect(fresh.goals().single.name, 'Synthetic');
     });
 
@@ -251,21 +223,20 @@ void main() {
       });
       final a = device('a');
       a.repo.importBatch(january);
-      final name = await writeBackup(a.repo, tmp.path, key, today: '2026-02-01');
-      await listBackups(tmp.path);
+      final file = await backupBytes(a.repo, key);
       final fresh = WalletRepo.inMemory();
       addTearDown(fresh.close);
-      await restoreBackup(fresh, backupPath(tmp.path, name), key);
-      await expectLater(restoreBackup(WalletRepo.inMemory(), '${tmp.path}/missing.bwb', key), throwsA(isA<BackupException>()));
+      await restoreBackupBytes(fresh, file, key);
+      final empty = WalletRepo.inMemory();
+      addTearDown(empty.close);
+      await expectLater(restoreBackupBytes(empty, await sealed('{"v":2,"ops":[]}'), key), throwsA(isA<BackupException>()));
       final text = lines.join('\n');
       expect(text, contains('backup.write {"ms":'));
       expect(text, contains('"ops":${january.transactions.length}'));
       expect(text, contains('backup.restore {"ms":'));
       expect(text, contains('backup.restore.failed'));
-      expect(text, contains('"reason":"unreadable"'));
+      expect(text, contains('"reason":"newerVersion"'));
       expect(text, isNot(contains(tmp.path)));
-      expect(text, isNot(contains(name)));
-      expect(text, isNot(contains('missing.bwb')));
       for (final t in january.transactions) {
         expect(text, isNot(contains(t.description)));
         expect(text, isNot(contains('${t.amountMinor}')));

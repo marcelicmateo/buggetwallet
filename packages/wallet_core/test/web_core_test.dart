@@ -135,27 +135,6 @@ void main() {
       await expectRefused(await seal(utf8.encode('{"v":1,"ops":[{"e":"tx","id":"x","f":{},"h":"not a clock"}]}'), key), key,
           throwsA(isA<BackupException>().having((e) => e.reason, 'reason', BackupFailure.damaged)));
     });
-
-    test('writeBackup writes exactly a backupBytes payload; restoreBackup reads it through restoreBackupBytes', () async {
-      final key = VaultKey.generate();
-      final dir = Directory.systemTemp.createTempSync('bw-web-core-');
-      addTearDown(() => dir.deleteSync(recursive: true));
-      final a = WalletRepo.inMemory(now: () => now);
-      addTearDown(a.close);
-      a.importBatch(january);
-      final name = await writeBackup(a, dir.path, key, today: '2026-10-21');
-      expect(name, backupFileName('2026-10-21'));
-      final fileBytes = File(backupPath(dir.path, name)).readAsBytesSync();
-      // Same plaintext (the nonce differs per seal), restorable by the pure function.
-      expect(await unseal(fileBytes, key), await unseal(await backupBytes(a, key), key));
-      final b = WalletRepo.inMemory(now: () => now);
-      addTearDown(b.close);
-      expect(await restoreBackupBytes(b, fileBytes, key), a.snapshotOps().length);
-      final c = WalletRepo.inMemory(now: () => now);
-      addTearDown(c.close);
-      expect(await restoreBackup(c, backupPath(dir.path, name), key), a.snapshotOps().length);
-      expect((await listBackups(dir.path)).map((b) => b.name), [name]);
-    });
   });
 
   group('gzip compatibility (package:archive)', () {
