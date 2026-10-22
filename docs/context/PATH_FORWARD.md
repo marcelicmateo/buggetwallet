@@ -43,7 +43,7 @@ Non-functional, now explicit:
   not rewrite assertions.
 - **Scale**: one household, 20k rows, 16 wallets, 1 GiB per wallet. Nothing needs to grow.
 - **Constraints**: one owner; agents build; owner tests at the end; Linux + Android (+ local web); no new packages without
-  asking; no golden tests (owner rule); CI on push only with the owner's yes (D1).
+  asking; no golden tests (owner rule); no tests in GitHub CI (D1) — the local run is the gate.
 
 ## 3. Architecture after the changes
 
@@ -76,7 +76,7 @@ product on what the test surfaced (P).** All schema and protocol changes land in
 | G3 | **App surface**: controller renames follow the repo (`edit*` → `update*`, `billById` → `bill`, one spelling of planned/bill); `openPageOrDialog` + one `DialogAppBar` replacing three copies and five app bars; `MoneyField` + `centsToFieldText` with one validation sentence replacing seven `_plain` copies and ten keyboard scaffolds; named 44/48/52 → one 48 dp constant in `layout.dart`; ruled list row from `common.dart` in the four screens that re-inline it; one gate-page scaffold; `gapped()` once; refusal copy owned by one layer; six raw `DateTime.now()` → the injected clock; one platform-split suffix (`_io`/`_web`), `notifier.dart` → `nudge_platform_io.dart`; needlessly public app classes made private; the 1,500-cent "typical order" literal out of a string | CAR 6.1, 6.3, 6.7, 7.3, 7.5, 7.6; SDR 5.2, 5.5 | ui-builder |
 | G4 | **Small bugs found by the sweep** (each with a test): `CalendarKind.values.byName` on unknown JSON sits outside the try; `headsUpChain` stays rejected forever after one throw; swallowed catches at `scan_bill.dart:90` and `controller_future.dart:283`; `platform_test.dart` misses `device_calendar_plus` and `calendar_source_native.dart` (and a header explaining the allow-list) | CAR 5, 6.4, 6.6, 6.8 | ui-builder |
 | G5 | **Tests pinned by contract**: importer tests assert `unknownLayoutMessage` or a stable fragment, registry test says "contains pbz, revolut"; widget tests on `ValueKey`s where they pin copy (326 `find.text` → keys); the text-scale test fails (not skips) when fonts are missing; `meetsGuideline(androidTapTargetGuideline, textContrastGuideline)` in the sweeps | CAR 2.2, 7.1; SDR 5.8, 7 | test-writer |
-| G6 | **Practices**: CI on every push for lint + importer/core/relay tests + app widget tests on `ubuntu-latest` (D1; APK, desktop, emulator, release stay manual); `--enforce-lockfile` on every `pub get` in `build.sh` and CI; pub `workspace:` in a root pubspec replacing the hand-rolled staleness check in `build.sh pub_ready`; R8/minify configured explicitly; `dart pub outdated`/OSV advisories as a CI step once on push; release-notes template with the schema-bump replay and the "all devices within a week" policy; `dist/` kept out of review snapshots | SDR 7, 8, 10.2; SEC 9, 10; SAR 8 | devops |
+| G6 | **Practices (local, D1: no tests in GitHub CI)**: faster `tools/build.sh test` — run only the tests the changed files touch (`tools/build.sh changed`), package suites in parallel, a persistent container and warm pub cache so a run does not pay startup; pre-commit lint hook on by default; `--enforce-lockfile` on every `pub get`; pub `workspace:` in a root pubspec replacing the hand-rolled staleness check in `build.sh pub_ready`; R8/minify configured explicitly; `dart pub outdated` + OSV as a local step; release-notes template with the schema-bump replay and the "all devices within a week" policy; `dist/` kept out of review snapshots | SDR 7, 8, 10.2; SEC 9, 10; SAR 8 | devops |
 
 Merge order: A → ui → tests → devops; reviewer; one Haiku full run. G changes no behaviour, so the stage is judged by the
 suites staying green and the diff reading smaller.
@@ -95,7 +95,7 @@ suites staying green and the diff reading smaller.
 | H8 | `BWOP2`: AAD per use (`bw-sync-file\n<device>\n<seq>`, `bw-snapshot\n<id>`, `bw-backup`, `bw-blob`, web key wrap); 256 MiB inflate cap in `unseal`; `PRAGMA cipher` pinned before `PRAGMA key`; relay host in the signed text (`bw-relay-v3`); delete-wins vs edit-wins decided per entity and written down | SDR 9.4, 9.5, 10.3, 10.4; SAR 2; SEC 9, 10, 14 | core-builder B |
 | H9 | Field-pair repair: `planned.paid_tx` meaningful only when `status == paid`; `bill.linked_tx` unique across live bills repaired when caught up like transfers and matches; `SyncEngine.run` re-entrancy and `clockOffsetMs` sharing documented | SDR 9.2; SAR §4, 11.2; SEC 6; CAR 6.8 | core-builder B |
 | H10 | Android: `allowBackup="false"` + `dataExtractionRules`; `network_security_config.xml` (cleartext only for private ranges / the configured relay host); release build **fails** without a keystore; `FLAG_SECURE` while the key sheet is open; "show QR only" as the default transfer path; `WRITE_CALENDAR` plugin replacement scoped (open question → P13); camera temp dir verified app-private | SDR 5.7, 9.4; SEC 2, 5, 7, 12, 19, §7, §9 | devops + ui |
-| H11 | Relay: `--create-token` (header on the first `PUT d/<device>/1`) or wallet allow-list; `--trust-proxy`; `HEALTHCHECK`; read-only container except `/data`; `HEAD` handled; missing file for a known device → diagnosable status, not 500; TLS as the documented default (D5), plain HTTP = dev mode; desktop key file: dir 0700, temp + chmod + rename | SDR 2.6, 9.6; SEC 4, 7, 8, 11, §5 | devops |
+| H11 | Relay: `--create-token` (header on the first `PUT d/<device>/1`) or wallet allow-list; `--trust-proxy`; `HEALTHCHECK`; read-only container except `/data`; `HEAD` handled; missing file for a known device → diagnosable status, not 500; TLS by a Caddy sidecar in the quadlet as the documented default (D5: LAN internal CA or public domain), plain HTTP = dev mode; desktop key file: dir 0700, temp + chmod + rename | SDR 2.6, 9.6; SEC 4, 7, 8, 11, §5 | devops |
 | H12 | Tests written from the spec: relay A→B→A; relay restored from an older image; cloned device id; future clock; two concurrent sync runs; concurrent budget edits; concurrent `linkBill`; device back after 90 days; schema-7 reader on schema-8 files then upgrade; zero ops on the second full round; invariants `ack ≤ cursor ≤ last`, `covers ≤ cursors`, transfer symmetry, bill payment uniqueness; property test "no live device left behind a prune"; memory-vs-real-relay model equivalence; relay fault injection (between `writeAtomic` and `saveMeta`, disk full, truncated files); protocol fuzz "4xx never 5xx, state unchanged"; fixed-key fixed-nonce `seal` vectors + nonce uniqueness; decompression bomb for `unseal` and `.xlsx`; PBZ header from another bank; "same month, newer template" fixture per bank; right-aligned PDF amount column; past-payday state; Android backup/restore on the emulator; old-build `.db`/`.bwb` fixture committed per release | SDR 2.4, 4.1, 7, 9.1, 9.8, 10.4; SAR 11; SEC 11 | test-writer |
 | H13 | Docs: version table (relay api, magic, payload, reader, schema, app) in the spec; threat model + clone, wrong-clock, lost-device adversaries; key rotation procedure; blobs not in backups; "restore the relay from an old copy" named as the one dangerous operation; relay metadata correlation and per-relay `wid` if ever shared; web `sessionStorage`; Dart cannot zero memory; evicted blobs and web as stated limits; spec §8 table corrections (matching, currency, YNAB cell); the two-wallet household recipe; §9 clipboard note; an anonymised real-bill corpus kept outside the repo | SDR 2.1, 3.4, 9.3, 9.4; SAR 2, 3, 8, 11.4; SEC 6, 13, 16, 17, §4; FPR 2, 3.11 | lead |
 
@@ -226,21 +226,22 @@ Cap 4 at once. G: A, ui, tests, devops. H: A, B, devops, tests, then ui. I: ui a
 | UI quick wins (I) before M6, IA change (P5) after | Reshuffle tabs now | Copy and footing bugs break trust on day one; tab layout is taste a period of use will settle |
 | Keep ChangeNotifier, Navigator 1.0, raw SQL, no new packages | Riverpod, go_router, drift | All reviews concur: at 12k lines with one maintainer they add concepts without removing code; the boundary to add is view objects (J1) |
 | Keep the matching auto-link, amend the rule (D2) | One-tap confirm | `SeenBank` is a second piece of evidence; a confirm per hand-added expense breaks the "two taps" promise |
-| Keep the build tooling (D4) | Trim to plain `flutter test` | The owner uses it daily; the reviewer's cost (a second contributor) does not exist. `workspace:` (G6) removes the one hand-rolled part |
+| Keep the build tooling (D4); no GitHub test CI (D1) | Trim to plain `flutter test`; CI on push | The owner uses the tooling daily and GitHub minutes cost; a faster local run (G6) gives the same regression signal before every push |
 | No golden tests (owner rule) | A dozen on money widgets | Sweeps + screenshots read by eye catch the same without churn |
 | 140-column format stays | 80/100 as SDR 10.2 suggests | Repo-wide reformat for no behaviour; the reviewer's objection was line counts in the spec |
 
 ## 8. Owner decisions needed (recommendation first)
 
-- **D1 CI on push for lint + package tests + widget tests** (`ubuntu-latest`, minutes, free). Recommended: yes; the macOS
-  billing concern was `release.yml`, which stays manual with APK, desktop and emulator jobs. Needed before G6.
+- **D1 — decided 2026-10-22: no tests in GitHub CI.** GitHub stays manual and build-only; development speed comes from the
+  local CI instead (G6). The reviews' "CI on push" is closed.
 - **D2 Matching auto-link vs "never on amount alone".** Recommended: amend the rule to name this exception (amount +
   window + the adding device had not seen the bank row) and show a "matched" mark with Unlink (I8).
 - **D3 Web.** Recommended: park (keeps building and `web-test` runs; README says "local, parked"); P18 only if M6 shows a
   daily reason.
 - **D4 Tooling trim.** Recommended: keep; delete what has not been used by the end of M6.
-- **D5 TLS default path**: `tailscale serve` (no certificates to manage) as the documented route, Caddy sidecar as the LAN
-  alternative. Needed before H11.
+- **D5 — decided 2026-10-22: no VPN on the phone; Caddy sidecar in the relay quadlet.** Sub-choice open: (a) LAN only with
+  Caddy's internal CA installed on the devices, or (b) a domain + port 443 forwarded, Let's Encrypt, sync from anywhere.
+  Needed before H11.
 - **D6 Tab layout (Bills tab, Save tab, Settings index)**: mockup in the design-system artifact after M6, decide then.
 - **D7 `docs/review/` committed** (code-only, no figures); say if it should stay out of git.
 
@@ -250,7 +251,7 @@ Cap 4 at once. G: A, ui, tests, devops. H: A, B, devops, tests, then ui. I: ui a
 - Relay storage past ~300 photos (1 GiB): usage shown (I8) first; raise `--max-bytes` or blob GC (P14) when it bites.
 - Replay from empty past ~100k ops: the per-(entity, id) clock lookup (G1) before any incremental cache.
 - Search past ~200k rows: FTS; not before.
-- A second contributor: `workspace:` and CI on push (G6), barrel `show` lists (G2), `WalletControllerDeps` (J1).
+- A second contributor: `workspace:` (G6), barrel `show` lists (G2), `WalletControllerDeps` (J1); CI on push only then (D1).
 - Localisation: G5 is the precondition; ARB + `intl` (P11) only once a second language exists.
 - iOS / macOS / Windows: parked; out of the README's promises until maintained.
 
