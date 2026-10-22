@@ -2,9 +2,11 @@
 // Run: tools/emulator.sh test onboarding
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/key_store.dart';
+import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -27,8 +29,20 @@ void main() {
     expect(find.byType(HomeShell), findsOneWidget);
     expect(find.text('SAFE TO SPEND TODAY'), findsOneWidget);
 
+    // The save-key sheet opens right after create; the last 4 characters confirm it.
     final key = await wc.keyText();
     Harness.rememberKey(key);
+    expect(find.byType(KeyBackupSheet), findsOneWidget);
+    expect(find.text('Without this key, this wallet cannot be opened again on any device.'), findsOneWidget);
+    await Harness.shot(t, 'onboarding-save-key');
+    await t.tap(find.byKey(const ValueKey('keySaved')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const ValueKey('keyLast4')), key.substring(key.length - 4));
+    await t.tap(find.byKey(const ValueKey('keyConfirm')));
+    await t.pumpAndSettle();
+    expect(find.byType(KeyBackupSheet), findsNothing);
+    expect(wc.keyBackupConfirmed, isTrue);
+    expect(find.byKey(const ValueKey('keyBackupRow')), findsNothing);
     expect(key, startsWith('BW1-'));
     final stored = await KeyStore.read();
     expect(stored, isNotNull, reason: 'the key is kept on the device');

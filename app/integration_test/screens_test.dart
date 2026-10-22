@@ -32,6 +32,7 @@ void main() {
   testWidgets('every tab with a synthetic wallet', (tester) async {
     final wc = await bootstrap(catchErrors: false);
     if (!wc.hasWallet) await wc.createWallet();
+    wc.takeKeyBackupPrompt(); // opened below from Today's row
     wc.repo.importBatch(demoBatch(wc.today()));
     wc.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
     wc.saveCategoryBudgets(demoBudgets);
@@ -41,6 +42,11 @@ void main() {
     await binding.convertFlutterSurfaceToImage();
     await tester.pumpAndSettle();
     await binding.takeScreenshot('1-today');
+    await tester.tap(find.text('Save now'));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('1-today-key');
+    await tester.tap(find.byKey(const ValueKey('keyLater')));
+    await tester.pumpAndSettle();
 
     for (final (i, tab) in ['Spending', 'Wishlist', 'Goals', 'Plan'].indexed) {
       await tester.tap(navTab(tab));

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
@@ -199,6 +200,17 @@ class WalletController extends ChangeNotifier {
 
   /// The phone's reminders (Plan › Nudges); [NoNudges] in tests and on desktop.
   final NudgePlatform nudges;
+
+  /// The system clipboard behind two functions so tests can swap it ([copyKeyBackup] clears the key from it again).
+  @visibleForTesting
+  Future<void> Function(String text) clipboardWrite = (t) => Clipboard.setData(ClipboardData(text: t));
+  @visibleForTesting
+  Future<String?> Function() clipboardRead = () async => (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+
+  /// How long the copied wallet key stays on the clipboard.
+  static const keyClipboardLife = Duration(seconds: 60);
+  Timer? _clipboardTimer;
+  bool _keyPromptPending = false;
 
   /// True after the system refused the notification permission when the switch was turned on (Plan says how to allow it).
   bool nudgesDenied = false;
@@ -693,6 +705,7 @@ class WalletController extends ChangeNotifier {
     await keyWriter(k, passphrase: passphrase);
     if (_dbPending) await _openFileDb(k, newWallet: true);
     key = k;
+    _keyPromptPending = true; // HomeShell asks the owner to save the key before the first Today
     logEvent(_log, Level.INFO, 'wallet.create', {'defaultGoals': repo.goals().isEmpty});
     if (repo.goals().isEmpty) {
       repo.saveGoal(name: 'Emergency fund', target: 300000, saved: 0, monthly: 10000, sort: 1);
@@ -712,6 +725,7 @@ class WalletController extends ChangeNotifier {
     await keyWriter(k, passphrase: passphrase);
     if (_dbPending) await _openFileDb(k);
     key = k;
+    repo.setLocalValue('keyBackupConfirmed', today()); // they typed the key in, so they have it
     if (r != null) {
       repo.setLocalValue('relayUrl', r.toString());
       relayUrl = r;
@@ -719,6 +733,74 @@ class WalletController extends ChangeNotifier {
     logEvent(_log, Level.INFO, 'wallet.join', {'relay': r != null});
     notifyListeners();
     await syncNow(trigger: 'join');
+  }
+
+  // ---------- key backup prompt (S3) ----------
+  // Device-local values (never synced): `keyBackupConfirmed` (date) and `keyBackupSnoozedUntil` (date). Logs say `key.backup`
+  // with an action word only; never the key or any part of it, also not the characters typed to confirm.
+
+  /// The owner confirmed (or, on a joined device, typed in) the key.
+  bool get keyBackupConfirmed => repo.localValue('keyBackupConfirmed') != null;
+
+  /// Show Today's "Save your wallet key" row: a key exists, it is not confirmed, and "Later" is not in force.
+  bool get keyBackupRowVisible {
+    if (!hasWallet || keyBackupConfirmed) return false;
+    final until = repo.localValue('keyBackupSnoozedUntil');
+    return until == null || today().compareTo(until) >= 0;
+  }
+
+  /// True once after [createWallet]: the app opens the save-key screen before the first Today.
+  bool takeKeyBackupPrompt() {
+    final p = _keyPromptPending && hasWallet && !keyBackupConfirmed;
+    _keyPromptPending = false;
+    return p;
+  }
+
+  /// Today is built once per [dataVersion]: the row appears or goes with a new version (no data was reloaded).
+  void _keyBackupChanged() {
+    dataVersion++;
+    notifyListeners();
+  }
+
+  /// Logs that the save-key screen was shown.
+  void keyBackupShown() => logEvent(_key, Level.INFO, 'key.backup', {'action': 'shown'});
+
+  /// "Later": hides Today's row for 7 days.
+  void snoozeKeyBackup() {
+    repo.setLocalValue('keyBackupSnoozedUntil', addDays(today(), 7));
+    logEvent(_key, Level.INFO, 'key.backup', {'action': 'snoozed'});
+    _keyBackupChanged();
+  }
+
+  /// Copies the key; 60 seconds later the clipboard is emptied if it still holds the key.
+  Future<void> copyKeyBackup() async {
+    final t = await keyText();
+    if (t.isEmpty) return;
+    await clipboardWrite(t);
+    logEvent(_key, Level.INFO, 'key.backup', {'action': 'copied'});
+    _clipboardTimer?.cancel();
+    _clipboardTimer = Timer(keyClipboardLife, () async {
+      _clipboardTimer = null;
+      try {
+        if (await clipboardRead() == t) await clipboardWrite('');
+      } catch (e, st) {
+        logError(_key, 'key.backup.clipboard', e, st, fields: {'type': e.runtimeType.toString()});
+      }
+    });
+  }
+
+  static String _plainKey(String s) => s.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
+
+  /// Do [typed] (spaces and dashes ignored, any case) equal the last 4 characters of the key? Only then it is confirmed.
+  Future<bool> confirmKeyBackup(String typed) async {
+    final k = _plainKey(await keyText());
+    final n = _plainKey(typed);
+    if (k.isEmpty || n.length != 4 || !k.endsWith(n)) return false;
+    repo.setLocalValue('keyBackupConfirmed', today());
+    repo.setLocalValue('keyBackupSnoozedUntil', null);
+    logEvent(_key, Level.INFO, 'key.backup', {'action': 'confirmed'});
+    _keyBackupChanged();
+    return true;
   }
 
   /// Web: opens the key stored in this browser with [passphrase]. Throws [WrongPassphrase]; the typed text is never logged.
@@ -1016,6 +1098,7 @@ class WalletController extends ChangeNotifier {
     _dayTimer?.cancel();
     _debounce?.cancel();
     _persistTimer?.cancel();
+    _clipboardTimer?.cancel();
     repo.close();
     super.dispose();
   }

@@ -12,6 +12,7 @@ import 'src/logging.dart';
 import 'src/platform.dart';
 import 'src/screens/goals.dart';
 import 'src/screens/in_use.dart';
+import 'src/screens/key_backup.dart';
 import 'src/screens/onboarding.dart';
 import 'src/screens/plan.dart';
 import 'src/screens/spending.dart';
@@ -217,6 +218,12 @@ class _HomeShellState extends State<HomeShell> {
       onHide: () => unawaited(widget.wc.persistNow()),
       onPause: () => unawaited(widget.wc.persistNow()),
     );
+    // A wallet just created: ask the owner to save the key before the first Today.
+    if (widget.wc.takeKeyBackupPrompt()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(openKeyBackup(context, widget.wc));
+      });
+    }
   }
 
   void _go(int i, String via) {
