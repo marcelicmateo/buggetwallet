@@ -184,7 +184,8 @@ class NudgesPanel extends StatelessWidget {
             : null,
         title: const Text('Warn me before big planned costs', style: TextStyle(fontSize: 14.5)),
       ),
-      const Muted('At 09:00, a few days ahead (set in Calendars). The text has no amounts or names. This device only.'),
+      const Muted(
+          'At 09:00, a few days ahead (set in Calendars). Also tells you when a return window or a warranty from your bills is about to end. The text has no amounts or names. This device only.'),
       if (!supported) const Muted('Reminders work in the phone app.'),
       if (wc.nudgesDenied)
         const StatusLabel(

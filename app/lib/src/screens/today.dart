@@ -28,6 +28,9 @@ class TodayScreen extends StatelessWidget {
   /// Opens Plan at "Expected bills" (the "Due by payday" line); without it the line is not tappable.
   final VoidCallback? openBills;
 
+  /// Opens Plan › Bills at "To review" ("N bills to review"); without it the line opens Plan.
+  final VoidCallback? openBillsReview;
+
   /// The file chooser of the review's Import step (tests pass one that fails).
   final FileChooser chooser;
 
@@ -40,6 +43,7 @@ class TodayScreen extends StatelessWidget {
     this.openSpending,
     this.addExpense,
     this.openBills,
+    this.openBillsReview,
     this.chooser = const FileChooser(),
     this.clock = DateTime.now,
   });
@@ -63,6 +67,7 @@ class TodayScreen extends StatelessWidget {
     final comingUp = wc.comingUp();
     final suggestions = wc.suggestionCount();
     final headsUps = wc.headsUpLines();
+    final toReview = wc.billsToReview();
     void upcoming() {
       logNav('upcoming.open');
       openUpcoming(context, wc);
@@ -139,6 +144,15 @@ class TodayScreen extends StatelessWidget {
                             ? 'Coming up: ${comingUp.count} ${comingUp.count == 1 ? 'cost' : 'costs'} before payday · ${moneyExact(comingUp.total, cur)}'
                             : 'Coming up: $suggestions calendar ${suggestions == 1 ? 'event' : 'events'} to check',
                         onTap: upcoming),
+                  if (toReview > 0)
+                    _InfoLine(
+                        key: const ValueKey('billsToReview'),
+                        icon: Icons.receipt_long_outlined,
+                        text: '$toReview ${toReview == 1 ? 'bill' : 'bills'} to review',
+                        onTap: () {
+                          logNav('bills.reviewOpen');
+                          (openBillsReview ?? openPlan)();
+                        }),
                   for (final h in headsUps)
                     _InfoLine(
                         key: ValueKey('headsUp:${h.item.key}'),
@@ -213,6 +227,7 @@ class TodayScreen extends StatelessWidget {
                         TxTile(
                             t: t,
                             currency: cur,
+                            hasBill: wc.billForTx(t.tx.id) != null,
                             onTap: () async {
                               final r = await showSheet<String>(context, TxSheet(wc: wc, t: t));
                               if (r != null && context.mounted) toast(context, r == 'deleted' ? 'Deleted' : 'Category saved');

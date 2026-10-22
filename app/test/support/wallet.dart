@@ -153,6 +153,22 @@ class FakeNudges implements NudgePlatform {
     await _headsUpCall();
     headsUpCancelled++;
   }
+
+  /// Bill reminder batches (return windows, warranties) asked for, newest last, and how many times they were cancelled.
+  final List<List<NudgeSlot>> billReminders = [];
+  int billReminderCancelled = 0;
+  @override
+  Future<int> scheduleBillReminders(List<NudgeSlot> slots) async {
+    await _headsUpCall();
+    billReminders.add(slots);
+    return slots.length;
+  }
+
+  @override
+  Future<void> cancelBillReminders() async {
+    await _headsUpCall();
+    billReminderCancelled++;
+  }
 }
 
 /// The phone's calendars as a fake: [allow] answers the permission dialog, [granted] is the state before it.

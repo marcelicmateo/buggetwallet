@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:wallet_core/wallet_core.dart' show PlannedCost, PlannedStatus;
+import 'package:wallet_core/wallet_core.dart' show Bill, BillStatus, PlannedCost, PlannedStatus;
 
 import '../controller.dart';
 import '../format.dart';
@@ -12,6 +12,7 @@ import '../platform.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
+import 'bill_sheet.dart';
 import 'upcoming.dart';
 
 /// A query needs this many characters before anything is searched.
@@ -76,6 +77,7 @@ class _SearchPaneState extends State<SearchPane> {
     final searched = _query.length >= searchMinChars;
     final r = searched ? wc.search(_query) : null;
     final planned = searched ? wc.searchPlanned(_query) : const <PlannedCost>[];
+    final billsFound = searched ? wc.searchBills(_query) : const <Bill>[];
 
     // The name wraps and the value keeps its width (SplitRow), so a long goal name or amount fits 320 dp at text scale 2.0.
     Widget tap(String label, String value, String sub, String kind, VoidCallback go) => InkWell(
@@ -107,7 +109,7 @@ class _SearchPaneState extends State<SearchPane> {
     final body = <Widget>[
       if (!searched)
         const EmptyNote('Type at least 2 letters or digits to search transactions, goals, the wishlist and bills.')
-      else if (r!.isEmpty && planned.isEmpty)
+      else if (r!.isEmpty && planned.isEmpty && billsFound.isEmpty)
         const EmptyNote('Nothing found')
       else ...[
         if (r.txs.isNotEmpty)
@@ -118,6 +120,7 @@ class _SearchPaneState extends State<SearchPane> {
                   key: ValueKey('hit:${t.tx.id}'),
                   t: t,
                   currency: cur,
+                  hasBill: wc.billForTx(t.tx.id) != null,
                   onTap: () async {
                     logNav('search.open.result', {'kind': 'tx'});
                     final res = await showSheet<String>(context, TxSheet(wc: wc, t: t));
@@ -151,6 +154,18 @@ class _SearchPaneState extends State<SearchPane> {
                     '${shortDateOrRaw(p.date)}${p.category == null ? '' : ' · ${p.category}'}${p.status == PlannedStatus.open ? '' : ' · ${p.status == PlannedStatus.paid ? 'Paid' : 'Skipped'}'}',
                     'planned',
                     () => openUpcoming(context, wc)),
+            ]),
+          ]),
+        if (billsFound.isNotEmpty)
+          section('Bills', billsFound.length, [
+            Rows(children: [
+              for (final b in billsFound)
+                tap(
+                    (b.payee ?? '').isNotEmpty ? b.payee! : ((b.description ?? '').isNotEmpty ? b.description! : 'Bill'),
+                    b.total == null ? 'No total' : moneyExact(b.total!, cur),
+                    '${b.date == null ? 'No date' : shortDateOrRaw(b.date!)} · ${b.status == BillStatus.review ? 'To review' : (b.paid ? 'Paid' : 'Unpaid')}',
+                    'billDb',
+                    () => openBill(context, wc, b.id)),
             ]),
           ]),
         if (r.bills.isNotEmpty)

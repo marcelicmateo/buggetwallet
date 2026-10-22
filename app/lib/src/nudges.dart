@@ -71,6 +71,11 @@ abstract class NudgePlatform {
   /// Replaces the earlier heads-ups with [slots] (at most [headsUpMax]); returns how many were scheduled.
   Future<int> scheduleHeadsUps(List<NudgeSlot> slots);
   Future<void> cancelHeadsUps();
+
+  /// Return-window and warranty reminders of the bills database: channel `bills`, ids [billFirstId] .. Replaces the earlier ones
+  /// with [slots] (at most [billMax]); returns how many were scheduled.
+  Future<int> scheduleBillReminders(List<NudgeSlot> slots);
+  Future<void> cancelBillReminders();
 }
 
 /// Notification ids 1000..1019 belong to heads-ups; reminders use 0..27.
@@ -101,6 +106,38 @@ List<NudgeSlot> headsUpSlots(DateTime now, Iterable<(String date, int days)> ite
   return out.take(headsUpMax).toList();
 }
 
+/// Notification ids 1020..1039 belong to bill reminders (return windows and warranties).
+const billFirstId = 1020;
+const billMax = 20;
+
+/// The reminder text for a return window or a warranty [daysLeft] days from ending. No payee, amount or item: it shows on the
+/// lock screen.
+String billReminderBody({required bool warranty, required int daysLeft}) {
+  final what = warranty ? 'A warranty' : 'A return window';
+  return switch (daysLeft) {
+    0 => '$what ends today',
+    1 => '$what ends tomorrow',
+    _ => '$what ends in $daysLeft days',
+  };
+}
+
+/// The bill reminders for [items] (end date, warranty or return window, days ahead): 09:00 local on (date - days); when that has
+/// already passed, the next 09:00 still ahead as long as it is on or before the end date (none otherwise). Same rule as
+/// [headsUpSlots]. At most [billMax], earliest first.
+List<NudgeSlot> billReminderSlots(DateTime now, Iterable<(String date, bool warranty, int days)> items) {
+  final today = isoDate(now);
+  final nextNine = now.hour < 9 ? today : addDays(today, 1);
+  final out = <NudgeSlot>[];
+  for (final (date, warranty, days) in items) {
+    var at = addDays(date, -days);
+    if (at.compareTo(nextNine) < 0) at = nextNine;
+    if (at.compareTo(date) > 0) continue;
+    out.add(NudgeSlot(at, 9, 0, nudgeTitle, billReminderBody(warranty: warranty, daysLeft: daysBetween(at, date))));
+  }
+  out.sort((a, b) => a.date.compareTo(b.date));
+  return out.take(billMax).toList();
+}
+
 /// Where reminders are not available: does nothing and never fails.
 class NoNudges implements NudgePlatform {
   const NoNudges();
@@ -116,4 +153,8 @@ class NoNudges implements NudgePlatform {
   Future<int> scheduleHeadsUps(List<NudgeSlot> slots) async => 0;
   @override
   Future<void> cancelHeadsUps() async {}
+  @override
+  Future<int> scheduleBillReminders(List<NudgeSlot> slots) async => 0;
+  @override
+  Future<void> cancelBillReminders() async {}
 }

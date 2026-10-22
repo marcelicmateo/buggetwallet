@@ -68,6 +68,43 @@ void seedDemoPlanned(WalletRepo repo, String today, String periodEnd) {
   repo.addPlanned(title: 'Gift for a friend', date: before(6), amount: 2500, category: 'Shopping');
 }
 
+/// SYNTHETIC bills for the demo: one read from a photo that waits in To review (guessed fields), one confirmed payment slip due in
+/// five days (unpaid), and one paid receipt with a warranty date and a return-by date, linked to the demo wallet's first card payment.
+void seedDemoBills(WalletRepo repo, String today) {
+  repo.importBill(NormalizedBill(
+      source: BillSource.photo,
+      externalId: 'demo:review',
+      date: addDays(today, -2),
+      total: 7123,
+      payee: 'Demo Review Shop',
+      description: 'Photo of a shop receipt',
+      unsure: 3));
+  final (slip, _) = repo.importBill(NormalizedBill(
+      source: BillSource.hub3,
+      externalId: 'demo:slip',
+      date: addDays(today, -1),
+      dueDate: addDays(today, 5),
+      total: 5432,
+      payee: 'Demo Water Utility',
+      iban: 'HR1210010051863000160',
+      reference: 'HR01 1234-5678',
+      description: 'Water bill'));
+  repo.confirmBill(slip);
+  final spent = repo.transactions().where((t) => t.live && t.amount < 0 && !t.description.toUpperCase().contains('ATM')).firstOrNull;
+  if (spent == null) return;
+  final (receipt, _) = repo.importBill(NormalizedBill(
+      source: BillSource.receiptQr,
+      externalId: 'demo:receipt',
+      date: spent.date,
+      total: -spent.amount,
+      payee: 'Demo Electronics',
+      description: 'Kettle',
+      items: [BillItem(name: 'Kettle', quantity: '1', amount: -spent.amount)]));
+  repo.confirmBill(receipt);
+  repo.linkBill(receipt, spent.id);
+  repo.updateBill(receipt, warrantyUntil: addDays(today, 200), returnBy: addDays(today, 4));
+}
+
 /// A SYNTHETIC calendar file: one event with an amount in its title, one without (both become suggestions in Upcoming).
 String demoIcs(String today) {
   String d(int n) => addDays(today, n).replaceAll('-', '');

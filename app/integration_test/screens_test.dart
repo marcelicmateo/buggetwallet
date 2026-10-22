@@ -3,8 +3,10 @@
 import 'dart:convert';
 
 import 'package:budget_wallet/main.dart';
+import 'package:budget_wallet/src/bill_inputs.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/logging.dart';
+import 'package:budget_wallet/src/screens/bill_sheet.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/today.dart';
@@ -20,12 +22,14 @@ import 'support/harness.dart' show navTab;
 /// Distinctive texts of the synthetic data: none of them may reach the log.
 const _private = [
   'LIDL', 'KONZUM', 'IKEA', 'MCDONALDS', 'WOLT', 'NETFLIX', 'Neto plaća', 'ATM TEST ULICA', 'Naplata kredita', 'POVRAT POREZA', //
+  'Demo Water Utility', 'Demo Review Shop', 'Demo Electronics', 'Kettle', 'HR1210010051863000160', '1234-5678', '54.32', '71.23', '99.99',
+  '11111111-2222', 'porezna', //
   'Revolut**', 'Desk lamp note', 'Gift card wish', 'Holiday fund', 'statement-secret', '€',
   '1400.00', '550.00', '12.99', '480.00', '98.76', '43.21', '1,400', '1.400,00',
 ];
 
 /// The same amounts in cents (as whole numbers, so ms and byte counts can't match by accident).
-final _cents = RegExp(r'(?<![\d.])(140000|100000|55000|25000|1299|48000|9876|4321)(?![\d.])');
+final _cents = RegExp(r'(?<![\d.])(140000|100000|55000|25000|1299|48000|9876|4321|5432|7123|9999)(?![\d.])');
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -38,6 +42,8 @@ void main() {
     wc.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
     wc.saveCategoryBudgets(demoBudgets);
     seedDemoPlanned(wc.repo, wc.today(), wc.period().end);
+    seedDemoBills(wc.repo, wc.today());
+    wc.reload();
     await wc.importIcsFile('demo.ics', Uint8List.fromList(utf8.encode(demoIcs(wc.today()))));
 
     await tester.pumpWidget(BudgetWalletApp(wc: wc));
@@ -67,8 +73,22 @@ void main() {
       await binding.takeScreenshot('${i + 2}-${tab.toLowerCase()}');
     }
 
-    // Plan › Budgets per category (new in E1): the editor with the saved budgets.
     final plan = find.descendant(of: find.byType(PlanScreen), matching: find.byType(Scrollable)).first;
+    // Plan › Bills (B4): To review, Unpaid and Paid, then the bill sheet of the one waiting for review.
+    await tester.scrollUntilVisible(find.text('Import bill file'), 300, scrollable: plan);
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-plan-bills');
+    final review = wc.billLists().review.first;
+    await tester.scrollUntilVisible(find.byKey(ValueKey('bill:${review.id}')), 300, scrollable: plan);
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-plan-bills-rows');
+    await tester.tap(find.byKey(ValueKey('bill:${review.id}')));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-bill-sheet');
+    Navigator.of(tester.element(find.byType(BillSheet))).pop();
+    await tester.pumpAndSettle();
+
+    // Plan › Budgets per category (new in E1): the editor with the saved budgets.
     await tester.scrollUntilVisible(find.text('Suggest from the last 6 months'), 300, scrollable: plan);
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-plan-budgets');
@@ -152,6 +172,8 @@ void main() {
     final csv = 'Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance\n'
         'CARD_PAYMENT,Current,${wc.today()} 10:00:00,${wc.today()} 11:00:00,IKEA ZAGREB,-98.76,0,EUR,COMPLETED,43.21\n';
     await wc.importFiles([('statement-secret-name.csv', Uint8List.fromList(utf8.encode(csv)))]);
+    await wc.importScannedCode(
+        const ScannedCode(CodeKind.qr, 'https://porezna.gov.hr/rn?jir=11111111-2222-4333-8444-555555555555&datv=20260101_1000&izn=9999'));
     final t = wc.txs.firstWhere((x) => x.tx.description.contains('IKEA ZAGREB'));
     wc.setCategory(t.tx, 'Shopping', always: true);
     await tester.tap(navTab('Today'));
@@ -177,6 +199,7 @@ void main() {
     expect(log, contains('nav.tab'));
     expect(log, contains('backup.done'));
     expect(log, contains('search.run'));
+    expect(log, contains('bills.import'));
     expect(log, contains('review.open'));
     expect(log, contains('log.level {"from":"info","to":"all"}'));
     for (final p in _private) {

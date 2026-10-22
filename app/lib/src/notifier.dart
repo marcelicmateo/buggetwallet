@@ -129,4 +129,40 @@ class AndroidNudges implements NudgePlatform {
       await p.cancel(id: headsUpFirstId + i);
     }
   }
+
+  @override
+  Future<int> scheduleBillReminders(List<NudgeSlot> slots) async {
+    final p = await _init();
+    await cancelBillReminders();
+    const details = NotificationDetails(
+        android: AndroidNotificationDetails('bills', 'Returns and warranties',
+            channelDescription: 'A reminder before a return window or a warranty ends. It never shows names or amounts.',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority));
+    final now = tz.TZDateTime.now(tz.local);
+    var n = 0;
+    for (final s in slots.take(billMax)) {
+      final d = parseIso(s.date);
+      final at = tz.TZDateTime(tz.local, d.year, d.month, d.day, s.hour, s.minute);
+      if (!at.isAfter(now)) continue;
+      await p.zonedSchedule(
+        id: billFirstId + n,
+        title: s.title,
+        body: s.body,
+        scheduledDate: at,
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+      n++;
+    }
+    return n;
+  }
+
+  @override
+  Future<void> cancelBillReminders() async {
+    final p = await _init();
+    for (var i = 0; i < billMax; i++) {
+      await p.cancel(id: billFirstId + i);
+    }
+  }
 }

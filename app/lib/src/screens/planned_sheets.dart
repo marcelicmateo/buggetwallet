@@ -8,11 +8,17 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 
-/// "Calendar", "Bill" or "Added": where a planned cost came from.
+/// "Calendar", "Bill" or "Added": where a planned cost came from; "Warranty" and "Return by" for a bill's dates.
 String sourceLabel(UpcomingItem i) => switch (i.kind) {
       UpcomingKind.bill => 'Bill',
       UpcomingKind.suggestion => 'Calendar',
-      UpcomingKind.planned => i.planned?.source == PlannedSource.calendar ? 'Calendar' : 'Added',
+      UpcomingKind.warranty => 'Warranty',
+      UpcomingKind.returnBy => 'Return by',
+      UpcomingKind.planned => switch (i.planned?.source) {
+          PlannedSource.calendar => 'Calendar',
+          PlannedSource.bill => 'Bill',
+          _ => 'Added',
+        },
     };
 
 /// The "+ Planned cost" sheet. Also used to change an existing planned cost ([edit]) and to confirm a calendar suggestion with

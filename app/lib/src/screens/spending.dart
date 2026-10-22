@@ -143,6 +143,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
                 TxTile(
                     t: t,
                     currency: cur,
+                    hasBill: wc.billForTx(t.tx.id) != null,
                     onTap: () async {
                       final r = await showSheet<String>(context, TxSheet(wc: wc, t: t));
                       if (r != null && context.mounted) toast(context, r == 'deleted' ? 'Deleted' : 'Category saved');
