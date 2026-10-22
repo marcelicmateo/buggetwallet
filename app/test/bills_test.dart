@@ -1279,6 +1279,78 @@ void main() {
     });
   });
 
+  group('final fixes (B6)', () {
+    /// A confirmed, unpaid bill due from today on with no category: confirmed while paid (no category needed then), then
+    /// unlinked, as after a deleted payment. Bills confirmed before B5a look the same.
+    String reopenedWithoutCategory(WalletController wc) {
+      final (id, _) = wc.repo.importBill(syntheticBill('b6-open', due: '2026-10-25', payee: 'Synthetic Gas'));
+      final tx = wc.repo.transactions().firstWhere((t) => t.description.contains('SYNTHSHOP'));
+      wc.repo.linkBill(id, tx.id);
+      wc.repo.confirmBill(id);
+      wc.repo.unlinkBill(id);
+      wc.reload();
+      final b = wc.billById(id)!;
+      expect((b.confirmed, b.paid, b.category), (true, false, null));
+      return id;
+    }
+
+    test('B6 bug: editBill/setBillDates threw on a reopened bill without a category; now small edits save, others return false', () {
+      final wc = bw();
+      final id = reopenedWithoutCategory(wc);
+      expect(wc.editBill(id, note: 'synthetic note'), isTrue);
+      expect(wc.setBillDates(id, warrantyUntil: '2027-10-18'), isTrue);
+      expect(wc.editBill(id, total: 5000), isFalse, reason: 'a total change on a reserving bill needs the category');
+      expect(wc.billById(id)!.total, 4560);
+      expect(wc.editBill(id, total: 5000, category: 'Bills & one-offs'), isTrue);
+      expect((wc.billById(id)!.total, wc.billById(id)!.category), (5000, 'Bills & one-offs'));
+    });
+
+    test('its planned row is listed but not reserved until it has a category', () {
+      final wc = bw();
+      final id = reopenedWithoutCategory(wc);
+      final p = wc.period();
+      expect(p.duePlanned.where((x) => x.needsCategory).map((x) => x.id), [WalletRepo.billPlannedId(id)]);
+      expect(p.reservedPlanned, 0);
+      wc.editBill(id, category: 'Bills & one-offs');
+      expect(wc.period().reservedPlanned, 4560);
+    });
+
+    tw('B6 bug: Save on such a bill failed silently; now it says why and the sheet stays open', (tester) async {
+      final wc = bw();
+      final id = reopenedWithoutCategory(wc);
+      await openSheetFor(tester, wc, id, size: const Size(400, 1600));
+      expect(find.text('Category (needed)'), findsOneWidget);
+      await tester.enterText(key('billTotal'), '50.00');
+      await tester.ensureVisible(key('saveBill'));
+      await tester.tap(key('saveBill'));
+      await tester.pumpAndSettle();
+      expect(key('billError'), findsOneWidget);
+      expect(find.text("Pick the category so Budget Wallet doesn't count this bill twice."), findsWidgets);
+      expect(key('saveBill'), findsOneWidget, reason: 'the sheet stays open');
+      expect(wc.billById(id)!.total, 4560);
+      // A note alone saves and closes the sheet.
+      await tester.enterText(key('billTotal'), '45.60');
+      await tester.enterText(key('billNote'), 'synthetic note');
+      await tester.ensureVisible(key('saveBill'));
+      await tester.tap(key('saveBill'));
+      await tester.pumpAndSettle();
+      expect(key('saveBill'), findsNothing);
+      expect(wc.billById(id)!.note, 'synthetic note');
+    });
+
+    test('Paid in cash gives the bill the category, so deleting the expense reopens it categorized', () {
+      final wc = bw();
+      final id = addBill(wc, syntheticBill('b6-cash', due: '2026-10-25'));
+      final txId = wc.repo.addExpenseFromBill(id, category: 'Bills & subscriptions');
+      wc.repo.deleteTransaction(txId);
+      wc.reload();
+      final b = wc.billById(id)!;
+      expect((b.paid, b.category), (false, 'Bills & subscriptions'));
+      expect(wc.editBill(id, note: 'synthetic note'), isTrue);
+      expect(wc.period().reservedPlanned, 0, reason: 'a fixed category: covered by the plan');
+    });
+  });
+
   group('privacy', () {
     test('logs carry counts and enum words, never a payee, IBAN, reference, amount, item, JIR, note or file name', () async {
       final fakes = FakeBillInputs();

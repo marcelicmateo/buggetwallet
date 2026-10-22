@@ -308,6 +308,11 @@ class PlannedCost {
   /// [RecurringBill.coveredByPlan]). Still listed in Upcoming and heads-ups.
   bool get coveredByPlan => category != null && kindOf(category!) == Kind.fixed;
 
+  /// A bill's row without a category (B6: a bill confirmed before B5a, or reopened after its cash expense was deleted):
+  /// only the category tells whether the payday plan already holds it, so `computePeriod` lists it in `duePlanned` but
+  /// does not reserve it (never counted twice); the app shows "needs a category" and asks for one.
+  bool get needsCategory => source == PlannedSource.bill && (category == null || category!.trim().isEmpty);
+
   /// Unknown `source`/`status` words (a newer build) read as manual/open; a damaged amount reads as null.
   static PlannedCost fromRow(Map<String, Object?> r) => PlannedCost(
         id: r['id'] as String,

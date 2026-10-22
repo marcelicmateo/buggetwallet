@@ -116,7 +116,7 @@ class _BillSheetState extends State<BillSheet> {
       setState(() => error = 'IBAN: check the number, it does not look right.');
       return false;
     }
-    widget.wc.editBill(b.id,
+    final saved = widget.wc.editBill(b.id,
         date: date != b.date ? date : null,
         dueDate: due != b.dueDate ? due : null,
         total: t != b.total ? t : null,
@@ -128,7 +128,19 @@ class _BillSheetState extends State<BillSheet> {
         note: changed(note, b.note),
         clearDueDate: due == null && b.dueDate != null,
         clearCategory: category == null && b.category != null);
-    return true;
+    if (!saved) {
+      // Core refused it: the bill is still to be paid and would reserve money with no category.
+      logNav('bill.invalid', {'why': 'category'});
+      setState(() => error = "Pick the category so Budget Wallet doesn't count this bill twice.");
+    }
+    return saved;
+  }
+
+  /// Saves a warranty or return-by date; a refusal keeps the sheet open with the reason.
+  void _saveDates(Bill b, {String? warrantyUntil, String? returnBy, bool clearWarranty = false, bool clearReturnBy = false}) {
+    final ok = widget.wc
+        .setBillDates(b.id, warrantyUntil: warrantyUntil, returnBy: returnBy, clearWarranty: clearWarranty, clearReturnBy: clearReturnBy);
+    if (!ok) setState(() => error = "Pick the category so Budget Wallet doesn't count this bill twice.");
   }
 
   Future<String?> _pick(String? current, {DateTime? first, DateTime? last}) async {
@@ -210,6 +222,9 @@ class _BillSheetState extends State<BillSheet> {
     final cur = wc.currency;
     final c = context.c;
     final review = b.status == BillStatus.review;
+    // In review with a due date, or confirmed, unpaid and due from today on (a bill reopened without one): until it has a
+    // category its planned row is listed, not reserved.
+    final categoryNeeded = due != null && !b.paid && (review || due!.compareTo(widget.wc.today()) >= 0);
     final planner = wc.billPlannedBy(b);
     // Values read from free text (PDF text, a photo) are guesses: each filled field says so until the owner confirms the bill.
     final guessed = review && b.unsure > 0;
@@ -307,10 +322,10 @@ class _BillSheetState extends State<BillSheet> {
         isExpanded: true,
         initialValue: category,
         decoration: InputDecoration(
-            labelText: review && due != null ? 'Category (needed)' : 'Category',
+            labelText: categoryNeeded ? 'Category (needed)' : 'Category',
             helperText: category != null && category == _suggested
                 ? 'Suggested from your earlier bills. Check it.'
-                : (review && due != null && category == null ? "Pick the category so Budget Wallet doesn't count this bill twice." : null),
+                : (categoryNeeded && category == null ? "Pick the category so Budget Wallet doesn't count this bill twice." : null),
             helperMaxLines: 3),
         items: [
           const DropdownMenuItem<String?>(value: null, child: Text('None')),
@@ -393,12 +408,12 @@ class _BillSheetState extends State<BillSheet> {
         SizedBox(
             width: 200,
             child: dateButton('Warranty until', b.warrantyUntil, (v) {
-              widget.wc.setBillDates(b.id, warrantyUntil: v, clearWarranty: v == null);
+              _saveDates(b, warrantyUntil: v, clearWarranty: v == null);
             }, clearable: true)),
         SizedBox(
             width: 200,
             child: dateButton('Return by', b.returnBy, (v) {
-              widget.wc.setBillDates(b.id, returnBy: v, clearReturnBy: v == null);
+              _saveDates(b, returnBy: v, clearReturnBy: v == null);
             }, clearable: true)),
       ]),
       if (review) const Padding(padding: EdgeInsets.only(top: 4), child: Muted('Shown in Upcoming once the bill is confirmed.', size: 12)),
