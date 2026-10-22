@@ -19,6 +19,7 @@ Personal finance tracker and budgeting app for one person. Offline first. Mainta
 - `packages/wallet_core/` — encrypted local database, change log, sync engine, budget engine
 - `relay/` — self-hosted sync relay (stores encrypted files it cannot read)
 - `artifact/` — v1 web app (claude.ai artifact), kept for reference
+- `docs/TECHNICAL_SPEC.md` — the full technical specification for reviewers (design, architecture, code, UI, security, tests)
 - `docs/architecture.md` — how it fits together
 - `docs/setup.md` — install, first run, relay and sync setup
 
