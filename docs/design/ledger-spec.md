@@ -76,12 +76,3 @@ Glyphs that must exist: €, U+2212, NBSP. Record the real APK size delta in STA
 4. Amount font: every money `Text` resolves to Plex Mono with tabular figures, and amounts in a list share the same right edge.
 5. Font assets: all six load, €, U+2212 and NBSP lay out in both families, and `OFL.txt` exists.
 6. Update the tests that find `Card`, `FilledButton.tonal` or the bar by type.
-
-## 5. Commits
-1. Fonts and tokens: fonts, licence, palette, `numStyle`, ThemeData base, the contrast and font tests.
-2. Ledger components: the widgets in §3, the screen changes, the structural and amount-font tests.
-3. Verification and docs: the three widths, text scale, screenshots, `app/CLAUDE.md`, STATUS with the font size.
-
-## 6. After the merge (lead)
-Re-sync the claude.ai design system (https://claude.ai/artifact/5tQpueayHHhYY3cgP9jw4q): tokens.json (incl. `lineStrong`),
-fonts, radii, React copies of the changed widgets, `meta.source` = the new SHA. Update the `design-system-artifact` memory note.

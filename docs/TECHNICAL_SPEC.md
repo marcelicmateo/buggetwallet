@@ -24,7 +24,7 @@ Contents
 
 Related files: `docs/setup.md` (install and run), `docs/architecture.md` (short version), `docs/context/RELAY_PROTOCOL.md`
 (wire protocol), `docs/context/FUTURE_SPENDING_API.md` and `docs/context/BILLS_API.md` (feature APIs),
-`docs/design/ledger-spec.md` (theme), each package's `CLAUDE.md` (file-by-file notes), `RUNNING.md` on the `review` branch.
+`docs/design/ledger-spec.md` (theme), `RUNNING.md` (how to build and run).
 
 ---
 
@@ -42,8 +42,8 @@ sections 2–3, then their own section, and finishes with the checklist in secti
 | Code architecture and extensibility | 2 | 6 (packages, rules, how to add a feature), 10 |
 | Security | 2 | 9 (threat model, key handling), 5 |
 
-Facts come from the repository as it stands: the design decisions and status files under `docs/context/`, the
-per-package notes, the protocol specification and the test suites. Measured figures (test counts, APK size, frame
+Facts come from the repository as it stands: the code, the protocol and API specifications under `docs/context/` and
+the test suites. Measured figures (test counts, APK size, frame
 budgets) carry their measurement date.
 
 ## 2. Product overview
@@ -616,7 +616,7 @@ headless smoke test, dev release; logs merged to a `ci-logs` branch.
 
 ## 11. Known limits and open questions
 
-Documented in `docs/context/STATUS.md` and the package notes; either accepted by the owner or waiting for the live test.
+Either accepted by the owner or waiting for the live test.
 
 ### Money and matching
 
@@ -661,7 +661,7 @@ Documented in `docs/context/STATUS.md` and the package notes; either accepted by
 
 ## 12. Roadmap and extension candidates
 
-The next step is fixed: the owner's live test (M6) on phone and laptop with the checklist in `docs/context/STATUS.md`.
+The next step is fixed: the owner's live test (M6) on phone and laptop with the owner's checklist.
 Everything after it depends on that test and on this review. Candidates, in the order they would be cheapest to add:
 
 | Candidate | Why | Fits where |

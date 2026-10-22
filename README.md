@@ -18,14 +18,13 @@ Personal finance tracker and budgeting app for one person. Offline first. Mainta
 - `packages/wallet_importer/` — bank file importer (pure Dart, synthetic test fixtures)
 - `packages/wallet_core/` — encrypted local database, change log, sync engine, budget engine
 - `relay/` — self-hosted sync relay (stores encrypted files it cannot read)
-- `artifact/` — v1 web app (claude.ai artifact), kept for reference
 - `docs/TECHNICAL_SPEC.md` — the full technical specification for reviewers (design, architecture, code, UI, security, tests)
-- `RUNNING.md` — how to build, test and run every part (Podman only, or your own Flutter SDK)
+- `RUNNING.md` — **start here to run it**: build, test and run every part (Podman only, or your own Flutter SDK)
 - `docs/architecture.md` — how it fits together
 - `docs/setup.md` — install, first run, relay and sync setup
 
 ## Privacy
-This repo holds **code only**. Bank exports, statements, keys and any real transaction data must never be committed. `.gitignore` blocks the common export formats; only synthetic fixtures under `test/fixtures` are allowed.
+This branch (`review`) holds production code, tests, build tooling and the specifications only. The repo holds **code only**. Bank exports, statements, keys and any real transaction data must never be committed. `.gitignore` blocks the common export formats; only synthetic fixtures under `test/fixtures` are allowed.
 
 ## Development
 Builds run in a rootless [Podman](https://podman.io) container, so Podman is the only thing to install.
@@ -76,19 +75,11 @@ tools/live.sh reload            # hot reload after an edit; also restart, shot, 
   packages for this are listed once in `dev/linux-packages.txt` (image and CI).
 - The first `tools/emulator.sh` run downloads the emulator and system image (~2 GB) into Podman volumes and saves a
   clean-boot snapshot; later runs boot from it in seconds. `tools/emulator.sh reset` deletes them.
-- **Live mode** (`tools/live.sh`) keeps `flutter run -d linux` going in the container so you and Claude use the same
-  running app: you click in the window, Claude hot-reloads, reads errors and the widget tree (through the `dart` MCP
-  server in `.mcp.json`, which runs `tools/build.sh mcp` in the container) and takes screenshots. The window opens
-  on your desktop through the Wayland socket alone, with the GPU passed in; `--headless` (or no Wayland session) uses
-  Xvfb instead. X11 is never passed through: an X11 client can read other windows and keystrokes.
+- **Live mode** (`tools/live.sh`) keeps `flutter run -d linux` going in the container: the window opens on your
+  desktop through the Wayland socket alone (`--headless` or no Wayland session uses Xvfb). X11 is never passed through.
   The app's wallet, key and logs are a throwaway folder in `dist/live/` (`demo/` with `--demo`, else `wallet/`;
-  `--fresh` empties it); the container never sees your home folder and gets its own D-Bus session, so the real
-  wallet and your keyring are out of reach. Claude drives the app only from inside it (VM service, the MCP server),
-  never with host input tools (xdotool, ydotool, uinput), and its screenshots come from the app (or Xvfb), never
-  your screen. The app and the MCP server share a Podman pod (`bw-<checkout folder>`); only the VM service port is
-  published, on 127.0.0.1, for DevTools in your browser (the URL `start` prints). `--profile` builds a profile app (no hot reload) for performance work:
-  `tools/live.sh trace start`, use the app, `tools/live.sh trace stop scroll` saves `trace-scroll.json` (open it in
-  DevTools or ui.perfetto.dev) and a summary (frames, build/raster p50/p90/max, frames over 16 ms) in the run folder.
+  `--fresh` empties it); the container never sees your home folder and gets its own D-Bus session. `reload`, `restart`,
+  `shot [file]` and `trace start|stop` work on the running app; `--profile` builds a profile app for performance work.
 - **Code style.** `dart format` with page width 140, and stricter analyzer rules (strict casts/inference/raw
   types plus extra lints) shared by the app and both packages in the root `analysis_options.yaml`. Infos fail the
   build too. Shell scripts are checked by shellcheck, workflows by actionlint; both are pinned in
@@ -101,7 +92,7 @@ tools/live.sh reload            # hot reload after an edit; also restart, shot, 
 - **Back up `~/.config/budget-wallet/`** (a password manager is fine). Every APK must be signed with that key, or
   Android refuses the update and the app has to be uninstalled, which deletes the wallet on the phone.
 - CI signs with the same key from GitHub secrets: run `tools/make-signing-key.sh --upload` once.
-- iPhone / macOS builds need a Mac with Xcode. CI builds every platform on `master`, tags, or `[release]` commits.
+- iPhone / macOS builds need a Mac with Xcode (parked). CI runs only when started by hand (`ci.yml`, `release.yml`).
 
 ## Milestones
 - M0 Setup

@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "dart": {
-      "type": "stdio",
-      "command": "bash",
-      "args": ["-c", "exec \"$(git rev-parse --show-toplevel)/tools/build.sh\" mcp"]
-    }
-  }
-}
