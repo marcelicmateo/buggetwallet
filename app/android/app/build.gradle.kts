@@ -58,7 +58,10 @@ android {
 
     buildTypes {
         release {
-            proguardFiles("proguard-rules.pro")
+            // R8: shrink code and resources explicitly (not left to the Flutter plugin default)
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
         }
     }
