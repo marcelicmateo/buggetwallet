@@ -256,6 +256,80 @@ class RecurringBill {
       );
 }
 
+/// Where a planned cost came from: typed by hand, a calendar event the owner gave an amount (or dismissed), or (later,
+/// §4.2) a bill with a due date.
+enum PlannedSource { manual, calendar, bill }
+
+/// open: reserves money until its date has passed; paid: the owner picked the transaction that paid it ([PlannedCost.paidTx]);
+/// skipped: not coming (also a dismissed calendar event).
+enum PlannedStatus { open, paid, skipped }
+
+/// A planned future cost (§4.3), synced entity `planned` (schema 6). Amounts are positive cents (a cost).
+class PlannedCost {
+  final String id;
+
+  /// May be '' (a dismissed calendar event stores no title).
+  final String title;
+  final String date; // YYYY-MM-DD
+
+  /// null = no confirmed amount: listed, never reserved.
+  final int? amount;
+  final String? category;
+
+  /// [calendarRef] of the event for calendar rows (a hash, never the raw calendar or event id).
+  final String? sourceRef;
+
+  /// The transaction the owner said paid it.
+  final String? paidTx;
+  final PlannedSource source;
+  final PlannedStatus status;
+
+  /// Deleted rows are kept (so a calendar event never comes back) and listed only with `includeClosed`.
+  final bool deleted;
+
+  const PlannedCost({
+    required this.id,
+    required this.title,
+    required this.date,
+    this.amount,
+    this.category,
+    this.sourceRef,
+    this.paidTx,
+    this.source = PlannedSource.manual,
+    this.status = PlannedStatus.open,
+    this.deleted = false,
+  });
+
+  /// Open and not deleted.
+  bool get isOpen => status == PlannedStatus.open && !deleted;
+
+  /// A planned cost in a fixed category (Rent, Loan, Bills & subscriptions) is already in the payday plan's fixed
+  /// amounts, so `computePeriod` lists it in `duePlanned` but does not reserve it again (exact-money rule, same as
+  /// [RecurringBill.coveredByPlan]). Still listed in Upcoming and heads-ups.
+  bool get coveredByPlan => category != null && kindOf(category!) == Kind.fixed;
+
+  /// Unknown `source`/`status` words (a newer build) read as manual/open; a damaged amount reads as null.
+  static PlannedCost fromRow(Map<String, Object?> r) => PlannedCost(
+        id: r['id'] as String,
+        title: _str(r['title']) ?? '',
+        date: _str(r['date']) ?? '',
+        amount: _int(r['amount']),
+        category: _str(r['category']),
+        sourceRef: _str(r['source_ref']),
+        paidTx: _str(r['paid_tx']),
+        source: PlannedSource.values.asNameMap()[r['source']] ?? PlannedSource.manual,
+        status: PlannedStatus.values.asNameMap()[r['status']] ?? PlannedStatus.open,
+        deleted: r['deleted'] == 1,
+      );
+}
+
+/// Display order of planned costs: date, then title, then id.
+int comparePlanned(PlannedCost a, PlannedCost b) {
+  var d = a.date.compareTo(b.date);
+  if (d == 0) d = a.title.compareTo(b.title);
+  return d != 0 ? d : a.id.compareTo(b.id);
+}
+
 /// One step of the weekly review with how many items it holds: `import` (0: the UI fills it after the import),
 /// `categories` (spending rows of the last 7 days without a user-set category), `pace` (categories behind pace or
 /// over), `wishlist` (items past their cooling-off still waiting).
@@ -304,6 +378,8 @@ class WalletSettings {
   final int reviewDay; // weekly review day, 1 = Monday .. 7 = Sunday
   final String? lastReview; // YYYY-MM-DD of the last completed weekly review
   final int reviewStreak; // weekly reviews done in a row
+  final int headsUpCents; // heads-up before a planned cost or bill this big or bigger (minor units)
+  final int headsUpDays; // ... this many days before its date (0 = on the day)
   final String? syncFolder; // device-local, not synced
 
   const WalletSettings({
@@ -326,6 +402,8 @@ class WalletSettings {
     this.reviewDay = DateTime.sunday,
     this.lastReview,
     this.reviewStreak = 0,
+    this.headsUpCents = defaultHeadsUpCents,
+    this.headsUpDays = defaultHeadsUpDays,
     this.syncFolder,
   });
 
@@ -337,6 +415,9 @@ class WalletSettings {
 
   /// Largest review streak kept (weeks; about 2000 years).
   static const maxStreak = 100000;
+
+  /// Heads-up defaults (owner, 2026-10-22: 3 days before a planned cost of 100 € or more) and their ranges.
+  static const defaultHeadsUpCents = 10000, maxHeadsUpCents = 10000000, defaultHeadsUpDays = 3, maxHeadsUpDays = 14;
 
   /// Reads settings from stored/synced values. A value of the wrong type or outside its range (another device's
   /// bug, a damaged op) falls back to that setting's default alone, logged as `settings.invalid` with the key only
@@ -403,6 +484,8 @@ class WalletSettings {
       reviewDay: i('reviewDay', DateTime.sunday, min: DateTime.monday, max: DateTime.sunday),
       lastReview: str('lastReview', _isDate),
       reviewStreak: i('reviewStreak', 0, max: maxStreak),
+      headsUpCents: i('headsUpCents', defaultHeadsUpCents, max: maxHeadsUpCents),
+      headsUpDays: i('headsUpDays', defaultHeadsUpDays, max: maxHeadsUpDays),
     );
   }
 
@@ -452,5 +535,7 @@ class WalletSettings {
         'reviewDay': reviewDay,
         'lastReview': lastReview,
         'reviewStreak': reviewStreak,
+        'headsUpCents': headsUpCents,
+        'headsUpDays': headsUpDays,
       };
 }
