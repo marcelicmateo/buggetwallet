@@ -10,6 +10,7 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 ## Layout
 - `app/` — Flutter app (Android, iOS, Windows, macOS, Linux).
 - `packages/wallet_importer/` — bank files → normalized transactions. The only code that knows bank formats.
+- `relay/` — the sync relay server (pure Dart, stores sealed sync files; `relay/CLAUDE.md`, protocol in `docs/context/RELAY_PROTOCOL.md`); `tools/relay.sh` runs it locally in Podman, `dev/Containerfile.relay` builds its image.
 - `packages/wallet_core/` — SQLite repo, change log + HLC, encrypted folder sync, categories, budget engine.
 - `artifact/` — v1 single-file web app (claude.ai artifact) and its JS tests (`npm test`).
 - `docs/architecture.md`, `docs/setup.md`.
@@ -25,7 +26,7 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
   names, the key, paths or file names (see package `CLAUDE.md`s).
 
 ## Local builds (owner's laptop)
-`tools/build.sh test|lint|format|apk|linux|desktop-test|desktop-smoke|perf|web|web-test|all|shell|lsp` runs the CI steps in a rootless **Podman** container
+`tools/build.sh test|lint|format|relay|apk|linux|desktop-test|desktop-smoke|perf|web|web-test|all|shell|lsp` runs the CI steps in a rootless **Podman** container
 (not Docker), image from `dev/Containerfile`, Flutter version pinned by `environment: flutter:` in `app/pubspec.yaml`
 (CI reads the same line). Outputs land in `dist/` (git-ignored). Run `tools/build.sh test` before pushing.
 The scripts assume a Linux host: Bash 5, GNU tools (`grep -P`, `sha256sum`, `base64 -w0`), Python 3, Podman.
