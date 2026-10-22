@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:wallet_core/wallet_core.dart' show PlannedCost, PlannedStatus;
 
 import '../controller.dart';
 import '../format.dart';
@@ -11,6 +12,7 @@ import '../platform.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
+import 'upcoming.dart';
 
 /// A query needs this many characters before anything is searched.
 const searchMinChars = 2;
@@ -73,6 +75,7 @@ class _SearchPaneState extends State<SearchPane> {
     final c = context.c;
     final searched = _query.length >= searchMinChars;
     final r = searched ? wc.search(_query) : null;
+    final planned = searched ? wc.searchPlanned(_query) : const <PlannedCost>[];
 
     // The name wraps and the value keeps its width (SplitRow), so a long goal name or amount fits 320 dp at text scale 2.0.
     Widget tap(String label, String value, String sub, String kind, VoidCallback go) => InkWell(
@@ -104,7 +107,7 @@ class _SearchPaneState extends State<SearchPane> {
     final body = <Widget>[
       if (!searched)
         const EmptyNote('Type at least 2 letters or digits to search transactions, goals, the wishlist and bills.')
-      else if (r!.isEmpty)
+      else if (r!.isEmpty && planned.isEmpty)
         const EmptyNote('Nothing found')
       else ...[
         if (r.txs.isNotEmpty)
@@ -136,6 +139,18 @@ class _SearchPaneState extends State<SearchPane> {
               for (final w in r.wishlist)
                 tap(w.name, money(w.price, cur, decimals: 0),
                     switch (w.status) { 'bought' => 'Bought', 'skipped' => 'Skipped', _ => 'Waiting' }, 'wish', () => widget.onOpenTab(2)),
+            ]),
+          ]),
+        if (planned.isNotEmpty)
+          section('Planned costs', planned.length, [
+            Rows(children: [
+              for (final p in planned)
+                tap(
+                    p.title,
+                    p.amount == null ? 'No amount' : moneyExact(p.amount!, cur),
+                    '${shortDateOrRaw(p.date)}${p.category == null ? '' : ' · ${p.category}'}${p.status == PlannedStatus.open ? '' : ' · ${p.status == PlannedStatus.paid ? 'Paid' : 'Skipped'}'}',
+                    'planned',
+                    () => openUpcoming(context, wc)),
             ]),
           ]),
         if (r.bills.isNotEmpty)

@@ -171,6 +171,20 @@ class NudgesPanel extends StatelessWidget {
         title: const Text('Remind me at 15:00 on weekdays and Sunday 11:00', style: TextStyle(fontSize: 14.5)),
       ),
       const Muted('Short, friendly lines. A reminder never shows amounts, shops or names. This device only.'),
+      SwitchListTile(
+        key: const ValueKey('headsUpSwitch'),
+        contentPadding: EdgeInsets.zero,
+        value: wc.headsUpNotify,
+        onChanged: supported
+            ? (on) async {
+                logNav('headsup.switch', {'on': on});
+                final granted = await wc.setHeadsUpNotify(on);
+                if (on && !granted && context.mounted) toast(context, 'Notifications are blocked.');
+              }
+            : null,
+        title: const Text('Warn me before big planned costs', style: TextStyle(fontSize: 14.5)),
+      ),
+      const Muted('At 09:00, a few days ahead (set in Calendars). The text has no amounts or names. This device only.'),
       if (!supported) const Muted('Reminders work in the phone app.'),
       if (wc.nudgesDenied)
         const StatusLabel(

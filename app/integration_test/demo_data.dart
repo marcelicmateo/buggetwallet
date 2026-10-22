@@ -53,3 +53,26 @@ ImportBatch demoBatch(String today) {
 
 /// Monthly budgets for the demo wallet (cents): Groceries is usually under, Eating out and Food delivery often over.
 const demoBudgets = {'Groceries': 40000, 'Eating out': 6000, 'Food delivery': 4000};
+
+/// SYNTHETIC planned costs for the demo: a 340 insurance 2 days ahead (a heads-up on Today), an 80 dentist visit and a 25 gift,
+/// all before payday ([periodEnd] is the first day of the next pay period).
+void seedDemoPlanned(WalletRepo repo, String today, String periodEnd) {
+  String before(int days) {
+    final d = addDays(today, days);
+    final last = addDays(periodEnd, -1);
+    return d.compareTo(last) > 0 ? last : d;
+  }
+
+  repo.addPlanned(title: 'Car insurance', date: before(2), amount: 34000, category: 'Car & transport');
+  repo.addPlanned(title: 'Dentist', date: before(4), amount: 8000, category: 'Health & care');
+  repo.addPlanned(title: 'Gift for a friend', date: before(6), amount: 2500, category: 'Shopping');
+}
+
+/// A SYNTHETIC calendar file: one event with an amount in its title, one without (both become suggestions in Upcoming).
+String demoIcs(String today) {
+  String d(int n) => addDays(today, n).replaceAll('-', '');
+  return 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Budget Wallet demo//EN\r\n'
+      'BEGIN:VEVENT\r\nUID:demo-1\r\nDTSTART;VALUE=DATE:${d(3)}\r\nSUMMARY:Birthday dinner 60 €\r\nEND:VEVENT\r\n'
+      'BEGIN:VEVENT\r\nUID:demo-2\r\nDTSTART;VALUE=DATE:${d(5)}\r\nSUMMARY:Concert tickets\r\nEND:VEVENT\r\n'
+      'END:VCALENDAR\r\n';
+}

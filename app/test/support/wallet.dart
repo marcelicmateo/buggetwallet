@@ -1,6 +1,7 @@
 // SYNTHETIC wallets for widget tests. Made-up amounts; merchants are well-known chains or generic names.
 import 'dart:convert';
 
+import 'package:budget_wallet/src/calendar_source.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/nudges.dart';
 import 'package:budget_wallet/src/theme.dart';
@@ -126,7 +127,62 @@ class FakeNudges implements NudgePlatform {
 
   @override
   Future<void> cancelAll() async => cancelled++;
+
+  /// Heads-up batches asked for, newest last, and how many times they were cancelled.
+  final List<List<NudgeSlot>> headsUps = [];
+  int headsUpCancelled = 0;
+  @override
+  Future<int> scheduleHeadsUps(List<NudgeSlot> slots) async {
+    headsUps.add(slots);
+    return slots.length;
+  }
+
+  @override
+  Future<void> cancelHeadsUps() async => headsUpCancelled++;
 }
+
+/// The phone's calendars as a fake: [allow] answers the permission dialog, [granted] is the state before it.
+class FakeCalendars implements CalendarSource {
+  bool allow, granted, canRead;
+  List<DeviceCalendarInfo> calendarList;
+  List<CalendarEvent> eventList;
+  Object? failWith;
+  int asked = 0, reads = 0;
+  FakeCalendars(
+      {this.allow = true,
+      this.granted = false,
+      this.canRead = true,
+      this.calendarList = const [DeviceCalendarInfo('c1', 'Family'), DeviceCalendarInfo('c2', 'Work', account: 'me@example.com')],
+      this.eventList = const [],
+      this.failWith});
+  @override
+  bool get supported => canRead;
+  @override
+  Future<bool> hasPermission() async => granted;
+  @override
+  Future<bool> requestPermission() async {
+    asked++;
+    return granted = allow;
+  }
+
+  @override
+  Future<List<DeviceCalendarInfo>> calendars() async => calendarList;
+  @override
+  Future<List<CalendarEvent>> events(Set<String> calendarIds, String from, String to) async {
+    reads++;
+    if (failWith != null) Error.throwWithStackTrace(failWith!, StackTrace.current);
+    return [
+      for (final e in eventList)
+        if (calendarIds.contains(e.calendarId) && e.date.compareTo(from) >= 0 && e.date.compareTo(to) <= 0) e
+    ];
+  }
+}
+
+/// A synthetic calendar file with the given events (UID, date, title).
+String fakeIcs(List<(String uid, String date, String title)> events) => 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${[
+      for (final e in events)
+        'BEGIN:VEVENT\r\nUID:${e.$1}\r\nDTSTART;VALUE=DATE:${e.$2.replaceAll('-', '')}\r\nSUMMARY:${e.$3}\r\nEND:VEVENT\r\n'
+    ].join()}END:VCALENDAR\r\n';
 
 /// The data of [budgetWallet] (Tuesday 20 Oct 2026; Groceries behind pace, Eating out over) plus what the weekly review and the bills need:
 /// three card payments in the last week without a learned category, a monthly gym payment three months running (a bill
@@ -171,5 +227,20 @@ WalletController habitsWallet({FakeNudges? nudges, bool confirmBill = false}) {
   if (confirmBill) {
     wc.confirmRecurring(wc.recurringBills().first.id);
   }
+  return wc;
+}
+
+/// A wallet on 20 Oct 2026 with planned costs (a 340 car insurance on the 23rd, an 80 dentist on the 27th), a car payment on the
+/// 22nd that could have paid the insurance, and (with [calendars]) two phone calendars. Calendar events are not read yet:
+/// call `wc.setCalendarOn('c1', true)` or `readCalendars` in the test.
+WalletController futureWallet({FakeNudges? nudges, FakeCalendars? calendars}) {
+  final wc = WalletController.forTest(WalletRepo.inMemory(),
+      key: VaultKey.generate(), clock: () => budgetToday, nudges: nudges, calendars: calendars);
+  wc.repo.addManual(date: '2026-10-03', amount: 15200, category: 'Groceries');
+  wc.repo.addManual(date: '2026-10-22', amount: 33900, category: 'Car & transport');
+  wc.repo.updateSettings({'salary': 150000, 'salaryConfirmed': true, 'periodStart': '2026-10-01'});
+  wc.repo.addPlanned(title: 'Car insurance', date: '2026-10-23', amount: 34000, category: 'Car & transport');
+  wc.repo.addPlanned(title: 'Dentist', date: '2026-10-27', amount: 8000, category: 'Health & care');
+  wc.reload();
   return wc;
 }
