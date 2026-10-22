@@ -45,7 +45,7 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | R7 | Relay container, `tools/relay.sh`, `tools/build.sh relay`, CI relay job, setup doc (desktop test through a relay moves to R7b after R5) | devops | R2 | done (990ee5d, merged; image 92 MB, full test green incl. relay 93) |
 | R7b | Desktop test: two app instances syncing through `tools/relay.sh` | devops | R5, R7 | done (a161afd, desktop relay_sync green 22 s; merged) |
 | R8a | Review fixes core/relay: M1 local import/delete reconcile ignores caught-up gate; M2 unblock on transient GET + older-schema snapshot; L5 refused snapshot re-downloaded each run; L6 first upload >16 MiB never syncs (split into ≤8 MiB parts); L7 relay buffers bodies for unknown wallets | core-builder | review | running |
-| R8b | Review fixes app: K join merges an unopened plaintext wallet.db (set aside instead); M3 web forget deletes set-aside copies; L4 create writes key before set-aside; L8 setRelay during a sync not followed up | ui-builder | review | running |
+| R8b | Review fixes app: K join merges an unopened plaintext wallet.db (set aside instead); M3 web forget deletes set-aside copies; L4 create writes key before set-aside; L8 setRelay during a sync not followed up | ui-builder | review | done (4d37bc3, test green app 755, web-test 9; merged) |
 | R | Review done (0 high, 3 medium, 5 low → R8a/b), fixes, Haiku full run, emulator, merge stage-r → v2, push, STATUS | lead | R1–R8 | running |
 
 R6 recipe (from R1): native `sqlite3.open(path)` then `PRAGMA key = "x'<64 hex>'"` right after open; plaintext → encrypted
