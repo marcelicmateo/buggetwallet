@@ -7,11 +7,17 @@ import 'package:flutter/widgets.dart' show AppLifecycleListener, AppLifecycleSta
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'calendar_platform.dart';
+import 'calendar_source.dart';
+import 'future_shim.dart';
+import 'ics_fetch.dart';
 import 'key_store.dart';
 import 'logging.dart';
 import 'nudge_platform.dart';
 import 'nudges.dart';
 import 'wallet_db.dart';
+
+part 'controller_future.dart';
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');
@@ -213,14 +219,30 @@ class WalletController extends ChangeNotifier {
   Timer? _clipboardTimer;
   bool _keyPromptPending = false;
 
+  /// The phone's calendars (Plan › Calendars); [NoCalendars] in tests and on desktop and web.
+  final CalendarSource calendarSource;
+
+  /// Downloads the text of an `.ics` link; tests replace it.
+  @visibleForTesting
+  Future<String> Function(Uri url) icsFetcher = fetchIcs;
+
+  /// Device-local calendar state (events read, permission, errors); see controller_future.dart.
+  final CalendarState cal = CalendarState();
+
   /// True after the system refused the notification permission when the switch was turned on (Plan says how to allow it).
   bool nudgesDenied = false;
 
   WalletController._(this.repo, this.key,
-      {DateTime Function()? clock, NudgePlatform? nudges, WalletDb? db, this.locked = false, this.inUseElsewhere = false})
+      {DateTime Function()? clock,
+      NudgePlatform? nudges,
+      CalendarSource? calendars,
+      WalletDb? db,
+      this.locked = false,
+      this.inUseElsewhere = false})
       : _db = db,
         _clock = clock ?? DateTime.now,
-        nudges = nudges ?? const NoNudges() {
+        nudges = nudges ?? const NoNudges(),
+        calendarSource = calendars ?? const NoCalendars() {
     relayUrl = _parseRelay(repo.localValue('relayUrl'));
   }
 
@@ -280,7 +302,8 @@ class WalletController extends ChangeNotifier {
 
     sw = Stopwatch()..start();
     final c =
-        WalletController._(db?.repo ?? WalletRepo.inMemory(), key, clock: clock, nudges: defaultNudgePlatform(), db: db, locked: locked);
+        WalletController._(db?.repo ?? WalletRepo.inMemory(), key,
+        clock: clock, nudges: defaultNudgePlatform(), calendars: defaultCalendarSource(), db: db, locked: locked);
     c._dbPending = db == null;
     c.hasUnopenedDb = unopened;
     c.dbOpener = opener;
@@ -293,6 +316,7 @@ class WalletController extends ChangeNotifier {
     c._startAutoSync();
     c.refreshRecurring();
     scheduleMicrotask(c.rescheduleNudges);
+    scheduleMicrotask(() => c.readCalendars(trigger: 'start'));
     return c;
   }
 
@@ -341,8 +365,13 @@ class WalletController extends ChangeNotifier {
   /// For widget tests: an already-open repo (e.g. [WalletRepo.inMemory]), no auto-sync. [clock] stands in for the current time.
   @visibleForTesting
   factory WalletController.forTest(WalletRepo repo,
-          {VaultKey? key, DateTime Function()? clock, NudgePlatform? nudges, WalletDb? db, bool locked = false}) =>
-      WalletController._(repo, key, clock: clock, nudges: nudges, db: db, locked: locked)..reload();
+          {VaultKey? key,
+          DateTime Function()? clock,
+          NudgePlatform? nudges,
+          CalendarSource? calendars,
+          WalletDb? db,
+          bool locked = false}) =>
+      WalletController._(repo, key, clock: clock, nudges: nudges, calendars: calendars, db: db, locked: locked)..reload();
 
   /// The saved monthly budgets per category (cents).
   Map<String, int> get categoryBudgets => settings.categoryBudgets;
@@ -398,6 +427,7 @@ class WalletController extends ChangeNotifier {
     _seenDay = _memoDay = today();
     t.done({'tx': txs.length, 'goals': goals.length, 'wish': wish.length});
     notifyListeners();
+    _headsUpsMayHaveChanged();
   }
 
   /// Derived values are computed once per [dataVersion] and day, however often a screen asks (every build, every tab).
@@ -453,6 +483,7 @@ class WalletController extends ChangeNotifier {
   String? newPayday(String periodStart) => _paydays.where((d) => d.compareTo(addDays(periodStart, 20)) > 0).lastOrNull;
 
   /// The budget of the running pay period. Confirmed recurring bills are reserved in it (`reservedBills`, `dueBills`).
+  // SHIM: at merge add `planned: plannedOpen()` to computePeriod (core F1 reserves planned costs in the safe-to-spend number).
   PeriodBudget period() => _cached(
       'period', () => timed('wc.period', () => computePeriod(txs, effectiveSettings, goals, today(), bills: recurringBills()), warnMs: 50));
 
@@ -528,6 +559,9 @@ class WalletController extends ChangeNotifier {
     logEvent(_log, Level.INFO, 'budgets.saved', {'count': budgets.length}); // never the categories or amounts
     _changed();
   }
+
+  /// Lets the controller_future.dart extension tell the screens something changed (notifyListeners is protected).
+  void _refreshView() => notifyListeners();
 
   void _changed() {
     reload();
@@ -669,6 +703,7 @@ class WalletController extends ChangeNotifier {
         await nudges.cancelAll();
         logEvent(_nudgeLog, Level.INFO, 'nudges.enabled', {'on': false});
         notifyListeners();
+        await rescheduleHeadsUps(); // cancelAll took the heads-ups too
         return false;
       }
       final granted = await nudges.requestPermission();
@@ -687,13 +722,16 @@ class WalletController extends ChangeNotifier {
 
   /// Schedules the next days of reminders again (app start, resume): the list is only ever 4 weeks long.
   Future<void> rescheduleNudges() async {
-    if (!nudgesEnabled || !nudges.supported) return;
-    try {
-      final n = await nudges.schedule(nudgeSlots(_clock()));
-      logEvent(_nudgeLog, Level.INFO, 'nudges.scheduled', {'count': n});
-    } catch (e, st) {
-      logError(_nudgeLog, 'nudges.scheduleFailed', e, st);
+    if (!nudges.supported) return;
+    if (nudgesEnabled) {
+      try {
+        final n = await nudges.schedule(nudgeSlots(_clock()));
+        logEvent(_nudgeLog, Level.INFO, 'nudges.scheduled', {'count': n});
+      } catch (e, st) {
+        logError(_nudgeLog, 'nudges.scheduleFailed', e, st);
+      }
     }
+    await rescheduleHeadsUps(); // scheduling the reminders cancelled everything, heads-ups included
   }
 
   // ---------- wallet / key ----------

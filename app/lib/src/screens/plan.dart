@@ -13,6 +13,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'backup_panel.dart';
 import 'budgets.dart';
+import 'calendars_panel.dart';
 import 'diagnostics.dart';
 import 'export_panel.dart';
 import 'forget_browser.dart';
@@ -219,6 +220,7 @@ class _PlanScreenState extends State<PlanScreen> {
               ]),
               KeyedSubtree(key: _billsKey, child: ExpectedBillsPanel(wc: wc)),
               BudgetsPanel(wc: wc),
+              CalendarsPanel(wc: wc, chooser: widget.chooser),
               Panel(children: [
                 const SectionHead('Month'),
                 Muted(

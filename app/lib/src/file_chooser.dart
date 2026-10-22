@@ -19,6 +19,9 @@ class FileChooser {
   /// A backup file (`.bwb`). An empty list means the user cancelled.
   Future<List<PlatformFile>> pickBackupFile() => FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['bwb']);
 
+  /// A calendar file (`.ics`). An empty list means the user cancelled.
+  Future<List<PlatformFile>> pickCalendarFile() => FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['ics']);
+
   /// The save dialog: where it saved, or null when the user cancelled. In a browser this is a download and there is no
   /// cancel to see, so a finished download answers with the file name as the path.
   Future<Uri?> saveText({required String fileName, required Uint8List bytes, required String title}) =>

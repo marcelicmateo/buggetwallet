@@ -210,7 +210,8 @@ class _HomeShellState extends State<HomeShell> {
     _life = AppLifecycleListener(
       onResume: () {
         widget.wc.checkDay(); // a new day also shows without a relay
-        widget.wc.rescheduleNudges(); // reminders are scheduled for 4 weeks at a time
+        widget.wc.rescheduleNudges(); // reminders are scheduled for 4 weeks at a time (and the heads-ups after them)
+        widget.wc.readCalendars(trigger: 'resume'); // calendars and .ics links are read again
         widget.wc.syncNow(quiet: true, trigger: 'resume');
       },
       // A browser tab that is hidden or closing: get the database into IndexedDB now.

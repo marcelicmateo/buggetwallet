@@ -63,7 +63,40 @@ abstract class NudgePlatform {
 
   /// Replaces every scheduled reminder with [slots]; returns how many were scheduled.
   Future<int> schedule(List<NudgeSlot> slots);
+
+  /// Cancels every scheduled notification of the app, heads-ups included (the controller schedules those again after it).
   Future<void> cancelAll();
+
+  /// Heads-ups before big planned costs: their own channel and ids ([headsUpFirstId] ..), so they never replace the reminders.
+  /// Replaces the earlier heads-ups with [slots] (at most [headsUpMax]); returns how many were scheduled.
+  Future<int> scheduleHeadsUps(List<NudgeSlot> slots);
+  Future<void> cancelHeadsUps();
+}
+
+/// Notification ids 1000..1019 belong to heads-ups; reminders use 0..27.
+const headsUpFirstId = 1000;
+const headsUpMax = 20;
+
+/// The heads-up text for a planned cost [daysLeft] days away. No amount, no title: it shows on the lock screen.
+String headsUpBody(int daysLeft) => switch (daysLeft) {
+      0 => 'A big planned cost is due today.',
+      1 => 'A big planned cost is coming up tomorrow.',
+      _ => 'A big planned cost is coming up in $daysLeft days.',
+    };
+
+/// The heads-up notifications for [items] (date and days left of each): 09:00 local on (date - [days]) or, when that day has
+/// passed, none. [now] decides what is already past.
+List<NudgeSlot> headsUpSlots(DateTime now, Iterable<(String date, int days)> items) {
+  final today = isoDate(now);
+  final out = <NudgeSlot>[];
+  for (final (date, days) in items) {
+    final at = addDays(date, -days);
+    if (at.compareTo(today) < 0 || (at == today && now.hour >= 9)) continue;
+    final left = days;
+    out.add(NudgeSlot(at, 9, 0, nudgeTitle, headsUpBody(left)));
+  }
+  out.sort((a, b) => a.date.compareTo(b.date));
+  return out.take(headsUpMax).toList();
 }
 
 /// Where reminders are not available: does nothing and never fails.
@@ -77,4 +110,8 @@ class NoNudges implements NudgePlatform {
   Future<int> schedule(List<NudgeSlot> slots) async => 0;
   @override
   Future<void> cancelAll() async {}
+  @override
+  Future<int> scheduleHeadsUps(List<NudgeSlot> slots) async => 0;
+  @override
+  Future<void> cancelHeadsUps() async {}
 }

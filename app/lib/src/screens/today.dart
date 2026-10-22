@@ -13,6 +13,7 @@ import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 import 'key_backup.dart';
 import 'review.dart';
+import 'upcoming.dart';
 
 class TodayScreen extends StatelessWidget {
   final WalletController wc;
@@ -59,6 +60,14 @@ class TodayScreen extends StatelessWidget {
     final tight = wc.tightestBudget();
     final review = wc.reviewState();
     final reviewedToday = wc.lastReview == wc.today() && !review.due;
+    final comingUp = wc.comingUp();
+    final suggestions = wc.suggestionCount();
+    final headsUps = wc.headsUpLines();
+    void upcoming() {
+      logNav('upcoming.open');
+      openUpcoming(context, wc);
+    }
+
     final recent = wc.txs.where((t) => t.kind != Kind.transfer).take(12).toList();
 
     return MarginLine(
@@ -122,6 +131,21 @@ class TodayScreen extends StatelessWidget {
                   ),
                   if (tight != null) _BudgetLine(tight, cur, openSpending),
                   if (p.dueBills.isNotEmpty) _BillsLine(p.dueBills, p.reservedBills, wc.today(), cur, openBills),
+                  if (comingUp.count > 0 || suggestions > 0)
+                    _InfoLine(
+                        key: const ValueKey('comingUpLine'),
+                        icon: Icons.event_outlined,
+                        text: comingUp.count > 0
+                            ? 'Coming up: ${comingUp.count} ${comingUp.count == 1 ? 'cost' : 'costs'} before payday · ${moneyExact(comingUp.total, cur)}'
+                            : 'Coming up: $suggestions calendar ${suggestions == 1 ? 'event' : 'events'} to check',
+                        onTap: upcoming),
+                  for (final h in headsUps)
+                    _InfoLine(
+                        key: ValueKey('headsUp:${h.item.key}'),
+                        icon: Icons.flag_outlined,
+                        text: '${h.item.title} ${h.daysLeft == 0 ? 'today' : h.daysLeft == 1 ? 'tomorrow' : 'in ${h.daysLeft} days'}'
+                            ' · ${moneyExact(h.item.amount!, cur)}',
+                        onTap: upcoming),
                   if (reviewedToday)
                     StatusLabel(key: const ValueKey('reviewed'), good: true, text: 'Reviewed · ${streakText(review.streak)}'),
                   Tooltip(
@@ -275,6 +299,30 @@ class _BillsLine extends StatelessWidget {
             if (overdue > 0) StatusLabel(key: const ValueKey('billsOverdue'), good: false, text: '$overdue overdue'),
           ])),
           if (onTap != null) Icon(Icons.chevron_right, size: 20, color: c.muted),
+        ]),
+      ),
+    );
+  }
+}
+
+/// One tappable line with an icon: "Coming up: 3 costs before payday · 182.40 €" and the heads-up lines.
+class _InfoLine extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final VoidCallback onTap;
+  const _InfoLine({super.key, required this.icon, required this.text, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Row(children: [
+          Icon(icon, size: 18, color: c.ink2),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: TextStyle(fontSize: 14, color: c.ink2))),
+          Icon(Icons.chevron_right, size: 20, color: c.muted),
         ]),
       ),
     );

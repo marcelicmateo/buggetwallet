@@ -93,4 +93,40 @@ class AndroidNudges implements NudgePlatform {
   Future<void> cancelAll() async {
     await (await _init()).cancelAll(); // also clears what an earlier run scheduled
   }
+
+  @override
+  Future<int> scheduleHeadsUps(List<NudgeSlot> slots) async {
+    final p = await _init();
+    await cancelHeadsUps();
+    const details = NotificationDetails(
+        android: AndroidNotificationDetails('headsup', 'Big costs coming up',
+            channelDescription: 'A heads-up a few days before a big planned cost. It never shows amounts or names.',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority));
+    final now = tz.TZDateTime.now(tz.local);
+    var n = 0;
+    for (final s in slots.take(headsUpMax)) {
+      final d = parseIso(s.date);
+      final at = tz.TZDateTime(tz.local, d.year, d.month, d.day, s.hour, s.minute);
+      if (!at.isAfter(now)) continue;
+      await p.zonedSchedule(
+        id: headsUpFirstId + n,
+        title: s.title,
+        body: s.body,
+        scheduledDate: at,
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+      n++;
+    }
+    return n;
+  }
+
+  @override
+  Future<void> cancelHeadsUps() async {
+    final p = await _init();
+    for (var i = 0; i < headsUpMax; i++) {
+      await p.cancel(id: headsUpFirstId + i);
+    }
+  }
 }
