@@ -10,7 +10,7 @@ enum PlannedStatus { open, paid, skipped }
 class PlannedCost {
   final String id, title, date;                    // title may be '' for a dismissed calendar event
   final int? amount;                               // null = no confirmed amount: never reserved
-  final String? category, sourceRef, paidTx;       // sourceRef = calendarRef(...) for calendar rows
+  final String? category, sourceRef, paidTx;       // sourceRef = CalendarEvent.ref (calendarEventRef) for calendar rows
   final PlannedSource source;
   final PlannedStatus status;
 }
@@ -24,8 +24,8 @@ void updatePlanned(String id, {String? title, String? date, int? amount, String?
 void markPlannedPaid(String id, String txId);      // the owner picked the transaction
 void skipPlanned(String id);
 void deletePlanned(String id);
-/// "No cost" on a calendar suggestion: a synced row {source: calendar, sourceRef, status: skipped, title: ''}, so no
-/// device suggests that event again. Stores no title.
+/// "No cost" on a calendar suggestion: a synced row {source: calendar, sourceRef, status: skipped}, so no device
+/// suggests that event again. Writes no title (column default '').
 void dismissCalendarEvent(String sourceRef, String date);
 ```
 
@@ -35,9 +35,11 @@ class CalendarEvent {
   final String calendarId, uid, title, date;       // date = the occurrence's local date
   final String? notes;
   final bool allDay;
-  String get ref => calendarRef(calendarId, uid, date);
+  String get ref => calendarEventRef(calendarId: calendarId, uid: uid, title: title, date: date);
 }
 String calendarRef(String calendarId, String uid, String date);   // hex SHA-256 prefix (32), no raw ids kept
+String calendarEventRef({required String calendarId, required String uid, required String title, required String date});
+                                                    // F4a: from normalizeTitle + date; calendarRef if that is ''
 class IcsParseResult { final List<CalendarEvent> events; final int unsupported; }
 /// VEVENT with DTSTART (date or date-time, TZID/UTC/floating), SUMMARY, DESCRIPTION, UID; RRULE FREQ=DAILY|WEEKLY|
 /// MONTHLY|YEARLY with INTERVAL, COUNT, UNTIL, BYDAY (weekly; monthly with ordinal like 2MO/-1FR), EXDATE.
@@ -124,3 +126,22 @@ all-day, stable UIDs). `searchAll(..., planned:)` adds `SearchResult.planned` (t
   (`1.250,50 €`, so `amountFromText(summary) == amount`); UIDs `planned-<id>@budget-wallet`,
   `bill-<id>-<yyyymmdd>@budget-wallet`; `DTSTAMP` from `from` (same input → same text).
 - `searchAll(..., planned:)` is optional (default empty).
+
+## Review fixes (F4a, 2026-10-22)
+- **Calendar refs come from the event's content.** `CalendarEvent.ref` = `calendarEventRef(...)`: the first 32 hex of
+  SHA-256 over `bw-cal-v2`, `normalizeTitle(title)` and `date`, so every device and every source (Android calendar,
+  `.ics` file, `.ics` link of the same calendar) gives the same ref and the row id `calendar:<ref>` converges: "No cost"
+  on one device hides the event on all, and confirming on two devices before they sync writes one row (reserved once).
+  A title that normalizes to '' (no letters, e.g. `80 €`) falls back to `calendarRef(calendarId, uid, date)` (per
+  calendar, so per device). No raw title is stored. Consequences: two events with the same normalized title on the same
+  day (amounts are stripped: `Dentist 80 €` and `Dentist 90 €`) show as ONE suggestion; renaming an event in the
+  calendar makes it a new suggestion (the old row stays, the new title is suggested again). `upcoming()` lists equal
+  refs once, picking the event first by calendarId, uid, title, notes (the same on every device, whatever the order).
+  Refs of rows written by F1–F3 builds (`bw-cal-v1`) no longer match; stage F was not released, so nothing migrates.
+- `parseIcs` cost bounds (it runs on the UI isolate): folded lines are joined in linear time; a whole-file budget of
+  2·10⁶ recurrence steps (one step = one period of one rule). Once spent, each later recurring event gives only its first
+  occurrence in [from, to] (a rule without COUNT: looked for within 8 periods of `from`; with COUNT: none, as that needs
+  stepping from DTSTART) and counts in `unsupported`; the event during which it runs out keeps the dates found so far
+  and counts too. Never throws.
+- `dismissCalendarEvent` on an event with no row writes `date`, `source`, `source_ref`, `status`, `deleted` but no
+  `title`: a "No cost" on one device after a confirm on another (not yet synced) keeps the confirmed title.

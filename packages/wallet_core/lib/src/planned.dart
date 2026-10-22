@@ -140,7 +140,9 @@ List<String> billOccurrences(RecurringBill b, String from, String to) {
 /// `plannedCosts(includeClosed: true)`) as suggestions. A suggestion's amount comes from the event's title, else its
 /// notes ([amountFromText], `suggestedFrom: 'title'`), else from the latest planned cost dated before the event with the
 /// same non-empty [normalizeTitle], an amount, open or paid and not deleted (`'earlier'`; its category is suggested
-/// too). The same event ref given twice is listed once. Sorted by date, then title, then key.
+/// too). Events with the same ref ([calendarEventRef]: same normalized title and date, from any calendar) are listed
+/// once: the one first by calendar id, uid, title, then notes, so every device picks the same whatever the list order.
+/// Sorted by date, then title, then key.
 List<UpcomingItem> upcoming({
   required List<PlannedCost> planned,
   required List<RecurringBill> bills,
@@ -175,7 +177,14 @@ List<UpcomingItem> upcoming({
   for (final l in earlier.values) {
     l.sort(comparePlanned);
   }
-  for (final e in events) {
+  int byIdentity(CalendarEvent a, CalendarEvent b) {
+    var c = a.calendarId.compareTo(b.calendarId);
+    if (c == 0) c = a.uid.compareTo(b.uid);
+    if (c == 0) c = a.title.compareTo(b.title);
+    return c != 0 ? c : (a.notes ?? '').compareTo(b.notes ?? '');
+  }
+
+  for (final e in [...events]..sort(byIdentity)) {
     if (!inRange(e.date)) continue;
     final ref = e.ref;
     if (stored.contains(ref) || !seen.add(ref)) continue;

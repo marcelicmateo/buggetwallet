@@ -168,18 +168,20 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   replaced rows never count.
 - `planned.dart` + `ics.dart` — future spending (§4.3, API and decisions in `docs/context/FUTURE_SPENDING_API.md`), pure
   and web-safe. `PlannedCost` (`models.dart`): synced entity `planned` (schema 6: `title`, `date`, `amount` nullable
-  cents > 0, `category`, `source` manual|calendar|bill, `source_ref` = `calendarRef` (SHA-256 prefix, never a raw
-  id), `status` open|paid|skipped, `paid_tx`, `deleted`). Repo: `plannedCosts(includeClosed:)`, `addPlanned` (id
+  cents > 0, `category`, `source` manual|calendar|bill, `source_ref` = `CalendarEvent.ref` = `calendarEventRef`
+  (SHA-256 prefix over the normalized title + date, the same on every device and source; `calendarRef` per calendar
+  only for titles without letters; never a raw id or title), `status` open|paid|skipped, `paid_tx`, `deleted`). Repo: `plannedCosts(includeClosed:)`, `addPlanned` (id
   `<source>:<ref>` when a ref is given, so devices converge on one row per event; else random `p…`), `updatePlanned`,
-  `markPlannedPaid`, `skipPlanned`, `reopenPlanned`, `deletePlanned`, `dismissCalendarEvent` (row with title '').
+  `markPlannedPaid`, `skipPlanned`, `reopenPlanned`, `deletePlanned`, `dismissCalendarEvent` (writes no title).
   Calendar events (`CalendarEvent`) are never stored by core. `computePeriod(..., planned:)`: `duePlanned` = open
   planned costs with an amount dated today .. day before payday; `reservedPlanned` = their sum outside fixed
   categories (`PlannedCost.coveredByPlan` listed, not reserved: exact money); a cost reserves until Paid/Skip or its
   date has passed. `upcoming` (planned + confirmed bill occurrences `billOccurrences` + calendar suggestions with
   `amountFromText`/earlier same `normalizeTitle` amounts), `paidCandidates` (same category ± 3 days, never by amount
   alone), `headsUps`; settings `headsUpCents` (10000, 0..10000000), `headsUpDays` (3, 0..14). `parseIcs` (RRULE
-  subset, EXDATE/RDATE/RECURRENCE-ID, folding, escapes; UTC times via the optional `toLocal`; unsupported rules →
-  first occurrence + `unsupported` count; never throws), `plannedIcs` (export, `euroText` amounts, stable UIDs).
+  subset, EXDATE/RDATE/RECURRENCE-ID, folding (linear), escapes; UTC times via the optional `toLocal`; unsupported
+  rules → first occurrence + `unsupported` count; a whole-file budget of 2·10⁶ recurrence steps, after which recurring
+  events give their first in-range occurrence only and count as unsupported; never throws), `plannedIcs` (export, `euroText` amounts, stable UIDs).
   Logs: counts and enum words only (`planned.*`, `ics.parse`, `ics.export`).
 - `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:, planned:)` → `SearchResult` (`txs` newest first capped at
   `searchTxLimit` 200, `goals`, `wishlist`, `bills`, `isEmpty`; blank query → `SearchResult.empty`). Text: `foldText`
@@ -323,6 +325,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - Planned costs: a planned cost whose bank row already landed still reserves until the owner marks it Paid or its date
   passes (counted as spent and reserved meanwhile; the app suggests "Paid by this?"). `.ics` UNTIL is compared by date
   only; a UTC time without `toLocal` takes its UTC date. Older builds ignore the `planned` entity (replayed once).
+- Calendar refs are built from the normalized title and date (`calendarEventRef`): two events with the same normalized
+  title on the same day (amounts stripped: `Dentist 80 €` and `Dentist 90 €`) show as one suggestion, and renaming an
+  event in the calendar makes it a new suggestion. A title without letters (`80 €`) gets a per-calendar ref, so its
+  "No cost" or confirm on one device does not reach the same event read on another device. A huge `.ics` file
+  (over 2·10⁶ recurrence steps) gives later recurring events their first in-range occurrence only.
 
 ## Tests
 - `test/core_test.dart`, one `group` per area. Shared synthetic data in `test/support/synthetic.dart`
@@ -331,7 +338,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   own transfers incl. two devices: `test/transfers_test.dart`, budgets per category incl. the setting and two devices:
   `test/budget_vs_actual_test.dart`, recurring bills + weekly review incl. two devices: `test/habits_test.dart`, M5 backup
   round trip incl. two devices + resend: `test/backup_test.dart`, future spending (planned costs, .ics, Upcoming, two
-  devices): `test/future_spending_test.dart` (+ `future_spending_spec_test.dart`, `ics_spec_test.dart`), CSV: `test/export_test.dart`, search: `test/search_test.dart`,
+  devices): `test/future_spending_test.dart` (+ `future_spending_spec_test.dart`, `ics_spec_test.dart`; F4a: content refs
+  incl. two devices `calendar_ref_test.dart`, parseIcs cost bounds + dismiss title `future_spending_fixes_test.dart`), CSV: `test/export_test.dart`, search: `test/search_test.dart`,
   web-safe core (`fromDatabase`, `backupBytes`/`restoreBackupBytes`, `MemoryLogSink`, gzip compatibility): `test/web_core_test.dart`,
   encrypted local database (new/convert/wrong key/WAL/interrupted conversion/perf numbers): `test/local_db_test.dart`
   (sqlite3mc proof tests: `test/encrypted_db_test.dart`), sync self-heal: `test/sync_self_heal_test.dart`;

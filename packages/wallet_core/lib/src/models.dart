@@ -276,7 +276,7 @@ class PlannedCost {
   final int? amount;
   final String? category;
 
-  /// [calendarRef] of the event for calendar rows (a hash, never the raw calendar or event id).
+  /// [calendarEventRef] of the event for calendar rows (a hash, never the raw calendar or event id).
   final String? sourceRef;
 
   /// The transaction the owner said paid it.

@@ -1043,7 +1043,7 @@ class WalletRepo {
   }
 
   /// Adds an open planned cost and returns its id. [amount] (positive cents) null = no amount yet: listed, never
-  /// reserved. With a [sourceRef] (a calendar event's [calendarRef]) the id is `<source>:<sourceRef>`: confirming an
+  /// reserved. With a [sourceRef] (a calendar event's [calendarEventRef]) the id is `<source>:<sourceRef>`: confirming an
   /// event that was dismissed before (or confirmed on another device) reopens and overwrites that one row. A bad
   /// [date] or an amount ≤ 0 is an [ArgumentError].
   String addPlanned(
@@ -1112,8 +1112,9 @@ class WalletRepo {
   void deletePlanned(String id) => _setPlanned(id, {'deleted': 1}, 'planned.delete');
 
   /// "No cost" on a calendar suggestion: a synced row `calendar:<sourceRef>` {source calendar, sourceRef, date,
-  /// status skipped, title ''}, so no device suggests that event again. Stores no title. If the event already has a
-  /// row (confirmed earlier, here or elsewhere), only its status becomes skipped.
+  /// status skipped}, so no device suggests that event again. Writes no title (the column default '' until a confirm
+  /// on another device brings one: that title is kept when the two merge). If the event already has a row (confirmed
+  /// earlier, here or elsewhere), only its status becomes skipped.
   void dismissCalendarEvent(String sourceRef, String date) {
     if (sourceRef.isEmpty) throw ArgumentError('No event ref.');
     _checkPlanned(date: date);
@@ -1126,7 +1127,6 @@ class WalletRepo {
         exists
             ? {'status': PlannedStatus.skipped.name}
             : {
-                'title': '',
                 'date': date,
                 'source': PlannedSource.calendar.name,
                 'source_ref': sourceRef,

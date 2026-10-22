@@ -24,14 +24,28 @@ class CalendarEvent {
   const CalendarEvent(
       {required this.calendarId, required this.uid, required this.title, required this.date, this.notes, this.allDay = true});
 
-  /// [calendarRef] of this occurrence: what a planned row stores as `sourceRef`.
-  String get ref => calendarRef(calendarId, uid, date);
+  /// [calendarEventRef] of this occurrence: what a planned row stores as `sourceRef`.
+  String get ref => calendarEventRef(calendarId: calendarId, uid: uid, title: title, date: date);
 }
 
 /// A stable reference to one occurrence of one event in one calendar: the first 32 hex characters of the SHA-256 of
-/// calendar id, uid and date, so no raw calendar or event id is ever stored or synced.
-String calendarRef(String calendarId, String uid, String date) {
-  final bytes = const DartSha256().hashSync(utf8.encode('bw-cal-v1\u0000$calendarId\u0000$uid\u0000$date')).bytes;
+/// calendar id, uid and date, so no raw calendar or event id is ever stored or synced. Calendar and event ids differ
+/// per device and per import, so [calendarEventRef] uses this only for titles with no letters.
+String calendarRef(String calendarId, String uid, String date) => _hashRef('bw-cal-v1\u0000$calendarId\u0000$uid\u0000$date');
+
+/// The ref of one calendar event occurrence, the same on every device and from every source (Android calendar,
+/// imported `.ics` file, `.ics` link of the same calendar): the first 32 hex characters of the SHA-256 of
+/// `normalizeTitle(title)` and [date]. A title that normalizes to '' (no letters, e.g. `80 €`) falls back to
+/// [calendarRef] (per calendar and device). No raw title or id is kept. Consequences: two events with the same
+/// normalized title on the same day (amounts are stripped, so `Dentist 80 €` and `Dentist 90 €`) are one suggestion,
+/// and renaming an event in the calendar makes it a new suggestion.
+String calendarEventRef({required String calendarId, required String uid, required String title, required String date}) {
+  final t = normalizeTitle(title);
+  return t.isEmpty ? calendarRef(calendarId, uid, date) : _hashRef('bw-cal-v2\u0000$t\u0000$date');
+}
+
+String _hashRef(String text) {
+  final bytes = const DartSha256().hashSync(utf8.encode(text)).bytes;
   return [for (final b in bytes.take(16)) b.toRadixString(16).padLeft(2, '0')].join();
 }
 
@@ -46,6 +60,22 @@ class IcsParseResult {
 
 /// Most periods a recurrence rule is stepped through (a daily rule over 270 years); beyond that it stops.
 const _maxPeriods = 100000;
+
+/// Most recurrence periods stepped through in one file (all events together), so a hostile or huge file cannot
+/// freeze the caller (parseIcs runs on the UI isolate). Once spent, each later recurring event gives its first
+/// occurrence in range only (if one is found within [_cheapPeriods] periods of the range start) and counts in
+/// [IcsParseResult.unsupported].
+const _stepBudget = 2000000;
+
+/// Periods tried for the first in-range occurrence of an event once [_stepBudget] is spent (8 covers Feb 29 on a
+/// yearly rule).
+const _cheapPeriods = 8;
+
+/// The recurrence steps left for one [parseIcs] call.
+class _Budget {
+  int left;
+  _Budget(this.left);
+}
 
 /// Reads the `VEVENT`s of an iCalendar text: `UID`, `SUMMARY` (title), `DESCRIPTION` (notes), `DTSTART` (a date =
 /// all-day; a date-time floating or with `TZID` = its wall-clock date, the `VTIMEZONE` is not needed; a UTC `…Z` time =
@@ -120,10 +150,11 @@ IcsParseResult parseIcs(String text,
         CalendarEvent(calendarId: calendarId, uid: e.uid, title: e.summary, date: date, notes: e.description, allDay: e.allDay);
   }
 
+  final budget = _Budget(_stepBudget);
   for (final e in masters.values) {
     if (e.cancelled) continue;
     try {
-      final (dates, ok) = _expand(e, from, to, toLocal);
+      final (dates, ok) = _expand(e, from, to, toLocal, budget);
       if (!ok) unsupported++;
       final skip = replaced[e.uid] ?? const {};
       for (final d in dates) {
@@ -143,7 +174,7 @@ IcsParseResult parseIcs(String text,
       if (c == 0) c = a.title.compareTo(b.title);
       return c != 0 ? c : a.uid.compareTo(b.uid);
     });
-  t.done({'vevents': raw.length, 'events': events.length, 'unsupported': unsupported});
+  t.done({'vevents': raw.length, 'events': events.length, 'unsupported': unsupported, 'budgetSpent': budget.left <= 0});
   return IcsParseResult(events: events, unsupported: unsupported);
 }
 
@@ -154,13 +185,16 @@ bool _validIso(String s) => RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s) && isoDat
 List<String> _unfold(String text) {
   if (text.startsWith('﻿')) text = text.substring(1);
   final out = <String>[];
+  StringBuffer? cur; // the line being joined (linear: a long folded value is never copied once per fold)
   for (final l in text.split(RegExp(r'\r\n|\n|\r'))) {
-    if ((l.startsWith(' ') || l.startsWith('\t')) && out.isNotEmpty) {
-      out[out.length - 1] += l.substring(1);
+    if ((l.startsWith(' ') || l.startsWith('\t')) && cur != null) {
+      cur.write(l.substring(1));
     } else {
-      out.add(l);
+      if (cur != null) out.add(cur.toString());
+      cur = StringBuffer(l);
     }
   }
+  if (cur != null) out.add(cur.toString());
   return out;
 }
 
@@ -298,8 +332,9 @@ typedef _ByDay = ({int weekday, int ordinal});
 DateTime _d(String iso) => parseIso(iso);
 
 /// The dates of [e] (DTSTART, the rule's dates, RDATEs; EXDATEs removed) up to [to], and whether every part was
-/// supported (false = DTSTART only, plus RDATEs).
-(List<String>, bool) _expand(_Event e, String from, String to, DateTime Function(DateTime)? toLocal) {
+/// supported (false = DTSTART only, plus RDATEs). A rule met with [budget] already spent gives the event's first
+/// occurrence in [from, to] only (false); one that spends the rest of it keeps the dates found so far (false).
+(List<String>, bool) _expand(_Event e, String from, String to, DateTime Function(DateTime)? toLocal, _Budget budget) {
   final dates = <String>{e.start, ...e.rdates};
   var ok = !e.ruleBroken;
   final rule = e.rule;
@@ -307,8 +342,18 @@ DateTime _d(String iso) => parseIso(iso);
     final r = _Rule.parse(rule, e.start, toLocal);
     if (r == null) {
       ok = false;
+    } else if (budget.left <= 0) {
+      final first = r.firstInRange(e.start, from, to);
+      if (first != null) dates.add(first);
+      final inRange = [
+        for (final d in dates)
+          if (!e.exdates.contains(d) && d.compareTo(from) >= 0 && d.compareTo(to) <= 0) d
+      ]..sort();
+      return (inRange.take(1).toList(), false);
     } else {
-      dates.addAll(r.dates(e.start, from, to));
+      final (more, done) = r.dates(e.start, from, to, budget);
+      dates.addAll(more);
+      if (!done) ok = false;
     }
   }
   final list = dates.where((d) => !e.exdates.contains(d)).toList()..sort();
@@ -433,32 +478,52 @@ class _Rule {
     return periods > 1 ? periods - 1 : 0;
   }
 
-  /// The rule's dates after DTSTART up to [to] (and UNTIL, COUNT incl. DTSTART itself).
-  List<String> dates(String start, String from, String to) {
-    final s = _d(start);
-    final end = until != null && until!.compareTo(to) < 0 ? until! : to;
-    final out = <String>[];
-    var n = 1; // DTSTART is the first occurrence
-    for (var p = _firstPeriod(s, from), steps = 0; steps < _maxPeriods; p++, steps++) {
-      final ds = _period(s, p);
-      // The period's first possible day past the end stops the loop (periods only move forward).
-      final periodStart = switch (freq) {
+  /// The first possible day of period [p] (periods only move forward).
+  DateTime _periodStart(DateTime s, int p) => switch (freq) {
         'MONTHLY' => DateTime.utc(s.year, s.month + p * interval, 1),
         'YEARLY' => DateTime.utc(s.year + p * interval, 1, 1),
         'WEEKLY' => DateTime.utc(s.year, s.month, s.day - (s.weekday - 1) + 7 * interval * p),
         _ => DateTime.utc(s.year, s.month, s.day + p * interval),
       };
-      if (isoDate(periodStart).compareTo(end) > 0) break;
-      for (final d in ds) {
-        final iso = isoDate(d);
-        if (iso.compareTo(start) <= 0) continue;
-        if (iso.compareTo(end) > 0) return out;
-        if (count != null && n >= count!) return out;
+
+  /// The rule's dates after DTSTART up to [to] (and UNTIL, COUNT incl. DTSTART itself), and whether the rule was
+  /// stepped to its end (false = [budget] ran out first: the dates found so far). Each period takes one step.
+  (List<String>, bool) dates(String start, String from, String to, _Budget budget) {
+    final s = _d(start);
+    final end = _d(until != null && until!.compareTo(to) < 0 ? until! : to);
+    final out = <String>[];
+    var n = 1; // DTSTART is the first occurrence
+    for (var p = _firstPeriod(s, from), steps = 0; steps < _maxPeriods; p++, steps++) {
+      if (budget.left <= 0) return (out, false);
+      budget.left--;
+      // The period's first possible day past the end stops the loop.
+      if (_periodStart(s, p).isAfter(end)) break;
+      for (final d in _period(s, p)) {
+        if (!d.isAfter(s)) continue;
+        if (d.isAfter(end)) return (out, true);
+        if (count != null && n >= count!) return (out, true);
         n++;
-        out.add(iso);
+        out.add(isoDate(d));
       }
     }
-    return out;
+    return (out, true);
+  }
+
+  /// Once the step budget is spent: the rule's first date in [from, to] (after DTSTART, before UNTIL) found within
+  /// [_cheapPeriods] periods of [from], or null. A rule with COUNT gives null (its count can only be known by stepping
+  /// from DTSTART).
+  String? firstInRange(String start, String from, String to) {
+    if (count != null) return null;
+    final s = _d(start), f = _d(from);
+    final end = _d(until != null && until!.compareTo(to) < 0 ? until! : to);
+    for (var p = _firstPeriod(s, from), i = 0; i < _cheapPeriods; p++, i++) {
+      if (_periodStart(s, p).isAfter(end)) return null;
+      for (final d in _period(s, p)) {
+        if (!d.isAfter(s) || d.isBefore(f)) continue;
+        return d.isAfter(end) ? null : isoDate(d);
+      }
+    }
+    return null;
   }
 }
 
