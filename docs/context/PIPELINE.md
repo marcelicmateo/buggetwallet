@@ -83,12 +83,15 @@ throws `SqliteException` extended code 26 "file is not a database".
 | # | Task | Agent (model/effort) | Depends | Status |
 |---|---|---|---|---|
 | B0 | Context pack; owner answers (packages mobile_scanner, ML Kit text, receive_sharing_intent; receipts, slips, PDFs first); API + protocol; `NormalizedBill` model | scout (haiku/low), lead | – | done |
-| B1a | Readers in wallet_importer: fiscal QR, HUB-3, UBL e-invoice, PDF text layer, billFromText; synthetic fixtures | core-builder (opus/high) | B0 | running |
-| B1b | Core: `bill` entity (schema 7), importBill/confirm/link/delete, planned row per unpaid bill, auto link by reference, billCandidates, reminders, Upcoming warranty/returnBy, BlobStore + transport blobs + SyncEngine upload/delete, search | core-builder (opus/high) | B0 | running |
+| B1a | Readers in wallet_importer: fiscal QR, HUB-3, UBL e-invoice, PDF text layer, billFromText; synthetic fixtures | core-builder (opus/high) | B0 | done 31b7a5a (importer 295), merged b4ba240 |
+| B1b | Core: `bill` entity (schema 7), importBill/confirm/link/delete, planned row per unpaid bill, auto link by reference, billCandidates, reminders, Upcoming warranty/returnBy, BlobStore + transport blobs + SyncEngine upload/delete, search | core-builder (opus/high) | B0 | done 6224fef (core 1177 incl. B3), merged 0e831de |
 | B2 | Relay: blob PUT/GET/DELETE, byte count, state `blobs`, CORS DELETE | core-builder (sonnet/medium) | B0 | done 0368859 (relay 138), merged e49187a |
-| B4 | App: Scan bill (camera, QR/PDF417, OCR), Plan › Bills, share to app, bill sheet, link, cash expense, Android PdfRenderer channel, Today row, Upcoming + reminders | ui-builder (sonnet/high) | B0 (codes against the API, shims until B1) | running |
+| B4 | App: Scan bill (camera, QR/PDF417, OCR), Plan › Bills, share to app, bill sheet, link, cash expense, Android PdfRenderer channel, Today row, Upcoming + reminders | ui-builder (sonnet/high) | B0 (codes against the API, shims until B1) | done b2c950f (app 918; APK 116 MB, was 60), merged ce8b53a |
 | B3 | Spec tests for readers, linking, blobs | test-writer (sonnet/medium) | B0; starts when a slot frees | done 7a68973 (150 tests, compile after B1; cache test to shrink: use a small LRU limit, not 15×14 MiB) |
-| B | Merge, review, full run, push | lead | B1–B4 | queued |
+| B | Merge, review, full run, push | lead | B1–B4 | review on ce8b53a: 3 high/medium-high, 4 medium, 3 low + APK size → B5; full run running |
+| B5a | Review fixes, core: category needed to reserve + suggestBillCategory, HUB-3 id per period + importBill asNew, unlink deleted tx across devices, invoice token length, orphan blobs, no transfers in candidates | core-builder (opus/high) | B | running |
+| B5b | Review fixes, app: category picker, "Add as new bill", Upcoming opens the bill, size checks + share cache cleanup, pdfText in an isolate, Take photo via system camera, reminder days UI, blobs waiting in Sync | ui-builder (sonnet/high) | B | running |
+| B5c | APK size: arm64 + x64 only (tools, ci, release), breakdown | devops (sonnet/medium) | B | done cb261a0 + a227dc3: local 86 MB (arm64+x64), published 44 MB (arm64) |
 
 Stage R notes: the haiku watcher stopped twice before finishing (it hands back while waiting on its own background run); the
 lead ran the remaining suites with one background command. Worktrees from `isolation: "worktree"` start on `master`:
@@ -109,7 +112,7 @@ every brief must begin with `git reset --hard <base>`.
 | B2c | Parallel desktop tests (BW_JOBS) | devops | agent-aefe0df… | – | done (8e212c1) |
 | B2e | BUG: desktop plan test typed a missing folder (test bug since 561d768) | ui-builder | agent-a7db2fe… | – | done (2759d5c) |
 | B2d | `paydayDone` → `payGoals(period:)`; pass appVersion to FolderSync | lead | stage-b | B2b | done (c1dd111, app 446/0) |
-| B2 | Merge B2a–e on `stage-b` (done), review (done, fixed: 6d273f4), test+desktop green on a275d29, perf step hangs (D1d), emulator running, then push | lead | stage-b → v2 | B2a–e, B1 | done 0368859 (relay 138), merged e49187a |
+| B2 | Merge B2a–e on `stage-b` (done), review (done, fixed: 6d273f4), test+desktop green on a275d29, perf step hangs (D1d), emulator running, then push | lead | stage-b → v2 | B2a–e, B1 | done |
 | C1 | Ledger theme tests from spec | test-writer | ledger-tests (from 6ebb9bc) | – | done (5 files; ui-builder merges them) |
 | C2 | Ledger theme build (fonts, tokens, components, screens) | ui-builder | ledger-ui (from 6ebb9bc) | – | done (cc64049, app 500/0, tests merged) |
 | C3 | Merge C1 into C2, make tests pass; three widths, dark, text scale | ui-builder | ledger-ui | C1, C2 | done (in cc64049) |

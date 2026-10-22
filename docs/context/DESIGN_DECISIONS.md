@@ -52,7 +52,7 @@ flowchart LR
 2. One bad `.bwop` file stops the whole sync run. Quarantine it, continue, report the device.
 3. Sync is tied to `dart:io` folders. Add a transport interface (put / list new / get); folder = one implementation.
 4. Sync files kept forever; new device replays all. Periodic snapshots + pruning of files all devices applied.
-5. Hard-coded thresholds: hand-entry match (same amount, ±3 days) → synced setting. (Rent cash threshold already fixed.)
+5. ~~Hard-coded thresholds: hand-entry match (same amount, ±3 days) → synced setting.~~ Closed 2026-10-22 (owner): the ±3-day window stays fixed (covers normal bank posting delays; a later posting only leaves the entry counting until linked by hand). Revisit only if the M6 live test shows real payments posting later. (Rent cash threshold already fixed.)
 6. Local `wallet.db` not encrypted (only sync files are). Decide: accept or encrypted SQLite.
 7. Key has no backup path. Prompt once to save `BW1-…` in a password manager.
 8. PBZ/Revolut hard-wired in core and app; identical rows from two banks would collide on id (see 4.1).

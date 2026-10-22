@@ -115,6 +115,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   web, perf 0 missed frames, emulator screens, `tools/relay.sh` health on /v2.
 
 ## Decisions log
+- 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
 - 2026-10-16: Strategy: pay yourself first + sinking funds + daily safe-to-spend + impulse cooling-off.
 - 2026-10-16: Impulse threshold €50, cooling-off 72h (adjustable). Pace A — strict from day one.
