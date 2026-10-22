@@ -52,10 +52,10 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
   }
 
   Future<void> _open(UpcomingItem i) async {
-    final billId = billDateBillId(i);
-    if (billId != null) {
+    final bill = i.billDb;
+    if (bill != null) {
       logNav('bill.openFromUpcoming');
-      await openBill(context, widget.wc, billId);
+      await openBill(context, widget.wc, bill.id);
       return;
     }
     final p = i.planned;
@@ -331,14 +331,12 @@ class _DayCell extends StatelessWidget {
     final isToday = date == today;
     final kinds = <_Mark>{
       for (final i in items)
-        switch (billDateKind(i)) {
-          BillDateKind.warranty => _Mark.warranty,
-          BillDateKind.returnBy => _Mark.returnBy,
-          null => switch (i.kind) {
-              UpcomingKind.planned => _Mark.planned,
-              UpcomingKind.bill => _Mark.bill,
-              UpcomingKind.suggestion => _Mark.suggestion
-            },
+        switch (i.kind) {
+          UpcomingKind.planned => _Mark.planned,
+          UpcomingKind.bill => _Mark.bill,
+          UpcomingKind.suggestion => _Mark.suggestion,
+          UpcomingKind.warranty => _Mark.warranty,
+          UpcomingKind.returnBy => _Mark.returnBy,
         },
     };
     final n = items.length;
@@ -390,7 +388,7 @@ class _UpcomingRow extends StatelessWidget {
     final cur = wc.currency;
     final i = item;
     final isSuggestion = i.kind == UpcomingKind.suggestion;
-    final isBillDate = billDateKind(i) != null;
+    final isBillDate = i.kind == UpcomingKind.warranty || i.kind == UpcomingKind.returnBy;
     final past = i.date.compareTo(today) < 0;
     final sub = Wrap(spacing: 8, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
       Text(shortDateOrRaw(i.date), style: TextStyle(fontSize: 12.5, color: c.ink2)),

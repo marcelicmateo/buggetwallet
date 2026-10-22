@@ -69,15 +69,19 @@ void main() {
   });
 
   test('files the web build loads import no dart:io, no native-only plugin and no *_io.dart except through a conditional import', () {
-    // Everything in lib/src except *_io.dart files and notifier.dart (the Android plugin) is on the web path.
+    // Everything in lib/src except *_io.dart files, notifier.dart and bill_inputs_native.dart (the Android plugins) is on the web path.
     final webPath = [
       for (final f in Directory('lib/src').listSync().whereType<File>())
-        if (f.path.endsWith('.dart') && !f.path.endsWith('_io.dart') && !f.path.endsWith('/notifier.dart')) f,
+        if (f.path.endsWith('.dart') &&
+            !f.path.endsWith('_io.dart') &&
+            !f.path.endsWith('/notifier.dart') &&
+            !f.path.endsWith('/bill_inputs_native.dart'))
+          f,
     ];
     expect(webPath.length, greaterThan(15));
     final statement = RegExp(r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]([^;]*);''', multiLine: true);
     final native = RegExp(
-        r'^(dart:io|package:path_provider/.*|package:flutter_secure_storage/.*|package:flutter_local_notifications/.*|.*_io\.dart|.*notifier\.dart)$');
+        r'^(dart:io|package:path_provider/.*|package:flutter_secure_storage/.*|package:flutter_local_notifications/.*|package:(mobile_scanner|google_mlkit_\w+|receive_sharing_intent)/.*|.*_io\.dart|.*notifier\.dart|.*bill_inputs_native\.dart)$');
     final bad = <String>[];
     for (final f in webPath) {
       for (final m in statement.allMatches(f.readAsStringSync())) {

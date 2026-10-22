@@ -5,7 +5,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
-import '../bills_shim.dart'; // SHIM: removed when the bills core is merged
 import '../controller.dart';
 import '../file_chooser.dart';
 import '../format.dart';

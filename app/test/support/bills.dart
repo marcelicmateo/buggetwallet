@@ -20,10 +20,29 @@ const hub3Slip = 'HRVHUB30\nEUR\n000000000004560\nPayer Name\nPayer Street 1\n10
 
 Uint8List bytesOfString(String s) => Uint8List.fromList(s.codeUnits);
 
-/// A tiny PDF whose text layer holds [lines] (one `Tj` each), enough for the readers.
+/// A one-page PDF with a proper xref whose text layer holds [lines] (Helvetica, one `Tj` per line), enough for the real readers.
 Uint8List smallPdf(List<String> lines) {
-  final body = [for (final l in lines) '($l) Tj'].join('\n');
-  return bytesOfString('%PDF-1.4\n1 0 obj << /Length ${body.length} >> stream\nBT\n$body\nET\nendstream endobj\n%%EOF');
+  final content = 'BT /F1 12 Tf 72 700 Td 14 TL ${[for (final l in lines) '($l) Tj T*'].join(' ')} ET';
+  final objs = [
+    '<</Type/Catalog/Pages 2 0 R>>',
+    '<</Type/Pages/Kids[3 0 R]/Count 1>>',
+    '<</Type/Page/Parent 2 0 R/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>',
+    '<</Length ${content.length}>>\nstream\n$content\nendstream',
+    '<</Type/Font/Subtype/Type1/BaseFont/Helvetica/Encoding/WinAnsiEncoding>>',
+  ];
+  final out = StringBuffer('%PDF-1.4\n');
+  final offsets = <int>[];
+  for (var i = 0; i < objs.length; i++) {
+    offsets.add(out.length);
+    out.write('${i + 1} 0 obj\n${objs[i]}\nendobj\n');
+  }
+  final xref = out.length;
+  out.write('xref\n0 ${objs.length + 1}\n0000000000 65535 f \n');
+  for (final o in offsets) {
+    out.write('${o.toString().padLeft(10, '0')} 00000 n \n');
+  }
+  out.write('trailer\n<</Size ${objs.length + 1}/Root 1 0 R>>\nstartxref\n$xref\n%%EOF\n');
+  return bytesOfString(out.toString());
 }
 
 /// The camera: a plain box; [emit] sends a code as if the camera saw it.
@@ -137,4 +156,12 @@ NormalizedBill syntheticBill(String id,
         String payee = 'Synthetic Water',
         String? due,
         BillSource source = BillSource.hub3}) =>
-    NormalizedBill(source: source, externalId: id, date: date, dueDate: due, total: total, payee: payee, description: 'Water bill');
+    NormalizedBill(
+        source: source,
+        externalId: id,
+        date: date,
+        dueDate: due,
+        total: total,
+        payee: payee,
+        description: 'Water bill',
+        unsure: source == BillSource.pdf || source == BillSource.photo ? 3 : 0);

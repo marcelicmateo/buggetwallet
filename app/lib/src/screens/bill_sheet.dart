@@ -2,8 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart' show validIban;
 
-import '../bills_shim.dart'; // SHIM: removed when the bills core is merged
 import '../controller.dart';
 import '../file_chooser.dart';
 import '../format.dart';
@@ -82,12 +82,17 @@ class _BillSheetState extends State<BillSheet> {
       return v.isEmpty || v == (old ?? '') ? null : v;
     }
 
+    final typedIban = iban.text.replaceAll(' ', '').toUpperCase();
+    if (typedIban.isNotEmpty && typedIban != (b.iban ?? '') && !validIban(typedIban)) {
+      setState(() => error = 'IBAN: check the number, it does not look right.');
+      return false;
+    }
     widget.wc.editBill(b.id,
         date: date != b.date ? date : null,
         dueDate: due != b.dueDate ? due : null,
         total: t != b.total ? t : null,
         payee: changed(payee, b.payee),
-        iban: changed(iban, b.iban),
+        iban: typedIban.isEmpty || typedIban == (b.iban ?? '') ? null : typedIban,
         reference: changed(reference, b.reference),
         description: changed(description, b.description),
         category: category != b.category ? category : null,
@@ -172,7 +177,7 @@ class _BillSheetState extends State<BillSheet> {
     final c = context.c;
     final review = b.status == BillStatus.review;
     // Values read from free text (PDF text, a photo) are guesses: each filled field says so until the owner confirms the bill.
-    final guessed = review && (b.source == BillSource.pdf || b.source == BillSource.photo);
+    final guessed = review && b.unsure > 0;
     InputDecoration deco(String label, {bool filled = true, String? hint, String? suffix}) => InputDecoration(
         labelText: label,
         hintText: hint,

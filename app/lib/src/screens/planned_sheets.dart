@@ -8,40 +8,18 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 
-/// The warranty or return-by date of a bill in the Upcoming list (no amount, never counted).
-enum BillDateKind { warranty, returnBy }
-
-/// SHIM: the core gives these rows their own `UpcomingKind` and `UpcomingItem.billDb`; until then the key says it (`w:<bill id>`,
-/// `r:<bill id>`).
-BillDateKind? billDateKind(UpcomingItem i) => i.planned != null || i.bill != null || i.event != null
-    ? null
-    : i.key.startsWith('w:')
-        ? BillDateKind.warranty
-        : (i.key.startsWith('r:') ? BillDateKind.returnBy : null);
-
-/// The id of the bill behind a warranty or return-by row.
-String? billDateBillId(UpcomingItem i) => billDateKind(i) == null ? null : i.key.substring(2);
-
 /// "Calendar", "Bill" or "Added": where a planned cost came from; "Warranty" and "Return by" for a bill's dates.
-String sourceLabel(UpcomingItem i) {
-  switch (billDateKind(i)) {
-    case BillDateKind.warranty:
-      return 'Warranty';
-    case BillDateKind.returnBy:
-      return 'Return by';
-    case null:
-      break;
-  }
-  return switch (i.kind) {
-    UpcomingKind.bill => 'Bill',
-    UpcomingKind.suggestion => 'Calendar',
-    UpcomingKind.planned => switch (i.planned?.source) {
-        PlannedSource.calendar => 'Calendar',
-        PlannedSource.bill => 'Bill',
-        _ => 'Added',
-      },
-  };
-}
+String sourceLabel(UpcomingItem i) => switch (i.kind) {
+      UpcomingKind.bill => 'Bill',
+      UpcomingKind.suggestion => 'Calendar',
+      UpcomingKind.warranty => 'Warranty',
+      UpcomingKind.returnBy => 'Return by',
+      UpcomingKind.planned => switch (i.planned?.source) {
+          PlannedSource.calendar => 'Calendar',
+          PlannedSource.bill => 'Bill',
+          _ => 'Added',
+        },
+    };
 
 /// The "+ Planned cost" sheet. Also used to change an existing planned cost ([edit]) and to confirm a calendar suggestion with
 /// another amount, title or date ([suggestion]). Pops `'saved'`.

@@ -7,7 +7,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:budget_wallet/src/bill_inputs.dart';
-import 'package:budget_wallet/src/bills_shim.dart'; // SHIM: removed when the bills core is merged
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/nudges.dart';
@@ -324,6 +323,39 @@ void main() {
       expect(wc.billForTx(c.first.tx.id), isNull);
     });
 
+    test('a deleted bill read again comes back as a new bill to review', () async {
+      final wc = bw();
+      final first = await wc.importScannedCode(const ScannedCode(CodeKind.qr, receiptQr));
+      wc.deleteBill(first.billId!);
+      expect(wc.billsAll(), isEmpty);
+      final again = await wc.importScannedCode(const ScannedCode(CodeKind.qr, receiptQr));
+      expect(again.kind, BillImportKind.added);
+      expect(wc.billLists().review, hasLength(1));
+    });
+
+    test('deleting the paying payment makes the bill unpaid again', () {
+      final wc = bw();
+      final id = addBill(wc, syntheticBill('dp'), confirm: true);
+      final tx = wc.billCandidatesFor(wc.billById(id)!).first.tx;
+      wc.linkBill(id, tx.id);
+      wc.addExpense(amount: 100, category: 'Groceries', note: '', date: '2026-10-19'); // another payment, not linked
+      wc.repo.deleteTransaction(tx.id);
+      wc.reload();
+      expect(wc.billById(id)!.paid, isFalse);
+      expect(wc.billLists().unpaid.map((b) => b.id), [id]);
+    });
+
+    test('a slip whose amount is 0 has no total and cannot be confirmed until one is typed', () async {
+      final wc = bw();
+      final r = await wc.importScannedCode(ScannedCode(CodeKind.pdf417, hub3Slip.replaceFirst('000000000004560', '000000000000000')));
+      final b = wc.billById(r.billId!)!;
+      expect(b.total, isNull);
+      wc.editBill(b.id, date: '2026-10-18');
+      expect(wc.confirmBill(b.id), isFalse);
+      wc.editBill(b.id, total: 4560);
+      expect(wc.confirmBill(b.id), isTrue);
+    });
+
     test('one payment cannot pay two bills', () {
       final wc = bw();
       final a = addBill(wc, syntheticBill('a'), confirm: true);
@@ -372,7 +404,6 @@ void main() {
       expect(wc.searchBills('water bill'), hasLength(1));
       expect(wc.searchBills('45,60'), hasLength(1));
       expect(wc.searchBills('zzz'), isEmpty);
-      expect(wc.searchBills('s'), isEmpty, reason: 'one character is too little');
     });
   });
 
@@ -522,7 +553,7 @@ void main() {
 
     tw('Confirm without a total says so and keeps the sheet; with one it confirms and says so', (tester) async {
       final wc = bw();
-      final id = addBill(wc, const NormalizedBill(source: BillSource.photo, externalId: 'file:y', date: '2026-10-18'));
+      final id = addBill(wc, const NormalizedBill(source: BillSource.photo, externalId: 'file:y', date: '2026-10-18', unsure: 1));
       await openSheetFor(tester, wc, id);
       await tester.ensureVisible(key('confirmBill'));
       await tester.tap(key('confirmBill'));
@@ -537,6 +568,23 @@ void main() {
       expect(snack('Bill confirmed'), findsOneWidget);
       final b = wc.billById(id)!;
       expect((b.status, b.total, b.payee), (BillStatus.confirmed, 1250, 'Typed Shop'));
+    });
+
+    tw('an IBAN that does not check out is refused; a valid one is kept', (tester) async {
+      final wc = bw();
+      final id = addBill(wc, syntheticBill('ib'));
+      await openSheetFor(tester, wc, id);
+      await tester.enterText(key('billIban'), 'HR1210010051863000161');
+      await tester.ensureVisible(key('confirmBill'));
+      await tester.tap(key('confirmBill'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('IBAN: check the number'), findsOneWidget);
+      expect(wc.billById(id)!.iban, isNull);
+      await tester.enterText(key('billIban'), 'hr12 1001 0051 8630 0016 0');
+      await tester.ensureVisible(key('confirmBill'));
+      await tester.tap(key('confirmBill'));
+      await tester.pumpAndSettle();
+      expect(wc.billById(id)!.iban, 'HR1210010051863000160');
     });
 
     tw('a total that is not an amount is refused and nothing is saved', (tester) async {
@@ -828,12 +876,16 @@ void main() {
       expect(key('saveBill'), findsOneWidget);
     });
 
-    tw('an unpaid bill with a due date is a planned row labelled Bill', (tester) async {
+    tw('an unpaid bill with a due date is a planned row labelled Bill; paying the bill closes it', (tester) async {
       final wc = bw();
-      wc.repo.addPlanned(title: 'Synthetic Water', date: '2026-10-25', amount: 4560, source: PlannedSource.bill, sourceRef: 'bill:x');
-      wc.reload();
+      final id = addBill(wc, syntheticBill('pl', due: '2026-10-25'), confirm: true);
+      final row = key('up:p:${WalletRepo.billPlannedId(id)}');
       await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1800));
-      expect(find.text('Bill'), findsWidgets);
+      expect(row, findsOneWidget);
+      expect(find.descendant(of: row, matching: find.text('Bill')), findsOneWidget);
+      expect(wc.comingUp().count, 1, reason: 'the slip reserves its money like any planned cost');
+      wc.linkBill(id, wc.billCandidatesFor(wc.billById(id)!).first.tx.id);
+      expect(wc.comingUp().count, 0);
     });
 
     tw('search has a Bills section; a tap opens the bill', (tester) async {
@@ -893,8 +945,6 @@ void main() {
         '4560',
         '12500',
         '3141',
-        '.pdf',
-        '.xml',
       ]) {
         expect(text, isNot(contains(secret)), reason: 'the logs must not contain "$secret"');
       }

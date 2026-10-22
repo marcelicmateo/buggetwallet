@@ -1,7 +1,6 @@
 // SYNTHETIC demo wallet for screenshot tests. Made-up amounts; merchants are well-known chains only.
 import 'dart:math';
 
-import 'package:budget_wallet/src/bills_shim.dart'; // SHIM: removed when the bills core is merged
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 

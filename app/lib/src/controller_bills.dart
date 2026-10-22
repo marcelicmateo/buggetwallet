@@ -53,9 +53,6 @@ class BillLists {
   bool get isEmpty => review.isEmpty && unpaid.isEmpty && paid.isEmpty;
 }
 
-/// Bill reminder days; SHIM: becomes `settings.returnReminderDays` / `settings.warrantyReminderDays` with the core.
-const _shimReturnDays = 3, _shimWarrantyDays = 14;
-
 /// A reader result with the gaps filled from [b].
 NormalizedBill _fill(NormalizedBill a, NormalizedBill? b) => b == null
     ? a
@@ -124,18 +121,8 @@ extension BillsDb on WalletController {
   /// "Paid by this?" candidates for [b]: payee-word matches first.
   List<CategorizedTx> billCandidatesFor(Bill b) => billCandidates(b, txs, billsAll());
 
-  /// Bills matching [query] (SHIM: becomes `search(query).billsDb`).
-  List<Bill> searchBills(String query) {
-    final q = foldText(query);
-    if (q.length < 2) return const [];
-    final cents = parseAmountQuery(query);
-    return [
-      for (final b in billsAll())
-        if (foldText('${b.payee ?? ''} ${b.description ?? ''} ${b.items.map((i) => i.name).join(' ')}').contains(q) ||
-            (cents != null && b.total == cents))
-          b
-    ];
-  }
+  /// Bills matching [query] (payee, description, item names, exact total); the bills part of [search].
+  List<Bill> searchBills(String query) => search(query).billsDb;
 
   // ---------- adding ----------
 
@@ -268,11 +255,11 @@ extension BillsDb on WalletController {
     }
     BlobRef? ref;
     if (keep != null && key != null) {
-      if (keep.length > 15 * 1024 * 1024) {
+      if (keep.length > maxBlobPlainBytes) {
         logEvent(_billLog, Level.INFO, 'bills.import', {'trigger': trigger, 'result': 'tooBig'});
         return const BillImport(BillImportKind.tooBig);
       }
-      ref = await BlobStore(repo, key!).add(keep, type ?? 'jpg');
+      ref = await _blobStore().add(keep, type ?? 'jpg');
     }
     final (id, isNew) = repo.importBill(bill, file: ref);
     logEvent(_billLog, Level.INFO, 'bills.import', {
@@ -397,6 +384,8 @@ extension BillsDb on WalletController {
     _changed();
   }
 
+  BlobStore _blobStore() => BlobStore(repo, key!, maxCacheBytes: isWeb ? blobCacheBytesWeb : blobCacheBytesNative);
+
   /// The original file: from this device, else from the relay. [BillFileState.missing] = it is not here and could not be fetched
   /// (no address, offline, not on the relay yet).
   Future<BillFile> billFile(Bill b) async {
@@ -406,7 +395,7 @@ extension BillsDb on WalletController {
     try {
       final url = relayUrl;
       if (url != null) transport = own = RelayTransport(url, key!);
-      final bytes = await BlobStore(repo, key!).read(b.blob!, transport: transport);
+      final bytes = await _blobStore().read(b.blob!, transport: transport);
       logEvent(_billLog, Level.INFO, 'bill.file', {'found': bytes != null, 'type': b.blobType});
       return bytes == null ? const BillFile(BillFileState.missing) : BillFile(BillFileState.ready, bytes: bytes, type: b.blobType);
     } catch (e, st) {
@@ -430,34 +419,16 @@ extension BillsDb on WalletController {
       final t = today();
       final items = <(String, bool, int)>[];
       for (final b in billsAll()) {
-        if (b.status != BillStatus.confirmed) continue;
-        if (b.returnBy != null && b.returnBy!.compareTo(t) >= 0) items.add((b.returnBy!, false, _shimReturnDays));
-        if (b.warrantyUntil != null && b.warrantyUntil!.compareTo(t) >= 0) items.add((b.warrantyUntil!, true, _shimWarrantyDays));
+        if (!b.confirmed) continue;
+        if (b.returnBy != null && b.returnBy!.compareTo(t) >= 0) items.add((b.returnBy!, false, settings.returnReminderDays));
+        if (b.warrantyUntil != null && b.warrantyUntil!.compareTo(t) >= 0) {
+          items.add((b.warrantyUntil!, true, settings.warrantyReminderDays));
+        }
       }
       final n = await nudges.scheduleBillReminders(billReminderSlots(_clock(), items));
       logEvent(_billLog, Level.INFO, 'bills.remindersScheduled', {'count': n});
     } catch (e, st) {
       logError(_billLog, 'bills.reminderFailed', e, st);
     }
-  }
-
-  // ---------- Upcoming ----------
-
-  /// Warranty and return-by dates in [from]..[to] as Upcoming rows (SHIM: the core's `upcoming(billsDb:)` makes these; they
-  /// then carry `UpcomingItem.billDb`). Keys `w:<billId>` / `r:<billId>`, no amount, never counted.
-  List<UpcomingItem> billDateItems(String from, String to) {
-    final out = <UpcomingItem>[];
-    for (final b in billsAll()) {
-      if (b.status != BillStatus.confirmed) continue;
-      final name = (b.payee ?? '').isNotEmpty ? b.payee! : (b.description ?? '');
-      void add(String? date, String prefix) {
-        if (date == null || date.compareTo(from) < 0 || date.compareTo(to) > 0) return;
-        out.add(UpcomingItem(kind: UpcomingKind.planned, key: '$prefix:${b.id}', date: date, title: name));
-      }
-
-      add(b.warrantyUntil, 'w');
-      add(b.returnBy, 'r');
-    }
-    return out;
   }
 }

@@ -2,9 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:wallet_core/wallet_core.dart' show PlannedCost, PlannedStatus;
+import 'package:wallet_core/wallet_core.dart' show Bill, BillStatus, PlannedCost, PlannedStatus;
 
-import '../bills_shim.dart'; // SHIM: removed when the bills core is merged
 import '../controller.dart';
 import '../format.dart';
 import '../layout.dart';

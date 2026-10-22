@@ -71,14 +71,8 @@ extension FutureSpending on WalletController {
   List<PlannedCost> plannedOpen() => _cached('plannedOpen', () => repo.plannedCosts());
 
   /// Planned costs, confirmed bills and unconfirmed calendar events from [from] to [to] (inclusive), by date. Cached.
-  List<UpcomingItem> upcomingItems(String from, String to) => _cached('upcoming|$from|$to|${cal.version}', () {
-        // SHIM: the core's `upcoming(billsDb: billsAll())` adds the warranty and return-by rows.
-        final list = upcoming(planned: plannedEverything(), bills: recurringBills(), events: cal.events, from: from, to: to);
-        return [...list, ...billDateItems(from, to)]..sort((a, b) {
-            final c = a.date.compareTo(b.date);
-            return c != 0 ? c : a.title.compareTo(b.title);
-          });
-      });
+  List<UpcomingItem> upcomingItems(String from, String to) => _cached('upcoming|$from|$to|${cal.version}',
+      () => upcoming(planned: plannedEverything(), bills: recurringBills(), events: cal.events, from: from, to: to, billsDb: billsAll()));
 
   /// The dates Upcoming shows: the pay period, or the next one of the same length ([next]). `end` is the last day shown.
   ({String start, String end}) upcomingRange({bool next = false}) {

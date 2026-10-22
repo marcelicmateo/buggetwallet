@@ -10,7 +10,6 @@ import 'package:wallet_importer/wallet_importer.dart';
 
 import 'bill_inputs.dart';
 import 'bill_platform.dart';
-import 'bills_shim.dart'; // SHIM: removed when the bills core is merged
 import 'calendar_platform.dart';
 import 'calendar_source.dart';
 import 'ics_fetch.dart';
@@ -18,6 +17,7 @@ import 'key_store.dart';
 import 'logging.dart';
 import 'nudge_platform.dart';
 import 'nudges.dart';
+import 'platform.dart' show isWeb;
 import 'wallet_db.dart';
 
 part 'controller_bills.dart';
@@ -1156,7 +1156,7 @@ class WalletController extends ChangeNotifier {
 
   /// Everything that matches [query] (transactions, goals, wishlist, expected bills). Cached per data version. Logs counts only.
   SearchResult search(String query) => _cached('search$query', () {
-        final r = searchAll(query, txs: txs, goals: goals, wishlist: wish, bills: recurringBills(), planned: [
+        final r = searchAll(query, txs: txs, goals: goals, wishlist: wish, bills: recurringBills(), billsDb: billsAll(), planned: [
           for (final p in plannedEverything())
             if (!p.deleted && p.title.isNotEmpty) p
         ]);
@@ -1166,7 +1166,8 @@ class WalletController extends ChangeNotifier {
           'goals': r.goals.length,
           'wish': r.wishlist.length,
           'bills': r.bills.length,
-          'planned': r.planned.length
+          'planned': r.planned.length,
+          'billsDb': r.billsDb.length
         });
         return r;
       });
