@@ -2,7 +2,7 @@
 
 ## 1. Install the app
 
-**Android:** open the latest successful run of the `ci` workflow on GitHub (Actions tab), download `budget-wallet-android`, unzip, open `app-release.apk` on the phone and allow installing from this source. The APK is built for 64-bit Android phones only (arm64-v8a and x86_64; all phones since about 2017). 32-bit-only phones cannot install it.
+**Android:** open the latest successful run of the `ci` workflow on GitHub (Actions tab), download `budget-wallet-android`, unzip, open `app-release.apk` on the phone and allow installing from this source. The published APK is for 64-bit Android phones only (arm64-v8a; all phones since about 2017), about 44 MB. 32-bit-only phones cannot install it. A local `tools/build.sh apk` also includes x86_64 (about 86 MB) so it installs on the emulator; `BW_APK_ABIS=arm64 tools/build.sh apk` builds the phone-only one.
 
 **Linux:** download `budget-wallet-linux`, unzip, run `budget_wallet`.
 

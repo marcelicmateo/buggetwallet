@@ -29,8 +29,7 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 `tools/build.sh test|lint|format|relay|apk|linux|desktop-test|desktop-smoke|perf|web|web-test|all|shell|lsp` runs the CI steps in a rootless **Podman** container
 (not Docker), image from `dev/Containerfile`, Flutter version pinned by `environment: flutter:` in `app/pubspec.yaml`
 (CI reads the same line). Outputs land in `dist/` (git-ignored). Run `tools/build.sh test` before pushing.
-The release APK is 64-bit only (`--target-platform android-arm64,android-x64` in build.sh, ci.yml, release.yml, plus `packaging.jniLibs.excludes`
-for armeabi-v7a in `app/android/app/build.gradle.kts`, because the ML Kit AARs ship 32-bit libs anyway); x86_64 stays for the emulator.
+The release APK is 64-bit only: `--target-platform` plus `packaging.jniLibs.excludes` in `app/android/app/build.gradle.kts` (the ML Kit AARs ship armeabi-v7a libs anyway). Local `tools/build.sh apk` keeps arm64 + x86_64 (~86 MB) so `tools/emulator.sh install` works; `BW_APK_ABIS=arm64` (set in ci.yml and release.yml, so the published APK) drops x86_64 too (~44 MB).
 The scripts assume a Linux host: Bash 5, GNU tools (`grep -P`, `sha256sum`, `base64 -w0`), Python 3, Podman.
 Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't spend effort on them.
 - **One test file:** `tools/build.sh core|importer|app <test file or dir>…` runs only those tests (paths relative to the package or repo root; no analyze; step `<pkg>:one`, kept apart from full-suite medians); `tools/build.sh shell -c '<command>'` runs a command non-interactively in the container.

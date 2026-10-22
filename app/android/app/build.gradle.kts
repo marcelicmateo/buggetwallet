@@ -40,6 +40,8 @@ android {
     packaging {
         jniLibs {
             excludes += listOf("lib/armeabi-v7a/**", "lib/x86/**")
+            // BW_APK_ABIS=arm64 (CI, published APK): phones only, no x86_64 emulator libs
+            if (System.getenv("BW_APK_ABIS") == "arm64") excludes += "lib/x86_64/**"
         }
     }
 
