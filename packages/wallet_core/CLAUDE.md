@@ -189,11 +189,15 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `bill:<32 hex SHA-256>` (else random `b…`). Repo: `bills`, `bill`, `importBill` (creation op without status/deleted;
   re-import fills only empty fields, a confirmed bill only items + file; a deleted one is revived; `asNew:` stores a
   copy `Bill.idFor('<ext>#<n>')`), `updateBill`, `confirmBill` (B5a: a bill that would reserve, i.e. confirmed, unpaid,
-  total, due from today on, needs a category, also on `updateBill`; `suggestBillCategory` offers one), `linkBill` (one bill per tx), `unlinkBill`, `deleteBill`, `addExpenseFromBill` (expense + link +
-  confirm in one `_write`). `_billWrites` keeps the planned row `bill:<billId>` in step (open while confirmed, unpaid,
+  total, due from today on, needs a category, also on an `updateBill` of due date/total/category (B6: other edits always save);
+  `suggestBillCategory` offers one), `linkBill` (one bill per tx), `unlinkBill`, `deleteBill`, `addExpenseFromBill` (expense + link +
+  confirm + the category when the bill has none, in one `_write`). `_billWrites` keeps the planned row `bill:<billId>` in step (open while confirmed, unpaid,
   with total and due date; paid with the payment; deleted with the bill), so `computePeriod(planned:)` reserves an
   unpaid slip, once: a row a confirmed recurring bill already plans (`plannedCoveredBy`/`billCoveredBy`: same
-  `billPayeeKey`, due ± 3 days of a cycle, decided when read) is not reserved nor listed in `upcoming`/`plannedIcs`. Auto link `planBillLinks` in `_reconcile` (caught up only) and at confirm: a token (reference ≥ 6
+  `billPayeeKey`, due ± 3 days of a cycle, decided when read) is not reserved when that cycle (`plannedCoverage`) is the
+  `nextDue` this period's `dueBills` lists, the cycle just paid/skipped, or the bill is `coveredByPlan` (B6: else the slip
+  reserves), and not listed in `upcoming`/`plannedIcs` when that cycle is in their range; a bill row without a category
+  (`PlannedCost.needsCategory`) is listed, never reserved. Auto link `planBillLinks` in `_reconcile` (caught up only) and at confirm: a token (reference ≥ 6
   digits, JIR, invoice no: digits only ≥ 6, mixed ≥ 4 with a letter and a digit) in the bank row's `normalizeForLink` description with digit boundaries, −amount == total,
   date − 3 .. (due ?? date) + 60, exactly one row and one bill; never by amount alone, never reclassifies. Deleting the
   paying tx unlinks at once; other devices unlink a bill whose payment row arrives deleted in `_autoLinkBills` (caught
@@ -374,7 +378,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   own transfers incl. two devices: `test/transfers_test.dart`, budgets per category incl. the setting and two devices:
   `test/budget_vs_actual_test.dart`, recurring bills + weekly review incl. two devices: `test/habits_test.dart`, M5 backup
   round trip incl. two devices + resend: `test/backup_test.dart`, bills (repo API, planned row, auto link, two devices, backup, schema 6 → 7):
-  `test/bills_test.dart` (+ `bills_spec_test.dart`; B5a review fixes incl. two devices `bills_b5a_test.dart`; helper
+  `test/bills_test.dart` (+ `bills_spec_test.dart`; B5a review fixes incl. two devices `bills_b5a_test.dart`; B6
+  `bills_b6_test.dart`; helper
   `support/bill_helpers.dart` `confirmWithCategory`), bill files (BlobStore, engine queues, Memory/RelayTransport blob calls):
   `test/blob_store_test.dart` (+ `blob_spec_test.dart`; real relay: `sync_relay_test.dart`), future spending (planned costs, .ics, Upcoming, two
   devices): `test/future_spending_test.dart` (+ `future_spending_spec_test.dart`, `ics_spec_test.dart`; F4a: content refs

@@ -211,3 +211,28 @@ linked, Upcoming warranty/return entries, reminders. Linux/web: file import (PDF
   device's files are on it, or the retry after this run's first file was refused again): an older relay without blob
   storage. The app shows "This relay can't keep bill photos yet. Update the relay on the home server." A 404 before this
   device's first file reached the relay is expected and does not count; no queued file gives false.
+
+## Decisions and additions (B6, final fixes, 2026-10-22)
+- **Cash expense keeps a category.** `addExpenseFromBill(id, category:)` also writes `category` to the bill when it has none
+  (same `_write`), so deleting that expense later reopens a categorized planned row (reserved once, or `coveredByPlan`).
+- **Edits that do not change the reserve are exempt from the category rule.** `updateBill` throws `ArgumentError('The bill
+  needs a category.')` only when it changes `due_date`, `total` or `category` and leaves a reserving bill (confirmed, unpaid,
+  total, due from today on) without one; a note, payee, reference, warranty/return-by edit always saves. `confirmBill` is
+  unchanged. A confirmed unpaid bill with no category (confirmed before B5a, or confirmed while paid and then unlinked) keeps
+  its planned row, but `PlannedCost.needsCategory` (`source` bill, category null or blank) makes `computePeriod` list it in
+  `duePlanned` **without reserving it**, so no path counts it twice; the app shows "needs a category" and asks for one.
+  App: `editBill` / `setBillDates` return `bool` (false = core refused, logged `bill.edit|dates {ok: false}`); the bill sheet
+  then shows "Pick the category so Budget Wallet doesn't count this bill twice." and stays open, and marks the category
+  "(needed)" on a confirmed unpaid bill due from today on as well as on one in review.
+- **A slip near payday is reserved where its recurring cycle is not.** `plannedCoverage(PlannedCost, recurring)` →
+  `({RecurringBill bill, String? occurrence})?` (the covering cycle's date `nextDue + k × intervalDays`, k ≥ 0; null for
+  k = −1, the cycle just paid or skipped). `computePeriod` leaves a bill's row out of `reservedPlanned` only when the recurring
+  bill is `coveredByPlan`, the cycle is k = −1, or the occurrence is the `nextDue` this period's `dueBills` lists; otherwise
+  the slip reserves (payday 11-01, slip due 10-30, recurring cycle 11-02: the slip is reserved in October, the recurring
+  occurrence in November). `upcoming` and `plannedIcs` leave the row out only when the covering occurrence is in their range
+  (or k = −1), so Upcoming shows the payment once per range. `plannedCoveredBy` / `billCoveredBy` are unchanged (any cycle).
+- **Bill photos.** `MainActivity` deletes everything in `cache/bill_photos` on create and at the start of each `takePhoto`
+  (a picture left when Android killed the app while the camera app was open). No unit test (Kotlin).
+- `asNew` copies made on two devices before they sync pick the same n and merge into one bill (documented trade-off, B5a).
+- Demo data (`app/integration_test/demo_data.dart`): the water slip has Bills & subscriptions (covered by the plan), a gym
+  slip in Bills & one-offs is reserved; `app/test/demo_data_test.dart` seeds it into an in-memory wallet on several days.
