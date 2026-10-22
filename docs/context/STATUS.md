@@ -5,6 +5,8 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 
 **Current milestone:** M2 Standalone app — v2.0 first builds published for all platforms (branch `v2`), waiting for owner testing. v1 web app still live.
 
+**Sync:** relay on the home server (stage R, 2026-10-22); Syncthing is no longer used.
+
 **v2 downloads (GitHub releases, private repo):**
 - All platforms: release tag `dev-all` (Android .apk, Linux .tar.gz, Windows .zip, macOS .zip unsigned, iPhone .ipa unsigned)
 - Android + Linux, updated on every v2 push: release tag `dev`
@@ -91,6 +93,19 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   `tools/build.sh web|web-test`, `tools/web.sh serve|shot` (127.0.0.1 only). Fixed in stage: nudge slots already past in the
   phone zone failed the whole schedule; unpinned sqlite3.wasm no longer pinned on first download. Full run green (app 707,
   core 789, importer 193, desktop 25, web smoke, perf 0 missed frames). First stage with `scout` context packs.
+- 2026-10-22: **Stage R: sync redesign** (spec DESIGN_DECISIONS §4.9, protocol `RELAY_PROTOCOL.md`). A self-hosted
+  **relay** (`relay/`, pure Dart, Podman image `dev/Containerfile.relay`, `tools/relay.sh`, setup in `docs/setup.md` §5)
+  replaces the Syncthing folder on every device incl. web; it stores only sealed files, auth by a token derived from the
+  wallet key. `SyncEngine` + `RelayTransport`/`MemoryTransport`: files apply strictly in order per device, matching and
+  transfer pairing (also on local imports) run only when caught up, snapshots (7 days / 500 ops) with relay pruning
+  (both kept snapshots + acks of devices seen in 90 days), uploads split into ≤8 MiB parts, a stuck peer is unstuck by a
+  snapshot from any caught-up device after 24 h. Fixes known limits S1/S2. **Local database encrypted** (sqlite3 3.x +
+  SQLite3MultipleCiphers on Android, Linux, web) with a key derived from the wallet key; old wallets convert on first
+  start (crash-safe side copy); the database opens only once the key is known; a file the key does not open is set
+  aside, never deleted or merged. App: Plan › Sync (relay address, test connection, status, devices), join with key +
+  relay address, backups and logs through the save dialog, no storage permissions (Android: INTERNET + cleartext for
+  LAN/VPN). Review: 0 high, 3 medium, 5 low, all fixed with tests. Full run: importer 193, core 882, relay 99, app 755,
+  desktop 12 files (incl. relay_sync), web 9, perf 0 missed frames, emulator screens.
 
 ## Decisions log
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -136,11 +151,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - Importer: v1-compatible rounding changed ids of rows with an exact negative half cent (3-decimal amounts, very rare);
   such rows imported by earlier v2 builds may re-import once as duplicates.
 - Search matches the cleaned description, note and category, not merchant-rule names, and opens from Spending only (not from Today's Recent list).
-- Manual-entry matching edge cases with two out-of-sync devices: listed in `packages/wallet_core/CLAUDE.md`
-  ("Known limits"), to solve in the sync redesign.
+- Sync: a device stays stuck on a damaged sync file only if no device that applied it before the damage still syncs
+  and is caught up (details in `packages/wallet_core/CLAUDE.md` "Known limits"). Devices on a pre-relay build cannot
+  sync with relay devices: update all devices together.
 
 ## Next
-- Owner installs Android APK + desktop build, creates wallet, imports bank files, sets up Syncthing (APKs before the signing
+- Owner installs Android APK + desktop build, creates wallet, imports bank files, sets up the relay (`docs/setup.md` §5; APKs before the signing
   fix used throwaway keys: uninstall that one once; later updates install in place). After testing: Plan › Diagnostics
   "Save logs…", send the file; summarise with `tools/log-summary.py`.
 - Owner checks on the phone after Stage C: Ledger theme at large text (stat strip, stacked rows), bottom bar accent mark,
@@ -154,7 +170,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - Owner checks after Stage W (web): `tools/build.sh web && tools/web.sh serve`, open http://127.0.0.1:8080 → new wallet with a
   passphrase; reload → unlock screen, wrong passphrase refused; open a second tab → "open in another tab", close the first,
   Reload works; Plan › Backup "Back up now" downloads a `.bwb`, "Forget this browser" returns to onboarding, restore that file.
-- Then: sync redesign (stage R, spec DESIGN_DECISIONS §4.9, owner decisions 2026-10-22: relay replaces Syncthing, matching when caught up, snapshots + pruning, encrypted local db) → M6 owner live test.
+- Owner checks after Stage R (sync redesign): run the relay on the home server (`docs/setup.md` §5) or locally with
+  `tools/relay.sh start`; update the phone over the existing install → the wallet opens with all data (it is encrypted on
+  first start); Plan › Sync: relay address (`http://<server>:8787` over LAN/VPN) → Test connection → Sync now → "Up to date";
+  the laptop joins with the key + the same address and sees the phone's data; an expense on one shows on the other;
+  Back up now / Restore from backup… through the Android file dialogs (storage permissions are gone); Diagnostics "Save logs…".
+- Then: M6 owner live test.
 
 ## In flight (2026-10-20)
 - Queue and procedure: `docs/context/PIPELINE.md`.

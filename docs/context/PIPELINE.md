@@ -46,7 +46,8 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | R7b | Desktop test: two app instances syncing through `tools/relay.sh` | devops | R5, R7 | done (a161afd, desktop relay_sync green 22 s; merged) |
 | R8a | Review fixes core/relay: M1 local import/delete reconcile ignores caught-up gate; M2 unblock on transient GET + older-schema snapshot; L5 refused snapshot re-downloaded each run; L6 first upload >16 MiB never syncs (split into ≤8 MiB parts); L7 relay buffers bodies for unknown wallets | core-builder | review | done (3b810b1, 008c6f4, 0c9f58a, 231a36d; core 882, relay 99; merged) |
 | R8b | Review fixes app: K join merges an unopened plaintext wallet.db (set aside instead); M3 web forget deletes set-aside copies; L4 create writes key before set-aside; L8 setRelay during a sync not followed up | ui-builder | review | done (4d37bc3, test green app 755, web-test 9; merged) |
-| R | Review done (0 high, 3 medium, 5 low → R8a/b), fixes, Haiku full run, emulator, merge stage-r → v2, push, STATUS | lead | R1–R8 | running |
+| R9 | Integration tests failing in the stage run (plan: StatusLabel finder; screens: backup log without the save dialog); app correct | ui-builder | full run | done (22ccb01) |
+| R | Review (0 high, 3 medium, 5 low, all fixed), full run green (unit 193/882/99/755, desktop 12, web 9, perf 0 missed, emulator screens), merged into v2, pushed | lead | R1–R9 | done 2026-10-22 |
 
 R6 recipe (from R1): native `sqlite3.open(path)` then `PRAGMA key = "x'<64 hex>'"` right after open; plaintext → encrypted
 in place = open unkeyed + `PRAGMA rekey`. Web: `registerVirtualFileSystem(fs)` **without** `makeDefault`, open with
@@ -54,6 +55,10 @@ in place = open unkeyed + `PRAGMA rekey`. Web: `registerVirtualFileSystem(fs)` *
 `unregisterVirtualFileSystem` (forget) the next `IndexedDbFileSystem` needs a new `vfsName` (else "null function"); check
 opening an existing unkeyed IndexedDB db via the wrapped VFS. Wrong/missing key: `PRAGMA key` succeeds, the first read
 throws `SqliteException` extended code 26 "file is not a database".
+
+Stage R notes: the haiku watcher stopped twice before finishing (it hands back while waiting on its own background run); the
+lead ran the remaining suites with one background command. Worktrees from `isolation: "worktree"` start on `master`:
+every brief must begin with `git reset --hard <base>`.
 
 ## Stage W progress (2026-10-21)
 - W1–W3 merged into local `v2` (925d546, 3071b53); scouts used for W2/W3 (29k + 47k tokens), builders 46k + 75k.
