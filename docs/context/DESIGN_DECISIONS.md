@@ -28,6 +28,7 @@ All numbers below are made-up samples. No personal figures. "Proposed" = not bui
 - 2026-10-20: M5 Polish (§4.7) approved: backups go **only into the sync folder** (`budget-wallet/backups/`, encrypted with the wallet key, restore only into an empty wallet); CSV exports carry the app's cleaned data (category, cleaned description, note), saved through the system save dialog; search covers **all data** (transactions, goals, wishlist, expected bills); no new settings for now.
 - 2026-10-20: CI runs only what is not verified locally (owner): the laptop's full run (lint, unit, desktop, perf, emulator) is the gate before every push; GitHub builds the signed APK, the Linux bundle + smoke test and publishes the dev release, each as its own job. Test jobs run only on demand (cloud sessions without Flutter).
 - 2026-10-20: `v2` merged into `master` (owner).
+- 2026-10-22: Relay requests are **signed** (protocol v2): Ed25519 key derived from the wallet key, relay stores only the public key (trust on first use), signature over method, path, body hash and time (±5 min). A captured request over plain HTTP can no longer be reused to change or prune the relay; the VPN still hides metadata.
 - 2026-10-22: Sync redesign (§4.9): self-hosted relay on the home server over LAN/VPN **replaces** Syncthing; matching stays automatic but runs only when the device is caught up (no gaps); snapshots + pruning; local database encrypted with a key derived from the wallet key; backups move to the save dialog.
 
 ## 2. Data flow as built (v2) — summary

@@ -56,6 +56,13 @@ in place = open unkeyed + `PRAGMA rekey`. Web: `registerVirtualFileSystem(fs)` *
 opening an existing unkeyed IndexedDB db via the wrapped VFS. Wrong/missing key: `PRAGMA key` succeeds, the first read
 throws `SqliteException` extended code 26 "file is not a database".
 
+## Stage S: relay hardening + docs (2026-10-22)
+| # | Item | Agent | Depends on | Status |
+|---|---|---|---|---|
+| S1 | Relay protocol v2: signed requests (Ed25519 from the wallet key, relay keeps the public key only), replay-harmless writes, clock-skew retry; server + `RelayTransport` + protocol doc | core-builder | – | running |
+| S2 | Docs: README, docs/setup.md, docs/architecture.md, DESIGN_DECISIONS §2 diagram, wallet_core CLAUDE.md backup notes still describe Syncthing | general-purpose (sonnet/medium) | – | running |
+| S3 | Key backup prompt (gap 7): the encrypted db and relay make the wallet key the only way back | – | – | proposed |
+
 Stage R notes: the haiku watcher stopped twice before finishing (it hands back while waiting on its own background run); the
 lead ran the remaining suites with one background command. Worktrees from `isolation: "worktree"` start on `master`:
 every brief must begin with `git reset --hard <base>`.
