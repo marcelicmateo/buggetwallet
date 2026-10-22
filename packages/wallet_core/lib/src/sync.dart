@@ -65,13 +65,20 @@ class SyncReport {
   /// keep bill files answers 404 to every one: the app says "this relay can't keep bill photos yet").
   final int blobsSent, blobsWaiting;
 
+  /// The relay answered 404 to a bill file upload although it knows this wallet (this device's files are on it): an
+  /// older relay without blob storage. The app says "This relay can't keep bill photos yet. Update the relay on the
+  /// home server." A 404 before this device's first file reached the relay is expected (the relay creates the wallet
+  /// with it; the upload is retried in the same run) and counts only when that retry is refused again.
+  final bool blobsUnsupported;
+
   const SyncReport(this.sent, this.received, this.filesRead,
       {this.problems = const [],
       this.caughtUp = false,
       this.waiting = const [],
       this.devices = const [],
       this.blobsSent = 0,
-      this.blobsWaiting = 0});
+      this.blobsWaiting = 0,
+      this.blobsUnsupported = false});
 
   /// How many files were not applied ([problems]).
   int get badFiles => problems.length;

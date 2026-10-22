@@ -70,7 +70,9 @@ final _amount = RegExp(r'^\d{1,15}$');
 ///
 /// An IBAN that fails the HR checksum is dropped (`iban` null, `unsure` + 1); so is a model that is not `HRnn`.
 /// An amount of zero (a slip left for the payer to fill in) gives `total` null. `externalId` is
-/// `hub3:<IBAN>:<model reference>:<amount>` and is only set when the IBAN is valid.
+/// `hub3:<IBAN>:<model reference>:<amount>:<description>` (description with runs of spaces made one, upper case; empty
+/// when the slip has none) and is only set when the IBAN is valid. The description is in it because a flat fee paid
+/// every month (same IBAN, model `HR99` without a reference, same amount) differs only there (B5a).
 NormalizedBill? readHub3(String payload) {
   final bill = _hub3(payload);
   logImporter(billsLog, Level.FINE, 'bills.hub3', {'chars': payload.length, 'ok': bill != null, if (bill != null) 'unsure': bill.unsure});
@@ -103,7 +105,7 @@ NormalizedBill? _hub3(String payload) {
   String? nonEmpty(String s) => s.isEmpty ? null : s;
   return NormalizedBill(
     source: BillSource.hub3,
-    externalId: iban == null ? null : 'hub3:$iban:${reference ?? ''}:$amount',
+    externalId: iban == null ? null : 'hub3:$iban:${reference ?? ''}:$amount:${f[13].replaceAll(RegExp(r'\s+'), ' ').toUpperCase()}',
     payee: nonEmpty(f[6]),
     iban: iban,
     reference: reference,

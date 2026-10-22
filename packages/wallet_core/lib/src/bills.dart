@@ -5,9 +5,11 @@ import 'dart:convert';
 import 'package:cryptography/dart.dart' show DartSha256;
 import 'package:wallet_importer/wallet_importer.dart' show BillItem, BillSource;
 
+import 'categories.dart' show Kind, merchantKey;
 import 'dates.dart';
 import 'models.dart';
 import 'planned.dart' show UpcomingKind;
+import 'recurring.dart' show recurringDays;
 import 'search.dart' show foldText;
 
 /// review: read from a code, file or photo (or typed), every value a suggestion; confirmed: the owner checked it, so
@@ -173,7 +175,8 @@ String normalizeForLink(String s) => foldText(s).toUpperCase().replaceAll(RegExp
 
 /// What may identify [b]'s payment in a bank description, normalized ([normalizeForLink]): its reference (model + poziv
 /// na broj, and the poziv na broj alone) when it has at least 6 digits, its JIR (`jir:` external id), its invoice number
-/// (`inv:` external id) when at least 4 characters.
+/// (`inv:` external id): digits only when at least 6 digits (like a reference, so `1234` or `2026` never match a card
+/// mask or a year), mixed when at least 4 characters with a letter and a digit; letters alone never.
 List<String> billLinkTokens(Bill b) {
   final out = <String>[];
   if (b.reference case final ref?) {
@@ -192,7 +195,8 @@ List<String> billLinkTokens(Bill b) {
     final rest = ext.substring(4);
     final cut = rest.indexOf(':');
     final no = normalizeForLink(cut < 0 ? '' : rest.substring(cut + 1));
-    if (no.length >= 4) out.add(no);
+    final digits = no.replaceAll(RegExp('[^0-9]'), '').length;
+    if (digits == no.length ? digits >= 6 : no.length >= 4 && digits > 0) out.add(no);
   }
   return out;
 }
@@ -262,8 +266,21 @@ Map<String, String> planBillLinks(List<Bill> bills, List<Tx> rows) {
   return proposals;
 }
 
+/// The payee's words (3+ letters or digits, folded) that [billCandidates] and [suggestBillCategory] look for in a
+/// bank row's description.
+List<String> billPayeeWords(Bill b) => [
+      for (final w in foldText(b.payee ?? '').split(RegExp(r'[^\p{L}\p{N}]+', unicode: true)))
+        if (w.length >= 3) w
+    ];
+
+bool _named(List<String> words, CategorizedTx t) {
+  final d = foldText(t.tx.description);
+  return words.any(d.contains);
+}
+
 /// "Paid by this?" candidates for [b]: live expenses dated from (date − 3) to (due date ?? date) + 30 that are not
-/// linked to another bill in [all]; rows whose description holds a word of the payee (3+ letters, folded) first, then
+/// linked to another bill in [all] and are not an own transfer (`transferTo` set, or a transfer category); rows whose
+/// description holds a word of the payee ([billPayeeWords]) first, then
 /// the closest to the bill's date or due date, then the amount closest to the total, then date, then id. Never filtered
 /// by amount. A bill without a date has none.
 List<CategorizedTx> billCandidates(Bill b, List<CategorizedTx> txs, List<Bill> all) {
@@ -273,18 +290,19 @@ List<CategorizedTx> billCandidates(Bill b, List<CategorizedTx> txs, List<Bill> a
     for (final o in all)
       if (o.id != b.id && !o.deleted && o.linkedTx != null) o.linkedTx!
   };
-  final words = [
-    for (final w in foldText(b.payee ?? '').split(RegExp(r'[^\p{L}\p{N}]+', unicode: true)))
-      if (w.length >= 3) w
-  ];
+  final words = billPayeeWords(b);
   final out = [
     for (final t in txs)
-      if (t.tx.live && t.amount < 0 && !taken.contains(t.tx.id) && t.date.compareTo(window.$1) >= 0 && t.date.compareTo(window.$2) <= 0) t
+      if (t.tx.live &&
+          t.amount < 0 &&
+          t.tx.transferTo == null &&
+          t.kind != Kind.transfer &&
+          !taken.contains(t.tx.id) &&
+          t.date.compareTo(window.$1) >= 0 &&
+          t.date.compareTo(window.$2) <= 0)
+        t
   ];
-  bool named(CategorizedTx t) {
-    final d = foldText(t.tx.description);
-    return words.any(d.contains);
-  }
+  bool named(CategorizedTx t) => _named(words, t);
 
   int dist(CategorizedTx t) => [
         for (final d in [b.date, b.dueDate])
@@ -300,6 +318,73 @@ List<CategorizedTx> billCandidates(Bill b, List<CategorizedTx> txs, List<Bill> a
     return c != 0 ? c : x.tx.id.compareTo(y.tx.id);
   });
   return out;
+}
+
+// ---------- categories and recurring bills (B5a) ----------
+
+/// The bill's payee as a recurring-bill payee key ([merchantKey] of a bank row described by the payee, the rule
+/// [RecurringBill.payee] uses), or null without a payee (or one without letters).
+String? billPayeeKey(Bill b) => _payeeKey(b.payee);
+
+String? _payeeKey(String? payee) {
+  final p = _nonEmpty(payee);
+  if (p == null) return null;
+  final k = merchantKey(Tx(id: '', source: 'bill', date: '', amount: 0, description: p.trim()));
+  return k == 'x' ? null : k;
+}
+
+/// The confirmed recurring bill that already plans [b]'s payment, or null: same payee key ([billPayeeKey] ==
+/// [RecurringBill.payee], exactly) and [b]'s due date within ± [recurringDays] of one of its cycles: `nextDue` + k ×
+/// `intervalDays` for k ≥ −1 (k = −1 is the cycle just paid, or skipped, before `nextDue`). Never by amount. Such a
+/// bill's planned row is not reserved ([plannedCoveredBy], decided when read, so the order of confirming the two never
+/// matters and nothing is written): the recurring bill reserves that payment, or the fixed plan holds it. The bill
+/// itself is listed as before (Plan › Bills, linking, reminders).
+RecurringBill? billCoveredBy(Bill b, List<RecurringBill> recurring) => _coveredBy(billPayeeKey(b), b.dueDate, recurring);
+
+/// [billCoveredBy] for a bill's planned row (`source` bill: payee = its title, due date = its date); null for any
+/// other planned cost. `computePeriod` does not reserve such a row and `upcoming` / `plannedIcs` do not list it (the
+/// recurring bill's occurrence stands for that payment).
+RecurringBill? plannedCoveredBy(PlannedCost p, List<RecurringBill> recurring) =>
+    p.source != PlannedSource.bill || p.title == 'Bill' ? null : _coveredBy(_payeeKey(p.title), p.date, recurring);
+
+RecurringBill? _coveredBy(String? key, String? due, List<RecurringBill> recurring) {
+  if (key == null || !_validDate(due)) return null;
+  for (final r in recurring) {
+    if (!r.confirmed || r.payee != key || !_validDate(r.nextDue)) continue;
+    final d = daysBetween(r.nextDue, due!);
+    final i = r.intervalDays;
+    if (i < 1) {
+      if (d.abs() <= recurringDays) return r;
+      continue;
+    }
+    final k = (d / i).round();
+    for (final c in [k - 1, k, k + 1]) {
+      if (c >= -1 && (d - c * i).abs() <= recurringDays) return r;
+    }
+  }
+  return null;
+}
+
+/// A category to offer for [b] before it is confirmed ([WalletRepo.confirmBill] needs one for a bill it would
+/// reserve): the category of the confirmed recurring bill with the same payee key ([billPayeeKey]); else the category
+/// of the latest live bank expense (not hand-added, not an own transfer) whose description holds a payee word
+/// ([billPayeeWords], like [billCandidates]); else null. Never by amount.
+String? suggestBillCategory(Bill b, {required List<RecurringBill> recurring, required List<CategorizedTx> txs}) {
+  final key = billPayeeKey(b);
+  if (key != null) {
+    for (final r in recurring) {
+      if (r.confirmed && r.payee == key && r.category.isNotEmpty) return r.category;
+    }
+  }
+  final words = billPayeeWords(b);
+  if (words.isEmpty) return null;
+  CategorizedTx? best;
+  for (final t in txs) {
+    if (!t.tx.live || t.tx.manual || t.amount >= 0 || t.tx.transferTo != null || t.kind == Kind.transfer) continue;
+    if (!_named(words, t)) continue;
+    if (best == null || t.date.compareTo(best.date) > 0 || (t.date == best.date && t.tx.id.compareTo(best.tx.id) > 0)) best = t;
+  }
+  return best?.category;
 }
 
 // ---------- reminders ----------

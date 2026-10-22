@@ -187,19 +187,24 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   web-safe. `Bill` (`models`-style row ↔ object): synced entity `bill`, table `bills` (schema 7; `items` = JSON text,
   `unsure` count, `linked_tx` the payment, `blob`/`blob_type`/`blob_bytes` the file), id `Bill.idFor(externalId)` =
   `bill:<32 hex SHA-256>` (else random `b…`). Repo: `bills`, `bill`, `importBill` (creation op without status/deleted;
-  re-import fills only empty fields, a confirmed bill only items + file; a deleted one is revived), `updateBill`,
-  `confirmBill`, `linkBill` (one bill per tx), `unlinkBill`, `deleteBill`, `addExpenseFromBill` (expense + link +
+  re-import fills only empty fields, a confirmed bill only items + file; a deleted one is revived; `asNew:` stores a
+  copy `Bill.idFor('<ext>#<n>')`), `updateBill`, `confirmBill` (B5a: a bill that would reserve, i.e. confirmed, unpaid,
+  total, due from today on, needs a category, also on `updateBill`; `suggestBillCategory` offers one), `linkBill` (one bill per tx), `unlinkBill`, `deleteBill`, `addExpenseFromBill` (expense + link +
   confirm in one `_write`). `_billWrites` keeps the planned row `bill:<billId>` in step (open while confirmed, unpaid,
   with total and due date; paid with the payment; deleted with the bill), so `computePeriod(planned:)` reserves an
-  unpaid slip. Auto link `planBillLinks` in `_reconcile` (caught up only) and at confirm: a token (reference ≥ 6
-  digits, JIR, invoice no ≥ 4) in the bank row's `normalizeForLink` description with digit boundaries, −amount == total,
+  unpaid slip, once: a row a confirmed recurring bill already plans (`plannedCoveredBy`/`billCoveredBy`: same
+  `billPayeeKey`, due ± 3 days of a cycle, decided when read) is not reserved nor listed in `upcoming`/`plannedIcs`. Auto link `planBillLinks` in `_reconcile` (caught up only) and at confirm: a token (reference ≥ 6
+  digits, JIR, invoice no: digits only ≥ 6, mixed ≥ 4 with a letter and a digit) in the bank row's `normalizeForLink` description with digit boundaries, −amount == total,
   date − 3 .. (due ?? date) + 60, exactly one row and one bill; never by amount alone, never reclassifies. Deleting the
-  paying tx unlinks at once. `billCandidates`, `billReminders`, `upcoming(billsDb:)` (`UpcomingKind.warranty`/`returnBy`),
+  paying tx unlinks at once; other devices unlink a bill whose payment row arrives deleted in `_autoLinkBills` (caught
+  up). `billCandidates` (no own transfers), `billReminders`, `upcoming(billsDb:)` (`UpcomingKind.warranty`/`returnBy`),
   settings `returnReminderDays` (3, 0..30) / `warrantyReminderDays` (14, 0..90). `BlobStore(repo, key, maxCacheBytes:)`:
   `add` (async: seal, hash = SHA-256 of the sealed bytes, cache + `blob_outbox`), `read(hash, transport:)` (cache, else
   fetch, hash checked, unsealed, cached). Device-local tables `blob_cache` (LRU by a use counter, never evicts a queued
-  hash), `blob_outbox`, `blob_delete` (not in `_entities`, snapshots or backups); repo helpers `putCachedBlob`,
-  `cachedBlob`, `evictBlobs`, `queuedBlobs`, `blobUploaded`, `blobDeletes`, `blobDeleteDone`. Logs: `bills.*`, `blob.*`,
+  hash), `blob_outbox`, `blob_delete`, `blob_own` (files this device attached to a bill; not in `_entities`, snapshots
+  or backups); repo helpers `putCachedBlob`, `cachedBlob`, `evictBlobs`, `queuedBlobs`, `blobUploaded`, `blobDeletes`,
+  `blobDeleteDone`, `dropOrphanBlobs` (own files no live bill points to: a queued one forgotten, an uploaded one queued
+  for deletion; after a caught-up run and before uploads). Logs: `bills.*`, `blob.*`,
   `sync.blob*` with counts, sources and enum words only.
 - `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:, planned:)` → `SearchResult` (`txs` newest first capped at
   `searchTxLimit` 200, `goals`, `wishlist`, `bills`, `planned`, `billsDb` (stored bills: payee, description, item
@@ -223,7 +228,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (`state`, `put`, `get`, `ack`, `putSnapshot`, `getSnapshot`, `putBlob`/`getBlob` (null on 404)/`deleteBlob`, whose
   defaults act like an older relay: 404; `run` uploads `blob_outbox` before the ops (a 404 before this device's first
   file is retried once after it: the relay creates a wallet only then), sends `blob_delete` after the ack, failures stay
-  queued and never stop the run, `SyncReport.blobsSent`/`blobsWaiting`; failures are `TransportException(TransportFailure)`),
+  queued and never stop the run, `SyncReport.blobsSent`/`blobsWaiting`/`blobsUnsupported` (404 on an upload for a wallet the relay knows = older relay); failures are `TransportException(TransportFailure)`),
   `RelayState`/`RelayDevice`/`RelaySnapshot` (+ `fromJson`), implemented by `MemoryTransport` (`sync_memory.dart`: the
   relay's rules in memory — no gaps, never overwritten, acks grow, snapshot 422 before 409, two kept snapshots, pruning
   incl. the 90-day rule driven by `now`; no signature check; blobs: hash checked, 404 for an unknown wallet, hooks `blobs`, `blobRoutes`, `tamperBlob`; test hooks `offline`, `corrupt`, `failGet`, `replace`, `files`,
@@ -353,6 +358,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   linked to a hand-added expense stays paid when matching later replaces that entry with its bank row. A deleted bill's
   file stays in other devices' caches until their next caught-up run. A blob added before this device ever stored a
   file waits for one (the relay creates the wallet only then). Older builds ignore the `bill` entity (replayed once).
+  A slip is matched to a confirmed recurring bill by exact payee key only (slip payee vs bank text may differ; then only
+  its category keeps it from being reserved on top of the fixed plan). Files attached before B5a are not in `blob_own`,
+  so an orphan among them stays on the relay. Two devices adding an `asNew` copy before syncing make one bill.
 - Calendar refs are built from the normalized title and date (`calendarEventRef`): two events with the same normalized
   title on the same day (amounts stripped: `Dentist 80 €` and `Dentist 90 €`) show as one suggestion, and renaming an
   event in the calendar makes it a new suggestion. A title without letters (`80 €`) gets a per-calendar ref, so its
@@ -366,7 +374,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   own transfers incl. two devices: `test/transfers_test.dart`, budgets per category incl. the setting and two devices:
   `test/budget_vs_actual_test.dart`, recurring bills + weekly review incl. two devices: `test/habits_test.dart`, M5 backup
   round trip incl. two devices + resend: `test/backup_test.dart`, bills (repo API, planned row, auto link, two devices, backup, schema 6 → 7):
-  `test/bills_test.dart` (+ `bills_spec_test.dart`), bill files (BlobStore, engine queues, Memory/RelayTransport blob calls):
+  `test/bills_test.dart` (+ `bills_spec_test.dart`; B5a review fixes incl. two devices `bills_b5a_test.dart`; helper
+  `support/bill_helpers.dart` `confirmWithCategory`), bill files (BlobStore, engine queues, Memory/RelayTransport blob calls):
   `test/blob_store_test.dart` (+ `blob_spec_test.dart`; real relay: `sync_relay_test.dart`), future spending (planned costs, .ics, Upcoming, two
   devices): `test/future_spending_test.dart` (+ `future_spending_spec_test.dart`, `ics_spec_test.dart`; F4a: content refs
   incl. two devices `calendar_ref_test.dart`, parseIcs cost bounds + dismiss title `future_spending_fixes_test.dart`), CSV: `test/export_test.dart`, search: `test/search_test.dart`,

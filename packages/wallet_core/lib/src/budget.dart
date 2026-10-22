@@ -1,3 +1,4 @@
+import 'bills.dart' show plannedCoveredBy;
 import 'categories.dart';
 import 'dates.dart';
 import 'logs.dart';
@@ -93,7 +94,8 @@ List<PlannedCost> duePlanned(List<PlannedCost> planned, String today, String end
 /// are already counted in the fixed-cost settings and change nothing ([RecurringBill.coveredByPlan]). [planned]
 /// (`WalletRepo.plannedCosts()`): the open ones with an amount dated from today to the day before payday
 /// ([duePlanned]) are reserved the same way ([PeriodBudget.reservedPlanned]), except those in fixed categories
-/// ([PlannedCost.coveredByPlan], like bills). Without planned costs every number is as before.
+/// ([PlannedCost.coveredByPlan], like bills) and a bill's row that a confirmed recurring bill in [bills] already plans
+/// ([plannedCoveredBy], B5a: listed, not added). Without planned costs every number is as before.
 PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today,
     {List<RecurringBill> bills = const [], List<PlannedCost> planned = const []}) {
   final start = st.periodStart ?? today;
@@ -109,7 +111,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final due = dueBills(bills, txs, start, end);
   final reservedBills = due.fold<int>(0, (s, b) => s + (b.coveredByPlan ? 0 : b.expectedAmount));
   final duePl = duePlanned(planned, today, end);
-  final reservedPlanned = duePl.fold<int>(0, (s, p) => s + (p.coveredByPlan ? 0 : p.amount!));
+  final reservedPlanned = duePl.fold<int>(0, (s, p) => s + (p.coveredByPlan || plannedCoveredBy(p, bills) != null ? 0 : p.amount!));
   final flexBudget = income - fixedPlan - goalMonthly - reservedBills - reservedPlanned;
   final flex = inPeriod.where((t) => t.kind == Kind.flex);
   final spent = -_sum(flex);

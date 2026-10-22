@@ -12,7 +12,7 @@ class BillItem { final String name; final String? quantity; final int amount; } 
 /// payer fields of a slip (the owner's own name/address) are never read into it.
 class NormalizedBill {
   final BillSource source;
-  final String? externalId;   // 'jir:<uuid>' | 'zki:<hex>' | 'inv:<supplier id or IBAN>:<invoice no>' | 'hub3:<IBAN>:<model reference>:<amount>'
+  final String? externalId;   // 'jir:<uuid>' | 'zki:<hex>' | 'inv:<supplier id or IBAN>:<invoice no>' | 'hub3:<IBAN>:<model reference>:<amount>:<DESCRIPTION>' (B5a)
   final String? date, dueDate, payee, iban, reference, description;  // reference = 'HR01 1234-5678' (model + poziv na broj, normalized)
   final int? total;           // null = not found
   final String currency;      // 'EUR' default
@@ -58,11 +58,12 @@ Repo (all writes through `_write`):
 List<Bill> bills({bool includeDeleted = false});
 /// Adds a bill as status review (or returns the existing id for the same externalId; then only empty fields are
 /// filled and nothing confirmed is overwritten). Returns (id, isNew).
-(String, bool) importBill(NormalizedBill b, {BlobRef? file});
+(String, bool) importBill(NormalizedBill b, {BlobRef? file, bool asNew = false});   // asNew: B5a
 void updateBill(String id, {String? date, String? dueDate, int? total, String? payee, String? iban, String? reference,
     String? description, String? category, String? note, List<BillItem>? items, String? warrantyUntil, String? returnBy,
     bool clearDueDate = false, bool clearWarranty = false, bool clearReturnBy = false, bool clearCategory = false});
-void confirmBill(String id);           // review → confirmed; needs date and total (> 0) else ArgumentError
+void confirmBill(String id);           // review → confirmed; needs date and total (> 0) else ArgumentError; B5a: an unpaid bill due
+                                       // from today on also needs a category (updateBill first) else ArgumentError
 void linkBill(String id, String txId); // the owner picked the payment; one bill per tx (linking a tx used by another bill → ArgumentError)
 void unlinkBill(String id);
 void deleteBill(String id);            // also queues its blob for deletion on the relay (if no other live bill points to it)
@@ -164,3 +165,49 @@ linked, Upcoming warranty/return entries, reminders. Linux/web: file import (PDF
   the run). Cached files of bills deleted elsewhere are purged on the next caught-up run. `MemoryTransport` hooks:
   `blobs`, `blobRoutes` (false = older relay), `tamperBlob`. `SyncTransport`'s default blob methods behave like an older
   relay (404), so other transports compile unchanged.
+
+## Decisions and additions (B5a, review fixes, core, 2026-10-22)
+- **Double reserve.** A bill that would reserve (confirmed, unpaid, total, due date from today on) needs a category:
+  `confirmBill` and any `updateBill` leaving it so without one throw `ArgumentError('The bill needs a category.')` (the app
+  asks; a bill in review, one without a due date, one due before today or a paid one needs none). The planned row carries
+  it, so a slip in a fixed category (Bills & subscriptions, Rent, Loan) is `PlannedCost.coveredByPlan`: listed, never
+  reserved on top of the payday plan. `String? suggestBillCategory(Bill b, {required List<RecurringBill> recurring,
+  required List<CategorizedTx> txs})`: the confirmed recurring bill with the same payee key → its category; else the latest
+  live bank expense (not hand-added, not an own transfer) whose description holds a payee word (`billPayeeWords`, the
+  `billCandidates` rule) → its category; else null. Never by amount.
+- **Slip of a confirmed recurring bill.** `String? billPayeeKey(Bill)` = `merchantKey` of a bank row described by the
+  payee (the `RecurringBill.payee` rule; null without letters). `RecurringBill? billCoveredBy(Bill, List<RecurringBill>)`:
+  a confirmed recurring bill with exactly that payee key whose cycle `nextDue + k × intervalDays` (k ≥ −1; k = −1 is the
+  cycle just paid or skipped) is within ± 3 days (`recurringDays`) of the bill's due date. Decided **when read**, not
+  written: the bill keeps its planned row, but `RecurringBill? plannedCoveredBy(PlannedCost, List<RecurringBill>)` (a
+  `bill`-source row: payee = title, due = date) makes `computePeriod` list it in `duePlanned` without reserving it, and
+  `upcoming` / `plannedIcs` leave it out (the recurring occurrence stands for that payment). So both orders (slip first or
+  recurring bill first) and later changes (confirm, dismiss, delete, skip, a payment moving `nextDue`, on any device)
+  give the same result with no extra writes, and an owner's skip/paid/delete of the planned row is never overwritten.
+  The bill stays in Bills (unpaid, linkable, reminders); the app can show "planned by <recurring label>" with
+  `billCoveredBy`. Exact key match only: a slip payee that differs from the bank text (`Synth Energy d.o.o.` vs
+  `SYNTH ENERGY ZAGREB`) is not matched, and then only the category rule above prevents a double reserve.
+- **HUB-3 ids per period.** `readHub3` externalId = `hub3:<IBAN>:<model reference>:<amount>:<description>` (description
+  with runs of spaces made one, upper case, empty when none), so a monthly flat fee (`HR99`, no reference, same amount)
+  with "03/2026" vs "04/2026" is two bills. Bills stored before B5a keep their old id (a re-scan of such a slip is a new
+  bill once). For two slips that read exactly alike, `importBill(b, asNew: true)` stores a separate bill: id
+  `Bill.idFor('<externalId>#<n>')`, n = the first ≥ 1 not used by a live bill (a deleted copy is revived), external id
+  unchanged. Two devices adding a copy before they sync pick the same n, so their copies are one bill (later import's
+  read fields win), the same rule as one slip scanned on two devices.
+- **Payment deleted on another device.** `_autoLinkBills` (caught up only) first unlinks every live bill whose `linked_tx`
+  is a deleted row here (through `_billWrites`: the planned row reopens while due), then plans links; the deleting device
+  still unlinks at once. Covers a link made on one device while the other deleted the row.
+- **Invoice tokens.** `billLinkTokens`: an invoice number of digits only needs ≥ 6 digits (like a reference: `1234`,
+  `2026` never link to `KARTICA ****1234` / `PRETPLATA 2026`); a mixed one ≥ 4 characters with a letter and a digit; letters
+  alone never.
+- **Orphan files.** Device-local `blob_own(hash)`: files this device attached to a bill (`importBill` when the bill takes
+  the file). `WalletRepo.dropOrphanBlobs()` (also run by `runPendingMatch` after a caught-up sync and by `SyncEngine.run`
+  before uploading): an own hash no live bill points to (bill deleted elsewhere, or the same bill got another device's file:
+  the later `blob` field wins) is forgotten when still queued (never sent) or queued for `blob_delete` when uploaded; the
+  cached copy goes. A file added with `BlobStore.add` but not yet given to `importBill` is never touched. Files attached
+  before B5a are not in `blob_own` (not swept).
+- **`billCandidates`** skips own transfers (`transferTo` set, or a transfer-kind category).
+- **`SyncReport.blobsUnsupported`** (bool): the relay answered 404 to a bill file upload for a wallet it knows (this
+  device's files are on it, or the retry after this run's first file was refused again): an older relay without blob
+  storage. The app shows "This relay can't keep bill photos yet. Update the relay on the home server." A 404 before this
+  device's first file reached the relay is expected and does not count; no queued file gives false.

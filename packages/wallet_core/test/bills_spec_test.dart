@@ -7,6 +7,7 @@ import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'support/bill_helpers.dart';
 import 'support/sim.dart';
 import 'support/synthetic.dart';
 
@@ -159,7 +160,7 @@ void main() {
 
     test('a confirmed bill is never overwritten by a re-import (also not its empty-looking fields)', () {
       final (id, _) = repo.importBill(nb());
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       repo.importBill(nb(payeeName: 'Other Payee', tot: 1, date: '2026-01-01', dueDate: '2026-01-02', description: 'Else'));
       final b = only(repo);
       expect(b.status, BillStatus.confirmed);
@@ -168,7 +169,7 @@ void main() {
 
     test('a re-import never changes the status back or the link', () {
       final (id, _) = repo.importBill(nb());
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       final tx = bankRow(repo, '2026-03-02', -total, 'SYNTHETIC SHOP');
       repo.linkBill(id, tx);
       repo.importBill(nb());
@@ -208,21 +209,21 @@ void main() {
       final (noTotal, _) = repo.importBill(nb(externalId: 'b', tot: null));
       final (zero, _) = repo.importBill(nb(externalId: 'c', tot: 0));
       for (final id in [noDate, noTotal, zero]) {
-        expect(() => repo.confirmBill(id), throwsArgumentError);
+        expect(() => repo.confirmWithCategory(id), throwsArgumentError);
         expect(repo.bills().singleWhere((b) => b.id == id).status, BillStatus.review);
       }
       repo.updateBill(noDate, date: '2026-02-25');
       repo.updateBill(noTotal, total: 1);
       repo.updateBill(zero, total: 500);
       for (final id in [noDate, noTotal, zero]) {
-        repo.confirmBill(id);
+        repo.confirmWithCategory(id);
         expect(repo.bills().singleWhere((b) => b.id == id).status, BillStatus.confirmed);
       }
     });
 
     test('a negative total cannot be confirmed', () {
       final (id, _) = repo.importBill(nb(tot: -100));
-      expect(() => repo.confirmBill(id), throwsArgumentError);
+      expect(() => repo.confirmWithCategory(id), throwsArgumentError);
     });
 
     test('updateBill sets and clears fields', () {
@@ -266,7 +267,7 @@ void main() {
       final (id, _) = repo.importBill(nb());
       expect(billRows(repo), isEmpty, reason: 'review: nothing is planned');
       expect(reserved(repo), 0);
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       final p = billRows(repo, id).single;
       expect((p.amount, p.date, p.title, p.status), (total, '2026-03-10', payee, PlannedStatus.open));
       expect(reserved(repo), total);
@@ -274,26 +275,26 @@ void main() {
 
     test('title is Bill without a payee; due today counts as not past', () {
       final (id, _) = repo.importBill(nb(payeeName: null, dueDate: '2026-03-01'));
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       expect(billRows(repo, id).single.title, 'Bill');
     });
 
     test('past due date: no planned row, nothing reserved', () {
       final (id, _) = repo.importBill(nb(dueDate: '2026-02-28'));
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       expect(billRows(repo), isEmpty);
       expect(reserved(repo), 0);
     });
 
     test('no due date: no planned row', () {
       final (id, _) = repo.importBill(nb(dueDate: null));
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       expect(billRows(repo), isEmpty);
     });
 
     test('updates follow the bill: total, due date, cleared due date', () {
       final (id, _) = repo.importBill(nb());
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       repo.updateBill(id, total: 20000);
       expect(billRows(repo, id).single.amount, 20000);
       expect(reserved(repo), 20000);
@@ -308,7 +309,7 @@ void main() {
 
     test('after the due date has passed nothing is reserved, and the bill stays unpaid', () {
       final (id, _) = repo.importBill(nb());
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       now = DateTime.utc(2026, 3, 11, 12).millisecondsSinceEpoch;
       expect(computePeriod(const [], st, const [], '2026-03-11', planned: repo.plannedCosts()).reservedPlanned, 0);
       expect(only(repo).paid, isFalse);
@@ -316,7 +317,7 @@ void main() {
 
     test('link closes the row with the paying tx: reserved money is released', () {
       final (id, _) = repo.importBill(nb());
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       final tx = bankRow(repo, '2026-03-01', -total, 'SYNTHETIC SHOP');
       repo.linkBill(id, tx);
       final p = billRows(repo, id).single;
@@ -328,7 +329,7 @@ void main() {
 
     test('delete: the planned row is gone and nothing is reserved', () {
       final (id, _) = repo.importBill(nb());
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       repo.deleteBill(id);
       // Changed (B1b): rows are never removed from the database (deletes sync as `deleted: 1`, like deletePlanned), so
       // "gone" = no live row.
@@ -346,7 +347,7 @@ void main() {
 
     test('the bill row never changes the bank row category', () {
       final (id, _) = repo.importBill(nb());
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       final tx = bankRow(repo, '2026-03-01', -total, 'SYNTHETIC SHOP');
       final before = repo.categorizer().categoryOf(repo.transactions().singleWhere((t) => t.id == tx));
       repo.updateBill(id, category: 'Utilities');
@@ -385,7 +386,7 @@ void main() {
       addTearDown(a.close);
       addTearDown(b.close);
       final (id, _) = a.repo.importBill(nb());
-      a.repo.confirmBill(id);
+      a.repo.confirmWithCategory(id);
       final tx = bankRow(a.repo, '2026-03-01', -total, 'SYNTHETIC SHOP');
       a.repo.linkBill(id, tx);
       for (final d in [a, b]) {
@@ -400,7 +401,7 @@ void main() {
   group('addExpenseFromBill', () {
     test('a hand-added expense of -total on the bill date, payee as description, linked', () {
       final (id, _) = repo.importBill(nb());
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       final txId = repo.addExpenseFromBill(id, category: 'Groceries');
       final t = repo.transactions().singleWhere((x) => x.id == txId);
       expect((t.amount, t.date, t.manual, t.category, t.description), (-total, '2026-02-25', true, 'Groceries', payee));
@@ -410,7 +411,7 @@ void main() {
 
     test('tx and link are written together: both ops sit in the outbox, none without the other on failure', () {
       final (id, _) = repo.importBill(nb());
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       final before = repo.db.select('SELECT COUNT(*) AS c FROM outbox').first['c'] as int;
       repo.addExpenseFromBill(id, category: 'Groceries');
       final ops = [for (final r in repo.db.select('SELECT op FROM outbox ORDER BY seq')) jsonDecode(r['op'] as String) as Map];
@@ -431,7 +432,7 @@ void main() {
       addTearDown(a.close);
       addTearDown(b.close);
       final (id, _) = a.repo.importBill(nb());
-      a.repo.confirmBill(id);
+      a.repo.confirmWithCategory(id);
       final txId = a.repo.addExpenseFromBill(id, category: 'Groceries');
       await a.run();
       await b.run();
@@ -444,7 +445,7 @@ void main() {
     // Bill: date 2026-02-25, due 2026-03-10, total 13579, reference HR01 5555-1234 -> window 2026-02-22 .. 2026-05-09.
     String confirmed(WalletRepo r, {NormalizedBill? bill}) {
       final (id, _) = r.importBill(bill ?? nb());
-      r.confirmBill(id);
+      r.confirmWithCategory(id);
       return id;
     }
 
@@ -569,7 +570,7 @@ void main() {
       final tx = bankRow(repo, '2026-03-05', -total, withRef);
       expect(bill(repo, a).linkedTx, tx);
       final (b, _) = repo.importBill(nb(externalId: 'second'));
-      repo.confirmBill(b);
+      repo.confirmWithCategory(b);
       repo.runPendingMatch();
       expect(bill(repo, a).linkedTx, tx);
       expect(bill(repo, b).linkedTx, isNull, reason: 'one bill per tx');
@@ -690,7 +691,7 @@ void main() {
       Bill mkOne(String ext, {String? payeeName, String? description, bool confirm = true, bool del = false}) {
         final (id, _) = repo.importBill(nb(externalId: ext, payeeName: payeeName, description: description, dueDate: null));
         repo.updateBill(id, warrantyUntil: '2026-03-20', returnBy: '2026-03-05');
-        if (confirm) repo.confirmBill(id);
+        if (confirm) repo.confirmWithCategory(id);
         if (del) repo.deleteBill(id);
         return repo.bills(includeDeleted: true).singleWhere((b) => b.id == id);
       }
@@ -824,7 +825,7 @@ void main() {
       // Changed (B1b): the local was `ref`, which hid the top-level reference string compared below.
       final file = await store.add(Uint8List.fromList(List.generate(2000, (i) => i & 0xff)), 'jpg');
       final (id, _) = repo.importBill(nb(items: const [BillItem(name: 'Widget', quantity: '2', amount: 1000)]), file: file);
-      repo.confirmBill(id);
+      repo.confirmWithCategory(id);
       repo.updateBill(id, warrantyUntil: '2027-03-01', returnBy: '2026-03-15', note: 'synthetic');
       final bytes = await backupBytes(repo, key);
 
@@ -856,7 +857,7 @@ void main() {
         id = i;
         repo.importBill(nb());
         repo.updateBill(id, note: 'secretnote', category: 'Utilities');
-        repo.confirmBill(id);
+        repo.confirmWithCategory(id);
         final tx = bankRow(repo, '2026-03-05', -total, 'PLACANJE RACUNA HR01 5555-1234 TEST ELEKTRA');
         repo.unlinkBill(id);
         repo.linkBill(id, tx);
@@ -864,7 +865,7 @@ void main() {
         repo.runPendingMatch();
         billCandidates(repo.bills().first, const [], repo.bills());
         searchAll('elektra', txs: const [], goals: const [], wishlist: const [], bills: const [], billsDb: repo.bills());
-        expect(() => repo.confirmBill('bill:missing'), throwsA(anything));
+        expect(() => repo.confirmWithCategory('bill:missing'), throwsA(anything));
         repo.deleteBill(id);
       });
       expect(lines, isNotEmpty, reason: 'bill actions are logged (counts, sources, enum words)');

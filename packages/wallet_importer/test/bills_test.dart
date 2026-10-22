@@ -183,7 +183,7 @@ void main() {
     test('bill from a printed HUB-3 block: slip fields exact, due date from the text', () {
       final b = billFromText(pdfText(fixture('bills/hub3_printed.pdf'))!, source: BillSource.pdf)!;
       expect(billMap(b), {
-        'externalId': 'hub3:${ibans[0]}:HR01 2026-1001-77:4599',
+        'externalId': 'hub3:${ibans[0]}:HR01 2026-1001-77:4599:RAČUN ZA STRUJU 10/2026',
         'date': null,
         'dueDate': '2026-11-30',
         'payee': 'Primjer Energija d.o.o.',
