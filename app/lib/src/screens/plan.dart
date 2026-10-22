@@ -12,6 +12,7 @@ import '../platform.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'backup_panel.dart';
+import 'bills_panel.dart';
 import 'budgets.dart';
 import 'calendars_panel.dart';
 import 'diagnostics.dart';
@@ -29,7 +30,10 @@ class PlanScreen extends StatefulWidget {
 
   /// Fires when Today's "Due by payday" line is tapped: the page then scrolls to Expected bills.
   final Listenable? showBills;
-  const PlanScreen({super.key, required this.wc, this.chooser = const FileChooser(), this.showBills});
+
+  /// Fires when Today's "N bills to review" line is tapped: the page then scrolls to Bills.
+  final Listenable? showBillsDb;
+  const PlanScreen({super.key, required this.wc, this.chooser = const FileChooser(), this.showBills, this.showBillsDb});
   @override
   State<PlanScreen> createState() => _PlanScreenState();
 }
@@ -46,6 +50,7 @@ class _PlanScreenState extends State<PlanScreen> {
   String _shownCurrency = 'EUR';
   bool importing = false;
   final _billsKey = GlobalKey();
+  final _billsDbKey = GlobalKey();
   final _scroll = ScrollController();
 
   /// Field errors from the last Save, by key (shown under the field until it is edited).
@@ -64,14 +69,19 @@ class _PlanScreenState extends State<PlanScreen> {
     _fill(widget.wc.settings, force: true);
     widget.wc.addListener(_onChange);
     widget.showBills?.addListener(_scrollToBills);
+    widget.showBillsDb?.addListener(_scrollToBillsDb);
   }
 
   /// Scrolls to Expected bills. A ListView builds only the rows near the window, so when the panel is not built yet the page
   /// is moved down a screen at a time until it is.
-  Future<void> _scrollToBills() async {
+  Future<void> _scrollToBills() => _scrollTo(_billsKey);
+
+  Future<void> _scrollToBillsDb() => _scrollTo(_billsDbKey);
+
+  Future<void> _scrollTo(GlobalKey key) async {
     for (var i = 0; i < 12 && mounted; i++) {
       await WidgetsBinding.instance.endOfFrame;
-      final c = _billsKey.currentContext;
+      final c = key.currentContext;
       if (c != null && c.mounted) {
         await Scrollable.ensureVisible(c, duration: const Duration(milliseconds: 250));
         return;
@@ -93,12 +103,17 @@ class _PlanScreenState extends State<PlanScreen> {
       old.showBills?.removeListener(_scrollToBills);
       widget.showBills?.addListener(_scrollToBills);
     }
+    if (old.showBillsDb != widget.showBillsDb) {
+      old.showBillsDb?.removeListener(_scrollToBillsDb);
+      widget.showBillsDb?.addListener(_scrollToBillsDb);
+    }
   }
 
   @override
   void dispose() {
     widget.wc.removeListener(_onChange);
     widget.showBills?.removeListener(_scrollToBills);
+    widget.showBillsDb?.removeListener(_scrollToBillsDb);
     _scroll.dispose();
     for (final c in f.values) {
       c.dispose();
@@ -219,6 +234,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 FilledButton(onPressed: _savePlan, child: const Text('Save numbers')),
               ]),
               KeyedSubtree(key: _billsKey, child: ExpectedBillsPanel(wc: wc)),
+              KeyedSubtree(key: _billsDbKey, child: BillsPanel(wc: wc, chooser: widget.chooser)),
               BudgetsPanel(wc: wc),
               CalendarsPanel(wc: wc, chooser: widget.chooser),
               Panel(children: [

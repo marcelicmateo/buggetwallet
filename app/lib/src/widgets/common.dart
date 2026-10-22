@@ -283,7 +283,10 @@ class TxTile extends StatelessWidget {
   final CategorizedTx t;
   final String currency;
   final VoidCallback? onTap;
-  const TxTile({super.key, required this.t, required this.currency, this.onTap});
+
+  /// A bill is linked to this payment: a small receipt mark (tap the row for "Open bill").
+  final bool hasBill;
+  const TxTile({super.key, required this.t, required this.currency, this.onTap, this.hasBill = false});
 
   @override
   Widget build(BuildContext context) {
@@ -300,6 +303,7 @@ class TxTile extends StatelessWidget {
       Text(columns ? t.category : '$date · ${t.category}',
           maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: c.ink2)),
       Tag(src),
+      if (hasBill) Icon(Icons.receipt_long_outlined, key: const ValueKey('billMark'), size: 15, semanticLabel: 'Has a bill', color: c.ink2),
     ]);
     final Widget body;
     if (columns) {

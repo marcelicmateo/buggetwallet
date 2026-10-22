@@ -10,6 +10,7 @@ import 'src/format.dart';
 import 'src/layout.dart';
 import 'src/logging.dart';
 import 'src/platform.dart';
+import 'src/screens/bill_sheet.dart';
 import 'src/screens/goals.dart';
 import 'src/screens/in_use.dart';
 import 'src/screens/key_backup.dart';
@@ -161,6 +162,10 @@ class _HomeShellState extends State<HomeShell> {
   /// Counts the taps on Today's "Due by payday" line; Plan scrolls to Expected bills on each.
   final _billsRequest = ValueNotifier<int>(0);
 
+  /// Counts the taps on Today's "N bills to review" line; Plan scrolls to Bills on each.
+  final _billsDbRequest = ValueNotifier<int>(0);
+  StreamSubscription<BillImport>? _sharedSub;
+
   /// Counts the Ctrl+F presses; Spending opens its search view on each.
   final _searchRequest = ValueNotifier<int>(0);
 
@@ -188,6 +193,10 @@ class _HomeShellState extends State<HomeShell> {
             openBills: () {
               _go(4, 'today');
               _billsRequest.value++; // Plan scrolls to Expected bills
+            },
+            openBillsReview: () {
+              _go(4, 'today');
+              _billsDbRequest.value++; // Plan scrolls to Bills
             }),
         1 => SpendingScreen(
             wc: widget.wc,
@@ -199,7 +208,7 @@ class _HomeShellState extends State<HomeShell> {
             }),
         2 => WishlistScreen(wc: widget.wc),
         3 => GoalsScreen(wc: widget.wc),
-        _ => PlanScreen(wc: widget.wc, showBills: _billsRequest),
+        _ => PlanScreen(wc: widget.wc, showBills: _billsRequest, showBillsDb: _billsDbRequest),
       };
 
   @override
@@ -219,6 +228,16 @@ class _HomeShellState extends State<HomeShell> {
       onHide: () => unawaited(widget.wc.persistNow()),
       onPause: () => unawaited(widget.wc.persistNow()),
     );
+    // PDFs and photos shared to the app (Android) become bills to review.
+    _sharedSub = widget.wc.sharedBillResults.listen((r) {
+      if (!mounted) return;
+      toast(context, r.message,
+          actionLabel: r.kind == BillImportKind.added && r.billId != null ? 'Open' : null,
+          onAction: r.kind == BillImportKind.added && r.billId != null ? () => openBill(context, widget.wc, r.billId!) : null);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(widget.wc.startSharing());
+    });
     // A wallet just created: ask the owner to save the key before the first Today.
     if (widget.wc.takeKeyBackupPrompt()) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -287,6 +306,8 @@ class _HomeShellState extends State<HomeShell> {
     _life.dispose();
     _focus.dispose();
     _billsRequest.dispose();
+    _billsDbRequest.dispose();
+    _sharedSub?.cancel();
     _searchRequest.dispose();
     super.dispose();
   }

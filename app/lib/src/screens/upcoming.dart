@@ -8,6 +8,7 @@ import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
+import 'bill_sheet.dart';
 import 'planned_sheets.dart';
 
 /// Opens Upcoming: a page on a phone, a dialog from [dialogMin] wide (like the weekly review).
@@ -51,6 +52,12 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
   }
 
   Future<void> _open(UpcomingItem i) async {
+    final billId = billDateBillId(i);
+    if (billId != null) {
+      logNav('bill.openFromUpcoming');
+      await openBill(context, widget.wc, billId);
+      return;
+    }
     final p = i.planned;
     if (p == null) return;
     logNav('planned.open');
@@ -188,7 +195,13 @@ class _Legend extends StatelessWidget {
   const _Legend();
   @override
   Widget build(BuildContext context) => Wrap(spacing: 14, runSpacing: 4, children: [
-        for (final (kind, label) in const [(_Mark.planned, 'Planned'), (_Mark.bill, 'Bill'), (_Mark.suggestion, 'Suggested')])
+        for (final (kind, label) in const [
+          (_Mark.planned, 'Planned'),
+          (_Mark.bill, 'Bill'),
+          (_Mark.suggestion, 'Suggested'),
+          (_Mark.warranty, 'Warranty'),
+          (_Mark.returnBy, 'Return by'),
+        ])
           Row(mainAxisSize: MainAxisSize.min, children: [
             _MarkBox(kind),
             const SizedBox(width: 5),
@@ -197,7 +210,7 @@ class _Legend extends StatelessWidget {
       ]);
 }
 
-enum _Mark { planned, bill, suggestion }
+enum _Mark { planned, bill, suggestion, warranty, returnBy }
 
 class _MarkBox extends StatelessWidget {
   final _Mark kind;
@@ -209,7 +222,13 @@ class _MarkBox extends StatelessWidget {
       width: 9,
       height: 9,
       decoration: BoxDecoration(
-        color: switch (kind) { _Mark.planned => c.accent, _Mark.bill => c.ink2, _Mark.suggestion => null },
+        color: switch (kind) {
+          _Mark.planned => c.accent,
+          _Mark.bill || _Mark.returnBy => c.ink2,
+          _Mark.suggestion || _Mark.warranty => null
+        },
+        // Warranty and return-by are round (hollow and filled), the rest square: the shape tells them apart without colour.
+        shape: kind == _Mark.warranty || kind == _Mark.returnBy ? BoxShape.circle : BoxShape.rectangle,
         border: Border.all(color: kind == _Mark.planned ? c.accent : c.ink2, width: 1.5),
       ),
     );
@@ -312,10 +331,14 @@ class _DayCell extends StatelessWidget {
     final isToday = date == today;
     final kinds = <_Mark>{
       for (final i in items)
-        switch (i.kind) {
-          UpcomingKind.planned => _Mark.planned,
-          UpcomingKind.bill => _Mark.bill,
-          UpcomingKind.suggestion => _Mark.suggestion
+        switch (billDateKind(i)) {
+          BillDateKind.warranty => _Mark.warranty,
+          BillDateKind.returnBy => _Mark.returnBy,
+          null => switch (i.kind) {
+              UpcomingKind.planned => _Mark.planned,
+              UpcomingKind.bill => _Mark.bill,
+              UpcomingKind.suggestion => _Mark.suggestion
+            },
         },
     };
     final n = items.length;
@@ -337,13 +360,13 @@ class _DayCell extends StatelessWidget {
           ),
           child: Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text('${dayOf(date)}', style: numStyle.copyWith(fontSize: 13, fontWeight: isToday ? FontWeight.w600 : FontWeight.w400)),
-            SizedBox(
-              height: 10,
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 10),
               child: kinds.isEmpty
                   ? null
-                  : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  : Wrap(alignment: WrapAlignment.center, spacing: 3, runSpacing: 2, children: [
                       for (final k in _Mark.values)
-                        if (kinds.contains(k)) Padding(padding: const EdgeInsets.symmetric(horizontal: 1.5), child: _MarkBox(k)),
+                        if (kinds.contains(k)) _MarkBox(k),
                     ]),
             ),
           ]),
@@ -367,6 +390,7 @@ class _UpcomingRow extends StatelessWidget {
     final cur = wc.currency;
     final i = item;
     final isSuggestion = i.kind == UpcomingKind.suggestion;
+    final isBillDate = billDateKind(i) != null;
     final past = i.date.compareTo(today) < 0;
     final sub = Wrap(spacing: 8, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
       Text(shortDateOrRaw(i.date), style: TextStyle(fontSize: 12.5, color: c.ink2)),
@@ -375,8 +399,9 @@ class _UpcomingRow extends StatelessWidget {
       if ((i.planned?.coveredByPlan ?? false) || (i.bill?.coveredByPlan ?? false))
         Text('covered by your plan', style: TextStyle(fontSize: 12.5, color: c.ink2)),
     ]);
-    final title = Text(i.title.isEmpty ? 'Planned cost' : i.title, style: const TextStyle(fontWeight: FontWeight.w500));
-    final head = isSuggestion
+    final title =
+        Text(i.title.isEmpty ? (isBillDate ? 'Bill' : 'Planned cost') : i.title, style: const TextStyle(fontWeight: FontWeight.w500));
+    final head = isSuggestion || isBillDate
         ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [title, const SizedBox(height: 2), sub])
         : SplitRow(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -387,7 +412,7 @@ class _UpcomingRow extends StatelessWidget {
           );
     return InkWell(
       key: ValueKey('up:${i.key}'),
-      onTap: i.planned == null ? null : () => onOpen(i),
+      onTap: i.planned == null && !isBillDate ? null : () => onOpen(i),
       child: Container(
         constraints: const BoxConstraints(minHeight: 48),
         padding: const EdgeInsets.symmetric(vertical: 8),

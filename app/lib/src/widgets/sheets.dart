@@ -6,6 +6,8 @@ import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
+import '../screens/bill_sheet.dart';
+import '../screens/scan_bill.dart';
 import '../theme.dart';
 import 'common.dart';
 
@@ -67,6 +69,7 @@ Future<void> addExpenseFlow(BuildContext context, WalletController wc) async {
   if (!context.mounted) return;
   if (r == 'added') toast(context, 'Expense added');
   if (r == 'wish') toast(context, 'On the wishlist. Decide in ${wc.settings.coolHours} hours.');
+  if (r == 'scan') await scanBillFlow(context, wc);
 }
 
 // ---------------------------------------------------------------- add expense
@@ -101,6 +104,22 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
     final cur = widget.wc.currency;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const Heading('Add expense'),
+      if (widget.wc.billInputs.camera.supported) ...[
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            key: const ValueKey('scanBill'),
+            style: accentOutlined(context),
+            icon: const Icon(Icons.document_scanner_outlined, size: 18),
+            label: const Text('Scan bill'),
+            onPressed: () {
+              logNav('expense.scanBill');
+              Navigator.pop(context, 'scan');
+            },
+          ),
+        ),
+      ],
       const SizedBox(height: 14),
       TextField(
         controller: amount,
@@ -203,6 +222,7 @@ class _TxSheetState extends State<TxSheet> {
   Widget build(BuildContext context) {
     final t = widget.t.tx;
     final manual = t.source == 'manual';
+    final bill = widget.wc.billForTx(t.id);
     final src = switch (t.source) { 'pbz' => 'PBZ', 'revolut' => 'Revolut', _ => 'Added by you' };
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(merchantName(t)),
@@ -215,6 +235,18 @@ class _TxSheetState extends State<TxSheet> {
       Muted('${longDateOrRaw(t.date)} · $src${t.bankType.isNotEmpty ? ' · ${t.bankType}' : ''}'),
       if (!manual)
         Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(t.description, style: const TextStyle(fontSize: 13))),
+      if (bill != null) ...[
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+              key: const ValueKey('openBill'),
+              style: accentOutlined(context),
+              icon: const Icon(Icons.receipt_long_outlined, size: 18),
+              label: const Text('Open bill'),
+              onPressed: () => openBill(context, widget.wc, bill.id)),
+        ),
+      ],
       const SizedBox(height: 14),
       DropdownButtonFormField<String>(
         isExpanded: true,

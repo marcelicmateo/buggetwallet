@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:cryptography/cryptography.dart' show Sha256;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter/widgets.dart' show AppLifecycleListener, AppLifecycleState, WidgetsBinding;
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'bill_inputs.dart';
+import 'bill_platform.dart';
+import 'bills_shim.dart'; // SHIM: removed when the bills core is merged
 import 'calendar_platform.dart';
 import 'calendar_source.dart';
 import 'ics_fetch.dart';
@@ -16,6 +20,7 @@ import 'nudge_platform.dart';
 import 'nudges.dart';
 import 'wallet_db.dart';
 
+part 'controller_bills.dart';
 part 'controller_future.dart';
 
 final _log = Logger('bw.app');
@@ -228,6 +233,11 @@ class WalletController extends ChangeNotifier {
   /// Device-local calendar state (events read, permission, errors); see controller_future.dart.
   final CalendarState cal = CalendarState();
 
+  /// The camera, picture reading, PDF pages and Share intent of this device (bills); [BillInputs.none] in tests and off Android.
+  final BillInputs billInputs;
+  StreamSubscription<List<SharedFile>>? _shareSub;
+  final StreamController<BillImport> _shareResults = StreamController<BillImport>.broadcast();
+
   /// True after the system refused the notification permission when the switch was turned on (Plan says how to allow it).
   bool nudgesDenied = false;
 
@@ -235,13 +245,15 @@ class WalletController extends ChangeNotifier {
       {DateTime Function()? clock,
       NudgePlatform? nudges,
       CalendarSource? calendars,
+      BillInputs? billInputs,
       WalletDb? db,
       this.locked = false,
       this.inUseElsewhere = false})
       : _db = db,
         _clock = clock ?? DateTime.now,
         nudges = nudges ?? const NoNudges(),
-        calendarSource = calendars ?? const NoCalendars() {
+        calendarSource = calendars ?? const NoCalendars(),
+        billInputs = billInputs ?? const BillInputs.none() {
     relayUrl = _parseRelay(repo.localValue('relayUrl'));
   }
 
@@ -301,7 +313,12 @@ class WalletController extends ChangeNotifier {
 
     sw = Stopwatch()..start();
     final c = WalletController._(db?.repo ?? WalletRepo.inMemory(), key,
-        clock: clock, nudges: defaultNudgePlatform(), calendars: defaultCalendarSource(), db: db, locked: locked);
+        clock: clock,
+        nudges: defaultNudgePlatform(),
+        calendars: defaultCalendarSource(),
+        billInputs: defaultBillInputs(),
+        db: db,
+        locked: locked);
     c._dbPending = db == null;
     c.hasUnopenedDb = unopened;
     c.dbOpener = opener;
@@ -367,9 +384,11 @@ class WalletController extends ChangeNotifier {
           DateTime Function()? clock,
           NudgePlatform? nudges,
           CalendarSource? calendars,
+          BillInputs? billInputs,
           WalletDb? db,
           bool locked = false}) =>
-      WalletController._(repo, key, clock: clock, nudges: nudges, calendars: calendars, db: db, locked: locked)..reload();
+      WalletController._(repo, key, clock: clock, nudges: nudges, calendars: calendars, billInputs: billInputs, db: db, locked: locked)
+        ..reload();
 
   /// The saved monthly budgets per category (cents).
   Map<String, int> get categoryBudgets => settings.categoryBudgets;
@@ -1184,6 +1203,8 @@ class WalletController extends ChangeNotifier {
     _resumeClear?.dispose();
     _resumeClear = null;
     _clearClipboardKey();
+    _shareSub?.cancel();
+    _shareResults.close();
     repo.close();
     super.dispose();
   }

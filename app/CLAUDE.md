@@ -68,6 +68,24 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   run one after another; `headsUpSlots` moves a passed slot to the next 09:00 on or before the cost; Android events with status canceled are dropped (`calendarEventsFrom`).
   Logs (counts only): `planned.add|edit|dismiss|paid|skip|reopen|delete`, `calendar.read {calendars, events, unsupported, trigger}`, `calendar.import {ok, kind, reason}`,
   `calendar.access|choose|remove`, `headsup.enabled|scheduled`. Tests: `test/future_spending_test.dart` (`futureWallet`, `FakeCalendars`, `fakeIcs`, `FakeNudges.headsUps` in `test/support/wallet.dart`).
+- Bills database (B4; core API in `docs/context/BILLS_API.md`): `controller_bills.dart` (a `part`: `extension BillsDb`) = lists (`billsAll`, `billLists()` To review / Unpaid / Paid,
+  `billsToReview`, `billForTx`, `billCandidatesFor`, `searchBills`), adding (`importBillFile(bytes, ext, trigger:)` = pdf → text + on Android page render + code scan, xml → e-invoice,
+  jpg/png → Android codes then OCR / elsewhere kept unread; the original goes to `BlobStore.add` (pictures sized to JPEG 2560 px first); no code or text in the file → `externalId`
+  `file:<hash of the file>` so the same file is one bill; `importScannedCode`, `importPhoto`; results are `BillImport` with a `message` such as "Already in your bills"), Share to app
+  (`startSharing()` from `HomeShell`, results on `sharedBillResults` → SnackBar), the bill sheet actions (`editBill`, `setBillDates`, `confirmBill` needs date + total, `linkBill`,
+  `unlinkBill`, `deleteBill`, `addBillAsExpense`, `billFile` = this device then the relay), reminders (`_rescheduleBillRemindersNow`, run inside `rescheduleHeadsUps`' chain, same switch as the
+  heads-ups; ids 1020..1039, channel `bills`, text "A return window ends in N days" / "A warranty ends in N days") and the Upcoming rows (`billDateItems`).
+  The camera, OCR, PDF pages and Share are behind `bill_inputs.dart` (`BillCamera`, `PictureReader`, `PdfPages`, `ShareInbox`, `BillInputs`, `BillInputs.none()`); `bill_platform.dart` picks
+  `bill_inputs_native.dart` (the only file that imports `mobile_scanner`, `google_mlkit_text_recognition`, `receive_sharing_intent`; Android only) or `bill_inputs_web.dart`. The app's own
+  channel `budget_wallet/bills` (MainActivity.kt) renders PDF pages (`PdfRenderer`, ≤ 5 pages, PNG at dpi, background thread) and sizes pictures (`toJpeg`, EXIF turned upright).
+  Screens: `screens/bills_panel.dart` (Plan › Bills, `pickAndImportBills`), `screens/bill_sheet.dart` (`openBill`, `BillSheet`: an "Unsure" mark on every field of a pdf/photo bill in review,
+  Paid by… / Paid in cash, warranty / return-by, `BillFileScreen` = zoomable picture, rendered PDF pages or Save file…, "The file is on the relay; sync to fetch it"),
+  `screens/scan_bill.dart` (`scanBillFlow`, `ScanBillScreen`: camera + Take photo = `RepaintBoundary.toImage` of the preview), Add expense › Scan bill (only with a camera), Today's
+  `billsToReview` row, the receipt mark on `TxTile(hasBill:)` + "Open bill" in `TxSheet`, Upcoming warranty / return-by rows (`billDateKind`), a "Bills" section in search.
+  Logs (counts and enum words only): `bills.import {trigger, source, isNew, read, unsure, items, kept}`, `bill.confirm|edit|dates|link|unlink|delete|cashExpense|file`, `share.received {files}`,
+  `scan.cameraFailed {code}`, `bills.remindersScheduled {count}`. Android: CAMERA (declared by mobile_scanner, asked when Scan bill opens), `singleTask` + SEND/SEND_MULTIPLE filters
+  for pdf and image; no storage permission. Tests: `test/bills_test.dart` with `test/support/bills.dart` (`FakeBillInputs`, `billsWallet`, `smallPdf`).
+  **While `lib/src/bills_shim.dart` exists** the core and readers are stand-ins (see its header); delete it when B1 is merged.
 - Nudges: `nudges.dart` (pure: ~14 funny, encouraging lines with no digits or names, `nudgeFor(date)`, `nudgeSlots(now)` = 15:00 on
   weekdays and 11:00 on Sunday for 4 weeks, `NudgePlatform`/`NoNudges`) and `notifier.dart` (native-only: `AndroidNudges` with
   `flutter_local_notifications`, one inexact `zonedSchedule` per slot, no exact-alarm permission; the time zone name comes from

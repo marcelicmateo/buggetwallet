@@ -19,6 +19,10 @@ class FileChooser {
   /// A backup file (`.bwb`). An empty list means the user cancelled.
   Future<List<PlatformFile>> pickBackupFile() => FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['bwb']);
 
+  /// Bills: a PDF, an e-invoice (XML) or a photo. An empty list means the user cancelled.
+  Future<List<PlatformFile>> pickBillFiles() =>
+      FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['pdf', 'xml', 'jpg', 'jpeg', 'png']);
+
   /// A calendar file (`.ics`). An empty list means the user cancelled.
   Future<List<PlatformFile>> pickCalendarFile() => FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['ics']);
 
@@ -26,6 +30,10 @@ class FileChooser {
   /// cancel to see, so a finished download answers with the file name as the path.
   Future<Uri?> saveText({required String fileName, required Uint8List bytes, required String title}) =>
       _save(fileName, bytes, title, 'text/plain');
+
+  /// The save dialog for a bill's original file (photo, PDF or e-invoice), where it cannot be shown in the app.
+  Future<Uri?> saveBillFile({required String fileName, required Uint8List bytes, required String title}) =>
+      _save(fileName, bytes, title, 'application/octet-stream');
 
   /// The same for an encrypted backup file (`.bwb`).
   Future<Uri?> saveBackup({required String fileName, required Uint8List bytes, required String title}) =>

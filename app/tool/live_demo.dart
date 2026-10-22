@@ -27,6 +27,7 @@ Future<void> main() async {
       wc.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
       wc.saveCategoryBudgets(demoBudgets);
       seedDemoPlanned(wc.repo, wc.today(), wc.period().end);
+      seedDemoBills(wc.repo, wc.today());
       await wc.importIcsFile('demo.ics', Uint8List.fromList(utf8.encode(demoIcs(wc.today()))));
     }
     final sinceRunApp = Stopwatch()..start();
