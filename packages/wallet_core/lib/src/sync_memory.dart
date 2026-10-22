@@ -41,11 +41,11 @@ class MemoryTransport implements SyncTransport {
   /// Calls made, by kind (`state`, `put`, `get`, `ack`, `putSnapshot`, `getSnapshot`), for tests.
   final Map<String, int> calls = {};
 
-  /// Flips the bytes of a stored file (as a damaged disk would), so it fails authentication.
+  /// Flips every byte of a stored file (as a damaged disk would): no longer a sync file at all, so `corrupt`.
   void corrupt(String device, int seq) {
     final f = _devs[device]?.files[seq];
     if (f == null) throw StateError('no such file');
-    for (var i = 5; i < f.length; i++) {
+    for (var i = 0; i < f.length; i++) {
       f[i] ^= 0xff;
     }
   }
@@ -101,7 +101,9 @@ class MemoryTransport implements SyncTransport {
     _checkName(device);
     _checkSeq(seq);
     if (bytes.length > maxFile) throw const TransportException(TransportFailure.full, 'too big');
+    // A known device is seen by any PUT that reaches the seq check; a new one appears only once a file is stored.
     final d = _devs[device] ?? _Dev();
+    if (_devs.containsKey(device)) d.lastSeen = _now().toUtc();
     if (seq > d.last + 1) throw const TransportException(TransportFailure.rejected, 'gap');
     if (seq < d.first) throw const TransportException(TransportFailure.gone, 'pruned');
     _devs[device] = d;
@@ -157,6 +159,12 @@ class MemoryTransport implements SyncTransport {
     for (final MapEntry(key: d, value: s) in covers.entries) {
       _checkName(d);
       if (s < 0 || s > (_devs[d]?.last ?? 0)) throw const TransportException(TransportFailure.rejected, 'covers beyond last');
+    }
+    for (final s in [_snap, _prev]) {
+      if (s == null || s.id != id) continue;
+      final same = _same(s.bytes, bytes) && s.covers.length == covers.length && covers.entries.every((e) => s.covers[e.key] == e.value);
+      if (same) return; // the same snapshot again: 200
+      throw const TransportException(TransportFailure.conflict, 'other content under this id');
     }
     for (final MapEntry(key: d, value: s) in (_snap?.covers ?? const <String, int>{}).entries) {
       if ((covers[d] ?? -1) < s) throw const TransportException(TransportFailure.conflict, 'does not dominate');

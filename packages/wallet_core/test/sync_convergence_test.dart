@@ -1,6 +1,6 @@
-// Sync convergence, randomized: 2-4 simulated devices (in-memory repos + FolderSync on their own copy of the shared
-// folder) do random interleaved edits; files reach other devices late, out of order and duplicated (Syncthing conflict
-// copies). After a final full sync every device must hold identical tables, equal to "highest HLC wins per field"
+// Sync convergence, randomized: 2-4 simulated devices (in-memory repos + SyncEngine on one MemoryTransport relay)
+// do random interleaved edits; fetches fail at random (a device then stops at that file of that device until a later
+// run). After a final full sync every device must hold identical tables, equal to "highest HLC wins per field"
 // over every op ever written. All data is SYNTHETIC. Seeds are fixed; BW_FUZZ_ITERATIONS / BW_FUZZ_SEED run more.
 import 'dart:io';
 import 'dart:math';
@@ -146,7 +146,7 @@ Future<void> _scenario(int seed, Directory tmp) async {
     now += r.nextInt(r.nextInt(10) == 0 ? 3600000 : 5000);
     final d = active[r.nextInt(active.length)];
     if (r.nextInt(4) == 0) {
-      d.deliver(net, r, p: r.nextDouble(), dup: 0.1);
+      d.deliver(net, r, p: r.nextDouble());
       final rep = await d.run();
       d.upload(net);
       log.add('${d.name}:sync(${rep.sent}/${rep.filesRead})');
@@ -157,18 +157,19 @@ Future<void> _scenario(int seed, Directory tmp) async {
   // Final full sync: everyone exports, every file reaches everyone (late joiner included), everyone applies. Applying
   // can add writes of its own (a manual entry matched to a bank row that arrived from another device), which every
   // device computes the same way; they need a few more rounds to settle.
+  // A run uploads before it applies, so the round is over only when no run sent anything (everyone then saw it all).
   var rounds = 0;
   while (true) {
+    var sent = 0;
     for (final d in devices) {
-      await d.run();
-      d.upload(net);
+      sent += (await d.run()).sent;
     }
     for (final d in devices) {
-      d.deliver(net, r, dup: 0.2);
-      await d.run();
+      d.deliver(net, r);
+      sent += (await d.run()).sent;
     }
     rounds++;
-    if (devices.every((d) => d.repo.pendingOps().isEmpty)) break;
+    if (sent == 0 && devices.every((d) => d.repo.pendingOps().isEmpty)) break;
     expect(rounds, lessThan(4), reason: 'seed $seed: sync does not settle');
   }
   final reason = 'seed $seed, $nDevices devices${lateJoiner ? ' (last joins late)' : ''}, steps: ${log.join(' ')}';
@@ -188,10 +189,11 @@ Future<void> _scenario(int seed, Directory tmp) async {
   }
   // Another full round changes nothing (idempotent).
   for (final d in devices) {
-    d.deliver(net, r, dup: 0.5);
+    d.deliver(net, r);
     final rep = await d.run();
     expect(rep.sent, 0, reason: reason);
     expect(rep.received, 0, reason: reason);
+    expect(rep.caughtUp, isTrue, reason: reason);
   }
   expect(dump(devices.last.repo), first, reason: reason);
   for (final d in devices) {

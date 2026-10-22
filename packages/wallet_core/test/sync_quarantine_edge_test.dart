@@ -1,7 +1,8 @@
 // A bad peer sync file must not stop the run: it is skipped, recorded with a reason (badKey, corrupt, unknownVersion,
 // applyFailed), not retried until it changes, and reported in `problems` on every run while it is there (device short
-// id + reason + isNew, never a path).
-// Files are written by hand so nothing depends on how the writing side builds them. All data is SYNTHETIC.
+// id + reason + isNew, never a full id). Files apply strictly in order per device, so a bad file holds up that
+// device's later files (`waiting`) while other devices go on.
+// Files are put on a MemoryTransport by hand so nothing depends on how the writing side builds them. All data is SYNTHETIC.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -17,24 +18,45 @@ Map<String, Object?> _setting(String key, Object? value) =>
 const _devA = 'aaaa1111bbbb2222';
 const _devB = 'cccc3333dddd4444';
 
+/// A relay whose `state` always fails with [failure].
+class _Failing implements SyncTransport {
+  final TransportFailure failure;
+  _Failing(this.failure);
+  Never _fail() => throw TransportException(failure, 'synthetic');
+  @override
+  Future<RelayState> state() async => _fail();
+  @override
+  Future<void> put(String device, int seq, List<int> bytes) async => _fail();
+  @override
+  Future<List<int>> get(String device, int seq) async => _fail();
+  @override
+  Future<void> ack(String device, Map<String, int> cursors) async => _fail();
+  @override
+  Future<void> putSnapshot(String id, Map<String, int> covers, List<int> bytes) async => _fail();
+  @override
+  Future<List<int>> getSnapshot(String id) async => _fail();
+}
+
 void main() {
   late Directory tmp;
+  late MemoryTransport relay;
   late VaultKey key;
   late WalletRepo repo;
 
-  Directory devices() => Directory('${tmp.path}/budget-wallet/devices');
-
   Future<Uint8List> sealed(List<Object?> ops, [VaultKey? k]) => seal(utf8.encode(jsonEncode(ops)), k ?? key);
 
-  Future<File> put(String device, String name, List<int> bytes) async {
-    final dir = Directory('${devices().path}/$device')..createSync(recursive: true);
-    return File('${dir.path}/$name')..writeAsBytesSync(bytes);
+  /// Stores [bytes] as [device]'s file [seq], replacing a stored one (a repair on the server).
+  Future<void> put(String device, int seq, List<int> bytes) async {
+    if (relay.files.containsKey('d/$device/$seq')) {
+      relay.replace(device, seq, bytes);
+    } else {
+      await relay.put(device, seq, bytes);
+    }
   }
 
-  Future<File> good(String device, String name, String setting, Object? value) async =>
-      put(device, name, await sealed([_setting(setting, value)]));
+  Future<void> good(String device, int seq, String setting, Object? value) async => put(device, seq, await sealed([_setting(setting, value)]));
 
-  Future<SyncReport> run() => FolderSync(tmp.path, key).run(repo);
+  Future<SyncReport> run() => SyncEngine(relay, key).run(repo);
 
   List<String> capture() {
     final lines = <String>[];
@@ -50,6 +72,7 @@ void main() {
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('bw-quarantine-');
+    relay = MemoryTransport();
     key = VaultKey.generate();
     repo = WalletRepo.inMemory();
   });
@@ -58,64 +81,64 @@ void main() {
     tmp.deleteSync(recursive: true);
   });
 
-  group('a bad file does not stop the others', () {
+  group('a bad file holds up only its own device', () {
     for (final pos in [0, 1, 2]) {
-      test('bad file at position $pos of three: the other two apply, one problem is reported', () async {
-        final names = ['0000000001.bwop', '0000000002.bwop', '0000000003.bwop'];
+      test('bad file at position $pos of three: the files before it apply, the ones after it wait', () async {
         final settings = ['salary', 'rent', 'loan'];
         for (var i = 0; i < 3; i++) {
           if (i == pos) {
-            await put(_devA, names[i], [9, 9, 9, 9, 9, 9, 9, 9]);
+            await put(_devA, i + 1, [9, 9, 9, 9, 9, 9, 9, 9]);
           } else {
-            await good(_devA, names[i], settings[i], 100 + i);
+            await good(_devA, i + 1, settings[i], 100 + i);
           }
         }
         final rep = await run();
         final st = repo.settings();
         final got = {'salary': st.salary, 'rent': st.rent, 'loan': st.loan};
         for (var i = 0; i < 3; i++) {
-          expect(got[settings[i]], i == pos ? 0 : 100 + i, reason: settings[i]);
+          expect(got[settings[i]], i < pos ? 100 + i : 0, reason: settings[i]);
         }
         expect(rep.problems, hasLength(1));
-        expect(rep.filesRead, 2);
+        expect(rep.filesRead, pos);
+        expect((rep.waiting.single.seq, rep.caughtUp), (pos + 1, false));
       });
     }
 
     test('two devices, one with only bad files: the good device\'s ops all land', () async {
-      await put(_devA, '0000000001.bwop', Uint8List(0));
-      await put(_devA, '0000000002.bwop', [1, 2, 3]);
-      await good(_devB, '0000000001.bwop', 'salary', 1);
-      await good(_devB, '0000000002.bwop', 'rent', 2);
-      await good(_devB, '0000000003.bwop', 'loan', 3);
+      await put(_devA, 1, Uint8List(0));
+      await put(_devA, 2, [1, 2, 3]);
+      await good(_devB, 1, 'salary', 1);
+      await good(_devB, 2, 'rent', 2);
+      await good(_devB, 3, 'loan', 3);
       final rep = await run();
       final st = repo.settings();
       expect((st.salary, st.rent, st.loan), (1, 2, 3));
-      expect(rep.problems, hasLength(2));
+      expect(rep.problems, hasLength(1), reason: 'the second bad file is not even fetched: it waits behind the first');
       expect(rep.problems.every((p) => _devA.startsWith(p.device)), isTrue);
+      expect(rep.waiting.single.device, SyncProblem.shortId(_devA));
     });
 
-    test('a run where every peer file is bad still exports this device\'s own ops', () async {
+    test('a run where every peer file is bad still uploads this device\'s own ops', () async {
       repo.updateSettings({'salary': 12345});
-      await put(_devA, '0000000001.bwop', [0, 1, 2]);
-      await put(_devB, '0000000001.bwop', Uint8List(0));
+      await put(_devA, 1, [0, 1, 2]);
+      await put(_devB, 1, Uint8List(0));
       final rep = await run();
       expect(rep.problems, hasLength(2));
       expect(rep.sent, greaterThan(0));
-      final own = Directory('${devices().path}/${repo.deviceId}');
-      final files = own.listSync().whereType<File>().where((f) => f.path.endsWith('.bwop')).toList();
-      expect(files, hasLength(1));
-      final ops = jsonDecode(utf8.decode(await unseal(files.single.readAsBytesSync(), key))) as List;
+      final own = relay.files.keys.where((k) => k.startsWith('d/${repo.deviceId}/')).toList();
+      expect(own, ['d/${repo.deviceId}/1']);
+      final ops = jsonDecode(utf8.decode(await unseal(relay.files[own.single]!, key))) as List;
       expect(ops, isNotEmpty);
       expect(repo.pendingOps(), isEmpty);
     });
 
     test('a file with one good op and one unappliable op is skipped as a whole (nothing half-applied)', () async {
       final badOp = const Op('setting', 'rent', {'value': '5', 'deleted': 0}, 'not-an-hlc').toJson();
-      await put(_devA, '0000000001.bwop', await sealed([_setting('salary', 777), badOp]));
-      await good(_devA, '0000000002.bwop', 'loan', 8);
+      await put(_devA, 1, await sealed([_setting('salary', 777), badOp]));
+      await good(_devA, 2, 'loan', 8);
       final rep = await run();
       expect(repo.settings().salary, 0);
-      expect(repo.settings().loan, 8);
+      expect(repo.settings().loan, 0, reason: 'waits behind the refused file');
       // A clock that does not parse is damage in the file (no update of this app would read it), so corrupt, not applyFailed.
       expect(rep.problems.single.reason.name, 'corrupt');
     });
@@ -124,8 +147,8 @@ void main() {
   group('reasons', () {
     test('truncated file: corrupt or badKey (cannot be told apart from damage), never a crash', () async {
       final full = await sealed([_setting('salary', 1)]);
-      await put(_devA, '0000000001.bwop', full.sublist(0, full.length - 9));
-      await put(_devA, '0000000002.bwop', full.sublist(0, 12));
+      await put(_devA, 1, full.sublist(0, full.length - 9));
+      await put(_devB, 1, full.sublist(0, 12));
       final rep = await run();
       expect(rep.problems, hasLength(2));
       for (final p in rep.problems) {
@@ -137,18 +160,19 @@ void main() {
     test('a flipped byte in the ciphertext is a problem, not an applied change', () async {
       final bytes = await sealed([_setting('salary', 1)]);
       bytes[bytes.length - 3] ^= 0x01;
-      await put(_devA, '0000000001.bwop', bytes);
+      await put(_devA, 1, bytes);
       final rep = await run();
       expect(['corrupt', 'badKey'], contains(rep.problems.single.reason.name));
       expect(repo.settings().salary, 0);
     });
 
-    test('a file sealed with another key is badKey (or corrupt when the formats cannot tell), and others apply', () async {
+    test('a file sealed with another key is badKey, and the other devices apply', () async {
       final other = VaultKey.generate();
-      await put(_devA, '0000000001.bwop', await sealed([_setting('salary', 1)], other));
-      await good(_devA, '0000000002.bwop', 'rent', 2);
+      await put(_devA, 1, await sealed([_setting('salary', 1)], other));
+      await good(_devB, 1, 'rent', 2);
       final rep = await run();
-      expect(['badKey', 'corrupt'], contains(rep.problems.single.reason.name));
+      expect(rep.problems.single.reason, SyncProblemReason.badKey);
+      expect(rep.waiting.single.reason, SyncProblemReason.badKey);
       expect(repo.settings().salary, 0);
       expect(repo.settings().rent, 2);
     });
@@ -156,24 +180,25 @@ void main() {
     test('a future format version (BWOP2) is unknownVersion', () async {
       final bytes = await sealed([_setting('salary', 1)]);
       bytes[4] = '2'.codeUnitAt(0); // "BWOP1" -> "BWOP2"
-      await put(_devA, '0000000001.bwop', bytes);
+      await put(_devA, 1, bytes);
       final rep = await run();
       expect(rep.problems.single.reason.name, 'unknownVersion');
       expect(repo.settings().salary, 0);
     });
 
-    test('an empty file and a 0-byte file are problems that do not stop later files', () async {
-      await put(_devA, '0000000001.bwop', Uint8List(0));
-      await good(_devA, '0000000002.bwop', 'salary', 5);
+    test('a 0-byte file is a problem that holds up the later files of its device', () async {
+      await put(_devA, 1, Uint8List(0));
+      await good(_devA, 2, 'salary', 5);
       final rep = await run();
       expect(rep.problems, hasLength(1));
-      expect(repo.settings().salary, 5);
+      expect(repo.settings().salary, 0);
+      expect(rep.waiting.single.seq, 1);
     });
 
-    test('valid encryption around something that is not an op list is applyFailed', () async {
-      await put(_devA, '0000000001.bwop', await seal(utf8.encode('{"not":"a list"}'), key));
-      await put(_devA, '0000000002.bwop', await seal(utf8.encode('[1, 2, 3]'), key));
-      await put(_devA, '0000000003.bwop', await seal(utf8.encode('not json at all'), key));
+    test('valid encryption around something that is not an op list is refused', () async {
+      await put('dev1', 1, await seal(utf8.encode('{"not":"a list"}'), key));
+      await put('dev2', 1, await seal(utf8.encode('[1, 2, 3]'), key));
+      await put('dev3', 1, await seal(utf8.encode('not json at all'), key));
       final rep = await run();
       expect(rep.problems, hasLength(3));
       for (final p in rep.problems) {
@@ -183,8 +208,8 @@ void main() {
   });
 
   group('not retried until it changes', () {
-    test('an unchanged bad file is reported as known (isNew false) and not read again on later runs', () async {
-      await put(_devA, '0000000001.bwop', [7, 7, 7, 7, 7, 7]);
+    test('an unchanged bad file is reported as known (isNew false) and not unsealed again on later runs', () async {
+      await put(_devA, 1, [7, 7, 7, 7, 7, 7]);
       final first = await run();
       expect(first.problems.single.isNew, isTrue);
       final lines = capture();
@@ -194,14 +219,14 @@ void main() {
         expect(again.filesRead, 0);
       }
       final decryptTries = lines.where((l) => RegExp(r'vault\.unseal\.(short|magic|auth|format)').hasMatch(l));
-      expect(decryptTries, isEmpty, reason: 'the bad file was read again');
+      expect(decryptTries, isEmpty, reason: 'the bad file was unsealed again');
     });
 
-    test('a file fixed later (same name, new bytes) is applied on the next run', () async {
-      final f = await put(_devA, '0000000001.bwop', [1, 2, 3]);
+    test('a file fixed later (same seq, new bytes) is applied on the next run', () async {
+      await put(_devA, 1, [1, 2, 3]);
       expect((await run()).problems, hasLength(1));
       expect(repo.settings().salary, 0);
-      f.writeAsBytesSync(await sealed([_setting('salary', 4242)]));
+      await put(_devA, 1, await sealed([_setting('salary', 4242)]));
       final rep = await run();
       expect(rep.problems, isEmpty);
       expect(rep.filesRead, 1);
@@ -209,51 +234,50 @@ void main() {
       expect((await run()).filesRead, 0, reason: 'applied once');
     });
 
-    test('a partial copy (0 bytes, then cut off, then whole) applies exactly when it is whole', () async {
+    test('a partial copy (0 bytes, then cut off, then whole) applies exactly when it is whole, then the file after it', () async {
       final full = await sealed([_setting('salary', 31)]);
-      final f = await put(_devA, '0000000001.bwop', Uint8List(0));
-      await good(_devA, '0000000002.bwop', 'rent', 2);
+      await put(_devA, 1, Uint8List(0));
+      await good(_devA, 2, 'rent', 2);
       expect((await run()).problems, hasLength(1));
+      expect((repo.settings().salary, repo.settings().rent), (0, 0));
+      await put(_devA, 1, full.sublist(0, full.length ~/ 2));
+      expect((await run()).problems, hasLength(1), reason: 'changed: looked at again, still bad');
       expect(repo.settings().salary, 0);
-      expect(repo.settings().rent, 2);
-      f.writeAsBytesSync(full.sublist(0, full.length ~/ 2));
-      expect((await run()).problems, hasLength(1), reason: 'size changed: looked at again, still bad');
-      expect(repo.settings().salary, 0);
-      f.writeAsBytesSync(full);
+      await put(_devA, 1, full);
       final rep = await run();
       expect(rep.problems, isEmpty);
-      expect(repo.settings().salary, 31);
+      expect((repo.settings().salary, repo.settings().rent), (31, 2));
     });
 
     test('different bad bytes of the same size are looked at again (hash, not only size)', () async {
-      final f = await put(_devA, '0000000001.bwop', [1, 1, 1, 1, 1, 1]);
+      await put(_devA, 1, [1, 1, 1, 1, 1, 1]);
       expect((await run()).problems.single.isNew, isTrue);
       expect((await run()).problems.single.isNew, isFalse);
-      f.writeAsBytesSync([2, 2, 2, 2, 2, 2]);
+      await put(_devA, 1, [2, 2, 2, 2, 2, 2]);
       expect((await run()).problems.single.isNew, isTrue);
     });
 
-    test('same bytes rewritten (touched) is not looked at again', () async {
-      final f = await put(_devA, '0000000001.bwop', [1, 1, 1, 1, 1, 1]);
+    test('the same bytes stored again are not looked at again', () async {
+      await put(_devA, 1, [1, 1, 1, 1, 1, 1]);
       await run();
-      f.writeAsBytesSync([1, 1, 1, 1, 1, 1]);
+      await put(_devA, 1, [1, 1, 1, 1, 1, 1]);
       expect((await run()).problems.single.isNew, isFalse);
     });
 
     test('the record of a bad file survives reopening the database', () async {
       final path = '${tmp.path}/w.db';
       final r1 = WalletRepo.open(path);
-      await put(_devA, '0000000001.bwop', [3, 3, 3]);
-      expect((await FolderSync(tmp.path, key).run(r1)).problems, hasLength(1));
+      await put(_devA, 1, [3, 3, 3]);
+      expect((await SyncEngine(relay, key).run(r1)).problems, hasLength(1));
       r1.close();
       final r2 = WalletRepo.open(path);
       addTearDown(r2.close);
-      expect((await FolderSync(tmp.path, key).run(r2)).problems.single.isNew, isFalse, reason: 'known from the record, not read again');
+      expect((await SyncEngine(relay, key).run(r2)).problems.single.isNew, isFalse, reason: 'known from the record, not read again');
     });
 
-    test('a bad file on one device does not hide the same file name being good on another device', () async {
-      await put(_devA, '0000000001.bwop', [5, 5, 5]);
-      await good(_devB, '0000000001.bwop', 'salary', 99);
+    test('a bad file on one device does not hide the same seq being good on another device', () async {
+      await put(_devA, 1, [5, 5, 5]);
+      await good(_devB, 1, 'salary', 99);
       final rep = await run();
       expect(rep.problems, hasLength(1));
       expect(repo.settings().salary, 99);
@@ -261,52 +285,66 @@ void main() {
   });
 
   group('privacy of problems and logs', () {
-    test('problems hold a short device id and a reason: no path, file name or full device folder name', () async {
-      await put(_devA, '0000000001.bwop', [1, 2, 3]);
-      await put(_devA, '0000000002.sync-conflict-20260101-000000-ABCDEFG.bwop', Uint8List(0));
-      await put(_devB, '0000000007.bwop', (await sealed([_setting('salary', 1)]))..[4] = '2'.codeUnitAt(0));
+    test('problems and waiting hold a short device id and a reason: never the whole id', () async {
+      await put(_devA, 1, [1, 2, 3]);
+      await put(_devA, 2, Uint8List(0));
+      await put(_devB, 1, (await sealed([_setting('salary', 1)]))..[4] = '2'.codeUnitAt(0));
       final lines = capture();
       final rep = await run();
-      expect(rep.problems, hasLength(3));
-      final shown = [for (final p in rep.problems) '${p.device}|${p.reason.name}|$p'].join('\n');
+      expect(rep.problems, hasLength(2));
+      final shown = [
+        for (final p in rep.problems) '${p.device}|${p.reason.name}|$p',
+        for (final w in rep.waiting) '${w.device}|$w',
+        for (final d in rep.devices) '${d.device}|$d',
+      ].join('\n');
       for (final p in rep.problems) {
         expect(p.device, isNotEmpty);
-        expect(p.device.length, lessThan(_devA.length), reason: 'a short id, not the whole folder name');
+        expect(p.device.length, lessThan(_devA.length), reason: 'a short id, not the whole id');
         expect(_devA.startsWith(p.device) || _devB.startsWith(p.device), isTrue);
       }
-      for (final bad in [tmp.path, '.bwop', 'sync-conflict', 'ABCDEFG', _devA, _devB, '/']) {
-        expect(shown, isNot(contains(bad)), reason: 'problems leak "$bad"');
+      for (final bad in [_devA, _devB, repo.deviceId]) {
+        expect(shown, isNot(contains(bad)), reason: 'report leaks "$bad"');
       }
       final logs = lines.join('\n');
-      for (final bad in [tmp.path, '.bwop', 'sync-conflict', 'ABCDEFG', _devA, _devB]) {
+      for (final bad in [_devA, _devB, SyncProblem.shortId(_devA), SyncProblem.shortId(_devB), repo.deviceId]) {
         expect(logs, isNot(contains(bad)), reason: 'logs leak "$bad"');
       }
     });
 
     test('logs of a run with bad files name no amounts or setting values', () async {
       final lines = capture();
-      await put(_devA, '0000000001.bwop', await sealed([_setting('salary', 987654)], VaultKey.generate()));
-      await good(_devA, '0000000002.bwop', 'rent', 424242);
+      await put(_devA, 1, await sealed([_setting('salary', 987654)], VaultKey.generate()));
+      await good(_devB, 1, 'rent', 424242);
       await run();
       expect(lines.join('\n'), allOf(isNot(contains('987654')), isNot(contains('424242'))));
     });
   });
 
-  group('vault.json is still fatal', () {
-    test('an unreadable vault.json raises SyncException, even when no peer file is bad', () async {
-      Directory('${tmp.path}/budget-wallet').createSync(recursive: true);
-      File('${tmp.path}/budget-wallet/vault.json').writeAsStringSync('{"v": 1, "ki');
-      await good(_devA, '0000000001.bwop', 'salary', 1);
-      await expectLater(run(), throwsA(isA<SyncException>()));
-      expect(repo.settings().salary, 0);
-    });
+  group('relay errors end the run', () {
+    for (final f in [TransportFailure.unreachable, TransportFailure.refused, TransportFailure.full, TransportFailure.newerApi, TransportFailure.other]) {
+      test('${f.name} on state is a SyncException with a short message; nothing is applied or marked sent', () async {
+        repo.updateSettings({'salary': 1});
+        final e = await SyncEngine(_Failing(f), key).run(repo).then<Object?>((_) => null, onError: (Object e) => e);
+        expect(e, isA<SyncException>());
+        final msg = (e as SyncException).message;
+        expect(msg, isNotEmpty);
+        expect(msg, isNot(contains('http')));
+        expect(msg, isNot(contains(repo.deviceId)));
+        expect(repo.pendingOps(), hasLength(1));
+        expect(repo.localValue(SyncEngine.sentKey), isNull);
+      });
+    }
 
-    test('a vault.json of another wallet raises SyncException and applies nothing', () async {
-      Directory('${tmp.path}/budget-wallet').createSync(recursive: true);
-      File('${tmp.path}/budget-wallet/vault.json').writeAsStringSync(jsonEncode({'v': 1, 'kid': 'someone-else'}));
-      await good(_devA, '0000000001.bwop', 'salary', 1);
-      await expectLater(run(), throwsA(isA<SyncException>()));
-      expect(repo.settings().salary, 0);
+    test('the messages tell the failures apart', () async {
+      final msgs = <String>{};
+      for (final f in [TransportFailure.unreachable, TransportFailure.refused, TransportFailure.full, TransportFailure.newerApi]) {
+        try {
+          await SyncEngine(_Failing(f), key).run(repo);
+        } on SyncException catch (e) {
+          msgs.add(e.message);
+        }
+      }
+      expect(msgs, hasLength(4));
     });
   });
 }

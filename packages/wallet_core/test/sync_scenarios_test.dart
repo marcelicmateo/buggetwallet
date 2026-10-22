@@ -1,6 +1,6 @@
-// Sync edge cases a tester would hit: idempotence, order independence, late joiners, clock skew, wrong key,
-// damaged or truncated files, writes during a sync, and import/delete/match races between devices.
-// All data is SYNTHETIC.
+// Sync edge cases a tester would hit: idempotence, strict per-device order, late joiners, clock skew, wrong key,
+// damaged or truncated files, writes during a sync, and import/delete/match races between devices (relay model:
+// SyncEngine + MemoryTransport). All data is SYNTHETIC.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -12,13 +12,6 @@ import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/sim.dart';
 import 'support/synthetic.dart';
-
-/// The .bwop files in a device folder, oldest first.
-List<File> _bwops(Device d, Device writer) {
-  final dir = Directory('${d.root.path}/devices/${writer.repo.deviceId}');
-  if (!dir.existsSync()) return [];
-  return dir.listSync().whereType<File>().where((f) => f.path.endsWith('.bwop')).toList()..sort((a, b) => a.path.compareTo(b.path));
-}
 
 /// Random ops on a few ids from three nodes, every HLC unique.
 List<Op> _randomOps(Random r, int count) {
@@ -131,25 +124,23 @@ void main() {
   });
 
   group('files', () {
-    test('the same file applied twice (Syncthing conflict copy) changes nothing the second time', () async {
+    test('a file applied again (cursor forgotten) changes nothing; with the cursor it is not fetched at all', () async {
       final a = device('a'), b = device('b');
       a.repo.importBatch(january);
       a.repo.updateSettings({'salary': 150000});
       await a.run();
-      a.upload(net);
-      b.deliver(net, Random(1));
       expect((await b.run()).filesRead, 1);
       final before = dump(b.repo);
-      final f = _bwops(b, a).single;
-      f.copySync(f.path.replaceFirst('.bwop', '.sync-conflict-20261016-000000-ABCDEFG.bwop'));
+      expect((await b.run()).filesRead, 0);
+      b.repo.setSyncCursor(a.repo.deviceId, 0);
       final again = await b.run();
       expect(again.filesRead, 1);
       expect(again.received, 0);
       expect(dump(b.repo), before);
     });
 
-    test('files delivered in reverse order give the same result as in order', () async {
-      final a = device('a'), inOrder = device('b'), reversed = device('c');
+    test('a device\'s files apply strictly in seq order: one that cannot be fetched holds up the later ones', () async {
+      final a = device('a'), inOrder = device('b'), late = device('c');
       a.repo.importBatch(january);
       final lidl = a.repo.transactions().firstWhere((t) => t.amount == -2340).id;
       for (final c in ['Shopping', 'Eating out', 'Groceries']) {
@@ -157,18 +148,19 @@ void main() {
         a.repo.setCategory(lidl, c);
         await a.run();
       }
-      a.upload(net);
-      inOrder.deliver(net, Random(1));
       await inOrder.run();
-      // Deliver newest first, one file per sync.
-      final names = net.files.keys.where((k) => k.endsWith('.bwop')).toList()..sort();
-      for (final name in names.reversed) {
-        final f = File('${reversed.root.path}/$name')..parent.createSync(recursive: true);
-        f.writeAsBytesSync(net.files[name]!);
-        await reversed.run();
-      }
+      net.relay.failGet(a.repo.deviceId, 3);
+      final first = await late.run();
+      expect(first.filesRead, 2);
+      expect(late.repo.transaction(lidl)!.category, 'Eating out', reason: 'files 1 (the whole state, Shopping) and 2 only');
+      expect(first.waiting.single.seq, 3);
+      expect(first.waiting.single.reason, isNull);
+      expect(first.waiting.single.device, SyncProblem.shortId(a.repo.deviceId));
+      expect(first.caughtUp, isFalse);
+      final second = await late.run();
+      expect((second.filesRead, second.caughtUp, second.waiting.length), (1, true, 0));
       expect(inOrder.repo.transaction(lidl)!.category, 'Groceries');
-      expect(dump(reversed.repo), dump(inOrder.repo));
+      expect(dump(late.repo), dump(inOrder.repo));
     });
 
     test('a device joining late gets everything, and its own edits reach the others', () async {
@@ -201,21 +193,38 @@ void main() {
         await Future<void>.delayed(Duration.zero);
       }
       await run;
-      await a.run(); // exports what was written during the first run
-      a.upload(net);
-      b.deliver(net, Random(1));
+      await a.run(); // uploads what was written during the first run
       await b.run();
       expect(written, greaterThan(0));
       expect(b.repo.transactions().where((t) => t.manual).length, written);
       expect(dump(b.repo, clocks: false), dump(a.repo, clocks: false));
     });
 
-    test('a missing sync folder is a SyncException and keeps the outbox', () async {
-      final r = WalletRepo.inMemory();
-      r.updateSettings({'salary': 1});
-      await expectLater(FolderSync('${tmp.path}/nope', key).run(r), throwsA(isA<SyncException>()));
-      expect(r.pendingOps().length, 1);
-      r.close();
+    test('an unreachable relay is a SyncException and keeps the outbox; the next run sends it', () async {
+      final a = device('a');
+      await a.run();
+      a.repo.updateSettings({'salary': 1});
+      net.relay.offline = true;
+      await expectLater(a.run(), throwsA(isA<SyncException>()));
+      expect(a.repo.pendingOps().length, 1);
+      net.relay.offline = false;
+      expect((await a.run()).sent, 1);
+      expect(a.repo.pendingOps(), isEmpty);
+    });
+
+    test('the first run on a relay uploads the whole wallet once (the migration from a folder); later runs only changes',
+        () async {
+      final a = device('a');
+      a.repo.importBatch(january);
+      a.repo.updateSettings({'salary': 150000});
+      a.repo.markExported(a.repo.pendingOps().last.$1); // as if a folder sync had sent it all already
+      final first = await a.run();
+      expect(first.sent, a.repo.snapshotOps().length);
+      a.repo.updateSettings({'rent': 1});
+      expect((await a.run()).sent, 1);
+      final b = device('b');
+      await b.run();
+      expect(dump(b.repo), dump(a.repo));
     });
   });
 
@@ -248,56 +257,48 @@ void main() {
       expect((await VaultKey.parse(' ${text.toLowerCase().replaceAll('-', '\n')} ')).bytes, k.bytes);
     });
 
-    test('refused before anything is written or read; outbox kept; works with the right key', () async {
+    test('a device with another wallet\'s key on the same relay: its files are refused both ways as badKey', () async {
       final a = device('a');
       a.repo.importBatch(january);
       await a.run();
-      final b = Device('b', a.dir, VaultKey.generate(), () => now); // same folder, other wallet's key
+      final b = Device('b', null, VaultKey.generate(), () => now); // the same relay, another wallet's key
       devices.add(b);
       b.repo.updateSettings({'salary': 99});
-      final before = dump(b.repo);
-      await expectLater(b.run(), throwsA(isA<SyncException>()));
-      expect(dump(b.repo), before);
-      expect(b.repo.pendingOps().length, 1);
-      expect(Directory('${a.root.path}/devices/${b.repo.deviceId}').existsSync(), isFalse);
-      final good = await FolderSync(a.dir.path, key).run(b.repo);
-      expect(good.sent, 1);
-      expect(b.repo.transactions().length, january.transactions.length);
+      final rb = await b.run();
+      expect(rb.waiting.single.reason, SyncProblemReason.badKey);
+      expect(rb.caughtUp, isFalse);
+      expect(b.repo.transactions(), isEmpty);
+      final ra = await a.run();
+      expect(ra.problems.single.reason, SyncProblemReason.badKey);
+      expect(a.repo.settings().salary, isNot(99));
     });
 
     test('a file sealed with another key is rejected and nothing is applied', () async {
       final a = device('a'), b = device('b');
       a.repo.updateSettings({'salary': 5});
       await a.run();
-      a.upload(net);
-      // Re-seal a's file with another key under the same name.
-      final name = net.files.keys.firstWhere((k) => k.endsWith('.bwop'));
-      final clear = await unseal(net.files[name]!, key);
-      net.files[name] = await seal(clear, VaultKey.generate());
-      b.deliver(net, Random(1));
+      final clear = await unseal(net.files['d/${a.repo.deviceId}/1']!, key);
+      net.relay.replace(a.repo.deviceId, 1, await seal(clear, VaultKey.generate()));
       final before = dump(b.repo);
       final rep = await b.run();
       expect(rep.badFiles, 1);
       expect(rep.filesRead, 0);
       expect(dump(b.repo), before);
-      expect(b.repo.peerFileSeen(a.repo.deviceId, name.split('/').last), isFalse);
+      expect(b.repo.syncCursors(), isEmpty);
     });
   });
 
   group('damaged files', () {
-    Future<(Device, Device, String, Uint8List)> setup() async {
+    Future<(Device, Device, Uint8List)> setup() async {
       final a = device('a'), b = device('b');
       a.repo.importBatch(january);
       a.repo.updateSettings({'salary': 150000});
       await a.run();
-      a.upload(net);
-      final name = net.files.keys.firstWhere((k) => k.endsWith('.bwop'));
-      return (a, b, name, net.files[name]!);
+      return (a, b, net.files['d/${a.repo.deviceId}/1']!);
     }
 
     test('truncated or bit-flipped files are rejected without changing anything; the repaired file then applies', () async {
-      final (a, b, name, good) = await setup();
-      final path = '${b.root.path}/$name';
+      final (a, b, good) = await setup();
       final r = Random(fuzzSeed(5));
       final cases = <Uint8List>[
         Uint8List(0),
@@ -306,26 +307,23 @@ void main() {
         for (var i = 0; i < fuzzIterations(25); i++) Uint8List.sublistView(good, 0, r.nextInt(good.length)),
         for (var i = 0; i < fuzzIterations(25); i++) Uint8List.fromList(good)..[r.nextInt(good.length)] ^= 1 << r.nextInt(8),
       ];
-      b.deliver(net, Random(1)); // vault.json and the folder
       final before = dump(b.repo);
       for (final (i, bad) in cases.indexed) {
-        File(path).writeAsBytesSync(bad);
-        final rep = await b.run(); // skipped and counted, not thrown: it must not block other files
+        net.relay.replace(a.repo.deviceId, 1, bad);
+        final rep = await b.run(); // skipped and counted, not thrown
         expect(rep.badFiles, 1, reason: 'case $i (${bad.length} bytes) was accepted');
         expect(rep.filesRead, 0, reason: 'case $i');
         expect(dump(b.repo), before, reason: 'case $i');
-        expect(b.repo.peerFileSeen(a.repo.deviceId, name.split('/').last), isFalse, reason: 'case $i');
+        expect(b.repo.syncCursors(), isEmpty, reason: 'case $i');
       }
-      File(path).writeAsBytesSync(good);
+      net.relay.replace(a.repo.deviceId, 1, good);
       final rep = await b.run();
       expect(rep.filesRead, 1);
       expect(dump(b.repo, clocks: false), dump(a.repo, clocks: false));
     });
 
     test('a correctly sealed file with broken contents changes nothing (no partial writes)', () async {
-      final (a, b, name, _) = await setup();
-      b.deliver(net, Random(1));
-      final path = '${b.root.path}/$name';
+      final (a, b, _) = await setup();
       final good = Op('setting', 'salary', const {'value': '1'}, Hlc(now + 10, 0, 'zz').toString()).toJson();
       final payloads = <Object>[
         'not json',
@@ -347,7 +345,7 @@ void main() {
       ];
       final before = dump(b.repo);
       for (final p in payloads) {
-        File(path).writeAsBytesSync(await seal(utf8.encode(p as String), key));
+        net.relay.replace(a.repo.deviceId, 1, await seal(utf8.encode(p as String), key));
         expect((await b.run()).badFiles, 1, reason: p);
         expect(dump(b.repo), before, reason: p);
         expect(b.repo.settings().salary, 0);
@@ -355,18 +353,16 @@ void main() {
     });
 
     test('one damaged file does not stop files from other devices being applied', () async {
-      final (_, b, name, good) = await setup();
+      final (a, b, good) = await setup();
       final c = device('c');
       c.repo.updateSettings({'rent': 40000});
       await c.run();
-      c.upload(net);
-      net.files[name] = Uint8List.sublistView(good, 0, good.length ~/ 2); // a's file arrives damaged
-      b.deliver(net, Random(1));
+      net.relay.replace(a.repo.deviceId, 1, Uint8List.sublistView(good, 0, good.length ~/ 2)); // a's file is damaged
       final rep = await b.run();
       expect(rep.badFiles, 1);
       expect(b.repo.settings().rent, 40000);
       // The repaired file applies on the next run.
-      File('${b.root.path}/$name').writeAsBytesSync(good);
+      net.relay.replace(a.repo.deviceId, 1, good);
       final again = await b.run();
       expect(again.badFiles, 0);
       expect(b.repo.settings().salary, 150000);
@@ -617,80 +613,66 @@ void main() {
     });
   });
 
-  group('matching while a sync file never arrives', () {
-    for (final partial in [false, true]) {
-      test(
-          'the phone holds the match but not the bank row${partial ? ' (only a partial row from the match op)' : ''}: the '
-          'entry counts once until the row arrives, then the row counts once', () async {
-        final phone = device('phone'), laptop = device('laptop');
-        final m = phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
-        await phone.run();
-        phone.upload(net);
-        now += 1000;
-        laptop.repo.importBatch(january);
-        final b = laptop.repo.transactions().singleWhere((t) => t.amount == -2340).id;
-        // Without its own category the match op also gives the row the entry's category: a partial row on the phone.
-        if (!partial) laptop.repo.setCategory(b, 'Groceries');
-        await laptop.run(); // the rows file
-        laptop.upload(net);
-        final rowsFile = net.files.keys.singleWhere((k) => k.contains(laptop.repo.deviceId) && k.endsWith('.bwop'));
-        laptop.deliver(net, Random(0));
-        await laptop.run(); // reads the entry and matches it
-        expect(laptop.repo.transaction(m)!.matchedTo, b);
-        await laptop.run(); // the match file
-        laptop.upload(net);
-        final rows = net.files.remove(rowsFile)!; // the rows file has not reached the phone
-        phone.deliver(net, Random(0));
-        await phone.run();
-        expect(phone.repo.transaction(m)!.matchedTo, b, reason: 'the match arrived');
-        expect(phone.repo.pendingOps(), isEmpty, reason: 'no writes');
 
-        int out(Device d) {
-          final cz = d.repo.categorizer();
-          return monthSummary(d.repo.transactions().map(cz.categorize).toList(), '2026-01').out;
-        }
-
-        expect(phone.repo.transactions().where((t) => t.amount == -2340).map((t) => t.id), [m], reason: 'counted once');
-        expect(phone.repo.transaction(m)!.live, isTrue);
-        expect(out(phone), 2340);
-
-        net.files[rowsFile] = rows; // it arrives
-        phone.deliver(net, Random(0));
-        await phone.run();
-        expect(phone.repo.transactions().where((t) => t.amount == -2340).map((t) => t.id), [b], reason: 'the row, once');
-        expect(phone.repo.transaction(m)!.live, isFalse);
-        expect(out(phone), out(laptop));
-        expect(phone.repo.pendingOps(), isEmpty);
-      });
+  group('matching while a sync file never arrives (strict order: the match never comes without its rows)', () {
+    int out(Device d) {
+      final cz = d.repo.categorizer();
+      return monthSummary(d.repo.transactions().map(cz.categorize).toList(), '2026-01').out;
     }
+
+    test('the rows file cannot be fetched: the phone applies neither it nor the later match file; the entry counts once, '
+        'then the row once', () async {
+      final phone = device('phone'), laptop = device('laptop');
+      final m = phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
+      await phone.run();
+      now += 1000;
+      laptop.repo.importBatch(january);
+      final b = laptop.repo.transactions().singleWhere((t) => t.amount == -2340).id;
+      await laptop.run(); // the rows file (its whole state), then reads the entry and matches it
+      expect(laptop.repo.transaction(m)!.matchedTo, b);
+      await laptop.run(); // the match file
+      expect(net.files.keys.where((k) => k.startsWith('d/${laptop.repo.deviceId}/')), hasLength(2));
+      net.relay.failGet(laptop.repo.deviceId, 1);
+      final rep = await phone.run();
+      expect((rep.filesRead, rep.caughtUp, rep.waiting.single.seq), (0, false, 1));
+      expect(phone.repo.transaction(m)!.matchedTo, isNull, reason: 'the match file waits behind the rows file');
+      expect(phone.repo.pendingOps(), isEmpty, reason: 'no writes');
+      expect(phone.repo.transactions().where((t) => t.amount == -2340).map((t) => t.id), [m], reason: 'counted once');
+      expect(out(phone), 2340);
+
+      final again = await phone.run(); // it arrives
+      expect((again.filesRead, again.caughtUp), (2, true));
+      expect(phone.repo.transactions().where((t) => t.amount == -2340).map((t) => t.id), [b], reason: 'the row, once');
+      expect(phone.repo.transaction(m)!.live, isFalse);
+      expect(out(phone), out(laptop));
+      expect(phone.repo.pendingOps(), isEmpty);
+    });
 
     for (final damaged in [true, false]) {
       test(
-          'the file with the bank row is ${damaged ? 'damaged' : 'missing'} on the phone for good: the match the laptop '
-          'wrote is kept, and repeated syncs write nothing new', () async {
+          'the file with the bank row is ${damaged ? 'damaged' : 'not fetchable'} for the phone for good: the phone keeps '
+          'its entry, does not match on its own, and repeated syncs write nothing new', () async {
         final phone = device('phone'), laptop = device('laptop');
-        List<String> bwops() => net.files.keys.where((k) => k.endsWith('.bwop')).toList()..sort();
+        List<String> files() => net.files.keys.where((k) => k.startsWith('d/')).toList()..sort();
         phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
         now += 1000;
         laptop.repo.importBatch(january);
-        // Filed on the laptop (its own category), so the match op the laptop writes later carries nothing for that row:
-        // the phone does not hold the row at all.
         laptop.repo.setCategory(laptop.repo.transactions().singleWhere((t) => t.amount == -2340).id, 'Groceries');
         await laptop.run();
-        laptop.upload(net);
-        final rowsFile = bwops().single;
-        final good = net.files[rowsFile]!;
-        if (damaged) net.files[rowsFile] = Uint8List.sublistView(good, 0, good.length ~/ 2);
-        final onPhone = File('${phone.root.path}/$rowsFile');
+        final rows = laptop.repo.deviceId;
+        final good = net.files['d/$rows/1']!;
+        if (damaged) net.relay.replace(rows, 1, Uint8List.sublistView(good, 0, good.length ~/ 2));
         var repaired = false;
 
         Future<void> round() async {
           for (final d in [phone, laptop]) {
-            d.deliver(net, Random(0));
-            if (d == phone && !damaged && !repaired && onPhone.existsSync()) onPhone.deleteSync(); // never arrives
+            if (d == phone && !damaged && !repaired) net.relay.failGet(rows, 1);
             now += 120000; // the 2-minute sync
-            await d.run();
-            d.upload(net);
+            final rep = await d.run();
+            if (d == phone && !repaired) {
+              expect(rep.caughtUp, isFalse);
+              expect(rep.waiting.single.reason, damaged ? isNotNull : isNull);
+            }
           }
         }
 
@@ -700,19 +682,19 @@ void main() {
         final m = phone.repo.transactions(includeHidden: true).singleWhere((t) => t.manual);
         final bank = laptop.repo.transaction(m.id)!.matchedTo;
         expect(bank, isNotNull, reason: 'the laptop holds the bank row and matched the entry');
-        expect(m.matchedTo, bank, reason: 'the phone keeps the match although it lacks that row');
-        expect(phone.repo.transaction(bank!), isNull, reason: 'the phone has not got the row itself');
-        final settled = bwops();
+        expect(phone.repo.transaction(m.id)!.matchedTo, isNull, reason: 'the phone got neither the row nor the match');
+        expect(phone.repo.transaction(m.id)!.live, isTrue, reason: 'the entry still counts on the phone');
+        final settled = files();
         for (var i = 0; i < 5; i++) {
           await round();
         }
-        expect(bwops(), settled, reason: 'no new sync files: nobody rewrites the match');
+        expect(files(), settled, reason: 'no new sync files: nobody rewrites the match');
         expect(phone.repo.pendingOps(), isEmpty);
         expect(laptop.repo.pendingOps(), isEmpty);
 
-        // The file is repaired (or finally arrives): one expense on both devices, same state.
+        // The file is repaired (or can be fetched again): one expense on both devices, same state.
         repaired = true;
-        if (damaged) onPhone.writeAsBytesSync(good);
+        if (damaged) net.relay.replace(rows, 1, good);
         await round();
         await round();
         for (final d in [phone, laptop]) {

@@ -531,9 +531,9 @@ class SyncEngine {
     final aged = since != null && now.difference(since) > snapshotAge;
     if (behind < snapshotOpsBehind && !aged) return;
     final covers = <String, int>{
-      for (final MapEntry(key: d, value: dev) in state.devices.entries)
-        if (d != me && dev.last > 0) d: cursors[d] ?? 0,
-      if (myLast > 0) me: myLast,
+      for (final d in state.devices.keys)
+        if (d != me) d: cursors[d] ?? 0,
+      me: myLast,
     };
     for (final MapEntry(key: d, value: seq) in old.entries) {
       if ((covers[d] ?? 0) < seq) {

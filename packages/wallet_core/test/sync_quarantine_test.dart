@@ -1,9 +1,8 @@
-// A sync file that cannot be used is skipped, recorded with a reason and reported per device; the run goes on with
-// the other files and devices, and the file is read again only when it changes (or after an update, for a newer
-// format). All data is SYNTHETIC.
+// A sync file that cannot be used is skipped, recorded with a reason and reported per device; that device's later
+// files wait behind it (strict order), the other devices go on, and the file is read again only when it changes (or
+// after an update, for a newer format). All data is SYNTHETIC.
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
@@ -35,26 +34,30 @@ List<String> _capture() {
 
 void main() {
   late Directory tmp;
+  late MemoryTransport relay;
   late VaultKey key;
   late WalletRepo repo;
 
-  Directory devices() => Directory('${tmp.path}/budget-wallet/devices');
-  File fileOf(String device, String name) => File('${devices().path}/$device/$name');
-
   Future<Uint8List> sealed(List<Object?> ops, [VaultKey? k]) => seal(utf8.encode(jsonEncode(ops)), k ?? key);
 
-  /// Writes a peer's file: sealed [ops], or raw [bytes] when given.
-  Future<File> peer(String device, String name, {List<Object?>? ops, List<int>? bytes}) async {
-    final f = fileOf(device, name)..parent.createSync(recursive: true);
-    f.writeAsBytesSync(bytes ?? await sealed(ops!));
-    return f;
+  /// Puts a peer's file [seq]: sealed [ops], or raw [bytes] when given; replaces a stored one (a repair on the server).
+  Future<void> peer(String device, int seq, {List<Object?>? ops, List<int>? bytes}) async {
+    final b = bytes ?? await sealed(ops!);
+    if (relay.files.containsKey('d/$device/$seq')) {
+      relay.replace(device, seq, b);
+    } else {
+      await relay.put(device, seq, b);
+    }
   }
 
-  Future<SyncReport> run({String appVersion = ''}) => FolderSync(tmp.path, key, appVersion: appVersion).run(repo);
+  bool seen(String device, int seq) => (repo.syncCursors()[device] ?? 0) >= seq;
+
+  Future<SyncReport> run({String appVersion = ''}) => SyncEngine(relay, key, appVersion: appVersion).run(repo);
   int failedLogs(List<String> lines) => lines.where((l) => l.contains('sync.file.failed')).length;
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('bw-quarantine-');
+    relay = MemoryTransport();
     key = VaultKey.generate();
     repo = WalletRepo.inMemory();
   });
@@ -74,7 +77,7 @@ void main() {
         'dev-new': Uint8List.fromList([...utf8.encode('BWOP2'), ...good.sublist(5)]),
       };
       for (final e in files.entries) {
-        await peer(e.key, '0000000001.bwop', bytes: e.value);
+        await peer(e.key, 1, bytes: e.value);
       }
       final rep = await run();
       final got = {for (final p in rep.problems) p.device: (p.reason, p.bytes, p.isNew)};
@@ -104,7 +107,7 @@ void main() {
         ],
       ];
       for (final (i, p) in payloads.indexed) {
-        await peer('p$i', '0000000001.bwop',
+        await peer('p$i', 1,
             ops: p is List ? p : null, bytes: p is List ? null : await seal(utf8.encode(jsonEncode(p)), key));
       }
       final rep = await run();
@@ -115,7 +118,8 @@ void main() {
     test('a file the database refuses is applyFailed; it is read again after an app update', () async {
       // Synthetic merchant rule op; hiding its table makes the database refuse the file (stands in for a bug).
       final rule = Op('rule', 'synthetic shop', {'category': 'Groceries'}, Hlc(_clock++, 0, 'peer').toString()).toJson();
-      await peer('p1', '0000000001.bwop', ops: [rule, _setting('salary', 3)]);
+      await run(); // the first run on the relay reads every table (its whole-state upload)
+      await peer('p1', 1, ops: [rule, _setting('salary', 3)]);
       repo.db.execute('ALTER TABLE merchant_rules RENAME TO merchant_rules_hidden');
       final rep = await run(appVersion: '1.0.0');
       expect(rep.problems.single.reason, SyncProblemReason.applyFailed);
@@ -131,7 +135,7 @@ void main() {
     });
 
     test('a database that cannot be written (read-only) stops the run; the file is not quarantined and applies later', () async {
-      await peer('p1', '0000000001.bwop', ops: [_setting('salary', 4)]);
+      await peer('p1', 1, ops: [_setting('salary', 4)]);
       repo.db.execute('PRAGMA query_only = 1');
       await expectLater(run(), throwsA(isA<SqliteException>()));
       repo.db.execute('PRAGMA query_only = 0');
@@ -145,7 +149,7 @@ void main() {
   group('not retried until it changes', () {
     test('an unchanged bad file is read once: later runs report it (isNew false) without trying it again', () async {
       final lines = _capture();
-      await peer('p1', '0000000001.bwop', bytes: [9, 9, 9, 9]);
+      await peer('p1', 1, bytes: [9, 9, 9, 9]);
       final first = await run();
       expect(first.problems.single.isNew, isTrue);
       for (var i = 0; i < 3; i++) {
@@ -154,16 +158,14 @@ void main() {
         expect(rep.problems.single.reason, SyncProblemReason.corrupt);
       }
       expect(failedLogs(lines), 1, reason: 'unsealed and logged once only');
-      expect(repo.peerFileSeen('p1', '0000000001.bwop'), isFalse);
+      expect(seen('p1', 1), isFalse);
     });
 
-    test('a repaired copy with the same size and time stamp still applies (content decides)', () async {
+    test('a repaired copy of the same size still applies (content decides)', () async {
       final good = await sealed([_setting('salary', 8)]);
-      final f = await peer('p1', '0000000001.bwop', bytes: Uint8List.fromList(good)..[good.length - 1] ^= 1);
-      final stamp = f.lastModifiedSync();
+      await peer('p1', 1, bytes: Uint8List.fromList(good)..[good.length - 1] ^= 1);
       expect((await run()).problems.single.reason, SyncProblemReason.badKey, reason: 'a changed byte fails authentication');
-      f.writeAsBytesSync(good);
-      f.setLastModifiedSync(stamp);
+      await peer('p1', 1, bytes: good);
       final rep = await run();
       expect((rep.filesRead, rep.badFiles), (1, 0));
       expect(repo.settings().salary, 8);
@@ -173,7 +175,7 @@ void main() {
     test('a newer-format file is not retried by the same build, and is retried once after an app update', () async {
       final lines = _capture();
       final good = await sealed([_setting('salary', 9)]);
-      await peer('p1', '0000000001.bwop', bytes: [...utf8.encode('BWOP2'), ...good.sublist(5)]);
+      await peer('p1', 1, bytes: [...utf8.encode('BWOP2'), ...good.sublist(5)]);
       await run(appVersion: '1.0.0');
       await run(appVersion: '1.0.0');
       expect(failedLogs(lines), 1);
@@ -186,35 +188,36 @@ void main() {
 
     test('a corrupt file is not retried after an app update (only a changed file is)', () async {
       final lines = _capture();
-      await peer('p1', '0000000001.bwop', bytes: [1, 2, 3]);
+      await peer('p1', 1, bytes: [1, 2, 3]);
       await run(appVersion: '1.0.0');
       await run(appVersion: '2.0.0');
       expect(failedLogs(lines), 1);
     });
 
-    test('a removed bad file is forgotten: no problem reported, no entry kept', () async {
-      final f = await peer('p1', '0000000001.bwop', bytes: [1, 2, 3]);
+    test('a bad file no longer needed (the cursor moved past it, as a snapshot does) is forgotten: no problem, no entry', () async {
+      await peer('p1', 1, bytes: [1, 2, 3]);
       expect((await run()).badFiles, 1);
       expect(repo.localValue(BadFiles.localKey), isNotNull);
-      f.deleteSync();
-      expect((await run()).badFiles, 0);
+      repo.setSyncCursor('p1', 1);
+      final rep = await run();
+      expect((rep.badFiles, rep.caughtUp), (0, true));
       expect(repo.localValue(BadFiles.localKey), isNull);
     });
 
     test('damaged bookkeeping is ignored: the files are simply checked again', () async {
-      await peer('p1', '0000000001.bwop', bytes: [1, 2, 3]);
+      await peer('p1', 1, bytes: [1, 2, 3]);
       await run();
-      for (final junk in ['not json', '{}', '[1, {"d": 5}]', '[{"d":"p1","f":"0000000001.bwop","r":"nope","n":3,"h":"x","b":"1+"}]']) {
+      for (final junk in ['not json', '{}', '[1, {"d": 5}]', '[{"d":"p1","f":"1","r":"nope","n":3,"h":"x","b":"1+"}]']) {
         repo.setLocalValue(BadFiles.localKey, junk);
         final rep = await run();
         expect(rep.problems.single.isNew, isTrue, reason: junk);
       }
     });
 
-    test('quarantine is per device and per file name (conflict copies too)', () async {
-      await peer('a', '0000000001.bwop', bytes: [1, 2, 3]);
-      await peer('b', '0000000001.bwop', bytes: [1, 2, 3]);
-      await peer('a', '0000000001.sync-conflict-20260101-000000-ABCDEFG.bwop', ops: [_setting('rent', 6)]);
+    test('quarantine is per device and per seq', () async {
+      await peer('a', 1, bytes: [1, 2, 3]);
+      await peer('b', 1, bytes: [1, 2, 3]);
+      await peer('c', 1, ops: [_setting('rent', 6)]);
       final rep = await run();
       expect(rep.problemsByDevice, {'a': 1, 'b': 1});
       expect(repo.settings().rent, 6);
@@ -223,22 +226,24 @@ void main() {
     });
   });
 
-  group('the run goes on', () {
-    test('later files from the same device and files from other devices apply past a bad file', () async {
-      await peer('p1', '0000000001.bwop', ops: [_setting('salary', 1)]);
-      await peer('p1', '0000000002.bwop', bytes: [0, 0, 0]);
-      await peer('p1', '0000000003.bwop', ops: [_setting('rent', 3)]);
-      await peer('p2', '0000000001.bwop', ops: [_setting('loan', 5)]);
+  group('the run goes on with the other devices; the bad device waits', () {
+    test('files before a bad file and files from other devices apply; later files of that device wait', () async {
+      await peer('p1', 1, ops: [_setting('salary', 1)]);
+      await peer('p1', 2, bytes: [0, 0, 0]);
+      await peer('p1', 3, ops: [_setting('rent', 3)]);
+      await peer('p2', 1, ops: [_setting('loan', 5)]);
       final rep = await run();
-      expect((rep.filesRead, rep.badFiles), (3, 1));
-      expect((repo.settings().salary, repo.settings().rent, repo.settings().loan), (1, 3, 5));
+      expect((rep.filesRead, rep.badFiles, rep.caughtUp), (2, 1, false));
+      expect((repo.settings().salary, repo.settings().rent, repo.settings().loan), (1, 0, 5));
       expect(rep.problems.single.device, 'p1');
+      expect((rep.waiting.single.device, rep.waiting.single.seq, rep.waiting.single.reason), ('p1', 2, SyncProblemReason.corrupt));
+      expect(repo.syncCursors(), {'p1': 1, 'p2': 1});
     });
 
-    test('two devices: a damaged middle file is skipped, the rest applies, and the repaired file converges both', () async {
+    test('two devices: a damaged middle file holds up the files after it; the repaired file converges both', () async {
       final net = Net();
-      final a = Device('a', Directory('${tmp.path}/a')..createSync(), key, () => 1767225600000);
-      final b = Device('b', Directory('${tmp.path}/b')..createSync(), key, () => 1767225600000);
+      final a = Device('a', null, key, () => 1767225600000, net: net);
+      final b = Device('b', null, key, () => 1767225600000, net: net);
       addTearDown(a.close);
       addTearDown(b.close);
       a.repo.importBatch(january);
@@ -247,31 +252,28 @@ void main() {
       await a.run();
       a.repo.addManual(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
       await a.run();
-      a.upload(net);
-      final names = net.files.keys.where((k) => k.endsWith('.bwop')).toList()..sort();
-      expect(names.length, 3);
-      final good = net.files[names[1]]!;
-      b.deliver(net, Random(1));
-      File('${b.root.path}/${names[1]}').writeAsBytesSync(good.sublist(0, good.length ~/ 2));
+      expect(net.files.keys.where((k) => k.startsWith('d/')), hasLength(3));
+      final good = net.files['d/${a.repo.deviceId}/2']!;
+      net.relay.replace(a.repo.deviceId, 2, good.sublist(0, good.length ~/ 2));
       final rep = await b.run();
-      expect((rep.filesRead, rep.badFiles), (2, 1));
-      expect(rep.problems.single.device, SyncProblem.shortId(a.repo.deviceId), reason: 'a short id, never the folder name');
-      expect(b.repo.transactions().where((t) => t.manual).length, 1, reason: 'the file after the damaged one applied');
+      expect((rep.filesRead, rep.badFiles), (1, 1));
+      expect(rep.problems.single.device, SyncProblem.shortId(a.repo.deviceId), reason: 'a short id, never the whole id');
+      expect(b.repo.transactions().where((t) => t.manual), isEmpty, reason: 'the file after the damaged one waits');
       expect(b.repo.settings().salary, 0);
-      File('${b.root.path}/${names[1]}').writeAsBytesSync(good);
+      net.relay.replace(a.repo.deviceId, 2, good);
       final again = await b.run();
-      expect((again.filesRead, again.badFiles), (1, 0));
+      expect((again.filesRead, again.badFiles, again.caughtUp), (2, 0, true));
       expect(dump(b.repo, clocks: false), dump(a.repo, clocks: false));
     });
   });
 
-  group('schema upgrade (every peer file is listed again)', () {
+  group('schema upgrade (every peer file is read again)', () {
     test('two devices: a quarantined file stays quarantined through the replay, the re-read files change nothing, a repaired copy applies',
         () async {
       final lines = _capture();
       final net = Net();
-      final a = Device('a', Directory('${tmp.path}/a')..createSync(), key, () => 1767225600000);
-      final b = Device('b', Directory('${tmp.path}/b')..createSync(), key, () => 1767225600000, dbPath: '${tmp.path}/b.db');
+      final a = Device('a', null, key, () => 1767225600000, net: net);
+      final b = Device('b', null, key, () => 1767225600000, dbPath: '${tmp.path}/b.db', net: net);
       addTearDown(a.close);
       addTearDown(b.close);
       a.repo.importBatch(january);
@@ -280,26 +282,23 @@ void main() {
       await a.run();
       a.repo.addManual(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
       await a.run();
-      a.upload(net);
-      final names = net.files.keys.where((k) => k.endsWith('.bwop')).toList()..sort();
-      final good = net.files[names[1]]!;
-      b.deliver(net, Random(1));
-      final damaged = File('${b.root.path}/${names[1]}')..writeAsBytesSync(good.sublist(0, good.length - 3));
+      final good = net.files['d/${a.repo.deviceId}/3']!;
+      net.relay.replace(a.repo.deviceId, 3, good.sublist(0, good.length - 3));
       final first = await b.run();
       expect((first.filesRead, first.badFiles, first.problems.single.reason), (2, 1, SyncProblemReason.badKey));
       expect(failedLogs(lines), 1);
       final before = dump(b.repo, clocks: false);
-      // The database as the build before `goal_contrib` left it: this build then forgets which peer files it read.
+      // The database as the build before `goal_contrib` left it: this build then forgets how far it applied each device.
       b.repo.db.execute("UPDATE meta SET value = '1' WHERE key = 'schema'");
       b.reopen();
-      expect(bookkeeping(b.repo)['peer_files'], 0);
+      expect(bookkeeping(b.repo)['sync_cursor'], 0);
       final replay = await b.run();
       expect((replay.filesRead, replay.received, replay.badFiles), (2, 0, 1), reason: 're-read, nothing new, still one problem');
       expect(replay.problems.single.isNew, isFalse, reason: 'unchanged, so not unsealed again');
       expect(failedLogs(lines), 1);
       expect(dump(b.repo, clocks: false), before);
-      expect(bookkeeping(b.repo)['peer_files'], 2);
-      damaged.writeAsBytesSync(good);
+      expect(b.repo.syncCursors(), {a.repo.deviceId: 2});
+      net.relay.replace(a.repo.deviceId, 3, good);
       final fixed = await b.run();
       expect((fixed.filesRead, fixed.badFiles), (1, 0));
       expect(dump(b.repo, clocks: false), dump(a.repo, clocks: false));
@@ -308,7 +307,8 @@ void main() {
 
     test('a file the previous build\'s database refused is retried once after the upgrade, also without an app version', () async {
       final rule = Op('rule', 'synthetic shop', {'category': 'Groceries'}, Hlc(_clock++, 0, 'peer').toString()).toJson();
-      await peer('p1', '0000000001.bwop', ops: [rule, _setting('salary', 3)]);
+      await run(); // the first run on the relay reads every table (its whole-state upload)
+      await peer('p1', 1, ops: [rule, _setting('salary', 3)]);
       repo.db.execute('ALTER TABLE merchant_rules RENAME TO merchant_rules_hidden');
       expect((await run()).problems.single.reason, SyncProblemReason.applyFailed);
       repo.db.execute('ALTER TABLE merchant_rules_hidden RENAME TO merchant_rules');
@@ -326,19 +326,19 @@ void main() {
     });
   });
 
-  test('logs carry reason words, sizes and sequence numbers only (no device ids, file names or paths)', () async {
+  test('logs carry reason words, sizes and sequence numbers only (no device ids)', () async {
     final lines = _capture();
-    await peer('device-secret-name', '0000000007.sync-conflict-20260101-ABCDEFG.bwop', bytes: [5, 5, 5]);
-    await peer('device-secret-name', '0000000008.bwop', bytes: await sealed([_setting('rent', 1)], VaultKey.generate()));
+    await peer('device-secret-name', 1, ops: [_setting('salary', 1)]);
+    await peer('device-secret-name', 2, bytes: [5, 5, 5]);
+    await peer('device-secret-other', 1, bytes: await sealed([_setting('rent', 1)], VaultKey.generate()));
     await run();
     await run();
     final text = lines.join('\n');
-    expect(text, contains('sync.file.failed {"file":"0000000007","reason":"corrupt","bytes":3}'));
+    expect(text, contains('sync.file.failed {"seq":2,"reason":"corrupt","bytes":3}'));
     expect(text, contains('"reason":"badKey"'));
     expect(text, contains('sync.files.skipped {"bad":2,"new":0}'));
-    expect(text, isNot(contains('secret-name')));
-    expect(text, isNot(contains('ABCDEFG')));
-    expect(text, isNot(contains(tmp.path)));
+    expect(text, isNot(contains('secret')));
+    expect(text, isNot(contains('device-')));
   });
 
   group('BadFile', () {
