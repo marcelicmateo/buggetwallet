@@ -37,10 +37,11 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | R0b | Context pack: build tooling, package layout, sqlite3 packaging | scout | – | done |
 | R1 | Encrypted SQLite spike (sqlite3mc on Android, Linux, web wasm) | devops | R0b | done (5606f00, merged e3794ff; sqlite3 3.7.1 + sqlite3mc hook, APK +1.4 MB) |
 | R2 | Relay server `relay/` + HTTP tests (protocol: `RELAY_PROTOCOL.md`) | core-builder | R0b | done (96118c7, 93 tests; merged into v2) |
-| R3 | `SyncTransport`, `MemoryTransport`, `RelayTransport`, `SyncEngine`, snapshots; deletes FolderSync, ports sim + sync tests (app compiles again in R5, based on R3) | core-builder | R0a | running |
-| R4 | Sync spec tests (strict order, caught-up matching, S1/S2, snapshots, pruning, first connect) | test-writer | R0a | written (f58c7f9, 34 tests); run after R3 merges |
-| R5 | App: Plan › Sync, join with relay, backups via save dialog, Android INTERNET/cleartext, remove folder sync | ui-builder | R3 | queued |
-| R6 | Encrypted local database: core key + conversion, app wiring | core-builder / ui-builder | R1 | queued |
+| R3 | `SyncTransport`, `MemoryTransport`, `RelayTransport`, `SyncEngine`, snapshots; deletes FolderSync, ports sim + sync tests (app compiles again in R5, based on R3) | core-builder | R0a | done (0c2687d, core 845/0 incl. R4; branch `stage-r` = R3 + v2) |
+| R4 | Sync spec tests (strict order, caught-up matching, S1/S2, snapshots, pruning, first connect) | test-writer | R0a | done (f58c7f9, merged into R3, green) |
+| R5 | App: Plan › Sync, join with relay, backups via save dialog, Android INTERNET/cleartext, remove folder sync | ui-builder | R3 | running (from stage-r) |
+| R6a | Encrypted db core: `localDbKey`, `openKeyed`, `WalletRepo.open(dbKey:)`, crash-safe conversion; stuck-peer snapshot self-heal | core-builder | R1, R3 | running (from stage-r) |
+| R6b | App: open the db only once the key is known (onboarding/web unlock), keyed open native + web wrapped VFS | ui-builder | R5, R6a | queued |
 | R7 | Relay container, `tools/relay.sh`, `tools/build.sh relay`, CI relay job, setup doc (desktop test through a relay moves to R7b after R5) | devops | R2 | done (990ee5d, merged; image 92 MB, full test green incl. relay 93) |
 | R7b | Desktop test: two app instances syncing through `tools/relay.sh` | devops | R5, R7 | queued |
 | R | Merge, review, Haiku full run, emulator, push, STATUS | lead | R1–R7b | queued |
