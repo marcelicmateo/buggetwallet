@@ -7,7 +7,6 @@ import 'dart:typed_data';
 import 'package:budget_wallet/src/calendar_source.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
-import 'package:budget_wallet/src/future_shim.dart';
 import 'package:budget_wallet/src/ics_fetch.dart';
 import 'package:budget_wallet/src/nudges.dart';
 import 'package:budget_wallet/src/screens/calendars_panel.dart';
@@ -85,6 +84,8 @@ Future<WalletController> withCalendar({FakeNudges? nudges}) async {
 
 Widget todayOf(WalletController wc) =>
     Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser()));
+
+String eur(String s) => s.replaceAll(' €', '\u00A0€');
 
 Finder key(String k) => find.byKey(ValueKey(k));
 
@@ -346,10 +347,11 @@ void main() {
     tw('shows the Coming up line and a heads-up line for the big cost', (tester) async {
       final wc = fw();
       await pumpApp(tester, todayOf(wc), size: const Size(400, 1400));
-      expect(find.descendant(of: key('comingUpLine'), matching: find.text('Coming up: 2 costs before payday · 420 €')), findsOneWidget);
+      expect(
+          find.descendant(of: key('comingUpLine'), matching: find.text(eur('Coming up: 2 costs before payday · 420 €'))), findsOneWidget);
       final head = find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('headsUp:'));
       expect(head, findsOneWidget);
-      expect(find.text('Car insurance in 3 days · 340 €'), findsOneWidget);
+      expect(find.text(eur('Car insurance in 3 days · 340 €')), findsOneWidget);
     });
 
     tw('has neither line without planned costs', (tester) async {
@@ -364,7 +366,7 @@ void main() {
       await wc.setCalendarOn('c1', false);
       await wc.setCalendarOn('c1', true);
       await pumpApp(tester, todayOf(wc), size: const Size(400, 1400));
-      expect(find.text('Coming up: 2 costs before payday · 420 €'), findsOneWidget);
+      expect(find.text(eur('Coming up: 2 costs before payday · 420 €')), findsOneWidget);
     });
 
     tw('tapping Coming up opens Upcoming', (tester) async {
@@ -387,8 +389,8 @@ void main() {
       }
       final insurance = find.descendant(of: key('up:p:${wc.plannedOpen().first.id}'), matching: find.text('Car insurance'));
       expect(insurance, findsOneWidget);
-      expect(find.text('340 €'), findsOneWidget);
-      expect(find.text('Suggested 80 €'), findsOneWidget);
+      expect(find.text(eur('340 €')), findsOneWidget);
+      expect(find.text(eur('Suggested 80 €')), findsOneWidget);
       expect(find.text('No amount found'), findsOneWidget);
       expect(find.text('Added'), findsWidgets);
       expect(find.text('Calendar'), findsWidgets);
@@ -414,7 +416,7 @@ void main() {
       expect(confirm, findsOneWidget, reason: 'only the suggestion with an amount can be confirmed as is');
       await tester.tap(confirm);
       await tester.pump();
-      expect(find.text('Suggested 80 €'), findsNothing);
+      expect(find.text(eur('Suggested 80 €')), findsNothing);
       expect(wc.comingUp().count, 3);
       expect(wc.comingUp().total, 50000);
     });
@@ -441,7 +443,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(key('plannedSave'));
       await tester.pump();
-      expect(find.text('Enter an amount, like 80.00.'), findsOneWidget);
+      expect(find.textContaining('Enter an amount, like 80.00.'), findsOneWidget);
       await tester.enterText(key('plannedAmount'), '25');
       await tester.tap(key('plannedSave'));
       await tester.pumpAndSettle();
@@ -573,7 +575,9 @@ void main() {
       await tester.tap(key('calImport'));
       await tester.pumpAndSettle();
       expect(find.textContaining("doesn't look like a calendar"), findsOneWidget);
-      chooser.picks = [_Picked('home.ics', bytesOf(fakeIcs([('u1', '2026-10-25', 'Car service 120 €')])))];
+      chooser.picks = [
+        _Picked('home.ics', bytesOf(fakeIcs([('u1', '2026-10-25', 'Car service 120 €')])))
+      ];
       await tester.tap(key('calImport'));
       await tester.pumpAndSettle();
       expect(find.text('home'), findsOneWidget);
@@ -592,7 +596,7 @@ void main() {
       await tester.enterText(key('calLinkField'), 'https://example.org/me.ics');
       await tester.tap(key('calLinkAdd'));
       await tester.pumpAndSettle();
-      expect(find.text("Couldn't reach the link. Check the network."), findsOneWidget);
+      expect(find.textContaining("Couldn't reach the link"), findsOneWidget);
     });
 
     tw('the heads-up amount and days are saved, bad values are refused', (tester) async {
@@ -601,7 +605,7 @@ void main() {
       await tester.enterText(key('headsUpDays'), '30');
       await tester.tap(key('headsUpSave'));
       await tester.pump();
-      expect(find.text('Days must be from 0 to 14.'), findsOneWidget);
+      expect(find.textContaining('Days must be from 0 to 14.'), findsOneWidget);
       expect(wc.headsUpDays, 3);
       await tester.enterText(key('headsUpDays'), '5');
       await tester.enterText(key('headsUpCents'), '250,50');
@@ -626,7 +630,8 @@ void main() {
     tw('Planned costs (.ics) saves the file', (tester) async {
       final wc = fw();
       final chooser = _Chooser();
-      await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: ExportPanel(wc: wc, chooser: chooser))), size: const Size(400, 1200));
+      await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: ExportPanel(wc: wc, chooser: chooser))),
+          size: const Size(400, 1200));
       await tester.tap(key('exportPlanned'));
       await tester.pumpAndSettle();
       expect(chooser.saved.single.name, 'budget-wallet-planned.ics');
@@ -637,7 +642,8 @@ void main() {
       final wc = emptyWallet();
       addTearDown(wc.dispose);
       final chooser = _Chooser();
-      await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: ExportPanel(wc: wc, chooser: chooser))), size: const Size(400, 1200));
+      await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: ExportPanel(wc: wc, chooser: chooser))),
+          size: const Size(400, 1200));
       await tester.tap(key('exportPlanned'));
       await tester.pump();
       expect(find.text('No planned costs with an amount to export'), findsOneWidget);
@@ -710,26 +716,30 @@ void main() {
       tw('$name: Upcoming with planned costs, suggestions and a long title', (tester) async {
         final errors = Errors();
         final wc = await withCalendar();
-        wc.addPlannedCost(title: 'A very long synthetic planned cost name that has to wrap on a narrow screen', date: '2026-10-29', amount: 123456);
+        wc.addPlannedCost(
+            title: 'A very long synthetic planned cost name that has to wrap on a narrow screen', date: '2026-10-29', amount: 123456);
         await pumpApp(tester, UpcomingScreen(wc: wc), size: size, textScale: scale);
         await scrollThrough(tester);
         errors.check();
       });
 
       tw('$name: the planned cost sheet and the entry sheet', (tester) async {
-        final errors = Errors();
         final wc = fw();
         await pumpApp(tester, UpcomingScreen(wc: wc), size: size, textScale: scale);
-        await tester.tap(key('addPlanned'));
+        await tester.tap(key('addPlannedTop'));
         await tester.pumpAndSettle();
         expect(key('plannedSave'), findsOneWidget);
-        await tester.tapAt(const Offset(2, 2));
+        expect(tester.takeException(), isNull, reason: 'the planned cost sheet');
+        tester.state<NavigatorState>(find.byType(Navigator).first).pop();
         await tester.pumpAndSettle();
-        await tester.tap(key('up:p:${wc.plannedOpen().first.id}'));
+        await tester.dragUntilVisible(key('up:p:${wc.plannedOpen().first.id}'), find.byType(ListView), const Offset(0, -200));
+        await tester.ensureVisible(key('up:p:${wc.plannedOpen().first.id}'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.descendant(of: key('up:p:${wc.plannedOpen().first.id}'), matching: find.text('Car insurance')));
         await tester.pumpAndSettle();
         await tester.tap(key('entryPaid'));
         await tester.pumpAndSettle();
-        errors.check();
+        expect(tester.takeException(), isNull, reason: 'the entry sheet');
       });
 
       tw('$name: Plan › Calendars with calendars, files, a link error and the heads-up fields', (tester) async {

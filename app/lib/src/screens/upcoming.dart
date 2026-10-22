@@ -3,7 +3,6 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
-import '../future_shim.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
@@ -81,13 +80,21 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
         final cur = wc.currency;
         final range = wc.upcomingRange(next: _next);
         final items = wc.upcomingItems(range.start, range.end);
-        final shown = _day == null ? items : [for (final i in items) if (i.date == _day) i];
+        final shown = _day == null
+            ? items
+            : [
+                for (final i in items)
+                  if (i.date == _day) i
+              ];
         final counted = wc.countedIn(items);
         final today = wc.today();
         return Scaffold(
           appBar: AppBar(
             title: const Text('Upcoming'),
             leading: IconButton(icon: const Icon(Icons.close), tooltip: 'Close', onPressed: () => Navigator.pop(context)),
+            actions: [
+              IconButton(key: const ValueKey('addPlannedTop'), icon: const Icon(Icons.add), tooltip: 'Add planned cost', onPressed: _add),
+            ],
             bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: Container(height: 2, color: context.c.lineStrong)),
           ),
           body: ListView(
@@ -149,9 +156,20 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                     Rows(children: [for (final i in shown) _UpcomingRow(wc: wc, item: i, today: today, onOpen: _open, onChange: _change)]),
                   if (_day == null && counted.count > 0)
                     TotalRule(
-                        padding: EdgeInsets.zero,
-                        child: LineItem('Set aside', moneyExact(counted.total, cur),
-                            bold: true, sub: '${counted.count} ${counted.count == 1 ? 'cost' : 'costs'} from today')),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: SplitRow(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('Set aside', style: TextStyle(fontWeight: FontWeight.w600)),
+                          Text('${counted.count} ${counted.count == 1 ? 'cost' : 'costs'} from today',
+                              style: TextStyle(fontSize: 12.5, color: context.c.ink2)),
+                        ]),
+                        end: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text(moneyExact(counted.total, cur), style: numStyle.copyWith(fontWeight: FontWeight.w600))),
+                      ),
+                    ),
                 ]),
               ])),
         );
@@ -257,14 +275,16 @@ class _MonthGrid extends StatelessWidget {
     }
     return Column(children: [
       Row(children: [
-        for (final l in _weekdayLetters)
-          Expanded(child: Center(child: Text(l, style: TextStyle(fontSize: 11.5, color: c.muted)))),
+        for (final l in _weekdayLetters) Expanded(child: Center(child: Text(l, style: TextStyle(fontSize: 11.5, color: c.muted)))),
       ]),
       for (var w = 0; w < days.length; w += 7)
         IntrinsicHeight(
           child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             for (final d in days.sublist(w, w + 7))
-              Expanded(child: d == null ? const SizedBox.shrink() : _DayCell(date: d, today: today, items: byDay[d] ?? const [], selected: selected == d, onTap: onDay)),
+              Expanded(
+                  child: d == null
+                      ? const SizedBox.shrink()
+                      : _DayCell(date: d, today: today, items: byDay[d] ?? const [], selected: selected == d, onTap: onDay)),
           ]),
         ),
     ]);
@@ -284,7 +304,11 @@ class _DayCell extends StatelessWidget {
     final isToday = date == today;
     final kinds = <_Mark>{
       for (final i in items)
-        switch (i.kind) { UpcomingKind.planned => _Mark.planned, UpcomingKind.bill => _Mark.bill, UpcomingKind.suggestion => _Mark.suggestion },
+        switch (i.kind) {
+          UpcomingKind.planned => _Mark.planned,
+          UpcomingKind.bill => _Mark.bill,
+          UpcomingKind.suggestion => _Mark.suggestion
+        },
     };
     final n = items.length;
     return Semantics(
@@ -376,7 +400,10 @@ class _UpcomingRow extends StatelessWidget {
                       toast(context, 'Added to your plan');
                     },
                     child: const Text('Confirm')),
-              OutlinedButton(key: ValueKey('change:${i.key}'), onPressed: () => onChange(i), child: Text((i.suggested ?? 0) > 0 ? 'Change' : 'Add amount')),
+              OutlinedButton(
+                  key: ValueKey('change:${i.key}'),
+                  onPressed: () => onChange(i),
+                  child: Text((i.suggested ?? 0) > 0 ? 'Change' : 'Add amount')),
               TextButton(
                   key: ValueKey('nocost:${i.key}'),
                   onPressed: () {

@@ -1,6 +1,6 @@
 // The phone's calendars behind one small interface, so the app and its tests never touch the plugin directly (same idea as
 // NudgePlatform). Read-only. Calendar names, ids and event titles stay on this device and are never logged.
-import 'future_shim.dart';
+import 'package:wallet_core/wallet_core.dart' show CalendarEvent;
 
 /// One calendar of the phone's calendar app (any account that syncs to the device).
 class DeviceCalendarInfo {

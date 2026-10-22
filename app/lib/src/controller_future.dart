@@ -62,8 +62,7 @@ extension FutureSpending on WalletController {
   List<PlannedCost> plannedOpen() => _cached('plannedOpen', () => repo.plannedCosts());
 
   /// Planned costs, confirmed bills and unconfirmed calendar events from [from] to [to] (inclusive), by date. Cached.
-  List<UpcomingItem> upcomingItems(String from, String to) => _cached(
-      'upcoming|$from|$to|${cal.version}',
+  List<UpcomingItem> upcomingItems(String from, String to) => _cached('upcoming|$from|$to|${cal.version}',
       () => upcoming(planned: plannedEverything(), bills: recurringBills(), events: cal.events, from: from, to: to));
 
   /// The dates Upcoming shows: the pay period, or the next one of the same length ([next]). `end` is the last day shown.
@@ -74,15 +73,15 @@ extension FutureSpending on WalletController {
 
   /// "Coming up": the planned costs with an amount dated from today to the day before payday (suggestions and bills are not in it).
   ({int count, int total}) comingUp() => _cached('comingUp', () {
-        final xs = duePlanned(plannedOpen(), today(), period().end);
-        return (count: xs.length, total: xs.fold<int>(0, (a, p) => a + p.amount!));
+        final p = period();
+        return (count: p.duePlanned.where((x) => !x.coveredByPlan).length, total: p.reservedPlanned);
       });
 
   /// What [items] set aside from today on: the planned costs and bills that have an amount (suggestions never count).
   ({int count, int total}) countedIn(List<UpcomingItem> items) {
     final t = today();
-    final xs = items.where((i) =>
-        i.kind != UpcomingKind.suggestion && i.amount != null && i.date.compareTo(t) >= 0 && !(i.planned?.coveredByPlan ?? false));
+    final xs = items.where(
+        (i) => i.kind != UpcomingKind.suggestion && i.amount != null && i.date.compareTo(t) >= 0 && !(i.planned?.coveredByPlan ?? false));
     return (count: xs.length, total: xs.fold<int>(0, (a, i) => a + i.amount!));
   }
 
@@ -147,15 +146,10 @@ extension FutureSpending on WalletController {
 
   // ---------- heads-up ----------
 
-  // SHIM: at merge these three use `settings.headsUpCents`, `settings.headsUpDays` and `updateSettings({'headsUpCents': …,
-  // 'headsUpDays': …})` (synced settings in core).
-  int get headsUpCents => shimHeadsUpCents(repo);
-  int get headsUpDays => shimHeadsUpDays(repo);
-  void saveHeadsUp({required int cents, required int days}) {
-    shimSaveHeadsUp(repo, cents, days);
-    logEvent(_log, Level.INFO, 'settings.changed', {'keys': 'headsUpCents,headsUpDays'});
-    _changed();
-  }
+  /// The heads-up threshold (cents) and days: synced settings.
+  int get headsUpCents => settings.headsUpCents;
+  int get headsUpDays => settings.headsUpDays;
+  void saveHeadsUp({required int cents, required int days}) => updateSettings({'headsUpCents': cents, 'headsUpDays': days});
 
   /// The big costs within the heads-up days (planned with an amount and confirmed bills; suggestions never). Cached.
   List<HeadsUp> headsUpLines() => _cached('headsUps', () {
@@ -244,7 +238,8 @@ extension FutureSpending on WalletController {
     }
   }
 
-  void _saveIcsSources(List<_IcsSource> xs) => repo.setLocalValue('icsSources', xs.isEmpty ? null : jsonEncode([for (final x in xs) x.toJson()]));
+  void _saveIcsSources(List<_IcsSource> xs) =>
+      repo.setLocalValue('icsSources', xs.isEmpty ? null : jsonEncode([for (final x in xs) x.toJson()]));
 
   /// Every calendar Plan lists: the phone's (once allowed), then imported files and links.
   List<CalendarEntry> calendarEntries() {
@@ -347,7 +342,10 @@ extension FutureSpending on WalletController {
 
   void removeCalendarSource(String id) {
     repo.setLocalValue('icsText:$id', null);
-    _saveIcsSources([for (final s in _icsSources) if (s.id != id) s]);
+    _saveIcsSources([
+      for (final s in _icsSources)
+        if (s.id != id) s
+    ]);
     cal.errors.remove(id);
     logEvent(_calLog, Level.INFO, 'calendar.remove', {});
     _refreshView();
@@ -400,7 +398,9 @@ extension FutureSpending on WalletController {
         if (s.kind == CalendarKind.link && s.url != null) {
           try {
             final fresh = await icsFetcher(Uri.parse(s.url!));
-            if (fresh.length > icsMaxBytes || _icsProblem(fresh) != null) throw const IcsFetchException("That link isn't a calendar any more.");
+            if (fresh.length > icsMaxBytes || _icsProblem(fresh) != null) {
+              throw const IcsFetchException("That link isn't a calendar any more.");
+            }
             text = fresh;
             repo.setLocalValue('icsText:${s.id}', fresh);
           } on IcsFetchException catch (e) {
@@ -445,6 +445,6 @@ extension FutureSpending on WalletController {
     return ExportFile('budget-wallet-planned.ics', Uint8List.fromList(utf8.encode(text)), rows);
   }
 
-  // SHIM: at merge `search(q).planned` (searchAll(..., planned:)) replaces this.
-  List<PlannedCost> searchPlanned(String query) => shimSearchPlanned(query, plannedEverything().where((p) => p.title.isNotEmpty).toList());
+  /// Planned costs matching [query] (the planned part of [search]).
+  List<PlannedCost> searchPlanned(String query) => search(query).planned;
 }

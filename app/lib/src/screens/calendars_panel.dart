@@ -228,8 +228,7 @@ class _CalendarsPanelState extends State<CalendarsPanel> {
           ],
           if (_error != null) StatusLabel(key: const ValueKey('calError'), good: false, text: _error!),
           if (reads && wc.cal.lastRead != null)
-            Muted('Read ${wc.cal.events.length} ${wc.cal.events.length == 1 ? 'event' : 'events'} for the next 90 days.',
-                size: 12.5),
+            Muted('Read ${wc.cal.events.length} ${wc.cal.events.length == 1 ? 'event' : 'events'} for the next 90 days.', size: 12.5),
           if (!wc.deviceCalendarsSupported && !wc.linksSupported)
             const Muted('In the browser you can import a .ics file. The phone app reads calendars directly.', size: 12.5),
           const Divider(height: 24),

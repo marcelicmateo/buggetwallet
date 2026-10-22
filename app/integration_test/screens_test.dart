@@ -3,6 +3,7 @@
 import 'dart:convert';
 
 import 'package:budget_wallet/main.dart';
+import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/review.dart';
@@ -36,6 +37,8 @@ void main() {
     wc.repo.importBatch(demoBatch(wc.today()));
     wc.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
     wc.saveCategoryBudgets(demoBudgets);
+    seedDemoPlanned(wc.repo, wc.today(), wc.period().end);
+    await wc.importIcsFile('demo.ics', Uint8List.fromList(utf8.encode(demoIcs(wc.today()))));
 
     await tester.pumpWidget(BudgetWalletApp(wc: wc));
     AppLog.startMonitors();
@@ -46,6 +49,16 @@ void main() {
     await tester.pumpAndSettle();
     await binding.takeScreenshot('1-today-key');
     await tester.tap(find.byKey(const ValueKey('keyLater')));
+    await tester.pumpAndSettle();
+
+    // Today's Coming up and heads-up lines, then the Upcoming screen (F3).
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('comingUpLine')), 200, scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('1-today-coming-up');
+    await tester.tap(find.byKey(const ValueKey('comingUpLine')));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('1-upcoming');
+    await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
 
     for (final (i, tab) in ['Spending', 'Wishlist', 'Goals', 'Plan'].indexed) {
@@ -59,6 +72,11 @@ void main() {
     await tester.scrollUntilVisible(find.text('Suggest from the last 6 months'), 300, scrollable: plan);
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-plan-budgets');
+
+    // Plan › Calendars (F3).
+    await tester.scrollUntilVisible(find.text('Import .ics file'), 300, scrollable: plan);
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-plan-calendars');
 
     // Plan › Weekly review day, Expected bills and Nudges (M4).
     await tester.scrollUntilVisible(find.text('Review day'), 300, scrollable: plan);

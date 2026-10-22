@@ -24,7 +24,8 @@ class _ExportPanelState extends State<ExportPanel> {
 
   static const _labels = {ExportRange.period: 'This period', ExportRange.year: 'This year', ExportRange.all: 'Everything'};
 
-  Future<void> _save(ExportFile Function() make, String what, {String title = 'Save CSV', String empty = 'Nothing to export in this range'}) async {
+  Future<void> _save(ExportFile Function() make, String what,
+      {String title = 'Save CSV', String empty = 'Nothing to export in this range'}) async {
     logNav('export.pressed', {'what': what});
     final f = make();
     if (f.rows == 0) {
@@ -67,14 +68,15 @@ class _ExportPanelState extends State<ExportPanel> {
               key: const ValueKey('exportSummary'),
               onPressed: _busy ? null : () => _save(widget.wc.exportSummary, 'summary'),
               child: const Text('Export monthly summary (CSV)')),
+          OutlinedButton(
+              key: const ValueKey('exportPlanned'),
+              onPressed: _busy
+                  ? null
+                  : () => _save(widget.wc.exportPlannedIcs, 'planned',
+                      title: 'Save calendar file', empty: 'No planned costs with an amount to export'),
+              child: const Text('Planned costs (.ics)')),
         ]),
-        OutlinedButton(
-            key: const ValueKey('exportPlanned'),
-            onPressed: _busy
-                ? null
-                : () => _save(widget.wc.exportPlannedIcs, 'planned',
-                    title: 'Save calendar file', empty: 'No planned costs with an amount to export'),
-            child: const Text('Planned costs (.ics)')),
-        const Muted('Plain files, not encrypted. The .ics file shows your planned costs in any calendar app.'),
+        const Muted('Plain files, not encrypted.'),
+        const Muted('The .ics file shows your planned costs in any calendar app.', size: 12.5),
       ]);
 }

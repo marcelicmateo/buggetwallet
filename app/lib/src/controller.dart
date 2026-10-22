@@ -9,7 +9,6 @@ import 'package:wallet_importer/wallet_importer.dart';
 
 import 'calendar_platform.dart';
 import 'calendar_source.dart';
-import 'future_shim.dart';
 import 'ics_fetch.dart';
 import 'key_store.dart';
 import 'logging.dart';
@@ -301,8 +300,7 @@ class WalletController extends ChangeNotifier {
     logEvent(_log, Level.INFO, 'app.start', {'phase': 'db', 'ms': sw.elapsedMilliseconds, 'opened': db != null, 'unopened': unopened});
 
     sw = Stopwatch()..start();
-    final c =
-        WalletController._(db?.repo ?? WalletRepo.inMemory(), key,
+    final c = WalletController._(db?.repo ?? WalletRepo.inMemory(), key,
         clock: clock, nudges: defaultNudgePlatform(), calendars: defaultCalendarSource(), db: db, locked: locked);
     c._dbPending = db == null;
     c.hasUnopenedDb = unopened;
@@ -483,9 +481,10 @@ class WalletController extends ChangeNotifier {
   String? newPayday(String periodStart) => _paydays.where((d) => d.compareTo(addDays(periodStart, 20)) > 0).lastOrNull;
 
   /// The budget of the running pay period. Confirmed recurring bills are reserved in it (`reservedBills`, `dueBills`).
-  // SHIM: at merge add `planned: plannedOpen()` to computePeriod (core F1 reserves planned costs in the safe-to-spend number).
   PeriodBudget period() => _cached(
-      'period', () => timed('wc.period', () => computePeriod(txs, effectiveSettings, goals, today(), bills: recurringBills()), warnMs: 50));
+      'period',
+      () => timed('wc.period', () => computePeriod(txs, effectiveSettings, goals, today(), bills: recurringBills(), planned: plannedOpen()),
+          warnMs: 50));
 
   /// Saved or lost per pay period (salary to salary), oldest first; the last one is still running.
   List<PeriodSummary> payPeriods({int count = 12}) => _cached('payPeriods$count',
@@ -1138,9 +1137,18 @@ class WalletController extends ChangeNotifier {
 
   /// Everything that matches [query] (transactions, goals, wishlist, expected bills). Cached per data version. Logs counts only.
   SearchResult search(String query) => _cached('search$query', () {
-        final r = searchAll(query, txs: txs, goals: goals, wishlist: wish, bills: recurringBills());
-        logEvent(_searchLog, Level.FINE, 'search.run',
-            {'chars': query.length, 'tx': r.txs.length, 'goals': r.goals.length, 'wish': r.wishlist.length, 'bills': r.bills.length});
+        final r = searchAll(query, txs: txs, goals: goals, wishlist: wish, bills: recurringBills(), planned: [
+          for (final p in plannedEverything())
+            if (!p.deleted && p.title.isNotEmpty) p
+        ]);
+        logEvent(_searchLog, Level.FINE, 'search.run', {
+          'chars': query.length,
+          'tx': r.txs.length,
+          'goals': r.goals.length,
+          'wish': r.wishlist.length,
+          'bills': r.bills.length,
+          'planned': r.planned.length
+        });
         return r;
       });
 

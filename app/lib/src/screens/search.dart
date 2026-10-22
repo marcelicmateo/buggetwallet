@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:wallet_core/wallet_core.dart' show PlannedCost, PlannedStatus;
 
 import '../controller.dart';
 import '../format.dart';
-import '../future_shim.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';

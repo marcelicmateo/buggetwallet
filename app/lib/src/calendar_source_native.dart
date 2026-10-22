@@ -4,7 +4,6 @@ import 'package:device_calendar_plus/device_calendar_plus.dart' hide CalendarSou
 import 'package:wallet_core/wallet_core.dart';
 
 import 'calendar_source.dart';
-import 'future_shim.dart';
 import 'platform.dart';
 
 final _log = Logger('bw.calendar');

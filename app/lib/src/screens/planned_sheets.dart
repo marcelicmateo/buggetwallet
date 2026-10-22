@@ -3,7 +3,6 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
-import '../future_shim.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -162,7 +161,8 @@ class _PlannedEntrySheetState extends State<PlannedEntrySheet> {
       const SizedBox(height: 6),
       const DoubleRule(),
       const SizedBox(height: 6),
-      Muted('${longDateOrRaw(p.date)} · ${p.category ?? 'No category'} · ${p.source == PlannedSource.calendar ? 'From a calendar' : 'Added by you'}'),
+      Muted(
+          '${longDateOrRaw(p.date)} · ${p.category ?? 'No category'} · ${p.source == PlannedSource.calendar ? 'From a calendar' : 'Added by you'}'),
       const SizedBox(height: 14),
       if (!_paying)
         Wrap(spacing: 8, runSpacing: 8, children: [

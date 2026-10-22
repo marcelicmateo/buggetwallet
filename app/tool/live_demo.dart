@@ -3,9 +3,12 @@
 // Live mode keeps that folder in dist/live/demo/; BW_LIVE_DEMO=1 (set by tools/live.sh) guards against seeding
 // anything else.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:budget_wallet/main.dart';
+import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/logging.dart';
 import 'package:flutter/widgets.dart';
 
@@ -23,6 +26,8 @@ Future<void> main() async {
       wc.repo.importBatch(demoBatch(wc.today()));
       wc.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
       wc.saveCategoryBudgets(demoBudgets);
+      seedDemoPlanned(wc.repo, wc.today(), wc.period().end);
+      await wc.importIcsFile('demo.ics', Uint8List.fromList(utf8.encode(demoIcs(wc.today()))));
     }
     final sinceRunApp = Stopwatch()..start();
     runApp(BudgetWalletApp(wc: wc));

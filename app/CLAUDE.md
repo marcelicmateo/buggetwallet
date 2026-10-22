@@ -50,6 +50,21 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   `SearchPane`): the icon in Spending's header or Ctrl+F (`HomeShell._searchRequest`) swaps the page for a pinned field + ruled result sections via an
   `IndexedStack` (the page keeps its scroll); 2+ characters, 150 ms debounce, `wc.search(q)` cached per data version; goal/wish/bill rows jump to their tab.
   Log events (counts only): `backup.done|restored|failed`, `export.transactions|summary|saved`, `search.run`.
+- Future spending (F3): `controller_future.dart` (a `part` of controller.dart: `extension FutureSpending` + `CalendarState` `wc.cal`): planned costs
+  (`plannedOpen/plannedEverything`, `upcomingItems(from,to)` cached per data version + `cal.version`, `upcomingRange(next:)` = the pay period or the next one,
+  `comingUp()`, `countedIn`, `addPlannedCost/editPlannedCost/confirmSuggestion/dismissSuggestion/markPlannedPaid/skipPlanned/deletePlanned`,
+  `paidCandidatesFor`), heads-ups (`headsUpLines()`, synced `headsUpCents/headsUpDays` via `saveHeadsUp`, device-local `headsUpNotify`, `rescheduleHeadsUps()`
+  after every reload, nudge reschedule and resume; `NudgePlatform.scheduleHeadsUps/cancelHeadsUps`: channel `headsup`, ids 1000..1019, 09:00 local on
+  date - days, text `headsUpBody` has no title or amount; `AndroidNudges.cancelAll` also removes them, so `rescheduleNudges` always ends with `rescheduleHeadsUps`),
+  calendars (`CalendarSource` interface in `calendar_source.dart`, `calendar_platform.dart` picks `AndroidCalendars` (plugin `device_calendar_plus`, read calls only; its
+  full permission request needs READ and WRITE_CALENDAR declared, the app never writes) or `NoCalendars` on the web/desktop; `.ics` files (`importIcsFile`, 2 MB cap) and
+  links (`addIcsLink`, `ics_fetch.dart`, not on the web) are kept as device-local values `icsSources` / `icsText:<id>`, device calendars chosen in `calendarsOn`; `readCalendars`
+  reads [today, today+90] at start, resume, choose, import and "Read now", links are fetched again first and a failure keeps the saved copy and shows a message on the entry).
+  Screens: `screens/upcoming.dart` (`openUpcoming` page/dialog, `PeriodGrid` month grids with a mark per kind, ruled list with Confirm / Change / No cost, "Set aside" total),
+  `screens/planned_sheets.dart` (`PlannedFormSheet` add/edit/confirm, `PlannedEntrySheet` Change / Paid (picker) / Skip / Delete), `screens/calendars_panel.dart` (Plan › Calendars +
+  heads-up fields), Today's `comingUpLine` and `headsUp:<key>` lines, Plan › Nudges `headsUpSwitch`, Plan › Export `exportPlanned`, a "Planned costs" section in search.
+  Logs (counts only): `planned.add|edit|dismiss|paid|skip|delete`, `calendar.read {calendars, events, unsupported, trigger}`, `calendar.import {ok, kind, reason}`,
+  `calendar.access|choose|remove`, `headsup.enabled|scheduled`. Tests: `test/future_spending_test.dart` (`futureWallet`, `FakeCalendars`, `fakeIcs`, `FakeNudges.headsUps` in `test/support/wallet.dart`).
 - Nudges: `nudges.dart` (pure: ~14 funny, encouraging lines with no digits or names, `nudgeFor(date)`, `nudgeSlots(now)` = 15:00 on
   weekdays and 11:00 on Sunday for 4 weeks, `NudgePlatform`/`NoNudges`) and `notifier.dart` (native-only: `AndroidNudges` with
   `flutter_local_notifications`, one inexact `zonedSchedule` per slot, no exact-alarm permission; the time zone name comes from

@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:budget_wallet/src/calendar_source.dart';
 import 'package:budget_wallet/src/controller.dart';
-import 'package:budget_wallet/src/future_shim.dart';
 import 'package:budget_wallet/src/nudges.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:flutter/material.dart';
@@ -171,14 +170,19 @@ class FakeCalendars implements CalendarSource {
   @override
   Future<List<CalendarEvent>> events(Set<String> calendarIds, String from, String to) async {
     reads++;
-    if (failWith != null) throw failWith!;
-    return [for (final e in eventList) if (calendarIds.contains(e.calendarId) && e.date.compareTo(from) >= 0 && e.date.compareTo(to) <= 0) e];
+    if (failWith != null) Error.throwWithStackTrace(failWith!, StackTrace.current);
+    return [
+      for (final e in eventList)
+        if (calendarIds.contains(e.calendarId) && e.date.compareTo(from) >= 0 && e.date.compareTo(to) <= 0) e
+    ];
   }
 }
 
 /// A synthetic calendar file with the given events (UID, date, title).
-String fakeIcs(List<(String uid, String date, String title)> events) =>
-    'BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${[for (final e in events) 'BEGIN:VEVENT\r\nUID:${e.$1}\r\nDTSTART;VALUE=DATE:${e.$2.replaceAll('-', '')}\r\nSUMMARY:${e.$3}\r\nEND:VEVENT\r\n'].join()}END:VCALENDAR\r\n';
+String fakeIcs(List<(String uid, String date, String title)> events) => 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${[
+      for (final e in events)
+        'BEGIN:VEVENT\r\nUID:${e.$1}\r\nDTSTART;VALUE=DATE:${e.$2.replaceAll('-', '')}\r\nSUMMARY:${e.$3}\r\nEND:VEVENT\r\n'
+    ].join()}END:VCALENDAR\r\n';
 
 /// The data of [budgetWallet] (Tuesday 20 Oct 2026; Groceries behind pace, Eating out over) plus what the weekly review and the bills need:
 /// three card payments in the last week without a learned category, a monthly gym payment three months running (a bill
