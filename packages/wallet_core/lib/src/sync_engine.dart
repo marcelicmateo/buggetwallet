@@ -124,6 +124,9 @@ enum TransportFailure {
   /// The relay speaks an older API than this build (update the relay).
   olderApi,
 
+  /// The relay's clock (its `Date` header) differs from this device's by more than a day: not trusted, not retried.
+  clockSkew,
+
   /// Anything else.
   other,
 }
@@ -274,6 +277,8 @@ class SyncEngine {
       TransportFailure.full => 'The relay is full. Free space on the home server or raise the relay\'s limits.',
       TransportFailure.newerApi => 'The relay runs a newer version. Update the app.',
       TransportFailure.olderApi => 'The relay runs an older version. Update the relay on the home server.',
+      TransportFailure.clockSkew =>
+        "This device's clock and the relay's clock differ by more than a day. Check the date and time settings.",
       _ => 'The relay answered with an error. Try again later.',
     });
   }
