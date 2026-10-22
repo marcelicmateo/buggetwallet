@@ -44,9 +44,16 @@ const entityTables = {
     ['payee', 'label', 'category', 'expected_amount', 'interval_days', 'next_due', 'status', 'last_paid_tx', 'deleted']
   ),
   'planned': ('planned', ['title', 'date', 'amount', 'category', 'source', 'source_ref', 'status', 'paid_tx', 'deleted']),
+  'bill': (
+    'bills',
+    [
+      'source', 'status', 'external_id', 'date', 'due_date', 'payee', 'iban', 'reference', 'description', 'category', 'note', //
+      'total', 'currency', 'items', 'unsure', 'linked_tx', 'warranty_until', 'return_by', 'blob', 'blob_type', 'blob_bytes', 'deleted',
+    ]
+  ),
 };
 
-const dataTables = ['tx', 'goals', 'wish', 'settings', 'merchant_rules', 'goal_contrib', 'recurring', 'planned'];
+const dataTables = ['tx', 'goals', 'wish', 'settings', 'merchant_rules', 'goal_contrib', 'recurring', 'planned', 'bills'];
 
 /// Every row of the data tables (and the field clocks), in a stable order, as plain maps.
 Map<String, List<Map<String, Object?>>> dump(WalletRepo r, {bool clocks = true}) => {
@@ -95,6 +102,12 @@ class _Flaky implements SyncTransport {
   Future<void> putSnapshot(String id, Map<String, int> covers, List<int> bytes) => inner.putSnapshot(id, covers, bytes);
   @override
   Future<List<int>> getSnapshot(String id) => inner.getSnapshot(id);
+  @override
+  Future<void> putBlob(String hash, List<int> bytes) => inner.putBlob(hash, bytes);
+  @override
+  Future<List<int>?> getBlob(String hash) => inner.getBlob(hash);
+  @override
+  Future<void> deleteBlob(String hash) => inner.deleteBlob(hash);
 }
 
 /// One simulated device: its own database and a skewed wall clock, syncing through a [Net]. With [dbPath] the

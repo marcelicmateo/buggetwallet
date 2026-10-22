@@ -35,6 +35,12 @@ class _Failing implements SyncTransport {
   Future<void> putSnapshot(String id, Map<String, int> covers, List<int> bytes) async => _fail();
   @override
   Future<List<int>> getSnapshot(String id) async => _fail();
+  @override
+  Future<void> putBlob(String hash, List<int> bytes) async => _fail();
+  @override
+  Future<List<int>?> getBlob(String hash) async => _fail();
+  @override
+  Future<void> deleteBlob(String hash) async => _fail();
 }
 
 void main() {

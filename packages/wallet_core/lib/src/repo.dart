@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:sqlite3/common.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'bills.dart';
 import 'categories.dart';
 import 'dates.dart';
 import 'hlc.dart';
@@ -58,6 +59,14 @@ const Map<String, (String, List<String>)> _entities = {
   ),
   // Planned costs (v6, §4.3): hand-added, calendar events given an amount or dismissed (see [PlannedCost]).
   'planned': ('planned', ['title', 'date', 'amount', 'category', 'source', 'source_ref', 'status', 'paid_tx', 'deleted']),
+  // Bills (v7, stage B): receipts, slips, e-invoices, PDFs and photos (see [Bill]).
+  'bill': (
+    'bills',
+    [
+      'source', 'status', 'external_id', 'date', 'due_date', 'payee', 'iban', 'reference', 'description', 'category', 'note', //
+      'total', 'currency', 'items', 'unsure', 'linked_tx', 'warranty_until', 'return_by', 'blob', 'blob_type', 'blob_bytes', 'deleted',
+    ]
+  ),
 };
 
 const _schema = '''
@@ -85,6 +94,15 @@ CREATE TABLE IF NOT EXISTS planned(id TEXT PRIMARY KEY, title TEXT NOT NULL DEFA
   category TEXT, source TEXT NOT NULL DEFAULT 'manual', source_ref TEXT, status TEXT NOT NULL DEFAULT 'open', paid_tx TEXT,
   deleted INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS planned_date ON planned(date);
+CREATE TABLE IF NOT EXISTS bills(id TEXT PRIMARY KEY, source TEXT NOT NULL DEFAULT 'manual', status TEXT NOT NULL DEFAULT 'review',
+  external_id TEXT, date TEXT, due_date TEXT, payee TEXT, iban TEXT, reference TEXT, description TEXT, category TEXT, note TEXT,
+  total INTEGER, currency TEXT NOT NULL DEFAULT 'EUR', items TEXT NOT NULL DEFAULT '[]', unsure INTEGER NOT NULL DEFAULT 0, linked_tx TEXT,
+  warranty_until TEXT, return_by TEXT, blob TEXT, blob_type TEXT, blob_bytes INTEGER, deleted INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS bills_date ON bills(date);
+CREATE INDEX IF NOT EXISTS bills_linked ON bills(linked_tx);
+CREATE TABLE IF NOT EXISTS blob_cache(hash TEXT PRIMARY KEY, sealed BLOB NOT NULL, used_at INTEGER NOT NULL, bytes INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS blob_outbox(hash TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS blob_delete(hash TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS clocks(entity TEXT NOT NULL, id TEXT NOT NULL, field TEXT NOT NULL, hlc TEXT NOT NULL, PRIMARY KEY(entity, id, field));
 CREATE TABLE IF NOT EXISTS outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sync_cursor(device TEXT PRIMARY KEY, seq INTEGER NOT NULL);
@@ -127,8 +145,8 @@ class WalletRepo {
   /// Bump when a new synced entity or field is added. Version 2 added `goal_contrib`, version 3 `tx.kind_hint` and
   /// `tx.transfer_to` (an older build dropped those fields from the ops it read, so they are replayed once), version 4
   /// the `exchange` hint (Revolut Exchange rows imported by version 3 as `ownTransfer` are rewritten once), version 5
-  /// the `recurring` entity, version 6 the `planned` entity.
-  static const schemaVersion = 6;
+  /// the `recurring` entity, version 6 the `planned` entity, version 7 the `bill` entity.
+  static const schemaVersion = 7;
 
   /// The folder sync's bookkeeping (`peer_files`: which files of the shared folder were read) means nothing on a relay,
   /// whose sequence numbers start over (every device's first relay file is its whole state), so it is dropped once.
@@ -246,7 +264,7 @@ class WalletRepo {
 
   /// Column types, for checking synced values: integer columns, 0/1 flags (a bool is stored as 0/1), and the
   /// columns that may hold NULL. Every other synced column is text.
-  static const _intCols = {'amount', 'target', 'saved', 'monthly', 'sort', 'price', 'added', 'decided', 'expected_amount', 'interval_days'};
+  static const _intCols = {'amount', 'target', 'saved', 'monthly', 'sort', 'price', 'added', 'decided', 'expected_amount', 'interval_days', 'total', 'unsure', 'blob_bytes'};
   static const _flagCols = {'manual', 'deleted'};
   static const _nullable = {
     'tx': {'category', 'note', 'matched_to', 'seen_bank', 'kind_hint', 'transfer_to'},
@@ -256,6 +274,10 @@ class WalletRepo {
     'rule': {'category'},
     'recurring': {'last_paid_tx'},
     'planned': {'amount', 'category', 'source_ref', 'paid_tx'},
+    'bill': {
+      'external_id', 'date', 'due_date', 'payee', 'iban', 'reference', 'description', 'category', 'note', 'total', 'linked_tx', //
+      'warranty_until', 'return_by', 'blob', 'blob_type', 'blob_bytes',
+    },
   };
 
   /// [value] as it is stored for [entity].[field], or [_bad] if it has the wrong type. A whole number sent as a
@@ -378,10 +400,10 @@ class WalletRepo {
   }
 
   /// Whether nothing has been put into this wallet yet: no transactions, goals, goal contributions, wishes, recurring
-  /// bills, planned costs, merchant rules (deleted rows count: they were data once) and no synced settings. Only such a wallet may
+  /// bills, planned costs, bills (receipts, slips), merchant rules (deleted rows count: they were data once) and no synced settings. Only such a wallet may
   /// take a restore from a backup; anything else merges through the sync folder.
   bool get isEmpty {
-    for (final table in ['tx', 'goals', 'goal_contrib', 'wish', 'recurring', 'planned', 'merchant_rules', 'settings']) {
+    for (final table in ['tx', 'goals', 'goal_contrib', 'wish', 'recurring', 'planned', 'bills', 'merchant_rules', 'settings']) {
       if (db.select('SELECT 1 FROM $table LIMIT 1').isNotEmpty) return false;
     }
     return true;
@@ -509,10 +531,13 @@ class WalletRepo {
   }
 
   /// After rows changed (import, delete, remote ops): pairs own-account transfers, then matches hand-added expenses
-  /// (a paired row is a transfer, so it is no longer a payment a cash entry could be). Returns (pairs, matches).
+  /// (a paired row is a transfer, so it is no longer a payment a cash entry could be), then links confirmed bills to
+  /// their payments ([planBillLinks]). Returns (pairs, matches).
   (int, int) _reconcile() {
     final pairs = _pairTransfers();
-    return (pairs, _matchManual());
+    final matches = _matchManual();
+    _autoLinkBills();
+    return (pairs, matches);
   }
 
   /// Device-local: whether this device's last sync run was caught up (`'1'`/`'0'`, written by `SyncEngine` after every
@@ -539,6 +564,7 @@ class WalletRepo {
     if (_meta('match_pending') == null) return;
     _reconcile();
     refreshRecurring(_today());
+    _purgeBlobCache();
   }
 
   /// Today's date on this device's clock (the one the HLC uses, so tests can set it).
@@ -796,6 +822,12 @@ class WalletRepo {
           ('tx', r['id'] as String, {'transfer_to': null}),
       ]);
     }
+    // A bill paid by this row is unpaid again at once (its planned row reopens and reserves): exact money.
+    final today = _today();
+    _write([
+      for (final r in db.select('SELECT * FROM bills WHERE deleted = 0 AND linked_tx = ?', [txId]))
+        ..._billWrites(Bill.fromRow(r), {'linked_tx': null}, today),
+    ]);
     _reconcileLocal();
   }
 
@@ -1136,6 +1168,381 @@ class WalletRepo {
       )
     ]);
     logEvent(_log, Level.INFO, 'planned.dismiss', {'existed': exists});
+  }
+
+  // ---------- bills (stage B, docs/context/BILLS_API.md §2) ----------
+
+  /// Live bills (deleted ones too with [includeDeleted]), newest first: by date (or due date), then id.
+  List<Bill> bills({bool includeDeleted = false}) => [
+        for (final r in db.select('SELECT * FROM bills ${includeDeleted ? '' : 'WHERE deleted = 0'} '
+            "ORDER BY COALESCE(date, due_date, '') DESC, id"))
+          Bill.fromRow(r),
+      ];
+
+  /// One bill by id (deleted ones included), or null.
+  Bill? bill(String id) {
+    final rs = db.select('SELECT * FROM bills WHERE id = ?', [id]);
+    return rs.isEmpty ? null : Bill.fromRow(rs.first);
+  }
+
+  Bill _liveBill(String id) {
+    final b = bill(id);
+    if (b == null || b.deleted) throw ArgumentError('No such bill.');
+    return b;
+  }
+
+  static bool _okDate(String? d) => d != null && _isoDate.hasMatch(d) && isoDate(parseIso(d)) == d;
+  static bool _okTotal(int? t) => t != null && t > 0 && t <= WalletSettings.maxAmount;
+
+  /// Adds a bill read from a code, file or photo as status review and returns (id, isNew). With an external id the id
+  /// is [Bill.idFor] it, so the same bill read on two devices is one row. A bill already here (same external id) keeps
+  /// what it has: a bill in review gets only its empty fields filled, a confirmed one only its file (when it had none)
+  /// and its items (when empty); its money fields never change. A deleted one is brought back as a new review bill
+  /// with the values read now (isNew true). Values a reader got wrong are left out, never thrown: a date that is not a
+  /// real `YYYY-MM-DD`, a total ≤ 0, items past the limits (cut to [maxBillItems], names to [maxBillItemName]). A
+  /// [file] the bill does not take is dropped again (never uploaded, or deleted on the relay). A [file] type outside
+  /// [blobTypes]: [ArgumentError].
+  (String, bool) importBill(NormalizedBill b, {BlobRef? file}) {
+    if (file != null && !blobTypes.contains(file.type)) throw ArgumentError('Unknown file type.');
+    String? text(String? s) => s == null || s.trim().isEmpty ? null : s.trim();
+    final items = [
+      for (final i in b.items.take(maxBillItems))
+        BillItem(
+            name: i.name.length > maxBillItemName ? i.name.substring(0, maxBillItemName) : i.name, quantity: i.quantity, amount: i.amount)
+    ];
+    final read = <String, Object?>{
+      'source': b.source.name,
+      'external_id': text(b.externalId),
+      'date': _okDate(b.date) ? b.date : null,
+      'due_date': _okDate(b.dueDate) ? b.dueDate : null,
+      'payee': text(b.payee),
+      'iban': text(b.iban),
+      'reference': text(b.reference),
+      'description': text(b.description),
+      'total': _okTotal(b.total) ? b.total : null,
+      'currency': RegExp(r'^[A-Z]{3}$').hasMatch(b.currency) ? b.currency : 'EUR',
+      'items': encodeBillItems(items),
+      'unsure': b.unsure < 0 ? 0 : b.unsure,
+      if (file != null) ...{'blob': file.hash, 'blob_type': file.type, 'blob_bytes': file.bytes},
+    };
+    final ext = read['external_id'] as String?;
+    final id = ext != null ? Bill.idFor(ext) : _newId('b');
+    final old = ext != null ? bill(id) : null;
+    final String event;
+    var isNew = true, fileUsed = file != null;
+    if (old == null) {
+      // No status or deleted here: a late import on another device must never undo a confirm or delete made elsewhere
+      // (the column defaults are review and live).
+      _write([
+        (
+          'bill',
+          id,
+          {
+            for (final e in read.entries)
+              if (e.value != null) e.key: e.value
+          }
+        )
+      ]);
+      event = 'bills.import';
+    } else if (old.deleted) {
+      _write([
+        (
+          'bill',
+          id,
+          {
+            for (final c in _entities['bill']!.$2) c: null,
+            ...read,
+            'items': read['items'] ?? '[]',
+            'status': BillStatus.review.name,
+            'deleted': 0,
+          }
+        )
+      ]);
+      event = 'bills.revive';
+    } else {
+      isNew = false;
+      final row = db.select('SELECT * FROM bills WHERE id = ?', [id]).first;
+      bool empty(String k) => row[k] == null || row[k] == '' || (k == 'items' && (decodeBillItems(row[k]) ?? const []).isEmpty);
+      const never = {'source', 'currency', 'unsure', 'external_id'};
+      final allowed = old.confirmed ? const {'items', 'blob', 'blob_type', 'blob_bytes'} : read.keys.toSet();
+      final fill = <String, Object?>{
+        for (final e in read.entries)
+          if (allowed.contains(e.key) && !never.contains(e.key) && e.value != null && empty(e.key)) e.key: e.value,
+      };
+      if (row['blob'] != null) fill.removeWhere((k, _) => k.startsWith('blob'));
+      fileUsed = fill.containsKey('blob');
+      _write([if (fill.isNotEmpty) ('bill', id, fill)]);
+      event = 'bills.reimport';
+    }
+    if (file != null && !fileUsed) _dropBlob(file.hash);
+    logEvent(_log, Level.INFO, event, {'source': b.source.name, 'file': fileUsed, 'items': items.length});
+    return (id, isNew);
+  }
+
+  /// Changes the given fields only (null = unchanged); the clear flags set those to none. A bad date, a total ≤ 0 or
+  /// items past the limits: [ArgumentError]. A confirmed bill's planned row follows ([_billWrites]).
+  void updateBill(String id,
+      {String? date,
+      String? dueDate,
+      int? total,
+      String? payee,
+      String? iban,
+      String? reference,
+      String? description,
+      String? category,
+      String? note,
+      List<BillItem>? items,
+      String? warrantyUntil,
+      String? returnBy,
+      bool clearDueDate = false,
+      bool clearWarranty = false,
+      bool clearReturnBy = false,
+      bool clearCategory = false}) {
+    for (final d in [date, dueDate, warrantyUntil, returnBy]) {
+      if (d != null && !_okDate(d)) throw ArgumentError('Bad date.');
+    }
+    if (total != null && !_okTotal(total)) throw ArgumentError('Bad amount.');
+    final itemsText = items == null ? null : encodeBillItems(items);
+    if (items != null && itemsText == null) throw ArgumentError('Too many items or a name too long.');
+    final b = _liveBill(id);
+    final fields = <String, Object?>{
+      if (date != null) 'date': date,
+      if (clearDueDate) 'due_date': null else if (dueDate != null) 'due_date': dueDate,
+      if (total != null) 'total': total,
+      if (payee != null) 'payee': payee,
+      if (iban != null) 'iban': iban,
+      if (reference != null) 'reference': reference,
+      if (description != null) 'description': description,
+      if (clearCategory) 'category': null else if (category != null) 'category': category,
+      if (note != null) 'note': note,
+      if (itemsText != null) 'items': itemsText,
+      if (clearWarranty) 'warranty_until': null else if (warrantyUntil != null) 'warranty_until': warrantyUntil,
+      if (clearReturnBy) 'return_by': null else if (returnBy != null) 'return_by': returnBy,
+    };
+    if (fields.isEmpty) return;
+    _write(_billWrites(b, fields, _today()));
+    logEvent(_log, Level.INFO, 'bills.update', {'fields': fields.length});
+  }
+
+  /// The owner checked the bill: review → confirmed. Needs a date and a total > 0, else [ArgumentError]. A due date
+  /// from today on gives it a planned row (reserved until paid); a matching bank row may now link it ([planBillLinks]):
+  /// at once while [syncCaughtUp], else at the next caught-up sync.
+  void confirmBill(String id) {
+    final b = _liveBill(id);
+    if (!_okDate(b.date)) throw ArgumentError('The bill needs a date.');
+    if (!_okTotal(b.total)) throw ArgumentError('The bill needs a total.');
+    _write(_billWrites(b, {if (!b.confirmed) 'status': BillStatus.confirmed.name}, _today()));
+    logEvent(_log, Level.INFO, 'bills.confirm', {'source': b.source.name});
+    if (syncCaughtUp) {
+      _autoLinkBills();
+    } else {
+      _setMeta('match_pending', '1');
+    }
+  }
+
+  /// The owner picked [txId] as the bill's payment. A transaction already linked to another bill, an unknown or
+  /// deleted transaction or bill: [ArgumentError]. The paying row's category never changes.
+  void linkBill(String id, String txId) {
+    final b = _liveBill(id);
+    final t = transaction(txId);
+    if (t == null || t.deleted) throw ArgumentError('No such transaction.');
+    if (db.select('SELECT 1 FROM bills WHERE deleted = 0 AND linked_tx = ? AND id != ?', [txId, id]).isNotEmpty) {
+      throw ArgumentError('That payment belongs to another bill.');
+    }
+    _write(_billWrites(b, {'linked_tx': txId}, _today()));
+    logEvent(_log, Level.INFO, 'bills.link', {'auto': false});
+  }
+
+  /// Not paid by that transaction after all: unpaid again (its planned row reopens). Unknown bill: [ArgumentError].
+  void unlinkBill(String id) {
+    final b = _liveBill(id);
+    if (!b.paid) return;
+    _write(_billWrites(b, {'linked_tx': null}, _today()));
+    logEvent(_log, Level.INFO, 'bills.unlink');
+  }
+
+  /// Deletes the bill (the row stays, deleted; the same code read again brings it back as new) and its planned row;
+  /// its file is dropped from this device and deleted on the relay at the next sync, unless another live bill points
+  /// to it. Unknown bill: [ArgumentError].
+  void deleteBill(String id) {
+    final b = _liveBill(id);
+    _write(_billWrites(b, {'deleted': 1}, _today()));
+    if (b.blob case final h?) _dropBlob(h);
+    logEvent(_log, Level.INFO, 'bills.delete', {'file': b.blob != null});
+  }
+
+  /// A cash receipt: one write holds the hand-added expense (−total on the bill's date, [category], payee as
+  /// description, `seen_bank` like [addManual]), the link, and the confirm when the bill was in review (adding it as
+  /// money is the owner's check). No date or total, or already paid: [ArgumentError]. Returns the expense's id.
+  String addExpenseFromBill(String id, {required String category}) {
+    final b = _liveBill(id);
+    if (!_okDate(b.date)) throw ArgumentError('The bill needs a date.');
+    if (!_okTotal(b.total)) throw ArgumentError('The bill needs a total.');
+    if (b.paid) throw ArgumentError('The bill is already paid.');
+    final txId = _newId('m');
+    _write([
+      (
+        'tx',
+        txId,
+        {
+          'source': 'manual',
+          'date': b.date,
+          'amount': -b.total!,
+          'currency': b.currency,
+          'description': b.payee ?? '',
+          'category': category,
+          'note': '',
+          'manual': 1,
+          'deleted': 0,
+          'seen_bank': _seenBank(),
+        }
+      ),
+      ..._billWrites(b, {'linked_tx': txId, if (!b.confirmed) 'status': BillStatus.confirmed.name}, _today()),
+    ]);
+    logEvent(_log, Level.INFO, 'bills.cashExpense');
+    return txId;
+  }
+
+  /// The id of a bill's planned row (`bill:<billId>`, the same on every device).
+  static String billPlannedId(String billId) => '${PlannedSource.bill.name}:$billId';
+
+  /// The writes for [fields] on bill [b], plus what keeps its planned row in step: a confirmed, unpaid, live bill with
+  /// a total and a due date has one open row (created only while the due date is today or later; an existing row
+  /// follows edits); a paid bill's row is marked paid with the payment; a deleted bill's row, or one whose due date or
+  /// total is gone, is deleted. Nothing is written for a row already as it should be.
+  List<(String, String, Map<String, Object?>)> _billWrites(Bill b, Map<String, Object?> fields, String today) {
+    final n = Bill.fromRow({...db.select('SELECT * FROM bills WHERE id = ?', [b.id]).first, ...fields});
+    final pid = billPlannedId(b.id);
+    final rs = db.select('SELECT * FROM planned WHERE id = ?', [pid]);
+    final p = rs.isEmpty ? null : PlannedCost.fromRow(rs.first);
+    Map<String, Object?> want;
+    if (n.deleted || !n.confirmed || !_okTotal(n.total) || !_okDate(n.dueDate)) {
+      want = p == null || p.deleted ? const {} : {'deleted': 1};
+    } else if (n.paid) {
+      want = p == null || p.deleted ? const {} : {'status': PlannedStatus.paid.name, 'paid_tx': n.linkedTx};
+    } else if ((p == null || p.deleted) && n.dueDate!.compareTo(today) < 0) {
+      want = const {};
+    } else {
+      want = {
+        'title': n.title,
+        'date': n.dueDate,
+        'amount': n.total,
+        'category': n.category,
+        'source': PlannedSource.bill.name,
+        'source_ref': n.id,
+        'status': PlannedStatus.open.name,
+        'paid_tx': null,
+        'deleted': 0,
+      };
+    }
+    if (rs.isNotEmpty && want.isNotEmpty) {
+      final cur = rs.first;
+      want = {
+        for (final e in want.entries)
+          if (cur[e.key] != e.value) e.key: e.value
+      };
+    }
+    return [
+      if (fields.isNotEmpty) ('bill', b.id, fields),
+      if (want.isNotEmpty) ('planned', pid, want),
+    ];
+  }
+
+  /// Links confirmed bills to their payments ([planBillLinks]) and closes their planned rows. Runs in [_reconcile]
+  /// (only while caught up) and after a confirm. Logged as `bills.autoLink` on `bw.perf` with counts.
+  void _autoLinkBills() {
+    final open = [
+      for (final r in db.select("SELECT * FROM bills WHERE deleted = 0 AND status = 'confirmed' AND linked_tx IS NULL AND total > 0"))
+        Bill.fromRow(r)
+    ];
+    if (open.isEmpty) return;
+    final t = PerfTimer('bills.autoLink');
+    final totals = {for (final b in open) -b.total!}.toList();
+    final rows = [
+      for (final r in db.select(
+          'SELECT * FROM tx WHERE manual = 0 AND deleted = 0 AND amount IN (${List.filled(totals.length, '?').join(',')})', totals))
+        Tx.fromRow(r)
+    ];
+    final linked = [
+      for (final r in db.select('SELECT * FROM bills WHERE deleted = 0 AND linked_tx IS NOT NULL')) Bill.fromRow(r),
+    ];
+    final plan = planBillLinks([...open, ...linked], rows);
+    final today = _today();
+    final byId = {for (final b in open) b.id: b};
+    _write([
+      for (final e in plan.entries) ..._billWrites(byId[e.key]!, {'linked_tx': e.value}, today),
+    ]);
+    t.done({'bills': open.length, 'rows': rows.length, 'linked': plan.length});
+  }
+
+  // ---------- bill files (device-local, never synced or backed up; see BlobStore) ----------
+
+  int _nextBlobUse() => (db.select('SELECT MAX(used_at) AS m FROM blob_cache').first['m'] as int? ?? 0) + 1;
+
+  /// Keeps sealed [bytes] under [hash] in the cache (most recently used), and queues it for upload with [queue].
+  void putCachedBlob(String hash, List<int> bytes, {bool queue = false}) {
+    db.execute('INSERT OR REPLACE INTO blob_cache(hash, sealed, used_at, bytes) VALUES(?, ?, ?, ?)', [hash, bytes, _nextBlobUse(), bytes.length]);
+    if (queue) db.execute('INSERT OR IGNORE INTO blob_outbox(hash) VALUES(?)', [hash]);
+  }
+
+  /// The sealed bytes cached for [hash], or null; with [touch] it becomes the most recently used.
+  List<int>? cachedBlob(String hash, {bool touch = true}) {
+    final rs = db.select('SELECT sealed FROM blob_cache WHERE hash = ?', [hash]);
+    if (rs.isEmpty) return null;
+    if (touch) db.execute('UPDATE blob_cache SET used_at = ? WHERE hash = ?', [_nextBlobUse(), hash]);
+    return rs.first['sealed'] as List<int>;
+  }
+
+  /// Removes [hash] from the cache (never one still queued for upload).
+  void uncacheBlob(String hash) =>
+      db.execute('DELETE FROM blob_cache WHERE hash = ? AND hash NOT IN (SELECT hash FROM blob_outbox)', [hash]);
+
+  /// Drops the least recently used cached files until the cache holds at most [maxBytes] sealed bytes; files still
+  /// queued for upload are never dropped. Returns how many were dropped.
+  int evictBlobs(int maxBytes) {
+    var total = cachedBlobBytes, n = 0;
+    if (total <= maxBytes) return 0;
+    for (final r in db.select('SELECT hash, bytes FROM blob_cache WHERE hash NOT IN (SELECT hash FROM blob_outbox) ORDER BY used_at')) {
+      if (total <= maxBytes) break;
+      db.execute('DELETE FROM blob_cache WHERE hash = ?', [r['hash']]);
+      total -= r['bytes'] as int;
+      n++;
+    }
+    return n;
+  }
+
+  /// Sealed bytes in the cache.
+  int get cachedBlobBytes => db.select('SELECT COALESCE(SUM(bytes), 0) AS s FROM blob_cache').first['s'] as int;
+
+  /// Files waiting for upload, in hash order.
+  List<String> queuedBlobs() => [for (final r in db.select('SELECT hash FROM blob_outbox ORDER BY hash')) r['hash'] as String];
+
+  /// [hash] is on the relay: no longer queued (it stays cached).
+  void blobUploaded(String hash) => db.execute('DELETE FROM blob_outbox WHERE hash = ?', [hash]);
+
+  /// Files to delete on the relay, in hash order.
+  List<String> blobDeletes() => [for (final r in db.select('SELECT hash FROM blob_delete ORDER BY hash')) r['hash'] as String];
+
+  /// [hash] was deleted on the relay.
+  void blobDeleteDone(String hash) => db.execute('DELETE FROM blob_delete WHERE hash = ?', [hash]);
+
+  /// A file no live bill uses any more: one still queued is simply forgotten (never uploaded), one already uploaded is
+  /// queued for deletion on the relay; the cached copy goes either way. Kept while a live bill points to it.
+  void _dropBlob(String hash) {
+    if (db.select('SELECT 1 FROM bills WHERE deleted = 0 AND blob = ?', [hash]).isNotEmpty) return;
+    final queued = db.select('SELECT 1 FROM blob_outbox WHERE hash = ?', [hash]).isNotEmpty;
+    db.execute('DELETE FROM blob_outbox WHERE hash = ?', [hash]);
+    if (!queued) db.execute('INSERT OR IGNORE INTO blob_delete(hash) VALUES(?)', [hash]);
+    db.execute('DELETE FROM blob_cache WHERE hash = ?', [hash]);
+    logEvent(_log, Level.FINE, 'blob.drop', {'queued': queued});
+  }
+
+  /// Cached files no live bill uses (bills deleted on another device): dropped, except those queued for upload.
+  void _purgeBlobCache() {
+    db.execute('DELETE FROM blob_cache WHERE hash NOT IN (SELECT hash FROM blob_outbox) '
+        'AND hash NOT IN (SELECT blob FROM bills WHERE deleted = 0 AND blob IS NOT NULL)');
+    final n = db.updatedRows;
+    if (n > 0) logEvent(_log, Level.FINE, 'blob.purge', {'files': n});
   }
 
   /// The weekly review was done on [today]: `lastReview` = today, `reviewStreak` grows by one when the previous review

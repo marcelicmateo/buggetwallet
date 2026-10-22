@@ -2,6 +2,7 @@
 import 'dart:collection';
 import 'dart:typed_data';
 
+import 'bills.dart' show sha256Hex;
 import 'sync_engine.dart';
 
 class _Dev {
@@ -24,7 +25,12 @@ class _Snap {
 /// after every accepted write: a file goes once every kept snapshot covers it and every other device seen within 90
 /// days ([now]) acked it. No signature check (the relay's job): files sealed with another key are stored like any.
 ///
-/// Test hooks: [offline], [corrupt], [failGet], [failGetSnapshot], [replace], [files], [maxFileBytes].
+/// Blobs (bill files) as the relay keeps them: PUT checks the hash (64 lowercase hex = SHA-256 of the body, else
+/// `rejected`), needs a known wallet (a stored file, else `missing`) and 16 MiB at most; GET of an absent one is null;
+/// DELETE is idempotent.
+///
+/// Test hooks: [offline], [corrupt], [failGet], [failGetSnapshot], [replace], [files], [maxFileBytes], [blobs],
+/// [blobRoutes], [tamperBlob].
 class MemoryTransport implements SyncTransport {
   MemoryTransport({DateTime Function()? now}) : _now = now ?? DateTime.now;
   final DateTime Function() _now;
@@ -32,6 +38,20 @@ class MemoryTransport implements SyncTransport {
   _Snap? _snap, _prev;
   final Map<(String, int), int> _failGets = {};
   final Map<String, int> _failSnapshotGets = {};
+  final Map<String, Uint8List> _blobs = {};
+
+  /// False = an older relay without blobs: every blob call answers 404 ([TransportFailure.missing]).
+  bool blobRoutes = true;
+
+  /// Read-only view of the stored blobs by hash.
+  Map<String, Uint8List> get blobs => UnmodifiableMapView(_blobs);
+
+  /// Flips one byte of a stored blob (a damaged disk or a hostile relay): its hash no longer matches.
+  void tamperBlob(String hash) {
+    final b = _blobs[hash];
+    if (b == null) throw StateError('no such blob');
+    b[b.length ~/ 2] ^= 0xff;
+  }
 
   static const maxFile = 16 << 20, maxSnapshot = 64 << 20;
   static const activeFor = Duration(days: 90);
@@ -194,6 +214,36 @@ class MemoryTransport implements SyncTransport {
       if (s != null && s.id == id) return Uint8List.fromList(s.bytes);
     }
     throw const TransportException(TransportFailure.missing, 'no such snapshot');
+  }
+
+  static final _hash = RegExp(r'^[0-9a-f]{64}$');
+
+  void _blobCall(String kind, String hash) {
+    _call(kind);
+    if (!blobRoutes) throw const TransportException(TransportFailure.missing, 'no blob routes');
+    if (!_hash.hasMatch(hash)) throw const TransportException(TransportFailure.rejected, 'bad hash');
+  }
+
+  @override
+  Future<void> putBlob(String hash, List<int> bytes) async {
+    _blobCall('putBlob', hash);
+    if (_devs.isEmpty) throw const TransportException(TransportFailure.missing, 'unknown wallet');
+    if (bytes.length > maxFile) throw const TransportException(TransportFailure.full, 'too big');
+    if (sha256Hex(bytes) != hash) throw const TransportException(TransportFailure.rejected, 'hash');
+    _blobs[hash] ??= Uint8List.fromList(bytes);
+  }
+
+  @override
+  Future<List<int>?> getBlob(String hash) async {
+    _blobCall('getBlob', hash);
+    final b = _blobs[hash];
+    return b == null ? null : Uint8List.fromList(b);
+  }
+
+  @override
+  Future<void> deleteBlob(String hash) async {
+    _blobCall('deleteBlob', hash);
+    _blobs.remove(hash);
   }
 
   /// Deletes every file that every kept snapshot covers and every other device seen within [activeFor] acked.

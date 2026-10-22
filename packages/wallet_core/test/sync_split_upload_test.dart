@@ -36,6 +36,12 @@ class _Recorder implements SyncTransport {
   Future<void> putSnapshot(String id, Map<String, int> covers, List<int> bytes) => inner.putSnapshot(id, covers, bytes);
   @override
   Future<List<int>> getSnapshot(String id) => inner.getSnapshot(id);
+  @override
+  Future<void> putBlob(String hash, List<int> bytes) => inner.putBlob(hash, bytes);
+  @override
+  Future<List<int>?> getBlob(String hash) => inner.getBlob(hash);
+  @override
+  Future<void> deleteBlob(String hash) => inner.deleteBlob(hash);
 }
 
 const part = 16 << 10, relayMax = 32 << 10;

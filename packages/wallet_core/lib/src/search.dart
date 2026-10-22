@@ -1,6 +1,7 @@
 /// Search over everything in the wallet (M5). Pure: the caller passes the lists it shows.
 library;
 
+import 'bills.dart';
 import 'models.dart';
 
 /// Newest transactions a result holds at most.
@@ -52,19 +53,28 @@ class SearchResult {
 
   /// Planned costs (§4.3), in input order.
   final List<PlannedCost> planned;
+
+  /// Stored bills (receipts, slips; stage B), in input order.
+  final List<Bill> billsDb;
   const SearchResult(
-      {this.txs = const [], this.goals = const [], this.wishlist = const [], this.bills = const [], this.planned = const []});
+      {this.txs = const [],
+      this.goals = const [],
+      this.wishlist = const [],
+      this.bills = const [],
+      this.planned = const [],
+      this.billsDb = const []});
 
   static const empty = SearchResult();
 
-  bool get isEmpty => txs.isEmpty && goals.isEmpty && wishlist.isEmpty && bills.isEmpty && planned.isEmpty;
+  bool get isEmpty => txs.isEmpty && goals.isEmpty && wishlist.isEmpty && bills.isEmpty && planned.isEmpty && billsDb.isEmpty;
 }
 
 /// Everything matching [query]: a case- and accent-insensitive substring ([foldText]) of a transaction's description,
 /// note or category, a goal's name, a wish's name, a bill's label or category; or, when the query is an amount
 /// ([parseAmountQuery]), a transaction whose `amount.abs()` is that many cents, a goal with that target or saved total,
 /// a wish with that price, a bill with that expected amount; a planned cost by title or category, or its exact amount
-/// (deleted ones never). A query that is both matches either way. Deleted and
+/// (deleted ones never); a stored bill ([billsDb], deleted ones never) by payee, description or an item name, or its
+/// exact total. A query that is both matches either way. Deleted and
 /// replaced transactions are never found. Blank query → [SearchResult.empty]. Transactions come newest first (date,
 /// then id, descending), capped at [searchTxLimit]; the other lists keep their input order.
 SearchResult searchAll(
@@ -74,6 +84,7 @@ SearchResult searchAll(
   required List<WishItem> wishlist,
   required List<RecurringBill> bills,
   List<PlannedCost> planned = const [],
+  List<Bill> billsDb = const [],
 }) {
   final q = foldText(query.trim());
   if (q.isEmpty) return SearchResult.empty;
@@ -105,6 +116,12 @@ SearchResult searchAll(
     planned: [
       for (final p in planned)
         if (!p.deleted && (text(p.title) || text(p.category) || (p.amount != null && amount(p.amount!)))) p
+    ],
+    billsDb: [
+      for (final b in billsDb)
+        if (!b.deleted &&
+            (text(b.payee) || text(b.description) || b.items.any((i) => text(i.name)) || (b.total != null && amount(b.total!))))
+          b
     ],
   );
 }

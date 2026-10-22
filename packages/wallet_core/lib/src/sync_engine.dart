@@ -148,6 +148,16 @@ abstract class SyncTransport {
   Future<void> ack(String device, Map<String, int> cursors);
   Future<void> putSnapshot(String id, Map<String, int> covers, List<int> bytes);
   Future<List<int>> getSnapshot(String id);
+
+  /// Stores a sealed bill file under [hash] (RELAY_PROTOCOL.md "Blobs"). A relay that does not know the wallet yet, or
+  /// an older relay without blobs, answers 404: [TransportFailure.missing]. The defaults here are such an older relay.
+  Future<void> putBlob(String hash, List<int> bytes) async => throw const TransportException(TransportFailure.missing, 'no blobs');
+
+  /// The sealed file stored under [hash], or null when the relay does not have it (404).
+  Future<List<int>?> getBlob(String hash) async => null;
+
+  /// Deletes the file stored under [hash] (also fine when absent).
+  Future<void> deleteBlob(String hash) async => throw const TransportException(TransportFailure.missing, 'no blobs');
 }
 
 /// SQLite result codes that are about this device's database, not about the file being applied (busy, locked, out of
@@ -293,8 +303,14 @@ class SyncEngine {
       throw _fatal('state', e);
     }
 
-    // 1. Upload.
+    // 1. Upload: bill files first (a peer that reads a bill row can then fetch its file), then the ops.
+    var (blobsSent, blobMissing) = await _uploadBlobs(repo);
     final (sent, myLast) = await _upload(repo, state);
+    if (blobMissing && (state.devices[me]?.last ?? 0) == 0 && myLast > 0) {
+      // A relay creates a wallet only with this device's first file: the files it refused before that go now.
+      final (more, _) = await _uploadBlobs(repo);
+      blobsSent += more;
+    }
 
     // 2. + 3. Apply the other devices' files.
     final peers = state.devices.keys.where((d) => d != me).toList()..sort();
@@ -449,6 +465,9 @@ class SyncEngine {
       logEvent(_log, Level.WARNING, 'sync.ack.failed', {'failure': e.failure.name});
     }
 
+    // 4b. Bill files deleted here go from the relay too (a failure keeps them queued).
+    final blobsDeleted = await _deleteBlobs(repo);
+
     // 5. Caught up: match, and maybe write a snapshot.
     final heal = _trackStuck(repo, state, cursors, myLast, now);
     final caughtUp = waiting.isEmpty && problems.isEmpty && peers.every((d) => cur(d) >= state.devices[d]!.last);
@@ -480,12 +499,70 @@ class SyncEngine {
       'known': known,
       'waiting': waiting.length,
       'caughtUp': caughtUp,
+      'blobsSent': blobsSent,
+      'blobsDeleted': blobsDeleted,
+      'blobsWaiting': repo.queuedBlobs().length,
     });
-    return SyncReport(sent, received, filesRead, problems: problems, caughtUp: caughtUp, waiting: waiting, devices: [
+    return SyncReport(sent, received, filesRead,
+        problems: problems,
+        caughtUp: caughtUp,
+        waiting: waiting,
+        blobsSent: blobsSent,
+        blobsWaiting: repo.queuedBlobs().length,
+        devices: [
       for (final d in ids)
         SyncDevice(_short(d),
             lastSeen: d == me ? (acked || sent > 0 ? now : state.devices[d]?.lastSeen) : state.devices[d]!.lastSeen, isThis: d == me),
     ]);
+  }
+
+  /// Uploads the queued bill files (`blob_outbox`). A refused or failed one stays queued and the run goes on; once the
+  /// relay is unreachable the rest wait for the next run. Returns (uploaded, whether one was refused as missing: a
+  /// wallet the relay does not know yet, or an older relay without blobs).
+  Future<(int, bool)> _uploadBlobs(WalletRepo repo) async {
+    final queued = repo.queuedBlobs();
+    if (queued.isEmpty) return (0, false);
+    var sent = 0, failed = 0;
+    var missing = false;
+    for (final hash in queued) {
+      final sealed = repo.cachedBlob(hash, touch: false);
+      if (sealed == null) {
+        // Cannot happen (queued files are never evicted); nothing to send, so it is dropped from the queue.
+        repo.blobUploaded(hash);
+        logEvent(_log, Level.WARNING, 'sync.blob.lost');
+        continue;
+      }
+      try {
+        await transport.putBlob(hash, sealed);
+        repo.blobUploaded(hash);
+        sent++;
+      } on TransportException catch (e) {
+        failed++;
+        if (e.failure == TransportFailure.missing) missing = true;
+        logEvent(_log, Level.WARNING, 'sync.blob.failed', {'failure': e.failure.name});
+        if (e.failure == TransportFailure.unreachable) break;
+      }
+    }
+    logEvent(_log, Level.INFO, 'sync.blobs', {'sent': sent, 'failed': failed, 'queued': queued.length});
+    return (sent, missing);
+  }
+
+  /// Sends the queued deletions of bill files (`blob_delete`); a failed one stays queued. Returns how many were sent.
+  Future<int> _deleteBlobs(WalletRepo repo) async {
+    final queued = repo.blobDeletes();
+    var n = 0;
+    for (final hash in queued) {
+      try {
+        await transport.deleteBlob(hash);
+        repo.blobDeleteDone(hash);
+        n++;
+      } on TransportException catch (e) {
+        logEvent(_log, Level.WARNING, 'sync.blob.deleteFailed', {'failure': e.failure.name});
+        if (e.failure == TransportFailure.unreachable) break;
+      }
+    }
+    if (queued.isNotEmpty) logEvent(_log, Level.INFO, 'sync.blobs.deleted', {'sent': n, 'queued': queued.length});
+    return n;
   }
 
   /// Uploads this device's next file (several when over [partBytes]). Returns (ops sent, this device's last seq on the
