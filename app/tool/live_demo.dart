@@ -19,6 +19,7 @@ Future<void> main() async {
     final wc = await bootstrap();
     if (!wc.hasWallet) {
       await wc.createWallet();
+      wc.takeKeyBackupPrompt(); // live mode drives no taps: show Today with its "Save your wallet key" row instead
       wc.repo.importBatch(demoBatch(wc.today()));
       wc.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
       wc.saveCategoryBudgets(demoBudgets);

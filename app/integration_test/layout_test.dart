@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
+import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
@@ -94,6 +95,7 @@ void main() {
 
         where = 'today';
         await wc.createWallet();
+        wc.takeKeyBackupPrompt(); // shot below through Today's row
         Harness.rememberKey(await wc.keyText());
         wc.repo.importBatch(demoBatch(wc.today()));
         wc.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
@@ -148,6 +150,13 @@ void main() {
         await tapVisible(t, find.text(longGoal));
         await Harness.shot(t, '$name-sheet-goal');
         await closeSheet(t, GoalSheet);
+
+        where = 'key-sheet';
+        debugPrint('layout $name: $where');
+        await goTab(t, 'Today');
+        await tapVisible(t, find.text('Save now'));
+        await Harness.shot(t, '$name-sheet-key');
+        await closeSheet(t, KeyBackupSheet);
         expect(t.takeException(), isNull);
       } finally {
         FlutterError.onError = prev;
