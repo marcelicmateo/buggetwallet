@@ -119,7 +119,7 @@ Web webWallet({bool full = false, bool withKey = true, bool locked = false}) {
   }
   wc.keyWriter = (key, {passphrase}) async => w.keyWrites.add(passphrase);
   wc.keyForgetter = () async => w.keyForgets++;
-  wc.dbOpener = () async => FakeDb(WalletRepo.inMemory()).db;
+  wc.dbOpener = (dbKey) async => FakeDb(WalletRepo.inMemory()).db;
   return w;
 }
 
@@ -779,7 +779,7 @@ void main() {
   });
 
   group('Wallet open in another tab', () {
-    Future<WalletController> loadInUse() => WalletController.load(opener: () async => throw const WalletInUse());
+    Future<WalletController> loadInUse() => WalletController.load(claim: () async => throw const WalletInUse());
 
     webTest('load keeps the tab out: flag set, no wallet, nothing opened or flushed', (t) async {
       final wc = await loadInUse();
@@ -793,7 +793,7 @@ void main() {
     });
 
     webTest('another failure from the opener is not swallowed', (t) async {
-      await expectLater(WalletController.load(opener: () async => throw StateError('disk')), throwsStateError);
+      await expectLater(WalletController.load(claim: () async => throw StateError('disk')), throwsStateError);
     });
 
     webTest('the app shows the InUse screen instead of onboarding or unlock', (t) async {
