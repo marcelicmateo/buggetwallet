@@ -78,11 +78,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   else if (!joining) ...[
                     if (error != null) StatusLabel(good: false, text: error!),
                     FilledButton(
+                      key: const ValueKey('startWallet'),
                       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                       onPressed: busy ? null : (isWeb ? () => _askPassphrase('create') : _create),
                       child: const Text('Start a new wallet', style: TextStyle(fontSize: 16)),
                     ),
                     OutlinedButton(
+                      key: const ValueKey('joinStart'),
                       style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                       onPressed: () {
                         logNav('onboarding.join');
@@ -111,11 +113,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             helperMaxLines: 2)),
                     if (error != null) StatusLabel(good: false, text: error!),
                     FilledButton(
+                      key: const ValueKey('joinWallet'),
                       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                       onPressed: busy ? null : (isWeb ? _checkKeyThenAsk : _join),
                       child: const Text('Join wallet', style: TextStyle(fontSize: 16)),
                     ),
-                    TextButton(onPressed: () => setState(() => joining = false), child: const Text('Back')),
+                    TextButton(
+                        key: const ValueKey('joinBack'), onPressed: () => setState(() => joining = false), child: const Text('Back')),
                   ],
                 ])),
           ),
@@ -154,6 +158,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: Text(_passphraseFor == 'create' ? 'Create wallet' : 'Join wallet', style: const TextStyle(fontSize: 16)),
         ),
         TextButton(
+            key: const ValueKey('passphraseBack'),
             onPressed: busy
                 ? null
                 : () => setState(() {

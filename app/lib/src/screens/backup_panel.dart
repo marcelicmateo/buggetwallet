@@ -84,7 +84,7 @@ class _BackupPanelState extends State<BackupPanel> {
         title: const Text('Restore this backup?'),
         content: const Text('This replaces nothing; the wallet is empty.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(key: const ValueKey('restoreCancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(key: const ValueKey('restoreConfirm'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Restore')),
         ],
       ),

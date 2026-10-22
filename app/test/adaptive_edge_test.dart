@@ -482,7 +482,7 @@ void main() {
     });
     testWidgets('plain "1" and "n" in the Add expense amount field do not switch tabs', (tester) async {
       await _pumpShell(tester, emptyWallet(), w: 1300, h: 800);
-      await tester.tap(find.text('Add expense'));
+      await tester.tap(find.byKey(const ValueKey('addExpense')));
       await tester.pumpAndSettle();
       await tester.sendKeyEvent(LogicalKeyboardKey.digit1, character: '1');
       await tester.sendKeyEvent(LogicalKeyboardKey.keyN, character: 'n');
@@ -535,7 +535,7 @@ void main() {
     });
     testWidgets('dialog in dark theme at 1280x800', (tester) async {
       await _pumpShell(tester, emptyWallet(), w: 1280, h: 800, dark: true);
-      await tester.tap(find.text('Add expense'));
+      await tester.tap(find.byKey(const ValueKey('addExpense')));
       await tester.pumpAndSettle();
       expect(find.byType(Dialog), findsOneWidget);
       expect(tester.takeException(), isNull);

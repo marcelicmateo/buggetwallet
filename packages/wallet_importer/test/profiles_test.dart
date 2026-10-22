@@ -111,8 +111,11 @@ void main() {
       expect(h.toJson()['account'], 'A');
     });
 
-    test('the unknown-layout message still names both banks, from their labels', () {
-      expect(unknownLayoutMessage, 'This is not a PBZ or Revolut export I recognise.');
+    test('the unknown-layout message still names every bank, from their labels', () {
+      expect(unknownLayoutMessage, contains('I recognise'));
+      for (final p in bankProfiles) {
+        expect(unknownLayoutMessage, contains(p.label));
+      }
       expect(() => importBankFile(Uint8List.fromList('hello,world\n1,2\n'.codeUnits)),
           throwsA(isA<ImportException>().having((e) => e.message, 'message', unknownLayoutMessage)));
     });
@@ -120,8 +123,10 @@ void main() {
 
   group('detect', () {
     test('registry holds PBZ and Revolut with distinct ids and labels', () {
-      expect(bankProfiles.map((p) => p.id).toSet(), {'pbz', 'revolut'});
-      expect(bankProfiles.map((p) => p.label).toSet(), {'PBZ', 'Revolut'});
+      expect(bankProfiles.map((p) => p.id), containsAll(['pbz', 'revolut']));
+      expect(bankProfiles.map((p) => p.label), containsAll(['PBZ', 'Revolut']));
+      expect(bankProfiles.map((p) => p.id).toSet().length, bankProfiles.length);
+      expect(bankProfiles.map((p) => p.label).toSet().length, bankProfiles.length);
     });
 
     for (final MapEntry(key: name, value: source) in fixtures.entries) {

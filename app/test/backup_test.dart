@@ -178,11 +178,11 @@ void main() {
     await pumpPanel(t, wc, c);
     await t.tap(restoreBtn); // picker cancelled: an empty list
     await t.pumpAndSettle();
-    expect(find.text('Restore this backup?'), findsNothing);
+    expect(find.byKey(const ValueKey('restoreConfirm')), findsNothing);
     c.picks = [_Picked(Uint8List(2))];
     await t.tap(restoreBtn);
     await t.pumpAndSettle();
-    await t.tap(find.text('Cancel'));
+    await t.tap(find.byKey(const ValueKey('restoreCancel')));
     await t.pumpAndSettle();
     expect(reads, 0);
     expect(find.textContaining('Restored'), findsNothing);

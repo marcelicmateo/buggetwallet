@@ -98,7 +98,11 @@ class _DiagnosticsPanelState extends State<DiagnosticsPanel> {
       LineItem('Log files', s == null ? '…' : '${s.files} · ${_size(s.bytes)}'),
       if (s != null && s.writeErrors > 0) LineItem('Log write errors', '${s.writeErrors} (logs may be incomplete)'),
       Wrap(spacing: 8, runSpacing: 8, children: [
-        OutlinedButton(style: accentOutlined(context), onPressed: busy ? null : () => _run('save', _save), child: const Text('Save logs…')),
+        OutlinedButton(
+            key: const ValueKey('logsSave'),
+            style: accentOutlined(context),
+            onPressed: busy ? null : () => _run('save', _save),
+            child: const Text('Save logs…')),
         OutlinedButton(
           onPressed: busy
               ? null

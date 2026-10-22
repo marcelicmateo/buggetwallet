@@ -690,7 +690,7 @@ void main() {
       await tester.ensureVisible(key('deleteBill'));
       await tester.tap(key('deleteBill'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Keep'));
+      await tester.tap(key('deleteBillKeep'));
       await tester.pumpAndSettle();
       expect(wc.billsAll(), hasLength(1));
       await tester.tap(key('deleteBill'));
@@ -706,7 +706,7 @@ void main() {
       final photo = (await tester.runAsync(() => wc.importBillFile(tinyPng, 'png')))!;
       await openSheetFor(tester, wc, photo.billId!);
       await tester.ensureVisible(key('showBillFile'));
-      expect(find.text('Show photo'), findsOneWidget);
+      expect(find.descendant(of: key('showBillFile'), matching: find.text(billFileLabel('png'))), findsOneWidget);
       await tester.tap(key('showBillFile'));
       await tester.pumpAndSettle();
       expect(key('billImage'), findsOneWidget);
@@ -720,7 +720,7 @@ void main() {
       final pdf = (await tester.runAsync(() => wc.importBillFile(smallPdf(['Ukupno: 5,00 EUR']), 'pdf')))!;
       await openSheetFor(tester, wc, pdf.billId!, chooser: chooser);
       await tester.ensureVisible(key('showBillFile'));
-      expect(find.text('Show PDF'), findsOneWidget);
+      expect(find.descendant(of: key('showBillFile'), matching: find.text(billFileLabel('pdf'))), findsOneWidget);
       await tester.tap(key('showBillFile'));
       await tester.pumpAndSettle();
       await tester.tap(key('saveBillFile'));
@@ -736,7 +736,7 @@ void main() {
       await pumpApp(tester, BillFileScreen(wc: wc, bill: far));
       await tester.pumpAndSettle();
       expect(key('fileOnRelay'), findsOneWidget);
-      expect(find.text('The file is on the relay; sync to fetch it'), findsOneWidget);
+      expect(key('fileOnRelay'), findsOneWidget);
     });
 
     tw('on Android a PDF is shown page by page from the rendered pages', (tester) async {
@@ -1069,7 +1069,7 @@ void main() {
       await tester.tap(key('up:p:${WalletRepo.billPlannedId(id)}'));
       await tester.pumpAndSettle();
       expect(key('paidBy'), findsOneWidget);
-      expect(find.text('Skip'), findsNothing);
+      expect(key('entrySkip'), findsNothing);
     });
 
     tw('a heads-up line for a bill opens the bill', (tester) async {

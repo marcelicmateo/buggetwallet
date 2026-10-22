@@ -34,8 +34,8 @@ class FailingChooser extends FileChooser {
   }
 }
 
-Future<void> _tapText(WidgetTester t, String text) async {
-  final f = find.text(text);
+Future<void> _tapKey(WidgetTester t, String key) async {
+  final f = find.byKey(ValueKey(key));
   await t.scrollUntilVisible(f, 300, scrollable: find.byType(Scrollable).first);
   await t.pump();
   await t.tap(f);
@@ -55,10 +55,10 @@ void main() {
     final wc = demoWallet();
     final chooser = FailingChooser();
     await pumpApp(t, Scaffold(body: PlanScreen(wc: wc, chooser: chooser)));
-    await _tapText(t, 'Choose files');
+    await _tapKey(t, 'planImport');
     expect(chooser.calls, 1);
     expect(find.text(chooserFailedMessage), findsOneWidget);
-    final button = find.ancestor(of: find.text('Choose files'), matching: find.bySubtype<ButtonStyleButton>());
+    final button = find.byKey(const ValueKey('planImport'));
     expect(t.widget<ButtonStyleButton>(button).onPressed, isNotNull, reason: 'not stuck in the importing state');
     expect(find.byType(CircularProgressIndicator), findsNothing);
     final logged = lines.where((l) => l.contains('import.pickerFailed')).toList();
@@ -68,7 +68,7 @@ void main() {
     expect(logged.single, isNot(contains('private-folder')));
     // And it can be tried again.
     await t.pump(const Duration(seconds: 4));
-    await _tapText(t, 'Choose files');
+    await _tapKey(t, 'planImport');
     expect(chooser.calls, 2);
   });
 
@@ -78,13 +78,13 @@ void main() {
     await pumpApp(t, Scaffold(body: SingleChildScrollView(child: DiagnosticsPanel(wc: wc, chooser: chooser))));
     // The log files are real I/O: the tap and the wait run outside the fake clock.
     await t.runAsync(() async {
-      await t.tap(find.text('Save logs…'));
+      await t.tap(find.byKey(const ValueKey('logsSave')));
       await Future<void>.delayed(const Duration(milliseconds: 500));
     });
     await t.pump();
     expect(chooser.calls, 1);
     expect(find.text("Couldn't save the logs."), findsOneWidget);
-    final button = find.ancestor(of: find.text('Save logs…'), matching: find.bySubtype<ButtonStyleButton>());
+    final button = find.byKey(const ValueKey('logsSave'));
     expect(t.widget<ButtonStyleButton>(button).onPressed, isNotNull, reason: 'not stuck busy');
     final logged = lines.where((l) => l.contains('log.saveDialogFailed')).toList();
     expect(logged, hasLength(1));

@@ -7,7 +7,7 @@ import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/biff.dart';
 
-final _unknown = throwsA(isA<ImportException>().having((e) => e.message, 'message', contains('not a PBZ or Revolut')));
+final _unknown = throwsA(isA<ImportException>().having((e) => e.message, 'message', contains('I recognise')));
 final _damaged = throwsA(isA<ImportException>().having((e) => e.message, 'message', contains('Could not read')));
 
 /// SST holding the PBZ header texts (indexes 0..5) and any [extra] strings from index 6.

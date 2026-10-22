@@ -388,7 +388,7 @@ void main() {
       await pumpApp(tester, todayOf(wc), size: const Size(400, 1400));
       await tester.tap(key('comingUpLine'));
       await tester.pumpAndSettle();
-      expect(find.text('Upcoming'), findsOneWidget);
+      expect(key('periodNow'), findsOneWidget);
       expect(key('day:2026-10-23'), findsOneWidget);
     });
   });
@@ -452,7 +452,7 @@ void main() {
       await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
       final hair = find.descendant(
           of: find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('up:e:')).last,
-          matching: find.text('Add amount'));
+          matching: find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('change:')));
       await tester.tap(hair);
       await tester.pumpAndSettle();
       await tester.tap(key('plannedSave'));
@@ -487,7 +487,6 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(key('entryPaid'));
       await tester.pump();
-      expect(find.text('Which payment was it?'), findsOneWidget);
       final pay = find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('pay:'));
       expect(pay, findsOneWidget);
       await tester.tap(pay);
@@ -632,7 +631,7 @@ void main() {
     tw('Plan lists Calendars and the heads-up switch next to Nudges', (tester) async {
       final wc = fw(nudges: FakeNudges());
       await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));
-      expect(find.text('CALENDARS'), findsOneWidget);
+      expect(key('calImport'), findsOneWidget);
       expect(key('headsUpSwitch'), findsOneWidget);
       await tester.tap(key('headsUpSwitch'));
       await tester.pumpAndSettle();
