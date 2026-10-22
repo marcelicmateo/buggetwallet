@@ -105,7 +105,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   match at once only while `WalletRepo.syncCaughtUp` (device-local `syncCaughtUp`, written by `SyncEngine` after every
   run; absent = never synced = caught up); otherwise they only set `match_pending` and the next caught-up run does it
   (`ImportSummary.transfers`/`matched` are then 0). A pair or match made against rows still on their way would never be
-  re-planned.
+  re-planned. A delete still undoes the links to the deleted row at once (cash entry `matched_to`, partner
+  `transfer_to` cleared through `_write`), so the entry it replaced counts again immediately; only new ones wait.
 - `models.dart` — `Tx`, `Goal`, `GoalContribution`, `WishItem`, `WalletSettings` (row ↔ object), `goalTotal`.
   `WalletSettings.categoryBudgets` (synced setting, `{category: cents per month}`, default `{}`) is validated entry
   by entry: only `spendingCategories` (fixed + flex) with whole cents 0..`maxBudget` are kept, other entries are
@@ -266,9 +267,6 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - Encrypted local database: a database encrypted with one wallet key cannot be opened after joining another wallet
   (`WalletDbKeyException`; the app decides what to do). The side copy of a native conversion is plaintext for as long
   as the conversion runs (deleted after the check, or used to recover at the next open).
-- While the last sync was not caught up (a peer file waiting or refused), a local import or delete does not pair or
-  match until the next caught-up run: a bank row that replaced a cash entry and is deleted then hides the entry until
-  that run (the entry counts again once it runs), and new transfers show by their hint only.
 - Older builds ignore `seen_bank` and match by the old rule: devices on mixed versions can plan different matches,
   and keep doing so after upgrading for entries they received before.
 - A wrong-typed field (e.g. `amount: "abc"`) is refused with no clock only by builds that check types: older builds

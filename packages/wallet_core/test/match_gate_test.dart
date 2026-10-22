@@ -100,7 +100,36 @@ void main() {
     expect(l.repo.importBatch(topup).transfers, 1);
   });
 
-  test('a delete while not caught up waits too; the caught-up run reopens and re-pairs', () async {
+  test('a delete while not caught up reopens the cash entry it replaced at once; no new match until caught up', () async {
+    final p = device('P'), l = device('L');
+    final cash = l.repo.addManual(date: '2026-10-11', amount: 3000, category: 'Eating out', note: 'synthetic cash');
+    now += 1000;
+    final first =
+        ImportBatch(source: 'pbz', transactions: [n('2026-10-12', -3000, 'POS plaćanje', 'PBZ POS SYNTHETIC CAFE', kind: TxKind.card)]);
+    expect(l.repo.importBatch(first).matched, 1, reason: 'never synced: matched at once');
+    final bankId = first.transactions.single.id;
+    bool counts() => l.repo.transactions().any((t) => t.id == cash && t.live);
+    expect(counts(), isFalse);
+
+    p.repo.updateSettings({'rent': 1});
+    await run(p);
+    net.relay.failGet(p.repo.deviceId, 1);
+    expect((await run(l)).caughtUp, isFalse);
+    now += 1000;
+    final second =
+        ImportBatch(source: 'pbz', transactions: [n('2026-10-13', -3000, 'POS plaćanje', 'PBZ POS SYNTHETIC CAFE TWO', kind: TxKind.card)]);
+    expect(l.repo.importBatch(second).matched, 0);
+
+    l.repo.deleteTransaction(bankId);
+    expect(counts(), isTrue, reason: 'the entry counts again at once: undoing its link needs only this deletion');
+    expect(l.repo.transaction(cash)!.matchedTo, isNull, reason: 'no new match while not caught up');
+
+    expect((await run(l)).caughtUp, isTrue);
+    expect(l.repo.transaction(cash)!.matchedTo, second.transactions.single.id, reason: 'matching goes on as usual');
+    expect(counts(), isFalse);
+  });
+
+  test('a delete while not caught up also unhides the own-transfer partner at once; re-pairing waits', () async {
     final p = device('P'), l = device('L');
     p.repo.importBatch(cardPayment);
     await run(p);
@@ -112,8 +141,8 @@ void main() {
     net.relay.failGet(p.repo.deviceId, 2);
     expect((await run(l)).caughtUp, isFalse);
     l.repo.deleteTransaction(cardId);
-    expect(links(l.repo)[topupId], cardId, reason: 'deferred: no re-planning against rows still on their way');
+    expect(links(l.repo)[topupId], isNull, reason: 'the link to the deleted row is undone at once');
     expect((await run(l)).caughtUp, isTrue);
-    expect(links(l.repo)[topupId], isNot(cardId), reason: 'reopened once caught up');
+    expect(links(l.repo)[topupId], isNot(cardId));
   });
 }

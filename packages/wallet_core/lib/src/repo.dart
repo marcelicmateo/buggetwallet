@@ -770,6 +770,16 @@ class WalletRepo {
     _write([
       ('tx', txId, {'deleted': 1})
     ]);
+    if (!syncCaughtUp) {
+      // New pairs and matches wait for a caught-up sync, but the links this row held are undone at once: that needs
+      // only its own deletion, and a cash entry it replaced must count again now (exact money).
+      _write([
+        for (final r in db.select('SELECT id FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to = ?', [txId]))
+          ('tx', r['id'] as String, {'matched_to': null}),
+        for (final r in db.select('SELECT id FROM tx WHERE transfer_to = ? AND id != ?', [txId, txId]))
+          ('tx', r['id'] as String, {'transfer_to': null}),
+      ]);
+    }
     _reconcileLocal();
   }
 
