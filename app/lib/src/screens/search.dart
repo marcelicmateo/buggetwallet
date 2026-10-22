@@ -89,7 +89,7 @@ class _SearchPaneState extends State<SearchPane> {
             go();
           },
           child: Container(
-            constraints: const BoxConstraints(minHeight: 44),
+            constraints: const BoxConstraints(minHeight: rowMin),
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               SplitRow(

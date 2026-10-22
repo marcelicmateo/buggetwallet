@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../controller.dart';
+import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../theme.dart';
@@ -81,14 +82,14 @@ class _KeyBackupSheetState extends State<KeyBackupSheet> {
           key: const ValueKey('keyCopy'),
           icon: Icon(_copied ? Icons.check : Icons.copy),
           label: Text(_copied ? 'Key copied' : 'Copy key'),
-          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
           onPressed: key == null ? null : _copy,
         ),
         if (_copied) const Muted('Copy key clears the clipboard after 60 seconds. Clipboard history on some phones may keep it.'),
         if (!_asking)
           FilledButton(
             key: const ValueKey('keySaved'),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
             onPressed: key == null ? null : () => setState(() => _asking = true),
             child: const Text('I saved it'),
           )
@@ -111,7 +112,7 @@ class _KeyBackupSheetState extends State<KeyBackupSheet> {
           if (_wrong) const StatusLabel(good: false, text: "That doesn't match the end of your key."),
           FilledButton(
             key: const ValueKey('keyConfirm'),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
             onPressed: _confirm,
             child: const Text('Confirm'),
           ),

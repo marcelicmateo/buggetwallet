@@ -109,7 +109,7 @@ class _SyncPanelState extends State<SyncPanel> {
     final hasRelay = wc.relayUrl != null;
     final last = wc.lastSync;
     final status = syncStatusLine(caughtUp: wc.syncCaughtUp, waiting: wc.syncWaiting);
-    final now = DateTime.now();
+    final now = wc.now;
     return Panel(children: [
       const SectionHead('Sync'),
       const Muted(

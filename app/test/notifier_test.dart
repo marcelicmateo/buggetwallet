@@ -1,6 +1,6 @@
 // The Android reminders through the plugin's method channel (mocked): permission, scheduling without exact alarms, and the
 // text that leaves the app. SYNTHETIC; no device.
-import 'package:budget_wallet/src/notifier.dart';
+import 'package:budget_wallet/src/nudge_platform_io.dart';
 import 'package:budget_wallet/src/nudges.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';

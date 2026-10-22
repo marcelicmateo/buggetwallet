@@ -15,4 +15,12 @@ void main() {
     expect(wc.waitingTotal, 12000);
     expect(emptyWallet().waitingTotal, 0);
   });
+
+  test('waitingTotal uses the injected clock, like the Wishlist split (wc.now)', () {
+    final wc = habitsWallet();
+    final now = wc.now.millisecondsSinceEpoch;
+    final cooling = wc.wish.where((w) => w.status == 'waiting' && w.hoursLeft(wc.settings.coolHours, now) > 0);
+    expect(wc.waitingTotal, cooling.fold<int>(0, (a, w) => a + w.price));
+    expect(wc.now, budgetToday);
+  });
 }

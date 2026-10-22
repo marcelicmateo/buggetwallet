@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../format.dart';
+import '../layout.dart';
 import '../theme.dart';
 import 'common.dart';
 
@@ -233,10 +234,9 @@ class _CategoryRow extends StatelessWidget {
     final budget = l?.budget;
     final tip = '$name: ${money(value, currency, decimals: 0)} · average ${money(average, currency, decimals: 0)}'
         '${l == null ? '' : ' · budget ${moneyExact(budget!, currency)}, ${budgetLeftText(l, currency)}'}';
-    return Container(
-      constraints: BoxConstraints(minHeight: l == null ? 36 : (behindPace(l) ? 58 : 44)),
+    return RuledRow(
+      minHeight: l == null ? 36 : (behindPace(l) ? 58 : rowMin),
       padding: const EdgeInsets.symmetric(vertical: 4),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
       child: Tooltip(
         message: tip,
         child: Semantics(

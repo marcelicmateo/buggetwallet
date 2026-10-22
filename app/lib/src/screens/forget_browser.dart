@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
+import '../layout.dart';
 import '../logging.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
@@ -50,13 +51,14 @@ class _ForgetBrowserSheetState extends State<ForgetBrowserSheet> {
           if (_error != null) StatusLabel(good: false, text: _error!),
           FilledButton(
             key: const ValueKey('forgetConfirm'),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48), backgroundColor: Theme.of(context).colorScheme.error),
+            style:
+                FilledButton.styleFrom(minimumSize: const Size.fromHeight(touchMin), backgroundColor: Theme.of(context).colorScheme.error),
             onPressed: _busy ? null : _forget,
             child: Text(_busy ? 'Deleting…' : 'Delete everything here'),
           ),
           OutlinedButton(
             key: const ValueKey('forgetCancel'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
             onPressed: _busy ? null : () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),

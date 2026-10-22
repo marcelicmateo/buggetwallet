@@ -35,9 +35,7 @@ class GoalsScreen extends StatelessWidget {
           focusColor: c.accentSoft,
           mouseCursor: SystemMouseCursors.click,
           onTap: () => showSheet<void>(context, GoalSheet(wc: wc, goal: g)),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 44),
-            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
+          child: RuledRow(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               SplitRow(

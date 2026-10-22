@@ -5,6 +5,7 @@ import '../format.dart';
 import '../layout.dart';
 import '../theme.dart';
 
+export '../layout.dart' show gapped;
 export '../theme.dart' show numStyle;
 
 /// A ruled section (no card): a 1 px strong rule on top, a hairline below, vertical padding only (the page margin belongs to
@@ -30,14 +31,10 @@ class Panel extends StatelessWidget {
         ),
       ),
       padding: band ? padding + const EdgeInsets.symmetric(horizontal: 12) : padding,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(children, 12)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: gapped(children, gap: 12)),
     );
   }
 }
-
-List<Widget> _spaced(List<Widget> xs, double gap) => [
-      for (var i = 0; i < xs.length; i++) ...[if (i > 0) SizedBox(height: gap), xs[i]],
-    ];
 
 class Eyebrow extends StatelessWidget {
   final String text;
@@ -69,6 +66,65 @@ class Heading extends StatelessWidget {
   const Heading(this.text, {super.key, this.size = 19});
   @override
   Widget build(BuildContext context) => Text(text, style: TextStyle(fontSize: size, fontWeight: FontWeight.w600, letterSpacing: -0.2));
+}
+
+/// A text field for an amount: decimal keyboard, right-aligned mono digits. Give the field a test key with [fieldKey] (it lands on the
+/// TextField itself). The parsing is `parseMoney`; the text for an existing amount is `centsToFieldText`.
+class MoneyField extends StatelessWidget {
+  final TextEditingController controller;
+  final Key? fieldKey;
+  final InputDecoration decoration;
+  final TextStyle? style;
+  final bool autofocus;
+  final ValueChanged<String>? onChanged;
+  const MoneyField({
+    super.key,
+    required this.controller,
+    required this.decoration,
+    this.fieldKey,
+    this.style,
+    this.autofocus = false,
+    this.onChanged,
+  });
+  @override
+  Widget build(BuildContext context) => TextField(
+        key: fieldKey,
+        controller: controller,
+        autofocus: autofocus,
+        onChanged: onChanged,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        textAlign: TextAlign.end,
+        style: style ?? numStyle,
+        decoration: decoration,
+      );
+}
+
+/// The page of the screens before the wallet opens (first run, unlock, open in another tab): the logo and name, then [children], in a
+/// 480 dp column.
+class GatePage extends StatelessWidget {
+  final List<Widget> children;
+  const GatePage({super.key, required this.children});
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: ListView(
+                  padding: const EdgeInsets.all(20),
+                  shrinkWrap: true,
+                  children: gapped([
+                    const Row(children: [
+                      LedgerLogo(),
+                      SizedBox(width: 10),
+                      Flexible(child: Heading('Budget Wallet', size: 24)),
+                    ]),
+                    ...children,
+                  ])),
+            ),
+          ),
+        ),
+      );
 }
 
 class Muted extends StatelessWidget {
@@ -344,13 +400,24 @@ class TxTile extends StatelessWidget {
       hoverColor: c.surface2,
       focusColor: c.accentSoft,
       mouseCursor: onTap == null ? null : SystemMouseCursors.click,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 44),
-        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
-        child: body,
-      ),
+      child: RuledRow(child: body),
     );
   }
+}
+
+/// One row of a ruled list: at least [minHeight] tall with a hairline under it (no card, no fill).
+class RuledRow extends StatelessWidget {
+  final Widget child;
+  final double minHeight;
+  final EdgeInsetsGeometry? padding;
+  const RuledRow({super.key, required this.child, this.minHeight = rowMin, this.padding});
+  @override
+  Widget build(BuildContext context) => Container(
+        constraints: BoxConstraints(minHeight: minHeight),
+        padding: padding,
+        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: context.c.line))),
+        child: child,
+      );
 }
 
 /// Tints its child with the hover colour while a mouse is over it (rows that are not tappable themselves).
@@ -393,7 +460,7 @@ class LineItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final w = bold ? FontWeight.w600 : FontWeight.w500;
     return Container(
-      constraints: const BoxConstraints(minHeight: 44),
+      constraints: const BoxConstraints(minHeight: rowMin),
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(children: [
         if (leading != null) ...[leading!, const SizedBox(width: 10)],
@@ -477,8 +544,3 @@ class NavBarFrame extends StatelessWidget {
     ]);
   }
 }
-
-/// Children with a fixed gap between them, for ListView pages.
-List<Widget> gapped(List<Widget> xs, {double gap = 14}) => [
-      for (var i = 0; i < xs.length; i++) ...[if (i > 0) SizedBox(height: gap), xs[i]],
-    ];

@@ -9,6 +9,7 @@ import '../bill_inputs.dart' show maxBillFileBytes;
 import '../controller.dart';
 import '../file_chooser.dart';
 import '../format.dart';
+import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -34,7 +35,7 @@ String billImportMessage(List<BillImport> results) {
 
 /// Choose bill files (PDF, e-invoice XML, photos) and add them; every failure is logged (type and counts only, never file names or
 /// paths) and shown as a short message. A single new bill opens its sheet.
-Future<void> pickAndImportBills(BuildContext context, WalletController wc, FileChooser chooser) async {
+Future<void> _pickAndImportBills(BuildContext context, WalletController wc, FileChooser chooser) async {
   logNav('bills.pick');
   final List<PlatformFile> picked;
   try {
@@ -129,7 +130,7 @@ class _BillsPanelState extends State<BillsPanel> {
   Future<void> _import() async {
     setState(() => _busy = true);
     try {
-      await pickAndImportBills(context, widget.wc, widget.chooser);
+      await _pickAndImportBills(context, widget.wc, widget.chooser);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -156,7 +157,7 @@ class _BillsPanelState extends State<BillsPanel> {
         focusColor: c.accentSoft,
         onTap: () => openBill(context, wc, b.id, chooser: widget.chooser),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 48),
+          constraints: const BoxConstraints(minHeight: touchMin),
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: SplitRow(
             crossAxisAlignment: CrossAxisAlignment.start,

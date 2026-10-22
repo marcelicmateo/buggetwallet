@@ -32,22 +32,7 @@ String? reviewSummary(ReviewState r) {
 /// closes when a pace row is tapped.
 Future<void> openReview(BuildContext context, WalletController wc,
     {VoidCallback? openSpending, FileChooser chooser = const FileChooser()}) {
-  final screen = ReviewScreen(wc: wc, chooser: chooser);
-  final Future<String?> route;
-  if (MediaQuery.sizeOf(context).width >= dialogMin) {
-    route = showDialog<String>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.all(24),
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(width: 560, height: (MediaQuery.sizeOf(ctx).height - 48).clamp(300.0, 760.0), child: screen),
-      ),
-    );
-  } else {
-    route = Navigator.of(context).push<String>(MaterialPageRoute(fullscreenDialog: true, builder: (_) => screen));
-  }
-  return loggedRoute('ReviewScreen', route).then((r) {
+  return openPageOrDialog<String>(context, ReviewScreen(wc: wc, chooser: chooser), width: 560, logName: 'ReviewScreen').then((r) {
     if (r == 'spending') openSpending?.call();
   });
 }
@@ -96,11 +81,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
         final month = monthOf(wc.today());
         final budget = wc.budgetVsActual(month);
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Weekly review'),
-            leading: IconButton(icon: const Icon(Icons.close), tooltip: 'Close', onPressed: () => Navigator.pop(context)),
-            bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: Container(height: 2, color: context.c.lineStrong)),
-          ),
+          appBar: const DialogAppBar(title: 'Weekly review'),
           body: ListView(
               padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
               children: gapped([
@@ -190,7 +171,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 ),
                 if (r.streak > 0) Muted('So far: ${streakText(r.streak)}.'),
                 FilledButton(
-                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
                   onPressed: _done,
                   child: const Text('Done', style: TextStyle(fontSize: 16)),
                 ),
@@ -245,7 +226,7 @@ class _PaceRow extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48),
+            constraints: const BoxConstraints(minHeight: touchMin),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: SplitRow(

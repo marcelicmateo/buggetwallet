@@ -352,4 +352,26 @@ void main() {
     });
     test('one-day period', () => expect(dateRange('2026-10-12', '2026-10-13'), '12 Oct – 12 Oct'));
   });
+
+  group('centsToFieldText', () {
+    test('whole amounts drop the decimals', () {
+      expect(centsToFieldText(150000), '1500');
+      expect(centsToFieldText(100), '1');
+    });
+    test('part amounts keep two decimals', () {
+      expect(centsToFieldText(150050), '1500.50');
+      expect(centsToFieldText(5), '0.05');
+      expect(centsToFieldText(1250), '12.50');
+    });
+    test('zero is 0, or empty with blankZero', () {
+      expect(centsToFieldText(0), '0');
+      expect(centsToFieldText(0, blankZero: true), '');
+      expect(centsToFieldText(5000, blankZero: true), '50');
+    });
+    test('parseMoney reads the text back', () {
+      for (final c in [0, 5, 100, 1250, 150050, maxAmountCents]) {
+        expect(parseMoney(centsToFieldText(c)), c);
+      }
+    });
+  });
 }

@@ -135,7 +135,14 @@ class FakeNudges implements NudgePlatform {
   /// How long a heads-up call takes, and the most calls that were ever running at once (they must never overlap).
   Duration headsUpDelay = Duration.zero;
   int headsUpRunning = 0, headsUpMostRunning = 0;
+
+  /// The next this many heads-up calls throw (a plugin that fails), then they work again.
+  int headsUpFailures = 0;
   Future<void> _headsUpCall() async {
+    if (headsUpFailures > 0) {
+      headsUpFailures--;
+      throw StateError('synthetic plugin failure');
+    }
     headsUpMostRunning = headsUpMostRunning < ++headsUpRunning ? headsUpRunning : headsUpMostRunning;
     if (headsUpDelay > Duration.zero) await Future<void>.delayed(headsUpDelay);
     headsUpRunning--;

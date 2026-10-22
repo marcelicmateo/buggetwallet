@@ -3,6 +3,7 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
+import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -23,8 +24,6 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
   /// The text each field last got from the saved budgets: a field whose text differs was edited.
   final Map<String, String> _shown = {};
   final Map<String, String> _errors = {};
-
-  static String _plain(int cents) => cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2);
 
   @override
   void initState() {
@@ -50,7 +49,7 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
   void _fill() {
     final saved = widget.wc.categoryBudgets;
     for (final k in _cats) {
-      final t = saved[k] == null ? '' : _plain(saved[k]!), c = _f[k]!;
+      final t = saved[k] == null ? '' : centsToFieldText(saved[k]!), c = _f[k]!;
       if (c.text.trim() == (_shown[k] ?? '') && c.text != t) c.text = t;
       _shown[k] = t;
     }
@@ -63,7 +62,7 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
     for (final k in _cats) {
       final cents = s[k], c = _f[k]!;
       if (cents == null || cents <= 0 || c.text.trim().isNotEmpty) continue;
-      c.text = _plain(cents);
+      c.text = centsToFieldText(cents);
       _errors.remove(k);
       filled++;
     }
@@ -101,7 +100,7 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
       setState(() => _errors
         ..clear()
         ..addAll(errors));
-      toast(context, 'Enter numbers only, like 300 or 45.50.');
+      toast(context, invalidAmountMessage);
       return;
     }
     if (_errors.isNotEmpty) setState(_errors.clear);
@@ -137,7 +136,7 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
       Rows(children: [
         for (final k in _cats)
           Container(
-            constraints: const BoxConstraints(minHeight: 48),
+            constraints: const BoxConstraints(minHeight: touchMin),
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: SplitRow(
               maxEnd: 0.5,
@@ -147,12 +146,9 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
                 width: 132,
                 child: Semantics(
                   label: 'Monthly budget for $k',
-                  child: TextField(
-                    key: ValueKey('budget:$k'),
-                    controller: _f[k],
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    textAlign: TextAlign.end,
-                    style: numStyle,
+                  child: MoneyField(
+                    fieldKey: ValueKey('budget:$k'),
+                    controller: _f[k]!,
                     onChanged: (_) {
                       if (_errors.containsKey(k)) setState(() => _errors.remove(k));
                     },

@@ -3,6 +3,7 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
+import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -101,7 +102,7 @@ class ExpectedBillsPanel extends StatelessWidget {
           for (final b in confirmed)
             Container(
               key: ValueKey('bill:${b.id}'),
-              constraints: const BoxConstraints(minHeight: 48),
+              constraints: const BoxConstraints(minHeight: touchMin),
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(children: [
                 Expanded(

@@ -7,6 +7,7 @@ import 'package:wallet_importer/wallet_importer.dart' show validIban;
 import '../controller.dart';
 import '../file_chooser.dart';
 import '../format.dart';
+import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../theme.dart';
@@ -55,10 +56,8 @@ void showBillImport(BuildContext context, WalletController wc, BillImport r, {Fi
 /// bill out of step).
 bool plannedIsBill(PlannedCost p) => p.source == PlannedSource.bill && p.sourceRef != null;
 
-String _plain(int cents) => cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2);
-
 /// The words for the original file's button.
-String billFileLabel(String? type) => switch (type) {
+String _billFileLabel(String? type) => switch (type) {
       'pdf' => 'Show PDF',
       'xml' => 'Show e-invoice file',
       _ => 'Show photo',
@@ -76,8 +75,8 @@ class BillSheet extends StatefulWidget {
 }
 
 class _BillSheetState extends State<BillSheet> {
-  late final Bill? _first = widget.wc.billById(widget.billId);
-  late final total = TextEditingController(text: _first?.total == null ? '' : _plain(_first!.total!));
+  late final Bill? _first = widget.wc.bill(widget.billId);
+  late final total = TextEditingController(text: _first?.total == null ? '' : centsToFieldText(_first!.total!));
   late final payee = TextEditingController(text: _first?.payee ?? '');
   late final iban = TextEditingController(text: _first?.iban ?? '');
   late final reference = TextEditingController(text: _first?.reference ?? '');
@@ -116,7 +115,7 @@ class _BillSheetState extends State<BillSheet> {
       setState(() => error = 'IBAN: check the number, it does not look right.');
       return false;
     }
-    final saved = widget.wc.editBill(b.id,
+    final saved = widget.wc.updateBill(b.id,
         date: date != b.date ? date : null,
         dueDate: due != b.dueDate ? due : null,
         total: t != b.total ? t : null,
@@ -146,7 +145,7 @@ class _BillSheetState extends State<BillSheet> {
   Future<String?> _pick(String? current, {DateTime? first, DateTime? last}) async {
     final d = await showDatePicker(
         context: context,
-        initialDate: current != null && isCalendarDate(current) ? parseIso(current) : DateTime.now(),
+        initialDate: current != null && isCalendarDate(current) ? parseIso(current) : widget.wc.now,
         firstDate: first ?? DateTime(2000),
         lastDate: last ?? DateTime(2100));
     return d == null ? null : isoDate(d);
@@ -212,7 +211,7 @@ class _BillSheetState extends State<BillSheet> {
   Widget build(BuildContext context) => ListenableBuilder(
       listenable: widget.wc,
       builder: (context, _) {
-        final b = widget.wc.billById(widget.billId);
+        final b = widget.wc.bill(widget.billId);
         if (b == null) return const Padding(padding: EdgeInsets.all(16), child: EmptyNote('This bill is gone.'));
         return _body(context, b);
       });
@@ -287,12 +286,10 @@ class _BillSheetState extends State<BillSheet> {
           ]),
         ),
       const SizedBox(height: 12),
-      TextField(
-        key: const ValueKey('billTotal'),
+      MoneyField(
+        fieldKey: const ValueKey('billTotal'),
         controller: total,
         onChanged: (_) => setState(() => error = null),
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        textAlign: TextAlign.end,
         style: numStyle.copyWith(fontSize: 26, fontWeight: FontWeight.w500),
         decoration:
             deco('Total', filled: total.text.isNotEmpty, hint: '0.00', suffix: currencySymbol(b.currency.isEmpty ? cur : b.currency)),
@@ -352,7 +349,7 @@ class _BillSheetState extends State<BillSheet> {
           child: OutlinedButton.icon(
             key: const ValueKey('showBillFile'),
             icon: const Icon(Icons.image_outlined, size: 18),
-            label: Text(billFileLabel(fileType)),
+            label: Text(_billFileLabel(fileType)),
             onPressed: () {
               logNav('bill.showFile', {'type': fileType});
               Navigator.of(context).push<void>(
@@ -506,7 +503,7 @@ class _CashSheetState extends State<_CashSheet> {
       const SizedBox(height: 14),
       FilledButton.icon(
           key: const ValueKey('addCashExpense'),
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
           icon: const Icon(Icons.add),
           label: const Text('Add expense'),
           onPressed: () => Navigator.pop(context, cat)),
@@ -552,11 +549,7 @@ class _BillFileScreenState extends State<BillFileScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: Text(billFileLabel(widget.bill.blobType)),
-          leading: IconButton(icon: const Icon(Icons.close), tooltip: 'Close', onPressed: () => Navigator.pop(context)),
-          bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: Container(height: 2, color: context.c.lineStrong)),
-        ),
+        appBar: DialogAppBar(title: _billFileLabel(widget.bill.blobType)),
         body: FutureBuilder<_Shown>(
             future: _future,
             builder: (context, snap) {

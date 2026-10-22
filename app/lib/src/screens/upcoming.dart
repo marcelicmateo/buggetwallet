@@ -13,22 +13,7 @@ import 'planned_sheets.dart';
 
 /// Opens Upcoming: a page on a phone, a dialog from [dialogMin] wide (like the weekly review).
 Future<void> openUpcoming(BuildContext context, WalletController wc) {
-  final screen = UpcomingScreen(wc: wc);
-  final Future<void> route;
-  if (MediaQuery.sizeOf(context).width >= dialogMin) {
-    route = showDialog<void>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.all(24),
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(width: 600, height: (MediaQuery.sizeOf(ctx).height - 48).clamp(300.0, 800.0), child: screen),
-      ),
-    );
-  } else {
-    route = Navigator.of(context).push<void>(MaterialPageRoute(fullscreenDialog: true, builder: (_) => screen));
-  }
-  return loggedRoute('UpcomingScreen', route);
+  return openPageOrDialog<void>(context, UpcomingScreen(wc: wc), width: 600, maxHeight: 800, logName: 'UpcomingScreen');
 }
 
 /// The pay period (and the next one) as a month grid with a mark per day, then a ruled list of what is coming: planned costs,
@@ -110,13 +95,11 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
         final counted = wc.countedIn(items);
         final today = wc.today();
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Upcoming'),
-            leading: IconButton(icon: const Icon(Icons.close), tooltip: 'Close', onPressed: () => Navigator.pop(context)),
+          appBar: DialogAppBar(
+            title: 'Upcoming',
             actions: [
               IconButton(key: const ValueKey('addPlannedTop'), icon: const Icon(Icons.add), tooltip: 'Add planned cost', onPressed: _add),
             ],
-            bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: Container(height: 2, color: context.c.lineStrong)),
           ),
           body: ListView(
               padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
@@ -142,7 +125,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                             })),
                   ]),
                 ),
-                PeriodGrid(
+                _PeriodGrid(
                   start: range.start,
                   end: range.end,
                   today: today,
@@ -245,13 +228,12 @@ const _weekdayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 /// The days from [start] to [end] (inclusive) as month grids, Monday first; a pay period that crosses a month gets two. A mark
 /// per kind on each day that has something; tap a day to list just that day.
-class PeriodGrid extends StatelessWidget {
+class _PeriodGrid extends StatelessWidget {
   final String start, end, today;
   final List<UpcomingItem> items;
   final String? selected;
   final ValueChanged<String> onDay;
-  const PeriodGrid(
-      {super.key, required this.start, required this.end, required this.today, required this.items, this.selected, required this.onDay});
+  const _PeriodGrid({required this.start, required this.end, required this.today, required this.items, this.selected, required this.onDay});
 
   @override
   Widget build(BuildContext context) {
@@ -355,7 +337,7 @@ class _DayCell extends StatelessWidget {
         key: ValueKey('day:$date'),
         onTap: () => onTap(date),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 48),
+          constraints: const BoxConstraints(minHeight: touchMin),
           margin: const EdgeInsets.all(1),
           padding: const EdgeInsets.symmetric(vertical: 4),
           decoration: BoxDecoration(
@@ -419,7 +401,7 @@ class _UpcomingRow extends StatelessWidget {
       key: ValueKey('up:${i.key}'),
       onTap: i.planned == null && !isBillDate ? null : () => onOpen(i),
       child: Container(
-        constraints: const BoxConstraints(minHeight: 48),
+        constraints: const BoxConstraints(minHeight: touchMin),
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           head,

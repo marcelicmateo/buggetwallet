@@ -411,6 +411,9 @@ class WalletController extends ChangeNotifier {
   bool get hasWallet => key != null;
   String get currency => settings.currency;
 
+  /// The current moment from the injected clock (tests move it); widgets use this, never `DateTime.now()`.
+  DateTime get now => _clock();
+
   String today() => isoDate(_clock());
 
   /// Tells the screens when the day has changed since they were last built (the app stayed open over midnight), so periods,
@@ -486,9 +489,9 @@ class WalletController extends ChangeNotifier {
   /// The sum of every goal's target (cents).
   int get goalTargetTotal => _cached('goalTargetTotal', () => goals.fold<int>(0, (a, g) => a + g.target));
 
-  /// The sum of the prices of wishes still cooling off (cents). Not cached: it depends on the wall clock.
+  /// The sum of the prices of wishes still cooling off (cents). Not cached: it depends on the clock ([now], the injected one in tests).
   int get waitingTotal {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _clock().millisecondsSinceEpoch;
     return wish.where((w) => w.status == 'waiting' && w.hoursLeft(settings.coolHours, now) > 0).fold<int>(0, (a, w) => a + w.price);
   }
 
@@ -807,7 +810,7 @@ class WalletController extends ChangeNotifier {
     await syncNow(trigger: 'join');
   }
 
-  // ---------- key backup prompt (S3) ----------
+  // ---------- key backup prompt (see app/CLAUDE.md, Sync) ----------
   // Device-local values (never synced): `keyBackupConfirmed` (date) and `keyBackupSnoozedUntil` (date). Logs say `key.backup`
   // with an action word only; never the key or any part of it, also not the characters typed to confirm.
 
@@ -1107,7 +1110,7 @@ class WalletController extends ChangeNotifier {
     scheduleMicrotask(() => syncNow(quiet: true, trigger: 'startup'));
   }
 
-  // ---------- backup, export, search (M5) ----------
+  // ---------- backup, export, search (see app/CLAUDE.md, Polish) ----------
   /// True while the wallet holds nothing (no transactions, goals or wishes): the only time a backup can be restored.
   bool get walletIsEmpty => _cached('walletIsEmpty', () => repo.isEmpty);
 
@@ -1293,7 +1296,7 @@ class WalletController extends ChangeNotifier {
     _changed();
   }
 
-  void deleteTx(Tx t) {
+  void deleteTransaction(Tx t) {
     repo.deleteTransaction(t.id);
     logEvent(_log, Level.INFO, 'tx.delete', {'manual': t.manual});
     _changed();

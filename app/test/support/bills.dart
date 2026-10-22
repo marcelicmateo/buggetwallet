@@ -46,6 +46,13 @@ Uint8List smallPdf(List<String> lines) {
   return bytesOfString(out.toString());
 }
 
+/// An error of a type the app does not know, whose text must never reach a log.
+class SyntheticCrash implements Exception {
+  const SyntheticCrash();
+  @override
+  String toString() => 'SYNTHETIC-SECRET-TEXT';
+}
+
 /// The camera: a plain box; [emit] sends a code as if the camera saw it.
 class FakeCamera implements BillCamera {
   final bool canShow;
@@ -54,12 +61,16 @@ class FakeCamera implements BillCamera {
   /// What the system camera "takes" (null = the owner cancelled); [photoError] makes it throw a [BillPhotoException] with that code.
   Uint8List? photo;
   String? photoError;
+
+  /// Makes takePhoto throw something that is not a [BillPhotoException], with text that must never reach the log.
+  bool crash = false;
   int photoCalls = 0;
   FakeCamera({this.canShow = true, this.photo});
 
   @override
   Future<Uint8List?> takePhoto() async {
     photoCalls++;
+    if (crash) throw const SyntheticCrash();
     if (photoError != null) throw BillPhotoException(photoError!);
     return photo;
   }

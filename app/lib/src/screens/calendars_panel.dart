@@ -5,6 +5,7 @@ import 'package:wallet_core/wallet_core.dart';
 import '../controller.dart';
 import '../file_chooser.dart';
 import '../format.dart';
+import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -28,12 +29,10 @@ class CalendarsPanel extends StatefulWidget {
 
 class _CalendarsPanelState extends State<CalendarsPanel> {
   final _link = TextEditingController();
-  late final _cents = TextEditingController(text: _plain(widget.wc.headsUpCents));
+  late final _cents = TextEditingController(text: centsToFieldText(widget.wc.headsUpCents));
   late final _days = TextEditingController(text: '${widget.wc.headsUpDays}');
   bool _addingLink = false, _busy = false;
   String? _error, _headsUpError;
-
-  static String _plain(int cents) => cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2);
 
   @override
   void initState() {
@@ -174,7 +173,7 @@ class _CalendarsPanelState extends State<CalendarsPanel> {
           for (final e in imported)
             Container(
               key: ValueKey('ics:${e.id}'),
-              constraints: const BoxConstraints(minHeight: 48),
+              constraints: const BoxConstraints(minHeight: touchMin),
               child: Row(children: [
                 Icon(e.kind == CalendarKind.link ? Icons.link : Icons.insert_drive_file_outlined, size: 18, color: c.ink2),
                 const SizedBox(width: 8),
@@ -242,12 +241,9 @@ class _CalendarsPanelState extends State<CalendarsPanel> {
           const Muted('Today and a notification warn you a few days before a planned cost this big or bigger.'),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
-              child: TextField(
-                key: const ValueKey('headsUpCents'),
+              child: MoneyField(
+                fieldKey: const ValueKey('headsUpCents'),
                 controller: _cents,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                textAlign: TextAlign.end,
-                style: numStyle,
                 decoration: InputDecoration(labelText: 'From amount', suffixText: currencySymbol(wc.currency)),
               ),
             ),

@@ -3,6 +3,7 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../key_store.dart' show minPassphraseLength;
+import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../widgets/common.dart';
@@ -48,80 +49,60 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: ListView(
-                padding: const EdgeInsets.all(20),
-                shrinkWrap: true,
-                children: gapped([
-                  const Row(children: [
-                    LedgerLogo(),
-                    SizedBox(width: 10),
-                    Flexible(child: Heading('Budget Wallet', size: 24)),
-                  ]),
-                  Muted(
-                      isWeb
-                          ? 'Your money, kept in this browser. It syncs only with your own relay, encrypted with a key only your devices have. Save a backup file from Plan now and then.'
-                          : 'Your money, on your devices. Everything is stored here first and works offline. Sync goes through your own relay, encrypted with a key only your devices have.',
-                      size: 14.5),
-                  if (widget.wc.hasUnopenedDb)
-                    const Row(key: ValueKey('olderWalletNotice'), crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Icon(Icons.info_outline, size: 18),
-                      SizedBox(width: 8),
-                      Expanded(child: Muted('An older wallet is on this device. Join with its key to open it.', size: 14.5)),
-                    ]),
-                  if (_passphraseFor != null)
-                    ..._passphraseStep()
-                  else if (!joining) ...[
-                    if (error != null) StatusLabel(good: false, text: error!),
-                    FilledButton(
-                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                      onPressed: busy ? null : (isWeb ? () => _askPassphrase('create') : _create),
-                      child: const Text('Start a new wallet', style: TextStyle(fontSize: 16)),
-                    ),
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                      onPressed: () {
-                        logNav('onboarding.join');
-                        setState(() => joining = true);
-                      },
-                      child: Text(isWeb ? 'Use my wallet key' : 'Join my wallet from another device'),
-                    ),
-                  ] else ...[
-                    Muted(isWeb
-                        ? 'On a device that already has your wallet, open Plan › Show wallet key, then type or paste the key here. You can then restore a backup file in Plan.'
-                        : 'On a device that already has your wallet, open Plan › Show wallet key, then type or paste the key here.'),
-                    TextField(
-                        controller: keyText,
-                        minLines: 2,
-                        maxLines: 4,
-                        decoration: const InputDecoration(labelText: 'Wallet key', hintText: 'BW1-…')),
-                    TextField(
-                        key: const ValueKey('relayAddress'),
-                        controller: relayText,
-                        keyboardType: TextInputType.url,
-                        autocorrect: false,
-                        decoration: const InputDecoration(
-                            labelText: 'Relay address (optional)',
-                            hintText: 'http://homeserver:8787',
-                            helperText: 'You can also set it later in Plan › Sync.',
-                            helperMaxLines: 2)),
-                    if (error != null) StatusLabel(good: false, text: error!),
-                    FilledButton(
-                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                      onPressed: busy ? null : (isWeb ? _checkKeyThenAsk : _join),
-                      child: const Text('Join wallet', style: TextStyle(fontSize: 16)),
-                    ),
-                    TextButton(onPressed: () => setState(() => joining = false), child: const Text('Back')),
-                  ],
-                ])),
-          ),
+    return GatePage(children: [
+      Muted(
+          isWeb
+              ? 'Your money, kept in this browser. It syncs only with your own relay, encrypted with a key only your devices have. Save a backup file from Plan now and then.'
+              : 'Your money, on your devices. Everything is stored here first and works offline. Sync goes through your own relay, encrypted with a key only your devices have.',
+          size: 14.5),
+      if (widget.wc.hasUnopenedDb)
+        const Row(key: ValueKey('olderWalletNotice'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Icons.info_outline, size: 18),
+          SizedBox(width: 8),
+          Expanded(child: Muted('An older wallet is on this device. Join with its key to open it.', size: 14.5)),
+        ]),
+      if (_passphraseFor != null)
+        ..._passphraseStep()
+      else if (!joining) ...[
+        if (error != null) StatusLabel(good: false, text: error!),
+        FilledButton(
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
+          onPressed: busy ? null : (isWeb ? () => _askPassphrase('create') : _create),
+          child: const Text('Start a new wallet', style: TextStyle(fontSize: 16)),
         ),
-      ),
-    );
+        OutlinedButton(
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
+          onPressed: () {
+            logNav('onboarding.join');
+            setState(() => joining = true);
+          },
+          child: Text(isWeb ? 'Use my wallet key' : 'Join my wallet from another device'),
+        ),
+      ] else ...[
+        Muted(isWeb
+            ? 'On a device that already has your wallet, open Plan › Show wallet key, then type or paste the key here. You can then restore a backup file in Plan.'
+            : 'On a device that already has your wallet, open Plan › Show wallet key, then type or paste the key here.'),
+        TextField(
+            controller: keyText, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Wallet key', hintText: 'BW1-…')),
+        TextField(
+            key: const ValueKey('relayAddress'),
+            controller: relayText,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            decoration: const InputDecoration(
+                labelText: 'Relay address (optional)',
+                hintText: 'http://homeserver:8787',
+                helperText: 'You can also set it later in Plan › Sync.',
+                helperMaxLines: 2)),
+        if (error != null) StatusLabel(good: false, text: error!),
+        FilledButton(
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
+          onPressed: busy ? null : (isWeb ? _checkKeyThenAsk : _join),
+          child: const Text('Join wallet', style: TextStyle(fontSize: 16)),
+        ),
+        TextButton(onPressed: () => setState(() => joining = false), child: const Text('Back')),
+      ],
+    ]);
   }
 
   /// Web: two fields and a short explanation. The passphrase protects the key in this browser only.
@@ -149,7 +130,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         if (error != null) StatusLabel(good: false, text: error!),
         FilledButton(
           key: const ValueKey('passphraseContinue'),
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
           onPressed: busy ? null : _savePassphrase,
           child: Text(_passphraseFor == 'create' ? 'Create wallet' : 'Join wallet', style: const TextStyle(fontSize: 16)),
         ),
