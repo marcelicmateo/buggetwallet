@@ -486,6 +486,7 @@ desktop_worker_app() {
   local base=$ROOT/dist/desktop-test/w$1 f
   mkdir -p "$base/app/.dart_tool"
   ln -sfn ../../../packages "$base/packages"
+  ln -sfn ../../../relay "$base/relay"
   rm -rf "$base"/app/{lib,test,integration_test,test_driver,tool}
   tar -C app --exclude=./build --exclude=./.dart_tool --exclude=./linux/flutter/ephemeral -cf - . | tar -C "$base/app" -xf -
   for f in package_config.json package_graph.json version; do
