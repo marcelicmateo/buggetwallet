@@ -41,10 +41,11 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | R4 | Sync spec tests (strict order, caught-up matching, S1/S2, snapshots, pruning, first connect) | test-writer | R0a | done (f58c7f9, merged into R3, green) |
 | R5 | App: Plan › Sync, join with relay, backups via save dialog, Android INTERNET/cleartext, remove folder sync | ui-builder | R3 | done (29b52e1, test green app 726; merged into stage-r) |
 | R6a | Encrypted db core: `localDbKey`, `openKeyed`, `WalletRepo.open(dbKey:)`, crash-safe conversion; stuck-peer snapshot self-heal | core-builder | R1, R3 | done (9febc0a + 709e4bf heal from any caught-up device; core 867/0; merged into stage-r) |
-| R6b | App: open the db only once the key is known (onboarding/web unlock), keyed open native + web wrapped VFS | ui-builder | R5, R6a | running (from stage-r) |
+| R6b | App: open the db only once the key is known (onboarding/web unlock), keyed open native + web wrapped VFS | ui-builder | R5, R6a | done (5eab5f2, test green app 751, web-test 9; merged into stage-r) |
 | R7 | Relay container, `tools/relay.sh`, `tools/build.sh relay`, CI relay job, setup doc (desktop test through a relay moves to R7b after R5) | devops | R2 | done (990ee5d, merged; image 92 MB, full test green incl. relay 93) |
 | R7b | Desktop test: two app instances syncing through `tools/relay.sh` | devops | R5, R7 | done (a161afd, desktop relay_sync green 22 s; merged) |
-| R | Merge, review, Haiku full run, emulator, push, STATUS | lead | R1–R7b | queued |
+| R8 | Fix: join with a key while an unkeyed plaintext wallet.db exists and no key is stored must set the file aside, never merge it (lead found in R6b report) + review findings | ui-builder / core-builder | review | queued |
+| R | Review (running), fixes, Haiku full run, emulator, merge stage-r → v2, push, STATUS | lead | R1–R8 | running |
 
 R6 recipe (from R1): native `sqlite3.open(path)` then `PRAGMA key = "x'<64 hex>'"` right after open; plaintext → encrypted
 in place = open unkeyed + `PRAGMA rekey`. Web: `registerVirtualFileSystem(fs)` **without** `makeDefault`, open with
