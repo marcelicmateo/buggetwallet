@@ -38,7 +38,10 @@ Checks, in this order (all before the wallet lock):
 
 Client clock: the client keeps a device-local offset (ms, in memory) added to its clock for `X-BW-Time`. On 401
 `clock` it sets the offset from the answer's `Date` header and retries that request once, freshly signed; a second
-`clock` (or no `Date`) fails the call.
+`clock` (or no `Date`) fails the call. The offset is accepted only if |offset| <= 24 h; a `Date` further away (a faked
+one over plain HTTP) is not used: no retry, the offset stays as it was, and the call fails as `clockSkew` ("This
+device's clock and the relay's clock differ by more than a day. Check the date and time settings."). So a request
+is never signed more than 24 h from the device's own clock.
 
 Replays inside the window repeat a request exactly (same method, path, covers, body), so every mutating endpoint is
 idempotent or monotonic: `PUT d` with the same bytes → 200, other bytes → 409 (never overwritten); acks only grow
@@ -112,8 +115,13 @@ Assumes the wallet key stays on the devices (only `wid`, `pub` and signatures de
 - **Network sniffer** (plain `http://` on the LAN): sees `wid`, device ids, seqs, sizes, times and the sealed bytes
   (unreadable without the key). Cannot change the relay: a captured signature is bound to its method, path, covers,
   body and time, so it cannot ack, snapshot, store or prune anything else, and a replay inside the 5 minutes repeats an
-  idempotent request. Can still read metadata and, if the relay is ever wiped, squat the `wid` with its own key first
+  idempotent request. The window stays 5 minutes because a client never takes a clock offset above 24 h from a `Date`
+  (a faked `Date` of, say, +30 days is refused), so it never signs a request far ahead to be replayed later.
+  Can still read metadata and, if the relay is ever wiped, squat the `wid` with its own key first
   (devices then get 401 `refused`: a denial of service, not a read). The VPN hides all of this.
+- **Denial of service** (anyone who can reach the port): the relay must read a body before it can verify the signature
+  (the hash covers it), so an unsigned or badly signed request still costs a read. That cost is bounded by the size
+  limits, the per-address in-flight cap and the rate limit (413 / 429); the VPN keeps strangers away.
 - **Stolen relay disk**: sealed files plus `meta.json` (public key, seqs, acks, times). Nothing in it can sign or decrypt.
 - **Malicious relay** (or someone controlling it): can drop, withhold, roll back or delete files and snapshots, lie in
   the state, refuse requests or replay its stored bytes to clients; it cannot read, forge or alter sealed content

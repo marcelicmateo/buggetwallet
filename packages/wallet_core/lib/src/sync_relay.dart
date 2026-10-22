@@ -163,6 +163,9 @@ class RelayTransport implements SyncTransport {
   static String signedText(String method, String path, String covers, String bodyHash, String time) =>
       'bw-relay-v2\n$method\n$path\n$covers\n$bodyHash\n$time';
 
+  /// The largest clock offset taken from a relay's `Date` (RELAY_PROTOCOL.md "Signed requests"); a bigger one fails the call.
+  static const maxClockOffset = Duration(hours: 24);
+
   Future<http.Response> _req(String method, String path, String kind,
       {List<int> body = const [], Map<String, String> headers = const {}, bool withPub = false}) async {
     final id = await _id;
@@ -182,7 +185,14 @@ class RelayTransport implements SyncTransport {
     if (_isClock(r)) {
       final relayTime = parseHttpDate(r.headers['date'] ?? '');
       if (relayTime != null) {
-        clockOffsetMs = relayTime.millisecondsSinceEpoch - _now().millisecondsSinceEpoch;
+        final offset = relayTime.millisecondsSinceEpoch - _now().millisecondsSinceEpoch;
+        // A `Date` over plain HTTP can be faked: an offset beyond a day would let a captured request be signed far
+        // ahead and replayed later. Refuse it, keep the old offset, and do not retry.
+        if (offset.abs() > maxClockOffset.inMilliseconds) {
+          logEvent(_log, Level.WARNING, 'relay.clockSkew', {'kind': kind});
+          throw const TransportException(TransportFailure.clockSkew, 'clock differs by more than a day');
+        }
+        clockOffsetMs = offset;
         // Only that the offset changed, never the clocks themselves.
         logEvent(_log, Level.INFO, 'relay.clockOffset', {'kind': kind, 'minutes': clockOffsetMs ~/ 60000});
         r = await attempt();

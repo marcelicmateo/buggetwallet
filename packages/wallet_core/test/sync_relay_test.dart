@@ -275,7 +275,7 @@ void main() {
 
     test('clock: a skewed device takes the offset from Date and retries once; later requests sign right away', () async {
       final relayNow = DateTime.utc(2026, 10, 22, 10);
-      for (final skew in [const Duration(hours: -3), const Duration(minutes: 6), const Duration(days: 400)]) {
+      for (final skew in [const Duration(hours: -3), const Duration(minutes: 6), const Duration(hours: 23)]) {
         seen.clear();
         final t = RelayTransport(Uri.parse('http://relay.test'), key,
             now: () => relayNow.add(skew),
@@ -291,6 +291,51 @@ void main() {
         await t.state();
         expect(seen, hasLength(3), reason: 'the offset is kept');
       }
+    });
+
+    test('clock: a Date more than 24 h away is not trusted: no retry, no far-time signature, no offset kept', () async {
+      final relayNow = DateTime.utc(2026, 10, 22, 10);
+      for (final fake in [const Duration(days: 30), const Duration(days: -30), const Duration(hours: 25)]) {
+        seen.clear();
+        // The device's clock is right; a man in the middle answers 401 clock with a Date [fake] away from it.
+        final t = RelayTransport(Uri.parse('http://relay.test'), key,
+            now: () => relayNow,
+            client: MockClient((r) async {
+              seen.add(r);
+              return http.Response('{"error":"clock"}', 401, headers: {'date': HttpDate.format(relayNow.add(fake))});
+            }));
+        await expectLater(t.state(), throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.clockSkew)));
+        expect(seen, hasLength(1), reason: 'no retry: $fake');
+        expect(t.clockOffsetMs, 0, reason: 'offset kept only when accepted');
+        t.close();
+      }
+    });
+
+    test('clock: a Date 2 h away is taken: one refusal, one retry that succeeds', () async {
+      final relayNow = DateTime.utc(2026, 10, 22, 10);
+      final t = RelayTransport(Uri.parse('http://relay.test'), key,
+          now: () => relayNow.add(const Duration(hours: 2)),
+          client: MockClient((r) async {
+            seen.add(r);
+            return _clockGate(r, relayNow);
+          }));
+      expect((await t.state()).devices, isEmpty);
+      expect(seen, hasLength(2));
+      expect(t.clockOffsetMs, -2 * 3600000);
+      expect(int.parse(seen[1].headers['X-BW-Time']!), relayNow.millisecondsSinceEpoch);
+    });
+
+    test('clock: the engine reports a skewed clock in words, without times or hosts', () async {
+      final relayNow = DateTime.utc(2026, 10, 22, 10);
+      final t = RelayTransport(Uri.parse('http://relay.test'), key,
+          now: () => relayNow,
+          client: MockClient((r) async =>
+              http.Response('{"error":"clock"}', 401, headers: {'date': HttpDate.format(relayNow.add(const Duration(days: 30)))})));
+      final repo = WalletRepo.inMemory();
+      await expectLater(
+          SyncEngine(t, key).run(repo),
+          throwsA(isA<SyncException>()
+              .having((e) => e.message, 'message', allOf(contains('differ by more than a day'), isNot(contains('relay.test'))))));
     });
 
     test('clock: a relay that keeps saying clock, or gives no Date, fails the call without looping', () async {
