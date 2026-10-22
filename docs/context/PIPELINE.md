@@ -33,12 +33,12 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 ## Stage R: sync redesign (2026-10-22, spec DESIGN_DECISIONS §4.9)
 | # | Item | Agent | Depends on | Status |
 |---|---|---|---|---|
-| R0a | Context pack: sync engine, repo sync APIs, sync tests/sim | scout | – | running |
-| R0b | Context pack: build tooling, package layout, sqlite3 packaging | scout | – | running |
-| R1 | Encrypted SQLite spike (sqlite3mc on Android, Linux, web wasm) | devops | R0b | queued |
-| R2 | Relay server `relay/` + HTTP tests | core-builder | R0b | queued |
-| R3 | `SyncTransport`, `MemoryTransport`, `RelayTransport`, `SyncEngine`, snapshots (FolderSync left for R5) | core-builder | R0a | queued |
-| R4 | Sync spec tests (strict order, caught-up matching, S1/S2, snapshots, pruning, first connect) | test-writer | R0a | queued |
+| R0a | Context pack: sync engine, repo sync APIs, sync tests/sim | scout | – | done |
+| R0b | Context pack: build tooling, package layout, sqlite3 packaging | scout | – | done |
+| R1 | Encrypted SQLite spike (sqlite3mc on Android, Linux, web wasm) | devops | R0b | running |
+| R2 | Relay server `relay/` + HTTP tests (protocol: `RELAY_PROTOCOL.md`) | core-builder | R0b | running |
+| R3 | `SyncTransport`, `MemoryTransport`, `RelayTransport`, `SyncEngine`, snapshots (FolderSync left for R5) | core-builder | R0a | running |
+| R4 | Sync spec tests (strict order, caught-up matching, S1/S2, snapshots, pruning, first connect) | test-writer | R0a | running |
 | R5 | App: Plan › Sync, join with relay, backups via save dialog, Android INTERNET/cleartext, remove folder sync | ui-builder | R3 | queued |
 | R6 | Encrypted local database: core key + conversion, app wiring | core-builder / ui-builder | R1 | queued |
 | R7 | Relay container, `tools/relay.sh`, `tools/build.sh relay`, desktop test through a local relay, setup doc | devops | R2 | queued |
