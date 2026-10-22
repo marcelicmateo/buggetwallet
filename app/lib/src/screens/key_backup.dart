@@ -74,8 +74,7 @@ class _KeyBackupSheetState extends State<KeyBackupSheet> {
                   color: Colors.white,
                   padding: const EdgeInsets.all(8),
                   child: QrImageView(key: const ValueKey('keyQr'), data: key, size: 160))),
-          SelectableText(key,
-              key: const ValueKey('keyText'), textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: 14, color: c.ink)),
+          Text(key, key: const ValueKey('keyText'), textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: 14, color: c.ink)),
         ] else
           const SizedBox(height: 160),
         OutlinedButton.icon(
@@ -85,7 +84,7 @@ class _KeyBackupSheetState extends State<KeyBackupSheet> {
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           onPressed: key == null ? null : _copy,
         ),
-        if (_copied) const Muted('The clipboard is cleared in 60 seconds.'),
+        if (_copied) const Muted('Copy key clears the clipboard after 60 seconds. Clipboard history on some phones may keep it.'),
         if (!_asking)
           FilledButton(
             key: const ValueKey('keySaved'),

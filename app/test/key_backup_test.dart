@@ -113,6 +113,58 @@ void main() {
       expect(clip[0], 'something else the owner copied');
     });
 
+    testWidgets('background app reads null from the clipboard: still cleared', (t) async {
+      final wc = keyed();
+      final clip = <String?>[null];
+      wc.clipboardWrite = (x) async => clip[0] = x;
+      wc.clipboardRead = () async => null;
+      await wc.copyKeyBackup();
+      expect(clip[0], isNotEmpty);
+      await t.pump(const Duration(seconds: 61));
+      expect(clip[0], '');
+    });
+
+    testWidgets('a failing clipboard read still clears', (t) async {
+      final wc = keyed();
+      final clip = <String?>[null];
+      wc.clipboardWrite = (x) async => clip[0] = x;
+      wc.clipboardRead = () async => throw StateError('no access');
+      await wc.copyKeyBackup();
+      await t.pump(const Duration(seconds: 61));
+      expect(clip[0], '');
+    });
+
+    testWidgets('in the background at 60 s: cleared on the next resume', (t) async {
+      final wc = keyed();
+      final clip = <String?>[null];
+      wc.clipboardWrite = (x) async => clip[0] = x;
+      wc.clipboardRead = () async => null;
+      final text = await wc.keyText();
+      await wc.copyKeyBackup();
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await t.pump(const Duration(seconds: 61));
+      expect(clip[0], text, reason: 'not cleared while in the background');
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      t.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await t.pump();
+      expect(clip[0], '');
+    });
+
+    testWidgets('dispose with a pending clear empties the clipboard at once', (t) async {
+      final wc = keyed();
+      final clip = <String?>[null];
+      wc.clipboardWrite = (x) async => clip[0] = x;
+      wc.clipboardRead = () async => clip[0];
+      await wc.copyKeyBackup();
+      expect(clip[0], isNotEmpty);
+      wc.dispose();
+      await t.pump();
+      expect(clip[0], '');
+    });
+
     testWidgets('a second copy restarts the 60 s', (t) async {
       final wc = keyed();
       final clip = <String?>[null];
@@ -143,9 +195,10 @@ void main() {
       expect(find.text('Save your wallet key'), findsWidgets);
       expect(find.text('Without this key, this wallet cannot be opened again on any device.'), findsOneWidget);
       expect(find.byKey(const ValueKey('keyQr')), findsOneWidget);
-      final shown = (t.widget(find.byKey(const ValueKey('keyText'))) as SelectableText).data!;
+      final shown = (t.widget(find.byKey(const ValueKey('keyText'))) as Text).data!;
       expect(shown, await f.wc.keyText());
       expect(find.text('The passphrase only unlocks this browser.'), findsNothing);
+      expect(find.byType(SelectableText), findsNothing, reason: 'Copy key is the only copy path (it clears the clipboard)');
 
       await t.tap(find.byKey(const ValueKey('keySaved')));
       await t.pump();
@@ -215,7 +268,7 @@ void main() {
       await t.tap(find.byKey(const ValueKey('keyCopy')));
       await t.pump();
       expect(clip[0], await wc.keyText());
-      expect(find.text('The clipboard is cleared in 60 seconds.'), findsOneWidget);
+      expect(find.text('Copy key clears the clipboard after 60 seconds. Clipboard history on some phones may keep it.'), findsOneWidget);
       await t.pump(const Duration(seconds: 61));
       expect(clip[0], '');
     });

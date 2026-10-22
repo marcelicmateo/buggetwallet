@@ -111,7 +111,9 @@ void main() {
         await scrollThrough(t, TodayScreen, '$name-today');
         where = 'add-expense-sheet';
         debugPrint('layout $name: $where');
-        await tapVisible(t, find.descendant(of: find.byType(TodayScreen), matching: find.text('Add expense')));
+        final addExpense = find.descendant(of: find.byType(TodayScreen), matching: find.text('Add expense'));
+        await scrollTo(t, addExpense, TodayScreen);
+        await tapVisible(t, addExpense);
         await t.enterText(find.descendant(of: find.byType(AddExpenseSheet), matching: find.byType(TextField)).first, '120');
         await tapVisible(t, find.descendant(of: find.byType(AddExpenseSheet), matching: find.text('Add expense')).last);
         expect(find.text('Over 50\u00A0€: wishlist first?'), findsOneWidget);
@@ -154,6 +156,7 @@ void main() {
         where = 'key-sheet';
         debugPrint('layout $name: $where');
         await goTab(t, 'Today');
+        await scrollTo(t, find.text('Save now'), TodayScreen, delta: -250);
         await tapVisible(t, find.text('Save now'));
         await Harness.shot(t, '$name-sheet-key');
         await closeSheet(t, KeyBackupSheet);
