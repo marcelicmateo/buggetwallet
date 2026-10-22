@@ -159,13 +159,12 @@ void main() {
       await t.pump();
     }
 
-    webTest('no sync folder needed: the button is on, no folder text, no "last backup" line', (t) async {
+    webTest('no relay needed: the button is on, no folder text, no "last backup" line', (t) async {
       final w = webWallet(full: true);
       await pumpPanel(t, w.wc, FakeChooser());
       expect(enabled(t, backupBtn), isTrue);
-      expect(find.text('Set the sync folder first'), findsNothing);
       expect(find.text('No backup yet'), findsNothing);
-      expect(find.textContaining('sync folder'), findsNothing);
+      expect(find.textContaining('folder'), findsNothing);
       expect(find.textContaining('as a file'), findsOneWidget);
     });
 
@@ -287,7 +286,7 @@ void main() {
       ('a wallet that got data meanwhile', StateError('not empty'), 'The wallet is not empty, so nothing was restored.'),
       ('anything else', const FormatException('odd'), "Couldn't restore the backup."),
     ]) {
-      webTest('restore with $label: the same text as with a file in the sync folder', (t) async {
+      webTest('restore with $label: the same texts as on the other platforms', (t) async {
         final w = webWallet();
         final c = FakeChooser()..picks = [FakePicked('a.bwb', Uint8List(2))];
         w.wc.backupBytesReader = (repo, bytes, key) async => raise(error);
@@ -371,7 +370,7 @@ void main() {
       expect(w.wc.repo, isNot(same(oldRepo)));
       expect(w.wc.txs, isEmpty);
       expect(w.wc.walletIsEmpty, isTrue);
-      expect(w.wc.syncFolder, isNull);
+      expect(w.wc.relayUrl, isNull);
       expect(lines.join('\n'), contains('wallet.forget'));
     });
 
@@ -439,13 +438,14 @@ void main() {
             {FakeChooser? chooser, Size size = const Size(400, 8000), double scale = 1}) =>
         pumpApp(t, Scaffold(body: PlanScreen(wc: wc, chooser: chooser ?? FakeChooser())), size: size, textScale: scale);
 
-    webTest('no Sync folder section and no Nudges; Backup, Export, Diagnostics and This browser stay', (t) async {
+    webTest('Sync (relay) is there, Nudges are not; Backup, Export, Diagnostics and This browser stay', (t) async {
       final w = webWallet(full: true);
       await pumpPlan(t, w.wc);
-      expect(find.text('SYNC'), findsNothing);
+      expect(find.text('SYNC'), findsOneWidget);
+      expect(find.text('Sync now'), findsOneWidget);
+      expect(find.text('Test connection'), findsOneWidget);
       expect(find.text('NUDGES'), findsNothing);
       expect(find.text('Choose folder'), findsNothing);
-      expect(find.text('Sync now'), findsNothing);
       expect(find.text('BACKUP'), findsOneWidget);
       expect(find.text('EXPORT'), findsOneWidget);
       expect(find.text('DIAGNOSTICS'), findsOneWidget);
@@ -528,7 +528,7 @@ void main() {
       expect(find.text('Logs downloaded.'), findsOneWidget);
     });
 
-    webTest('a failed download says so and does not reach for a folder', (t) async {
+    webTest('a failed download says so', (t) async {
       final w = webWallet();
       final c = FakeChooser()..saveError = StateError('no');
       await pumpApp(t, Scaffold(body: SingleChildScrollView(child: DiagnosticsPanel(wc: w.wc, chooser: c))));
@@ -627,13 +627,13 @@ void main() {
       await pumpOnboarding(t, w.wc);
       await t.tap(find.text('Use my wallet key'));
       await t.pump();
-      await t.enterText(find.byType(TextField), 'not a key');
+      await t.enterText(find.widgetWithText(TextField, 'Wallet key'), 'not a key');
       await t.tap(find.text('Join wallet'));
       await t.pump();
       expect(find.textContaining('This is not a Budget Wallet key (it should start with BW1).'), findsOneWidget);
       expect(field('passphrase'), findsNothing);
       final text = await VaultKey.generate().toText();
-      await t.enterText(find.byType(TextField), text);
+      await t.enterText(find.widgetWithText(TextField, 'Wallet key'), text);
       await t.tap(find.text('Join wallet'));
       await t.pumpAndSettle();
       expect(find.text('Choose a passphrase'), findsOneWidget);

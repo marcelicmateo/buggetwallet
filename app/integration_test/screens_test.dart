@@ -1,7 +1,6 @@
 // Screenshots of every tab with the synthetic demo wallet, then the app's log. Run on the emulator: tools/emulator.sh screens
 // -> dist/screens/*.png and dist/logs/app-emulator.log (written by test_driver/integration_test.dart).
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/logging.dart';
@@ -12,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:wallet_core/wallet_core.dart';
 
 import 'demo_data.dart';
 import 'support/harness.dart' show navTab;
@@ -62,20 +62,19 @@ void main() {
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-plan-nudges');
 
-    // Plan › Backup and Export (M5): a throwaway sync folder, one backup, then the Export panel.
-    final folder = await Directory.systemTemp.createTemp('bw-screens-sync');
-    addTearDown(() => folder.delete(recursive: true));
-    await wc.setSyncFolder(folder.path);
+    // Plan › Sync (relay address, status, devices), then Backup and Export (M5). The relay is a fake run: no network.
+    wc.syncRunner = (relay, key, repo) async => SyncReport(0, 0, 0, caughtUp: true, devices: [
+          SyncDevice('ab12f3', lastSeen: DateTime.now().subtract(const Duration(minutes: 5)), isThis: true),
+          SyncDevice('c9d8e7', lastSeen: DateTime.now().subtract(const Duration(hours: 3))),
+        ]);
+    await wc.setRelay(Uri.parse('http://homeserver:8787'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Test connection'), 300, scrollable: plan);
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-plan-sync');
     await tester.scrollUntilVisible(find.text('Back up now'), 300, scrollable: plan);
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-plan-backup');
-    await tester.tap(find.text('Back up now'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Last backup'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 4)); // the toast goes away, so it does not cover the next screenshots
-    await tester.pumpAndSettle();
-    await binding.takeScreenshot('5-plan-backup-done');
     await tester.scrollUntilVisible(find.text('Plain files, not encrypted.'), 300, scrollable: plan);
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-plan-export');

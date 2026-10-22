@@ -1,7 +1,5 @@
-// Tap-through on Plan: numbers (validation, save), start a new month, sync folder, wallet key, Diagnostics (level,
-// log size, put logs in the sync folder, clear). Run: tools/emulator.sh test plan
-import 'dart:io';
-
+// Tap-through on Plan: numbers (validation, save), start a new month, Sync (relay address), wallet key, Diagnostics (level,
+// log size, clear). Run: tools/emulator.sh test plan
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/diagnostics.dart';
@@ -10,7 +8,6 @@ import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/harness.dart';
@@ -163,12 +160,10 @@ void main() {
     await Harness.checkLog();
   });
 
-  itest('Sync folder, wallet key, Diagnostics: level, log size, logs to the sync folder, clear', (t) async {
+  itest('Sync (relay), wallet key, Diagnostics: level, log size, clear', (t) async {
     final wc = await Harness.start(t);
     final key = await wc.keyText();
-    final tmp = await getTemporaryDirectory();
-    final sync = '${tmp.path}${Platform.pathSeparator}bw-it-sync-${DateTime.now().millisecondsSinceEpoch}';
-    Harness.private(texts: [sync, 'bw-it-sync', tmp.path]);
+    Harness.private(texts: ['it-relay.invalid']);
     await goTab(t, 'Plan');
 
     // Log level.
@@ -192,27 +187,28 @@ void main() {
     expect(wc.logLevel, 'all');
     expect(Logger.root.level, Level.ALL);
 
-    // Sync folder by typed path: a missing folder is refused (never created), an existing one is used and synced into.
-    await scrollTo(t, find.text('Type path'), PlanScreen, delta: -250);
-    expect(find.text('Put in sync folder'), findsNothing);
-    await tapVisible(t, find.text('Type path'));
+    // Relay address: a bad one is refused, a good one is saved device-locally and synced (a fake run: no network).
+    wc.syncRunner = (relay, k, repo) async =>
+        SyncReport(0, 0, 0, caughtUp: true, devices: [SyncDevice('ab12f3', lastSeen: DateTime.now(), isThis: true)]);
+    wc.healthCheck = (relay) async {};
+    await scrollTo(t, find.text('Test connection'), PlanScreen, delta: -250);
+    final field = find.byKey(const ValueKey('relayAddress'));
+    await t.enterText(field, 'gopher://nope');
+    await tapVisible(t, find.text('Save address'));
     await t.pumpAndSettle();
-    final field = find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField));
-    await t.enterText(field, sync);
-    await tapVisible(t, find.text('Use folder'));
+    expect(find.text('Enter an address like http://homeserver:8787'), findsOneWidget);
+    expect(wc.relayUrl, isNull);
+    await t.enterText(field, 'http://it-relay.invalid:8787');
+    await tapVisible(t, find.text('Test connection'));
     await t.pumpAndSettle();
-    expect(find.text("This folder doesn't exist."), findsOneWidget);
-    expect(wc.syncFolder, isNull);
-    expect(Directory(sync).existsSync(), isFalse, reason: 'a typed path is never created');
-    Directory(sync).createSync(recursive: true);
-    await tapVisible(t, find.text('Use folder'));
+    expect(find.text('Relay reachable'), findsOneWidget);
+    await tapVisible(t, find.text('Save address'));
     await waitFor(t, () => wc.lastSync != null || wc.syncError != null, what: 'the first sync');
     expect(wc.syncError, isNull);
-    expect(wc.syncFolder, sync);
-    expect(wc.repo.localValue('syncFolder'), sync);
-    expect(Directory(sync).listSync(recursive: true).whereType<File>(), isNotEmpty, reason: 'sync wrote its files');
-    expect(find.textContaining('Synced at '), findsOneWidget);
-    expect(find.text(sync), findsOneWidget, reason: 'the folder is shown');
+    expect(wc.relayUrl, Uri.parse('http://it-relay.invalid:8787'));
+    expect(wc.repo.localValue('relayUrl'), 'http://it-relay.invalid:8787');
+    expect(find.text('Up to date'), findsOneWidget);
+    expect(find.textContaining('Last sync '), findsOneWidget);
 
     await tapVisible(t, find.text('Sync now'));
     await waitFor(t, () => !wc.syncing, what: 'sync now');
@@ -229,37 +225,6 @@ void main() {
     expect((await Clipboard.getData(Clipboard.kTextPlain))?.text, key);
     await Clipboard.setData(const ClipboardData(text: ''));
 
-    // Logs into the sync folder's diagnostics/.
-    await scrollTo(t, find.text('Put in sync folder'), PlanScreen);
-    await tapVisible(t, find.text('Put in sync folder'));
-    final want = '$sync${Platform.pathSeparator}diagnostics${Platform.pathSeparator}${wc.logFileName()}';
-    await waitFor(t, () => find.text('Saved to $want').evaluate().isNotEmpty, what: 'logs saved');
-    final saved = File(want).readAsStringSync();
-    expect(saved, contains('app.start'));
-    expect(saved, isNot(contains(key)));
-    expect(await AppLog.combined(), contains('log.saved {"to":"syncFolder"'));
-
-    // Without a sync folder: the fallback behind "Save logs…" writes to the app documents folder.
-    await wc.setSyncFolder(null);
-    await t.pumpAndSettle();
-    expect(find.text('Put in sync folder'), findsNothing);
-    Directory? docs;
-    try {
-      docs = await getApplicationDocumentsDirectory();
-    } on MissingPlatformDirectoryException {
-      // Linux finds it with the xdg-user-dir tool, which a bare build container may not have.
-      if (!Platform.isLinux) rethrow;
-      debugPrint('SKIPPED documents-folder fallback: no documents folder on this Linux (xdg-user-dir missing)');
-    }
-    if (docs != null) {
-      Harness.private(texts: [docs.path]);
-      final path = await wc.saveLogsToFolder();
-      expect(path, '${docs.path}${Platform.pathSeparator}diagnostics${Platform.pathSeparator}${wc.logFileName()}');
-      expect(File(path).existsSync(), isTrue);
-      File(path).deleteSync();
-      expect(await AppLog.combined(), contains('log.saved {"to":"documents"'));
-    }
-
     await Harness.checkLog();
 
     // Clear logs: one fresh file that starts with log.cleared.
@@ -271,7 +236,6 @@ void main() {
     expect(logFilesValue(t), startsWith('1 · '));
     expect(await AppLog.combined(), contains('log.cleared'));
     expect(find.byType(DiagnosticsPanel), findsOneWidget);
-    Directory(sync).deleteSync(recursive: true);
     await Harness.checkLog();
   });
 }

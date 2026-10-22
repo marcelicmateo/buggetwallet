@@ -1,6 +1,5 @@
 // The system file choosers can throw (Linux without xdg-desktop-portal: DBusServiceUnknownException). The screens must
 // show a short message, log the failure without paths, and leave their buttons usable. All data is SYNTHETIC.
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:budget_wallet/src/file_chooser.dart';
@@ -24,12 +23,6 @@ class FailingChooser extends FileChooser {
   FailingChooser();
   @override
   Future<List<PlatformFile>> pickBankFiles() async {
-    calls++;
-    throw PortalMissing();
-  }
-
-  @override
-  Future<String?> pickFolder({required String title}) async {
     calls++;
     throw PortalMissing();
   }
@@ -79,38 +72,18 @@ void main() {
     expect(chooser.calls, 2);
   });
 
-  testWidgets('Choose folder: a failing chooser shows a message and opens the type-a-path dialog', (t) async {
+  testWidgets('Save logs: a failing save dialog says so and the panel stays usable', (t) async {
     final wc = demoWallet();
-    final chooser = FailingChooser();
-    await pumpApp(t, Scaffold(body: PlanScreen(wc: wc, chooser: chooser)));
-    await _tapText(t, 'Choose folder');
-    await t.pump();
-    expect(chooser.calls, 1);
-    expect(find.text(chooserFailedMessage), findsOneWidget);
-    expect(find.text('Sync folder path'), findsOneWidget, reason: 'the folder can be typed or pasted instead');
-    expect(find.widgetWithText(FilledButton, 'Use folder'), findsOneWidget);
-    expect(wc.syncFolder, isNull);
-    final logged = lines.where((l) => l.contains('sync.pickerFailed')).toList();
-    expect(logged, hasLength(1));
-    expect(logged.single, contains('"type":"PortalMissing"'));
-    expect(logged.single, isNot(contains('private-folder')));
-  });
-
-  testWidgets('Save logs: a failing save dialog falls back to the sync folder and the panel stays usable', (t) async {
-    final wc = demoWallet();
-    final dir = Directory.systemTemp.createTempSync('bw-chooser-test');
-    addTearDown(() => dir.deleteSync(recursive: true));
-    wc.syncFolder = dir.path;
     final chooser = FailingChooser();
     await pumpApp(t, Scaffold(body: SingleChildScrollView(child: DiagnosticsPanel(wc: wc, chooser: chooser))));
-    // Real file I/O: the tap and the wait run outside the fake clock.
+    // The log files are real I/O: the tap and the wait run outside the fake clock.
     await t.runAsync(() async {
       await t.tap(find.text('Save logs…'));
       await Future<void>.delayed(const Duration(milliseconds: 500));
     });
     await t.pump();
     expect(chooser.calls, 1);
-    expect(find.textContaining('Saved to'), findsOneWidget);
+    expect(find.text("Couldn't save the logs."), findsOneWidget);
     final button = find.ancestor(of: find.text('Save logs…'), matching: find.bySubtype<ButtonStyleButton>());
     expect(t.widget<ButtonStyleButton>(button).onPressed, isNotNull, reason: 'not stuck busy');
     final logged = lines.where((l) => l.contains('log.saveDialogFailed')).toList();

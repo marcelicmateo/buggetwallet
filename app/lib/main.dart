@@ -208,7 +208,7 @@ class _HomeShellState extends State<HomeShell> {
     _refreshPages();
     _life = AppLifecycleListener(
       onResume: () {
-        widget.wc.checkDay(); // a new day also shows without a sync folder
+        widget.wc.checkDay(); // a new day also shows without a relay
         widget.wc.rescheduleNudges(); // reminders are scheduled for 4 weeks at a time
         widget.wc.syncNow(quiet: true, trigger: 'resume');
       },
@@ -241,8 +241,8 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   void _syncNow() {
-    if (widget.wc.syncFolder == null) {
-      toast(context, isWeb ? 'There is no sync on the web yet.' : 'No sync folder yet. Set one in Plan.');
+    if (widget.wc.relayUrl == null) {
+      toast(context, 'No relay address yet. Set one in Plan › Sync.');
       return;
     }
     widget.wc.syncNow(trigger: 'key');

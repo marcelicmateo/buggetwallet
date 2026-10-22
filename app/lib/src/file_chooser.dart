@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 /// What the user sees when the system file chooser can't open (Linux without the xdg-desktop-portal, for one).
 const chooserFailedMessage = "Can't open the file chooser on this computer.";
 
-/// The system file and folder choosers. The screens take one as a parameter so tests can replace it
+/// The system file choosers. The screens take one as a parameter so tests can replace it
 /// (the real ones need a desktop portal or an Android activity, and can throw when that is missing).
 class FileChooser {
   const FileChooser();
@@ -18,9 +18,6 @@ class FileChooser {
 
   /// A backup file (`.bwb`). An empty list means the user cancelled.
   Future<List<PlatformFile>> pickBackupFile() => FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['bwb']);
-
-  /// A folder path, or null when the user cancelled.
-  Future<String?> pickFolder({required String title}) => FilePicker.getDirectoryPath(dialogTitle: title);
 
   /// The save dialog: where it saved, or null when the user cancelled. In a browser this is a download and there is no
   /// cancel to see, so a finished download answers with the file name as the path.
