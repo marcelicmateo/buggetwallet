@@ -28,7 +28,7 @@ build_image() {
   echo "building $IMAGE" >&2
   podman build -f "$ROOT/dev/Containerfile.relay" -t "$IMAGE" "$ROOT" >&2
 }
-health() { curl -fsS --max-time 3 "$@" "http://127.0.0.1:$PORT/v1/health"; }
+health() { curl -fsS --max-time 3 "$@" "http://127.0.0.1:$PORT/v2/health"; }
 
 case "$CMD" in
   image) build_image ;;

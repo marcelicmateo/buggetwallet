@@ -30,6 +30,7 @@ String clockText(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute
 /// What "Test connection" says for a failure.
 String relayTestFailureText(TransportFailure f) => switch (f) {
       TransportFailure.newerApi => 'This relay needs a newer app',
+      TransportFailure.olderApi => 'This relay is older than the app. Update the relay on the home server.',
       TransportFailure.unreachable => "Can't reach the relay",
       _ => 'The relay answered, but not as expected',
     };

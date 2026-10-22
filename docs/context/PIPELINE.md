@@ -59,9 +59,12 @@ throws `SqliteException` extended code 26 "file is not a database".
 ## Stage S: relay hardening + docs (2026-10-22)
 | # | Item | Agent | Depends on | Status |
 |---|---|---|---|---|
-| S1 | Relay protocol v2: signed requests (Ed25519 from the wallet key, relay keeps the public key only), replay-harmless writes, clock-skew retry; server + `RelayTransport` + protocol doc | core-builder | – | running |
+| S1 | Relay protocol v2: signed requests (Ed25519 from the wallet key, relay keeps the public key only), replay-harmless writes, clock-skew retry; server + `RelayTransport` + protocol doc; folder backups removed | core-builder | – | done (c5944c7, cd6169d; relay 115, core 882, app 770) |
 | S2 | Docs: README, docs/setup.md, docs/architecture.md, DESIGN_DECISIONS §2 diagram, wallet_core CLAUDE.md backup notes still describe Syncthing | general-purpose (sonnet/medium) | – | done (8389317, labels fixed by lead) |
 | S3 | Key backup prompt (gap 7): the encrypted db and relay make the wallet key the only way back | ui-builder | – | done (b9c15a1, app 770, desktop onboarding + emulator screens ok) |
+| S4 | Lead: `tools/relay.sh` health on `/v2/health`; app text for an older relay (`olderApi`) | lead | S1 | done |
+| S | Review stage S diff, full run, push | lead | S1–S4 | running |
+| F0 | Future spending spec (§4.3), owner open questions: calendars, default amounts, heads-up | lead | – | next |
 
 Stage R notes: the haiku watcher stopped twice before finishing (it hands back while waiting on its own background run); the
 lead ran the remaining suites with one background command. Worktrees from `isolation: "worktree"` start on `master`:
