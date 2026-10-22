@@ -212,7 +212,7 @@ jobs:
           BW_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BW_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BW_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-        run: .github/scripts/timed.sh apk 'cd app && flutter pub get >/dev/null && flutter build apk --release 2>&1 | tail -40'
+        run: .github/scripts/timed.sh apk 'cd app && flutter pub get >/dev/null && flutter build apk --release --target-platform android-arm64,android-x64 2>&1 | tail -40'
       - name: Upload Android app
         if: steps.apk.outcome == 'success'
         uses: actions/upload-artifact@v4

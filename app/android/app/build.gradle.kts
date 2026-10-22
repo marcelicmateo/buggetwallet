@@ -36,6 +36,13 @@ android {
         versionName = flutter.versionName
     }
 
+    // 64-bit only: ML Kit AARs bundle 32-bit ARM libs that --target-platform does not remove (about 10 MB).
+    packaging {
+        jniLibs {
+            excludes += listOf("lib/armeabi-v7a/**", "lib/x86/**")
+        }
+    }
+
     signingConfigs {
         if (releaseKeystore != null) {
             create("release") {
