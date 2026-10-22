@@ -45,7 +45,7 @@ jobs:
           export BW_KEYSTORE="$RUNNER_TEMP/release.jks"
           cd app
           flutter pub get 2>&1 | tee -a ../build.log
-          flutter build apk --release 2>&1 | tail -40 | tee -a ../build.log
+          flutter build apk --release --target-platform android-arm64,android-x64 2>&1 | tail -40 | tee -a ../build.log
           flutter build linux --release 2>&1 | tail -40 | tee -a ../build.log
           mkdir -p ../dist
           cp build/app/outputs/flutter-apk/app-release.apk ../dist/BudgetWallet-android.apk

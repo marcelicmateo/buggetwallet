@@ -301,7 +301,7 @@ build_apk() {
     results+=("apk=FAILED"); failed=1; return
   fi
   local cold=false; [[ -d app/build/app ]] || cold=true
-  step apk 'cd app && flutter build apk --release && cp build/app/outputs/flutter-apk/app-release.apk ../dist/BudgetWallet-android.apk' "$cold"
+  step apk 'cd app && flutter build apk --release --target-platform android-arm64,android-x64 && cp build/app/outputs/flutter-apk/app-release.apk ../dist/BudgetWallet-android.apk' "$cold"
   [[ $failed == 0 ]] && step apk-signature check_signature
 }
 # The APK must carry the release key's certificate, or Android refuses it as an update.
