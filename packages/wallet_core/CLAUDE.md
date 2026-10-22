@@ -180,7 +180,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `amountFromText`/earlier same `normalizeTitle` amounts), `paidCandidates` (same category ± 3 days, never by amount
   alone), `headsUps`; settings `headsUpCents` (10000, 0..10000000), `headsUpDays` (3, 0..14). `parseIcs` (RRULE
   subset, EXDATE/RDATE/RECURRENCE-ID, folding (linear), escapes; UTC times via the optional `toLocal`; unsupported
-  rules → first occurrence + `unsupported` count; a whole-file budget of 2·10⁶ recurrence steps, after which recurring
+  rules → first occurrence + `unsupported` count; a whole-file budget of 10⁶ recurrence steps, after which recurring
   events give their first in-range occurrence only and count as unsupported; never throws), `plannedIcs` (export, `euroText` amounts, stable UIDs).
   Logs: counts and enum words only (`planned.*`, `ics.parse`, `ics.export`).
 - `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:, planned:)` → `SearchResult` (`txs` newest first capped at
@@ -329,7 +329,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   title on the same day (amounts stripped: `Dentist 80 €` and `Dentist 90 €`) show as one suggestion, and renaming an
   event in the calendar makes it a new suggestion. A title without letters (`80 €`) gets a per-calendar ref, so its
   "No cost" or confirm on one device does not reach the same event read on another device. A huge `.ics` file
-  (over 2·10⁶ recurrence steps) gives later recurring events their first in-range occurrence only.
+  (over 10⁶ recurrence steps) gives later recurring events their first in-range occurrence only.
 
 ## Tests
 - `test/core_test.dart`, one `group` per area. Shared synthetic data in `test/support/synthetic.dart`

@@ -139,7 +139,7 @@ all-day, stable UIDs). `searchAll(..., planned:)` adds `SearchResult.planned` (t
   refs once, picking the event first by calendarId, uid, title, notes (the same on every device, whatever the order).
   Refs of rows written by F1–F3 builds (`bw-cal-v1`) no longer match; stage F was not released, so nothing migrates.
 - `parseIcs` cost bounds (it runs on the UI isolate): folded lines are joined in linear time; a whole-file budget of
-  2·10⁶ recurrence steps (one step = one period of one rule). Once spent, each later recurring event gives only its first
+  10⁶ recurrence steps (one step = one period of one rule). Once spent, each later recurring event gives only its first
   occurrence in [from, to] (a rule without COUNT: looked for within 8 periods of `from`; with COUNT: none, as that needs
   stepping from DTSTART) and counts in `unsupported`; the event during which it runs out keeps the dates found so far
   and counts too. Never throws.

@@ -62,8 +62,10 @@ throws `SqliteException` extended code 26 "file is not a database".
 | F0 | Context pack | scout | – | done |
 | F1 | Core: `planned` entity (schema 6), reservation in computePeriod, .ics parser + export, amountFromText, upcoming(), paidCandidates(), headsUps(), settings, search | core-builder | F0 | done (b150671, core 1024 incl. F2; merged) |
 | F2 | Spec tests for the money logic and parser | test-writer | F0 | done (71a7d07, green in F1) |
-| F3 | App: Upcoming screen, Today "Coming up" + heads-up, entry sheet, Plan › Calendars (Android calendar plugin, .ics import/link), heads-up notifications, export .ics, demo data | ui-builder | F0 (codes against the API, shims until F1) | running |
-| F | Merge F1 → F2 → F3, review, full run, push | lead | F1–F3 | queued |
+| F3 | App: Upcoming screen, Today "Coming up" + heads-up, entry sheet, Plan › Calendars (Android calendar plugin, .ics import/link), heads-up notifications, export .ics, demo data | ui-builder | F0 (codes against the API, shims until F1) | done 2d00e82 (plugin device_calendar_plus; Android declares READ+WRITE_CALENDAR, app only reads) |
+| F | Merge F1 → F2 → F3, review, full run, push | lead | F1–F3 | merged abf15c4; full run green (test, desktop, web, perf, screens); review: 10 findings → F4 |
+| F4a | Review fixes, core: content-based calendar refs (same on every device/source), .ics parse step budget + linear unfold, dismiss keeps title | core-builder | F | done cc6955d (step budget lowered to 10⁶ by lead for slow phones) |
+| F4b | Review fixes, app: Confirm keeps category, clear category, Set aside = reserved, link fetch overall timeout + no https→http, late heads-up, serialized reschedule, cancelled Android events, Paid/Skip undo | ui-builder | F | running |
 
 ## Stage S: relay hardening + docs (2026-10-22)
 | # | Item | Agent | Depends on | Status |

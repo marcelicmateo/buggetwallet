@@ -65,7 +65,7 @@ const _maxPeriods = 100000;
 /// freeze the caller (parseIcs runs on the UI isolate). Once spent, each later recurring event gives its first
 /// occurrence in range only (if one is found within [_cheapPeriods] periods of the range start) and counts in
 /// [IcsParseResult.unsupported].
-const _stepBudget = 2000000;
+const _stepBudget = 1000000;
 
 /// Periods tried for the first in-range occurrence of an event once [_stepBudget] is spent (8 covers Feb 29 on a
 /// yearly rule).
