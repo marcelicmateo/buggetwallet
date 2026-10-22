@@ -5,6 +5,7 @@
 library;
 
 export 'src/bills/codes.dart' show readFiscalQr, readHub3;
+export 'src/bills/common.dart' show validIban;
 export 'src/bills/einvoice.dart' show readEInvoice, maxEInvoiceChars;
 export 'src/bills/model.dart';
 export 'src/bills/pdf_text.dart' show pdfText, maxPdfBytes, pdfOpBudget;

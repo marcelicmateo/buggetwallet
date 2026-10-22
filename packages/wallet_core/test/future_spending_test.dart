@@ -208,7 +208,8 @@ void main() {
       r.close();
       expect(lines, isNotEmpty);
       for (final l in lines) {
-        expect(l.contains('Secret') || l.contains('8123') || l.contains('80'), isFalse, reason: l);
+        // `80` as a whole number only: a timestamp like `…:26.180` is not the amount.
+        expect(l.contains('Secret') || l.contains('8123') || l.contains('8000') || RegExp(r'\b80\b').hasMatch(l), isFalse, reason: l);
       }
     });
   });
