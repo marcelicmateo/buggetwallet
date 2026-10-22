@@ -29,6 +29,32 @@ Future<void> openBill(BuildContext context, WalletController wc, String billId, 
   if (msg != null) toast(context, msg);
 }
 
+/// Shows how adding a bill ended. A slip that is already there says so, and offers "Add as new bill" (next month's slip can look
+/// the same); a bill that was added offers "Open".
+void showBillImport(BuildContext context, WalletController wc, BillImport r, {FileChooser chooser = const FileChooser()}) {
+  if (r.kind == BillImportKind.added && r.billId != null) {
+    toast(context, r.message, actionLabel: 'Open', onAction: () => openBill(context, wc, r.billId!, chooser: chooser));
+  } else if (r.kind == BillImportKind.duplicate && r.addAsNew != null) {
+    toast(context, r.message, actionLabel: 'Add as new bill', onAction: () async {
+      logNav('bill.addAsNew');
+      final n = await r.addAsNew!();
+      if (!context.mounted) return;
+      if (n.kind == BillImportKind.added && n.billId != null) {
+        toast(context, n.message);
+        await openBill(context, wc, n.billId!, chooser: chooser);
+      } else {
+        toast(context, n.message);
+      }
+    });
+  } else {
+    toast(context, r.message);
+  }
+}
+
+/// True for the planned row a confirmed bill owns: it is opened as the bill (Paid, Skip and Delete on the row alone would leave the
+/// bill out of step).
+bool plannedIsBill(PlannedCost p) => p.source == PlannedSource.bill && p.sourceRef != null;
+
 String _plain(int cents) => cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2);
 
 /// The words for the original file's button.
@@ -59,7 +85,10 @@ class _BillSheetState extends State<BillSheet> {
   late final note = TextEditingController(text: _first?.note ?? '');
   late String? date = _first?.date;
   late String? due = _first?.dueDate;
-  late String? category = _first?.category;
+  // A bill to review whose category is empty starts with the suggestion (earlier bills of the same payee); it is marked as one.
+  late final String? _suggested =
+      _first == null || _first.status != BillStatus.review || _first.category != null ? null : widget.wc.suggestedBillCategory(_first);
+  late String? category = _first?.category ?? _suggested;
   String? error;
 
   @override
@@ -117,6 +146,11 @@ class _BillSheetState extends State<BillSheet> {
     if (date == null || (t ?? 0) <= 0) {
       logNav('bill.invalid');
       setState(() => error = 'Add a date and a total first.');
+      return;
+    }
+    if (category == null && due != null && due!.compareTo(widget.wc.today()) >= 0) {
+      logNav('bill.invalid', {'why': 'category'});
+      setState(() => error = "Pick the category so Budget Wallet doesn't count this bill twice.");
       return;
     }
     if (widget.wc.confirmBill(b.id) && mounted) Navigator.pop(context, 'confirmed');
@@ -260,12 +294,20 @@ class _BillSheetState extends State<BillSheet> {
         key: ValueKey('billCategory:${category ?? ''}'),
         isExpanded: true,
         initialValue: category,
-        decoration: const InputDecoration(labelText: 'Category'),
+        decoration: InputDecoration(
+            labelText: review && due != null ? 'Category (needed)' : 'Category',
+            helperText: category != null && category == _suggested
+                ? 'Suggested from your earlier bills. Check it.'
+                : (review && due != null && category == null ? "Pick the category so Budget Wallet doesn't count this bill twice." : null),
+            helperMaxLines: 3),
         items: [
           const DropdownMenuItem<String?>(value: null, child: Text('None')),
           for (final k in categories.keys) DropdownMenuItem<String?>(value: k, child: Text(k)),
         ],
-        onChanged: (v) => setState(() => category = v),
+        onChanged: (v) => setState(() {
+          category = v;
+          error = null;
+        }),
       ),
       const SizedBox(height: 10),
       TextField(key: const ValueKey('billNote'), controller: note, decoration: const InputDecoration(labelText: 'Note')),

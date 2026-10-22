@@ -13,6 +13,9 @@ import 'package:wallet_core/wallet_core.dart';
   return (text: 'Up to date', good: true);
 }
 
+/// "3 bill files waiting to upload" (shown only when something waits).
+String blobsWaitingText(int n) => '$n bill ${n == 1 ? 'file' : 'files'} waiting to upload';
+
 /// "just now", "5 min ago", "3 h ago", "2 days ago"; "never" without a time.
 String lastSeenText(DateTime? seen, DateTime now) {
   if (seen == null) return 'never';

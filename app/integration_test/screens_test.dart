@@ -79,11 +79,23 @@ void main() {
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-plan-bills');
     final review = wc.billLists().review.first;
-    await tester.scrollUntilVisible(find.byKey(ValueKey('bill:${review.id}')), 300, scrollable: plan);
+    final reviewRow = find.byKey(ValueKey('bill:${review.id}'));
+    await tester.scrollUntilVisible(reviewRow, 300, scrollable: plan);
     await tester.pumpAndSettle();
+    // The "To review" heading must be in the shot: put it near the top, the rows are right under it.
+    await Scrollable.ensureVisible(tester.element(find.textContaining('To review')), alignment: 0.1);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('To review'), findsOneWidget);
     await binding.takeScreenshot('5-plan-bills-rows');
-    await tester.tap(find.byKey(ValueKey('bill:${review.id}')));
+    // The row must be on screen before the tap (Android's taller bars hid it once), then wait (bounded) until the sheet is up.
+    await tester.ensureVisible(reviewRow);
     await tester.pumpAndSettle();
+    await tester.tap(reviewRow);
+    for (var i = 0; i < 40 && find.text('Bill to review').evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('Bill to review'), findsOneWidget);
     await binding.takeScreenshot('5-bill-sheet');
     Navigator.of(tester.element(find.byType(BillSheet))).pop();
     await tester.pumpAndSettle();

@@ -158,6 +158,8 @@ class _SyncPanelState extends State<SyncPanel> {
         else if (last != null)
           StatusLabel(key: const ValueKey('syncStatus'), good: status.good, text: status.text),
         if (last != null) Muted('Last sync ${clockText(last)}'),
+        if (wc.syncBlobsWaiting > 0)
+          StatusLabel(key: const ValueKey('blobsWaiting'), good: false, text: blobsWaitingText(wc.syncBlobsWaiting)),
         if (wc.syncBadFiles > 0)
           StatusLabel(
               good: false,

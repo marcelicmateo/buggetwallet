@@ -50,11 +50,39 @@ Future<T> _withTempFile<T>(List<int> bytes, String ext, Future<T> Function(Strin
   }
 }
 
+Future<void> _deleteQuietly(String path) async {
+  try {
+    final f = File(path);
+    if (await f.exists()) await f.delete();
+  } catch (_) {}
+}
+
 String _imageExt(Uint8List b) => b.length > 3 && b[0] == 0x89 && b[1] == 0x50 ? 'png' : 'jpg';
 
 class AndroidBillCamera implements BillCamera {
+  static const _channel = MethodChannel('budget_wallet/bills');
+
   @override
   bool get supported => true;
+
+  /// The system camera app takes one picture into a file in the app's cache (MainActivity.kt `takePhoto`, which asks for the camera
+  /// permission first); the file is read and deleted here, whatever happens.
+  @override
+  Future<Uint8List?> takePhoto() async {
+    String? path;
+    try {
+      path = await _channel.invokeMethod<String>('takePhoto');
+      if (path == null) return null; // cancelled
+      final file = File(path);
+      if (await file.length() > maxBillImageBytes) throw const BillPhotoException('tooBig');
+      return await file.readAsBytes();
+    } on PlatformException catch (e) {
+      logEvent(_log, Level.WARNING, 'scan.photoFailed', {'code': e.code});
+      throw BillPhotoException(e.code);
+    } finally {
+      if (path != null) await _deleteQuietly(path);
+    }
+  }
 
   @override
   Widget view({required ValueChanged<ScannedCode> onCode}) => _CameraView(onCode: onCode);
@@ -176,14 +204,25 @@ class AndroidShareInbox implements ShareInbox {
     return dot < 0 ? '' : f.path.substring(dot + 1).toLowerCase();
   }
 
+  /// The size is checked before the file is read, and the plugin's copy in the app's cache folder is removed afterwards (also when
+  /// reading failed): a shared bill must not stay behind as a second, unmanaged copy.
   Future<List<SharedFile>> _read(List<SharedMediaFile> list) async {
     final out = <SharedFile>[];
+    final cache = (await getTemporaryDirectory()).path;
     for (final f in list) {
       if (f.type != SharedMediaType.image && f.type != SharedMediaType.file) continue;
       try {
-        out.add(SharedFile(await File(f.path).readAsBytes(), _ext(f)));
+        final ext = _ext(f);
+        final file = File(f.path);
+        if (await file.length() > maxBillFileBytes(ext)) {
+          out.add(SharedFile(Uint8List(0), ext, tooBig: true));
+        } else {
+          out.add(SharedFile(await file.readAsBytes(), ext));
+        }
       } catch (e, st) {
         logError(_log, 'share.readFailed', e, st, fields: {'type': e.runtimeType.toString()});
+      } finally {
+        if (f.path.startsWith('$cache/')) await _deleteQuietly(f.path);
       }
     }
     return out;

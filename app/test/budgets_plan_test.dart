@@ -114,7 +114,7 @@ void main() {
   });
 
   for (final (name, size, scale) in const [
-    ('320 dp at text 2.0', Size(320, 6000), 2.0),
+    ('320 dp at text 2.0', Size(320, 7000), 2.0),
     ('1280 wide', Size(1280, 3000), 1.0),
     ('360 dp', Size(360, 4000), 1.0)
   ]) {

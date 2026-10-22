@@ -1,8 +1,6 @@
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 import '../bill_inputs.dart';
 import '../controller.dart';
@@ -13,23 +11,11 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'bill_sheet.dart';
 
-/// Takes the picture of the camera preview behind [key]; tests replace it.
-typedef FrameGrabber = Future<Uint8List?> Function(GlobalKey key, double pixelRatio);
-
-Future<Uint8List?> grabFrame(GlobalKey key, double pixelRatio) async {
-  final boundary = key.currentContext?.findRenderObject();
-  if (boundary is! RenderRepaintBoundary) return null;
-  final image = await boundary.toImage(pixelRatio: pixelRatio);
-  final data = await image.toByteData(format: ui.ImageByteFormat.png);
-  return data?.buffer.asUint8List();
-}
-
 /// Add expense › Scan bill, or Plan › Bills › Scan bill: opens the camera and then the sheet of the bill that was read (or says
 /// it was already in the bills).
-Future<void> scanBillFlow(BuildContext context, WalletController wc,
-    {FileChooser chooser = const FileChooser(), FrameGrabber grabber = grabFrame}) async {
+Future<void> scanBillFlow(BuildContext context, WalletController wc, {FileChooser chooser = const FileChooser()}) async {
   logNav('scan.open');
-  final screen = ScanBillScreen(wc: wc, grabber: grabber);
+  final screen = ScanBillScreen(wc: wc);
   final BillImport? r;
   if (MediaQuery.sizeOf(context).width >= dialogMin) {
     r = await showDialog<BillImport>(
@@ -48,22 +34,20 @@ Future<void> scanBillFlow(BuildContext context, WalletController wc,
   if (r.kind == BillImportKind.added && r.billId != null) {
     await openBill(context, wc, r.billId!, chooser: chooser);
   } else {
-    toast(context, r.message);
+    showBillImport(context, wc, r, chooser: chooser);
   }
 }
 
-/// The camera looks for the QR code of a receipt or the PDF417 barcode of a payment slip. "Take photo" keeps the frame (the
-/// photo stays with the bill) and reads its text. Pops a [BillImport].
+/// The camera looks for the QR code of a receipt or the PDF417 barcode of a payment slip. "Take photo" opens the phone's own camera
+/// app for one full-size picture (the photo stays with the bill) and reads its text; cancelling comes back here. Pops a [BillImport].
 class ScanBillScreen extends StatefulWidget {
   final WalletController wc;
-  final FrameGrabber grabber;
-  const ScanBillScreen({super.key, required this.wc, this.grabber = grabFrame});
+  const ScanBillScreen({super.key, required this.wc});
   @override
   State<ScanBillScreen> createState() => _ScanBillScreenState();
 }
 
 class _ScanBillScreenState extends State<ScanBillScreen> {
-  final _frame = GlobalKey();
   bool _busy = false;
   String? _hint;
   final _seen = <String>{};
@@ -93,14 +77,27 @@ class _ScanBillScreenState extends State<ScanBillScreen> {
       _busy = true;
       _hint = null;
     });
-    final bytes = await widget.grabber(_frame, MediaQuery.devicePixelRatioOf(context));
-    if (bytes == null) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _hint = "Couldn't take the photo. Try again, or import a file.";
-        });
-      }
+    Uint8List? bytes;
+    String? failed;
+    try {
+      bytes = await widget.wc.billInputs.camera.takePhoto();
+    } on BillPhotoException catch (e) {
+      failed = e.code == 'permission'
+          ? 'The camera is off for this app. Allow it in Android settings, or import a bill file.'
+          : e.code == 'tooBig'
+              ? billTooBigMessage
+              : "Couldn't take the photo. Try again, or import a file.";
+    } catch (_) {
+      failed = "Couldn't take the photo. Try again, or import a file.";
+    }
+    logNav('scan.photoDone', {'result': failed != null ? 'failed' : (bytes == null ? 'cancelled' : 'ok')});
+    if (!mounted) return;
+    if (failed != null || bytes == null) {
+      // Cancelled: back to the scanner with nothing said.
+      setState(() {
+        _busy = false;
+        _hint = failed;
+      });
       return;
     }
     final r = await widget.wc.importPhoto(bytes);
@@ -127,7 +124,7 @@ class _ScanBillScreenState extends State<ScanBillScreen> {
       body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Expanded(
           child: Stack(children: [
-            RepaintBoundary(key: _frame, child: widget.wc.billInputs.camera.view(onCode: _onCode)),
+            widget.wc.billInputs.camera.view(onCode: _onCode),
             if (_busy)
               const Positioned.fill(child: ColoredBox(color: Color(0x66000000), child: Center(child: CircularProgressIndicator()))),
           ]),

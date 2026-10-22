@@ -12,11 +12,13 @@ import 'bill_inputs.dart';
 import 'bill_platform.dart';
 import 'calendar_platform.dart';
 import 'calendar_source.dart';
+import 'core_standin.dart';
 import 'ics_fetch.dart';
 import 'key_store.dart';
 import 'logging.dart';
 import 'nudge_platform.dart';
 import 'nudges.dart';
+import 'pdf_parse.dart';
 import 'platform.dart' show isWeb;
 import 'wallet_db.dart';
 
@@ -196,6 +198,9 @@ class WalletController extends ChangeNotifier {
   /// From the last successful sync: devices whose later files wait for a missing or refused file.
   List<SyncWaiting> syncWaiting = const [];
 
+  /// Bill photos and files the last sync could not upload yet (they stay queued and are tried again).
+  int syncBlobsWaiting = 0;
+
   /// From the last successful sync: the devices the relay knows (short ids), this one included.
   List<SyncDevice> syncDevices = const [];
 
@@ -235,6 +240,14 @@ class WalletController extends ChangeNotifier {
 
   /// The camera, picture reading, PDF pages and Share intent of this device (bills); [BillInputs.none] in tests and off Android.
   final BillInputs billInputs;
+
+  /// Reads a PDF's text layer and the bill in it: off the UI isolate on native (pdf_parse.dart); tests swap it.
+  @visibleForTesting
+  PdfParser pdfParser = parsePdf;
+
+  /// Replaces the category suggestion for a bill (tests); null = the real one.
+  @visibleForTesting
+  String? Function(Bill b)? billCategorySuggester;
   StreamSubscription<List<SharedFile>>? _shareSub;
   final StreamController<BillImport> _shareResults = StreamController<BillImport>.broadcast();
 
@@ -960,6 +973,7 @@ class WalletController extends ChangeNotifier {
     syncError = null;
     syncCaughtUp = false;
     syncWaiting = const [];
+    syncBlobsWaiting = 0;
     syncDevices = const [];
     lastImport = const [];
     reload();
@@ -998,6 +1012,7 @@ class WalletController extends ChangeNotifier {
     syncError = null;
     syncCaughtUp = false;
     syncWaiting = const [];
+    syncBlobsWaiting = 0;
     syncDevices = const [];
     _relayFollowUp = u != null && syncing; // a run is going: exactly one follow-up for the new address when it ends
     logEvent(_sync, Level.INFO, 'sync.relay', {'set': u != null}); // never the address
@@ -1043,6 +1058,7 @@ class WalletController extends ChangeNotifier {
       syncBadFiles = r.badFiles;
       syncCaughtUp = r.caughtUp;
       syncWaiting = r.waiting;
+      syncBlobsWaiting = r.blobsWaiting;
       syncDevices = r.devices;
       logEvent(_sync, Level.INFO, 'sync.done', {
         'trigger': trigger,
