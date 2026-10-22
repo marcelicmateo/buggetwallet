@@ -88,9 +88,10 @@ throws `SqliteException` extended code 26 "file is not a database".
 | B2 | Relay: blob PUT/GET/DELETE, byte count, state `blobs`, CORS DELETE | core-builder (sonnet/medium) | B0 | done 0368859 (relay 138), merged e49187a |
 | B4 | App: Scan bill (camera, QR/PDF417, OCR), Plan › Bills, share to app, bill sheet, link, cash expense, Android PdfRenderer channel, Today row, Upcoming + reminders | ui-builder (sonnet/high) | B0 (codes against the API, shims until B1) | done b2c950f (app 918; APK 116 MB, was 60), merged ce8b53a |
 | B3 | Spec tests for readers, linking, blobs | test-writer (sonnet/medium) | B0; starts when a slot frees | done 7a68973 (150 tests, compile after B1; cache test to shrink: use a small LRU limit, not 15×14 MiB) |
-| B | Merge, review, full run, push | lead | B1–B4 | review on ce8b53a: 3 high/medium-high, 4 medium, 3 low + APK size → B5; full run running |
+| B | Merge, review, full run, push | lead | B1–B4 | done: 2 reviews (3/4/3, then 2/0/3), fixes B5a–c + B6, full run green, pushed; review branch |
 | B5a | Review fixes, core: category needed to reserve + suggestBillCategory, HUB-3 id per period + importBill asNew, unlink deleted tx across devices, invoice token length, orphan blobs, no transfers in candidates | core-builder (opus/high) | B | done e5d7b20, merged b39e7c3 |
 | B5b | Review fixes, app: category picker, "Add as new bill", Upcoming opens the bill, size checks + share cache cleanup, pdfText in an isolate, Take photo via system camera, reminder days UI, blobs waiting in Sync | ui-builder (sonnet/high) | B | done 28f461c, merged 51b1d87; stand-ins → core running |
+| B6 | Follow-up review fixes: category on cash expense, no silent reserve, slip near payday, one reserve rule (`plannedReserves`) for Today/Upcoming, needs-a-category marks, demo data, photo cache | core-builder (opus/high) | B5 | done 7f10330, merged 7a80d8f |
 | B5c | APK size: arm64 + x64 only (tools, ci, release), breakdown | devops (sonnet/medium) | B | done cb261a0 + a227dc3: local 86 MB (arm64+x64), published 44 MB (arm64) |
 
 Stage R notes: the haiku watcher stopped twice before finishing (it hands back while waiting on its own background run); the

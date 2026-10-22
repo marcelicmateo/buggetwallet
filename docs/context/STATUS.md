@@ -159,6 +159,17 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   Heads-up notifications at 09:00 (no amount or title). Export "Planned costs (.ics)", search. Calendar events are
   matched across devices by name + date. Review: 2 high, 3 medium, 5 low, all fixed with tests. Full run: importer 193,
   core 1036, relay 115, app 853, desktop 11 files, web, perf 0 missed frames, emulator screens.
+- 2026-10-22: **Stage B: bills database.** Scan bill on Android (receipt QR, HUB-3 slip barcode, photo through the system camera
+  + on-device OCR), Share to app (PDF, photo), Plan › Bills (To review / Unpaid / Paid, import PDF / e-invoice XML / image),
+  bill sheet with "Unsure" marks, line items, photo/PDF kept encrypted on the relay (new blob routes) and fetched on demand,
+  Paid by… (never on amount alone; auto link only by reference/JIR/invoice number + exact amount, when caught up), Paid in
+  cash → expense, warranty / return-by dates in Upcoming with reminders. An unpaid slip with a due date is a planned cost:
+  it needs a category, reserves until paid, is never counted twice with an expected bill or the fixed plan; one rule
+  (`plannedReserves`) feeds safe-to-spend, Today's "Coming up" and Upcoming's "Set aside". New packages (owner):
+  mobile_scanner, google_mlkit_text_recognition, receive_sharing_intent. Published APK arm64 only (44 MB; local builds
+  keep x86_64 for the emulator). Reviews: 3 high / 4 medium / 3 low, then 2 medium / 3 low on the fixes; all fixed with
+  tests. Full run: importer 296, core 1217, relay 138, app 955, desktop 11 files, web, perf 0 missed frames, emulator.
+  Review package: `docs/TECHNICAL_SPEC.md`, `RUNNING.md`, branch `review`.
 ## Open questions for owner
 - Test v2 on phone and computer; feedback (✅ / ❌ / ✏️).
 - Make the repo public? Then all-platform builds are free on every push.
@@ -176,6 +187,10 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - Calendar suggestions: two events with the same name on the same day show as one; renaming an event in the
   calendar suggests it again; a planned cost reserves until marked Paid/Skipped or its day passes (even if the bank row
   already landed: the app offers "Paid by this?").
+- Bills: two devices that "Add as new bill" the same slip before syncing make one bill; a slip whose payee is written
+  differently from the bank text is not matched to its expected bill (its required category still keeps a fixed-category
+  slip from being reserved twice); Upcoming's "Set aside" leaves out an overdue expected bill that Today still reserves;
+  photos are not in `.bwb` backups (they stay on the relay).
 ## Next
 - Owner installs Android APK + desktop build, creates wallet, imports bank files, sets up the relay (`docs/setup.md` §5; APKs before the signing
   fix used throwaway keys: uninstall that one once; later updates install in place). After testing: Plan › Diagnostics
@@ -204,8 +219,15 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   → "Showing what was saved"; an `http://` link shows the warning; Paid → pick the payment → Undo; Skip → Undo; a cancelled
   phone event is not suggested; Plan › Nudges heads-up on → a notification at 09:00 before a ≥100 € cost (no amount);
   Plan › Export "Planned costs (.ics)" opens in the phone's calendar.
-- Build order (owner 2026-10-22: every feature first, the owner tests last): future spending (§4.3, done) → bills
-  database (§4.2) → M6 owner live test.
+- Owner checks after Stage B (phone): Add expense › Scan bill → a shop receipt QR, then a payment slip barcode, then
+  Take photo of a receipt without a code (the phone's camera app opens; fields marked "Unsure"); deny the camera once and
+  check the hint; Share a PDF bill from email and a photo from the gallery (app closed and open); Plan › Bills: confirm a
+  slip (it asks for a category; a utility in Bills & subscriptions shows "covered by your plan"), see it in Upcoming and
+  Today's safe-to-spend, then "Paid by…" the bank row and check the receipt mark in Spending; scan the same slip next
+  month → "Add as new bill"; open the photo/PDF on the laptop after a sync; set a return-by date and wait for the 09:00
+  reminder (no payee or amount in it); install the 44 MB APK from the `ci` run over the old app.
+- Build order (owner 2026-10-22: every feature first, the owner tests last): future spending (done) → bills database
+  (done) → review by outside reviewers (`review` branch) → M6 owner live test.
 
 ## In flight (2026-10-20)
 - Queue and procedure: `docs/context/PIPELINE.md`.

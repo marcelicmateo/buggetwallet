@@ -575,10 +575,10 @@ verification on the owner's laptop before a push; CI exists for the signed build
 
 | Suite | Tests | What it covers |
 |---|---|---|
-| `wallet_importer` | 295 | Bank profiles with golden outputs (ids unchanged since v1), BIFF8/XLSX/CSV edge cases, fuzzing, bill readers incl. 500 mutated PDFs/XMLs, log privacy |
-| `wallet_core` | 1,177 | Money maths, categorizer, matching and pairing, recurring detection, planned costs, bills, encryption, local DB conversion, sync engine over an in-memory relay, two-to-four-device random convergence, quarantine, snapshots, self-heal, backup round trip, relay client with hand-written signatures, end-to-end against the real relay |
+| `wallet_importer` | 296 | Bank profiles with golden outputs (ids unchanged since v1), BIFF8/XLSX/CSV edge cases, fuzzing, bill readers incl. 500 mutated PDFs/XMLs, log privacy |
+| `wallet_core` | 1,217 | Money maths, categorizer, matching and pairing, recurring detection, planned costs, bills, encryption, local DB conversion, sync engine over an in-memory relay, two-to-four-device random convergence, quarantine, snapshots, self-heal, backup round trip, relay client with hand-written signatures, end-to-end against the real relay |
 | `relay` | 138 | Every endpoint, signature and clock rules, replays, limits, pruning, restart recovery, blobs, CORS, logs; the binary as a process |
-| `app` (widget) | ~940 | Every screen at 320 dp × 2.0 / 360 / 1280, light and dark, controller logic with fakes, theme contrast, log privacy, platform splits |
+| `app` (widget) | 955 | Every screen at 320 dp × 2.0 / 360 / 1280, light and dark, controller logic with fakes, theme contrast, log privacy, platform splits |
 | Desktop integration (Linux, Xvfb) | 11 files | Onboarding, flows, import, layout (5 shards), plan, relay sync against a real relay, screens, wishlist/goals, big wallet, perf, adaptive |
 | Android emulator | 1 file | Every tab with a synthetic wallet, screenshots, log scan |
 | Web | 9 + build | `flutter test --platform chrome` for the browser key store, DB and unlock; wasm build |
@@ -605,7 +605,7 @@ reasons.
 Every stage: scout (context pack) → builders in worktrees against a fixed API → spec tests in parallel → merge →
 read-only reviewer on the full diff (money, sync safety, privacy, brief match) → each finding fixed with a reproducing
 test → full run → screenshots read → push. Review outcomes so far: Stage R 0 high / 3 medium / 5 low; Stage S 0 / 1 /
-4; Stage F 2 / 3 / 5; Stage B 3 / 4 / 3. All fixed before push.
+4; Stage F 2 / 3 / 5; Stage B 3 / 4 / 3, then 2 / 0 / 3 on the fixes. All fixed before push.
 
 ### Build and CI
 
@@ -631,6 +631,9 @@ Documented in `docs/context/STATUS.md` and the package notes; either accepted by
 - Two calendar events with the same name on the same day show as one suggestion; renaming an event suggests it again.
   A title with no letters (`80 €`) gets a per-calendar ref, so its dismissal does not reach other devices.
 - A bill linked to a hand-added expense stays paid after matching replaces that entry with its bank row.
+- Two devices that "Add as new bill" the same slip before syncing make one bill; a slip whose payee is written
+  differently from the bank text is not matched to its expected bill (the required category still prevents a double
+  reserve for a fixed-category slip); Upcoming's "Set aside" leaves out an overdue expected bill that Today still reserves.
 
 ### Sync
 
