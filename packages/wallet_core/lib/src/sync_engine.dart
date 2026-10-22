@@ -419,6 +419,9 @@ class SyncEngine {
     // 5. Caught up: match, and maybe write a snapshot.
     final heal = _trackStuck(repo, state, cursors, myLast, now);
     final caughtUp = waiting.isEmpty && problems.isEmpty && peers.every((d) => cur(d) >= state.devices[d]!.last);
+    // Local imports and deletes match at once only while this holds (WalletRepo.syncCaughtUp); otherwise they wait
+    // for the next caught-up run, like the ops applied here.
+    repo.setLocalValue(WalletRepo.caughtUpKey, caughtUp ? '1' : '0');
     if (caughtUp) {
       repo.runPendingMatch();
       await _maybeSnapshot(repo, state, cursors, myLast, now, heal: heal);

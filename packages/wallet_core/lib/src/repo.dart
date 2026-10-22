@@ -161,7 +161,7 @@ class WalletRepo {
     _setMeta('schema', '$schemaVersion');
     logEvent(_log, Level.INFO, 'repo.migrate',
         {'from': from, 'to': schemaVersion, 'new': _created, 'replayDevices': replay, 'rehinted': rehinted});
-    if (rehinted > 0) _reconcile();
+    if (rehinted > 0) _reconcileLocal();
   }
 
   static WalletRepo _timedOpen(CommonDatabase Function() opener, bool file, int Function()? now) {
@@ -333,7 +333,7 @@ class WalletRepo {
       if (changed > 0) _setMeta('match_pending', '1');
     });
     t.done({'ops': ops.length, 'changed': changed, 'resend': resend});
-    if (match) runPendingMatch();
+    if (match && syncCaughtUp) runPendingMatch();
     return changed;
   }
 
@@ -506,6 +506,24 @@ class WalletRepo {
   (int, int) _reconcile() {
     final pairs = _pairTransfers();
     return (pairs, _matchManual());
+  }
+
+  /// Device-local: whether this device's last sync run was caught up (`'1'`/`'0'`, written by `SyncEngine` after every
+  /// run; absent = never synced, which counts as caught up).
+  static const caughtUpKey = 'syncCaughtUp';
+
+  /// False while the last sync run was not caught up (a peer file waiting or refused): rows this device has not
+  /// received yet may be the right partners, and a pair or match once made is never re-planned.
+  bool get syncCaughtUp => localValue(caughtUpKey) != '0';
+
+  /// After a local change of rows (import, delete, a migration rewrite): pairing and matching at once when
+  /// [syncCaughtUp], else only marked due ([runPendingMatch] runs it on the next caught-up sync). Returns (pairs,
+  /// matches), (0, 0) when deferred.
+  (int, int) _reconcileLocal() {
+    if (syncCaughtUp) return _reconcile();
+    _setMeta('match_pending', '1');
+    logEvent(_log, Level.INFO, 'repo.match.deferred');
+    return (0, 0);
   }
 
   /// Runs transfer pairing and matching if ops applied with `applyRemote(match: false)` changed something since it
@@ -684,7 +702,7 @@ class WalletRepo {
       ));
     }
     _write(changes);
-    final (transfers, matched) = _reconcile();
+    final (transfers, matched) = _reconcileLocal();
     refreshRecurring(_today());
     final s = ImportSummary(fresh.length, batch.transactions.length - fresh.length, matched, batch.skipped, transfers: transfers);
     t.done({
@@ -752,7 +770,7 @@ class WalletRepo {
     _write([
       ('tx', txId, {'deleted': 1})
     ]);
-    _reconcile();
+    _reconcileLocal();
   }
 
   void setMerchantRule(String key, String category) => _write([
