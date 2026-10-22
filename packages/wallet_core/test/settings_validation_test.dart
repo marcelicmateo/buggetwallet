@@ -1,7 +1,6 @@
 // Settings from another device (or a damaged op) can hold a wrong type or an out-of-range value. Each bad value
 // falls back to that setting's default alone, with a WARNING naming only the key. All data is SYNTHETIC.
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -137,22 +136,21 @@ void main() {
   });
 
   test('bad values from another device: sync keeps working, only those settings fall back', () async {
-    final dir = Directory.systemTemp.createTempSync('bw-settings-');
-    addTearDown(() => dir.deleteSync(recursive: true));
+    final relay = MemoryTransport();
     final key = VaultKey.generate();
     final a = WalletRepo.inMemory(), b = WalletRepo.inMemory();
     addTearDown(a.close);
     addTearDown(b.close);
     a.updateSettings({'salary': 150000, 'rent': 55000, 'paydayDay': 10, 'coolHours': 48});
-    await FolderSync(dir.path, key).run(a);
-    await FolderSync(dir.path, key).run(b);
+    await SyncEngine(relay, key).run(a);
+    await SyncEngine(relay, key).run(b);
     expect(b.settings().paydayDay, 10);
 
     // Device a has a bug and writes out-of-range and wrong-typed values; they sync like any other op.
     a.updateSettings({'paydayDay': 0, 'coolHours': -5, 'rent': 'lots', 'currency': 'euro'});
-    await FolderSync(dir.path, key).run(a);
+    await SyncEngine(relay, key).run(a);
     late WalletSettings s;
-    await FolderSync(dir.path, key).run(b);
+    await SyncEngine(relay, key).run(b);
     final warnings = _logs(() => s = b.settings()).where((l) => l.contains('settings.invalid')).toList();
     expect(s.paydayDay, 15);
     expect(s.coolHours, 72);
@@ -163,8 +161,8 @@ void main() {
 
     // A later good value from either device replaces the bad one.
     b.updateSettings({'paydayDay': 12});
-    await FolderSync(dir.path, key).run(b);
-    await FolderSync(dir.path, key).run(a);
+    await SyncEngine(relay, key).run(b);
+    await SyncEngine(relay, key).run(a);
     expect(a.settings().paydayDay, 12);
     expect(b.settings().paydayDay, 12);
   });

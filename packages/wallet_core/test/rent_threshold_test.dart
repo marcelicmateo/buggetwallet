@@ -50,6 +50,7 @@ void main() {
 
     test('syncs to a second device', () async {
       final dir = Directory.systemTemp.createTempSync('bw-rent-');
+      final relay = MemoryTransport();
       addTearDown(() => dir.deleteSync(recursive: true));
       final key = VaultKey.generate();
       final a = WalletRepo.inMemory(), b = WalletRepo.inMemory();
@@ -60,8 +61,8 @@ void main() {
       b.importBatch(batch);
       expect(b.categorizer().categoryOf(b.transactions().single), 'Cash');
       a.updateSettings({'rentCashThreshold': 25000});
-      await FolderSync(dir.path, key).run(a);
-      await FolderSync(dir.path, key).run(b);
+      await SyncEngine(relay, key).run(a);
+      await SyncEngine(relay, key).run(b);
       expect(b.settings().rentCashThreshold, 25000);
       expect(b.categorizer().categoryOf(b.transactions().single), 'Rent');
     });

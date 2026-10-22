@@ -25,6 +25,9 @@ Future<void> main(List<String> args) async {
   final repo = WalletRepo.fromDatabase(db, file: false);
   final Uint8List bytes = await backupBytes(repo, key);
   final ops = await restoreBackupBytes(repo, bytes, key);
+  final SyncTransport transport = args.length > 1 ? RelayTransport(Uri.parse(args[1]), key) : MemoryTransport();
+  final report = await SyncEngine(transport, key).run(repo);
+  logEvent(log, Level.INFO, 'web.smoke.sync', {'caughtUp': report.caughtUp, 'id': (await deriveKey(key, 'smoke')).length});
   logEvent(log, Level.INFO, 'web.smoke', {
     'rows': repo.transactions().length,
     'ops': ops,

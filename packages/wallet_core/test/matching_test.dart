@@ -207,6 +207,7 @@ void main() {
 
     test('after an upgrade, old unmatched entries are not matched to bank history (no match ops synced)', () async {
       final dir = Directory.systemTemp.createTempSync('bw-match-');
+      final relay = MemoryTransport();
       addTearDown(() => dir.deleteSync(recursive: true));
       final path = '${dir.path}/wallet.db';
       var t = 1767225600000;
@@ -235,7 +236,7 @@ void main() {
       r.importBatch(pos([('2026-02-03', -700, 'POS EXAMPLE BAKERY')])); // the first import after the upgrade
       r.addManual(date: '2026-02-04', amount: 310, category: 'Eating out');
       expect(matchOps(r), isEmpty, reason: 'no match ops for old history');
-      await FolderSync(dir.path, VaultKey.generate()).run(r); // and the first sync
+      await SyncEngine(relay, VaultKey.generate()).run(r); // and the first sync
       expect(matchOps(r), isEmpty);
       for (final id in ['m-old-1', 'm-old-2']) {
         expect(r.transaction(id)!.matchedTo, isNull, reason: id);
@@ -340,6 +341,7 @@ void main() {
 
     test('deleted on another device: after sync the expense counts again on both, same state', () async {
       final dir = Directory.systemTemp.createTempSync('bw-match-del-');
+      final relay = MemoryTransport();
       addTearDown(() => dir.deleteSync(recursive: true));
       final key = VaultKey.generate();
       var t = 1767225600000;
@@ -348,8 +350,8 @@ void main() {
       addTearDown(laptop.close);
       Future<void> sync() async {
         for (var i = 0; i < 2; i++) {
-          await FolderSync(dir.path, key).run(phone);
-          await FolderSync(dir.path, key).run(laptop);
+          await SyncEngine(relay, key).run(phone);
+          await SyncEngine(relay, key).run(laptop);
         }
       }
 
@@ -405,6 +407,7 @@ void main() {
 
     test('a new device reading many sync files matches once per sync run, not once per file', () async {
       final dir = Directory.systemTemp.createTempSync('bw-match-sync-');
+      final relay = MemoryTransport();
       addTearDown(() => dir.deleteSync(recursive: true));
       final key = VaultKey.generate();
       var t = 1767225600000;
@@ -421,16 +424,16 @@ void main() {
         } else {
           a.importBatch(ImportBatch(source: 'pbz', transactions: [n(day, -(1000 + i - 1), 'POS plaćanje', 'POS EXAMPLE $i')]));
         }
-        await FolderSync(dir.path, key).run(a);
+        await SyncEngine(relay, key).run(a);
       }
       late SyncReport rep;
-      final runs = await matchRuns(() async => rep = await FolderSync(dir.path, key).run(b));
+      final runs = await matchRuns(() async => rep = await SyncEngine(relay, key).run(b));
       expect(rep.filesRead, files);
       expect(runs, hasLength(1), reason: 'one matching run for the whole sync');
       expect(b.transactions().where((t) => t.manual), isEmpty, reason: 'every entry matched by its bank row');
       expect(b.transactions().length, files ~/ 2);
       // Nothing new: no matching at all.
-      expect(await matchRuns(() => FolderSync(dir.path, key).run(b)), isEmpty);
+      expect(await matchRuns(() => SyncEngine(relay, key).run(b)), isEmpty);
     });
 
     test('a large wallet loads only the bank rows that could replace an open entry', () async {

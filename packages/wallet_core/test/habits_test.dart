@@ -614,19 +614,19 @@ void main() {
       expect((after.lastPaidTx, after.nextDue), (gym('2026-04-10', 2999).id, '2026-05-10'));
     });
 
-    test('an existing database is upgraded to schema 5 with the recurring table and replays peer files once', () {
+    test('an existing database is upgraded to schema 5 with the recurring table and replays the relay once', () {
       final tmp = Directory.systemTemp.createTempSync('bw-habits-');
       addTearDown(() => tmp.deleteSync(recursive: true));
       final path = '${tmp.path}/w.db';
       final old = WalletRepo.open(path);
       old.importBatch(january);
-      old.markPeerFile('dev', 'f1');
+      old.setSyncCursor('dev', 3);
       old.db.execute("UPDATE meta SET value = '4' WHERE key = 'schema'");
       old.db.execute('DROP TABLE recurring');
       old.close();
       final up = WalletRepo.open(path);
       expect(up.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '5');
-      expect(up.peerFileSeen('dev', 'f1'), isFalse);
+      expect(up.syncCursors(), isEmpty);
       expect(up.recurringBills(), isEmpty);
       up.close();
     });

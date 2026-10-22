@@ -199,11 +199,11 @@ void main() {
     setUp(() => tmp = Directory.systemTemp.createTempSync('bw-kind-'));
     tearDown(() => tmp.deleteSync(recursive: true));
 
-    test('a database from the previous build gains kind_hint and transfer_to and replays peer files once', () {
+    test('a database from the previous build gains kind_hint and transfer_to and replays the relay once', () {
       final path = '${tmp.path}/old.db';
       final r = WalletRepo.open(path);
       r.importBatch(january);
-      r.markPeerFile('peer', '0000000001.bwop');
+      r.setSyncCursor('peer', 1);
       r.close();
       final db = sqlite3.open(path);
       db.execute('ALTER TABLE tx DROP COLUMN kind_hint');
@@ -215,7 +215,7 @@ void main() {
       final cols = {for (final c in again.db.select('PRAGMA table_info(tx)')) c['name'] as String};
       expect(cols, containsAll(entityTables['tx']!.$2));
       expect(again.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '${WalletRepo.schemaVersion}');
-      expect(bookkeeping(again)['peer_files'], 0, reason: 'the older build dropped kind_hint from the ops it read');
+      expect(bookkeeping(again)['sync_cursor'], 0, reason: 'the older build dropped kind_hint from the ops it read');
       expect(again.transactions().length, january.transactions.length);
       expect(again.transactions().map((t) => t.kindHint).toSet(), {null});
     });

@@ -53,9 +53,9 @@ class SyncProblem {
 /// A refused file, kept on this device only (a local value, never synced) so it is not retried on every run.
 ///
 /// It is read again only when it changes: by content hash where reads are cheap (a local folder); [size] and [stamp]
-/// are kept for a transport that lists files without reading them (none yet: `FolderSync` always hashes). Files
+/// are kept for a transport that lists files without reading them (none yet: `SyncEngine` always hashes). Files
 /// refused as [SyncProblemReason.unknownVersion] or [SyncProblemReason.applyFailed] are also read again once after
-/// [build] (the reader, the schema or the app version, see `FolderSync.build`) changes.
+/// [build] (the reader, the schema or the app version, see `SyncEngine.build`) changes.
 class BadFile {
   /// The device's folder name and the file's name: the quarantine key. Never logged or shown.
   final String device, file;

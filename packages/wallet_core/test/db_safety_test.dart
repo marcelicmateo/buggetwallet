@@ -43,7 +43,7 @@ void main() {
   tearDown(() => tmp.deleteSync(recursive: true));
 
   group('reopen', () {
-    test('everything survives close and reopen: data, device id, outbox, clock, file numbers, applied files', () async {
+    test('everything survives close and reopen: data, device id, outbox, clock, sync cursors and sent seq', () async {
       final path = '${tmp.path}/wallet.db';
       var t = 1767225600000;
       var r = WalletRepo.open(path, now: () => t);
@@ -54,7 +54,8 @@ void main() {
       r.addWish('Synthetic thing', 9000);
       r.setMerchantRule('lidl_hrvatska_zagreb', 'Groceries');
       final id = r.deviceId, data = dump(r), pending = r.pendingOps().length, last = r.clock.last.toString();
-      final file = r.nextFileNumber();
+      r.setSyncCursor('peer', 4);
+      r.setLocalValue(SyncEngine.sentKey, '7');
       r.close();
 
       t = 0; // the wall clock went backwards (e.g. a dead RTC battery)
@@ -63,7 +64,8 @@ void main() {
       expect(dump(r), data);
       expect(r.pendingOps().length, pending);
       expect(r.clock.last.toString(), last);
-      expect(r.nextFileNumber(), file + 1);
+      expect(r.syncCursors(), {'peer': 4});
+      expect(r.localValue(SyncEngine.sentKey), '7');
       r.updateSettings({'salary': 160000});
       expect(r.pendingOps().last.$2.hlc.compareTo(last), greaterThan(0), reason: 'new edits must still win over older ones');
       expect(r.settings().salary, 160000);
@@ -72,17 +74,17 @@ void main() {
 
     test('files applied before a restart are not applied again; exported ops are not exported again', () async {
       final key = VaultKey.generate();
-      final folder = Directory('${tmp.path}/sync')..createSync();
+      final relay = MemoryTransport();
       final a = WalletRepo.inMemory();
       a.importBatch(january);
-      await FolderSync(folder.path, key).run(a);
+      await SyncEngine(relay, key).run(a);
       final path = '${tmp.path}/b.db';
       var b = WalletRepo.open(path);
       b.updateSettings({'rent': 1});
-      expect((await FolderSync(folder.path, key).run(b)).filesRead, 1);
+      expect((await SyncEngine(relay, key).run(b)).filesRead, 1);
       b.close();
       b = WalletRepo.open(path);
-      final again = await FolderSync(folder.path, key).run(b);
+      final again = await SyncEngine(relay, key).run(b);
       expect((again.sent, again.filesRead), (0, 0));
       expect(b.transactions().length, january.transactions.length);
       b.close();
@@ -119,7 +121,7 @@ void main() {
       expect(r.wishlist().single.status, 'waiting');
       r.updateSettings({'salary': 160000});
       expect(r.settings().salary, 160000, reason: 'the stored clock must not make a new edit lose');
-      expect(r.nextFileNumber(), 5);
+      expect(r.db.select("SELECT 1 FROM sqlite_master WHERE name = 'peer_files'"), isEmpty, reason: 'folder-sync bookkeeping is dropped');
       final cols = _columns(r.db);
       for (final e in entityTables.values) {
         expect(cols[e.$1], containsAll(e.$2), reason: e.$1);
@@ -142,11 +144,11 @@ void main() {
       r.close();
     });
 
-    test('no column of the first v2 schema was dropped or renamed', () {
+    test('no column of the first v2 schema was dropped or renamed (the folder-sync peer_files table aside)', () {
       final old = sqlite3.openInMemory()..execute(_schemaV2_0);
       final r = WalletRepo.inMemory();
       final now = _columns(r.db);
-      for (final e in _columns(old).entries) {
+      for (final e in _columns(old).entries.where((e) => e.key != 'peer_files')) {
         expect(now[e.key], containsAll(e.value), reason: e.key);
       }
       old.dispose();

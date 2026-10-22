@@ -58,10 +58,7 @@ String backupFileName(String today) {
 Future<Uint8List> backupBytes(WalletRepo repo, VaultKey key) async {
   final t = PerfTimer('backup.write', warnMs: 2000);
   final ops = repo.snapshotOps();
-  final payload = utf8.encode(jsonEncode({
-    'v': backupVersion,
-    'ops': [for (final op in ops) op.toJson()]
-  }));
+  final payload = backupPayload(ops);
   final sealed = await seal(payload, key);
   t.done({'ops': ops.length, 'bytes': sealed.length});
   return sealed;
@@ -91,10 +88,20 @@ Future<int> restoreBackupBytes(WalletRepo repo, List<int> bytes, VaultKey key) a
   return ops.length;
 }
 
+/// The backup payload of [ops], unsealed: UTF-8 JSON `{"v":1,"ops":[...]}` (also a relay snapshot's content).
+Uint8List backupPayload(List<Op> ops) => utf8.encode(jsonEncode({
+      'v': backupVersion,
+      'ops': [for (final op in ops) op.toJson()]
+    }));
+
+/// The ops of an unsealed backup payload (a relay snapshot), or a [BackupException]; logged as [event] with the
+/// reason only.
+List<Op> backupPayloadOps(List<int> clear, {String event = 'backup.parse.failed'}) => _parse(clear, clear.length, event: event);
+
 /// The ops of an unsealed backup, or a [BackupException] (logged with the reason only).
-List<Op> _parse(List<int> clear, int sealedBytes) {
+List<Op> _parse(List<int> clear, int sealedBytes, {String event = 'backup.restore.failed'}) {
   Never refuse(BackupFailure reason, Object error, StackTrace st, String message) {
-    logError(_log, 'backup.restore.failed', error, st, fields: {'reason': reason.name, 'bytes': sealedBytes});
+    logError(_log, event, error, st, fields: {'reason': reason.name, 'bytes': sealedBytes});
     throw BackupException(reason, message);
   }
 
@@ -107,12 +114,12 @@ List<Op> _parse(List<int> clear, int sealedBytes) {
   if (json is! Map) throw const BackupException(BackupFailure.damaged, 'The backup file is damaged.');
   final v = json['v'];
   if (v is int && v > backupVersion) {
-    logEvent(_log, Level.WARNING, 'backup.restore.failed', {'reason': BackupFailure.newerVersion.name, 'v': v});
+    logEvent(_log, Level.WARNING, event, {'reason': BackupFailure.newerVersion.name, 'v': v});
     throw const BackupException(BackupFailure.newerVersion, 'The backup was made by a newer version of the app. Update the app first.');
   }
   final list = json['ops'];
   if (v != backupVersion || list is! List) {
-    logEvent(_log, Level.WARNING, 'backup.restore.failed', {'reason': BackupFailure.damaged.name});
+    logEvent(_log, Level.WARNING, event, {'reason': BackupFailure.damaged.name});
     throw const BackupException(BackupFailure.damaged, 'The backup file is damaged.');
   }
   try {

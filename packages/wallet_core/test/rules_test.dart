@@ -198,12 +198,13 @@ void main() {
 
     test('a rule learned on one device categorises the same merchant on another after sync', () async {
       final dir = Directory.systemTemp.createTempSync('bw-rule-');
+      final relay = MemoryTransport();
       addTearDown(() => dir.deleteSync(recursive: true));
       final key = VaultKey.generate();
       final a = WalletRepo.inMemory(), b = WalletRepo.inMemory();
       a.setMerchantRule('example_bistro_zagreb', 'Groceries');
-      await FolderSync(dir.path, key).run(a);
-      await FolderSync(dir.path, key).run(b);
+      await SyncEngine(relay, key).run(a);
+      await SyncEngine(relay, key).run(b);
       b.importBatch(
           ImportBatch(source: 'pbz', transactions: [n('2026-01-17', -2340, 'POS plaćanje', 'PBZ POS PBZ7EXAMPLE BISTRO ZAGREB')]));
       expect(b.categorizer().categoryOf(b.transactions().single), 'Groceries');

@@ -81,7 +81,8 @@ CREATE TABLE IF NOT EXISTS recurring(id TEXT PRIMARY KEY, payee TEXT NOT NULL DE
   next_due TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'candidate', last_paid_tx TEXT, deleted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS clocks(entity TEXT NOT NULL, id TEXT NOT NULL, field TEXT NOT NULL, hlc TEXT NOT NULL, PRIMARY KEY(entity, id, field));
 CREATE TABLE IF NOT EXISTS outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS peer_files(device TEXT NOT NULL, file TEXT NOT NULL, PRIMARY KEY(device, file));
+CREATE TABLE IF NOT EXISTS sync_cursor(device TEXT PRIMARY KEY, seq INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS sync_files(device TEXT NOT NULL, seq INTEGER NOT NULL, ops INTEGER NOT NULL, PRIMARY KEY(device, seq));
 ''';
 
 final _log = Logger('bw.repo');
@@ -113,6 +114,7 @@ class WalletRepo {
     }
     deviceId = dev;
     clock = HlcClock(dev, now: now, last: _meta('hlc'));
+    _dropFolderSync();
     _migrate();
   }
 
@@ -122,10 +124,20 @@ class WalletRepo {
   /// the `recurring` entity.
   static const schemaVersion = 5;
 
-  /// Builds before a synced entity existed skipped its ops but still marked the peer files holding them as read. So
-  /// when an existing database is opened by a build with a newer [schemaVersion], it forgets which peer files it read
-  /// (`peer_files`): the next sync reads every file once more, ops already applied change nothing (their clocks are
-  /// not newer), and the skipped ones apply. A new database just records the version.
+  /// The folder sync's bookkeeping (`peer_files`: which files of the shared folder were read) means nothing on a relay,
+  /// whose sequence numbers start over (every device's first relay file is its whole state), so it is dropped once.
+  void _dropFolderSync() {
+    if (db.select("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'peer_files'").isEmpty) return;
+    final n = db.select('SELECT COUNT(*) AS n FROM peer_files').first['n'] as int;
+    db.execute('DROP TABLE peer_files');
+    logEvent(_log, Level.INFO, 'repo.peerFiles.dropped', {'files': n});
+  }
+
+  /// Builds before a synced entity existed skipped its ops but still advanced their sync cursors past the files
+  /// holding them. So when an existing database is opened by a build with a newer [schemaVersion], it forgets how far
+  /// it applied each device (`sync_cursor`): the next sync starts over like a new device (the latest snapshot when one
+  /// of this schema or newer exists, else every file still on the relay), ops already applied change nothing (their
+  /// clocks are not newer), and the skipped ones apply. A new database just records the version.
   ///
   /// Below version 4, Revolut Exchange legs were imported with the `ownTransfer` hint, which lets them anchor a pair
   /// across sources; `importBatch` skips known ids and never edits `kind_hint`, so they are rewritten here once to
@@ -135,8 +147,8 @@ class WalletRepo {
     if (from >= schemaVersion) return;
     var replay = 0, rehinted = 0;
     if (!_created) {
-      replay = db.select('SELECT COUNT(*) AS n FROM peer_files').first['n'] as int;
-      db.execute('DELETE FROM peer_files');
+      replay = db.select('SELECT COUNT(*) AS n FROM sync_cursor').first['n'] as int;
+      db.execute('DELETE FROM sync_cursor');
       if (from < 4) {
         final stale = db.select("SELECT id FROM tx WHERE source = 'revolut' AND bank_type = ? AND kind_hint = ?",
             [revolutExchangeType, TxKind.ownTransfer.name]);
@@ -148,7 +160,7 @@ class WalletRepo {
     }
     _setMeta('schema', '$schemaVersion');
     logEvent(_log, Level.INFO, 'repo.migrate',
-        {'from': from, 'to': schemaVersion, 'new': _created, 'replayFiles': replay, 'rehinted': rehinted});
+        {'from': from, 'to': schemaVersion, 'new': _created, 'replayDevices': replay, 'rehinted': rehinted});
     if (rehinted > 0) _reconcile();
   }
 
@@ -326,7 +338,7 @@ class WalletRepo {
   /// the state exactly) one op per distinct field clock, holding the fields written with that clock and their current
   /// values. A field with no clock (never written: the column default) is left out, so a restore records the same
   /// clocks as this device holds; a row with no clocked field at all gives no op. Device-local values (`local.*`
-  /// meta, the outbox, peer files) are not included. Ordered by entity, id, clock.
+  /// meta, the outbox, sync cursors) are not included. Ordered by entity, id, clock.
   List<Op> snapshotOps() {
     final t = PerfTimer('repo.snapshot', warnMs: 1000);
     final out = <Op>[];
@@ -494,7 +506,7 @@ class WalletRepo {
   }
 
   /// Runs transfer pairing and matching if ops applied with `applyRemote(match: false)` changed something since it
-  /// last ran (also after a crash mid-sync: the flag is stored). [FolderSync.run] calls it once after applying all files.
+  /// last ran (also after a crash mid-sync: the flag is stored). `SyncEngine.run` calls it once, only when caught up.
   void runPendingMatch() {
     if (_meta('match_pending') == null) return;
     _reconcile();
@@ -504,15 +516,37 @@ class WalletRepo {
   /// Today's date on this device's clock (the one the HLC uses, so tests can set it).
   String _today() => isoDate(DateTime.fromMillisecondsSinceEpoch(clock.now()));
 
-  bool peerFileSeen(String device, String file) =>
-      db.select('SELECT 1 FROM peer_files WHERE device = ? AND file = ?', [device, file]).isNotEmpty;
-  void markPeerFile(String device, String file) =>
-      db.execute('INSERT OR IGNORE INTO peer_files(device, file) VALUES(?, ?)', [device, file]);
+  // ---------- sync bookkeeping (device-local, never synced) ----------
+  /// How far this device applied each other device's relay files (device id → last applied seq; absent = none).
+  /// Advanced file by file by `SyncEngine`, raised to a snapshot's covers; a schema bump clears it ([_migrate]).
+  Map<String, int> syncCursors() => {
+        for (final r in db.select('SELECT device, seq FROM sync_cursor')) r['device'] as String: r['seq'] as int,
+      };
 
-  int nextFileNumber() {
-    final n = int.tryParse(_meta('file_seq') ?? '0') ?? 0;
-    _setMeta('file_seq', '${n + 1}');
-    return n + 1;
+  /// Sets [device]'s cursor; 0 forgets it (the relay lost that device's files, which start again at 1).
+  void setSyncCursor(String device, int seq) => seq <= 0
+      ? db.execute('DELETE FROM sync_cursor WHERE device = ?', [device])
+      : db.execute('INSERT OR REPLACE INTO sync_cursor(device, seq) VALUES(?, ?)', [device, seq]);
+
+  /// Records that relay file [seq] of [device] (this device's own uploads included) held [ops] ops, for the snapshot
+  /// rule ("500 ops behind the newest snapshot").
+  void recordSyncFile(String device, int seq, int ops) =>
+      db.execute('INSERT OR REPLACE INTO sync_files(device, seq, ops) VALUES(?, ?, ?)', [device, seq, ops]);
+
+  /// Ops in recorded files not covered by [covers] (device → seq; a device not in it covers nothing).
+  int syncOpsAfter(Map<String, int> covers) {
+    var n = 0;
+    for (final r in db.select('SELECT device, seq, ops FROM sync_files')) {
+      if ((r['seq'] as int) > (covers[r['device']] ?? 0)) n += r['ops'] as int;
+    }
+    return n;
+  }
+
+  /// Forgets recorded files that [covers] covers.
+  void forgetSyncFiles(Map<String, int> covers) {
+    for (final MapEntry(key: d, value: s) in covers.entries) {
+      db.execute('DELETE FROM sync_files WHERE device = ? AND seq <= ?', [d, s]);
+    }
   }
 
   // ---------- reads ----------

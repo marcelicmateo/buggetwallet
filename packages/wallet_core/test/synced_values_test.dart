@@ -136,23 +136,19 @@ void main() {
   });
 
   group('two devices', () {
-    late Directory tmp;
-    setUp(() => tmp = Directory.systemTemp.createTempSync('bw-synced-values-'));
-    tearDown(() => tmp.deleteSync(recursive: true));
-
     test('both refuse the same bad field from a third device and converge when a valid write follows', () async {
       final key = VaultKey.generate();
+      final relay = MemoryTransport();
       final a = WalletRepo.inMemory(), b = WalletRepo.inMemory();
       addTearDown(a.close);
       addTearDown(b.close);
-      Future<void> sync(WalletRepo repo) => FolderSync(tmp.path, key).run(repo);
+      Future<void> sync(WalletRepo repo) => SyncEngine(relay, key).run(repo);
 
       a.updateSettings({'salary': 1});
-      await sync(a); // creates the folder and vault.json
+      await sync(a);
       // A third device with a bug writes a file with a newer clock than anything local: a bad amount and a good note.
-      final peer = Directory('${tmp.path}/budget-wallet/devices/peer')..createSync(recursive: true);
-      Future<void> peerFile(int n, List<Op> ops) async => File('${peer.path}/${'$n'.padLeft(10, '0')}.bwop')
-          .writeAsBytesSync(await seal(utf8.encode(jsonEncode([for (final o in ops) o.toJson()])), key));
+      Future<void> peerFile(int n, List<Op> ops) async =>
+          relay.put('peer', n, await seal(utf8.encode(jsonEncode([for (final o in ops) o.toJson()])), key));
       final now = DateTime.now().millisecondsSinceEpoch;
       await peerFile(1, [
         Op('tx', 't', {..._base, 'note': 'n0'}, Hlc(now - 1000, 0, 'peer').toString()),

@@ -56,33 +56,59 @@ Map<String, List<Map<String, Object?>>> dump(WalletRepo r, {bool clocks = true})
 
 /// Row counts of the bookkeeping tables.
 Map<String, int> bookkeeping(WalletRepo r) => {
-      for (final t in ['outbox', 'peer_files', 'clocks']) t: r.db.select('SELECT COUNT(*) AS n FROM $t').first['n'] as int,
+      for (final t in ['outbox', 'sync_cursor', 'clocks']) t: r.db.select('SELECT COUNT(*) AS n FROM $t').first['n'] as int,
     };
 
-/// All files under [dir], keyed by path relative to it.
-Map<String, Uint8List> filesUnder(Directory dir) {
-  if (!dir.existsSync()) return {};
-  return {
-    for (final f in dir.listSync(recursive: true).whereType<File>())
-      f.path.substring(dir.path.length + 1).replaceAll(Platform.pathSeparator, '/'): f.readAsBytesSync(),
-  };
-}
-
-/// What a file-sync tool (Syncthing) has seen so far: every file any device uploaded, by relative path.
+/// The relay the devices of a test sync through ([MemoryTransport]). A [Device] without its own net uses the latest
+/// one made, so `net = Net()` in `setUp` connects every device of the test.
 class Net {
-  final Map<String, Uint8List> files = {};
+  static Net? _current;
+  final MemoryTransport relay;
+  Net({DateTime Function()? now}) : relay = MemoryTransport(now: now) {
+    _current = this;
+  }
+
+  /// What the relay stores: `d/<device>/<seq>` and `snapshot/<id>`.
+  Map<String, Uint8List> get files => relay.files;
 }
 
-/// One simulated device: its own database, its own copy of the shared folder, and a skewed wall clock. With
-/// [dbPath] the database is a file, so [reopen] can simulate an app restart (or upgrade).
+/// Fails each file GET with probability `1 - p` (a flaky link: the device stops at that file of that device).
+class _Flaky implements SyncTransport {
+  final SyncTransport inner;
+  final Random? r;
+  final double p;
+  _Flaky(this.inner, this.r, this.p);
+  @override
+  Future<RelayState> state() => inner.state();
+  @override
+  Future<void> put(String device, int seq, List<int> bytes) => inner.put(device, seq, bytes);
+  @override
+  Future<List<int>> get(String device, int seq) async {
+    if (r != null && p < 1 && r!.nextDouble() >= p) throw const TransportException(TransportFailure.unreachable, 'flaky');
+    return inner.get(device, seq);
+  }
+
+  @override
+  Future<void> ack(String device, Map<String, int> cursors) => inner.ack(device, cursors);
+  @override
+  Future<void> putSnapshot(String id, Map<String, int> covers, List<int> bytes) => inner.putSnapshot(id, covers, bytes);
+  @override
+  Future<List<int>> getSnapshot(String id) => inner.getSnapshot(id);
+}
+
+/// One simulated device: its own database and a skewed wall clock, syncing through a [Net]. With [dbPath] the
+/// database is a file, so [reopen] can simulate an app restart (or upgrade). [dir] is scratch space for the test.
 class Device {
   final String name;
-  final Directory dir;
+  final Directory? dir;
   final VaultKey key;
   final String? dbPath;
   int Function() clock;
   late WalletRepo repo;
-  Device(this.name, this.dir, this.key, this.clock, {this.dbPath}) {
+  Net? net;
+  Random? _r;
+  double _p = 1;
+  Device(this.name, this.dir, this.key, this.clock, {this.dbPath, this.net}) {
     repo = _open();
   }
 
@@ -94,48 +120,40 @@ class Device {
     repo = _open();
   }
 
-  FolderSync get sync => FolderSync(dir.path, key);
-  Directory get root => Directory('${dir.path}/budget-wallet');
+  Net get _net => net ??= Net._current ?? Net();
+  MemoryTransport get relay => _net.relay;
 
-  Future<SyncReport> run() => sync.run(repo);
+  SyncEngine engine({String appVersion = ''}) => SyncEngine(_Flaky(relay, _r, _p), key, appVersion: appVersion);
 
-  /// Copies files this device wrote into the network.
-  void upload(Net net) {
-    for (final e in filesUnder(root).entries) {
-      if (e.key.split('/').last.startsWith('.')) continue; // half-written temp files never leave the device
-      net.files.putIfAbsent(e.key, () => e.value);
-    }
+  /// One sync run: uploads this device's changes, then applies what it can fetch (see [deliver]).
+  Future<SyncReport> run({String appVersion = ''}) async {
+    final e = engine(appVersion: appVersion);
+    _p = 1;
+    return e.run(repo);
   }
 
-  /// Delivers network files to this device. Each missing file arrives with probability [p] (so later files can
-  /// arrive before earlier ones); with probability [dup] an already present file comes again as a conflict copy.
+  /// Files go out during [run]; kept so the folder-era helpers read the same.
+  void upload(Net net) => this.net ??= net;
+
+  /// The next [run] fetches each file with probability [p] (a failed GET stops that device's later files until a
+  /// later run). [dup] is ignored: a relay has no conflict copies.
   void deliver(Net net, Random r, {double p = 1, double dup = 0}) {
-    for (final e in net.files.entries) {
-      final f = File('${root.path}/${e.key}');
-      if (f.existsSync()) {
-        if (dup > 0 && r.nextDouble() < dup && e.key.endsWith('.bwop') && !e.key.contains('conflict')) {
-          final copy = File('${f.path.substring(0, f.path.length - 5)}.sync-conflict-20261016-${r.nextInt(1 << 20)}.bwop');
-          copy.writeAsBytesSync(e.value);
-        }
-        continue;
-      }
-      if (r.nextDouble() >= p) continue;
-      f.parent.createSync(recursive: true);
-      f.writeAsBytesSync(e.value);
-    }
+    this.net ??= net;
+    _r = r;
+    _p = p;
   }
 
   void close() => repo.close();
 }
 
-/// Every op in the network's sync files (decrypted), conflict copies included.
+/// Every op on the relay (decrypted): device files and snapshots.
 Future<List<Op>> opsInNet(Net net, VaultKey key) async {
   final out = <Op>[];
   for (final e in net.files.entries) {
-    if (!e.key.endsWith('.bwop')) continue;
     final clear = await unseal(e.value, key);
-    for (final j in jsonDecode(utf8.decode(clear)) as List) {
-      out.add(Op.fromJson(Map<String, Object?>.from(j as Map)));
+    final j = jsonDecode(utf8.decode(clear));
+    for (final o in (j is Map ? j['ops'] : j) as List) {
+      out.add(Op.fromJson(Map<String, Object?>.from(o as Map)));
     }
   }
   return out;

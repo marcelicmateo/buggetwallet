@@ -1,5 +1,5 @@
 name: wallet_core
-description: Budget Wallet core - local database, change log, encrypted folder sync and budget engine.
+description: Budget Wallet core - local database, change log, encrypted relay sync and budget engine.
 version: 0.1.0
 publish_to: none
 
@@ -9,6 +9,7 @@ environment:
 dependencies:
   archive: ^4.5.2
   cryptography: ^2.7.0
+  http: ^1.2.0
   logging: ^1.3.0
   sqlite3: ^2.4.0
   wallet_importer:

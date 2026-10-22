@@ -1,5 +1,5 @@
 /// Budget Wallet core: local SQLite database, change log, end-to-end
-/// encrypted folder sync (for Syncthing) and the budget engine.
+/// encrypted relay sync and the budget engine.
 ///
 /// Compiles for the web (dart2js and dart2wasm): the dart:io parts (`*_io.dart`) are swapped for stubs
 /// (`*_web.dart`) that throw [UnsupportedError]; `tool/web_smoke.dart` is the compile check.
@@ -13,7 +13,7 @@ export 'src/budget.dart';
 export 'src/categories.dart';
 export 'src/dates.dart';
 export 'src/export.dart';
-export 'src/folder_sync_io.dart' if (dart.library.js_interop) 'src/folder_sync_web.dart';
+export 'src/sync_engine.dart';
 export 'src/hlc.dart' show Hlc, HlcClock;
 export 'src/logs.dart';
 export 'src/logs_io.dart' if (dart.library.js_interop) 'src/logs_web.dart';

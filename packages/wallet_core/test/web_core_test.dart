@@ -259,14 +259,16 @@ void main() {
   });
 
   group('web-safe sync types', () {
-    test('SyncReport and SyncException stay exported with FolderSync', () {
+    test('SyncReport, SyncException and the engine are exported (no dart:io in the engine)', () {
       const r = SyncReport(1, 2, 3, problems: [SyncProblem('abcdef01', SyncProblemReason.badKey, bytes: 10)]);
       expect(r.badFiles, 1);
       expect(r.problemsByDevice, {'abcdef01': 1});
+      expect([r.caughtUp, r.waiting.isEmpty, r.devices.isEmpty], [false, true, true]);
       expect(const SyncException('x').toString(), 'x');
-      final dir = Directory.systemTemp.createTempSync('bw-web-core-');
-      addTearDown(() => dir.deleteSync(recursive: true));
-      expect(FolderSync(dir.path, VaultKey.generate(), appVersion: '1.2').build, endsWith('+1.2'));
+      expect(SyncEngine(MemoryTransport(), VaultKey.generate(), appVersion: '1.2').build, endsWith('+1.2'));
+      for (final f in ['sync_engine.dart', 'sync_memory.dart', 'sync_relay.dart', 'sync.dart', 'sync_problems.dart']) {
+        expect(File('lib/src/$f').readAsStringSync(), isNot(contains("import 'dart:io'")), reason: f);
+      }
     });
   });
 }

@@ -381,38 +381,42 @@ void main() {
       r.close();
     });
 
-    test('an upgraded device re-reads peer files once and picks up contributions an older build skipped', () async {
+    test('an upgraded device replays the relay once and picks up contributions an older build skipped', () async {
       final key = VaultKey.generate();
-      final dir = Directory('${tmp.path}/sync/budget-wallet/devices/p1')..createSync(recursive: true);
-      File('${tmp.path}/sync/budget-wallet/vault.json').writeAsStringSync(jsonEncode({'v': 1, 'kid': await key.keyId()}));
+      final relay = MemoryTransport();
       final ops = [
         _goalOp('g1', {'name': 'Synthetic fund'}).toJson(),
         _contribOp('c1', 'g1', 5000).toJson(),
       ];
-      File('${dir.path}/0000000001.bwop').writeAsBytesSync(await seal(utf8.encode(jsonEncode(ops)), key));
-      // The old build already read that file (and ignored the contribution).
+      await relay.put('p1', 1, await seal(utf8.encode(jsonEncode(ops)), key));
       final path = oldDb(peerFiles: ['0000000001.bwop']);
-      final r = WalletRepo.open(path);
-      expect(r.peerFileSeen('p1', '0000000001.bwop'), isFalse);
+      var r = WalletRepo.open(path);
+      expect(r.db.select("SELECT 1 FROM sqlite_master WHERE name = 'peer_files'"), isEmpty, reason: 'folder bookkeeping dropped');
+      // As if an older build had applied p1's file 1 and ignored the contribution: cursor at 1, schema before goal_contrib.
+      r.setSyncCursor('p1', 1);
+      r.db.execute("UPDATE meta SET value = '1' WHERE key = 'schema'");
+      r.close();
+      r = WalletRepo.open(path);
+      expect(r.syncCursors(), isEmpty, reason: 'the schema bump forgets the cursors');
       expect(_savedOf(r, 'g1'), 2345);
-      final rep = await FolderSync('${tmp.path}/sync', key).run(r);
+      final rep = await SyncEngine(relay, key).run(r);
       expect(rep.filesRead, 1);
       expect(_savedOf(r, 'g1'), 7345);
-      expect((await FolderSync('${tmp.path}/sync', key).run(r)).filesRead, 0);
+      expect((await SyncEngine(relay, key).run(r)).filesRead, 0);
       r.close();
       final again = WalletRepo.open(path);
-      expect(again.peerFileSeen('p1', '0000000001.bwop'), isTrue, reason: 'the replay happens once, not on every open');
+      expect(again.syncCursors(), {'p1': 1}, reason: 'the replay happens once, not on every open');
       expect(_savedOf(again, 'g1'), 7345);
       again.close();
     });
 
-    test('a new database records the schema version and keeps its peer files on reopen', () {
+    test('a new database records the schema version and keeps its sync cursors on reopen', () {
       final path = '${tmp.path}/new.db';
       final r = WalletRepo.open(path);
-      r.markPeerFile('p1', '0000000001.bwop');
+      r.setSyncCursor('p1', 1);
       r.close();
       final again = WalletRepo.open(path);
-      expect(again.peerFileSeen('p1', '0000000001.bwop'), isTrue);
+      expect(again.syncCursors(), {'p1': 1});
       again.close();
     });
   });

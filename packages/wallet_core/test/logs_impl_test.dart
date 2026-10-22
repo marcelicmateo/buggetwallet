@@ -221,40 +221,40 @@ void main() {
 
     test('sync and vault', () async {
       final lines = _captureAll();
-      final dir = Directory.systemTemp.createTempSync('bw_sync_log_');
-      addTearDown(() => dir.deleteSync(recursive: true));
+      final relay = MemoryTransport();
       final key = VaultKey.generate();
       final a = WalletRepo.inMemory(), b = WalletRepo.inMemory();
       addTearDown(a.close);
       addTearDown(b.close);
       a.importBatch(january);
       a.saveGoal(name: 'Laptop fund', target: 150000, saved: 0, monthly: 2340);
-      await FolderSync(dir.path, key).run(a);
-      final r = await FolderSync(dir.path, key).run(b);
+      await SyncEngine(relay, key).run(a);
+      final r = await SyncEngine(relay, key).run(b);
       expect(r.filesRead, 1);
 
-      // A damaged conflict copy is skipped and logged by its sequence number only (the suffix holds a device id).
-      final mine = Directory('${dir.path}/budget-wallet/devices/${a.deviceId}');
-      File('${mine.path}/0000000001.sync-conflict-20261016-000000-SYNTHID.bwop').writeAsBytesSync([1, 2, 3]);
-      expect((await FolderSync(dir.path, key).run(b)).badFiles, 1);
+      // A damaged file is skipped and logged by its sequence number only.
+      a.updateSettings({'rent': 1});
+      await SyncEngine(relay, key).run(a);
+      relay.replace(a.deviceId, 2, [1, 2, 3]);
+      expect((await SyncEngine(relay, key).run(b)).badFiles, 1);
 
-      // A different key: the failure is logged without key material.
-      await expectLater(FolderSync(dir.path, VaultKey.generate()).run(WalletRepo.inMemory()), throwsA(isA<SyncException>()));
+      // An unreachable relay: the failure is logged without key material.
+      relay.offline = true;
+      await expectLater(SyncEngine(relay, VaultKey.generate()).run(WalletRepo.inMemory()), throwsA(isA<SyncException>()));
 
       final text = lines.join('\n');
       expect(text, contains('sync.export {"ms":'));
-      expect(text, contains('sync.apply {"ms":'));
+      expect(text, contains('sync.run {"ms":'));
       expect(text, contains('vault.seal'));
       expect(text, contains('vault.unseal'));
-      expect(text, contains('sync.vault.mismatch'));
-      expect(text, contains('WARNING bw.sync sync.file.failed {"file":"0000000001","reason":"corrupt","bytes":3}'));
+      expect(text, contains('sync.failed {"step":"state","failure":"unreachable"}'));
+      expect(text, contains('WARNING bw.sync sync.file.failed {"seq":2,"reason":"corrupt","bytes":3}'));
       expect(text, contains('sync.files.skipped {"bad":1,"new":1}'));
-      expect(text, isNot(contains('SYNTHID')), reason: 'conflict-copy names are not logged');
       _expectClean(lines);
       expect(text, isNot(contains(await key.toText())));
       expect(text, isNot(contains(base64Encode(key.bytes))));
       expect(text, isNot(contains(a.deviceId)), reason: 'device ids are not logged');
-      expect(text, isNot(contains(dir.path)), reason: 'paths are not logged');
+      expect(text, isNot(contains(SyncProblem.shortId(a.deviceId))), reason: 'not even short ones');
     });
 
     test('a failed write logs a SEVERE rollback without the values', () {

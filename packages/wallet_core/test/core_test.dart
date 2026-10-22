@@ -1,5 +1,4 @@
 // All data here is synthetic.
-import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -130,16 +129,15 @@ void main() {
   });
 
   group('sync', () {
-    late Directory dir;
-    setUp(() => dir = Directory.systemTemp.createTempSync('bw-sync-'));
-    tearDown(() => dir.deleteSync(recursive: true));
+    late MemoryTransport relay;
+    setUp(() => relay = MemoryTransport());
 
     test('two devices converge, last edit wins per field', () async {
       var t = 1000;
       final a = WalletRepo.inMemory(now: () => t);
       final b = WalletRepo.inMemory(now: () => t);
       final key = VaultKey.generate();
-      final sa = FolderSync(dir.path, key), sb = FolderSync(dir.path, key);
+      final sa = SyncEngine(relay, key), sb = SyncEngine(relay, key);
 
       a.importBatch(january);
       a.updateSettings({'salary': 150000});
@@ -165,11 +163,23 @@ void main() {
       expect(a.settings().salary, 150000);
     });
 
-    test('a different key is refused', () async {
+    test('files sealed with a different key are refused (badKey) and hold up that device; nothing applies', () async {
+      final a = WalletRepo.inMemory(), b = WalletRepo.inMemory();
+      a.updateSettings({'salary': 1});
+      await SyncEngine(relay, VaultKey.generate()).run(a);
+      final r = await SyncEngine(relay, VaultKey.generate()).run(b);
+      expect(r.problems.single.reason, SyncProblemReason.badKey);
+      expect(r.waiting.single.reason, SyncProblemReason.badKey);
+      expect(r.caughtUp, isFalse);
+      expect(b.settings().salary, isNot(1));
+    });
+
+    test('an unreachable relay is a SyncException and keeps the outbox', () async {
       final a = WalletRepo.inMemory();
       a.updateSettings({'salary': 1});
-      await FolderSync(dir.path, VaultKey.generate()).run(a);
-      expect(() => FolderSync(dir.path, VaultKey.generate()).run(WalletRepo.inMemory()), throwsA(isA<SyncException>()));
+      relay.offline = true;
+      await expectLater(SyncEngine(relay, VaultKey.generate()).run(a), throwsA(isA<SyncException>()));
+      expect(a.pendingOps(), isNotEmpty);
     });
   });
 }
