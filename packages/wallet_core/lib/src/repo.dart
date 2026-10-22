@@ -172,8 +172,11 @@ class WalletRepo {
     return repo;
   }
 
-  /// Opens (or creates) the database file at [path]. Native only: on the web use [fromDatabase].
-  static WalletRepo open(String path, {int Function()? now}) => _timedOpen(() => sqlite.openFileDb(path), true, now);
+  /// Opens (or creates) the database file at [path]. Native only: on the web use [fromDatabase] (with `openKeyed`).
+  /// With [dbKey] (`localDbKey`) the file is encrypted: opened keyed, a plaintext one converted in place first
+  /// (crash-safe, see `openKeyedFileDb`); a key that does not open it is a `WalletDbKeyException`.
+  static WalletRepo open(String path, {List<int>? dbKey, int Function()? now}) =>
+      _timedOpen(() => dbKey == null ? sqlite.openFileDb(path) : sqlite.openKeyedFileDb(path, dbKey), true, now);
 
   /// A fresh in-memory database (tests). Native only: on the web use [fromDatabase].
   static WalletRepo inMemory({int Function()? now}) => _timedOpen(sqlite.openMemoryDb, false, now);

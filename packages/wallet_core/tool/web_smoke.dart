@@ -22,7 +22,8 @@ Future<void> main(List<String> args) async {
     return;
   }
   final db = args.first as CommonDatabase; // a real caller passes a WASM database
-  final repo = WalletRepo.fromDatabase(db, file: false);
+  final dbKey = await localDbKey(key);
+  final repo = WalletRepo.fromDatabase(openKeyed(() => db, dbKey), file: false);
   final Uint8List bytes = await backupBytes(repo, key);
   final ops = await restoreBackupBytes(repo, bytes, key);
   final SyncTransport transport = args.length > 1 ? RelayTransport(Uri.parse(args[1]), key) : MemoryTransport();

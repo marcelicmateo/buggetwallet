@@ -233,6 +233,16 @@ class SyncEngine {
   /// Device-local values: this device's last uploaded seq (absent = never met a relay) and when it first did.
   static const sentKey = 'syncSent', sinceKey = 'syncSince';
 
+  /// Device-local: per (peer, device) pair where the peer's ack for that device's files is below what this device holds
+  /// of them (its cursor, or its own last), that ack and since when (ms) it has stayed there
+  /// (`{"<peer>/<device>": [ack, ms]}`); and when this device last wrote a heal snapshot (ms).
+  static const stuckKey = 'syncPeerStuck', healKey = 'syncHealAt';
+
+  /// Self-heal: a device seen within this long whose ack for some device's files has stayed below what this device
+  /// applied of them for longer than this is taken as blocked on a file it refused; a caught-up device that holds the
+  /// file then writes a snapshot at once (at most one heal snapshot per device per this long).
+  static const stuckAfter = Duration(hours: 24);
+
   /// What a quarantined file's record says about the build that refused it ([BadFile.build]): the file format this
   /// build reads, the database schema and the app version. Files refused as [SyncProblemReason.badKey] or
   /// [SyncProblemReason.corrupt] are never retried for a build change: only a changed file is.
@@ -407,10 +417,11 @@ class SyncEngine {
     }
 
     // 5. Caught up: match, and maybe write a snapshot.
+    final heal = _trackStuck(repo, state, cursors, myLast, now);
     final caughtUp = waiting.isEmpty && problems.isEmpty && peers.every((d) => cur(d) >= state.devices[d]!.last);
     if (caughtUp) {
       repo.runPendingMatch();
-      await _maybeSnapshot(repo, state, cursors, myLast, now);
+      await _maybeSnapshot(repo, state, cursors, myLast, now, heal: heal);
     } else {
       logEvent(_log, Level.INFO, 'sync.match.waiting', {'waiting': waiting.length, 'bad': problems.length});
     }
@@ -531,15 +542,58 @@ class SyncEngine {
     return null;
   }
 
-  /// Writes a snapshot when the newest is older than [snapshotAge] or [snapshotOpsBehind] ops behind (called only when
-  /// caught up). Failures are logged: another device may simply have written a newer one.
-  Future<void> _maybeSnapshot(WalletRepo repo, RelayState state, Map<String, int> cursors, int myLast, DateTime now) async {
+  /// Updates [stuckKey] (every run, caught up or not) and says whether a snapshot should heal a peer now: another
+  /// device seen within [stuckAfter] has kept the same ack for some device D below what this device holds of D (its
+  /// cursor, or [myLast] for its own files) for longer than [stuckAfter] (a file it refused stops it there for good: the
+  /// relay never overwrites one, see the known limits), the newest snapshot does not cover the file it needs (else it
+  /// starts from that snapshot by itself), and this device wrote no heal snapshot within [stuckAfter] ([healKey]).
+  bool _trackStuck(WalletRepo repo, RelayState state, Map<String, int> cursors, int myLast, DateTime now) {
+    final me = repo.deviceId;
+    final stored = repo.localValue(stuckKey);
+    var old = const <String, Object?>{};
+    if (stored != null) {
+      try {
+        old = (jsonDecode(stored) as Map).cast<String, Object?>();
+      } catch (e, st) {
+        logError(_log, 'sync.stuck.unreadable', e, st);
+      }
+    }
+    final covers = state.snapshot?.covers ?? const <String, int>{};
+    final next = <String, List<int>>{};
+    var stuck = 0;
+    for (final MapEntry(key: p, value: peer) in state.devices.entries) {
+      final seen = peer.lastSeen;
+      if (p == me || seen == null || now.difference(seen) > stuckAfter) continue;
+      for (final d in state.devices.keys) {
+        if (d == p) continue;
+        final held = d == me ? myLast : cursors[d] ?? 0, ack = peer.acks[d] ?? 0;
+        if (ack >= held) continue;
+        final prev = old['$p/$d'];
+        final since = prev is List && prev.length == 2 && prev[0] == ack && prev[1] is int ? prev[1] as int : now.millisecondsSinceEpoch;
+        next['$p/$d'] = [ack, since];
+        if ((covers[d] ?? 0) <= ack && now.difference(DateTime.fromMillisecondsSinceEpoch(since, isUtc: true)) > stuckAfter) stuck++;
+      }
+    }
+    final text = jsonEncode(next);
+    if (text != (stored ?? '{}')) repo.setLocalValue(stuckKey, text);
+    if (stuck == 0) return false;
+    final last = int.tryParse(repo.localValue(healKey) ?? '');
+    final recent = last != null && now.difference(DateTime.fromMillisecondsSinceEpoch(last, isUtc: true)) < stuckAfter;
+    logEvent(_log, Level.INFO, 'sync.stuck', {'pairs': stuck, 'recentHeal': recent});
+    return !recent;
+  }
+
+  /// Writes a snapshot when the newest is older than [snapshotAge] or [snapshotOpsBehind] ops behind, or at once with
+  /// [heal] ([_trackStuck]) (called only when caught up). Failures are logged: another device may simply have written a
+  /// newer one.
+  Future<void> _maybeSnapshot(WalletRepo repo, RelayState state, Map<String, int> cursors, int myLast, DateTime now,
+      {bool heal = false}) async {
     final me = repo.deviceId;
     final current = state.snapshot;
     final old = current?.covers ?? const <String, int>{};
     repo.forgetSyncFiles(old);
     final behind = repo.syncOpsAfter(old);
-    if (behind == 0) return;
+    if (behind == 0 && !heal) return;
     final since = current == null
         ? switch (int.tryParse(repo.localValue(sinceKey) ?? '')) {
             final int ms => DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true),
@@ -547,7 +601,7 @@ class SyncEngine {
           }
         : _snapshotTime(current.id);
     final aged = since != null && now.difference(since) > snapshotAge;
-    if (behind < snapshotOpsBehind && !aged) return;
+    if (behind < snapshotOpsBehind && !aged && !heal) return;
     final covers = <String, int>{
       for (final d in state.devices.keys)
         if (d != me) d: cursors[d] ?? 0,
@@ -569,6 +623,7 @@ class SyncEngine {
       return;
     }
     repo.forgetSyncFiles(covers);
-    t.done({'ops': ops.length, 'bytes': sealed.length, 'devices': covers.length, 'behind': behind, 'aged': aged});
+    if (heal) repo.setLocalValue(healKey, '${now.millisecondsSinceEpoch}');
+    t.done({'ops': ops.length, 'bytes': sealed.length, 'devices': covers.length, 'behind': behind, 'aged': aged, 'heal': heal});
   }
 }

@@ -103,16 +103,20 @@ class Device {
   final Directory? dir;
   final VaultKey key;
   final String? dbPath;
+
+  /// With [dbPath]: the local database key (`localDbKey`); the file is then encrypted, like the app's.
+  final List<int>? dbKey;
   int Function() clock;
   late WalletRepo repo;
   Net? net;
   Random? _r;
   double _p = 1;
-  Device(this.name, this.dir, this.key, this.clock, {this.dbPath, this.net}) {
+  Device(this.name, this.dir, this.key, this.clock, {this.dbPath, this.dbKey, this.net}) {
     repo = _open();
   }
 
-  WalletRepo _open() => dbPath == null ? WalletRepo.inMemory(now: () => clock()) : WalletRepo.open(dbPath!, now: () => clock());
+  WalletRepo _open() =>
+      dbPath == null ? WalletRepo.inMemory(now: () => clock()) : WalletRepo.open(dbPath!, dbKey: dbKey, now: () => clock());
 
   /// Closes and opens the database again (file-backed devices only), as an app restart would.
   void reopen() {

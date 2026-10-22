@@ -14,6 +14,7 @@ export 'src/categories.dart';
 export 'src/dates.dart';
 export 'src/export.dart';
 export 'src/hlc.dart' show Hlc, HlcClock;
+export 'src/local_db.dart' show localDbKey, localDbKeyInfo, openKeyed, WalletDbKeyException;
 export 'src/logs.dart';
 export 'src/logs_io.dart' if (dart.library.js_interop) 'src/logs_web.dart';
 export 'src/matching.dart';
