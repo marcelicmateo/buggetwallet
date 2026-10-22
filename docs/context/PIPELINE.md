@@ -63,9 +63,9 @@ throws `SqliteException` extended code 26 "file is not a database".
 | S2 | Docs: README, docs/setup.md, docs/architecture.md, DESIGN_DECISIONS §2 diagram, wallet_core CLAUDE.md backup notes still describe Syncthing | general-purpose (sonnet/medium) | – | done (8389317, labels fixed by lead) |
 | S3 | Key backup prompt (gap 7): the encrypted db and relay make the wallet key the only way back | ui-builder | – | done (b9c15a1, app 770, desktop onboarding + emulator screens ok) |
 | S4 | Lead: `tools/relay.sh` health on `/v2/health`; app text for an older relay (`olderApi`) | lead | S1 | done |
-| S5 | Review M1: key clipboard clear fails on Android in the background; selectable key text skips the clear | ui-builder | review | running |
-| S6 | Review L3: cap the relay clock offset at 24 h; DoS note in the threat model | core-builder (sonnet) | review | running |
-| S | Review done (0 high, 1 medium, 4 low; docs fixed by lead e207b2e), full run running, then app/core re-run after S5/S6, push | lead | S1–S6 | running |
+| S5 | Review M1: key clipboard clear fails on Android in the background; selectable key text skips the clear; layout test scroll fixes | ui-builder | review | done (607eda2) |
+| S6 | Review L3: cap the relay clock offset at 24 h; DoS note in the threat model | core-builder (sonnet) | review | done (c25e5d8, app text fc78acc) |
+| S | Review (0 high, 1 medium, 4 low, all fixed), full run green (perf re-run on an idle laptop: the first run was under load), pushed | lead | S1–S6 | done 2026-10-22 |
 | F0 | Future spending spec (§4.3), owner open questions: calendars, default amounts, heads-up | lead | – | next |
 
 Stage R notes: the haiku watcher stopped twice before finishing (it hands back while waiting on its own background run); the

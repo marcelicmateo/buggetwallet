@@ -106,6 +106,13 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   relay address, backups and logs through the save dialog, no storage permissions (Android: INTERNET + cleartext for
   LAN/VPN). Review: 0 high, 3 medium, 5 low, all fixed with tests. Full run: importer 193, core 882, relay 99, app 755,
   desktop 12 files (incl. relay_sync), web 9, perf 0 missed frames, emulator screens.
+- 2026-10-22: **Stage S: relay hardening.** Relay protocol v2: every request signed with an Ed25519 key derived from the
+  wallet key (relay keeps only the public key; a captured request can only repeat unchanged for 5 minutes, which changes
+  nothing; clock offset capped at 24 h), old folder backups removed. **Save-your-wallet-key prompt** after creating a wallet
+  and as a Today row until confirmed by the key's last 4 characters ("Later" = 7 days; Copy key clears the clipboard after
+  60 s, also from the background). User docs (README, setup, architecture) describe the relay, the encrypted database and
+  the key. Review: 0 high, 1 medium, 4 low, all fixed. Full run: importer 193, core 885, relay 115, app 774, desktop,
+  web, perf 0 missed frames, emulator screens, `tools/relay.sh` health on /v2.
 
 ## Decisions log
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -175,7 +182,9 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   first start); Plan › Sync: relay address (`http://<server>:8787` over LAN/VPN) → Test connection → Sync now → "Up to date";
   the laptop joins with the key + the same address and sees the phone's data; an expense on one shows on the other;
   Back up now / Restore from backup… through the Android file dialogs (storage permissions are gone); Diagnostics "Save logs…".
-- Then: M6 owner live test.
+- Owner checks after Stage S: create a wallet → "Save your wallet key" sheet; wrong then right last 4; "Later" hides the
+  Today row; Copy key → paste in the password manager → after 60 s back in the app the clipboard is empty.
+- Then: M6 owner live test. Next build: future spending (DESIGN_DECISIONS §4.3, approved 2026-10-22), then the bills database.
 
 ## In flight (2026-10-20)
 - Queue and procedure: `docs/context/PIPELINE.md`.
