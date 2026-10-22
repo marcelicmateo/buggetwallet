@@ -7,7 +7,7 @@ budget engine. **All money logic lives here**, so it can be unit-tested without 
 `package:wallet_core/wallet_core.dart` must compile with dart2js and dart2wasm, with identical behaviour on native.
 Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:sqlite3/sqlite3.dart` unconditionally.
 - Database code uses `package:sqlite3/common.dart` (`WalletRepo.db` is a `CommonDatabase`). `WalletRepo.open(path)` /
-  `inMemory()` go through `sqlite_io.dart` (native) or `sqlite_web.dart` (throws); the web app opens a
+  `inMemory()` (and `open(path, dbKey:)`, `openKeyedFileDb`) go through `sqlite_io.dart` (native) or `sqlite_web.dart` (throws); the web app opens a
   `package:sqlite3/wasm.dart` database itself and calls `WalletRepo.fromDatabase(db, file:)` (same pragmas/migrations).
 - dart:io code lives in `*_io.dart` files with a `*_web.dart` twin of the same public names that throws
   `UnsupportedError`; the barrel picks one with `export 'src/x_io.dart' if (dart.library.js_interop) 'src/x_web.dart';`:
@@ -120,6 +120,18 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   once through `_write` and reconciled, `revolutExchangeType`; 5 = the `recurring` entity). Opening an existing database with an older version
   clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
   written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
+- `local_db.dart` — encrypted local database (§4.9, SQLite3MultipleCiphers, web-safe): `localDbKey(VaultKey)` = HKDF
+  (`bw-local-db-v1`, 32 bytes), `openKeyed(open, dbKey)` → the database keyed with `PRAGMA key = "x'<hex>'"` (raw key,
+  no KDF). Keyed first; only if that cannot read it ("file is not a database", 26) unkeyed: readable = plaintext →
+  row counts per table, `journal_mode=DELETE` (sqlite3mc refuses to rekey a WAL database; the switch checkpoints it),
+  `PRAGMA rekey`, reopen keyed, same counts or `StateError`; unreadable both ways → `WalletDbKeyException` (file left as
+  it was). A new/empty database is keyed from the start. Web path relies on rekey being one journaled transaction
+  (checked by killing a converting process, see the doc comment). Native `WalletRepo.open(path, dbKey:)` →
+  `openKeyedFileDb` (`sqlite_io.dart`): before the rekey the complete plaintext file is copied to
+  `<path>.plain-copy` (temp + rename), deleted only after the check; a copy found at open = interrupted conversion →
+  main/-wal/-shm/-journal replaced by it and converted again; a failed rekey or check restores it at once. Test hook
+  `step:` (`copied`, `rekeyed`, `verified`). The app (R6b) passes the key on native and wraps the web VFS
+  (`multipleciphers-<fs>`) itself.
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption; `UnsealFailure` says why a
   file was refused; `deriveKey` = HKDF-SHA256, empty salt), `sync.dart` (`SyncException`, `SyncReport`, `SyncWaiting`,
   `SyncDevice`; web-safe) + `sync_engine.dart` (below).
@@ -191,7 +203,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   device applied through `last`: only then `runPendingMatch()` and the snapshot check: written when files not covered by
   the newest snapshot hold ≥ 500 ops (`sync_files`: ops per recorded file, own uploads included) or the newest is older
   than 7 days (none yet: 7 days since this device's first relay sync, local `syncSince`); payload = backup format,
-  covers = every listed device's cursor + own last; refused (another device was faster) is only logged. `SyncReport`:
+  covers = every listed device's cursor + own last; refused (another device was faster) is only logged. Self-heal
+  (`_trackStuck`, every run): a device seen within `stuckAfter` (24 h) whose ack for this device's files stays below this
+  device's last (same value; tracked device-locally in `syncPeerStuck` = `{device: [ack, sinceMs]}`) for over 24 h,
+  while the newest snapshot does not cover the file it needs, makes this device (when caught up) write a snapshot at once. `SyncReport`:
   `sent` ops, `received` fields changed, `filesRead` (snapshots count), `problems`, `caughtUp`, `waiting`, `devices`
   (short ids, `lastSeen`, `isThis`). Fatal `SyncException`s (short, no address): unreachable, refused (401), relay
   full, newer relay API, other. Opening a folder-sync database drops `peer_files` (`repo.peerFiles.dropped`).
@@ -224,11 +239,16 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   added in between on the first device can be matched to that row although that device held it.
 - A sync file changed after sealing fails authentication like one sealed with another key: both are `badKey`
   (`MemoryTransport.corrupt` flips the magic too, so it gives `corrupt`).
-- A refused relay file that no snapshot covers stops that device's later files on every device that has not applied it,
-  for good: the relay never overwrites a file, the blocked reader never acks past it (so the relay keeps every later
-  file), and matching and pairing wait there (cash entries keep counting: never twice, but not matched either). It
-  clears only when a snapshot covering it appears (written by a device that read the file before it was damaged), a
-  newer build reads it (unknownVersion/applyFailed), or the file is repaired on the server.
+- A refused relay file that no snapshot covers stops that device's later files on every device that has not applied it
+  (the relay never overwrites a file, the blocked reader never acks past it; matching and pairing wait there, cash
+  entries keep counting). Self-heal: the author device, once it is caught up and has seen the blocked device (seen
+  within 24 h) stay below its last for over 24 h, writes a snapshot covering the file, and the blocked device goes on
+  from it on its next run. Remaining case: the author is gone for good (or never caught up again); then it clears only
+  when another device writes a snapshot for its own reasons (7 days / 500 ops, covering what it applied), a newer build
+  reads the file (unknownVersion/applyFailed), or the file is repaired on the server.
+- Encrypted local database: a database encrypted with one wallet key cannot be opened after joining another wallet
+  (`WalletDbKeyException`; the app decides what to do). The side copy of a native conversion is plaintext for as long
+  as the conversion runs (deleted after the check, or used to recover at the next open).
 - Older builds ignore `seen_bank` and match by the old rule: devices on mixed versions can plan different matches,
   and keep doing so after upgrading for entries they received before.
 - A wrong-typed field (e.g. `amount: "abc"`) is refused with no clock only by builds that check types: older builds
@@ -275,7 +295,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   own transfers incl. two devices: `test/transfers_test.dart`, budgets per category incl. the setting and two devices:
   `test/budget_vs_actual_test.dart`, recurring bills + weekly review incl. two devices: `test/habits_test.dart`, M5 backup
   round trip incl. two devices + resend: `test/backup_test.dart`, CSV: `test/export_test.dart`, search: `test/search_test.dart`,
-  web-safe core (`fromDatabase`, `backupBytes`/`restoreBackupBytes`, `MemoryLogSink`, gzip compatibility): `test/web_core_test.dart`;
+  web-safe core (`fromDatabase`, `backupBytes`/`restoreBackupBytes`, `MemoryLogSink`, gzip compatibility): `test/web_core_test.dart`,
+  encrypted local database (new/convert/wrong key/WAL/interrupted conversion/perf numbers): `test/local_db_test.dart`
+  (sqlite3mc proof tests: `test/encrypted_db_test.dart`), sync self-heal: `test/sync_self_heal_test.dart`;
   `<feature>_edge_test.dart` and `<feature>_spec_test.dart` are spec-written tests). Multi-device sim in `test/support/sim.dart` (lists entities on its own): `Net` (one
   `MemoryTransport`; a `Device` uses the latest `Net` made unless given `net:`), `Device` (own database; `run()` uploads
   and applies, `deliver(net, r, p:)` makes the next run's GETs fail with probability 1 − p, `upload` is a no-op kept for
