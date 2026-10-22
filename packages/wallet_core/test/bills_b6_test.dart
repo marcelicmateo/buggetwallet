@@ -108,4 +108,68 @@ void main() {
       expect(b.duePlanned, hasLength(3));
     });
   });
+
+  group('2. a slip near payday is reserved once, in the period that pays it', () {
+    // Payday on the 1st: the period 2026-10-01 .. 2026-10-31, today 2026-10-28.
+    const st = WalletSettings(salary: 100000, paydayDay: 1, periodStart: '2026-10-01');
+    const day = '2026-10-28';
+    RecurringBill rec(String nextDue, {String category = 'Bills & one-offs'}) => RecurringBill(
+        id: 'rec:synth_power',
+        payee: 'synth_power',
+        label: 'SYNTH POWER',
+        category: category,
+        expectedAmount: 3000,
+        nextDue: nextDue,
+        status: 'confirmed');
+    PlannedCost row(String due) =>
+        PlannedCost(id: 'bill:b6', title: 'Synth Power', date: due, amount: 3100, category: 'Bills & one-offs', source: PlannedSource.bill);
+
+    test('B6 bug: slip due 10-30, recurring cycle 11-02 (next period): the slip is reserved here, not dropped', () {
+      final r = rec('2026-11-02');
+      final p = row('2026-10-30');
+      expect(plannedCoveredBy(p, [r]), r, reason: 'the same payment as far as matching goes');
+      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [p]);
+      expect(b.dueBills, isEmpty);
+      expect(b.reservedBills, 0);
+      expect(b.duePlanned.map((p) => p.id), ['bill:b6']);
+      expect(b.reservedPlanned, 3100);
+      // Upcoming shows it in this period and the recurring occurrence in the next one.
+      final now = upcoming(planned: [p], bills: [r], events: const [], from: '2026-10-01', to: '2026-10-31');
+      expect(now.map((u) => u.kind), [UpcomingKind.planned]);
+      final next = upcoming(planned: [p], bills: [r], events: const [], from: '2026-11-01', to: '2026-11-30');
+      expect(next.map((u) => u.kind), [UpcomingKind.bill]);
+      expect('BEGIN:VEVENT'.allMatches(plannedIcs([p], [r], from: '2026-10-01', to: '2026-10-31')), hasLength(1));
+    });
+
+    test('the other side: recurring cycle 10-31 inside the period reserves it; the slip is listed, not added', () {
+      final r = rec('2026-10-31');
+      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [row('2026-10-30')]);
+      expect((b.reservedBills, b.reservedPlanned), (3000, 0));
+      expect(b.duePlanned, hasLength(1));
+      final up = upcoming(planned: [row('2026-10-30')], bills: [r], events: const [], from: '2026-10-01', to: '2026-10-31');
+      expect(up.map((u) => u.kind), [UpcomingKind.bill]);
+    });
+
+    test('symmetric: slip due 11-02 after the period, recurring 10-30 inside: reserved once by the recurring bill', () {
+      final r = rec('2026-10-30');
+      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [row('2026-11-02')]);
+      expect((b.reservedBills, b.reservedPlanned), (3000, 0));
+      expect(b.dueBills.single.id, r.id);
+      expect(b.duePlanned, isEmpty, reason: 'the slip falls in the next period');
+    });
+
+    test('a recurring bill in a fixed category: the fixed plan holds it, the slip is not reserved in either period', () {
+      final r = rec('2026-11-02', category: 'Bills & subscriptions');
+      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [row('2026-10-30')]);
+      expect((b.reservedBills, b.reservedPlanned), (0, 0));
+    });
+
+    test('the cycle just paid (before nextDue): the slip for it stays unreserved', () {
+      // Paid early on 10-27; the next cycle moved to 11-26. The slip for the paid cycle is due 10-29.
+      final r = rec('2026-11-26');
+      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [row('2026-10-29')]);
+      expect((b.reservedBills, b.reservedPlanned), (0, 0));
+      expect(plannedCoverage(row('2026-10-29'), [r])?.occurrence, isNull);
+    });
+  });
 }

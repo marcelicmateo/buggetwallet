@@ -6,7 +6,7 @@ import 'dart:convert';
 
 import 'package:cryptography/dart.dart';
 
-import 'bills.dart' show plannedCoveredBy;
+import 'bills.dart' show plannedCoverage;
 import 'dates.dart';
 import 'logs.dart';
 import 'models.dart';
@@ -567,7 +567,8 @@ void _writeFolded(StringBuffer sb, String line) {
 String _compact(String iso) => iso.replaceAll('-', '');
 
 /// The planned costs as an iCalendar text for other calendar apps: one all-day `VEVENT` per planned cost with an
-/// amount that is open or paid (not skipped, not deleted, not a bill's row a recurring bill plans: [plannedCoveredBy])
+/// amount that is open or paid (not skipped, not deleted, not a bill's row whose covering recurring occurrence, [plannedCoverage], is in range
+/// too or is the cycle just paid or skipped)
 /// and per occurrence of a confirmed bill ([billOccurrences]),
 /// dated in [from, to]. `SUMMARY` = `<title> · <amount>` ([euroText], so [amountFromText] reads the amount back),
 /// stable UIDs (`planned-<id>@budget-wallet`, `bill-<id>-<yyyymmdd>@budget-wallet`), `DTSTAMP` from [from] so the same
@@ -575,8 +576,10 @@ String _compact(String iso) => iso.replaceAll('-', '');
 String plannedIcs(List<PlannedCost> planned, List<RecurringBill> bills, {required String from, required String to}) {
   final rows = <(String uid, String date, String title, int amount)>[];
   if (_validIso(from) && _validIso(to) && from.compareTo(to) <= 0) {
+    bool inRange(String d) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
     for (final p in planned) {
-      if (p.deleted || p.status == PlannedStatus.skipped || p.amount == null || plannedCoveredBy(p, bills) != null) continue;
+      if (p.deleted || p.status == PlannedStatus.skipped || p.amount == null) continue;
+      if (plannedCoverage(p, bills) case final c? when c.occurrence == null || inRange(c.occurrence!)) continue;
       if (p.date.compareTo(from) < 0 || p.date.compareTo(to) > 0 || !_validIso(p.date)) continue;
       rows.add(('planned-${p.id}@budget-wallet', p.date, p.title, p.amount!));
     }

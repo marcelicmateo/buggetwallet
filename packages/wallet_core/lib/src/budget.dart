@@ -1,4 +1,4 @@
-import 'bills.dart' show plannedCoveredBy;
+import 'bills.dart' show plannedCoverage;
 import 'categories.dart';
 import 'dates.dart';
 import 'logs.dart';
@@ -24,7 +24,7 @@ class PeriodBudget {
   /// Σ `amount` of [duePlanned] (open planned costs with an amount dated from today to the day before payday) outside
   /// fixed categories, taken off the flexible money with [reservedBills] (§4.3). One in a fixed category
   /// ([PlannedCost.coveredByPlan]) is already in `fixedPlan`: listed, not added. So is a bill's row without a category
-  /// ([PlannedCost.needsCategory]). 0 without planned costs.
+  /// ([PlannedCost.needsCategory]) and one a due recurring bill reserves ([computePeriod]). 0 without planned costs.
   final int reservedPlanned;
   final List<PlannedCost> duePlanned;
 
@@ -96,7 +96,9 @@ List<PlannedCost> duePlanned(List<PlannedCost> planned, String today, String end
 /// (`WalletRepo.plannedCosts()`): the open ones with an amount dated from today to the day before payday
 /// ([duePlanned]) are reserved the same way ([PeriodBudget.reservedPlanned]), except those in fixed categories
 /// ([PlannedCost.coveredByPlan], like bills), a bill's row that a confirmed recurring bill in [bills] already plans
-/// ([plannedCoveredBy], B5a: listed, not added) and a bill's row without a category
+/// in this period ([plannedCoverage], B5a/B6: listed, not added; B6: only when that bill's covering occurrence is the
+/// one [dueBills] lists here, the cycle just paid or skipped, or the bill is `coveredByPlan` — a slip due before
+/// payday whose recurring cycle falls after it is reserved here) and a bill's row without a category
 /// ([PlannedCost.needsCategory], B6: listed, not added; the owner is asked for the category). Without planned costs every number is as before.
 PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today,
     {List<RecurringBill> bills = const [], List<PlannedCost> planned = const []}) {
@@ -113,8 +115,13 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final due = dueBills(bills, txs, start, end);
   final reservedBills = due.fold<int>(0, (s, b) => s + (b.coveredByPlan ? 0 : b.expectedAmount));
   final duePl = duePlanned(planned, today, end);
-  final reservedPlanned =
-      duePl.fold<int>(0, (s, p) => s + (p.coveredByPlan || p.needsCategory || plannedCoveredBy(p, bills) != null ? 0 : p.amount!));
+  final dueIds = {for (final b in due) b.id};
+  bool reservedElsewhere(PlannedCost p) {
+    final c = plannedCoverage(p, bills);
+    return c != null && (c.bill.coveredByPlan || c.occurrence == null || (c.occurrence == c.bill.nextDue && dueIds.contains(c.bill.id)));
+  }
+
+  final reservedPlanned = duePl.fold<int>(0, (s, p) => s + (p.coveredByPlan || p.needsCategory || reservedElsewhere(p) ? 0 : p.amount!));
   final flexBudget = income - fixedPlan - goalMonthly - reservedBills - reservedPlanned;
   final flex = inPeriod.where((t) => t.kind == Kind.flex);
   final spent = -_sum(flex);

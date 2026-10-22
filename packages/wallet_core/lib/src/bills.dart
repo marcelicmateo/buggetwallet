@@ -336,30 +336,40 @@ String? _payeeKey(String? payee) {
 /// The confirmed recurring bill that already plans [b]'s payment, or null: same payee key ([billPayeeKey] ==
 /// [RecurringBill.payee], exactly) and [b]'s due date within ± [recurringDays] of one of its cycles: `nextDue` + k ×
 /// `intervalDays` for k ≥ −1 (k = −1 is the cycle just paid, or skipped, before `nextDue`). Never by amount. Such a
-/// bill's planned row is not reserved ([plannedCoveredBy], decided when read, so the order of confirming the two never
-/// matters and nothing is written): the recurring bill reserves that payment, or the fixed plan holds it. The bill
+/// bill's planned row is not reserved where the recurring bill's occurrence already is ([plannedCoverage], decided when
+/// read, so the order of confirming the two never matters and nothing is written): the recurring bill reserves that
+/// payment, or the fixed plan holds it. The bill
 /// itself is listed as before (Plan › Bills, linking, reminders).
-RecurringBill? billCoveredBy(Bill b, List<RecurringBill> recurring) => _coveredBy(billPayeeKey(b), b.dueDate, recurring);
+RecurringBill? billCoveredBy(Bill b, List<RecurringBill> recurring) => _coverage(billPayeeKey(b), b.dueDate, recurring)?.bill;
 
 /// [billCoveredBy] for a bill's planned row (`source` bill: payee = its title, due date = its date); null for any
-/// other planned cost. `computePeriod` does not reserve such a row and `upcoming` / `plannedIcs` do not list it (the
-/// recurring bill's occurrence stands for that payment).
-RecurringBill? plannedCoveredBy(PlannedCost p, List<RecurringBill> recurring) =>
-    p.source != PlannedSource.bill || p.title == 'Bill' ? null : _coveredBy(_payeeKey(p.title), p.date, recurring);
+/// other planned cost. Whether that keeps the row out of a total depends on where the covering occurrence falls
+/// ([plannedCoverage]): `computePeriod`, `upcoming` and `plannedIcs` decide per period or range (B6).
+RecurringBill? plannedCoveredBy(PlannedCost p, List<RecurringBill> recurring) => plannedCoverage(p, recurring)?.bill;
 
-RecurringBill? _coveredBy(String? key, String? due, List<RecurringBill> recurring) {
+/// Which recurring bill covers a bill's planned row [p] ([plannedCoveredBy]) and through which cycle: `occurrence` =
+/// the covering cycle's date `nextDue + k × intervalDays` (k ≥ 0), or null for k = −1 (the cycle just paid or skipped
+/// before `nextDue`: that payment is already in spending, or the owner skipped it). A row is left out of a total only
+/// when that occurrence is itself in it (B6): `computePeriod` reserves the row unless the recurring bill is
+/// `coveredByPlan`, the cycle is k = −1, or the occurrence is the `nextDue` that this period's `dueBills` lists;
+/// `upcoming` / `plannedIcs` list the row unless the cycle is k = −1 or the occurrence is in their range. So a slip due
+/// before payday whose recurring cycle falls just after it is reserved in this period, not dropped from both.
+({RecurringBill bill, String? occurrence})? plannedCoverage(PlannedCost p, List<RecurringBill> recurring) =>
+    p.source != PlannedSource.bill || p.title == 'Bill' ? null : _coverage(_payeeKey(p.title), p.date, recurring);
+
+({RecurringBill bill, String? occurrence})? _coverage(String? key, String? due, List<RecurringBill> recurring) {
   if (key == null || !_validDate(due)) return null;
   for (final r in recurring) {
     if (!r.confirmed || r.payee != key || !_validDate(r.nextDue)) continue;
     final d = daysBetween(r.nextDue, due!);
     final i = r.intervalDays;
     if (i < 1) {
-      if (d.abs() <= recurringDays) return r;
+      if (d.abs() <= recurringDays) return (bill: r, occurrence: r.nextDue);
       continue;
     }
     final k = (d / i).round();
     for (final c in [k - 1, k, k + 1]) {
-      if (c >= -1 && (d - c * i).abs() <= recurringDays) return r;
+      if (c >= -1 && (d - c * i).abs() <= recurringDays) return (bill: r, occurrence: c < 0 ? null : addDays(r.nextDue, c * i));
     }
   }
   return null;
