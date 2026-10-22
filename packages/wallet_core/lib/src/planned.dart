@@ -3,6 +3,7 @@
 /// `WalletRepo.recurringBills()`, calendar events read on this device). Web-safe.
 library;
 
+import 'bills.dart';
 import 'dates.dart';
 import 'ics.dart';
 import 'models.dart';
@@ -70,13 +71,16 @@ int? amountFromText(String text) {
 String normalizeTitle(String title) =>
     foldText(title).replaceAll(_amountRe, ' ').replaceAll(RegExp(r'[^\p{L}]+', unicode: true), ' ').trim();
 
-enum UpcomingKind { planned, bill, suggestion }
+/// `bill` = a recurring bill's occurrence; `warranty` / `returnBy` = the last day of a stored bill's warranty or
+/// return window (never counted: amount null).
+enum UpcomingKind { planned, bill, suggestion, warranty, returnBy }
 
 /// One line of the Upcoming list ([upcoming]).
 class UpcomingItem {
   final UpcomingKind kind;
 
-  /// `p:<planned id>`, `b:<bill id>@<date>` (a bill can occur more than once in a range), `e:<event ref>`.
+  /// `p:<planned id>`, `b:<bill id>@<date>` (a bill can occur more than once in a range), `e:<event ref>`,
+  /// `w:<bill id>` (warranty), `r:<bill id>` (return by).
   final String key;
   final String date;
   final String title;
@@ -94,6 +98,9 @@ class UpcomingItem {
   final RecurringBill? bill;
   final CalendarEvent? event;
 
+  /// Warranty / return-by items: the stored bill ([Bill], not a [RecurringBill]).
+  final Bill? billDb;
+
   const UpcomingItem({
     required this.kind,
     required this.key,
@@ -106,6 +113,7 @@ class UpcomingItem {
     this.planned,
     this.bill,
     this.event,
+    this.billDb,
   });
 }
 
@@ -142,13 +150,16 @@ List<String> billOccurrences(RecurringBill b, String from, String to) {
 /// same non-empty [normalizeTitle], an amount, open or paid and not deleted (`'earlier'`; its category is suggested
 /// too). Events with the same ref ([calendarEventRef]: same normalized title and date, from any calendar) are listed
 /// once: the one first by calendar id, uid, title, then notes, so every device picks the same whatever the list order.
-/// Sorted by date, then title, then key.
+/// [billsDb] (`WalletRepo.bills()`): the `warrantyUntil` / `returnBy` dates of confirmed, live bills in range
+/// (title = payee, else description; amount null; a bill's planned row is already in [planned]). Sorted by date, then
+/// title, then key.
 List<UpcomingItem> upcoming({
   required List<PlannedCost> planned,
   required List<RecurringBill> bills,
   required List<CalendarEvent> events,
   required String from,
   required String to,
+  List<Bill> billsDb = const [],
 }) {
   if (!_isDate(from) || !_isDate(to) || from.compareTo(to) > 0) return const [];
   bool inRange(String d) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
@@ -163,6 +174,16 @@ List<UpcomingItem> upcoming({
     for (final d in billOccurrences(b, from, to)) {
       out.add(UpcomingItem(
           kind: UpcomingKind.bill, key: 'b:${b.id}@$d', date: d, title: b.label, amount: b.expectedAmount, category: b.category, bill: b));
+    }
+  }
+  for (final b in billsDb) {
+    if (b.deleted || !b.confirmed) continue;
+    final title = b.payee ?? b.description ?? '';
+    if (b.warrantyUntil case final d? when _isDate(d) && inRange(d)) {
+      out.add(UpcomingItem(kind: UpcomingKind.warranty, key: 'w:${b.id}', date: d, title: title, category: b.category, billDb: b));
+    }
+    if (b.returnBy case final d? when _isDate(d) && inRange(d)) {
+      out.add(UpcomingItem(kind: UpcomingKind.returnBy, key: 'r:${b.id}', date: d, title: title, category: b.category, billDb: b));
     }
   }
   final stored = {for (final p in planned) p.sourceRef};

@@ -61,8 +61,17 @@ class SyncReport {
   /// The devices the relay knows, this one included (sorted by id; short ids only).
   final List<SyncDevice> devices;
 
+  /// Bill files uploaded in this run, and those still waiting (refused or not reachable; an older relay that cannot
+  /// keep bill files answers 404 to every one: the app says "this relay can't keep bill photos yet").
+  final int blobsSent, blobsWaiting;
+
   const SyncReport(this.sent, this.received, this.filesRead,
-      {this.problems = const [], this.caughtUp = false, this.waiting = const [], this.devices = const []});
+      {this.problems = const [],
+      this.caughtUp = false,
+      this.waiting = const [],
+      this.devices = const [],
+      this.blobsSent = 0,
+      this.blobsWaiting = 0});
 
   /// How many files were not applied ([problems]).
   int get badFiles => problems.length;

@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:http/http.dart' as http;
@@ -497,6 +498,32 @@ void main() {
     tearDown(() async {
       await relay.close();
       dir.deleteSync(recursive: true);
+    });
+
+    test('a bill file goes up with the run, the other device fetches it, a delete removes it (blob PUT/GET/DELETE)', () async {
+      final k = VaultKey.generate();
+      final a = WalletRepo.inMemory(), b = WalletRepo.inMemory();
+      addTearDown(a.close);
+      addTearDown(b.close);
+      final ta = RelayTransport(base, k), tb = RelayTransport(base, k);
+      addTearDown(ta.close);
+      addTearDown(tb.close);
+      final plain = List.generate(5000, (i) => (i * 7) & 0xff);
+      final ref = await BlobStore(a, k).add(Uint8List.fromList(plain), 'pdf');
+      final (id, _) = a.importBill(
+          const NormalizedBill(source: BillSource.pdf, externalId: 'jir:synthetic-e2e', date: '2026-02-25', total: 100),
+          file: ref);
+      final up = await SyncEngine(ta, k).run(a);
+      expect((up.blobsSent, up.blobsWaiting), (1, 0), reason: 'refused while the wallet did not exist, sent after the first file');
+      await SyncEngine(tb, k).run(b);
+      expect(b.bills().single.blob, ref.hash);
+      expect(await BlobStore(b, k).read(ref.hash, transport: tb), plain);
+      expect(await tb.getBlob('0' * 64), isNull);
+      a.deleteBill(id);
+      await SyncEngine(ta, k).run(a);
+      expect(a.blobDeletes(), isEmpty);
+      expect(await tb.getBlob(ref.hash), isNull);
+      await tb.deleteBlob(ref.hash); // absent: still fine
     });
 
     test('two devices sync through the relay: first connect, edits both ways, caught up, acks, devices listed', () async {

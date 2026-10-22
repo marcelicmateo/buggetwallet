@@ -127,3 +127,40 @@ platform `PdfRenderer` (own small channel, no package) and scanned for codes), *
 Android) → To review, bill sheet (fields with "unsure" marks, items, photo/PDF on demand, Confirm, Paid by… candidates,
 Add as cash expense, warranty / return-by dates, Delete), Today row "N bills to review", Spending row mark when a bill is
 linked, Upcoming warranty/return entries, reminders. Linux/web: file import (PDF text, XML); photos are kept unread.
+
+## Decisions and additions (B1b, core, 2026-10-22)
+- `BlobStore.add` is async (`Future<BlobRef>`): sealing is async and the hash is over the sealed bytes.
+  `BlobStore(repo, key, {maxCacheBytes = blobCacheBytesNative})` (`blobCacheBytesWeb` = 50 MiB for the web app);
+  `maxBlobPlainBytes` (15 MiB), `blobTypes`, `isBlobHash`, `sha256Hex`. An empty file is an `ArgumentError` too.
+- Barrel re-exports `BillItem`, `BillSource`, `NormalizedBill` from wallet_importer. Additions: `Bill.title` (payee or
+  `Bill`), `Bill.confirmed`, `Bill.file` (`BlobRef?`), `Bill.unsure` (stored, column `unsure`), `WalletRepo.bill(id)`,
+  `WalletRepo.billPlannedId(billId)`, `UpcomingItem.billDb` (the `Bill` of a warranty/return item; its title = payee, else
+  description, else ''), `SyncReport.blobsSent`. Pure helpers: `planBillLinks`, `billLinkTokens`, `descriptionHasToken`,
+  `normalizeForLink`, `billLinkWindow`, `encodeBillItems`/`decodeBillItems`.
+- `importBill`: the creation op carries no `status`/`deleted` (a late import on another device never undoes a confirm or
+  delete; the same bill imported on two devices before a sync: the later import's read fields win over an edit made in
+  between, like tx rows). Re-import of a live bill: review → only empty fields; confirmed → only `items` (when empty) and
+  the file (when none); never date, due date or total. A deleted bill read again is revived as a new review bill
+  (isNew true, read values replace the old ones). Reader values that are not valid are dropped, not thrown (bad dates,
+  total ≤ 0, items cut to 500 / names to 200). A file the bill does not take is dropped again (forgotten if never
+  uploaded, else queued for relay deletion).
+- Planned row: created only when the due date is today or later (an existing row follows edits, a cleared due date or
+  total deletes it, setting it again restores it); `confirmBill`/`updateBill`/`linkBill`/`unlinkBill`/`deleteBill`/
+  `addExpenseFromBill` and the auto link keep it in step; rows are soft-deleted like every planned row.
+- `addExpenseFromBill` also confirms a review bill (adding it as money is the owner's check); the expense's `seen_bank`
+  is set like `addManual`. `linkBill` accepts a review bill too (no planned row exists for it).
+- Deleting the paying transaction makes its bill unpaid at once (planned row reopened), like a deleted match.
+- Auto link tokens are compared on `normalizeForLink` text (accents folded, A–Z/0–9 only) with digit boundaries
+  (`12345678` is not found inside `9123456789`): the reference as model + number and the number alone (≥ 6 digits),
+  the JIR, the invoice number after `inv:<supplier>:` (≥ 4 characters). A window without a bill date uses the due date.
+  Only bank rows (not hand-added, not an own transfer, same currency). It runs in `_reconcile` (caught up only) and at
+  `confirmBill` (while caught up, else on the next caught-up run). A link once made is never re-planned: rows imported
+  one by one link to the first candidate; two candidates in one import link none.
+- `billCandidates`: date distance = the smaller distance to the bill date or due date.
+- `billReminders`: windows ending from today to today + days (inclusive), like `headsUps`; the app passes a longer
+  horizon to schedule notifications.
+- Blobs: the relay creates a wallet only with a device's first file, so a blob refused as 404 before this device's first
+  upload is retried once after the ops in the same run. Every queued blob is tried (a failure never stops the others or
+  the run). Cached files of bills deleted elsewhere are purged on the next caught-up run. `MemoryTransport` hooks:
+  `blobs`, `blobRoutes` (false = older relay), `tamperBlob`. `SyncTransport`'s default blob methods behave like an older
+  relay (404), so other transports compile unchanged.

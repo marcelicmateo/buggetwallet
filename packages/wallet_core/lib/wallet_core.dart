@@ -5,9 +5,11 @@
 /// (`*_web.dart`) that throw [UnsupportedError]; `tool/web_smoke.dart` is the compile check.
 library;
 
-export 'package:wallet_importer/wallet_importer.dart' show TxKind;
+export 'package:wallet_importer/wallet_importer.dart' show BillItem, BillSource, NormalizedBill, TxKind;
 
 export 'src/backup.dart';
+export 'src/bills.dart';
+export 'src/blob_store.dart';
 export 'src/budget.dart';
 export 'src/categories.dart';
 export 'src/dates.dart';

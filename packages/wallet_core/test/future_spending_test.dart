@@ -411,7 +411,7 @@ void main() {
       old.db.execute('DROP TABLE planned');
       old.close();
       final up = WalletRepo.open(path);
-      expect(up.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '6');
+      expect(up.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '${WalletRepo.schemaVersion}');
       expect(up.syncCursors(), isEmpty);
       expect(up.plannedCosts(), isEmpty);
       up.addPlanned(title: 'x', date: '2026-03-01', amount: 1);
