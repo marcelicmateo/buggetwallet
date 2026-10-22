@@ -41,7 +41,7 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | R4 | Sync spec tests (strict order, caught-up matching, S1/S2, snapshots, pruning, first connect) | test-writer | R0a | written (f58c7f9, 34 tests); run after R3 merges |
 | R5 | App: Plan › Sync, join with relay, backups via save dialog, Android INTERNET/cleartext, remove folder sync | ui-builder | R3 | queued |
 | R6 | Encrypted local database: core key + conversion, app wiring | core-builder / ui-builder | R1 | queued |
-| R7 | Relay container, `tools/relay.sh`, `tools/build.sh relay`, CI relay job, setup doc (desktop test through a relay moves to R7b after R5) | devops | R2 | running |
+| R7 | Relay container, `tools/relay.sh`, `tools/build.sh relay`, CI relay job, setup doc (desktop test through a relay moves to R7b after R5) | devops | R2 | done (990ee5d, merged; image 92 MB, full test green incl. relay 93) |
 | R7b | Desktop test: two app instances syncing through `tools/relay.sh` | devops | R5, R7 | queued |
 | R | Merge, review, Haiku full run, emulator, push, STATUS | lead | R1–R7b | queued |
 

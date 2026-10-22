@@ -21,6 +21,7 @@ wallet in a local SQLite database. Devices sync through a shared folder
 |---|---|---|
 | `packages/wallet_importer` | Bank formats → normalized transactions (contract v1). Own BIFF8 .xls reader, .xlsx via `archive` + `xml`, CSV. | nothing Flutter |
 | `packages/wallet_core` | Database, change log, encryption, folder sync, categorisation, budget maths. | `sqlite3`, `cryptography`, `wallet_importer` |
+| `relay` | Home-server relay for sync: stores sealed files it cannot read (protocol `docs/context/RELAY_PROTOCOL.md`). Pure Dart server, own container image. | `cryptography` |
 | `app` | Flutter UI for Android, iOS, Windows, macOS, Linux. | both packages |
 | `artifact` | v1 web app (claude.ai artifact), kept for reference. | — |
 

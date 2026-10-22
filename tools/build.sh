@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local builds in a rootless Podman container. Runs the same steps as CI (.github/workflows/ci.yml).
 #
-#   tools/build.sh test     lint, then importer + core + app: analyze and tests (all in parallel)
+#   tools/build.sh test     lint, then importer + core + relay + app: analyze and tests (all in parallel)
 #   tools/build.sh lint     quick checks: Dart formatting, shellcheck, actionlint (pre-commit hook)
 #   tools/build.sh format   rewrite Dart files with `dart format` (page width in analysis_options.yaml)
 #   tools/build.sh apk      Android release APK   -> dist/BudgetWallet-android.apk
@@ -22,8 +22,8 @@
 #                           tab switches; flutter drive --profile under Xvfb). Writes <action>.timeline.json (open in DevTools or
 #                           Perfetto) and .timeline_summary.json to dist/logs, appends history/perf.jsonl, fails on a budget
 #                           overrun (app/test_driver/perf_budget.dart). Not part of test or all.
-#   tools/build.sh importer|core|app   analyze and test one package (what CI runs, one step each)
-#   tools/build.sh importer|core|app <test file or dir>…   only those tests (paths relative to the package or the repo root),
+#   tools/build.sh importer|core|relay|app   analyze and test one package (what CI runs, one step each)
+#   tools/build.sh importer|core|relay|app <test file or dir>…   only those tests (paths relative to the package or the repo root),
 #                           no analyze; step name <pkg>:one, so the full-suite medians stay clean
 #   tools/build.sh shell    interactive shell in the container;  shell -c '<command>' runs one command non-interactively
 #   tools/build.sh image    (re)build the container image (first build ~15 min)
@@ -94,7 +94,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   case "$CMD" in
     image) build_image; exit ;;
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
-    test|lint|apk|linux|all|importer|core|app|desktop-test|desktop-smoke|perf|web|web-test) run_begin "$CMD" ;;
+    test|lint|apk|linux|all|importer|core|relay|app|desktop-test|desktop-smoke|perf|web|web-test) run_begin "$CMD" ;;
     format|shell|lsp|mcp) ;;
     *) usage ;;
   esac
@@ -169,14 +169,14 @@ failed=0
 
 # Dart sources, skipping generated and build folders
 dart_files() {
-  find app packages \( -name .dart_tool -o -name build -o -name ephemeral -o -name .symlinks \) -prune \
+  find app packages relay \( -name .dart_tool -o -name build -o -name ephemeral -o -name .symlinks \) -prune \
     -o -name '*.dart' -print0
 }
 # `pub get` only where the resolution is out of date, so a warm run skips it (CI always starts clean).
 # Also needed by `dart format`, which reads page_width through the analysis_options.yaml includes.
 pub_ready() {
   local d
-  for d in packages/wallet_importer packages/wallet_core app; do
+  for d in packages/wallet_importer packages/wallet_core relay app; do
     pub_stale "$d" || continue
     echo "--- pub get: $d"
     if [[ $d == app ]]; then (cd "$d" && flutter pub get); else (cd "$d" && dart pub get); fi || return 1
@@ -267,12 +267,13 @@ LINT=(format format_check
 declare -A SUITE=(
   [importer]='suite importer packages/wallet_importer "dart analyze --fatal-infos" dart test'
   [core]='suite core packages/wallet_core "dart analyze --fatal-infos" dart test'
+  [relay]='suite relay relay "dart analyze --fatal-infos" dart test'
   [app]='suite app app "flutter analyze --fatal-infos --no-pub" flutter test --no-pub')
-# one_suite <importer|core|app> <test file or dir>…: just those tests, no analyze, as step "<pkg>:one"
+# one_suite <importer|core|relay|app> <test file or dir>…: just those tests, no analyze, as step "<pkg>:one"
 one_suite() {
   local pkg=$1 dir f files=() tcmd=dart
   shift
-  case "$pkg" in importer) dir=packages/wallet_importer ;; core) dir=packages/wallet_core ;; *) dir=app; tcmd='flutter' ;; esac
+  case "$pkg" in importer) dir=packages/wallet_importer ;; core) dir=packages/wallet_core ;; relay) dir=relay ;; *) dir=app; tcmd='flutter' ;; esac
   for f in "$@"; do
     f=${f#"$ROOT/"}; f=${f#"$dir/"}
     [[ -e $dir/$f ]] || { echo "no such test file or dir in $dir: $f" >&2; failed=1; return; }
@@ -283,10 +284,10 @@ one_suite() {
   [[ $pkg == app ]] && cmd+=" --no-pub"
   steps "$pkg:one" "$cmd $(printf '%q ' "${files[@]}")"
 }
-TESTS=(importer "${SUITE[importer]}" core "${SUITE[core]}" app "${SUITE[app]}")
+TESTS=(importer "${SUITE[importer]}" core "${SUITE[core]}" relay "${SUITE[relay]}" app "${SUITE[app]}")
 run_pub() {
   local cold=false d
-  for d in packages/wallet_importer packages/wallet_core app; do [[ -f $d/.dart_tool/package_config.json ]] || cold=true; done
+  for d in packages/wallet_importer packages/wallet_core relay app; do [[ -f $d/.dart_tool/package_config.json ]] || cold=true; done
   run_step pub pub_ready || true
   # Only worth showing (and timing) when something had to be resolved
   if [[ $(wc -l < "$LOGS/pub.log") -gt 2 || $(cut -d' ' -f2 "$LOGS/pub.status") != 0 ]]; then
@@ -607,7 +608,7 @@ case "$CMD" in
   format) pub_ready; dart_files | xargs -0 dart format; exit ;;
   lint)   run_pub; steps "${LINT[@]}" ;;
   test)   run_pub; [[ $failed == 0 ]] && steps "${LINT[@]}" "${TESTS[@]}" ;;
-  importer|core|app)
+  importer|core|relay|app)
     if (($# > 1)); then run_pub; [[ $failed == 0 ]] && one_suite "$CMD" "${@:2}"
     else run_pub; [[ $failed == 0 ]] && steps "$CMD" "${SUITE[$CMD]}"; fi ;;
   apk)    build_apk ;;
