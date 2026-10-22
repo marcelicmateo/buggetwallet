@@ -38,12 +38,12 @@ flowchart LR
   U[Screens] --> C[WalletController]
   I --> W[WalletRepo._write: field op + HLC]
   C --> W
-  W --> DB[(wallet.db: tx, goals, wish, settings, merchant_rules + outbox, clocks, peer_files, meta)]
+  W --> DB[(wallet.db: tx, goals, wish, settings, merchant_rules + outbox, clocks, sync_cursor, meta; encrypted)]
   DB --> E[Categorizer + budget engine, recomputed on reload] --> U
-  DB <--> S[FolderSync: seal outbox -> devices/<id>/<n>.bwop; apply others' files]
-  S <--> SF[Syncthing folder: ciphertext + key fingerprint]
+  DB <--> S[SyncEngine: seal outbox -> signed upload as device file; apply others' files in order]
+  S <--> R[Relay: ciphertext only, public key per wallet]
 ```
-- One write path (`_write`), categories and all numbers computed at read, per-field last-writer-wins by HLC.
+- One write path (`_write`), categories and all numbers computed at read, per-field last-writer-wins by HLC. Devices sync only through the relay (§4.9); requests are signed, the relay stores ciphertext and a public key.
 - Safe today = (flexBudget − spent before today) ÷ days left − spent today; flexBudget = income − (rent+loan+subs) − Σ goal monthly.
 
 **Gaps found (fix order):**

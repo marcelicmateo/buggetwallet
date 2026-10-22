@@ -6,7 +6,7 @@
 
 **Linux:** download `budget-wallet-linux`, unzip, run `budget_wallet`.
 
-**Windows / macOS / iPhone:** build from source on that machine:
+**Windows / macOS / iPhone** (parked, not maintained): build from source on that machine:
 
 ```
 cd app
@@ -18,16 +18,25 @@ iPhone builds need Xcode and an Apple ID (free accounts can install for 7 days a
 
 ## 2. First device
 
-Open the app → **Start a new wallet**. Then Plan → **Show wallet key** and keep the key somewhere safe (a password manager). Without it, the encrypted sync files cannot be read.
+Open the app → **Start a new wallet**. Then Plan → **Show wallet key** and save the key (`BW1-…`) in a password manager.
 
-## 3. Sync with Syncthing
+**The key is the only way back to your data.** The local database and the copies on the relay are encrypted with it; if you lose it
+(and every device that holds it), nothing can be read again, by you or by anyone else.
 
-1. Install Syncthing on every device: Syncthing (Windows/macOS/Linux), Syncthing-Fork (Android), Möbius Sync (iPhone).
-2. Create one shared folder, e.g. `Documents/BudgetWallet` on Android and `~/BudgetWallet` on the computer, and share it between the devices in Syncthing.
-3. In the app: Plan → **Choose folder** and pick that folder. On Android also tap **Allow file access**. On iPhone tap **Use the app folder** and add that folder in Möbius Sync.
-4. On each additional device: **Join my wallet from another device**, enter the key, then choose the same folder.
+## 3. Sync through the relay
 
-The app syncs when it opens, every 2 minutes while open, and a few seconds after each change.
+Devices sync through a small server you run yourself (see §5). It stores only encrypted files and cannot read them.
+
+1. Start the relay (§5; for a try-out on one computer `tools/relay.sh start`).
+2. In the app: Plan → **Sync address**, enter `http://<server>:8787` (or your VPN name) and tap **Test connection**.
+3. Each additional device: **Join my wallet from another device**, enter the key and the same address.
+
+The app syncs when it opens, every 2 minutes while open and a few seconds after each change. Requests to the relay are signed
+with a key derived from the wallet key and the relay keeps only the public half, so a captured request cannot be replayed and plain
+`http://` on the home network is safe for your data. A VPN (Tailscale or WireGuard) is still recommended: it hides who syncs, when
+and how much, and lets phones sync away from home.
+
+Backups: Plan → **Back up now** saves an encrypted `.bwb` file through the save dialog; restore works only into an empty wallet.
 
 ## 4. Bring in your history
 

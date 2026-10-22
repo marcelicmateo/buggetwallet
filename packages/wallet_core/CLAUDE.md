@@ -141,8 +141,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart`, `vault.dart` (key + encryption; `UnsealFailure` says why a
   file was refused; `deriveKey` = HKDF-SHA256, empty salt), `sync.dart` (`SyncException`, `SyncReport`, `SyncWaiting`,
   `SyncDevice`; web-safe) + `sync_engine.dart` (below).
-- `backup.dart` — backups (M5, owner decision 2026-10-20: only into the sync folder, encrypted with the wallet key,
-  restore only into an empty wallet). Pure half (web-safe): `backupFileName(today)` = `bw-backup-<today>.bwb`
+- `backup.dart` — backups (M5, owner decision 2026-10-22: no sync folder any more, "Back up now" saves the sealed `.bwb` through the save dialog,
+  encrypted with the wallet key, restore only into an empty wallet; the `*_io.dart` folder helpers below are the older folder variant). Pure half (web-safe): `backupFileName(today)` = `bw-backup-<today>.bwb`
   (`ArgumentError` unless `YYYY-MM-DD`), `backupBytes(repo, key)` = the sealed payload, `restoreBackupBytes(repo,
   bytes, key)` = everything a restore does once the bytes are in hand. File half (`backup_io.dart`):
   `writeBackup(repo, syncFolder, key, today:)` writes `backupBytes` to
@@ -159,8 +159,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `applyRemote(ops, resend: true)`: matching, pairing and bill detection run once at the end, and the ops are queued in
   the outbox with their clocks unchanged, so the next sync exports them as this device's file and the restored state
   reaches the other devices like local writes (devices already holding those fields at the same clocks change nothing:
-  a clock is only accepted when newer; a restore in a sync folder that still has every device's files converges either
-  way, the resend covers pruned files or a new folder). Returns the op count. `listBackups(syncFolder)` →
+  a clock is only accepted when newer; a restore into a wallet whose relay still has every device's files converges either
+  way, the resend covers pruned files or a new relay). Returns the op count. `listBackups(syncFolder)` →
   `BackupInfo(name, date, path)` (full path for `restoreBackup`) newest first, only `bw-backup-YYYY-MM-DD.bwb` names, missing folder → `[]`.
 - `export.dart` — CSV (M5, pure, the app saves the text through the system dialog; unencrypted, the app warns once).
   `transactionsCsv(List<CategorizedTx>)`: `date,amount,category,description,source,note`, live rows only (`Tx.live`:
@@ -244,7 +244,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   another account within a few days is never enough on its own. The same goes for any future "looks like" rule.
 - Keep `vault.dart` / `sync.dart` file formats backward compatible (`BWOP1`, `BW1-` keys), and the backup payload
   (`{"v":1,"ops":[...]}`): a new shape bumps `backupVersion`, and older builds refuse it as `newerVersion`.
-- Backups: never restore into a wallet with data (the sync folder is the merge path); `snapshotOps` must keep each
+- Backups: never restore into a wallet with data (the relay is the merge path); `snapshotOps` must keep each
   field's own clock (grouping fields by clock), never one fresh clock per row, or a restored device would overrule
   edits other devices made in between.
 - Logging: loggers `bw.<area>`; every catch block logs (`logError`). Log counts, durations, sizes, dates, built-in
