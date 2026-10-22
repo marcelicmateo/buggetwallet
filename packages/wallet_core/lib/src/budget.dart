@@ -1,4 +1,4 @@
-import 'bills.dart' show plannedCoveredBy;
+import 'bills.dart' show occurrenceKey, plannedReserves;
 import 'categories.dart';
 import 'dates.dart';
 import 'logs.dart';
@@ -23,9 +23,14 @@ class PeriodBudget {
 
   /// Σ `amount` of [duePlanned] (open planned costs with an amount dated from today to the day before payday) outside
   /// fixed categories, taken off the flexible money with [reservedBills] (§4.3). One in a fixed category
-  /// ([PlannedCost.coveredByPlan]) is already in `fixedPlan`: listed, not added. 0 without planned costs.
+  /// ([PlannedCost.coveredByPlan]) is already in `fixedPlan`: listed, not added. So is a bill's row without a category
+  /// ([PlannedCost.needsCategory]) and one a due recurring bill reserves ([computePeriod]). 0 without planned costs.
   final int reservedPlanned;
   final List<PlannedCost> duePlanned;
+
+  /// The rows of [duePlanned] summed into [reservedPlanned] ([plannedReserves]), in the same order: what "Coming up"
+  /// counts, so the shown count and total are exactly what is reserved.
+  final List<PlannedCost> reservedPlannedRows;
 
   const PeriodBudget({
     required this.start,
@@ -50,6 +55,7 @@ class PeriodBudget {
     this.dueBills = const [],
     this.reservedPlanned = 0,
     this.duePlanned = const [],
+    this.reservedPlannedRows = const [],
   });
 
   /// Positive = under budget so far, negative = over.
@@ -94,8 +100,12 @@ List<PlannedCost> duePlanned(List<PlannedCost> planned, String today, String end
 /// are already counted in the fixed-cost settings and change nothing ([RecurringBill.coveredByPlan]). [planned]
 /// (`WalletRepo.plannedCosts()`): the open ones with an amount dated from today to the day before payday
 /// ([duePlanned]) are reserved the same way ([PeriodBudget.reservedPlanned]), except those in fixed categories
-/// ([PlannedCost.coveredByPlan], like bills) and a bill's row that a confirmed recurring bill in [bills] already plans
-/// ([plannedCoveredBy], B5a: listed, not added). Without planned costs every number is as before.
+/// ([PlannedCost.coveredByPlan], like bills), a bill's row that a confirmed recurring bill in [bills] already plans
+/// in this period ([plannedCoverage], B5a/B6: listed, not added; B6: only when that bill's covering occurrence is the
+/// one [dueBills] lists here, the cycle just paid or skipped, or the bill is `coveredByPlan` — a slip due before
+/// payday whose recurring cycle falls after it is reserved here) and a bill's row without a category
+/// ([PlannedCost.needsCategory], B6: listed, not added; the owner is asked for the category). The rule is
+/// [plannedReserves]; the rows it accepts are [PeriodBudget.reservedPlannedRows]. Without planned costs every number is as before.
 PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today,
     {List<RecurringBill> bills = const [], List<PlannedCost> planned = const []}) {
   final start = st.periodStart ?? today;
@@ -111,7 +121,12 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final due = dueBills(bills, txs, start, end);
   final reservedBills = due.fold<int>(0, (s, b) => s + (b.coveredByPlan ? 0 : b.expectedAmount));
   final duePl = duePlanned(planned, today, end);
-  final reservedPlanned = duePl.fold<int>(0, (s, p) => s + (p.coveredByPlan || plannedCoveredBy(p, bills) != null ? 0 : p.amount!));
+  final counted = {for (final b in due) occurrenceKey(b.id, b.nextDue)};
+  final reservedRows = [
+    for (final p in duePl)
+      if (plannedReserves(p, bills, counted)) p
+  ];
+  final reservedPlanned = reservedRows.fold<int>(0, (s, p) => s + p.amount!);
   final flexBudget = income - fixedPlan - goalMonthly - reservedBills - reservedPlanned;
   final flex = inPeriod.where((t) => t.kind == Kind.flex);
   final spent = -_sum(flex);
@@ -162,6 +177,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     dueBills: due,
     reservedPlanned: reservedPlanned,
     duePlanned: duePl,
+    reservedPlannedRows: reservedRows,
   );
 }
 

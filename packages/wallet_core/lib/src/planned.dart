@@ -142,6 +142,13 @@ List<String> billOccurrences(RecurringBill b, String from, String to) {
   return out;
 }
 
+/// A bill's planned row whose covering recurring occurrence ([plannedCoverage]) is listed in the same range, or is the
+/// cycle just paid or skipped: left out of `upcoming` / `plannedIcs`.
+bool _shownByBill(PlannedCost p, List<RecurringBill> bills, bool Function(String) inRange) {
+  final c = plannedCoverage(p, bills);
+  return c != null && (c.occurrence == null || inRange(c.occurrence!));
+}
+
 /// The Upcoming list for [from, to] (both inclusive; from after to = empty): open planned costs (not deleted), the
 /// occurrences of confirmed recurring bills ([billOccurrences]; `coveredByPlan` ones included: their [UpcomingItem.bill]
 /// tells), and calendar events with no planned row of the same ref in [planned] (any status, deleted included: pass
@@ -152,7 +159,8 @@ List<String> billOccurrences(RecurringBill b, String from, String to) {
 /// once: the one first by calendar id, uid, title, then notes, so every device picks the same whatever the list order.
 /// [billsDb] (`WalletRepo.bills()`): the `warrantyUntil` / `returnBy` dates of confirmed, live bills in range
 /// (title = payee, else description; amount null; a bill's planned row is already in [planned]). A bill's planned row a
-/// confirmed recurring bill already plans ([plannedCoveredBy]) is left out: that bill's occurrence stands for it.
+/// confirmed recurring bill already plans ([plannedCoverage]) is left out when that bill's covering occurrence is in
+/// [from, to] too (it stands for it) or is the cycle just paid or skipped; otherwise it is listed (B6).
 /// Sorted by date, then title, then key.
 List<UpcomingItem> upcoming({
   required List<PlannedCost> planned,
@@ -166,7 +174,7 @@ List<UpcomingItem> upcoming({
   bool inRange(String d) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
   final out = <UpcomingItem>[];
   for (final p in planned) {
-    if (!p.isOpen || !inRange(p.date) || plannedCoveredBy(p, bills) != null) continue;
+    if (!p.isOpen || !inRange(p.date) || _shownByBill(p, bills, inRange)) continue;
     out.add(UpcomingItem(
         kind: UpcomingKind.planned, key: 'p:${p.id}', date: p.date, title: p.title, amount: p.amount, category: p.category, planned: p));
   }

@@ -11,6 +11,7 @@ import android.graphics.Matrix
 import android.graphics.pdf.PdfRenderer
 import android.media.ExifInterface
 import android.net.Uri
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
@@ -37,6 +38,21 @@ class MainActivity : FlutterActivity() {
     /** The `takePhoto` call that is waiting for the permission or for the camera app, and the file the camera writes. */
     private var photoResult: MethodChannel.Result? = null
     private var photoFile: File? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // A picture left behind when Android killed the app while the camera app was open (its path was lost with it).
+        clearBillPhotos()
+    }
+
+    /** Deletes every file in `cache/bill_photos` (only the camera writes there; Dart reads and deletes each picture at once). */
+    private fun clearBillPhotos() {
+        try {
+            File(cacheDir, "bill_photos").listFiles()?.forEach { it.delete() }
+        } catch (e: SecurityException) {
+            // Our own cache folder: not expected; the next call tries again.
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -83,6 +99,7 @@ class MainActivity : FlutterActivity() {
             return
         }
         photoResult = result
+        clearBillPhotos() // nothing is waiting for an older picture now
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             launchCamera()
         } else {

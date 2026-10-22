@@ -68,6 +68,7 @@ class TodayScreen extends StatelessWidget {
     final comingUp = wc.comingUp();
     final suggestions = wc.suggestionCount();
     final headsUps = wc.headsUpLines();
+    final needCategory = wc.plannedNeedingCategory();
     final toReview = wc.billsToReview();
     void upcoming() {
       logNav('upcoming.open');
@@ -145,6 +146,15 @@ class TodayScreen extends StatelessWidget {
                             ? 'Coming up: ${comingUp.count} ${comingUp.count == 1 ? 'cost' : 'costs'} before payday · ${moneyExact(comingUp.total, cur)}'
                             : 'Coming up: $suggestions calendar ${suggestions == 1 ? 'event' : 'events'} to check',
                         onTap: upcoming),
+                  for (final n in needCategory)
+                    _InfoLine(
+                        key: ValueKey('needsCategory:${n.id}'),
+                        icon: Icons.label_outline,
+                        text: '${n.title.isEmpty ? 'Bill' : n.title} · ${moneyExact(n.amount!, cur)} · needs a category',
+                        onTap: () {
+                          logNav('bill.needsCategory');
+                          openBill(context, wc, n.sourceRef!);
+                        }),
                   if (toReview > 0)
                     _InfoLine(
                         key: const ValueKey('billsToReview'),
@@ -159,7 +169,8 @@ class TodayScreen extends StatelessWidget {
                         key: ValueKey('headsUp:${h.item.key}'),
                         icon: Icons.flag_outlined,
                         text: '${h.item.title} ${h.daysLeft == 0 ? 'today' : h.daysLeft == 1 ? 'tomorrow' : 'in ${h.daysLeft} days'}'
-                            ' · ${moneyExact(h.item.amount!, cur)}',
+                            ' · ${moneyExact(h.item.amount!, cur)}'
+                            '${(h.item.planned?.needsCategory ?? false) ? ' · needs a category' : ''}',
                         onTap: () {
                           final p = h.item.planned;
                           if (p != null && plannedIsBill(p)) {

@@ -80,21 +80,37 @@ extension FutureSpending on WalletController {
     return next ? (start: p.end, end: addDays(p.end, p.length - 1)) : (start: p.start, end: addDays(p.end, -1));
   }
 
-  /// "Coming up": the planned costs with an amount dated from today to the day before payday (suggestions and bills are not in it).
+  /// "Coming up": exactly the planned costs this period reserves (core's `PeriodBudget.reservedPlannedRows`, summed into
+  /// `reservedPlanned`), so the count and total shown are what comes off the spending money. Suggestions and bills are not in it.
   ({int count, int total}) comingUp() => _cached('comingUp', () {
         final p = period();
-        return (count: p.duePlanned.where((x) => !x.coveredByPlan).length, total: p.reservedPlanned);
+        return (count: p.reservedPlannedRows.length, total: p.reservedPlanned);
       });
 
-  /// What [items] set aside from today on: the planned costs and bills that have an amount (suggestions never count).
+  /// The bill rows due this period that have no category: listed, not reserved, until the owner picks one (Today says so).
+  List<PlannedCost> plannedNeedingCategory() => _cached(
+      'needsCategory',
+      () => [
+            for (final p in period().duePlanned)
+              if (p.needsCategory && p.sourceRef != null) p
+          ]);
+
+  /// What [items] set aside from today on (suggestions never count): confirmed recurring bills with an amount outside the fixed
+  /// plan, and the planned costs core's `plannedReserves` accepts, given those bill occurrences (the same rule as `computePeriod`,
+  /// for whatever range is shown).
   ({int count, int total}) countedIn(List<UpcomingItem> items) {
     final t = today();
-    final xs = items.where((i) =>
-        i.kind != UpcomingKind.suggestion &&
-        i.amount != null &&
-        i.date.compareTo(t) >= 0 &&
-        !(i.planned?.coveredByPlan ?? false) &&
-        !(i.bill?.coveredByPlan ?? false));
+    bool ahead(UpcomingItem i) => i.amount != null && i.date.compareTo(t) >= 0;
+    final occurrences = {
+      for (final i in items)
+        if (i.kind == UpcomingKind.bill && i.bill != null && ahead(i)) occurrenceKey(i.bill!.id, i.date)
+    };
+    final recurring = recurringBills();
+    final xs = items.where((i) => switch (i.kind) {
+          UpcomingKind.bill => ahead(i) && !(i.bill?.coveredByPlan ?? false),
+          UpcomingKind.planned => ahead(i) && i.planned != null && plannedReserves(i.planned!, recurring, occurrences),
+          _ => false,
+        });
     return (count: xs.length, total: xs.fold<int>(0, (a, i) => a + i.amount!));
   }
 

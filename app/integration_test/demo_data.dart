@@ -68,8 +68,9 @@ void seedDemoPlanned(WalletRepo repo, String today, String periodEnd) {
   repo.addPlanned(title: 'Gift for a friend', date: before(6), amount: 2500, category: 'Shopping');
 }
 
-/// SYNTHETIC bills for the demo: one read from a photo that waits in To review (guessed fields), one confirmed payment slip due in
-/// five days (unpaid), and one paid receipt with a warranty date and a return-by date, linked to the demo wallet's first card payment.
+/// SYNTHETIC bills for the demo: one read from a photo that waits in To review (guessed fields), two confirmed payment slips (unpaid):
+/// water due in five days in Bills & subscriptions ("covered by your plan") and a gym fee due in three days in Bills & one-offs
+/// (reserved), and one paid receipt with a warranty date and a return-by date, linked to the demo wallet's first card payment.
 void seedDemoBills(WalletRepo repo, String today) {
   repo.importBill(NormalizedBill(
       source: BillSource.photo,
@@ -89,7 +90,21 @@ void seedDemoBills(WalletRepo repo, String today) {
       iban: 'HR1210010051863000160',
       reference: 'HR01 1234-5678',
       description: 'Water bill'));
+  // A slip that is still to be paid needs a category before it is confirmed (core rule: never reserved twice).
+  repo.updateBill(slip, category: 'Bills & subscriptions');
   repo.confirmBill(slip);
+  final (gym, _) = repo.importBill(NormalizedBill(
+      source: BillSource.hub3,
+      externalId: 'demo:gym',
+      date: addDays(today, -1),
+      dueDate: addDays(today, 3),
+      total: 2900,
+      payee: 'Demo Gym Club',
+      iban: 'HR1210010051863000160',
+      reference: 'HR01 8765-4321',
+      description: 'Gym fee'));
+  repo.updateBill(gym, category: 'Bills & one-offs');
+  repo.confirmBill(gym);
   final spent = repo.transactions().where((t) => t.live && t.amount < 0 && !t.description.toUpperCase().contains('ATM')).firstOrNull;
   if (spent == null) return;
   final (receipt, _) = repo.importBill(NormalizedBill(

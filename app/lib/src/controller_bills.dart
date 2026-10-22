@@ -322,8 +322,10 @@ extension BillsDb on WalletController {
 
   // ---------- the bill sheet ----------
 
-  /// Saves edited fields; an empty text clears none of them (the sheet passes only fields the owner changed).
-  void editBill(String id,
+  /// Saves edited fields; an empty text clears none of them (the sheet passes only fields the owner changed). Returns
+  /// false (nothing saved) when core refuses the edit: a due date, total or category change that would leave an unpaid
+  /// bill due from today on without a category (the sheet asks for one).
+  bool editBill(String id,
       {String? date,
       String? dueDate,
       int? total,
@@ -335,28 +337,43 @@ extension BillsDb on WalletController {
       String? note,
       bool clearDueDate = false,
       bool clearCategory = false}) {
-    repo.updateBill(id,
-        date: date,
-        dueDate: dueDate,
-        total: total,
-        payee: payee,
-        iban: iban,
-        reference: reference,
-        description: description,
-        category: category,
-        note: note,
-        clearDueDate: clearDueDate,
-        clearCategory: clearCategory);
+    try {
+      repo.updateBill(id,
+          date: date,
+          dueDate: dueDate,
+          total: total,
+          payee: payee,
+          iban: iban,
+          reference: reference,
+          description: description,
+          category: category,
+          note: note,
+          clearDueDate: clearDueDate,
+          clearCategory: clearCategory);
+    } on ArgumentError {
+      // Refused by core (a reserving bill without a category; the sheet's own checks catch the rest first).
+      logEvent(_billLog, Level.INFO, 'bill.edit', {'ok': false});
+      return false;
+    }
     logEvent(_billLog, Level.INFO, 'bill.edit', {'category': category != null});
     _changed();
+    return true;
   }
 
-  /// Warranty and return-by dates; a null date with the clear flag removes it.
-  void setBillDates(String id, {String? warrantyUntil, String? returnBy, bool clearWarranty = false, bool clearReturnBy = false}) {
-    repo.updateBill(id, warrantyUntil: warrantyUntil, returnBy: returnBy, clearWarranty: clearWarranty, clearReturnBy: clearReturnBy);
+  /// Warranty and return-by dates; a null date with the clear flag removes it. Returns false (nothing saved) when core
+  /// refuses it.
+  bool setBillDates(String id, {String? warrantyUntil, String? returnBy, bool clearWarranty = false, bool clearReturnBy = false}) {
+    try {
+      repo.updateBill(id, warrantyUntil: warrantyUntil, returnBy: returnBy, clearWarranty: clearWarranty, clearReturnBy: clearReturnBy);
+    } on ArgumentError {
+      // Refused by core (a reserving bill without a category; the sheet's own checks catch the rest first).
+      logEvent(_billLog, Level.INFO, 'bill.dates', {'ok': false});
+      return false;
+    }
     logEvent(_billLog, Level.INFO, 'bill.dates',
         {'warranty': warrantyUntil != null, 'returnBy': returnBy != null, 'cleared': clearWarranty || clearReturnBy});
     _changed();
+    return true;
   }
 
   /// To review → confirmed. Needs a date and a total; returns false (nothing changed) when one is missing.
