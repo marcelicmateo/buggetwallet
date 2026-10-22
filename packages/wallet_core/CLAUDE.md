@@ -101,6 +101,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   is reopened only when its bank row is deleted, never because the row has not arrived yet; until it arrives, reads
   mark the entry `Tx.matchPending` and it counts (`Tx.live`). `WalletRepo` runs it after imports, deletes and
   `applyRemote` (SyncEngine: once per run, only when caught up, `runPendingMatch`), loading only candidate rows.
+  **Caught-up gate** (stage R, M1): local imports, deletes, the schema-4 rewrite and `applyRemote(match: true)` pair and
+  match at once only while `WalletRepo.syncCaughtUp` (device-local `syncCaughtUp`, written by `SyncEngine` after every
+  run; absent = never synced = caught up); otherwise they only set `match_pending` and the next caught-up run does it
+  (`ImportSummary.transfers`/`matched` are then 0). A pair or match made against rows still on their way would never be
+  re-planned.
 - `models.dart` — `Tx`, `Goal`, `GoalContribution`, `WishItem`, `WalletSettings` (row ↔ object), `goalTotal`.
   `WalletSettings.categoryBudgets` (synced setting, `{category: cents per month}`, default `{}`) is validated entry
   by entry: only `spendingCategories` (fixed + flex) with whole cents 0..`maxBudget` are kept, other entries are
@@ -189,18 +194,27 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   incl. the 90-day rule driven by `now`; no token check; test hooks `offline`, `corrupt`, `failGet`, `replace`, `files`,
   `calls`) and `RelayTransport` (`sync_relay.dart`, `package:http`: wid/token from `deriveKey`, Bearer header,
   `X-BW-Covers`, status → failure, `api` > 1 → `newerApi`, 404 state = empty relay, 30 s timeout; `health(base)`).
-  `SyncEngine(transport, key, appVersion:, now:).run(repo)`: reads `state`; uploads pending ops as `last + 1` (seq from
-  the relay, so a failed PUT leaves no gap; 409/422 keep the outbox for the next run); the **first run on a relay** (local
-  `syncSent` absent, or the relay's `last` for this device below it = a new or wiped relay) uploads `snapshotOps()`
-  instead (the migration from the folder sync). Cursors (`sync_cursor` table, device-local, `WalletRepo.syncCursors`):
+  `SyncEngine(transport, key, appVersion:, now:, partBytes:).run(repo)`: reads `state`; uploads pending ops as `last + 1`
+  (seq from the relay, so a failed PUT leaves no gap; 409/422 keep the outbox for the next run); the **first run on a
+  relay** (local `syncSent` absent, or the relay's `last` for this device below it = a new or wiped relay) uploads
+  `snapshotOps()` instead (the migration from the folder sync). Any upload is split into several seqs, each sealed file
+  ≤ `partBytes` (default `maxPartBytes` 8 MiB; the relay refuses > 16 MiB): by op count, sealed size measured, halved
+  while over; the outbox and `syncSent` change only after every part is stored, so a run that stops half-way sends it all
+  again (idempotent). `MemoryTransport.maxFileBytes` (default 16 MiB) lowers the limit in tests. Cursors (`sync_cursor` table, device-local, `WalletRepo.syncCursors`):
   per other device the last seq applied; files apply strictly in order; the first file that cannot be fetched (`waiting`
   with reason null + an `unreadable` problem), is pruned without a usable snapshot, or is refused (quarantined in
   `BadFiles` under `<device>/<seq>`, fetched and hashed again each run) stops that device. A cursor above a device's
   `last` is reset to 0 (relay lost its files). Snapshot use: when a needed file is pruned; when this device applied
   nothing yet (new device, schema-bump replay) and the snapshot id says this schema or newer (`s<schema>-<ms>-<hex>`);
   and when a blocked file is covered by the snapshot (then the device goes on after it). Latest first, then `previous`;
-  covers raise the cursors. Acks every run (a failed ack is only logged). `caughtUp` = no waiting, no problem, every
-  device applied through `last`: only then `runPendingMatch()` and the snapshot check: written when files not covered by
+  covers raise the cursors. The unblock case only for a quarantined wait (`SyncWaiting.reason` set, not a file that
+  could not be fetched) and, like the new-device case, only with a snapshot of this schema or newer (latest or
+  `previous`, whichever covers it). A snapshot that could not be fetched or refused to apply is remembered device-locally
+  (`syncBadSnapshots` = `{"<id>": {reason (null = not fetched), bytes, hash, build, at}}`) and not downloaded again until
+  the relay names another id (unknownVersion/applyFailed: once more after `build` changes; not fetched: retried after
+  `snapshotRetry`, 1 h); records of ids no longer listed are dropped. It is reported in `SyncReport.problems` as a
+  `SyncProblem` with `snapshot: true` and `device` '' (counts in `badFiles`, not in `caughtUp`). Acks every run (a failed ack is only logged). `caughtUp` = no waiting, no problem, every
+  device applied through `last` (stored as `syncCaughtUp`, see matching): only then `runPendingMatch()` and the snapshot check: written when files not covered by
   the newest snapshot hold ≥ 500 ops (`sync_files`: ops per recorded file, own uploads included) or the newest is older
   than 7 days (none yet: 7 days since this device's first relay sync, local `syncSince`); payload = backup format,
   covers = every listed device's cursor + own last; refused (another device was faster) is only logged. Self-heal
@@ -252,6 +266,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - Encrypted local database: a database encrypted with one wallet key cannot be opened after joining another wallet
   (`WalletDbKeyException`; the app decides what to do). The side copy of a native conversion is plaintext for as long
   as the conversion runs (deleted after the check, or used to recover at the next open).
+- While the last sync was not caught up (a peer file waiting or refused), a local import or delete does not pair or
+  match until the next caught-up run: a bank row that replaced a cash entry and is deleted then hides the entry until
+  that run (the entry counts again once it runs), and new transfers show by their hint only.
 - Older builds ignore `seen_bank` and match by the old rule: devices on mixed versions can plan different matches,
   and keep doing so after upgrading for entries they received before.
 - A wrong-typed field (e.g. `amount: "abc"`) is refused with no clock only by builds that check types: older builds
@@ -306,7 +323,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   and applies, `deliver(net, r, p:)` makes the next run's GETs fail with probability 1 − p, `upload` is a no-op kept for
   the helpers; `dbPath:` + `reopen()` simulate a restart or upgrade), `opsInNet`, `dump`, `bookkeeping`. Sync engine:
   `test/sync_scenarios_test.dart`, `sync_convergence_test.dart` (random, 2-4 devices), `sync_quarantine*_test.dart`,
-  `sync_read_edge_test.dart`, `sync_engine_spec_test.dart` (+ `support/engine_spec_sim.dart`, shared fake clock: snapshots,
+  `sync_read_edge_test.dart`, `match_gate_test.dart` (matching only when caught up), `sync_snapshot_use_test.dart`
+  (unblock conditions, remembered snapshots), `sync_split_upload_test.dart` (uploads over one file), `sync_engine_spec_test.dart` (+ `support/engine_spec_sim.dart`, shared fake clock: snapshots,
   pruning, first connect, S1/S2), `sync_relay_test.dart` (`deriveKey` vs. a hand-written HKDF, `RelayTransport` over
   `MockClient`, `MemoryTransport` rules, end to end with the real `relay/` server on port 0).
 - Run: `tools/build.sh test` from the repo root (or `tools/build.sh shell`, then `cd packages/wallet_core && dart test`).

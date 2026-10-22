@@ -24,16 +24,20 @@ class _Snap {
 /// after every accepted write: a file goes once every kept snapshot covers it and every other device seen within 90
 /// days ([now]) acked it. No token check: files sealed with another key are stored like any.
 ///
-/// Test hooks: [offline], [corrupt], [failGet], [replace], [files].
+/// Test hooks: [offline], [corrupt], [failGet], [failGetSnapshot], [replace], [files], [maxFileBytes].
 class MemoryTransport implements SyncTransport {
   MemoryTransport({DateTime Function()? now}) : _now = now ?? DateTime.now;
   final DateTime Function() _now;
   final Map<String, _Dev> _devs = {};
   _Snap? _snap, _prev;
   final Map<(String, int), int> _failGets = {};
+  final Map<String, int> _failSnapshotGets = {};
 
   static const maxFile = 16 << 20, maxSnapshot = 64 << 20;
   static const activeFor = Duration(days: 90);
+
+  /// Largest file a PUT may store ([maxFile] like the relay; lower in tests so a big upload needs few rows).
+  int maxFileBytes = maxFile;
 
   /// Every call throws [TransportFailure.unreachable] while true.
   bool offline = false;
@@ -52,6 +56,9 @@ class MemoryTransport implements SyncTransport {
 
   /// The next [times] GETs of that file fail as [TransportFailure.unreachable] (a dropped connection).
   void failGet(String device, int seq, {int times = 1}) => _failGets[(device, seq)] = times;
+
+  /// The next [times] GETs of snapshot [id] fail as [TransportFailure.unreachable].
+  void failGetSnapshot(String id, {int times = 1}) => _failSnapshotGets[id] = times;
 
   /// Replaces a stored file's bytes, which the relay itself never does (a repair made on the server).
   void replace(String device, int seq, List<int> bytes) {
@@ -100,7 +107,7 @@ class MemoryTransport implements SyncTransport {
     _call('put');
     _checkName(device);
     _checkSeq(seq);
-    if (bytes.length > maxFile) throw const TransportException(TransportFailure.full, 'too big');
+    if (bytes.length > maxFileBytes) throw const TransportException(TransportFailure.full, 'too big');
     // A known device is seen by any PUT that reaches the seq check; a new one appears only once a file is stored.
     final d = _devs[device] ?? _Dev();
     if (_devs.containsKey(device)) d.lastSeen = _now().toUtc();
@@ -178,6 +185,11 @@ class MemoryTransport implements SyncTransport {
   Future<List<int>> getSnapshot(String id) async {
     _call('getSnapshot');
     _checkName(id);
+    final left = _failSnapshotGets[id];
+    if (left != null && left > 0) {
+      _failSnapshotGets[id] = left - 1;
+      throw const TransportException(TransportFailure.unreachable, 'dropped');
+    }
     for (final s in [_snap, _prev]) {
       if (s != null && s.id == id) return Uint8List.fromList(s.bytes);
     }

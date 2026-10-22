@@ -40,14 +40,18 @@ class SyncProblem {
 
   /// Found in this run. False: refused in an earlier run and not read again, because it has not changed since.
   final bool isNew;
-  const SyncProblem(this.device, this.reason, {required this.bytes, this.isNew = true});
+
+  /// A relay snapshot rather than a device's file ([device] is then empty): it could not be fetched or was refused,
+  /// and is not fetched again until the relay names another snapshot (one that could not be fetched: after an hour).
+  final bool snapshot;
+  const SyncProblem(this.device, this.reason, {required this.bytes, this.isNew = true, this.snapshot = false});
 
   /// What of a device's folder name the UI gets: its first 8 characters (device ids are random hex, so a prefix tells
   /// devices apart as well as the whole id does).
   static String shortId(String folder) => folder.length <= 8 ? folder : folder.substring(0, 8);
 
   @override
-  String toString() => 'SyncProblem(${reason.name}, $bytes bytes${isNew ? ', new' : ''})';
+  String toString() => 'SyncProblem(${snapshot ? 'snapshot, ' : ''}${reason.name}, $bytes bytes${isNew ? ', new' : ''})';
 }
 
 /// A refused file, kept on this device only (a local value, never synced) so it is not retried on every run.

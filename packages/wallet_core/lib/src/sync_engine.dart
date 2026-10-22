@@ -222,7 +222,19 @@ class SyncEngine {
   /// format, are read again once after it changes.
   final String appVersion;
   final DateTime Function() _now;
-  SyncEngine(this.transport, this.key, {this.appVersion = '', DateTime Function()? now}) : _now = now ?? DateTime.now;
+  SyncEngine(this.transport, this.key, {this.appVersion = '', DateTime Function()? now, this.partBytes = maxPartBytes})
+      : _now = now ?? DateTime.now;
+
+  /// Largest sealed file this device uploads ([maxPartBytes]; lower in tests). An upload with more is split into
+  /// several files (seqs), each at most this big: the relay refuses files over 16 MiB.
+  final int partBytes;
+  static const maxPartBytes = 8 << 20;
+
+  /// Device-local: snapshots this device could not use, by id ([_BadSnapshots]).
+  static const badSnapshotKey = 'syncBadSnapshots';
+
+  /// A snapshot that could not be fetched (not refused) is fetched again only after this long.
+  static const snapshotRetry = Duration(hours: 1);
 
   /// A caught-up device writes a snapshot when the newest is older than this (with none: since its first relay sync).
   static const snapshotAge = Duration(days: 7);
@@ -293,11 +305,12 @@ class SyncEngine {
     final problems = <SyncProblem>[];
     final waiting = <SyncWaiting>[];
     final bad = BadFiles.load(repo), listed = <String>{};
+    final badSnaps = _BadSnapshots.load(repo);
     var badChanged = false, complete = false;
     // Per device that stopped: what it waits on, and the problem to report (none when a pruned file has no snapshot).
     final blocked = <String, (SyncWaiting, SyncProblem?)>{};
-    Future<bool> snapshot() async {
-      final got = await _applySnapshot(repo, state, cursors);
+    Future<bool> snapshot({bool Function(RelaySnapshot s)? usable}) async {
+      final got = await _applySnapshot(repo, state, cursors, badSnaps, usable: usable);
       if (got == null) return false;
       received += got.$1;
       opsRead += got.$2;
@@ -364,17 +377,24 @@ class SyncEngine {
       final fresh = cursors.isEmpty && peers.any((d) => state.devices[d]!.last > 0);
       final snap = state.snapshot;
       var usedSnapshot = false;
-      if (snap != null && (pruned || (fresh && (_snapshotSchema(snap.id) ?? 0) >= WalletRepo.schemaVersion))) {
-        usedSnapshot = await snapshot();
+      if (snap != null && (pruned || (fresh && _current(snap)))) {
+        // A pruned file leaves no choice; otherwise only a snapshot of this schema or newer (else it lacks fields).
+        usedSnapshot = await snapshot(usable: pruned ? null : _current);
       }
       for (final d in peers) {
         await applyPeer(d);
       }
-      // A file that cannot be used but that the snapshot covers (it was readable for the device that wrote the
-      // snapshot): start from the snapshot, then go on after it. Otherwise that device would wait for good.
-      if (!usedSnapshot && snap != null && blocked.entries.any((e) => e.value.$1.seq <= (snap.covers[e.key] ?? 0))) {
-        logEvent(_log, Level.INFO, 'sync.snapshot.unblock', {'devices': blocked.length});
-        if (await snapshot()) {
+      // A file refused for good (quarantined, not one that merely could not be fetched) that a snapshot of this schema
+      // or newer covers (it was readable for the device that wrote it): start from that snapshot, then go on after
+      // it. Otherwise that device would wait for good.
+      final refused = {
+        for (final MapEntry(key: d, value: (w, _)) in blocked.entries)
+          if (w.reason != null) d: w.seq
+      };
+      bool unblocks(RelaySnapshot s) => _current(s) && refused.entries.any((e) => e.value <= (s.covers[e.key] ?? 0));
+      if (!usedSnapshot && [state.snapshot, state.previous].nonNulls.any(unblocks)) {
+        logEvent(_log, Level.INFO, 'sync.snapshot.unblock', {'devices': refused.length});
+        if (await snapshot(usable: unblocks)) {
           for (final d in blocked.keys.toList()) {
             if (cur(d) < blocked[d]!.$1.seq) continue;
             blocked.remove(d);
@@ -399,8 +419,12 @@ class SyncEngine {
           bad.byKey.remove(k);
         }
         badChanged |= gone.isNotEmpty;
+        badSnaps.keepOnly({
+          for (final s in [state.snapshot, state.previous].nonNulls) s.id
+        });
       }
       if (badChanged) bad.save(repo);
+      badSnaps.save(repo);
     }
 
     // 4. Ack what was applied.
@@ -419,6 +443,8 @@ class SyncEngine {
     // 5. Caught up: match, and maybe write a snapshot.
     final heal = _trackStuck(repo, state, cursors, myLast, now);
     final caughtUp = waiting.isEmpty && problems.isEmpty && peers.every((d) => cur(d) >= state.devices[d]!.last);
+    // Snapshots not used are reported, but a device that applied every file is caught up without them.
+    problems.addAll(badSnaps.problems.values);
     // Local imports and deletes match at once only while this holds (WalletRepo.syncCaughtUp); otherwise they wait
     // for the next caught-up run, like the ops applied here.
     repo.setLocalValue(WalletRepo.caughtUpKey, caughtUp ? '1' : '0');
@@ -453,7 +479,8 @@ class SyncEngine {
     ]);
   }
 
-  /// Uploads this device's next file. Returns (ops sent, this device's last seq on the relay after it).
+  /// Uploads this device's next file (several when over [partBytes]). Returns (ops sent, this device's last seq on the
+  /// relay after it).
   Future<(int, int)> _upload(WalletRepo repo, RelayState state) async {
     final me = repo.deviceId;
     final relayLast = state.devices[me]?.last ?? 0;
@@ -473,27 +500,43 @@ class SyncEngine {
       return (0, relayLast);
     }
     final t = PerfTimer('sync.export', warnMs: 500);
-    final seq = relayLast + 1;
-    final payload = _filePayload(ops);
-    final sealed = await seal(payload, key);
-    try {
-      await transport.put(me, seq, sealed);
-    } on TransportException catch (e) {
-      if (e.failure == TransportFailure.conflict || e.failure == TransportFailure.rejected) {
-        // The relay moved on since `state` (another install with this device id): kept, sent on the next run.
-        logEvent(_log, Level.WARNING, 'sync.export.conflict', {'seq': seq, 'failure': e.failure.name});
-        return (0, relayLast);
+    // One file per [partBytes] at most (the relay refuses files over 16 MiB): split by op count, sealed size
+    // measured, halved while over. The outbox and [sentKey] change only once every part is stored, so a run that stops
+    // half-way sends everything again next time (ops are idempotent: a clock is only taken when newer).
+    var seq = relayLast, done = 0, size = ops.length, jsonBytes = 0, bytes = 0;
+    while (done < ops.length) {
+      var count = min(size, ops.length - done);
+      List<int> payload, sealed;
+      while (true) {
+        payload = _filePayload(ops.sublist(done, done + count));
+        sealed = await seal(payload, key);
+        if (sealed.length <= partBytes || count == 1) break;
+        count = (count + 1) ~/ 2;
       }
-      throw _fatal('put', e);
+      try {
+        await transport.put(me, seq + 1, sealed);
+      } on TransportException catch (e) {
+        if (e.failure == TransportFailure.conflict || e.failure == TransportFailure.rejected) {
+          // The relay moved on since `state` (another install with this device id): kept, sent on the next run.
+          logEvent(_log, Level.WARNING, 'sync.export.conflict', {'seq': seq + 1, 'failure': e.failure.name});
+          return (0, seq);
+        }
+        throw _fatal('put', e);
+      }
+      seq++;
+      repo.recordSyncFile(me, seq, count);
+      done += count;
+      size = count;
+      jsonBytes += payload.length;
+      bytes += sealed.length;
     }
     if (pending.isNotEmpty) repo.markExported(pending.last.$1);
     repo.setLocalValue(sentKey, '$seq');
-    repo.recordSyncFile(me, seq, ops.length);
     if (first) {
       repo.setLocalValue(sinceKey, repo.localValue(sinceKey) ?? '${_now().millisecondsSinceEpoch}');
       logEvent(_log, Level.INFO, 'sync.connect', {'ops': ops.length, 'relayLast': relayLast});
     }
-    t.done({'ops': ops.length, 'seq': seq, 'jsonBytes': payload.length, 'bytes': sealed.length, 'whole': first});
+    t.done({'ops': ops.length, 'seq': seq, 'files': seq - relayLast, 'jsonBytes': jsonBytes, 'bytes': bytes, 'whole': first});
     return (ops.length, seq);
   }
 
@@ -512,16 +555,28 @@ class SyncEngine {
     return 's${WalletRepo.schemaVersion}-${now.millisecondsSinceEpoch}-$tail';
   }
 
-  /// Applies the latest snapshot (falling back to `previous`) and raises the cursors to its covers. Returns (fields
-  /// changed, ops, bytes), or null when neither could be used.
-  Future<(int, int, int)?> _applySnapshot(WalletRepo repo, RelayState state, Map<String, int> cursors) async {
+  /// Whether a snapshot was written by this schema or newer (an older one lacks fields this build syncs).
+  static bool _current(RelaySnapshot s) => (_snapshotSchema(s.id) ?? 0) >= WalletRepo.schemaVersion;
+
+  /// Applies the latest snapshot (falling back to `previous`), only those [usable] accepts, and raises the cursors to
+  /// its covers. One this device refused before is skipped until the relay names another id (unknownVersion and
+  /// applyFailed: once more after [build] changes), one that could not be fetched until [snapshotRetry] has passed;
+  /// both are recorded in [bad]. Returns (fields changed, ops, bytes), or null when none could be used.
+  Future<(int, int, int)?> _applySnapshot(WalletRepo repo, RelayState state, Map<String, int> cursors, _BadSnapshots bad,
+      {bool Function(RelaySnapshot s)? usable}) async {
+    final now = _now();
     for (final (which, s) in [('latest', state.snapshot), ('previous', state.previous)]) {
-      if (s == null) continue;
+      if (s == null || (usable != null && !usable(s))) continue;
+      if (bad.skip(s.id, build, now)) {
+        logEvent(_log, Level.INFO, 'sync.snapshot.skipped', {'which': which, 'reason': 'known'});
+        continue;
+      }
       final List<int> bytes;
       try {
         bytes = await transport.getSnapshot(s.id);
       } on TransportException catch (e) {
         logEvent(_log, Level.WARNING, 'sync.snapshot.unreadable', {'which': which, 'failure': e.failure.name});
+        bad.unreadable(s.id, now);
         continue;
       }
       final int changed, count;
@@ -529,8 +584,10 @@ class SyncEngine {
         (changed, count) = await _applyBytes(repo, key, bytes, (c) => backupPayloadOps(c, event: 'sync.snapshot.damaged'));
       } on _Refused catch (r) {
         logError(_log, 'sync.snapshot.failed', r.error, r.stack, fields: {'which': which, 'reason': r.reason.name, 'bytes': bytes.length});
+        bad.refused(s.id, r.reason, bytes.length, await fileHash(bytes), build, now);
         continue;
       }
+      bad.applied(s.id);
       var raised = 0;
       for (final MapEntry(key: d, value: seq) in s.covers.entries) {
         if (d == repo.deviceId || seq <= (cursors[d] ?? 0)) continue;
@@ -628,5 +685,80 @@ class SyncEngine {
     repo.forgetSyncFiles(covers);
     if (heal) repo.setLocalValue(healKey, '${now.millisecondsSinceEpoch}');
     t.done({'ops': ops.length, 'bytes': sealed.length, 'devices': covers.length, 'behind': behind, 'aged': aged, 'heal': heal});
+  }
+}
+
+/// Snapshots this device could not use, kept device-locally ([SyncEngine.badSnapshotKey], never synced) as
+/// `{"<id>": {"reason": <SyncProblemReason name, null = could not be fetched>, "bytes", "hash", "build", "at" (ms)}}`,
+/// so a snapshot of up to 64 MiB is not downloaded on every run. A refused one is skipped until the relay names another
+/// id (a relay never stores other bytes under an id); unknownVersion/applyFailed are tried once more after the build
+/// changes; one that could not be fetched is tried again after [SyncEngine.snapshotRetry]. Records of ids the relay no
+/// longer lists are forgotten.
+class _BadSnapshots {
+  _BadSnapshots(this._byId, this._stored);
+  final Map<String, Map<String, Object?>> _byId;
+  final String? _stored;
+
+  /// Snapshots wanted in this run but not applied, for [SyncReport.problems].
+  final Map<String, SyncProblem> problems = {};
+
+  static _BadSnapshots load(WalletRepo repo) {
+    final stored = repo.localValue(SyncEngine.badSnapshotKey);
+    final out = <String, Map<String, Object?>>{};
+    if (stored != null) {
+      try {
+        for (final MapEntry(key: id, value: v) in (jsonDecode(stored) as Map).cast<String, Object?>().entries) {
+          if (v is Map) out[id] = v.cast<String, Object?>();
+        }
+      } catch (e, st) {
+        logError(_log, 'sync.badSnapshots.unreadable', e, st);
+      }
+    }
+    return _BadSnapshots(out, stored);
+  }
+
+  static SyncProblemReason? _reason(Map<String, Object?> r) => switch (r['reason']) {
+        final String n => SyncProblemReason.values.where((v) => v.name == n).firstOrNull ?? SyncProblemReason.corrupt,
+        _ => null,
+      };
+
+  /// Whether [id] is skipped in this run (and then listed in [problems] as known).
+  bool skip(String id, String build, DateTime now) {
+    final r = _byId[id];
+    if (r == null) return false;
+    final reason = _reason(r);
+    final at = r['at'] is int ? r['at'] as int : 0;
+    final skipped = switch (reason) {
+      null => now.difference(DateTime.fromMillisecondsSinceEpoch(at, isUtc: true)) < SyncEngine.snapshotRetry,
+      SyncProblemReason.unknownVersion || SyncProblemReason.applyFailed => r['build'] == build,
+      _ => true,
+    };
+    if (skipped) {
+      problems[id] = SyncProblem('', reason ?? SyncProblemReason.unreadable,
+          bytes: r['bytes'] is int ? r['bytes'] as int : 0, isNew: false, snapshot: true);
+    }
+    return skipped;
+  }
+
+  void unreadable(String id, DateTime now) {
+    _byId[id] = {'reason': null, 'at': now.millisecondsSinceEpoch};
+    problems[id] = const SyncProblem('', SyncProblemReason.unreadable, bytes: 0, snapshot: true);
+  }
+
+  void refused(String id, SyncProblemReason reason, int bytes, String hash, String build, DateTime now) {
+    _byId[id] = {'reason': reason.name, 'bytes': bytes, 'hash': hash, 'build': build, 'at': now.millisecondsSinceEpoch};
+    problems[id] = SyncProblem('', reason, bytes: bytes, snapshot: true);
+  }
+
+  void applied(String id) {
+    _byId.remove(id);
+    problems.remove(id);
+  }
+
+  void keepOnly(Set<String> ids) => _byId.removeWhere((id, _) => !ids.contains(id));
+
+  void save(WalletRepo repo) {
+    final text = _byId.isEmpty ? null : jsonEncode(_byId);
+    if (text != _stored) repo.setLocalValue(SyncEngine.badSnapshotKey, text);
   }
 }
