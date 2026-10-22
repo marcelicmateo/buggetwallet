@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:flutter/widgets.dart' show AppLifecycleListener, AppLifecycleState, WidgetsBinding;
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
@@ -772,21 +773,56 @@ class WalletController extends ChangeNotifier {
     _keyBackupChanged();
   }
 
-  /// Copies the key; 60 seconds later the clipboard is emptied if it still holds the key.
+  /// Copies the key; 60 seconds later the clipboard is emptied unless it is readable and holds something else.
+  /// (Android 10+ shows a background app an empty clipboard, so "null" counts as "still ours".) If the app is in the
+  /// background then, the clear waits for the next resume; disposing the controller clears at once.
   Future<void> copyKeyBackup() async {
     final t = await keyText();
     if (t.isEmpty) return;
     await clipboardWrite(t);
     logEvent(_key, Level.INFO, 'key.backup', {'action': 'copied'});
     _clipboardTimer?.cancel();
-    _clipboardTimer = Timer(keyClipboardLife, () async {
+    _resumeClear?.dispose();
+    _resumeClear = null;
+    _pendingClipboardKey = t;
+    _clipboardTimer = Timer(keyClipboardLife, () {
       _clipboardTimer = null;
+      final state = WidgetsBinding.instance.lifecycleState;
+      if (state != null && state != AppLifecycleState.resumed) {
+        _resumeClear?.dispose();
+        _resumeClear = AppLifecycleListener(onResume: () {
+          _resumeClear?.dispose();
+          _resumeClear = null;
+          _clearClipboardKey();
+        });
+        return;
+      }
+      _clearClipboardKey();
+    });
+  }
+
+  AppLifecycleListener? _resumeClear;
+  String? _pendingClipboardKey;
+
+  /// Empties the clipboard unless it can be read and holds something other than the copied key.
+  Future<void> _clearClipboardKey() async {
+    final t = _pendingClipboardKey;
+    if (t == null) return;
+    _pendingClipboardKey = null;
+    try {
+      String? now;
+      var readable = true;
       try {
-        if (await clipboardRead() == t) await clipboardWrite('');
+        now = await clipboardRead();
       } catch (e, st) {
+        readable = false;
         logError(_key, 'key.backup.clipboard', e, st, fields: {'type': e.runtimeType.toString()});
       }
-    });
+      if (readable && now != null && now != t) return;
+      await clipboardWrite('');
+    } catch (e, st) {
+      logError(_key, 'key.backup.clipboard', e, st, fields: {'type': e.runtimeType.toString()});
+    }
   }
 
   static String _plainKey(String s) => s.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
@@ -1099,6 +1135,9 @@ class WalletController extends ChangeNotifier {
     _debounce?.cancel();
     _persistTimer?.cancel();
     _clipboardTimer?.cancel();
+    _resumeClear?.dispose();
+    _resumeClear = null;
+    _clearClipboardKey();
     repo.close();
     super.dispose();
   }
