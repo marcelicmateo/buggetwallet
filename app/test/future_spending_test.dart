@@ -298,6 +298,57 @@ void main() {
     });
   });
 
+  group('G4: bad saved values and a failing plugin', () {
+    test('a calendar source with an unknown kind is skipped and logged (a count, no text); the others still load', () {
+      final wc = fw();
+      wc.repo.setLocalValue(
+          'icsSources',
+          jsonEncode([
+            {'id': 'a', 'name': 'Synthetic cloud', 'kind': 'cloud'},
+            {'id': 'b', 'name': 'Synthetic file', 'kind': 'file'},
+          ]));
+      late List<CalendarEntry> entries;
+      expect(() => entries = wc.calendarEntries(), returnsNormally);
+      expect([for (final e in entries) e.id], ['b']);
+      final skipped = lines.where((l) => l.contains('calendar.sourceSkipped')).toList();
+      expect(skipped, isNotEmpty);
+      expect(skipped.join(), allOf(isNot(contains('Synthetic')), isNot(contains('cloud'))));
+    });
+
+    test('a saved list that is not JSON gives an empty list and logs only the key', () {
+      final wc = fw();
+      wc.repo.setLocalValue('calendarsOn', '{not json SYNTHETIC-SECRET');
+      wc.repo.setLocalValue('icsSources', '[1,');
+      expect(wc.calendarEntries(), isEmpty);
+      final bad = lines.where((l) => l.contains('localList.invalid')).toList();
+      expect(bad.length, greaterThanOrEqualTo(2));
+      expect(bad.join(), allOf(contains('calendarsOn'), contains('icsSources'), isNot(contains('SYNTHETIC-SECRET'))));
+    });
+
+    test('one failing heads-up run does not stop the next one', () async {
+      final nudges = FakeNudges();
+      final wc = fw(nudges: nudges);
+      wc.addPlannedCost(title: 'Annual membership', date: '2026-10-30', amount: 20000);
+      await wc.setHeadsUpNotify(true);
+      nudges.headsUps.clear();
+      nudges.headsUpFailures = 1;
+      await wc.rescheduleHeadsUps(); // throws inside the plugin: logged, not rethrown
+      await wc.rescheduleHeadsUps();
+      expect(nudges.headsUps, isNotEmpty, reason: 'the second call ran');
+      await wc.rescheduleHeadsUps();
+      expect(nudges.headsUps.length, greaterThanOrEqualTo(2));
+    });
+
+    test('a failing run that is not caught inside (the chain itself) is logged and the chain recovers', () async {
+      final nudges = FakeNudges();
+      final wc = fw(nudges: nudges);
+      wc.cal.headsUpChain = Future<void>.error(StateError('synthetic'))..ignore();
+      await wc.setHeadsUpNotify(true);
+      expect(nudges.headsUps, isNotEmpty);
+      expect(lines.where((l) => l.contains('headsup.chainFailed')), isNotEmpty);
+    });
+  });
+
   group('heads-up notifications', () {
     test('turned on: scheduled at 09:00 on (date - days) with a text that has no title and no amount', () async {
       final nudges = FakeNudges();

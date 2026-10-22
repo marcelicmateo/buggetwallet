@@ -237,7 +237,16 @@ extension FutureSpending on WalletController {
   /// Runs one after another: a call made while another is running waits for it and then reads the state as it is by then.
   Future<void> rescheduleHeadsUps() {
     if (!nudges.supported) return Future.value();
-    return cal.headsUpChain = cal.headsUpChain.then((_) => _rescheduleHeadsUpsNow());
+    // A link that throws is logged and the chain goes on: one failure must not leave every later call rejected.
+    return cal.headsUpChain = cal.headsUpChain.catchError((Object e, StackTrace st) {
+      logError(_headLog, 'headsup.chainFailed', e, st);
+    }).then((_) async {
+      try {
+        await _rescheduleHeadsUpsNow();
+      } catch (e, st) {
+        logError(_headLog, 'headsup.chainFailed', e, st);
+      }
+    });
   }
 
   Future<void> _rescheduleHeadsUpsNow() async {
@@ -269,18 +278,36 @@ extension FutureSpending on WalletController {
   /// Can this build fetch an `.ics` link (not the browser)?
   bool get linksSupported => icsLinksSupported;
 
-  Set<String> get _deviceOn => {for (final x in _jsonList(repo.localValue('calendarsOn'))) x as String};
+  Set<String> get _deviceOn => {
+        for (final x in _jsonList('calendarsOn'))
+          if (x is String) x
+      };
 
-  List<_IcsSource> get _icsSources => [
-        for (final m in _jsonList(repo.localValue('icsSources')))
-          _IcsSource((m as Map)['id'] as String, m['name'] as String, CalendarKind.values.byName(m['kind'] as String), m['url'] as String?)
-      ];
+  /// The saved sources. An entry that cannot be read (an unknown kind from a newer build, a missing field) is skipped and counted in
+  /// the log; the others still load.
+  List<_IcsSource> get _icsSources {
+    final out = <_IcsSource>[];
+    var skipped = 0;
+    for (final m in _jsonList('icsSources')) {
+      final kind = m is Map && m['kind'] is String ? CalendarKind.values.asNameMap()[m['kind']] : null;
+      if (m is Map && kind != null && m['id'] is String && m['name'] is String) {
+        out.add(_IcsSource(m['id'] as String, m['name'] as String, kind, m['url'] as String?));
+      } else {
+        skipped++;
+      }
+    }
+    if (skipped > 0) logEvent(_calLog, Level.WARNING, 'calendar.sourceSkipped', {'count': skipped});
+    return out;
+  }
 
-  static List<Object?> _jsonList(String? raw) {
+  /// The JSON list saved under the device-local [key]; empty when missing or damaged (the log names the key, never the text).
+  List<Object?> _jsonList(String key) {
+    final raw = repo.localValue(key);
     if (raw == null) return const [];
     try {
       return jsonDecode(raw) as List<Object?>;
-    } catch (_) {
+    } catch (e, st) {
+      logError(_calLog, 'localList.invalid', e, st, fields: {'key': key});
       return const [];
     }
   }

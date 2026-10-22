@@ -829,6 +829,21 @@ void main() {
       expect(wc.billsAll(), isEmpty);
     });
 
+    tw('an unexpected crash while taking the photo says so and logs the type only', (tester) async {
+      final fakes = FakeBillInputs(camera: FakeCamera()..crash = true);
+      final wc = bw(inputs: fakes);
+      await pumpApp(tester, ScanBillScreen(wc: wc));
+      await tester.runAsync(() async {
+        await tester.tap(key('takePhoto'));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pump();
+      expect(find.textContaining("Couldn't take the photo"), findsOneWidget);
+      final logged = lines.where((l) => l.contains('scan.photoFailed')).toList();
+      expect(logged, isNotEmpty, reason: 'the catch logs instead of swallowing');
+      expect(logged.join(), allOf(contains('SyntheticCrash'), isNot(contains('SYNTHETIC-SECRET-TEXT'))));
+    });
+
     tw('cancelling the system camera comes back to the scanner with nothing said and nothing added', (tester) async {
       final fakes = FakeBillInputs(); // photo stays null = cancelled
       final wc = bw(inputs: fakes);
