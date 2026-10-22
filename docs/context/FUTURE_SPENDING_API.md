@@ -89,3 +89,38 @@ Device-local (app, `setLocalValue`): chosen Android calendar ids, `.ics` imports
 `String plannedIcs(List<PlannedCost> planned, List<RecurringBill> bills, {required String from, required String to})` —
 an `.ics` (VEVENT per planned cost with an amount and per confirmed bill occurrence; SUMMARY `<title> · <amount €>`,
 all-day, stable UIDs). `searchAll(..., planned:)` adds `SearchResult.planned` (title/category folded, exact amount).
+
+## Decisions and additions (F1, 2026-10-22)
+- Constructors take named args matching the field names; `PlannedCost.source` defaults to manual, `status` to open.
+  Additions: `PlannedCost.deleted` (default false) and `isOpen` (open and not deleted).
+- Repo additions: `reopenPlanned(id)` (open again, `paid_tx` cleared); `updatePlanned(..., clearAmount: false,
+  clearCategory: false)`. `addPlanned`/`updatePlanned`: bad date or amount ≤ 0 → `ArgumentError`; unknown id →
+  `ArgumentError`. With a `sourceRef` the row id is `<source>:<ref>` (`calendar:<ref>`), the same on every device: two
+  devices confirming one event write one row (last writer wins per field); confirming a dismissed event reopens it.
+  `dismissCalendarEvent` on an event that already has a row only sets `status: skipped` (title kept).
+- `plannedCosts(includeClosed: true)` returns every row incl. deleted ones; pass that list to `upcoming()` so an event
+  with any row (deleted included) is never suggested again.
+- Bill keys are `b:<billId>@<date>` (one bill can occur several times in a range). Occurrences: `nextDue`, then every
+  `intervalDays`, inside [from, to]; an overdue bill shows from its next occurrence. `billOccurrences(bill, from, to)`.
+- "Earlier" suggestion: the latest planned cost dated before the event with the same non-empty `normalizeTitle`, with an
+  amount, open or paid, not deleted; its category is suggested too. An amount in the title (or else the notes,
+  `suggestedFrom: 'title'`) wins.
+- `amountFromText`: a single `.`/`,` followed by exactly three digits is a thousands separator (`1.250 €` = 1250 €);
+  zero and negative amounts are not amounts; malformed separators (`1.250.00 €`) → null. `normalizeTitle` also turns
+  every non-letter into a space.
+- `paidCandidates`: live expenses only (no income, deleted or replaced rows), ties by date distance, then amount
+  closeness, then date, then id; `paidWindowDays = 3`.
+- `parseIcs(..., toLocal:)`: optional `DateTime Function(DateTime utc)`; a UTC `Z` time takes the date of
+  `toLocal(t)` (the app passes `(t) => t.toLocal()`), the UTC date without it. TZID and floating times keep their wall
+  date. Also supported: monthly `BYDAY` without ordinal, `BYMONTHDAY` (monthly), daily `BYDAY`, yearly `BYMONTH`/
+  `BYMONTHDAY` repeating DTSTART, `RDATE`, `RECURRENCE-ID` overrides, `STATUS:CANCELLED`. RRULE MONTHLY on the 31st:
+  RFC 5545 (months without that day skipped). `unsupported` also counts events without a usable DTSTART and a file cut
+  off inside an event.
+- `computePeriod`: `duePlanned(planned, today, end)` is public. `PlannedCost.coveredByPlan` (category of kind fixed:
+  Rent, Loan, Bills & subscriptions; same rule as `RecurringBill.coveredByPlan`): listed in `duePlanned`, Upcoming and
+  heads-ups, but never added to `reservedPlanned` (already in the fixed plan; lead 2026-10-22). Deleted rows and
+  non-positive amounts never reserve.
+- `plannedIcs`: open and paid costs with an amount (not skipped/deleted); SUMMARY `<title> · <euroText(amount)>`
+  (`1.250,50 €`, so `amountFromText(summary) == amount`); UIDs `planned-<id>@budget-wallet`,
+  `bill-<id>-<yyyymmdd>@budget-wallet`; `DTSTAMP` from `from` (same input → same text).
+- `searchAll(..., planned:)` is optional (default empty).

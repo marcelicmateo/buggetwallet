@@ -2,7 +2,6 @@
 // spec only. All data is SYNTHETIC.
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
-import 'package:wallet_importer/wallet_importer.dart';
 
 var _seq = 0;
 
@@ -119,8 +118,8 @@ void main() {
     });
 
     test('a bill in a fixed category is not reserved a second time, planned still is', () {
-      final p = computePeriod(txs, st, const [], today,
-          bills: [bill('2026-03-05', 5000, category: 'Rent')], planned: [pc('2026-03-06', 3000)]);
+      final p =
+          computePeriod(txs, st, const [], today, bills: [bill('2026-03-05', 5000, category: 'Rent')], planned: [pc('2026-03-06', 3000)]);
       expect(p.reservedBills, 0, reason: 'already in the fixed plan');
       expect(p.reservedPlanned, 3000);
     });
@@ -244,7 +243,8 @@ void main() {
       expect((r.title, r.source, r.sourceRef, r.status), ('', PlannedSource.calendar, e.ref, PlannedStatus.skipped));
       expect(a.plannedCosts(), isEmpty, reason: 'closed rows are not in the default list');
       send(a, b);
-      final items = upcoming(planned: b.plannedCosts(includeClosed: true), bills: const [], events: [e], from: '2026-03-01', to: '2026-03-31');
+      final items =
+          upcoming(planned: b.plannedCosts(includeClosed: true), bills: const [], events: [e], from: '2026-03-01', to: '2026-03-31');
       expect(items, isEmpty);
     });
   });
@@ -303,16 +303,11 @@ void main() {
     });
 
     test('paid and skipped planned costs are not listed', () {
-      final items = upcoming(
-          planned: [
-            pc('2026-03-05', 1000, status: PlannedStatus.paid),
-            pc('2026-03-05', 1000, status: PlannedStatus.skipped),
-            pc('2026-03-05', 1000, title: 'Open'),
-          ],
-          bills: const [],
-          events: const [],
-          from: from,
-          to: to);
+      final items = upcoming(planned: [
+        pc('2026-03-05', 1000, status: PlannedStatus.paid),
+        pc('2026-03-05', 1000, status: PlannedStatus.skipped),
+        pc('2026-03-05', 1000, title: 'Open'),
+      ], bills: const [], events: const [], from: from, to: to);
       expect([for (final i in items) i.title], ['Open']);
     });
 
@@ -351,8 +346,8 @@ void main() {
     });
 
     test('an event whose notes carry the amount is suggested from them', () {
-      final items = upcoming(
-          planned: const [], bills: const [], events: [ev('2026-03-10', 'Gift', notes: 'budget 45,00 €')], from: from, to: to);
+      final items =
+          upcoming(planned: const [], bills: const [], events: [ev('2026-03-10', 'Gift', notes: 'budget 45,00 €')], from: from, to: to);
       expect(items.single.suggested, 4500);
     });
 
@@ -425,7 +420,9 @@ void main() {
     test('a transaction already paying another planned cost is excluded', () {
       final other = pc('2026-03-09', 8000, status: PlannedStatus.paid, paidTx: 'taken');
       final c = paidCandidates(
-          p, [row('2026-03-10', -8000, 'X', category: 'Health', id: 'taken'), row('2026-03-11', -100, 'X', category: 'Health', id: 'free')], [p, other]);
+          p,
+          [row('2026-03-10', -8000, 'X', category: 'Health', id: 'taken'), row('2026-03-11', -100, 'X', category: 'Health', id: 'free')],
+          [p, other]);
       expect(ids(c), ['free']);
     });
 

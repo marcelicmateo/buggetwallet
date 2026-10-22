@@ -625,7 +625,7 @@ void main() {
       old.db.execute('DROP TABLE recurring');
       old.close();
       final up = WalletRepo.open(path);
-      expect(up.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '5');
+      expect(up.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '${WalletRepo.schemaVersion}');
       expect(up.syncCursors(), isEmpty);
       expect(up.recurringBills(), isEmpty);
       up.close();

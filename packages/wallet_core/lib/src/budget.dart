@@ -20,6 +20,12 @@ class PeriodBudget {
   final int reservedBills;
   final List<RecurringBill> dueBills;
 
+  /// Σ `amount` of [duePlanned] (open planned costs with an amount dated from today to the day before payday) outside
+  /// fixed categories, taken off the flexible money with [reservedBills] (§4.3). One in a fixed category
+  /// ([PlannedCost.coveredByPlan]) is already in `fixedPlan`: listed, not added. 0 without planned costs.
+  final int reservedPlanned;
+  final List<PlannedCost> duePlanned;
+
   const PeriodBudget({
     required this.start,
     required this.end,
@@ -41,6 +47,8 @@ class PeriodBudget {
     required this.fixedPaid,
     this.reservedBills = 0,
     this.dueBills = const [],
+    this.reservedPlanned = 0,
+    this.duePlanned = const [],
   });
 
   /// Positive = under budget so far, negative = over.
@@ -69,13 +77,25 @@ List<RecurringBill> dueBills(List<RecurringBill> bills, List<CategorizedTx> txs,
     });
 }
 
+/// The planned costs of [planned] that still reserve money in the period ending at [end] (the next payday,
+/// exclusive): open, with an amount, dated from [today] to the day before [end]. A cost dated before today reserves
+/// nothing (its day has passed: the real row is in spending); paid, skipped and deleted ones never do. Ordered by date, then
+/// title, then id.
+List<PlannedCost> duePlanned(List<PlannedCost> planned, String today, String end) => [
+      for (final p in planned)
+        if (p.isOpen && p.amount != null && p.amount! > 0 && p.date.compareTo(today) >= 0 && p.date.compareTo(end) < 0) p,
+    ]..sort(comparePlanned);
+
 /// The budget for the pay period that holds [today]. [bills] (`WalletRepo.recurringBills()`): confirmed recurring
 /// bills due before the next payday and not paid yet are listed ([PeriodBudget.dueBills]); those in flex categories are
 /// reserved ([PeriodBudget.reservedBills]), taken off the flexible money on the same path as the planned fixed costs, so
 /// the daily plan and safe-to-spend drop by them until the bank row that pays each one lands. Bills in fixed categories
-/// are already counted in the fixed-cost settings and change nothing ([RecurringBill.coveredByPlan]).
+/// are already counted in the fixed-cost settings and change nothing ([RecurringBill.coveredByPlan]). [planned]
+/// (`WalletRepo.plannedCosts()`): the open ones with an amount dated from today to the day before payday
+/// ([duePlanned]) are reserved the same way ([PeriodBudget.reservedPlanned]), except those in fixed categories
+/// ([PlannedCost.coveredByPlan], like bills). Without planned costs every number is as before.
 PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today,
-    {List<RecurringBill> bills = const []}) {
+    {List<RecurringBill> bills = const [], List<PlannedCost> planned = const []}) {
   final start = st.periodStart ?? today;
   final end = nextPayday(start, st.paydayDay);
   final length = daysBetween(start, end).clamp(1, 1000);
@@ -88,7 +108,9 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final fixedPlan = st.rent + st.loan + st.subs;
   final due = dueBills(bills, txs, start, end);
   final reservedBills = due.fold<int>(0, (s, b) => s + (b.coveredByPlan ? 0 : b.expectedAmount));
-  final flexBudget = income - fixedPlan - goalMonthly - reservedBills;
+  final duePl = duePlanned(planned, today, end);
+  final reservedPlanned = duePl.fold<int>(0, (s, p) => s + (p.coveredByPlan ? 0 : p.amount!));
+  final flexBudget = income - fixedPlan - goalMonthly - reservedBills - reservedPlanned;
   final flex = inPeriod.where((t) => t.kind == Kind.flex);
   final spent = -_sum(flex);
   final spentToday = -_sum(flex.where((t) => t.date == today));
@@ -111,6 +133,8 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
       'goals': goals.length,
       'bills': bills.length,
       'dueBills': due.length,
+      'planned': planned.length,
+      'duePlanned': duePl.length,
     });
   }
   return PeriodBudget(
@@ -134,6 +158,8 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     fixedPaid: fixedPaid,
     reservedBills: reservedBills,
     dueBills: due,
+    reservedPlanned: reservedPlanned,
+    duePlanned: duePl,
   );
 }
 

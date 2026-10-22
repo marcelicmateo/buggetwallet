@@ -56,6 +56,8 @@ const Map<String, (String, List<String>)> _entities = {
     'recurring',
     ['payee', 'label', 'category', 'expected_amount', 'interval_days', 'next_due', 'status', 'last_paid_tx', 'deleted']
   ),
+  // Planned costs (v6, §4.3): hand-added, calendar events given an amount or dismissed (see [PlannedCost]).
+  'planned': ('planned', ['title', 'date', 'amount', 'category', 'source', 'source_ref', 'status', 'paid_tx', 'deleted']),
 };
 
 const _schema = '''
@@ -79,6 +81,10 @@ CREATE INDEX IF NOT EXISTS goal_contrib_goal ON goal_contrib(goal_id);
 CREATE TABLE IF NOT EXISTS recurring(id TEXT PRIMARY KEY, payee TEXT NOT NULL DEFAULT '', label TEXT NOT NULL DEFAULT '',
   category TEXT NOT NULL DEFAULT '', expected_amount INTEGER NOT NULL DEFAULT 0, interval_days INTEGER NOT NULL DEFAULT 30,
   next_due TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'candidate', last_paid_tx TEXT, deleted INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS planned(id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', date TEXT NOT NULL DEFAULT '', amount INTEGER,
+  category TEXT, source TEXT NOT NULL DEFAULT 'manual', source_ref TEXT, status TEXT NOT NULL DEFAULT 'open', paid_tx TEXT,
+  deleted INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS planned_date ON planned(date);
 CREATE TABLE IF NOT EXISTS clocks(entity TEXT NOT NULL, id TEXT NOT NULL, field TEXT NOT NULL, hlc TEXT NOT NULL, PRIMARY KEY(entity, id, field));
 CREATE TABLE IF NOT EXISTS outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sync_cursor(device TEXT PRIMARY KEY, seq INTEGER NOT NULL);
@@ -121,8 +127,8 @@ class WalletRepo {
   /// Bump when a new synced entity or field is added. Version 2 added `goal_contrib`, version 3 `tx.kind_hint` and
   /// `tx.transfer_to` (an older build dropped those fields from the ops it read, so they are replayed once), version 4
   /// the `exchange` hint (Revolut Exchange rows imported by version 3 as `ownTransfer` are rewritten once), version 5
-  /// the `recurring` entity.
-  static const schemaVersion = 5;
+  /// the `recurring` entity, version 6 the `planned` entity.
+  static const schemaVersion = 6;
 
   /// The folder sync's bookkeeping (`peer_files`: which files of the shared folder were read) means nothing on a relay,
   /// whose sequence numbers start over (every device's first relay file is its whole state), so it is dropped once.
@@ -249,6 +255,7 @@ class WalletRepo {
     'setting': {'value'},
     'rule': {'category'},
     'recurring': {'last_paid_tx'},
+    'planned': {'amount', 'category', 'source_ref', 'paid_tx'},
   };
 
   /// [value] as it is stored for [entity].[field], or [_bad] if it has the wrong type. A whole number sent as a
@@ -371,10 +378,10 @@ class WalletRepo {
   }
 
   /// Whether nothing has been put into this wallet yet: no transactions, goals, goal contributions, wishes, recurring
-  /// bills, merchant rules (deleted rows count: they were data once) and no synced settings. Only such a wallet may
+  /// bills, planned costs, merchant rules (deleted rows count: they were data once) and no synced settings. Only such a wallet may
   /// take a restore from a backup; anything else merges through the sync folder.
   bool get isEmpty {
-    for (final table in ['tx', 'goals', 'goal_contrib', 'wish', 'recurring', 'merchant_rules', 'settings']) {
+    for (final table in ['tx', 'goals', 'goal_contrib', 'wish', 'recurring', 'planned', 'merchant_rules', 'settings']) {
       if (db.select('SELECT 1 FROM $table LIMIT 1').isNotEmpty) return false;
     }
     return true;
@@ -638,6 +645,15 @@ class WalletRepo {
         for (final r in db.select(
             "SELECT * FROM recurring WHERE deleted = 0 ${includeDismissed ? '' : "AND status != 'dismissed'"} ORDER BY next_due, label, id"))
           RecurringBill.fromRow(r),
+      ];
+
+  /// Planned costs (§4.3), ordered by date, then title, then id: the open ones with a date, or with [includeClosed]
+  /// every row, paid, skipped (dismissed calendar events included) and deleted ones too ([PlannedCost.deleted]). Pass
+  /// `includeClosed: true` to [upcoming] so a calendar event with any row is never suggested again.
+  List<PlannedCost> plannedCosts({bool includeClosed = false}) => [
+        for (final r in db.select(
+            "SELECT * FROM planned ${includeClosed ? '' : "WHERE deleted = 0 AND status = 'open' AND date != ''"} ORDER BY date, title, id"))
+          PlannedCost.fromRow(r),
       ];
 
   Map<String, String> merchantRules() => {
@@ -1012,6 +1028,114 @@ class WalletRepo {
       ('recurring', id, {'next_due': addDays(b.nextDue, b.intervalDays)})
     ]);
     logEvent(_log, Level.INFO, 'recurring.skip', {'intervalDays': b.intervalDays});
+  }
+
+  // ---------- planned costs (§4.3) ----------
+
+  /// The row id of a planned cost from a source: `<source>:<ref>` (the same on every device, so two devices confirming
+  /// or dismissing one calendar event write one row, last writer wins per field), else a new random `p…` id.
+  String _plannedId(PlannedSource source, String? sourceRef) =>
+      sourceRef != null && sourceRef.isNotEmpty ? '${source.name}:$sourceRef' : _newId('p');
+
+  static void _checkPlanned({String? date, int? amount}) {
+    if (date != null && !(_isoDate.hasMatch(date) && isoDate(parseIso(date)) == date)) throw ArgumentError('Bad date.');
+    if (amount != null && (amount <= 0 || amount > WalletSettings.maxAmount)) throw ArgumentError('Bad amount.');
+  }
+
+  /// Adds an open planned cost and returns its id. [amount] (positive cents) null = no amount yet: listed, never
+  /// reserved. With a [sourceRef] (a calendar event's [calendarRef]) the id is `<source>:<sourceRef>`: confirming an
+  /// event that was dismissed before (or confirmed on another device) reopens and overwrites that one row. A bad
+  /// [date] or an amount ≤ 0 is an [ArgumentError].
+  String addPlanned(
+      {required String title,
+      required String date,
+      int? amount,
+      String? category,
+      PlannedSource source = PlannedSource.manual,
+      String? sourceRef}) {
+    _checkPlanned(date: date, amount: amount);
+    final id = _plannedId(source, sourceRef);
+    _write([
+      (
+        'planned',
+        id,
+        {
+          'title': title,
+          'date': date,
+          'amount': amount,
+          'category': category,
+          'source': source.name,
+          'source_ref': sourceRef,
+          'status': PlannedStatus.open.name,
+          'paid_tx': null,
+          'deleted': 0,
+        }
+      )
+    ]);
+    logEvent(_log, Level.INFO, 'planned.add', {'source': source.name, 'withAmount': amount != null});
+    return id;
+  }
+
+  void _setPlanned(String id, Map<String, Object?> fields, String event) {
+    if (db.select('SELECT 1 FROM planned WHERE id = ?', [id]).isEmpty) throw ArgumentError('No such planned cost.');
+    if (fields.isEmpty) return;
+    _write([('planned', id, fields)]);
+    logEvent(_log, Level.INFO, event);
+  }
+
+  /// Changes the given fields only (null = unchanged); [clearAmount] / [clearCategory] set those to none. Unknown id,
+  /// bad date or amount ≤ 0: [ArgumentError].
+  void updatePlanned(String id,
+      {String? title, String? date, int? amount, String? category, bool clearAmount = false, bool clearCategory = false}) {
+    _checkPlanned(date: date, amount: amount);
+    _setPlanned(
+        id,
+        {
+          if (title != null) 'title': title,
+          if (date != null) 'date': date,
+          if (clearAmount) 'amount': null else if (amount != null) 'amount': amount,
+          if (clearCategory) 'category': null else if (category != null) 'category': category,
+        },
+        'planned.update');
+  }
+
+  /// The owner picked [txId] as the transaction that paid it ([paidCandidates]): no longer listed or reserved.
+  void markPlannedPaid(String id, String txId) => _setPlanned(id, {'status': PlannedStatus.paid.name, 'paid_tx': txId}, 'planned.paid');
+
+  /// Not coming: no longer listed or reserved.
+  void skipPlanned(String id) => _setPlanned(id, {'status': PlannedStatus.skipped.name}, 'planned.skip');
+
+  /// Back to open (undo of Paid or Skip): `paid_tx` cleared.
+  void reopenPlanned(String id) => _setPlanned(id, {'status': PlannedStatus.open.name, 'paid_tx': null}, 'planned.reopen');
+
+  /// Removes it (the row stays, deleted, so the calendar event it came from is not suggested again).
+  void deletePlanned(String id) => _setPlanned(id, {'deleted': 1}, 'planned.delete');
+
+  /// "No cost" on a calendar suggestion: a synced row `calendar:<sourceRef>` {source calendar, sourceRef, date,
+  /// status skipped, title ''}, so no device suggests that event again. Stores no title. If the event already has a
+  /// row (confirmed earlier, here or elsewhere), only its status becomes skipped.
+  void dismissCalendarEvent(String sourceRef, String date) {
+    if (sourceRef.isEmpty) throw ArgumentError('No event ref.');
+    _checkPlanned(date: date);
+    final id = _plannedId(PlannedSource.calendar, sourceRef);
+    final exists = db.select('SELECT 1 FROM planned WHERE id = ?', [id]).isNotEmpty;
+    _write([
+      (
+        'planned',
+        id,
+        exists
+            ? {'status': PlannedStatus.skipped.name}
+            : {
+                'title': '',
+                'date': date,
+                'source': PlannedSource.calendar.name,
+                'source_ref': sourceRef,
+                'status': PlannedStatus.skipped.name,
+                'deleted': 0,
+              }
+      )
+    ]);
+    logEvent(_log, Level.INFO, 'planned.dismiss', {'existed': exists});
   }
 
   /// The weekly review was done on [today]: `lastReview` = today, `reviewStreak` grows by one when the previous review

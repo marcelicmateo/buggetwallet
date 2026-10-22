@@ -37,9 +37,11 @@ void main() {
     });
 
     test('folded lines are joined (CRLF or LF + one space/tab), the fold character is dropped', () {
-      final a = parse('BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a\r\nDTSTART;VALUE=DATE:20260310\r\nSUMMARY:Dentist ap\r\n pointment\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n');
+      final a = parse(
+          'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:a\r\nDTSTART;VALUE=DATE:20260310\r\nSUMMARY:Dentist ap\r\n pointment\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n');
       expect(a.events.single.title, 'Dentist appointment');
-      final b = parse('BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:a\nDTSTART;VALUE=DATE:20260310\nSUMMARY:Dentist ap\n\tpointment\nEND:VEVENT\nEND:VCALENDAR\n');
+      final b = parse(
+          'BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:a\nDTSTART;VALUE=DATE:20260310\nSUMMARY:Dentist ap\n\tpointment\nEND:VEVENT\nEND:VCALENDAR\n');
       expect(b.events.single.title, 'Dentist appointment');
     });
 
@@ -57,7 +59,7 @@ void main() {
     });
 
     test('several events in one file', () {
-      final text = 'BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:a\nDTSTART;VALUE=DATE:20260310\nSUMMARY:A\nEND:VEVENT\n'
+      const text = 'BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:a\nDTSTART;VALUE=DATE:20260310\nSUMMARY:A\nEND:VEVENT\n'
           'BEGIN:VEVENT\nUID:b\nDTSTART;VALUE=DATE:20260311\nSUMMARY:B\nEND:VEVENT\nEND:VCALENDAR\n';
       expect({for (final e in parse(text).events) e.title}, {'A', 'B'});
     });
@@ -68,7 +70,8 @@ void main() {
   });
 
   group('recurrence', () {
-    List<String> rule(String dtstart, String rrule, {List<String> extra = const [], String from = '2026-03-01', String to = '2026-03-31'}) =>
+    List<String> rule(String dtstart, String rrule,
+            {List<String> extra = const [], String from = '2026-03-01', String to = '2026-03-31'}) =>
         dates(parse(ics(['UID:r', 'DTSTART;VALUE=DATE:$dtstart', 'SUMMARY:R', 'RRULE:$rrule', ...extra]), from: from, to: to));
 
     test('DAILY with COUNT', () {
@@ -144,7 +147,7 @@ void main() {
     }
 
     test('one broken event does not lose the good one', () {
-      final text = 'BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:bad\nDTSTART:xx\nEND:VEVENT\n'
+      const text = 'BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:bad\nDTSTART:xx\nEND:VEVENT\n'
           'BEGIN:VEVENT\nUID:ok\nDTSTART;VALUE=DATE:20260310\nSUMMARY:Good\nEND:VEVENT\nEND:VCALENDAR\n';
       expect([for (final e in parse(text).events) e.title], ['Good']);
     });
@@ -188,8 +191,11 @@ void main() {
         );
 
     test('round trips through parseIcs: titles, dates, amounts; planned without amount is left out', () {
-      final out = plannedIcs([p('1', 'Dentist', '2026-03-10', 8000), p('2', 'Gift, big; one', '2026-03-12', 12550), p('3', 'No amount', '2026-03-14', null)], const [],
-          from: '2026-03-01', to: '2026-03-31');
+      final out = plannedIcs([
+        p('1', 'Dentist', '2026-03-10', 8000),
+        p('2', 'Gift, big; one', '2026-03-12', 12550),
+        p('3', 'No amount', '2026-03-14', null)
+      ], const [], from: '2026-03-01', to: '2026-03-31');
       final r = parse(out);
       expect(r.events, hasLength(2));
       final byDate = {for (final e in r.events) e.date: e};
@@ -202,8 +208,14 @@ void main() {
 
     test('confirmed bill occurrences are exported, candidates are not; UIDs are stable and distinct', () {
       const gym = RecurringBill(
-          id: 'rec:g', payee: 'g', label: 'Synthetic Gym', category: 'Sport & fitness', expectedAmount: 2999, nextDue: '2026-03-05', status: 'confirmed');
-      final cand = RecurringBill(
+          id: 'rec:g',
+          payee: 'g',
+          label: 'Synthetic Gym',
+          category: 'Sport & fitness',
+          expectedAmount: 2999,
+          nextDue: '2026-03-05',
+          status: 'confirmed');
+      const cand = RecurringBill(
           id: 'rec:c', payee: 'c', label: 'Cand', category: 'Other', expectedAmount: 999, nextDue: '2026-03-06', status: 'candidate');
       String run() => plannedIcs([p('1', 'Dentist', '2026-03-10', 8000)], [gym, cand], from: '2026-03-01', to: '2026-05-31');
       final out = run();
@@ -219,7 +231,8 @@ void main() {
     });
 
     test('dates outside [from, to] are not exported', () {
-      final out = plannedIcs([p('1', 'Early', '2026-02-01', 100), p('2', 'In', '2026-03-10', 100)], const [], from: '2026-03-01', to: '2026-03-31');
+      final out =
+          plannedIcs([p('1', 'Early', '2026-02-01', 100), p('2', 'In', '2026-03-10', 100)], const [], from: '2026-03-01', to: '2026-03-31');
       expect(parse(out, from: '2026-01-01', to: '2026-12-31').events.map((e) => e.date), ['2026-03-10']);
     });
   });
