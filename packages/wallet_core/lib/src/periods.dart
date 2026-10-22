@@ -9,8 +9,8 @@ final _log = Logger('bw.budget');
 class PeriodSummary {
   final String start; // first day, YYYY-MM-DD, inclusive (a payday)
   final String end; // next period's start, exclusive; for the running period: nextPayday(start, st.paydayDay)
-  final int income; // cents: Kind.income + Kind.extra amounts in [start, end)
-  final int out; // cents: -(Kind.fixed + Kind.flex amounts) in [start, end); refunds lower it
+  final int income; // cents: BudgetKind.income + BudgetKind.extra amounts in [start, end)
+  final int out; // cents: -(BudgetKind.fixed + BudgetKind.flex amounts) in [start, end); refunds lower it
   final Map<String, int> byCategory; // category -> positive cents out (fixed + flex only)
   final bool running; // true only for the current period (today is in it)
   const PeriodSummary({
@@ -35,7 +35,7 @@ const _missingSalaryDays = 45;
 /// Salary parts within 20 days of a payday's first payment belong to that payday.
 List<String> salaryPaydays(List<CategorizedTx> txs, String today) {
   final salary = txs
-      .where((t) => t.tx.live && t.kind == Kind.income && t.amount > 0 && t.date.compareTo(today) <= 0)
+      .where((t) => t.tx.live && t.kind == BudgetKind.income && t.amount > 0 && t.date.compareTo(today) <= 0)
       .map((t) => t.date)
       .toList()
     ..sort();
@@ -99,12 +99,12 @@ List<PeriodSummary> periodSummaries(List<CategorizedTx> txs, WalletSettings st, 
     if (!t.tx.live || t.date.compareTo(starts.first) < 0 || t.date.compareTo(today) > 0) continue;
     final i = indexOf(t.date);
     switch (t.kind) {
-      case Kind.income || Kind.extra:
+      case BudgetKind.income || BudgetKind.extra:
         income[i] += t.amount;
-      case Kind.fixed || Kind.flex:
+      case BudgetKind.fixed || BudgetKind.flex:
         out[i] -= t.amount;
         byCat[i][t.category] = (byCat[i][t.category] ?? 0) - t.amount;
-      case Kind.transfer:
+      case BudgetKind.transfer:
         break;
     }
   }

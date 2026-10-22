@@ -16,12 +16,13 @@ Pure Dart. **The only code that knows bank formats.** Turns PBZ .xls, Revolut .x
 - `xls_reader.dart` (own BIFF8 reader), `xlsx_reader.dart` (`archive` + `xml`), `csv_reader.dart`. `grid.dart` —
   `sparseRows`: cells → rows without a dense grid, capped at `maxSheetCells` (bigger = ImportException).
 - `model.dart` — `NormalizedTransaction`, `TxKind`, `ImportBatch`. `ids.dart` — `transactionId` (v1),
-  `sourceTransactionId` (banks added after v1), `fnv1a36`, `formatCents`.
+  `sourceTransactionId` (banks added after v1); `fnv1a36`, `formatCents` are internal (tests import `src/ids.dart`).
 - `bills/` — bill readers (`docs/context/BILLS_API.md` §1), all pure Dart, web-safe, never throw: `model.dart`
   (`NormalizedBill`, `BillItem`, `BillSource`), `codes.dart` (`readFiscalQr`, `readHub3`), `einvoice.dart` (`readEInvoice`,
   UBL 2.1), `pdf_text.dart` (`pdfText`: own minimal PDF text-layer reader; its header lists what is and isn't supported),
-  `text_bill.dart` (`billFromText`: labelled fields only, conservative money), external ids per `BILLS_API.md` §1 (HUB-3:
-  `hub3:<IBAN>:<model reference>:<amount>:<DESCRIPTION>` since B5a, so monthly flat-fee slips differ), `common.dart` (IBAN mod-97, references,
+  `text_bill.dart` (`billFromText`: labelled fields only, conservative money); each reader has a `…Result` twin returning
+  `ReadResult` (`read_result.dart`: the value or a `ReadFailure` reason) and the nullable one is its `.value`; external ids per `BILLS_API.md` §1 (HUB-3:
+  `hub3:<IBAN>:<model reference>:<amount>:<DESCRIPTION>`, so monthly flat-fee slips differ), `common.dart` (IBAN mod-97, references,
   exact cents, dates). Logger `bw.importer.bills`: event words, counts, sizes, reason words (`test/bills_log_test.dart`).
 - `log.dart` — `logImporter`: same line shape as wallet_core's `logEvent` (loggers `bw.importer[.xls|.xlsx|.csv]`).
   Formats, sizes, counts, profile ids and timings only — never cell contents or file names (`test/importer_log_test.dart`).

@@ -65,6 +65,34 @@ int? amountFromText(String text) {
   return found;
 }
 
+/// Most cents an amount typed by the owner may be ([parseMoneyCents]): the one cap, the repo's [WalletSettings.maxAmount].
+const maxAmountCents = WalletSettings.maxAmount;
+
+final _plainNumber = RegExp(r'^[+-]?(\d+\.?\d*|\.\d+)$');
+
+/// The cents of an amount typed by hand: "12", "12.5", "12,50", "1.234,56", "1,234.56" (a comma followed by one or
+/// two digits is the decimal separator; else commas group thousands), currency signs and spaces ignored. Null if not
+/// a number, negative, in exponent form, or beyond [maxAmountCents]. The value is `abs() * 100` rounded to the cent
+/// (the rule the app's input fields had).
+int? parseMoneyCents(String input) {
+  var s = input.trim().replaceAll(RegExp(r'[\s€\$£]'), '');
+  if (s.isEmpty) return null;
+  if (RegExp(r',\d{1,2}$').hasMatch(s)) {
+    s = s.replaceAll('.', '').replaceAll(',', '.');
+  } else if (RegExp(r'^[+-]?0*,\d{3}$').hasMatch(s)) {
+    return null; // "0,005": a thousands group cannot follow a zero
+  } else {
+    s = s.replaceAll(',', '');
+  }
+  if (!_plainNumber.hasMatch(s)) return null;
+  final v = double.tryParse(s);
+  if (v == null || !v.isFinite) return null;
+  if (s.startsWith('-') && v != 0) return null;
+  final cents = v.abs() * 100;
+  if (cents > maxAmountCents) return null;
+  return cents.round();
+}
+
 /// [title] for matching events across months: folded ([foldText]: lower case, accents), amounts ([amountFromText]'s
 /// patterns) and every digit removed, any other non-letter turned into a space, single spaces, trimmed. `Zubar ČĆŽ
 /// 80 €` → `zubar ccz`; `Dentist 2026` → `dentist`.
@@ -117,11 +145,6 @@ class UpcomingItem {
   });
 }
 
-bool _isDate(String s) {
-  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s)) return false;
-  return isoDate(parseIso(s)) == s;
-}
-
 /// Most occurrences of one bill listed or exported.
 const _maxOccurrences = 1000;
 
@@ -129,7 +152,7 @@ const _maxOccurrences = 1000;
 /// gives `nextDue` only). Occurrences before [from] are skipped, so an overdue bill shows from its next date on. No
 /// check of `status`: the callers take confirmed bills only.
 List<String> billOccurrences(RecurringBill b, String from, String to) {
-  if (!_isDate(b.nextDue) || !_isDate(from) || !_isDate(to) || from.compareTo(to) > 0) return const [];
+  if (!isIsoDate(b.nextDue) || !isIsoDate(from) || !isIsoDate(to) || from.compareTo(to) > 0) return const [];
   final step = b.intervalDays;
   var d = b.nextDue;
   if (step < 1) return d.compareTo(from) >= 0 && d.compareTo(to) <= 0 ? [d] : const [];
@@ -160,7 +183,7 @@ bool _shownByBill(PlannedCost p, List<RecurringBill> bills, bool Function(String
 /// [billsDb] (`WalletRepo.bills()`): the `warrantyUntil` / `returnBy` dates of confirmed, live bills in range
 /// (title = payee, else description; amount null; a bill's planned row is already in [planned]). A bill's planned row a
 /// confirmed recurring bill already plans ([plannedCoverage]) is left out when that bill's covering occurrence is in
-/// [from, to] too (it stands for it) or is the cycle just paid or skipped; otherwise it is listed (B6).
+/// [from, to] too (it stands for it) or is the cycle just paid or skipped; otherwise it is listed (BILLS_API.md §3).
 /// Sorted by date, then title, then key.
 List<UpcomingItem> upcoming({
   required List<PlannedCost> planned,
@@ -170,7 +193,7 @@ List<UpcomingItem> upcoming({
   required String to,
   List<Bill> billsDb = const [],
 }) {
-  if (!_isDate(from) || !_isDate(to) || from.compareTo(to) > 0) return const [];
+  if (!isIsoDate(from) || !isIsoDate(to) || from.compareTo(to) > 0) return const [];
   bool inRange(String d) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
   final out = <UpcomingItem>[];
   for (final p in planned) {
@@ -188,10 +211,10 @@ List<UpcomingItem> upcoming({
   for (final b in billsDb) {
     if (b.deleted || !b.confirmed) continue;
     final title = b.payee ?? b.description ?? '';
-    if (b.warrantyUntil case final d? when _isDate(d) && inRange(d)) {
+    if (b.warrantyUntil case final d? when isIsoDate(d) && inRange(d)) {
       out.add(UpcomingItem(kind: UpcomingKind.warranty, key: 'w:${b.id}', date: d, title: title, category: b.category, billDb: b));
     }
-    if (b.returnBy case final d? when _isDate(d) && inRange(d)) {
+    if (b.returnBy case final d? when isIsoDate(d) && inRange(d)) {
       out.add(UpcomingItem(kind: UpcomingKind.returnBy, key: 'r:${b.id}', date: d, title: title, category: b.category, billDb: b));
     }
   }
@@ -200,7 +223,7 @@ List<UpcomingItem> upcoming({
   // Earlier confirmed amounts by normalized title, latest date last.
   final earlier = <String, List<PlannedCost>>{};
   for (final p in planned) {
-    if (p.deleted || p.amount == null || p.status == PlannedStatus.skipped || !_isDate(p.date)) continue;
+    if (p.deleted || p.amount == null || p.status == PlannedStatus.skipped || !isIsoDate(p.date)) continue;
     final t = normalizeTitle(p.title);
     if (t.isNotEmpty) (earlier[t] ??= []).add(p);
   }
@@ -248,15 +271,15 @@ List<UpcomingItem> upcoming({
 }
 
 /// Days either side of a planned cost's date in which a transaction may have paid it.
-const paidWindowDays = 3;
+const _paidWindowDays = 3;
 
 /// "Paid by this?" candidates for [p]: live expenses (amount < 0; no income, deleted or replaced rows) of exactly
-/// [p]'s category dated within its date ± [paidWindowDays], that are not already the `paidTx` of another planned cost
+/// [p]'s category dated within its date ± [_paidWindowDays], that are not already the `paidTx` of another planned cost
 /// in [all]. Closest date first, then the amount closest to [p]'s amount, then date, then id. Never matched by amount
 /// alone (exact money rule): a planned cost without a category has no candidates. Only the owner's pick links one.
 List<CategorizedTx> paidCandidates(PlannedCost p, List<CategorizedTx> txs, List<PlannedCost> all) {
   final cat = p.category;
-  if (cat == null || cat.isEmpty || !_isDate(p.date)) return const [];
+  if (cat == null || cat.isEmpty || !isIsoDate(p.date)) return const [];
   final taken = {
     for (final q in all)
       if (q.id != p.id && q.paidTx != null) q.paidTx
@@ -267,8 +290,8 @@ List<CategorizedTx> paidCandidates(PlannedCost p, List<CategorizedTx> txs, List<
           t.amount < 0 &&
           t.category == cat &&
           !taken.contains(t.tx.id) &&
-          _isDate(t.date) &&
-          daysBetween(p.date, t.date).abs() <= paidWindowDays)
+          isIsoDate(t.date) &&
+          daysBetween(p.date, t.date).abs() <= _paidWindowDays)
         t
   ];
   int dist(CategorizedTx t) => daysBetween(p.date, t.date).abs();
@@ -292,7 +315,7 @@ class HeadsUp {
 /// The planned costs with an amount and the confirmed bills of [items] whose amount is at least [thresholdCents],
 /// dated from [today] to [today] + [days] (inclusive). Suggestions never. In the order of [items] (by date).
 List<HeadsUp> headsUps(List<UpcomingItem> items, String today, {required int thresholdCents, required int days}) {
-  if (!_isDate(today) || days < 0) return const [];
+  if (!isIsoDate(today) || days < 0) return const [];
   final last = addDays(today, days);
   return [
     for (final i in items)

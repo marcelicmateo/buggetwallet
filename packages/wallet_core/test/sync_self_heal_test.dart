@@ -18,7 +18,7 @@ void main() {
     await a.sync(); // seq 1 (first connect: whole state)
     await b.sync();
     await a.sync();
-    a.repo.addManual(date: '2026-01-09', amount: 450, category: 'Eating out');
+    a.repo.addTransaction(date: '2026-01-09', amount: 450, category: 'Eating out');
     await a.sync(); // seq 2
     sim.transport.corrupt(a.id, 2);
     sim.tick();
@@ -79,7 +79,7 @@ void main() {
     await b.sync();
     final before = (await snapshot())?.id;
     for (var i = 0; i < 8; i++) {
-      a.repo.addManual(date: '2026-01-10', amount: 100 + i, category: 'Eating out');
+      a.repo.addTransaction(date: '2026-01-10', amount: 100 + i, category: 'Eating out');
       sim.tick(const Duration(hours: 5));
       await a.sync();
       await b.sync();
@@ -92,7 +92,7 @@ void main() {
     final c = sim.device();
     await c.sync();
     await a.sync();
-    c.repo.addManual(date: '2026-01-10', amount: 77, category: 'Eating out');
+    c.repo.addTransaction(date: '2026-01-10', amount: 77, category: 'Eating out');
     await c.sync();
     final seq = (await sim.transport.state()).devices[c.id]!.last;
     sim.transport.corrupt(c.id, seq); // A stops at C's file: A is not caught up
@@ -111,7 +111,7 @@ void main() {
     await a.sync();
     await b.sync();
     await c.sync();
-    a.repo.addManual(date: '2026-01-09', amount: 450, category: 'Eating out');
+    a.repo.addTransaction(date: '2026-01-09', amount: 450, category: 'Eating out');
     await a.sync(); // seq 2: A's last file; A is never heard from again
     await c.sync(); // C applies it
     sim.transport.corrupt(a.id, 2);
@@ -140,7 +140,7 @@ void main() {
     final healers = [a, c, d];
     a.repo.importBatch(batch([('2026-01-08', -1200, 'POS TESTSHOP 1')]));
     await sim.syncAll([a, b, c, d]);
-    a.repo.addManual(date: '2026-01-09', amount: 450, category: 'Eating out');
+    a.repo.addTransaction(date: '2026-01-09', amount: 450, category: 'Eating out');
     await a.sync();
     await c.sync();
     await d.sync();

@@ -72,11 +72,11 @@ void main() {
     final gid = a.repo.saveGoal(name: 'Synthetic trip', target: 90000, saved: 1000, monthly: 5000);
     a.repo.addWish('Synthetic headphones', 12999);
     a.repo.setMerchantRule('lidl', 'Groceries');
-    final mid = a.repo.addManual(date: '2026-01-21', amount: 1250, category: 'Eating out', note: 'lunch');
+    final mid = a.repo.addTransaction(date: '2026-01-21', amount: 1250, category: 'Eating out', note: 'lunch');
     await syncAll([a, b]);
     b.repo.addGoalContribution(gid, 2500, date: '2026-01-22');
     a.repo.addGoalContribution(gid, 700, date: '2026-01-23');
-    b.repo.addManual(date: '2026-01-24', amount: 999, category: 'Shopping', note: 'gift');
+    b.repo.addTransaction(date: '2026-01-24', amount: 999, category: 'Shopping', note: 'gift');
     await syncAll([a, b]);
     a.repo.deleteTransaction(mid);
     await syncAll([a, b]);
@@ -142,7 +142,7 @@ void main() {
       final (a, _) = await richWallet();
       final file = await backupBytes(a.repo, key);
       final other = WalletRepo.inMemory();
-      other.addManual(date: '2026-01-02', amount: 500, category: 'Groceries', note: 'mine');
+      other.addTransaction(date: '2026-01-02', amount: 500, category: 'Groceries', note: 'mine');
       final before = dump(other);
       final pending = other.pendingOps().length;
       await expectLater(restoreBackupBytes(other, file, key), throwsA(isA<StateError>()));

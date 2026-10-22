@@ -373,10 +373,10 @@ void main() {
       expect(cats()[-20000], 'To people');
       r.setCategory(outflow.id, null);
       // A hand-added 200.00 expense next to the pair: the paired row is a transfer, so the entry keeps counting.
-      r.addManual(date: '2026-03-02', amount: 20000, category: 'Shopping');
+      r.addTransaction(date: '2026-03-02', amount: 20000, category: 'Shopping');
       final other = WalletRepo.inMemory();
       addTearDown(other.close);
-      other.addManual(date: '2026-03-02', amount: 20000, category: 'Shopping');
+      other.addTransaction(date: '2026-03-02', amount: 20000, category: 'Shopping');
       other.importBatch(pbz);
       Tx entry() => other.transactions(includeHidden: true).where((t) => t.manual).single;
       expect(entry().matchedTo, isNotNull, reason: 'unpaired, the row is a payment');
@@ -387,7 +387,7 @@ void main() {
     });
 
     test('a pair an earlier build made on amount alone dissolves when the plan runs; the cash entry it displaced matches again', () {
-      r.addManual(date: '2026-03-02', amount: 20000, category: 'Shopping');
+      r.addTransaction(date: '2026-03-02', amount: 20000, category: 'Shopping');
       r.importBatch(loosePbz);
       r.importBatch(looseRev);
       Tx entry() => r.transactions(includeHidden: true).where((t) => t.manual).single;

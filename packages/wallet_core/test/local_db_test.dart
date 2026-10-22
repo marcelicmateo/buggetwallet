@@ -61,7 +61,7 @@ void main() {
     final repo = WalletRepo.open(path, now: () => now);
     repo.importBatch(january);
     repo.saveGoal(name: 'Bike', target: 50000, saved: 1000, monthly: 2000);
-    repo.addManual(date: '2026-01-19', amount: 1250, category: 'Groceries', note: 'market');
+    repo.addTransaction(date: '2026-01-19', amount: 1250, category: 'Groceries', note: 'market');
     repo.updateSettings({'reviewDay': 3});
     return repo;
   }
@@ -125,7 +125,7 @@ void main() {
       a.repo.saveGoal(name: 'Trip', target: 90000, saved: 0, monthly: 5000);
       await a.run();
       await b.run();
-      b.repo.addManual(date: '2026-01-19', amount: 480, category: 'Coffee', note: 'pending');
+      b.repo.addTransaction(date: '2026-01-19', amount: 480, category: 'Coffee', note: 'pending');
       expect(b.repo.syncCursors(), isNotEmpty);
       final cursors = b.repo.syncCursors();
       b.repo.close();
@@ -151,7 +151,7 @@ void main() {
     test('a plaintext wallet left with an un-checkpointed WAL (app killed) loses nothing', () {
       final repo = plainWallet();
       repo.db.execute('PRAGMA wal_autocheckpoint=0');
-      repo.addManual(date: '2026-01-20', amount: 999, category: 'Coffee', note: 'in the wal');
+      repo.addTransaction(date: '2026-01-20', amount: 999, category: 'Coffee', note: 'in the wal');
       final crashed = '${dir.path}/crashed.db';
       File(path).copySync(crashed);
       File('$path-wal').copySync('$crashed-wal');
@@ -168,7 +168,7 @@ void main() {
     test('an encrypted wallet with an un-checkpointed WAL survives a wrong-key and a no-key open', () async {
       final repo = WalletRepo.open(path, dbKey: dbKey, now: () => now)..importBatch(january);
       repo.db.execute('PRAGMA wal_autocheckpoint=0');
-      repo.addManual(date: '2026-01-20', amount: 999, category: 'Coffee', note: 'in the wal');
+      repo.addTransaction(date: '2026-01-20', amount: 999, category: 'Coffee', note: 'in the wal');
       final crashed = '${dir.path}/crashed.db';
       File(path).copySync(crashed);
       File('$path-wal').copySync('$crashed-wal');

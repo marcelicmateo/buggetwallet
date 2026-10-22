@@ -91,7 +91,7 @@ void randomAction(Random rnd, Dev d) {
     case 0:
       d.repo.importBatch(batch([(dates[rnd.nextInt(4)], amounts[rnd.nextInt(4)], 'POS TESTSHOP ${rnd.nextInt(6)}')]));
     case 1:
-      d.repo.addManual(date: dates[rnd.nextInt(4)], amount: amounts[rnd.nextInt(4)], category: 'Eating out');
+      d.repo.addTransaction(date: dates[rnd.nextInt(4)], amount: amounts[rnd.nextInt(4)], category: 'Eating out');
     case 2:
       final txs = d.repo.transactions();
       if (txs.isNotEmpty) d.repo.setCategory(txs[rnd.nextInt(txs.length)].id, ['Groceries', 'Transport', 'Eating out'][rnd.nextInt(3)]);

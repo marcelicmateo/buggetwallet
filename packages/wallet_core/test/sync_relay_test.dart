@@ -543,7 +543,7 @@ void main() {
       final got = await eb.run(b);
       expect((got.filesRead, got.caughtUp), (1, true));
       expect(b.transactions().length, january.transactions.length);
-      b.addManual(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
+      b.addTransaction(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
       await eb.run(b);
       final back = await ea.run(a);
       expect((back.filesRead, back.caughtUp), (1, true));

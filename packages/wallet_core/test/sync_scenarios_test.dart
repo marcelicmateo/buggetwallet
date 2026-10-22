@@ -174,7 +174,7 @@ void main() {
       final late = device('late');
       await syncAll([late]);
       expect(dump(late.repo), dump(a.repo));
-      late.repo.addManual(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
+      late.repo.addTransaction(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
       await syncAll([late, a, b]);
       expect(dump(a.repo), dump(late.repo));
       expect(dump(b.repo), dump(late.repo));
@@ -188,7 +188,7 @@ void main() {
       final run = a.run().whenComplete(() => running = false);
       var written = 0;
       while (running) {
-        a.repo.addManual(date: '2026-01-2${written % 9}', amount: 100 + written, category: 'Groceries');
+        a.repo.addTransaction(date: '2026-01-2${written % 9}', amount: 100 + written, category: 'Groceries');
         written++;
         await Future<void>.delayed(Duration.zero);
       }
@@ -562,7 +562,7 @@ void main() {
           'a hand-added expense added offline, then the bank row imported on another device: matched once, in either '
           'sync order (${phoneFirst ? 'phone' : 'laptop'} syncs first)', () async {
         final phone = device('phone'), laptop = device('laptop');
-        phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
+        phone.repo.addTransaction(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
         now += 1000; // later, the laptop imports the export before the phone's entry arrived
         laptop.repo.importBatch(january);
         await syncAll(phoneFirst ? [phone, laptop] : [laptop, phone]);
@@ -583,9 +583,9 @@ void main() {
       laptop.repo.importBatch(january); // Saturday's synthetic card payment of 23.40
       await syncAll([laptop, phone]);
       now += 1000;
-      phone.repo.addManual(date: '2026-01-19', amount: 2340, category: 'Eating out', note: 'synthetic cash'); // Monday, cash
+      phone.repo.addTransaction(date: '2026-01-19', amount: 2340, category: 'Eating out', note: 'synthetic cash'); // Monday, cash
       now += 1000;
-      laptop.repo.addManual(date: '2026-01-18', amount: 2340, category: 'Shopping', note: 'synthetic cash'); // also cash
+      laptop.repo.addTransaction(date: '2026-01-18', amount: 2340, category: 'Shopping', note: 'synthetic cash'); // also cash
       await syncAll([phone, laptop]);
       await syncAll([laptop, phone]);
       for (final d in [phone, laptop]) {
@@ -598,8 +598,8 @@ void main() {
 
     test('two devices each add the same expense by hand, one bank row: one pair matched, same on both devices', () async {
       final phone = device('phone'), laptop = device('laptop');
-      phone.repo.addManual(date: '2026-01-16', amount: 2340, category: 'Eating out', note: 'synthetic');
-      laptop.repo.addManual(date: '2026-01-18', amount: 2340, category: 'Shopping', note: 'synthetic');
+      phone.repo.addTransaction(date: '2026-01-16', amount: 2340, category: 'Eating out', note: 'synthetic');
+      laptop.repo.addTransaction(date: '2026-01-18', amount: 2340, category: 'Shopping', note: 'synthetic');
       now += 1000; // the bank row comes after both entries (rule: only a later bank row replaces an entry)
       laptop.repo.importBatch(january);
       for (var i = 0; i < 3; i++) {
@@ -624,7 +624,7 @@ void main() {
         final phone = device('phone'), laptop = device('laptop');
         laptop.repo.importBatch(january); // 09:00: holds the synthetic 23.40 card payment of 2026-01-17
         now += 10 * 3600000; // 19:00, the phone has not synced since
-        final m = phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
+        final m = phone.repo.addTransaction(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
         await syncAll(phoneFirst ? [phone, laptop] : [laptop, phone]);
         for (final d in [phone, laptop]) {
           final live = d.repo.transactions().where((t) => t.amount == -2340).toList();
@@ -648,7 +648,7 @@ void main() {
       // The laptop imports the next statement (other rows) before the phone's entry arrives.
       laptop.repo.importBatch(ImportBatch(source: 'pbz', transactions: [bankRow('2026-01-18', -5000, 'POS plaćanje', 'POS EXAMPLE SHOP')]));
       now += 3600000;
-      final cash = phone.repo.addManual(date: '2026-01-19', amount: 240, category: 'Eating out', note: 'synthetic cash coffee');
+      final cash = phone.repo.addTransaction(date: '2026-01-19', amount: 240, category: 'Eating out', note: 'synthetic cash coffee');
       await syncAll([phone, laptop]);
       await syncAll([laptop, phone]);
       for (final d in [phone, laptop]) {
@@ -669,7 +669,7 @@ void main() {
         'the rows file cannot be fetched: the phone applies neither it nor the later match file; the entry counts once, '
         'then the row once', () async {
       final phone = device('phone'), laptop = device('laptop');
-      final m = phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
+      final m = phone.repo.addTransaction(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
       await phone.run();
       now += 1000;
       laptop.repo.importBatch(january);
@@ -700,7 +700,7 @@ void main() {
           'its entry, does not match on its own, and repeated syncs write nothing new', () async {
         final phone = device('phone'), laptop = device('laptop');
         List<String> files() => net.files.keys.where((k) => k.startsWith('d/')).toList()..sort();
-        phone.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
+        phone.repo.addTransaction(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
         now += 1000;
         laptop.repo.importBatch(january);
         laptop.repo.setCategory(laptop.repo.transactions().singleWhere((t) => t.amount == -2340).id, 'Groceries');

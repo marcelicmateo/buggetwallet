@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'dates.dart';
 import 'hlc.dart';
 import 'logs.dart';
 import 'repo.dart';
@@ -11,8 +12,6 @@ final _log = Logger('bw.backup');
 
 /// The format written by [backupBytes]; a file with a higher one comes from a newer build.
 const backupVersion = 1;
-
-final _isoDate = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 
 /// Why a restore refused a file. Key and sealing errors are [VaultException]s instead.
 enum BackupFailure {
@@ -37,7 +36,7 @@ class BackupException implements Exception {
 
 /// The name of the backup written on [today] (`YYYY-MM-DD`, else [ArgumentError]): `bw-backup-<today>.bwb`.
 String backupFileName(String today) {
-  if (!_isoDate.hasMatch(today)) throw ArgumentError('The date is not YYYY-MM-DD.');
+  requireIsoDate(today);
   return 'bw-backup-$today.bwb';
 }
 

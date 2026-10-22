@@ -190,7 +190,7 @@ void main() {
       final r = WalletRepo.inMemory();
       addTearDown(r.close);
       r.importBatch(pos([('2026-01-17', -240, 'POS EXAMPLE CAFE')])); // Saturday, already in the wallet
-      final cash = r.addManual(date: '2026-01-19', amount: 240, category: 'Eating out', note: 'synthetic cash coffee');
+      final cash = r.addTransaction(date: '2026-01-19', amount: 240, category: 'Eating out', note: 'synthetic cash coffee');
       expect(r.transaction(cash)!.matchedTo, isNull);
       expect(r.transactions().where((t) => t.amount == -240).length, 2, reason: 'two coffees: both count');
       // An overlapping export brings Saturday's row again: still known, still not this entry's row.
@@ -234,7 +234,7 @@ void main() {
       expect(r.transaction('m-old-1')!.matchedTo, isNull);
       expect(r.db.select("SELECT seen_bank FROM tx WHERE id = 'm-old-1'").single['seen_bank'], isNull, reason: 'column added');
       r.importBatch(pos([('2026-02-03', -700, 'POS EXAMPLE BAKERY')])); // the first import after the upgrade
-      r.addManual(date: '2026-02-04', amount: 310, category: 'Eating out');
+      r.addTransaction(date: '2026-02-04', amount: 310, category: 'Eating out');
       expect(matchOps(r), isEmpty, reason: 'no match ops for old history');
       await SyncEngine(relay, VaultKey.generate()).run(r); // and the first sync
       expect(matchOps(r), isEmpty);
@@ -263,16 +263,16 @@ void main() {
       expect(r.transaction('m-old')!.matchedTo, 'b-after');
     });
 
-    test('addManual records the bank rows this device holds, per device, in the same op as the entry', () {
+    test('addTransaction records the bank rows this device holds, per device, in the same op as the entry', () {
       final r = WalletRepo.inMemory(now: () => 1767225600000 + 5000);
       addTearDown(r.close);
-      final none = r.addManual(date: '2026-01-10', amount: 100, category: 'Eating out');
+      final none = r.addTransaction(date: '2026-01-10', amount: 100, category: 'Eating out');
       r.applyRemote([
         Op('tx', 'b-peer', {'source': 'pbz', 'date': '2026-01-11', 'amount': -500, 'description': 'POS EXAMPLE', 'manual': 0},
             const Hlc(1767225600000, 0, 'peer').toString()),
       ]);
       r.importBatch(january);
-      final m = r.addManual(date: '2026-01-20', amount: 100, category: 'Eating out');
+      final m = r.addTransaction(date: '2026-01-20', amount: 100, category: 'Eating out');
       final ops = {for (final (_, op) in r.pendingOps()) op.id: op};
       expect(ops[none]!.fields['seen_bank'], '[]');
       final own = r.db.select("SELECT MAX(hlc) AS h FROM clocks WHERE field = 'amount' AND id != ? AND id != ?", [m, none]).single['h'];
@@ -287,7 +287,7 @@ void main() {
     test('the hand-added expense counts again, and a later bank row can replace it', () {
       final r = WalletRepo.inMemory();
       addTearDown(r.close);
-      final m = r.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic');
+      final m = r.addTransaction(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic');
       expect(r.importBatch(january).matched, 1);
       final bank = r.transaction(m)!.matchedTo!;
       r.deleteTransaction(bank);
@@ -355,7 +355,7 @@ void main() {
         }
       }
 
-      final m = phone.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic');
+      final m = phone.addTransaction(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic');
       t += 1000;
       laptop.importBatch(january);
       await sync();
@@ -420,7 +420,7 @@ void main() {
         final day = addDays('2026-01-01', i);
         // One sync file per step: a hand-added expense, then (next file) the bank row that replaces it.
         if (i.isEven) {
-          a.addManual(date: day, amount: 1000 + i, category: 'Eating out');
+          a.addTransaction(date: day, amount: 1000 + i, category: 'Eating out');
         } else {
           a.importBatch(ImportBatch(source: 'pbz', transactions: [n(day, -(1000 + i - 1), 'POS plaćanje', 'POS EXAMPLE $i')]));
         }
@@ -447,9 +447,9 @@ void main() {
       ]));
       // 200 hand-added expenses among that history that no bank row replaced (cash): they stay open for good.
       for (var i = 0; i < 200; i++) {
-        r.addManual(date: addDays('2025-01-01', i * 3), amount: [240, 990, 2340][i % 3], category: 'Eating out');
+        r.addTransaction(date: addDays('2025-01-01', i * 3), amount: [240, 990, 2340][i % 3], category: 'Eating out');
       }
-      final m = r.addManual(date: '2026-12-30', amount: 990, category: 'Eating out');
+      final m = r.addTransaction(date: '2026-12-30', amount: 990, category: 'Eating out');
       late ImportSummary s;
       final runs = await matchRuns(() async {
         s = r.importBatch(ImportBatch(source: 'pbz', transactions: [n('2026-12-31', -990, 'POS plaćanje', 'POS EXAMPLE NEW')]));

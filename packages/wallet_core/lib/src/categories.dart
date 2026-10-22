@@ -5,47 +5,48 @@ import 'models.dart';
 
 final _log = Logger('bw.categories');
 
-enum Kind { income, extra, fixed, flex, transfer }
+/// What a category means to the budget: income, extra (one-offs outside the plan), fixed, flex, or an own transfer.
+enum BudgetKind { income, extra, fixed, flex, transfer }
 
 /// Category name -> kind. Same names as the v1 web app.
-const Map<String, Kind> categories = {
-  'Salary': Kind.income,
-  'Extra income': Kind.extra,
-  'Rent': Kind.fixed,
-  'Loan': Kind.fixed,
-  'Bills & subscriptions': Kind.fixed,
-  'Groceries': Kind.flex,
-  'Food delivery': Kind.flex,
-  'Eating out': Kind.flex,
-  'Car & transport': Kind.flex,
-  'Shopping': Kind.flex,
-  'Home & tools': Kind.flex,
-  'Sport & fitness': Kind.flex,
-  'Health & care': Kind.flex,
-  'Games & apps': Kind.flex,
-  'Cash': Kind.flex,
-  'Bills & one-offs': Kind.flex,
-  'To people': Kind.flex,
-  'Bank fees': Kind.flex,
-  'Internal transfer': Kind.transfer,
-  'Loan received': Kind.transfer,
+const Map<String, BudgetKind> categories = {
+  'Salary': BudgetKind.income,
+  'Extra income': BudgetKind.extra,
+  'Rent': BudgetKind.fixed,
+  'Loan': BudgetKind.fixed,
+  'Bills & subscriptions': BudgetKind.fixed,
+  'Groceries': BudgetKind.flex,
+  'Food delivery': BudgetKind.flex,
+  'Eating out': BudgetKind.flex,
+  'Car & transport': BudgetKind.flex,
+  'Shopping': BudgetKind.flex,
+  'Home & tools': BudgetKind.flex,
+  'Sport & fitness': BudgetKind.flex,
+  'Health & care': BudgetKind.flex,
+  'Games & apps': BudgetKind.flex,
+  'Cash': BudgetKind.flex,
+  'Bills & one-offs': BudgetKind.flex,
+  'To people': BudgetKind.flex,
+  'Bank fees': BudgetKind.flex,
+  'Internal transfer': BudgetKind.transfer,
+  'Loan received': BudgetKind.transfer,
 };
 
 List<String> get flexCategories => [
       for (final e in categories.entries)
-        if (e.value == Kind.flex) e.key
+        if (e.value == BudgetKind.flex) e.key
     ];
 
 /// Categories money goes out through (fixed and flex): the ones a monthly budget can be set for.
 List<String> get spendingCategories => [
       for (final e in categories.entries)
-        if (e.value == Kind.fixed || e.value == Kind.flex) e.key
+        if (e.value == BudgetKind.fixed || e.value == BudgetKind.flex) e.key
     ];
 
 /// Whether [category] is a built-in spending category (see [spendingCategories]).
-bool isSpendingCategory(String category) => switch (categories[category]) { Kind.fixed || Kind.flex => true, _ => false };
+bool isSpendingCategory(String category) => switch (categories[category]) { BudgetKind.fixed || BudgetKind.flex => true, _ => false };
 
-Kind kindOf(String category) => categories[category] ?? Kind.flex;
+BudgetKind kindOf(String category) => categories[category] ?? BudgetKind.flex;
 
 /// Built-in rules: well-known chains and brands only. Personal merchants live in
 /// settings (merchantPatterns) so nobody's habits end up in the code.
@@ -181,7 +182,7 @@ class Categorizer {
     if (o != null && categories.containsKey(o)) return o;
     final auto = autoCategory(t);
     final k = kindOf(auto);
-    if (t.source != 'manual' && (k == Kind.flex || k == Kind.fixed)) {
+    if (t.source != 'manual' && (k == BudgetKind.flex || k == BudgetKind.fixed)) {
       final r = merchantRules[merchantKey(t)];
       if (r != null && categories.containsKey(r)) return r;
     }

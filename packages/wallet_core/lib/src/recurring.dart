@@ -12,10 +12,10 @@ const recurringDays = 3;
 const recurringPercent = 10;
 
 /// Calendar months looked back for candidates (the current one included).
-const recurringMonths = 7;
+const _recurringMonths = 7;
 
 /// Whether [cents] (positive) is within [recurringPercent] of [expected] (positive): `|a − e| × 100 ≤ e × 10`.
-bool withinBand(int cents, int expected) => (cents - expected).abs() * 100 <= expected * recurringPercent;
+bool _withinBand(int cents, int expected) => (cents - expected).abs() * 100 <= expected * recurringPercent;
 
 /// The median of positive cents: the middle value, or for an even count the mean of the two middle ones (rounded down).
 int medianCents(List<int> xs) {
@@ -27,17 +27,17 @@ int medianCents(List<int> xs) {
 /// Bills that come back every month, found in bank rows: candidates for the owner to confirm or dismiss.
 ///
 /// A candidate is a payee (`merchantKey`) whose live bank outflows (not transfers, not hand-added rows) in the last
-/// [recurringMonths] calendar months up to [today] number at least 3, follow one another 30 ± [recurringDays] days
+/// [_recurringMonths] calendar months up to [today] number at least 3, follow one another 30 ± [recurringDays] days
 /// apart (every gap, oldest to newest), and all lie within [recurringPercent] of their median: one extra purchase at
 /// the same merchant breaks the chain, so shops never qualify. `nextDue` = the last payment + 30 days,
 /// `expectedAmount` = the median, `category` and `label` from the latest row. Ordered by label, then id. A pure
 /// function: every device derives the same candidates (and ids, `RecurringBill.idFor`) from the same rows. Nothing
 /// here changes a row's category: a bill is information, not a reclassification.
 List<RecurringBill> detectRecurring(List<CategorizedTx> txs, {required String today}) {
-  final from = '${monthsEnding(monthOf(today), recurringMonths).first}-01';
+  final from = '${monthsEnding(monthOf(today), _recurringMonths).first}-01';
   final byPayee = <String, List<CategorizedTx>>{};
   for (final t in txs) {
-    if (!t.tx.live || t.tx.manual || t.amount >= 0 || t.kind == Kind.transfer) continue;
+    if (!t.tx.live || t.tx.manual || t.amount >= 0 || t.kind == BudgetKind.transfer) continue;
     if (t.date.compareTo(from) < 0 || t.date.compareTo(today) > 0) continue;
     (byPayee[merchantKey(t.tx)] ??= []).add(t);
   }
@@ -57,7 +57,7 @@ List<RecurringBill> detectRecurring(List<CategorizedTx> txs, {required String to
     if (!monthly) continue;
     final amounts = [for (final r in rows) -r.amount];
     final median = medianCents(amounts);
-    if (median <= 0 || amounts.any((a) => !withinBand(a, median))) continue;
+    if (median <= 0 || amounts.any((a) => !_withinBand(a, median))) continue;
     final last = rows.last;
     out.add(RecurringBill(
       id: RecurringBill.idFor(e.key),
@@ -102,7 +102,7 @@ RecurringPayments planRecurringPayments(List<RecurringBill> bills, List<Tx> rows
     Tx? best;
     var bestDays = 0;
     for (final t in byPayee[b.payee] ?? const <Tx>[]) {
-      if (t.id == b.lastPaidTx || !withinBand(-t.amount, b.expectedAmount)) continue;
+      if (t.id == b.lastPaidTx || !_withinBand(-t.amount, b.expectedAmount)) continue;
       final days = daysBetween(b.nextDue, t.date).abs();
       if (days > recurringDays) continue;
       if (best == null ||

@@ -1,4 +1,4 @@
-/// CSV exports (M5). Pure: the caller saves the text. UTF-8 without BOM, LF line ends, RFC 4180 quoting; amounts as
+/// CSV exports. Pure: the caller saves the text. UTF-8 without BOM, LF line ends, RFC 4180 quoting; amounts as
 /// exact decimals from the cents (never through a double).
 library;
 

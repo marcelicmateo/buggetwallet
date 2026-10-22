@@ -7,6 +7,7 @@ import '../log.dart';
 import 'codes.dart';
 import 'common.dart';
 import 'model.dart';
+import 'read_result.dart';
 
 /// Characters of text read; the rest is ignored.
 const maxBillTextChars = 2000000;
@@ -20,18 +21,25 @@ const _maxLine = 2000;
 /// Money is exact and conservative: a total needs a label, a line with two different amounts after the label is
 /// ambiguous, and two labelled totals that differ give `total` null. Every field found in the text adds 1 to
 /// `unsure`. Nothing found → `null`. Never throws.
-NormalizedBill? billFromText(String text, {required BillSource source}) {
+NormalizedBill? billFromText(String text, {required BillSource source}) => billFromTextResult(text, source: source).value;
+
+/// [billFromText] with the reason when there is no bill: [ReadFailure.nothingFound] (no labelled field) or
+/// [ReadFailure.error].
+ReadResult<NormalizedBill> billFromTextResult(String text, {required BillSource source}) {
   final fields = <String, Object?>{'source': source.name, 'chars': text.length};
   NormalizedBill? bill;
+  var failed = false;
   try {
     bill = _fromText(text, source, fields);
   } catch (_) {
     fields['reason'] = 'error';
+    failed = true;
   }
   fields['ok'] = bill != null;
   if (bill != null) fields['unsure'] = bill.unsure;
   logImporter(billsLog, Level.FINE, 'bills.text', fields);
-  return bill;
+  if (bill != null) return ReadResult.ok(bill);
+  return ReadResult.failed(failed ? ReadFailure.error : ReadFailure.nothingFound);
 }
 
 final _spaces = RegExp('[    \t]');

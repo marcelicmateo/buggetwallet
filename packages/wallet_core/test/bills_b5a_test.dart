@@ -119,7 +119,7 @@ void main() {
 
   group('1. suggestBillCategory', () {
     CategorizedTx ct(String id, String date, int amount, String desc, String category,
-            {Kind kind = Kind.flex, bool manual = false, String? transferTo}) =>
+            {BudgetKind kind = BudgetKind.flex, bool manual = false, String? transferTo}) =>
         CategorizedTx(
             Tx(
                 id: id,
@@ -161,8 +161,8 @@ void main() {
         ct('t1', '2026-01-10', -4000, 'SYNTH ENERGY ZAGREB', 'Home & tools'),
         ct('t2', '2026-02-10', -4100, 'NALOG SYNTH ENERGY', 'Bills & one-offs'),
         ct('t3', '2026-02-20', -4599, 'Synth energy cash', 'Shopping', manual: true),
-        ct('t4', '2026-02-21', -4599, 'SYNTH ENERGY', 'Internal transfer', kind: Kind.transfer, transferTo: 'x'),
-        ct('t5', '2026-02-22', 4599, 'SYNTH ENERGY REFUND', 'Extra income', kind: Kind.extra),
+        ct('t4', '2026-02-21', -4599, 'SYNTH ENERGY', 'Internal transfer', kind: BudgetKind.transfer, transferTo: 'x'),
+        ct('t5', '2026-02-22', 4599, 'SYNTH ENERGY REFUND', 'Extra income', kind: BudgetKind.extra),
       ];
       expect(suggestBillCategory(bill, recurring: const [], txs: txs), 'Bills & one-offs');
     });
@@ -313,12 +313,12 @@ void main() {
     test('B5a bug: own transfers are never "Paid by this?" candidates', () {
       const b = Bill(id: 'b', payee: 'Synth Energy', date: '2026-02-27', total: 4599);
       const txs = [
-        CategorizedTx(
-            Tx(id: 'pay', source: 'pbz', date: '2026-03-01', amount: -4599, description: 'SYNTH ENERGY'), 'Bills & one-offs', Kind.flex),
+        CategorizedTx(Tx(id: 'pay', source: 'pbz', date: '2026-03-01', amount: -4599, description: 'SYNTH ENERGY'), 'Bills & one-offs',
+            BudgetKind.flex),
         CategorizedTx(Tx(id: 'tr', source: 'pbz', date: '2026-03-01', amount: -4599, description: 'SYNTH ENERGY', transferTo: 'r'),
-            'Internal transfer', Kind.transfer),
+            'Internal transfer', BudgetKind.transfer),
         CategorizedTx(Tx(id: 'cat', source: 'pbz', date: '2026-03-01', amount: -4599, description: 'TOP-UP', category: 'Internal transfer'),
-            'Internal transfer', Kind.transfer),
+            'Internal transfer', BudgetKind.transfer),
       ];
       expect(billCandidates(b, txs, const []).map((t) => t.tx.id), ['pay']);
     });
@@ -359,7 +359,7 @@ void main() {
 
     test('nothing queued: never true, whatever the relay', () async {
       relay.blobRoutes = false;
-      repo.addManual(date: today, amount: 100, category: 'Groceries');
+      repo.addTransaction(date: today, amount: 100, category: 'Groceries');
       expect((await run()).blobsUnsupported, isFalse);
       now += 1000;
       expect((await run()).blobsUnsupported, isFalse);
@@ -477,7 +477,7 @@ void main() {
 
     test('5. a file added but not yet attached to a bill is never dropped', () async {
       final a = device('a');
-      a.repo.addManual(date: today, amount: 100, category: 'Groceries'); // the relay keeps files of a known wallet only
+      a.repo.addTransaction(date: today, amount: 100, category: 'Groceries'); // the relay keeps files of a known wallet only
       final ref = await BlobStore(a.repo, key).add(bytes(2000, 5), 'jpg');
       expect(a.repo.dropOrphanBlobs(), 0);
       expect(a.repo.queuedBlobs(), [ref.hash]);

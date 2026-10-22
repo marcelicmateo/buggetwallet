@@ -43,7 +43,7 @@ void main() {
 
     test('hand-added expense is matched by the bank row and keeps its category', () {
       final r = WalletRepo.inMemory();
-      r.addManual(date: '2026-01-16', amount: 2340, category: 'Eating out', note: 'lunch');
+      r.addTransaction(date: '2026-01-16', amount: 2340, category: 'Eating out', note: 'lunch');
       final s = r.importBatch(january);
       expect(s.matched, 1);
       final live = r.transactions();

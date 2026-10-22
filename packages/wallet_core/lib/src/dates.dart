@@ -3,6 +3,17 @@ String _p(int n) => n.toString().padLeft(2, '0');
 /// `YYYY-MM-DD` for a local date.
 String isoDate(DateTime d) => '${d.year}-${_p(d.month)}-${_p(d.day)}';
 
+/// Whether [s] is a real calendar date written `YYYY-MM-DD` (`2026-02-30` is not). The one check every date a
+/// caller passes goes through ([requireIsoDate] for the writes that throw).
+bool isIsoDate(String s) => _isoShape.hasMatch(s) && isoDate(parseIso(s)) == s;
+
+final _isoShape = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+
+/// Throws [ArgumentError] unless [isIsoDate].
+void requireIsoDate(String s) {
+  if (!isIsoDate(s)) throw ArgumentError('The date is not YYYY-MM-DD.');
+}
+
 DateTime parseIso(String iso) {
   final p = iso.split('-').map(int.parse).toList();
   return DateTime.utc(p[0], p[1], p[2]);

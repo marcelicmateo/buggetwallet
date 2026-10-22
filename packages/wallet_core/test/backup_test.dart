@@ -120,7 +120,7 @@ void main() {
       a.repo.setMerchantRule('lidl', 'Groceries');
       final gid = a.repo.saveGoal(name: 'Synthetic', target: 90000, saved: 1000, monthly: 5000);
       a.repo.addWish('Synthetic thing', 12999);
-      final mid = a.repo.addManual(date: '2026-01-21', amount: 1250, category: 'Eating out', note: 'lunch');
+      final mid = a.repo.addTransaction(date: '2026-01-21', amount: 1250, category: 'Eating out', note: 'lunch');
       await syncAll([a, b]);
       now += 60000;
       b.repo.addGoalContribution(gid, 2500, date: '2026-01-22');

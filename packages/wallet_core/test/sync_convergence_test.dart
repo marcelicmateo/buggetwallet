@@ -63,7 +63,7 @@ String _edit(Device d, Random r, List<NormalizedTransaction> pool) {
       // Same amount as a pool row now and then, so matching to bank rows happens.
       final p = pool[r.nextInt(pool.length)];
       final amount = r.nextBool() && p.amountMinor < 0 ? -p.amountMinor : 100 + r.nextInt(5000);
-      repo.addManual(date: addDays(p.date, r.nextInt(7) - 3), amount: amount, category: _cats[r.nextInt(_cats.length)], note: 'n');
+      repo.addTransaction(date: addDays(p.date, r.nextInt(7) - 3), amount: amount, category: _cats[r.nextInt(_cats.length)], note: 'n');
       return 'manual';
     case 4 || 5:
       repo.setCategory(_randomTx(repo, r), r.nextInt(5) == 0 ? null : _cats[r.nextInt(_cats.length)]);

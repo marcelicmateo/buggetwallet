@@ -102,7 +102,7 @@ void main() {
 
   test('a delete while not caught up reopens the cash entry it replaced at once; no new match until caught up', () async {
     final p = device('P'), l = device('L');
-    final cash = l.repo.addManual(date: '2026-10-11', amount: 3000, category: 'Eating out', note: 'synthetic cash');
+    final cash = l.repo.addTransaction(date: '2026-10-11', amount: 3000, category: 'Eating out', note: 'synthetic cash');
     now += 1000;
     final first =
         ImportBatch(source: 'pbz', transactions: [n('2026-10-12', -3000, 'POS plaćanje', 'PBZ POS SYNTHETIC CAFE', kind: TxKind.card)]);
