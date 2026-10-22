@@ -148,6 +148,16 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - 2026-10-19: UI directions kept: D1 Baseline, D3 Ledger, D5 Soft Blocks, D6 Receipt, D8 Calendar (+ calendar integration and future spending), D10 Voice First. Parked: D2, D4, D7, D9.
 - 2026-10-19: Projects (research projects and ongoing trackers for a car / home server) proposed; they live under the Goals tab. Bank profiles, bills database and calendar/future spending also proposed (not scheduled).
 
+- 2026-10-22: **Stage F: future spending.** Planned costs (synced, schema 6) reserve money before payday (Today's
+  safe-to-spend drops; Rent/Loan/Bills costs are listed as "covered by your plan", never reserved twice). Upcoming: month
+  grid + list of planned costs, confirmed bills and calendar suggestions (amount from the title/notes or an earlier cost
+  of the same name; Confirm / Change / No cost — never reserved until confirmed), Paid (pick the payment, same category
+  ±3 days) / Skip with Undo / Delete. Today: "Coming up" line + heads-up lines (≥100 €, 3 days, editable). Plan ›
+  Calendars: Android calendars (read-only, asked on tap; plugin `device_calendar_plus` needs READ+WRITE_CALENDAR declared,
+  the app never writes), `.ics` file and link (60 s limit, https never downgraded, warning on http), all device-local.
+  Heads-up notifications at 09:00 (no amount or title). Export "Planned costs (.ics)", search. Calendar events are
+  matched across devices by name + date. Review: 2 high, 3 medium, 5 low, all fixed with tests. Full run: importer 193,
+  core 1036, relay 115, app 853, desktop 11 files, web, perf 0 missed frames, emulator screens.
 ## Open questions for owner
 - Test v2 on phone and computer; feedback (✅ / ❌ / ✏️).
 - Make the repo public? Then all-platform builds are free on every push.
@@ -162,6 +172,9 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   and is caught up (details in `packages/wallet_core/CLAUDE.md` "Known limits"). Devices on a pre-relay build cannot
   sync with relay devices: update all devices together.
 
+- Calendar suggestions: two events with the same name on the same day show as one; renaming an event in the
+  calendar suggests it again; a planned cost reserves until marked Paid/Skipped or its day passes (even if the bank row
+  already landed: the app offers "Paid by this?").
 ## Next
 - Owner installs Android APK + desktop build, creates wallet, imports bank files, sets up the relay (`docs/setup.md` §5; APKs before the signing
   fix used throwaway keys: uninstall that one once; later updates install in place). After testing: Plan › Diagnostics
@@ -184,8 +197,14 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   Back up now / Restore from backup… through the Android file dialogs (storage permissions are gone); Diagnostics "Save logs…".
 - Owner checks after Stage S: create a wallet → "Save your wallet key" sheet; wrong then right last 4; "Later" hides the
   Today row; Copy key → paste in the password manager → after 60 s back in the app the clipboard is empty.
-- Build order (owner 2026-10-22: every feature first, the owner tests last): future spending (§4.3) → bills database (§4.2)
-  → M6 owner live test.
+- Owner checks after Stage F: add a planned cost (Upcoming "+") → Today's safe-to-spend drops by it; Plan › Calendars
+  "Allow calendar access" → switch a calendar on → its events show as suggestions in Upcoming → Confirm one (Today drops),
+  "No cost" another (gone on the other device after sync too); import an `.ics` file and add an `.ics` link, break the link
+  → "Showing what was saved"; an `http://` link shows the warning; Paid → pick the payment → Undo; Skip → Undo; a cancelled
+  phone event is not suggested; Plan › Nudges heads-up on → a notification at 09:00 before a ≥100 € cost (no amount);
+  Plan › Export "Planned costs (.ics)" opens in the phone's calendar.
+- Build order (owner 2026-10-22: every feature first, the owner tests last): future spending (§4.3, done) → bills
+  database (§4.2) → M6 owner live test.
 
 ## In flight (2026-10-20)
 - Queue and procedure: `docs/context/PIPELINE.md`.
