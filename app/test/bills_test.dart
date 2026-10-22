@@ -10,11 +10,13 @@ import 'package:budget_wallet/src/bill_inputs.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/nudges.dart';
+import 'package:budget_wallet/src/pdf_parse.dart';
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
 import 'package:budget_wallet/src/screens/bills_panel.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/scan_bill.dart';
 import 'package:budget_wallet/src/screens/search.dart';
+import 'package:budget_wallet/src/screens/sync_panel.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/upcoming.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
@@ -64,6 +66,18 @@ base class _Picked extends PlatformFile {
   Stream<Uint8List> readAsByteStream() => Stream.value(data);
 }
 
+/// A picked file that says it is [size] bytes long and must never be read.
+base class _Huge extends _Picked {
+  final int size;
+  _Huge(String name, this.size) : super(name, Uint8List(0));
+  @override
+  int? lengthSync() => size;
+  @override
+  Future<int?> length() async => size;
+  @override
+  Future<Uint8List> readAsBytes() async => throw StateError('a file over the limit must not be read');
+}
+
 class _Chooser extends FileChooser {
   List<PlatformFile> picks = [];
   bool fail = false;
@@ -93,8 +107,10 @@ const eInvoice = '''<?xml version="1.0" encoding="UTF-8"?>
 </Invoice>''';
 
 /// Adds a bill read by the readers straight into the repo and returns its id (review status).
-String addBill(WalletController wc, NormalizedBill b, {bool confirm = false}) {
+String addBill(WalletController wc, NormalizedBill b, {bool confirm = false, String? category}) {
   final (id, _) = wc.repo.importBill(b);
+  // A slip still to be paid needs a category before it is confirmed (it would count twice otherwise).
+  if (confirm && b.dueDate != null) wc.repo.updateBill(id, category: category ?? 'Bills & subscriptions');
   wc.reload();
   if (confirm) wc.confirmBill(id);
   return id;
@@ -300,7 +316,7 @@ void main() {
       final id = addBill(wc, const NormalizedBill(source: BillSource.pdf, externalId: 'file:x', payee: 'Synthetic Water'));
       expect(wc.confirmBill(id), isFalse);
       expect(wc.billLists().review.map((b) => b.id), [id]);
-      wc.editBill(id, date: '2026-10-18', total: 4560, dueDate: '2026-10-30');
+      wc.editBill(id, date: '2026-10-18', total: 4560, dueDate: '2026-10-30', category: 'Bills & subscriptions');
       expect(wc.confirmBill(id), isTrue);
       expect(wc.billLists().review, isEmpty);
       expect(wc.billLists().unpaid.map((b) => b.id), [id]);
@@ -772,15 +788,11 @@ void main() {
     });
 
     tw('Take photo keeps the frame, reads its text and opens the bill with unsure marks', (tester) async {
-      final fakes = FakeBillInputs();
+      final fakes = FakeBillInputs(camera: FakeCamera(photo: tinyPng));
       fakes.pictures.textResult = 'Datum racuna 05.10.2026\nUkupno 12,50';
       final wc = bw(inputs: fakes);
       await pumpApp(
-          tester,
-          Scaffold(
-              body: Builder(
-                  builder: (c) =>
-                      TextButton(onPressed: () => scanBillFlow(c, wc, grabber: (k, r) async => tinyPng), child: const Text('go')))));
+          tester, Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => scanBillFlow(c, wc), child: const Text('go')))));
       await tester.tap(find.text('go'));
       await tester.pumpAndSettle();
       await tester.runAsync(() async {
@@ -795,15 +807,41 @@ void main() {
       expect(find.textContaining('Unsure'), findsWidgets);
     });
 
-    tw('a frame that cannot be taken says so', (tester) async {
-      final wc = bw();
-      await pumpApp(tester, ScanBillScreen(wc: wc, grabber: (k, r) async => null));
+    tw('a photo that fails says so; a refused camera permission has its own words', (tester) async {
+      final fakes = FakeBillInputs(camera: FakeCamera()..photoError = 'failed');
+      final wc = bw(inputs: fakes);
+      await pumpApp(tester, ScanBillScreen(wc: wc));
       await tester.runAsync(() async {
         await tester.tap(key('takePhoto'));
         await Future<void>.delayed(const Duration(milliseconds: 50));
       });
       await tester.pump();
       expect(key('scanHint'), findsOneWidget);
+      expect(find.textContaining("Couldn't take the photo"), findsOneWidget);
+      fakes.camera.photoError = 'permission';
+      await tester.runAsync(() async {
+        await tester.tap(key('takePhoto'));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pump();
+      expect(find.textContaining('camera is off'), findsOneWidget);
+      expect(wc.billsAll(), isEmpty);
+    });
+
+    tw('cancelling the system camera comes back to the scanner with nothing said and nothing added', (tester) async {
+      final fakes = FakeBillInputs(); // photo stays null = cancelled
+      final wc = bw(inputs: fakes);
+      await pumpApp(tester, ScanBillScreen(wc: wc));
+      await tester.runAsync(() async {
+        await tester.tap(key('takePhoto'));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pump();
+      expect(fakes.camera.photoCalls, 1);
+      expect(key('scanHint'), findsNothing);
+      expect(key('fakeCamera'), findsOneWidget);
+      expect(tester.widget<FilledButton>(key('takePhoto')).onPressed, isNotNull, reason: 'the button works again');
+      expect(wc.billsAll(), isEmpty);
     });
   });
 
@@ -878,7 +916,7 @@ void main() {
 
     tw('an unpaid bill with a due date is a planned row labelled Bill; paying the bill closes it', (tester) async {
       final wc = bw();
-      final id = addBill(wc, syntheticBill('pl', due: '2026-10-25'), confirm: true);
+      final id = addBill(wc, syntheticBill('pl', due: '2026-10-25'), confirm: true, category: 'Bills & one-offs'); // flex: reserves money
       final row = key('up:p:${WalletRepo.billPlannedId(id)}');
       await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1800));
       expect(row, findsOneWidget);
@@ -902,6 +940,290 @@ void main() {
       await tester.pumpAndSettle();
       expect(key('confirmBill'), findsOneWidget);
       expect(wc.billById(id), isNotNull);
+    });
+  });
+
+  group('review fixes (B5b)', () {
+    // ---- 1. category before Confirm ----
+    test('a slip still to be paid cannot be confirmed without a category; once it has one it can', () {
+      final wc = bw();
+      final (id, _) = wc.repo.importBill(syntheticBill('cat1', due: '2026-10-25'));
+      wc.reload();
+      expect(wc.billNeedsCategory(wc.billById(id)!), isTrue);
+      expect(wc.confirmBill(id), isFalse);
+      expect(wc.billById(id)!.status, BillStatus.review);
+      wc.editBill(id, category: 'Bills & subscriptions');
+      expect(wc.confirmBill(id), isTrue);
+    });
+
+    test('a due date in the past, or none, needs no category', () {
+      final wc = bw();
+      final late = addBill(wc, syntheticBill('cat2', due: '2026-10-10'));
+      final none = addBill(wc, syntheticBill('cat3'));
+      expect(wc.confirmBill(late), isTrue);
+      expect(wc.confirmBill(none), isTrue);
+    });
+
+    tw('Confirm on the sheet asks for the category first, says why, and works after picking one', (tester) async {
+      final wc = bw();
+      final id = addBill(wc, syntheticBill('cat4', due: '2026-10-25'));
+      await openSheetFor(tester, wc, id, size: const Size(400, 1600));
+      expect(find.text("Pick the category so Budget Wallet doesn't count this bill twice."), findsOneWidget);
+      await tester.ensureVisible(key('confirmBill'));
+      await tester.tap(key('confirmBill'));
+      await tester.pumpAndSettle();
+      expect(key('billError'), findsOneWidget);
+      expect(wc.billById(id)!.status, BillStatus.review);
+      await tester.ensureVisible(key('billCategory:'));
+      await tester.tap(key('billCategory:'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bills & subscriptions').last);
+      await tester.pumpAndSettle();
+      expect(key('billError'), findsNothing, reason: 'picking clears the message');
+      await tester.ensureVisible(key('confirmBill'));
+      await tester.tap(key('confirmBill'));
+      await tester.pumpAndSettle();
+      final b = wc.billById(id)!;
+      expect((b.status, b.category), (BillStatus.confirmed, 'Bills & subscriptions'));
+    });
+
+    tw('the category is prefilled from the suggestion and marked as one; Confirm then works as it is', (tester) async {
+      final wc = bw();
+      wc.billCategorySuggester = (b) => 'Bills & subscriptions';
+      final id = addBill(wc, syntheticBill('cat5', due: '2026-10-25'));
+      await openSheetFor(tester, wc, id, size: const Size(400, 1600));
+      expect(find.text('Suggested from your earlier bills. Check it.'), findsOneWidget);
+      expect(find.text("Pick the category so Budget Wallet doesn't count this bill twice."), findsNothing);
+      await tester.ensureVisible(key('confirmBill'));
+      await tester.tap(key('confirmBill'));
+      await tester.pumpAndSettle();
+      expect(wc.billById(id)!.category, 'Bills & subscriptions');
+      expect(wc.billById(id)!.status, BillStatus.confirmed);
+    });
+
+    tw('a bill that already has a category is not marked as suggested; no suggestion leaves the field empty', (tester) async {
+      final wc = bw();
+      wc.billCategorySuggester = (b) => 'Groceries';
+      final id = addBill(wc, syntheticBill('cat6', due: '2026-10-25'));
+      wc.editBill(id, category: 'Rent');
+      await openSheetFor(tester, wc, id, size: const Size(400, 1600));
+      expect(find.text('Suggested from your earlier bills. Check it.'), findsNothing);
+      expect(wc.billById(id)!.category, 'Rent');
+    });
+
+    // ---- 2. "Already in your bills" is not a dead end ----
+    test('the same slip again says it is already there and offers to add it as a new bill', () async {
+      final wc = bw();
+      final first = await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
+      final again = await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
+      expect(again.kind, BillImportKind.duplicate);
+      expect(again.message, 'Already in your bills');
+      expect(again.addAsNew, isNotNull);
+      final added = await again.addAsNew!();
+      expect(added.kind, BillImportKind.added);
+      expect(added.billId, isNot(first.billId));
+      expect(wc.billsAll(), hasLength(2));
+    });
+
+    test('when the bill there is paid, or past its due date, the words ask about a new one', () async {
+      final wc = bw();
+      final first = await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
+      wc.editBill(first.billId!, date: '2026-10-18', dueDate: '2026-10-25', category: 'Bills & subscriptions');
+      wc.confirmBill(first.billId!);
+      wc.unlinkBill(first.billId!); // confirming linked it to the water payment on its own
+      expect((await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip))).message, 'Already in your bills',
+          reason: 'still open and not late');
+      wc.linkBill(first.billId!, wc.billCandidatesFor(wc.billById(first.billId!)!).first.tx.id);
+      final paid = await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
+      expect(paid.message, 'You already paid a bill like this. Add it as a new one?');
+      final other = bw();
+      final f2 = await other.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
+      other.editBill(f2.billId!, date: '2026-09-18', dueDate: '2026-10-05');
+      other.confirmBill(f2.billId!);
+      final late = await other.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
+      expect(late.message, 'You already paid a bill like this. Add it as a new one?');
+    });
+
+    tw('the message has an "Add as new bill" action that adds it and opens the new bill', (tester) async {
+      final wc = bw();
+      await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
+      final again = await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
+      await pumpApp(tester,
+          Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => showBillImport(c, wc, again), child: const Text('go')))));
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+      expect(snack('Already in your bills'), findsOneWidget);
+      await tester.tap(find.text('Add as new bill'));
+      await tester.pumpAndSettle();
+      expect(wc.billsAll(), hasLength(2));
+      expect(key('confirmBill'), findsOneWidget, reason: 'the new bill opens');
+    });
+
+    // ---- 3. a bill's planned row is the bill ----
+    tw('Upcoming opens a bill row as the bill, not as a planned cost', (tester) async {
+      final wc = bw();
+      final id = addBill(wc, syntheticBill('up1', due: '2026-10-25'), confirm: true);
+      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1800));
+      await tester.tap(key('up:p:${WalletRepo.billPlannedId(id)}'));
+      await tester.pumpAndSettle();
+      expect(key('paidBy'), findsOneWidget);
+      expect(find.text('Skip'), findsNothing);
+    });
+
+    tw('a heads-up line for a bill opens the bill', (tester) async {
+      final wc = bw();
+      wc.saveHeadsUp(cents: 0, days: 14);
+      final id = addBill(wc, syntheticBill('up2', due: '2026-10-25'), confirm: true);
+      final h = wc.headsUpLines().single;
+      await pumpApp(tester, todayOf(wc), size: const Size(400, 1800));
+      await tester.ensureVisible(key('headsUp:${h.item.key}'));
+      await tester.tap(key('headsUp:${h.item.key}'));
+      await tester.pumpAndSettle();
+      expect(key('paidBy'), findsOneWidget);
+      expect(wc.billById(id), isNotNull);
+    });
+
+    tw('a planned-cost search result for a bill opens the bill', (tester) async {
+      final wc = bw();
+      final id = addBill(wc, syntheticBill('up3', due: '2026-10-25', payee: 'Findable Plumbing'), confirm: true);
+      await pumpApp(tester, Scaffold(body: SearchPane(wc: wc, onClose: () {}, onOpenTab: (_) {}, onOpenBills: () {})),
+          size: const Size(400, 1200));
+      await tester.enterText(key('searchField'), 'plumb');
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('PLANNED COSTS'), findsOneWidget);
+      await tester.tap(find.textContaining('Bills & subscriptions'));
+      await tester.pumpAndSettle();
+      expect(key('paidBy'), findsOneWidget);
+      expect(wc.billById(id), isNotNull);
+    });
+
+    // ---- 4. size checks before reading ----
+    test('a PDF over 15 MB is refused before it is read; a picture up to 40 MB is sized down first', () async {
+      var parsed = 0;
+      final fakes = FakeBillInputs(pdf: FakePdf(jpeg: Uint8List.fromList([1, 2, 3])));
+      final wc = bw(inputs: fakes);
+      wc.pdfParser = (pdf) async {
+        parsed++;
+        return (text: null, bill: null);
+      };
+      final r = await wc.importBillFile(Uint8List(15 * 1024 * 1024 + 1), 'pdf');
+      expect(r.kind, BillImportKind.tooBig);
+      expect(r.message, 'This file is too big for a bill (max 15 MB).');
+      expect(parsed, 0, reason: 'refused before any reading');
+      final pic = await wc.importBillFile(Uint8List(20 * 1024 * 1024), 'jpg');
+      expect(pic.kind, BillImportKind.added);
+      expect((await wc.importBillFile(Uint8List(40 * 1024 * 1024 + 1), 'jpg')).kind, BillImportKind.tooBig);
+    });
+
+    test('a picture that is still over 15 MB after sizing down is refused', () async {
+      final wc = bw(inputs: FakeBillInputs(pdf: FakePdf(jpeg: Uint8List(15 * 1024 * 1024 + 1))));
+      expect((await wc.importBillFile(Uint8List(20 * 1024 * 1024), 'jpg')).kind, BillImportKind.tooBig);
+      expect(wc.billsAll(), isEmpty);
+    });
+
+    test('the byte limits per type', () {
+      expect(maxBillFileBytes('pdf'), 15 * 1024 * 1024);
+      expect(maxBillFileBytes('.xml'), 15 * 1024 * 1024);
+      expect(maxBillFileBytes('JPG'), 40 * 1024 * 1024);
+      expect(maxBillFileBytes('png'), 40 * 1024 * 1024);
+    });
+
+    tw('Import bill file asks the size first: a huge file is never read and says so', (tester) async {
+      final wc = bw();
+      final chooser = _Chooser()..picks = [_Huge('big.pdf', 16 * 1024 * 1024)];
+      await pumpApp(tester, Scaffold(body: BillsPanel(wc: wc, chooser: chooser)), size: const Size(400, 1000));
+      await tester.tap(key('importBill'));
+      await tester.pumpAndSettle();
+      expect(snack('This file is too big for a bill (max 15 MB).'), findsOneWidget);
+      expect(wc.billsAll(), isEmpty);
+    });
+
+    test('a shared file that was too big says so and adds nothing', () async {
+      final fakes = FakeBillInputs(share: FakeShare(initialFiles: [SharedFile(Uint8List(0), 'pdf', tooBig: true)]));
+      final wc = bw(inputs: fakes);
+      final results = <BillImport>[];
+      final sub = wc.sharedBillResults.listen(results.add);
+      addTearDown(sub.cancel);
+      await wc.startSharing();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(results.single.kind, BillImportKind.tooBig);
+      expect(wc.billsAll(), isEmpty);
+    });
+
+    // ---- 5. PDF reading off the UI isolate ----
+    test('a PDF is read through the isolate path on native, and through the swappable reader', () async {
+      final wc = bw(inputs: FakeBillInputs(pictures: FakePictures(canRead: false), pdf: FakePdf(canRender: false)));
+      wc.pdfParser = parsePdf; // the real one: Isolate.run
+      final before = pdfParsedOffUi;
+      final r = await wc.importBillFile(smallPdf(['Datum racuna: 18.10.2026', 'Ukupno: 45,60 EUR']), 'pdf');
+      expect(wc.billById(r.billId!)!.total, 4560);
+      expect(pdfParsedOffUi, before + 1, reason: 'pdfText + billFromText ran in Isolate.run, not on the UI isolate');
+      var calls = 0;
+      wc.pdfParser = (pdf) async {
+        calls++;
+        return (text: 'Ukupno: 10,00 EUR\n01.10.2026', bill: null);
+      };
+      await wc.importBillFile(smallPdf(['x']), 'pdf');
+      expect(calls, 1);
+    });
+
+    test('a PDF the reader fails on is still kept, to be typed', () async {
+      final wc = bw(inputs: FakeBillInputs(pictures: FakePictures(canRead: false), pdf: FakePdf(canRender: false)));
+      wc.pdfParser = (pdf) async => throw StateError('boom');
+      final r = await wc.importBillFile(smallPdf(['Ukupno: 5,00 EUR']), 'pdf');
+      expect(r.kind, BillImportKind.added);
+      expect(wc.billById(r.billId!)!.total, isNull);
+    });
+
+    // ---- 7. reminder days and waiting bill files ----
+    tw('Plan › Bills saves the reminder days and refuses numbers out of range', (tester) async {
+      final wc = bw();
+      await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: BillsPanel(wc: wc))), size: const Size(400, 1600));
+      expect(tester.widget<TextField>(key('returnReminderDays')).controller!.text, '3');
+      expect(tester.widget<TextField>(key('warrantyReminderDays')).controller!.text, '14');
+      await tester.enterText(key('returnReminderDays'), '31');
+      await tester.ensureVisible(key('remindSave'));
+      await tester.tap(key('remindSave'));
+      await tester.pumpAndSettle();
+      expect(key('remindError'), findsOneWidget);
+      expect(wc.returnReminderDays, 3);
+      await tester.enterText(key('returnReminderDays'), '7');
+      await tester.enterText(key('warrantyReminderDays'), '91');
+      await tester.tap(key('remindSave'));
+      await tester.pumpAndSettle();
+      expect(key('remindError'), findsOneWidget);
+      expect(wc.warrantyReminderDays, 14);
+      await tester.enterText(key('warrantyReminderDays'), '30');
+      await tester.tap(key('remindSave'));
+      await tester.pumpAndSettle();
+      expect(key('remindError'), findsNothing);
+      expect((wc.returnReminderDays, wc.warrantyReminderDays), (7, 30));
+      expect(wc.settings.returnReminderDays, 7);
+    });
+
+    test('saveBillReminderDays checks both ranges (0 is on the day)', () {
+      final wc = bw();
+      expect(wc.saveBillReminderDays(returnDays: 0, warrantyDays: 0), isTrue);
+      expect(wc.saveBillReminderDays(returnDays: 30, warrantyDays: 90), isTrue);
+      expect(wc.saveBillReminderDays(returnDays: 31, warrantyDays: 5), isFalse);
+      expect(wc.saveBillReminderDays(returnDays: 5, warrantyDays: -1), isFalse);
+      expect((wc.returnReminderDays, wc.warrantyReminderDays), (30, 90));
+    });
+
+    tw('Plan › Sync says how many bill files wait to upload, only when some do', (tester) async {
+      final wc = bw();
+      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 2);
+      await tester.runAsync(() => wc.setRelay(Uri.parse('http://homeserver.test:8787')));
+      await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: SyncPanel(wc: wc, onShowKey: () {}))), size: const Size(400, 1200));
+      expect(find.textContaining('2 bill files waiting to upload', findRichText: true), findsOneWidget);
+      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 1);
+      await tester.runAsync(wc.syncNow);
+      await tester.pump();
+      expect(find.textContaining('1 bill file waiting to upload', findRichText: true), findsOneWidget);
+      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true);
+      await tester.runAsync(wc.syncNow);
+      await tester.pump();
+      expect(key('blobsWaiting'), findsNothing);
     });
   });
 
@@ -1025,6 +1347,7 @@ void main() {
           await tester.ensureVisible(key(k));
           await tester.pump();
         }
+        wc.editBill(id, category: 'Bills & subscriptions');
         wc.confirmBill(id);
         await tester.pump();
         await tester.ensureVisible(key('paidBy'));

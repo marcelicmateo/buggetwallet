@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
+import 'bill_sheet.dart';
 import 'key_backup.dart';
 import 'review.dart';
 import 'upcoming.dart';
@@ -159,7 +160,14 @@ class TodayScreen extends StatelessWidget {
                         icon: Icons.flag_outlined,
                         text: '${h.item.title} ${h.daysLeft == 0 ? 'today' : h.daysLeft == 1 ? 'tomorrow' : 'in ${h.daysLeft} days'}'
                             ' · ${moneyExact(h.item.amount!, cur)}',
-                        onTap: upcoming),
+                        onTap: () {
+                          final p = h.item.planned;
+                          if (p != null && plannedIsBill(p)) {
+                            openBill(context, wc, p.sourceRef!);
+                          } else {
+                            upcoming();
+                          }
+                        }),
                   if (reviewedToday)
                     StatusLabel(key: const ValueKey('reviewed'), good: true, text: 'Reviewed · ${streakText(review.streak)}'),
                   Tooltip(

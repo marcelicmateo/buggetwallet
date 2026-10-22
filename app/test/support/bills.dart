@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:budget_wallet/src/bill_inputs.dart';
 import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/pdf_parse.dart';
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
@@ -49,7 +50,20 @@ Uint8List smallPdf(List<String> lines) {
 class FakeCamera implements BillCamera {
   final bool canShow;
   ValueChanged<ScannedCode>? _onCode;
-  FakeCamera({this.canShow = true});
+
+  /// What the system camera "takes" (null = the owner cancelled); [photoError] makes it throw a [BillPhotoException] with that code.
+  Uint8List? photo;
+  String? photoError;
+  int photoCalls = 0;
+  FakeCamera({this.canShow = true, this.photo});
+
+  @override
+  Future<Uint8List?> takePhoto() async {
+    photoCalls++;
+    if (photoError != null) throw BillPhotoException(photoError!);
+    return photo;
+  }
+
   @override
   bool get supported => canShow;
   @override
@@ -135,10 +149,18 @@ class FakeBillInputs {
   BillInputs get inputs => BillInputs(camera: camera, reader: pictures, pdf: pdf, share: share);
 }
 
+/// The PDF reader without an isolate (what the browser does).
+Future<PdfParse> inlinePdfParser(Uint8List pdf) async {
+  final text = pdfText(pdf);
+  return (text: text, bill: text == null ? null : billFromText(text, source: BillSource.pdf));
+}
+
 /// A wallet on 20 Oct 2026 for the bills tests: two bank rows (one could have paid a slip), a salary period, and the fakes.
 WalletController billsWallet({FakeBillInputs? inputs, FakeNudges? nudges}) {
   final wc = WalletController.forTest(WalletRepo.inMemory(),
       key: VaultKey.generate(), clock: () => budgetToday, nudges: nudges, billInputs: (inputs ?? FakeBillInputs()).inputs);
+  // Widget tests run in fake time, where a real isolate never answers: PDFs are read inline unless a test asks for the isolate path.
+  wc.pdfParser = inlinePdfParser;
   wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
     syntheticTx('2026-10-19', -4560, 'Trajni nalog', 'SYNTHETIC WATER HR01 1234-5678'),
     syntheticTx('2026-10-19', -1250, 'POS plaćanje', 'POS SYNTHSHOP ZAGREB'),

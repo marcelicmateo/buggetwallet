@@ -1,5 +1,8 @@
 package hr.marcelic.budget_wallet
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -7,9 +10,14 @@ import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.pdf.PdfRenderer
 import android.media.ExifInterface
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.provider.MediaStore
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -20,10 +28,15 @@ import kotlin.concurrent.thread
 
 /**
  * Two tiny channels: the time zone name (for reminders), and the bills helpers (no PDF package): `renderPdf` draws the pages of a
- * PDF with the platform's PdfRenderer and `toJpeg` sizes a picture down. Both run on a background thread.
+ * PDF with the platform's PdfRenderer, `toJpeg` sizes a picture down (both on a background thread) and `takePhoto` lets the
+ * phone's own camera app take one full-size picture into the app's cache (returns its path; null when cancelled).
  */
 class MainActivity : FlutterActivity() {
     private val main = Handler(Looper.getMainLooper())
+
+    /** The `takePhoto` call that is waiting for the permission or for the camera app, and the file the camera writes. */
+    private var photoResult: MethodChannel.Result? = null
+    private var photoFile: File? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -54,9 +67,80 @@ class MainActivity : FlutterActivity() {
                         background(result) { toJpeg(bytes, maxSide) }
                     }
                 }
+                "takePhoto" -> takePhoto(result)
                 else -> result.notImplemented()
             }
         }
+    }
+
+    /**
+     * ACTION_IMAGE_CAPTURE throws a SecurityException when CAMERA is declared in the manifest but not granted, so the permission is
+     * asked first (Scan bill has normally asked already). The picture goes to a FileProvider uri under the app's cache.
+     */
+    private fun takePhoto(result: MethodChannel.Result) {
+        if (photoResult != null) {
+            result.error("busy", "photo already open", null)
+            return
+        }
+        photoResult = result
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            launchCamera()
+        } else {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), REQUEST_PERMISSION)
+        }
+    }
+
+    private fun launchCamera() {
+        val result = photoResult ?: return
+        try {
+            val dir = File(cacheDir, "bill_photos").apply { mkdirs() }
+            val file = File.createTempFile("photo", ".jpg", dir)
+            photoFile = file
+            val uri: Uri = FileProvider.getUriForFile(this, "$packageName.billphotos", file)
+            val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                putExtra(MediaStore.EXTRA_OUTPUT, uri)
+                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData = android.content.ClipData.newRawUri("", uri)
+            }
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, REQUEST_PHOTO)
+        } catch (e: Throwable) {
+            finishPhoto(null, e.javaClass.simpleName)
+        }
+    }
+
+    /** Answers the waiting `takePhoto` call once: [path] on success, null when cancelled, an error code when it failed. */
+    private fun finishPhoto(path: String?, error: String? = null) {
+        val result = photoResult ?: return
+        photoResult = null
+        if (path == null) {
+            photoFile?.delete()
+        }
+        photoFile = null
+        if (error != null) result.error(error, null, null) else result.success(path)
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == REQUEST_PHOTO) {
+            val file = photoFile
+            if (resultCode == RESULT_OK && file != null && file.length() > 0) finishPhoto(file.absolutePath) else finishPhoto(null)
+            return
+        }
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        if (requestCode == REQUEST_PERMISSION && photoResult != null) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) launchCamera() else finishPhoto(null, "permission")
+            return
+        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    companion object {
+        private const val REQUEST_PHOTO = 7301
+        private const val REQUEST_PERMISSION = 7302
     }
 
     /** Runs [work] off the main thread and answers on it; any failure becomes an error with the exception type only. */

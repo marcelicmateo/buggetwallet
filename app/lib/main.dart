@@ -231,9 +231,7 @@ class _HomeShellState extends State<HomeShell> {
     // PDFs and photos shared to the app (Android) become bills to review.
     _sharedSub = widget.wc.sharedBillResults.listen((r) {
       if (!mounted) return;
-      toast(context, r.message,
-          actionLabel: r.kind == BillImportKind.added && r.billId != null ? 'Open' : null,
-          onAction: r.kind == BillImportKind.added && r.billId != null ? () => openBill(context, widget.wc, r.billId!) : null);
+      showBillImport(context, widget.wc, r);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(widget.wc.startSharing());

@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import '../bill_inputs.dart' show maxBillFileBytes;
 import '../controller.dart';
 import '../file_chooser.dart';
 import '../format.dart';
@@ -47,10 +48,13 @@ Future<void> pickAndImportBills(BuildContext context, WalletController wc, FileC
     logNav('bills.cancelled');
     return;
   }
-  final files = <(String, Uint8List)>[];
+  // The size is asked before the file is read: a huge file is never loaded into memory (limits in bill_inputs.dart).
+  final files = <(String, Uint8List?)>[];
   try {
     for (final pf in picked) {
-      files.add((fileExt(pf.name), await pf.readAsBytes()));
+      final ext = fileExt(pf.name);
+      final size = await pf.length();
+      files.add((ext, size != null && size > maxBillFileBytes(ext) ? null : await pf.readAsBytes()));
     }
   } catch (e, st) {
     logError(_log, 'bills.openFailed', e, st, fields: {'files': picked.length, 'read': files.length});
@@ -60,11 +64,11 @@ Future<void> pickAndImportBills(BuildContext context, WalletController wc, FileC
   logNav('bills.chosen', {
     'files': files.length,
     'exts': [for (final (x, _) in files) x],
-    'bytes': [for (final (_, b) in files) b.length]
+    'bytes': [for (final (_, b) in files) b?.length ?? -1]
   });
   final results = <BillImport>[];
   for (final (ext, bytes) in files) {
-    results.add(await wc.importBillFile(bytes, ext));
+    results.add(bytes == null ? const BillImport(BillImportKind.tooBig) : await wc.importBillFile(bytes, ext));
   }
   if (!context.mounted) return;
   final one = results.length == 1 ? results.first : null;
@@ -73,7 +77,11 @@ Future<void> pickAndImportBills(BuildContext context, WalletController wc, FileC
     unawaited(openBill(context, wc, one.billId!, chooser: chooser)); // the panel is not busy while the sheet is open
     return;
   }
-  toast(context, billImportMessage(results));
+  if (one != null) {
+    showBillImport(context, wc, one, chooser: chooser);
+  } else {
+    toast(context, billImportMessage(results));
+  }
 }
 
 /// Plan › Bills: the bills database. To review (read from codes, files and photos; nothing counts until confirmed), Unpaid (confirmed,
@@ -89,6 +97,32 @@ class BillsPanel extends StatefulWidget {
 class _BillsPanelState extends State<BillsPanel> {
   bool _busy = false;
   bool _allPaid = false;
+  late final _returnDays = TextEditingController(text: '${widget.wc.returnReminderDays}');
+  late final _warrantyDays = TextEditingController(text: '${widget.wc.warrantyReminderDays}');
+  String? _remindError;
+
+  @override
+  void dispose() {
+    _returnDays.dispose();
+    _warrantyDays.dispose();
+    super.dispose();
+  }
+
+  void _saveReminders() {
+    final r = int.tryParse(_returnDays.text.trim());
+    final w = int.tryParse(_warrantyDays.text.trim());
+    if (r == null || r < 0 || r > WalletSettings.maxReturnReminderDays) {
+      setState(() => _remindError = 'Return-by days must be from 0 to ${WalletSettings.maxReturnReminderDays}.');
+      return;
+    }
+    if (w == null || w < 0 || w > WalletSettings.maxWarrantyReminderDays) {
+      setState(() => _remindError = 'Warranty days must be from 0 to ${WalletSettings.maxWarrantyReminderDays}.');
+      return;
+    }
+    widget.wc.saveBillReminderDays(returnDays: r, warrantyDays: w);
+    setState(() => _remindError = null);
+    toast(context, 'Saved');
+  }
 
   static const _paidShown = 6;
 
@@ -183,6 +217,36 @@ class _BillsPanelState extends State<BillsPanel> {
       if (lists.review.isNotEmpty) group('To review', lists.review),
       if (lists.unpaid.isNotEmpty) group('Unpaid', lists.unpaid, unpaid: true),
       if (lists.paid.isNotEmpty) group('Paid', lists.paid, limit: _paidShown),
+      const Divider(height: 24),
+      const Heading('Reminder days', size: 15),
+      const Muted('How many days before a return window or a warranty ends you get a reminder (0 = on the day).'),
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+          child: TextField(
+            key: const ValueKey('returnReminderDays'),
+            controller: _returnDays,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.end,
+            style: numStyle,
+            decoration: const InputDecoration(labelText: 'Return-by'),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: TextField(
+            key: const ValueKey('warrantyReminderDays'),
+            controller: _warrantyDays,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.end,
+            style: numStyle,
+            decoration: const InputDecoration(labelText: 'Warranty'),
+          ),
+        ),
+      ]),
+      if (_remindError != null) StatusLabel(key: const ValueKey('remindError'), good: false, text: _remindError!),
+      Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton(key: const ValueKey('remindSave'), onPressed: _saveReminders, child: const Text('Save reminder days'))),
     ]);
   }
 }

@@ -20,16 +20,23 @@ class BillImport {
 
   /// The original file was kept with the bill (so "Show photo" works).
   final bool fileKept;
-  const BillImport(this.kind, {this.billId, this.fileKept = false});
+
+  /// For a duplicate: the bill already there is paid or past its due date, so this is probably next month's slip.
+  final bool existingDone;
+
+  /// For a duplicate: adds the same slip once more as a new bill ("Add as new bill"); null when there is nothing to add again.
+  final Future<BillImport> Function()? addAsNew;
+  const BillImport(this.kind, {this.billId, this.fileKept = false, this.existingDone = false, this.addAsNew});
 
   bool get ok => kind == BillImportKind.added || kind == BillImportKind.duplicate;
 
   /// What the owner reads after the try.
   String get message => switch (kind) {
         BillImportKind.added => 'Bill added to review',
-        BillImportKind.duplicate => 'Already in your bills',
+        BillImportKind.duplicate =>
+          existingDone && addAsNew != null ? 'You already paid a bill like this. Add it as a new one?' : 'Already in your bills',
         BillImportKind.unreadable => "Couldn't read that bill. Try another file or photo.",
-        BillImportKind.tooBig => 'That file is too big (15 MB at most).',
+        BillImportKind.tooBig => billTooBigMessage,
         BillImportKind.failed => "Couldn't add that bill.",
       };
 }
@@ -132,6 +139,10 @@ extension BillsDb on WalletController {
   Future<BillImport> importBillFile(Uint8List raw, String ext, {String trigger = 'file'}) async {
     try {
       final e = ext.toLowerCase().replaceFirst('.', '');
+      if (raw.length > maxBillFileBytes(e)) {
+        logEvent(_billLog, Level.INFO, 'bills.import', {'trigger': trigger, 'result': 'tooBig', 'where': 'raw'});
+        return const BillImport(BillImportKind.tooBig);
+      }
       NormalizedBill? bill;
       var keep = raw, type = e;
       if (e == 'pdf') {
@@ -189,8 +200,10 @@ extension BillsDb on WalletController {
     NormalizedBill? fromText;
     String? text;
     try {
-      text = pdfText(pdf);
-      if (text != null) fromText = billFromText(text, source: BillSource.pdf);
+      // Off the UI isolate on native: a big PDF must not stall the screen.
+      final parsed = await pdfParser(pdf);
+      text = parsed.text;
+      fromText = parsed.bill;
     } catch (e, st) {
       logError(_billLog, 'bills.pdfTextFailed', e, st, fields: {'type': e.runtimeType.toString()});
     }
@@ -227,7 +240,7 @@ extension BillsDb on WalletController {
     return t == null ? null : billFromText(t, source: BillSource.photo);
   }
 
-  Future<BillImport> _storeBill(NormalizedBill? read, Uint8List? keep, String? type, {required String trigger}) async {
+  Future<BillImport> _storeBill(NormalizedBill? read, Uint8List? keep, String? type, {required String trigger, bool asNew = false}) async {
     var bill = read ?? NormalizedBill(source: type == 'pdf' ? BillSource.pdf : BillSource.photo);
     final found = read != null;
     if (keep != null && bill.externalId == null) {
@@ -248,10 +261,13 @@ extension BillsDb on WalletController {
         unsure: bill.unsure,
       );
     }
-    final existing = bill.externalId == null ? null : billsAll().where((b) => b.externalId == bill.externalId).firstOrNull;
+    final existing = bill.externalId == null || asNew ? null : billsAll().where((b) => b.externalId == bill.externalId).firstOrNull;
     if (existing != null) {
-      logEvent(_billLog, Level.INFO, 'bills.import', {'trigger': trigger, 'source': bill.source.name, 'isNew': false});
-      return BillImport(BillImportKind.duplicate, billId: existing.id);
+      final done = existing.paid || (existing.dueDate != null && existing.dueDate!.compareTo(today()) < 0);
+      logEvent(_billLog, Level.INFO, 'bills.import', {'trigger': trigger, 'source': bill.source.name, 'isNew': false, 'paidOrLate': done});
+      // Next month's slip can look the same (same reference): the owner may add it once more as a new bill.
+      return BillImport(BillImportKind.duplicate,
+          billId: existing.id, existingDone: done, addAsNew: () => _storeBill(read, keep, type, trigger: trigger, asNew: true));
     }
     BlobRef? ref;
     if (keep != null && key != null) {
@@ -261,7 +277,8 @@ extension BillsDb on WalletController {
       }
       ref = await _blobStore().add(keep, type ?? 'jpg');
     }
-    final (id, isNew) = repo.importBill(bill, file: ref);
+    final (id, isNew) =
+        standInImportBill(repo, bill, file: ref, asNew: asNew); // TODO(core merge): repo.importBill(bill, file: ref, asNew: asNew)
     logEvent(_billLog, Level.INFO, 'bills.import', {
       'trigger': trigger,
       'source': bill.source.name,
@@ -269,7 +286,8 @@ extension BillsDb on WalletController {
       'read': found,
       'unsure': bill.unsure,
       'items': bill.items.length,
-      'kept': ref != null
+      'kept': ref != null,
+      'asNew': asNew
     });
     _changed();
     return BillImport(isNew ? BillImportKind.added : BillImportKind.duplicate, billId: id, fileKept: ref != null);
@@ -298,7 +316,7 @@ extension BillsDb on WalletController {
     if (files.isEmpty || !hasWallet) return;
     logEvent(_billLog, Level.INFO, 'share.received', {'files': files.length});
     for (final f in files) {
-      final r = await importBillFile(f.bytes, f.ext, trigger: 'share');
+      final r = f.tooBig ? const BillImport(BillImportKind.tooBig) : await importBillFile(f.bytes, f.ext, trigger: 'share');
       if (!_shareResults.isClosed) _shareResults.add(r);
     }
   }
@@ -346,11 +364,26 @@ extension BillsDb on WalletController {
   bool confirmBill(String id) {
     final b = billById(id);
     if (b == null || b.date == null || (b.total ?? 0) <= 0) return false;
-    repo.confirmBill(id);
+    // A slip that is still to be paid reserves money; without a category it would count on top of the fixed plan.
+    if (billNeedsCategory(b)) return false;
+    try {
+      repo.confirmBill(id);
+    } on ArgumentError {
+      logEvent(_billLog, Level.INFO, 'bill.confirm', {'ok': false});
+      return false;
+    }
     logEvent(_billLog, Level.INFO, 'bill.confirm', {'source': b.source.name, 'items': b.items.length, 'due': b.dueDate != null});
     _changed();
     return true;
   }
+
+  /// A bill with a due date today or later needs a category before it is confirmed.
+  bool billNeedsCategory(Bill b) => b.category == null && b.dueDate != null && b.dueDate!.compareTo(today()) >= 0;
+
+  /// The category worth suggesting for [b] (earlier bills and payments of the same payee); null when nothing fits.
+  String? suggestedBillCategory(Bill b) => billCategorySuggester != null
+      ? billCategorySuggester!(b)
+      : standInSuggestBillCategory(b, recurring: recurringBills(), txs: txs); // TODO(core merge): suggestBillCategory(...)
 
   /// "Paid by…": the owner picked the payment. Returns false when that payment already belongs to another bill.
   bool linkBill(String id, String txId) {
@@ -407,6 +440,22 @@ extension BillsDb on WalletController {
   }
 
   // ---------- reminders ----------
+
+  /// Days before the end of a return window / a warranty that the reminder comes (synced settings; 0 = on the day).
+  int get returnReminderDays => settings.returnReminderDays;
+  int get warrantyReminderDays => settings.warrantyReminderDays;
+
+  /// Saves both reminder spans; false (nothing saved) when one is outside 0..30 (return) or 0..90 (warranty).
+  bool saveBillReminderDays({required int returnDays, required int warrantyDays}) {
+    if (returnDays < 0 ||
+        returnDays > WalletSettings.maxReturnReminderDays ||
+        warrantyDays < 0 ||
+        warrantyDays > WalletSettings.maxWarrantyReminderDays) {
+      return false;
+    }
+    updateSettings({'returnReminderDays': returnDays, 'warrantyReminderDays': warrantyDays});
+    return true;
+  }
 
   /// Return-window and warranty reminders: 09:00 on (end date − days) for every confirmed bill with such a date still ahead.
   /// The text has no payee, amount or item. Runs inside [rescheduleHeadsUps]'s chain, so it never overlaps another run.

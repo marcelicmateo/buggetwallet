@@ -5,6 +5,19 @@
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
+import 'package:wallet_core/wallet_core.dart' show maxBlobPlainBytes;
+
+/// What the owner reads when a file is over the limit.
+const billTooBigMessage = 'This file is too big for a bill (max 15 MB).';
+
+/// A picture may be this big before it is sized down (the JPEG that is kept must then fit [maxBlobPlainBytes]).
+const maxBillImageBytes = 40 * 1024 * 1024;
+
+/// The most a file of [ext] may weigh when it is picked: pictures are sized down, other files are kept as they are.
+int maxBillFileBytes(String ext) {
+  final e = ext.toLowerCase().replaceFirst('.', '');
+  return e == 'jpg' || e == 'jpeg' || e == 'png' ? maxBillImageBytes : maxBlobPlainBytes;
+}
 
 /// What kind of code was read.
 enum CodeKind { qr, pdf417, other }
@@ -24,6 +37,18 @@ abstract class BillCamera {
   /// The preview. [onCode] is called for every code seen (the caller ignores repeats). A refused permission or a missing camera
   /// is shown inside the view as a short plain message.
   Widget view({required ValueChanged<ScannedCode> onCode});
+
+  /// "Take photo": opens the phone's own camera app for one picture and returns it (full resolution, JPEG); null when the owner
+  /// cancelled or the camera could not be used. Throws [BillPhotoException] when the camera permission is refused.
+  Future<Uint8List?> takePhoto();
+}
+
+/// The system camera could not be used (permission refused or no camera app).
+class BillPhotoException implements Exception {
+  final String code;
+  const BillPhotoException(this.code);
+  @override
+  String toString() => 'BillPhotoException($code)';
 }
 
 /// Codes and text read from a picture (JPEG or PNG bytes).
@@ -54,7 +79,10 @@ class SharedFile {
 
   /// Lower case extension without the dot (`pdf`, `jpg`, `png`, `xml`).
   final String ext;
-  const SharedFile(this.bytes, this.ext);
+
+  /// The file was over the size limit and was not read ([bytes] is empty): the app says so.
+  final bool tooBig;
+  const SharedFile(this.bytes, this.ext, {this.tooBig = false});
 }
 
 /// Share to app (Android): files shared while the app was closed ([initial]) and while it runs ([files]).
@@ -71,6 +99,8 @@ class NoBillInputs implements BillCamera, PictureReader, PdfPages, ShareInbox {
   bool get supported => false;
   @override
   Widget view({required ValueChanged<ScannedCode> onCode}) => const SizedBox.shrink();
+  @override
+  Future<Uint8List?> takePhoto() async => null;
   @override
   Future<List<ScannedCode>> codes(Uint8List image) async => const [];
   @override
