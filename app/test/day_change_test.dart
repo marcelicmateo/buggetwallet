@@ -158,16 +158,16 @@ void main() {
   group('a sync that fails partway', () {
     test('changes it already applied are shown (reload after the error)', () async {
       final wc = emptyWallet();
-      wc.syncFolder = '/not-used-by-the-fake-sync';
+      wc.relayUrl = Uri.parse('http://relay.test');
       expect(wc.settings.rent, isNot(61000));
       final before = wc.dataVersion;
-      wc.syncRunner = (folder, key, repo) async {
-        // File A applied, then reading the folder failed.
+      wc.syncRunner = (relay, key, repo) async {
+        // File A applied, then the relay failed.
         final now = DateTime.now().millisecondsSinceEpoch;
         repo.applyRemote([
           Op('setting', 'rent', {'value': jsonEncode(61000), 'deleted': 0}, Hlc(now + 60000, 0, 'peer').toString())
         ]);
-        throw const FileSystemException('listing the folder failed');
+        throw const FileSystemException('listing the relay failed');
       };
       await wc.syncNow();
       expect(wc.syncError, isNotNull);
@@ -177,9 +177,9 @@ void main() {
 
     test('a failure before anything is applied does not reload', () async {
       final wc = emptyWallet();
-      wc.syncFolder = '/not-used-by-the-fake-sync';
+      wc.relayUrl = Uri.parse('http://relay.test');
       final before = wc.dataVersion;
-      wc.syncRunner = (folder, key, repo) async => throw const SyncException('The sync folder is missing.');
+      wc.syncRunner = (relay, key, repo) async => throw const SyncException('The relay is unreachable.');
       await wc.syncNow();
       expect(wc.syncError, isNotNull);
       expect(wc.dataVersion, before);
@@ -187,23 +187,9 @@ void main() {
 
     test('a file-system failure before anything is applied does not reload (no access, read-only mount)', () async {
       final wc = emptyWallet();
-      wc.syncFolder = '/not-used-by-the-fake-sync';
+      wc.relayUrl = Uri.parse('http://relay.test');
       final before = wc.dataVersion;
-      wc.syncRunner = (folder, key, repo) async => throw const FileSystemException('cannot read vault.json');
-      await wc.syncNow();
-      await wc.syncNow();
-      expect(wc.syncError, isNotNull);
-      expect(wc.dataVersion, before);
-    });
-
-    test('a read-only folder that fails after the run took a file number does not reload either', () async {
-      final wc = emptyWallet();
-      wc.syncFolder = '/not-used-by-the-fake-sync';
-      final before = wc.dataVersion;
-      wc.syncRunner = (folder, key, repo) async {
-        repo.nextFileNumber(); // what FolderSync.run writes before its file write fails
-        throw const FileSystemException('read-only file system');
-      };
+      wc.syncRunner = (relay, key, repo) async => throw const FileSystemException('cannot read vault.json');
       await wc.syncNow();
       await wc.syncNow();
       expect(wc.syncError, isNotNull);

@@ -62,7 +62,7 @@ class _DiagnosticsPanelState extends State<DiagnosticsPanel> {
     await _refresh();
   }
 
-  /// The system save dialog (a download in a browser); where there is none (or it fails), the sync folder's diagnostics/ or app documents.
+  /// The system save dialog (a download in a browser).
   Future<String?> _save() async {
     final wc = widget.wc;
     logNav('log.save');
@@ -73,8 +73,7 @@ class _DiagnosticsPanelState extends State<DiagnosticsPanel> {
       return uri == null ? null : (isWeb ? 'Logs downloaded.' : 'Logs saved.');
     } catch (e, st) {
       logError(_log, 'log.saveDialogFailed', e, st, fields: {'type': e.runtimeType.toString()}, level: Level.INFO);
-      if (isWeb) return "Couldn't download the logs."; // no folder to fall back to in a browser
-      return 'Saved to ${await wc.saveLogsToFolder()}';
+      return isWeb ? "Couldn't download the logs." : "Couldn't save the logs.";
     }
   }
 
@@ -100,16 +99,6 @@ class _DiagnosticsPanelState extends State<DiagnosticsPanel> {
       if (s != null && s.writeErrors > 0) LineItem('Log write errors', '${s.writeErrors} (logs may be incomplete)'),
       Wrap(spacing: 8, runSpacing: 8, children: [
         OutlinedButton(style: accentOutlined(context), onPressed: busy ? null : () => _run('save', _save), child: const Text('Save logs…')),
-        if (wc.syncFolder != null)
-          OutlinedButton(
-            onPressed: busy
-                ? null
-                : () => _run('saveToSync', () async {
-                      logNav('log.saveToSync');
-                      return 'Saved to ${await wc.saveLogsToFolder()}';
-                    }),
-            child: const Text('Put in sync folder'),
-          ),
         OutlinedButton(
           onPressed: busy
               ? null

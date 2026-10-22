@@ -9,8 +9,6 @@ import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
-import '../storage_access.dart';
-import '../sync_path.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'backup_panel.dart';
@@ -20,10 +18,7 @@ import 'export_panel.dart';
 import 'forget_browser.dart';
 import 'habits_panels.dart';
 import 'import_flow.dart';
-
-export '../sync_path.dart' show checkSyncPath; // the sync path tests import it from here
-
-final _log = Logger('bw.app');
+import 'sync_panel.dart';
 
 class PlanScreen extends StatefulWidget {
   final WalletController wc;
@@ -258,7 +253,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 for (final l in wc.lastImport) StatusLabel(good: l.ok, text: '${l.file}: ${l.message}'),
               ]),
               if (!isWeb) NudgesPanel(wc: wc),
-              if (!isWeb) _syncPanel(context),
+              SyncPanel(wc: wc, onShowKey: () => _showKey(context)),
               BackupPanel(wc: wc, chooser: widget.chooser),
               ExportPanel(wc: wc, chooser: widget.chooser),
               DiagnosticsPanel(wc: wc, chooser: widget.chooser),
@@ -321,90 +316,11 @@ class _PlanScreenState extends State<PlanScreen> {
     }
   }
 
-  Widget _syncPanel(BuildContext context) {
-    final wc = widget.wc;
-    final folder = wc.syncFolder;
-    final last = wc.lastSync;
-    return Panel(children: [
-      const SectionHead('Sync'),
-      const Heading('Your devices', size: 15),
-      const Muted(
-          'Changes are encrypted on this device and written to a folder that Syncthing keeps in step across your phone and computer. Only devices with your wallet key can read them.'),
-      LineItem('Sync folder', '', sub: folder ?? 'Not set'),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        if (isIOS)
-          OutlinedButton(
-              onPressed: () async {
-                logNav('sync.useAppFolder');
-                await wc.setSyncFolder(await wc.defaultSyncFolder());
-              },
-              child: const Text('Use the app folder'))
-        else
-          OutlinedButton(
-            onPressed: () async {
-              logNav('sync.chooseFolder');
-              final String? path;
-              try {
-                path = await widget.chooser.pickFolder(title: 'Choose your Syncthing folder');
-              } catch (e, st) {
-                logError(_log, 'sync.pickerFailed', e, st, fields: {'type': e.runtimeType.toString()});
-                if (!context.mounted) return;
-                toast(context, chooserFailedMessage);
-                await _typePath(context); // the folder can still be typed or pasted
-                return;
-              }
-              logNav('sync.chooseFolder.done', {'picked': path != null}); // never the path
-              if (path != null) await wc.setSyncFolder(path);
-            },
-            child: const Text('Choose folder'),
-          ),
-        if (!isIOS) OutlinedButton(onPressed: () => _typePath(context), child: const Text('Type path')),
-        if (isAndroid)
-          OutlinedButton(
-            onPressed: () async {
-              logNav('storage.pressed');
-              if (await StorageAccess.granted()) {
-                if (context.mounted) toast(context, 'File access is already allowed');
-                return;
-              }
-              await StorageAccess.request();
-            },
-            child: const Text('Allow file access'),
-          ),
-        Tooltip(
-          message: hasKeyboard ? 'Sync now (F5)' : '',
-          child: OutlinedButton(
-              style: accentOutlined(context),
-              onPressed: folder == null || wc.syncing
-                  ? null
-                  : () {
-                      logNav('sync.pressed');
-                      wc.syncNow();
-                    },
-              child: Text(wc.syncing ? 'Syncing…' : 'Sync now')),
-        ),
-      ]),
-      if (wc.syncError != null) StatusLabel(good: false, text: wc.syncError!),
-      if (wc.syncError == null && last != null)
-        StatusLabel(good: true, text: 'Synced at ${last.hour.toString().padLeft(2, '0')}:${last.minute.toString().padLeft(2, '0')}'),
-      if (wc.syncError == null && wc.syncBadFiles > 0)
-        StatusLabel(
-            good: false,
-            text: wc.syncBadFiles == 1
-                ? '1 sync file could not be read. It was skipped and will be tried again.'
-                : '${wc.syncBadFiles} sync files could not be read. They were skipped and will be tried again.'),
-      OutlinedButton.icon(icon: const Icon(Icons.key), label: const Text('Show wallet key'), onPressed: () => _showKey(context)),
-      Muted(isIOS
-          ? 'On iPhone, sync the app folder (Files › On My iPhone › Budget Wallet › BudgetWalletSync) with the Möbius Sync app.'
-          : 'Install Syncthing on each device and share one folder between them. Pick that folder here on every device.'),
-    ]);
-  }
-
-  /// Web only (there is no sync folder): the wallet key, and "Forget this browser".
+  /// Web only: the wallet key, and "Forget this browser".
   Widget _browserPanel(BuildContext context) => Panel(children: [
         const SectionHead('This browser'),
-        const Muted('The wallet is stored in this browser, on this computer only. There is no sync on the web yet: use Backup to move it. '
-            'Clearing the browser data deletes it.'),
+        const Muted('The wallet is stored in this browser, on this computer only. Sync keeps it in step with your other devices; '
+            'Backup moves it as a file. Clearing the browser data deletes it.'),
         Wrap(spacing: 8, runSpacing: 8, children: [
           OutlinedButton.icon(
               key: const ValueKey('showKey'),
@@ -418,46 +334,6 @@ class _PlanScreenState extends State<PlanScreen> {
               onPressed: () => confirmForgetBrowser(context, widget.wc)),
         ]),
       ]);
-
-  Future<void> _typePath(BuildContext context) async {
-    final ctl = TextEditingController(text: widget.wc.syncFolder ?? (isAndroid ? androidSyncFolder : ''));
-    final example = isAndroid ? androidSyncFolder : '/home/you/Sync';
-    logNav('dialog.open', {'dialog': 'syncPath'});
-    String? error;
-    final path = await showDialog<String>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: const Text('Sync folder path'),
-          content: TextField(
-              controller: ctl, decoration: InputDecoration(hintText: '/path/to/BudgetWallet', errorText: error, errorMaxLines: 3)),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () {
-                var r = checkSyncPath(ctl.text);
-                // The suggested phone folder may not exist before Syncthing makes it: create that one, never a typed path.
-                if (r.reason == 'missing' && isAndroid && ctl.text.trim() == androidSyncFolder) {
-                  if (createSuggestedFolder()) {
-                    r = checkSyncPath(androidSyncFolder);
-                  } else {
-                    logEvent(_log, Level.WARNING, 'sync.pathCreateFailed');
-                  }
-                }
-                if (r.path != null) return Navigator.pop(ctx, r.path);
-                logEvent(_log, Level.INFO, 'sync.pathRejected', {'reason': r.reason}); // never the path
-                setState(() => error = r.reason == 'missing' ? "This folder doesn't exist." : 'Enter a full folder path, like $example');
-              },
-              child: const Text('Use folder'),
-            ),
-          ],
-        ),
-      ),
-    );
-    logNav('dialog.close', {'dialog': 'syncPath', 'set': path != null}); // never the path
-    if (path == null) return;
-    await widget.wc.setSyncFolder(path);
-  }
 
   Future<void> _showKey(BuildContext context) async {
     logNav('dialog.open', {'dialog': 'walletKey'}); // the key itself is never logged

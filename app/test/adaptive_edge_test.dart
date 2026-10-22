@@ -493,7 +493,7 @@ void main() {
       expect(find.text('12.50'), findsOneWidget);
     });
     for (final w in [400.0, 1300.0]) {
-      testWidgets('F5 and Ctrl+R with no sync folder do nothing harmful at $w', (tester) async {
+      testWidgets('F5 and Ctrl+R with no relay address do nothing harmful at $w', (tester) async {
         final wc = emptyWallet();
         await _pumpShell(tester, wc, w: w, h: 800);
         await _focusBody(tester);

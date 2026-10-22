@@ -31,54 +31,25 @@ void main() {
     }
   });
 
-  group('Plan › Sync text by platform', () {
-    const iosText = 'On iPhone, sync the app folder';
-    const otherText = 'Install Syncthing on each device';
-
-    Future<void> pumpPlan(WidgetTester tester) async {
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: demoWallet())), size: const Size(400, 8000)); // all rows built
-    }
-
+  group('Plan › Sync is the same on every platform (relay address, no folder buttons)', () {
     // The override must be unset before the test body ends (flutter_test checks it then, before any tearDown).
-    Future<void> on(WidgetTester tester, TargetPlatform p, Future<void> Function() body) async {
-      debugDefaultTargetPlatformOverride = p;
-      try {
-        await body();
-      } finally {
-        debugDefaultTargetPlatformOverride = null;
-      }
+    for (final p in [TargetPlatform.iOS, TargetPlatform.android, TargetPlatform.linux]) {
+      testWidgets(p.name, (tester) async {
+        debugDefaultTargetPlatformOverride = p;
+        try {
+          await pumpApp(tester, Scaffold(body: PlanScreen(wc: demoWallet())), size: const Size(400, 8000)); // all rows built
+          expect(find.widgetWithText(TextField, 'Relay address'), findsOneWidget);
+          expect(find.text('Test connection'), findsOneWidget);
+          expect(find.text('Show wallet key'), findsOneWidget);
+          for (final gone in ['Choose folder', 'Type path', 'Use the app folder', 'Allow file access']) {
+            expect(find.text(gone), findsNothing);
+          }
+          expect(find.textContaining('Syncthing'), findsNothing);
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
     }
-
-    testWidgets('iOS shows the app-folder button and the Möbius Sync text', (tester) async {
-      await on(tester, TargetPlatform.iOS, () async {
-        await pumpPlan(tester);
-        expect(find.textContaining(iosText), findsOneWidget);
-        expect(find.textContaining(otherText), findsNothing);
-        expect(find.text('Use the app folder'), findsOneWidget);
-        expect(find.text('Type path'), findsNothing);
-        expect(find.text('Allow file access'), findsNothing);
-      });
-    });
-
-    testWidgets('Android also offers file access', (tester) async {
-      await on(tester, TargetPlatform.android, () async {
-        await pumpPlan(tester);
-        expect(find.textContaining(otherText), findsOneWidget);
-        expect(find.text('Choose folder'), findsOneWidget);
-        expect(find.text('Type path'), findsOneWidget);
-        expect(find.text('Allow file access'), findsOneWidget);
-      });
-    });
-
-    testWidgets('Linux has the folder chooser and typed path only', (tester) async {
-      await on(tester, TargetPlatform.linux, () async {
-        await pumpPlan(tester);
-        expect(find.textContaining(otherText), findsOneWidget);
-        expect(find.text('Choose folder'), findsOneWidget);
-        expect(find.text('Allow file access'), findsNothing);
-        expect(find.text('Use the app folder'), findsNothing);
-      });
-    });
   });
 
   test('main.dart, screens and widgets do not import dart:io (they must build for the web)', () {

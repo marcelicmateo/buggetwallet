@@ -20,6 +20,7 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final keyText = TextEditingController();
+  final relayText = TextEditingController();
   final _pass = TextEditingController();
   final _pass2 = TextEditingController();
   bool joining = false;
@@ -39,6 +40,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void dispose() {
     keyText.dispose();
+    relayText.dispose();
     _pass.dispose();
     _pass2.dispose();
     super.dispose();
@@ -62,8 +64,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ]),
                   Muted(
                       isWeb
-                          ? 'Your money, kept in this browser. Nothing leaves it: there is no sync on the web yet. Save a backup file from Plan now and then.'
-                          : 'Your money, on your devices. Everything is stored here first and works offline. Sync between your phone and computer is encrypted with a key only your devices have.',
+                          ? 'Your money, kept in this browser. It syncs only with your own relay, encrypted with a key only your devices have. Save a backup file from Plan now and then.'
+                          : 'Your money, on your devices. Everything is stored here first and works offline. Sync goes through your own relay, encrypted with a key only your devices have.',
                       size: 14.5),
                   if (_passphraseFor != null)
                     ..._passphraseStep()
@@ -91,6 +93,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         minLines: 2,
                         maxLines: 4,
                         decoration: const InputDecoration(labelText: 'Wallet key', hintText: 'BW1-…')),
+                    TextField(
+                        key: const ValueKey('relayAddress'),
+                        controller: relayText,
+                        keyboardType: TextInputType.url,
+                        autocorrect: false,
+                        decoration: const InputDecoration(
+                            labelText: 'Relay address (optional)',
+                            hintText: 'http://homeserver:8787',
+                            helperText: 'You can also set it later in Plan › Sync.',
+                            helperMaxLines: 2)),
                     if (error != null) StatusLabel(good: false, text: error!),
                     FilledButton(
                       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
@@ -155,6 +167,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   /// Web join: a typo in the key shows at once, before the passphrase is asked for.
   Future<void> _checkKeyThenAsk() async {
+    if (_relayInvalid) {
+      setState(() => error = _relayError);
+      return;
+    }
     try {
       await VaultKey.parse(keyText.text);
     } catch (e, st) {
@@ -199,13 +215,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
+  /// The typed relay address: null when the field is empty or not an address (see [_relayInvalid]).
+  Uri? _relay() => WalletController.parseRelayAddress(relayText.text);
+
+  bool get _relayInvalid => relayText.text.trim().isNotEmpty && _relay() == null;
+
+  static const _relayError = 'Enter the relay address like http://homeserver:8787, or leave it empty.';
+
   Future<void> _join({String? passphrase}) async {
+    if (_relayInvalid) {
+      setState(() => error = _relayError);
+      return;
+    }
     setState(() {
       busy = true;
       error = null;
     });
     try {
-      await widget.wc.joinWallet(keyText.text, passphrase: passphrase);
+      await widget.wc.joinWallet(keyText.text, passphrase: passphrase, relay: _relay());
     } catch (e, st) {
       // Key errors are fixed texts (typo, too short, …); the typed key is never logged.
       logError(_log, 'wallet.join.failed', e, st, fields: {'chars': keyText.text.length});

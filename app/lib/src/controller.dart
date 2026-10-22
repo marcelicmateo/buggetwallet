@@ -9,7 +9,6 @@ import 'key_store.dart';
 import 'logging.dart';
 import 'nudge_platform.dart';
 import 'nudges.dart';
-import 'sync_path.dart';
 import 'wallet_db.dart';
 
 final _log = Logger('bw.app');
@@ -24,10 +23,7 @@ final _searchLog = Logger('bw.search');
 /// The core function; the controller method of the same name would hide it inside the class.
 const _computeBudget = budgetVsActual;
 
-/// The core backup functions; the controller methods of the same names would hide them inside the class.
-const _writeBackupFn = writeBackup;
-const _restoreBackupFn = restoreBackup;
-const _listBackupsFn = listBackups;
+/// The core backup functions; the controller methods of similar names would hide them inside the class.
 const _backupBytesFn = backupBytes;
 const _restoreBackupBytesFn = restoreBackupBytes;
 
@@ -122,21 +118,24 @@ class WalletController extends ChangeNotifier {
   String? _seenDay;
   final DateTime Function() _clock;
 
-  /// Runs the sync of one folder; tests replace it.
+  /// Runs the sync against the relay at an address; tests replace it (with a [MemoryTransport] or a fake).
   @visibleForTesting
-  Future<SyncReport> Function(String folder, VaultKey key, WalletRepo repo) syncRunner = _runFolderSync;
-  static Future<SyncReport> _runFolderSync(String folder, VaultKey key, WalletRepo repo) =>
-      FolderSync(folder, key, appVersion: appVersion).run(repo);
+  Future<SyncReport> Function(Uri relay, VaultKey key, WalletRepo repo) syncRunner = _runRelaySync;
+  static Future<SyncReport> _runRelaySync(Uri relay, VaultKey key, WalletRepo repo) async {
+    final transport = RelayTransport(relay, key);
+    try {
+      return await SyncEngine(transport, key, appVersion: appVersion).run(repo);
+    } finally {
+      transport.close();
+    }
+  }
 
-  /// Backup work; tests replace them (the real ones write and read encrypted files in the sync folder).
+  /// Checks that a relay answers at an address; tests replace it.
   @visibleForTesting
-  Future<String> Function(WalletRepo repo, String folder, VaultKey key, {required String today}) backupWriter = _writeBackupFn;
-  @visibleForTesting
-  Future<int> Function(WalletRepo repo, String file, VaultKey key) backupReader = _restoreBackupFn;
-  @visibleForTesting
-  Future<List<BackupInfo>> Function(String folder) backupLister = _listBackupsFn;
+  Future<void> Function(Uri relay) healthCheck = RelayTransport.health;
 
-  /// The same for the browser, where a backup is a download and a restore reads picked bytes.
+  /// Backup work: a backup is the bytes of an encrypted file (saved through the system save dialog) and a restore reads
+  /// picked bytes. Tests replace them.
   @visibleForTesting
   Future<Uint8List> Function(WalletRepo repo, VaultKey key) backupBytesWriter = _backupBytesFn;
   @visibleForTesting
@@ -154,9 +153,19 @@ class WalletController extends ChangeNotifier {
   @visibleForTesting
   Future<WalletDb> Function() dbOpener = openWalletDb;
 
-  String? syncFolder;
+  /// The relay's address, device-local (`relayUrl` in the local settings); null until one is set.
+  Uri? relayUrl;
   DateTime? lastSync;
   String? syncError;
+
+  /// From the last successful sync: every device applied through its last file (matching only runs then).
+  bool syncCaughtUp = false;
+
+  /// From the last successful sync: devices whose later files wait for a missing or refused file.
+  List<SyncWaiting> syncWaiting = const [];
+
+  /// From the last successful sync: the devices the relay knows (short ids), this one included.
+  List<SyncDevice> syncDevices = const [];
 
   /// Files from other devices the last sync could not read (damaged or half-synced); retried on every sync.
   int syncBadFiles = 0;
@@ -164,6 +173,7 @@ class WalletController extends ChangeNotifier {
   List<ImportLine> lastImport = const [];
 
   Timer? _syncTimer;
+  Timer? _dayTimer;
   Timer? _debounce;
   Timer? _persistTimer;
 
@@ -178,7 +188,7 @@ class WalletController extends ChangeNotifier {
       : _db = db,
         _clock = clock ?? DateTime.now,
         nudges = nudges ?? const NoNudges() {
-    syncFolder = repo.localValue('syncFolder');
+    relayUrl = _parseRelay(repo.localValue('relayUrl'));
   }
 
   /// Opens the database, reads the key and loads everything. Logs each startup phase as `app.start`.
@@ -210,7 +220,7 @@ class WalletController extends ChangeNotifier {
     final c = WalletController._(repo, key, nudges: defaultNudgePlatform(), db: db, locked: key == null && KeyStore.isLocked);
     c.reload();
     logEvent(_log, Level.INFO, 'app.start',
-        {'phase': 'reload', 'ms': sw.elapsedMilliseconds, 'tx': c.txs.length, 'syncFolder': c.syncFolder != null, 'logLevel': c.logLevel});
+        {'phase': 'reload', 'ms': sw.elapsedMilliseconds, 'tx': c.txs.length, 'relay': c.relayUrl != null, 'logLevel': c.logLevel});
     c._startAutoSync();
     c.refreshRecurring();
     scheduleMicrotask(c.rescheduleNudges);
@@ -589,11 +599,18 @@ class WalletController extends ChangeNotifier {
     _changed();
   }
 
-  Future<void> joinWallet(String text, {String? passphrase}) async {
+  /// Joins with the wallet [text] key. [relay] (optional, can be set later in Plan) is the relay address; the first sync follows.
+  Future<void> joinWallet(String text, {String? passphrase, Uri? relay}) async {
     final k = await VaultKey.parse(text); // errors are logged by the caller (never the text)
+    final r = relay == null ? null : _parseRelay(relay.toString());
+    if (relay != null && r == null) throw const FormatException('Not a relay address');
     await keyWriter(k, passphrase: passphrase);
     key = k;
-    logEvent(_log, Level.INFO, 'wallet.join');
+    if (r != null) {
+      repo.setLocalValue('relayUrl', r.toString());
+      relayUrl = r;
+    }
+    logEvent(_log, Level.INFO, 'wallet.join', {'relay': r != null});
     notifyListeners();
     await syncNow(trigger: 'join');
   }
@@ -613,6 +630,7 @@ class WalletController extends ChangeNotifier {
   Future<void> forgetBrowser() async {
     logEvent(_log, Level.INFO, 'wallet.forget');
     _syncTimer?.cancel();
+    _dayTimer?.cancel();
     _debounce?.cancel();
     _persistTimer?.cancel();
     Object? failure;
@@ -643,9 +661,12 @@ class WalletController extends ChangeNotifier {
     final fresh = await dbOpener();
     _db = fresh;
     repo = fresh.repo;
-    syncFolder = null;
+    relayUrl = null;
     lastSync = null;
     syncError = null;
+    syncCaughtUp = false;
+    syncWaiting = const [];
+    syncDevices = const [];
     lastImport = const [];
     reload();
     _startAutoSync();
@@ -655,52 +676,87 @@ class WalletController extends ChangeNotifier {
   Future<String> keyText() async => key == null ? '' : await key!.toText();
 
   // ---------- sync ----------
-  /// [create]: make the folder first if it is missing (a typed path); a failure is logged and sync then reports it.
-  Future<void> setSyncFolder(String? path, {bool create = false}) async {
-    if (create && path != null) {
-      try {
-        await createFolder(path);
-      } catch (e, st) {
-        // Sync then reports the missing folder; describeError drops the path.
-        logError(_sync, 'sync.folderCreateFailed', e, st);
-      }
-    }
-    repo.setLocalValue('syncFolder', path);
-    syncFolder = path;
-    syncError = null;
-    logEvent(_sync, Level.INFO, 'sync.folder', {'set': path != null}); // never the path
-    notifyListeners();
-    if (path != null) await syncNow(trigger: 'folder');
+  /// Reads a typed relay address: `http://` or `https://` plus a host (a bare `host:8787` gets `http://`). Null when it is not one.
+  /// A trailing slash is dropped.
+  static Uri? _parseRelay(String? raw) {
+    var t = raw?.trim() ?? '';
+    if (t.isEmpty) return null;
+    if (!t.contains('://')) t = 'http://$t';
+    final u = Uri.tryParse(t);
+    if (u == null || (u.scheme != 'http' && u.scheme != 'https') || u.host.isEmpty) return null;
+    if (!RegExp(r'^[A-Za-z0-9._:\-]+$').hasMatch(u.host)) return null; // a space or other odd character is a typo
+    if (u.hasQuery || u.hasFragment || u.userInfo.isNotEmpty) return null;
+    final path = u.path.endsWith('/') ? u.path.substring(0, u.path.length - 1) : u.path;
+    return u.replace(path: path);
   }
 
-  /// Default folder on iPhone: the app's Documents folder, visible in the Files app.
-  Future<String> defaultSyncFolder() => appSyncFolder();
+  /// The address typed in [raw] as a relay [Uri], or null when it is not a usable one (for the Plan field and onboarding).
+  static Uri? parseRelayAddress(String raw) => _parseRelay(raw);
 
-  /// [trigger] says why it ran (button, timer, change, resume, startup, folder, join) for the log.
+  /// Sets (or, with null, clears) the relay address, device-local, then syncs. Throws [FormatException] for a bad address
+  /// (the address is never logged: only `set` / `unset`).
+  Future<void> setRelay(Uri? url) async {
+    final u = url == null ? null : _parseRelay(url.toString());
+    if (url != null && u == null) throw const FormatException('Not a relay address');
+    repo.setLocalValue('relayUrl', u?.toString());
+    relayUrl = u;
+    syncError = null;
+    if (u == null) {
+      syncCaughtUp = false;
+      syncWaiting = const [];
+      syncDevices = const [];
+    }
+    logEvent(_sync, Level.INFO, 'sync.relay', {'set': u != null}); // never the address
+    notifyListeners();
+    if (u != null) await syncNow(trigger: 'relay');
+  }
+
+  /// "Test connection": returns when a relay answers at [url] and speaks this build's API. Throws [TransportException]
+  /// (`unreachable`, `newerApi`, …). Nothing about the address is logged.
+  Future<void> testRelay(Uri url) async {
+    try {
+      await healthCheck(url);
+      logEvent(_sync, Level.INFO, 'sync.health', {'ok': true});
+    } on TransportException catch (e) {
+      logEvent(_sync, Level.INFO, 'sync.health', {'ok': false, 'failure': e.failure.name});
+      rethrow;
+    }
+  }
+
+  /// [trigger] says why it ran (button, timer, change, resume, startup, relay, join) for the log.
   Future<void> syncNow({bool quiet = false, String trigger = 'button'}) async {
-    final folder = syncFolder, k = key;
-    if (folder == null || k == null || syncing) {
-      logEvent(
-          _sync, Level.FINER, 'sync.skip', {'trigger': trigger, 'reason': folder == null ? 'noFolder' : (k == null ? 'noKey' : 'busy')});
+    final relay = relayUrl, k = key;
+    if (relay == null || k == null || syncing) {
+      logEvent(_sync, Level.FINER, 'sync.skip', {'trigger': trigger, 'reason': relay == null ? 'noRelay' : (k == null ? 'noKey' : 'busy')});
       return;
     }
     syncing = true;
     if (!quiet) notifyListeners();
     final dataBefore = _dataMark();
     try {
-      final r = await timedAsync('sync.run', () => syncRunner(folder, k, repo), fields: {'trigger': trigger}, warnMs: 3000);
+      final r = await timedAsync('sync.run', () => syncRunner(relay, k, repo), fields: {'trigger': trigger}, warnMs: 3000);
       lastSync = DateTime.now();
       syncError = null;
       syncBadFiles = r.badFiles;
-      logEvent(_sync, Level.INFO, 'sync.done',
-          {'trigger': trigger, 'sent': r.sent, 'received': r.received, 'files': r.filesRead, 'bad': r.badFiles});
+      syncCaughtUp = r.caughtUp;
+      syncWaiting = r.waiting;
+      syncDevices = r.devices;
+      logEvent(_sync, Level.INFO, 'sync.done', {
+        'trigger': trigger,
+        'sent': r.sent,
+        'received': r.received,
+        'files': r.filesRead,
+        'bad': r.badFiles,
+        'caughtUp': r.caughtUp,
+        'waiting': r.waiting.length,
+        'devices': r.devices.length,
+      });
       if (r.received > 0 || r.sent > 0) reload();
     } catch (e, st) {
       logError(_sync, 'sync.failed', e, st, fields: {'trigger': trigger});
-      syncError = e.toString();
-      // A run that failed partway (a folder that stopped being readable after file A) may already have applied A's changes.
-      // Reload only if wallet data changed during the run: a sync that keeps failing before applying anything (no folder
-      // access, read-only mount) must not reload the whole wallet every 2 minutes.
+      syncError = e is SyncException ? e.message : "Couldn't sync. Check the relay address and your connection.";
+      // A run that failed partway may already have applied some changes. Reload only if wallet data changed during the run:
+      // a sync that keeps failing before applying anything must not reload the whole wallet every few minutes.
       if (_dataMark() != dataBefore) reload();
     } finally {
       syncing = false;
@@ -716,10 +772,10 @@ class WalletController extends ChangeNotifier {
   }
 
   void _startAutoSync() {
-    _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      checkDay();
-      syncNow(quiet: true, trigger: 'timer');
-    });
+    _dayTimer?.cancel();
+    _syncTimer?.cancel();
+    _dayTimer = Timer.periodic(const Duration(minutes: 2), (_) => checkDay());
+    _syncTimer = Timer.periodic(const Duration(minutes: 5), (_) => syncNow(quiet: true, trigger: 'timer'));
     scheduleMicrotask(() => syncNow(quiet: true, trigger: 'startup'));
   }
 
@@ -727,27 +783,7 @@ class WalletController extends ChangeNotifier {
   /// True while the wallet holds nothing (no transactions, goals or wishes): the only time a backup can be restored.
   bool get walletIsEmpty => _cached('walletIsEmpty', () => repo.isEmpty);
 
-  /// Writes an encrypted backup into the sync folder; returns the file name (never log it). Throws [StateError] without a
-  /// folder or a key.
-  Future<String> backupNow() async {
-    final folder = syncFolder, k = key;
-    if (folder == null || k == null) {
-      logEvent(_backupLog, Level.INFO, 'backup.skip', {'reason': folder == null ? 'noFolder' : 'noKey'});
-      throw StateError('No sync folder');
-    }
-    final sw = Stopwatch()..start();
-    try {
-      final name = await backupWriter(repo, folder, k, today: today());
-      logEvent(_backupLog, Level.INFO, 'backup.done',
-          {'ms': sw.elapsedMilliseconds, 'tx': txs.length, 'goals': goals.length, 'wish': wish.length});
-      return name;
-    } catch (e, st) {
-      logError(_backupLog, 'backup.failed', e, st);
-      rethrow;
-    }
-  }
-
-  /// Web: a backup of the wallet as bytes for a download, with its file name (never log it). Throws [StateError] without a key.
+  /// A backup of the wallet as bytes for the save dialog, with its file name (never log it). Throws [StateError] without a key.
   Future<({String name, Uint8List bytes})> backupDownload() async {
     final k = key;
     if (k == null) {
@@ -766,8 +802,8 @@ class WalletController extends ChangeNotifier {
     }
   }
 
-  /// Web: reads a picked backup file ([bytes]) into the empty wallet; returns the number of rows restored. Same errors as
-  /// [restoreBackup].
+  /// Reads a picked backup file ([bytes]) into the empty wallet; returns the number of rows restored.
+  /// Throws [StateError] when the wallet is not empty, [VaultException] on a wrong key, [BackupException] on a bad file.
   Future<int> restoreBackupFile(Uint8List bytes) async {
     final k = key;
     if (k == null) throw const BackupException(BackupFailure.unreadable, 'No wallet key on this device.');
@@ -775,35 +811,6 @@ class WalletController extends ChangeNotifier {
     try {
       final rows = await backupBytesReader(repo, bytes, k);
       logEvent(_backupLog, Level.INFO, 'backup.restored', {'ms': sw.elapsedMilliseconds, 'rows': rows, 'bytes': bytes.length});
-      _changed();
-      return rows;
-    } catch (e, st) {
-      logError(_backupLog, 'backup.restoreFailed', e, st, fields: {'type': e.runtimeType.toString()});
-      rethrow;
-    }
-  }
-
-  /// The backups found in the sync folder, newest first; empty without a folder or when it can't be read.
-  Future<List<BackupInfo>> listBackups() async {
-    final folder = syncFolder;
-    if (folder == null) return const [];
-    try {
-      return await backupLister(folder);
-    } catch (e, st) {
-      logError(_backupLog, 'backup.listFailed', e, st);
-      return const [];
-    }
-  }
-
-  /// Reads the backup [info] (one from [listBackups]) into the empty wallet; returns the number of rows restored.
-  /// Throws [StateError] when the wallet is not empty, [VaultException] on a wrong key, [BackupException] on a bad file.
-  Future<int> restoreBackup(BackupInfo info) async {
-    final k = key;
-    if (k == null) throw const BackupException(BackupFailure.unreadable, 'No wallet key on this device.');
-    final sw = Stopwatch()..start();
-    try {
-      final rows = await backupReader(repo, info.path, k);
-      logEvent(_backupLog, Level.INFO, 'backup.restored', {'ms': sw.elapsedMilliseconds, 'rows': rows});
       _changed();
       return rows;
     } catch (e, st) {
@@ -867,20 +874,13 @@ class WalletController extends ChangeNotifier {
   /// All logs as one text file's bytes.
   Future<Uint8List> logBytes() async => Uint8List.fromList(utf8.encode(await AppLog.combined()));
 
-  /// Writes the logs into the sync folder's `diagnostics/` (or the app documents folder) and returns the path.
-  Future<String> saveLogsToFolder() async {
-    final bytes = await logBytes();
-    final saved = await saveDiagnosticsFile(syncFolder, logFileName(), bytes);
-    logEvent(_log, Level.INFO, 'log.saved', {'to': saved.inSyncFolder ? 'syncFolder' : 'documents', 'bytes': bytes.length});
-    return saved.path;
-  }
-
   Future<void> clearLogs() => AppLog.clear();
 
   @override
   void dispose() {
     logEvent(_log, Level.FINE, 'wc.dispose');
     _syncTimer?.cancel();
+    _dayTimer?.cancel();
     _debounce?.cancel();
     _persistTimer?.cancel();
     repo.close();

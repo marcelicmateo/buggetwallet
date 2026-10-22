@@ -24,7 +24,7 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   `reload()`) and day: never compute from `txs` in `build()`. `HomeShell` builds the five pages once per data version and day
   (`'${dataVersion}|${today()}'`), so a tab switch only moves the `IndexedStack` (keep it that way: 20,000 rows made every
   switch miss frames). The controller takes a clock (`forTest(clock:)`); `checkDay()` (resume, 2-minute timer) notifies when
-  the day changed, so a wallet without a sync folder also moves on at midnight.
+  the day changed, so a wallet without a relay also moves on at midnight.
 - Habits (M4): `screens/review.dart` (`openReview` = page on phones, 560 dp dialog from `dialogMin`; `ReviewScreen` = four ruled steps with a
   square tick: Import (`screens/import_flow.dart` `pickAndImport`, shared with Plan), Confirm categories (`reviewRows()`: the rows core counts;
   "Looks right"/"Change" call `confirmCategory` = pin the category + teach the merchant, so the row leaves), Pace (`paceRows()`, tap → Spending),
@@ -35,9 +35,17 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   bill; confirmed rows with Paid/Overdue/Covered and Remove) and Nudges (a device-local switch, `setNudges`). The "Due by payday" tap
   switches to Plan and scrolls to Expected bills (`PlanScreen.showBills`, a notifier owned by `HomeShell`).
   Controller log events (counts and enum words only): `review.done`, `review.day`, `recurring.confirm|dismiss|delete`, `nudges.enabled|scheduled`.
-- Polish (M5): Plan › Backup (`screens/backup_panel.dart`: "Last backup: 20 Oct"/"No backup yet" from `listBackups()`, "Back up now" off without a sync
-  folder, "Restore from backup…" only while `walletIsEmpty`, pick → confirm → `restoreBackup(name)` → toast with the row count; the core functions sit
-  behind `backupWriter/backupReader/backupLister` so tests use fakes) and Plan › Export (`screens/export_panel.dart`: range chips This period/year/Everything,
+- Sync (R5): `controller.dart` keeps `relayUrl` (device-local `relayUrl` value; `setRelay(Uri?)` validates http/https + host, saves, syncs with trigger `relay`;
+  `parseRelayAddress(text)`), `syncRunner(Uri relay, key, repo)` (default: `SyncEngine` over `RelayTransport`; tests inject a fake or a `MemoryTransport` run),
+  `healthCheck(Uri)` / `testRelay(Uri)` ("Test connection"), `syncNow`, and after each run `syncCaughtUp`, `syncWaiting`, `syncDevices`, `syncError`
+  (a `SyncException` shows its message, anything else a generic one), `syncBadFiles`, `lastSync`. Runs: start, resume, 3 s after a change, every 5 min (the
+  2-minute timer only checks the day), Ctrl+R/F5 (toast without an address), on web too. Logs say `sync.relay {set}`, never the address.
+  `sync_status.dart` = pure texts (`syncStatusLine`, `lastSeenText`, `clockText`, `relayTestFailureText`); `screens/sync_panel.dart` = Plan › Sync (address field, Save
+  address, Test connection, Sync now, status line, devices, Show wallet key). Onboarding join takes the key plus an optional relay address (`joinWallet(…, relay:)`).
+  Android: INTERNET permission and cleartext HTTP (LAN/VPN); no storage permission, no `budget_wallet/storage` channel.
+- Polish (M5): Plan › Backup (`screens/backup_panel.dart`: "Back up now" = `wc.backupDownload()` → `FileChooser.saveBackup` (the system save dialog on every platform; a cancel
+  shows nothing), "Restore from backup…" only while `walletIsEmpty`: `pickBackupFile()` → confirm → `restoreBackupFile(bytes)` → toast with the row count; the core
+  functions sit behind `backupBytesWriter/backupBytesReader` so tests use fakes) and Plan › Export (`screens/export_panel.dart`: range chips This period/year/Everything,
   `exportTransactions(range)`/`exportSummary()` return an `ExportFile` (UTF-8 with BOM) saved through `FileChooser.saveText`). Search (`screens/search.dart`
   `SearchPane`): the icon in Spending's header or Ctrl+F (`HomeShell._searchRequest`) swaps the page for a pinned field + ruled result sections via an
   `IndexedStack` (the page keeps its scroll); 2+ characters, 150 ms debounce, `wc.search(q)` cached per data version; goal/wish/bill rows jump to their tab.
@@ -68,9 +76,8 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   `<app support>/logs/`; `log_backend_web.dart`: `MemoryLogSink`), error hooks,
   frame/memory/lifecycle monitors, `logNav` (UI actions), `loggedRoute` (sheets), `fileExt`. `main.dart`'s `bootstrap()`
   sets it up and logs the `app.start` phases. Plan › Diagnostics (`screens/diagnostics.dart`): level, save, clear.
-- `storage_access.dart` — Android "All files access" channel for the Syncthing folder.
 
-## Web build (`flutter build web`, localhost only, no sync)
+## Web build (`flutter build web`, localhost only)
 Same app and wallet logic; the files that touch the OS come in pairs chosen by `dart.library.js_interop` (`x.dart` re-exports
 `x_io.dart` or `x_web.dart`; nothing on the web path imports `dart:io`):
 - `wallet_db.dart` — `openWalletDb()` → `WalletDb {repo, persist(), forget()}`. io: `wallet.db` in the support folder (`persist` does
@@ -86,10 +93,9 @@ Same app and wallet logic; the files that touch the OS come in pairs chosen by `
   but nothing in sessionStorage → `UnlockScreen` (`wc.locked`, `wc.unlock`, `WrongPassphrase`). Onboarding on web asks for a passphrase
   (2 fields, ≥ 8 characters) after "Start a new wallet" / "Use my wallet key". Logs: `store: 'browser'`, found/locked flags only.
 - `log_backend_web.dart` — `MemoryLogSink` (1 MB, newest lines); Plan › Diagnostics "Save logs…" downloads them through `FileChooser.saveText`.
-- `sync_path_web.dart` (no folders), `nudge_platform_web.dart` (`NoNudges`). Plan hides Sync and Nudges when `isWeb` and adds "This browser"
+- `nudge_platform_web.dart` (`NoNudges`). Plan hides Nudges when `isWeb` and adds "This browser"
   (Show wallet key, Forget this browser → `ForgetBrowserSheet` → `wc.forgetBrowser()`: deletes database + key, opens an empty database, app
-  returns to onboarding). Backup on web: "Back up now" = `wc.backupDownload()` → `FileChooser.saveBackup` (download); "Restore from backup…"
-  (only while `walletIsEmpty`) = `FileChooser.pickBackupFile()` → `wc.restoreBackupFile(bytes)`, same error texts as the folder restore.
+  returns to onboarding). Backup works the same everywhere (see Polish above).
   File downloads in a browser return null from `FilePicker.saveFile`, so `FileChooser` answers with the file name there.
 - `platform.dart` `isWeb` (= `kIsWeb`; tests set `debugIsWebOverride = true` to run the web branches on the VM and must reset it).
 - Tests: `test/web_test.dart` (screens, controller paths, flush with fakes), `test/key_vault_test.dart` (wrap/unwrap, locked state). The
@@ -107,7 +113,7 @@ key fails on the first read (`SqliteException` 26 "file is not a database"); pla
 ## Rules
 - **No `dart:io` in `main.dart`, `screens/`, `widgets/`, `layout.dart` or `platform.dart`** (they must build for the web;
   `test/platform_test.dart` checks it). File and folder work goes into the native-only files
-  (`controller.dart` via `sync_path.dart`/`wallet_db.dart`, `key_store_io.dart`, `log_backend_io.dart`, `file_chooser.dart`). OS facts for logs: `nativeInfo()`.
+  (`controller.dart` via `wallet_db.dart`, `key_store_io.dart`, `log_backend_io.dart`, `file_chooser.dart`). OS facts for logs: `nativeInfo()`.
 - New screen state comes from the controller; don't open the database from a widget.
 - Text is short and plain (the owner often uses the app by voice and on a phone).
 - Android release builds are signed by the fixed key (see root `CLAUDE.md`); don't touch signing here.
@@ -131,4 +137,5 @@ key fails on the first read (`SqliteException` 26 "file is not a database"); pla
   `habitsWallet()` helper (20 Oct 2026, a bill candidate, three unconfirmed card rows, a ready wish) and `FakeNudges` are in `test/support/wallet.dart`.
 - `test/theme_*_test.dart` — the Ledger theme: contrast ratios of every token, structure (no `Card`, nav by width, Panel without radius), text
   scale 2.0 at 320/360 with the real fonts, amounts in Plex Mono with tabular figures and a shared right edge, the six font files and `OFL.txt`.
+- `test/sync_relay_test.dart` (texts, controller, two controllers through one `MemoryTransport`, Plan › Sync, join with an address), `test/backup_test.dart` (save/restore through a fake chooser).
 - `test/` — formatting and widget tests. Run: `tools/build.sh test` (format check, `flutter analyze`, `flutter test`).
