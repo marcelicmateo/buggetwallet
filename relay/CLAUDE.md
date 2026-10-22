@@ -7,9 +7,11 @@ Never put a token, key, body, full id or client address in a log line, a test fi
 ## Files
 - `bin/relay.dart` — flags `--host --port --data --origin (repeatable) --max-wallets --max-bytes` (hand-parsed, no `args`),
   env `BW_RELAY_HOST/PORT/DATA/ORIGINS/MAX_WALLETS/MAX_BYTES` (flags win); usage error = exit 64; SIGINT/SIGTERM = graceful stop.
-- `lib/relay.dart` — barrel. `lib/src/relay_server.dart` — `Relay({data, origins, maxWallets, maxBytes, now, log})`:
+- `lib/relay.dart` — barrel. `lib/src/relay_server.dart` — `Relay({data, origins, maxWallets, maxBytes, maxInFlightBytes, now, log})`:
   `serve({host, port})` (port 0 for tests), `close()`, `handle(HttpRequest)`, `walletCount`. Routing, auth, body limits, the
-  per-wallet async lock (`_locked`), every endpoint. `now` drives lastSeen, the 90-day rule and the rate limit.
+  per-wallet async lock (`_locked`), every endpoint. Body bytes buffered per client address (`_held`, released when the
+  request is answered) are capped by `maxInFlightBytes` (32 MiB → 429 when other requests of that address hold bytes;
+  test hook `onHold`); an unknown wallet's `PUT d` with seq ≠ 1 or on a full relay is refused before buffering. `now` drives lastSeen, the 90-day rule and the rate limit.
 - `lib/src/wallet.dart` — `Wallet` (devices, snapshots, byte total), `meta.json` save/load (atomic temp + rename), `prune`,
   name patterns, `writeAtomic`. `lib/src/rate_limit.dart` — token bucket (20/s, burst 100) per client address.
 

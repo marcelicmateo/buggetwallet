@@ -31,6 +31,7 @@ class Harness {
   static Future<Harness> start({
     int maxWallets = 16,
     int maxBytes = 1024 * 1024 * 1024,
+    int maxInFlightBytes = defaultMaxInFlightBytes,
     List<String>? origins,
     Directory? dir,
     DateTime? clock,
@@ -39,6 +40,7 @@ class Harness {
     h._origins = origins;
     h._maxWallets = maxWallets;
     h._maxBytes = maxBytes;
+    h._maxInFlight = maxInFlightBytes;
     await h._boot();
     return h;
   }
@@ -46,6 +48,7 @@ class Harness {
   List<String>? _origins;
   late int _maxWallets;
   late int _maxBytes;
+  late int _maxInFlight;
 
   Future<void> _boot() async {
     relay = Relay(
@@ -53,6 +56,7 @@ class Harness {
       origins: _origins ?? defaultOrigins,
       maxWallets: _maxWallets,
       maxBytes: _maxBytes,
+      maxInFlightBytes: _maxInFlight,
       now: () => clock,
       log: logs.add,
     );

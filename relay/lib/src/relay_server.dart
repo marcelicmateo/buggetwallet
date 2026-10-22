@@ -15,6 +15,9 @@ const int maxFileBytes = 16 * _mib;
 const int maxSnapshotBytes = 64 * _mib;
 
 const int _maxJsonBytes = 64 * 1024;
+
+/// Default for [Relay.maxInFlightBytes]: request body bytes one client address may have buffered at once.
+const int defaultMaxInFlightBytes = 32 * _mib;
 const List<String> defaultOrigins = ['http://127.0.0.1:8080', 'http://localhost:8080'];
 
 class _HttpError implements Exception {
@@ -54,6 +57,10 @@ class _LogInfo {
   int bytes = 0;
   String wid = '-';
   String device = '-';
+
+  /// Client address (never logged) and the body bytes this request holds in [Relay._held].
+  String remote = '?';
+  int held = 0;
 }
 
 /// The relay: HTTP API v1 over a data folder (docs/context/RELAY_PROTOCOL.md). It stores sealed files it cannot read.
@@ -63,6 +70,7 @@ class Relay {
     this.origins = defaultOrigins,
     this.maxWallets = 16,
     this.maxBytes = 1024 * _mib,
+    this.maxInFlightBytes = defaultMaxInFlightBytes,
     DateTime Function()? now,
     void Function(String line)? log,
   })  : _now = now ?? DateTime.now,
@@ -72,6 +80,10 @@ class Relay {
   final List<String> origins;
   final int maxWallets;
   final int maxBytes;
+
+  /// Body bytes one client address may have buffered across its concurrent requests; a request that would pass it
+  /// while others from that address hold bytes gets 429 (a lone request is limited only by its own size limit).
+  final int maxInFlightBytes;
   final DateTime Function() _now;
   final void Function(String) _log;
 
@@ -79,6 +91,10 @@ class Relay {
   final Map<String, Future<void>> _tails = {};
   final RateLimiter _limiter = RateLimiter();
   final Set<Future<void>> _inFlight = {};
+  final Map<String, int> _held = {};
+
+  /// Test hook: called with the client address's in-flight body bytes each time a request buffers a chunk.
+  void Function(int total)? onHold;
   Future<void>? _loaded;
   HttpServer? _server;
 
@@ -133,6 +149,8 @@ class Relay {
     } on Object catch (e) {
       info.kind = '${info.kind}!${e.runtimeType}';
       out = _Out.error(500, 'internal');
+    } finally {
+      _release(info);
     }
     await _send(req, out);
     _log('relay ${info.kind} ${out.status} ${info.bytes} w=${info.wid} d=${info.device}');
@@ -166,6 +184,7 @@ class Relay {
 
   Future<_Out> _dispatch(HttpRequest req, _LogInfo info) async {
     final remote = req.connectionInfo?.remoteAddress.address ?? '?';
+    info.remote = remote;
     if (!_limiter.allow(remote, _now())) {
       info.kind = 'limited';
       return _Out.error(429, 'too many requests');
@@ -255,13 +274,17 @@ class Relay {
 
   // ---- body ---------------------------------------------------------------------------------------------------------
 
+  /// Reads the body (at most [limit] bytes: 413 beyond). The bytes count against the client address's in-flight
+  /// budget ([maxInFlightBytes]) until the request is answered; passing it while other requests from that address
+  /// hold bytes is 429. Either refusal drains (and discards) a little more so the client sees the status.
   Future<Uint8List> _readBody(HttpRequest req, int limit, _LogInfo info) async {
     var over = req.contentLength > limit;
+    var busy = !over && req.contentLength > 0 && _wouldPass(info, req.contentLength);
     final b = BytesBuilder(copy: false);
     var n = 0;
     var drained = 0;
     await for (final chunk in req) {
-      if (over) {
+      if (over || busy) {
         drained += chunk.length;
         if (drained > limit * 2) break; // enough of a polite drain
         continue;
@@ -269,13 +292,57 @@ class Relay {
       n += chunk.length;
       if (n > limit) {
         over = true;
+        _release(info);
+        b.clear();
         continue;
       }
+      if (_wouldPass(info, chunk.length)) {
+        busy = true;
+        _release(info);
+        b.clear();
+        continue;
+      }
+      _hold(info, chunk.length);
       b.add(chunk);
     }
     info.bytes = over ? limit + 1 : n;
     if (over) throw _HttpError(413, 'too big', close: true);
+    if (busy) throw _HttpError(429, 'too many bytes in flight', close: true);
     return b.takeBytes();
+  }
+
+  /// Refuses a body without buffering it: reads and discards up to 2× [limit] (so the client sees the status), then
+  /// throws [status].
+  Future<Never> _refuseBody(HttpRequest req, int limit, int status, String message) async {
+    var drained = 0;
+    await for (final chunk in req) {
+      drained += chunk.length;
+      if (drained > limit * 2) break;
+    }
+    throw _HttpError(status, message, close: true);
+  }
+
+  /// Whether [more] bytes would put this address over [maxInFlightBytes] while other requests of it hold bytes.
+  bool _wouldPass(_LogInfo info, int more) {
+    final all = _held[info.remote] ?? 0;
+    return all + more > maxInFlightBytes && all - info.held > 0;
+  }
+
+  void _hold(_LogInfo info, int n) {
+    info.held += n;
+    _held[info.remote] = (_held[info.remote] ?? 0) + n;
+    onHold?.call(_held[info.remote]!);
+  }
+
+  void _release(_LogInfo info) {
+    if (info.held == 0) return;
+    final left = (_held[info.remote] ?? 0) - info.held;
+    info.held = 0;
+    if (left > 0) {
+      _held[info.remote] = left;
+    } else {
+      _held.remove(info.remote);
+    }
   }
 
   Future<Map<String, Object?>> _readJsonMap(HttpRequest req, _LogInfo info) async {
@@ -330,6 +397,11 @@ class Relay {
     final hash = sha256Hex(token);
     final known = _wallets[wid];
     if (known != null && !constantTimeEquals(hash, known.tokenHash)) throw _HttpError(401, 'unauthorized');
+    if (known == null) {
+      // An unknown wallet: refuse what cannot create it before reading (and buffering) a body. Checked again in the lock.
+      if (seq != 1) await _refuseBody(req, maxFileBytes, 422, 'seq beyond last + 1');
+      if (_wallets.length >= maxWallets) await _refuseBody(req, maxFileBytes, 507, 'relay full');
+    }
     final body = await _readBody(req, maxFileBytes, info);
     return _locked(wid, () async {
       final w = _wallets[wid];
