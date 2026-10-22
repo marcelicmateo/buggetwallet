@@ -204,9 +204,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   the newest snapshot hold ≥ 500 ops (`sync_files`: ops per recorded file, own uploads included) or the newest is older
   than 7 days (none yet: 7 days since this device's first relay sync, local `syncSince`); payload = backup format,
   covers = every listed device's cursor + own last; refused (another device was faster) is only logged. Self-heal
-  (`_trackStuck`, every run): a device seen within `stuckAfter` (24 h) whose ack for this device's files stays below this
-  device's last (same value; tracked device-locally in `syncPeerStuck` = `{device: [ack, sinceMs]}`) for over 24 h,
-  while the newest snapshot does not cover the file it needs, makes this device (when caught up) write a snapshot at once. `SyncReport`:
+  (`_trackStuck`, every run): a peer seen within `stuckAfter` (24 h) whose ack for any device D (this one included)
+  stays below what this device holds of D (its cursor, or its own last; same value, tracked device-locally in
+  `syncPeerStuck` = `{"<peer>/<D>": [ack, sinceMs]}`) for over 24 h, while the newest snapshot does not cover the file it
+  needs, makes this device (when caught up) write a snapshot at once; at most one heal snapshot per device per 24 h
+  (`syncHealAt`), and a second healer skips once the first one's snapshot covers the file. `SyncReport`:
   `sent` ops, `received` fields changed, `filesRead` (snapshots count), `problems`, `caughtUp`, `waiting`, `devices`
   (short ids, `lastSeen`, `isThis`). Fatal `SyncException`s (short, no address): unreachable, refused (401), relay
   full, newer relay API, other. Opening a folder-sync database drops `peer_files` (`repo.peerFiles.dropped`).
@@ -241,11 +243,12 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (`MemoryTransport.corrupt` flips the magic too, so it gives `corrupt`).
 - A refused relay file that no snapshot covers stops that device's later files on every device that has not applied it
   (the relay never overwrites a file, the blocked reader never acks past it; matching and pairing wait there, cash
-  entries keep counting). Self-heal: the author device, once it is caught up and has seen the blocked device (seen
-  within 24 h) stay below its last for over 24 h, writes a snapshot covering the file, and the blocked device goes on
-  from it on its next run. Remaining case: the author is gone for good (or never caught up again); then it clears only
-  when another device writes a snapshot for its own reasons (7 days / 500 ops, covering what it applied), a newer build
-  reads the file (unknownVersion/applyFailed), or the file is repaired on the server.
+  entries keep counting). Self-heal: any caught-up device that applied the file (the author or another one), once it
+  has seen the blocked device (seen within 24 h) stay below it for over 24 h, writes a snapshot covering it, and the
+  blocked device goes on from it on its next run. Remaining case: no device that applied the file before it was
+  damaged is still syncing and caught up; then it clears only when a newer build reads it (unknownVersion/applyFailed)
+  or the file is repaired on the server. A blocked device that cannot read snapshots stays blocked (no storm: the
+  snapshot covers the file, so nobody writes another).
 - Encrypted local database: a database encrypted with one wallet key cannot be opened after joining another wallet
   (`WalletDbKeyException`; the app decides what to do). The side copy of a native conversion is plaintext for as long
   as the conversion runs (deleted after the check, or used to recover at the next open).

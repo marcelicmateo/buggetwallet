@@ -233,12 +233,14 @@ class SyncEngine {
   /// Device-local values: this device's last uploaded seq (absent = never met a relay) and when it first did.
   static const sentKey = 'syncSent', sinceKey = 'syncSince';
 
-  /// Device-local: per other device whose ack for this device's files is below this device's last, that ack and since
-  /// when (ms) it has stayed there (`{<device>: [ack, ms]}`).
-  static const stuckKey = 'syncPeerStuck';
+  /// Device-local: per (peer, device) pair where the peer's ack for that device's files is below what this device holds
+  /// of them (its cursor, or its own last), that ack and since when (ms) it has stayed there
+  /// (`{"<peer>/<device>": [ack, ms]}`); and when this device last wrote a heal snapshot (ms).
+  static const stuckKey = 'syncPeerStuck', healKey = 'syncHealAt';
 
-  /// Self-heal: a device seen within this long whose ack for this device's files has stayed below this device's last
-  /// for longer than this is taken as blocked on a file it refused; a caught-up author then writes a snapshot at once.
+  /// Self-heal: a device seen within this long whose ack for some device's files has stayed below what this device
+  /// applied of them for longer than this is taken as blocked on a file it refused; a caught-up device that holds the
+  /// file then writes a snapshot at once (at most one heal snapshot per device per this long).
   static const stuckAfter = Duration(hours: 24);
 
   /// What a quarantined file's record says about the build that refused it ([BadFile.build]): the file format this
@@ -415,7 +417,7 @@ class SyncEngine {
     }
 
     // 5. Caught up: match, and maybe write a snapshot.
-    final heal = _trackStuck(repo, state, myLast, now);
+    final heal = _trackStuck(repo, state, cursors, myLast, now);
     final caughtUp = waiting.isEmpty && problems.isEmpty && peers.every((d) => cur(d) >= state.devices[d]!.last);
     if (caughtUp) {
       repo.runPendingMatch();
@@ -541,10 +543,11 @@ class SyncEngine {
   }
 
   /// Updates [stuckKey] (every run, caught up or not) and says whether a snapshot should heal a peer now: another
-  /// device seen within [stuckAfter] has kept the same ack below [myLast] for this device's files for longer than
-  /// [stuckAfter] (a file it refused stops it there for good: the relay never overwrites one, see the known limits), and
-  /// the newest snapshot does not cover the file it needs (else it starts from that snapshot by itself).
-  bool _trackStuck(WalletRepo repo, RelayState state, int myLast, DateTime now) {
+  /// device seen within [stuckAfter] has kept the same ack for some device D below what this device holds of D (its
+  /// cursor, or [myLast] for its own files) for longer than [stuckAfter] (a file it refused stops it there for good: the
+  /// relay never overwrites one, see the known limits), the newest snapshot does not cover the file it needs (else it
+  /// starts from that snapshot by itself), and this device wrote no heal snapshot within [stuckAfter] ([healKey]).
+  bool _trackStuck(WalletRepo repo, RelayState state, Map<String, int> cursors, int myLast, DateTime now) {
     final me = repo.deviceId;
     final stored = repo.localValue(stuckKey);
     var old = const <String, Object?>{};
@@ -555,21 +558,29 @@ class SyncEngine {
         logError(_log, 'sync.stuck.unreadable', e, st);
       }
     }
-    final covered = state.snapshot?.covers[me] ?? 0;
+    final covers = state.snapshot?.covers ?? const <String, int>{};
     final next = <String, List<int>>{};
-    var heal = 0;
-    for (final MapEntry(key: d, value: dev) in state.devices.entries) {
-      final seen = dev.lastSeen, ack = dev.acks[me] ?? 0;
-      if (d == me || seen == null || now.difference(seen) > stuckAfter || ack >= myLast) continue;
-      final prev = old[d];
-      final since = prev is List && prev.length == 2 && prev[0] == ack && prev[1] is int ? prev[1] as int : now.millisecondsSinceEpoch;
-      next[d] = [ack, since];
-      if (covered <= ack && now.difference(DateTime.fromMillisecondsSinceEpoch(since, isUtc: true)) > stuckAfter) heal++;
+    var stuck = 0;
+    for (final MapEntry(key: p, value: peer) in state.devices.entries) {
+      final seen = peer.lastSeen;
+      if (p == me || seen == null || now.difference(seen) > stuckAfter) continue;
+      for (final d in state.devices.keys) {
+        if (d == p) continue;
+        final held = d == me ? myLast : cursors[d] ?? 0, ack = peer.acks[d] ?? 0;
+        if (ack >= held) continue;
+        final prev = old['$p/$d'];
+        final since = prev is List && prev.length == 2 && prev[0] == ack && prev[1] is int ? prev[1] as int : now.millisecondsSinceEpoch;
+        next['$p/$d'] = [ack, since];
+        if ((covers[d] ?? 0) <= ack && now.difference(DateTime.fromMillisecondsSinceEpoch(since, isUtc: true)) > stuckAfter) stuck++;
+      }
     }
     final text = jsonEncode(next);
     if (text != (stored ?? '{}')) repo.setLocalValue(stuckKey, text);
-    if (heal > 0) logEvent(_log, Level.INFO, 'sync.stuck', {'devices': heal});
-    return heal > 0;
+    if (stuck == 0) return false;
+    final last = int.tryParse(repo.localValue(healKey) ?? '');
+    final recent = last != null && now.difference(DateTime.fromMillisecondsSinceEpoch(last, isUtc: true)) < stuckAfter;
+    logEvent(_log, Level.INFO, 'sync.stuck', {'pairs': stuck, 'recentHeal': recent});
+    return !recent;
   }
 
   /// Writes a snapshot when the newest is older than [snapshotAge] or [snapshotOpsBehind] ops behind, or at once with
@@ -612,6 +623,7 @@ class SyncEngine {
       return;
     }
     repo.forgetSyncFiles(covers);
+    if (heal) repo.setLocalValue(healKey, '${now.millisecondsSinceEpoch}');
     t.done({'ops': ops.length, 'bytes': sealed.length, 'devices': covers.length, 'behind': behind, 'aged': aged, 'heal': heal});
   }
 }

@@ -104,4 +104,85 @@ void main() {
     }
     expect((await snapshot())?.id, before);
   });
+
+  test('author gone for good: another device that applied the file heals the stuck peer after 24 h', () async {
+    final a = sim.device(), b = sim.device(), c = sim.device();
+    a.repo.importBatch(batch([('2026-01-08', -1200, 'POS TESTSHOP 1')]));
+    await a.sync();
+    await b.sync();
+    await c.sync();
+    a.repo.addManual(date: '2026-01-09', amount: 450, category: 'Eating out');
+    await a.sync(); // seq 2: A's last file; A is never heard from again
+    await c.sync(); // C applies it
+    sim.transport.corrupt(a.id, 2);
+    sim.tick();
+    expect((await b.sync()).waiting.single.seq, 2);
+    final before = (await snapshot())?.id;
+    for (final h in [6, 6, 6, 5]) {
+      sim.tick(Duration(hours: h));
+      await b.sync();
+      expect((await c.sync()).caughtUp, isTrue);
+      expect((await snapshot())?.id, before);
+    }
+    sim.tick(const Duration(hours: 1, minutes: 30));
+    await b.sync();
+    await c.sync();
+    final snap = await snapshot();
+    expect(snap?.id, isNot(before));
+    expect(snap!.covers[a.id], 2);
+    final r = await b.sync();
+    expect(r.caughtUp, isTrue);
+    expect(b.repo.transactions().map((t) => t.amount), contains(-450));
+  });
+
+  test('no snapshot storm: three devices see the same stuck peer, at most one snapshot is accepted per 24 h', () async {
+    final a = sim.device(), b = sim.device(), c = sim.device(), d = sim.device();
+    final healers = [a, c, d];
+    a.repo.importBatch(batch([('2026-01-08', -1200, 'POS TESTSHOP 1')]));
+    await sim.syncAll([a, b, c, d]);
+    a.repo.addManual(date: '2026-01-09', amount: 450, category: 'Eating out');
+    await a.sync();
+    await c.sync();
+    await d.sync();
+    sim.transport.corrupt(a.id, 2);
+    expect((await b.sync()).caughtUp, isFalse);
+    final accepted = <String, DateTime>{};
+    Future<void> note() async {
+      final id = (await snapshot())?.id;
+      if (id != null) accepted.putIfAbsent(id, () => sim.clock.t);
+    }
+
+    await note();
+    final initial = accepted.length;
+    for (var i = 0; i < 24; i++) {
+      sim.tick(const Duration(hours: 3));
+      for (final h in healers) {
+        await h.sync();
+        await note();
+      }
+      if (i < 12) await b.sync(); // B is around (and stuck) for the first 36 h
+    }
+    final heals = accepted.values.skip(initial).toList();
+    expect(heals, hasLength(1), reason: 'one heal snapshot, written by whichever healer came first');
+    final r = await b.sync();
+    expect(r.caughtUp, isTrue);
+  });
+
+  test('at most one heal snapshot per device per 24 h', () async {
+    final (a, b) = await stuckPair();
+    final before = (await snapshot())?.id;
+    sim.tick(const Duration(hours: 23));
+    await b.sync();
+    await a.sync();
+    a.repo.setLocalValue(SyncEngine.healKey, '${sim.clock.ms}'); // A wrote a heal snapshot (for something else) just now
+    sim.tick(const Duration(hours: 2));
+    await b.sync();
+    await a.sync(); // B stuck for 25 h, but A's last heal is 2 h old
+    expect((await snapshot())?.id, before);
+    sim.tick(const Duration(hours: 22, minutes: 30));
+    await b.sync();
+    await a.sync(); // the mark is 24.5 h old
+    expect((await snapshot())?.id, isNot(before));
+    expect((await b.sync()).caughtUp, isTrue);
+  });
 }
