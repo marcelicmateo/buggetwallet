@@ -357,6 +357,24 @@ RecurringBill? plannedCoveredBy(PlannedCost p, List<RecurringBill> recurring) =>
 ({RecurringBill bill, String? occurrence})? plannedCoverage(PlannedCost p, List<RecurringBill> recurring) =>
     p.source != PlannedSource.bill || p.title == 'Bill' ? null : _coverage(_payeeKey(p.title), p.date, recurring);
 
+/// The key of one recurring bill occurrence in the set [plannedReserves] takes: `<bill id>@<YYYY-MM-DD>`.
+String occurrenceKey(String recurringId, String date) => '$recurringId@$date';
+
+/// The one rule (B6) for whether planned cost [p] adds its amount to what is set aside, given [counted]: the recurring
+/// bill occurrences ([occurrenceKey]) the same total already holds. `computePeriod` passes this period's `dueBills`
+/// (their `nextDue`) and sums the rows it accepts into `reservedPlanned` (`reservedPlannedRows`); the app's Upcoming
+/// "Set aside" passes the bill occurrences it counts in its range, so both use the same rule. A row reserves when it is
+/// open with an amount > 0, not in a fixed category ([PlannedCost.coveredByPlan]), not a bill row without a category
+/// ([PlannedCost.needsCategory]), and not a slip a confirmed recurring bill already holds ([plannedCoverage]: that bill
+/// is `coveredByPlan`, the cycle is the one just paid or skipped, or the covering occurrence is in [counted]). Dates are
+/// the caller's to check (today .. payday for a period).
+bool plannedReserves(PlannedCost p, List<RecurringBill> recurring, Set<String> counted) {
+  if (!p.isOpen || (p.amount ?? 0) <= 0 || p.coveredByPlan || p.needsCategory) return false;
+  final c = plannedCoverage(p, recurring);
+  if (c == null) return true;
+  return !(c.bill.coveredByPlan || c.occurrence == null || counted.contains(occurrenceKey(c.bill.id, c.occurrence!)));
+}
+
 ({RecurringBill bill, String? occurrence})? _coverage(String? key, String? due, List<RecurringBill> recurring) {
   if (key == null || !_validDate(due)) return null;
   for (final r in recurring) {

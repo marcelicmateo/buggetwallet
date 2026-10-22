@@ -402,6 +402,7 @@ class _UpcomingRow extends StatelessWidget {
       if (past && !isSuggestion) Text('past', style: TextStyle(fontSize: 12.5, color: c.muted)),
       if ((i.planned?.coveredByPlan ?? false) || (i.bill?.coveredByPlan ?? false))
         Text('covered by your plan', style: TextStyle(fontSize: 12.5, color: c.ink2)),
+      if (i.planned?.needsCategory ?? false) StatusLabel(key: ValueKey('needsCategory:${i.key}'), good: false, text: 'Needs a category'),
     ]);
     final title =
         Text(i.title.isEmpty ? (isBillDate ? 'Bill' : 'Planned cost') : i.title, style: const TextStyle(fontWeight: FontWeight.w500));

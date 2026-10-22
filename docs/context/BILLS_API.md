@@ -231,6 +231,14 @@ linked, Upcoming warranty/return entries, reminders. Linux/web: file import (PDF
   the slip reserves (payday 11-01, slip due 10-30, recurring cycle 11-02: the slip is reserved in October, the recurring
   occurrence in November). `upcoming` and `plannedIcs` leave the row out only when the covering occurrence is in their range
   (or k = −1), so Upcoming shows the payment once per range. `plannedCoveredBy` / `billCoveredBy` are unchanged (any cycle).
+- **One rule for what is set aside (B6b).** `bool plannedReserves(PlannedCost p, List<RecurringBill> recurring, Set<String>
+  counted)` (`counted` = recurring occurrences the same total holds, keys `occurrenceKey(id, date)`): open, amount > 0, not
+  `coveredByPlan`, not `needsCategory`, and not a slip whose covering cycle is held (bill `coveredByPlan`, cycle just
+  paid/skipped, or occurrence in `counted`). `computePeriod` uses it with its `dueBills` and exposes the accepted rows as
+  `PeriodBudget.reservedPlannedRows` (Σ = `reservedPlanned`). App: Today's "Coming up" = `reservedPlannedRows.length` /
+  `reservedPlanned`; Upcoming's "Set aside" (`countedIn`) counts planned rows by `plannedReserves` with the bill occurrences it
+  counts in the shown range (any range). "Needs a category": a red mark on the Upcoming row, a Today line per such bill row due
+  this period (`plannedNeedingCategory()`) and a suffix on its heads-up line; each opens the bill sheet.
 - **Bill photos.** `MainActivity` deletes everything in `cache/bill_photos` on create and at the start of each `takePhoto`
   (a picture left when Android killed the app while the camera app was open). No unit test (Kotlin).
 - `asNew` copies made on two devices before they sync pick the same n and merge into one bill (documented trade-off, B5a).

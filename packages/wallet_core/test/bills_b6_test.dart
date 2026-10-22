@@ -172,4 +172,59 @@ void main() {
       expect(plannedCoverage(row('2026-10-29'), [r])?.occurrence, isNull);
     });
   });
+
+  group('3. one rule for what a planned row sets aside (plannedReserves)', () {
+    const st = WalletSettings(salary: 100000, paydayDay: 1, periodStart: '2026-10-01');
+    const day = '2026-10-20';
+    const rec = RecurringBill(
+        id: 'rec:synth_power',
+        payee: 'synth_power',
+        label: 'SYNTH POWER',
+        category: 'Bills & one-offs',
+        expectedAmount: 3000,
+        nextDue: '2026-10-25',
+        status: 'confirmed');
+    PlannedCost billRow(String id, String title, String? category, int amount) => PlannedCost(
+        id: 'bill:$id', title: title, date: '2026-10-26', amount: amount, category: category, source: PlannedSource.bill, sourceRef: id);
+    const plain = PlannedCost(id: 'p1', title: 'Synthetic dentist', date: '2026-10-22', amount: 8000, category: 'Health & care');
+    final covered = billRow('a', 'Synth Power', 'Bills & one-offs', 3100); // recurring cycle 10-25
+    final fixed = billRow('b', 'Synth Water', 'Bills & subscriptions', 4000);
+    final noCategory = billRow('c', 'Synth Gas', null, 2500);
+
+    test('computePeriod sums exactly reservedPlannedRows, the rows plannedReserves accepts', () {
+      final b = computePeriod(const [], st, const [], day, bills: const [rec], planned: [plain, covered, fixed, noCategory]);
+      expect(b.duePlanned, hasLength(4));
+      expect(b.reservedPlannedRows.map((p) => p.id), ['p1']);
+      expect(b.reservedPlanned, 8000);
+      expect(b.reservedPlanned, b.reservedPlannedRows.fold<int>(0, (s, p) => s + p.amount!));
+      final counted = {occurrenceKey(rec.id, rec.nextDue)};
+      expect([
+        for (final p in b.duePlanned) plannedReserves(p, const [rec], counted)
+      ], [
+        true,
+        false,
+        false,
+        false
+      ]);
+    });
+
+    test('the covering occurrence not counted by the caller: the slip reserves', () {
+      expect(plannedReserves(covered, const [rec], const {}), isTrue);
+      expect(plannedReserves(covered, const [rec], {occurrenceKey(rec.id, '2026-11-24')}), isTrue);
+      expect(plannedReserves(covered, const [rec], {occurrenceKey(rec.id, '2026-10-25')}), isFalse);
+    });
+
+    test('closed, empty or zero rows never reserve', () {
+      const paid = PlannedCost(id: 'p2', title: 'x', date: '2026-10-22', amount: 100, status: PlannedStatus.paid);
+      const none = PlannedCost(id: 'p3', title: 'x', date: '2026-10-22');
+      const gone = PlannedCost(id: 'p4', title: 'x', date: '2026-10-22', amount: 100, deleted: true);
+      expect([
+        for (final p in [paid, none, gone]) plannedReserves(p, const [], const {})
+      ], [
+        false,
+        false,
+        false
+      ]);
+    });
+  });
 }

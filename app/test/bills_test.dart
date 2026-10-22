@@ -1349,6 +1349,87 @@ void main() {
       expect(wc.editBill(id, note: 'synthetic note'), isTrue);
       expect(wc.period().reservedPlanned, 0, reason: 'a fixed category: covered by the plan');
     });
+
+    /// 20 Oct 2026 (repo clock too), pay period 1 Oct .. 31 Oct. A confirmed recurring bill SYNTH POWER due 10-20, and four
+    /// planned rows: a plain flex cost (reserved), the power slip that recurring bill holds, a water slip in a fixed category,
+    /// and a gas slip with no category (confirmed while paid, then unlinked).
+    ({WalletController wc, String plain, String power, String water, String gas}) mixedWallet() {
+      final repo = WalletRepo.inMemory(now: () => budgetToday.millisecondsSinceEpoch);
+      final wc = WalletController.forTest(repo, key: VaultKey.generate(), clock: () => budgetToday, billInputs: FakeBillInputs().inputs);
+      repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        for (final d in ['2026-07-22', '2026-08-21', '2026-09-20']) syntheticTx(d, -3000, 'Trajni nalog', 'SYNTH POWER'),
+        syntheticTx('2026-10-19', -2500, 'POS plaćanje', 'POS SYNTHSHOP ZAGREB'),
+      ]));
+      repo.updateSettings({'salary': 150000, 'salaryConfirmed': true, 'periodStart': '2026-10-01', 'paydayDay': 1});
+      final rec = repo.recurringBills().single;
+      expect(rec.nextDue, '2026-10-20');
+      repo.confirmRecurring(rec.id);
+      final plain = repo.addPlanned(title: 'Synthetic dentist', date: '2026-10-24', amount: 8000, category: 'Health & care');
+      String slip(String ext, String payee, String due, int total, String? category) {
+        final (id, _) = repo.importBill(syntheticBill(ext, payee: payee, due: due, total: total));
+        if (category != null) {
+          repo.updateBill(id, category: category);
+          repo.confirmBill(id);
+        }
+        return id;
+      }
+
+      final power = slip('b6-power', 'Synth Power', '2026-10-22', 3100, 'Bills & one-offs');
+      final water = slip('b6-water', 'Synth Water', '2026-10-25', 4000, 'Bills & subscriptions');
+      final gas = slip('b6-gas', 'Synth Gas', '2026-10-26', 2500, null);
+      repo.linkBill(gas, repo.transactions().firstWhere((t) => t.description.contains('SYNTHSHOP')).id);
+      repo.confirmBill(gas);
+      repo.unlinkBill(gas);
+      wc.snoozeKeyBackup();
+      wc.reload();
+      return (wc: wc, plain: plain, power: power, water: water, gas: gas);
+    }
+
+    test('Coming up and Set aside count exactly the planned rows the period reserves', () {
+      final w = mixedWallet();
+      final p = w.wc.period();
+      expect(p.duePlanned, hasLength(4));
+      expect(p.reservedPlannedRows.map((x) => x.id), [w.plain]);
+      expect(p.reservedPlanned, 8000);
+      expect(w.wc.comingUp(), (count: p.reservedPlannedRows.length, total: p.reservedPlanned));
+      final range = w.wc.upcomingRange();
+      final items = w.wc.upcomingItems(range.start, range.end);
+      final counted = w.wc.countedIn(items);
+      final bills = p.dueBills.where((b) => !b.coveredByPlan);
+      expect(counted, (count: p.reservedPlannedRows.length + bills.length, total: p.reservedPlanned + p.reservedBills));
+      // Each planned row in Upcoming is counted exactly when the period reserves it.
+      final shownPlanned = [
+        for (final i in items)
+          if (i.planned != null) i
+      ];
+      expect(w.wc.countedIn(shownPlanned), (count: 1, total: 8000));
+      expect(plannedIsBill(w.wc.plannedNeedingCategory().single), isTrue);
+      expect(w.wc.plannedNeedingCategory().single.sourceRef, w.gas);
+    });
+
+    tw('"Needs a category" on Today and in Upcoming at 320 dp x 2.0; tapping opens the bill sheet', (tester) async {
+      final w = mixedWallet();
+      w.wc.saveHeadsUp(cents: 1000, days: 7);
+      await pumpApp(tester, todayOf(w.wc), size: const Size(320, 4000), textScale: 2);
+      final line = key('needsCategory:${WalletRepo.billPlannedId(w.gas)}');
+      expect(line, findsOneWidget);
+      expect(find.descendant(of: line, matching: find.textContaining('needs a category')), findsOneWidget);
+      expect(find.textContaining('· needs a category'), findsNWidgets(2), reason: 'its own line and its heads-up line');
+      await tester.ensureVisible(line);
+      await tester.tap(line);
+      await tester.pumpAndSettle();
+      expect(find.text('Category (needed)'), findsOneWidget, reason: 'the bill sheet of the gas slip');
+
+      await pumpApp(tester, Scaffold(body: UpcomingScreen(wc: w.wc)), size: const Size(320, 4000), textScale: 2);
+      final tag = key('needsCategory:p:${WalletRepo.billPlannedId(w.gas)}');
+      expect(tag, findsOneWidget);
+      expect(find.textContaining('Needs a category', findRichText: true), findsOneWidget);
+      final row = key('up:p:${WalletRepo.billPlannedId(w.gas)}');
+      await tester.ensureVisible(row);
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(find.text('Category (needed)'), findsOneWidget);
+    });
   });
 
   group('privacy', () {

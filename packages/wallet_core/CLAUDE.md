@@ -197,7 +197,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `billPayeeKey`, due ± 3 days of a cycle, decided when read) is not reserved when that cycle (`plannedCoverage`) is the
   `nextDue` this period's `dueBills` lists, the cycle just paid/skipped, or the bill is `coveredByPlan` (B6: else the slip
   reserves), and not listed in `upcoming`/`plannedIcs` when that cycle is in their range; a bill row without a category
-  (`PlannedCost.needsCategory`) is listed, never reserved. Auto link `planBillLinks` in `_reconcile` (caught up only) and at confirm: a token (reference ≥ 6
+  (`PlannedCost.needsCategory`) is listed, never reserved. One rule: `plannedReserves(p, recurring, counted)` (B6b), used by
+  `computePeriod` (`PeriodBudget.reservedPlannedRows`) and the app's Upcoming "Set aside". Auto link `planBillLinks` in `_reconcile` (caught up only) and at confirm: a token (reference ≥ 6
   digits, JIR, invoice no: digits only ≥ 6, mixed ≥ 4 with a letter and a digit) in the bank row's `normalizeForLink` description with digit boundaries, −amount == total,
   date − 3 .. (due ?? date) + 60, exactly one row and one bill; never by amount alone, never reclassifies. Deleting the
   paying tx unlinks at once; other devices unlink a bill whose payment row arrives deleted in `_autoLinkBills` (caught
