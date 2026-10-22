@@ -41,7 +41,7 @@ void main() {
   }
 
   testWidgets('Today hero and stat strip: one narrow gap, no widget between number and sign', (tester) async {
-    await pumpFull(tester, demoWallet(), 1.0, size: const Size(800, 1000));
+    await pumpFull(tester, demoWallet()..snoozeKeyBackup(), 1.0, size: const Size(800, 1000)); // no key row above the hero
     await tapTab(tester, 'Today');
     for (final scale in [1.0, 2.0]) {
       tester.platformDispatcher.textScaleFactorTestValue = scale;

@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
+import 'key_backup.dart';
 import 'review.dart';
 
 class TodayScreen extends StatelessWidget {
@@ -64,6 +65,7 @@ class TodayScreen extends StatelessWidget {
         child: ListView(
             padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
             children: _gap([
+              if (wc.keyBackupRowVisible) KeyBackupRow(wc: wc),
               if (!s.salaryConfirmed)
                 Panel(color: c.warnBg, children: [
                   Text('Planning on ${money(s.salary, cur, decimals: 0)} a month',

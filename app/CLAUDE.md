@@ -56,6 +56,11 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   the `budget_wallet/timezone` channel in MainActivity; POST_NOTIFICATIONS is asked when the switch is turned on). Everything but
   Android gets `NoNudges` (the switch is off with a note). The controller schedules again on start and resume. A reminder never
   carries amounts, merchants or names. Tests use `FakeNudges` (`test/support/wallet.dart`) through `forTest(nudges:)`.
+- Save-key prompt (S3): `screens/key_backup.dart` (`KeyBackupSheet` via `showSheet`: why, QR + key text, Copy key, "I saved it" → type the last 4 characters, Later; `KeyBackupRow` = Today's
+  notice). Controller: `keyBackupRowVisible`, `takeKeyBackupPrompt()` (true once after `createWallet`; `HomeShell.initState` opens the sheet), `confirmKeyBackup(typed)`,
+  `snoozeKeyBackup()` (7 days), `copyKeyBackup()` (clipboard cleared after 60 s if it still holds the key; `clipboardWrite/Read` swappable in tests). Device-local values
+  `keyBackupConfirmed`, `keyBackupSnoozedUntil`; `joinWallet` marks confirmed. Logs `key.backup {shown|copied|confirmed|snoozed}`, nothing else. Tests: `test/key_backup_test.dart`.
+  Tests that need a clean Today call `wc.snoozeKeyBackup()`; integration helpers call `wc.takeKeyBackupPrompt()` after `createWallet`.
 - `lib/src/file_chooser.dart` — `FileChooser`: the system file/folder/save dialogs behind one injectable class. They can throw
   (Linux without xdg-desktop-portal), so every call site catches, logs the type and shows `chooserFailedMessage`.
 - `lib/src/theme.dart` — the D3 Ledger theme (`docs/design/ledger-spec.md`): `WalletColors` (paper/ink tokens incl. `lineStrong`; light and

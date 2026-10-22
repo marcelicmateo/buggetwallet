@@ -112,6 +112,7 @@ class Harness {
     _wc = wc;
     if (wallet) {
       await wc.createWallet();
+      wc.takeKeyBackupPrompt(); // the save-key sheet would cover every screen; onboarding_test covers it
       _keys.add(await wc.keyText());
       if (noGoals) {
         for (final g in wc.goals) {
