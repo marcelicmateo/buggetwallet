@@ -30,31 +30,42 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 Agent models: scout, ci-watcher haiku/low; test-writer, devops sonnet/medium; ui-builder sonnet/high; core-builder, reviewer Fable/high.
 Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the lead from the branch named in "Base".
 
-## Stage H: hardening before M6 (2026-10-22, spec `PATH_FORWARD.md` §4; one schema bump → 8, one protocol doc bump)
-Items H1–H14 are specified in `PATH_FORWARD.md`; this table is the queue. Merge order: B → A → devops → tests → ui.
+## Stage G: foundation — structure and practices (2026-10-22, `PATH_FORWARD.md` §4; behaviour-neutral, no schema change)
+Owner direction: structure and practices first. Merge order: A → ui → tests → devops.
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
-| H0a | Context pack: budget/periods/categories money paths, settings map storage, PBZ detect, import caps | scout | – | – | queued |
-| H0b | Context pack: sync engine marker/409 paths, hlc, vault seal/unseal, local_db key, relay wallet meta, signing | scout | – | – | queued |
-| H0c | Context pack: Android manifest/gradle signing, relay server options, Containerfile.relay, key_store_io, build.sh pub get | scout | – | – | queued |
-| H0d | Context pack: sync sim/convergence tests, relay tests, importer golden/edge tests, db_safety fixtures | scout | – | – | queued |
-| HA | H1 currency filter, H2 paydayPassed/overBy/affordability guard + lowIncome into core, H3 per-key budgets/patterns (schema 8), H4 PBZ header/idCollision/import caps | core-builder A | harden-core | H0a | queued |
-| HB | H5 relay instance id, H6 device id per install + `deviceIdInUse`, H7 bounded HLC `clockDrift`, H8 BWOP2 AAD + inflate cap + cipher pin + `bw-relay-v3` host, H9 field-pair repair | core-builder B | harden-sync | H0b | queued |
-| HD | H10 Android defaults + keystore fail, H11 relay token/trust-proxy/HEALTHCHECK/read-only/TLS path + key file umask, H12 enforce-lockfile + release-notes template | devops | harden-platform | H0c | queued |
-| HT | H13 scenario/invariant/model-equivalence/KAT/bomb tests + fixtures (written from the spec, `skip: 'BUG: …'` until HA/HB land) | test-writer | harden-tests | H0d | queued |
-| HU | App halves: device id stored next to the key (H6), `FLAG_SECURE` on the key sheet (H10), `clockDrift`/`deviceIdInUse` shown in Plan › Sync | ui-builder | harden-ui | HB, HD | queued |
-| H14 | Docs: version table, threat-model additions, rotation procedure, backup/blob note, metadata note | lead | v2 | HB | queued |
-| H | Merge, reviewer, Haiku full run, emulator screens, push, STATUS | lead | v2 | HA, HB, HD, HT, HU, H14 | queued |
+| G0a | Context pack: `repo.dart` entity map / `_intCols` / DDL / migration / `_apply` / snapshot / export / search; barrel exports; dates/money helpers; recurring read side | scout | – | – | queued |
+| G0b | Context pack: controller renames, the three page-or-dialog copies, `_plain` copies, keyboard scaffolds, app bars, gate pages, `DateTime.now()` sites, platform-split names, the four CAR 6.4/6.8 bug sites | scout | – | – | queued |
+| G0c | Context pack: importer copy-pinned tests, `find.text` sites by file, font-skip test, `platform_test.dart` | scout | – | – | queued |
+| G0d | Context pack: `build.sh pub_ready` + `pub get` sites, ci.yml jobs, gradle release block, lockfiles | scout | – | – | queued |
+| GA | G1 typed entity schema + generalised migration + clocks lookup + `repo.dart` parts; G2 core/importer surface | core-builder A | foundation-core | G0a | queued |
+| GU | G3 app surface; G4 the four sweep bugs with tests | ui-builder | foundation-ui | G0b | queued |
+| GT | G5 tests by contract (importer messages, `ValueKey`s, font test fails, `meetsGuideline`) | test-writer | foundation-tests | G0c | queued |
+| GD | G6 CI on push (needs D1), enforce-lockfile, pub workspace, R8, advisories step, release-notes template | devops | foundation-devops | G0d, D1 | queued |
+| G | Merge, reviewer (checklist = `PATH_FORWARD.md` §5), Haiku full run, push, STATUS | lead | v2 | GA, GU, GT, GD | queued |
 
-## Stage I: UI quick wins + surface hygiene (after H; `PATH_FORWARD.md` §4 I1–I9; no schema/protocol change)
+## Stage H: hardening before M6 (after G; `PATH_FORWARD.md` §4 H1–H13; one schema bump → 8, one protocol doc bump)
+Merge order: B → A → devops → tests → ui.
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
-| IU | I1–I7 (over-budget copy, wish name, ledger foots, toasts with Undo/Open, labels/filled primary/X/sticky Confirm, type tokens + 48 dp + MergeSemantics + compact TxTile, honest states) and the app half of I8 | ui-builder | quickwins-ui | H | queued |
-| IC | Packages half of I8 (importer test copy, isIsoDate, barrel show lists, dead code, verb vocabulary, rounding rule in core) | core-builder | quickwins-core | H | queued |
-| IT | I9 tests on `ValueKey`s, font test fails not skips, `meetsGuideline` sweeps | test-writer | quickwins-tests | H | queued |
-| I | Merge, reviewer, Haiku full run, emulator screens incl. dark frames, push, STATUS → owner starts `ci` for the M6 build | lead | v2 | IU, IC, IT | queued |
+| H0a–d | Context packs (money paths; sync marker/409/hlc/vault/local_db/relay meta/signing; manifest/gradle/relay options/key_store_io; sim + relay + importer tests) | scout | – | G | queued |
+| HA | H1 currency filter, H2 paydayPassed/overBy/affordability/lowIncome/income parts, H3 per-key budgets + patterns (schema 8), H4 PBZ header/FILEPASS/idCollision/import caps | core-builder A | harden-core | H0a | queued |
+| HB | H5 relay instance id + fingerprint, H6 device id per install + `deviceIdInUse`, H7 bounded HLC `clockDrift`, H8 BWOP2 AAD + inflate cap + cipher pin + `bw-relay-v3` + delete-wins table, H9 field-pair repair + re-entrancy docs | core-builder B | harden-sync | H0b | queued |
+| HD | H10 Android defaults + keystore fail + QR-only default, H11 relay token/trust-proxy/HEALTHCHECK/read-only/HEAD/500 + TLS path (D5) + key file umask | devops | harden-platform | H0c, D5 | queued |
+| HT | H12 scenario / invariant / equivalence / fault-injection / fuzz / KAT / bomb / fixture tests (from the spec, `skip: 'BUG: …'` until HA/HB land) | test-writer | harden-tests | H0d | queued |
+| HU | App halves: device id next to the key (H6), `FLAG_SECURE` + QR-first key sheet (H10), `clockDrift` / `deviceIdInUse` / relay fingerprint in Plan › Sync | ui-builder | harden-ui | HB, HD | queued |
+| H13 | Docs: version table, threat model, rotation, backups/blobs, relay restore warning, metadata, limits, §8 corrections, household recipe, bill corpus location | lead | v2 | HB | queued |
+| H | Merge, reviewer, Haiku full run, emulator screens, push, STATUS | lead | v2 | HA, HB, HD, HT, HU, H13 | queued |
 
-Owner decisions D1–D7 (`PATH_FORWARD.md` §7) are needed before HD (D5 TLS path) and before Stage P (D2, D3, D6).
+## Stage I: UI quick wins (after H; `PATH_FORWARD.md` §4 I1–I9; no schema/protocol change)
+| # | Item | Agent | Branch | Depends on | Status |
+|---|---|---|---|---|---|
+| IU | I1–I8 (over-budget copy, wish name, ledger foots, toasts + Undo, labels/filled primary/X/sticky Confirm/date picker/default category, type tokens + 48 dp + MergeSemantics + grid + compact TxTile + Upcoming/Wishlist/desktop strip + delivery-hour gate + dark toggle, persistent add action, honest states + matched mark) | ui-builder | quickwins-ui | H | queued |
+| IT | Widget tests for I1–I8 from the spec | test-writer | quickwins-tests | H | queued |
+| I | I9 dark frames + emulator screens read; merge, reviewer, Haiku full run, push, STATUS → owner starts `ci` for the M6 build | lead | v2 | IU, IT | queued |
+
+Owner decisions D1–D7 (`PATH_FORWARD.md` §8): D1 before GD, D5 before HD, D2/D3/D6 before Stage P. Stages J and P are
+specified in `PATH_FORWARD.md` and are queued here when H and M6 finish.
 
 ## Stage R: sync redesign (2026-10-22, spec DESIGN_DECISIONS §4.9)
 | # | Item | Agent | Depends on | Status |

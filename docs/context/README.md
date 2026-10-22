@@ -12,7 +12,7 @@ update them here, on the `v2` branch.
 | `ARCHITECTURE.md` | v2 requirements and the decisions behind them (transport options etc.). The as-built design is `docs/architecture.md`. |
 | `IMPORT_FORMATS.md` | PBZ and Revolut export formats the importer has to handle. |
 | `DESIGN_DECISIONS.md` | 2026-10-19 planning session: decisions, data-flow gaps, web plan, proposals (bank profiles, bills, calendar, projects), kept UI directions, task order. |
-| `PATH_FORWARD.md` | 2026-10-22 plan from the six outside reviews (`docs/review/`): stages H (hardening) → I (UI quick wins) → M6 (owner live test) → J (structure) → P (product), delegation, trade-offs, owner decisions D1–D7. |
+| `PATH_FORWARD.md` | 2026-10-22 plan from the six outside reviews (`docs/review/`): stages G (structure + practices) → H (hardening) → I (UI quick wins) → M6 (owner live test) → J (deeper structure) → P (product); every review KEEP/CHANGE placed (§10 index), KEEP register for the reviewer (§5), delegation, trade-offs, owner decisions D1–D7. |
 
 ## Privacy
 The repo holds no personal figures: no salary, rent, loan, balance or other amounts from the owner's life, no

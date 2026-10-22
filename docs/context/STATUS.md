@@ -232,8 +232,8 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   month → "Add as new bill"; open the photo/PDF on the laptop after a sync; set a return-by date and wait for the 09:00
   reminder (no payee or amount in it); install the 44 MB APK from the `ci` run over the old app.
 - Build order (owner 2026-10-22: every feature first, the owner tests last): future spending (done) → bills database
-  (done) → outside reviews (done, `docs/review/`) → **Stage H hardening → Stage I UI quick wins → M6 owner live test**
-  (plan, delegation and owner decisions D1–D7 in `PATH_FORWARD.md`; queue in `PIPELINE.md` Stage H/I).
+  (done) → outside reviews (done, `docs/review/`) → **Stage G foundation (structure + practices, owner 2026-10-22) → Stage H hardening → Stage I UI quick wins → M6 owner live test**
+  (plan with every review KEEP/CHANGE placed, delegation, owner decisions D1–D7 in `PATH_FORWARD.md`; queue in `PIPELINE.md` Stage G/H/I).
 - M6 adds four disaster drills to the owner checks (`PATH_FORWARD.md` §4 M6): new phone with the relay alive; new phone
   with the relay dead + `.bwb`; relay address switched to a second relay and back; laptop clock a day ahead for one sync.
 
