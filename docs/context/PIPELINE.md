@@ -61,7 +61,7 @@ throws `SqliteException` extended code 26 "file is not a database".
 |---|---|---|---|---|
 | S1 | Relay protocol v2: signed requests (Ed25519 from the wallet key, relay keeps the public key only), replay-harmless writes, clock-skew retry; server + `RelayTransport` + protocol doc | core-builder | – | running |
 | S2 | Docs: README, docs/setup.md, docs/architecture.md, DESIGN_DECISIONS §2 diagram, wallet_core CLAUDE.md backup notes still describe Syncthing | general-purpose (sonnet/medium) | – | done (8389317, labels fixed by lead) |
-| S3 | Key backup prompt (gap 7): the encrypted db and relay make the wallet key the only way back | ui-builder | – | running |
+| S3 | Key backup prompt (gap 7): the encrypted db and relay make the wallet key the only way back | ui-builder | – | done (b9c15a1, app 770, desktop onboarding + emulator screens ok) |
 
 Stage R notes: the haiku watcher stopped twice before finishing (it hands back while waiting on its own background run); the
 lead ran the remaining suites with one background command. Worktrees from `isolation: "worktree"` start on `master`:
