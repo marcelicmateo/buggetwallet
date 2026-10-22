@@ -1,8 +1,9 @@
-/// Search over everything in the wallet (M5). Pure: the caller passes the lists it shows.
+/// Search over everything in the wallet. Pure: the caller passes the lists it shows.
 library;
 
 import 'bills.dart';
 import 'models.dart';
+import 'schema.dart';
 
 /// Newest transactions a result holds at most.
 const searchTxLimit = 200;
@@ -54,19 +55,69 @@ class SearchResult {
   /// Planned costs (§4.3), in input order.
   final List<PlannedCost> planned;
 
-  /// Stored bills (receipts, slips; stage B), in input order.
+  /// Stored bills (receipts, slips), in input order.
   final List<Bill> billsDb;
+
+  /// Matches among the raw rows passed as [searchAll]'s `rows` (entity → matching rows, input order; see [searchRows]).
+  final Map<String, List<Map<String, Object?>>> rows;
   const SearchResult(
       {this.txs = const [],
       this.goals = const [],
       this.wishlist = const [],
       this.bills = const [],
       this.planned = const [],
-      this.billsDb = const []});
+      this.billsDb = const [],
+      this.rows = const {}});
 
   static const empty = SearchResult();
 
-  bool get isEmpty => txs.isEmpty && goals.isEmpty && wishlist.isEmpty && bills.isEmpty && planned.isEmpty && billsDb.isEmpty;
+  bool get isEmpty =>
+      txs.isEmpty &&
+      goals.isEmpty &&
+      wishlist.isEmpty &&
+      bills.isEmpty &&
+      planned.isEmpty &&
+      billsDb.isEmpty &&
+      rows.values.every((l) => l.isEmpty);
+}
+
+/// The names of the columns of [entity] that search looks at (flagged `searchable` in [entitySchema]): text columns
+/// by folded substring, integer columns by exact amount. Unknown entity → none.
+List<String> searchableColumns(String entity) => [
+      for (final c in entitySchema[entity]?.columns ?? const <ColumnDef>[])
+        if (c.searchable) c.name
+    ];
+
+/// The rows of [entity] (maps as `SELECT *` returns them) matching [query] on its searchable columns ([searchableColumns]):
+/// a text column that holds the folded query ([foldText]) or, when the query is an amount ([parseAmountQuery]), an
+/// integer column whose `abs()` is that many cents. A row whose `deleted` is 1 is never found. Input order. Any entity
+/// flagged searchable in the schema is searched this way without a parameter of its own on [searchAll].
+List<Map<String, Object?>> searchRows(String entity, String query, Iterable<Map<String, Object?>> rows) {
+  final q = foldText(query.trim());
+  if (q.isEmpty) return const [];
+  final cols = [
+    for (final c in entitySchema[entity]?.columns ?? const <ColumnDef>[])
+      if (c.searchable) c
+  ];
+  if (cols.isEmpty) return const [];
+  final cents = parseAmountQuery(query)?.abs();
+  bool hit(Map<String, Object?> r) {
+    if (r['deleted'] == 1) return false;
+    for (final c in cols) {
+      final v = r[c.name];
+      if (c.type == ColumnType.text) {
+        if (v is String && foldText(v).contains(q)) return true;
+      } else if (cents != null && v is int && v.abs() == cents) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  return [
+    for (final r in rows)
+      if (hit(r)) r
+  ];
 }
 
 /// Everything matching [query]: a case- and accent-insensitive substring ([foldText]) of a transaction's description,
@@ -76,7 +127,8 @@ class SearchResult {
 /// (deleted ones never); a stored bill ([billsDb], deleted ones never) by payee, description or an item name, or its
 /// exact total. A query that is both matches either way. Deleted and
 /// replaced transactions are never found. Blank query → [SearchResult.empty]. Transactions come newest first (date,
-/// then id, descending), capped at [searchTxLimit]; the other lists keep their input order.
+/// then id, descending), capped at [searchTxLimit]; the other lists keep their input order. [rows] (entity → raw rows)
+/// are searched on the entity's searchable columns ([searchRows]) into [SearchResult.rows].
 SearchResult searchAll(
   String query, {
   required List<CategorizedTx> txs,
@@ -85,6 +137,7 @@ SearchResult searchAll(
   required List<RecurringBill> bills,
   List<PlannedCost> planned = const [],
   List<Bill> billsDb = const [],
+  Map<String, Iterable<Map<String, Object?>>> rows = const {},
 }) {
   final q = foldText(query.trim());
   if (q.isEmpty) return SearchResult.empty;
@@ -123,5 +176,6 @@ SearchResult searchAll(
             (text(b.payee) || text(b.description) || b.items.any((i) => text(i.name)) || (b.total != null && amount(b.total!))))
           b
     ],
+    rows: {for (final e in rows.entries) e.key: searchRows(e.key, query, e.value)},
   );
 }
