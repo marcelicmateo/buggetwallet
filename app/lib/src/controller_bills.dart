@@ -277,8 +277,7 @@ extension BillsDb on WalletController {
       }
       ref = await _blobStore().add(keep, type ?? 'jpg');
     }
-    final (id, isNew) =
-        standInImportBill(repo, bill, file: ref, asNew: asNew); // TODO(core merge): repo.importBill(bill, file: ref, asNew: asNew)
+    final (id, isNew) = repo.importBill(bill, file: ref, asNew: asNew);
     logEvent(_billLog, Level.INFO, 'bills.import', {
       'trigger': trigger,
       'source': bill.source.name,
@@ -381,9 +380,12 @@ extension BillsDb on WalletController {
   bool billNeedsCategory(Bill b) => b.category == null && b.dueDate != null && b.dueDate!.compareTo(today()) >= 0;
 
   /// The category worth suggesting for [b] (earlier bills and payments of the same payee); null when nothing fits.
-  String? suggestedBillCategory(Bill b) => billCategorySuggester != null
-      ? billCategorySuggester!(b)
-      : standInSuggestBillCategory(b, recurring: recurringBills(), txs: txs); // TODO(core merge): suggestBillCategory(...)
+  String? suggestedBillCategory(Bill b) =>
+      billCategorySuggester != null ? billCategorySuggester!(b) : suggestBillCategory(b, recurring: recurringBills(), txs: txs);
+
+  /// The confirmed expected bill that already plans this slip (same payee, due about one cycle), or null. Such a bill's planned row is
+  /// listed but not reserved (decided by core when read).
+  RecurringBill? billPlannedBy(Bill b) => billCoveredBy(b, recurringBills());
 
   /// "Paid by…": the owner picked the payment. Returns false when that payment already belongs to another bill.
   bool linkBill(String id, String txId) {

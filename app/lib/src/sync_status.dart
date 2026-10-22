@@ -16,6 +16,9 @@ import 'package:wallet_core/wallet_core.dart';
 /// "3 bill files waiting to upload" (shown only when something waits).
 String blobsWaitingText(int n) => '$n bill ${n == 1 ? 'file' : 'files'} waiting to upload';
 
+/// What Plan › Sync says when the relay cannot keep bill files.
+const blobsUnsupportedText = "This relay can't keep bill photos yet. Update the relay on the home server.";
+
 /// "just now", "5 min ago", "3 h ago", "2 days ago"; "never" without a time.
 String lastSeenText(DateTime? seen, DateTime now) {
   if (seen == null) return 'never';
