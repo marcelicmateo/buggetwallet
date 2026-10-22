@@ -81,9 +81,9 @@ void main() {
     test('bad X-BW-Covers headers are 400, and nothing changes', () async {
       final h = await freshHarness();
       await putMany(h, 'dev1', 2);
-      expect((await h.send('PUT', '/v1/w/$w1/snapshot/s1', token: tokenA, body: bytes('a'))).statusCode, 400);
+      expect((await h.send('PUT', '/v2/w/$w1/snapshot/s1', key: keyA, body: bytes('a'))).statusCode, 400);
       for (final bad in ['nope', '[]', '{"dev1":"1"}', '{"dev1":-1}', '{"dev1":1.5}', '{"a b":1}', '"x"', '{"dev1":null}']) {
-        final r = await h.send('PUT', '/v1/w/$w1/snapshot/s1', token: tokenA, body: bytes('a'), headers: {'x-bw-covers': bad});
+        final r = await h.send('PUT', '/v2/w/$w1/snapshot/s1', key: keyA, body: bytes('a'), headers: {'x-bw-covers': bad});
         expect(r.statusCode, 400, reason: bad);
       }
       expect((await h.state(w1))['snapshot'], isNull);
@@ -136,7 +136,7 @@ void main() {
       final h = await freshHarness();
       await putMany(h, 'dev1', 1);
       final big = List<int>.filled(64 * 1024 * 1024 + 1, 7);
-      final r = await h.send('PUT', '/v1/w/$w1/snapshot/s1', token: tokenA, body: big, headers: {'x-bw-covers': '{}'});
+      final r = await h.send('PUT', '/v2/w/$w1/snapshot/s1', key: keyA, body: big, headers: {'x-bw-covers': '{}'});
       expect(r.statusCode, 413);
       expect((await h.state(w1))['snapshot'], isNull);
     });
@@ -144,10 +144,10 @@ void main() {
     test('snapshots of two wallets do not mix', () async {
       final h = await freshHarness();
       await putMany(h, 'dev1', 1);
-      await h.putData(w2, 'dev1', 1, 'x', token: tokenB);
+      await h.putData(w2, 'dev1', 1, 'x', key: keyB);
       await h.putSnapshot(w1, 's1', {'dev1': 1}, 'mine');
-      expect((await h.getSnapshot(w2, 's1', token: tokenB)).statusCode, 404);
-      expect((await h.getSnapshot(w1, 's1', token: tokenB)).statusCode, 401);
+      expect((await h.getSnapshot(w2, 's1', key: keyB)).statusCode, 404);
+      expect((await h.getSnapshot(w1, 's1', key: keyB)).statusCode, 401);
     });
   });
 
@@ -300,7 +300,7 @@ void main() {
       await h.putSnapshot(w1, 's1', {'dev1': 1}, 'a');
       await h.putSnapshot(w1, 's2', {'dev1': 2, 'dev2': 1}, 'b');
       expect(await h.state(w1), {
-        'api': 1,
+        'api': 2,
         'devices': {
           'dev1': {
             'first': 2,
@@ -330,7 +330,7 @@ void main() {
       final h = await freshHarness();
       h.clock = DateTime.utc(2026, 1, 2, 3, 4, 5, 678, 9);
       await h.putData(w1, 'dev1', 1, 'a');
-      final r = await h.get('/v1/w/$w1/state', token: tokenA);
+      final r = await h.get('/v2/w/$w1/state', key: keyA);
       final j = jsonDecode(r.body) as Map<String, Object?>;
       expect(j.containsKey('snapshot'), isTrue);
       expect(j['snapshot'], isNull);
@@ -350,10 +350,10 @@ void main() {
       expect(await h.device(w1, 'dev1'), containsPair('first', 5));
     });
 
-    test('the state needs the token', () async {
+    test('the state needs a signature', () async {
       final h = await freshHarness();
       await h.putData(w1, 'dev1', 1, 'a');
-      expect((await h.get('/v1/w/$w1/state')).statusCode, 401);
+      expect((await h.get('/v2/w/$w1/state')).statusCode, 401);
     });
   });
 }

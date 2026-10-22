@@ -1,8 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
-import 'package:cryptography/dart.dart';
+import 'signing.dart';
+
+/// The protocol version this relay speaks (`api` in health and state).
+const int apiVersion = 2;
 
 /// Names accepted on the wire (docs/context/RELAY_PROTOCOL.md, "Names").
 final RegExp widPattern = RegExp(r'^[0-9a-f]{32}$');
@@ -21,12 +25,6 @@ int? parseSeq(String s) {
 
 /// A device that has not been seen for this long no longer holds back pruning.
 const Duration deviceMemory = Duration(days: 90);
-
-/// SHA-256 of [s] (UTF-8) as lowercase hex.
-String sha256Hex(String s) {
-  final h = const DartSha256().hashSync(utf8.encode(s));
-  return [for (final b in h.bytes) b.toRadixString(16).padLeft(2, '0')].join();
-}
 
 /// Constant-time comparison of two strings.
 bool constantTimeEquals(String a, String b) {
@@ -77,13 +75,16 @@ class Snap {
   Map<String, Object?> toJson() => {'id': id, 'covers': covers};
 }
 
-/// One wallet: auth hash, devices, snapshots and the byte total, rebuilt from its folder on start.
+/// One wallet: its public signing key, devices, snapshots and the byte total, rebuilt from its folder on start.
 class Wallet {
-  Wallet(this.wid, this.dir, this.tokenHash);
+  Wallet(this.wid, this.dir, this.pub) : pubBytes = decodeBase64Url(pub, 32)!;
 
   final String wid;
   final Directory dir;
-  final String tokenHash;
+
+  /// Ed25519 public key (base64url, no padding) set by the request that created the wallet: verifies every request.
+  final String pub;
+  final Uint8List pubBytes;
   final Map<String, DeviceState> devices = {};
   Snap? snapshot;
   Snap? previous;
@@ -98,7 +99,7 @@ class Wallet {
   Map<String, Object?> stateJson() {
     final names = devices.keys.toList()..sort();
     return {
-      'api': 1,
+      'api': apiVersion,
       'devices': {
         for (final n in names)
           n: {
@@ -115,8 +116,8 @@ class Wallet {
 
   Future<void> saveMeta() async {
     final meta = {
-      'v': 1,
-      'tokenHash': tokenHash,
+      'v': 2,
+      'pub': pub,
       'devices': {
         for (final e in devices.entries) e.key: {'last': e.value.last, 'lastSeen': formatTime(e.value.lastSeen), 'acks': e.value.acks},
       },
@@ -166,9 +167,9 @@ class Wallet {
     } on Object {
       return null;
     }
-    final hash = meta['tokenHash'];
-    if (hash is! String || hash.isEmpty) return null;
-    final w = Wallet(wid, dir, hash);
+    final pub = meta['pub'];
+    if (pub is! String || decodeBase64Url(pub, 32) == null) return null; // a v1 meta (token hash) is not a wallet any more
+    final w = Wallet(wid, dir, pub);
     final devs = meta['devices'];
     if (devs is Map<String, Object?>) {
       for (final e in devs.entries) {

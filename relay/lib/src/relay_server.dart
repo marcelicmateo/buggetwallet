@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'rate_limit.dart';
+import 'signing.dart';
 import 'wallet.dart';
 
 const int _mib = 1024 * 1024;
@@ -19,6 +20,7 @@ const int _maxJsonBytes = 64 * 1024;
 /// Default for [Relay.maxInFlightBytes]: request body bytes one client address may have buffered at once.
 const int defaultMaxInFlightBytes = 32 * _mib;
 const List<String> defaultOrigins = ['http://127.0.0.1:8080', 'http://localhost:8080'];
+final RegExp _timePattern = RegExp(r'^[0-9]{1,16}$');
 
 class _HttpError implements Exception {
   _HttpError(this.status, this.message, {this.close = false});
@@ -51,6 +53,21 @@ class _Out {
   final bool close;
 }
 
+/// The signature headers of a request and what it signs besides method and body (RELAY_PROTOCOL.md "Signed requests").
+class _Sig {
+  _Sig(this.path, this.time, this.sig, this.covers);
+
+  /// From `/v2/` on, rebuilt from the checked segments.
+  final String path;
+  final String time;
+  final Uint8List sig;
+
+  /// The `X-BW-Covers` value, or empty.
+  final String covers;
+
+  String text(String method, List<int> body) => signedText(method, path, covers, sha256OfBytes(body), time);
+}
+
 /// What a request log line may say: kind, byte count, short wallet and device ids.
 class _LogInfo {
   String kind = 'other';
@@ -63,7 +80,7 @@ class _LogInfo {
   int held = 0;
 }
 
-/// The relay: HTTP API v1 over a data folder (docs/context/RELAY_PROTOCOL.md). It stores sealed files it cannot read.
+/// The relay: HTTP API v2 over a data folder (docs/context/RELAY_PROTOCOL.md). It stores sealed files it cannot read.
 class Relay {
   Relay({
     required this.data,
@@ -163,12 +180,15 @@ class Relay {
       final origin = req.headers.value('origin');
       res.headers.set('Vary', 'Origin');
       res.headers.set('Cache-Control', 'no-store');
+      res.headers.date = _now(); // the relay clock: clients set their signing offset from it
       if (origin != null && origins.contains(origin)) {
         res.headers.set('Access-Control-Allow-Origin', origin);
         if (req.method == 'OPTIONS') {
           res.headers.set('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS');
-          res.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-BW-Covers');
+          res.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-BW-Covers, X-BW-Time, X-BW-Sig, X-BW-Pub');
           res.headers.set('Access-Control-Max-Age', '600');
+        } else {
+          res.headers.set('Access-Control-Expose-Headers', 'Date');
         }
       }
       if (out.status == 429) res.headers.set('Retry-After', '1');
@@ -194,49 +214,52 @@ class Relay {
       return _Out.empty(204);
     }
     final seg = req.uri.pathSegments;
-    if (seg.length < 2 || seg[0] != 'v1') throw _HttpError(404, 'not found');
+    if (seg.length < 2 || seg[0] != 'v2') throw _HttpError(404, 'not found');
     if (seg[1] == 'health' && seg.length == 2) {
       info.kind = 'health';
       _method(req, ['GET']);
-      return _Out.json(200, {'api': 1});
+      return _Out.json(200, {'api': apiVersion});
     }
     if (seg[1] != 'w' || seg.length < 4) throw _HttpError(404, 'not found');
     final wid = seg[2];
     if (!widPattern.hasMatch(wid)) throw _HttpError(400, 'bad wallet id');
     info.wid = wid.substring(0, 6);
     final route = seg[3];
+    final path = '/${seg.join('/')}';
     switch ((route, seg.length)) {
       case ('state', 4):
         info.kind = 'state';
         _method(req, ['GET']);
-        return _getState(req, wid);
+        return _getState(wid, _signature(req, path));
       case ('d', 6):
         final device = _name(seg[4], 'bad device');
         info.device = _short(device);
         final seq = parseSeq(seg[5]);
         if (seq == null) throw _HttpError(400, 'bad seq');
         _method(req, ['GET', 'PUT']);
+        final sig = _signature(req, path);
         if (req.method == 'GET') {
           info.kind = 'get-d';
-          return _getData(req, wid, device, seq, info);
+          return _getData(wid, device, seq, info, sig);
         }
         info.kind = 'put-d';
-        return _putData(req, wid, device, seq, info);
+        return _putData(req, wid, device, seq, info, sig);
       case ('ack', 5):
         final device = _name(seg[4], 'bad device');
         info.device = _short(device);
         info.kind = 'ack';
         _method(req, ['PUT']);
-        return _putAck(req, wid, device, info);
+        return _putAck(req, wid, device, info, _signature(req, path));
       case ('snapshot', 5):
         final id = _name(seg[4], 'bad snapshot id');
         _method(req, ['GET', 'PUT']);
+        final sig = _signature(req, path);
         if (req.method == 'GET') {
           info.kind = 'get-snap';
-          return _getSnapshot(req, wid, id, info);
+          return _getSnapshot(wid, id, info, sig);
         }
         info.kind = 'put-snap';
-        return _putSnapshot(req, wid, id, info);
+        return _putSnapshot(req, wid, id, info, sig);
     }
     throw _HttpError(404, 'not found');
   }
@@ -252,25 +275,36 @@ class Relay {
     return s;
   }
 
-  // ---- auth ---------------------------------------------------------------------------------------------------------
+  // ---- signatures -----------------------------------------------------------------------------------------------
 
-  /// The bearer token of the request; 401 when absent or malformed.
-  static String _bearer(HttpRequest req) {
-    final h = req.headers.value('authorization');
-    if (h != null && h.length > 7 && h.substring(0, 7).toLowerCase() == 'bearer ') {
-      final t = h.substring(7).trim();
-      if (t.isNotEmpty && t.length <= 512 && !t.contains(' ')) return t;
-    }
-    throw _HttpError(401, 'unauthorized');
+  /// The one value of header [name], or null when absent; sent more than once → 400.
+  static String? _header(HttpRequest req, String name, String display) {
+    final v = req.headers[name];
+    if (v == null || v.isEmpty) return null;
+    if (v.length > 1) throw _HttpError(400, 'bad $display');
+    return v.single;
   }
 
-  /// Looks up a known wallet for a read or ack: 404 unknown, 401 wrong or missing token.
-  Wallet _known(HttpRequest req, String wid) {
-    final w = _wallets[wid];
-    if (w == null) throw _HttpError(404, 'unknown wallet');
-    if (!constantTimeEquals(sha256Hex(_bearer(req)), w.tokenHash)) throw _HttpError(401, 'unauthorized');
-    return w;
+  /// The signature headers: 401 when missing, 400 when malformed, 401 `clock` outside [signatureWindow]. Checked before
+  /// any wallet lookup or body read.
+  _Sig _signature(HttpRequest req, String path) {
+    final time = _header(req, 'x-bw-time', 'X-BW-Time');
+    final sig = _header(req, 'x-bw-sig', 'X-BW-Sig');
+    if (time == null || sig == null) throw _HttpError(401, 'unsigned');
+    if (!_timePattern.hasMatch(time) || int.parse(time) > maxSeq) throw _HttpError(400, 'bad X-BW-Time');
+    final bytes = decodeBase64Url(sig, 64);
+    if (bytes == null) throw _HttpError(400, 'bad X-BW-Sig');
+    if ((int.parse(time) - _now().millisecondsSinceEpoch).abs() > signatureWindow.inMilliseconds) throw _HttpError(401, 'clock');
+    return _Sig(path, time, bytes, _header(req, 'x-bw-covers', 'X-BW-Covers') ?? '');
   }
+
+  /// 401 unless [sig] signs this request ([method], [body]) for [pub].
+  static Future<void> _verify(Uint8List pub, _Sig sig, String method, List<int> body) async {
+    if (!await verifySignature(pub, sig.sig, sig.text(method, body))) throw _HttpError(401, 'bad signature');
+  }
+
+  /// A known wallet: 404 when the relay does not hold [wid].
+  Wallet _known(String wid) => _wallets[wid] ?? (throw _HttpError(404, 'unknown wallet'));
 
   // ---- body ---------------------------------------------------------------------------------------------------------
 
@@ -345,8 +379,7 @@ class Relay {
     }
   }
 
-  Future<Map<String, Object?>> _readJsonMap(HttpRequest req, _LogInfo info) async {
-    final body = await _readBody(req, _maxJsonBytes, info);
+  static Map<String, Object?> _jsonMap(List<int> body) {
     try {
       final v = jsonDecode(utf8.decode(body));
       if (v is Map<String, Object?>) return v;
@@ -371,13 +404,15 @@ class Relay {
 
   // ---- handlers -----------------------------------------------------------------------------------------------------
 
-  Future<_Out> _getState(HttpRequest req, String wid) {
-    final w = _known(req, wid);
+  Future<_Out> _getState(String wid, _Sig sig) async {
+    final w = _known(wid);
+    await _verify(w.pubBytes, sig, 'GET', const []);
     return _locked(wid, () async => _Out.json(200, w.stateJson()));
   }
 
-  Future<_Out> _getData(HttpRequest req, String wid, String device, int seq, _LogInfo info) {
-    final w = _known(req, wid);
+  Future<_Out> _getData(String wid, String device, int seq, _LogInfo info, _Sig sig) async {
+    final w = _known(wid);
+    await _verify(w.pubBytes, sig, 'GET', const []);
     return _locked(wid, () async {
       final st = w.devices[device];
       if (st == null || seq > st.last) throw _HttpError(404, 'not stored');
@@ -392,21 +427,27 @@ class Relay {
     });
   }
 
-  Future<_Out> _putData(HttpRequest req, String wid, String device, int seq, _LogInfo info) async {
-    final token = _bearer(req);
-    final hash = sha256Hex(token);
+  Future<_Out> _putData(HttpRequest req, String wid, String device, int seq, _LogInfo info, _Sig sig) async {
     final known = _wallets[wid];
-    if (known != null && !constantTimeEquals(hash, known.tokenHash)) throw _HttpError(401, 'unauthorized');
-    if (known == null) {
+    final String pub;
+    if (known != null) {
+      pub = known.pub;
+    } else {
       // An unknown wallet: refuse what cannot create it before reading (and buffering) a body. Checked again in the lock.
       if (seq != 1) await _refuseBody(req, maxFileBytes, 422, 'seq beyond last + 1');
       if (_wallets.length >= maxWallets) await _refuseBody(req, maxFileBytes, 507, 'relay full');
+      final h = _header(req, 'x-bw-pub', 'X-BW-Pub');
+      if (h == null) throw _HttpError(401, 'unknown wallet without X-BW-Pub');
+      if (decodeBase64Url(h, 32) == null) throw _HttpError(400, 'bad X-BW-Pub');
+      pub = h;
     }
     final body = await _readBody(req, maxFileBytes, info);
+    await _verify(known?.pubBytes ?? decodeBase64Url(pub, 32)!, sig, 'PUT', body);
     return _locked(wid, () async {
       final w = _wallets[wid];
-      if (w != null && !constantTimeEquals(hash, w.tokenHash)) throw _HttpError(401, 'unauthorized');
-      if (w == null) return _createWallet(wid, hash, device, seq, body);
+      // Trust on first use: a creation that lost the race to another key is refused here.
+      if (w != null && !constantTimeEquals(pub, w.pub)) throw _HttpError(401, 'bad signature');
+      if (w == null) return _createWallet(wid, pub, device, seq, body);
       final st = w.devices[device];
       final first = st?.first ?? 1;
       final last = st?.last ?? 0;
@@ -438,13 +479,13 @@ class Relay {
     });
   }
 
-  /// The first accepted `PUT d/...` of a wallet creates it and sets its token hash (trust on first use).
-  Future<_Out> _createWallet(String wid, String hash, String device, int seq, Uint8List body) async {
+  /// The first accepted `PUT d/...` of a wallet creates it and stores its public key [pub] (trust on first use).
+  Future<_Out> _createWallet(String wid, String pub, String device, int seq, Uint8List body) async {
     if (seq != 1) throw _HttpError(422, 'seq beyond last + 1');
     if (_wallets.length >= maxWallets) throw _HttpError(507, 'relay full');
     if (body.length > maxBytes) throw _HttpError(507, 'wallet full');
     final dir = Directory('${data.path}/$wid');
-    final w = Wallet(wid, dir, hash);
+    final w = Wallet(wid, dir, pub);
     _wallets[wid] = w; // reserve the slot before any await
     try {
       if (await dir.exists()) await dir.delete(recursive: true); // left over from an interrupted creation
@@ -460,9 +501,11 @@ class Relay {
     return _Out.json(201, {'seq': seq});
   }
 
-  Future<_Out> _putAck(HttpRequest req, String wid, String device, _LogInfo info) async {
-    _known(req, wid);
-    final raw = await _readJsonMap(req, info);
+  Future<_Out> _putAck(HttpRequest req, String wid, String device, _LogInfo info, _Sig sig) async {
+    final known = _known(wid);
+    final body = await _readBody(req, _maxJsonBytes, info);
+    await _verify(known.pubBytes, sig, 'PUT', body);
+    final raw = _jsonMap(body);
     final acks = <String, int>{};
     for (final e in raw.entries) {
       final v = e.value;
@@ -470,7 +513,7 @@ class Relay {
       acks[e.key] = v;
     }
     return _locked(wid, () async {
-      final w = _known(req, wid);
+      final w = _known(wid);
       for (final e in acks.entries) {
         if (e.value > (w.devices[e.key]?.last ?? 0)) throw _HttpError(422, 'ack beyond last');
       }
@@ -485,12 +528,13 @@ class Relay {
     });
   }
 
-  Future<_Out> _putSnapshot(HttpRequest req, String wid, String id, _LogInfo info) async {
-    _known(req, wid);
-    final covers = _parseCovers(req.headers.value('x-bw-covers'));
+  Future<_Out> _putSnapshot(HttpRequest req, String wid, String id, _LogInfo info, _Sig sig) async {
+    final known = _known(wid);
+    final covers = _parseCovers(sig.covers.isEmpty ? null : sig.covers);
     final body = await _readBody(req, maxSnapshotBytes, info);
+    await _verify(known.pubBytes, sig, 'PUT', body);
     return _locked(wid, () async {
-      final w = _known(req, wid);
+      final w = _known(wid);
       final existing = w.snapshot?.id == id ? w.snapshot : (w.previous?.id == id ? w.previous : null);
       if (existing != null) {
         final stored = await w.snapFile(id).readAsBytes();
@@ -527,8 +571,9 @@ class Relay {
     });
   }
 
-  Future<_Out> _getSnapshot(HttpRequest req, String wid, String id, _LogInfo info) {
-    final w = _known(req, wid);
+  Future<_Out> _getSnapshot(String wid, String id, _LogInfo info, _Sig sig) async {
+    final w = _known(wid);
+    await _verify(w.pubBytes, sig, 'GET', const []);
     return _locked(wid, () async {
       if (w.snapshot?.id != id && w.previous?.id != id) throw _HttpError(404, 'no such snapshot');
       try {

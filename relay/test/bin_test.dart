@@ -32,11 +32,11 @@ void main() {
         await start(['--host', '127.0.0.1', '--port=0', '--data', dir.path, '--origin', 'https://a.example', '--origin=https://b.example']);
     addTearDown(p.kill);
     final base = 'http://127.0.0.1:$port';
-    final r = await http.get(Uri.parse('$base/v1/health'), headers: {'origin': 'https://b.example'});
+    final r = await http.get(Uri.parse('$base/v2/health'), headers: {'origin': 'https://b.example'});
     expect(r.statusCode, 200);
     expect(r.headers['access-control-allow-origin'], 'https://b.example');
     expect(
-        (await http.get(Uri.parse('$base/v1/health'), headers: {'origin': 'http://localhost:8080'})).headers['access-control-allow-origin'],
+        (await http.get(Uri.parse('$base/v2/health'), headers: {'origin': 'http://localhost:8080'})).headers['access-control-allow-origin'],
         isNull);
     final stopping = lines.firstWhere((l) => l == 'relay stopping');
     expect(p.kill(ProcessSignal.sigterm), isTrue);
@@ -59,11 +59,11 @@ void main() {
     );
     addTearDown(p.kill);
     final base = 'http://127.0.0.1:$port';
-    expect((await http.get(Uri.parse('$base/v1/health'), headers: {'origin': 'https://d.example'})).headers['access-control-allow-origin'],
+    expect((await http.get(Uri.parse('$base/v2/health'), headers: {'origin': 'https://d.example'})).headers['access-control-allow-origin'],
         'https://d.example');
     Future<int> put(String wid) async => (await http.put(
-          Uri.parse('$base/v1/w/$wid/d/dev1/1'),
-          headers: {'authorization': 'Bearer $tokenA'},
+          Uri.parse('$base/v2/w/$wid/d/dev1/1'),
+          headers: await keyA.headers('PUT', '/v2/w/$wid/d/dev1/1', bytes('x'), timeMs: DateTime.now().millisecondsSinceEpoch),
           body: 'x',
         ))
             .statusCode;

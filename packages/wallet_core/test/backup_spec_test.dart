@@ -173,8 +173,7 @@ void main() {
       a.repo.importBatch(january);
       final file = await backupBytes(a.repo, key);
       final fresh = WalletRepo.inMemory();
-      await expectLater(
-          restoreBackupBytes(fresh, file, VaultKey.generate()), throwsA(isA<VaultException>()));
+      await expectLater(restoreBackupBytes(fresh, file, VaultKey.generate()), throwsA(isA<VaultException>()));
       expect(fresh.isEmpty, isTrue);
       fresh.close();
     });
@@ -185,7 +184,8 @@ void main() {
       final file = await backupBytes(a.repo, key);
       for (final cut in [0, 5, file.length ~/ 2, file.length - 1]) {
         final fresh = WalletRepo.inMemory();
-        await expectLater(restoreBackupBytes(fresh, file.sublist(0, cut), key), throwsA(anyOf(isA<VaultException>(), isA<BackupException>())),
+        await expectLater(
+            restoreBackupBytes(fresh, file.sublist(0, cut), key), throwsA(anyOf(isA<VaultException>(), isA<BackupException>())),
             reason: 'cut at $cut');
         expect(fresh.isEmpty, isTrue, reason: 'cut at $cut');
         fresh.close();

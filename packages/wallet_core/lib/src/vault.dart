@@ -174,8 +174,8 @@ Future<Uint8List> unseal(List<int> data, VaultKey key) async {
 }
 
 /// HKDF-SHA256 of the wallet key with an empty salt and [info] (UTF-8), [length] bytes. Gives the relay's wallet id
-/// and auth token (`bw-relay-id-v1`, `bw-relay-auth-v1`, docs/context/RELAY_PROTOCOL.md) and later the local database
-/// key, so one wallet key is all a device needs. Different [info] strings give unrelated keys.
+/// and request-signing seed (`bw-relay-id-v1`, `bw-relay-sign-v1`, docs/context/RELAY_PROTOCOL.md) and the local
+/// database key, so one wallet key is all a device needs. Different [info] strings give unrelated keys.
 Future<Uint8List> deriveKey(VaultKey key, String info, {int length = 32}) async {
   final out = await Hkdf(hmac: Hmac.sha256(), outputLength: length)
       .deriveKey(secretKey: SecretKey(key.bytes), nonce: const <int>[], info: utf8.encode(info));

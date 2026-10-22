@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:http/http.dart' as http;
 import 'package:relay/relay.dart';
 import 'package:test/test.dart';
@@ -9,12 +10,45 @@ import 'package:test/test.dart';
 /// Synthetic ids only.
 const String w1 = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 const String w2 = '00112233445566778899aabbccddeeff';
-const String tokenA = 'synthetic-token-A_0123456789';
-const String tokenB = 'synthetic-token-B_9876543210';
+
+/// Synthetic signing keys (fixed seeds, derived from no wallet key).
+final TestKey keyA = TestKey(List<int>.generate(32, (i) => 0xA0 ^ i));
+final TestKey keyB = TestKey(List<int>.generate(32, (i) => 0xB0 ^ i));
 
 String wid(int n) => n.toRadixString(16).padLeft(32, '0');
 
 Uint8List bytes(String s) => Uint8List.fromList(utf8.encode(s));
+
+String _b64(List<int> b) => base64Url.encode(b).replaceAll('=', '');
+
+String _hex(List<int> b) => [for (final x in b) x.toRadixString(16).padLeft(2, '0')].join();
+
+/// An Ed25519 key pair from a synthetic seed: signs requests the way the client does (written from
+/// docs/context/RELAY_PROTOCOL.md, independently of the relay's code).
+class TestKey {
+  TestKey(this.seed);
+
+  final List<int> seed;
+  late final Future<SimpleKeyPair> _pair = Ed25519().newKeyPairFromSeed(seed);
+
+  /// The public key as `X-BW-Pub` sends it.
+  Future<String> pub() async => _b64((await (await _pair).extractPublicKey()).bytes);
+
+  /// base64url signature over [text].
+  Future<String> sign(String text) async => _b64((await Ed25519().sign(utf8.encode(text), keyPair: await _pair)).bytes);
+
+  /// The v2 signature headers for one request. [covers] is the `X-BW-Covers` value ('' when none).
+  Future<Map<String, String>> headers(String method, String path, List<int> body,
+      {required int timeMs, String covers = '', bool withPub = true}) async {
+    final hash = _hex((await Sha256().hash(body)).bytes);
+    final text = 'bw-relay-v2\n$method\n$path\n$covers\n$hash\n$timeMs';
+    return {
+      'x-bw-time': '$timeMs',
+      'x-bw-sig': await sign(text),
+      if (withPub) 'x-bw-pub': await pub(),
+    };
+  }
+}
 
 /// A relay on a free port over a temp folder with a controllable clock and a captured log.
 class Harness {
@@ -27,6 +61,9 @@ class Harness {
   late HttpServer server;
   late Uri base;
   final http.Client client = http.Client();
+
+  /// Added to the relay clock for `X-BW-Time` of signed requests (a skewed client).
+  Duration skew = Duration.zero;
 
   static Future<Harness> start({
     int maxWallets = 16,
@@ -78,39 +115,56 @@ class Harness {
 
   void advance(Duration d) => clock = clock.add(d);
 
+  /// The signature headers [key] would send now for this request ([path] from `/v2/` on).
+  Future<Map<String, String>> sign(TestKey key, String method, String path, List<int> body, {String covers = '', bool withPub = true}) =>
+      key.headers(method, path, body, timeMs: clock.add(skew).millisecondsSinceEpoch, covers: covers, withPub: withPub);
+
+  /// Sends a request signed with [key] (unsigned when null); [headers] are added after the signature headers, so a
+  /// test can override them.
   Future<http.Response> send(
     String method,
     String path, {
-    String? token,
+    TestKey? key,
     List<int>? body,
     Map<String, String> headers = const {},
+    bool withPub = true,
   }) async {
     final req = http.Request(method, base.resolve(path));
-    if (token != null) req.headers['authorization'] = 'Bearer $token';
+    if (key != null) {
+      req.headers.addAll(
+          await sign(key, method, base.resolve(path).path, body ?? const [], covers: headers['x-bw-covers'] ?? '', withPub: withPub));
+    }
     req.headers.addAll(headers);
     if (body != null) req.bodyBytes = body;
     return http.Response.fromStream(await client.send(req));
   }
 
-  Future<http.Response> get(String path, {String? token, Map<String, String> headers = const {}}) =>
-      send('GET', path, token: token, headers: headers);
+  /// Sends exactly [headers] and [body] again (a captured request replayed by someone without the key).
+  Future<http.Response> replay(String method, String path, Map<String, String> headers, {List<int>? body}) async {
+    final req = http.Request(method, base.resolve(path))..headers.addAll(headers);
+    if (body != null) req.bodyBytes = body;
+    return http.Response.fromStream(await client.send(req));
+  }
 
-  Future<http.Response> putData(String wallet, String device, int seq, String body, {String? token = tokenA}) =>
-      send('PUT', '/v1/w/$wallet/d/$device/$seq', token: token, body: bytes(body));
+  Future<http.Response> get(String path, {TestKey? key, Map<String, String> headers = const {}}) =>
+      send('GET', path, key: key, headers: headers);
 
-  Future<http.Response> getData(String wallet, String device, int seq, {String? token = tokenA}) =>
-      get('/v1/w/$wallet/d/$device/$seq', token: token);
+  Future<http.Response> putData(String wallet, String device, int seq, String body, {TestKey? key, bool withPub = true}) =>
+      send('PUT', '/v2/w/$wallet/d/$device/$seq', key: key ?? keyA, body: bytes(body), withPub: withPub);
 
-  Future<http.Response> ack(String wallet, String device, Map<String, Object?> acks, {String? token = tokenA}) =>
-      send('PUT', '/v1/w/$wallet/ack/$device', token: token, body: bytes(jsonEncode(acks)));
+  Future<http.Response> getData(String wallet, String device, int seq, {TestKey? key}) =>
+      get('/v2/w/$wallet/d/$device/$seq', key: key ?? keyA);
 
-  Future<http.Response> putSnapshot(String wallet, String id, Map<String, int> covers, String body, {String? token = tokenA}) =>
-      send('PUT', '/v1/w/$wallet/snapshot/$id', token: token, body: bytes(body), headers: {'x-bw-covers': jsonEncode(covers)});
+  Future<http.Response> ack(String wallet, String device, Map<String, Object?> acks, {TestKey? key}) =>
+      send('PUT', '/v2/w/$wallet/ack/$device', key: key ?? keyA, body: bytes(jsonEncode(acks)));
 
-  Future<http.Response> getSnapshot(String wallet, String id, {String? token = tokenA}) => get('/v1/w/$wallet/snapshot/$id', token: token);
+  Future<http.Response> putSnapshot(String wallet, String id, Map<String, int> covers, String body, {TestKey? key}) =>
+      send('PUT', '/v2/w/$wallet/snapshot/$id', key: key ?? keyA, body: bytes(body), headers: {'x-bw-covers': jsonEncode(covers)});
 
-  Future<Map<String, Object?>> state(String wallet, {String token = tokenA}) async {
-    final r = await get('/v1/w/$wallet/state', token: token);
+  Future<http.Response> getSnapshot(String wallet, String id, {TestKey? key}) => get('/v2/w/$wallet/snapshot/$id', key: key ?? keyA);
+
+  Future<Map<String, Object?>> state(String wallet, {TestKey? key}) async {
+    final r = await get('/v2/w/$wallet/state', key: key ?? keyA);
     expect(r.statusCode, 200, reason: r.body);
     return jsonDecode(r.body) as Map<String, Object?>;
   }

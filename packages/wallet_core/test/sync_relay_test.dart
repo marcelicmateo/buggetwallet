@@ -28,18 +28,40 @@ Future<List<int>> _hkdf(List<int> ikm, String info, int length) async {
 
 String _hex(List<int> b) => b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
 
-/// Forwards to [inner] with the Authorization header replaced (a client with the right wallet id but a wrong token).
-class _WrongToken extends http.BaseClient {
+String _b64(List<int> b) => base64Url.encode(b).replaceAll('=', '');
+
+List<int> _unb64(String s) => base64Url.decode(s.padRight((s.length + 3) ~/ 4 * 4, '='));
+
+/// Forwards to [inner] with one bit of `X-BW-Sig` flipped (a client with the right wallet id but a wrong signature).
+class _BadSignature extends http.BaseClient {
   final http.Client inner;
-  _WrongToken(this.inner);
+  _BadSignature(this.inner);
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) {
+    final sig = _unb64(request.headers['X-BW-Sig']!)..[0] ^= 1;
     final r = http.Request(request.method, request.url)
       ..headers.addAll(request.headers)
-      ..headers['Authorization'] = 'Bearer synthetic-wrong-token-0000000000000000000000';
+      ..headers['X-BW-Sig'] = _b64(sig);
     if (request is http.Request) r.bodyBytes = request.bodyBytes;
     return inner.send(r);
   }
+}
+
+/// Whether [r] carries a v2 signature by [pub] over [path] (from `/v2/` on), written from the protocol text.
+Future<bool> _signedBy(http.Request r, String pub, {String? path}) async {
+  final hash = _hex((await Sha256().hash(r.bodyBytes)).bytes);
+  final text = 'bw-relay-v2\n${r.method}\n${path ?? r.url.path}\n${r.headers['X-BW-Covers'] ?? ''}\n$hash\n${r.headers['X-BW-Time']}';
+  return Ed25519().verify(utf8.encode(text),
+      signature: Signature(_unb64(r.headers['X-BW-Sig']!), publicKey: SimplePublicKey(_unb64(pub), type: KeyPairType.ed25519)));
+}
+
+/// A relay stand-in that checks only the time window (5 min) against [relayNow] and answers 401 clock with a Date.
+http.Response _clockGate(http.Request r, DateTime relayNow, {bool sendDate = true, bool alwaysClock = false}) {
+  final t = int.parse(r.headers['X-BW-Time']!);
+  if (alwaysClock || (t - relayNow.millisecondsSinceEpoch).abs() > 300000) {
+    return http.Response('{"error":"clock"}', 401, headers: {if (sendDate) 'date': HttpDate.format(relayNow)});
+  }
+  return http.Response('{"api":2,"devices":{}}', 200);
 }
 
 void main() {
@@ -47,7 +69,7 @@ void main() {
 
   group('deriveKey', () {
     test('is HKDF-SHA256 with an empty salt; lengths and infos give the expected, unrelated bytes', () async {
-      for (final (info, n) in [('bw-relay-id-v1', 16), ('bw-relay-auth-v1', 32), ('bw-local-db-v1', 32), ('x', 64)]) {
+      for (final (info, n) in [('bw-relay-id-v1', 16), ('bw-relay-sign-v1', 32), ('bw-local-db-v1', 32), ('x', 64)]) {
         expect(await deriveKey(key, info, length: n), await _hkdf(key.bytes, info, n), reason: info);
       }
       expect(await deriveKey(key, 'a'), isNot(await deriveKey(key, 'b')));
@@ -55,22 +77,25 @@ void main() {
       expect(await deriveKey(key, 'a'), hasLength(32));
     });
 
-    test('relay ids: wid = 32 lowercase hex, token = 43 base64url chars without padding', () async {
-      final (wid, token) = await RelayTransport(Uri.parse('http://relay.test:8787'), key).ids;
+    test('relay ids: wid = 32 lowercase hex, pub = the Ed25519 key of the bw-relay-sign-v1 seed, 43 base64url chars', () async {
+      final (wid, pub) = await RelayTransport(Uri.parse('http://relay.test:8787'), key).ids;
       expect(wid, _hex(await _hkdf(key.bytes, 'bw-relay-id-v1', 16)));
       expect(wid, matches(RegExp(r'^[0-9a-f]{32}$')));
-      expect(token, base64Url.encode(await _hkdf(key.bytes, 'bw-relay-auth-v1', 32)).replaceAll('=', ''));
-      expect(token, matches(RegExp(r'^[A-Za-z0-9_-]{43}$')));
+      final pair = await Ed25519().newKeyPairFromSeed(await _hkdf(key.bytes, 'bw-relay-sign-v1', 32));
+      expect(pub, _b64((await pair.extractPublicKey()).bytes));
+      expect(pub, matches(RegExp(r'^[A-Za-z0-9_-]{43}$')));
+      final (_, otherPub) = await RelayTransport(Uri.parse('http://relay.test:8787'), VaultKey.generate()).ids;
+      expect(otherPub, isNot(pub));
     });
   });
 
   group('RelayTransport over a fake client', () {
     late List<http.Request> seen;
-    late String wid, token;
+    late String wid, pub;
 
     setUp(() async {
       seen = [];
-      (wid, token) = await RelayTransport(Uri.parse('http://relay.test'), key).ids;
+      (wid, pub) = await RelayTransport(Uri.parse('http://relay.test'), key).ids;
     });
 
     RelayTransport client(FutureOr<http.Response> Function(http.Request r) answer, {String base = 'http://relay.test:8787'}) =>
@@ -79,9 +104,9 @@ void main() {
           return answer(r);
         }));
 
-    test('state: the URL, the bearer token, the parsed JSON; 404 is an empty relay', () async {
+    test('state: the URL, a valid signature, the parsed JSON; 404 is an empty relay', () async {
       final body = {
-        'api': 1,
+        'api': 2,
         'devices': {
           'dev1': {
             'first': 3,
@@ -100,8 +125,11 @@ void main() {
       final t = client((r) => http.Response(jsonEncode(body), 200));
       final s = await t.state();
       expect(seen.single.method, 'GET');
-      expect(seen.single.url.toString(), 'http://relay.test:8787/v1/w/$wid/state');
-      expect(seen.single.headers['Authorization'], 'Bearer $token');
+      expect(seen.single.url.toString(), 'http://relay.test:8787/v2/w/$wid/state');
+      expect(await _signedBy(seen.single, pub), isTrue);
+      expect(seen.single.headers.containsKey('Authorization'), isFalse);
+      expect(seen.single.headers.containsKey('X-BW-Pub'), isFalse);
+      expect(seen.single.bodyBytes, isEmpty);
       expect((s.devices['dev1']!.first, s.devices['dev1']!.last), (3, 12));
       expect(s.devices['dev1']!.acks, {'dev2': 5});
       expect(s.devices['dev1']!.lastSeen, DateTime.utc(2026, 10, 22, 10));
@@ -114,11 +142,12 @@ void main() {
       expect(empty.snapshot, isNull);
     });
 
-    test('a base address with a path, with or without a trailing slash', () async {
+    test('a base address with a path, with or without a trailing slash; the signed path starts at /v2/', () async {
       for (final base in ['http://relay.test:8787/bw', 'http://relay.test:8787/bw/']) {
         seen.clear();
-        await client((r) => http.Response('{"api":1,"devices":{}}', 200), base: base).state();
-        expect(seen.single.url.path, '/bw/v1/w/$wid/state', reason: base);
+        await client((r) => http.Response('{"api":2,"devices":{}}', 200), base: base).state();
+        expect(seen.single.url.path, '/bw/v2/w/$wid/state', reason: base);
+        expect(await _signedBy(seen.single, pub, path: '/v2/w/$wid/state'), isTrue, reason: base);
       }
     });
 
@@ -127,24 +156,39 @@ void main() {
             'GET' => http.Response.bytes([7, 8, 9], 200),
             _ => http.Response('', r.url.path.contains('/ack/') ? 204 : 201),
           });
+      await t.put('dev1', 1, [1]);
       await t.put('dev1', 4, [1, 2, 3]);
       expect(await t.get('dev1', 4), [7, 8, 9]);
       await t.ack('dev1', {'dev2': 5, 'dev3': 0});
       await t.putSnapshot('s5-1-ab', {'dev1': 4}, [4, 5]);
       expect(await t.getSnapshot('s5-1-ab'), [7, 8, 9]);
-      final [put, get, ack, snap, getSnap] = seen;
-      expect((put.method, put.url.path, put.headers['Content-Type']), ('PUT', '/v1/w/$wid/d/dev1/4', 'application/octet-stream'));
+      final [first, put, get, ack, snap, getSnap] = seen;
+      expect(first.headers['X-BW-Pub'], pub, reason: 'seq 1 may create the wallet');
+      expect(put.headers.containsKey('X-BW-Pub'), isFalse);
+      expect((put.method, put.url.path, put.headers['Content-Type']), ('PUT', '/v2/w/$wid/d/dev1/4', 'application/octet-stream'));
       expect(put.bodyBytes, [1, 2, 3]);
-      expect((get.method, get.url.path), ('GET', '/v1/w/$wid/d/dev1/4'));
-      expect((ack.method, ack.url.path), ('PUT', '/v1/w/$wid/ack/dev1'));
+      expect((get.method, get.url.path), ('GET', '/v2/w/$wid/d/dev1/4'));
+      expect((ack.method, ack.url.path), ('PUT', '/v2/w/$wid/ack/dev1'));
       expect(jsonDecode(ack.body), {'dev2': 5, 'dev3': 0});
-      expect((snap.method, snap.url.path), ('PUT', '/v1/w/$wid/snapshot/s5-1-ab'));
+      expect((snap.method, snap.url.path), ('PUT', '/v2/w/$wid/snapshot/s5-1-ab'));
       expect(jsonDecode(snap.headers['X-BW-Covers']!), {'dev1': 4});
       expect(snap.bodyBytes, [4, 5]);
-      expect(getSnap.url.path, '/v1/w/$wid/snapshot/s5-1-ab');
+      expect(getSnap.url.path, '/v2/w/$wid/snapshot/s5-1-ab');
       for (final r in seen) {
-        expect(r.headers['Authorization'], 'Bearer $token');
+        expect(await _signedBy(r, pub), isTrue, reason: '${r.method} ${r.url.path}');
+        expect(r.headers['X-BW-Time'], matches(RegExp(r'^[0-9]{13}$')));
+        expect(r.headers['X-BW-Sig'], matches(RegExp(r'^[A-Za-z0-9_-]{86}$')));
       }
+      // Covers are signed: the same snapshot with other covers carries another signature.
+      final again = seen.length;
+      await t.putSnapshot('s5-1-ab', {'dev1': 3}, [4, 5]);
+      expect(
+          await _signedBy(
+              http.Request('PUT', seen[again].url)
+                ..headers.addAll({...seen[again].headers, 'X-BW-Covers': snap.headers['X-BW-Covers']!})
+                ..bodyBytes = [4, 5],
+              pub),
+          isFalse);
     });
 
     test('status codes map to failures', () async {
@@ -178,11 +222,12 @@ void main() {
           client: MockClient((r) => Future.delayed(const Duration(seconds: 2), () => http.Response('{}', 200))));
       await expectLater(slow.get('d', 1), throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.unreachable)));
       for (final (body, failure) in [
-        ('{"api":2,"devices":{}}', TransportFailure.newerApi),
+        ('{"api":3,"devices":{}}', TransportFailure.newerApi),
+        ('{"api":1,"devices":{}}', TransportFailure.olderApi),
         ('not json', TransportFailure.other),
         ('[1]', TransportFailure.other),
         ('{"devices":{}}', TransportFailure.other),
-        ('{"api":1,"devices":{"d":{"first":"x"}}}', TransportFailure.other),
+        ('{"api":2,"devices":{"d":{"first":"x"}}}', TransportFailure.other),
       ]) {
         await expectLater(
             client((r) => http.Response(body, 200)).state(), throwsA(isA<TransportException>().having((e) => e.failure, 'f', failure)),
@@ -190,17 +235,26 @@ void main() {
       }
     });
 
-    test('health: /v1/health without a token; api 1 is fine, a newer one or no answer throws', () async {
+    test('health: /v2/health not signed; api 2 is fine, a newer one, an older relay or no answer throws', () async {
       final requests = <http.Request>[];
       MockClient answering(String body) => MockClient((r) async {
             requests.add(r);
             return http.Response(body, 200);
           });
-      await RelayTransport.health(Uri.parse('http://relay.test:8787'), client: answering('{"api":1}'));
-      expect(requests.single.url.toString(), 'http://relay.test:8787/v1/health');
-      expect(requests.single.headers.containsKey('Authorization'), isFalse);
-      await expectLater(RelayTransport.health(Uri.parse('http://relay.test'), client: answering('{"api":2}')),
+      await RelayTransport.health(Uri.parse('http://relay.test:8787'), client: answering('{"api":2}'));
+      expect(requests.single.url.toString(), 'http://relay.test:8787/v2/health');
+      expect(requests.single.headers.keys.where((h) => h.startsWith('X-BW') || h == 'Authorization'), isEmpty);
+      await expectLater(RelayTransport.health(Uri.parse('http://relay.test'), client: answering('{"api":3}')),
           throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.newerApi)));
+      // A v1 relay: /v2/health is an unknown path there, /v1/health says api 1.
+      final v1 = MockClient(
+          (r) async => r.url.path == '/v1/health' ? http.Response('{"api":1}', 200) : http.Response('{"error":"not found"}', 404));
+      await expectLater(RelayTransport.health(Uri.parse('http://relay.test'), client: v1),
+          throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.olderApi)));
+      // Nothing at either path: missing, not olderApi.
+      await expectLater(
+          RelayTransport.health(Uri.parse('http://relay.test'), client: MockClient((r) async => http.Response('{"error":"x"}', 404))),
+          throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.missing)));
       await expectLater(
           RelayTransport.health(Uri.parse('http://relay.test'), client: MockClient((r) async => throw http.ClientException('down'))),
           throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.unreachable)));
@@ -210,12 +264,78 @@ void main() {
       final repo = WalletRepo.inMemory();
       addTearDown(repo.close);
       repo.updateSettings({'salary': 1});
-      final t = client((r) => http.Response('{"api":2,"devices":{}}', 200));
+      final t = client((r) => http.Response('{"api":3,"devices":{}}', 200));
       await expectLater(SyncEngine(t, key).run(repo), throwsA(isA<SyncException>()));
+      expect(repo.pendingOps(), hasLength(1));
+      final old = client((r) => http.Response('{"api":1,"devices":{}}', 200));
+      await expectLater(
+          SyncEngine(old, key).run(repo), throwsA(isA<SyncException>().having((e) => e.message, 'message', contains('older version'))));
       expect(repo.pendingOps(), hasLength(1));
     });
 
-    test('logs carry kinds and statuses, never the wallet id, the token or the address', () async {
+    test('clock: a skewed device takes the offset from Date and retries once; later requests sign right away', () async {
+      final relayNow = DateTime.utc(2026, 10, 22, 10);
+      for (final skew in [const Duration(hours: -3), const Duration(minutes: 6), const Duration(days: 400)]) {
+        seen.clear();
+        final t = RelayTransport(Uri.parse('http://relay.test'), key,
+            now: () => relayNow.add(skew),
+            client: MockClient((r) async {
+              seen.add(r);
+              return _clockGate(r, relayNow);
+            }));
+        expect((await t.state()).devices, isEmpty, reason: '$skew');
+        expect(seen, hasLength(2), reason: 'one refusal, one retry');
+        expect(t.clockOffsetMs, -skew.inMilliseconds);
+        expect(int.parse(seen[1].headers['X-BW-Time']!), relayNow.millisecondsSinceEpoch);
+        expect(await _signedBy(seen[1], pub), isTrue);
+        await t.state();
+        expect(seen, hasLength(3), reason: 'the offset is kept');
+      }
+    });
+
+    test('clock: a relay that keeps saying clock, or gives no Date, fails the call without looping', () async {
+      final relayNow = DateTime.utc(2026, 10, 22, 10);
+      final always = RelayTransport(Uri.parse('http://relay.test'), key, client: MockClient((r) async {
+        seen.add(r);
+        return _clockGate(r, relayNow, alwaysClock: true);
+      }));
+      await expectLater(always.put('dev1', 2, [1]),
+          throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.other).having((e) => e.message, 'm', 'clock')));
+      expect(seen, hasLength(2));
+      seen.clear();
+      final noDate = RelayTransport(Uri.parse('http://relay.test'), key,
+          now: () => relayNow.add(const Duration(hours: 1)),
+          client: MockClient((r) async {
+            seen.add(r);
+            return _clockGate(r, relayNow, sendDate: false);
+          }));
+      await expectLater(noDate.state(), throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.other)));
+      expect(seen, hasLength(1));
+      expect(noDate.clockOffsetMs, 0);
+      // A plain 401 (wrong key) is refused at once, no retry.
+      seen.clear();
+      await expectLater(client((r) => http.Response('{"error":"bad signature"}', 401)).state(),
+          throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.refused)));
+      expect(seen, hasLength(1));
+    });
+
+    test('parseHttpDate reads IMF-fixdate and refuses anything else', () {
+      expect(parseHttpDate('Thu, 22 Oct 2026 10:00:07 GMT'), DateTime.utc(2026, 10, 22, 10, 0, 7));
+      expect(parseHttpDate(HttpDate.format(DateTime.utc(2027, 1, 2, 3, 4, 5))), DateTime.utc(2027, 1, 2, 3, 4, 5));
+      for (final bad in [
+        '',
+        'Thu, 22 Foo 2026 10:00:00 GMT',
+        'Thu, 22 Oct 2026 10:00:00 CET',
+        'Thursday, 22-Oct-26 10:00:00 GMT',
+        'Thu, 32 Oct 2026 10:00:00 GMT',
+        'Thu, 22 Oct 2026 25:00:00 GMT',
+        '1792663200000'
+      ]) {
+        expect(parseHttpDate(bad), isNull, reason: bad);
+      }
+    });
+
+    test('logs carry kinds and statuses, never the wallet id, the key, a signature or the address', () async {
       final lines = <String>[];
       final was = Logger.root.level;
       Logger.root.level = Level.ALL;
@@ -232,7 +352,7 @@ void main() {
       final text = lines.join('\n');
       expect(text, contains('relay.failed {"kind":"state","status":401,"failure":"refused"}'));
       expect(text, contains('relay.unreachable'));
-      for (final bad in [wid, token, 'secret-host']) {
+      for (final bad in [wid, pub, 'secret-host', ...seen.map((r) => r.headers['X-BW-Sig']!)]) {
         expect(text, isNot(contains(bad)), reason: bad);
       }
     });
@@ -372,11 +492,33 @@ void main() {
       expect((await to.state()).devices, isEmpty);
       await SyncEngine(to, VaultKey.generate()).run(other);
       expect(other.transactions(), isEmpty);
-      // The right wallet id with a wrong token is refused.
-      final wrong = RelayTransport(base, k, client: _WrongToken(http.Client()));
+      // The right wallet id with a wrong signature is refused, and changes nothing.
+      final before = await ta.state();
+      final wrong = RelayTransport(base, k, client: _BadSignature(http.Client()));
       addTearDown(wrong.close);
-      await expectLater(SyncEngine(wrong, k).run(WalletRepo.inMemory()), throwsA(isA<SyncException>()));
-      expect(logs.join('\n'), isNot(contains((await ta.ids).$2)), reason: 'the relay never logs the token');
+      await expectLater(SyncEngine(wrong, k).run(WalletRepo.inMemory()),
+          throwsA(isA<SyncException>().having((e) => e.message, 'message', contains('another key'))));
+      expect((await ta.state()).toJson(), before.toJson());
+      expect(logs.join('\n'), isNot(contains((await ta.ids).$2)), reason: 'the relay never logs the public key');
+    });
+
+    test('a device whose clock is off by an hour syncs: one clock refusal, then the offset holds', () async {
+      final k = VaultKey.generate();
+      final a = WalletRepo.inMemory(), b = WalletRepo.inMemory();
+      addTearDown(a.close);
+      addTearDown(b.close);
+      final ta = RelayTransport(base, k, now: () => DateTime.now().add(const Duration(hours: 1)));
+      final tb = RelayTransport(base, k, now: () => DateTime.now().subtract(const Duration(minutes: 30)));
+      addTearDown(ta.close);
+      addTearDown(tb.close);
+      a.importBatch(january);
+      final logsBefore = logs.length;
+      expect((await SyncEngine(ta, k).run(a)).caughtUp, isTrue);
+      expect(ta.clockOffsetMs, closeTo(-3600000, 10000));
+      expect((await SyncEngine(tb, k).run(b)).caughtUp, isTrue);
+      expect(b.transactions().length, january.transactions.length);
+      final refusals = logs.skip(logsBefore).where(RegExp(r'^relay \S+ 401 ').hasMatch).length;
+      expect(refusals, 2, reason: 'one per device, then every request signs inside the window');
     });
 
     test('a snapshot through the relay: written, used by a new device, files pruned once acked', () async {

@@ -10,35 +10,35 @@ void main() {
     test('burst of 100, then 429 with Retry-After, then 20 per second', () async {
       final h = await freshHarness();
       for (var i = 0; i < 100; i++) {
-        expect((await h.get('/v1/health')).statusCode, 200, reason: 'request $i');
+        expect((await h.get('/v2/health')).statusCode, 200, reason: 'request $i');
       }
-      final limited = await h.get('/v1/health');
+      final limited = await h.get('/v2/health');
       expect(limited.statusCode, 429);
       expect(limited.headers['retry-after'], '1');
-      expect((await h.get('/v1/health')).statusCode, 429);
+      expect((await h.get('/v2/health')).statusCode, 429);
       h.advance(const Duration(seconds: 1));
       for (var i = 0; i < 20; i++) {
-        expect((await h.get('/v1/health')).statusCode, 200, reason: 'refill $i');
+        expect((await h.get('/v2/health')).statusCode, 200, reason: 'refill $i');
       }
-      expect((await h.get('/v1/health')).statusCode, 429);
+      expect((await h.get('/v2/health')).statusCode, 429);
       h.advance(const Duration(milliseconds: 50)); // one token
-      expect((await h.get('/v1/health')).statusCode, 200);
-      expect((await h.get('/v1/health')).statusCode, 429);
+      expect((await h.get('/v2/health')).statusCode, 200);
+      expect((await h.get('/v2/health')).statusCode, 429);
     });
 
     test('every kind of request counts, including OPTIONS and failures', () async {
       final h = await freshHarness();
       for (var i = 0; i < 50; i++) {
         await h.get('/nope');
-        await h.send('OPTIONS', '/v1/w/$w1/state');
+        await h.send('OPTIONS', '/v2/w/$w1/state');
       }
-      expect((await h.get('/v1/health')).statusCode, 429);
+      expect((await h.get('/v2/health')).statusCode, 429);
     });
 
     test('a limited request does not reach the wallet', () async {
       final h = await freshHarness();
       for (var i = 0; i < 100; i++) {
-        await h.get('/v1/health');
+        await h.get('/v2/health');
       }
       expect((await h.putData(w1, 'dev1', 1, 'one')).statusCode, 429);
       h.advance(const Duration(seconds: 5));
@@ -72,7 +72,7 @@ void main() {
       final r = await h.putData(wid(3), 'dev1', 1, 'a');
       expect(r.statusCode, 507);
       expect(h.relay.walletCount, 2);
-      expect((await h.get('/v1/w/${wid(3)}/state', token: tokenA)).statusCode, 404);
+      expect((await h.get('/v2/w/${wid(3)}/state', key: keyA)).statusCode, 404);
       expect((await h.putData(wid(2), 'dev1', 2, 'b')).statusCode, 201);
       expect((await h.putData(wid(1), 'dev2', 1, 'b')).statusCode, 201);
     });
@@ -100,7 +100,7 @@ void main() {
       expect((await h.putData(w1, 'dev1', 3, 'x')).statusCode, 507);
       expect((await h.device(w1, 'dev1'))['last'], 2);
       // Another wallet has its own budget.
-      expect((await h.putData(w2, 'dev1', 1, 'x' * 100, token: tokenB)).statusCode, 201);
+      expect((await h.putData(w2, 'dev1', 1, 'x' * 100, key: keyB)).statusCode, 201);
     });
 
     test('a first PUT larger than --max-bytes creates nothing', () async {
@@ -140,12 +140,12 @@ void main() {
 
     test('an allowed origin is echoed on every kind of answer', () async {
       final h = await freshHarness();
-      for (final p in ['/v1/health', '/nope', '/v1/w/$w1/state']) {
+      for (final p in ['/v2/health', '/nope', '/v2/w/$w1/state']) {
         final r = await h.get(p, headers: {'origin': allowed});
         expect(r.headers['access-control-allow-origin'], allowed, reason: p);
         expect(r.headers['vary'], contains('Origin'), reason: p);
       }
-      final other = await h.get('/v1/health', headers: {'origin': 'http://localhost:8080'});
+      final other = await h.get('/v2/health', headers: {'origin': 'http://localhost:8080'});
       expect(other.headers['access-control-allow-origin'], 'http://localhost:8080');
     });
 
@@ -160,57 +160,59 @@ void main() {
         '*',
         ''
       ]) {
-        final r = await h.get('/v1/health', headers: {'origin': o});
+        final r = await h.get('/v2/health', headers: {'origin': o});
         expect(r.statusCode, 200, reason: o);
         expect(r.headers.containsKey('access-control-allow-origin'), isFalse, reason: o);
       }
-      expect((await h.get('/v1/health')).headers.containsKey('access-control-allow-origin'), isFalse);
+      expect((await h.get('/v2/health')).headers.containsKey('access-control-allow-origin'), isFalse);
     });
 
     test('errors carry the CORS header too, so the browser can read them', () async {
       final h = await freshHarness();
       await h.putData(w1, 'dev1', 1, 'a');
-      final r = await h.get('/v1/w/$w1/state', token: tokenB, headers: {'origin': allowed});
+      final r = await h.get('/v2/w/$w1/state', key: keyB, headers: {'origin': allowed});
       expect(r.statusCode, 401);
       expect(r.headers['access-control-allow-origin'], allowed);
+      expect(r.headers['access-control-expose-headers'], 'Date', reason: 'the client reads the relay clock');
+      expect(r.headers['date'], isNotNull);
     });
 
     test('preflight: 204 with methods and headers for an allowed origin', () async {
       final h = await freshHarness();
-      for (final p in ['/v1/health', '/v1/w/$w1/d/dev1/1', '/v1/w/$w1/snapshot/s1', '/anything/at/all']) {
+      for (final p in ['/v2/health', '/v2/w/$w1/d/dev1/1', '/v2/w/$w1/snapshot/s1', '/anything/at/all']) {
         final r = await h.send('OPTIONS', p, headers: {'origin': allowed, 'access-control-request-method': 'PUT'});
         expect(r.statusCode, 204, reason: p);
         expect(r.bodyBytes, isEmpty);
         expect(r.headers['access-control-allow-origin'], allowed);
         expect(r.headers['access-control-allow-methods'], 'GET, PUT, OPTIONS');
-        expect(r.headers['access-control-allow-headers'], 'Authorization, Content-Type, X-BW-Covers');
+        expect(r.headers['access-control-allow-headers'], 'Content-Type, X-BW-Covers, X-BW-Time, X-BW-Sig, X-BW-Pub');
       }
     });
 
     test('preflight from a denied origin is still 204 but grants nothing', () async {
       final h = await freshHarness();
-      final r = await h.send('OPTIONS', '/v1/health', headers: {'origin': 'http://evil.example'});
+      final r = await h.send('OPTIONS', '/v2/health', headers: {'origin': 'http://evil.example'});
       expect(r.statusCode, 204);
       expect(r.headers.containsKey('access-control-allow-origin'), isFalse);
       expect(r.headers.containsKey('access-control-allow-methods'), isFalse);
     });
 
-    test('preflight needs no token and touches no wallet', () async {
+    test('preflight needs no signature and touches no wallet', () async {
       final h = await freshHarness();
-      expect((await h.send('OPTIONS', '/v1/w/$w1/d/dev1/1', headers: {'origin': allowed})).statusCode, 204);
+      expect((await h.send('OPTIONS', '/v2/w/$w1/d/dev1/1', headers: {'origin': allowed})).statusCode, 204);
       expect(h.relay.walletCount, 0);
     });
 
     test('a configured origin list replaces the defaults', () async {
       final h = await freshHarness(origins: ['https://app.example']);
-      expect((await h.get('/v1/health', headers: {'origin': 'https://app.example'})).headers['access-control-allow-origin'],
+      expect((await h.get('/v2/health', headers: {'origin': 'https://app.example'})).headers['access-control-allow-origin'],
           'https://app.example');
-      expect((await h.get('/v1/health', headers: {'origin': allowed})).headers.containsKey('access-control-allow-origin'), isFalse);
+      expect((await h.get('/v2/health', headers: {'origin': allowed})).headers.containsKey('access-control-allow-origin'), isFalse);
     });
 
     test('an empty origin list allows no browser', () async {
       final h = await freshHarness(origins: []);
-      expect((await h.get('/v1/health', headers: {'origin': allowed})).headers.containsKey('access-control-allow-origin'), isFalse);
+      expect((await h.get('/v2/health', headers: {'origin': allowed})).headers.containsKey('access-control-allow-origin'), isFalse);
     });
   });
 
@@ -221,18 +223,18 @@ void main() {
       const secret = 'SECRET-BODY-TEXT';
       await h.putData(w1, device, 1, secret);
       await h.putData(w1, device, 1, 'other');
-      await h.putData(w1, device, 1, secret, token: tokenB);
+      await h.putData(w1, device, 1, secret, key: keyB);
       await h.getData(w1, device, 1);
       await h.getData(w1, device, 9);
       await h.state(w1);
       await h.ack(w1, device, {device: 1});
       await h.putSnapshot(w1, 'snapshot-with-long-id', {device: 1}, secret);
       await h.getSnapshot(w1, 'snapshot-with-long-id');
-      await h.get('/v1/health');
-      await h.get('/v1/w/${w1.toUpperCase()}/state', token: tokenA);
-      await h.get('/nothing-here/$tokenA');
-      await h.send('OPTIONS', '/v1/w/$w1/state');
-      await h.get('/v1/w/$w1/d/$device/not-a-number', token: tokenA);
+      await h.get('/v2/health');
+      await h.get('/v2/w/${w1.toUpperCase()}/state', key: keyA);
+      await h.get('/nothing-here/x');
+      await h.send('OPTIONS', '/v2/w/$w1/state');
+      await h.get('/v2/w/$w1/d/$device/not-a-number', key: keyA);
 
       expect(h.logs.length, 14);
       final line = RegExp(r'^relay [a-z0-9!A-Za-z-]+ \d{3} \d+ w=([0-9a-f]{6}|-) d=\S{1,6}$');
@@ -240,8 +242,9 @@ void main() {
         expect(l, matches(line));
       }
       final all = h.logs.join('\n');
-      expect(all, isNot(contains(tokenA)));
-      expect(all, isNot(contains(tokenB)));
+      expect(all, isNot(contains(await keyA.pub())));
+      expect(all, isNot(contains(await keyB.pub())));
+      expect(all, isNot(matches(RegExp(r'[A-Za-z0-9_-]{40,}'))), reason: 'no signature, key or long id');
       expect(all, isNot(contains(secret)));
       expect(all, isNot(contains(w1))); // never the full id
       expect(all, isNot(contains(w1.toUpperCase())));

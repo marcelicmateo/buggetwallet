@@ -187,9 +187,14 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (`state`, `put`, `get`, `ack`, `putSnapshot`, `getSnapshot`; failures are `TransportException(TransportFailure)`),
   `RelayState`/`RelayDevice`/`RelaySnapshot` (+ `fromJson`), implemented by `MemoryTransport` (`sync_memory.dart`: the
   relay's rules in memory — no gaps, never overwritten, acks grow, snapshot 422 before 409, two kept snapshots, pruning
-  incl. the 90-day rule driven by `now`; no token check; test hooks `offline`, `corrupt`, `failGet`, `replace`, `files`,
-  `calls`) and `RelayTransport` (`sync_relay.dart`, `package:http`: wid/token from `deriveKey`, Bearer header,
-  `X-BW-Covers`, status → failure, `api` > 1 → `newerApi`, 404 state = empty relay, 30 s timeout; `health(base)`).
+  incl. the 90-day rule driven by `now`; no signature check; test hooks `offline`, `corrupt`, `failGet`, `replace`, `files`,
+  `calls`) and `RelayTransport` (`sync_relay.dart`, `package:http` + `cryptography`, protocol v2: `wid` and the Ed25519
+  key pair from `deriveKey` (`relayIdInfo`, `relaySignInfo`; `ids` = (wid, public key)); every request carries
+  `X-BW-Time` (device clock + `clockOffsetMs`) and `X-BW-Sig` over `signedText` (method, path from `/v2/` even behind a
+  base path, `X-BW-Covers`, body SHA-256, time); `PUT d/<device>/1` also sends `X-BW-Pub`. 401 `clock` → offset from the
+  `Date` header (`parseHttpDate`, no dart:io) and one retry, never more (a second `clock` = `other`); status → failure,
+  `api` above 2 → `newerApi`, below → `olderApi`, 404 state = empty relay, 30 s timeout; `health(base)` asks
+  `/v2/health`, on 404 `/v1/health` to tell an older relay apart; `now:` for tests). About 1.8 ms per signature on the VM.
   `SyncEngine(transport, key, appVersion:, now:, partBytes:).run(repo)`: reads `state`; uploads pending ops as `last + 1`
   (seq from the relay, so a failed PUT leaves no gap; 409/422 keep the outbox for the next run); the **first run on a
   relay** (local `syncSent` absent, or the relay's `last` for this device below it = a new or wiped relay) uploads
@@ -221,7 +226,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (`syncHealAt`), and a second healer skips once the first one's snapshot covers the file. `SyncReport`:
   `sent` ops, `received` fields changed, `filesRead` (snapshots count), `problems`, `caughtUp`, `waiting`, `devices`
   (short ids, `lastSeen`, `isThis`). Fatal `SyncException`s (short, no address): unreachable, refused (401), relay
-  full, newer relay API, other. Opening a database from the old folder-sync builds drops its `peer_files` table (`repo.peerFiles.dropped`).
+  full, newer relay API, older relay API, other. Opening a database from the old folder-sync builds drops its `peer_files` table (`repo.peerFiles.dropped`).
 - `logs.dart` — logging (`package:logging`): `logEvent`/`logError` (structured events), `formatLogRecord` (one line,
   errors via `describeError`, which drops SQL parameters, paths and FormatException sources), `LogSink` (`add`,
   `flush`, `close`) with `MemoryLogSink` (ring buffer by UTF-8 bytes, `maxBytes` default 2 MiB, oldest lines dropped
@@ -319,5 +324,6 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `sync_read_edge_test.dart`, `match_gate_test.dart` (matching only when caught up), `sync_snapshot_use_test.dart`
   (unblock conditions, remembered snapshots), `sync_split_upload_test.dart` (uploads over one file), `sync_engine_spec_test.dart` (+ `support/engine_spec_sim.dart`, shared fake clock: snapshots,
   pruning, first connect, S1/S2), `sync_relay_test.dart` (`deriveKey` vs. a hand-written HKDF, `RelayTransport` over
-  `MockClient`, `MemoryTransport` rules, end to end with the real `relay/` server on port 0).
+  `MockClient` incl. signatures checked from the protocol text, clock offset retry, older/newer API, `MemoryTransport`
+  rules, end to end with the real `relay/` server on port 0 incl. a wrong signature and skewed device clocks).
 - Run: `tools/build.sh test` from the repo root (or `tools/build.sh shell`, then `cd packages/wallet_core && dart test`).

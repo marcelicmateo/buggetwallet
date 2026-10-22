@@ -100,7 +100,7 @@ enum TransportFailure {
   /// No answer (network down, wrong address, timeout).
   unreachable,
 
-  /// 401: the relay holds this wallet id with another token.
+  /// 401: the relay holds this wallet id with another key (the signature does not verify).
   refused,
 
   /// 410: pruned (below the device's `first`).
@@ -120,6 +120,9 @@ enum TransportFailure {
 
   /// The relay speaks a newer API than this build.
   newerApi,
+
+  /// The relay speaks an older API than this build (update the relay).
+  olderApi,
 
   /// Anything else.
   other,
@@ -270,6 +273,7 @@ class SyncEngine {
       TransportFailure.refused => 'The relay refused this wallet: it holds a wallet with another key at this address.',
       TransportFailure.full => 'The relay is full. Free space on the home server or raise the relay\'s limits.',
       TransportFailure.newerApi => 'The relay runs a newer version. Update the app.',
+      TransportFailure.olderApi => 'The relay runs an older version. Update the relay on the home server.',
       _ => 'The relay answered with an error. Try again later.',
     });
   }

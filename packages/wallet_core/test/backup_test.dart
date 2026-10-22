@@ -194,8 +194,8 @@ void main() {
       expect((await refused(await sealed('{"v":1}'))).reason, BackupFailure.damaged);
       expect((await refused(await sealed('{"ops":[]}'))).reason, BackupFailure.damaged);
       expect((await refused(await sealed('[]'))).reason, BackupFailure.damaged);
-      expect((await refused(await sealed('{"v":1,"ops":[{"e":"tx","id":"x","f":{"amount":1},"h":"junk"}]}'))).reason,
-          BackupFailure.damaged);
+      expect(
+          (await refused(await sealed('{"v":1,"ops":[{"e":"tx","id":"x","f":{"amount":1},"h":"junk"}]}'))).reason, BackupFailure.damaged);
       expect((await refused(await sealed('{"v":1,"ops":[1]}'))).reason, BackupFailure.damaged);
       expect((await refused(await sealed('{"v":"1","ops":[]}'))).reason, BackupFailure.damaged);
       expect(fresh.isEmpty, isTrue);

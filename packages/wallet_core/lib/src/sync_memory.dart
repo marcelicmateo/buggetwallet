@@ -22,7 +22,7 @@ class _Snap {
 /// again are fine), acks only grow and never pass a device's `last` (422), a snapshot must dominate the current one
 /// (409) and stay within each device's `last` (422), 16 MiB per file and 64 MiB per snapshot (`full`), and pruning
 /// after every accepted write: a file goes once every kept snapshot covers it and every other device seen within 90
-/// days ([now]) acked it. No token check: files sealed with another key are stored like any.
+/// days ([now]) acked it. No signature check (the relay's job): files sealed with another key are stored like any.
 ///
 /// Test hooks: [offline], [corrupt], [failGet], [failGetSnapshot], [replace], [files], [maxFileBytes].
 class MemoryTransport implements SyncTransport {

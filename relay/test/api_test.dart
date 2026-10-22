@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -9,25 +8,25 @@ import 'support.dart';
 
 void main() {
   group('health and routing', () {
-    test('health needs no auth and says api 1', () async {
+    test('health needs no signature and says api 2', () async {
       final h = await freshHarness();
-      final r = await h.get('/v1/health');
+      final r = await h.get('/v2/health');
       expect(r.statusCode, 200);
-      expect(jsonDecode(r.body), {'api': 1});
+      expect(jsonDecode(r.body), {'api': 2});
       expect(r.headers['content-type'], contains('application/json'));
     });
 
     test('unknown paths are 404 and wrong methods 405, both as JSON errors', () async {
       final h = await freshHarness();
-      for (final p in ['/', '/v1', '/v2/health', '/v1/w', '/v1/w/$w1', '/v1/w/$w1/nope', '/v1/health/x', '/v1/w/$w1/state/']) {
+      for (final p in ['/', '/v2', '/v1/health', '/v2/w', '/v2/w/$w1', '/v2/w/$w1/nope', '/v2/health/x', '/v2/w/$w1/state/']) {
         final r = await h.get(p);
         expect(r.statusCode, 404, reason: p);
         expect(jsonDecode(r.body), {'error': isA<String>()});
       }
-      expect((await h.send('POST', '/v1/health')).statusCode, 405);
-      expect((await h.send('POST', '/v1/w/$w1/state', token: tokenA)).statusCode, 405);
-      expect((await h.send('DELETE', '/v1/w/$w1/d/a/1', token: tokenA)).statusCode, 405);
-      expect((await h.send('GET', '/v1/w/$w1/ack/a', token: tokenA)).statusCode, 405);
+      expect((await h.send('POST', '/v2/health')).statusCode, 405);
+      expect((await h.send('POST', '/v2/w/$w1/state', key: keyA)).statusCode, 405);
+      expect((await h.send('DELETE', '/v2/w/$w1/d/a/1', key: keyA)).statusCode, 405);
+      expect((await h.send('GET', '/v2/w/$w1/ack/a', key: keyA)).statusCode, 405);
     });
   });
 
@@ -35,7 +34,7 @@ void main() {
     test('bad wallet ids are 400', () async {
       final h = await freshHarness();
       for (final bad in ['A1B2C3D4E5F60718293A4B5C6D7E8F90', 'abc', '${w1}0', w1.substring(1), 'g' * 32, '%20' * 11]) {
-        expect((await h.get('/v1/w/$bad/state', token: tokenA)).statusCode, 400, reason: bad);
+        expect((await h.get('/v2/w/$bad/state', key: keyA)).statusCode, 400, reason: bad);
       }
     });
 
@@ -47,8 +46,8 @@ void main() {
         expect((await h.ack(w1, bad, {})).statusCode, 400, reason: bad);
       }
       for (final bad in ['0', '01', '-1', '1.5', 'abc', '9007199254740992', '99999999999999999999', '+1', '1e3']) {
-        expect((await h.send('PUT', '/v1/w/$w1/d/a/$bad', token: tokenA, body: bytes('x'))).statusCode, 400, reason: bad);
-        expect((await h.get('/v1/w/$w1/d/a/$bad', token: tokenA)).statusCode, 400, reason: bad);
+        expect((await h.send('PUT', '/v2/w/$w1/d/a/$bad', key: keyA, body: bytes('x'))).statusCode, 400, reason: bad);
+        expect((await h.get('/v2/w/$w1/d/a/$bad', key: keyA)).statusCode, 400, reason: bad);
       }
       expect((await h.putSnapshot(w1, 'a b', {}, 'x')).statusCode, 400);
       expect((await h.getSnapshot(w1, 'a' * 65)).statusCode, 400);
@@ -65,53 +64,24 @@ void main() {
     });
   });
 
-  group('auth', () {
-    test('the first PUT creates the wallet and sets the token', () async {
+  group('wallet creation (signing details: signing_test.dart)', () {
+    test('the first PUT creates the wallet and stores its public key', () async {
       final h = await freshHarness();
-      expect((await h.get('/v1/w/$w1/state', token: tokenA)).statusCode, 404);
+      expect((await h.get('/v2/w/$w1/state', key: keyA)).statusCode, 404);
       expect((await h.putData(w1, 'dev1', 1, 'one')).statusCode, 201);
-      expect((await h.get('/v1/w/$w1/state', token: tokenA)).statusCode, 200);
+      expect((await h.get('/v2/w/$w1/state', key: keyA)).statusCode, 200);
     });
 
-    test('wrong, missing and malformed tokens are 401 on a known wallet', () async {
+    test('a later PUT with another key cannot take over the wallet', () async {
       final h = await freshHarness();
       await h.putData(w1, 'dev1', 1, 'one');
-      final paths = ['/v1/w/$w1/state', '/v1/w/$w1/d/dev1/1', '/v1/w/$w1/snapshot/s1'];
-      for (final p in paths) {
-        expect((await h.get(p, token: tokenB)).statusCode, 401, reason: p);
-        expect((await h.get(p)).statusCode, 401, reason: p);
-        expect((await h.get(p, headers: {'authorization': 'Basic $tokenA'})).statusCode, 401, reason: p);
-        expect((await h.get(p, headers: {'authorization': 'Bearer'})).statusCode, 401, reason: p);
-        expect((await h.get(p, headers: {'authorization': 'Bearer ${tokenA}x'})).statusCode, 401, reason: p);
-        expect((await h.get(p, headers: {'authorization': 'Bearer $tokenA '})).statusCode, anyOf(200, 404), reason: 'trailing space');
-      }
-      expect((await h.putData(w1, 'dev1', 2, 'two', token: tokenB)).statusCode, 401);
-      expect((await h.putData(w1, 'dev1', 2, 'two', token: null)).statusCode, 401);
-      expect((await h.ack(w1, 'dev1', {}, token: tokenB)).statusCode, 401);
-      expect((await h.putSnapshot(w1, 's1', {}, 'x', token: tokenB)).statusCode, 401);
-      // The failed writes changed nothing.
-      expect((await h.device(w1, 'dev1'))['last'], 1);
-    });
-
-    test('the bearer scheme is case-insensitive', () async {
-      final h = await freshHarness();
-      await h.putData(w1, 'dev1', 1, 'one');
-      final r = await h.get('/v1/w/$w1/state', headers: {'authorization': 'bearer $tokenA'});
-      expect(r.statusCode, 200);
-    });
-
-    test('a later PUT with another token cannot take over the wallet', () async {
-      final h = await freshHarness();
-      await h.putData(w1, 'dev1', 1, 'one');
-      expect((await h.putData(w1, 'dev2', 1, 'evil', token: tokenB)).statusCode, 401);
-      expect((await h.state(w1)).containsKey('devices'), isTrue);
+      expect((await h.putData(w1, 'dev2', 1, 'evil', key: keyB)).statusCode, 401);
       expect(((await h.state(w1))['devices'] as Map).keys, ['dev1']);
     });
 
-    test('unknown wallet: every GET and the ack and snapshot PUTs are 404, even without a token', () async {
+    test('unknown wallet: every signed GET and the ack and snapshot PUTs are 404', () async {
       final h = await freshHarness();
-      expect((await h.get('/v1/w/$w1/state', token: tokenA)).statusCode, 404);
-      expect((await h.get('/v1/w/$w1/state')).statusCode, 404);
+      expect((await h.get('/v2/w/$w1/state', key: keyA)).statusCode, 404);
       expect((await h.getData(w1, 'dev1', 1)).statusCode, 404);
       expect((await h.getSnapshot(w1, 's1')).statusCode, 404);
       expect((await h.ack(w1, 'dev1', {})).statusCode, 404);
@@ -119,25 +89,11 @@ void main() {
       expect(h.relay.walletCount, 0);
     });
 
-    test('a PUT without token on an unknown wallet is 401 and creates nothing', () async {
-      final h = await freshHarness();
-      expect((await h.putData(w1, 'dev1', 1, 'one', token: null)).statusCode, 401);
-      expect(h.relay.walletCount, 0);
-    });
-
     test('a first PUT with seq above 1 is 422 and creates nothing', () async {
       final h = await freshHarness();
       expect((await h.putData(w1, 'dev1', 2, 'two')).statusCode, 422);
       expect(h.relay.walletCount, 0);
-      expect((await h.get('/v1/w/$w1/state', token: tokenB)).statusCode, 404);
-    });
-
-    test('only the SHA-256 of the token reaches the disk', () async {
-      final h = await freshHarness();
-      await h.putData(w1, 'dev1', 1, 'one');
-      final meta = await File('${h.dir.path}/$w1/meta.json').readAsString();
-      expect(meta, isNot(contains(tokenA)));
-      expect(meta, contains('"tokenHash"'));
+      expect((await h.get('/v2/w/$w1/state', key: keyB)).statusCode, 404);
     });
   });
 
@@ -184,7 +140,7 @@ void main() {
     test('binary bytes round-trip unchanged', () async {
       final h = await freshHarness();
       final all = Uint8List.fromList([for (var i = 0; i < 1024; i++) i % 256]);
-      expect((await h.send('PUT', '/v1/w/$w1/d/dev1/1', token: tokenA, body: all)).statusCode, 201);
+      expect((await h.send('PUT', '/v2/w/$w1/d/dev1/1', key: keyA, body: all)).statusCode, 201);
       final r = await h.getData(w1, 'dev1', 1);
       expect(r.bodyBytes, all);
       expect(r.headers['content-type'], 'application/octet-stream');
@@ -204,20 +160,21 @@ void main() {
     test('413 at 16 MiB + 1, 16 MiB itself is fine, and the rejected PUT stores nothing', () async {
       final h = await freshHarness();
       final big = Uint8List(16 * 1024 * 1024 + 1);
-      expect((await h.send('PUT', '/v1/w/$w1/d/dev1/1', token: tokenA, body: big)).statusCode, 413);
+      expect((await h.send('PUT', '/v2/w/$w1/d/dev1/1', key: keyA, body: big)).statusCode, 413);
       expect(h.relay.walletCount, 0);
       final ok = Uint8List(16 * 1024 * 1024);
-      expect((await h.send('PUT', '/v1/w/$w1/d/dev1/1', token: tokenA, body: ok)).statusCode, 201);
-      expect((await h.send('PUT', '/v1/w/$w1/d/dev1/2', token: tokenA, body: big)).statusCode, 413);
+      expect((await h.send('PUT', '/v2/w/$w1/d/dev1/1', key: keyA, body: ok)).statusCode, 201);
+      expect((await h.send('PUT', '/v2/w/$w1/d/dev1/2', key: keyA, body: big)).statusCode, 413);
       expect((await h.device(w1, 'dev1'))['last'], 1);
       // The relay still answers after the rejection.
-      expect((await h.get('/v1/health')).statusCode, 200);
+      expect((await h.get('/v2/health')).statusCode, 200);
     });
 
     test('413 also when the length is not announced (chunked)', () async {
       final h = await freshHarness();
-      final req = http.StreamedRequest('PUT', h.base.resolve('/v1/w/$w1/d/dev1/1'))..headers['authorization'] = 'Bearer $tokenA';
       final chunk = Uint8List(1024 * 1024);
+      final req = http.StreamedRequest('PUT', h.base.resolve('/v2/w/$w1/d/dev1/1'))
+        ..headers.addAll(await h.sign(keyA, 'PUT', '/v2/w/$w1/d/dev1/1', Uint8List(17 * chunk.length)));
       final send = h.client.send(req);
       for (var i = 0; i < 17; i++) {
         req.sink.add(chunk);
@@ -346,16 +303,16 @@ void main() {
         '{"a b": 1}',
         '{"dev1": 9007199254740992}'
       ]) {
-        final r = await h.send('PUT', '/v1/w/$w1/ack/dev1', token: tokenA, body: utf8.encode(body));
+        final r = await h.send('PUT', '/v2/w/$w1/ack/dev1', key: keyA, body: utf8.encode(body));
         expect(r.statusCode, 400, reason: body);
       }
-      expect((await h.send('PUT', '/v1/w/$w1/ack/dev1', token: tokenA, body: Uint8List.fromList([0xff, 0xfe]))).statusCode, 400);
+      expect((await h.send('PUT', '/v2/w/$w1/ack/dev1', key: keyA, body: Uint8List.fromList([0xff, 0xfe]))).statusCode, 400);
     });
 
     test('an oversized ack body is 413', () async {
       final h = await freshHarness();
       await h.putData(w1, 'dev1', 1, 'one');
-      final r = await h.send('PUT', '/v1/w/$w1/ack/dev1', token: tokenA, body: Uint8List(70 * 1024));
+      final r = await h.send('PUT', '/v2/w/$w1/ack/dev1', key: keyA, body: Uint8List(70 * 1024));
       expect(r.statusCode, 413);
     });
 

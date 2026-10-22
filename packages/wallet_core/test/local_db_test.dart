@@ -73,7 +73,7 @@ void main() {
       expect(await localDbKey(await VaultKey.parse(await key.toText())), dbKey, reason: 'same wallet key text, same db key');
       expect(await localDbKey(VaultKey.generate()), isNot(dbKey));
       expect(await deriveKey(key, 'bw-local-db-v1'), dbKey);
-      expect(await deriveKey(key, 'bw-relay-auth-v1'), isNot(dbKey));
+      expect(await deriveKey(key, 'bw-relay-sign-v1'), isNot(dbKey));
       final id = await deriveKey(key, 'bw-relay-id-v1', length: 16);
       expect(dbKey.sublist(0, 16), isNot(id));
     });

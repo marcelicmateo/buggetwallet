@@ -1,8 +1,10 @@
-// HTTP client for the relay (docs/context/RELAY_PROTOCOL.md). `package:http` only, so it runs on the VM and the web.
+// HTTP client for the relay (docs/context/RELAY_PROTOCOL.md, v2: signed requests). `package:http` and
+// `package:cryptography` only, so it runs on the VM and the web.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:http/http.dart' as http;
 
 import 'logs.dart';
@@ -12,38 +14,75 @@ import 'vault.dart';
 final _log = Logger('bw.relay');
 
 /// The relay API version this build speaks.
-const relayApi = 1;
+const relayApi = 2;
 
-/// [SyncTransport] over HTTP to a relay at [base] (e.g. `http://homeserver:8787`). The wallet id and the bearer token
-/// are derived from [key] ([deriveKey]); the key itself never leaves the device.
+/// HKDF info of the wallet id and of the Ed25519 signing seed (RELAY_PROTOCOL.md "Identity").
+const relayIdInfo = 'bw-relay-id-v1';
+const relaySignInfo = 'bw-relay-sign-v1';
+
+class _Identity {
+  final String wid;
+  final SimpleKeyPair keyPair;
+  final String pub;
+  _Identity(this.wid, this.keyPair, this.pub);
+}
+
+/// [SyncTransport] over HTTP to a relay at [base] (e.g. `http://homeserver:8787`). The wallet id and the Ed25519 key
+/// that signs every request are derived from [key] ([deriveKey]); the key itself never leaves the device, and the
+/// relay only ever learns the public key.
 class RelayTransport implements SyncTransport {
   final Uri base;
   final VaultKey key;
   final http.Client _client;
   final Duration timeout;
-  RelayTransport(this.base, this.key, {http.Client? client, this.timeout = const Duration(seconds: 30)})
-      : _client = client ?? http.Client();
+  final DateTime Function() _now;
 
-  Future<(String, String)>? _ids;
+  /// Added to this device's clock for `X-BW-Time`: set from the relay's `Date` header when the relay answers 401
+  /// `clock` (device-local, in memory).
+  int clockOffsetMs;
 
-  /// (wallet id, token): `wid` = lowercase hex of HKDF(`bw-relay-id-v1`, 16 bytes), `token` = base64url without padding
-  /// of HKDF(`bw-relay-auth-v1`, 32 bytes).
-  Future<(String, String)> get ids => _ids ??= () async {
-        final id = await deriveKey(key, 'bw-relay-id-v1', length: 16);
-        final auth = await deriveKey(key, 'bw-relay-auth-v1');
-        return (id.map((b) => b.toRadixString(16).padLeft(2, '0')).join(), base64Url.encode(auth).replaceAll('=', ''));
+  RelayTransport(this.base, this.key,
+      {http.Client? client, this.timeout = const Duration(seconds: 30), DateTime Function()? now, this.clockOffsetMs = 0})
+      : _client = client ?? http.Client(),
+        _now = now ?? DateTime.now;
+
+  static final _ed25519 = Ed25519();
+
+  Future<_Identity>? _identity;
+
+  Future<_Identity> get _id => _identity ??= () async {
+        final id = await deriveKey(key, relayIdInfo, length: 16);
+        final seed = await deriveKey(key, relaySignInfo);
+        final pair = await _ed25519.newKeyPairFromSeed(seed);
+        final pub = (await pair.extractPublicKey()).bytes;
+        return _Identity(id.map((b) => b.toRadixString(16).padLeft(2, '0')).join(), pair, _b64(pub));
       }();
+
+  /// (wallet id, public key): `wid` = lowercase hex of HKDF(`bw-relay-id-v1`, 16 bytes), the public key = base64url
+  /// without padding of the Ed25519 key from the seed HKDF(`bw-relay-sign-v1`, 32 bytes), as `X-BW-Pub` sends it.
+  Future<(String, String)> get ids async {
+    final i = await _id;
+    return (i.wid, i.pub);
+  }
+
+  static String _b64(List<int> b) => base64Url.encode(b).replaceAll('=', '');
 
   static Uri _url(Uri base, String path) {
     final prefix = base.path.endsWith('/') ? base.path.substring(0, base.path.length - 1) : base.path;
     return base.replace(path: '$prefix/$path', query: null, fragment: null);
   }
 
-  /// Checks that a relay answers at [base] and speaks this build's API (`GET /v1/health`). Throws [TransportException].
+  /// Checks that a relay answers at [base] and speaks this build's API (`GET /v2/health`, not signed). A 404 there is
+  /// asked again at `/v1/health` to tell an older relay apart ([TransportFailure.olderApi]). Throws
+  /// [TransportException].
   static Future<void> health(Uri base, {http.Client? client, Duration timeout = const Duration(seconds: 10)}) async {
     final c = client ?? http.Client();
     try {
-      final r = await _send(() => c.get(_url(base, 'v1/health')), timeout, 'health');
+      final r = await _send(() => c.get(_url(base, 'v$relayApi/health')), timeout, 'health');
+      if (r.statusCode == 404) {
+        final old = await _send(() => c.get(_url(base, 'v1/health')), timeout, 'health');
+        if (old.statusCode == 200) _api(old.body, 'health');
+      }
       _check(r, 'health');
       _api(r.body, 'health');
     } finally {
@@ -72,6 +111,7 @@ class RelayTransport implements SyncTransport {
     logEvent(_log, Level.FINE, 'relay.response', {'kind': kind, 'status': s, 'bytes': r.bodyBytes.length});
     if (s >= 200 && s < 300) return;
     final failure = switch (s) {
+      401 when _isClock(r) => TransportFailure.other,
       401 || 403 => TransportFailure.refused,
       410 => TransportFailure.gone,
       404 => TransportFailure.missing,
@@ -81,10 +121,22 @@ class RelayTransport implements SyncTransport {
       _ => TransportFailure.other,
     };
     logEvent(_log, Level.WARNING, 'relay.failed', {'kind': kind, 'status': s, 'failure': failure.name});
-    throw TransportException(failure, 'status $s');
+    throw TransportException(failure, _isClock(r) ? 'clock' : 'status $s');
   }
 
-  /// The JSON object in [body]; an `api` above [relayApi] is [TransportFailure.newerApi].
+  /// A 401 `{"error":"clock"}`: the signature time is outside the relay's window.
+  static bool _isClock(http.Response r) {
+    if (r.statusCode != 401) return false;
+    try {
+      final j = jsonDecode(r.body);
+      return j is Map && j['error'] == 'clock';
+    } on FormatException {
+      return false;
+    }
+  }
+
+  /// The JSON object in [body]; an `api` above [relayApi] is [TransportFailure.newerApi], below it
+  /// [TransportFailure.olderApi].
   static Map<String, Object?> _api(String body, String kind) {
     final Object? j;
     try {
@@ -100,14 +152,42 @@ class RelayTransport implements SyncTransport {
       logEvent(_log, Level.WARNING, 'relay.newerApi', {'api': api});
       throw const TransportException(TransportFailure.newerApi, 'newer api');
     }
+    if (api < relayApi) {
+      logEvent(_log, Level.WARNING, 'relay.olderApi', {'api': api});
+      throw const TransportException(TransportFailure.olderApi, 'older api');
+    }
     return Map<String, Object?>.from(j);
   }
 
-  Future<http.Response> _req(String method, String path, String kind, {List<int>? body, Map<String, String> headers = const {}}) async {
-    final (wid, token) = await ids;
-    final req = http.Request(method, _url(base, 'v1/w/$wid/$path'))..headers.addAll({'Authorization': 'Bearer $token', ...headers});
-    if (body != null) req.bodyBytes = body;
-    final r = await _send(() async => http.Response.fromStream(await _client.send(req)), timeout, kind);
+  /// The string a v2 request signs (RELAY_PROTOCOL.md "Signed requests").
+  static String signedText(String method, String path, String covers, String bodyHash, String time) =>
+      'bw-relay-v2\n$method\n$path\n$covers\n$bodyHash\n$time';
+
+  Future<http.Response> _req(String method, String path, String kind,
+      {List<int> body = const [], Map<String, String> headers = const {}, bool withPub = false}) async {
+    final id = await _id;
+    final signedPath = '/v$relayApi/w/${id.wid}/$path';
+    final hash = (await Sha256().hash(body)).bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    Future<http.Response> attempt() async {
+      final time = '${_now().millisecondsSinceEpoch + clockOffsetMs}';
+      final sig =
+          await _ed25519.sign(utf8.encode(signedText(method, signedPath, headers['X-BW-Covers'] ?? '', hash, time)), keyPair: id.keyPair);
+      final req = http.Request(method, _url(base, signedPath.substring(1)))
+        ..headers.addAll({...headers, 'X-BW-Time': time, 'X-BW-Sig': _b64(sig.bytes), if (withPub) 'X-BW-Pub': id.pub});
+      if (method != 'GET') req.bodyBytes = body;
+      return _send(() async => http.Response.fromStream(await _client.send(req)), timeout, kind);
+    }
+
+    var r = await attempt();
+    if (_isClock(r)) {
+      final relayTime = parseHttpDate(r.headers['date'] ?? '');
+      if (relayTime != null) {
+        clockOffsetMs = relayTime.millisecondsSinceEpoch - _now().millisecondsSinceEpoch;
+        // Only that the offset changed, never the clocks themselves.
+        logEvent(_log, Level.INFO, 'relay.clockOffset', {'kind': kind, 'minutes': clockOffsetMs ~/ 60000});
+        r = await attempt();
+      }
+    }
     _check(r, kind);
     return r;
   }
@@ -134,7 +214,8 @@ class RelayTransport implements SyncTransport {
 
   @override
   Future<void> put(String device, int seq, List<int> bytes) async {
-    await _req('PUT', 'd/$device/$seq', 'put', body: bytes, headers: _octets);
+    // seq 1 may create the wallet on the relay: it carries the public key (trust on first use).
+    await _req('PUT', 'd/$device/$seq', 'put', body: bytes, headers: _octets, withPub: seq == 1);
   }
 
   @override
@@ -155,4 +236,19 @@ class RelayTransport implements SyncTransport {
 
   /// Closes the HTTP client.
   void close() => _client.close();
+}
+
+const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+final _httpDate = RegExp(r'^[A-Za-z]{3}, (\d{2}) ([A-Za-z]{3}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$');
+
+/// An HTTP `Date` header (IMF-fixdate, `Thu, 22 Oct 2026 10:00:00 GMT`) as UTC, or null (web-safe: no dart:io).
+DateTime? parseHttpDate(String s) {
+  final m = _httpDate.firstMatch(s.trim());
+  if (m == null) return null;
+  final month = _months.indexOf(m.group(2)!) + 1;
+  if (month == 0) return null;
+  int g(int i) => int.parse(m.group(i)!);
+  final (day, hour, minute, second) = (g(1), g(4), g(5), g(6));
+  if (day < 1 || day > 31 || hour > 23 || minute > 59 || second > 60) return null;
+  return DateTime.utc(g(3), month, day, hour, minute, second);
 }
