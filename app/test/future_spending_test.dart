@@ -1,10 +1,13 @@
 // Stage F3: future spending in the app. Planned costs, the Upcoming screen (grid + list), Today's "Coming up" and heads-up
 // lines, Plan › Calendars (phone calendars through a fake source, .ics files and links), heads-up notifications, Plan › Export
 // and the log privacy of all of it. All data is SYNTHETIC (futureWallet: Tuesday 20 Oct 2026).
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:budget_wallet/src/calendar_source.dart';
+import 'package:budget_wallet/src/calendar_source_native.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/ics_fetch.dart';
@@ -14,10 +17,12 @@ import 'package:budget_wallet/src/screens/export_panel.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/upcoming.dart';
+import 'package:device_calendar_plus/device_calendar_plus.dart' show Event, EventAvailability, EventStatus;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/layout.dart';
 import 'support/wallet.dart';
@@ -64,6 +69,8 @@ class _Chooser extends FileChooser {
     return Uri(path: fileName);
   }
 }
+
+class _RealHttp extends HttpOverrides {}
 
 Uint8List bytesOf(String s) => Uint8List.fromList(utf8.encode(s));
 
@@ -299,9 +306,13 @@ void main() {
       expect(await wc.setHeadsUpNotify(true), isTrue);
       expect(nudges.asked, 1);
       final slots = nudges.headsUps.last;
-      expect(slots.map((s) => (s.date, s.hour)), [('2026-10-27', 9)], reason: 'the insurance slot (20 Oct 09:00) has passed');
-      expect(slots.single.body, 'A big planned cost is coming up in 3 days.');
-      expect('${slots.single.title}${slots.single.body}', isNot(anyOf(contains('Annual'), contains('200'), contains('€'))));
+      expect(slots.map((s) => (s.date, s.hour)), [('2026-10-21', 9), ('2026-10-27', 9)],
+          reason: 'the insurance slot (20 Oct 09:00) has passed: it moves to the next 09:00');
+      expect(slots.first.body, 'A big planned cost is coming up in 2 days.');
+      expect(slots.last.body, 'A big planned cost is coming up in 3 days.');
+      for (final s in slots) {
+        expect('${s.title}${s.body}', isNot(anyOf(contains('Annual'), contains('Car'), contains('200'), contains('€'))));
+      }
     });
 
     test('rescheduled when a planned cost changes, and cancelled when the switch goes off', () async {
@@ -336,8 +347,11 @@ void main() {
     test('the slots are a pure function: past days and the 20 limit', () {
       final now = DateTime(2026, 10, 20, 8);
       expect(headsUpSlots(now, [('2026-10-23', 3)]).map((s) => s.date), ['2026-10-20'], reason: 'today 09:00 is still ahead at 08:00');
-      expect(headsUpSlots(DateTime(2026, 10, 20, 9), [('2026-10-23', 3)]), isEmpty);
-      expect(headsUpSlots(now, [('2026-10-21', 3)]), isEmpty);
+      expect(headsUpSlots(DateTime(2026, 10, 20, 9), [('2026-10-23', 3)]).map((s) => s.date), ['2026-10-21'],
+          reason: 'its day has passed: the next 09:00 ahead, still before the cost');
+      expect(headsUpSlots(now, [('2026-10-21', 3)]).map((s) => s.date), ['2026-10-20']);
+      expect(headsUpSlots(DateTime(2026, 10, 20, 9), [('2026-10-20', 3)]), isEmpty, reason: 'the cost is today and 09:00 has gone');
+      expect(headsUpSlots(DateTime(2026, 10, 20, 12), [('2026-10-21', 3)]).single.body, headsUpBody(0));
       expect(headsUpSlots(now, [for (var i = 0; i < 30; i++) (addDays('2026-11-01', i), 3)]), hasLength(headsUpMax));
       expect(headsUpBody(0), isNot(contains('0 days')));
     });
@@ -695,6 +709,320 @@ void main() {
       }
       final read = lines.where((l) => l.contains('calendar.read')).last;
       expect(read, allOf(contains('calendars'), contains('events'), contains('unsupported')));
+    });
+  });
+
+  group('F4b review fixes', () {
+    Event phoneEvent(String id, String title, EventStatus status) => Event(
+        eventId: id,
+        instanceId: '$id@1',
+        calendarId: 'c1',
+        title: title,
+        startDate: DateTime(2026, 10, 24, 10),
+        endDate: DateTime(2026, 10, 24, 11),
+        isAllDay: false,
+        availability: EventAvailability.busy,
+        status: status,
+        isRecurring: false);
+
+    /// Runs [body] with a real HttpClient (flutter_test replaces it with one that always answers 400).
+    Future<T> realHttp<T>(Future<T> Function() body) => HttpOverrides.runWithHttpOverrides(body, _RealHttp());
+
+    Future<HttpServer> serve(Future<void> Function(HttpRequest r) handler) async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((r) => handler(r).catchError((_) {}));
+      return server;
+    }
+
+    Future<WalletController> rentWallet() async {
+      final cals =
+          FakeCalendars(granted: true, eventList: const [CalendarEvent(calendarId: 'c1', uid: 'r1', title: 'Rent', date: '2026-10-26')]);
+      final wc = fw(calendars: cals);
+      wc.addPlannedCost(title: 'Rent', date: '2026-10-02', amount: 50000, category: 'Rent');
+      await wc.requestCalendarAccess();
+      await wc.setCalendarOn('c1', true);
+      return wc;
+    }
+
+    test('a suggestion with an earlier cost of the same name keeps its category: covered by the plan, not reserved twice', () async {
+      final wc = await rentWallet();
+      final r = wc.upcomingRange();
+      final s = wc.upcomingItems(r.start, r.end).singleWhere((i) => i.kind == UpcomingKind.suggestion);
+      expect((s.suggested, s.suggestedFrom, s.category), (50000, 'earlier', 'Rent'));
+      final reservedBefore = wc.period().reservedPlanned;
+      wc.confirmSuggestion(s, amount: s.suggested!, category: s.category);
+      final stored = wc.plannedOpen().singleWhere((p) => p.source == PlannedSource.calendar);
+      expect(stored.category, 'Rent');
+      expect(stored.coveredByPlan, isTrue);
+      expect(wc.period().reservedPlanned, reservedBefore, reason: 'rent is in the fixed plan already');
+    });
+
+    tw('tapping Confirm on that suggestion passes the category on', (tester) async {
+      final wc = await rentWallet();
+      final reservedBefore = wc.period().reservedPlanned;
+      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      final confirm = find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('confirm:e:'));
+      await tester.tap(confirm);
+      await tester.pump();
+      final stored = wc.plannedOpen().singleWhere((p) => p.source == PlannedSource.calendar);
+      expect(stored.category, 'Rent');
+      expect(wc.period().reservedPlanned, reservedBefore);
+    });
+
+    test('editPlannedCost: clearCategory removes the category, null alone leaves it', () {
+      final wc = fw();
+      final id = wc.plannedOpen().firstWhere((p) => p.title == 'Dentist').id;
+      wc.editPlannedCost(id, title: 'Dentist');
+      expect(wc.plannedOpen().firstWhere((p) => p.id == id).category, 'Health & care');
+      wc.editPlannedCost(id, clearCategory: true);
+      expect(wc.plannedOpen().firstWhere((p) => p.id == id).category, isNull);
+    });
+
+    tw('the change sheet: choosing "No category" really removes the category', (tester) async {
+      final wc = fw();
+      final id = wc.plannedOpen().firstWhere((p) => p.title == 'Dentist').id;
+      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await tester.ensureVisible(key('up:p:$id'));
+      await tester.tap(find.descendant(of: key('up:p:$id'), matching: find.text('Dentist')));
+      await tester.pumpAndSettle();
+      await tester.tap(key('entryEdit'));
+      await tester.pumpAndSettle();
+      await tester.tap(key('plannedCategory'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('No category').last);
+      await tester.pumpAndSettle();
+      await tester.tap(key('plannedSave'));
+      await tester.pumpAndSettle();
+      expect(wc.plannedOpen().firstWhere((p) => p.id == id).category, isNull);
+    });
+
+    group('Set aside', () {
+      WalletController withBills() {
+        final wc = fw();
+        wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+          for (final d in const ['2026-07-27', '2026-08-27', '2026-09-27']) syntheticTx(d, -1299, 'POS plaćanje', 'POS NETFLIX.COM'),
+          for (final d in const ['2026-07-25', '2026-08-25', '2026-09-25']) syntheticTx(d, -2999, 'POS plaćanje', 'POS SYNTHGYM ZAGREB'),
+        ]));
+        wc.reload();
+        wc.refreshRecurring();
+        for (final b in wc.recurringBills()) {
+          wc.confirmRecurring(b.id);
+        }
+        return wc;
+      }
+
+      test('equals what the period reserves: a bill in a fixed category is not counted, a flexible one is', () {
+        final wc = withBills();
+        final bills = wc.recurringBills();
+        expect(bills.where((b) => b.coveredByPlan), hasLength(1));
+        expect(bills.where((b) => !b.coveredByPlan), hasLength(1));
+        final r = wc.upcomingRange();
+        final items = wc.upcomingItems(wc.today(), r.end);
+        expect(items.where((i) => i.kind == UpcomingKind.bill), hasLength(2));
+        final p = wc.period();
+        expect(p.reservedBills, 2999);
+        expect(wc.countedIn(items).total, p.reservedBills + p.reservedPlanned);
+        expect(wc.countedIn(items).total, 2999 + 42000);
+        expect(wc.countedIn(items).count, 3);
+      });
+    });
+
+    group('link fetch', () {
+      test('one overall timeout: a server that sends a byte now and then cannot hold it open', () async {
+        final server = await serve((r) async {
+          r.response.statusCode = 200;
+          for (var i = 0; i < 200; i++) {
+            r.response.write('x');
+            await r.response.flush();
+            await Future<void>.delayed(const Duration(milliseconds: 40));
+          }
+          await r.response.close();
+        });
+        final watch = Stopwatch()..start();
+        await realHttp(() async {
+          await expectLater(fetchIcs(Uri.parse('http://127.0.0.1:${server.port}/slow.ics'), timeout: const Duration(milliseconds: 500)),
+              throwsA(isA<IcsFetchException>().having((e) => e.message, 'message', contains('too long'))));
+        });
+        expect(watch.elapsed, lessThan(const Duration(seconds: 4)));
+      });
+
+      test('redirects are followed (a few), and a loop is refused', () async {
+        final server = await serve((r) async {
+          switch (r.uri.path) {
+            case '/a':
+              r.response
+                ..statusCode = 302
+                ..headers.set('location', '/b');
+            case '/b':
+              r.response
+                ..statusCode = 200
+                ..write(fakeIcs([('u1', '2026-10-25', 'Hop')]));
+            default:
+              r.response
+                ..statusCode = 301
+                ..headers.set('location', '/loop');
+          }
+          await r.response.close();
+        });
+        final base = 'http://127.0.0.1:${server.port}';
+        await realHttp(() async {
+          expect(await fetchIcs(Uri.parse('$base/a')), contains('SUMMARY:Hop'));
+          await expectLater(fetchIcs(Uri.parse('$base/loop')),
+              throwsA(isA<IcsFetchException>().having((e) => e.message, 'message', contains('too many times'))));
+        });
+      });
+
+      test('a redirect from https to http is refused, other steps are fine', () {
+        final https = Uri.parse('https://example.org/a.ics');
+        expect(() => resolveRedirect(https, 'http://example.org/b.ics'), throwsA(isA<IcsFetchException>()));
+        expect(() => resolveRedirect(https, 'ftp://example.org/b.ics'), throwsA(isA<IcsFetchException>()));
+        expect(resolveRedirect(https, '/b.ics').toString(), 'https://example.org/b.ics');
+        expect(resolveRedirect(Uri.parse('http://example.org/a.ics'), 'https://example.org/b.ics').scheme, 'https');
+        expect(resolveRedirect(Uri.parse('http://example.org/a.ics'), 'http://other.org/b.ics').host, 'other.org');
+      });
+
+      test('a link that fails in a way nobody expected still leaves reading switched off', () async {
+        final wc = fw();
+        wc.icsFetcher = (u) async => fakeIcs([('u2', '2026-10-26', 'Link event')]);
+        await wc.addIcsLink('https://example.org/a.ics');
+        wc.icsFetcher = (u) async => throw StateError('boom');
+        await wc.readCalendars();
+        expect(wc.cal.reading, isFalse);
+        expect(wc.calendarEntries().single.error, contains('Showing what was saved'));
+        await wc.readCalendars();
+        expect(wc.cal.events.map((e) => e.title), ['Link event'], reason: 'the later read still runs');
+      });
+    });
+
+    tw('Plan › Calendars warns under an http:// link, not under https://, at 320 dp x2.0', (tester) async {
+      final errors = Errors();
+      final wc = fw();
+      await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: CalendarsPanel(wc: wc))),
+          size: const Size(320, 900), textScale: 2.0);
+      await tester.ensureVisible(key('calLink'));
+      await tester.tap(key('calLink'));
+      await tester.pump();
+      expect(key('calLinkInsecure'), findsNothing);
+      await tester.enterText(key('calLinkField'), 'https://example.org/a.ics');
+      await tester.pump();
+      expect(key('calLinkInsecure'), findsNothing);
+      await tester.enterText(key('calLinkField'), ' HTTP://example.org/a.ics');
+      await tester.pump();
+      expect(key('calLinkInsecure'), findsOneWidget);
+      expect(find.textContaining("This link isn't encrypted", findRichText: true), findsOneWidget);
+      expect(find.byIcon(Icons.error_outline), findsWidgets, reason: 'icon plus text');
+      errors.check();
+    });
+
+    tw('a saved http:// link keeps its warning in the list', (tester) async {
+      final errors = Errors();
+      final wc = fw();
+      wc.icsFetcher = (u) async => fakeIcs([('u2', '2026-10-26', 'Link event')]);
+      expect(await wc.addIcsLink('http://example.org/a.ics'), isNull, reason: 'accepted, with a warning');
+      expect(wc.calendarEntries().single.insecure, isTrue);
+      await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: CalendarsPanel(wc: wc))),
+          size: const Size(320, 900), textScale: 2.0);
+      expect(find.textContaining("This link isn't encrypted", findRichText: true), findsOneWidget);
+      errors.check();
+    });
+
+    test('a cost added for tomorrow with a 3 day heads-up still gets a notification (the next 09:00)', () async {
+      final nudges = FakeNudges();
+      final wc = fw(nudges: nudges);
+      wc.addPlannedCost(title: 'New tyres', date: '2026-10-21', amount: 30000);
+      await wc.setHeadsUpNotify(true);
+      final slots = nudges.headsUps.last;
+      expect(slots.firstWhere((s) => s.date == '2026-10-21').body, headsUpBody(0));
+    });
+
+    test('two heads-up reschedules at once run one after the other (no stale notifications)', () async {
+      final nudges = FakeNudges()..headsUpDelay = const Duration(milliseconds: 30);
+      final wc = fw(nudges: nudges);
+      wc.repo.setLocalValue('headsUpNotify', '1');
+      await Future.wait([wc.rescheduleHeadsUps(), wc.rescheduleHeadsUps(), wc.rescheduleHeadsUps()]);
+      expect(nudges.headsUps, hasLength(3));
+      expect(nudges.headsUpMostRunning, 1, reason: 'never two calls inside the platform at the same time');
+      wc.addPlannedCost(title: 'Tyres', date: '2026-11-05', amount: 30000);
+      await Future.wait([wc.rescheduleHeadsUps(), wc.rescheduleHeadsUps()]);
+      expect(nudges.headsUps.last.map((s) => s.date), contains('2026-11-02'));
+      expect(nudges.headsUpMostRunning, 1);
+    });
+
+    test('cancelled phone events are not suggested; others are', () {
+      final list = calendarEventsFrom([
+        phoneEvent('e1', 'Dinner', EventStatus.confirmed),
+        phoneEvent('e2', 'Called off', EventStatus.canceled),
+        phoneEvent('e3', 'Maybe', EventStatus.tentative),
+        phoneEvent('e4', 'No status', EventStatus.none),
+      ]);
+      expect(list.map((e) => e.title), ['Dinner', 'Maybe', 'No status']);
+      expect(list.first.date, '2026-10-24');
+    });
+
+    group('Undo after Paid and Skip', () {
+      Finder snack(String text) => find.descendant(of: find.byType(SnackBar), matching: find.text(text));
+
+      tw('Skip: "Skipped" with Undo; Undo puts the cost back in the plan', (tester) async {
+        final wc = fw();
+        final id = wc.plannedOpen().firstWhere((p) => p.title == 'Car insurance').id;
+        await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+        await tester.ensureVisible(key('up:p:$id'));
+        await tester.tap(find.descendant(of: key('up:p:$id'), matching: find.text('Car insurance')));
+        await tester.pumpAndSettle();
+        await tester.tap(key('entrySkip'));
+        await tester.pumpAndSettle();
+        expect(snack('Skipped'), findsOneWidget);
+        expect(wc.comingUp().count, 1);
+        await tester.tap(find.widgetWithText(SnackBarAction, 'Undo'));
+        await tester.pumpAndSettle();
+        expect(wc.comingUp().count, 2);
+        expect(wc.plannedOpen().map((p) => p.title), contains('Car insurance'));
+      });
+
+      tw('Paid: "Marked paid" with Undo; Undo opens the cost again and forgets the payment', (tester) async {
+        final wc = fw();
+        final p = wc.plannedOpen().firstWhere((p) => p.title == 'Car insurance');
+        final tx = wc.paidCandidatesFor(p).single.tx;
+        await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+        await tester.ensureVisible(key('up:p:${p.id}'));
+        await tester.tap(find.descendant(of: key('up:p:${p.id}'), matching: find.text('Car insurance')));
+        await tester.pumpAndSettle();
+        await tester.tap(key('entryPaid'));
+        await tester.pumpAndSettle();
+        await tester.tap(key('pay:${tx.id}'));
+        await tester.pumpAndSettle();
+        expect(snack('Marked paid'), findsOneWidget);
+        expect(wc.plannedOpen().map((x) => x.title), isNot(contains('Car insurance')));
+        await tester.tap(find.widgetWithText(SnackBarAction, 'Undo'));
+        await tester.pumpAndSettle();
+        final back = wc.plannedOpen().firstWhere((x) => x.title == 'Car insurance');
+        expect(back.paidTx, isNull);
+        expect(back.status, PlannedStatus.open);
+        expect(wc.paidCandidatesFor(back), hasLength(1), reason: 'the payment can be picked again');
+      });
+
+      tw('Delete has no Undo', (tester) async {
+        final wc = fw();
+        final id = wc.plannedOpen().firstWhere((p) => p.title == 'Dentist').id;
+        await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+        await tester.ensureVisible(key('up:p:$id'));
+        await tester.tap(find.descendant(of: key('up:p:$id'), matching: find.text('Dentist')));
+        await tester.pumpAndSettle();
+        await tester.tap(key('entryDelete'));
+        await tester.pumpAndSettle();
+        expect(snack('Deleted'), findsOneWidget);
+        expect(find.widgetWithText(SnackBarAction, 'Undo'), findsNothing);
+      });
+
+      test('reopenPlanned is logged without any text', () {
+        final wc = fw();
+        final p = wc.plannedOpen().first;
+        wc.skipPlanned(p);
+        wc.reopenPlanned(p);
+        expect(lines.where((l) => l.contains('bw.planned') && l.contains('planned.reopen')), hasLength(1));
+        expect(lines.join('\n'), isNot(contains(p.title)));
+      });
     });
   });
 

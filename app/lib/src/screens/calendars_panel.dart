@@ -11,6 +11,9 @@ import '../widgets/common.dart';
 
 final _log = Logger('bw.calendar');
 
+/// Shown under an `http://` calendar link: accepted, but the owner is told.
+const insecureLinkWarning = "This link isn't encrypted. Anyone on the network can read the calendar.";
+
 /// Plan › Calendars: which calendars feed Upcoming, and when to warn about a big cost.
 /// Android: the phone's calendars (any account that syncs to the phone) after the system permission. Everywhere: import an
 /// `.ics` file; apps (not the browser) can also add an `.ics` link, refreshed at start and resume. Read only: nothing is ever
@@ -178,6 +181,7 @@ class _CalendarsPanelState extends State<CalendarsPanel> {
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(e.name, style: const TextStyle(fontWeight: FontWeight.w500)),
+                    if (e.insecure) const StatusLabel(good: false, text: insecureLinkWarning),
                     if (e.error != null) StatusLabel(good: false, text: e.error!),
                   ]),
                 ),
@@ -219,8 +223,10 @@ class _CalendarsPanelState extends State<CalendarsPanel> {
               controller: _link,
               keyboardType: TextInputType.url,
               autocorrect: false,
+              onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(labelText: 'Calendar link', hintText: 'https://…/calendar.ics'),
             ),
+            if (isInsecureLink(_link.text)) const StatusLabel(key: ValueKey('calLinkInsecure'), good: false, text: insecureLinkWarning),
             Align(
                 alignment: Alignment.centerLeft,
                 child: FilledButton(key: const ValueKey('calLinkAdd'), onPressed: _busy ? null : _addLink, child: const Text('Add link'))),

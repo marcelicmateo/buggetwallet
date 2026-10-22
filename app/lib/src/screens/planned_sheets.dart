@@ -61,7 +61,7 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
     }
     final wc = widget.wc;
     if (widget.edit != null) {
-      wc.editPlannedCost(widget.edit!.id, title: title, date: _date, amount: amount, category: _category);
+      wc.editPlannedCost(widget.edit!.id, title: title, date: _date, amount: amount, category: _category, clearCategory: _category == null);
     } else if (widget.suggestion != null) {
       wc.confirmSuggestion(widget.suggestion!, amount: amount, title: title, date: _date, category: _category);
     } else {

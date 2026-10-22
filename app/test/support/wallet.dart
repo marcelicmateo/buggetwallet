@@ -131,14 +131,28 @@ class FakeNudges implements NudgePlatform {
   /// Heads-up batches asked for, newest last, and how many times they were cancelled.
   final List<List<NudgeSlot>> headsUps = [];
   int headsUpCancelled = 0;
+
+  /// How long a heads-up call takes, and the most calls that were ever running at once (they must never overlap).
+  Duration headsUpDelay = Duration.zero;
+  int headsUpRunning = 0, headsUpMostRunning = 0;
+  Future<void> _headsUpCall() async {
+    headsUpMostRunning = headsUpMostRunning < ++headsUpRunning ? headsUpRunning : headsUpMostRunning;
+    if (headsUpDelay > Duration.zero) await Future<void>.delayed(headsUpDelay);
+    headsUpRunning--;
+  }
+
   @override
   Future<int> scheduleHeadsUps(List<NudgeSlot> slots) async {
+    await _headsUpCall();
     headsUps.add(slots);
     return slots.length;
   }
 
   @override
-  Future<void> cancelHeadsUps() async => headsUpCancelled++;
+  Future<void> cancelHeadsUps() async {
+    await _headsUpCall();
+    headsUpCancelled++;
+  }
 }
 
 /// The phone's calendars as a fake: [allow] answers the permission dialog, [granted] is the state before it.

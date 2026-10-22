@@ -63,7 +63,10 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   Screens: `screens/upcoming.dart` (`openUpcoming` page/dialog, `PeriodGrid` month grids with a mark per kind, ruled list with Confirm / Change / No cost, "Set aside" total),
   `screens/planned_sheets.dart` (`PlannedFormSheet` add/edit/confirm, `PlannedEntrySheet` Change / Paid (picker) / Skip / Delete), `screens/calendars_panel.dart` (Plan › Calendars +
   heads-up fields), Today's `comingUpLine` and `headsUp:<key>` lines, Plan › Nudges `headsUpSwitch`, Plan › Export `exportPlanned`, a "Planned costs" section in search.
-  Logs (counts only): `planned.add|edit|dismiss|paid|skip|delete`, `calendar.read {calendars, events, unsupported, trigger}`, `calendar.import {ok, kind, reason}`,
+  F4b: Paid and Skip show a snack bar with Undo (`reopenPlanned`; `toast(actionLabel:, onAction:)`); `fetchIcs` has one overall 60 s timeout, follows up to 5
+  redirects by hand and refuses https to http (`resolveRedirect`); an `http://` link is accepted with a warning (`insecureLinkWarning`); `rescheduleHeadsUps` calls
+  run one after another; `headsUpSlots` moves a passed slot to the next 09:00 on or before the cost; Android events with status canceled are dropped (`calendarEventsFrom`).
+  Logs (counts only): `planned.add|edit|dismiss|paid|skip|reopen|delete`, `calendar.read {calendars, events, unsupported, trigger}`, `calendar.import {ok, kind, reason}`,
   `calendar.access|choose|remove`, `headsup.enabled|scheduled`. Tests: `test/future_spending_test.dart` (`futureWallet`, `FakeCalendars`, `fakeIcs`, `FakeNudges.headsUps` in `test/support/wallet.dart`).
 - Nudges: `nudges.dart` (pure: ~14 funny, encouraging lines with no digits or names, `nudgeFor(date)`, `nudgeSlots(now)` = 15:00 on
   weekdays and 11:00 on Sunday for 4 weeks, `NudgePlatform`/`NoNudges`) and `notifier.dart` (native-only: `AndroidNudges` with

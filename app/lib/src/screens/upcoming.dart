@@ -58,12 +58,20 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
     if (!mounted) return;
     final msg = switch (r) {
       'saved' => 'Saved',
-      'paid' => 'Marked as paid',
+      'paid' => 'Marked paid',
       'skipped' => 'Skipped',
       'deleted' => 'Deleted',
       _ => null,
     };
-    if (msg != null) toast(context, msg);
+    if (msg == null) return;
+    if (r == 'paid' || r == 'skipped') {
+      toast(context, msg, actionLabel: 'Undo', onAction: () {
+        logNav('planned.undo');
+        widget.wc.reopenPlanned(p);
+      });
+    } else {
+      toast(context, msg);
+    }
   }
 
   Future<void> _change(UpcomingItem i) async {
@@ -364,7 +372,8 @@ class _UpcomingRow extends StatelessWidget {
       Text(shortDateOrRaw(i.date), style: TextStyle(fontSize: 12.5, color: c.ink2)),
       Tag(sourceLabel(i)),
       if (past && !isSuggestion) Text('past', style: TextStyle(fontSize: 12.5, color: c.muted)),
-      if (i.planned?.coveredByPlan ?? false) Text('covered by your plan', style: TextStyle(fontSize: 12.5, color: c.ink2)),
+      if ((i.planned?.coveredByPlan ?? false) || (i.bill?.coveredByPlan ?? false))
+        Text('covered by your plan', style: TextStyle(fontSize: 12.5, color: c.ink2)),
     ]);
     final title = Text(i.title.isEmpty ? 'Planned cost' : i.title, style: const TextStyle(fontWeight: FontWeight.w500));
     final head = isSuggestion
@@ -396,7 +405,7 @@ class _UpcomingRow extends StatelessWidget {
                     style: accentOutlined(context),
                     onPressed: () {
                       logNav('suggestion.confirm');
-                      wc.confirmSuggestion(i, amount: i.suggested!);
+                      wc.confirmSuggestion(i, amount: i.suggested!, category: i.category);
                       toast(context, 'Added to your plan');
                     },
                     child: const Text('Confirm')),

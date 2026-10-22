@@ -13,6 +13,9 @@ const calendarHorizonDays = 90;
 
 enum CalendarKind { device, file, link }
 
+/// Is [link] a plain `http://` address (the calendar would travel unencrypted)?
+bool isInsecureLink(String? link) => link != null && link.trim().toLowerCase().startsWith('http://');
+
 /// One row of Plan › Calendars.
 class CalendarEntry {
   final String id;
@@ -23,7 +26,10 @@ class CalendarEntry {
 
   /// A plain message when the last read of this calendar failed (the saved copy is still used).
   final String? error;
-  const CalendarEntry(this.id, this.kind, this.name, {this.account, this.on = true, this.error});
+
+  /// A link that starts with `http://` (not encrypted).
+  final bool insecure;
+  const CalendarEntry(this.id, this.kind, this.name, {this.account, this.on = true, this.error, this.insecure = false});
 }
 
 /// Device-local calendar state. Events are only ever held in memory here: they are re-read from the phone (or the saved `.ics`
@@ -38,6 +44,9 @@ class CalendarState {
   final Map<String, String> errors = {};
 
   bool headsUpQueued = false;
+
+  /// The last scheduled heads-up run: the next one waits for it, so two overlapping calls never cancel and schedule in turn.
+  Future<void> headsUpChain = Future.value();
 
   /// Bumped whenever [events] change, so cached Upcoming lists are made again.
   int version = 0;
@@ -80,8 +89,12 @@ extension FutureSpending on WalletController {
   /// What [items] set aside from today on: the planned costs and bills that have an amount (suggestions never count).
   ({int count, int total}) countedIn(List<UpcomingItem> items) {
     final t = today();
-    final xs = items.where(
-        (i) => i.kind != UpcomingKind.suggestion && i.amount != null && i.date.compareTo(t) >= 0 && !(i.planned?.coveredByPlan ?? false));
+    final xs = items.where((i) =>
+        i.kind != UpcomingKind.suggestion &&
+        i.amount != null &&
+        i.date.compareTo(t) >= 0 &&
+        !(i.planned?.coveredByPlan ?? false) &&
+        !(i.bill?.coveredByPlan ?? false));
     return (count: xs.length, total: xs.fold<int>(0, (a, i) => a + i.amount!));
   }
 
@@ -94,8 +107,9 @@ extension FutureSpending on WalletController {
     _changed();
   }
 
-  void editPlannedCost(String id, {String? title, String? date, int? amount, String? category}) {
-    repo.updatePlanned(id, title: title?.trim(), date: date, amount: amount, category: category);
+  /// [clearCategory] removes the category (a null [category] alone means unchanged).
+  void editPlannedCost(String id, {String? title, String? date, int? amount, String? category, bool clearCategory = false}) {
+    repo.updatePlanned(id, title: title?.trim(), date: date, amount: amount, category: category, clearCategory: clearCategory);
     logEvent(_planLog, Level.INFO, 'planned.edit', {'amount': amount != null});
     _changed();
   }
@@ -132,6 +146,13 @@ extension FutureSpending on WalletController {
   void skipPlanned(PlannedCost p) {
     repo.skipPlanned(p.id);
     logEvent(_planLog, Level.INFO, 'planned.skip', {});
+    _changed();
+  }
+
+  /// "Undo" after Paid or Skip: the cost is open again (and counts again).
+  void reopenPlanned(PlannedCost p) {
+    repo.reopenPlanned(p.id);
+    logEvent(_planLog, Level.INFO, 'planned.reopen', {});
     _changed();
   }
 
@@ -197,8 +218,13 @@ extension FutureSpending on WalletController {
 
   /// Schedules a notification at 09:00 local on (cost date − heads-up days) for every big planned cost in the next 90 days.
   /// The text never carries an amount or a title. Replaces the earlier heads-ups; cancels them when the switch is off.
-  Future<void> rescheduleHeadsUps() async {
-    if (!nudges.supported) return;
+  /// Runs one after another: a call made while another is running waits for it and then reads the state as it is by then.
+  Future<void> rescheduleHeadsUps() {
+    if (!nudges.supported) return Future.value();
+    return cal.headsUpChain = cal.headsUpChain.then((_) => _rescheduleHeadsUpsNow());
+  }
+
+  Future<void> _rescheduleHeadsUpsNow() async {
     try {
       if (!headsUpNotify) {
         await nudges.cancelHeadsUps();
@@ -247,7 +273,7 @@ extension FutureSpending on WalletController {
     return [
       if (cal.permission)
         for (final d in cal.device) CalendarEntry(d.id, CalendarKind.device, d.name, account: d.account, on: on.contains(d.id)),
-      for (final s in _icsSources) CalendarEntry(s.id, s.kind, s.name, error: cal.errors[s.id]),
+      for (final s in _icsSources) CalendarEntry(s.id, s.kind, s.name, error: cal.errors[s.id], insecure: isInsecureLink(s.url)),
     ];
   }
 

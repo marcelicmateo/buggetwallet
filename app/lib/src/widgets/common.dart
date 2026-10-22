@@ -427,12 +427,18 @@ class EmptyNote extends StatelessWidget {
 }
 
 /// A short message at the bottom: full width on a phone, a 400 dp floating card on wide windows.
-void toast(BuildContext context, String msg) {
+///
+/// With [actionLabel] and [onAction] the snack bar has one action button (like "Undo") and stays a little longer.
+void toast(BuildContext context, String msg, {String? actionLabel, VoidCallback? onAction}) {
   final wide = layoutOf(context) != LayoutSize.compact;
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(
-        SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating, width: wide ? 400 : null, duration: const Duration(seconds: 3)));
+    ..showSnackBar(SnackBar(
+        content: Text(msg),
+        behavior: SnackBarBehavior.floating,
+        width: wide ? 400 : null,
+        duration: Duration(seconds: onAction == null ? 3 : 6),
+        action: actionLabel == null || onAction == null ? null : SnackBarAction(label: actionLabel, onPressed: onAction)));
 }
 
 /// The bottom bar with a 1 px ink rule on top and a 3 px accent bar over the selected destination (the bar's destinations
