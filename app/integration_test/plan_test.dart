@@ -201,13 +201,13 @@ void main() {
     await t.enterText(field, 'http://it-relay.invalid:8787');
     await tapVisible(t, find.text('Test connection'));
     await t.pumpAndSettle();
-    expect(find.text('Relay reachable'), findsOneWidget);
+    expect(status('Relay reachable'), findsOneWidget);
     await tapVisible(t, find.text('Save address'));
     await waitFor(t, () => wc.lastSync != null || wc.syncError != null, what: 'the first sync');
     expect(wc.syncError, isNull);
     expect(wc.relayUrl, Uri.parse('http://it-relay.invalid:8787'));
     expect(wc.repo.localValue('relayUrl'), 'http://it-relay.invalid:8787');
-    expect(find.text('Up to date'), findsOneWidget);
+    expect(status('Up to date'), findsOneWidget);
     expect(find.textContaining('Last sync '), findsOneWidget);
 
     await tapVisible(t, find.text('Sync now'));

@@ -75,6 +75,8 @@ void main() {
     await tester.scrollUntilVisible(find.text('Back up now'), 300, scrollable: plan);
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-plan-backup');
+    // "Back up now" opens the system save dialog (no portal or activity to drive here), so run the part before it: it logs backup.done.
+    await wc.backupDownload();
     await tester.scrollUntilVisible(find.text('Plain files, not encrypted.'), 300, scrollable: plan);
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-plan-export');
