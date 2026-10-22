@@ -3,6 +3,14 @@
 #
 #   tools/build.sh test     lint, then importer + core + relay + app: analyze and tests (all in parallel)
 #   tools/build.sh lint     quick checks: Dart formatting, shellcheck, actionlint (pre-commit hook)
+#   tools/build.sh analyze [pkg…]   analyze only (importer core relay app; default all): app compiles against a changed API
+#                           without running its tests (app ~7 s)
+#   tools/build.sh stage    one stage verification, each step its own run and history lines, in this order: test, desktop-test,
+#                           web-test, tools/emulator.sh screens (skipped when the emulator volumes don't exist), perf (last).
+#                           Writes dist/logs/stage-summary.txt: seconds and ok/FAILED per step, the failing tests and BUG: skips,
+#                           the 10 slowest tests. Takes a long time: start it in the background.
+#   tools/build.sh outdated   dart pub outdated per package (needs network; no offline advisory check exists in the SDK).
+#                           Not part of test
 #   tools/build.sh format   rewrite Dart files with `dart format` (page width in analysis_options.yaml)
 #   tools/build.sh apk      Android release APK   -> dist/BudgetWallet-android.apk
 #   tools/build.sh linux    Linux release bundle  -> dist/BudgetWallet-linux-x64.tar.gz
@@ -49,7 +57,53 @@ CMD=${1:-test}
 # shellcheck source=tools/timing.sh
 source "$ROOT/tools/timing.sh"
 
-usage() { sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,/^set -/{/^set -/!p}' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+
+# One line, once per run dir, when the opt-in pre-commit hook (tools/install-hooks.sh) isn't installed in this checkout
+hook_hint() {
+  local hook
+  [[ -n ${BW_RUN_DIR:-} && ! -e $BW_RUN_DIR/.hook-hint ]] || return 0
+  : > "$BW_RUN_DIR/.hook-hint"
+  hook=$(cd "$ROOT" && git rev-parse --git-path hooks/pre-commit 2>/dev/null) || return 0
+  [[ $hook == /* ]] || hook=$ROOT/$hook
+  [[ -e $hook ]] || echo "hint: no pre-commit hook here; tools/install-hooks.sh adds one that runs tools/build.sh lint" >&2
+  return 0
+}
+
+# stage (host): the stage verification, one sub-run per step so each keeps its own run dir and history lines. Continues after
+# a failure; stage-summary.txt goes into the stage's own run dir (dist/logs points there at the end).
+host_stage() {
+  run_begin stage
+  local stage_dir=$BW_RUN_DIR names=() secs=() results=() dirs=() n start rc d i=0
+  local sub=(test "$ROOT/tools/build.sh" test
+             desktop-test "$ROOT/tools/build.sh" desktop-test
+             web-test "$ROOT/tools/build.sh" web-test)
+  if podman volume exists bw-emulator 2>/dev/null && podman volume exists bw-emulator-image 2>/dev/null; then
+    sub+=(emulator-screens "$ROOT/tools/emulator.sh" screens)
+  else
+    echo "stage: emulator volumes missing, skipping emulator-screens (tools/emulator.sh screens sets them up, ~2 GB)"
+  fi
+  sub+=(perf "$ROOT/tools/build.sh" perf)
+  while ((i < ${#sub[@]})); do
+    n=${sub[i]}
+    echo "=== stage: $n ==="
+    start=$(now_us); rc=0
+    # a fresh run per step: the sub-command must not join the stage's run
+    env -u BW_RUN_DIR -u BW_RUN_ID -u BW_RUN -u BW_CMD -u BW_COLD "${sub[i + 1]}" "${sub[i + 2]}" || rc=$?
+    names+=("$n"); secs+=("$(secs_since "$start")"); results+=("$([[ $rc == 0 ]] && echo ok || echo FAILED)")
+    d=$(readlink "$ROOT/dist/logs" || true); dirs+=("$d")
+    i=$((i + 3))
+  done
+  ln -sfn "$stage_dir" "$ROOT/dist/logs"
+  {
+    for i in "${!names[@]}"; do printf '%-18s %8s s  %s\n' "${names[i]}" "${secs[i]}" "${results[i]}"; done
+    printf '%s\n' "${dirs[@]}" | python3 -I "$ROOT/tools/stage_summary.py"
+    echo "--- slowest 10 tests (tools/build-times.sh trend)"
+    python3 -I "$ROOT/tools/build_log.py" trend --top 10 2>&1 || true
+  } | tee "$stage_dir/stage-summary.txt"
+  for rc in "${results[@]}"; do [[ $rc == FAILED ]] && return 1; done
+  return 0
+}
 
 # ---- host side: hand the command to the container ----
 if [[ "${BW_NATIVE:-}" != 1 ]]; then
@@ -94,7 +148,8 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   case "$CMD" in
     image) build_image; exit ;;
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
-    test|lint|apk|linux|all|importer|core|relay|app|desktop-test|desktop-smoke|perf|web|web-test) run_begin "$CMD" ;;
+    test|lint|apk|linux|all|importer|core|relay|app|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated) run_begin "$CMD"; hook_hint ;;
+    stage) host_stage; exit ;;
     format|shell|lsp|mcp) ;;
     *) usage ;;
   esac
@@ -179,7 +234,13 @@ pub_ready() {
   for d in packages/wallet_importer packages/wallet_core relay app; do
     pub_stale "$d" || continue
     echo "--- pub get: $d"
-    if [[ $d == app ]]; then (cd "$d" && flutter pub get); else (cd "$d" && dart pub get); fi || return 1
+    # app and relay have a tracked pubspec.lock: --enforce-lockfile fails instead of silently moving versions (to change a
+    # dependency run `pub get` without it in a shell, then commit the lock). The packages' locks are git-ignored.
+    case $d in
+      app) (cd "$d" && flutter pub get --enforce-lockfile) ;;
+      relay) (cd "$d" && dart pub get --enforce-lockfile) ;;
+      *) (cd "$d" && dart pub get) ;;
+    esac || return 1
     touch "$d/.dart_tool/package_config.json"  # pub leaves it alone when nothing changed
   done
 }
@@ -263,12 +324,13 @@ steps() {
 # implicit `pub get` (--no-pub) and all run in parallel.
 LINT=(format format_check
       shellcheck 'shellcheck tools/*.sh dev/*.sh .github/scripts/*.sh'
-      actionlint actionlint)
+      actionlint actionlint
+      hook-selftest 'tools/no-poll-hook.sh --self-test')
 declare -A SUITE=(
-  [importer]='suite importer packages/wallet_importer "dart analyze --fatal-infos" dart test'
-  [core]='suite core packages/wallet_core "dart analyze --fatal-infos" dart test'
-  [relay]='suite relay relay "dart analyze --fatal-infos" dart test'
-  [app]='suite app app "flutter analyze --fatal-infos --no-pub" flutter test --no-pub')
+  [importer]='suite importer packages/wallet_importer "dart analyze --fatal-infos" dart test --timeout 60s'
+  [core]='suite core packages/wallet_core "dart analyze --fatal-infos" dart test --timeout 60s'
+  [relay]='suite relay relay "dart analyze --fatal-infos" dart test --timeout 60s'
+  [app]='suite app app "flutter analyze --fatal-infos --no-pub" flutter test --no-pub --timeout 60s')
 # one_suite <importer|core|relay|app> <test file or dir>…: just those tests, no analyze, as step "<pkg>:one"
 one_suite() {
   local pkg=$1 dir f files=() tcmd=dart
@@ -280,10 +342,35 @@ one_suite() {
     files+=("$f")
   done
   echo "($pkg: ${#files[@]} path(s), no analyze)"
-  local cmd="suite $pkg:one $dir true $tcmd test"
+  local cmd="suite $pkg:one $dir true $tcmd test --timeout 60s"  # per-test cap: a hung test fails in 1 min, not 10
   [[ $pkg == app ]] && cmd+=" --no-pub"
   steps "$pkg:one" "$cmd $(printf '%q ' "${files[@]}")"
 }
+# analyze [pkg…]: analysis only (fatal infos), in parallel, step "analyze-<pkg>"
+analyze_pkgs() {
+  local pkgs=("$@") p args=()
+  ((${#pkgs[@]})) || pkgs=(importer core relay app)
+  for p in "${pkgs[@]}"; do
+    case $p in
+      importer) args+=(analyze-importer "cd packages/wallet_importer && dart analyze --fatal-infos") ;;
+      core) args+=(analyze-core "cd packages/wallet_core && dart analyze --fatal-infos") ;;
+      relay) args+=(analyze-relay "cd relay && dart analyze --fatal-infos") ;;
+      app) args+=(analyze-app "cd app && flutter analyze --fatal-infos --no-pub") ;;
+      *) echo "analyze: unknown package $p (importer core relay app)" >&2; failed=1; return ;;
+    esac
+  done
+  steps "${args[@]}"
+}
+# outdated: dart pub outdated per package (network). The SDK has no advisory check, so this is the table only.
+# shellcheck disable=SC2329  # called by name through a step
+outdated() {
+  local d
+  for d in packages/wallet_importer packages/wallet_core relay app; do
+    echo "=== $d"
+    if [[ $d == app ]]; then (cd "$d" && flutter pub outdated); else (cd "$d" && dart pub outdated); fi || true
+  done
+}
+export -f outdated
 TESTS=(importer "${SUITE[importer]}" core "${SUITE[core]}" relay "${SUITE[relay]}" app "${SUITE[app]}")
 run_pub() {
   local cold=false d
@@ -610,6 +697,8 @@ case "$CMD" in
   mcp)    pub_ready >&2; exec "${FLUTTER_HOME:+$FLUTTER_HOME/bin/cache/dart-sdk/bin/}dart" mcp-server --disable flutter_app_lifecycle "${@:2}" ;;
   format) pub_ready; dart_files | xargs -0 dart format; exit ;;
   lint)   run_pub; steps "${LINT[@]}" ;;
+  analyze) run_pub; [[ $failed == 0 ]] && analyze_pkgs "${@:2}" ;;
+  outdated) outdated ;;
   test)   run_pub; [[ $failed == 0 ]] && steps "${LINT[@]}" "${TESTS[@]}" ;;
   importer|core|relay|app)
     if (($# > 1)); then run_pub; [[ $failed == 0 ]] && one_suite "$CMD" "${@:2}"
