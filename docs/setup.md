@@ -57,7 +57,7 @@ mkdir -p /srv/budget-wallet-relay
 podman run -d --name bw-relay --userns=keep-id:uid=10001,gid=10001 -p 8787:8787 \
   -v /srv/budget-wallet-relay:/data:z \
   -e BW_RELAY_ORIGINS=http://<web-app-host>:8080 localhost/budget-wallet-relay
-curl -s http://<server>:8787/v1/health        # {"api":1}
+curl -s http://<server>:8787/v2/health        # {"api":2}
 ```
 
 `:z` on the volume is needed with SELinux (Fedora and friends). `BW_RELAY_ORIGINS` is a comma separated list of web-app
@@ -94,7 +94,7 @@ files are encrypted before they leave the device, and the VPN encrypts the link)
 front the port: `tailscale serve --bg --https=443 http://127.0.0.1:8787`, then use the `https://<machine>.<tailnet>.ts.net` address.
 
 **Backup.** Stop the container (or snapshot the filesystem) and copy the data folder (`/srv/budget-wallet-relay`). It holds only
-sealed files and the wallets' token hashes, but losing it means every device must upload its history again; keep it in your
+sealed files and the wallets' public keys, but losing it means every device must upload its history again; keep it in your
 normal backup. Restoring is copying the folder back.
 
 **Upgrading.** `git pull`, rebuild the image (`podman build …` as above), tag it `latest`, then

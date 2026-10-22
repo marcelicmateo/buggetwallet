@@ -20,6 +20,7 @@ Personal finance tracker and budgeting app for one person. Offline first. Mainta
 - `relay/` — self-hosted sync relay (stores encrypted files it cannot read)
 - `artifact/` — v1 web app (claude.ai artifact), kept for reference
 - `docs/TECHNICAL_SPEC.md` — the full technical specification for reviewers (design, architecture, code, UI, security, tests)
+- `RUNNING.md` — how to build, test and run every part (Podman only, or your own Flutter SDK)
 - `docs/architecture.md` — how it fits together
 - `docs/setup.md` — install, first run, relay and sync setup
 
