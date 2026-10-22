@@ -14,7 +14,10 @@ class WalletDb {
   final WalletRepo repo;
   final Future<void> Function()? _persist;
   final Future<void> Function()? _forget;
-  WalletDb(this.repo, {Future<void> Function()? persist, Future<void> Function()? forget})
+
+  /// True when opening encrypted an older plaintext database in place (logged as `db.open {converted}`).
+  final bool converted;
+  WalletDb(this.repo, {Future<void> Function()? persist, Future<void> Function()? forget, this.converted = false})
       : _persist = persist,
         _forget = forget;
 

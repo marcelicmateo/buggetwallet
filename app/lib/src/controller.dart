@@ -149,9 +149,25 @@ class WalletController extends ChangeNotifier {
   @visibleForTesting
   Future<void> Function() keyForgetter = KeyStore.forget;
 
-  /// Opens a new empty database after [forgetBrowser]; tests replace it.
+  /// Database work; tests replace them. [dbOpener] opens (or creates) the keyed wallet database with `localDbKey(key)`.
   @visibleForTesting
-  Future<WalletDb> Function() dbOpener = openWalletDb;
+  Future<WalletDb> Function(Uint8List dbKey) dbOpener = openWalletDb;
+
+  /// Is there a wallet database file on this device? (Asked only while no key is known.)
+  @visibleForTesting
+  Future<bool> Function() dbExists = walletDbExists;
+
+  /// Moves the wallet database aside (`wallet.db.unopened-<stamp>`), nothing deleted.
+  @visibleForTesting
+  Future<void> Function(String stamp) dbSetAside = setAsideWalletDb;
+
+  /// A wallet database exists on this device but the key we have does not open it (or there is no key). It is never deleted or
+  /// overwritten: joining with the key that opens it uses it; creating a new wallet sets it aside first. Onboarding says so.
+  bool hasUnopenedDb = false;
+
+  /// True while [repo] is the in-memory placeholder used before a key exists (onboarding, web locked): [createWallet],
+  /// [joinWallet] and [unlock] then open the keyed database and switch to it.
+  bool _dbPending = false;
 
   /// The relay's address, device-local (`relayUrl` in the local settings); null until one is set.
   Uri? relayUrl;
@@ -191,33 +207,67 @@ class WalletController extends ChangeNotifier {
     relayUrl = _parseRelay(repo.localValue('relayUrl'));
   }
 
-  /// Opens the database, reads the key and loads everything. Logs each startup phase as `app.start`.
-  /// If another browser tab has the wallet open, nothing is opened or written and [inUseElsewhere] is true. [opener] is for tests.
-  static Future<WalletController> load({Future<WalletDb> Function() opener = openWalletDb}) async {
+  /// Reads the key, opens the keyed database (only when the key is known) and loads everything. Before a key exists
+  /// (onboarding, web locked) the controller runs on an in-memory placeholder; [createWallet], [joinWallet] and [unlock] open
+  /// the file database later. A database file the key does not open stays untouched ([hasUnopenedDb]). Logs each startup phase as
+  /// `app.start`. If another browser tab has the wallet open ([claim] throws [WalletInUse]), nothing is opened or written and
+  /// [inUseElsewhere] is true. The other parameters are for tests.
+  static Future<WalletController> load({
+    Future<WalletDb> Function(Uint8List dbKey) opener = openWalletDb,
+    Future<bool> Function() exists = walletDbExists,
+    Future<void> Function(String stamp) setAside = setAsideWalletDb,
+    Future<void> Function() claim = claimWalletDb,
+    Future<VaultKey?> Function() keyReader = KeyStore.read,
+    bool Function()? isLocked,
+    DateTime Function()? clock,
+  }) async {
     var sw = Stopwatch()..start();
-    final WalletDb db;
     try {
-      db = await opener();
+      await claim();
     } on WalletInUse {
       logEvent(_log, Level.WARNING, 'app.start', {'phase': 'db', 'inUse': true});
       return WalletController._(WalletRepo.inMemory(), null, inUseElsewhere: true);
     }
-    final repo = db.repo;
-    logEvent(_log, Level.INFO, 'app.start', {'phase': 'db', 'ms': sw.elapsedMilliseconds});
 
-    sw = Stopwatch()..start();
     VaultKey? key;
     try {
-      key = await KeyStore.read();
+      key = await keyReader();
     } catch (e, st) {
       // The app then shows onboarding; the error says why the stored key could not be read.
       logError(_key, 'key.readFailed', e, st, level: Level.SEVERE);
       key = null;
     }
+    final locked = key == null && (isLocked ?? () => KeyStore.isLocked)();
     logEvent(_log, Level.INFO, 'app.start', {'phase': 'key', 'ms': sw.elapsedMilliseconds, 'found': key != null});
 
     sw = Stopwatch()..start();
-    final c = WalletController._(repo, key, nudges: defaultNudgePlatform(), db: db, locked: key == null && KeyStore.isLocked);
+    WalletDb? db;
+    var unopened = false;
+    if (key != null) {
+      try {
+        db = await _openKeyed(opener, key);
+      } on WalletInUse {
+        logEvent(_log, Level.WARNING, 'app.start', {'phase': 'db', 'inUse': true});
+        return WalletController._(WalletRepo.inMemory(), null, inUseElsewhere: true);
+      } on WalletDbKeyException {
+        // The stored key does not open the file: leave the file alone and start at onboarding.
+        logEvent(_log, Level.WARNING, 'app.start', {'phase': 'db', 'keyMismatch': true});
+        key = null;
+        unopened = true;
+      }
+    } else if (!locked) {
+      unopened = await exists();
+    }
+    logEvent(_log, Level.INFO, 'app.start', {'phase': 'db', 'ms': sw.elapsedMilliseconds, 'opened': db != null, 'unopened': unopened});
+
+    sw = Stopwatch()..start();
+    final c =
+        WalletController._(db?.repo ?? WalletRepo.inMemory(), key, clock: clock, nudges: defaultNudgePlatform(), db: db, locked: locked);
+    c._dbPending = db == null;
+    c.hasUnopenedDb = unopened;
+    c.dbOpener = opener;
+    c.dbExists = exists;
+    c.dbSetAside = setAside;
     c.reload();
     logEvent(_log, Level.INFO, 'app.start',
         {'phase': 'reload', 'ms': sw.elapsedMilliseconds, 'tx': c.txs.length, 'relay': c.relayUrl != null, 'logLevel': c.logLevel});
@@ -225,6 +275,48 @@ class WalletController extends ChangeNotifier {
     c.refreshRecurring();
     scheduleMicrotask(c.rescheduleNudges);
     return c;
+  }
+
+  /// Opens the keyed database for [key] through [opener]; logs `db.open` (phases and timings only).
+  static Future<WalletDb> _openKeyed(Future<WalletDb> Function(Uint8List dbKey) opener, VaultKey key) async {
+    final sw = Stopwatch()..start();
+    final db = await opener(await localDbKey(key));
+    logEvent(_log, Level.INFO, 'db.open', {'keyed': true, 'converted': db.converted, 'ms': sw.elapsedMilliseconds});
+    return db;
+  }
+
+  /// Switches from the in-memory placeholder to the opened [db]: the screens reload from it.
+  void _useDb(WalletDb db) {
+    final old = repo;
+    _db = db;
+    repo = db.repo;
+    _dbPending = false;
+    if (!identical(old, repo)) old.close();
+    relayUrl = _parseRelay(repo.localValue('relayUrl'));
+    reload();
+  }
+
+  /// Opens the keyed database for [k] and switches to it. An unopened older file is never overwritten: if [k] opens it, it is
+  /// used; if not, it is set aside first (`db.setAside`, no paths logged) and a new database is created. With [newWallet] the
+  /// file is set aside without trying [k]. With [asideOnMismatch] false a [WalletDbKeyException] is thrown instead (unlock).
+  Future<void> _openFileDb(VaultKey k, {bool newWallet = false, bool asideOnMismatch = true}) async {
+    Future<void> aside() async {
+      await dbSetAside(isoDate(_clock()));
+      hasUnopenedDb = false;
+      logEvent(_log, Level.WARNING, 'db.setAside');
+    }
+
+    if (newWallet && hasUnopenedDb) await aside();
+    WalletDb db;
+    try {
+      db = await _openKeyed(dbOpener, k);
+    } on WalletDbKeyException {
+      if (!asideOnMismatch) rethrow;
+      await aside();
+      db = await _openKeyed(dbOpener, k);
+    }
+    hasUnopenedDb = false;
+    _useDb(db);
   }
 
   /// For widget tests: an already-open repo (e.g. [WalletRepo.inMemory]), no auto-sync. [clock] stands in for the current time.
@@ -589,7 +681,8 @@ class WalletController extends ChangeNotifier {
   /// [passphrase]: the web build wraps the key with it (the other builds ignore it).
   Future<void> createWallet({String? passphrase}) async {
     final k = VaultKey.generate();
-    await keyWriter(k, passphrase: passphrase);
+    await keyWriter(k, passphrase: passphrase); // the key first: a crash after it only costs an empty database
+    if (_dbPending) await _openFileDb(k, newWallet: true);
     key = k;
     logEvent(_log, Level.INFO, 'wallet.create', {'defaultGoals': repo.goals().isEmpty});
     if (repo.goals().isEmpty) {
@@ -605,6 +698,7 @@ class WalletController extends ChangeNotifier {
     final r = relay == null ? null : _parseRelay(relay.toString());
     if (relay != null && r == null) throw const FormatException('Not a relay address');
     await keyWriter(k, passphrase: passphrase);
+    if (_dbPending) await _openFileDb(k);
     key = k;
     if (r != null) {
       repo.setLocalValue('relayUrl', r.toString());
@@ -618,6 +712,18 @@ class WalletController extends ChangeNotifier {
   /// Web: opens the key stored in this browser with [passphrase]. Throws [WrongPassphrase]; the typed text is never logged.
   Future<void> unlock(String passphrase) async {
     final k = await unlocker(passphrase);
+    if (_dbPending) {
+      try {
+        await _openFileDb(k, asideOnMismatch: false);
+      } on WalletDbKeyException {
+        // The stored key does not open the stored database: keep the file, go to onboarding (create sets it aside).
+        logEvent(_log, Level.WARNING, 'wallet.unlock', {'keyMismatch': true});
+        hasUnopenedDb = true;
+        locked = false;
+        notifyListeners();
+        return;
+      }
+    }
     key = k;
     locked = false;
     logEvent(_log, Level.INFO, 'wallet.unlock');
@@ -658,9 +764,11 @@ class WalletController extends ChangeNotifier {
     }
     key = null;
     locked = false;
-    final fresh = await dbOpener();
-    _db = fresh;
-    repo = fresh.repo;
+    // No key, so no database: back to the in-memory placeholder until a wallet is created or joined (a new file system then).
+    _db = null;
+    repo = WalletRepo.inMemory();
+    _dbPending = true;
+    hasUnopenedDb = false;
     relayUrl = null;
     lastSync = null;
     syncError = null;

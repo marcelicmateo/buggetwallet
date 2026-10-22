@@ -67,6 +67,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ? 'Your money, kept in this browser. It syncs only with your own relay, encrypted with a key only your devices have. Save a backup file from Plan now and then.'
                           : 'Your money, on your devices. Everything is stored here first and works offline. Sync goes through your own relay, encrypted with a key only your devices have.',
                       size: 14.5),
+                  if (widget.wc.hasUnopenedDb)
+                    const Row(key: ValueKey('olderWalletNotice'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Icon(Icons.info_outline, size: 18),
+                      SizedBox(width: 8),
+                      Expanded(child: Muted('An older wallet is on this device. Join with its key to open it.', size: 14.5)),
+                    ]),
                   if (_passphraseFor != null)
                     ..._passphraseStep()
                   else if (!joining) ...[

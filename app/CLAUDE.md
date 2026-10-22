@@ -101,7 +101,23 @@ Same app and wallet logic; the files that touch the OS come in pairs chosen by `
 - Tests: `test/web_test.dart` (screens, controller paths, flush with fakes), `test/key_vault_test.dart` (wrap/unwrap, locked state). The
   browser itself (IndexedDB, downloads, wasm) is covered by `tools/build.sh web-test`, not by the VM tests.
 
-## Encrypted database plumbing (stage R1; app code not wired yet)
+## Encrypted local database in the app (R6b)
+The wallet database opens **only once the key is known**, always keyed with `localDbKey(key)` (`wallet_db.dart`: `claimWalletDb()`,
+`walletDbExists()`, `setAsideWalletDb(stamp)`, `openWalletDb(dbKey)` → `WalletDb {repo, converted, persist, forget}`).
+`WalletController.load` claims the web tab lock, reads the key, then: key found → keyed open (an older plaintext file is converted on that
+start; logs `db.open {keyed, converted, ms}`); no key (onboarding, web locked) → `WalletRepo.inMemory()` placeholder (`_dbPending`),
+and `createWallet` / `joinWallet` / `unlock` write the key, open the file db (`_openFileDb`) and switch to it (`_useDb`: relay URL and
+data reload from it). `forgetBrowser` deletes the db + key and goes back to the placeholder (a new IndexedDB VFS name comes with the next open).
+**Never lose data:** a `wallet.db` that exists with no key, or that the key does not open (`WalletDbKeyException`), is left untouched
+(`hasUnopenedDb`; onboarding shows "An older wallet is on this device. Join with its key to open it."). Joining with the key that opens it uses
+it; creating a wallet (or joining with another key) moves it to `wallet.db.unopened-<yyyy-mm-dd>` (+ `-wal`/`-shm`/`-journal`/`.plain-copy`;
+web: copied inside IndexedDB) and logs `db.setAside` (no paths). Web: one `IndexedDbFileSystem` per generation (`vfsName` `indexeddb-<n>`),
+registered without `makeDefault`, opened via `openKeyed(() => sqlite.open('/wallet.db', vfs: 'multipleciphers-<name>'), dbKey)`.
+Tests: `test/db_open_test.dart` (load/create/join/unlock/forget flows with a fake disk), `test/wallet_db_io_test.dart` (real files in a temp
+folder via `walletDbDirOverride`), `test/web/wallet_db_web_test.dart` (`tools/build.sh web-test`: real IndexedDB, wrong key, converted
+unkeyed db, set aside, forget + reopen).
+
+## Encrypted database plumbing (stage R1)
 `sqlite3` 3.x + `hooks: user_defines: sqlite3: source: sqlite3mc` in `pubspec.yaml` (also in `packages/wallet_core/pubspec.yaml` for
 `dart test`) = SQLite3 Multiple Ciphers on Android, Linux and (via `sqlite3mc.wasm`, pinned in `dev/sqlite3-wasm.sha256`, served as
 `sqlite3.wasm`) the web; `sqlite3_flutter_libs` is gone. Key right after open: `db.execute('PRAGMA key = "x\'<64 hex>\'"')`; wrong or missing
