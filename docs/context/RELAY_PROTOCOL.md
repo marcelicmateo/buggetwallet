@@ -24,12 +24,15 @@ Both sides follow this file exactly; change it here first.
 | `PUT /v1/w/<wid>/d/<device>/<seq>` body = sealed bytes (≤ 16 MiB) | 201 stored; 200 same bytes already stored; 409 other bytes already stored for that seq (never overwritten); 422 `seq > last + 1` (no gaps on the relay); 410 `seq < first` (pruned); 413 too big |
 | `GET /v1/w/<wid>/d/<device>/<seq>` | 200 bytes; 410 pruned (`seq < first`); 404 never stored |
 | `PUT /v1/w/<wid>/ack/<device>` body `{"<peer>": seq, …}` | 204. Each ack only ever grows (max with the stored one); an ack above the peer's `last` → 422 |
-| `PUT /v1/w/<wid>/snapshot/<id>` header `X-BW-Covers: {"<device>": seq, …}`, body = sealed bytes (≤ 64 MiB) | 201 when `covers` ≥ the current snapshot's covers for every device in it, and ≤ each device's `last`; else 409 (does not dominate) / 422 (beyond `last`) |
+| `PUT /v1/w/<wid>/snapshot/<id>` header `X-BW-Covers: {"<device>": seq, …}`, body = sealed bytes (≤ 64 MiB) | 201 when `covers` ≥ the current snapshot's covers for every device in it (a device missing from `covers` counts as 0), and ≤ each device's `last`; checked in that order: 422 beyond `last` (unknown device = `last` 0), then 409 does not dominate; same id with the same bytes and covers again = 200, same id with other content = 409; missing/invalid `X-BW-Covers` = 400 |
 | `GET /v1/w/<wid>/snapshot/<id>` | 200 bytes; 404 |
 | any `OPTIONS` | CORS preflight, 204 |
 
-A `PUT d/...` from `device` and a `PUT ack/<device>` set that device's `lastSeen` to now. Clients ack on every sync run
-(even unchanged), which keeps `lastSeen` fresh.
+`lastSeen` of a known device is set to now by any `PUT d/<device>/...` that reaches the seq check (200, 201, 409, 410, 422)
+and by every accepted ack; snapshot PUTs and refused acks do not. A new device appears only on a 201 or an accepted ack.
+Clients ack on every sync run (even unchanged), which keeps `lastSeen` fresh. The `PUT d` that creates a wallet must have
+seq 1 (otherwise 422 and nothing is created). Acks: values ≥ 0 (`0` allowed), non-int/negative/bad names → 400, body over
+64 KiB → 413. Unknown path → 404, wrong method on a known path → 405. Unknown wallet without a token → 404.
 
 ## State JSON
 ```json
@@ -48,14 +51,15 @@ device appears once it has stored a file or sent an ack.
 ## Snapshots and pruning
 - The relay keeps the latest snapshot and the one before it (`previous`); an accepted snapshot moves the latest to
   `previous` and deletes the older one.
-- File `seq` of device `D` is deleted when every kept snapshot covers it (`covers[D] ≥ seq`) **and** every other device
-  whose `lastSeen` is within 90 days has `acks[D] ≥ seq`. Checked after each accepted PUT.
+- File `seq` of device `D` is deleted when every kept snapshot (only those that exist) covers it (`covers[D] ≥ seq`) **and** every other device
+  whose `lastSeen` is within 90 days has `acks[D] ≥ seq`. Checked after each accepted PUT and ack.
 - A client whose next needed file is below `first` (pruned) starts from the latest snapshot (falling back to `previous`
   if the latest cannot be read), then fetches the files after its `covers`.
 
 ## Limits and CORS
-- 413 body too big; 429 more than 20 requests/s per client address (burst 100); 507 relay full (wallet count over
-  `--max-wallets`, default 16, or a wallet over `--max-bytes`, default 1 GiB).
+- 413 body too big (the relay reads and discards up to 2× the limit first so the client sees the status); 429 more than 20 requests/s per client address (burst 100); 507 relay full (wallet count over
+  `--max-wallets`, default 16, or a wallet over `--max-bytes`, default 1 GiB: a `PUT d` counts files + kept snapshots, a
+  snapshot PUT counts only the kept snapshots + the new one, so a nearly full wallet can still snapshot and prune).
 - CORS: `Access-Control-Allow-Origin` echoes the request `Origin` only if it is in the configured list (default
   `http://127.0.0.1:8080`, `http://localhost:8080`); allowed methods `GET, PUT, OPTIONS`; allowed headers
   `Authorization, Content-Type, X-BW-Covers`.

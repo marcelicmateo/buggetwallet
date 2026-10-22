@@ -1,0 +1,15 @@
+name: relay
+description: Budget Wallet relay - stores sealed sync files it cannot read (protocol in docs/context/RELAY_PROTOCOL.md).
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  cryptography: ^2.7.0
+
+dev_dependencies:
+  http: any
+  lints: any
+  test: any

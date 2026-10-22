@@ -35,14 +35,22 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 |---|---|---|---|---|
 | R0a | Context pack: sync engine, repo sync APIs, sync tests/sim | scout | – | done |
 | R0b | Context pack: build tooling, package layout, sqlite3 packaging | scout | – | done |
-| R1 | Encrypted SQLite spike (sqlite3mc on Android, Linux, web wasm) | devops | R0b | running |
-| R2 | Relay server `relay/` + HTTP tests (protocol: `RELAY_PROTOCOL.md`) | core-builder | R0b | running |
-| R3 | `SyncTransport`, `MemoryTransport`, `RelayTransport`, `SyncEngine`, snapshots (FolderSync left for R5) | core-builder | R0a | running |
-| R4 | Sync spec tests (strict order, caught-up matching, S1/S2, snapshots, pruning, first connect) | test-writer | R0a | running |
+| R1 | Encrypted SQLite spike (sqlite3mc on Android, Linux, web wasm) | devops | R0b | done (5606f00, merged e3794ff; sqlite3 3.7.1 + sqlite3mc hook, APK +1.4 MB) |
+| R2 | Relay server `relay/` + HTTP tests (protocol: `RELAY_PROTOCOL.md`) | core-builder | R0b | done (96118c7, 93 tests; merged into v2) |
+| R3 | `SyncTransport`, `MemoryTransport`, `RelayTransport`, `SyncEngine`, snapshots; deletes FolderSync, ports sim + sync tests (app compiles again in R5, based on R3) | core-builder | R0a | running |
+| R4 | Sync spec tests (strict order, caught-up matching, S1/S2, snapshots, pruning, first connect) | test-writer | R0a | written (f58c7f9, 34 tests); run after R3 merges |
 | R5 | App: Plan › Sync, join with relay, backups via save dialog, Android INTERNET/cleartext, remove folder sync | ui-builder | R3 | queued |
 | R6 | Encrypted local database: core key + conversion, app wiring | core-builder / ui-builder | R1 | queued |
-| R7 | Relay container, `tools/relay.sh`, `tools/build.sh relay`, desktop test through a local relay, setup doc | devops | R2 | queued |
-| R | Merge, review, Haiku full run, emulator, push, STATUS | lead | R1–R7 | queued |
+| R7 | Relay container, `tools/relay.sh`, `tools/build.sh relay`, CI relay job, setup doc (desktop test through a relay moves to R7b after R5) | devops | R2 | running |
+| R7b | Desktop test: two app instances syncing through `tools/relay.sh` | devops | R5, R7 | queued |
+| R | Merge, review, Haiku full run, emulator, push, STATUS | lead | R1–R7b | queued |
+
+R6 recipe (from R1): native `sqlite3.open(path)` then `PRAGMA key = "x'<64 hex>'"` right after open; plaintext → encrypted
+in place = open unkeyed + `PRAGMA rekey`. Web: `registerVirtualFileSystem(fs)` **without** `makeDefault`, open with
+`vfs: 'multipleciphers-${fs.name}'`, then `PRAGMA key` (makeDefault gives "Encryption is not supported by the VFS"); after
+`unregisterVirtualFileSystem` (forget) the next `IndexedDbFileSystem` needs a new `vfsName` (else "null function"); check
+opening an existing unkeyed IndexedDB db via the wrapped VFS. Wrong/missing key: `PRAGMA key` succeeds, the first read
+throws `SqliteException` extended code 26 "file is not a database".
 
 ## Stage W progress (2026-10-21)
 - W1–W3 merged into local `v2` (925d546, 3071b53); scouts used for W2/W3 (29k + 47k tokens), builders 46k + 75k.

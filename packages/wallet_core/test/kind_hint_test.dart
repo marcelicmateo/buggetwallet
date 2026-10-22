@@ -209,7 +209,7 @@ void main() {
       db.execute('ALTER TABLE tx DROP COLUMN kind_hint');
       db.execute('ALTER TABLE tx DROP COLUMN transfer_to');
       db.execute("UPDATE meta SET value = '2' WHERE key = 'schema'");
-      db.dispose();
+      db.close();
       final again = WalletRepo.open(path);
       addTearDown(again.close);
       final cols = {for (final c in again.db.select('PRAGMA table_info(tx)')) c['name'] as String};

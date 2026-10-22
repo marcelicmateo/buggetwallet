@@ -48,3 +48,4 @@ packages/*/pubspec.lock
 
 # Web build: SQLite wasm fetched by tools/build.sh web (pinned in dev/sqlite3-wasm.sha256)
 app/web/sqlite3.wasm
+app/test/sqlite3.wasm

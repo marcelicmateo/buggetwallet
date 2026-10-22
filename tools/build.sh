@@ -60,34 +60,35 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
       podman build --build-arg FLUTTER_VERSION="$FLUTTER_VERSION" -t "$IMAGE" "$ROOT/dev"
     BW_COLD=1
   }
-  # sqlite3.wasm (the web build's SQLite) for the sqlite3 version in app/pubspec.lock: a release asset of the sqlite3.dart
-  # project, pinned by dev/sqlite3-wasm.sha256 ("<sha256>  sqlite3-<version>"), cached outside the repo, copied to the
-  # git-ignored app/web/sqlite3.wasm. The first fetch of a version writes its hash into that file (commit it).
+  # sqlite3mc.wasm (SQLite3 Multiple Ciphers: the web build's SQLite, encryption capable) for the sqlite3 version in app/pubspec.lock: a release asset of the sqlite3.dart
+  # project, pinned by dev/sqlite3-wasm.sha256 ("<sha256>  sqlite3mc-<version>"), cached outside the repo, copied to the
+  # git-ignored app/web/sqlite3.wasm (same URL the app loads). The first fetch of a version writes its hash into that file (commit it).
   fetch_sqlite_wasm() {
     local ver cache want got pinned="$ROOT/dev/sqlite3-wasm.sha256"
     ver=$(awk '/^  sqlite3:$/ {f=1} f && /version:/ {gsub(/"/, "", $2); print $2; exit}' "$ROOT/app/pubspec.lock")
     [[ -n $ver ]] || { echo "no sqlite3 version in app/pubspec.lock" >&2; return 1; }
-    cache="${BW_DATA_DIR:-$HOME/.local/share/budget-wallet}/cache/sqlite3-$ver.wasm"
+    cache="${BW_DATA_DIR:-$HOME/.local/share/budget-wallet}/cache/sqlite3mc-$ver.wasm"
     mkdir -p "$(dirname "$cache")"
     if [[ ! -f $cache ]]; then
-      echo "fetching sqlite3.wasm $ver" >&2
-      curl -fsSL -o "$cache.part" "https://github.com/simolus3/sqlite3.dart/releases/download/sqlite3-$ver/sqlite3.wasm" \
-        || { rm -f "$cache.part"; echo "download of sqlite3.wasm $ver failed" >&2; return 1; }
+      echo "fetching sqlite3mc.wasm $ver" >&2
+      curl -fsSL -o "$cache.part" "https://github.com/simolus3/sqlite3.dart/releases/download/sqlite3-$ver/sqlite3mc.wasm" \
+        || { rm -f "$cache.part"; echo "download of sqlite3mc.wasm $ver failed" >&2; return 1; }
       mv "$cache.part" "$cache"
     fi
     got=$(sha256sum "$cache" | cut -d' ' -f1)
-    want=$(awk -v n="sqlite3-$ver" '$2 == n {print $1}' "$pinned" 2>/dev/null || true)
+    want=$(awk -v n="sqlite3mc-$ver" '$2 == n {print $1}' "$pinned" 2>/dev/null || true)
     if [[ -z $want ]]; then
       # No trust on first use: a new version is pinned by hand after checking the hash against the release page.
-      echo "sqlite3.wasm $ver is not pinned. Check its sha256 on the sqlite3.dart release page, then add this line" >&2
-      echo "to dev/sqlite3-wasm.sha256 and commit it:  $got  sqlite3-$ver" >&2
+      echo "sqlite3mc.wasm $ver is not pinned. Check its sha256 on the sqlite3.dart release page, then add this line" >&2
+      echo "to dev/sqlite3-wasm.sha256 and commit it:  $got  sqlite3mc-$ver" >&2
       return 1
     elif [[ $want != "$got" ]]; then
       rm -f "$cache"
-      echo "sqlite3.wasm $ver sha256 mismatch: pinned $want, got $got (cache deleted)" >&2
+      echo "sqlite3mc.wasm $ver sha256 mismatch: pinned $want, got $got (cache deleted)" >&2
       return 1
     fi
     cp "$cache" "$ROOT/app/web/sqlite3.wasm"
+    cp "$cache" "$ROOT/app/test/sqlite3.wasm"  # flutter test --platform chrome serves app/test/ at the root
   }
   run=()  # the container writes logs and history into this run (tools/timing.sh)
   case "$CMD" in
@@ -97,7 +98,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     format|shell|lsp|mcp) ;;
     *) usage ;;
   esac
-  [[ "$CMD" == web ]] && { fetch_sqlite_wasm || exit 1; }
+  [[ "$CMD" == web || "$CMD" == web-test ]] && { fetch_sqlite_wasm || exit 1; }
   # Build output goes to stderr (stdout belongs to the LSP client in `lsp` mode)
   podman image exists "$IMAGE" || build_image
   if [[ "$CMD" == lsp ]]; then
