@@ -489,9 +489,9 @@ class WalletController extends ChangeNotifier {
   /// The sum of every goal's target (cents).
   int get goalTargetTotal => _cached('goalTargetTotal', () => goals.fold<int>(0, (a, g) => a + g.target));
 
-  /// The sum of the prices of wishes still cooling off (cents). Not cached: it depends on the wall clock.
+  /// The sum of the prices of wishes still cooling off (cents). Not cached: it depends on the clock ([now], the injected one in tests).
   int get waitingTotal {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _clock().millisecondsSinceEpoch;
     return wish.where((w) => w.status == 'waiting' && w.hoursLeft(settings.coolHours, now) > 0).fold<int>(0, (a, w) => a + w.price);
   }
 

@@ -310,8 +310,10 @@ void main() {
       late List<CalendarEntry> entries;
       expect(() => entries = wc.calendarEntries(), returnsNormally);
       expect([for (final e in entries) e.id], ['b']);
+      wc.calendarEntries();
+      wc.calendarEntries();
       final skipped = lines.where((l) => l.contains('calendar.sourceSkipped')).toList();
-      expect(skipped, isNotEmpty);
+      expect(skipped.length, 1, reason: 'logged once, not on every read');
       expect(skipped.join(), allOf(isNot(contains('Synthetic')), isNot(contains('cloud'))));
     });
 

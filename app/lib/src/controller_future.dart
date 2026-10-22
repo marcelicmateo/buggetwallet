@@ -40,6 +40,9 @@ class CalendarState {
   bool permission = false;
   bool denied = false;
   bool reading = false;
+
+  /// How many saved sources the last read could not use (logged when it changes).
+  int skippedSources = 0;
   String? lastRead;
   final Map<String, String> errors = {};
 
@@ -296,7 +299,11 @@ extension FutureSpending on WalletController {
         skipped++;
       }
     }
-    if (skipped > 0) logEvent(_calLog, Level.WARNING, 'calendar.sourceSkipped', {'count': skipped});
+    // Logged when the count changes, not on every read (the getter is read by every Calendars build).
+    if (skipped != cal.skippedSources) {
+      cal.skippedSources = skipped;
+      if (skipped > 0) logEvent(_calLog, Level.WARNING, 'calendar.sourceSkipped', {'count': skipped});
+    }
     return out;
   }
 
