@@ -61,7 +61,7 @@ throws `SqliteException` extended code 26 "file is not a database".
 |---|---|---|---|---|
 | F0 | Context pack | scout | – | done |
 | F1 | Core: `planned` entity (schema 6), reservation in computePeriod, .ics parser + export, amountFromText, upcoming(), paidCandidates(), headsUps(), settings, search | core-builder | F0 | running |
-| F2 | Spec tests for the money logic and parser | test-writer | F0 | running |
+| F2 | Spec tests for the money logic and parser | test-writer | F0 | written (71a7d07, ~90 cases); F1 merges and runs them |
 | F3 | App: Upcoming screen, Today "Coming up" + heads-up, entry sheet, Plan › Calendars (Android calendar plugin, .ics import/link), heads-up notifications, export .ics, demo data | ui-builder | F0 (codes against the API, shims until F1) | running |
 | F | Merge F1 → F2 → F3, review, full run, push | lead | F1–F3 | queued |
 
