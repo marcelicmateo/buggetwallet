@@ -67,12 +67,13 @@ void main() {
       const pending = CategorizedTx(
           Tx(id: 'm', source: 'manual', date: '2026-01-02', amount: -100, matchedTo: 'later', note: 'cash', matchPending: true),
           'Eating out',
-          Kind.flex);
+          BudgetKind.flex);
       expect(transactionsCsv([pending]), contains('2026-01-02,-1.00,Eating out,,manual,cash\n'));
     });
 
     test('the category column is the resolved category, not the pinned one', () {
-      const t = CategorizedTx(Tx(id: 'a', source: 'pbz', date: '2026-01-02', amount: -100, description: 'LIDL'), 'Groceries', Kind.flex);
+      const t =
+          CategorizedTx(Tx(id: 'a', source: 'pbz', date: '2026-01-02', amount: -100, description: 'LIDL'), 'Groceries', BudgetKind.flex);
       expect(transactionsCsv([t]).split('\n')[1], '2026-01-02,-1.00,Groceries,LIDL,pbz,');
     });
   });

@@ -65,8 +65,8 @@ void main() {
       expect(cz.categoryOf(_tx('revolut', 'Topup', 'Top-up by *0000', 5000)), 'Internal transfer');
       expect(cz.categoryOf(_tx('revolut', 'Exchange', 'Exchanged to USD', -1000)), 'Internal transfer');
       expect(cz.categoryOf(_tx('pbz', 'Ostalo', 'Isplata kredita 0000', 1000000)), 'Loan received');
-      expect(kindOf('Internal transfer'), Kind.transfer);
-      expect(kindOf('Loan received'), Kind.transfer);
+      expect(kindOf('Internal transfer'), BudgetKind.transfer);
+      expect(kindOf('Loan received'), BudgetKind.transfer);
     });
 
     test('a merchant rule never turns a transfer into spending', () {
@@ -96,8 +96,8 @@ void main() {
       expect(cz.categoryOf(_tx('pbz', 'Isplata ATM', 'PBZ ATM TEST', -49999)), 'Cash');
       expect(cz.categoryOf(_tx('pbz', 'Isplata ATM', 'PBZ ATM TEST', -2000)), 'Cash');
       expect(cz.categoryOf(_tx('pbz', 'Isplata u poslovnici', 'Branch', -80000)), 'Cash');
-      expect(kindOf('Rent'), Kind.fixed);
-      expect(kindOf('Cash'), Kind.flex);
+      expect(kindOf('Rent'), BudgetKind.fixed);
+      expect(kindOf('Cash'), BudgetKind.flex);
     });
 
     test('rent is a fixed bill: not in safe-to-spend, shown as paid', () {
@@ -114,7 +114,7 @@ void main() {
       expect(cz.categoryOf(_tx('pbz', 'Ostalo', 'VAL_01.01.2026.POVRAT', 30000)), 'Extra income');
       expect(cz.categoryOf(_tx('pbz', 'Plaća/Mirovina', 'Neto plaća', 150000)), 'Salary');
       expect(cz.categoryOf(_tx('pbz', 'Ostalo', 'Povrat krive uplate', 150000)), 'Salary');
-      expect(kindOf('Extra income'), Kind.extra);
+      expect(kindOf('Extra income'), BudgetKind.extra);
     });
 
     test('a bonus raises income and net, but not flexible money or safe-to-spend', () {
@@ -215,7 +215,7 @@ void main() {
     WalletRepo repoWith(List<(String, int)> manual) {
       final r = WalletRepo.inMemory();
       for (final (d, a) in manual) {
-        r.addManual(date: d, amount: a, category: 'Eating out', note: 'synthetic');
+        r.addTransaction(date: d, amount: a, category: 'Eating out', note: 'synthetic');
       }
       return r;
     }
@@ -257,7 +257,7 @@ void main() {
 
     test('rent cash (a fixed bill) can be matched to a hand-entered rent', () {
       final r = WalletRepo.inMemory();
-      r.addManual(date: '2026-01-15', amount: 55000, category: 'Rent');
+      r.addTransaction(date: '2026-01-15', amount: 55000, category: 'Rent');
       final s = r.importBatch(bank([('2026-01-15', -55000, 'Isplata ATM', 'PBZ ATM TEST')]));
       expect(s.matched, 1);
       r.close();
@@ -293,7 +293,7 @@ void main() {
 
     test('a deleted or already matched manual entry is not matched again; re-import changes nothing', () {
       final r = repoWith([('2026-01-17', 2340)]);
-      final deleted = r.addManual(date: '2026-01-17', amount: 2340, category: 'Shopping');
+      final deleted = r.addTransaction(date: '2026-01-17', amount: 2340, category: 'Shopping');
       r.deleteTransaction(deleted);
       expect(r.importBatch(january).matched, 1);
       final before = r.transactions(includeHidden: true).map((t) => '${t.id}${t.matchedTo}${t.deleted}').toList();

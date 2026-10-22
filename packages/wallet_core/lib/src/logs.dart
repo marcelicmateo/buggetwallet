@@ -44,7 +44,7 @@ void logError(Logger logger, String event, Object error, StackTrace? stack,
 String _two(int n) => n.toString().padLeft(2, '0');
 
 /// Level names in the log: FINE is shown as DEBUG, the others keep their `package:logging` names.
-String levelName(Level l) => l == Level.FINE ? 'DEBUG' : l.name;
+String _levelName(Level l) => l == Level.FINE ? 'DEBUG' : l.name;
 
 /// `2026-10-16T19:01:02.123+02:00` (local time, UTC offset, milliseconds).
 String formatLogTime(DateTime t) {
@@ -107,7 +107,7 @@ String formatLogRecord(LogRecord r) {
   final b = StringBuffer()
     ..write(formatLogTime(r.time))
     ..write(' ')
-    ..write(levelName(r.level))
+    ..write(_levelName(r.level))
     ..write(' ')
     ..write(r.loggerName)
     ..write(' ')
@@ -139,7 +139,7 @@ String formatLogRecord(LogRecord r) {
 final _perf = Logger('bw.perf');
 
 /// Logs a finished timing on `bw.perf`: FINE, or WARNING when [ms] >= [warnMs]. Fields: {"ms": ms, ...fields}.
-void logPerf(String name, int ms, {Map<String, Object?> fields = const {}, int warnMs = 200}) {
+void _logPerf(String name, int ms, {Map<String, Object?> fields = const {}, int warnMs = 200}) {
   final level = ms >= warnMs ? Level.WARNING : Level.FINE;
   if (!_perf.isLoggable(level)) return;
   _perf.log(level, LogEvent(name, {'ms': ms, ...fields}));
@@ -154,10 +154,10 @@ class PerfTimer {
 
   int get ms => _sw.elapsedMilliseconds;
 
-  /// Logs the timing (see [logPerf]) and returns the milliseconds.
+  /// Logs the timing (see [_logPerf]) and returns the milliseconds.
   int done([Map<String, Object?> fields = const {}]) {
     final ms = _sw.elapsedMilliseconds;
-    logPerf(name, ms, fields: fields, warnMs: warnMs);
+    _logPerf(name, ms, fields: fields, warnMs: warnMs);
     return ms;
   }
 }
@@ -168,10 +168,10 @@ T timed<T>(String name, T Function() body, {Map<String, Object?> fields = const 
   final sw = Stopwatch()..start();
   try {
     final r = body();
-    logPerf(name, sw.elapsedMilliseconds, fields: fields, warnMs: warnMs);
+    _logPerf(name, sw.elapsedMilliseconds, fields: fields, warnMs: warnMs);
     return r;
   } catch (_) {
-    logPerf(name, sw.elapsedMilliseconds, fields: {...fields, 'failed': true}, warnMs: warnMs);
+    _logPerf(name, sw.elapsedMilliseconds, fields: {...fields, 'failed': true}, warnMs: warnMs);
     rethrow;
   }
 }
@@ -181,10 +181,10 @@ Future<T> timedAsync<T>(String name, Future<T> Function() body, {Map<String, Obj
   final sw = Stopwatch()..start();
   try {
     final r = await body();
-    logPerf(name, sw.elapsedMilliseconds, fields: fields, warnMs: warnMs);
+    _logPerf(name, sw.elapsedMilliseconds, fields: fields, warnMs: warnMs);
     return r;
   } catch (_) {
-    logPerf(name, sw.elapsedMilliseconds, fields: {...fields, 'failed': true}, warnMs: warnMs);
+    _logPerf(name, sw.elapsedMilliseconds, fields: {...fields, 'failed': true}, warnMs: warnMs);
     rethrow;
   }
 }

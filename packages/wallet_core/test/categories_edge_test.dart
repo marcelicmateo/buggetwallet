@@ -86,7 +86,7 @@ void main() {
     test('rule table is consistent: known categories, spending kinds only, no capitals that could never match', () {
       for (final (cat, re) in builtInMerchantRules) {
         expect(categories.containsKey(cat), isTrue, reason: cat);
-        expect([Kind.flex, Kind.fixed], contains(kindOf(cat)), reason: '$cat must not turn spending into income or a transfer');
+        expect([BudgetKind.flex, BudgetKind.fixed], contains(kindOf(cat)), reason: '$cat must not turn spending into income or a transfer');
         final literal = re.pattern.replaceAll(RegExp(r'\\.'), ''); // drop \b, \d ...
         expect(RegExp('[A-Z]').hasMatch(literal), isFalse, reason: '${re.pattern} can never match lower-cased text');
       }
@@ -216,7 +216,7 @@ void main() {
       expect(cz.categoryOf(_tx('revolut', 'Topup', 'Top-up', 5000, category: 'Groceries')), 'Groceries');
       expect(cz.categoryOf(_tx('pbz', 'POS plaćanje', 'POS Revolut**0000*', -5000, category: 'Shopping')), 'Shopping');
       expect(cz.categoryOf(_tx('pbz', 'POS plaćanje', 'Lidl', -100, category: 'Internal transfer')), 'Internal transfer');
-      expect(cz.categorize(_tx('pbz', 'POS plaćanje', 'Lidl', -100, category: 'Internal transfer')).kind, Kind.transfer);
+      expect(cz.categorize(_tx('pbz', 'POS plaćanje', 'Lidl', -100, category: 'Internal transfer')).kind, BudgetKind.transfer);
     });
 
     test('hand-added entries with an unknown stored category still get a known category', () {
@@ -278,12 +278,12 @@ void main() {
 
     test('kindOf: unknown names are flexible spending; the income and transfer names are exact', () {
       for (final s in ['', 'Nonexistent', 'groceries', 'salary', 'Internal Transfer']) {
-        expect(kindOf(s), Kind.flex, reason: '"$s"');
+        expect(kindOf(s), BudgetKind.flex, reason: '"$s"');
       }
-      expect(kindOf('Salary'), Kind.income);
-      expect(kindOf('Extra income'), Kind.extra);
-      expect(kindOf('Rent'), Kind.fixed);
-      expect(kindOf('Loan received'), Kind.transfer);
+      expect(kindOf('Salary'), BudgetKind.income);
+      expect(kindOf('Extra income'), BudgetKind.extra);
+      expect(kindOf('Rent'), BudgetKind.fixed);
+      expect(kindOf('Loan received'), BudgetKind.transfer);
       expect(flexCategories, isNot(contains('Salary')));
       expect(flexCategories, isNot(contains('Internal transfer')));
       expect(flexCategories, containsAll(['Groceries', 'Cash', 'To people']));

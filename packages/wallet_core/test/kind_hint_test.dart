@@ -75,7 +75,7 @@ void main() {
       expect(cz.categoryOf(_tx('pbz', 'Plaćanje putem direktnih kanala', 'To my other account', -10000, kind: TxKind.ownTransfer)),
           'Internal transfer');
       expect(cz.categoryOf(_tx('bankx', 'XFER', 'Savings pot', 10000, kind: TxKind.ownTransfer)), 'Internal transfer');
-      expect(kindOf(cz.categoryOf(_tx('bankx', 'XFER', 'Savings pot', 10000, kind: TxKind.ownTransfer))), Kind.transfer);
+      expect(kindOf(cz.categoryOf(_tx('bankx', 'XFER', 'Savings pot', 10000, kind: TxKind.ownTransfer))), BudgetKind.transfer);
       expect(cz.categoryOf(_tx('revolut', 'Exchange', 'Exchanged to USD', -10000, kind: TxKind.exchange)), 'Internal transfer');
       expect(cz.categoryOf(_tx('bankx', 'FX', 'Exchanged to USD', -10000, kind: TxKind.exchange)), 'Internal transfer',
           reason: 'exchange: Internal transfer by the hint alone, without any text rule');

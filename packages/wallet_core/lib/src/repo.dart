@@ -42,7 +42,6 @@ class ImportSummary {
 }
 
 final _log = Logger('bw.repo');
-final _isoDate = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 
 /// The wallet database on one device. All writes go through [_write] so they are
 /// recorded as [Op]s and can be synced; remote ops come in through [applyRemote].
@@ -336,7 +335,7 @@ class WalletRepo {
 
   // ---------- matching and pairing (hand-added entries ↔ bank rows, own transfers) ----------
   /// Each row's first write, for [planMatches] and `seen_bank`: the clock of its `amount`. Only the write that creates a row sets it
-  /// (importBatch, addManual; matching, categories and deletes never touch it), and the clocks table converges to the
+  /// (importBatch, addTransaction; matching, categories and deletes never touch it), and the clocks table converges to the
   /// same value on every device. If the same bank row is imported on two devices before they sync, the later import
   /// wins (highest HLC per field), so the row counts as written at that later import.
   static const _writtenJoin = "LEFT JOIN clocks c ON c.entity = 'tx' AND c.id = tx.id AND c.field = 'amount'";
@@ -377,7 +376,7 @@ class WalletRepo {
     final bank = {for (final b in targets) b.id: b};
     for (final m in open) {
       final since = written[m.id];
-      if (since == null || !_isoDate.hasMatch(m.date)) continue;
+      if (since == null || !isIsoDate(m.date)) continue;
       // Candidates for this entry only: same amount, within the window, and not on its device when it was added.
       // Without a seen_bank value, only rows written in or after the entry's millisecond (comparing the 15-digit
       // millis prefix as text is safe for any counter).
@@ -392,7 +391,7 @@ class WalletRepo {
     final cz = categorizer();
     final plan = planMatches(manual, [...bank.values], (b) {
       final k = kindOf(cz.autoCategory(b));
-      return k == Kind.flex || k == Kind.fixed;
+      return k == BudgetKind.flex || k == BudgetKind.fixed;
     }, written, seenBank: seenBank);
     _write([
       for (final e in plan.matchedTo.entries) ('tx', e.key, {'matched_to': e.value}),
@@ -704,7 +703,7 @@ class WalletRepo {
   /// A hand-entered expense (positive [amount] = money spent). Records which bank rows this device holds now
   /// (`seen_bank`, in the same op): none of them is this entry's row, but a bank row imported on another device that
   /// has not synced yet may be ([planMatches]).
-  String addManual({required String date, required int amount, required String category, String note = '', String currency = 'EUR'}) {
+  String addTransaction({required String date, required int amount, required String category, String note = '', String currency = 'EUR'}) {
     final id = _newId('m');
     final seen = _seenBank();
     _write([
@@ -802,7 +801,7 @@ class WalletRepo {
   /// brought back). Throws [ArgumentError] for a goal that never existed here, a bad date, or a total that would
   /// leave ±[Goal.maxSaved] (adds made at the same time on other devices can still pass it: reads clamp).
   String? addGoalContribution(String goalId, int cents, {String? date}) {
-    if (date != null && !_isoDate.hasMatch(date)) throw ArgumentError('The date is not YYYY-MM-DD.');
+    if (date != null) requireIsoDate(date);
     final rs = db.select('SELECT deleted FROM goals WHERE id = ?', [goalId]);
     if (rs.isEmpty) throw ArgumentError('No such goal.');
     if (rs.first['deleted'] != 0 || cents == 0) return null;
@@ -866,7 +865,7 @@ class WalletRepo {
   ///   15th stays matched month after month), `expectedAmount` unchanged; cycle after cycle when several payments are
   ///   here. The bank row keeps its category: nothing is reclassified.
   void refreshRecurring(String today) {
-    if (!_isoDate.hasMatch(today)) throw ArgumentError('The date is not YYYY-MM-DD.');
+    requireIsoDate(today);
     final t = PerfTimer('repo.recurring');
     final rows = transactions();
     if (rows.isEmpty) {
@@ -882,7 +881,7 @@ class WalletRepo {
     // The latest live bank outflow per payee: its category is the payee's current one.
     final latest = <String, CategorizedTx>{};
     for (final t in categorized) {
-      if (!t.tx.live || t.tx.manual || t.amount >= 0 || t.kind == Kind.transfer) continue;
+      if (!t.tx.live || t.tx.manual || t.amount >= 0 || t.kind == BudgetKind.transfer) continue;
       final key = merchantKey(t.tx);
       final have = latest[key];
       if (have == null || t.date.compareTo(have.date) > 0 || (t.date == have.date && t.tx.id.compareTo(have.tx.id) > 0)) {
@@ -985,7 +984,7 @@ class WalletRepo {
     final r = db.select('SELECT * FROM recurring WHERE id = ?', [id]);
     if (r.isEmpty) throw ArgumentError('No such bill.');
     final b = RecurringBill.fromRow(r.first);
-    if (!_isoDate.hasMatch(b.nextDue)) throw StateError('The bill has no due date yet.');
+    if (!isIsoDate(b.nextDue)) throw StateError('The bill has no due date yet.');
     _write([
       ('recurring', id, {'next_due': addDays(b.nextDue, b.intervalDays)})
     ]);
@@ -996,7 +995,7 @@ class WalletRepo {
   /// was less than 14 days before, i.e. no weekly review day was skipped in between (else starts again at 1). Done
   /// twice on one day changes nothing.
   void markReviewDone(String today) {
-    if (!_isoDate.hasMatch(today)) throw ArgumentError('The date is not YYYY-MM-DD.');
+    requireIsoDate(today);
     final st = settings();
     final last = st.lastReview;
     if (last == today) return;

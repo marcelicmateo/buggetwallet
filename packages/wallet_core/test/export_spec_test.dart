@@ -162,8 +162,8 @@ void main() {
         _tx('1', '2026-01-02', -1000, cat: 'Groceries'),
         _tx('2', '2026-01-03', 150000, cat: 'Salary'),
         _tx('3', '2026-01-04', -5000, cat: 'Internal transfer'),
-        const CategorizedTx(
-            Tx(id: '4', source: 'pbz', date: '2026-01-05', amount: -7777, category: 'Groceries', deleted: true), 'Groceries', Kind.flex),
+        const CategorizedTx(Tx(id: '4', source: 'pbz', date: '2026-01-05', amount: -7777, category: 'Groceries', deleted: true),
+            'Groceries', BudgetKind.flex),
       ]));
       expect(rows[1], row('2026-01', {'Groceries': '10.00'}, '10.00'));
     });

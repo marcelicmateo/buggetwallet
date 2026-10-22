@@ -169,8 +169,8 @@ void main() {
 
     test('category name is searched too; deleted transactions are not found', () {
       final t = [
-        const CategorizedTx(
-            Tx(id: 'd', source: 'pbz', date: '2026-01-01', amount: -100, description: 'Ghost shop', deleted: true), 'Shopping', Kind.flex),
+        const CategorizedTx(Tx(id: 'd', source: 'pbz', date: '2026-01-01', amount: -100, description: 'Ghost shop', deleted: true),
+            'Shopping', BudgetKind.flex),
         _tx('l', -100, 'Ghost shop live')
       ];
       expect([for (final x in _s('ghost', txs: t).txs) x.tx.id], ['l']);

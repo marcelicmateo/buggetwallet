@@ -98,7 +98,7 @@ class Tx {
 class CategorizedTx {
   final Tx tx;
   final String category;
-  final Kind kind;
+  final BudgetKind kind;
   const CategorizedTx(this.tx, this.category, this.kind);
   String get date => tx.date;
   int get amount => tx.amount;
@@ -229,7 +229,7 @@ class RecurringBill {
   /// A bill in a fixed category (Rent, Loan, Bills & subscriptions) is already planned through the fixed-cost
   /// settings, so `computePeriod` lists it as due but does not reserve it a second time (owner rule: exact). A
   /// confirmed bill's `category` is kept current by `WalletRepo.refreshRecurring`, so this follows a later rule.
-  bool get coveredByPlan => kindOf(category) == Kind.fixed;
+  bool get coveredByPlan => kindOf(category) == BudgetKind.fixed;
 
   static RecurringBill fromRow(Map<String, Object?> r) => RecurringBill(
         id: r['id'] as String,
@@ -287,6 +287,9 @@ class PlannedCost {
   /// Deleted rows are kept (so a calendar event never comes back) and listed only with `includeClosed`.
   final bool deleted;
 
+  /// The planned row of a stored bill (`bill:<billId>`, kept in step by the repo's bill writes).
+  bool get isBill => source == PlannedSource.bill && sourceRef != null;
+
   const PlannedCost({
     required this.id,
     required this.title,
@@ -306,9 +309,9 @@ class PlannedCost {
   /// A planned cost in a fixed category (Rent, Loan, Bills & subscriptions) is already in the payday plan's fixed
   /// amounts, so `computePeriod` lists it in `duePlanned` but does not reserve it again (exact-money rule, same as
   /// [RecurringBill.coveredByPlan]). Still listed in Upcoming and heads-ups.
-  bool get coveredByPlan => category != null && kindOf(category!) == Kind.fixed;
+  bool get coveredByPlan => category != null && kindOf(category!) == BudgetKind.fixed;
 
-  /// A bill's row without a category (B6: a bill confirmed before B5a, or reopened after its cash expense was deleted):
+  /// A bill's row without a category (a bill confirmed before categories were asked for, or reopened after its cash expense was deleted):
   /// only the category tells whether the payday plan already holds it, so `computePeriod` lists it in `duePlanned` but
   /// does not reserve it (never counted twice); the app shows "needs a category" and asks for one.
   bool get needsCategory => source == PlannedSource.bill && (category == null || category!.trim().isEmpty);
@@ -474,10 +477,10 @@ class WalletSettings {
       impulse: i('impulse', 5000),
       coolHours: i('coolHours', 72, max: maxCoolHours),
       paydayDay: i('paydayDay', 15, min: 1, max: 31),
-      periodStart: str('periodStart', _isDate),
+      periodStart: str('periodStart', isIsoDate),
       currency: str('currency', (v) => RegExp(r'^[A-Z]{3}$').hasMatch(v)) ?? 'EUR',
       incomeMode: one('incomeMode', 'planned', const {'planned', 'received'}),
-      savedFor: str('savedFor', _isDate),
+      savedFor: str('savedFor', isIsoDate),
       salaryConfirmed: confirmed == null || confirmed is bool ? confirmed == true : bad('salaryConfirmed', false),
       merchantPatterns: switch (patterns) {
         null => const [],
@@ -494,7 +497,7 @@ class WalletSettings {
         _ => bad('categoryBudgets', const {}),
       },
       reviewDay: i('reviewDay', DateTime.sunday, min: DateTime.monday, max: DateTime.sunday),
-      lastReview: str('lastReview', _isDate),
+      lastReview: str('lastReview', isIsoDate),
       reviewStreak: i('reviewStreak', 0, max: maxStreak),
       headsUpCents: i('headsUpCents', defaultHeadsUpCents, max: maxHeadsUpCents),
       headsUpDays: i('headsUpDays', defaultHeadsUpDays, max: maxHeadsUpDays),
@@ -524,8 +527,6 @@ class WalletSettings {
     if (dropped) logInvalidSetting('categoryBudgets', raw);
     return out;
   }
-
-  static bool _isDate(String v) => RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v) && isoDate(parseIso(v)) == v; // no 2026-02-30
 
   static bool _isMonth(String v) => RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(v);
 

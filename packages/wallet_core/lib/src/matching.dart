@@ -19,13 +19,11 @@ class MatchPlan {
   bool get isEmpty => matchedTo.isEmpty && bankCategory.isEmpty;
 }
 
-final _iso = RegExp(r'^\d{4}-\d{2}-\d{2}$');
-
 /// Days a bank row may be from the hand-added expense it replaces.
 const matchDays = 3;
 
 /// Which bank rows the device that added a manual entry already held at that moment: the entry's `seen_bank` field,
-/// written with the entry (`WalletRepo.addManual`) and synced with it, so every device decides the same.
+/// written with the entry (`WalletRepo.addTransaction`) and synced with it, so every device decides the same.
 ///
 /// Per device that imported bank rows (the node of their `amount` clock), the highest such clock the adding device
 /// held. Assuming a device's sync files arrive in order, holding that device's row written at `h` means holding all
@@ -144,7 +142,7 @@ MatchPlan planMatches(List<Tx> manual, List<Tx> bank, bool Function(Tx) eligible
   if (open.isEmpty) return MatchPlan(matchedTo, bankCategory, 0);
   final byAmount = <int, List<Tx>>{};
   for (final b in bank) {
-    if (b.amount < 0 && !b.manual && !b.deleted && !taken.contains(b.id) && _iso.hasMatch(b.date) && eligible(b)) {
+    if (b.amount < 0 && !b.manual && !b.deleted && !taken.contains(b.id) && isIsoDate(b.date) && eligible(b)) {
       (byAmount[b.amount] ??= []).add(b);
     }
   }
@@ -156,7 +154,7 @@ MatchPlan planMatches(List<Tx> manual, List<Tx> bank, bool Function(Tx) eligible
   for (final m in open) {
     final pool = byAmount[m.amount];
     final since = written[m.id];
-    if (pool == null || since == null || !_iso.hasMatch(m.date)) continue;
+    if (pool == null || since == null || !isIsoDate(m.date)) continue;
     final seen = SeenBank.of(since, seenBank[m.id]);
     Tx? best;
     var bestDays = 0;

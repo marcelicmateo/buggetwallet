@@ -58,7 +58,7 @@ void main() {
       final r1 = await store.add(bytes(3000, 1), 'pdf');
       final r2 = await store.add(bytes(3000, 2), 'pdf');
       for (final h in [r1.hash, r2.hash]) {
-        a.blobUploaded(h);
+        a.markBlobUploaded(h);
       }
       await store.read(r1.hash); // r1 is now more recent than r2
       final r3 = await store.add(bytes(3000, 3), 'pdf');

@@ -53,7 +53,7 @@ void main() {
     test('a second run without changes sends and receives nothing; all devices report caught up and list each other', () async {
       final a = sim.device(), b = sim.device(), c = sim.device();
       a.repo.importBatch(batch([('2026-01-12', -1200, 'POS TESTSHOP 1')]));
-      b.repo.addManual(date: '2026-01-13', amount: 500, category: 'Eating out');
+      b.repo.addTransaction(date: '2026-01-13', amount: 500, category: 'Eating out');
       await sim.syncAll([a, b, c]);
       for (final d in [a, b, c]) {
         final r = await d.sync();
@@ -95,10 +95,10 @@ void main() {
       await a.sync(); // seq 2
       a.repo.importBatch(batch([('2026-01-14', -300, 'POS TESTSHOP 3')]));
       await a.sync(); // seq 3
-      c.repo.addManual(date: '2026-01-15', amount: 100, category: 'Eating out');
+      c.repo.addTransaction(date: '2026-01-15', amount: 100, category: 'Eating out');
       await c.sync();
       sim.transport.corrupt(a.id, 2);
-      b.repo.addManual(date: '2026-01-16', amount: 250, category: 'Eating out');
+      b.repo.addTransaction(date: '2026-01-16', amount: 250, category: 'Eating out');
       final r = await b.sync();
       expect(r.caughtUp, isFalse);
       final w = waitingFor(r, a).single;
@@ -159,7 +159,7 @@ void main() {
       l.repo.importBatch(batch([('2026-01-17', -2340, 'POS EXAMPLE MART')])); // R2, the real one
       await l.sync(); // seq 2
       // P holds nothing yet and adds the cash entry for the 17th.
-      final m = p.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out');
+      final m = p.repo.addTransaction(date: '2026-01-17', amount: 2340, category: 'Eating out');
       sim.transport.failGet(l.id, 2);
       final r = await p.sync(); // applies seq 1 (R1), then waits for seq 2
       expect(r.caughtUp, isFalse);
@@ -185,7 +185,7 @@ void main() {
       await l.sync(); // seq 2
       l.repo.importBatch(batch([('2026-01-20', -700, 'POS TESTSHOP B')]));
       await l.sync(); // seq 3
-      final m = p.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out');
+      final m = p.repo.addTransaction(date: '2026-01-17', amount: 2340, category: 'Eating out');
       sim.transport.failGet(l.id, 2);
       final r = await p.sync();
       expect(r.caughtUp, isFalse);
@@ -208,7 +208,7 @@ void main() {
       l.repo.importBatch(batch([('2026-01-17', -2340, 'POS EXAMPLE MART')]));
       await l.sync();
       sim.transport.corrupt(l.id, 2);
-      final m = p.repo.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out');
+      final m = p.repo.addTransaction(date: '2026-01-17', amount: 2340, category: 'Eating out');
       for (var i = 0; i < 3; i++) {
         final r = await p.sync();
         expect(r.caughtUp, isFalse);
@@ -233,7 +233,7 @@ void main() {
   group('snapshots', () {
     Future<void> activity(Dev d, int rows) async {
       for (var i = 0; i < rows; i++) {
-        d.repo.addManual(date: '2026-01-1${i % 9}', amount: 100 + i, category: 'Eating out');
+        d.repo.addTransaction(date: '2026-01-1${i % 9}', amount: 100 + i, category: 'Eating out');
       }
     }
 
@@ -288,7 +288,7 @@ void main() {
     Future<void> longRun(List<Dev> active, int days) async {
       for (var d = 0; d < days; d += 8) {
         sim.tick(_day * 8);
-        active.first.repo.addManual(date: '2026-02-01', amount: 100 + d, category: 'Eating out');
+        active.first.repo.addTransaction(date: '2026-02-01', amount: 100 + d, category: 'Eating out');
         await sim.syncAll(active, rounds: 3);
       }
     }
@@ -298,7 +298,7 @@ void main() {
       a.repo.importBatch(batch([('2026-01-12', -1200, 'POS TESTSHOP 1')]));
       a.repo.setCategory(a.repo.transactions().first.id, 'Groceries');
       sim.tick();
-      b.repo.addManual(date: '2026-01-13', amount: 500, category: 'Eating out');
+      b.repo.addTransaction(date: '2026-01-13', amount: 500, category: 'Eating out');
       await longRun([a, b], 40);
       final s = await sim.transport.state();
       expect(s.devices[a.id]!.first, greaterThan(1), reason: 'early files pruned (two snapshots cover them, both acked)');
@@ -360,7 +360,7 @@ void main() {
   group('pruning', () {
     test('kept while a device seen within 90 days has not acked; pruned once it is silent for 91 days', () async {
       final a = sim.device(), b = sim.device(), d = sim.device();
-      a.repo.addManual(date: '2026-01-12', amount: 100, category: 'Eating out');
+      a.repo.addTransaction(date: '2026-01-12', amount: 100, category: 'Eating out');
       await sim.syncAll([a, b, d]);
       final dAck = (await sim.transport.state()).devices[d.id]!.acks[a.id]!;
       expect(dAck, greaterThan(0));
@@ -369,7 +369,7 @@ void main() {
       Future<void> step() async {
         sim.tick(_day * 8);
         t += 8;
-        a.repo.addManual(date: '2026-02-01', amount: 100 + t, category: 'Eating out');
+        a.repo.addTransaction(date: '2026-02-01', amount: 100 + t, category: 'Eating out');
         await sim.syncAll([a, b], rounds: 3);
       }
 
@@ -384,7 +384,7 @@ void main() {
       s = await sim.transport.state();
       expect(s.devices[a.id]!.first, greaterThan(dAck + 1), reason: 'D silent 91+ days no longer holds files back');
       // D returns with an unsynced local edit; its next needed file is gone.
-      d.repo.addManual(date: '2026-02-02', amount: 4242, category: 'Eating out');
+      d.repo.addTransaction(date: '2026-02-02', amount: 4242, category: 'Eating out');
       final r = await d.sync();
       expect(r.caughtUp, isTrue);
       await sim.syncAll([a, b, d]);
@@ -403,8 +403,8 @@ void main() {
       // The old sync delivered the import to b.
       b.repo.applyRemote([for (final (_, op) in a.repo.pendingOps()) op]);
       sim.tick();
-      a.repo.addManual(date: '2026-01-13', amount: 111, category: 'Eating out');
-      b.repo.addManual(date: '2026-01-14', amount: 222, category: 'Eating out');
+      a.repo.addTransaction(date: '2026-01-13', amount: 111, category: 'Eating out');
+      b.repo.addTransaction(date: '2026-01-14', amount: 222, category: 'Eating out');
       final id = a.repo.transactions().firstWhere((t) => !t.manual).id;
       sim.tick();
       a.repo.setCategory(id, 'Groceries');
@@ -542,9 +542,9 @@ void main() {
 
     test('files sealed with another wallet\'s key are quarantined as badKey and never applied', () async {
       final good = sim.device(), stranger = sim.device(otherKey: VaultKey.generate());
-      stranger.repo.addManual(date: '2026-01-12', amount: 999, category: 'Eating out');
+      stranger.repo.addTransaction(date: '2026-01-12', amount: 999, category: 'Eating out');
       await stranger.sync();
-      good.repo.addManual(date: '2026-01-13', amount: 111, category: 'Eating out');
+      good.repo.addTransaction(date: '2026-01-13', amount: 111, category: 'Eating out');
       final r = await good.sync();
       expect(r.problems.where((p) => p.reason == SyncProblemReason.badKey), isNotEmpty);
       expect(good.repo.transactions().map((t) => t.amount), [-111]);

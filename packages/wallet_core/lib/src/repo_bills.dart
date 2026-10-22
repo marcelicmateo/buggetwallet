@@ -21,7 +21,7 @@ extension WalletRepoBills on WalletRepo {
     return b;
   }
 
-  static bool _okDate(String? d) => d != null && _isoDate.hasMatch(d) && isoDate(parseIso(d)) == d;
+  static bool _okDate(String? d) => d != null && isIsoDate(d);
   static bool _okTotal(int? t) => t != null && t > 0 && t <= WalletSettings.maxAmount;
 
   /// Adds a bill read from a code, file or photo as status review and returns (id, isNew). With an external id the id
@@ -125,7 +125,7 @@ extension WalletRepoBills on WalletRepo {
   /// items past the limits: [ArgumentError]. A confirmed bill's planned row follows ([_billWrites]). An update of the
   /// due date, total or category that leaves a confirmed, unpaid bill with a total and a due date from today on
   /// without a category: [ArgumentError] (its planned row would reserve money, and only the category tells whether the
-  /// payday plan already holds it). Other edits (note, payee, dates of warranty or return …) never throw for it (B6).
+  /// payday plan already holds it). Other edits (note, payee, dates of warranty or return …) never throw for it (BILLS_API.md §3).
   void updateBill(String id,
       {String? date,
       String? dueDate,
@@ -165,8 +165,8 @@ extension WalletRepoBills on WalletRepo {
       if (clearReturnBy) 'return_by': null else if (returnBy != null) 'return_by': returnBy,
     };
     if (fields.isEmpty) return;
-    // B6: only an edit that changes the reserve (due date, total, category) is held to the category rule; a note,
-    // payee or warranty edit on a bill without one (confirmed before B5a, or reopened) still saves: such a bill's
+    // Only an edit that changes the reserve (due date, total, category) is held to the category rule; a note,
+    // payee or warranty edit on a bill without one (confirmed before categories were asked for, or reopened) still saves: such a bill's
     // planned row is listed, not reserved ([PlannedCost.needsCategory]), so nothing counts twice either way.
     _write(_billWrites(b, fields, _today(), needCategory: fields.keys.any(_billReserveFields.contains)));
     logEvent(_log, Level.INFO, 'bills.update', {'fields': fields.length});
@@ -224,8 +224,8 @@ extension WalletRepoBills on WalletRepo {
   }
 
   /// A cash receipt: one write holds the hand-added expense (−total on the bill's date, [category], payee as
-  /// description, `seen_bank` like [addManual]), the link, the confirm when the bill was in review (adding it as
-  /// money is the owner's check) and [category] on the bill when it has none (B6). No date or total, or already paid: [ArgumentError]. Returns the expense's id.
+  /// description, `seen_bank` like [addTransaction]), the link, the confirm when the bill was in review (adding it as
+  /// money is the owner's check) and [category] on the bill when it has none (BILLS_API.md §3). No date or total, or already paid: [ArgumentError]. Returns the expense's id.
   String addExpenseFromBill(String id, {required String category}) {
     final b = _liveBill(id);
     if (!_okDate(b.date)) throw ArgumentError('The bill needs a date.');
@@ -249,7 +249,7 @@ extension WalletRepoBills on WalletRepo {
           'seen_bank': _seenBank(),
         }
       ),
-      // B6: the bill takes the expense's category when it has none, so a later delete of the expense reopens a
+      // The bill takes the expense's category when it has none, so a later delete of the expense reopens a
       // categorized row (reserved, or covered by the plan) instead of one that reserves with no category.
       ..._billWrites(
           b,

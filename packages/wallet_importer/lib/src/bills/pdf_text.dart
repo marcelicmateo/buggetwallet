@@ -20,6 +20,7 @@ import 'package:logging/logging.dart';
 
 import '../log.dart';
 import 'common.dart';
+import 'read_result.dart';
 
 /// Largest PDF read; bigger → `null`.
 const maxPdfBytes = 20 * 1024 * 1024;
@@ -35,7 +36,11 @@ const _maxChars = 2000000;
 
 /// The text layer of [pdf], pages in order, lines separated by `\n`; `null` when the file is not a PDF, is encrypted,
 /// is over [maxPdfBytes], has no text, or is unreadable. Never throws.
-String? pdfText(Uint8List pdf) {
+String? pdfText(Uint8List pdf) => pdfTextResult(pdf).value;
+
+/// [pdfText] with the reason when there is no text ([ReadFailure.tooBig], [ReadFailure.notRecognized],
+/// [ReadFailure.encrypted], [ReadFailure.budget], [ReadFailure.noText], [ReadFailure.error]).
+ReadResult<String> pdfTextResult(Uint8List pdf) {
   final sw = Stopwatch()..start();
   var reason = 'ok';
   String? text;
@@ -87,7 +92,15 @@ String? pdfText(Uint8List pdf) {
       'ms': sw.elapsedMilliseconds,
     });
   }
-  return text;
+  if (text != null) return ReadResult.ok(text);
+  return ReadResult.failed(switch (reason) {
+    'tooBig' => ReadFailure.tooBig,
+    'notPdf' => ReadFailure.notRecognized,
+    'encrypted' => ReadFailure.encrypted,
+    'budget' => ReadFailure.budget,
+    'noText' => ReadFailure.noText,
+    _ => ReadFailure.error,
+  });
 }
 
 final _pdfHeader = '%PDF-'.codeUnits;

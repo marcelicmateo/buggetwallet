@@ -157,7 +157,7 @@ void main() {
       repo.updateBill(id, total: 5000, dueDate: '2026-03-12');
       p = plannedOf(id)!;
       expect((p.amount, p.date), (5000, '2026-03-12'));
-      final tx = repo.addManual(date: '2026-03-02', amount: 5000, category: 'Groceries');
+      final tx = repo.addTransaction(date: '2026-03-02', amount: 5000, category: 'Groceries');
       repo.linkBill(id, tx);
       p = plannedOf(id)!;
       expect((p.status, p.paidTx), (PlannedStatus.paid, tx));
@@ -195,7 +195,7 @@ void main() {
       var p = computePeriod(const [], st, const [], today, planned: repo.plannedCosts());
       expect(p.reservedPlanned, 4599);
       expect(p.flexBudget, base - 4599);
-      repo.linkBill(id, repo.addManual(date: '2026-03-01', amount: 4599, category: 'Groceries'));
+      repo.linkBill(id, repo.addTransaction(date: '2026-03-01', amount: 4599, category: 'Groceries'));
       p = computePeriod(const [], st, const [], today, planned: repo.plannedCosts());
       expect(p.reservedPlanned, 0);
     });
@@ -233,7 +233,7 @@ void main() {
     test('deleting the paying row makes the bill unpaid again at once', () {
       final (id, _) = repo.importBill(slip());
       repo.confirmWithCategory(id);
-      final tx = repo.addManual(date: '2026-03-01', amount: 4599, category: 'Groceries');
+      final tx = repo.addTransaction(date: '2026-03-01', amount: 4599, category: 'Groceries');
       repo.linkBill(id, tx);
       repo.deleteTransaction(tx);
       expect(repo.bill(id)!.paid, isFalse);
@@ -329,7 +329,7 @@ void main() {
       repo.importBatch(rows([n('2026-03-04', -500, 'Nalog', 'HR01 4444-0001')]));
       expect(repo.bill(review)!.paid, isFalse);
       final id = confirmed(slip(ext: 'jir:m', reference: 'HR01 4444-0002', total: 600));
-      repo.addManual(date: '2026-03-04', amount: 600, category: 'Groceries');
+      repo.addTransaction(date: '2026-03-04', amount: 600, category: 'Groceries');
       repo.runPendingMatch();
       expect(repo.bill(id)!.paid, isFalse);
     });
@@ -359,7 +359,7 @@ void main() {
     test('payee words first, then date distance, then amount closeness; never filtered by amount; taken rows out', () {
       const b = Bill(id: 'b1', date: '2026-03-01', dueDate: '2026-03-10', total: 1000, payee: 'Synthetic Utility');
       CategorizedTx row(String id, String date, int cents, String desc) =>
-          CategorizedTx(Tx(id: id, source: 'pbz', date: date, amount: cents, description: desc), 'Groceries', Kind.flex);
+          CategorizedTx(Tx(id: id, source: 'pbz', date: date, amount: cents, description: desc), 'Groceries', BudgetKind.flex);
       final txs = [
         row('far', '2026-03-20', -1000, 'OTHER'),
         row('near', '2026-03-02', -5, 'OTHER'),
@@ -406,15 +406,6 @@ void main() {
       expect(headsUps(items, today, thresholdCents: 0, days: 30), isEmpty);
       expect(upcoming(planned: const [], bills: const [], events: const [], from: today, to: '2026-03-10'), isEmpty,
           reason: 'existing callers are unchanged');
-    });
-
-    test('billReminders: within each window, sorted, days left', () {
-      final r = billReminders(const [b], today, returnDays: 3, warrantyDays: 14);
-      expect([for (final x in r) (x.kind, x.date, x.daysLeft)], [(UpcomingKind.returnBy, '2026-03-04', 3)]);
-      final all = billReminders(const [b], today, returnDays: 30, warrantyDays: 30);
-      expect([for (final x in all) x.kind], [UpcomingKind.returnBy, UpcomingKind.warranty]);
-      expect(billReminders(const [b], '2026-03-05', returnDays: 30, warrantyDays: 0), isEmpty);
-      expect(billReminders(const [b], 'bad', returnDays: 3, warrantyDays: 3), isEmpty);
     });
 
     test('settings returnReminderDays (3, 0..30) and warrantyReminderDays (14, 0..90)', () {
@@ -553,7 +544,7 @@ void main() {
       await round();
       await round();
       expect(b.repo.bill(idA)!.confirmed, isTrue, reason: "b's later import never undid the confirm");
-      final tx = b.repo.addManual(date: '2026-03-01', amount: 4599, category: 'Groceries');
+      final tx = b.repo.addTransaction(date: '2026-03-01', amount: 4599, category: 'Groceries');
       b.repo.linkBill(idA, tx);
       await round();
       await round();

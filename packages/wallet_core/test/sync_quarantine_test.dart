@@ -249,7 +249,7 @@ void main() {
       await a.run();
       a.repo.updateSettings({'salary': 150000});
       await a.run();
-      a.repo.addManual(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
+      a.repo.addTransaction(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
       await a.run();
       expect(net.files.keys.where((k) => k.startsWith('d/')), hasLength(3));
       final good = net.files['d/${a.repo.deviceId}/2']!;
@@ -279,7 +279,7 @@ void main() {
       await a.run();
       a.repo.updateSettings({'salary': 150000});
       await a.run();
-      a.repo.addManual(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
+      a.repo.addTransaction(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
       await a.run();
       final good = net.files['d/${a.repo.deviceId}/3']!;
       net.relay.replace(a.repo.deviceId, 3, good.sublist(0, good.length - 3));

@@ -208,13 +208,13 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   digits, JIR, invoice no: digits only ≥ 6, mixed ≥ 4 with a letter and a digit) in the bank row's `normalizeForLink` description with digit boundaries, −amount == total,
   date − 3 .. (due ?? date) + 60, exactly one row and one bill; never by amount alone, never reclassifies. Deleting the
   paying tx unlinks at once; other devices unlink a bill whose payment row arrives deleted in `_autoLinkBills` (caught
-  up). `billCandidates` (no own transfers), `billReminders`, `upcoming(billsDb:)` (`UpcomingKind.warranty`/`returnBy`),
+  up). `billCandidates` (no own transfers), `upcoming(billsDb:)` (`UpcomingKind.warranty`/`returnBy`),
   settings `returnReminderDays` (3, 0..30) / `warrantyReminderDays` (14, 0..90). `BlobStore(repo, key, maxCacheBytes:)`:
   `add` (async: seal, hash = SHA-256 of the sealed bytes, cache + `blob_outbox`), `read(hash, transport:)` (cache, else
   fetch, hash checked, unsealed, cached). Device-local tables `blob_cache` (LRU by a use counter, never evicts a queued
   hash), `blob_outbox`, `blob_delete`, `blob_own` (files this device attached to a bill; not in `_entities`, snapshots
-  or backups); repo helpers `putCachedBlob`, `cachedBlob`, `evictBlobs`, `queuedBlobs`, `blobUploaded`, `blobDeletes`,
-  `blobDeleteDone`, `dropOrphanBlobs` (own files no live bill points to: a queued one forgotten, an uploaded one queued
+  or backups); repo helpers `putCachedBlob`, `cachedBlob`, `evictBlobs`, `queuedBlobs`, `markBlobUploaded`, `blobDeletes`,
+  `markBlobDeleted`, `dropOrphanBlobs` (own files no live bill points to: a queued one forgotten, an uploaded one queued
   for deletion; after a caught-up run and before uploads). Logs: `bills.*`, `blob.*`,
   `sync.blob*` with counts, sources and enum words only.
 - `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:, planned:)` → `SearchResult` (`txs` newest first capped at

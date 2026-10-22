@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:test/test.dart';
 import 'package:wallet_importer/src/grid.dart';
+import 'package:wallet_importer/src/ids.dart' show formatCents;
 import 'package:wallet_importer/src/importer.dart' show fixMojibake, excelDate, jsRound;
 import 'package:wallet_importer/src/xls_reader.dart';
 import 'package:wallet_importer/wallet_importer.dart';

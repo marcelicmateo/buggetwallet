@@ -536,13 +536,13 @@ class SyncEngine {
       final sealed = repo.cachedBlob(hash, touch: false);
       if (sealed == null) {
         // Cannot happen (queued files are never evicted); nothing to send, so it is dropped from the queue.
-        repo.blobUploaded(hash);
+        repo.markBlobUploaded(hash);
         logEvent(_log, Level.WARNING, 'sync.blob.lost');
         continue;
       }
       try {
         await transport.putBlob(hash, sealed);
-        repo.blobUploaded(hash);
+        repo.markBlobUploaded(hash);
         sent++;
       } on TransportException catch (e) {
         failed++;
@@ -561,7 +561,7 @@ class SyncEngine {
     for (final hash in queued) {
       try {
         await transport.deleteBlob(hash);
-        repo.blobDeleteDone(hash);
+        repo.markBlobDeleted(hash);
         n++;
       } on TransportException catch (e) {
         logEvent(_log, Level.WARNING, 'sync.blob.deleteFailed', {'failure': e.failure.name});

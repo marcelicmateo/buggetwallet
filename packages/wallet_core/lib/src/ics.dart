@@ -93,7 +93,7 @@ class _Budget {
 IcsParseResult parseIcs(String text,
     {required String calendarId, required String from, required String to, DateTime Function(DateTime utc)? toLocal}) {
   final t = PerfTimer('ics.parse');
-  if (!_validIso(from) || !_validIso(to) || from.compareTo(to) > 0) return const IcsParseResult();
+  if (!isIsoDate(from) || !isIsoDate(to) || from.compareTo(to) > 0) return const IcsParseResult();
   final raw = <_RawEvent>[];
   var unsupported = 0;
   _RawEvent? cur;
@@ -178,8 +178,6 @@ IcsParseResult parseIcs(String text,
   t.done({'vevents': raw.length, 'events': events.length, 'unsupported': unsupported, 'budgetSpent': budget.left <= 0});
   return IcsParseResult(events: events, unsupported: unsupported);
 }
-
-bool _validIso(String s) => RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s) && isoDate(parseIso(s)) == s;
 
 /// Content lines with folds joined: a line starting with a space or tab continues the previous one (the first
 /// character is dropped). Any of CRLF, LF, CR ends a line; a leading BOM is dropped.
@@ -529,7 +527,7 @@ class _Rule {
 }
 
 /// [cents] as euros the way [amountFromText] reads them back: `80,00 €`, `1.250,50 €`.
-String euroText(int cents) {
+String _euroText(int cents) {
   final abs = cents.abs();
   final whole = (abs ~/ 100).toString();
   final grouped = StringBuffer();
@@ -570,17 +568,17 @@ String _compact(String iso) => iso.replaceAll('-', '');
 /// amount that is open or paid (not skipped, not deleted, not a bill's row whose covering recurring occurrence, [plannedCoverage], is in range
 /// too or is the cycle just paid or skipped)
 /// and per occurrence of a confirmed bill ([billOccurrences]),
-/// dated in [from, to]. `SUMMARY` = `<title> · <amount>` ([euroText], so [amountFromText] reads the amount back),
+/// dated in [from, to]. `SUMMARY` = `<title> · <amount>` ([_euroText], so [amountFromText] reads the amount back),
 /// stable UIDs (`planned-<id>@budget-wallet`, `bill-<id>-<yyyymmdd>@budget-wallet`), `DTSTAMP` from [from] so the same
 /// data gives the same text. CRLF, folded at 75 octets, text escaped.
 String plannedIcs(List<PlannedCost> planned, List<RecurringBill> bills, {required String from, required String to}) {
   final rows = <(String uid, String date, String title, int amount)>[];
-  if (_validIso(from) && _validIso(to) && from.compareTo(to) <= 0) {
+  if (isIsoDate(from) && isIsoDate(to) && from.compareTo(to) <= 0) {
     bool inRange(String d) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
     for (final p in planned) {
       if (p.deleted || p.status == PlannedStatus.skipped || p.amount == null) continue;
       if (plannedCoverage(p, bills) case final c? when c.occurrence == null || inRange(c.occurrence!)) continue;
-      if (p.date.compareTo(from) < 0 || p.date.compareTo(to) > 0 || !_validIso(p.date)) continue;
+      if (p.date.compareTo(from) < 0 || p.date.compareTo(to) > 0 || !isIsoDate(p.date)) continue;
       rows.add(('planned-${p.id}@budget-wallet', p.date, p.title, p.amount!));
     }
     for (final b in bills) {
@@ -598,7 +596,7 @@ String plannedIcs(List<PlannedCost> planned, List<RecurringBill> bills, {require
   for (final l in ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Budget Wallet//Planned costs//EN', 'CALSCALE:GREGORIAN']) {
     _writeFolded(sb, l);
   }
-  final stamp = '${_validIso(from) ? _compact(from) : '19700101'}T000000Z';
+  final stamp = '${isIsoDate(from) ? _compact(from) : '19700101'}T000000Z';
   for (final (uid, date, title, amount) in rows) {
     for (final l in [
       'BEGIN:VEVENT',
@@ -606,7 +604,7 @@ String plannedIcs(List<PlannedCost> planned, List<RecurringBill> bills, {require
       'DTSTAMP:$stamp',
       'DTSTART;VALUE=DATE:${_compact(date)}',
       'DTEND;VALUE=DATE:${_compact(addDays(date, 1))}',
-      'SUMMARY:${_escape(title.isEmpty ? euroText(amount) : '$title · ${euroText(amount)}')}',
+      'SUMMARY:${_escape(title.isEmpty ? _euroText(amount) : '$title · ${_euroText(amount)}')}',
       'TRANSP:TRANSPARENT',
       'END:VEVENT',
     ]) {

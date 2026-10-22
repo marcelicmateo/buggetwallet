@@ -37,11 +37,11 @@ final _allCategories = categories.keys.toList();
       final kind = kindOf(c);
       final mag = 1 + r.nextInt(20000);
       final sign = switch (kind) {
-        Kind.income || Kind.extra => 1,
-        Kind.transfer => r.nextBool() ? 1 : -1,
+        BudgetKind.income || BudgetKind.extra => 1,
+        BudgetKind.transfer => r.nextBool() ? 1 : -1,
         _ => r.nextInt(12) == 0 ? 1 : -1, // refunds now and then
       };
-      if (kind == Kind.income && r.nextInt(3) != 0) continue; // salary mostly comes from the monthly parts above
+      if (kind == BudgetKind.income && r.nextInt(3) != 0) continue; // salary mostly comes from the monthly parts above
       txs.add(ct(d, sign * mag, c, deleted: deleted(), matchedTo: matched()));
     }
   }
@@ -80,7 +80,7 @@ void main() {
         final why = 'seed $seed today $today paydayDay ${st.paydayDay} periodStart ${st.periodStart}';
         final ps = periodSummaries(w.txs, st, today, count: 10000);
 
-        final hasSalary = w.txs.any((t) => t.tx.live && t.kind == Kind.income && t.amount > 0 && t.date.compareTo(today) <= 0);
+        final hasSalary = w.txs.any((t) => t.tx.live && t.kind == BudgetKind.income && t.amount > 0 && t.date.compareTo(today) <= 0);
         final hasStart = st.periodStart != null && st.periodStart!.compareTo(today) <= 0;
         expect(ps.isEmpty, !(hasSalary || hasStart), reason: why);
         if (ps.isEmpty) continue;
@@ -107,8 +107,8 @@ void main() {
           final byCat = <String, int>{};
           for (final t in w.txs) {
             if (!t.tx.live || !_in(t.date, p.start, lastDay)) continue;
-            if (t.kind == Kind.income || t.kind == Kind.extra) inc += t.amount;
-            if (t.kind == Kind.fixed || t.kind == Kind.flex) {
+            if (t.kind == BudgetKind.income || t.kind == BudgetKind.extra) inc += t.amount;
+            if (t.kind == BudgetKind.fixed || t.kind == BudgetKind.flex) {
               out -= t.amount;
               byCat[t.category] = (byCat[t.category] ?? 0) - t.amount;
             }
@@ -121,14 +121,14 @@ void main() {
         // Totals over the whole range [first start, today]: every row in exactly one period.
         var wantIn = 0, wantOut = 0;
         for (final t in w.txs.where((t) => t.tx.live && _in(t.date, ps.first.start, today))) {
-          if (t.kind == Kind.income || t.kind == Kind.extra) wantIn += t.amount;
-          if (t.kind == Kind.fixed || t.kind == Kind.flex) wantOut -= t.amount;
+          if (t.kind == BudgetKind.income || t.kind == BudgetKind.extra) wantIn += t.amount;
+          if (t.kind == BudgetKind.fixed || t.kind == BudgetKind.flex) wantOut -= t.amount;
         }
         expect((totalIn, totalOut), (wantIn, wantOut), reason: why);
         expect(ps.fold<int>(0, (s, p) => s + p.net), wantIn - wantOut, reason: why);
 
         // Transfers never change anything; input order never matters.
-        final noTransfers = w.txs.where((t) => t.kind != Kind.transfer).toList();
+        final noTransfers = w.txs.where((t) => t.kind != BudgetKind.transfer).toList();
         final shuffled = [...w.txs]..shuffle(r);
         final extraTransfers = [
           ...w.txs,
@@ -186,12 +186,12 @@ void main() {
         // Brute force over live rows in [start, today].
         final live = w.txs.where((t) => t.tx.live && _in(t.date, p.start, today)).toList();
         int sum(Iterable<CategorizedTx> xs) => xs.fold(0, (s, t) => s + t.amount);
-        expect(p.spent, -sum(live.where((t) => t.kind == Kind.flex)), reason: why);
-        expect(p.spentToday, -sum(live.where((t) => t.kind == Kind.flex && t.date == today)), reason: why);
-        expect(p.received, sum(live.where((t) => t.kind == Kind.income)), reason: why);
-        expect(p.extras, sum(live.where((t) => t.kind == Kind.extra)), reason: why);
+        expect(p.spent, -sum(live.where((t) => t.kind == BudgetKind.flex)), reason: why);
+        expect(p.spentToday, -sum(live.where((t) => t.kind == BudgetKind.flex && t.date == today)), reason: why);
+        expect(p.received, sum(live.where((t) => t.kind == BudgetKind.income)), reason: why);
+        expect(p.extras, sum(live.where((t) => t.kind == BudgetKind.extra)), reason: why);
         final fixed = <String, int>{};
-        for (final t in live.where((t) => t.kind == Kind.fixed)) {
+        for (final t in live.where((t) => t.kind == BudgetKind.fixed)) {
           fixed[t.category] = (fixed[t.category] ?? 0) - t.amount;
         }
         expect(p.fixedPaid, fixed, reason: why);

@@ -734,27 +734,9 @@ void main() {
       expect(p.flexBudget, base.flexBudget);
     });
 
-    test('billReminders: defaults come from settings (3 and 14)', () {
+    test('reminder lead times: defaults come from settings (3 and 14)', () {
       const s = WalletSettings();
       expect((s.returnReminderDays, s.warrantyReminderDays), (3, 14));
-    });
-
-    test('billReminders: kind, date, daysLeft; past, review and deleted ones are left out', () {
-      final rs = billReminders([warranty, returns, review, deleted], '2026-03-03', returnDays: 3, warrantyDays: 30);
-      final byKey = {for (final r in rs) '${r.kind.name}:${r.bill.id}': r};
-      expect(
-          byKey.keys.toSet(), {'returnBy:${warranty.id}', 'warranty:${warranty.id}', 'returnBy:${returns.id}', 'warranty:${returns.id}'});
-      final r = byKey['returnBy:${warranty.id}']!;
-      expect((r.date, r.daysLeft), ('2026-03-05', 2));
-      expect(byKey['warranty:${warranty.id}']!.daysLeft, 17);
-      final past = billReminders([warranty], '2026-03-06', returnDays: 3, warrantyDays: 30);
-      expect(past.map((r) => r.kind), [UpcomingKind.warranty], reason: 'the return window is over');
-      expect(billReminders([warranty], '2026-03-21', returnDays: 3, warrantyDays: 30), isEmpty);
-    });
-
-    test('billReminders: exactly the lead time away is included, daysLeft = days', () {
-      final rs = billReminders([warranty], '2026-03-02', returnDays: 3, warrantyDays: 0);
-      expect(rs.where((r) => r.kind == UpcomingKind.returnBy).single.daysLeft, 3);
     });
   });
 

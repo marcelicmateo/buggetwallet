@@ -44,13 +44,13 @@ extension WalletRepoBlobs on WalletRepo {
   List<String> queuedBlobs() => [for (final r in db.select('SELECT hash FROM blob_outbox ORDER BY hash')) r['hash'] as String];
 
   /// [hash] is on the relay: no longer queued (it stays cached).
-  void blobUploaded(String hash) => db.execute('DELETE FROM blob_outbox WHERE hash = ?', [hash]);
+  void markBlobUploaded(String hash) => db.execute('DELETE FROM blob_outbox WHERE hash = ?', [hash]);
 
   /// Files to delete on the relay, in hash order.
   List<String> blobDeletes() => [for (final r in db.select('SELECT hash FROM blob_delete ORDER BY hash')) r['hash'] as String];
 
   /// [hash] was deleted on the relay.
-  void blobDeleteDone(String hash) => db.execute('DELETE FROM blob_delete WHERE hash = ?', [hash]);
+  void markBlobDeleted(String hash) => db.execute('DELETE FROM blob_delete WHERE hash = ?', [hash]);
 
   /// A file no live bill uses any more: one still queued is simply forgotten (never uploaded), one already uploaded is
   /// queued for deletion on the relay; the cached copy goes either way. Kept while a live bill points to it.

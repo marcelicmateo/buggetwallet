@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:test/test.dart';
+import 'package:wallet_importer/src/ids.dart' show fnv1a36, formatCents;
 import 'package:wallet_importer/wallet_importer.dart';
 
 const _hdr = 'Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance';

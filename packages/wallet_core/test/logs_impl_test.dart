@@ -149,8 +149,8 @@ void main() {
 
     test('FINE prints as DEBUG; non-JSON field values print as text', () {
       final lines = _captureAll();
-      logEvent(Logger('bw.t'), Level.FINE, 'e', {'d': DateTime.utc(2026, 1, 2), 'k': Kind.flex});
-      expect(lines.single, endsWith(' DEBUG bw.t e {"d":"2026-01-02T00:00:00.000Z","k":"Kind.flex"}'));
+      logEvent(Logger('bw.t'), Level.FINE, 'e', {'d': DateTime.utc(2026, 1, 2), 'k': BudgetKind.flex});
+      expect(lines.single, endsWith(' DEBUG bw.t e {"d":"2026-01-02T00:00:00.000Z","k":"BudgetKind.flex"}'));
     });
   });
 
@@ -197,7 +197,7 @@ void main() {
           ['Shopping', '(unclosed LIDL'],
         ]
       });
-      repo.addManual(date: '2026-01-17', amount: 2340, category: 'Groceries', note: 'Lunch note');
+      repo.addTransaction(date: '2026-01-17', amount: 2340, category: 'Groceries', note: 'Lunch note');
       final s = repo.importBatch(january);
       expect(s.added, january.transactions.length);
       repo.saveGoal(name: 'Laptop fund', target: 150000, saved: 2340, monthly: 2340);

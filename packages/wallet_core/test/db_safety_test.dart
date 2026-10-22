@@ -48,7 +48,7 @@ void main() {
       var t = 1767225600000;
       var r = WalletRepo.open(path, now: () => t);
       r.importBatch(january);
-      r.addManual(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
+      r.addTransaction(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
       r.updateSettings({'salary': 150000, 'paydayDay': 12});
       r.saveGoal(name: 'Synthetic fund', target: 100000, saved: 0, monthly: 5000, sort: 1);
       r.addWish('Synthetic thing', 9000);
@@ -169,7 +169,7 @@ void main() {
   group('rollback', () {
     test('an import that fails halfway writes nothing (rows, matches, outbox, clocks, stored clock)', () {
       final r = WalletRepo.inMemory();
-      r.addManual(date: '2026-01-17', amount: 2340, category: 'Eating out');
+      r.addTransaction(date: '2026-01-17', amount: 2340, category: 'Eating out');
       final before = (dump(r), bookkeeping(r), r.db.select("SELECT value FROM meta WHERE key = 'hlc'").first['value']);
       r.db.execute(
           "CREATE TEMP TRIGGER boom BEFORE UPDATE ON tx WHEN NEW.description = 'Synthetic boom' BEGIN SELECT RAISE(ABORT, 'boom'); END");

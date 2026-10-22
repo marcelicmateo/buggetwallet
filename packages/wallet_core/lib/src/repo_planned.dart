@@ -8,7 +8,7 @@ extension WalletRepoPlanned on WalletRepo {
       sourceRef != null && sourceRef.isNotEmpty ? '${source.name}:$sourceRef' : _newId('p');
 
   static void _checkPlanned({String? date, int? amount}) {
-    if (date != null && !(_isoDate.hasMatch(date) && isoDate(parseIso(date)) == date)) throw ArgumentError('Bad date.');
+    if (date != null && !isIsoDate(date)) throw ArgumentError('Bad date.');
     if (amount != null && (amount <= 0 || amount > WalletSettings.maxAmount)) throw ArgumentError('Bad amount.');
   }
 

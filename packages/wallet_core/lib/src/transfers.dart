@@ -5,7 +5,6 @@ import 'logs.dart';
 import 'models.dart';
 
 final _log = Logger('bw.transfers');
-final _iso = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 
 /// Days the two sides of a transfer between the owner's own accounts may be booked apart (inclusive, either way in
 /// time): an outflow on the 10th pairs with an inflow from the 7th to the 13th.
@@ -48,7 +47,7 @@ List<Tx> openTransfers(List<Tx> rows) {
   final byId = {for (final t in rows) t.id: t};
   return [
     for (final t in rows)
-      if (!t.manual && !t.deleted && t.amount != 0 && _iso.hasMatch(t.date) && !_linked(t, byId)) t
+      if (!t.manual && !t.deleted && t.amount != 0 && isIsoDate(t.date) && !_linked(t, byId)) t
   ];
 }
 

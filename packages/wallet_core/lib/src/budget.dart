@@ -101,10 +101,10 @@ List<PlannedCost> duePlanned(List<PlannedCost> planned, String today, String end
 /// (`WalletRepo.plannedCosts()`): the open ones with an amount dated from today to the day before payday
 /// ([duePlanned]) are reserved the same way ([PeriodBudget.reservedPlanned]), except those in fixed categories
 /// ([PlannedCost.coveredByPlan], like bills), a bill's row that a confirmed recurring bill in [bills] already plans
-/// in this period ([plannedCoverage], B5a/B6: listed, not added; B6: only when that bill's covering occurrence is the
+/// in this period ([plannedCoverage], BILLS_API.md §3: listed, not added; only when that bill's covering occurrence is the
 /// one [dueBills] lists here, the cycle just paid or skipped, or the bill is `coveredByPlan` — a slip due before
 /// payday whose recurring cycle falls after it is reserved here) and a bill's row without a category
-/// ([PlannedCost.needsCategory], B6: listed, not added; the owner is asked for the category). The rule is
+/// ([PlannedCost.needsCategory]: listed, not added; the owner is asked for the category). The rule is
 /// [plannedReserves]; the rows it accepts are [PeriodBudget.reservedPlannedRows]. Without planned costs every number is as before.
 PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today,
     {List<RecurringBill> bills = const [], List<PlannedCost> planned = const []}) {
@@ -113,8 +113,8 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final length = daysBetween(start, end).clamp(1, 1000);
   final daysLeft = daysBetween(today, end).clamp(1, 1000);
   final inPeriod = txs.where((t) => t.date.compareTo(start) >= 0 && t.date.compareTo(today) <= 0 && t.tx.live).toList();
-  final received = _sum(inPeriod.where((t) => t.kind == Kind.income));
-  final extras = _sum(inPeriod.where((t) => t.kind == Kind.extra));
+  final received = _sum(inPeriod.where((t) => t.kind == BudgetKind.income));
+  final extras = _sum(inPeriod.where((t) => t.kind == BudgetKind.extra));
   final income = st.incomeMode == 'received' && received > 0 ? received : st.salary;
   final goalMonthly = goals.fold<int>(0, (s, g) => s + g.monthly);
   final fixedPlan = st.rent + st.loan + st.subs;
@@ -128,13 +128,13 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   ];
   final reservedPlanned = reservedRows.fold<int>(0, (s, p) => s + p.amount!);
   final flexBudget = income - fixedPlan - goalMonthly - reservedBills - reservedPlanned;
-  final flex = inPeriod.where((t) => t.kind == Kind.flex);
+  final flex = inPeriod.where((t) => t.kind == BudgetKind.flex);
   final spent = -_sum(flex);
   final spentToday = -_sum(flex.where((t) => t.date == today));
   final allowanceToday = ((flexBudget - (spent - spentToday)) / daysLeft).round();
   final elapsed = ((daysBetween(start, today) + 1) / length).clamp(0.0, 1.0);
   final fixedPaid = <String, int>{};
-  for (final t in inPeriod.where((t) => t.kind == Kind.fixed)) {
+  for (final t in inPeriod.where((t) => t.kind == BudgetKind.fixed)) {
     fixedPaid[t.category] = (fixedPaid[t.category] ?? 0) - t.amount;
   }
   // Dates and counts only, never amounts.
@@ -195,12 +195,12 @@ MonthSummary monthSummary(List<CategorizedTx> txs, String month) {
   for (final t in txs) {
     if (!t.tx.live || monthOf(t.date) != month) continue;
     switch (t.kind) {
-      case Kind.income || Kind.extra:
+      case BudgetKind.income || BudgetKind.extra:
         income += t.amount;
-      case Kind.fixed || Kind.flex:
+      case BudgetKind.fixed || BudgetKind.flex:
         out -= t.amount;
         byCat[t.category] = (byCat[t.category] ?? 0) - t.amount;
-      case Kind.transfer:
+      case BudgetKind.transfer:
         break;
     }
   }
@@ -213,7 +213,7 @@ Map<String, int> _outByCategory(List<CategorizedTx> txs, Set<String> months) {
   final out = <String, int>{};
   for (final t in txs) {
     if (!t.tx.live || !months.contains(monthOf(t.date))) continue;
-    if (t.kind == Kind.fixed || t.kind == Kind.flex) out[t.category] = (out[t.category] ?? 0) - t.amount;
+    if (t.kind == BudgetKind.fixed || t.kind == BudgetKind.flex) out[t.category] = (out[t.category] ?? 0) - t.amount;
   }
   return out;
 }
@@ -378,7 +378,7 @@ ReviewState reviewState(List<CategorizedTx> txs, WalletSettings st, List<WishIte
   var automatic = 0;
   for (final t in txs) {
     if (!t.tx.live || t.date.compareTo(since) <= 0 || t.date.compareTo(today) > 0) continue;
-    if (t.kind != Kind.fixed && t.kind != Kind.flex) continue;
+    if (t.kind != BudgetKind.fixed && t.kind != BudgetKind.flex) continue;
     final own = t.tx.category;
     if (own == null || !categories.containsKey(own)) automatic++; // no override, or one this build does not know
   }

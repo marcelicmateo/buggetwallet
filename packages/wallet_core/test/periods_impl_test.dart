@@ -8,15 +8,15 @@ import 'support/synthetic.dart';
 var _seq = 0;
 
 /// A categorized transaction with an explicit kind.
-CategorizedTx tx(String date, int cents, Kind kind, {String? category, bool deleted = false}) => CategorizedTx(
+CategorizedTx tx(String date, int cents, BudgetKind kind, {String? category, bool deleted = false}) => CategorizedTx(
       Tx(id: 't${_seq++}', source: 'pbz', date: date, amount: cents, deleted: deleted),
       category ??
           switch (kind) {
-            Kind.income => 'Salary',
-            Kind.extra => 'Extra income',
-            Kind.fixed => 'Rent',
-            Kind.flex => 'Groceries',
-            Kind.transfer => 'Internal transfer'
+            BudgetKind.income => 'Salary',
+            BudgetKind.extra => 'Extra income',
+            BudgetKind.fixed => 'Rent',
+            BudgetKind.flex => 'Groceries',
+            BudgetKind.transfer => 'Internal transfer'
           },
       kind,
     );
@@ -35,31 +35,31 @@ void main() {
   group('paydays', () {
     test('salary parts within 20 days are one payday', () {
       final txs = [
-        tx('2026-01-10', 50000, Kind.income),
-        tx('2026-01-14', 40000, Kind.income),
-        tx('2026-01-30', 10000, Kind.income), // 20 days after the 10th: same payday
-        tx('2026-02-11', 90000, Kind.income),
+        tx('2026-01-10', 50000, BudgetKind.income),
+        tx('2026-01-14', 40000, BudgetKind.income),
+        tx('2026-01-30', 10000, BudgetKind.income), // 20 days after the 10th: same payday
+        tx('2026-02-11', 90000, BudgetKind.income),
       ];
       expect(detectPaydays(txs, st, '2026-02-20'), ['2026-01-10', '2026-02-11']);
     });
 
     test('ignores deleted salary, future salary and transfers', () {
       final txs = [
-        tx('2026-01-12', 90000, Kind.income),
-        tx('2026-02-12', 90000, Kind.income, deleted: true),
-        tx('2026-02-13', 90000, Kind.transfer),
-        tx('2026-03-12', 90000, Kind.income), // after today
+        tx('2026-01-12', 90000, BudgetKind.income),
+        tx('2026-02-12', 90000, BudgetKind.income, deleted: true),
+        tx('2026-02-13', 90000, BudgetKind.transfer),
+        tx('2026-03-12', 90000, BudgetKind.income), // after today
       ];
       expect(detectPaydays(txs, st, '2026-03-01'), ['2026-01-12', '2026-02-15']);
     });
 
     test('missing salary: paydays assumed on paydayDay until the next real one', () {
-      final txs = [tx('2026-01-12', 90000, Kind.income), tx('2026-04-13', 90000, Kind.income)];
+      final txs = [tx('2026-01-12', 90000, BudgetKind.income), tx('2026-04-13', 90000, BudgetKind.income)];
       expect(detectPaydays(txs, st, '2026-04-20'), ['2026-01-12', '2026-02-15', '2026-03-15', '2026-04-13']);
     });
 
     test('missing salary at the end: assumed until today, clamped to month end', () {
-      final txs = [tx('2026-01-12', 90000, Kind.income)];
+      final txs = [tx('2026-01-12', 90000, BudgetKind.income)];
       expect(detectPaydays(txs, const WalletSettings(paydayDay: 31), '2026-03-31'), ['2026-01-12', '2026-02-28', '2026-03-31']);
       // 45 days or fewer: nothing assumed yet
       expect(detectPaydays(txs, st, '2026-02-26'), ['2026-01-12']);
@@ -67,7 +67,7 @@ void main() {
     });
 
     test('hand-set period start counts when more than 20 days after the last payday', () {
-      final txs = [tx('2026-01-12', 90000, Kind.income)];
+      final txs = [tx('2026-01-12', 90000, BudgetKind.income)];
       expect(detectPaydays(txs, const WalletSettings(periodStart: '2026-02-10'), '2026-02-20'), ['2026-01-12', '2026-02-10']);
       expect(detectPaydays(txs, const WalletSettings(periodStart: '2026-01-25'), '2026-02-20'), ['2026-01-12']);
       expect(detectPaydays(txs, const WalletSettings(periodStart: '2026-02-25'), '2026-02-20'), ['2026-01-12']); // after today
@@ -77,22 +77,22 @@ void main() {
 
   group('periodSummaries', () {
     test('no paydays and no period start: empty', () {
-      expect(periodSummaries([tx('2026-01-05', -1000, Kind.flex)], st, '2026-01-20'), isEmpty);
+      expect(periodSummaries([tx('2026-01-05', -1000, BudgetKind.flex)], st, '2026-01-20'), isEmpty);
     });
 
     test('sums per period, running last, transfers and later rows ignored', () {
       final txs = [
-        tx('2026-01-05', -999, Kind.flex), // before the first payday
-        tx('2026-01-12', 100000, Kind.income),
-        tx('2026-01-13', -40000, Kind.fixed, category: 'Rent'),
-        tx('2026-01-20', -2500, Kind.flex, category: 'Groceries'),
-        tx('2026-01-21', 500, Kind.flex, category: 'Groceries'), // refund
-        tx('2026-01-22', -20000, Kind.transfer),
-        tx('2026-02-01', 3000, Kind.extra),
-        tx('2026-02-11', 100000, Kind.income),
-        tx('2026-02-12', -150000, Kind.flex, category: 'Shopping'),
-        tx('2026-02-12', -7777, Kind.flex, deleted: true),
-        tx('2026-02-25', -1000, Kind.flex), // after today
+        tx('2026-01-05', -999, BudgetKind.flex), // before the first payday
+        tx('2026-01-12', 100000, BudgetKind.income),
+        tx('2026-01-13', -40000, BudgetKind.fixed, category: 'Rent'),
+        tx('2026-01-20', -2500, BudgetKind.flex, category: 'Groceries'),
+        tx('2026-01-21', 500, BudgetKind.flex, category: 'Groceries'), // refund
+        tx('2026-01-22', -20000, BudgetKind.transfer),
+        tx('2026-02-01', 3000, BudgetKind.extra),
+        tx('2026-02-11', 100000, BudgetKind.income),
+        tx('2026-02-12', -150000, BudgetKind.flex, category: 'Shopping'),
+        tx('2026-02-12', -7777, BudgetKind.flex, deleted: true),
+        tx('2026-02-25', -1000, BudgetKind.flex), // after today
       ];
       final ps = periodSummaries(txs, st, '2026-02-20');
       expect(ps.length, 2);
@@ -107,13 +107,13 @@ void main() {
     });
 
     test('savings rate is null without income', () {
-      final ps = periodSummaries([tx('2026-01-15', -1000, Kind.flex)], const WalletSettings(periodStart: '2026-01-10'), '2026-01-20');
+      final ps = periodSummaries([tx('2026-01-15', -1000, BudgetKind.flex)], const WalletSettings(periodStart: '2026-01-10'), '2026-01-20');
       expect(ps.single.income, 0);
       expect(ps.single.savingsRate, isNull);
     });
 
     test('keeps the last [count] periods', () {
-      final txs = [for (var m = 1; m <= 9; m++) tx('2026-0$m-12', 100000, Kind.income)];
+      final txs = [for (var m = 1; m <= 9; m++) tx('2026-0$m-12', 100000, BudgetKind.income)];
       final ps = periodSummaries(txs, st, '2026-09-20', count: 4);
       expect(ps.map((p) => p.start), ['2026-06-12', '2026-07-12', '2026-08-12', '2026-09-12']);
       expect(ps.last.running, isTrue);
@@ -157,28 +157,28 @@ void main() {
   group('salaryPaydays', () {
     test('a payday is its first salary part, even when later parts arrive days after', () {
       final txs = [
-        tx('2026-09-10', 100000, Kind.income),
-        tx('2026-09-13', 40000, Kind.income),
-        tx('2026-10-10', 100000, Kind.income),
-        tx('2026-10-13', 40000, Kind.income),
-        tx('2026-10-14', -5000, Kind.flex),
-        tx('2026-10-15', 2000, Kind.extra),
+        tx('2026-09-10', 100000, BudgetKind.income),
+        tx('2026-09-13', 40000, BudgetKind.income),
+        tx('2026-10-10', 100000, BudgetKind.income),
+        tx('2026-10-13', 40000, BudgetKind.income),
+        tx('2026-10-14', -5000, BudgetKind.flex),
+        tx('2026-10-15', 2000, BudgetKind.extra),
       ];
       expect(salaryPaydays(txs, '2026-10-16'), ['2026-09-10', '2026-10-10']);
     });
 
     test('ignores deleted salary, salary after today, and refunds', () {
       final txs = [
-        tx('2026-09-10', 100000, Kind.income),
-        tx('2026-10-10', 100000, Kind.income, deleted: true),
-        tx('2026-10-12', -100, Kind.income),
-        tx('2026-11-10', 100000, Kind.income),
+        tx('2026-09-10', 100000, BudgetKind.income),
+        tx('2026-10-10', 100000, BudgetKind.income, deleted: true),
+        tx('2026-10-12', -100, BudgetKind.income),
+        tx('2026-11-10', 100000, BudgetKind.income),
       ];
       expect(salaryPaydays(txs, '2026-10-16'), ['2026-09-10']);
     });
 
     test('no salary: empty', () {
-      expect(salaryPaydays([tx('2026-10-01', -500, Kind.flex)], '2026-10-16'), isEmpty);
+      expect(salaryPaydays([tx('2026-10-01', -500, BudgetKind.flex)], '2026-10-16'), isEmpty);
     });
   });
 }

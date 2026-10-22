@@ -5,6 +5,7 @@ import 'package:xml/xml.dart';
 import '../log.dart';
 import 'common.dart';
 import 'model.dart';
+import 'read_result.dart';
 
 const _invoiceNs = 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2';
 const _creditNs = 'urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2';
@@ -21,7 +22,10 @@ const maxEInvoiceItems = 2000;
 ///
 /// `externalId` is `inv:<supplier VAT/company id, else IBAN>:<invoice number>` when both are present.
 /// An account that fails the IBAN checksum is dropped (`unsure` + 1); a line whose amount is not exact cents is dropped.
-NormalizedBill? readEInvoice(String xml) {
+NormalizedBill? readEInvoice(String xml) => readEInvoiceResult(xml).value;
+
+/// [readEInvoice] with the reason when there is no bill.
+ReadResult<NormalizedBill> readEInvoiceResult(String xml) {
   final fields = <String, Object?>{'chars': xml.length};
   NormalizedBill? bill;
   try {
@@ -31,7 +35,13 @@ NormalizedBill? readEInvoice(String xml) {
   }
   fields['ok'] = bill != null;
   logImporter(billsLog, bill == null ? Level.INFO : Level.FINE, 'bills.invoice', fields);
-  return bill;
+  if (bill != null) return ReadResult.ok(bill);
+  return ReadResult.failed(switch (fields['reason']) {
+    'tooBig' => ReadFailure.tooBig,
+    'creditNote' || 'notInvoice' => ReadFailure.notRecognized,
+    'empty' => ReadFailure.nothingFound,
+    _ => ReadFailure.malformed, // 'doctype', 'malformed'
+  });
 }
 
 NormalizedBill? _read(String xml, Map<String, Object?> log) {
