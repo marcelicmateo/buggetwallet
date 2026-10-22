@@ -49,17 +49,22 @@ class SearchResult {
   final List<Goal> goals;
   final List<WishItem> wishlist;
   final List<RecurringBill> bills;
-  const SearchResult({this.txs = const [], this.goals = const [], this.wishlist = const [], this.bills = const []});
+
+  /// Planned costs (§4.3), in input order.
+  final List<PlannedCost> planned;
+  const SearchResult(
+      {this.txs = const [], this.goals = const [], this.wishlist = const [], this.bills = const [], this.planned = const []});
 
   static const empty = SearchResult();
 
-  bool get isEmpty => txs.isEmpty && goals.isEmpty && wishlist.isEmpty && bills.isEmpty;
+  bool get isEmpty => txs.isEmpty && goals.isEmpty && wishlist.isEmpty && bills.isEmpty && planned.isEmpty;
 }
 
 /// Everything matching [query]: a case- and accent-insensitive substring ([foldText]) of a transaction's description,
 /// note or category, a goal's name, a wish's name, a bill's label or category; or, when the query is an amount
 /// ([parseAmountQuery]), a transaction whose `amount.abs()` is that many cents, a goal with that target or saved total,
-/// a wish with that price, a bill with that expected amount. A query that is both matches either way. Deleted and
+/// a wish with that price, a bill with that expected amount; a planned cost by title or category, or its exact amount
+/// (deleted ones never). A query that is both matches either way. Deleted and
 /// replaced transactions are never found. Blank query → [SearchResult.empty]. Transactions come newest first (date,
 /// then id, descending), capped at [searchTxLimit]; the other lists keep their input order.
 SearchResult searchAll(
@@ -68,6 +73,7 @@ SearchResult searchAll(
   required List<Goal> goals,
   required List<WishItem> wishlist,
   required List<RecurringBill> bills,
+  List<PlannedCost> planned = const [],
 }) {
   final q = foldText(query.trim());
   if (q.isEmpty) return SearchResult.empty;
@@ -95,6 +101,10 @@ SearchResult searchAll(
     bills: [
       for (final b in bills)
         if (text(b.label) || text(b.category) || amount(b.expectedAmount)) b
+    ],
+    planned: [
+      for (final p in planned)
+        if (!p.deleted && (text(p.title) || text(p.category) || (p.amount != null && amount(p.amount!)))) p
     ],
   );
 }
