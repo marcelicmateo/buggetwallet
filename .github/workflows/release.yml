@@ -38,6 +38,7 @@ jobs:
           BW_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BW_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BW_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          BW_APK_ABIS: arm64
         run: |
           set -o pipefail
           if [ -z "$KEYSTORE_B64" ]; then echo "::error::ANDROID_KEYSTORE_BASE64 secret missing (run tools/make-signing-key.sh --upload)" | tee -a build.log; exit 1; fi
@@ -45,7 +46,7 @@ jobs:
           export BW_KEYSTORE="$RUNNER_TEMP/release.jks"
           cd app
           flutter pub get 2>&1 | tee -a ../build.log
-          flutter build apk --release --target-platform android-arm64,android-x64 2>&1 | tail -40 | tee -a ../build.log
+          flutter build apk --release --target-platform android-arm64 2>&1 | tail -40 | tee -a ../build.log
           flutter build linux --release 2>&1 | tail -40 | tee -a ../build.log
           mkdir -p ../dist
           cp build/app/outputs/flutter-apk/app-release.apk ../dist/BudgetWallet-android.apk

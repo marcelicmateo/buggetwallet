@@ -147,7 +147,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     -v bw-gradle-cache:/cache/gradle \
     -v bw-android-user:/cache/android \
     "${signing[@]}" "${run[@]}" \
-    -e BW_NATIVE=1 -e BW_JOBS -e BW_GL_THREADS \
+    -e BW_NATIVE=1 -e BW_JOBS -e BW_GL_THREADS -e BW_APK_ABIS \
     -w /work "$IMAGE" "${inner[@]}" || rc=$?
   exit "$rc"
 fi
@@ -301,7 +301,9 @@ build_apk() {
     results+=("apk=FAILED"); failed=1; return
   fi
   local cold=false; [[ -d app/build/app ]] || cold=true
-  step apk 'cd app && flutter build apk --release --target-platform android-arm64,android-x64 && cp build/app/outputs/flutter-apk/app-release.apk ../dist/BudgetWallet-android.apk' "$cold"
+  # BW_APK_ABIS=arm64: phone-only APK (what CI publishes); default also has x86_64 for tools/emulator.sh install
+  local apk_abis=android-arm64,android-x64; [[ ${BW_APK_ABIS:-} == arm64 ]] && apk_abis=android-arm64
+  step apk "cd app && flutter build apk --release --target-platform $apk_abis && cp build/app/outputs/flutter-apk/app-release.apk ../dist/BudgetWallet-android.apk" "$cold"
   [[ $failed == 0 ]] && step apk-signature check_signature
 }
 # The APK must carry the release key's certificate, or Android refuses it as an update.
