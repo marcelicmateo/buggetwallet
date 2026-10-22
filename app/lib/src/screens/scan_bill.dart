@@ -1,35 +1,22 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:wallet_core/wallet_core.dart';
 
 import '../bill_inputs.dart';
 import '../controller.dart';
 import '../file_chooser.dart';
 import '../layout.dart';
 import '../logging.dart';
-import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/sheets.dart';
 import 'bill_sheet.dart';
 
 /// Add expense › Scan bill, or Plan › Bills › Scan bill: opens the camera and then the sheet of the bill that was read (or says
 /// it was already in the bills).
 Future<void> scanBillFlow(BuildContext context, WalletController wc, {FileChooser chooser = const FileChooser()}) async {
   logNav('scan.open');
-  final screen = ScanBillScreen(wc: wc);
-  final BillImport? r;
-  if (MediaQuery.sizeOf(context).width >= dialogMin) {
-    r = await showDialog<BillImport>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.all(24),
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(width: 520, height: (MediaQuery.sizeOf(ctx).height - 48).clamp(300.0, 760.0), child: screen),
-      ),
-    );
-  } else {
-    r = await Navigator.of(context).push<BillImport>(MaterialPageRoute(fullscreenDialog: true, builder: (_) => screen));
-  }
+  final r = await openPageOrDialog<BillImport>(context, ScanBillScreen(wc: wc), width: 520);
   if (r == null || !context.mounted) return;
   if (r.kind == BillImportKind.added && r.billId != null) {
     await openBill(context, wc, r.billId!, chooser: chooser);
@@ -82,13 +69,10 @@ class _ScanBillScreenState extends State<ScanBillScreen> {
     try {
       bytes = await widget.wc.billInputs.camera.takePhoto();
     } on BillPhotoException catch (e) {
-      failed = e.code == 'permission'
-          ? 'The camera is off for this app. Allow it in Android settings, or import a bill file.'
-          : e.code == 'tooBig'
-              ? billTooBigMessage
-              : "Couldn't take the photo. Try again, or import a file.";
-    } catch (_) {
-      failed = "Couldn't take the photo. Try again, or import a file.";
+      failed = photoFailureMessage(e.code);
+    } catch (e, st) {
+      logError(Logger('bw.bills'), 'scan.photoFailed', e, st, fields: {'type': e.runtimeType.toString()});
+      failed = photoFailedMessage;
     }
     logNav('scan.photoDone', {'result': failed != null ? 'failed' : (bytes == null ? 'cancelled' : 'ok')});
     if (!mounted) return;
@@ -114,13 +98,8 @@ class _ScanBillScreenState extends State<ScanBillScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.c;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Scan bill'),
-        leading: IconButton(icon: const Icon(Icons.close), tooltip: 'Close', onPressed: () => Navigator.pop(context)),
-        bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: Container(height: 2, color: c.lineStrong)),
-      ),
+      appBar: const DialogAppBar(title: 'Scan bill'),
       body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Expanded(
           child: Stack(children: [
@@ -137,7 +116,7 @@ class _ScanBillScreenState extends State<ScanBillScreen> {
             const SizedBox(height: 10),
             FilledButton.icon(
               key: const ValueKey('takePhoto'),
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
               icon: const Icon(Icons.photo_camera_outlined),
               label: const Text('Take photo'),
               onPressed: _busy ? null : _photo,

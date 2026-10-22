@@ -12,6 +12,9 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   window width (`MediaQuery.sizeOf`/`LayoutBuilder`), never on the device type. Content max width 720 (medium) / 1040 (expanded);
   `TwoCol(left, right)` = two columns when the content is ≥ 1040 wide (Today, Spending), `NarrowPage` = 720 (Wishlist, Plan).
   `showSheet` opens a dialog (max 480) from 600 dp, a bottom sheet below; callers don't change.
+  Shared UI helpers: `rowMin`/`touchMin`/`buttonMin` (44/48/52 dp minimum heights), `gapped()`; `widgets/sheets.dart` `openPageOrDialog<T>(context, screen, {width, maxHeight, logName})`
+  + `DialogAppBar(title, actions)` for full-screen pages that are dialogs on wide windows; `widgets/common.dart` `MoneyField` (decimal keyboard; `fieldKey` for tests), `RuledRow`,
+  `GatePage` (first run / unlock / in use); `format.dart` `centsToFieldText`, `invalidAmountMessage`; widgets read the clock as `wc.now`, never `DateTime.now()`.
 - `lib/src/platform.dart` — `isAndroid/isIOS/isWindows/isMobile/isDesktop/hasKeyboard` from `kIsWeb` + `defaultTargetPlatform`.
   Use these, not `Platform.isX`. Tests set `debugDefaultTargetPlatformOverride` (and must unset it before the test body ends).
 - `lib/src/controller.dart` — `WalletController` (ChangeNotifier): owns the `WalletRepo`, the cached lists,
@@ -52,7 +55,7 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   Log events (counts only): `backup.done|restored|failed`, `export.transactions|summary|saved`, `search.run`.
 - Future spending (F3): `controller_future.dart` (a `part` of controller.dart: `extension FutureSpending` + `CalendarState` `wc.cal`): planned costs
   (`plannedOpen/plannedEverything`, `upcomingItems(from,to)` cached per data version + `cal.version`, `upcomingRange(next:)` = the pay period or the next one,
-  `comingUp()`, `countedIn`, `addPlannedCost/editPlannedCost/confirmSuggestion/dismissSuggestion/markPlannedPaid/skipPlanned/deletePlanned`,
+  `comingUp()`, `countedIn`, `addPlannedCost/updatePlanned/confirmSuggestion/dismissSuggestion/markPlannedPaid/skipPlanned/deletePlanned`,
   `paidCandidatesFor`), heads-ups (`headsUpLines()`, synced `headsUpCents/headsUpDays` via `saveHeadsUp`, device-local `headsUpNotify`, `rescheduleHeadsUps()`
   after every reload, nudge reschedule and resume; `NudgePlatform.scheduleHeadsUps/cancelHeadsUps`: channel `headsup`, ids 1000..1019, 09:00 local on
   date - days, text `headsUpBody` has no title or amount; `AndroidNudges.cancelAll` also removes them, so `rescheduleNudges` always ends with `rescheduleHeadsUps`),
@@ -60,7 +63,7 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   full permission request needs READ and WRITE_CALENDAR declared, the app never writes) or `NoCalendars` on the web/desktop; `.ics` files (`importIcsFile`, 2 MB cap) and
   links (`addIcsLink`, `ics_fetch.dart`, not on the web) are kept as device-local values `icsSources` / `icsText:<id>`, device calendars chosen in `calendarsOn`; `readCalendars`
   reads [today, today+90] at start, resume, choose, import and "Read now", links are fetched again first and a failure keeps the saved copy and shows a message on the entry).
-  Screens: `screens/upcoming.dart` (`openUpcoming` page/dialog, `PeriodGrid` month grids with a mark per kind, ruled list with Confirm / Change / No cost, "Set aside" total),
+  Screens: `screens/upcoming.dart` (`openUpcoming` page/dialog, `_PeriodGrid` month grids with a mark per kind, ruled list with Confirm / Change / No cost, "Set aside" total),
   `screens/planned_sheets.dart` (`PlannedFormSheet` add/edit/confirm, `PlannedEntrySheet` Change / Paid (picker) / Skip / Delete), `screens/calendars_panel.dart` (Plan › Calendars +
   heads-up fields), Today's `comingUpLine` and `headsUp:<key>` lines, Plan › Nudges `headsUpSwitch`, Plan › Export `exportPlanned`, a "Planned costs" section in search.
   F4b: Paid and Skip show a snack bar with Undo (`reopenPlanned`; `toast(actionLabel:, onAction:)`); `fetchIcs` has one overall 60 s timeout, follows up to 5
@@ -72,18 +75,18 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   `billsToReview`, `billForTx`, `billCandidatesFor`, `searchBills`), adding (`importBillFile(bytes, ext, trigger:)` = pdf → text + on Android page render + code scan, xml → e-invoice,
   jpg/png → Android codes then OCR / elsewhere kept unread; the original goes to `BlobStore.add` (pictures sized to JPEG 2560 px first); no code or text in the file → `externalId`
   `file:<hash of the file>` so the same file is one bill; `importScannedCode`, `importPhoto`; results are `BillImport` with a `message` such as "Already in your bills"), Share to app
-  (`startSharing()` from `HomeShell`, results on `sharedBillResults` → SnackBar), the bill sheet actions (`editBill`, `setBillDates`, `confirmBill` needs date + total, `linkBill`,
+  (`startSharing()` from `HomeShell`, results on `sharedBillResults` → SnackBar), the bill sheet actions (`updateBill`, `setBillDates`, `confirmBill` needs date + total, `linkBill`,
   `unlinkBill`, `deleteBill`, `addBillAsExpense`, `billFile` = this device then the relay), reminders (`_rescheduleBillRemindersNow`, run inside `rescheduleHeadsUps`' chain, same switch as the
   heads-ups; ids 1020..1039, channel `bills`, text "A return window ends in N days" / "A warranty ends in N days") reminder days from the synced settings `returnReminderDays` / `warrantyReminderDays`.
   The camera, OCR, PDF pages and Share are behind `bill_inputs.dart` (`BillCamera`, `PictureReader`, `PdfPages`, `ShareInbox`, `BillInputs`, `BillInputs.none()`); `bill_platform.dart` picks
-  `bill_inputs_native.dart` (the only file that imports `mobile_scanner`, `google_mlkit_text_recognition`, `receive_sharing_intent`; Android only) or `bill_inputs_web.dart`. The app's own
+  `bill_inputs_io.dart` (the only file that imports `mobile_scanner`, `google_mlkit_text_recognition`, `receive_sharing_intent`; Android only) or `bill_inputs_web.dart`. The app's own
   channel `budget_wallet/bills` (MainActivity.kt) renders PDF pages (`PdfRenderer`, ≤ 5 pages, PNG at dpi, background thread) and sizes pictures (`toJpeg`, EXIF turned upright).
-  Screens: `screens/bills_panel.dart` (Plan › Bills, `pickAndImportBills`), `screens/bill_sheet.dart` (`openBill`, `BillSheet`: an "Unsure" mark on every field of a pdf/photo bill in review,
+  Screens: `screens/bills_panel.dart` (Plan › Bills, `_pickAndImportBills`), `screens/bill_sheet.dart` (`openBill`, `BillSheet`: an "Unsure" mark on every field of a pdf/photo bill in review,
   Paid by… / Paid in cash, warranty / return-by, `BillFileScreen` = zoomable picture, rendered PDF pages or Save file…, "The file is on the relay; sync to fetch it"),
   `screens/scan_bill.dart` (`scanBillFlow`, `ScanBillScreen`: camera preview for codes; Take photo = `BillCamera.takePhoto()` = the system camera app through the channel's `takePhoto` (CAMERA asked first, FileProvider `<applicationId>.billphotos` over `cache/bill_photos/`, full resolution, file read and deleted at once; cancel = back to the scanner), then `toJpeg` + OCR), Add expense › Scan bill (only with a camera), Today's
   `billsToReview` row, the receipt mark on `TxTile(hasBill:)` + "Open bill" in `TxSheet`, Upcoming warranty / return-by rows (`UpcomingKind.warranty|returnBy`, `UpcomingItem.billDb`; opens the bill), a "Bills" section in search.
   B5b: `confirmBill` needs a category for a bill due today or later (`billNeedsCategory`; the sheet prefills `suggestedBillCategory` and marks it; core's `suggestBillCategory`; `billPlannedBy` = core's `billCoveredBy`: the sheet says "Planned by <expected bill>", such a row is listed, not reserved; `importBill(asNew: true)` for "Add as new bill"); a duplicate `BillImport` carries `addAsNew` and `existingDone` (message "You already paid a bill like this. Add it as a new one?"), shown by `showBillImport` (toast action "Add as new bill"); a bill's planned row opens the bill sheet (`plannedIsBill`: Upcoming, Today heads-ups, search); sizes are checked before reading (`maxBillFileBytes`: 15 MB, pictures 40 MB before sizing, `billTooBigMessage`; `SharedFile.tooBig`; the share plugin's cache copy is deleted); `pdfParser` (`pdf_parse.dart`: `Isolate.run` on native, inline on web); Plan › Bills "Reminder days" (`saveBillReminderDays`), Plan › Sync "N bill files waiting to upload" (`syncBlobsWaiting`) and, when `SyncReport.blobsUnsupported`, "This relay can't keep bill photos yet. Update the relay on the home server.". Bill widget tests use `tw` (60 s timeout) and read PDFs inline (`inlinePdfParser`).
-  B6: `editBill`/`setBillDates` return false when core refuses (a reserving bill without a category); the sheet then shows the category message and stays open.
+  B6: `updateBill`/`setBillDates` return false when core refuses (a reserving bill without a category); the sheet then shows the category message and stays open.
   `comingUp()` = core's `reservedPlannedRows`/`reservedPlanned`; `countedIn` uses core's `plannedReserves` (shown = reserved, exactly). "Needs a category" (`PlannedCost.needsCategory`):
   Upcoming row mark, Today line per row (`plannedNeedingCategory()`, key `needsCategory:<planned id>`) and heads-up suffix; each opens the bill sheet.
   The demo wallet (`integration_test/demo_data.dart`, also used by `tool/live_demo.dart`) is seeded in `test/demo_data_test.dart`, so a core rule that breaks seeding fails `flutter test`.
@@ -91,7 +94,7 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   `scan.cameraFailed {code}`, `bills.remindersScheduled {count}`. Android: CAMERA (declared by mobile_scanner, asked when Scan bill opens), `singleTask` + SEND/SEND_MULTIPLE filters
   for pdf and image; no storage permission. Tests: `test/bills_test.dart` with `test/support/bills.dart` (`FakeBillInputs`, `billsWallet`, `smallPdf`).
 - Nudges: `nudges.dart` (pure: ~14 funny, encouraging lines with no digits or names, `nudgeFor(date)`, `nudgeSlots(now)` = 15:00 on
-  weekdays and 11:00 on Sunday for 4 weeks, `NudgePlatform`/`NoNudges`) and `notifier.dart` (native-only: `AndroidNudges` with
+  weekdays and 11:00 on Sunday for 4 weeks, `NudgePlatform`/`NoNudges`) and `nudge_platform_io.dart` (native-only: `AndroidNudges` with
   `flutter_local_notifications`, one inexact `zonedSchedule` per slot, no exact-alarm permission; the time zone name comes from
   the `budget_wallet/timezone` channel in MainActivity; POST_NOTIFICATIONS is asked when the switch is turned on). Everything but
   Android gets `NoNudges` (the switch is off with a note). The controller schedules again on start and resume. A reminder never

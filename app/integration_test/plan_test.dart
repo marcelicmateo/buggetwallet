@@ -44,12 +44,12 @@ void main() {
     await goTab(t, 'Plan');
     await fill(t, {'Salary per month': '2500', 'Rent': '600,50', 'Loan': 'abc'});
     await save(t);
-    expect(find.text('Enter numbers only, like 1500 or 1500.50.'), findsOneWidget);
+    expect(find.text('Enter an amount, like 12.50.'), findsOneWidget);
     expect(inPlan(find.text('Numbers only')), findsOneWidget, reason: 'the wrong field says why');
     expect(wc.settings.salary, 0, reason: 'nothing is saved while a field is wrong');
     await fill(t, {'Loan': '-5'});
     await save(t);
-    expect(find.text('Enter numbers only, like 1500 or 1500.50.'), findsOneWidget);
+    expect(find.text('Enter an amount, like 12.50.'), findsOneWidget);
     expect(wc.settings.salary, 0);
 
     await fill(t, {

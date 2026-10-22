@@ -115,9 +115,7 @@ class _CameraViewState extends State<_CameraView> {
           }
         },
         errorBuilder: (context, e) {
-          final msg = e.errorCode == MobileScannerErrorCode.permissionDenied
-              ? 'The camera is off for this app. Allow it in Android settings, or import a bill file.'
-              : "Can't open the camera on this phone.";
+          final msg = e.errorCode == MobileScannerErrorCode.permissionDenied ? cameraOffMessage : cameraUnavailableMessage;
           logEvent(_log, Level.WARNING, 'scan.cameraFailed', {'code': e.errorCode.name});
           return Center(child: Padding(padding: const EdgeInsets.all(16), child: Text(msg, textAlign: TextAlign.center)));
         },

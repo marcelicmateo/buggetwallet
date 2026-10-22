@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../layout.dart';
 import '../logging.dart';
 import '../page_reload.dart';
 import '../widgets/common.dart';
@@ -22,33 +23,16 @@ class _InUseScreenState extends State<InUseScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: ListView(
-                  padding: const EdgeInsets.all(20),
-                  shrinkWrap: true,
-                  children: gapped([
-                    const Row(children: [
-                      LedgerLogo(),
-                      SizedBox(width: 10),
-                      Flexible(child: Heading('Budget Wallet', size: 24)),
-                    ]),
-                    const Muted('Budget Wallet is open in another tab. Close it, then reload this one.', size: 14.5),
-                    FilledButton(
-                      key: const ValueKey('inUseReload'),
-                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                      onPressed: () {
-                        logNav('inUse.reload');
-                        widget.onReload();
-                      },
-                      child: const Text('Reload', style: TextStyle(fontSize: 16)),
-                    ),
-                  ])),
-            ),
-          ),
+  Widget build(BuildContext context) => GatePage(children: [
+        const Muted('Budget Wallet is open in another tab. Close it, then reload this one.', size: 14.5),
+        FilledButton(
+          key: const ValueKey('inUseReload'),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
+          onPressed: () {
+            logNav('inUse.reload');
+            widget.onReload();
+          },
+          child: const Text('Reload', style: TextStyle(fontSize: 16)),
         ),
-      );
+      ]);
 }

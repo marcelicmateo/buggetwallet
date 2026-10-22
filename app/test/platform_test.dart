@@ -1,4 +1,8 @@
 // Web-safe platform checks (lib/src/platform.dart) and the rule that UI code does not import dart:io.
+// The web-path test below has an allow-list: every file in lib/src except `*_io.dart` is compiled for the browser, so it may not import
+// dart:io or a native-only plugin (the `native` regex lists them: path_provider, flutter_secure_storage, flutter_local_notifications,
+// device_calendar_plus, the camera / OCR / share plugins). `*_io.dart` files are the only ones allowed to; they are reached through a
+// conditional-import barrel (`if (dart.library.js_interop) '..._web.dart'`). A new native plugin goes into that regex in the same commit.
 // All data is SYNTHETIC.
 import 'dart:io';
 
@@ -69,19 +73,16 @@ void main() {
   });
 
   test('files the web build loads import no dart:io, no native-only plugin and no *_io.dart except through a conditional import', () {
-    // Everything in lib/src except *_io.dart files, notifier.dart and bill_inputs_native.dart (the Android plugins) is on the web path.
+    // Everything in lib/src except the *_io.dart files (including the Android plugin ones: nudge_platform_io, bill_inputs_io,
+    // calendar_source_io) is on the web path.
     final webPath = [
       for (final f in Directory('lib/src').listSync().whereType<File>())
-        if (f.path.endsWith('.dart') &&
-            !f.path.endsWith('_io.dart') &&
-            !f.path.endsWith('/notifier.dart') &&
-            !f.path.endsWith('/bill_inputs_native.dart'))
-          f,
+        if (f.path.endsWith('.dart') && !f.path.endsWith('_io.dart')) f,
     ];
     expect(webPath.length, greaterThan(15));
     final statement = RegExp(r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]([^;]*);''', multiLine: true);
     final native = RegExp(
-        r'^(dart:io|package:path_provider/.*|package:flutter_secure_storage/.*|package:flutter_local_notifications/.*|package:(mobile_scanner|google_mlkit_\w+|receive_sharing_intent)/.*|.*_io\.dart|.*notifier\.dart|.*bill_inputs_native\.dart)$');
+        r'^(dart:io|package:path_provider/.*|package:flutter_secure_storage/.*|package:flutter_local_notifications/.*|package:(mobile_scanner|google_mlkit_\w+|receive_sharing_intent|device_calendar_plus)/.*|.*_io\.dart)$');
     final bad = <String>[];
     for (final f in webPath) {
       for (final m in statement.allMatches(f.readAsStringSync())) {
@@ -91,5 +92,14 @@ void main() {
       }
     }
     expect(bad, isEmpty, reason: 'web path files must not load native code directly');
+  });
+
+  test('only calendar_source_io.dart imports the calendar plugin', () {
+    final plugin = RegExp(r'''^\s*(?:import|export)\s+['"]package:device_calendar_plus/''', multiLine: true);
+    final importers = [
+      for (final f in Directory('lib').listSync(recursive: true).whereType<File>())
+        if (f.path.endsWith('.dart') && plugin.hasMatch(f.readAsStringSync())) f.path.split('/').last,
+    ];
+    expect(importers, ['calendar_source_io.dart']);
   });
 }

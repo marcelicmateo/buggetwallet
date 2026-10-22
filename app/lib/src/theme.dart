@@ -1,4 +1,4 @@
-// D3 Ledger theme (docs/design/ledger-spec.md): paper and ink colours, IBM Plex, ruled lines instead of cards.
+// The Ledger theme (see docs/design/ledger-spec.md): paper and ink colours, IBM Plex, ruled lines instead of cards.
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -105,10 +105,10 @@ const numStyle = TextStyle(
 Color marginLineColor(Brightness b) => b == Brightness.light ? const Color(0xFFE3B1AA) : const Color(0xFF7A3F3F);
 
 /// Rectangle with a rule along the top edge only (bottom sheets).
-class TopRuleBorder extends ShapeBorder {
+class _TopRuleBorder extends ShapeBorder {
   final Color color;
   final double width;
-  const TopRuleBorder({required this.color, this.width = 2});
+  const _TopRuleBorder({required this.color, this.width = 2});
   @override
   EdgeInsetsGeometry get dimensions => EdgeInsets.only(top: width);
   @override
@@ -121,14 +121,14 @@ class TopRuleBorder extends ShapeBorder {
   }
 
   @override
-  ShapeBorder scale(double t) => TopRuleBorder(color: color, width: width * t);
+  ShapeBorder scale(double t) => _TopRuleBorder(color: color, width: width * t);
 }
 
 /// Rectangle with a bar along the left edge (the selected item of the rail).
-class LeftBarBorder extends ShapeBorder {
+class _LeftBarBorder extends ShapeBorder {
   final Color color;
   final double width;
-  const LeftBarBorder({required this.color, this.width = 3});
+  const _LeftBarBorder({required this.color, this.width = 3});
   @override
   EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
   @override
@@ -141,7 +141,7 @@ class LeftBarBorder extends ShapeBorder {
   }
 
   @override
-  ShapeBorder scale(double t) => LeftBarBorder(color: color, width: width * t);
+  ShapeBorder scale(double t) => _LeftBarBorder(color: color, width: width * t);
 }
 
 /// Accent-outlined button style (what used to be the tonal button).
@@ -241,7 +241,7 @@ ThemeData buildTheme(Brightness b) {
       elevation: 0,
       minWidth: 80,
       indicatorColor: w.accentSoft,
-      indicatorShape: LeftBarBorder(color: w.accent),
+      indicatorShape: _LeftBarBorder(color: w.accent),
       selectedIconTheme: IconThemeData(color: w.accent),
       unselectedIconTheme: IconThemeData(color: w.ink2),
       selectedLabelTextStyle: TextStyle(fontFamily: sansFamily, fontSize: 12, fontWeight: w6, color: w.accent),
@@ -334,7 +334,7 @@ ThemeData buildTheme(Brightness b) {
       modalElevation: 0,
       elevation: 0,
       showDragHandle: false,
-      shape: TopRuleBorder(color: w.ink),
+      shape: _TopRuleBorder(color: w.ink),
       modalBarrierColor: Colors.black.withValues(alpha: 0.4),
     ),
     snackBarTheme: SnackBarThemeData(

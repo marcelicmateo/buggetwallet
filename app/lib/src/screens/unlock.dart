@@ -3,6 +3,7 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../key_store.dart' show WrongPassphrase;
+import '../layout.dart';
 import '../logging.dart';
 import '../widgets/common.dart';
 import 'forget_browser.dart';
@@ -64,47 +65,30 @@ class _UnlockScreenState extends State<UnlockScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: ListView(
-                  padding: const EdgeInsets.all(20),
-                  shrinkWrap: true,
-                  children: gapped([
-                    const Row(children: [
-                      LedgerLogo(),
-                      SizedBox(width: 10),
-                      Flexible(child: Heading('Budget Wallet', size: 24)),
-                    ]),
-                    const Muted('Your wallet is locked. Type your passphrase to open it in this browser.', size: 14.5),
-                    TextField(
-                      key: const ValueKey('unlockPassphrase'),
-                      controller: _pass,
-                      obscureText: true,
-                      autofocus: true,
-                      enableSuggestions: false,
-                      autocorrect: false,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _unlock(),
-                      decoration: const InputDecoration(labelText: 'Passphrase'),
-                    ),
-                    if (_error != null) StatusLabel(good: false, text: _error!),
-                    FilledButton(
-                      key: const ValueKey('unlockButton'),
-                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-                      onPressed: _busy ? null : _unlock,
-                      child: Text(_busy ? 'Opening…' : 'Unlock', style: const TextStyle(fontSize: 16)),
-                    ),
-                    TextButton(
-                      key: const ValueKey('unlockForget'),
-                      onPressed: _busy ? null : () => confirmForgetBrowser(context, widget.wc),
-                      child: const Text('Forget this browser'),
-                    ),
-                  ])),
-            ),
-          ),
+  Widget build(BuildContext context) => GatePage(children: [
+        const Muted('Your wallet is locked. Type your passphrase to open it in this browser.', size: 14.5),
+        TextField(
+          key: const ValueKey('unlockPassphrase'),
+          controller: _pass,
+          obscureText: true,
+          autofocus: true,
+          enableSuggestions: false,
+          autocorrect: false,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _unlock(),
+          decoration: const InputDecoration(labelText: 'Passphrase'),
         ),
-      );
+        if (_error != null) StatusLabel(good: false, text: _error!),
+        FilledButton(
+          key: const ValueKey('unlockButton'),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
+          onPressed: _busy ? null : _unlock,
+          child: Text(_busy ? 'Opening…' : 'Unlock', style: const TextStyle(fontSize: 16)),
+        ),
+        TextButton(
+          key: const ValueKey('unlockForget'),
+          onPressed: _busy ? null : () => confirmForgetBrowser(context, widget.wc),
+          child: const Text('Forget this browser'),
+        ),
+      ]);
 }

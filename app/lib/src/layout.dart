@@ -21,6 +21,16 @@ const twoColMin = 1040.0;
 /// Side padding of the scrolling pages; TwoCol adds it back to the width it sees.
 const pagePad = 16.0;
 
+/// Minimum heights of tappable things. [rowMin] = a list row, [touchMin] = a field, chip or small button, [buttonMin] = a full button.
+const rowMin = 44.0;
+const touchMin = 48.0;
+const buttonMin = 52.0;
+
+/// [xs] with a fixed [gap] of empty space between them (for ListView and Column children).
+List<Widget> gapped(List<Widget> xs, {double gap = 14}) => [
+      for (var i = 0; i < xs.length; i++) ...[if (i > 0) SizedBox(height: gap), xs[i]],
+    ];
+
 LayoutSize sizeFor(double width) => width < mediumMin
     ? LayoutSize.compact
     : width < expandedMin
@@ -43,14 +53,10 @@ class TwoCol extends StatelessWidget {
   final double gap, colGap;
   const TwoCol({super.key, required this.left, required this.right, this.gap = 14, this.colGap = 16});
 
-  List<Widget> _spaced(List<Widget> xs) => [
-        for (var i = 0; i < xs.length; i++) ...[if (i > 0) SizedBox(height: gap), xs[i]],
-      ];
-
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
-        final l = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(left));
-        final r = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _spaced(right));
+        final l = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: gapped(left, gap: gap));
+        final r = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: gapped(right, gap: gap));
         if (box.maxWidth + 2 * pagePad + _gutterOf(context) >= twoColMin) {
           // A 1 px hairline in the middle of the gap (the columns are equally wide, so the middle is half the width).
           return Stack(children: [

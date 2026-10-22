@@ -56,11 +56,9 @@ class _PlanScreenState extends State<PlanScreen> {
   /// Field errors from the last Save, by key (shown under the field until it is edited).
   final Map<String, String> _errors = {};
 
-  static String _plain(int cents) => cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2);
-
   static String _text(WalletSettings s, String k) {
     final v = s.toMap()[k] as int;
-    return _moneyKeys.contains(k) ? _plain(v) : '$v';
+    return _moneyKeys.contains(k) ? centsToFieldText(v) : '$v';
   }
 
   @override
@@ -144,17 +142,24 @@ class _PlanScreenState extends State<PlanScreen> {
     final p = wc.period();
     final lowIncome = p.received > 0 && p.received < s.salary * 0.9 && daysBetween(p.start, wc.today()) >= 4;
 
-    Widget field(String key, String label, {bool money = true}) => TextField(
-          controller: f[key],
-          keyboardType: TextInputType.numberWithOptions(decimal: money),
-          textAlign: TextAlign.end,
-          style: numStyle,
-          onChanged: (_) {
-            if (_errors.containsKey(key)) setState(() => _errors.remove(key));
-          },
-          decoration: InputDecoration(
-              labelText: label, suffixText: money ? currencySymbol(currency) : null, errorText: _errors[key], errorMaxLines: 3),
-        );
+    Widget field(String key, String label, {bool money = true}) {
+      void changed(String _) {
+        if (_errors.containsKey(key)) setState(() => _errors.remove(key));
+      }
+
+      final decoration =
+          InputDecoration(labelText: label, suffixText: money ? currencySymbol(currency) : null, errorText: _errors[key], errorMaxLines: 3);
+      return money
+          ? MoneyField(controller: f[key]!, onChanged: changed, decoration: decoration)
+          : TextField(
+              controller: f[key],
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.end,
+              style: numStyle,
+              onChanged: changed,
+              decoration: decoration,
+            );
+    }
 
     return NarrowPage(
         child: ListView(
@@ -246,8 +251,7 @@ class _PlanScreenState extends State<PlanScreen> {
                   label: const Text('Salary landed: start new month'),
                   onPressed: () async {
                     logNav('month.pick');
-                    final d = await showDatePicker(
-                        context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now());
+                    final d = await showDatePicker(context: context, initialDate: wc.now, firstDate: DateTime(2020), lastDate: wc.now);
                     if (d == null) return;
                     wc.startNewMonth(isoDate(d));
                     if (context.mounted) toast(context, 'New month started ${shortDate(isoDate(d))}');
@@ -301,7 +305,7 @@ class _PlanScreenState extends State<PlanScreen> {
           context,
           errors.containsKey('coolHours') && errors['coolHours'] != 'Numbers only'
               ? "Wait (hours) can't be negative."
-              : 'Enter numbers only, like 1500 or 1500.50.');
+              : invalidAmountMessage);
       return;
     }
     if (_errors.isNotEmpty) setState(_errors.clear);

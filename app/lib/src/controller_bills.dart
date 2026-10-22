@@ -1,4 +1,4 @@
-// The bills database in the controller (stage B4): bills from the camera, files, photos and Share to app, the lists in Plan ›
+// The bills database in the controller (API: docs/context/BILLS_API.md): bills from the camera, files, photos and Share to app, the lists in Plan ›
 // Bills, the bill sheet's actions, the file on the relay, search and the reminders. A `part` of controller.dart so it can use
 // the cache and `_changed`. The readers (QR, HUB-3, e-invoice, PDF text, text) are pure code in wallet_importer; the camera, OCR,
 // PDF pages and Share are behind `BillInputs` (bill_inputs.dart) so tests never touch a plugin.
@@ -97,7 +97,7 @@ extension BillsDb on WalletController {
   /// Every live bill (cached per data version).
   List<Bill> billsAll() => _cached('billsDb', () => repo.bills());
 
-  Bill? billById(String id) {
+  Bill? bill(String id) {
     for (final b in billsAll()) {
       if (b.id == id) return b;
     }
@@ -325,7 +325,7 @@ extension BillsDb on WalletController {
   /// Saves edited fields; an empty text clears none of them (the sheet passes only fields the owner changed). Returns
   /// false (nothing saved) when core refuses the edit: a due date, total or category change that would leave an unpaid
   /// bill due from today on without a category (the sheet asks for one).
-  bool editBill(String id,
+  bool updateBill(String id,
       {String? date,
       String? dueDate,
       int? total,
@@ -378,7 +378,7 @@ extension BillsDb on WalletController {
 
   /// To review → confirmed. Needs a date and a total; returns false (nothing changed) when one is missing.
   bool confirmBill(String id) {
-    final b = billById(id);
+    final b = bill(id);
     if (b == null || b.date == null || (b.total ?? 0) <= 0) return false;
     // A slip that is still to be paid reserves money; without a category it would count on top of the fixed plan.
     if (billNeedsCategory(b)) return false;

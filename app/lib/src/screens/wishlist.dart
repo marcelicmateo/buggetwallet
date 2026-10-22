@@ -24,7 +24,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
     final wc = widget.wc;
     final s = wc.settings;
     final cur = wc.currency;
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = wc.now.millisecondsSinceEpoch;
     final waiting = wc.wish.where((w) => w.status == 'waiting' && w.hoursLeft(s.coolHours, now) > 0).toList();
     final ready = wc.wish.where((w) => w.status == 'waiting' && w.hoursLeft(s.coolHours, now) <= 0).toList();
     final done = wc.wish.where((w) => w.status != 'waiting').toList()..sort((a, b) => (b.decided ?? 0).compareTo(a.decided ?? 0));
@@ -48,12 +48,9 @@ class _WishlistScreenState extends State<WishlistScreen> {
                   const SizedBox(width: 10),
                   SizedBox(
                     width: 120,
-                    child: TextField(
+                    child: MoneyField(
                         controller: price,
                         onChanged: (_) => setState(() {}),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        textAlign: TextAlign.end,
-                        style: numStyle,
                         decoration: InputDecoration(labelText: 'Price', suffixText: currencySymbol(cur))),
                   ),
                 ]),

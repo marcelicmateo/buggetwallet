@@ -16,6 +16,9 @@ import 'key_backup.dart';
 import 'review.dart';
 import 'upcoming.dart';
 
+/// The size of a typical delivery order the delivery-hour panel compares with today's money (in cents).
+const typicalOrderCents = 1500;
+
 class TodayScreen extends StatelessWidget {
   final WalletController wc;
   final VoidCallback openPlan;
@@ -80,7 +83,7 @@ class TodayScreen extends StatelessWidget {
     return MarginLine(
         child: ListView(
             padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
-            children: _gap([
+            children: gapped([
               if (wc.keyBackupRowVisible) KeyBackupRow(wc: wc),
               if (!s.salaryConfirmed)
                 Panel(color: c.warnBg, children: [
@@ -184,7 +187,7 @@ class TodayScreen extends StatelessWidget {
                   Tooltip(
                     message: hasKeyboard ? 'Add expense (Ctrl+N)' : '',
                     child: FilledButton.icon(
-                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
                       icon: const Icon(Icons.add),
                       label: const Text('Add expense', style: TextStyle(fontSize: 16)),
                       onPressed: addExpense ?? () => addExpenseFlow(context, wc),
@@ -230,7 +233,7 @@ class TodayScreen extends StatelessWidget {
                     ]),
                     Text(
                       'This month: $deliveryCount ${deliveryCount == 1 ? 'order' : 'orders'}, ${money(deliverySum, cur)}. '
-                      '${p.allowanceToday > 0 ? 'A typical ${money(1500, cur, decimals: 0)} order is ${(1500 / p.allowanceToday * 100).round()}% of today\'s money.' : 'Today\'s money is already used.'}',
+                      '${p.allowanceToday > 0 ? 'A typical ${money(typicalOrderCents, cur, decimals: 0)} order is ${(typicalOrderCents / p.allowanceToday * 100).round()}% of today\'s money.' : 'Today\'s money is already used.'}',
                       style: const TextStyle(fontSize: 14),
                     ),
                   ]),
@@ -265,10 +268,6 @@ class TodayScreen extends StatelessWidget {
   }
 }
 
-List<Widget> _gap(List<Widget> xs) => [
-      for (var i = 0; i < xs.length; i++) ...[if (i > 0) const SizedBox(height: 14), xs[i]],
-    ];
-
 /// "Groceries: 48 € left this month" for the budgeted category with the least left (`bad` with an icon when over); a tap opens
 /// Spending.
 class _BudgetLine extends StatelessWidget {
@@ -288,7 +287,7 @@ class _BudgetLine extends StatelessWidget {
       key: const ValueKey('budgetLine'),
       onTap: onTap,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44),
+        constraints: const BoxConstraints(minHeight: rowMin),
         child: Row(children: [
           Icon(over ? Icons.error_outline : Icons.pie_chart_outline, size: 18, color: col),
           const SizedBox(width: 8),
@@ -323,7 +322,7 @@ class _BillsLine extends StatelessWidget {
       key: const ValueKey('billsLine'),
       onTap: onTap,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44),
+        constraints: const BoxConstraints(minHeight: rowMin),
         child: Row(children: [
           Icon(Icons.event_note_outlined, size: 18, color: c.ink2),
           const SizedBox(width: 8),
@@ -351,7 +350,7 @@ class _InfoLine extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44),
+        constraints: const BoxConstraints(minHeight: rowMin),
         child: Row(children: [
           Icon(icon, size: 18, color: c.ink2),
           const SizedBox(width: 8),

@@ -63,6 +63,45 @@ Future<T?> showSheet<T>(BuildContext context, Widget child) {
       ));
 }
 
+/// Opens [screen] (a Scaffold with a [DialogAppBar]) as a full-screen page on a phone and as a dialog [width] wide from [dialogMin]
+/// (at most [maxHeight] tall, the window height minus 48 when that is less). With [logName] the open and close are logged like a sheet.
+Future<T?> openPageOrDialog<T>(BuildContext context, Widget screen, {required double width, double maxHeight = 760, String? logName}) {
+  final Future<T?> route;
+  if (MediaQuery.sizeOf(context).width >= dialogMin) {
+    route = showDialog<T>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(24),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(width: width, height: (MediaQuery.sizeOf(ctx).height - 48).clamp(300.0, maxHeight), child: screen),
+      ),
+    );
+  } else {
+    route = Navigator.of(context).push<T>(MaterialPageRoute(fullscreenDialog: true, builder: (_) => screen));
+  }
+  return logName == null ? route : loggedRoute(logName, route);
+}
+
+/// The app bar of a page opened with [openPageOrDialog]: a close button on the left, the [title], optional [actions] and a 2 px
+/// strong rule underneath.
+class DialogAppBar extends StatelessWidget implements PreferredSizeWidget {
+  final String title;
+  final List<Widget>? actions;
+  const DialogAppBar({super.key, required this.title, this.actions});
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight + 2);
+
+  @override
+  Widget build(BuildContext context) => AppBar(
+        title: Text(title),
+        leading: IconButton(icon: const Icon(Icons.close), tooltip: 'Close', onPressed: () => Navigator.pop(context)),
+        actions: actions,
+        bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: Container(height: 2, color: context.c.lineStrong)),
+      );
+}
+
 /// Add expense from anywhere (the Today button, Ctrl+N): opens the sheet and shows the toast for its result.
 Future<void> addExpenseFlow(BuildContext context, WalletController wc) async {
   final r = await showSheet<String>(context, AddExpenseSheet(wc: wc));
@@ -88,7 +127,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       TextEditingController(text: widget.amount == null ? '' : (widget.amount! / 100).toStringAsFixed(2));
   late final TextEditingController note = TextEditingController(text: widget.note ?? '');
   String cat = 'Groceries';
-  DateTime date = DateTime.now();
+  late DateTime date = widget.wc.now;
   String? error;
   bool warned = false;
 
@@ -121,12 +160,10 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         ),
       ],
       const SizedBox(height: 14),
-      TextField(
+      MoneyField(
         controller: amount,
         autofocus: true,
         onChanged: (_) => setState(() {}),
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        textAlign: TextAlign.end,
         style: numStyle.copyWith(fontSize: 30, fontWeight: FontWeight.w500),
         decoration: InputDecoration(suffixText: currencySymbol(cur), hintText: '0.00'),
       ),
@@ -148,7 +185,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
           label: Text(shortDate(isoDate(date))),
           onPressed: () async {
             final d = await showDatePicker(
-                context: context, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 1)));
+                context: context, initialDate: date, firstDate: DateTime(2020), lastDate: widget.wc.now.add(const Duration(days: 1)));
             if (d != null) setState(() => date = d);
           },
         ),
@@ -175,14 +212,14 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       ],
       const SizedBox(height: 14),
       FilledButton.icon(
-        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
         icon: const Icon(Icons.add),
         label: const Text('Add expense', style: TextStyle(fontSize: 16)),
         onPressed: () {
           final a = parseMoney(amount.text);
           if (a == null || a <= 0) {
             logNav('expense.invalid');
-            setState(() => error = 'Enter an amount, like 12.50.');
+            setState(() => error = invalidAmountMessage);
             return;
           }
           if (a > s.impulse && !warned) {
@@ -275,7 +312,7 @@ class _TxSheetState extends State<TxSheet> {
           TextButton(
             style: TextButton.styleFrom(foregroundColor: context.c.bad),
             onPressed: () {
-              widget.wc.deleteTx(t);
+              widget.wc.deleteTransaction(t);
               Navigator.pop(context, 'deleted');
             },
             child: const Text('Delete'),
@@ -299,13 +336,11 @@ class GoalSheet extends StatefulWidget {
 class _GoalSheetState extends State<GoalSheet> {
   late final g = widget.goal;
   late final name = TextEditingController(text: g?.name ?? widget.name ?? '');
-  late final target = TextEditingController(text: _plain(g?.target ?? widget.target ?? 0));
-  late final monthly = TextEditingController(text: _plain(g?.monthly ?? 5000));
-  late final saved = TextEditingController(text: _plain(g?.saved ?? 0));
+  late final target = TextEditingController(text: centsToFieldText(g?.target ?? widget.target ?? 0, blankZero: true));
+  late final monthly = TextEditingController(text: centsToFieldText(g?.monthly ?? 5000, blankZero: true));
+  late final saved = TextEditingController(text: centsToFieldText(g?.saved ?? 0, blankZero: true));
   final add = TextEditingController();
   String? error;
-
-  static String _plain(int cents) => cents == 0 ? '' : (cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2));
 
   String hint() {
     final t = parseMoney(target.text) ?? 0,
@@ -359,39 +394,27 @@ class _GoalSheetState extends State<GoalSheet> {
       const SizedBox(height: 10),
       Row(children: [
         Expanded(
-            child: TextField(
+            child: MoneyField(
                 controller: target,
                 onChanged: upd,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                textAlign: TextAlign.end,
-                style: numStyle,
                 decoration: InputDecoration(labelText: 'Target', suffixText: currencySymbol(widget.wc.currency)))),
         const SizedBox(width: 10),
         Expanded(
-            child: TextField(
+            child: MoneyField(
                 controller: monthly,
                 onChanged: upd,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                textAlign: TextAlign.end,
-                style: numStyle,
                 decoration: InputDecoration(labelText: 'Each month', suffixText: currencySymbol(widget.wc.currency)))),
       ]),
       const SizedBox(height: 10),
-      TextField(
+      MoneyField(
           controller: saved,
           onChanged: upd,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          textAlign: TextAlign.end,
-          style: numStyle,
           decoration: InputDecoration(labelText: 'Put aside so far', suffixText: currencySymbol(widget.wc.currency))),
       if (g != null) ...[
         const SizedBox(height: 10),
-        TextField(
+        MoneyField(
             controller: add,
             onChanged: upd,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            textAlign: TextAlign.end,
-            style: numStyle,
             decoration: InputDecoration(
                 labelText: 'Add money now', hintText: 'e.g. a bonus or tax refund', suffixText: currencySymbol(widget.wc.currency))),
       ],

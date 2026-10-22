@@ -1,5 +1,5 @@
 // Nudges: short, funny, encouraging reminders. The words never carry amounts, merchants, names or any other wallet data,
-// because a notification shows on the lock screen. No dart:io and no plugin here (the scheduling is in notifier.dart).
+// because a notification shows on the lock screen. No dart:io and no plugin here (the scheduling is in nudge_platform_io.dart).
 import 'package:wallet_core/wallet_core.dart';
 
 /// The lines. Keep them free of digits, money words and brand names (`test/nudges_test.dart` checks).

@@ -1,4 +1,4 @@
-// Future spending in the controller (stage F3): planned costs, the Upcoming list, calendars (phone calendars and `.ics`),
+// Future spending in the controller (API: docs/context/FUTURE_SPENDING_API.md): planned costs, the Upcoming list, calendars (phone calendars and `.ics`),
 // heads-up lines and notifications, export and search. A `part` of controller.dart so it can use the cache and `_changed`.
 //
 // Privacy: logs carry counts and enum words only, never titles, amounts, calendar names, links or file names.
@@ -124,7 +124,7 @@ extension FutureSpending on WalletController {
   }
 
   /// [clearCategory] removes the category (a null [category] alone means unchanged).
-  void editPlannedCost(String id, {String? title, String? date, int? amount, String? category, bool clearCategory = false}) {
+  void updatePlanned(String id, {String? title, String? date, int? amount, String? category, bool clearCategory = false}) {
     repo.updatePlanned(id, title: title?.trim(), date: date, amount: amount, category: category, clearCategory: clearCategory);
     logEvent(_planLog, Level.INFO, 'planned.edit', {'amount': amount != null});
     _changed();

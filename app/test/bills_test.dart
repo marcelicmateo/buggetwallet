@@ -148,7 +148,7 @@ void main() {
       final wc = bw();
       final r = await wc.importScannedCode(const ScannedCode(CodeKind.qr, receiptQr));
       expect(r.kind, BillImportKind.added);
-      final b = wc.billById(r.billId!)!;
+      final b = wc.bill(r.billId!)!;
       expect(b.status, BillStatus.review);
       expect(b.source, BillSource.receiptQr);
       expect(b.total, 1234);
@@ -161,7 +161,7 @@ void main() {
       final wc = bw();
       final first = await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
       expect(first.kind, BillImportKind.added);
-      expect(wc.billById(first.billId!)!.total, 4560);
+      expect(wc.bill(first.billId!)!.total, 4560);
       final second = await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
       expect(second.kind, BillImportKind.duplicate);
       expect(second.message, 'Already in your bills');
@@ -184,7 +184,7 @@ void main() {
       final r = await wc.importBillFile(pdf, 'pdf');
       expect(r.kind, BillImportKind.added);
       expect(r.fileKept, isTrue);
-      final b = wc.billById(r.billId!)!;
+      final b = wc.bill(r.billId!)!;
       expect(b.source, BillSource.pdf);
       expect(b.total, 4560);
       expect(b.date, '2026-10-18');
@@ -200,7 +200,7 @@ void main() {
       final wc = bw(inputs: fakes);
       final r = await wc.importBillFile(smallPdf(['Ukupno: 99,99 EUR']), 'pdf');
       expect(fakes.pdf.renders, 1);
-      final b = wc.billById(r.billId!)!;
+      final b = wc.bill(r.billId!)!;
       expect(b.source, BillSource.hub3);
       expect(b.total, 4560, reason: 'the slip says 45.60, the text 99.99: the code is exact');
     });
@@ -209,7 +209,7 @@ void main() {
       final wc = bw(inputs: FakeBillInputs(pdf: FakePdf(canRender: false), pictures: FakePictures(canRead: false)));
       final r = await wc.importBillFile(bytesOfString('%PDF-1.4 nothing readable'), 'pdf');
       expect(r.kind, BillImportKind.added);
-      final b = wc.billById(r.billId!)!;
+      final b = wc.bill(r.billId!)!;
       expect(b.total, isNull);
       expect(b.date, isNull);
       expect(b.blob, isNotNull);
@@ -220,7 +220,7 @@ void main() {
       final wc = bw();
       final r = await wc.importBillFile(bytesOfString(eInvoice), 'xml');
       expect(r.kind, BillImportKind.added);
-      final b = wc.billById(r.billId!)!;
+      final b = wc.bill(r.billId!)!;
       expect(b.source, BillSource.eInvoice);
       expect(b.total, 12500);
       expect(b.dueDate, '2026-10-25');
@@ -234,7 +234,7 @@ void main() {
       fakes.pictures.codeList = const [ScannedCode(CodeKind.qr, receiptQr)];
       final wc = bw(inputs: fakes);
       final r = await wc.importBillFile(tinyPng, 'png');
-      final b = wc.billById(r.billId!)!;
+      final b = wc.bill(r.billId!)!;
       expect(b.source, BillSource.receiptQr);
       expect(b.blobType, 'jpg');
       expect((await wc.billFile(b)).bytes, [9, 9, 9]);
@@ -243,7 +243,7 @@ void main() {
       fakes.pictures.codeList = const [];
       fakes.pictures.textResult = 'Datum racuna 05.10.2026\nUkupno 12,50';
       final r2 = await wc.importBillFile(Uint8List.fromList([7, 7]), 'jpg');
-      final b2 = wc.billById(r2.billId!)!;
+      final b2 = wc.bill(r2.billId!)!;
       expect(b2.source, BillSource.photo);
       expect(b2.total, 1250);
       expect(b2.date, '2026-10-05');
@@ -253,7 +253,7 @@ void main() {
       final wc = bw(inputs: FakeBillInputs(pictures: FakePictures(canRead: false), pdf: FakePdf(canRender: false)));
       final a = await wc.importBillFile(tinyPng, 'jpg');
       expect(a.kind, BillImportKind.added);
-      final b = wc.billById(a.billId!)!;
+      final b = wc.bill(a.billId!)!;
       expect(b.source, BillSource.photo);
       expect(b.total, isNull);
       expect(b.blob, isNotNull);
@@ -275,7 +275,7 @@ void main() {
       fakes.pictures.textResult = 'Datum racuna 05.10.2026\nUkupno 12,50';
       final wc = bw(inputs: fakes);
       final r = await wc.importPhoto(Uint8List.fromList([1, 2, 3, 4]));
-      final b = wc.billById(r.billId!)!;
+      final b = wc.bill(r.billId!)!;
       expect(b.source, BillSource.photo);
       expect(b.blob, isNotNull);
       expect(b.total, 1250);
@@ -317,7 +317,7 @@ void main() {
       final id = addBill(wc, const NormalizedBill(source: BillSource.pdf, externalId: 'file:x', payee: 'Synthetic Water'));
       expect(wc.confirmBill(id), isFalse);
       expect(wc.billLists().review.map((b) => b.id), [id]);
-      wc.editBill(id, date: '2026-10-18', total: 4560, dueDate: '2026-10-30', category: 'Bills & subscriptions');
+      wc.updateBill(id, date: '2026-10-18', total: 4560, dueDate: '2026-10-30', category: 'Bills & subscriptions');
       expect(wc.confirmBill(id), isTrue);
       expect(wc.billLists().review, isEmpty);
       expect(wc.billLists().unpaid.map((b) => b.id), [id]);
@@ -326,13 +326,13 @@ void main() {
     test('"Paid by…" lists payments near the date, the payee-word match first; link and unlink move the bill', () {
       final wc = bw();
       final id = addBill(wc, syntheticBill('hub3:x', due: '2026-10-30'), confirm: true);
-      final c = wc.billCandidatesFor(wc.billById(id)!);
+      final c = wc.billCandidatesFor(wc.bill(id)!);
       expect(c, hasLength(2));
       expect(c.first.tx.description, contains('SYNTHETIC WATER'));
       expect(wc.linkBill(id, c.first.tx.id), isTrue);
       expect(wc.billLists().paid.map((b) => b.id), [id]);
       expect(wc.billForTx(c.first.tx.id)!.id, id);
-      expect(wc.billCandidatesFor(wc.billById(addBill(wc, syntheticBill('hub3:y', payee: 'Other')))!).map((t) => t.tx.id),
+      expect(wc.billCandidatesFor(wc.bill(addBill(wc, syntheticBill('hub3:y', payee: 'Other')))!).map((t) => t.tx.id),
           isNot(contains(c.first.tx.id)),
           reason: 'a payment of another bill is not offered');
       wc.unlinkBill(id);
@@ -353,23 +353,23 @@ void main() {
     test('deleting the paying payment makes the bill unpaid again', () {
       final wc = bw();
       final id = addBill(wc, syntheticBill('dp'), confirm: true);
-      final tx = wc.billCandidatesFor(wc.billById(id)!).first.tx;
+      final tx = wc.billCandidatesFor(wc.bill(id)!).first.tx;
       wc.linkBill(id, tx.id);
       wc.addExpense(amount: 100, category: 'Groceries', note: '', date: '2026-10-19'); // another payment, not linked
       wc.repo.deleteTransaction(tx.id);
       wc.reload();
-      expect(wc.billById(id)!.paid, isFalse);
+      expect(wc.bill(id)!.paid, isFalse);
       expect(wc.billLists().unpaid.map((b) => b.id), [id]);
     });
 
     test('a slip whose amount is 0 has no total and cannot be confirmed until one is typed', () async {
       final wc = bw();
       final r = await wc.importScannedCode(ScannedCode(CodeKind.pdf417, hub3Slip.replaceFirst('000000000004560', '000000000000000')));
-      final b = wc.billById(r.billId!)!;
+      final b = wc.bill(r.billId!)!;
       expect(b.total, isNull);
-      wc.editBill(b.id, date: '2026-10-18');
+      wc.updateBill(b.id, date: '2026-10-18');
       expect(wc.confirmBill(b.id), isFalse);
-      wc.editBill(b.id, total: 4560);
+      wc.updateBill(b.id, total: 4560);
       expect(wc.confirmBill(b.id), isTrue);
     });
 
@@ -377,7 +377,7 @@ void main() {
       final wc = bw();
       final a = addBill(wc, syntheticBill('a'), confirm: true);
       final b = addBill(wc, syntheticBill('b'), confirm: true);
-      final tx = wc.billCandidatesFor(wc.billById(a)!).first.tx.id;
+      final tx = wc.billCandidatesFor(wc.bill(a)!).first.tx.id;
       expect(wc.linkBill(a, tx), isTrue);
       expect(wc.linkBill(b, tx), isFalse);
     });
@@ -388,7 +388,7 @@ void main() {
       final before = wc.txs.length;
       wc.addBillAsExpense(id, category: 'Groceries');
       expect(wc.txs.length, before + 1);
-      final b = wc.billById(id)!;
+      final b = wc.bill(id)!;
       expect(b.paid, isTrue);
       final tx = wc.txs.firstWhere((t) => t.tx.id == b.linkedTx);
       expect(tx.amount, -2000);
@@ -406,9 +406,9 @@ void main() {
     test('the original is "none" without a file and "missing" when it is not on this device', () async {
       final wc = bw();
       final id = addBill(wc, syntheticBill('nofile'));
-      expect((await wc.billFile(wc.billById(id)!)).state, BillFileState.none);
+      expect((await wc.billFile(wc.bill(id)!)).state, BillFileState.none);
       final r = await wc.importBillFile(tinyPng, 'jpg');
-      final b = wc.billById(r.billId!)!;
+      final b = wc.bill(r.billId!)!;
       expect((await wc.billFile(b)).state, BillFileState.ready);
       final gone = Bill(id: 'g', source: BillSource.photo, blob: 'f' * 64, blobType: 'jpg');
       expect((await wc.billFile(gone)).state, BillFileState.missing);
@@ -497,7 +497,7 @@ void main() {
       addBill(wc, syntheticBill('r1', payee: 'Review Shop'));
       final unpaid = addBill(wc, syntheticBill('u1', payee: 'Unpaid Utility', due: '2026-10-15'), confirm: true);
       final paid = addBill(wc, syntheticBill('p1', payee: 'Paid Store'), confirm: true);
-      wc.linkBill(paid, wc.billCandidatesFor(wc.billById(paid)!).first.tx.id);
+      wc.linkBill(paid, wc.billCandidatesFor(wc.bill(paid)!).first.tx.id);
       await pumpApp(tester, Scaffold(body: BillsPanel(wc: wc)), size: const Size(400, 1400));
       expect(find.text('To review (1)'), findsOneWidget);
       expect(find.text('Unpaid (1)'), findsOneWidget);
@@ -576,14 +576,14 @@ void main() {
       await tester.tap(key('confirmBill'));
       await tester.pumpAndSettle();
       expect(key('billError'), findsOneWidget);
-      expect(wc.billById(id)!.status, BillStatus.review);
+      expect(wc.bill(id)!.status, BillStatus.review);
       await tester.enterText(key('billTotal'), '12.50');
       await tester.enterText(key('billPayee'), 'Typed Shop');
       await tester.ensureVisible(key('confirmBill'));
       await tester.tap(key('confirmBill'));
       await tester.pumpAndSettle();
       expect(snack('Bill confirmed'), findsOneWidget);
-      final b = wc.billById(id)!;
+      final b = wc.bill(id)!;
       expect((b.status, b.total, b.payee), (BillStatus.confirmed, 1250, 'Typed Shop'));
     });
 
@@ -596,12 +596,12 @@ void main() {
       await tester.tap(key('confirmBill'));
       await tester.pumpAndSettle();
       expect(find.textContaining('IBAN: check the number'), findsOneWidget);
-      expect(wc.billById(id)!.iban, isNull);
+      expect(wc.bill(id)!.iban, isNull);
       await tester.enterText(key('billIban'), 'hr12 1001 0051 8630 0016 0');
       await tester.ensureVisible(key('confirmBill'));
       await tester.tap(key('confirmBill'));
       await tester.pumpAndSettle();
-      expect(wc.billById(id)!.iban, 'HR1210010051863000160');
+      expect(wc.bill(id)!.iban, 'HR1210010051863000160');
     });
 
     tw('a total that is not an amount is refused and nothing is saved', (tester) async {
@@ -613,7 +613,7 @@ void main() {
       await tester.tap(key('confirmBill'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Total: enter an amount'), findsOneWidget);
-      expect(wc.billById(id)!.total, 4560);
+      expect(wc.bill(id)!.total, 4560);
     });
 
     tw('items are listed', (tester) async {
@@ -639,12 +639,12 @@ void main() {
       await tester.ensureVisible(key('paidBy'));
       await tester.tap(key('paidBy'));
       await tester.pumpAndSettle();
-      final ids = wc.billCandidatesFor(wc.billById(id)!).map((t) => t.tx.id).toList();
+      final ids = wc.billCandidatesFor(wc.bill(id)!).map((t) => t.tx.id).toList();
       expect(tester.getTopLeft(key('cand:${ids.first}')).dy, lessThan(tester.getTopLeft(key('cand:${ids.last}')).dy));
       await tester.tap(key('cand:${ids.first}'));
       await tester.pumpAndSettle();
       expect(snack('Marked as paid'), findsOneWidget);
-      expect(wc.billById(id)!.linkedTx, ids.first);
+      expect(wc.bill(id)!.linkedTx, ids.first);
     });
 
     tw('a paid bill shows the payment and Unlink; "Paid in cash" asks for a category and adds the expense', (tester) async {
@@ -658,14 +658,14 @@ void main() {
       await tester.pump();
       await tester.tap(key('addCashExpense'));
       await tester.pumpAndSettle();
-      expect(wc.billById(id)!.paid, isTrue);
+      expect(wc.bill(id)!.paid, isTrue);
       expect(wc.txs.where((t) => t.amount == -2000 && t.category == 'Eating out'), hasLength(1));
       await openSheetFor(tester, wc, id);
       expect(find.textContaining('Paid'), findsWidgets);
       await tester.ensureVisible(key('unlinkBill'));
       await tester.tap(key('unlinkBill'));
       await tester.pumpAndSettle();
-      expect(wc.billById(id)!.paid, isFalse);
+      expect(wc.bill(id)!.paid, isFalse);
     });
 
     tw('warranty and return-by can be cleared', (tester) async {
@@ -676,11 +676,11 @@ void main() {
       await tester.ensureVisible(find.byTooltip('Clear Warranty until'));
       await tester.tap(find.byTooltip('Clear Warranty until'));
       await tester.pumpAndSettle();
-      expect(wc.billById(id)!.warrantyUntil, isNull);
-      expect(wc.billById(id)!.returnBy, '2026-11-01');
+      expect(wc.bill(id)!.warrantyUntil, isNull);
+      expect(wc.bill(id)!.returnBy, '2026-11-01');
       await tester.tap(find.byTooltip('Clear Return by'));
       await tester.pumpAndSettle();
-      expect(wc.billById(id)!.returnBy, isNull);
+      expect(wc.bill(id)!.returnBy, isNull);
     });
 
     tw('Delete asks first; Keep keeps it, Delete removes it', (tester) async {
@@ -742,7 +742,7 @@ void main() {
     tw('on Android a PDF is shown page by page from the rendered pages', (tester) async {
       final wc = bw(inputs: FakeBillInputs(pdf: FakePdf(pages: [tinyPng, tinyPng])));
       final r = (await tester.runAsync(() => wc.importBillFile(smallPdf(['Ukupno: 5,00 EUR']), 'pdf')))!;
-      await pumpApp(tester, BillFileScreen(wc: wc, bill: wc.billById(r.billId!)!));
+      await pumpApp(tester, BillFileScreen(wc: wc, bill: wc.bill(r.billId!)!));
       await tester.pumpAndSettle();
       expect(find.byType(Image), findsNWidgets(2));
     });
@@ -866,7 +866,7 @@ void main() {
     tw('a payment with a linked bill shows the receipt mark and "Open bill"', (tester) async {
       final wc = bw();
       final id = addBill(wc, syntheticBill('l'), confirm: true);
-      final tx = wc.billCandidatesFor(wc.billById(id)!).first;
+      final tx = wc.billCandidatesFor(wc.bill(id)!).first;
       await pumpApp(tester, todayOf(wc), size: const Size(400, 1800));
       expect(key('billMark'), findsNothing);
       wc.linkBill(id, tx.tx.id);
@@ -923,7 +923,7 @@ void main() {
       expect(row, findsOneWidget);
       expect(find.descendant(of: row, matching: find.text('Bill')), findsOneWidget);
       expect(wc.comingUp().count, 1, reason: 'the slip reserves its money like any planned cost');
-      wc.linkBill(id, wc.billCandidatesFor(wc.billById(id)!).first.tx.id);
+      wc.linkBill(id, wc.billCandidatesFor(wc.bill(id)!).first.tx.id);
       expect(wc.comingUp().count, 0);
     });
 
@@ -940,7 +940,7 @@ void main() {
       await tester.tap(find.text('Findable Plumbing'));
       await tester.pumpAndSettle();
       expect(key('confirmBill'), findsOneWidget);
-      expect(wc.billById(id), isNotNull);
+      expect(wc.bill(id), isNotNull);
     });
   });
 
@@ -950,10 +950,10 @@ void main() {
       final wc = bw();
       final (id, _) = wc.repo.importBill(syntheticBill('cat1', due: '2026-10-25'));
       wc.reload();
-      expect(wc.billNeedsCategory(wc.billById(id)!), isTrue);
+      expect(wc.billNeedsCategory(wc.bill(id)!), isTrue);
       expect(wc.confirmBill(id), isFalse);
-      expect(wc.billById(id)!.status, BillStatus.review);
-      wc.editBill(id, category: 'Bills & subscriptions');
+      expect(wc.bill(id)!.status, BillStatus.review);
+      wc.updateBill(id, category: 'Bills & subscriptions');
       expect(wc.confirmBill(id), isTrue);
     });
 
@@ -975,7 +975,7 @@ void main() {
       await tester.tap(key('confirmBill'));
       await tester.pumpAndSettle();
       expect(key('billError'), findsOneWidget);
-      expect(wc.billById(id)!.status, BillStatus.review);
+      expect(wc.bill(id)!.status, BillStatus.review);
       await tester.ensureVisible(key('billCategory:'));
       await tester.tap(key('billCategory:'));
       await tester.pumpAndSettle();
@@ -985,7 +985,7 @@ void main() {
       await tester.ensureVisible(key('confirmBill'));
       await tester.tap(key('confirmBill'));
       await tester.pumpAndSettle();
-      final b = wc.billById(id)!;
+      final b = wc.bill(id)!;
       expect((b.status, b.category), (BillStatus.confirmed, 'Bills & subscriptions'));
     });
 
@@ -999,18 +999,18 @@ void main() {
       await tester.ensureVisible(key('confirmBill'));
       await tester.tap(key('confirmBill'));
       await tester.pumpAndSettle();
-      expect(wc.billById(id)!.category, 'Bills & subscriptions');
-      expect(wc.billById(id)!.status, BillStatus.confirmed);
+      expect(wc.bill(id)!.category, 'Bills & subscriptions');
+      expect(wc.bill(id)!.status, BillStatus.confirmed);
     });
 
     tw('a bill that already has a category is not marked as suggested; no suggestion leaves the field empty', (tester) async {
       final wc = bw();
       wc.billCategorySuggester = (b) => 'Groceries';
       final id = addBill(wc, syntheticBill('cat6', due: '2026-10-25'));
-      wc.editBill(id, category: 'Rent');
+      wc.updateBill(id, category: 'Rent');
       await openSheetFor(tester, wc, id, size: const Size(400, 1600));
       expect(find.text('Suggested from your earlier bills. Check it.'), findsNothing);
-      expect(wc.billById(id)!.category, 'Rent');
+      expect(wc.bill(id)!.category, 'Rent');
     });
 
     // ---- 2. "Already in your bills" is not a dead end ----
@@ -1030,17 +1030,17 @@ void main() {
     test('when the bill there is paid, or past its due date, the words ask about a new one', () async {
       final wc = bw();
       final first = await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
-      wc.editBill(first.billId!, date: '2026-10-18', dueDate: '2026-10-25', category: 'Bills & subscriptions');
+      wc.updateBill(first.billId!, date: '2026-10-18', dueDate: '2026-10-25', category: 'Bills & subscriptions');
       wc.confirmBill(first.billId!);
       wc.unlinkBill(first.billId!); // confirming linked it to the water payment on its own
       expect((await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip))).message, 'Already in your bills',
           reason: 'still open and not late');
-      wc.linkBill(first.billId!, wc.billCandidatesFor(wc.billById(first.billId!)!).first.tx.id);
+      wc.linkBill(first.billId!, wc.billCandidatesFor(wc.bill(first.billId!)!).first.tx.id);
       final paid = await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
       expect(paid.message, 'You already paid a bill like this. Add it as a new one?');
       final other = bw();
       final f2 = await other.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
-      other.editBill(f2.billId!, date: '2026-09-18', dueDate: '2026-10-05');
+      other.updateBill(f2.billId!, date: '2026-09-18', dueDate: '2026-10-05');
       other.confirmBill(f2.billId!);
       final late = await other.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
       expect(late.message, 'You already paid a bill like this. Add it as a new one?');
@@ -1082,7 +1082,7 @@ void main() {
       await tester.tap(key('headsUp:${h.item.key}'));
       await tester.pumpAndSettle();
       expect(key('paidBy'), findsOneWidget);
-      expect(wc.billById(id), isNotNull);
+      expect(wc.bill(id), isNotNull);
     });
 
     tw('a planned-cost search result for a bill opens the bill', (tester) async {
@@ -1096,7 +1096,7 @@ void main() {
       await tester.tap(find.textContaining('Bills & subscriptions'));
       await tester.pumpAndSettle();
       expect(key('paidBy'), findsOneWidget);
-      expect(wc.billById(id), isNotNull);
+      expect(wc.bill(id), isNotNull);
     });
 
     // ---- 4. size checks before reading ----
@@ -1158,7 +1158,7 @@ void main() {
       wc.pdfParser = parsePdf; // the real one: Isolate.run
       final before = pdfParsedOffUi;
       final r = await wc.importBillFile(smallPdf(['Datum racuna: 18.10.2026', 'Ukupno: 45,60 EUR']), 'pdf');
-      expect(wc.billById(r.billId!)!.total, 4560);
+      expect(wc.bill(r.billId!)!.total, 4560);
       expect(pdfParsedOffUi, before + 1, reason: 'pdfText + billFromText ran in Isolate.run, not on the UI isolate');
       var calls = 0;
       wc.pdfParser = (pdf) async {
@@ -1174,7 +1174,7 @@ void main() {
       wc.pdfParser = (pdf) async => throw StateError('boom');
       final r = await wc.importBillFile(smallPdf(['Ukupno: 5,00 EUR']), 'pdf');
       expect(r.kind, BillImportKind.added);
-      expect(wc.billById(r.billId!)!.total, isNull);
+      expect(wc.bill(r.billId!)!.total, isNull);
     });
 
     // ---- core merged: real suggestion, "Planned by", older relay ----
@@ -1194,21 +1194,21 @@ void main() {
       final wc = withGymBill();
       final r = wc.recurringBills().singleWhere((r) => r.confirmed);
       final id = addBill(wc, syntheticBill('gym1', payee: 'SYNTHGYM ZAGREB', due: '2026-10-25'));
-      expect(wc.suggestedBillCategory(wc.billById(id)!), r.category);
-      expect(wc.suggestedBillCategory(wc.billById(addBill(wc, syntheticBill('x1', payee: 'Unknown Plumber')))!), isNull);
+      expect(wc.suggestedBillCategory(wc.bill(id)!), r.category);
+      expect(wc.suggestedBillCategory(wc.bill(addBill(wc, syntheticBill('x1', payee: 'Unknown Plumber')))!), isNull);
     });
 
     tw('the bill sheet says which expected bill already plans the slip, and says nothing for another payee', (tester) async {
       final wc = withGymBill();
       final label = wc.recurringBills().singleWhere((r) => r.confirmed).label;
       final id = addBill(wc, syntheticBill('gym2', payee: 'SYNTHGYM ZAGREB', due: '2026-10-25'));
-      expect(wc.billPlannedBy(wc.billById(id)!)?.label, label);
+      expect(wc.billPlannedBy(wc.bill(id)!)?.label, label);
       await openSheetFor(tester, wc, id, size: const Size(400, 1600));
       expect(find.text('Planned by $label'), findsOneWidget);
       tester.state<NavigatorState>(find.byType(Navigator).first).pop();
       await tester.pumpAndSettle();
       final other = addBill(wc, syntheticBill('gym3', payee: 'Unknown Plumber', due: '2026-10-25'));
-      expect(wc.billPlannedBy(wc.billById(other)!), isNull);
+      expect(wc.billPlannedBy(wc.bill(other)!), isNull);
       await openSheetFor(tester, wc, other, size: const Size(400, 1600));
       expect(key('plannedBy'), findsNothing);
     });
@@ -1289,20 +1289,20 @@ void main() {
       wc.repo.confirmBill(id);
       wc.repo.unlinkBill(id);
       wc.reload();
-      final b = wc.billById(id)!;
+      final b = wc.bill(id)!;
       expect((b.confirmed, b.paid, b.category), (true, false, null));
       return id;
     }
 
-    test('B6 bug: editBill/setBillDates threw on a reopened bill without a category; now small edits save, others return false', () {
+    test('B6 bug: updateBill/setBillDates threw on a reopened bill without a category; now small edits save, others return false', () {
       final wc = bw();
       final id = reopenedWithoutCategory(wc);
-      expect(wc.editBill(id, note: 'synthetic note'), isTrue);
+      expect(wc.updateBill(id, note: 'synthetic note'), isTrue);
       expect(wc.setBillDates(id, warrantyUntil: '2027-10-18'), isTrue);
-      expect(wc.editBill(id, total: 5000), isFalse, reason: 'a total change on a reserving bill needs the category');
-      expect(wc.billById(id)!.total, 4560);
-      expect(wc.editBill(id, total: 5000, category: 'Bills & one-offs'), isTrue);
-      expect((wc.billById(id)!.total, wc.billById(id)!.category), (5000, 'Bills & one-offs'));
+      expect(wc.updateBill(id, total: 5000), isFalse, reason: 'a total change on a reserving bill needs the category');
+      expect(wc.bill(id)!.total, 4560);
+      expect(wc.updateBill(id, total: 5000, category: 'Bills & one-offs'), isTrue);
+      expect((wc.bill(id)!.total, wc.bill(id)!.category), (5000, 'Bills & one-offs'));
     });
 
     test('its planned row is listed but not reserved until it has a category', () {
@@ -1311,7 +1311,7 @@ void main() {
       final p = wc.period();
       expect(p.duePlanned.where((x) => x.needsCategory).map((x) => x.id), [WalletRepo.billPlannedId(id)]);
       expect(p.reservedPlanned, 0);
-      wc.editBill(id, category: 'Bills & one-offs');
+      wc.updateBill(id, category: 'Bills & one-offs');
       expect(wc.period().reservedPlanned, 4560);
     });
 
@@ -1327,7 +1327,7 @@ void main() {
       expect(key('billError'), findsOneWidget);
       expect(find.text("Pick the category so Budget Wallet doesn't count this bill twice."), findsWidgets);
       expect(key('saveBill'), findsOneWidget, reason: 'the sheet stays open');
-      expect(wc.billById(id)!.total, 4560);
+      expect(wc.bill(id)!.total, 4560);
       // A note alone saves and closes the sheet.
       await tester.enterText(key('billTotal'), '45.60');
       await tester.enterText(key('billNote'), 'synthetic note');
@@ -1335,7 +1335,7 @@ void main() {
       await tester.tap(key('saveBill'));
       await tester.pumpAndSettle();
       expect(key('saveBill'), findsNothing);
-      expect(wc.billById(id)!.note, 'synthetic note');
+      expect(wc.bill(id)!.note, 'synthetic note');
     });
 
     test('Paid in cash gives the bill the category, so deleting the expense reopens it categorized', () {
@@ -1344,9 +1344,9 @@ void main() {
       final txId = wc.repo.addExpenseFromBill(id, category: 'Bills & subscriptions');
       wc.repo.deleteTransaction(txId);
       wc.reload();
-      final b = wc.billById(id)!;
+      final b = wc.bill(id)!;
       expect((b.paid, b.category), (false, 'Bills & subscriptions'));
-      expect(wc.editBill(id, note: 'synthetic note'), isTrue);
+      expect(wc.updateBill(id, note: 'synthetic note'), isTrue);
       expect(wc.period().reservedPlanned, 0, reason: 'a fixed category: covered by the plan');
     });
 
@@ -1439,21 +1439,21 @@ void main() {
       final wc = bw(inputs: fakes);
       await wc.importScannedCode(const ScannedCode(CodeKind.qr, receiptQr));
       final slip = await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
-      wc.editBill(slip.billId!, date: '2026-10-18'); // a slip has no date: the owner types it
+      wc.updateBill(slip.billId!, date: '2026-10-18'); // a slip has no date: the owner types it
       await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
       await wc.importScannedCode(const ScannedCode(CodeKind.qr, 'https://example.org/secret-looking-code'));
       final x = await wc.importBillFile(bytesOfString(eInvoice), 'xml');
       await wc.importBillFile(tinyPng, 'png');
       await wc.importBillFile(smallPdf(['Ukupno: 31,41 EUR', '03.10.2026']), 'pdf', trigger: 'share');
-      wc.editBill(slip.billId!, payee: 'Zzyzx Plumbing', note: 'private note about the boiler', category: 'Bills & subscriptions');
+      wc.updateBill(slip.billId!, payee: 'Zzyzx Plumbing', note: 'private note about the boiler', category: 'Bills & subscriptions');
       wc.setBillDates(slip.billId!, warrantyUntil: '2027-02-02', returnBy: '2026-11-11');
       wc.confirmBill(slip.billId!);
-      final cand = wc.billCandidatesFor(wc.billById(slip.billId!)!).first;
+      final cand = wc.billCandidatesFor(wc.bill(slip.billId!)!).first;
       wc.linkBill(slip.billId!, cand.tx.id);
       wc.unlinkBill(slip.billId!);
       wc.addBillAsExpense(x.billId!, category: 'Groceries');
       wc.searchBills('zzyzx');
-      await wc.billFile(wc.billById(slip.billId!)!);
+      await wc.billFile(wc.bill(slip.billId!)!);
       wc.deleteBill(slip.billId!);
       final text = lines.join('\n');
       for (final secret in [
@@ -1481,12 +1481,12 @@ void main() {
   });
 
   group('plugins stay out of the shared code', () {
-    test('only bill_inputs_native.dart imports the camera, OCR and share plugins; nothing on the web path imports dart:io', () {
+    test('only bill_inputs_io.dart imports the camera, OCR and share plugins; nothing on the web path imports dart:io', () {
       final plugins = RegExp(r"import 'package:(mobile_scanner|google_mlkit_\w+|receive_sharing_intent)/");
       final offenders = <String>[];
       for (final e in Directory('lib').listSync(recursive: true)) {
         if (e is! File || !e.path.endsWith('.dart')) continue;
-        if (plugins.hasMatch(e.readAsStringSync()) && !e.path.endsWith('bill_inputs_native.dart')) offenders.add(e.path);
+        if (plugins.hasMatch(e.readAsStringSync()) && !e.path.endsWith('bill_inputs_io.dart')) offenders.add(e.path);
       }
       expect(offenders, isEmpty);
       for (final f in [
@@ -1514,7 +1514,7 @@ void main() {
         final u = addBill(wc, syntheticBill('l2', payee: 'Unpaid', due: '2026-10-12'), confirm: true);
         wc.setBillDates(u, warrantyUntil: '2026-10-28', returnBy: '2026-10-24');
         final p = addBill(wc, syntheticBill('l3', payee: 'Paid'), confirm: true);
-        wc.linkBill(p, wc.billCandidatesFor(wc.billById(p)!).first.tx.id);
+        wc.linkBill(p, wc.billCandidatesFor(wc.bill(p)!).first.tx.id);
         for (var i = 0; i < 8; i++) {
           addBill(wc, syntheticBill('p$i', payee: 'Paid $i'), confirm: true);
         }
@@ -1552,7 +1552,7 @@ void main() {
           await tester.ensureVisible(key(k));
           await tester.pump();
         }
-        wc.editBill(id, category: 'Bills & subscriptions');
+        wc.updateBill(id, category: 'Bills & subscriptions');
         expect(wc.confirmBill(id), isTrue, reason: 'a bill due from today on needs a category to confirm');
         await tester.pump();
         await tester.ensureVisible(key('paidBy'));

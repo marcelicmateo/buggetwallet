@@ -7,7 +7,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:budget_wallet/src/calendar_source.dart';
-import 'package:budget_wallet/src/calendar_source_native.dart';
+import 'package:budget_wallet/src/calendar_source_io.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/ics_fetch.dart';
@@ -457,7 +457,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(key('plannedSave'));
       await tester.pump();
-      expect(find.textContaining('Enter an amount, like 80.00.'), findsOneWidget);
+      expect(find.textContaining('Enter an amount, like 12.50.'), findsOneWidget);
       await tester.enterText(key('plannedAmount'), '25');
       await tester.tap(key('plannedSave'));
       await tester.pumpAndSettle();
@@ -770,12 +770,12 @@ void main() {
       expect(wc.period().reservedPlanned, reservedBefore);
     });
 
-    test('editPlannedCost: clearCategory removes the category, null alone leaves it', () {
+    test('updatePlanned: clearCategory removes the category, null alone leaves it', () {
       final wc = fw();
       final id = wc.plannedOpen().firstWhere((p) => p.title == 'Dentist').id;
-      wc.editPlannedCost(id, title: 'Dentist');
+      wc.updatePlanned(id, title: 'Dentist');
       expect(wc.plannedOpen().firstWhere((p) => p.id == id).category, 'Health & care');
-      wc.editPlannedCost(id, clearCategory: true);
+      wc.updatePlanned(id, clearCategory: true);
       expect(wc.plannedOpen().firstWhere((p) => p.id == id).category, isNull);
     });
 

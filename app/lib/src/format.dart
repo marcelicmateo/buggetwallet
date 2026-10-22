@@ -71,6 +71,16 @@ const maxAmountCents = 1000000000000;
 
 final _plainNumber = RegExp(r'^[+-]?(\d+\.?\d*|\.\d+)$');
 
+/// The one sentence for an amount that does not parse (sheets, planned costs, budgets, Plan).
+const invalidAmountMessage = 'Enter an amount, like 12.50.';
+
+/// A cents amount as the text of a money field: `1500` -> "15", `1550` -> "15.50" (parseMoney reads it back). With [blankZero] a
+/// zero is empty, so the field shows its hint.
+String centsToFieldText(int cents, {bool blankZero = false}) {
+  if (blankZero && cents == 0) return '';
+  return cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2);
+}
+
 /// Parses "12", "12.5", "12,50", "1.234,56" into cents. Null if not a number, negative,
 /// in exponent form, or beyond [maxAmountCents].
 int? parseMoney(String input) {

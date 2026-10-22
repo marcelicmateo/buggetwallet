@@ -3,6 +3,7 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
+import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -62,12 +63,12 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
       return;
     }
     if (amount == null || amount <= 0) {
-      setState(() => _error = 'Enter an amount, like 80.00.');
+      setState(() => _error = invalidAmountMessage);
       return;
     }
     final wc = widget.wc;
     if (widget.edit != null) {
-      wc.editPlannedCost(widget.edit!.id, title: title, date: _date, amount: amount, category: _category, clearCategory: _category == null);
+      wc.updatePlanned(widget.edit!.id, title: title, date: _date, amount: amount, category: _category, clearCategory: _category == null);
     } else if (widget.suggestion != null) {
       wc.confirmSuggestion(widget.suggestion!, amount: amount, title: title, date: _date, category: _category);
     } else {
@@ -92,11 +93,9 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
         decoration: const InputDecoration(labelText: 'What', hintText: 'Car insurance'),
       ),
       const SizedBox(height: 12),
-      TextField(
-        key: const ValueKey('plannedAmount'),
+      MoneyField(
+        fieldKey: const ValueKey('plannedAmount'),
         controller: _amount,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        textAlign: TextAlign.end,
         style: numStyle.copyWith(fontSize: 24, fontWeight: FontWeight.w500),
         decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur), hintText: '0.00'),
       ),
@@ -132,7 +131,7 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
       const SizedBox(height: 14),
       FilledButton(
           key: const ValueKey('plannedSave'),
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
           onPressed: _save,
           child: Text(editing ? 'Save' : (widget.suggestion != null ? 'Add to my plan' : 'Add planned cost'))),
       const SizedBox(height: 8),
@@ -222,7 +221,7 @@ class _PlannedEntrySheetState extends State<PlannedEntrySheet> {
                   Navigator.pop(context, 'paid');
                 },
                 child: Container(
-                  constraints: const BoxConstraints(minHeight: 48),
+                  constraints: const BoxConstraints(minHeight: touchMin),
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: SplitRow(
                     start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

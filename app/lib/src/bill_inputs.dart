@@ -10,6 +10,18 @@ import 'package:wallet_core/wallet_core.dart' show maxBlobPlainBytes;
 /// What the owner reads when a file is over the limit.
 const billTooBigMessage = 'This file is too big for a bill (max 15 MB).';
 
+/// Refusal copy shared by the scanner view (bill_inputs_io.dart) and the screens (scan_bill.dart): one place for the words.
+const cameraOffMessage = 'The camera is off for this app. Allow it in Android settings, or import a bill file.';
+const cameraUnavailableMessage = "Can't open the camera on this phone.";
+const photoFailedMessage = "Couldn't take the photo. Try again, or import a file.";
+
+/// The words for a failed "Take photo" ([BillPhotoException.code]: `permission`, `tooBig`, anything else).
+String photoFailureMessage(String code) => switch (code) {
+      'permission' => cameraOffMessage,
+      'tooBig' => billTooBigMessage,
+      _ => photoFailedMessage,
+    };
+
 /// A picture may be this big before it is sized down (the JPEG that is kept must then fit [maxBlobPlainBytes]).
 const maxBillImageBytes = 40 * 1024 * 1024;
 
