@@ -90,13 +90,45 @@ Order: transport interface + `archive` gzip first, then WASM DB + web key store,
 - Link to bank row: by reference (JIR / invoice no / payment reference) found in the bank text; otherwise the bill stays "unlinked" for the owner to link by hand (never by amount alone, decision 2026-10-20). Photos/PDFs stored once as encrypted files in the sync folder, fetched by hash.
 - Open: totals only or line items? keep photo or data only? warranty/return reminders?
 
-### 4.3 Calendar integration and future spending
+### 4.3 Calendar integration and future spending — approved 2026-10-22
 - Planned costs from: calendar events given an amount, bills with due dates, recurring bills found in exports, manual entries, project cost lines and schedules.
 - Safe to spend = (flexible money − spent − planned before payday) ÷ days left. Sample: 92 € planned → 14 € becomes 10 €. After-payday costs go into the next period.
 - Real bank row / hand entry for a planned cost replaces it (no double counting). Learned amounts are only suggestions until confirmed.
 - Only events given an amount are stored (title, date, amount), synced encrypted. Android calendar provider; Linux/web via .ics.
 - UI: "Coming up" line on Today; Upcoming screen (pay period as calendar).
 - Open: which calendars? default amounts per event kind? heads-up before big costs?
+**Approved 2026-10-22 (owner): build next.** Decisions: read **any calendar that syncs to the device** (Android: every
+calendar account on the phone via the system calendar — Google, Outlook/Exchange, CalDAV through DAVx5 — read-only, the
+owner picks which; Linux and web: `.ics` file import, Linux also an `.ics` link refreshed on start); **the app has its own
+calendar (Upcoming)** that holds every planned cost — from calendars, confirmed recurring bills, hand-added planned costs,
+later bills with due dates; amounts are **suggested, counted only after the owner confirms**; **heads-up 3 days before a
+planned cost ≥ 100 €** (both adjustable).
+Design:
+- **Data (core, synced):** `planned` rows: title, date, amount (cents, null = no amount yet), category, source
+  (manual | calendar | bill), source ref (hash of calendar + event uid + date, never the raw id), status (open | paid | skipped),
+  `paid_tx` (the transaction the owner said paid it). Calendar events without a confirmed amount are **not stored or synced**:
+  they show on this device only, as suggestions. Confirmed recurring bills appear in the same calendar as virtual entries
+  (not copied).
+- **Safe to spend:** flexible money − spent − **open planned costs dated from today to the day before payday** ÷ days left.
+  One reservation function covers planned costs and confirmed recurring bills (replaces the M4 bill reservation; same
+  numbers when only bills exist). Costs after payday land in the next period. A planned cost stops reserving when the owner
+  marks it Paid (picks the transaction) or Skip, or the day after its date (the real row is then in spending).
+- **No double counting, no amount-only matching:** when a bank row or hand entry of the same category arrives within the
+  planned cost's date ±3 days, the app *suggests* "Paid by this?"; only the owner's tap links it. An early payment reserves
+  only until that tap or the date passes.
+- **Amount suggestions:** an amount in the event title/notes (`80 €`, `€80`, `80 EUR`, `80,00 €`), or the confirmed amount of
+  an earlier event with the same normalised title. Shown as "Suggested 80 € — Confirm / Change / No cost".
+- **Calendar reading:** Android: one plugin (read-only `READ_CALENDAR`, instances in the next 90 days, recurring events
+  expanded by the system). `.ics`: own parser in core (VEVENT, all-day and timed, TZID, RRULE for DAILY/WEEKLY/MONTHLY/
+  YEARLY with INTERVAL, COUNT, UNTIL, BYDAY, EXDATE; anything else imported as single events and logged as unsupported).
+  Refresh on start and resume. Logs never contain titles, amounts or calendar names.
+- **UI:** Today "Coming up" line (next planned costs before payday + total) → **Upcoming** screen: the pay period as a month
+  grid with marks + a ruled list (date, title, amount or "Suggested …", source tag), "+ Planned cost". Entry sheet: amount,
+  category, date, Paid (pick the transaction) / Skip / Delete. Plan › **Calendars**: pick Android calendars, import/link
+  `.ics`, heads-up threshold and days. Plan › Export adds "Planned costs (.ics)" so the plan shows in other calendar apps.
+- **Heads-up:** Android notification (nudge rules: no amounts or titles in the text) and a Today line 3 days before each
+  planned cost ≥ 100 €; settings synced.
+- **Not in scope now:** writing into the phone's calendars, reminders for costs without an amount, the bills database.
 
 ### 4.4 Projects — research and trackers (dropped by the owner 2026-10-22; kept for reference)
 ```mermaid
