@@ -71,6 +71,7 @@ void main() {
       expect(relayTestFailureText(TransportFailure.unreachable), "Can't reach the relay");
       expect(relayTestFailureText(TransportFailure.newerApi), 'This relay needs a newer app');
       expect(relayTestFailureText(TransportFailure.olderApi), contains('Update the relay'));
+      expect(relayTestFailureText(TransportFailure.clockSkew), contains('date and time'));
       expect(relayTestFailureText(TransportFailure.other), isNot(contains("Can't reach")));
     });
   });
