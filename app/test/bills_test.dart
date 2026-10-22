@@ -1417,7 +1417,7 @@ void main() {
           if (i.planned != null) i
       ];
       expect(w.wc.countedIn(shownPlanned), (count: 1, total: 8000));
-      expect(plannedIsBill(w.wc.plannedNeedingCategory().single), isTrue);
+      expect(w.wc.plannedNeedingCategory().single.isBill, isTrue);
       expect(w.wc.plannedNeedingCategory().single.sourceRef, w.gas);
     });
 

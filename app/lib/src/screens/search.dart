@@ -153,7 +153,7 @@ class _SearchPaneState extends State<SearchPane> {
                     p.amount == null ? 'No amount' : moneyExact(p.amount!, cur),
                     '${shortDateOrRaw(p.date)}${p.category == null ? '' : ' · ${p.category}'}${p.status == PlannedStatus.open ? '' : ' · ${p.status == PlannedStatus.paid ? 'Paid' : 'Skipped'}'}',
                     'planned',
-                    () => plannedIsBill(p) ? openBill(context, wc, p.sourceRef!) : openUpcoming(context, wc)),
+                    () => p.isBill ? openBill(context, wc, p.sourceRef!) : openUpcoming(context, wc)),
             ]),
           ]),
         if (billsFound.isNotEmpty)

@@ -45,7 +45,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
     }
     final p = i.planned;
     if (p == null) return;
-    if (plannedIsBill(p)) {
+    if (p.isBill) {
       // A bill's planned row is the bill: Paid, Skip and Delete belong to the bill sheet.
       logNav('bill.openFromUpcoming');
       await openBill(context, widget.wc, p.sourceRef!);

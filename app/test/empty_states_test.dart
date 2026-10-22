@@ -100,7 +100,7 @@ void main() {
     final d = wc.today();
     wc.repo.updateSettings({'salary': 150000, 'rent': 50000, 'periodStart': d});
     for (final c in [1000, 2000, 300]) {
-      wc.repo.addManual(date: d, amount: c, category: 'Shopping', note: 'Item $c');
+      wc.repo.addTransaction(date: d, amount: c, category: 'Shopping', note: 'Item $c');
     }
   }, check: (t, seen) => expect(_has(seen, 'Spent 33.00\u00A0€ today'), isTrue, reason: '10.00 + 20.00 + 3.00 spent today'));
 
@@ -115,7 +115,7 @@ void main() {
 
   _scenario('a future-dated expense does not count as spent today', (wc) {
     wc.repo.updateSettings({'salary': 150000, 'periodStart': addDays(wc.today(), -5)});
-    wc.repo.addManual(date: addDays(wc.today(), 5), amount: 9900, category: 'Shopping', note: 'Future thing');
+    wc.repo.addTransaction(date: addDays(wc.today(), 5), amount: 9900, category: 'Shopping', note: 'Future thing');
   }, check: (t, seen) {
     expect(_has(seen, 'Spent 99.00\u00A0€ today'), isFalse);
     expect(_has(seen, 'Future thing'), isTrue, reason: 'still listed somewhere, not dropped');
@@ -131,17 +131,17 @@ void main() {
 
   _scenario('period start in the future', (wc) {
     wc.repo.updateSettings({'salary': 150000, 'rent': 50000, 'periodStart': addDays(wc.today(), 10)});
-    wc.repo.addManual(date: wc.today(), amount: 1500, category: 'Groceries', note: 'Today thing');
+    wc.repo.addTransaction(date: wc.today(), amount: 1500, category: 'Groceries', note: 'Today thing');
   });
 
   _scenario('period start two years ago', (wc) {
     wc.repo.updateSettings({'salary': 150000, 'rent': 50000, 'periodStart': addDays(wc.today(), -730)});
-    wc.repo.addManual(date: wc.today(), amount: 1500, category: 'Groceries', note: 'Today thing');
+    wc.repo.addTransaction(date: wc.today(), amount: 1500, category: 'Groceries', note: 'Today thing');
   });
 
   _scenario('salary smaller than rent + loan + subscriptions', (wc) {
     wc.repo.updateSettings({'salary': 50000, 'rent': 60000, 'loan': 30000, 'subs': 5000, 'salaryConfirmed': true});
-    wc.repo.addManual(date: wc.today(), amount: 1500, category: 'Groceries', note: 'Today thing');
+    wc.repo.addTransaction(date: wc.today(), amount: 1500, category: 'Groceries', note: 'Today thing');
   });
 
   _scenario('odd goals: target 0, saved above target, monthly 0, empty name, huge target', (wc) {

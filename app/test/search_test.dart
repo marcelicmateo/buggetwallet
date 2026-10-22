@@ -173,7 +173,7 @@ void main() {
     testWidgets('the field stays put while the results scroll, at 320 dp and text scale 2.0', (t) async {
       final wc = searchWallet();
       for (var i = 0; i < 30; i++) {
-        wc.repo.addManual(
+        wc.repo.addTransaction(
             date: '2026-09-${(i % 27 + 1).toString().padLeft(2, '0')}', amount: 1000 + i, category: 'Shopping', note: 'Synthetic item $i');
       }
       wc.reload();

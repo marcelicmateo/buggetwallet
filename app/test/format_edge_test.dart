@@ -2,6 +2,7 @@
 // Expected values are worked out by hand from the documented behaviour. All data is SYNTHETIC.
 import 'package:budget_wallet/src/format.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallet_core/wallet_core.dart' show maxAmountCents;
 
 void main() {
   group('parseMoney: empty and junk', () {
@@ -142,10 +143,10 @@ void main() {
     test('scientific notation is not an amount', () {
       expect(parseMoney('1e3'), isNull);
     });
-    test('the cap is 10 billion, inclusive', () {
-      expect(parseMoney('10000000000'), 1000000000000);
-      expect(parseMoney('10000000000.01'), isNull);
-      expect(parseMoney('10,000,000,001'), isNull);
+    test('the cap is core\'s maxAmountCents (1 billion), inclusive', () {
+      expect(parseMoney('1000000000'), maxAmountCents);
+      expect(parseMoney('1000000000.01'), isNull);
+      expect(parseMoney('1,000,000,001'), isNull);
     });
     test('hex is not an amount', () {
       expect(parseMoney('0x10'), isNull);

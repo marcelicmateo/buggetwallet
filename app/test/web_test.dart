@@ -114,7 +114,7 @@ Web webWallet({bool full = false, bool withKey = true, bool locked = false}) {
   final w = Web(wc, fake);
   addTearDown(w.dispose);
   if (full) {
-    wc.repo.addManual(date: wc.today(), amount: 1200, category: 'Groceries');
+    wc.repo.addTransaction(date: wc.today(), amount: 1200, category: 'Groceries');
     wc.reload();
   }
   wc.keyWriter = (key, {passphrase}) async => w.keyWrites.add(passphrase);

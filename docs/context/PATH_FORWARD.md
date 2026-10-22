@@ -283,4 +283,4 @@ Cap 4 at once. G: A, ui, tests, devops. H: A, B, devops, tests, then ui. I: ui a
   §6 I1, I6, P11, G5. §7 I6, P5. §8 P5, I7. §9 1 I1 · 2 I2 · 3 I3 · 4 I4 · 5 I5 · 6 I6 · 7 I6 · 8 I7 · 9 P5 · 10 P5 · 11 I6 ·
   12 I5 · 13 I9. §10 K18, K19, K20.
 - Corrections to the reviews: `.claude/agents/*.md` and the per-package `CLAUDE.md` files are in git (SDR §7 says not);
-  no `pubspec.yaml` exists at the root yet (G6 adds it).
+  a pub `workspace:` root was tried in G6 and rejected (it breaks the `sqlite3mc` build hook and the standalone relay image), so per-package `pub get` stays.

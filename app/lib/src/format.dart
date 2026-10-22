@@ -1,4 +1,4 @@
-import 'package:wallet_core/wallet_core.dart' show addDays;
+import 'package:wallet_core/wallet_core.dart' show addDays, maxAmountCents, parseMoneyCents;
 
 const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const _monthsLong = [
@@ -66,11 +66,6 @@ String timeLeft(double hours) {
   return h == 0 ? '${d}d left' : '${d}d ${h}h left';
 }
 
-/// Largest amount the app accepts: 10 billion in major units, in cents (same cap as the importer).
-const maxAmountCents = 1000000000000;
-
-final _plainNumber = RegExp(r'^[+-]?(\d+\.?\d*|\.\d+)$');
-
 /// The one sentence for an amount that does not parse (sheets, planned costs, budgets, Plan).
 const invalidAmountMessage = 'Enter an amount, like 12.50.';
 
@@ -81,26 +76,9 @@ String centsToFieldText(int cents, {bool blankZero = false}) {
   return cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2);
 }
 
-/// Parses "12", "12.5", "12,50", "1.234,56" into cents. Null if not a number, negative,
-/// in exponent form, or beyond [maxAmountCents].
-int? parseMoney(String input) {
-  var s = input.trim().replaceAll(RegExp(r'[\s€$£]'), '');
-  if (s.isEmpty) return null;
-  if (RegExp(r',\d{1,2}$').hasMatch(s)) {
-    s = s.replaceAll('.', '').replaceAll(',', '.');
-  } else if (RegExp(r'^[+-]?0*,\d{3}$').hasMatch(s)) {
-    return null; // "0,005": a thousands group cannot follow a zero
-  } else {
-    s = s.replaceAll(',', '');
-  }
-  if (!_plainNumber.hasMatch(s)) return null;
-  final v = double.tryParse(s);
-  if (v == null || !v.isFinite) return null;
-  if (s.startsWith('-') && v != 0) return null;
-  final cents = v.abs() * 100;
-  if (cents > maxAmountCents) return null;
-  return cents.round();
-}
+/// Parses "12", "12.5", "12,50", "1.234,56" into cents: core's [parseMoneyCents] (null if not a number, negative,
+/// in exponent form, or beyond [maxAmountCents]).
+int? parseMoney(String input) => parseMoneyCents(input);
 
 List<int> _ymd(String iso) => iso.split('-').map(int.parse).toList();
 

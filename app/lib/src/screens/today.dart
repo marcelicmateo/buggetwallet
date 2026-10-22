@@ -78,7 +78,7 @@ class TodayScreen extends StatelessWidget {
       openUpcoming(context, wc);
     }
 
-    final recent = wc.txs.where((t) => t.kind != Kind.transfer).take(12).toList();
+    final recent = wc.txs.where((t) => t.kind != BudgetKind.transfer).take(12).toList();
 
     return MarginLine(
         child: ListView(
@@ -176,7 +176,7 @@ class TodayScreen extends StatelessWidget {
                             '${(h.item.planned?.needsCategory ?? false) ? ' · needs a category' : ''}',
                         onTap: () {
                           final p = h.item.planned;
-                          if (p != null && plannedIsBill(p)) {
+                          if (p != null && p.isBill) {
                             openBill(context, wc, p.sourceRef!);
                           } else {
                             upcoming();

@@ -221,7 +221,7 @@ linked, Upcoming warranty/return entries, reminders. Linux/web: file import (PDF
   unchanged. A confirmed unpaid bill with no category (confirmed before B5a, or confirmed while paid and then unlinked) keeps
   its planned row, but `PlannedCost.needsCategory` (`source` bill, category null or blank) makes `computePeriod` list it in
   `duePlanned` **without reserving it**, so no path counts it twice; the app shows "needs a category" and asks for one.
-  App: `editBill` / `setBillDates` return `bool` (false = core refused, logged `bill.edit|dates {ok: false}`); the bill sheet
+  App: `updateBill` / `setBillDates` return `bool` (false = core refused, logged `bill.edit|dates {ok: false}`); the bill sheet
   then shows "Pick the category so Budget Wallet doesn't count this bill twice." and stays open, and marks the category
   "(needed)" on a confirmed unpaid bill due from today on as well as on one in review.
 - **A slip near payday is reserved where its recurring cycle is not.** `plannedCoverage(PlannedCost, recurring)` →

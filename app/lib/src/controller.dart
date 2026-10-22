@@ -547,8 +547,8 @@ class WalletController extends ChangeNotifier {
               final monthTxs = <CategorizedTx>[];
               for (final t in txs) {
                 if (monthOf(t.date) != month) continue;
-                if (t.kind != Kind.transfer) monthTxs.add(t);
-                if (t.kind == Kind.flex && t.amount < 0) {
+                if (t.kind != BudgetKind.transfer) monthTxs.add(t);
+                if (t.kind == BudgetKind.flex && t.amount < 0) {
                   final k = merchantName(t.tx);
                   final (n, v) = merch[k] ?? (0, 0);
                   merch[k] = (n + 1, v - t.amount);
@@ -622,7 +622,7 @@ class WalletController extends ChangeNotifier {
             if (t.tx.live &&
                 t.date.compareTo(from) > 0 &&
                 t.date.compareTo(to) <= 0 &&
-                (t.kind == Kind.fixed || t.kind == Kind.flex) &&
+                (t.kind == BudgetKind.fixed || t.kind == BudgetKind.flex) &&
                 (t.tx.category == null || !categories.containsKey(t.tx.category)))
               t
         ];
@@ -1278,7 +1278,7 @@ class WalletController extends ChangeNotifier {
 
   // ---------- edits ----------
   void addExpense({required int amount, required String category, required String note, required String date}) {
-    repo.addManual(date: date, amount: amount, category: category, note: note, currency: currency);
+    repo.addTransaction(date: date, amount: amount, category: category, note: note, currency: currency);
     logEvent(_log, Level.INFO, 'expense.add', {'category': category}); // category only
     _changed();
   }

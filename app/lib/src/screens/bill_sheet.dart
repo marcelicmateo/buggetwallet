@@ -52,10 +52,6 @@ void showBillImport(BuildContext context, WalletController wc, BillImport r, {Fi
   }
 }
 
-/// True for the planned row a confirmed bill owns: it is opened as the bill (Paid, Skip and Delete on the row alone would leave the
-/// bill out of step).
-bool plannedIsBill(PlannedCost p) => p.source == PlannedSource.bill && p.sourceRef != null;
-
 /// The words for the original file's button.
 String _billFileLabel(String? type) => switch (type) {
       'pdf' => 'Show PDF',

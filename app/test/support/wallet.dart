@@ -87,13 +87,13 @@ final budgetToday = DateTime(2026, 10, 20, 12);
 WalletController budgetWallet({bool budgets = true, int eatingOutBudget = 10000, int groceriesBudget = 30000}) {
   final wc = WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => budgetToday);
   for (final m in const ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']) {
-    wc.repo.addManual(date: '$m-10', amount: 29000, category: 'Groceries');
-    wc.repo.addManual(date: '$m-12', amount: 8500, category: 'Eating out');
+    wc.repo.addTransaction(date: '$m-10', amount: 29000, category: 'Groceries');
+    wc.repo.addTransaction(date: '$m-12', amount: 8500, category: 'Eating out');
   }
-  wc.repo.addManual(date: '2026-10-03', amount: 15200, category: 'Groceries');
-  wc.repo.addManual(date: '2026-10-12', amount: 10000, category: 'Groceries');
-  wc.repo.addManual(date: '2026-10-08', amount: 11200, category: 'Eating out');
-  wc.repo.addManual(date: '2026-10-09', amount: 6000, category: 'Shopping');
+  wc.repo.addTransaction(date: '2026-10-03', amount: 15200, category: 'Groceries');
+  wc.repo.addTransaction(date: '2026-10-12', amount: 10000, category: 'Groceries');
+  wc.repo.addTransaction(date: '2026-10-08', amount: 11200, category: 'Eating out');
+  wc.repo.addTransaction(date: '2026-10-09', amount: 6000, category: 'Shopping');
   wc.repo.updateSettings({
     'salary': 150000,
     'salaryConfirmed': true,
@@ -227,13 +227,13 @@ String fakeIcs(List<(String uid, String date, String title)> events) => 'BEGIN:V
 WalletController habitsWallet({FakeNudges? nudges, bool confirmBill = false}) {
   final wc = WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => budgetToday, nudges: nudges);
   for (final m in const ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']) {
-    wc.repo.addManual(date: '$m-10', amount: 29000, category: 'Groceries');
-    wc.repo.addManual(date: '$m-12', amount: 8500, category: 'Eating out');
+    wc.repo.addTransaction(date: '$m-10', amount: 29000, category: 'Groceries');
+    wc.repo.addTransaction(date: '$m-12', amount: 8500, category: 'Eating out');
   }
-  wc.repo.addManual(date: '2026-10-03', amount: 15200, category: 'Groceries');
-  wc.repo.addManual(date: '2026-10-12', amount: 10000, category: 'Groceries');
-  wc.repo.addManual(date: '2026-10-08', amount: 11200, category: 'Eating out');
-  wc.repo.addManual(date: '2026-10-09', amount: 6000, category: 'Shopping');
+  wc.repo.addTransaction(date: '2026-10-03', amount: 15200, category: 'Groceries');
+  wc.repo.addTransaction(date: '2026-10-12', amount: 10000, category: 'Groceries');
+  wc.repo.addTransaction(date: '2026-10-08', amount: 11200, category: 'Eating out');
+  wc.repo.addTransaction(date: '2026-10-09', amount: 6000, category: 'Shopping');
   wc.repo.updateSettings({
     'salary': 150000,
     'salaryConfirmed': true,
@@ -273,8 +273,8 @@ WalletController habitsWallet({FakeNudges? nudges, bool confirmBill = false}) {
 WalletController futureWallet({FakeNudges? nudges, FakeCalendars? calendars}) {
   final wc = WalletController.forTest(WalletRepo.inMemory(),
       key: VaultKey.generate(), clock: () => budgetToday, nudges: nudges, calendars: calendars);
-  wc.repo.addManual(date: '2026-10-03', amount: 15200, category: 'Groceries');
-  wc.repo.addManual(date: '2026-10-22', amount: 33900, category: 'Car & transport');
+  wc.repo.addTransaction(date: '2026-10-03', amount: 15200, category: 'Groceries');
+  wc.repo.addTransaction(date: '2026-10-22', amount: 33900, category: 'Car & transport');
   wc.repo.updateSettings({'salary': 150000, 'salaryConfirmed': true, 'periodStart': '2026-10-01'});
   wc.repo.addPlanned(title: 'Car insurance', date: '2026-10-23', amount: 34000, category: 'Car & transport');
   wc.repo.addPlanned(title: 'Dentist', date: '2026-10-27', amount: 8000, category: 'Health & care');
