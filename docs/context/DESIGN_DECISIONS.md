@@ -82,13 +82,17 @@ Order: transport interface + `archive` gzip first, then WASM DB + web key store,
 - Unknown layout → map columns once, saved as synced setting keyed by header row.
 - First step: move PBZ and Revolut into profiles with tests proving ids and categories unchanged.
 
-### 4.2 Bills database (source-agnostic)
+### 4.2 Bills database (source-agnostic) — approved 2026-10-22, after future spending
 - Sources → readers → one `NormalizedBill` → `importBill()`; app never sees QR/barcode/XML.
 - Readers: fiscal receipt QR (date-time, total, JIR), HUB-3 2D barcode on slips (payee, IBAN, amount, model+reference, description), e-invoice XML (UBL / EN 16931), PDF text layer, OCR fallback; later supplier portals.
 - Inputs: camera scan (Add expense › Scan bill), file import (Plan), inbox folder (automatic, lands in "To review").
 - `NormalizedBill`: source, externalId (JIR / invoice no / reference, unique → dedupe), date, total cents, currency, payee, optional IBAN, reference, dueDate, items, original file hash.
 - Link to bank row: by reference (JIR / invoice no / payment reference) found in the bank text; otherwise the bill stays "unlinked" for the owner to link by hand (never by amount alone, decision 2026-10-20). Photos/PDFs stored once as encrypted files in the sync folder, fetched by hash.
 - Open: totals only or line items? keep photo or data only? warranty/return reminders?
+**Owner decisions 2026-10-22 (built after future spending):** keep **totals + line items when the source has them**;
+**keep the photo/PDF, encrypted on the relay** (new blob storage in the relay protocol, fetched on demand); **optional
+warranty / return-by date per bill**, shown in Upcoming with a nudge before it ends (no amounts in notifications). Owner
+tests everything at the end (M6 after all features).
 
 ### 4.3 Calendar integration and future spending — approved 2026-10-22
 - Planned costs from: calendar events given an amount, bills with due dates, recurring bills found in exports, manual entries, project cost lines and schedules.

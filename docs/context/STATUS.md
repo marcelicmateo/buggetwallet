@@ -184,7 +184,8 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   Back up now / Restore from backup… through the Android file dialogs (storage permissions are gone); Diagnostics "Save logs…".
 - Owner checks after Stage S: create a wallet → "Save your wallet key" sheet; wrong then right last 4; "Later" hides the
   Today row; Copy key → paste in the password manager → after 60 s back in the app the clipboard is empty.
-- Then: M6 owner live test. Next build: future spending (DESIGN_DECISIONS §4.3, approved 2026-10-22), then the bills database.
+- Build order (owner 2026-10-22: every feature first, the owner tests last): future spending (§4.3) → bills database (§4.2)
+  → M6 owner live test.
 
 ## In flight (2026-10-20)
 - Queue and procedure: `docs/context/PIPELINE.md`.
