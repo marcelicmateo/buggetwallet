@@ -706,7 +706,7 @@ void main() {
       final photo = (await tester.runAsync(() => wc.importBillFile(tinyPng, 'png')))!;
       await openSheetFor(tester, wc, photo.billId!);
       await tester.ensureVisible(key('showBillFile'));
-      expect(find.descendant(of: key('showBillFile'), matching: find.text(billFileLabel('png'))), findsOneWidget);
+      expect(find.descendant(of: key('showBillFile'), matching: find.text('Show photo')), findsOneWidget);
       await tester.tap(key('showBillFile'));
       await tester.pumpAndSettle();
       expect(key('billImage'), findsOneWidget);
@@ -720,7 +720,7 @@ void main() {
       final pdf = (await tester.runAsync(() => wc.importBillFile(smallPdf(['Ukupno: 5,00 EUR']), 'pdf')))!;
       await openSheetFor(tester, wc, pdf.billId!, chooser: chooser);
       await tester.ensureVisible(key('showBillFile'));
-      expect(find.descendant(of: key('showBillFile'), matching: find.text(billFileLabel('pdf'))), findsOneWidget);
+      expect(find.descendant(of: key('showBillFile'), matching: find.text('Show PDF')), findsOneWidget);
       await tester.tap(key('showBillFile'));
       await tester.pumpAndSettle();
       await tester.tap(key('saveBillFile'));
@@ -735,7 +735,6 @@ void main() {
       final far = Bill(id: 'far', source: BillSource.photo, blob: 'a' * 64, blobType: 'jpg');
       await pumpApp(tester, BillFileScreen(wc: wc, bill: far));
       await tester.pumpAndSettle();
-      expect(key('fileOnRelay'), findsOneWidget);
       expect(key('fileOnRelay'), findsOneWidget);
     });
 

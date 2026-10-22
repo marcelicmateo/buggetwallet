@@ -130,7 +130,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   /// Web: two fields and a short explanation. The passphrase protects the key in this browser only.
   List<Widget> _passphraseStep() => [
-        const Heading('Choose a passphrase', size: 18),
+        const Heading(key: ValueKey('passphraseHeading'), 'Choose a passphrase', size: 18),
         const Muted('It protects your wallet key in this browser only. You type it once each time you open the app in a new tab. '
             'If you lose it, you can only start over here; a backup file or another device still has your data.'),
         TextField(

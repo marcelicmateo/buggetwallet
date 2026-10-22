@@ -550,7 +550,7 @@ void main() {
       expect(find.textContaining('kept in this browser'), findsOneWidget);
       await t.tap(find.byKey(const ValueKey('startWallet')));
       await t.pump();
-      expect(find.byKey(const ValueKey('passphrase')), findsOneWidget);
+      expect(find.byKey(const ValueKey('passphraseHeading')), findsOneWidget);
       expect(find.textContaining('this browser only'), findsOneWidget);
       expect(field('passphrase'), findsOneWidget);
       expect(field('passphrase2'), findsOneWidget);
@@ -564,7 +564,7 @@ void main() {
       expect(find.byKey(const ValueKey('startWallet')), findsOneWidget);
       await t.tap(find.byKey(const ValueKey('startWallet')));
       await t.pump();
-      expect(find.byKey(const ValueKey('passphrase')), findsOneWidget);
+      expect(find.byKey(const ValueKey('passphraseHeading')), findsOneWidget);
       await t.enterText(field('passphrase'), '1234567');
       await t.enterText(field('passphrase2'), '1234567');
       await t.tap(field('passphraseContinue'));
@@ -636,7 +636,7 @@ void main() {
       await t.enterText(find.widgetWithText(TextField, 'Wallet key'), text);
       await t.tap(find.byKey(const ValueKey('joinWallet')));
       await t.pumpAndSettle();
-      expect(find.byKey(const ValueKey('passphrase')), findsOneWidget);
+      expect(find.byKey(const ValueKey('passphraseHeading')), findsOneWidget);
       await t.enterText(field('passphrase'), 'my passphrase');
       await t.enterText(field('passphrase2'), 'my passphrase');
       await t.tap(field('passphraseContinue'));

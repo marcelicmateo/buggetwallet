@@ -452,7 +452,7 @@ void main() {
       await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
       final hair = find.descendant(
           of: find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('up:e:')).last,
-          matching: find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('change:')));
+          matching: find.text('Add amount'));
       await tester.tap(hair);
       await tester.pumpAndSettle();
       await tester.tap(key('plannedSave'));
@@ -487,6 +487,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(key('entryPaid'));
       await tester.pump();
+      expect(key('paidWhich'), findsOneWidget);
       final pay = find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('pay:'));
       expect(pay, findsOneWidget);
       await tester.tap(pay);

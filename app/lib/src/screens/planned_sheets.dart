@@ -206,7 +206,7 @@ class _PlannedEntrySheetState extends State<PlannedEntrySheet> {
               child: const Text('Delete')),
         ])
       else ...[
-        const Heading('Which payment was it?', size: 15),
+        const Heading(key: ValueKey('paidWhich'), 'Which payment was it?', size: 15),
         const SizedBox(height: 4),
         if (candidates.isEmpty)
           const Muted('No matching payment yet. Import your bank file, then come back.', size: 13.5)
