@@ -1043,7 +1043,7 @@ class WalletRepo {
   }
 
   /// Adds an open planned cost and returns its id. [amount] (positive cents) null = no amount yet: listed, never
-  /// reserved. With a [sourceRef] (a calendar event's [calendarRef]) the id is `<source>:<sourceRef>`: confirming an
+  /// reserved. With a [sourceRef] (a calendar event's [calendarEventRef]) the id is `<source>:<sourceRef>`: confirming an
   /// event that was dismissed before (or confirmed on another device) reopens and overwrites that one row. A bad
   /// [date] or an amount ≤ 0 is an [ArgumentError].
   String addPlanned(
