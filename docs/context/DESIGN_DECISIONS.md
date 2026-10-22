@@ -93,6 +93,12 @@ Order: transport interface + `archive` gzip first, then WASM DB + web key store,
 **keep the photo/PDF, encrypted on the relay** (new blob storage in the relay protocol, fetched on demand); **optional
 warranty / return-by date per bill**, shown in Upcoming with a nudge before it ends (no amounts in notifications). Owner
 tests everything at the end (M6 after all features).
+**Owner decisions 2026-10-22 (inputs):** new packages approved: `mobile_scanner` (camera, QR + PDF417 on the device),
+`google_mlkit_text_recognition` (OCR on the device, offline) and `receive_sharing_intent` (Share a PDF/photo to the
+app; replaces the inbox folder). Most common bills: shop receipts (fiscal QR), HUB-3 payment slips, PDF bills by email;
+e-invoice XML after those. ML Kit and the camera exist only on Android: Linux and web import files (PDF text layer,
+XML) and keep photos without reading them. Every value read from a photo or text is a suggestion: a bill stays "To
+review" until the owner confirms it (exact money). API: `docs/context/BILLS_API.md`; relay blobs: `RELAY_PROTOCOL.md`.
 
 ### 4.3 Calendar integration and future spending — approved 2026-10-22
 - Planned costs from: calendar events given an amount, bills with due dates, recurring bills found in exports, manual entries, project cost lines and schedules.

@@ -17,7 +17,7 @@ Every request under `/v2/w/<wid>/` (GETs too: the state is metadata) carries:
   ```
   bw-relay-v2\n<METHOD>\n<path>\n<covers>\n<body hash>\n<time>
   ```
-  `<METHOD>` = `GET` or `PUT`; `<path>` = the request path from `/v2/` on (`/v2/w/<wid>/d/<device>/<seq>`), without query
+  `<METHOD>` = `GET`, `PUT` or `DELETE` (blobs only); `<path>` = the request path from `/v2/` on (`/v2/w/<wid>/d/<device>/<seq>`), without query
   and without any prefix in the relay address the client was given; `<covers>` = the `X-BW-Covers` header value as sent,
   or empty when the request has none; `<body hash>` = lowercase hex SHA-256 of the body bytes (a GET or an empty body
   hashes the empty string: `e3b0c442…b855`); `<time>` = the `X-BW-Time` value as sent. `\n` is one LF; no trailing LF.
@@ -72,6 +72,24 @@ accepted ack. Clients ack on every sync run (even unchanged), which keeps `lastS
 wallet must have seq 1 (otherwise 422 and nothing is created). Acks: values ≥ 0 (`0` allowed), non-int/negative/bad
 names → 400, body over 64 KiB → 413. Unknown path → 404, wrong method on a known path → 405.
 
+## Blobs (bill photos and PDFs, Stage B, 2026-10-22)
+Sealed files that rows point to by hash (a bill's photo or PDF). Content-addressed, never pruned by the snapshot rules.
+| Request | Result |
+|---|---|
+| `PUT /v2/w/<wid>/blob/<hash>` body = sealed bytes (≤ 16 MiB) | `<hash>` = lowercase hex SHA-256 of the body (64 chars, else 400); body hash ≠ `<hash>` → 400 `hash`; 201 stored; 200 already stored (same hash = same bytes); 404 unknown wallet (a wallet is created only by `PUT d/<device>/1`); 413 too big; 507 wallet over `--max-bytes` (blobs count) |
+| `GET /v2/w/<wid>/blob/<hash>` | 200 bytes; 404 never stored or deleted |
+| `DELETE /v2/w/<wid>/blob/<hash>` (empty body) | 204, also when absent (idempotent) |
+
+- Signed like every wallet request; `<METHOD>` in the signed text may now also be `DELETE`. CORS allowed methods become
+  `GET, PUT, DELETE, OPTIONS`. A blob PUT/DELETE does not change `lastSeen`.
+- Storage: `blobs/<hash>` in the wallet's folder (temp + rename). The wallet's byte count (`--max-bytes`) = files + kept
+  snapshots + blobs; a blob PUT counts everything + the new blob.
+- State JSON gains `"blobs": {"count": n, "bytes": b}` (clients ignore it; older clients ignore unknown keys).
+- A replayed DELETE inside the 5-minute window deletes a blob that the owner re-uploaded with the very same sealed bytes
+  in those minutes; clients never re-upload a deleted blob's bytes (a new photo is sealed again with a fresh nonce),
+  so this cannot happen in practice. `api` stays 2: older relays answer 404 on `blob/…`, which clients report as
+  "this relay can't keep bill photos yet" and keep the blob queued.
+
 ## State JSON
 ```json
 {
@@ -103,7 +121,7 @@ limit, so a 64 MiB snapshot still goes through); 507 relay full (wallet count ov
   `--max-wallets`, default 16, or a wallet over `--max-bytes`, default 1 GiB: a `PUT d` counts files + kept snapshots, a
   snapshot PUT counts only the kept snapshots + the new one, so a nearly full wallet can still snapshot and prune).
 - CORS: `Access-Control-Allow-Origin` echoes the request `Origin` only if it is in the configured list (default
-  `http://127.0.0.1:8080`, `http://localhost:8080`); allowed methods `GET, PUT, OPTIONS`; allowed headers
+  `http://127.0.0.1:8080`, `http://localhost:8080`); allowed methods `GET, PUT, DELETE, OPTIONS`; allowed headers
   `Content-Type, X-BW-Covers, X-BW-Time, X-BW-Sig, X-BW-Pub`; exposed header `Date` (the client's clock offset).
 
 ## Logs

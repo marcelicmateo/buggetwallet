@@ -79,6 +79,17 @@ throws `SqliteException` extended code 26 "file is not a database".
 | S | Review (0 high, 1 medium, 4 low, all fixed), full run green (perf re-run on an idle laptop: the first run was under load), pushed | lead | S1–S6 | done 2026-10-22 |
 | F0 | Future spending spec (§4.3), owner open questions: calendars, default amounts, heads-up | lead | – | done (owner answers 2026-10-22; Stage F table above) |
 
+## Stage B: bills database (2026-10-22, spec DESIGN_DECISIONS §4.2, API `BILLS_API.md`, relay blobs in `RELAY_PROTOCOL.md`)
+| # | Task | Agent (model/effort) | Depends | Status |
+|---|---|---|---|---|
+| B0 | Context pack; owner answers (packages mobile_scanner, ML Kit text, receive_sharing_intent; receipts, slips, PDFs first); API + protocol; `NormalizedBill` model | scout (haiku/low), lead | – | done |
+| B1a | Readers in wallet_importer: fiscal QR, HUB-3, UBL e-invoice, PDF text layer, billFromText; synthetic fixtures | core-builder (opus/high) | B0 | running |
+| B1b | Core: `bill` entity (schema 7), importBill/confirm/link/delete, planned row per unpaid bill, auto link by reference, billCandidates, reminders, Upcoming warranty/returnBy, BlobStore + transport blobs + SyncEngine upload/delete, search | core-builder (opus/high) | B0 | running |
+| B2 | Relay: blob PUT/GET/DELETE, byte count, state `blobs`, CORS DELETE | core-builder (sonnet/medium) | B0 | running |
+| B4 | App: Scan bill (camera, QR/PDF417, OCR), Plan › Bills, share to app, bill sheet, link, cash expense, Android PdfRenderer channel, Today row, Upcoming + reminders | ui-builder (sonnet/high) | B0 (codes against the API, shims until B1) | running |
+| B3 | Spec tests for readers, linking, blobs | test-writer (sonnet/medium) | B0; starts when a slot frees | queued |
+| B | Merge, review, full run, push | lead | B1–B4 | queued |
+
 Stage R notes: the haiku watcher stopped twice before finishing (it hands back while waiting on its own background run); the
 lead ran the remaining suites with one background command. Worktrees from `isolation: "worktree"` start on `master`:
 every brief must begin with `git reset --hard <base>`.

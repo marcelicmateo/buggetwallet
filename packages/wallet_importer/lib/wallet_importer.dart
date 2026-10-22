@@ -4,6 +4,7 @@
 /// [bankProfiles]. It outputs [NormalizedTransaction]s; the app and database never see bank files.
 library;
 
+export 'src/bills/model.dart';
 export 'src/ids.dart' show transactionId, sourceTransactionId, fnv1a36, formatCents;
 export 'src/importer.dart' show importBankFile, parseRows, ImportException, unknownLayoutMessage;
 export 'src/model.dart';
