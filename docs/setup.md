@@ -31,10 +31,11 @@ Devices sync through a small server you run yourself (see §5). It stores only e
 2. In the app: Plan › Sync → **Relay address**, enter `http://<server>:8787` (or the VPN name), tap **Save address**, then **Test connection** and **Sync now**.
 3. Each additional device: **Join my wallet from another device**, enter the key and the same address.
 
-The app syncs when it opens, every 2 minutes while open and a few seconds after each change. Requests to the relay are signed
-with a key derived from the wallet key and the relay keeps only the public half, so a captured request cannot be replayed and plain
-`http://` on the home network is safe for your data. A VPN (Tailscale or WireGuard) is still recommended: it hides who syncs, when
-and how much, and lets phones sync away from home.
+The app syncs when it opens, every 5 minutes while open and a few seconds after each change. Requests to the relay are signed
+with a key derived from the wallet key and the relay keeps only the public half. Someone who captures a request on the network can
+only repeat that same request for 5 minutes, which changes nothing, and can never read your data or forge a change. On plain
+`http://` they can still block or delay sync, so a VPN (Tailscale or WireGuard) is recommended for everyday use: it also hides who
+syncs, when and how much, and lets phones sync away from home.
 
 Backups: Plan › Backup → **Back up now** saves an encrypted `.bwb` file through the save dialog; restore works only into an empty wallet.
 
