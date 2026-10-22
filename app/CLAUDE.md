@@ -108,7 +108,7 @@ The wallet database opens **only once the key is known**, always keyed with `loc
 start; logs `db.open {keyed, converted, ms}`); no key (onboarding, web locked) → `WalletRepo.inMemory()` placeholder (`_dbPending`),
 and `createWallet` / `joinWallet` / `unlock` write the key, open the file db (`_openFileDb`) and switch to it (`_useDb`: relay URL and
 data reload from it). `forgetBrowser` deletes the db + key and goes back to the placeholder (a new IndexedDB VFS name comes with the next open).
-**Never lose data:** a `wallet.db` that exists with no key, or that the key does not open (`WalletDbKeyException`), is left untouched
+**Never lose data:** (join with no stored key and a plaintext file never converts it: it is set aside first, and create/join set aside *before* writing the key; web forget deletes only `/wallet.db`, set-aside copies stay) a `wallet.db` that exists with no key, or that the key does not open (`WalletDbKeyException`), is left untouched
 (`hasUnopenedDb`; onboarding shows "An older wallet is on this device. Join with its key to open it."). Joining with the key that opens it uses
 it; creating a wallet (or joining with another key) moves it to `wallet.db.unopened-<yyyy-mm-dd>` (+ `-wal`/`-shm`/`-journal`/`.plain-copy`;
 web: copied inside IndexedDB) and logs `db.setAside` (no paths). Web: one `IndexedDbFileSystem` per generation (`vfsName` `indexeddb-<n>`),

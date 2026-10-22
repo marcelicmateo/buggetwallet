@@ -60,6 +60,13 @@ bool _isPlaintext(String path) {
   }
 }
 
+/// Is the stored wallet an unkeyed one (a plaintext `wallet.db`, or a plaintext copy left by an interrupted conversion)?
+/// Opening it with any key would convert it, so joining a wallet never does that.
+Future<bool> walletDbIsPlaintext() async {
+  final path = await _path();
+  return _isPlaintext(path) || await File('$path.plain-copy').exists();
+}
+
 /// `wallet.db` in the app support folder, encrypted with [dbKey] (`localDbKey`). An older plaintext file is converted in place
 /// (crash-safe in core). A key that does not open it throws [WalletDbKeyException]; the file is not touched then.
 /// [WalletDb.forget] closes it and deletes the file and its side files.

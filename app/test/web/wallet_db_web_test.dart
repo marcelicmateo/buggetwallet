@@ -92,11 +92,11 @@ void main() {
     expect((await _peek('/wallet.db.unopened-2026-10-22')).exists, isTrue); // still there
   });
 
-  test('forget drops everything; a reopen gets a new vfsName and a new empty keyed database', () async {
+  test('forget deletes the wallet but keeps set-aside copies; a reopen gets a new vfsName and a new empty keyed database', () async {
     final db = await openWalletDb(_key(3));
     await db.forget();
     expect((await _peek('/wallet.db')).exists, isFalse);
-    expect((await _peek('/wallet.db.unopened-2026-10-22')).exists, isFalse); // the whole IndexedDB database is gone
+    expect((await _peek('/wallet.db.unopened-2026-10-22')).exists, isTrue); // an older wallet set aside is never deleted
     expect(await walletDbExists(), isFalse);
     final again = await openWalletDb(_key(4));
     expect(again.repo.goals(), isEmpty);
@@ -112,12 +112,14 @@ void main() {
     await _legacyUnkeyedWallet();
     expect((await _peek('/wallet.db')).plain, isTrue);
     expect(await walletDbExists(), isTrue);
+    expect(await walletDbIsPlaintext(), isTrue);
     final db = await openWalletDb(_key(5));
     expect(db.converted, isTrue);
     expect(db.repo.goals().single.name, 'Old goal');
     await db.persist();
     db.repo.close();
     expect((await _peek('/wallet.db')).plain, isFalse);
+    expect(await walletDbIsPlaintext(), isFalse);
     await expectLater(openWalletDb(_key(6)), throwsA(isA<WalletDbKeyException>()));
     final reopened = await openWalletDb(_key(5));
     expect(reopened.converted, isFalse);

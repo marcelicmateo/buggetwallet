@@ -1,5 +1,7 @@
 // Sync through the relay: the pure texts, the controller (address, runs, two devices through one MemoryTransport), Plan › Sync
 // and joining with an address. The relay itself is a fake (health function, syncRunner). All data is SYNTHETIC.
+import 'dart:async';
+
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
 import 'package:budget_wallet/src/screens/sync_panel.dart';
@@ -144,6 +146,50 @@ void main() {
       wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true);
       await wc.syncNow();
       expect(wc.syncError, isNull);
+    });
+
+    test('setRelay while a sync runs: old status cleared at once, old result dropped, exactly one follow-up run for the new address',
+        () async {
+      final wc = emptyWallet();
+      final other = Uri.parse('http://second.test:8787');
+      final gates = <Completer<SyncReport>>[];
+      final used = <Uri>[];
+      wc.syncRunner = (relay, k, r) {
+        used.add(relay);
+        final c = Completer<SyncReport>();
+        gates.add(c);
+        return c.future;
+      };
+      wc.relayUrl = _relay;
+      final first = wc.syncNow(trigger: 'button');
+      await Future<void>.delayed(Duration.zero);
+      expect(wc.syncing, isTrue);
+      wc.syncCaughtUp = true;
+      wc.syncDevices = [SyncDevice('ab12f3', lastSeen: DateTime(2026, 1, 1))];
+      wc.syncError = 'old problem';
+
+      final set = wc.setRelay(other); // skipped as busy right now
+      expect(wc.syncCaughtUp, isFalse);
+      expect(wc.syncDevices, isEmpty);
+      expect(wc.syncWaiting, isEmpty);
+      expect(wc.syncError, isNull);
+      await set;
+      await wc.syncNow(quiet: true, trigger: 'change'); // another trigger skipped as busy: still only one follow-up
+      expect(gates, hasLength(1));
+
+      gates.single.complete(const SyncReport(0, 0, 0, caughtUp: true, devices: [])); // the OLD relay's answer
+      await first;
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(wc.syncCaughtUp, isFalse, reason: 'the old relay result is not shown for the new address');
+      expect(gates, hasLength(2), reason: 'one follow-up run');
+      expect(used, [_relay, other]);
+      gates.last.complete(const SyncReport(0, 0, 0, caughtUp: true));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(wc.syncCaughtUp, isTrue);
+      expect(wc.syncing, isFalse);
+      expect(gates, hasLength(2), reason: 'no further runs');
     });
 
     test('testRelay passes the failure on and logs only its kind', () async {

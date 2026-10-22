@@ -128,6 +128,13 @@ bool _isPlaintext(IndexedDbFileSystem fs) {
   }
 }
 
+/// Is the stored wallet an unkeyed one (opening it with any key would convert it)?
+Future<bool> walletDbIsPlaintext() async {
+  await _takeTabLock();
+  final (_, fs) = await _store();
+  return _isPlaintext(fs);
+}
+
 /// The wallet in the browser: SQLite compiled to WebAssembly (`sqlite3.wasm`, served next to index.html) on an IndexedDB
 /// file system, encrypted with [dbKey] (`localDbKey`) through the wrapped VFS. An unkeyed database from an older build is
 /// converted. A key that does not open it throws [WalletDbKeyException]. Changes are in memory until [WalletDb.persist]
@@ -143,12 +150,16 @@ Future<WalletDb> openWalletDb(Uint8List dbKey) async {
     converted: converted,
     persist: fs.flush,
     forget: () async {
-      // The repo is already closed. Drop the file system, then the whole IndexedDB database; the next one gets a new vfsName.
-      sqlite.unregisterVirtualFileSystem(fs);
-      if (identical(_fs, fs)) _fs = null;
-      await fs.close();
+      // The repo is already closed. Delete only the wallet file (and its side files): `wallet.db.unopened-*` copies made by
+      // [setAsideWalletDb] stay (an older wallet is never deleted). Then drop the file system; the next one gets a new vfsName.
       try {
-        await IndexedDbFileSystem.deleteDatabase(_dbName);
+        for (final s in ['', '-journal', '-wal', '-shm']) {
+          if (fs.xAccess('$_path$s', 0) != 0) fs.xDelete('$_path$s', 0);
+        }
+        await fs.flush();
+        sqlite.unregisterVirtualFileSystem(fs);
+        if (identical(_fs, fs)) _fs = null;
+        await fs.close();
       } catch (e, st) {
         logError(_log, 'db.forgetFailed', e, st);
         rethrow;

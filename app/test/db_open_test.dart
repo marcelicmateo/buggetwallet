@@ -58,7 +58,13 @@ class World {
     return hasFile;
   }
 
+  /// What happened, in order: 'aside' and 'key'.
+  final events = <String>[];
+
+  Future<bool> isPlaintext() async => hasFile && fileKey == null;
+
   Future<void> setAside(String stamp) async {
+    events.add('aside');
     aside['wallet.db.unopened-$stamp'] = contents;
     hasFile = false;
     contents = null;
@@ -80,6 +86,7 @@ Future<WalletController> loadWith(
     opener: w.open,
     exists: w.exists,
     setAside: w.setAside,
+    isPlaintext: w.isPlaintext,
     claim: claim ?? () async {},
     keyReader: () async => keyError != null ? Error.throwWithStackTrace(keyError, StackTrace.current) : key,
     isLocked: () => locked,
@@ -87,7 +94,7 @@ Future<WalletController> loadWith(
   );
   await Future<void>.delayed(Duration.zero); // lets the start-up microtasks (nudges, recurring) run
   if (autoDispose) addTearDown(wc.dispose);
-  wc.keyWriter = (k, {passphrase}) async {};
+  wc.keyWriter = (k, {passphrase}) async => w.events.add('key');
   wc.keyForgetter = () async {};
   wc.unlocker = (p) async => throw const WrongPassphrase();
   return wc;
@@ -212,6 +219,33 @@ void main() {
       expect(wc.goals.single.name, 'Old goal');
       expect(wc.hasWallet, isTrue);
       expect(wc.hasUnopenedDb, isFalse);
+    });
+
+    test('joining with a key while an unkeyed plaintext file exists sets it aside: not converted, not merged', () async {
+      final w = World(hasFile: true); // plaintext, no key stored
+      final old = w.contents;
+      final wc = await loadWith(w);
+      expect(wc.hasUnopenedDb, isTrue);
+      await wc.joinWallet(await VaultKey.generate().toText());
+      expect(w.aside.values.single, same(old), reason: 'the old file is kept as it was');
+      expect(w.opens, hasLength(1), reason: 'only the fresh database was opened, never the plaintext file');
+      expect(wc.goals.map((g) => g.name), isNot(contains('Old goal')));
+      expect(wc.hasWallet, isTrue);
+      expect(wc.hasUnopenedDb, isFalse);
+      expect(log(), contains('"converted":false'));
+      expect(log(), isNot(contains('"converted":true')));
+    });
+
+    test('join and create set the older file aside before the key is written', () async {
+      final w = World(hasFile: true);
+      final wc = await loadWith(w);
+      await wc.joinWallet(await VaultKey.generate().toText());
+      expect(w.events, ['aside', 'key']);
+
+      final w2 = World(hasFile: true);
+      final wc2 = await loadWith(w2);
+      await wc2.createWallet();
+      expect(w2.events, ['aside', 'key']);
     });
 
     test('joining with another key sets the older file aside and starts a new database', () async {

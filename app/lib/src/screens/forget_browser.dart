@@ -46,7 +46,7 @@ class _ForgetBrowserSheetState extends State<ForgetBrowserSheet> {
         ...gapped([
           const Heading('Forget this browser?', size: 18),
           const Text('This deletes the wallet and the key stored in this browser. A backup file or another device is not touched.'),
-          const Muted('Without a backup file, the data in this browser is gone for good.'),
+          const Muted('Without a backup file, the data in this browser is gone for good. Older wallet copies kept aside stay.'),
           if (_error != null) StatusLabel(good: false, text: _error!),
           FilledButton(
             key: const ValueKey('forgetConfirm'),

@@ -47,7 +47,7 @@ void main() {
       addTearDown(b.dispose);
       b.relayUrl = Uri.parse(addr);
       Future<void> syncB() async {
-        await t.runAsync(() => b.syncNow());
+        await t.runAsync(b.syncNow);
         expect(b.syncError, isNull, reason: 'B sync');
       }
 

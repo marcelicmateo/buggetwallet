@@ -53,6 +53,17 @@ void main() {
     expect(names(), ['wallet.db']); // the plaintext side copy is gone
   });
 
+  test('joining with a key while an unkeyed wallet.db exists sets it aside as it was; nothing is converted or merged', () async {
+    plaintextWallet();
+    expect(await walletDbIsPlaintext(), isTrue);
+    final before = File(path).readAsBytesSync();
+    final wc = await load(null);
+    await wc.joinWallet(await VaultKey.generate().toText());
+    expect(wc.goals, isEmpty);
+    expect(File('$path.unopened-2026-10-22').readAsBytesSync(), before); // untouched, still plaintext
+    expect(await walletDbIsPlaintext(), isFalse);
+  });
+
   test('a wallet.db without a key is left alone until a new wallet is created, then set aside with its side files', () async {
     plaintextWallet();
     File('$path-wal').writeAsStringSync('w');
