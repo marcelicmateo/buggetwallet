@@ -210,6 +210,7 @@ class _BillSheetState extends State<BillSheet> {
     final cur = wc.currency;
     final c = context.c;
     final review = b.status == BillStatus.review;
+    final planner = wc.billPlannedBy(b);
     // Values read from free text (PDF text, a photo) are guesses: each filled field says so until the owner confirms the bill.
     final guessed = review && b.unsure > 0;
     InputDecoration deco(String label, {bool filled = true, String? hint, String? suffix}) => InputDecoration(
@@ -259,6 +260,17 @@ class _BillSheetState extends State<BillSheet> {
           },
           size: 12.5),
       if (review) const Muted('Check the fields, then confirm. Nothing counts until you do.', size: 12.5),
+      if (planner != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(Icons.event_repeat, size: 16, color: c.ink2),
+            const SizedBox(width: 6),
+            Expanded(
+                child:
+                    Text('Planned by ${planner.label}', key: const ValueKey('plannedBy'), style: TextStyle(fontSize: 12.5, color: c.ink2))),
+          ]),
+        ),
       const SizedBox(height: 12),
       TextField(
         key: const ValueKey('billTotal'),

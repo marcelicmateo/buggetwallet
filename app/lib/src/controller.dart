@@ -12,7 +12,6 @@ import 'bill_inputs.dart';
 import 'bill_platform.dart';
 import 'calendar_platform.dart';
 import 'calendar_source.dart';
-import 'core_standin.dart';
 import 'ics_fetch.dart';
 import 'key_store.dart';
 import 'logging.dart';
@@ -200,6 +199,9 @@ class WalletController extends ChangeNotifier {
 
   /// Bill photos and files the last sync could not upload yet (they stay queued and are tried again).
   int syncBlobsWaiting = 0;
+
+  /// The relay is older than bill files: it answers 404 to every upload (Plan › Sync says to update it).
+  bool syncBlobsUnsupported = false;
 
   /// From the last successful sync: the devices the relay knows (short ids), this one included.
   List<SyncDevice> syncDevices = const [];
@@ -974,6 +976,7 @@ class WalletController extends ChangeNotifier {
     syncCaughtUp = false;
     syncWaiting = const [];
     syncBlobsWaiting = 0;
+    syncBlobsUnsupported = false;
     syncDevices = const [];
     lastImport = const [];
     reload();
@@ -1013,6 +1016,7 @@ class WalletController extends ChangeNotifier {
     syncCaughtUp = false;
     syncWaiting = const [];
     syncBlobsWaiting = 0;
+    syncBlobsUnsupported = false;
     syncDevices = const [];
     _relayFollowUp = u != null && syncing; // a run is going: exactly one follow-up for the new address when it ends
     logEvent(_sync, Level.INFO, 'sync.relay', {'set': u != null}); // never the address
@@ -1059,6 +1063,7 @@ class WalletController extends ChangeNotifier {
       syncCaughtUp = r.caughtUp;
       syncWaiting = r.waiting;
       syncBlobsWaiting = r.blobsWaiting;
+      syncBlobsUnsupported = r.blobsUnsupported;
       syncDevices = r.devices;
       logEvent(_sync, Level.INFO, 'sync.done', {
         'trigger': trigger,

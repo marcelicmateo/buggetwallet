@@ -24,6 +24,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart' show ImportBatch;
 
 import 'support/bills.dart';
 import 'support/layout.dart';
@@ -39,7 +40,7 @@ WalletController bw({FakeBillInputs? inputs, FakeNudges? nudges}) {
 void tw(String name, Future<void> Function(WidgetTester tester) body) => testWidgets(name, (tester) async {
       await body(tester);
       await tester.pump(const Duration(seconds: 4));
-    });
+    }, timeout: const Timeout(Duration(seconds: 60))); // a stuck test fails in a minute, never hangs for ten
 
 Finder key(String k) => find.byKey(ValueKey(k));
 Finder snack(String text) => find.descendant(of: find.byType(SnackBar), matching: find.text(text));
@@ -966,6 +967,7 @@ void main() {
 
     tw('Confirm on the sheet asks for the category first, says why, and works after picking one', (tester) async {
       final wc = bw();
+      wc.billCategorySuggester = (b) => null; // the real core would offer one from the water payment
       final id = addBill(wc, syntheticBill('cat4', due: '2026-10-25'));
       await openSheetFor(tester, wc, id, size: const Size(400, 1600));
       expect(find.text("Pick the category so Budget Wallet doesn't count this bill twice."), findsOneWidget);
@@ -1175,6 +1177,56 @@ void main() {
       expect(wc.billById(r.billId!)!.total, isNull);
     });
 
+    // ---- core merged: real suggestion, "Planned by", older relay ----
+    /// A wallet with a confirmed expected bill for a made-up gym (three monthly card rows), next due 25 Oct.
+    WalletController withGymBill() {
+      final wc = bw();
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        for (final d in const ['2026-07-25', '2026-08-25', '2026-09-25']) syntheticTx(d, -2999, 'POS plaćanje', 'POS SYNTHGYM ZAGREB'),
+      ]));
+      wc.reload();
+      final cand = wc.recurringBills().singleWhere((r) => r.label.toLowerCase().contains('synthgym'));
+      wc.confirmRecurring(cand.id);
+      return wc;
+    }
+
+    test('the real core suggests the category of the expected bill with the same payee', () {
+      final wc = withGymBill();
+      final r = wc.recurringBills().singleWhere((r) => r.confirmed);
+      final id = addBill(wc, syntheticBill('gym1', payee: 'SYNTHGYM ZAGREB', due: '2026-10-25'));
+      expect(wc.suggestedBillCategory(wc.billById(id)!), r.category);
+      expect(wc.suggestedBillCategory(wc.billById(addBill(wc, syntheticBill('x1', payee: 'Unknown Plumber')))!), isNull);
+    });
+
+    tw('the bill sheet says which expected bill already plans the slip, and says nothing for another payee', (tester) async {
+      final wc = withGymBill();
+      final label = wc.recurringBills().singleWhere((r) => r.confirmed).label;
+      final id = addBill(wc, syntheticBill('gym2', payee: 'SYNTHGYM ZAGREB', due: '2026-10-25'));
+      expect(wc.billPlannedBy(wc.billById(id)!)?.label, label);
+      await openSheetFor(tester, wc, id, size: const Size(400, 1600));
+      expect(find.text('Planned by $label'), findsOneWidget);
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await tester.pumpAndSettle();
+      final other = addBill(wc, syntheticBill('gym3', payee: 'Unknown Plumber', due: '2026-10-25'));
+      expect(wc.billPlannedBy(wc.billById(other)!), isNull);
+      await openSheetFor(tester, wc, other, size: const Size(400, 1600));
+      expect(key('plannedBy'), findsNothing);
+    });
+
+    tw('Plan › Sync tells that an older relay cannot keep bill photos', (tester) async {
+      final wc = bw();
+      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 2, blobsUnsupported: true);
+      await tester.runAsync(() => wc.setRelay(Uri.parse('http://homeserver.test:8787')));
+      await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: SyncPanel(wc: wc, onShowKey: () {}))), size: const Size(400, 1200));
+      expect(find.textContaining("This relay can't keep bill photos yet. Update the relay on the home server.", findRichText: true),
+          findsOneWidget);
+      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 2);
+      await tester.runAsync(wc.syncNow);
+      await tester.pump();
+      expect(key('blobsUnsupported'), findsNothing);
+      expect(find.textContaining('2 bill files waiting to upload', findRichText: true), findsOneWidget);
+    });
+
     // ---- 7. reminder days and waiting bill files ----
     tw('Plan › Bills saves the reminder days and refuses numbers out of range', (tester) async {
       final wc = bw();
@@ -1348,7 +1400,7 @@ void main() {
           await tester.pump();
         }
         wc.editBill(id, category: 'Bills & subscriptions');
-        wc.confirmBill(id);
+        expect(wc.confirmBill(id), isTrue, reason: 'a bill due from today on needs a category to confirm');
         await tester.pump();
         await tester.ensureVisible(key('paidBy'));
         await tester.pump();
