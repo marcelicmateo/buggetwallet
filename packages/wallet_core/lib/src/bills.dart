@@ -90,8 +90,8 @@ class Bill {
   /// The file as a [BlobRef], or null without one.
   BlobRef? get file => blob != null && blobType != null ? BlobRef(hash: blob!, type: blobType!, bytes: blobBytes ?? 0) : null;
 
-  /// Payee, else description, else `Bill`: what Upcoming and the planned row show.
-  String get title => _nonEmpty(payee) ?? _nonEmpty(description) ?? 'Bill';
+  /// Payee, else `Bill`: the planned row's title.
+  String get title => _nonEmpty(payee) ?? 'Bill';
 
   /// The id of the bill with [externalId], the same on every device.
   static String idFor(String externalId) => 'bill:${sha256Hex(utf8.encode(externalId)).substring(0, 32)}';
@@ -279,12 +279,7 @@ List<CategorizedTx> billCandidates(Bill b, List<CategorizedTx> txs, List<Bill> a
   ];
   final out = [
     for (final t in txs)
-      if (t.tx.live &&
-          t.amount < 0 &&
-          !taken.contains(t.tx.id) &&
-          t.date.compareTo(window.$1) >= 0 &&
-          t.date.compareTo(window.$2) <= 0)
-        t
+      if (t.tx.live && t.amount < 0 && !taken.contains(t.tx.id) && t.date.compareTo(window.$1) >= 0 && t.date.compareTo(window.$2) <= 0) t
   ];
   bool named(CategorizedTx t) {
     final d = foldText(t.tx.description);

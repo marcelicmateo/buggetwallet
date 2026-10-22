@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
-import 'package:wallet_importer/wallet_importer.dart';
 
 Uint8List bytesOf(int n, [int seed = 1]) {
   final r = Random(seed);
@@ -18,8 +17,8 @@ Future<String> sha256Hex(List<int> b) async => [for (final x in (await Sha256().
 /// A relay that records the order of uploads and can refuse blob routes.
 class SpyTransport extends MemoryTransport {
   final order = <String>[];
-  Object? blobPutError;
-  Object? blobDeleteError;
+  TransportException? blobPutError;
+  TransportException? blobDeleteError;
   @override
   Future<void> put(String device, int seq, List<int> bytes) {
     order.add('put');
@@ -59,6 +58,9 @@ void main() {
     key = VaultKey.generate();
     relay = SpyTransport();
     repo = mk();
+    // Changed (B1b): the relay creates a wallet only with a device's first file (RELAY_PROTOCOL.md: a blob PUT for an
+    // unknown wallet is 404). A real bill file always comes with its bill row; a setting stands in for it here.
+    repo.updateSettings({'returnReminderDays': 3});
   });
   tearDown(() {
     for (final r in extra) {
@@ -356,12 +358,12 @@ void main() {
 
   group('cache', () {
     test('LRU: a queued (not yet uploaded) blob is never evicted, however full the cache gets', () async {
-      // 200 MiB native limit: 15 blobs of ~14 MiB overflow it. The first stays queued, the rest are uploaded.
-      final store = BlobStore(repo, key);
-      final queued = await store.add(bytesOf(14 * 1024 * 1024, 100), 'pdf');
+      // Changed (B1b): a 200 KiB limit and 14 KiB files instead of 200 MiB and 14 MiB (same shape, seconds not minutes).
+      final store = BlobStore(repo, key, maxCacheBytes: 200 * 1024);
+      final queued = await store.add(bytesOf(14 * 1024 * 1024 ~/ 1024, 100), 'pdf');
       final others = <BlobRef>[];
       for (var i = 0; i < 15; i++) {
-        others.add(await store.add(bytesOf(14 * 1024 * 1024, i), 'pdf'));
+        others.add(await store.add(bytesOf(14 * 1024, i), 'pdf'));
         // Upload all but the first blob: hide it from the run by queueing only the new ones via a transport that refuses it.
         await run(repo, via: _FailOne(relay, queued.hash));
       }
@@ -380,7 +382,7 @@ void main() {
       // And the queued blob still goes out on the next run.
       await run(repo);
       expect(await relay.getBlob(queued.hash), isNotNull);
-    }, timeout: const Timeout(Duration(minutes: 10)));
+    });
   });
 }
 

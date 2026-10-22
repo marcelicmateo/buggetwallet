@@ -128,7 +128,7 @@ void main() {
       expect(() => repo.updateBill(id, date: '2026-13-01'), throwsArgumentError);
       expect(() => repo.updateBill(id, total: 0), throwsArgumentError);
       expect(() => repo.updateBill(id, total: -5), throwsArgumentError);
-      expect(() => repo.updateBill(id, items: [for (var i = 0; i < 501; i++) BillItem(name: 'x', amount: 1)]), throwsArgumentError);
+      expect(() => repo.updateBill(id, items: [for (var i = 0; i < 501; i++) const BillItem(name: 'x', amount: 1)]), throwsArgumentError);
       expect(() => repo.updateBill(id, items: [BillItem(name: 'x' * 201, amount: 1)]), throwsArgumentError);
       expect(() => repo.updateBill('nope', note: 'x'), throwsArgumentError);
     });
@@ -369,7 +369,13 @@ void main() {
         row('late', '2026-04-10', -1000, 'SYNTHETIC UTILITY'),
       ];
       const other = Bill(id: 'b2', linkedTx: 'taken');
-      expect([for (final t in billCandidates(b, txs, const [b, other])) t.tx.id], ['named', 'near', 'far']);
+      expect([
+        for (final t in billCandidates(b, txs, const [b, other])) t.tx.id
+      ], [
+        'named',
+        'near',
+        'far'
+      ]);
       expect(billCandidates(const Bill(id: 'n'), txs, const []), isEmpty);
     });
   });
@@ -384,8 +390,14 @@ void main() {
           events: const [],
           from: today,
           to: '2026-03-31',
-          billsDb: const [b, Bill(id: 'r', warrantyUntil: '2026-03-05'), Bill(id: 'd', status: BillStatus.confirmed, returnBy: '2026-03-05', deleted: true)]);
-      expect([for (final i in items) (i.kind, i.key, i.date, i.title, i.amount)], [
+          billsDb: const [
+            b,
+            Bill(id: 'r', warrantyUntil: '2026-03-05'),
+            Bill(id: 'd', status: BillStatus.confirmed, returnBy: '2026-03-05', deleted: true)
+          ]);
+      expect([
+        for (final i in items) (i.kind, i.key, i.date, i.title, i.amount)
+      ], [
         (UpcomingKind.returnBy, 'r:b1', '2026-03-04', 'Synthetic Shop', null),
         (UpcomingKind.warranty, 'w:b1', '2026-03-20', 'Synthetic Shop', null),
       ]);
@@ -421,7 +433,8 @@ void main() {
     test('payee, description, item names folded; exact total; deleted never', () {
       const a = Bill(id: 'a', payee: 'Pekara Đurđa', total: 1234, items: [BillItem(name: 'Kruh', amount: 1234)]);
       const del = Bill(id: 'd', payee: 'Pekara', deleted: true);
-      SearchResult s(String q) => searchAll(q, txs: const [], goals: const [], wishlist: const [], bills: const [], billsDb: const [a, del]);
+      SearchResult s(String q) =>
+          searchAll(q, txs: const [], goals: const [], wishlist: const [], bills: const [], billsDb: const [a, del]);
       expect(s('durda').billsDb, [a]);
       expect(s('kruh').billsDb, [a]);
       expect(s('12,34').billsDb, [a]);

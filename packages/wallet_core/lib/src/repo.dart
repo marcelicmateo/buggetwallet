@@ -264,7 +264,21 @@ class WalletRepo {
 
   /// Column types, for checking synced values: integer columns, 0/1 flags (a bool is stored as 0/1), and the
   /// columns that may hold NULL. Every other synced column is text.
-  static const _intCols = {'amount', 'target', 'saved', 'monthly', 'sort', 'price', 'added', 'decided', 'expected_amount', 'interval_days', 'total', 'unsure', 'blob_bytes'};
+  static const _intCols = {
+    'amount',
+    'target',
+    'saved',
+    'monthly',
+    'sort',
+    'price',
+    'added',
+    'decided',
+    'expected_amount',
+    'interval_days',
+    'total',
+    'unsure',
+    'blob_bytes'
+  };
   static const _flagCols = {'manual', 'deleted'};
   static const _nullable = {
     'tx': {'category', 'note', 'matched_to', 'seen_bank', 'kind_hint', 'transfer_to'},
@@ -1411,7 +1425,10 @@ class WalletRepo {
   /// follows edits); a paid bill's row is marked paid with the payment; a deleted bill's row, or one whose due date or
   /// total is gone, is deleted. Nothing is written for a row already as it should be.
   List<(String, String, Map<String, Object?>)> _billWrites(Bill b, Map<String, Object?> fields, String today) {
-    final n = Bill.fromRow({...db.select('SELECT * FROM bills WHERE id = ?', [b.id]).first, ...fields});
+    final n = Bill.fromRow({
+      ...db.select('SELECT * FROM bills WHERE id = ?', [b.id]).first,
+      ...fields
+    });
     final pid = billPlannedId(b.id);
     final rs = db.select('SELECT * FROM planned WHERE id = ?', [pid]);
     final p = rs.isEmpty ? null : PlannedCost.fromRow(rs.first);
@@ -1481,7 +1498,8 @@ class WalletRepo {
 
   /// Keeps sealed [bytes] under [hash] in the cache (most recently used), and queues it for upload with [queue].
   void putCachedBlob(String hash, List<int> bytes, {bool queue = false}) {
-    db.execute('INSERT OR REPLACE INTO blob_cache(hash, sealed, used_at, bytes) VALUES(?, ?, ?, ?)', [hash, bytes, _nextBlobUse(), bytes.length]);
+    db.execute(
+        'INSERT OR REPLACE INTO blob_cache(hash, sealed, used_at, bytes) VALUES(?, ?, ?, ?)', [hash, bytes, _nextBlobUse(), bytes.length]);
     if (queue) db.execute('INSERT OR IGNORE INTO blob_outbox(hash) VALUES(?)', [hash]);
   }
 

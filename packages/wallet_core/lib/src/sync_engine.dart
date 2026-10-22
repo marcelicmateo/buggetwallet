@@ -510,14 +510,14 @@ class SyncEngine {
         blobsSent: blobsSent,
         blobsWaiting: repo.queuedBlobs().length,
         devices: [
-      for (final d in ids)
-        SyncDevice(_short(d),
-            lastSeen: d == me ? (acked || sent > 0 ? now : state.devices[d]?.lastSeen) : state.devices[d]!.lastSeen, isThis: d == me),
-    ]);
+          for (final d in ids)
+            SyncDevice(_short(d),
+                lastSeen: d == me ? (acked || sent > 0 ? now : state.devices[d]?.lastSeen) : state.devices[d]!.lastSeen, isThis: d == me),
+        ]);
   }
 
-  /// Uploads the queued bill files (`blob_outbox`). A refused or failed one stays queued and the run goes on; once the
-  /// relay is unreachable the rest wait for the next run. Returns (uploaded, whether one was refused as missing: a
+  /// Uploads the queued bill files (`blob_outbox`). A refused or failed one stays queued and the run goes on with the
+  /// others. Returns (uploaded, whether one was refused as missing: a
   /// wallet the relay does not know yet, or an older relay without blobs).
   Future<(int, bool)> _uploadBlobs(WalletRepo repo) async {
     final queued = repo.queuedBlobs();
@@ -540,7 +540,6 @@ class SyncEngine {
         failed++;
         if (e.failure == TransportFailure.missing) missing = true;
         logEvent(_log, Level.WARNING, 'sync.blob.failed', {'failure': e.failure.name});
-        if (e.failure == TransportFailure.unreachable) break;
       }
     }
     logEvent(_log, Level.INFO, 'sync.blobs', {'sent': sent, 'failed': failed, 'queued': queued.length});
@@ -558,7 +557,6 @@ class SyncEngine {
         n++;
       } on TransportException catch (e) {
         logEvent(_log, Level.WARNING, 'sync.blob.deleteFailed', {'failure': e.failure.name});
-        if (e.failure == TransportFailure.unreachable) break;
       }
     }
     if (queued.isNotEmpty) logEvent(_log, Level.INFO, 'sync.blobs.deleted', {'sent': n, 'queued': queued.length});

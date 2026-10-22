@@ -3,7 +3,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:logging/logging.dart';
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
@@ -331,7 +330,9 @@ void main() {
       final (id, _) = repo.importBill(nb());
       repo.confirmBill(id);
       repo.deleteBill(id);
-      expect(billRows(repo), isEmpty);
+      // Changed (B1b): rows are never removed from the database (deletes sync as `deleted: 1`, like deletePlanned), so
+      // "gone" = no live row.
+      expect(billRows(repo).where((p) => !p.deleted), isEmpty);
       expect(repo.plannedCosts().where((p) => p.sourceRef == id), isEmpty);
       expect(reserved(repo), 0);
       expect(repo.bills(), isEmpty);
@@ -546,8 +547,12 @@ void main() {
 
     test('several candidates: none is linked', () {
       final id = confirmed(repo);
-      bankRow(repo, '2026-03-05', -total, withRef);
-      bankRow(repo, '2026-03-06', -total, withRef);
+      // Changed (B1b): both rows in one import. Rows imported one by one link to the first (the only candidate then):
+      // like matching and pairing, a link once made is never re-planned.
+      repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        n('2026-03-05', -total, 'POS plaćanje', withRef),
+        n('2026-03-06', -total, 'POS plaćanje', withRef),
+      ]));
       repo.runPendingMatch();
       expect(bill(repo, id).linkedTx, isNull);
     });
@@ -608,11 +613,12 @@ void main() {
         row('2026-02-26', 5000, 'income'),
         row('2026-02-26', -5000, 'deleted', deleted: true),
       ];
-      expect(
-          [
-            for (final c in billCandidates(b, txs, [b])) c.tx.description
-          ].toSet(),
-          {'first day', 'last day'});
+      expect({
+        for (final c in billCandidates(b, txs, [b])) c.tx.description
+      }, {
+        'first day',
+        'last day'
+      });
     });
 
     test('with a due date the window ends 30 days after it', () {
@@ -728,7 +734,7 @@ void main() {
     });
 
     test('billReminders: defaults come from settings (3 and 14)', () {
-      final s = WalletSettings();
+      const s = WalletSettings();
       expect((s.returnReminderDays, s.warrantyReminderDays), (3, 14));
     });
 
@@ -815,8 +821,9 @@ void main() {
     test('bills round-trip; blob cache and queues are device-local and not in the backup', () async {
       final key = VaultKey.generate();
       final store = BlobStore(repo, key);
-      final ref = await store.add(Uint8List.fromList(List.generate(2000, (i) => i & 0xff)), 'jpg');
-      final (id, _) = repo.importBill(nb(items: const [BillItem(name: 'Widget', quantity: '2', amount: 1000)]), file: ref);
+      // Changed (B1b): the local was `ref`, which hid the top-level reference string compared below.
+      final file = await store.add(Uint8List.fromList(List.generate(2000, (i) => i & 0xff)), 'jpg');
+      final (id, _) = repo.importBill(nb(items: const [BillItem(name: 'Widget', quantity: '2', amount: 1000)]), file: file);
       repo.confirmBill(id);
       repo.updateBill(id, warrantyUntil: '2027-03-01', returnBy: '2026-03-15', note: 'synthetic');
       final bytes = await backupBytes(repo, key);
@@ -830,13 +837,13 @@ void main() {
           (BillStatus.confirmed, total, payee, '2026-03-10', '2026-02-25', ref, theIban));
       expect(b.items, o.items);
       expect((b.warrantyUntil, b.returnBy, b.note), ('2027-03-01', '2026-03-15', 'synthetic'));
-      expect((b.blob, b.blobType, b.blobBytes), (ref.hash, 'jpg', 2000));
+      expect((b.blob, b.blobType, b.blobBytes), (file.hash, 'jpg', 2000));
       expect(billRows(fresh, id), hasLength(1), reason: 'the planned row comes along');
 
       for (final t in ['blob_cache', 'blob_outbox', 'blob_delete']) {
         expect(fresh.db.select('SELECT COUNT(*) AS c FROM $t').first['c'], 0, reason: t);
       }
-      expect(await BlobStore(fresh, key).read(ref.hash), isNull, reason: 'the file itself is not in the backup');
+      expect(await BlobStore(fresh, key).read(file.hash), isNull, reason: 'the file itself is not in the backup');
     });
   });
 

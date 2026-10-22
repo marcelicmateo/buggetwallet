@@ -122,7 +122,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   may have removed it meanwhile); a goal that never existed here is an `ArgumentError`.
 - `WalletRepo.schemaVersion` (meta `schema`): bump it when adding a synced entity or field (3 = `tx.kind_hint`,
   `tx.transfer_to`; 4 = the `exchange` hint: Revolut Exchange rows a version-3 build hinted `ownTransfer` are rewritten
-  once through `_write` and reconciled, `revolutExchangeType`; 5 = the `recurring` entity; 6 = the `planned` entity). Opening an existing database with an older version
+  once through `_write` and reconciled, `revolutExchangeType`; 5 = the `recurring` entity; 6 = the `planned` entity; 7 = the `bill` entity). Opening an existing database with an older version
   clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
   written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
 - `local_db.dart` — encrypted local database (§4.9, SQLite3MultipleCiphers, web-safe): `localDbKey(VaultKey)` = HKDF
@@ -148,7 +148,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   with that clock and their current values; a field with no clock, i.e. the column default, is left out), so a restore
   records the very same clocks; device-local values never. Logs `backup.write` with the op count.
   `restoreBackupBytes(repo, bytes, key)`: `StateError` unless `repo.isEmpty` (no row at all, deleted included, in tx,
-  goals, goal_contrib, wish, recurring, planned, merchant_rules, settings) before anything is read; unseal errors are the
+  goals, goal_contrib, wish, recurring, planned, bills, merchant_rules, settings) before anything is read; unseal errors are the
   `VaultException`; content that is not a backup or has a clock that does not parse is a `BackupException` (`reason`:
   `damaged`, `newerVersion` for `v` > `backupVersion`; `unreadable` is what the app uses when it cannot read the picked
   file; nothing applied unless the whole file parses). The ops go through `applyRemote(ops, resend: true)`: matching,
@@ -183,8 +183,27 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   rules → first occurrence + `unsupported` count; a whole-file budget of 10⁶ recurrence steps, after which recurring
   events give their first in-range occurrence only and count as unsupported; never throws), `plannedIcs` (export, `euroText` amounts, stable UIDs).
   Logs: counts and enum words only (`planned.*`, `ics.parse`, `ics.export`).
+- `bills.dart` + `blob_store.dart` — bills database (stage B, API and decisions in `docs/context/BILLS_API.md`), pure and
+  web-safe. `Bill` (`models`-style row ↔ object): synced entity `bill`, table `bills` (schema 7; `items` = JSON text,
+  `unsure` count, `linked_tx` the payment, `blob`/`blob_type`/`blob_bytes` the file), id `Bill.idFor(externalId)` =
+  `bill:<32 hex SHA-256>` (else random `b…`). Repo: `bills`, `bill`, `importBill` (creation op without status/deleted;
+  re-import fills only empty fields, a confirmed bill only items + file; a deleted one is revived), `updateBill`,
+  `confirmBill`, `linkBill` (one bill per tx), `unlinkBill`, `deleteBill`, `addExpenseFromBill` (expense + link +
+  confirm in one `_write`). `_billWrites` keeps the planned row `bill:<billId>` in step (open while confirmed, unpaid,
+  with total and due date; paid with the payment; deleted with the bill), so `computePeriod(planned:)` reserves an
+  unpaid slip. Auto link `planBillLinks` in `_reconcile` (caught up only) and at confirm: a token (reference ≥ 6
+  digits, JIR, invoice no ≥ 4) in the bank row's `normalizeForLink` description with digit boundaries, −amount == total,
+  date − 3 .. (due ?? date) + 60, exactly one row and one bill; never by amount alone, never reclassifies. Deleting the
+  paying tx unlinks at once. `billCandidates`, `billReminders`, `upcoming(billsDb:)` (`UpcomingKind.warranty`/`returnBy`),
+  settings `returnReminderDays` (3, 0..30) / `warrantyReminderDays` (14, 0..90). `BlobStore(repo, key, maxCacheBytes:)`:
+  `add` (async: seal, hash = SHA-256 of the sealed bytes, cache + `blob_outbox`), `read(hash, transport:)` (cache, else
+  fetch, hash checked, unsealed, cached). Device-local tables `blob_cache` (LRU by a use counter, never evicts a queued
+  hash), `blob_outbox`, `blob_delete` (not in `_entities`, snapshots or backups); repo helpers `putCachedBlob`,
+  `cachedBlob`, `evictBlobs`, `queuedBlobs`, `blobUploaded`, `blobDeletes`, `blobDeleteDone`. Logs: `bills.*`, `blob.*`,
+  `sync.blob*` with counts, sources and enum words only.
 - `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:, planned:)` → `SearchResult` (`txs` newest first capped at
-  `searchTxLimit` 200, `goals`, `wishlist`, `bills`, `isEmpty`; blank query → `SearchResult.empty`). Text: `foldText`
+  `searchTxLimit` 200, `goals`, `wishlist`, `bills`, `planned`, `billsDb` (stored bills: payee, description, item
+  names, exact total), `isEmpty`; blank query → `SearchResult.empty`). Text: `foldText`
   (lower case, č ć š ž đ → c c s z d, `dj` → `d`, common Latin accents) substring over tx description/note/category
   (resolved), goal name, wish name, bill label/category; live rows only. Amount: `parseAmountQuery` (`12`, `12.5`,
   `12,50`, `-12.50`, `12.50 €`; null for `12.`, more than two decimals — never rounded —, words, thousands separators,
@@ -201,10 +220,13 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   so the file is not refused for good. The quarantine is separate from the cursors: a schema upgrade reads every
   peer file again, an unchanged badKey/corrupt file stays skipped, unknownVersion/applyFailed are tried once more.
 - `sync_engine.dart` — relay sync (§4.9, wire protocol `docs/context/RELAY_PROTOCOL.md`), web-safe. `SyncTransport`
-  (`state`, `put`, `get`, `ack`, `putSnapshot`, `getSnapshot`; failures are `TransportException(TransportFailure)`),
+  (`state`, `put`, `get`, `ack`, `putSnapshot`, `getSnapshot`, `putBlob`/`getBlob` (null on 404)/`deleteBlob`, whose
+  defaults act like an older relay: 404; `run` uploads `blob_outbox` before the ops (a 404 before this device's first
+  file is retried once after it: the relay creates a wallet only then), sends `blob_delete` after the ack, failures stay
+  queued and never stop the run, `SyncReport.blobsSent`/`blobsWaiting`; failures are `TransportException(TransportFailure)`),
   `RelayState`/`RelayDevice`/`RelaySnapshot` (+ `fromJson`), implemented by `MemoryTransport` (`sync_memory.dart`: the
   relay's rules in memory — no gaps, never overwritten, acks grow, snapshot 422 before 409, two kept snapshots, pruning
-  incl. the 90-day rule driven by `now`; no signature check; test hooks `offline`, `corrupt`, `failGet`, `replace`, `files`,
+  incl. the 90-day rule driven by `now`; no signature check; blobs: hash checked, 404 for an unknown wallet, hooks `blobs`, `blobRoutes`, `tamperBlob`; test hooks `offline`, `corrupt`, `failGet`, `replace`, `files`,
   `calls`) and `RelayTransport` (`sync_relay.dart`, `package:http` + `cryptography`, protocol v2: `wid` and the Ed25519
   key pair from `deriveKey` (`relayIdInfo`, `relaySignInfo`; `ids` = (wid, public key)); every request carries
   `X-BW-Time` (device clock + `clockOffsetMs`) and `X-BW-Sig` over `signedText` (method, path from `/v2/` even behind a
@@ -325,6 +347,12 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - Planned costs: a planned cost whose bank row already landed still reserves until the owner marks it Paid or its date
   passes (counted as spent and reserved meanwhile; the app suggests "Paid by this?"). `.ics` UNTIL is compared by date
   only; a UTC time without `toLocal` takes its UTC date. Older builds ignore the `planned` entity (replayed once).
+- Bills: the same bill imported on two devices before a sync: the later import's read fields (date, total, …) win over
+  an edit made on the other device in between (status and deleted never: the creation op carries neither). An auto link
+  is never re-planned: rows imported one by one link to the first candidate even if a second one comes later. A bill
+  linked to a hand-added expense stays paid when matching later replaces that entry with its bank row. A deleted bill's
+  file stays in other devices' caches until their next caught-up run. A blob added before this device ever stored a
+  file waits for one (the relay creates the wallet only then). Older builds ignore the `bill` entity (replayed once).
 - Calendar refs are built from the normalized title and date (`calendarEventRef`): two events with the same normalized
   title on the same day (amounts stripped: `Dentist 80 €` and `Dentist 90 €`) show as one suggestion, and renaming an
   event in the calendar makes it a new suggestion. A title without letters (`80 €`) gets a per-calendar ref, so its
@@ -337,7 +365,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (goals: `test/goal_contrib_test.dart`, quarantine: `test/sync_quarantine_test.dart`, hints: `test/kind_hint_test.dart`,
   own transfers incl. two devices: `test/transfers_test.dart`, budgets per category incl. the setting and two devices:
   `test/budget_vs_actual_test.dart`, recurring bills + weekly review incl. two devices: `test/habits_test.dart`, M5 backup
-  round trip incl. two devices + resend: `test/backup_test.dart`, future spending (planned costs, .ics, Upcoming, two
+  round trip incl. two devices + resend: `test/backup_test.dart`, bills (repo API, planned row, auto link, two devices, backup, schema 6 → 7):
+  `test/bills_test.dart` (+ `bills_spec_test.dart`), bill files (BlobStore, engine queues, Memory/RelayTransport blob calls):
+  `test/blob_store_test.dart` (+ `blob_spec_test.dart`; real relay: `sync_relay_test.dart`), future spending (planned costs, .ics, Upcoming, two
   devices): `test/future_spending_test.dart` (+ `future_spending_spec_test.dart`, `ics_spec_test.dart`; F4a: content refs
   incl. two devices `calendar_ref_test.dart`, parseIcs cost bounds + dismiss title `future_spending_fixes_test.dart`), CSV: `test/export_test.dart`, search: `test/search_test.dart`,
   web-safe core (`fromDatabase`, `backupBytes`/`restoreBackupBytes`, `MemoryLogSink`, gzip compatibility): `test/web_core_test.dart`,
