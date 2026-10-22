@@ -84,16 +84,18 @@ String headsUpBody(int daysLeft) => switch (daysLeft) {
       _ => 'A big planned cost is coming up in $daysLeft days.',
     };
 
-/// The heads-up notifications for [items] (date and days left of each): 09:00 local on (date - [days]) or, when that day has
-/// passed, none. [now] decides what is already past.
+/// The heads-up notifications for [items] (date and days ahead of each): 09:00 local on (date - [days]); when that moment has
+/// already passed, at the next 09:00 still ahead, as long as that is on or before the cost's date (none otherwise). The text
+/// says how many days are left at the time of the notification. [now] decides what is already past.
 List<NudgeSlot> headsUpSlots(DateTime now, Iterable<(String date, int days)> items) {
   final today = isoDate(now);
+  final nextNine = now.hour < 9 ? today : addDays(today, 1);
   final out = <NudgeSlot>[];
   for (final (date, days) in items) {
-    final at = addDays(date, -days);
-    if (at.compareTo(today) < 0 || (at == today && now.hour >= 9)) continue;
-    final left = days;
-    out.add(NudgeSlot(at, 9, 0, nudgeTitle, headsUpBody(left)));
+    var at = addDays(date, -days);
+    if (at.compareTo(nextNine) < 0) at = nextNine;
+    if (at.compareTo(date) > 0) continue;
+    out.add(NudgeSlot(at, 9, 0, nudgeTitle, headsUpBody(daysBetween(at, date))));
   }
   out.sort((a, b) => a.date.compareTo(b.date));
   return out.take(headsUpMax).toList();

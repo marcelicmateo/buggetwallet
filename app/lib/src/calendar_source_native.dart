@@ -41,16 +41,20 @@ class AndroidCalendars implements CalendarSource {
     final end = parseIso(addDays(to, 1));
     final list = await _plugin.listEvents(DateTime(start.year, start.month, start.day), DateTime(end.year, end.month, end.day),
         calendarIds: calendarIds.toList());
-    return [
-      for (final e in list)
-        CalendarEvent(
-          calendarId: e.calendarId,
-          uid: e.eventId,
-          title: e.title,
-          notes: e.description,
-          date: isoDate(e.startDate),
-          allDay: e.isAllDay,
-        ),
-    ];
+    return calendarEventsFrom(list);
   }
 }
+
+/// The plugin's events as [CalendarEvent]s; cancelled ones are left out (like `STATUS:CANCELLED` in an `.ics` file).
+List<CalendarEvent> calendarEventsFrom(Iterable<Event> list) => [
+      for (final e in list)
+        if (e.status != EventStatus.canceled)
+          CalendarEvent(
+            calendarId: e.calendarId,
+            uid: e.eventId,
+            title: e.title,
+            notes: e.description,
+            date: isoDate(e.startDate),
+            allDay: e.isAllDay,
+          ),
+    ];

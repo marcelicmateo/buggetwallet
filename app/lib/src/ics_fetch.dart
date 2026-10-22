@@ -11,3 +11,20 @@ class IcsFetchException implements Exception {
   @override
   String toString() => 'IcsFetchException';
 }
+
+/// The longest a whole download may take (connect, answer, every redirect and the body together).
+const icsFetchTimeout = Duration(seconds: 60);
+
+/// Most redirects followed for one link.
+const icsMaxRedirects = 5;
+
+/// Where a redirect to [location] from [from] goes. Throws [IcsFetchException] for anything that is not http(s) and for a
+/// step from https down to http (the calendar would then travel unencrypted).
+Uri resolveRedirect(Uri from, String location) {
+  final to = from.resolve(location);
+  if (to.scheme != 'http' && to.scheme != 'https') throw const IcsFetchException('The link sends you somewhere that is not a web address.');
+  if (from.scheme == 'https' && to.scheme == 'http') {
+    throw const IcsFetchException('The link redirects to an unencrypted address, so it was not followed.');
+  }
+  return to;
+}
