@@ -235,7 +235,7 @@ void main() {
       await pumpPanel(t, w.wc, c);
       await t.tap(restoreBtn);
       await t.pumpAndSettle();
-      expect(find.text('Restore this backup?'), findsOneWidget);
+      expect(find.byKey(const ValueKey('restoreConfirm')), findsOneWidget);
       expect(got, isNull, reason: 'nothing is read before the owner confirms');
       await t.tap(find.byKey(const ValueKey('restoreConfirm')));
       await t.pumpAndSettle();
@@ -254,11 +254,11 @@ void main() {
       await pumpPanel(t, w.wc, c);
       await t.tap(restoreBtn); // picker cancelled: empty list
       await t.pumpAndSettle();
-      expect(find.text('Restore this backup?'), findsNothing);
+      expect(find.byKey(const ValueKey('restoreConfirm')), findsNothing);
       c.picks = [FakePicked('a.bwb', Uint8List(2))];
       await t.tap(restoreBtn);
       await t.pumpAndSettle();
-      await t.tap(find.text('Cancel'));
+      await t.tap(find.byKey(const ValueKey('restoreCancel')));
       await t.pumpAndSettle();
       expect(reads, 0);
     });
@@ -442,16 +442,16 @@ void main() {
       final w = webWallet(full: true);
       await pumpPlan(t, w.wc);
       expect(find.text('SYNC'), findsOneWidget);
-      expect(find.text('Sync now'), findsOneWidget);
-      expect(find.text('Test connection'), findsOneWidget);
+      expect(find.byKey(const ValueKey('syncNow')), findsOneWidget);
+      expect(find.byKey(const ValueKey('relayTest')), findsOneWidget);
       expect(find.text('NUDGES'), findsNothing);
       expect(find.text('Choose folder'), findsNothing);
       expect(find.text('BACKUP'), findsOneWidget);
       expect(find.text('EXPORT'), findsOneWidget);
       expect(find.text('DIAGNOSTICS'), findsOneWidget);
       expect(find.text('THIS BROWSER'), findsOneWidget);
-      expect(find.text('Forget this browser'), findsOneWidget);
-      expect(find.text('Show wallet key'), findsOneWidget, reason: 'the key is still needed for another device or a backup');
+      expect(find.byKey(const ValueKey('forgetBrowser')), findsOneWidget);
+      expect(find.byKey(const ValueKey('showKey')), findsOneWidget, reason: 'the key is still needed for another device or a backup');
     });
 
     webTest('on the other platforms Sync and Nudges stay and there is no Forget row', (t) async {
@@ -460,7 +460,7 @@ void main() {
       await pumpPlan(t, w.wc);
       expect(find.text('SYNC'), findsOneWidget);
       expect(find.text('NUDGES'), findsOneWidget);
-      expect(find.text('Forget this browser'), findsNothing);
+      expect(find.byKey(const ValueKey('forgetBrowser')), findsNothing);
       expect(find.text('THIS BROWSER'), findsNothing);
     });
 
@@ -469,11 +469,11 @@ void main() {
       await pumpPlan(t, w.wc);
       await t.tap(find.byKey(const ValueKey('forgetBrowser')));
       await t.pumpAndSettle();
-      expect(find.text('Forget this browser?'), findsOneWidget);
+      expect(find.byKey(const ValueKey('forgetConfirm')), findsOneWidget);
       expect(w.db.forgotten, isFalse);
       await t.tap(find.byKey(const ValueKey('forgetCancel')));
       await t.pumpAndSettle();
-      expect(find.text('Forget this browser?'), findsNothing);
+      expect(find.byKey(const ValueKey('forgetConfirm')), findsNothing);
       expect(w.db.forgotten, isFalse);
       expect(w.keyForgets, 0);
       expect(w.wc.hasWallet, isTrue);
@@ -489,7 +489,7 @@ void main() {
       expect(w.db.forgotten, isTrue);
       expect(w.keyForgets, 1);
       expect(w.wc.hasWallet, isFalse);
-      expect(find.text('Forget this browser?'), findsNothing);
+      expect(find.byKey(const ValueKey('forgetConfirm')), findsNothing);
       expect(lines.join('\n'), contains('wallet.forget'));
       w.dispose(); // forgetting starts new timers
     });
@@ -513,7 +513,7 @@ void main() {
       await t.scrollUntilVisible(find.byKey(const ValueKey('forgetBrowser')), 500, scrollable: find.byType(Scrollable).first);
       await t.pump();
       expect(t.takeException(), isNull); // an overflow would show up here
-      expect(find.text('Forget this browser'), findsOneWidget);
+      expect(find.byKey(const ValueKey('forgetBrowser')), findsOneWidget);
     });
   });
 
@@ -522,7 +522,7 @@ void main() {
       final w = webWallet();
       final c = FakeChooser();
       await pumpApp(t, Scaffold(body: SingleChildScrollView(child: DiagnosticsPanel(wc: w.wc, chooser: c))));
-      await t.tap(find.text('Save logs…'));
+      await t.tap(find.byKey(const ValueKey('logsSave')));
       await t.pumpAndSettle();
       expect(c.texts.map((x) => x.name), [w.wc.logFileName()]);
       expect(find.text('Logs downloaded.'), findsOneWidget);
@@ -532,7 +532,7 @@ void main() {
       final w = webWallet();
       final c = FakeChooser()..saveError = StateError('no');
       await pumpApp(t, Scaffold(body: SingleChildScrollView(child: DiagnosticsPanel(wc: w.wc, chooser: c))));
-      await t.tap(find.text('Save logs…'));
+      await t.tap(find.byKey(const ValueKey('logsSave')));
       await t.pumpAndSettle();
       expect(find.text("Couldn't download the logs."), findsOneWidget);
     });
@@ -548,9 +548,9 @@ void main() {
       final w = webWallet(withKey: false);
       await pumpOnboarding(t, w.wc);
       expect(find.textContaining('kept in this browser'), findsOneWidget);
-      await t.tap(find.text('Start a new wallet'));
+      await t.tap(find.byKey(const ValueKey('startWallet')));
       await t.pump();
-      expect(find.text('Choose a passphrase'), findsOneWidget);
+      expect(find.byKey(const ValueKey('passphraseHeading')), findsOneWidget);
       expect(find.textContaining('this browser only'), findsOneWidget);
       expect(field('passphrase'), findsOneWidget);
       expect(field('passphrase2'), findsOneWidget);
@@ -561,10 +561,10 @@ void main() {
     webTest('fewer than 8 characters and two different passphrases are refused with a text', (t) async {
       final w = webWallet(withKey: false);
       await pumpOnboarding(t, w.wc);
-      expect(find.text('Start a new wallet'), findsOneWidget);
-      await t.tap(find.text('Start a new wallet'));
+      expect(find.byKey(const ValueKey('startWallet')), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('startWallet')));
       await t.pump();
-      expect(find.text('Choose a passphrase'), findsOneWidget);
+      expect(find.byKey(const ValueKey('passphraseHeading')), findsOneWidget);
       await t.enterText(field('passphrase'), '1234567');
       await t.enterText(field('passphrase2'), '1234567');
       await t.tap(field('passphraseContinue'));
@@ -582,7 +582,7 @@ void main() {
     webTest('exactly 8 matching characters create the wallet and wrap the key with that passphrase; it is never logged', (t) async {
       final w = webWallet(withKey: false);
       await pumpOnboarding(t, w.wc);
-      await t.tap(find.text('Start a new wallet'));
+      await t.tap(find.byKey(const ValueKey('startWallet')));
       await t.pump();
       await t.enterText(field('passphrase'), 'pass-1234');
       await t.enterText(field('passphrase2'), 'pass-1234');
@@ -596,14 +596,14 @@ void main() {
     webTest('the passphrase fields hide what is typed, and Back returns to the first choice', (t) async {
       final w = webWallet(withKey: false);
       await pumpOnboarding(t, w.wc);
-      await t.tap(find.text('Start a new wallet'));
+      await t.tap(find.byKey(const ValueKey('startWallet')));
       await t.pump();
       for (final k in ['passphrase', 'passphrase2']) {
         expect(t.widget<TextField>(field(k)).obscureText, isTrue);
       }
-      await t.tap(find.text('Back'));
+      await t.tap(find.byKey(const ValueKey('passphraseBack')));
       await t.pump();
-      expect(find.text('Start a new wallet'), findsOneWidget);
+      expect(find.byKey(const ValueKey('startWallet')), findsOneWidget);
       expect(field('passphrase'), findsNothing);
     });
 
@@ -611,7 +611,7 @@ void main() {
       final w = webWallet(withKey: false);
       w.wc.keyWriter = (key, {passphrase}) async => throw StateError('storage is full');
       await pumpOnboarding(t, w.wc);
-      await t.tap(find.text('Start a new wallet'));
+      await t.tap(find.byKey(const ValueKey('startWallet')));
       await t.pump();
       await t.enterText(field('passphrase'), 'pass-1234');
       await t.enterText(field('passphrase2'), 'pass-1234');
@@ -625,18 +625,18 @@ void main() {
     webTest('Use my wallet key: a typo shows at once, a good key goes on to the passphrase and is wrapped with it', (t) async {
       final w = webWallet(withKey: false);
       await pumpOnboarding(t, w.wc);
-      await t.tap(find.text('Use my wallet key'));
+      await t.tap(find.byKey(const ValueKey('joinStart')));
       await t.pump();
       await t.enterText(find.widgetWithText(TextField, 'Wallet key'), 'not a key');
-      await t.tap(find.text('Join wallet'));
+      await t.tap(find.byKey(const ValueKey('joinWallet')));
       await t.pump();
       expect(find.textContaining('This is not a Budget Wallet key (it should start with BW1).'), findsOneWidget);
       expect(field('passphrase'), findsNothing);
       final text = await VaultKey.generate().toText();
       await t.enterText(find.widgetWithText(TextField, 'Wallet key'), text);
-      await t.tap(find.text('Join wallet'));
+      await t.tap(find.byKey(const ValueKey('joinWallet')));
       await t.pumpAndSettle();
-      expect(find.text('Choose a passphrase'), findsOneWidget);
+      expect(find.byKey(const ValueKey('passphraseHeading')), findsOneWidget);
       await t.enterText(field('passphrase'), 'my passphrase');
       await t.enterText(field('passphrase2'), 'my passphrase');
       await t.tap(field('passphraseContinue'));
@@ -652,7 +652,7 @@ void main() {
       plat.debugIsWebOverride = false;
       final w = webWallet(withKey: false);
       await pumpOnboarding(t, w.wc);
-      await t.tap(find.text('Start a new wallet'));
+      await t.tap(find.byKey(const ValueKey('startWallet')));
       await t.pumpAndSettle();
       expect(field('passphrase'), findsNothing);
       expect(w.keyWrites, [null]);
@@ -662,10 +662,10 @@ void main() {
     webTest('fits 320 dp at text scale 2.0, first screen and passphrase step', (t) async {
       final w = webWallet(withKey: false);
       await pumpOnboarding(t, w.wc, size: const Size(320, 1600), scale: 2); // tall: the width is what is tested
-      expect(find.text('Start a new wallet'), findsOneWidget);
-      await t.tap(find.text('Start a new wallet'));
+      expect(find.byKey(const ValueKey('startWallet')), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('startWallet')));
       await t.pump();
-      expect(find.text('Choose a passphrase'), findsOneWidget);
+      expect(find.text('Choose a passphrase'), findsOneWidget, reason: 'the heading is built; the fields are further down the lazy list');
       // The text is so tall at 2.0 that the fields are below the built part of the lazy list: scroll to them, as a user does.
       final list = find.byType(Scrollable).first;
       await t.scrollUntilVisible(field('passphrase'), 200, scrollable: list);
@@ -686,8 +686,8 @@ void main() {
       await pumpUnlock(t, w.wc);
       expect(find.textContaining('locked'), findsOneWidget);
       expect(t.widget<TextField>(pass).obscureText, isTrue);
-      expect(find.text('Unlock'), findsOneWidget);
-      expect(find.text('Forget this browser'), findsOneWidget);
+      expect(find.byKey(const ValueKey('unlockButton')), findsOneWidget);
+      expect(find.byKey(const ValueKey('unlockForget')), findsOneWidget);
     });
 
     webTest('a wrong passphrase shows an error, keeps the screen and allows another try', (t) async {
@@ -815,7 +815,7 @@ void main() {
 
     webTest('fits 320 dp at text scale 2', (t) async {
       await pumpApp(t, InUseScreen(onReload: () {}), size: const Size(320, 1600), textScale: 2);
-      expect(find.text('Reload'), findsOneWidget);
+      expect(find.byKey(const ValueKey('inUseReload')), findsOneWidget);
       expect(t.takeException(), isNull);
     });
   });

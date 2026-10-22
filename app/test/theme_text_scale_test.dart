@@ -13,15 +13,12 @@ const _dir = 'assets/fonts';
 Future<ByteData> _bytes(String f) async => ByteData.sublistView(await File('$_dir/$f').readAsBytes());
 
 void main() {
-  final present =
-      ['Sans', 'Mono'].every((fam) => ['Regular', 'Medium', 'SemiBold'].every((w) => File('$_dir/IBMPlex$fam-$w.ttf').existsSync()));
-  if (!present) {
-    // ignore: avoid_print
-    print('SKIPPED: IBM Plex font files are not in app/assets/fonts yet');
-  }
-
   setUpAll(() async {
-    if (!present) return;
+    for (final fam in ['Sans', 'Mono']) {
+      for (final w in ['Regular', 'Medium', 'SemiBold']) {
+        expect(File('$_dir/IBMPlex$fam-$w.ttf').existsSync(), isTrue, reason: 'font file IBMPlex$fam-$w.ttf missing in app/assets/fonts');
+      }
+    }
     for (final (fam, prefix) in [('IBM Plex Sans', 'IBMPlexSans'), ('IBM Plex Mono', 'IBMPlexMono')]) {
       final l = FontLoader(fam);
       for (final w in ['Regular', 'Medium', 'SemiBold']) {
@@ -31,7 +28,7 @@ void main() {
     }
   });
 
-  group('text scale 2.0 with real fonts', skip: present ? false : 'IBM Plex font files not present in app/assets/fonts yet', () {
+  group('text scale 2.0 with real fonts', () {
     for (final w in [320.0, 360.0]) {
       for (final b in Brightness.values) {
         testWidgets('${w.toInt()} wide ${b.name}: every tab scrolls through', (tester) async {

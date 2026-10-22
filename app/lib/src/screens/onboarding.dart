@@ -66,11 +66,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       else if (!joining) ...[
         if (error != null) StatusLabel(good: false, text: error!),
         FilledButton(
+          key: const ValueKey('startWallet'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
           onPressed: busy ? null : (isWeb ? () => _askPassphrase('create') : _create),
           child: const Text('Start a new wallet', style: TextStyle(fontSize: 16)),
         ),
         OutlinedButton(
+          key: const ValueKey('joinStart'),
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
           onPressed: () {
             logNav('onboarding.join');
@@ -96,18 +98,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 helperMaxLines: 2)),
         if (error != null) StatusLabel(good: false, text: error!),
         FilledButton(
+          key: const ValueKey('joinWallet'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
           onPressed: busy ? null : (isWeb ? _checkKeyThenAsk : _join),
           child: const Text('Join wallet', style: TextStyle(fontSize: 16)),
         ),
-        TextButton(onPressed: () => setState(() => joining = false), child: const Text('Back')),
+        TextButton(key: const ValueKey('joinBack'), onPressed: () => setState(() => joining = false), child: const Text('Back')),
       ],
     ]);
   }
 
   /// Web: two fields and a short explanation. The passphrase protects the key in this browser only.
   List<Widget> _passphraseStep() => [
-        const Heading('Choose a passphrase', size: 18),
+        const Heading(key: ValueKey('passphraseHeading'), 'Choose a passphrase', size: 18),
         const Muted('It protects your wallet key in this browser only. You type it once each time you open the app in a new tab. '
             'If you lose it, you can only start over here; a backup file or another device still has your data.'),
         TextField(
@@ -135,6 +138,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: Text(_passphraseFor == 'create' ? 'Create wallet' : 'Join wallet', style: const TextStyle(fontSize: 16)),
         ),
         TextButton(
+            key: const ValueKey('passphraseBack'),
             onPressed: busy
                 ? null
                 : () => setState(() {

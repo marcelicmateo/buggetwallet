@@ -142,7 +142,7 @@ void main() {
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
       expect(find.byKey(const ValueKey('reviewCard')), findsOneWidget);
       expect(find.text('3 categories to confirm · 2 behind pace · 1 wishlist decision'), findsOneWidget);
-      await tester.tap(find.text('Start review'));
+      await tester.tap(find.byKey(const ValueKey('startReview')));
       await tester.pumpAndSettle();
       expect(find.byType(ReviewScreen), findsOneWidget);
     });
@@ -248,7 +248,7 @@ void main() {
       expect(find.byKey(const ValueKey('tick:open')), findsNWidgets(4));
       expect(find.byKey(const ValueKey('tick:done')), findsNothing);
       expect(find.text('Synthetic lamp'), findsOneWidget);
-      expect(find.text('Looks right'), findsNWidgets(3));
+      expect(_keyed('looksRight:'), findsNWidgets(3));
       expect(find.text('Eating out'), findsWidgets);
     });
 
@@ -256,11 +256,11 @@ void main() {
       final wc = hw();
       await open(tester, wc);
       for (var left = 3; left > 0; left--) {
-        expect(find.text('Looks right'), findsNWidgets(left));
-        await tester.tap(find.text('Looks right').first);
+        expect(_keyed('looksRight:'), findsNWidgets(left));
+        await tester.tap(_keyed('looksRight:').first);
         await tester.pump();
       }
-      expect(find.text('Looks right'), findsNothing);
+      expect(_keyed('looksRight:'), findsNothing);
       expect(wc.reviewState().count('categories'), 0);
       expect(find.descendant(of: find.byKey(const ValueKey('step:categories')), matching: find.byKey(const ValueKey('tick:done'))),
           findsOneWidget);
@@ -270,7 +270,7 @@ void main() {
     tw('wishlist: Skip decides the wish and the step ticks', (tester) async {
       final wc = hw();
       await open(tester, wc);
-      await tester.tap(find.text('Skip'));
+      await tester.tap(find.byKey(const ValueKey('skipWish:wish-ready')));
       await tester.pump();
       expect(wc.wish.firstWhere((w) => w.id == 'wish-ready').status, 'skipped');
       expect(find.text('Synthetic lamp'), findsNothing);
@@ -283,7 +283,7 @@ void main() {
       await open(tester, wc);
       expect(find.text('over budget'), findsOneWidget);
       expect(find.text('behind pace'), findsOneWidget);
-      await tester.tap(find.text('Got it'));
+      await tester.tap(find.byKey(const ValueKey('paceGotIt')));
       await tester.pump();
       expect(
           find.descendant(of: find.byKey(const ValueKey('step:pace')), matching: find.byKey(const ValueKey('tick:done'))), findsOneWidget);
@@ -297,8 +297,8 @@ void main() {
       await tester.tap(find.text('go'));
       await tester.pumpAndSettle();
       expect(find.byType(ReviewScreen), findsOneWidget);
-      await tester.ensureVisible(find.text('Done'));
-      await tester.tap(find.text('Done'));
+      await tester.ensureVisible(find.byKey(const ValueKey('reviewDone')));
+      await tester.tap(find.byKey(const ValueKey('reviewDone')));
       await tester.pumpAndSettle();
       expect(find.byType(ReviewScreen), findsNothing);
       expect(wc.reviewState().due, isFalse);
@@ -326,7 +326,7 @@ void main() {
     tw('a failing file chooser shows the standard message', (tester) async {
       final wc = hw();
       await pumpApp(tester, ReviewScreen(wc: wc, chooser: _FailingChooser()), size: const Size(400, 3000));
-      await tester.tap(find.text('Choose files'));
+      await tester.tap(find.byKey(const ValueKey('reviewImport')));
       await tester.pump();
       expect(find.text(chooserFailedMessage), findsOneWidget);
       expect(find.byKey(const ValueKey('tick:done')), findsNothing);
@@ -369,8 +369,8 @@ void main() {
       await plan(tester, wc);
       expect(find.text('Looks like a monthly bill'), findsOneWidget);
       expect(find.text(eur('29.99 €')), findsOneWidget);
-      await tester.ensureVisible(find.text('Confirm'));
-      await tester.tap(find.text('Confirm'));
+      await tester.ensureVisible(_keyed('confirm:'));
+      await tester.tap(_keyed('confirm:'));
       await tester.pump();
       expect(find.text('Looks like a monthly bill'), findsNothing);
       expect(find.text('Confirmed'), findsOneWidget);
@@ -381,8 +381,8 @@ void main() {
     tw('expected bills: Not a bill hides it; Remove deletes a confirmed one', (tester) async {
       final wc = hw();
       await plan(tester, wc);
-      await tester.ensureVisible(find.text('Not a bill'));
-      await tester.tap(find.text('Not a bill'));
+      await tester.ensureVisible(_keyed('dismiss:'));
+      await tester.tap(_keyed('dismiss:'));
       await tester.pump();
       expect(find.text('Looks like a monthly bill'), findsNothing);
       expect(find.textContaining('No repeating bills found yet'), findsOneWidget);
@@ -406,7 +406,7 @@ void main() {
       await plan(tester, wc);
       expect(find.textContaining('next 25 Oct'), findsOneWidget);
       await tester.ensureVisible(find.byKey(ValueKey('skip:${bill.id}')));
-      await tester.tap(find.text('Skip this cycle'));
+      await tester.tap(find.byKey(ValueKey('skip:${bill.id}')));
       await tester.pumpAndSettle();
       expect(wc.recurringBills().single.nextDue, '2026-11-24');
       expect(wc.period().reservedBills, 0);
@@ -501,3 +501,6 @@ class _FailingChooser extends FileChooser {
   @override
   Future<List<PlatformFile>> pickBankFiles() async => throw StateError('no portal');
 }
+
+/// Rows share a key prefix and end in an id (`confirm:<id>`), so a test finds them by the prefix.
+Finder _keyed(String prefix) => find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith(prefix));

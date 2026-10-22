@@ -210,7 +210,7 @@ void main() {
       await tester.enterText(find.byType(TextField).first, '120');
       await tester.enterText(_field('Note'), '   ');
       await _tap(tester, _primary);
-      await _tap(tester, find.text('Put on wishlist'));
+      await _tap(tester, find.byKey(const ValueKey('putOnWishlist')));
       await _settle(tester);
       expect(o.result, 'wish');
       expect(wc.txs, isEmpty);
@@ -288,7 +288,7 @@ void main() {
       await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '75');
       await _tap(tester, _primary);
-      final b = find.text('Put on wishlist');
+      final b = find.byKey(const ValueKey('putOnWishlist'));
       await _ready(tester, b);
       await tester.tap(b);
       await tester.pump(const Duration(milliseconds: 40));
@@ -374,7 +374,7 @@ void main() {
         await tester.enterText(find.byType(TextField).first, '99999');
         await _tap(tester, _primary);
         expect(find.textContaining('wishlist first?'), findsOneWidget);
-        await tester.ensureVisible(find.text('Put on wishlist'));
+        await tester.ensureVisible(find.byKey(const ValueKey('putOnWishlist')));
         await tester.pump();
         expect(tester.takeException(), isNull);
         await _settle(tester);
@@ -441,7 +441,7 @@ void main() {
       wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [_bank('2026-10-10', 150000, 'Synthetic payer', type: 'Uplata')]));
       wc.reload();
       await _open(tester, TxSheet(wc: wc, t: wc.txs.single));
-      expect(find.text('Delete'), findsNothing);
+      expect(find.byKey(const ValueKey('txDelete')), findsNothing);
       expect(find.text('+1,500.00\u00A0€'), findsOneWidget);
       expect(find.textContaining('Saturday, 10 October 2026'), findsOneWidget);
       await _settle(tester);
@@ -487,7 +487,7 @@ void main() {
       expect(find.byType(Switch), findsNothing);
       expect(find.text('Added by you'), findsNothing, reason: 'it is inside a longer line');
       expect(find.textContaining('Added by you'), findsOneWidget);
-      final del = find.text('Delete');
+      final del = find.byKey(const ValueKey('txDelete'));
       await _ready(tester, del);
       await tester.tap(del);
       await tester.pump(const Duration(milliseconds: 40));
@@ -516,7 +516,7 @@ void main() {
         final wc = emptyWallet();
         wc.addExpense(amount: 12345678, category: 'Sport & fitness', note: 'Synthetic note ' * 20, date: '2028-02-29');
         await _open(tester, TxSheet(wc: wc, t: wc.txs.single), size: const Size(320, 640), textScale: scale);
-        await tester.ensureVisible(find.text('Delete'));
+        await tester.ensureVisible(find.byKey(const ValueKey('txDelete')));
         await tester.pump();
         expect(tester.takeException(), isNull);
         await _settle(tester);
@@ -537,7 +537,7 @@ void main() {
   });
 
   group('GoalSheet', () {
-    Future<void> save(WidgetTester tester) => _tap(tester, find.widgetWithText(FilledButton, 'Save goal'));
+    Future<void> save(WidgetTester tester) => _tap(tester, find.byKey(const ValueKey('goalSave')));
 
     testWidgets('a new goal starts with an empty name and target and 50 a month', (tester) async {
       final wc = emptyWallet();
@@ -548,7 +548,7 @@ void main() {
       expect(tester.widget<TextField>(_field('Each month')).controller!.text, '50');
       expect(tester.widget<TextField>(_field('Put aside so far')).controller!.text, '');
       expect(_field('Add money now'), findsNothing);
-      expect(find.text('Delete'), findsNothing);
+      expect(find.byKey(const ValueKey('goalDelete')), findsNothing);
       await _settle(tester);
     });
 
@@ -592,7 +592,7 @@ void main() {
       await _open(tester, GoalSheet(wc: wc));
       await tester.enterText(_field('Name'), 'Trip');
       await tester.enterText(_field('Target'), '100');
-      final b = find.widgetWithText(FilledButton, 'Save goal');
+      final b = find.byKey(const ValueKey('goalSave'));
       await _ready(tester, b);
       await tester.tap(b);
       await tester.pump(const Duration(milliseconds: 40));
@@ -682,7 +682,7 @@ void main() {
       testWidgets('Delete removes the goal once, even on a double tap', (tester) async {
         final wc = emptyWallet();
         final o = await _open(tester, GoalSheet(wc: wc, goal: makeGoal(wc)));
-        final d = find.text('Delete');
+        final d = find.byKey(const ValueKey('goalDelete'));
         await _ready(tester, d);
         await tester.tap(d);
         await tester.pump(const Duration(milliseconds: 40));
@@ -816,7 +816,7 @@ void main() {
             size: const Size(320, 640), textScale: scale);
         await tester.enterText(_field('Each month'), '99999999');
         await tester.pump();
-        await tester.ensureVisible(find.text('Save goal'));
+        await tester.ensureVisible(find.byKey(const ValueKey('goalSave')));
         await tester.pump();
         expect(tester.takeException(), isNull);
         await _settle(tester);
@@ -830,7 +830,7 @@ void main() {
       await _open(tester, GoalSheet(wc: wc, goal: wc.goals.single), size: const Size(320, 640));
       await tester.enterText(_field('Target'), '987654321.99');
       await tester.pump();
-      await tester.ensureVisible(find.text('Delete'));
+      await tester.ensureVisible(find.byKey(const ValueKey('goalDelete')));
       await tester.pump();
       expect(tester.takeException(), isNull);
       await _settle(tester);
@@ -841,7 +841,7 @@ void main() {
       wc.repo.saveGoal(name: 'Trip', target: 123456, saved: 1, monthly: 5000, sort: 1);
       wc.reload();
       await _open(tester, GoalSheet(wc: wc, goal: wc.goals.single), size: const Size(320, 640), textScale: 2);
-      await tester.ensureVisible(find.text('Delete'));
+      await tester.ensureVisible(find.byKey(const ValueKey('goalDelete')));
       await tester.pump();
       expect(tester.takeException(), isNull);
       await _settle(tester);

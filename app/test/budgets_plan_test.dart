@@ -9,8 +9,8 @@ import 'support/wallet.dart';
 Finder _field(String category) => find.byKey(ValueKey('budget:$category'));
 String _text(WidgetTester tester, String category) => tester.widget<TextField>(_field(category)).controller!.text;
 
-Future<void> _tapButton(WidgetTester tester, String label) async {
-  final btn = find.text(label);
+Future<void> _tapButton(WidgetTester tester, String key) async {
+  final btn = find.byKey(ValueKey(key));
   await tester.pump(const Duration(milliseconds: 400)); // a focused field scrolls itself into view first
   await tester.ensureVisible(btn);
   await tester.pump();
@@ -43,7 +43,7 @@ void main() {
     final before = _wc.dataVersion;
     await tester.ensureVisible(_field('Groceries'));
     await tester.enterText(_field('Groceries'), '150');
-    await _tapButton(tester, 'Suggest from the last 6 months');
+    await _tapButton(tester, 'budgetsSuggest');
     expect(_text(tester, 'Groceries'), '150', reason: 'a typed value is kept');
     expect(_text(tester, 'Eating out'), '90', reason: '85 rounded up to the nearest 10');
     expect(_text(tester, 'Shopping'), '', reason: 'no history, no suggestion');
@@ -53,7 +53,7 @@ void main() {
 
   testWidgets('Suggest does not touch a field that already has a value', (tester) async {
     await _pump(tester);
-    await _tapButton(tester, 'Suggest from the last 6 months');
+    await _tapButton(tester, 'budgetsSuggest');
     expect(_text(tester, 'Groceries'), '300');
     expect(_text(tester, 'Eating out'), '100', reason: 'saved 100, suggestion would be 90');
     expect(find.text('Nothing new to suggest.'), findsOneWidget, reason: 'the only categories with history already have a budget');
@@ -64,7 +64,7 @@ void main() {
     final before = _wc.dataVersion;
     await tester.ensureVisible(_field('Shopping'));
     await tester.enterText(_field('Shopping'), '80,50');
-    await _tapButton(tester, 'Save budgets');
+    await _tapButton(tester, 'budgetsSave');
     expect(_wc.dataVersion, before + 1);
     expect(_wc.categoryBudgets, {'Groceries': 30000, 'Eating out': 10000, 'Shopping': 8050});
     expect(_text(tester, 'Shopping'), '80.50');
@@ -73,13 +73,13 @@ void main() {
   testWidgets('Save with nothing changed does not write', (tester) async {
     await _pump(tester);
     final before = _wc.dataVersion;
-    await _tapButton(tester, 'Save budgets');
+    await _tapButton(tester, 'budgetsSave');
     expect(_wc.dataVersion, before);
     expect(find.text('Nothing to save'), findsOneWidget);
     // Typing the saved value again, or 0 into an empty field, is no change either.
     await tester.enterText(_field('Groceries'), '300.00');
     await tester.enterText(_field('Shopping'), '0');
-    await _tapButton(tester, 'Save budgets');
+    await _tapButton(tester, 'budgetsSave');
     expect(_wc.dataVersion, before);
     expect(_text(tester, 'Groceries'), '300');
     expect(_text(tester, 'Shopping'), '');
@@ -88,7 +88,7 @@ void main() {
   testWidgets('an emptied field removes the budget', (tester) async {
     await _pump(tester);
     await tester.enterText(_field('Eating out'), '');
-    await _tapButton(tester, 'Save budgets');
+    await _tapButton(tester, 'budgetsSave');
     expect(_wc.categoryBudgets, {'Groceries': 30000});
   });
 
@@ -98,7 +98,7 @@ void main() {
     await tester.enterText(_field('Shopping'), 'abc');
     await tester.enterText(_field('Groceries'), '-5');
     await tester.enterText(_field('Rent'), '1e3');
-    final btn = find.text('Save budgets');
+    final btn = find.byKey(const ValueKey('budgetsSave'));
     await tester.ensureVisible(btn);
     await tester.pump();
     await tester.tap(btn);
@@ -121,7 +121,7 @@ void main() {
     testWidgets('$name: the editor lays out without overflow, errors included', (tester) async {
       await _pump(tester, size: size, scale: scale);
       await tester.enterText(_field('Shopping'), 'abc');
-      await _tapButton(tester, 'Save budgets');
+      await _tapButton(tester, 'budgetsSave');
       await tester.ensureVisible(_field('Bank fees'));
       await tester.pump();
       expect(find.text('Numbers only'), findsOneWidget);

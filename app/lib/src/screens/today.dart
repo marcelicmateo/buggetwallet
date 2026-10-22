@@ -188,6 +188,7 @@ class TodayScreen extends StatelessWidget {
                     message: hasKeyboard ? 'Add expense (Ctrl+N)' : '',
                     child: FilledButton.icon(
                       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
+                      key: const ValueKey('addExpense'),
                       icon: const Icon(Icons.add),
                       label: const Text('Add expense', style: TextStyle(fontSize: 16)),
                       onPressed: addExpense ?? () => addExpenseFlow(context, wc),
@@ -200,6 +201,7 @@ class TodayScreen extends StatelessWidget {
                     Text(reviewSummary(review) ?? 'Nothing to fix. Import your latest files and tick it off.',
                         style: const TextStyle(fontSize: 14)),
                     FilledButton(
+                      key: const ValueKey('startReview'),
                       onPressed: () {
                         logNav('review.open');
                         openReview(context, wc, openSpending: openSpending, chooser: chooser);

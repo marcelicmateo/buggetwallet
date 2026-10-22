@@ -194,7 +194,7 @@ class _BillSheetState extends State<BillSheet> {
               title: const Text('Delete this bill?'),
               content: const Text('The bill and its photo or file are removed. A payment linked to it stays.'),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
+                TextButton(key: const ValueKey('deleteBillKeep'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
                 TextButton(
                     key: const ValueKey('deleteBillYes'),
                     style: TextButton.styleFrom(foregroundColor: context.c.bad),

@@ -99,6 +99,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                         icon: _importing
                             ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                             : const Icon(Icons.upload_file),
+                        key: const ValueKey('reviewImport'),
                         label: const Text('Choose files'),
                         onPressed: _importing ? null : _import,
                       ),
@@ -146,7 +147,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
                     if (pace.isNotEmpty && !_paceSeen)
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: TextButton(onPressed: () => setState(() => _paceSeen = true), child: const Text('Got it')),
+                        child: TextButton(
+                            key: const ValueKey('paceGotIt'),
+                            onPressed: () => setState(() => _paceSeen = true),
+                            child: const Text('Got it')),
                       ),
                   ],
                 ),
@@ -164,7 +168,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
                           WishRow(w: w, currency: cur, sub: 'Waited ${wc.settings.coolHours}h', actions: [
                             OutlinedButton(
                                 style: accentOutlined(context), onPressed: () => buyWish(context, wc, w), child: const Text('Buy it')),
-                            TextButton(onPressed: () => skipWish(context, wc, w), child: const Text('Skip')),
+                            TextButton(
+                                key: ValueKey('skipWish:${w.id}'), onPressed: () => skipWish(context, wc, w), child: const Text('Skip')),
                           ]),
                       ]),
                   ],
@@ -172,6 +177,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 if (r.streak > 0) Muted('So far: ${streakText(r.streak)}.'),
                 FilledButton(
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
+                  key: const ValueKey('reviewDone'),
                   onPressed: _done,
                   child: const Text('Done', style: TextStyle(fontSize: 16)),
                 ),
@@ -266,6 +272,7 @@ class _CategoryRow extends StatelessWidget {
                   },
                   child: const Text('Change')),
               OutlinedButton(
+                key: ValueKey('looksRight:${t.tx.id}'),
                 style: accentOutlined(context),
                 onPressed: () {
                   logNav('review.confirm');

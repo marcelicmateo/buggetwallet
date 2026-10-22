@@ -53,7 +53,7 @@ Uint8List _book(List<List<Object?>> rows, {Map<String, String> more = const {}})
 
 ImportBatch _imp(List<List<Object?>> txRows) => importBankFile(_book([_head, ...txRows]));
 
-final _unknown = throwsA(isA<ImportException>().having((e) => e.message, 'message', contains('not a PBZ or Revolut')));
+final _unknown = throwsA(isA<ImportException>().having((e) => e.message, 'message', contains('I recognise')));
 final _damaged = throwsA(isA<ImportException>().having((e) => e.message, 'message', contains('Could not read')));
 
 void main() {

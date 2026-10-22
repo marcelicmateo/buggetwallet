@@ -241,7 +241,7 @@ void main() {
       expect(find.text('Relay address'), findsOneWidget);
       expect(find.textContaining('No relay set'), findsOneWidget);
       expect(_enabled(t, _syncNow), isFalse);
-      expect(find.text('Show wallet key'), findsOneWidget);
+      expect(find.byKey(const ValueKey('showKey')), findsOneWidget);
       expect(find.textContaining('Syncthing'), findsNothing);
     });
 
@@ -402,7 +402,7 @@ void main() {
       final wc = emptyWallet(withKey: false);
       wc.keyWriter = (k, {passphrase}) async {};
       await pumpApp(t, OnboardingScreen(wc: wc), size: size, textScale: scale);
-      await t.tap(find.text('Join my wallet from another device'));
+      await t.tap(find.byKey(const ValueKey('joinStart')));
       await t.pump();
       return wc;
     }
@@ -417,7 +417,7 @@ void main() {
       };
       await t.enterText(find.widgetWithText(TextField, 'Wallet key'), await key.toText());
       await t.enterText(_address, 'homeserver.test:8787');
-      await t.tap(find.text('Join wallet'));
+      await t.tap(find.byKey(const ValueKey('joinWallet')));
       await t.pumpAndSettle();
       expect(wc.hasWallet, isTrue);
       expect(wc.relayUrl, _relay);
@@ -437,7 +437,7 @@ void main() {
         return const SyncReport(0, 0, 0);
       };
       await t.enterText(find.widgetWithText(TextField, 'Wallet key'), await key.toText());
-      await t.tap(find.text('Join wallet'));
+      await t.tap(find.byKey(const ValueKey('joinWallet')));
       await t.pumpAndSettle();
       expect(wc.hasWallet, isTrue);
       expect(wc.relayUrl, isNull);
@@ -449,7 +449,7 @@ void main() {
       final wc = await pumpJoin(t);
       await t.enterText(find.widgetWithText(TextField, 'Wallet key'), await key.toText());
       await t.enterText(_address, 'ftp://nope');
-      await t.tap(find.text('Join wallet'));
+      await t.tap(find.byKey(const ValueKey('joinWallet')));
       await t.pump();
       expect(find.textContaining('Enter the relay address like http://homeserver:8787'), findsOneWidget);
       expect(wc.hasWallet, isFalse);

@@ -269,6 +269,7 @@ class _PlanScreenState extends State<PlanScreen> {
                   icon: importing
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.upload_file),
+                  key: const ValueKey('planImport'),
                   label: const Text('Choose files'),
                   onPressed: importing ? null : _import,
                 ),

@@ -188,7 +188,7 @@ void main() {
       t.view.devicePixelRatio = 1;
       addTearDown(t.view.reset);
       await t.pumpWidget(BudgetWalletApp(wc: f.wc));
-      await t.tap(find.text('Start a new wallet'));
+      await t.tap(find.byKey(const ValueKey('startWallet')));
       await t.pump();
       await t.pump(const Duration(milliseconds: 500));
       await t.pump(const Duration(milliseconds: 500));
@@ -244,7 +244,7 @@ void main() {
       final wc = keyed();
       await pumpApp(t, todayOf(wc));
       expect(find.text('Save your wallet key'), findsOneWidget);
-      expect(find.text('Save now'), findsOneWidget);
+      expect(find.byKey(const ValueKey('keySaveNow')), findsOneWidget);
       await t.tap(find.byKey(const ValueKey('keyRowLater')));
       await t.pump();
       expect(find.byKey(const ValueKey('keyBackupRow')), findsNothing);

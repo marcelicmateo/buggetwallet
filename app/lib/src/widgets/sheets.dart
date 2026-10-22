@@ -205,6 +205,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                 widget.wc.addWish(note.text.trim().isEmpty ? cat : note.text.trim(), parseMoney(amount.text)!);
                 Navigator.pop(context, 'wish');
               },
+              key: const ValueKey('putOnWishlist'),
               child: const Text('Put on wishlist'),
             ),
           ),
@@ -213,6 +214,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       const SizedBox(height: 14),
       FilledButton.icon(
         style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
+        key: const ValueKey('addExpenseSave'),
         icon: const Icon(Icons.add),
         label: const Text('Add expense', style: TextStyle(fontSize: 16)),
         onPressed: () {
@@ -315,6 +317,7 @@ class _TxSheetState extends State<TxSheet> {
               widget.wc.deleteTransaction(t);
               Navigator.pop(context, 'deleted');
             },
+            key: const ValueKey('txDelete'),
             child: const Text('Delete'),
           ),
       ]),
@@ -425,6 +428,7 @@ class _GoalSheetState extends State<GoalSheet> {
       Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, children: [
         FilledButton(
           onPressed: _save,
+          key: const ValueKey('goalSave'),
           child: const Text('Save goal'),
         ),
         if (g != null)
@@ -434,6 +438,7 @@ class _GoalSheetState extends State<GoalSheet> {
               widget.wc.deleteGoal(g!.id);
               Navigator.pop(context, 'deleted');
             },
+            key: const ValueKey('goalDelete'),
             child: const Text('Delete'),
           ),
       ]),

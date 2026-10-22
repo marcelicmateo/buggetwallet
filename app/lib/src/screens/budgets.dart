@@ -160,11 +160,12 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
           ),
       ]),
       OutlinedButton.icon(
+          key: const ValueKey('budgetsSuggest'),
           style: accentOutlined(context),
           icon: const Icon(Icons.auto_awesome_outlined),
           label: const Text('Suggest from the last 6 months'),
           onPressed: _suggest),
-      FilledButton(onPressed: _save, child: const Text('Save budgets')),
+      FilledButton(key: const ValueKey('budgetsSave'), onPressed: _save, child: const Text('Save budgets')),
     ]);
   }
 }

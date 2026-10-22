@@ -149,7 +149,7 @@ void main() {
     test('headers are matched exactly: lower case or translated headers are not a Revolut export', () {
       expect(() => _imp('type,started date,description,amount\ncard,2026-02-01,Shop,-1\n'), throwsA(isA<ImportException>()));
       expect(() => _imp('Vrsta,Datum početka,Opis,Iznos\nKartica,2026-02-01,Shop,-1\n'),
-          throwsA(isA<ImportException>().having((e) => e.message, 'message', contains('not a PBZ or Revolut'))));
+          throwsA(isA<ImportException>().having((e) => e.message, 'message', contains('I recognise'))));
     });
 
     test('the header may sit up to row 15 (index 14) and not below', () {
@@ -435,7 +435,7 @@ void main() {
   });
 
   group('format detection and wrong files', () {
-    final unknown = throwsA(isA<ImportException>().having((e) => e.message, 'message', contains('not a PBZ or Revolut')));
+    final unknown = throwsA(isA<ImportException>().having((e) => e.message, 'message', contains('I recognise')));
     final damaged = throwsA(isA<ImportException>().having((e) => e.message, 'message', contains('Could not read')));
 
     test('files of the wrong type are refused with a clear message, never imported as garbage', () {
