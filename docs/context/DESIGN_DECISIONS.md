@@ -28,6 +28,7 @@ All numbers below are made-up samples. No personal figures. "Proposed" = not bui
 - 2026-10-20: M5 Polish (§4.7) approved: backups go **only into the sync folder** (`budget-wallet/backups/`, encrypted with the wallet key, restore only into an empty wallet); CSV exports carry the app's cleaned data (category, cleaned description, note), saved through the system save dialog; search covers **all data** (transactions, goals, wishlist, expected bills); no new settings for now.
 - 2026-10-20: CI runs only what is not verified locally (owner): the laptop's full run (lint, unit, desktop, perf, emulator) is the gate before every push; GitHub builds the signed APK, the Linux bundle + smoke test and publishes the dev release, each as its own job. Test jobs run only on demand (cloud sessions without Flutter).
 - 2026-10-20: `v2` merged into `master` (owner).
+- 2026-10-22: Sync redesign (§4.9): self-hosted relay on the home server over LAN/VPN **replaces** Syncthing; matching stays automatic but runs only when the device is caught up (no gaps); snapshots + pruning; local database encrypted with a key derived from the wallet key; backups move to the save dialog.
 
 ## 2. Data flow as built (v2) — summary
 ```mermaid
@@ -198,6 +199,69 @@ passphrase-wrapped in the browser (PBKDF2 + XChaCha20-Poly1305 blob in localStor
 only). As built: database = `sqlite3` WASM on the IndexedDB VFS (no COOP/COEP headers needed; OPFS later if it is slow);
 `archive` gzip replaces `dart:io` gzip in the vault on every platform; `wallet_core`'s barrel compiles for the web (file
 sync, file backups and the rotating log file live behind conditional exports with web stubs).
+
+### 4.9 Sync redesign — owner decisions 2026-10-22 (relay replaces Syncthing; automatic matching only when caught up; snapshots + pruning; encrypted local database)
+**Owner decisions:** a small self-hosted **relay** on the home server, reached over the LAN or a VPN (Tailscale/WireGuard),
+**replaces** the Syncthing folder on every device (folder sync removed); hand-added expenses stay **matched automatically,
+but only when the device is caught up**; **snapshots + pruning**; the **local database is encrypted** with a key derived
+from the wallet key (no extra prompt).
+
+**Relay (`relay/`, new Dart package, `dart:io` only + `cryptography`):** stores sealed files it cannot read.
+- Wallet id = hex(HKDF-SHA256(wallet key, info `bw-relay-id-v1`))[0..32]; auth token = HKDF(wallet key, `bw-relay-auth-v1`),
+  sent as `Authorization: Bearer`. The relay keeps only SHA-256(token) per wallet, set by the first write (trust on first
+  use). It never sees the key or a cleartext op.
+- HTTP API v1 under `/v1/w/<wid>/`: `GET state` → `{devices: {<id>: {first, last, lastSeen, acks: {<peer>: seq}}},
+  snapshot: {id, covers: {<device>: seq}} | null}`; `PUT d/<device>/<seq>` (sealed bytes; same bytes again = 200, other
+  bytes for an existing seq = 409, never overwritten); `GET d/<device>/<seq>`; `PUT ack/<device>` (`{<peer>: seq}`,
+  applied-up-to per peer); `PUT snapshot/<id>` (header `X-BW-Covers` JSON; accepted only if it covers at least the
+  current one); `GET snapshot/<id>`. Limits: 16 MB per file, 413/429 on abuse; CORS for configured origins
+  (default `http://127.0.0.1:8080`, `http://localhost:8080`) so the localhost web build can reach it.
+- Pruning on the relay: a file is deleted once the latest snapshot covers it **and** every device seen in the last
+  90 days acked it; the previous snapshot is kept as well. Storage = files in one data directory (`<wid>/d/<device>/<seq>`,
+  `<wid>/snap/<id>`, `<wid>/meta.json`, written to a temp file then renamed).
+- Logs: request kind, status, sizes, short wallet/device ids (first 6 hex); never tokens, bodies or full ids.
+- Runs as `dev/Containerfile.relay` (`dart compile exe`, port 8787, data volume); `tools/relay.sh start|stop|status|logs`
+  runs it locally on 127.0.0.1 (data in `~/.local/share/budget-wallet/relay/`); `docs/setup.md` describes the home-server
+  install (Podman quadlet). Plain HTTP is accepted (the VPN encrypts the link; bodies are ciphertext anyway).
+
+**Core (`wallet_core`, web-safe, no `dart:io` in the engine):**
+- `SyncTransport` interface: `state()`, `put(device, seq, bytes)`, `get(device, seq)`, `ack(device, cursors)`,
+  `putSnapshot(id, covers, bytes)`, `getSnapshot(id)`. `RelayTransport(Uri base, VaultKey key, {http.Client? client})`
+  (`package:http`, new dependency) and `MemoryTransport` (in-process fake for tests, same rules as the relay).
+- `SyncEngine(SyncTransport t, VaultKey key, {String appVersion = ''}).run(WalletRepo repo) → SyncReport` replaces
+  `FolderSync` (deleted with `folder_sync_io/web.dart`). Steps: upload pending ops as the next seq; read `state()`; apply
+  each peer's files **strictly in seq order** — a missing or quarantined file stops that device's later files until it
+  is fixed (fixes known limit S2: no gaps, so `seen_bank` never claims rows this device never got); ack what was applied.
+- **Caught up** = every device listed by the relay applied through its `last`, no quarantined file, no gap. Matching and
+  own-transfer pairing (`runPendingMatch`) run **only when caught up**; otherwise they wait for a later run (fixes S1).
+  `SyncReport` gains `caughtUp`, `waiting` (per device short id: the missing seq or quarantined file) and `devices`
+  (short id, `lastSeen`, `isThis`).
+- **Snapshots:** a caught-up device writes one when the newest is older than 7 days or 500 ops behind: every table as ops
+  with their original clocks (the backup format, incl. `goal_contrib`), `covers` = what it applied plus its own last seq.
+  A new device, a device whose next file was pruned, and a schema-bump replay start from the latest snapshot, then
+  apply the files after `covers`.
+- **First connect to a relay** (also the migration from Syncthing): the device uploads its whole state as its first
+  relay file (all fields with their clocks; last-writer-wins makes it safe on every device), then syncs normally.
+- `SyncException` messages: relay unreachable, refused (another wallet's token), relay full, newer relay API.
+
+**Encrypted local database:** SQLite3MultipleCiphers (same cipher on Android, Linux and web wasm; exact package/build
+verified first by devops) keyed by HKDF(wallet key, `bw-local-db-v1`). Native: the wallet key stays in the OS keystore, the
+database opens without a prompt. Web: opens after the passphrase unlock (the IndexedDB pages are ciphertext). First start
+of the new build converts the plaintext `wallet.db` (export into an encrypted copy, verify, swap, delete the old file).
+Logs and backups are unchanged.
+
+**App:** Plan › Sync = relay address (e.g. `http://homeserver:8787`) + "Test connection", "Sync now", status ("Up to date" /
+"Waiting for file 12 from device ab12f3" / "Not caught up: matching waits"), devices with last seen, the wallet key. Join
+wallet = key + relay address. Sync runs on start, on resume, after a change (debounced) and every 5 min while open, on web
+too. Removed: folder picker, Android All files access (`MANAGE_EXTERNAL_STORAGE` and its channel); added: Android
+`INTERNET` permission and cleartext HTTP (LAN/VPN). **Backups** no longer have a sync folder: "Back up now" saves the
+`.bwb` through the system save dialog on every platform (as on web); relay snapshots are the automatic copy.
+
+**Tests:** `MemoryTransport` sim with 3 devices (offline, out of order, gaps, quarantine, prune + late device, snapshot
+replay, first-connect migration, S1/S2 reproductions turned green); relay package tests over real HTTP (auth, 409, CORS,
+pruning, limits) and one end-to-end test with two `SyncEngine`s against the real relay; encrypted-db open/convert/wrong-key
+tests; app widget tests for Plan › Sync; desktop test syncing two app instances through a local relay.
+**Not in scope:** public hosting/TLS, accounts, sharing a wallet with another person, push notifications from the relay.
 
 ## 5. Roadmap snapshot (19 Oct)
 | Feature | Status | Milestone |

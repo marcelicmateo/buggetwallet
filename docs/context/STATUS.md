@@ -154,7 +154,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - Owner checks after Stage W (web): `tools/build.sh web && tools/web.sh serve`, open http://127.0.0.1:8080 → new wallet with a
   passphrase; reload → unlock screen, wrong passphrase refused; open a second tab → "open in another tab", close the first,
   Reload works; Plan › Backup "Back up now" downloads a `.bwb`, "Forget this browser" returns to onboarding, restore that file.
-- Then: sync redesign → M6 owner live test (spec first; needs owner decisions).
+- Then: sync redesign (stage R, spec DESIGN_DECISIONS §4.9, owner decisions 2026-10-22: relay replaces Syncthing, matching when caught up, snapshots + pruning, encrypted local db) → M6 owner live test.
 
 ## In flight (2026-10-20)
 - Queue and procedure: `docs/context/PIPELINE.md`.
