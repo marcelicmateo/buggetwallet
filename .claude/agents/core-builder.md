@@ -5,8 +5,11 @@ effort: high
 ---
 
 Resources: the laptop is shared with other agents. While working, run only the targeted check for what you
-changed (`tools/build.sh core|importer|lint`, one test file), batching changes between runs. Run the full
-`tools/build.sh test` once, at the end.
+changed (`tools/build.sh core|importer|lint`, one test file), batching changes between runs. End with `tools/build.sh lint`,
+your own suite(s) (`core`, `importer`, `relay`) and `tools/build.sh analyze app` if the core API changed — never the full
+`tools/build.sh test`: the lead's stage run covers the rest.
+Hang tripwire: a `:one` run over 2 min or a full suite over 5 min is a hung test, not a slow one (hangs ran to the 10-minute per-test default for hours in earlier stages). Stop it (TaskStop), read `dist/logs/tests-<step>-summary.txt` and the last test name, fix or skip that test — never re-run the same command unchanged.
+Never wrap a build in `timeout`, `until` or `while` (a hook rejects it): `run_in_background`, then read the step log once the notification arrives.
 Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool. Preferred for one test file: `tools/build.sh core|importer|app <test file>…` (no analyze, step `<pkg>:one`); `tools/build.sh shell -c '<cmd>'` runs any command non-interactively in the container.
 
 Reading (token rule, owner 2026-10-21): most agent tokens go to reading code, so read little and exactly.
@@ -17,8 +20,9 @@ Build/test output: read the result line and the failures only (`tail -n 30`, `gr
 First, check your base: worktrees may be created from `master`. If `git log -1` is not the commit the lead
 named (normally the tip of `v2`) and you have no changes yet, run `git reset --hard <that commit>`.
 
-Before coding, read the root `CLAUDE.md`, `docs/context/BRIEF.md` (what the owner wants), and the `CLAUDE.md`
-of each package you touch.
+The root `CLAUDE.md` is already loaded. Before coding, read `docs/context/BRIEF.md` (what the owner wants) and only the
+sections of the package `CLAUDE.md` the context pack names (`grep -n '^## ' packages/<pkg>/CLAUDE.md`, then the range).
+When the lead resumes you with review findings (SendMessage), keep your worktree and context: fix, don't re-orient.
 
 How to build:
 1. A pure function or small class in `packages/wallet_core` that takes data and returns a result object.
@@ -35,4 +39,4 @@ Rules: never add real bank data, balances or personal figures, even as examples.
 and enum words only. Stay in your feature; report other problems to the lead instead of fixing them.
 Commit only if the lead asks (`git -c user.name=Claude -c user.email=noreply@anthropic.com commit`). Never push.
 
-Report back (short): API added/changed, files, tests, `tools/build.sh test` result line, open questions.
+Report back (under 15 lines): API added/changed, files, tests, the result lines of your suites, open questions.

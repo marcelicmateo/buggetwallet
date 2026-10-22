@@ -22,8 +22,8 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 ## Procedure on each event
 | Event | Do |
 |---|---|
-| Builder reports | Read its report. Bug outside scope → queue a fix item (test + fix, same stage). Mark the item done. Start the next item whose deps are met (table below). |
-| All items of a stage done | Merge branches into `v2` in the listed order → reviewer (Fable/high) on the stage diff → fix findings → Haiku/low full run (`test`, `desktop-test`, `perf`) → `tools/emulator.sh screens` for UI stages (read the PNGs) → commit → push → STATUS.md (Done + Next) → `git worktree remove` the merged worktrees. |
+| Builder reports | Read its report. Bug outside scope → queue a fix item (test + fix, same stage). Mark the item done. Start the next item whose deps are met (table below). **Review each half as it lands** (reviewer on that diff, `PATH_FORWARD.md` §5 as checklist) and send findings to the *same* builder by SendMessage (it keeps its worktree and context; no scout for fix items). If the next stage needs owner input, ask now, while the other half builds. |
+| All items of a stage done | Merge branches into `v2` in the listed order → reviewer on the merged delta only (the halves were reviewed as they landed) → fix findings → lead starts `tools/build.sh stage` in the background; Haiku/low watcher reads `dist/logs/stage-summary.txt` and the failures → read the PNGs for UI stages → commit → push → STATUS.md (Done + Next) → `git worktree remove` the merged worktrees. |
 | Haiku run red | Fix items first (owner rule: bugs before features), then re-run only the failing suite. |
 | Owner message | Owner bug reports go before anything queued. |
 
@@ -34,13 +34,13 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 Owner direction: structure and practices first. Merge order: A → ui → tests → devops.
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
-| G0a | Context pack: `repo.dart` entity map / `_intCols` / DDL / migration / `_apply` / snapshot / export / search; barrel exports; dates/money helpers; recurring read side | scout | – | – | queued |
-| G0b | Context pack: controller renames, the three page-or-dialog copies, `_plain` copies, keyboard scaffolds, app bars, gate pages, `DateTime.now()` sites, platform-split names, the four CAR 6.4/6.8 bug sites | scout | – | – | queued |
-| G0c | Context pack: importer copy-pinned tests, `find.text` sites by file, font-skip test, `platform_test.dart` | scout | – | – | queued |
-| G0d | Context pack: `build.sh pub_ready` + `pub get` sites, ci.yml jobs, gradle release block, lockfiles | scout | – | – | queued |
-| GA | G1 typed entity schema + generalised migration + clocks lookup + `repo.dart` parts; G2 core/importer surface | core-builder A | foundation-core | G0a | queued |
-| GU | G3 app surface; G4 the four sweep bugs with tests | ui-builder | foundation-ui | G0b | queued |
-| GT | G5 tests by contract (importer messages, `ValueKey`s, font test fails, `meetsGuideline`) | test-writer | foundation-tests | G0c | queued |
+| G0a | Context pack: `repo.dart` entity map / `_intCols` / DDL / migration / `_apply` / snapshot / export / search; barrel exports; dates/money helpers; recurring read side | scout | – | – | done (pack in lead scratchpad) |
+| G0b | Context pack: controller renames, the three page-or-dialog copies, `_plain` copies, keyboard scaffolds, app bars, gate pages, `DateTime.now()` sites, platform-split names, the four CAR 6.4/6.8 bug sites | scout | – | – | done (pack in lead scratchpad) |
+| G0c | Context pack: importer copy-pinned tests, `find.text` sites by file, font-skip test, `platform_test.dart` | scout | – | – | done (pack in lead scratchpad) |
+| G0d | Context pack: `build.sh pub_ready` + `pub get` sites, ci.yml jobs, gradle release block, lockfiles | scout | – | – | done (pack in lead scratchpad) |
+| GA | G1 typed entity schema + generalised migration + clocks lookup + `repo.dart` parts; G2 core/importer surface | core-builder A | foundation-core | G0a | running (worktree foundation-core, base 82f94b3) |
+| GU | G3 app surface; G4 the four sweep bugs with tests | ui-builder | foundation-ui | G0b | running (worktree foundation-ui, base 82f94b3) |
+| GT | G5 tests by contract (importer messages, `ValueKey`s, font test fails, `meetsGuideline`) | test-writer | foundation-tests | G0c | running (worktree foundation-tests, base 82f94b3) |
 | GD | G6 local CI: changed-files test selection, parallel suites, persistent container/pub cache, pre-commit hook default, enforce-lockfile, pub workspace, R8, outdated/OSV step, release-notes template (D1: nothing in GitHub CI); G7 `tools/lsp.py refs|def` over `build.sh lsp` for the scout | devops | foundation-devops | G0d | queued |
 | G | Merge, reviewer (checklist = `PATH_FORWARD.md` §5), Haiku full run, push, STATUS | lead | v2 | GA, GU, GT, GD | queued |
 
@@ -192,7 +192,9 @@ Merge order for B2: B2b → B2a → B2c, then B2d. C merges after B2 (ledger bra
 only brings packages/ and tools/ changes).
 
 ## Rules the lead keeps
-- One Haiku full run per stage; targeted checks only while building (`tools/build.sh core|importer|app|lint`, one test file).
+- One full run per stage (`tools/build.sh stage`, Haiku reads the summary); builders end with lint + their own suite, never the full `test`.
+- A `:one` run over 2 min or a suite over 5 min is a hang: stop it, fix the test; never re-run unchanged (hangs cost ~4–5 h in the first four days).
+- When the UI half is the long pole, split it over two ui-builders on disjoint files from the pack.
 - No polling anywhere: background runs + notifications, Monitor for other processes.
 - Say the model/effort choice before starting agents; cheapest that does the job.
 - Bugs found by any agent are fixed in the same stage with a reproducing test.

@@ -7,8 +7,11 @@ tools: Bash, Read, Grep, Glob
 
 Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool.
 
-You review the uncommitted or unpushed change the lead points you at (`git diff`, or `git diff origin/v2...HEAD`).
-Read the root `CLAUDE.md`, the package `CLAUDE.md` files, and `docs/context/BRIEF.md`.
+You review the uncommitted or unpushed change the lead points you at (`git diff`, or `git diff origin/v2...HEAD`). The lead
+may point you at one half (the core diff or the UI diff, as soon as it lands) or at the delta since the half reviews; review
+only that diff. The KEEP register in `docs/context/PATH_FORWARD.md` §5 is part of your checklist: a change to any item there
+is a finding unless the brief names an owner decision for it.
+The root `CLAUDE.md` is loaded; read `docs/context/BRIEF.md` and grep the package `CLAUDE.md` files for the rules the diff touches.
 
 Check, in order:
 1. **Privacy** — no real transactions, balances, salary/rent/loan figures, account numbers, owner-derived merchant
