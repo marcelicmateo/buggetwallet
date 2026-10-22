@@ -106,7 +106,7 @@ void main() {
       db.execute("INSERT INTO wish(id, name, price, added) VALUES('w1', 'Synthetic thing', 9000, 1767225600000)");
       db.execute(
           "INSERT INTO clocks(entity, id, field, hlc) VALUES('setting', 'salary', 'value', '000001767225600000:00003:00112233aabbccdd')");
-      db.dispose();
+      db.close();
 
       final r = WalletRepo.open(path, now: () => 1767225600000 - 5000);
       expect(r.deviceId, '00112233aabbccdd');
@@ -132,7 +132,7 @@ void main() {
       final db = sqlite3.open(path);
       db.execute(_schemaV2_0.split('CREATE INDEX').first);
       db.execute("INSERT INTO tx(id, source, date, amount, description) VALUES('260117x', 'pbz', '2026-01-17', -100, 'Synthetic')");
-      db.dispose();
+      db.close();
       final r = WalletRepo.open(path);
       expect(r.transactions().single.id, '260117x');
       expect(r.goals(), isEmpty);
@@ -149,7 +149,7 @@ void main() {
       for (final e in _columns(old).entries) {
         expect(now[e.key], containsAll(e.value), reason: e.key);
       }
-      old.dispose();
+      old.close();
       r.close();
     });
 

@@ -368,7 +368,7 @@ void main() {
       for (final f in peerFiles) {
         db.execute("INSERT INTO peer_files(device, file) VALUES('p1', ?)", [f]);
       }
-      db.dispose();
+      db.close();
       return path;
     }
 

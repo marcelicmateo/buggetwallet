@@ -173,7 +173,7 @@ class WalletRepo {
 
   void close() {
     logEvent(_log, Level.FINE, 'repo.close');
-    db.dispose();
+    db.close();
   }
 
   // ---------- meta ----------
