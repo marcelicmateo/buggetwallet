@@ -15,6 +15,10 @@ import 'support/synthetic.dart';
 
 int _clock = 3000000000000;
 
+/// This device's wall clock in these tests: the synthetic clock the ops above are stamped with, so they are never more
+/// than an hour ahead of it (H7 would quarantine them as clockDrift, or refuse local writes behind them).
+int _wall() => _clock;
+
 /// A setting op from a peer, newer than anything local.
 Map<String, Object?> _setting(String key, Object? value) =>
     Op('setting', key, {'value': jsonEncode(value), 'deleted': 0}, Hlc(_clock++, 0, 'peer').toString()).toJson();
@@ -38,11 +42,12 @@ void main() {
   late VaultKey key;
   late WalletRepo repo;
 
-  Future<Uint8List> sealed(List<Object?> ops, [VaultKey? k]) => seal(utf8.encode(jsonEncode(ops)), k ?? key);
+  Future<Uint8List> sealed(List<Object?> ops, [VaultKey? k, String device = 'p1', int seq = 1]) =>
+      seal(utf8.encode(jsonEncode(ops)), k ?? key, aad: aadSyncFile(device, seq));
 
   /// Puts a peer's file [seq]: sealed [ops], or raw [bytes] when given; replaces a stored one (a repair on the server).
   Future<void> peer(String device, int seq, {List<Object?>? ops, List<int>? bytes}) async {
-    final b = bytes ?? await sealed(ops!);
+    final b = bytes ?? await sealed(ops!, null, device, seq);
     if (relay.files.containsKey('d/$device/$seq')) {
       relay.replace(device, seq, b);
     } else {
@@ -59,7 +64,7 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('bw-quarantine-');
     relay = MemoryTransport();
     key = VaultKey.generate();
-    repo = WalletRepo.inMemory();
+    repo = WalletRepo.inMemory(now: _wall);
   });
   tearDown(() {
     repo.close();
@@ -67,14 +72,14 @@ void main() {
   });
 
   group('reasons', () {
-    test('another key or a changed byte is badKey, garbage is corrupt, BWOP2 is unknownVersion; each with device and size', () async {
+    test('another key or a changed byte is badKey, garbage is corrupt, BWOP3 is unknownVersion; each with device and size', () async {
       final good = await sealed([_setting('salary', 1)]);
       final files = {
         'dev-key': await sealed([_setting('rent', 1)], VaultKey.generate()),
         // Cut off after sealing: authentication fails, which cannot be told apart from another key.
         'dev-cut': good.sublist(0, good.length - 7),
         'dev-junk': Uint8List.fromList([1, 2, 3]),
-        'dev-new': Uint8List.fromList([...utf8.encode('BWOP2'), ...good.sublist(5)]),
+        'dev-new': Uint8List.fromList([...utf8.encode('BWOP3'), ...good.sublist(5)]),
       };
       for (final e in files.entries) {
         await peer(e.key, 1, bytes: e.value);
@@ -107,7 +112,8 @@ void main() {
         ],
       ];
       for (final (i, p) in payloads.indexed) {
-        await peer('p$i', 1, ops: p is List ? p : null, bytes: p is List ? null : await seal(utf8.encode(jsonEncode(p)), key));
+        await peer('p$i', 1,
+            ops: p is List ? p : null, bytes: p is List ? null : await seal(utf8.encode(jsonEncode(p)), key, aad: aadSyncFile('p$i', 1)));
       }
       final rep = await run();
       expect([for (final p in rep.problems) p.reason], List.filled(payloads.length, SyncProblemReason.corrupt));
@@ -174,7 +180,7 @@ void main() {
     test('a newer-format file is not retried by the same build, and is retried once after an app update', () async {
       final lines = _capture();
       final good = await sealed([_setting('salary', 9)]);
-      await peer('p1', 1, bytes: [...utf8.encode('BWOP2'), ...good.sublist(5)]);
+      await peer('p1', 1, bytes: [...utf8.encode('BWOP3'), ...good.sublist(5)]);
       await run(appVersion: '1.0.0');
       await run(appVersion: '1.0.0');
       expect(failedLogs(lines), 1);

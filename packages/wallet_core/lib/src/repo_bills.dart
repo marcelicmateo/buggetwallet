@@ -307,15 +307,67 @@ extension WalletRepoBills on WalletRepo {
     }
     if (rs.isNotEmpty && want.isNotEmpty) {
       final cur = rs.first;
+      // `status` and `paid_tx` mean something only together (H9): when one changes both are written, so another
+      // device's edit of one of them cannot leave a paid row without its payment or an open row with one.
+      final pair = cur['status'] != want['status'] || cur['paid_tx'] != want['paid_tx'];
       want = {
         for (final e in want.entries)
-          if (cur[e.key] != e.value) e.key: e.value
+          if (cur[e.key] != e.value || (pair && (e.key == 'status' || e.key == 'paid_tx'))) e.key: e.value
       };
     }
     return [
       if (fields.isNotEmpty) ('bill', b.id, fields),
       if (want.isNotEmpty) ('planned', pid, want),
     ];
+  }
+
+  /// H9: fields that only mean something together, which per-field last-writer-wins can split when two devices edit
+  /// them apart (a Paid on one, a Skip on the other): a live planned cost keeps `paid_tx` only while `status` is paid,
+  /// a payment row pays at most one live bill (the link made first by its `linked_tx` clock stays, then the smallest id;
+  /// the others are unlinked through [_billWrites], so their planned rows reopen and [_autoLinkBills] may link them to
+  /// another row), and a bill's planned row `bill:<id>` is as [_billWrites] wants it for the bill as it is now (paid
+  /// with its payment, open, or deleted). Deterministic, so caught-up devices write the same values. Runs in
+  /// [_reconcile].
+  void _repairFieldPairs() {
+    final stalePaid = [
+      for (final r
+          in db.select("SELECT id FROM planned WHERE deleted = 0 AND paid_tx IS NOT NULL AND (status IS NULL OR status != 'paid')"))
+        r['id'] as String
+    ];
+    final dupes = db.select('''
+      SELECT b.*, c.hlc AS link_clock FROM bills b LEFT JOIN clocks c ON c.entity = 'bill' AND c.id = b.id AND c.field = 'linked_tx'
+      WHERE b.deleted = 0 AND b.linked_tx IN (SELECT linked_tx FROM bills WHERE deleted = 0 AND linked_tx IS NOT NULL
+        GROUP BY linked_tx HAVING COUNT(*) > 1)''');
+    final byTx = <String, List<(String, Bill)>>{};
+    for (final r in dupes) {
+      final b = Bill.fromRow(r);
+      (byTx[b.linkedTx!] ??= []).add((r['link_clock'] as String? ?? '', b));
+    }
+    final unlink = <Bill>[];
+    for (final list in byTx.values) {
+      list.sort((x, y) {
+        final c = x.$1.isEmpty || y.$1.isEmpty ? x.$1.compareTo(y.$1) : Hlc.compareStrings(x.$1, y.$1);
+        return c != 0 ? c : x.$2.id.compareTo(y.$2.id);
+      });
+      unlink.addAll([for (final (_, b) in list.skip(1)) b]);
+    }
+    final today = _today();
+    final unlinked = {for (final b in unlink) b.id};
+    final follow = [
+      for (final r in db.select('SELECT * FROM bills ORDER BY id'))
+        if (!unlinked.contains(r['id'])) ..._billWrites(Bill.fromRow(r), const {}, today),
+    ];
+    final stale = {for (final (_, id, _) in follow) id};
+    final writes = [
+      for (final id in stalePaid)
+        if (!stale.contains(id)) ('planned', id, <String, Object?>{'paid_tx': null}),
+      ...follow,
+      for (final b in unlink) ..._billWrites(b, {'linked_tx': null}, today),
+    ];
+    if (writes.isEmpty) return;
+    _write(writes);
+    logEvent(
+        _log, Level.INFO, 'repo.repairPairs', {'plannedPaidTx': stalePaid.length, 'billLinks': unlink.length, 'billRows': follow.length});
   }
 
   /// Links confirmed bills to their payments ([planBillLinks]) and closes their planned rows. Runs in [_reconcile]

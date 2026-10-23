@@ -1,8 +1,14 @@
-# Relay protocol v2 (sync redesign, DESIGN_DECISIONS §4.9; signed requests, decision 2026-10-22)
+# Relay protocol, api 3 (sync redesign, DESIGN_DECISIONS §4.9; signed requests, decision 2026-10-22; Stage H)
 
 The relay stores sealed files it cannot read. Server: `relay/`. Client: `RelayTransport` in `wallet_core`.
-Both sides follow this file exactly; change it here first. v2 replaces v1 (bearer token; never deployed): paths are
-`/v2/…` and the state says `"api": 2`.
+Both sides follow this file exactly; change it here first. Paths are `/v2/…`; health and state say `"api": 3`.
+
+## Versions
+| api | Change | Mixed versions |
+|---|---|---|
+| 1 | Bearer token (never deployed). | Paths `/v1/…`: a v2+ client's health check tells it apart (`olderApi`). |
+| 2 | Ed25519-signed requests (`bw-relay-v2`), blobs. | — |
+| 3 (Stage H, 2026-10-23) | The signed text names the host (`bw-relay-v3`, H8); state carries the relay `instance` id (H5); per-device stream epochs `<device>-<n>` (H5b); optional `--create-token` (H11); a missing file of a known device is 404 `missing`. | An api-2 app on an api-3 relay stops with `newerApi` ("The relay runs a newer version. Update the app."); an api-3 app on an api-2 relay stops with `olderApi` ("Update the relay"). Nothing is uploaded or read either way, so no device diverges: each syncs again once both sides run Stage H. A v3 relay accepts only v3 signatures. |
 
 ## Identity (client side only)
 - `wid` = lowercase hex of HKDF-SHA256(ikm = wallet key bytes, salt = empty, info = `bw-relay-id-v1`, length 16) → 32 hex chars.
@@ -15,15 +21,24 @@ Every request under `/v2/w/<wid>/` (GETs too: the state is metadata) carries:
 - `X-BW-Sig`: base64url without padding (86 chars) of the Ed25519 signature over the UTF-8 string
 
   ```
-  bw-relay-v2\n<METHOD>\n<path>\n<covers>\n<body hash>\n<time>
+  bw-relay-v3\n<METHOD>\n<host>\n<path>\n<covers>\n<body hash>\n<time>
   ```
-  `<METHOD>` = `GET`, `PUT` or `DELETE` (blobs only); `<path>` = the request path from `/v2/` on (`/v2/w/<wid>/d/<device>/<seq>`), without query
+  `<METHOD>` = `GET`, `PUT` or `DELETE` (blobs only); `<host>` = the host the client addressed as its `Host` header
+  carries it: lower case, `:<port>` only when the port is not the scheme's default (80/443), an IPv6 address in
+  brackets (`relay.example.org`, `192.168.1.5:8787`). The relay compares it with its `--public-host` when set (behind a
+  proxy such as Caddy, whose `Host` may differ), else with the request's `Host` header, lower case; a request signed for
+  another relay address fails as `bad signature` (401), so a request captured at one relay does not replay at another
+  that holds the same wallet. `<path>` = the request path from `/v2/` on (`/v2/w/<wid>/d/<device>/<seq>`), without query
   and without any prefix in the relay address the client was given; `<covers>` = the `X-BW-Covers` header value as sent,
   or empty when the request has none; `<body hash>` = lowercase hex SHA-256 of the body bytes (a GET or an empty body
   hashes the empty string: `e3b0c442…b855`); `<time>` = the `X-BW-Time` value as sent. `\n` is one LF; no trailing LF.
 - The request that creates a wallet (the first accepted `PUT d/<device>/1`) also carries `X-BW-Pub: <pub>`. The relay
   verifies that request's signature with it and stores `pub` in `meta.json` (trust on first use). Later requests are
   verified with the stored key; their `X-BW-Pub` is ignored. Clients send `X-BW-Pub` on every `PUT d/<device>/1`.
+- Create token (H11): a relay started with `--create-token` creates a wallet only when that `PUT d/<device>/1` carries
+  `X-BW-Create-Token: <token>` (constant-time compare); missing or wrong → 403 `{"error":"createToken"}`, nothing created.
+  Existing wallets never need it. Clients with a token configured send it on every `PUT d/<device>/1`; it is not part
+  of the signed text. The client maps the 403 to `createToken` (fatal for the run; "The relay needs its create token…").
 
 Checks, in this order (all before the wallet lock):
 1. Route, names and method (400 / 404 / 405, below).
@@ -57,7 +72,7 @@ dominates (same covers: same genuine content, nothing more pruned) or is refused
 ## Endpoints
 | Request | Result |
 |---|---|
-| `GET /v2/health` (not signed) | 200 `{"api":2}` |
+| `GET /v2/health` (not signed) | 200 `{"api":3}` |
 | `GET /v2/w/<wid>/state` | 200 state JSON (below) |
 | `PUT /v2/w/<wid>/d/<device>/<seq>` body = sealed bytes (≤ 16 MiB) | 201 stored; 200 same bytes already stored; 409 other bytes already stored for that seq (never overwritten); 422 `seq > last + 1` (no gaps on the relay); 410 `seq < first` (pruned); 413 too big |
 | `GET /v2/w/<wid>/d/<device>/<seq>` | 200 bytes; 410 pruned (`seq < first`); 404 never stored |
@@ -93,7 +108,8 @@ Sealed files that rows point to by hash (a bill's photo or PDF). Content-address
 ## State JSON
 ```json
 {
-  "api": 2,
+  "api": 3,
+  "instance": "<32 hex>",
   "devices": {
     "<device>": {"first": 1, "last": 12, "lastSeen": "2026-10-22T10:00:00Z", "acks": {"<peer>": 5}}
   },
@@ -102,7 +118,32 @@ Sealed files that rows point to by hash (a bill's photo or PDF). Content-address
 }
 ```
 `first` = lowest seq still stored, or `last + 1` when all were pruned. `snapshot`/`previous` are `null` when absent. A
-device appears once it has stored a file or sent an ack. A client refuses `api` above its own (`newerApi`: update the
+device appears once it has stored a file or sent an ack.
+
+`instance` (H5): random 32 hex characters per wallet, created with the wallet (or, for a wallet stored by an older
+relay, at its first load, and saved at once) and kept in its `meta.json`. A wiped data folder or another relay names
+another id. The client stores the id of the last run whose upload went through (device-local `syncInstance`); another
+id from the relay = `relayChanged`: every cursor goes back to 0 and the run is a first connect (the whole state is
+uploaded again, appended after this device's `last` there). No stored id yet (first sync, or the first sync after the
+upgrade) = adopted without a first connect; a relay without `instance` (api 2) leaves the stored id as it is. The app
+shows `relayFingerprint` (first 8 hex as `xxxx-xxxx`). A restored copy of the same data folder keeps its `instance`:
+that case is caught by the stream epochs below.
+
+### Device streams (H5b)
+A device writes its files under a relay device name, its **stream**: its device id for epoch 0 (every file written
+before Stage H), else `<device id>-<epoch>` (device ids are letters and digits only, so the name parses back; the
+name stays within the 64-character `device` pattern). The epoch is device-local (`syncEpoch`). When the relay holds
+fewer files of the current stream than the device has sent (`last` < its `syncSent`: a restored older copy of the data
+folder, or a wiped relay), the device moves to the next unused epoch at once and uploads its whole state as seq 1… of
+the new stream; it never stores other content under a seq it used before. Peers never saw the new name, so they read
+all of it; the old stream stays as it is (read and applied like any device's, idempotent), and a peer cursor above a
+stream's `last` is reset to 0 as before. Each device acks under its current stream and, with the same cursors plus its
+current stream's `last`, under each of its older streams still listed, so old streams never hold back pruning or look
+stuck. Clients show all streams of one device id as one device. A stream of this device's id with an epoch above its
+own was written by another install with this id: reported as `deviceIdInUse`, like a 409 on its own next seq.
+Limits: the relay keeps an abandoned stream's files until snapshots and acks cover them (pruned like any device's);
+a device whose run stopped after a stored PUT but before it recorded `syncSent`, on a relay then restored to a copy
+from before that PUT, does not notice (its `last` equals `syncSent`) and can reuse that seq. A client refuses `api` above its own (`newerApi`: update the
 app) and below it (`olderApi`: update the relay); its health check also asks `/v1/health` when `/v2/health` is 404, to
 tell an old relay apart.
 

@@ -14,6 +14,9 @@ const _alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 /// A fixed, made-up key so the checksum behaviour is deterministic.
 VaultKey _fixed() => VaultKey([for (var i = 0; i < 32; i++) (i * 7 + 3) & 0xFF]);
 
+/// The associated data these tests seal for (any use works; `BWOP2` checks it on open).
+final _aad = aadBackup;
+
 Matcher get _refused => throwsA(isA<VaultException>());
 
 /// A correctly authenticated file whose content is [inner] as is (no gzip), laid out like `seal`.
@@ -232,86 +235,86 @@ void main() {
         List<int>.generate(1024 * 1024, (_) => r.nextInt(256)), // does not compress
       ];
       for (final p in cases) {
-        final back = await unseal(await seal(p, key), key);
+        final back = await unseal(await seal(p, key, aad: _aad), key, aad: _aad);
         expect(back.length, p.length);
         expect(back, p);
       }
     });
 
-    test('layout: BWOP1, 24-byte nonce, 16-byte tag; two seals of one payload differ', () async {
-      final a = await seal(utf8.encode('hello'), key), b = await seal(utf8.encode('hello'), key);
-      expect(a.sublist(0, 5), utf8.encode('BWOP1'));
+    test('layout: BWOP2, 24-byte nonce, 16-byte tag; two seals of one payload differ', () async {
+      final a = await seal(utf8.encode('hello'), key, aad: _aad), b = await seal(utf8.encode('hello'), key, aad: _aad);
+      expect(a.sublist(0, 5), utf8.encode('BWOP2'));
       expect(a.length, greaterThanOrEqualTo(5 + 24 + 16 + 1));
       expect(a.sublist(5, 29), isNot(b.sublist(5, 29)), reason: 'nonce reused');
       expect(a, isNot(b));
-      expect(await unseal(a, key), await unseal(b, key));
+      expect(await unseal(a, key, aad: _aad), await unseal(b, key, aad: _aad));
     });
 
     test('the sealed bytes do not contain the plaintext', () async {
-      final sealed = await seal(utf8.encode('Synthetic Groceries LIDL ' * 20), key);
+      final sealed = await seal(utf8.encode('Synthetic Groceries LIDL ' * 20), key, aad: _aad);
       expect(latin1.decode(sealed, allowInvalid: true).contains('LIDL'), isFalse);
     });
 
     test('a plain List<int> (not a Uint8List) is accepted', () async {
-      final sealed = (await seal(utf8.encode('abc'), key)).toList();
-      expect(utf8.decode(await unseal(sealed, key)), 'abc');
+      final sealed = (await seal(utf8.encode('abc'), key, aad: _aad)).toList();
+      expect(utf8.decode(await unseal(sealed, key, aad: _aad)), 'abc');
     });
 
     test('wrong key, including a key that differs by one bit', () async {
-      final sealed = await seal(utf8.encode('secret'), key);
-      await expectLater(unseal(sealed, VaultKey.generate()), _refused);
+      final sealed = await seal(utf8.encode('secret'), key, aad: _aad);
+      await expectLater(unseal(sealed, VaultKey.generate(), aad: _aad), _refused);
       final near = Uint8List.fromList(key.bytes)..[0] ^= 1;
-      await expectLater(unseal(sealed, VaultKey(near)), _refused);
+      await expectLater(unseal(sealed, VaultKey(near), aad: _aad), _refused);
     });
 
     test('nothing shorter than 45 bytes is accepted, and 45 bytes with an empty body is refused', () async {
-      final good = await seal(utf8.encode('x'), key);
+      final good = await seal(utf8.encode('x'), key, aad: _aad);
       for (var len = 0; len <= 45; len++) {
-        await expectLater(unseal(good.sublist(0, len), key), _refused, reason: 'length $len');
+        await expectLater(unseal(good.sublist(0, len), key, aad: _aad), _refused, reason: 'length $len');
       }
-      await expectLater(unseal(List<int>.filled(45, 0), key), _refused);
-      await expectLater(unseal([...utf8.encode('BWOP1'), ...List.filled(40, 0)], key), _refused);
+      await expectLater(unseal(List<int>.filled(45, 0), key, aad: _aad), _refused);
+      await expectLater(unseal([...utf8.encode('BWOP1'), ...List.filled(40, 0)], key, aad: _aad), _refused);
     });
 
     test('every truncation of a real file is refused', () async {
-      final good = await seal(utf8.encode(jsonEncode({'a': List.generate(40, (i) => 'Synthetic $i')})), key);
+      final good = await seal(utf8.encode(jsonEncode({'a': List.generate(40, (i) => 'Synthetic $i')})), key, aad: _aad);
       for (var len = 0; len < good.length; len++) {
-        await expectLater(unseal(good.sublist(0, len), key), _refused, reason: 'length $len of ${good.length}');
+        await expectLater(unseal(good.sublist(0, len), key, aad: _aad), _refused, reason: 'length $len of ${good.length}');
       }
     });
 
     test('bytes appended to a real file are refused', () async {
-      final good = await seal(utf8.encode('payload'), key);
+      final good = await seal(utf8.encode('payload'), key, aad: _aad);
       for (final extra in [
         [0],
         [0, 0, 0, 0],
         utf8.encode('\n')
       ]) {
-        await expectLater(unseal([...good, ...extra], key), _refused, reason: '${extra.length} extra bytes');
+        await expectLater(unseal([...good, ...extra], key, aad: _aad), _refused, reason: '${extra.length} extra bytes');
       }
     });
 
     test('flipping a bit in any byte of a small file is refused (nonce, tag, ciphertext)', () async {
-      final good = await seal(utf8.encode('{"k":"v"}'), key);
+      final good = await seal(utf8.encode('{"k":"v"}'), key, aad: _aad);
       for (var i = 0; i < good.length; i++) {
         for (final bit in [0, 7]) {
           final bad = Uint8List.fromList(good)..[i] ^= 1 << bit;
-          await expectLater(unseal(bad, key), _refused, reason: 'byte $i bit $bit');
+          await expectLater(unseal(bad, key, aad: _aad), _refused, reason: 'byte $i bit $bit');
         }
       }
     });
 
     test('swapping the nonce or the tag with those of another file is refused', () async {
-      final a = await seal(utf8.encode('first'), key), b = await seal(utf8.encode('second'), key);
-      await expectLater(unseal([...a.sublist(0, 5), ...b.sublist(5, 29), ...a.sublist(29)], key), _refused);
-      await expectLater(unseal([...a.sublist(0, 29), ...b.sublist(29, 45), ...a.sublist(45)], key), _refused);
+      final a = await seal(utf8.encode('first'), key, aad: _aad), b = await seal(utf8.encode('second'), key, aad: _aad);
+      await expectLater(unseal([...a.sublist(0, 5), ...b.sublist(5, 29), ...a.sublist(29)], key, aad: _aad), _refused);
+      await expectLater(unseal([...a.sublist(0, 29), ...b.sublist(29, 45), ...a.sublist(45)], key, aad: _aad), _refused);
     });
 
-    test('version byte and magic: BWOP0, BWOP2, lowercase, truncated and zero magic are refused as not a sync file', () async {
-      final good = await seal(utf8.encode('x'), key);
+    test('version byte and magic: BWOP0, BWOP3, lowercase, truncated and zero magic are refused as not a sync file', () async {
+      final good = await seal(utf8.encode('x'), key, aad: _aad);
       for (final magic in [
         [...'BWOP0'.codeUnits],
-        [...'BWOP2'.codeUnits],
+        [...'BWOP3'.codeUnits],
         [...'BWOP9'.codeUnits],
         [...'bwop1'.codeUnits],
         [...'WBOP1'.codeUnits],
@@ -320,17 +323,17 @@ void main() {
         [0, 0, 0, 0, 0],
       ]) {
         final bytes = [...magic, ...good.sublist(5)];
-        await expectLater(
-            unseal(bytes, key), throwsA(isA<VaultException>().having((e) => e.message, 'message', contains('Not a Budget Wallet'))),
+        await expectLater(unseal(bytes, key, aad: _aad),
+            throwsA(isA<VaultException>().having((e) => e.message, 'message', contains('Not a Budget Wallet'))),
             reason: String.fromCharCodes(magic));
       }
-      // A future file with a longer header is never read as BWOP1.
-      await expectLater(unseal([...utf8.encode('BWOP2'), ...good.sublist(5), ...List.filled(8, 1)], key), _refused);
+      // A future file with a longer header is never read as BWOP2.
+      await expectLater(unseal([...utf8.encode('BWOP3'), ...good.sublist(5), ...List.filled(8, 1)], key, aad: _aad), _refused);
     });
 
     test('a file of plain JSON or plain gzip (not sealed) is refused', () async {
-      await expectLater(unseal(utf8.encode('[{"e":"tx","id":"a","f":{},"h":"1:1:a"}]' * 3), key), _refused);
-      await expectLater(unseal(gzip.encode(utf8.encode('x' * 100)), key), _refused);
+      await expectLater(unseal(utf8.encode('[{"e":"tx","id":"a","f":{},"h":"1:1:a"}]' * 3), key, aad: _aad), _refused);
+      await expectLater(unseal(gzip.encode(utf8.encode('x' * 100)), key, aad: _aad), _refused);
     });
 
     test('authenticated content that is not gzip is refused with a VaultException (writer bug or future format)', () async {
@@ -341,15 +344,15 @@ void main() {
       ];
       for (final inner in cases) {
         final file = await _sealRaw(inner, key);
-        await expectLater(unseal(file, key), _refused, reason: 'inner ${inner.length} bytes');
+        await expectLater(unseal(file, key, aad: _aad), _refused, reason: 'inner ${inner.length} bytes');
       }
     });
 
     test('refusal messages do not contain key bytes or the payload', () async {
-      final sealed = await seal(utf8.encode('Synthetic Payload Text'), key);
+      final sealed = await seal(utf8.encode('Synthetic Payload Text'), key, aad: _aad);
       final bad = Uint8List.fromList(sealed)..[sealed.length - 1] ^= 1;
       try {
-        await unseal(bad, key);
+        await unseal(bad, key, aad: _aad);
         fail('accepted');
       } on VaultException catch (e) {
         expect(e.toString(), isNot(contains('Synthetic')));

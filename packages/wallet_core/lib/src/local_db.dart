@@ -43,6 +43,11 @@ class WalletDbKeyException implements Exception {
 /// A failed check after the rekey is a [StateError] (nothing is returned that holds fewer rows than before).
 CommonDatabase openKeyed(CommonDatabase Function() open, List<int> dbKey) => openKeyedWith(open, dbKey);
 
+/// Pinned before every `PRAGMA key` / `PRAGMA rekey` (H8): ChaCha20-Poly1305, the cipher sqlite3mc has used by default
+/// for every wallet database so far. A library update that changed the default would otherwise make existing files
+/// unreadable (or new ones unreadable to older builds).
+const _pinCipher = "PRAGMA cipher = 'chacha20'";
+
 /// [openKeyed] with the native side-copy steps: [beforeRekey] runs once the plaintext database is complete in its main
 /// file (WAL checkpointed and removed) and before it is changed; [onFailed] when the rekey threw or the check failed
 /// (before the error propagates); [onVerified] after the check passed. [step] is a test hook called with `rekeyed`.
@@ -60,6 +65,7 @@ CommonDatabase openKeyedWith(
   final keyed = open();
   final bool ok;
   try {
+    keyed.execute(_pinCipher);
     keyed.execute('PRAGMA key = $pragmaKey');
     ok = _readable(keyed);
   } catch (_) {
@@ -84,6 +90,7 @@ CommonDatabase openKeyedWith(
     if (mode == 'wal') throw StateError('local database busy: cannot leave WAL mode to encrypt it');
     beforeRekey?.call();
     try {
+      plain.execute(_pinCipher);
       plain.execute('PRAGMA rekey = $pragmaKey');
     } catch (e, st) {
       logError(_log, 'db.encrypt.failed', e, st);
@@ -98,6 +105,7 @@ CommonDatabase openKeyedWith(
 
     final db = open();
     try {
+      db.execute(_pinCipher);
       db.execute('PRAGMA key = $pragmaKey');
       final after = _readable(db) ? _rowCounts(db) : null;
       if (after == null || !_sameCounts(before, after)) {

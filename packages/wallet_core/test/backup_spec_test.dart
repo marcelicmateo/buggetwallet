@@ -193,10 +193,10 @@ void main() {
     });
 
     test('a sealed non-backup payload is a BackupException', () async {
-      final junk = await seal('{"not":"a list of ops"}'.codeUnits, key);
+      final junk = await seal('{"not":"a list of ops"}'.codeUnits, key, aad: aadBackup);
       final fresh = WalletRepo.inMemory();
       await expectLater(restoreBackupBytes(fresh, junk, key), throwsA(isA<BackupException>()));
-      final junk2 = await seal('not json at all'.codeUnits, key);
+      final junk2 = await seal('not json at all'.codeUnits, key, aad: aadBackup);
       await expectLater(restoreBackupBytes(fresh, junk2, key), throwsA(isA<BackupException>()));
       expect(fresh.isEmpty, isTrue);
       fresh.close();

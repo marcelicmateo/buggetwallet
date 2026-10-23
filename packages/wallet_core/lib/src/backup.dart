@@ -47,7 +47,7 @@ Future<Uint8List> backupBytes(WalletRepo repo, VaultKey key) async {
   final t = PerfTimer('backup.write', warnMs: 2000);
   final ops = repo.snapshotOps();
   final payload = backupPayload(ops);
-  final sealed = await seal(payload, key);
+  final sealed = await seal(payload, key, aad: aadBackup);
   t.done({'ops': ops.length, 'bytes': sealed.length});
   return sealed;
 }
@@ -65,7 +65,7 @@ Future<int> restoreBackupBytes(WalletRepo repo, List<int> bytes, VaultKey key) a
   final t = PerfTimer('backup.restore', warnMs: 5000);
   final List<int> clear;
   try {
-    clear = await unseal(bytes, key);
+    clear = await unseal(bytes, key, aad: aadBackup);
   } on VaultException catch (e, st) {
     logError(_log, 'backup.restore.failed', e, st, fields: {'reason': e.failure?.name ?? 'vault', 'bytes': bytes.length});
     rethrow;

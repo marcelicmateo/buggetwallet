@@ -133,8 +133,9 @@ Future<void> _scenario(int seed, Directory tmp) async {
   final lateJoiner = nDevices > 2 && r.nextBool();
   final devices = <Device>[];
   for (var i = 0; i < nDevices; i++) {
-    // Clock skew: up to ±2 hours, and now and then a device far in the future or the past.
-    final skew = switch (r.nextInt(6)) { 0 => 365 * 86400000, 1 => -30 * 86400000, _ => r.nextInt(4 * 3600000) - 2 * 3600000 };
+    // Clock skew: up to ±25 minutes, so any two devices are under an hour apart. Further apart, H7 quarantines the
+    // files that are ahead (clockDrift, sync_scenarios_test) and the devices do not converge until the clocks agree.
+    final skew = r.nextInt(50 * 60000) - 25 * 60000;
     final dir = Directory('${tmp.path}/s$seed-d$i')..createSync(recursive: true);
     devices.add(Device('d$i', dir, key, () => now + skew));
   }

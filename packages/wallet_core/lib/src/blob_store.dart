@@ -34,7 +34,7 @@ class BlobStore {
   Future<BlobRef> add(Uint8List plain, String type) async {
     if (!blobTypes.contains(type)) throw ArgumentError('Unknown file type.');
     if (plain.isEmpty || plain.length > maxBlobPlainBytes) throw ArgumentError('The file is empty or too big.');
-    final sealed = await seal(plain, key);
+    final sealed = await seal(plain, key, aad: aadBlob);
     final hash = sha256Hex(sealed);
     repo.putCachedBlob(hash, sealed, queue: true);
     final dropped = repo.evictBlobs(maxCacheBytes);
@@ -50,7 +50,7 @@ class BlobStore {
     final cached = repo.cachedBlob(hash);
     if (cached != null) {
       try {
-        return await unseal(cached, key);
+        return await unseal(cached, key, aad: aadBlob);
       } on VaultException catch (e, st) {
         // A damaged cached copy: forget it (unless it waits for upload, then it cannot be fixed here) and fetch again.
         logError(_log, 'blob.cache.bad', e, st, level: Level.WARNING);
@@ -75,7 +75,7 @@ class BlobStore {
     }
     final Uint8List plain;
     try {
-      plain = await unseal(sealed, key);
+      plain = await unseal(sealed, key, aad: aadBlob);
     } on VaultException catch (e, st) {
       logError(_log, 'blob.fetch.refused', e, st, level: Level.WARNING, fields: {'reason': e.failure?.name ?? 'key'});
       return null;

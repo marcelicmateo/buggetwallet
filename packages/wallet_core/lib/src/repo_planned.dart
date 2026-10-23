@@ -72,8 +72,8 @@ extension WalletRepoPlanned on WalletRepo {
   /// The owner picked [txId] as the transaction that paid it ([paidCandidates]): no longer listed or reserved.
   void markPlannedPaid(String id, String txId) => _setPlanned(id, {'status': PlannedStatus.paid.name, 'paid_tx': txId}, 'planned.paid');
 
-  /// Not coming: no longer listed or reserved.
-  void skipPlanned(String id) => _setPlanned(id, {'status': PlannedStatus.skipped.name}, 'planned.skip');
+  /// Not coming: no longer listed or reserved. `paid_tx` cleared (it means something only while paid).
+  void skipPlanned(String id) => _setPlanned(id, {'status': PlannedStatus.skipped.name, 'paid_tx': null}, 'planned.skip');
 
   /// Back to open (undo of Paid or Skip): `paid_tx` cleared.
   void reopenPlanned(String id) => _setPlanned(id, {'status': PlannedStatus.open.name, 'paid_tx': null}, 'planned.reopen');

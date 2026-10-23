@@ -55,7 +55,10 @@ class _Out {
 
 /// The signature headers of a request and what it signs besides method and body (RELAY_PROTOCOL.md "Signed requests").
 class _Sig {
-  _Sig(this.path, this.time, this.sig, this.covers);
+  _Sig(this.host, this.path, this.time, this.sig, this.covers);
+
+  /// The host the client addressed (v3): [Relay.publicHost] when set, else the request's `Host` header, lower case.
+  final String host;
 
   /// From `/v2/` on, rebuilt from the checked segments.
   final String path;
@@ -65,7 +68,7 @@ class _Sig {
   /// The `X-BW-Covers` value, or empty.
   final String covers;
 
-  String text(String method, List<int> body) => signedText(method, path, covers, sha256OfBytes(body), time);
+  String text(String method, List<int> body) => signedText(method, host, path, covers, sha256OfBytes(body), time);
 }
 
 /// What a request log line may say: kind, byte count, short wallet and device ids.
@@ -90,6 +93,8 @@ class Relay {
     this.maxInFlightBytes = defaultMaxInFlightBytes,
     DateTime Function()? now,
     void Function(String line)? log,
+    this.publicHost,
+    this.hooks,
   })  : _now = now ?? DateTime.now,
         _log = log ?? stdout.writeln;
 
@@ -103,6 +108,13 @@ class Relay {
   final int maxInFlightBytes;
   final DateTime Function() _now;
   final void Function(String) _log;
+
+  /// The host clients address (`bw.example.org`, with `:port` when not the scheme's default), lower case. Set behind a
+  /// proxy (Caddy) whose `Host` differs from what clients signed; null = the request's `Host` header is the host.
+  final String? publicHost;
+
+  /// Fault injection for tests ([RelayTestHooks]); null in production.
+  final RelayTestHooks? hooks;
 
   final Map<String, Wallet> _wallets = {};
   final Map<String, Future<void>> _tails = {};
@@ -149,7 +161,7 @@ class Relay {
       if (ent is! Directory) continue;
       final wid = ent.uri.pathSegments.lastWhere((s) => s.isNotEmpty);
       if (!widPattern.hasMatch(wid)) continue;
-      final w = await Wallet.load(ent, wid, _now());
+      final w = await Wallet.load(ent, wid, _now(), hooks: hooks);
       if (w != null) _wallets[wid] = w;
     }
   }
@@ -311,7 +323,10 @@ class Relay {
     final bytes = decodeBase64Url(sig, 64);
     if (bytes == null) throw _HttpError(400, 'bad X-BW-Sig');
     if ((int.parse(time) - _now().millisecondsSinceEpoch).abs() > signatureWindow.inMilliseconds) throw _HttpError(401, 'clock');
-    return _Sig(path, time, bytes, _header(req, 'x-bw-covers', 'X-BW-Covers') ?? '');
+    // v3 signs the host the client addressed: a request captured for one relay does not verify at another one that
+    // holds the same wallet (a moved or second relay). No Host and no publicHost: the empty string, which no client signs.
+    final host = (publicHost ?? req.headers.value(HttpHeaders.hostHeader) ?? '').toLowerCase();
+    return _Sig(host, path, time, bytes, _header(req, 'x-bw-covers', 'X-BW-Covers') ?? '');
   }
 
   /// 401 unless [sig] signs this request ([method], [body]) for [pub].
@@ -484,7 +499,7 @@ class Relay {
         throw _HttpError(422, 'seq beyond last + 1');
       }
       if (w.totalBytes + body.length > maxBytes) throw _HttpError(507, 'wallet full');
-      await writeAtomic(w.dataFile(device, seq), body);
+      await w.writeData(device, seq, body);
       w.bytes += body.length;
       final dev = w.devices.putIfAbsent(device, () => DeviceState(_now()));
       dev.last = seq;
@@ -501,11 +516,11 @@ class Relay {
     if (_wallets.length >= maxWallets) throw _HttpError(507, 'relay full');
     if (body.length > maxBytes) throw _HttpError(507, 'wallet full');
     final dir = Directory('${data.path}/$wid');
-    final w = Wallet(wid, dir, pub);
+    final w = Wallet(wid, dir, pub, hooks: hooks);
     _wallets[wid] = w; // reserve the slot before any await
     try {
       if (await dir.exists()) await dir.delete(recursive: true); // left over from an interrupted creation
-      await writeAtomic(w.dataFile(device, 1), body);
+      await w.writeData(device, 1, body);
       w.bytes = body.length;
       final st = DeviceState(_now())..last = 1;
       w.devices[device] = st;

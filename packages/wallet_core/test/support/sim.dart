@@ -125,12 +125,16 @@ class Device {
   Net? net;
   Random? _r;
   double _p = 1;
-  Device(this.name, this.dir, this.key, this.clock, {this.dbPath, this.dbKey, this.net}) {
+
+  /// The install's own device id (H6, `WalletRepo.open(deviceId:)`); null = the one stored in the database.
+  String? deviceId;
+  Device(this.name, this.dir, this.key, this.clock, {this.dbPath, this.dbKey, this.net, this.deviceId}) {
     repo = _open();
   }
 
-  WalletRepo _open() =>
-      dbPath == null ? WalletRepo.inMemory(now: () => clock()) : WalletRepo.open(dbPath!, dbKey: dbKey, now: () => clock());
+  WalletRepo _open() => dbPath == null
+      ? WalletRepo.inMemory(now: () => clock(), deviceId: deviceId)
+      : WalletRepo.open(dbPath!, dbKey: dbKey, now: () => clock(), deviceId: deviceId);
 
   /// Closes and opens the database again (file-backed devices only), as an app restart would.
   void reopen() {
@@ -168,7 +172,9 @@ class Device {
 Future<List<Op>> opsInNet(Net net, VaultKey key) async {
   final out = <Op>[];
   for (final e in net.files.entries) {
-    final clear = await unseal(e.value, key);
+    // `d/<device>/<seq>` or `snapshot/<id>`: each sealed for its own place (BWOP2 associated data).
+    final p = e.key.split('/');
+    final clear = await unseal(e.value, key, aad: p[0] == 'd' ? aadSyncFile(p[1], int.parse(p[2])) : aadSnapshot(p[1]));
     final j = jsonDecode(utf8.decode(clear));
     for (final o in (j is Map ? j['ops'] : j) as List) {
       out.add(Op.fromJson(Map<String, Object?>.from(o as Map)));

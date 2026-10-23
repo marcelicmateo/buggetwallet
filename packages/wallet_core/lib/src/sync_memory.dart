@@ -1,5 +1,6 @@
 // In-memory relay for tests and the web smoke check: the same rules as `relay/` (docs/context/RELAY_PROTOCOL.md).
 import 'dart:collection';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'bills.dart' show sha256Hex;
@@ -34,6 +35,66 @@ class _Snap {
 class MemoryTransport implements SyncTransport {
   MemoryTransport({DateTime Function()? now}) : _now = now ?? DateTime.now;
   final DateTime Function() _now;
+
+  /// This store's relay instance id (`GET state` → `instance`, sent once the wallet exists). Random per transport;
+  /// null = an older relay (api 2) that sends none. Tests may set another one ("the relay was replaced").
+  String? instance = newInstanceId();
+
+  /// 32 random hex characters, like the relay's `meta.json` instance id.
+  static String newInstanceId() {
+    final r = Random.secure();
+    return List.generate(16, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  /// Test hook: the relay lost everything (wiped data directory): no devices, files, snapshots or blobs, and a new
+  /// [instance] id.
+  void wipe() {
+    _devs.clear();
+    _snap = _prev = null;
+    _blobs.clear();
+    instance = newInstanceId();
+  }
+
+  /// Test hook: a copy of everything stored (a backup of the relay's data folder), for [restore].
+  Object copy() => (
+        {
+          for (final MapEntry(key: id, value: d) in _devs.entries)
+            id: _Dev()
+              ..first = d.first
+              ..last = d.last
+              ..lastSeen = d.lastSeen
+              ..acks.addAll(d.acks)
+              ..files.addAll({for (final f in d.files.entries) f.key: Uint8List.fromList(f.value)}),
+        },
+        _snap,
+        _prev,
+        Map.of(_blobs),
+        instance,
+      );
+
+  /// Test hook: the relay restored from an older [copy] (its `instance` id included, as a restored `meta.json` keeps
+  /// it). What was stored since is gone.
+  void restore(Object copy) {
+    final (devs, snap, prev, blobs, inst) = copy as (Map<String, _Dev>, _Snap?, _Snap?, Map<String, Uint8List>, String?);
+    _devs
+      ..clear()
+      ..addAll({
+        for (final MapEntry(key: id, value: d) in devs.entries)
+          id: _Dev()
+            ..first = d.first
+            ..last = d.last
+            ..lastSeen = d.lastSeen
+            ..acks.addAll(d.acks)
+            ..files.addAll({for (final f in d.files.entries) f.key: Uint8List.fromList(f.value)}),
+      });
+    _snap = snap;
+    _prev = prev;
+    _blobs
+      ..clear()
+      ..addAll(blobs);
+    instance = inst;
+  }
+
   final Map<String, _Dev> _devs = {};
   _Snap? _snap, _prev;
   final Map<(String, int), int> _failGets = {};
@@ -119,6 +180,7 @@ class MemoryTransport implements SyncTransport {
       },
       snapshot: _snap == null ? null : RelaySnapshot(_snap!.id, Map.unmodifiable(_snap!.covers)),
       previous: _prev == null ? null : RelaySnapshot(_prev!.id, Map.unmodifiable(_prev!.covers)),
+      instance: _devs.isEmpty ? null : instance,
     );
   }
 

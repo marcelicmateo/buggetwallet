@@ -284,7 +284,7 @@ void main() {
       final h = await freshHarness();
       final r = await h.get('/v2/health');
       expect(r.statusCode, 200);
-      expect(jsonDecode(r.body), {'api': 2});
+      expect(jsonDecode(r.body), {'api': 3});
     });
 
     test('two concurrent creations with different keys: one wins, the other is 401', () async {
@@ -306,7 +306,7 @@ void main() {
     test('meta.json holds the public key and nothing that can sign', () async {
       final h = await twoDevices();
       final meta = jsonDecode(File('${h.dir.path}/$w1/meta.json').readAsStringSync()) as Map<String, Object?>;
-      expect(meta.keys.toSet(), {'v', 'pub', 'devices', 'snapshot', 'previous'});
+      expect(meta.keys.toSet(), {'v', 'pub', 'instance', 'devices', 'snapshot', 'previous'});
       expect(meta['v'], 2);
       expect(meta['pub'], await keyA.pub());
       final text = File('${h.dir.path}/$w1/meta.json').readAsStringSync();

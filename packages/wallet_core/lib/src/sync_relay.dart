@@ -1,4 +1,4 @@
-// HTTP client for the relay (docs/context/RELAY_PROTOCOL.md, v2: signed requests). `package:http` and
+// HTTP client for the relay (docs/context/RELAY_PROTOCOL.md, api 3: requests signed with the host, paths under /v2/). `package:http` and
 // `package:cryptography` only, so it runs on the VM and the web.
 import 'dart:async';
 import 'dart:convert';
@@ -13,8 +13,8 @@ import 'vault.dart';
 
 final _log = Logger('bw.relay');
 
-/// The relay API version this build speaks.
-const relayApi = 2;
+/// The relay API version this build speaks (`api` in health and state). The URL paths stay under `/v2/`.
+const relayApi = 3;
 
 /// HKDF info of the wallet id and of the Ed25519 signing seed (RELAY_PROTOCOL.md "Identity").
 const relayIdInfo = 'bw-relay-id-v1';
@@ -38,11 +38,18 @@ class RelayTransport implements SyncTransport {
   final DateTime Function() _now;
 
   /// Added to this device's clock for `X-BW-Time`: set from the relay's `Date` header when the relay answers 401
-  /// `clock` (device-local, in memory).
+  /// `clock` (device-local, in memory). It belongs to this transport only: the app keeps one [RelayTransport] per relay
+  /// address for the session, so every engine run (and the blob store) shares it; a new transport starts at 0 and
+  /// learns it again with one extra round trip. Never persisted.
   int clockOffsetMs;
 
+  /// The relay's create token (`--create-token`), sent as `X-BW-Create-Token` on every `PUT d/<device>/1` (the request
+  /// that can create a wallet). Device-local, never synced or logged. A relay that needs it and gets none or a wrong one
+  /// answers 403 `createToken` ([TransportFailure.createToken]).
+  final String? createToken;
+
   RelayTransport(this.base, this.key,
-      {http.Client? client, this.timeout = const Duration(seconds: 30), DateTime Function()? now, this.clockOffsetMs = 0})
+      {http.Client? client, this.timeout = const Duration(seconds: 30), DateTime Function()? now, this.clockOffsetMs = 0, this.createToken})
       : _client = client ?? http.Client(),
         _now = now ?? DateTime.now;
 
@@ -78,7 +85,7 @@ class RelayTransport implements SyncTransport {
   static Future<void> health(Uri base, {http.Client? client, Duration timeout = const Duration(seconds: 10)}) async {
     final c = client ?? http.Client();
     try {
-      final r = await _send(() => c.get(_url(base, 'v$relayApi/health')), timeout, 'health');
+      final r = await _send(() => c.get(_url(base, 'v2/health')), timeout, 'health');
       if (r.statusCode == 404) {
         final old = await _send(() => c.get(_url(base, 'v1/health')), timeout, 'health');
         if (old.statusCode == 200) _api(old.body, 'health');
@@ -112,6 +119,7 @@ class RelayTransport implements SyncTransport {
     if (s >= 200 && s < 300) return;
     final failure = switch (s) {
       401 when _isClock(r) => TransportFailure.other,
+      403 when _error(r) == 'createToken' => TransportFailure.createToken,
       401 || 403 => TransportFailure.refused,
       410 => TransportFailure.gone,
       404 => TransportFailure.missing,
@@ -125,13 +133,15 @@ class RelayTransport implements SyncTransport {
   }
 
   /// A 401 `{"error":"clock"}`: the signature time is outside the relay's window.
-  static bool _isClock(http.Response r) {
-    if (r.statusCode != 401) return false;
+  static bool _isClock(http.Response r) => r.statusCode == 401 && _error(r) == 'clock';
+
+  /// The `error` word of a JSON error body, or null.
+  static String? _error(http.Response r) {
     try {
       final j = jsonDecode(r.body);
-      return j is Map && j['error'] == 'clock';
+      return j is Map && j['error'] is String ? j['error'] as String : null;
     } on FormatException {
-      return false;
+      return null;
     }
   }
 
@@ -159,9 +169,18 @@ class RelayTransport implements SyncTransport {
     return Map<String, Object?>.from(j);
   }
 
-  /// The string a v2 request signs (RELAY_PROTOCOL.md "Signed requests").
-  static String signedText(String method, String path, String covers, String bodyHash, String time) =>
-      'bw-relay-v2\n$method\n$path\n$covers\n$bodyHash\n$time';
+  /// The string a v3 request signs (RELAY_PROTOCOL.md "Signed requests"): [host] is [signedHost] of the URL.
+  static String signedText(String method, String host, String path, String covers, String bodyHash, String time) =>
+      'bw-relay-v3\n$method\n$host\n$path\n$covers\n$bodyHash\n$time';
+
+  /// The host a request to [url] names, as its `Host` header carries it: lower case, `:port` only when it is not the
+  /// scheme's default, an IPv6 address in brackets.
+  static String signedHost(Uri url) {
+    final h = url.host.toLowerCase();
+    final host = h.contains(':') ? '[$h]' : h;
+    final def = url.scheme == 'https' ? 443 : 80;
+    return url.hasPort && url.port != def ? '$host:${url.port}' : host;
+  }
 
   /// The largest clock offset taken from a relay's `Date` (RELAY_PROTOCOL.md "Signed requests"); a bigger one fails the call.
   static const maxClockOffset = Duration(hours: 24);
@@ -169,13 +188,15 @@ class RelayTransport implements SyncTransport {
   Future<http.Response> _req(String method, String path, String kind,
       {List<int> body = const [], Map<String, String> headers = const {}, bool withPub = false}) async {
     final id = await _id;
-    final signedPath = '/v$relayApi/w/${id.wid}/$path';
+    final signedPath = '/v2/w/${id.wid}/$path';
+    final url = _url(base, signedPath.substring(1));
+    final host = signedHost(url);
     final hash = (await Sha256().hash(body)).bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     Future<http.Response> attempt() async {
       final time = '${_now().millisecondsSinceEpoch + clockOffsetMs}';
-      final sig =
-          await _ed25519.sign(utf8.encode(signedText(method, signedPath, headers['X-BW-Covers'] ?? '', hash, time)), keyPair: id.keyPair);
-      final req = http.Request(method, _url(base, signedPath.substring(1)))
+      final sig = await _ed25519.sign(utf8.encode(signedText(method, host, signedPath, headers['X-BW-Covers'] ?? '', hash, time)),
+          keyPair: id.keyPair);
+      final req = http.Request(method, url)
         ..headers.addAll({...headers, 'X-BW-Time': time, 'X-BW-Sig': _b64(sig.bytes), if (withPub) 'X-BW-Pub': id.pub});
       if (method != 'GET') req.bodyBytes = body;
       return _send(() async => http.Response.fromStream(await _client.send(req)), timeout, kind);
@@ -224,8 +245,12 @@ class RelayTransport implements SyncTransport {
 
   @override
   Future<void> put(String device, int seq, List<int> bytes) async {
-    // seq 1 may create the wallet on the relay: it carries the public key (trust on first use).
-    await _req('PUT', 'd/$device/$seq', 'put', body: bytes, headers: _octets, withPub: seq == 1);
+    // seq 1 may create the wallet on the relay: it carries the public key (trust on first use) and the create token.
+    final token = createToken;
+    await _req('PUT', 'd/$device/$seq', 'put',
+        body: bytes,
+        headers: {..._octets, if (seq == 1 && token != null && token.isNotEmpty) 'X-BW-Create-Token': token},
+        withPub: seq == 1);
   }
 
   @override

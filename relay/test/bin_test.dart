@@ -63,7 +63,8 @@ void main() {
         'https://d.example');
     Future<int> put(String wid) async => (await http.put(
           Uri.parse('$base/v2/w/$wid/d/dev1/1'),
-          headers: await keyA.headers('PUT', '/v2/w/$wid/d/dev1/1', bytes('x'), timeMs: DateTime.now().millisecondsSinceEpoch),
+          headers: await keyA.headers('PUT', '/v2/w/$wid/d/dev1/1', bytes('x'),
+              timeMs: DateTime.now().millisecondsSinceEpoch, host: '127.0.0.1:$port'),
           body: 'x',
         ))
             .statusCode;

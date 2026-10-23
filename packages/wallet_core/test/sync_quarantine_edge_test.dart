@@ -12,6 +12,10 @@ import 'package:wallet_core/wallet_core.dart';
 
 int _clock = 4000000000000;
 
+/// This device's wall clock in these tests: the synthetic clock the ops above are stamped with, so they are never more
+/// than an hour ahead of it (H7 would quarantine them as clockDrift, or refuse local writes behind them).
+int _wall() => _clock;
+
 Map<String, Object?> _setting(String key, Object? value) =>
     Op('setting', key, {'value': jsonEncode(value), 'deleted': 0}, Hlc(_clock++, 0, 'peer').toString()).toJson();
 
@@ -49,7 +53,8 @@ void main() {
   late VaultKey key;
   late WalletRepo repo;
 
-  Future<Uint8List> sealed(List<Object?> ops, [VaultKey? k]) => seal(utf8.encode(jsonEncode(ops)), k ?? key);
+  Future<Uint8List> sealed(List<Object?> ops, [VaultKey? k, String device = 'p1', int seq = 1]) =>
+      seal(utf8.encode(jsonEncode(ops)), k ?? key, aad: aadSyncFile(device, seq));
 
   /// Stores [bytes] as [device]'s file [seq], replacing a stored one (a repair on the server).
   Future<void> put(String device, int seq, List<int> bytes) async {
@@ -61,7 +66,7 @@ void main() {
   }
 
   Future<void> good(String device, int seq, String setting, Object? value) async =>
-      put(device, seq, await sealed([_setting(setting, value)]));
+      put(device, seq, await sealed([_setting(setting, value)], null, device, seq));
 
   Future<SyncReport> run() => SyncEngine(relay, key).run(repo);
 
@@ -81,7 +86,7 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('bw-quarantine-');
     relay = MemoryTransport();
     key = VaultKey.generate();
-    repo = WalletRepo.inMemory();
+    repo = WalletRepo.inMemory(now: _wall);
   });
   tearDown(() {
     repo.close();
@@ -134,14 +139,14 @@ void main() {
       expect(rep.sent, greaterThan(0));
       final own = relay.files.keys.where((k) => k.startsWith('d/${repo.deviceId}/')).toList();
       expect(own, ['d/${repo.deviceId}/1']);
-      final ops = jsonDecode(utf8.decode(await unseal(relay.files[own.single]!, key))) as List;
+      final ops = jsonDecode(utf8.decode(await unseal(relay.files[own.single]!, key, aad: aadSyncFile(repo.deviceId, 1)))) as List;
       expect(ops, isNotEmpty);
       expect(repo.pendingOps(), isEmpty);
     });
 
     test('a file with one good op and one unappliable op is skipped as a whole (nothing half-applied)', () async {
       final badOp = const Op('setting', 'rent', {'value': '5', 'deleted': 0}, 'not-an-hlc').toJson();
-      await put(_devA, 1, await sealed([_setting('salary', 777), badOp]));
+      await put(_devA, 1, await sealed([_setting('salary', 777), badOp], null, _devA, 1));
       await good(_devA, 2, 'loan', 8);
       final rep = await run();
       expect(repo.settings().salary, 0);
@@ -184,9 +189,9 @@ void main() {
       expect(repo.settings().rent, 2);
     });
 
-    test('a future format version (BWOP2) is unknownVersion', () async {
+    test('a future format version (BWOP3) is unknownVersion', () async {
       final bytes = await sealed([_setting('salary', 1)]);
-      bytes[4] = '2'.codeUnitAt(0); // "BWOP1" -> "BWOP2"
+      bytes[4] = '3'.codeUnitAt(0); // "BWOP2" -> "BWOP3"
       await put(_devA, 1, bytes);
       final rep = await run();
       expect(rep.problems.single.reason.name, 'unknownVersion');
@@ -203,9 +208,9 @@ void main() {
     });
 
     test('valid encryption around something that is not an op list is refused', () async {
-      await put('dev1', 1, await seal(utf8.encode('{"not":"a list"}'), key));
-      await put('dev2', 1, await seal(utf8.encode('[1, 2, 3]'), key));
-      await put('dev3', 1, await seal(utf8.encode('not json at all'), key));
+      await put('dev1', 1, await seal(utf8.encode('{"not":"a list"}'), key, aad: aadSyncFile('dev1', 1)));
+      await put('dev2', 1, await seal(utf8.encode('[1, 2, 3]'), key, aad: aadSyncFile('dev2', 1)));
+      await put('dev3', 1, await seal(utf8.encode('not json at all'), key, aad: aadSyncFile('dev3', 1)));
       final rep = await run();
       expect(rep.problems, hasLength(3));
       for (final p in rep.problems) {
@@ -233,7 +238,7 @@ void main() {
       await put(_devA, 1, [1, 2, 3]);
       expect((await run()).problems, hasLength(1));
       expect(repo.settings().salary, 0);
-      await put(_devA, 1, await sealed([_setting('salary', 4242)]));
+      await put(_devA, 1, await sealed([_setting('salary', 4242)], null, _devA, 1));
       final rep = await run();
       expect(rep.problems, isEmpty);
       expect(rep.filesRead, 1);
@@ -242,7 +247,7 @@ void main() {
     });
 
     test('a partial copy (0 bytes, then cut off, then whole) applies exactly when it is whole, then the file after it', () async {
-      final full = await sealed([_setting('salary', 31)]);
+      final full = await sealed([_setting('salary', 31)], null, _devA, 1);
       await put(_devA, 1, Uint8List(0));
       await good(_devA, 2, 'rent', 2);
       expect((await run()).problems, hasLength(1));
@@ -273,11 +278,11 @@ void main() {
 
     test('the record of a bad file survives reopening the database', () async {
       final path = '${tmp.path}/w.db';
-      final r1 = WalletRepo.open(path);
+      final r1 = WalletRepo.open(path, now: _wall);
       await put(_devA, 1, [3, 3, 3]);
       expect((await SyncEngine(relay, key).run(r1)).problems, hasLength(1));
       r1.close();
-      final r2 = WalletRepo.open(path);
+      final r2 = WalletRepo.open(path, now: _wall);
       addTearDown(r2.close);
       expect((await SyncEngine(relay, key).run(r2)).problems.single.isNew, isFalse, reason: 'known from the record, not read again');
     });
@@ -295,7 +300,7 @@ void main() {
     test('problems and waiting hold a short device id and a reason: never the whole id', () async {
       await put(_devA, 1, [1, 2, 3]);
       await put(_devA, 2, Uint8List(0));
-      await put(_devB, 1, (await sealed([_setting('salary', 1)]))..[4] = '2'.codeUnitAt(0));
+      await put(_devB, 1, (await sealed([_setting('salary', 1)]))..[4] = '3'.codeUnitAt(0));
       final lines = capture();
       final rep = await run();
       expect(rep.problems, hasLength(2));

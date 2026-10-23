@@ -87,7 +87,7 @@ void main() {
       final sealed = (await relay.getBlob(ref.hash))!;
       expect(await sha256Hex(sealed), ref.hash);
       expect(sealed, isNot(plain));
-      expect(await unseal(sealed, key), plain);
+      expect(await unseal(sealed, key, aad: aadBlob), plain);
     });
 
     test('queued in blob_outbox until a run uploads it', () async {

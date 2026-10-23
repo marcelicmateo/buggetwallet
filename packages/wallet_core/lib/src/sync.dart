@@ -71,6 +71,15 @@ class SyncReport {
   /// with it; the upload is retried in the same run) and counts only when that retry is refused again.
   final bool blobsUnsupported;
 
+  /// The relay's instance id for this wallet (`RelayState.instance`; null from an older relay or before the wallet
+  /// exists there). The app shows [relayFingerprint] of it.
+  final String? relayInstance;
+
+  /// The relay names another instance than the one this device last synced with (stored device-locally as
+  /// `syncInstance`): a wiped, restored or replaced relay. This run was then a first connect (whole state uploaded,
+  /// every device's files read from the start). False on the very first sync and with an older relay.
+  final bool relayChanged;
+
   const SyncReport(this.sent, this.received, this.filesRead,
       {this.problems = const [],
       this.caughtUp = false,
@@ -78,7 +87,9 @@ class SyncReport {
       this.devices = const [],
       this.blobsSent = 0,
       this.blobsWaiting = 0,
-      this.blobsUnsupported = false});
+      this.blobsUnsupported = false,
+      this.relayInstance,
+      this.relayChanged = false});
 
   /// How many files were not applied ([problems]).
   int get badFiles => problems.length;
@@ -91,4 +102,12 @@ class SyncReport {
     }
     return out;
   }
+}
+
+/// The relay fingerprint the app shows: the first 8 hex characters of [instance] as `xxxx-xxxx` (shorter input as it
+/// is, lower case).
+String relayFingerprint(String instance) {
+  final h = instance.toLowerCase();
+  if (h.length < 8) return h;
+  return '${h.substring(0, 4)}-${h.substring(4, 8)}';
 }

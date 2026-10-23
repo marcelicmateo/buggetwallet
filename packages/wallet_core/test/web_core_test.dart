@@ -15,16 +15,18 @@ import 'support/synthetic.dart';
 
 final _aead = Xchacha20.poly1305Aead();
 
-/// A correctly authenticated file whose content is [inner] as is (no gzip), laid out like `seal`.
+/// A correctly authenticated file whose content is [inner] as is (no gzip), laid out like `seal` of older builds
+/// (`BWOP1`, no associated data: still read).
 Future<Uint8List> _sealRaw(List<int> inner, VaultKey key) async {
   final box = await _aead.encrypt(inner, secretKey: SecretKey(key.bytes));
   return Uint8List.fromList([...utf8.encode('BWOP1'), ...box.nonce, ...box.mac.bytes, ...box.cipherText]);
 }
 
-/// The authenticated content of a sealed file: the gzip member `seal` wrote.
-Future<List<int>> _openRaw(List<int> sealed, VaultKey key) => _aead.decrypt(
+/// The authenticated content of a sealed file: the gzip member `seal` wrote (`BWOP2`, sealed for [aad]).
+Future<List<int>> _openRaw(List<int> sealed, VaultKey key, List<int> aad) => _aead.decrypt(
       SecretBox(sealed.sublist(45), nonce: sealed.sublist(5, 29), mac: Mac(sealed.sublist(29, 45))),
       secretKey: SecretKey(key.bytes),
+      aad: aad,
     );
 
 void main() {
@@ -89,7 +91,7 @@ void main() {
       now += 1000;
       a.updateSettings({'reviewDay': 3});
       final bytes = await backupBytes(a, key);
-      expect(bytes.sublist(0, 5), utf8.encode('BWOP1'), reason: 'sealed like a sync file');
+      expect(bytes.sublist(0, 5), utf8.encode('BWOP2'), reason: 'sealed like a sync file');
 
       final b = WalletRepo.inMemory(now: () => now);
       addTearDown(b.close);
@@ -128,11 +130,11 @@ void main() {
 
       await expectRefused(
           bytes, VaultKey.generate(), throwsA(isA<VaultException>().having((e) => e.failure, 'failure', UnsealFailure.badKey)));
-      await expectRefused(await seal(utf8.encode('[1,2]'), key), key,
+      await expectRefused(await seal(utf8.encode('[1,2]'), key, aad: aadBackup), key,
           throwsA(isA<BackupException>().having((e) => e.reason, 'reason', BackupFailure.damaged)));
-      await expectRefused(await seal(utf8.encode('{"v":${backupVersion + 1},"ops":[]}'), key), key,
+      await expectRefused(await seal(utf8.encode('{"v":${backupVersion + 1},"ops":[]}'), key, aad: aadBackup), key,
           throwsA(isA<BackupException>().having((e) => e.reason, 'reason', BackupFailure.newerVersion)));
-      await expectRefused(await seal(utf8.encode('{"v":1,"ops":[{"e":"tx","id":"x","f":{},"h":"not a clock"}]}'), key), key,
+      await expectRefused(await seal(utf8.encode('{"v":1,"ops":[{"e":"tx","id":"x","f":{},"h":"not a clock"}]}'), key, aad: aadBackup), key,
           throwsA(isA<BackupException>().having((e) => e.reason, 'reason', BackupFailure.damaged)));
     });
   });
@@ -143,21 +145,21 @@ void main() {
 
     test('a member written by dart:io gzip (phones and desktops today) unseals', () async {
       final file = await _sealRaw(gzip.encode(text), key);
-      expect(await unseal(file, key), text);
+      expect(await unseal(file, key, aad: aadBackup), text);
     });
 
     test('a member written by the pure-Dart encoder (what a web build writes) unseals, so _wholeGzip accepts it', () async {
       final z = const GZipEncoderWeb().encodeBytes(text);
       expect(z.sublist(0, 2), [0x1f, 0x8b]);
       final file = await _sealRaw(z, key);
-      expect(await unseal(file, key), text);
+      expect(await unseal(file, key, aad: aadBackup), text);
       // An empty payload too (header + empty deflate block + trailer).
-      expect(await unseal(await _sealRaw(const GZipEncoderWeb().encodeBytes(const []), key), key), isEmpty);
+      expect(await unseal(await _sealRaw(const GZipEncoderWeb().encodeBytes(const []), key), key, aad: aadBackup), isEmpty);
     });
 
     test('what seal writes today is one gzip member the pure-Dart decoder reads (a web build reads phone files)', () async {
-      final sealed = await seal(text, key);
-      final inner = await _openRaw(sealed, key);
+      final sealed = await seal(text, key, aad: aadSyncFile('d', 1));
+      final inner = await _openRaw(sealed, key, aadSyncFile('d', 1));
       expect(inner.sublist(0, 2), [0x1f, 0x8b]);
       expect(const GZipDecoderWeb().decodeBytes(inner, verify: true), text);
     });
@@ -166,14 +168,15 @@ void main() {
       final z = const GZipEncoderWeb().encodeBytes(text);
       for (final cut in [8, 18, z.length ~/ 2, z.length - 1]) {
         final file = await _sealRaw(z.sublist(0, cut), key);
-        await expectLater(unseal(file, key), throwsA(isA<VaultException>().having((e) => e.failure, 'failure', UnsealFailure.damaged)),
+        await expectLater(
+            unseal(file, key, aad: aadBackup), throwsA(isA<VaultException>().having((e) => e.failure, 'failure', UnsealFailure.damaged)),
             reason: 'cut at $cut');
       }
     });
 
     test('seal → unseal round trips, empty and large', () async {
       for (final plain in [<int>[], utf8.encode('x'), List<int>.generate(300000, (i) => i * 31 & 0xFF)]) {
-        expect(await unseal(await seal(plain, key), key), plain, reason: '${plain.length} bytes');
+        expect(await unseal(await seal(plain, key, aad: aadBlob), key, aad: aadBlob), plain, reason: '${plain.length} bytes');
       }
     });
   });

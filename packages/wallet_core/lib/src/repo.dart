@@ -52,7 +52,7 @@ class WalletRepo {
   late final HlcClock clock;
   bool _created = false;
 
-  WalletRepo._(this.db, int Function()? now) {
+  WalletRepo._(this.db, int Function()? now, String? givenId) {
     db.execute('PRAGMA journal_mode=WAL;');
     db.execute(schemaSql);
     // Columns added after the first release (CREATE TABLE IF NOT EXISTS leaves an older table as it was).
@@ -62,12 +62,24 @@ class WalletRepo {
         if (!have.contains(c.name)) db.execute('ALTER TABLE ${e.table} ADD COLUMN ${c.ddl}');
       }
     }
+    if (givenId != null && !_deviceIdPattern.hasMatch(givenId)) {
+      throw ArgumentError.value('(hidden)', 'deviceId', 'must be 1..48 of A-Z a-z 0-9');
+    }
     var dev = _meta('device_id');
     if (dev == null) {
-      final r = Random.secure();
-      dev = List.generate(8, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+      dev = givenId ?? newDeviceId();
       _setMeta('device_id', dev);
       _created = true;
+    } else if (givenId != null && givenId != dev) {
+      // H6: this install has its own id (kept next to the key, not in the database), so a copied database does not
+      // write into another install's seq stream. The old id's outbox and everything else go out again as this id's
+      // first connect (the whole state, clocks unchanged), and the old id's own files are read like a peer's.
+      _setMeta('device_id', givenId);
+      final unsent = db.select('SELECT COUNT(*) AS n FROM outbox').first['n'] as int;
+      // SyncEngine.sentKey (absent = first connect) and epochKey (the new id starts at stream epoch 0).
+      db.execute("DELETE FROM meta WHERE key IN ('local.syncSent', 'local.syncEpoch', 'local.syncSending')");
+      logEvent(_log, Level.WARNING, 'repo.deviceId.changed', {'outbox': unsent});
+      dev = givenId;
     }
     deviceId = dev;
     clock = HlcClock(dev, now: now, last: _meta('hlc'));
@@ -121,9 +133,19 @@ class WalletRepo {
     if (rehinted > 0) _reconcileLocal();
   }
 
-  static WalletRepo _timedOpen(CommonDatabase Function() opener, bool file, int Function()? now) {
+  /// Ids given to [open]: letters and digits only (a relay stream name is `<id>-<epoch>`, at most 64 characters).
+  static final _deviceIdPattern = RegExp(r'^[A-Za-z0-9]{1,48}$');
+
+  /// A new random device id (16 hex characters, like the ids databases made for themselves before H6), for the app's
+  /// key store.
+  static String newDeviceId() {
+    final r = Random.secure();
+    return List.generate(8, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  static WalletRepo _timedOpen(CommonDatabase Function() opener, bool file, int Function()? now, String? deviceId) {
     final t = PerfTimer('repo.open');
-    final repo = WalletRepo._(opener(), now);
+    final repo = WalletRepo._(opener(), now, deviceId);
     int count(String table) => repo.db.select('SELECT COUNT(*) AS n FROM $table').first['n'] as int;
     t.done({'file': file, 'new': repo._created, 'tx': count('tx'), 'outbox': count('outbox')});
     return repo;
@@ -132,16 +154,34 @@ class WalletRepo {
   /// Opens (or creates) the database file at [path]. Native only: on the web use [fromDatabase] (with `openKeyed`).
   /// With [dbKey] (`localDbKey`) the file is encrypted: opened keyed, a plaintext one converted in place first
   /// (crash-safe, see `openKeyedFileDb`); a key that does not open it is a `WalletDbKeyException`.
-  static WalletRepo open(String path, {List<int>? dbKey, int Function()? now}) =>
-      _timedOpen(() => dbKey == null ? sqlite.openFileDb(path) : sqlite.openKeyedFileDb(path, dbKey), true, now);
+  ///
+  /// [deviceId] (H6) is this install's id from the app's key store. Null = the id stored in the database (a new
+  /// database makes one), as before. Given and different from the stored one, this install takes the given id: the
+  /// next sync is a first connect under it (whole state, clocks unchanged). [deviceId] (the getter) of a database
+  /// opened without one is the id to move into the key store once.
+  static WalletRepo open(String path, {List<int>? dbKey, int Function()? now, String? deviceId}) =>
+      _timedOpen(() => dbKey == null ? sqlite.openFileDb(path) : sqlite.openKeyedFileDb(path, dbKey), true, now, deviceId);
 
-  /// A fresh in-memory database (tests). Native only: on the web use [fromDatabase].
-  static WalletRepo inMemory({int Function()? now}) => _timedOpen(sqlite.openMemoryDb, false, now);
+  /// A fresh in-memory database (tests). Native only: on the web use [fromDatabase]. [deviceId] as for [open].
+  static WalletRepo inMemory({int Function()? now, String? deviceId}) => _timedOpen(sqlite.openMemoryDb, false, now, deviceId);
 
   /// Wraps an already open [db] (e.g. a `package:sqlite3/wasm.dart` database on the web): the same pragmas and
   /// migrations run as for [open] and [inMemory]. [file] says whether it is a persistent database (logged in
-  /// `repo.open`, like [open]) or a throwaway one (like [inMemory]). [close] disposes it.
-  static WalletRepo fromDatabase(CommonDatabase db, {required bool file, int Function()? now}) => _timedOpen(() => db, file, now);
+  /// `repo.open`, like [open]) or a throwaway one (like [inMemory]). [close] disposes it. [deviceId] as for [open].
+  static WalletRepo fromDatabase(CommonDatabase db, {required bool file, int Function()? now, String? deviceId}) =>
+      _timedOpen(() => db, file, now, deviceId);
+
+  /// The device id stored in [db] (meta `device_id`), or null for a database that has none yet. Reads only, no
+  /// migration: for the app to move an existing id into its key store before opening.
+  static String? storedDeviceId(CommonDatabase db) {
+    try {
+      final rs = db.select("SELECT value FROM meta WHERE key = 'device_id'");
+      return rs.isEmpty ? null : rs.first['value'] as String?;
+    } on SqliteException catch (e, st) {
+      logError(_log, 'repo.deviceId.unreadable', e, st);
+      return null;
+    }
+  }
 
   void close() {
     logEvent(_log, Level.FINE, 'repo.close');
@@ -222,8 +262,16 @@ class WalletRepo {
     }
   }
 
+  /// Every local write: one [Op] per change, applied and queued in the outbox, in one transaction. Throws
+  /// [ClockBehindException] (nothing written) when the wall clock is more than [maxClockDrift] behind the newest clock
+  /// this database holds: its ops would sort before edits it has already seen.
   void _write(List<(String, String, Map<String, Object?>)> changes) {
     if (changes.isEmpty) return;
+    final behind = clock.last.millis - clock.now();
+    if (behind > maxClockDrift.inMilliseconds) {
+      logEvent(_log, Level.WARNING, 'repo.clockBehind', {'ops': changes.length, 'behindMin': behind ~/ 60000});
+      throw const ClockBehindException();
+    }
     final t = PerfTimer('repo.write');
     _tx(() {
       for (final (entity, id, fields) in changes) {
@@ -461,6 +509,7 @@ class WalletRepo {
   (int, int) _reconcile() {
     final pairs = _pairTransfers();
     final matches = _matchManual();
+    _repairFieldPairs();
     _autoLinkBills();
     return (pairs, matches);
   }

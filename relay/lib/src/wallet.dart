@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -5,8 +6,29 @@ import 'dart:typed_data';
 
 import 'signing.dart';
 
-/// The protocol version this relay speaks (`api` in health and state).
-const int apiVersion = 2;
+/// The protocol version this relay speaks (`api` in health and state). 3: requests sign the host (`bw-relay-v3`), state
+/// carries `instance`.
+const int apiVersion = 3;
+
+/// Test seams for fault injection (tests only; production passes none), `Relay(hooks: ...)`. A throw from a callback
+/// acts like a crash or a full disk at that point: the request fails with 500 and what was already written stays.
+class RelayTestHooks {
+  const RelayTestHooks({this.afterFileWrite, this.beforeMetaSave});
+
+  /// After sync file [seq] of [device] in wallet [wid] was written, before the meta is saved.
+  final FutureOr<void> Function(String wid, String device, int seq)? afterFileWrite;
+
+  /// Before `meta.json` of wallet [wid] is written by a request (not by a load).
+  final FutureOr<void> Function(String wid)? beforeMetaSave;
+}
+
+/// A new relay instance id: 32 random hex characters.
+String newInstanceId() {
+  final r = math.Random.secure();
+  return [for (var i = 0; i < 16; i++) r.nextInt(256).toRadixString(16).padLeft(2, '0')].join();
+}
+
+final RegExp _instancePattern = RegExp(r'^[0-9a-f]{32}$');
 
 /// Names accepted on the wire (docs/context/RELAY_PROTOCOL.md, "Names").
 final RegExp widPattern = RegExp(r'^[0-9a-f]{32}$');
@@ -80,7 +102,16 @@ class Snap {
 
 /// One wallet: its public signing key, devices, snapshots and the byte total, rebuilt from its folder on start.
 class Wallet {
-  Wallet(this.wid, this.dir, this.pub) : pubBytes = decodeBase64Url(pub, 32)!;
+  Wallet(this.wid, this.dir, this.pub, {String? instance, this.hooks})
+      : pubBytes = decodeBase64Url(pub, 32)!,
+        instance = instance ?? newInstanceId();
+
+  /// This store's id for the wallet (`instance` in state, kept in `meta.json`): random when the wallet is created (or
+  /// first loaded by a relay that did not have one), so a wiped or replaced data folder names another one.
+  final String instance;
+
+  /// Fault injection for tests ([RelayTestHooks]).
+  final RelayTestHooks? hooks;
 
   final String wid;
   final Directory dir;
@@ -111,6 +142,7 @@ class Wallet {
     final names = devices.keys.toList()..sort();
     return {
       'api': apiVersion,
+      'instance': instance,
       'devices': {
         for (final n in names)
           n: {
@@ -126,10 +158,19 @@ class Wallet {
     };
   }
 
-  Future<void> saveMeta() async {
+  /// Writes sync file [seq] of [device] ([writeAtomic]), then calls [RelayTestHooks.afterFileWrite].
+  Future<void> writeData(String device, int seq, List<int> bytes) async {
+    await writeAtomic(dataFile(device, seq), bytes);
+    await hooks?.afterFileWrite?.call(wid, device, seq);
+  }
+
+  /// Writes `meta.json` (temp + rename). [RelayTestHooks.beforeMetaSave] runs first unless [load] (the save of a load).
+  Future<void> saveMeta({bool load = false}) async {
+    if (!load) await hooks?.beforeMetaSave?.call(wid);
     final meta = {
       'v': 2,
       'pub': pub,
+      'instance': instance,
       'devices': {
         for (final e in devices.entries) e.key: {'last': e.value.last, 'lastSeen': formatTime(e.value.lastSeen), 'acks': e.value.acks},
       },
@@ -170,7 +211,7 @@ class Wallet {
 
   /// Rebuilds a wallet from [dir]; null when `meta.json` is missing or unreadable.
   /// Files win over the meta for `last` (a crash between writing a file and the meta), unknown files are cleaned up.
-  static Future<Wallet?> load(Directory dir, String wid, DateTime now) async {
+  static Future<Wallet?> load(Directory dir, String wid, DateTime now, {RelayTestHooks? hooks}) async {
     final Map<String, Object?> meta;
     try {
       final decoded = jsonDecode(await File('${dir.path}/meta.json').readAsString());
@@ -181,7 +222,9 @@ class Wallet {
     }
     final pub = meta['pub'];
     if (pub is! String || decodeBase64Url(pub, 32) == null) return null; // a v1 meta (token hash) is not a wallet any more
-    final w = Wallet(wid, dir, pub);
+    final stored = meta['instance'];
+    final hadInstance = stored is String && _instancePattern.hasMatch(stored);
+    final w = Wallet(wid, dir, pub, instance: hadInstance ? stored : null, hooks: hooks);
     final devs = meta['devices'];
     if (devs is Map<String, Object?>) {
       for (final e in devs.entries) {
@@ -255,6 +298,10 @@ class Wallet {
 
     w.snapshot = await snap(meta['snapshot']);
     w.previous = await snap(meta['previous']);
+    // Temp files of an interrupted meta save ([writeAtomic] next to `meta.json`).
+    await for (final f in dir.list(followLinks: false)) {
+      if (f is File && f.uri.pathSegments.last.startsWith('.tmp-')) await f.delete();
+    }
     final dSnap = Directory('${dir.path}/snap');
     if (await dSnap.exists()) {
       await for (final f in dSnap.list(followLinks: false)) {
@@ -273,6 +320,8 @@ class Wallet {
         w.blobBytes += await f.length();
       }
     }
+    // A meta from before instance ids: the new id is kept at once, so a restart before the next write names the same.
+    if (!hadInstance) await w.saveMeta(load: true);
     return w;
   }
 }

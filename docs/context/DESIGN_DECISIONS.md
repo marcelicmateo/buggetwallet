@@ -307,6 +307,28 @@ pruning, limits) and one end-to-end test with two `SyncEngine`s against the real
 tests; app widget tests for Plan › Sync; desktop test syncing two app instances through a local relay.
 **Not in scope:** public hosting/TLS, accounts, sharing a wallet with another person, push notifications from the relay.
 
+### 4.10 Delete vs edit, per entity — decided 2026-10-23 (Stage H, H8; core-builder B)
+How it works: `deleted` is a field like any other, merged per field by HLC (last writer wins). So an edit of *other*
+fields never brings a deleted row back; only a write of `deleted: 0` does, and then the newer of that write and the
+delete wins. What each write path does, and so the rule per entity (kept as built; written down so a change is a
+decision, not an accident):
+
+| Entity | Concurrent delete on one device, edit on another | Why |
+|---|---|---|
+| `tx` (bank and hand-added) | **Delete wins.** Category, note, match and transfer links written elsewhere keep the row deleted. A re-import of the same bank row is a duplicate (known id) and stays deleted. | Deleting a transaction is deliberate (a wrong entry, a duplicate); money must not reappear by itself. |
+| `goal` | **Later write wins.** `saveGoal` writes `deleted: 0`, so an edit made after the delete (by HLC) restores the goal; an edit made before it loses. Contributions of a deleted goal are hidden, not removed. | Editing a goal is a clear wish to keep it; contributions stay exact either way. |
+| `goal_contrib` | **Delete wins** (rows are never edited, only added). | Deltas. |
+| `wish` | **Delete wins.** Decisions (`status`) do not revive; `addWish` always makes a new id. | — |
+| `setting`, `rule` (merchant rules) | **Later write wins.** Every write carries `deleted: 0`. | A setting or rule has one current value. |
+| `recurring` | **Delete wins**, also over a late detection: the creation op carries neither `status` nor `deleted`, and a payee with any row (deleted included) is never added again. | The owner said "this is not a bill". |
+| `planned` (manual, calendar) | **Delete wins** over `updatePlanned`, Paid, Skip and Reopen; `addPlanned` with the same ref (the same calendar event added again) writes `deleted: 0` and restores it when it is the later write. | Re-adding is a deliberate act; edits are not. |
+| `planned` row `bill:<id>` | **Follows the bill** (`_billWrites`, repaired when caught up, H9). | One rule, in one place. |
+| `bill` | **Delete wins** over `updateBill`, confirm and links; a re-import of the same bill (`importBill`) writes `deleted: 0` and restores it when it is the later write. | Importing the slip again is a deliberate "I have this bill". |
+
+Field pairs (H9): `planned.status`/`paid_tx` are always written together, `paid_tx` is cleared on a live row that is
+not paid, and a payment row pays at most one live bill (first link by clock stays); all repaired through `_write` when
+caught up, so every device converges on the same values.
+
 ## 5. Roadmap snapshot (19 Oct)
 | Feature | Status | Milestone |
 |---|---|---|
