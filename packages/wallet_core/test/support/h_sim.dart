@@ -101,6 +101,9 @@ String _s(String id) => SyncProblem.shortId(id);
 /// The relay name this device's files go under now: its id, or `<id>-<n>` after the relay lost some of its files (a
 /// restored copy starts a new stream of the same device, Stage H5b). The newest stream the relay lists for the device.
 String ownStream(RelayState s, Dev d) {
+  // Later builds keep the install's current stream name as a device-local value ('syncStream' = SyncEngine.streamKey).
+  final current = d.repo.localValue('syncStream');
+  if (current != null && current.startsWith(d.id)) return current;
   var best = d.id, bestEpoch = 0;
   for (final name in s.devices.keys) {
     if (!name.startsWith('${d.id}-')) continue;

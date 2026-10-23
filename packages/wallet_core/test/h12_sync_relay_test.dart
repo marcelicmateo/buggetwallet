@@ -302,23 +302,39 @@ void main() {
       }
     }, timeout: _t);
 
-    test('the clone is told: deviceIdInUse in the report (own short id), outbox kept, no silent retry', () async {
+    test(
+        'the clone and the original both keep editing: they converge with the peer, deviceIdInUse is reported once and never blocks caughtUp',
+        () async {
       final (c, x1, x2, p) = await clones();
-      _add(x1, 'x1');
-      await x1.sync();
-      c.tick();
-      await p.sync();
-      _add(x2, 'x2');
-      final puts = (c.transport as MemoryTransport).calls['put'] ?? 0;
-      final r = await x2.sync();
       final reason = reasonNamed('deviceIdInUse')!;
-      expect(r.problems.where((p) => p.reason == reason), hasLength(1));
-      expect(r.problems.firstWhere((p) => p.reason == reason).device, x2.short);
-      expect(x2.repo.pendingOps(), isNotEmpty, reason: 'the outbox is kept');
-      expect((c.transport as MemoryTransport).calls['put'] ?? 0, lessThanOrEqualTo(puts + 1), reason: 'one attempt, not a retry loop');
-      final again = await x2.sync();
-      expect(again.problems.map((p) => p.reason), contains(reason));
-    }, skip: bugUnless(reasonNamed('deviceIdInUse') != null, 'H6', 'a 409 on an own seq is SyncProblemReason.deviceIdInUse'), timeout: _t);
+      final kept = <String>{};
+      final inUse = <Dev, int>{x1: 0, x2: 0, p: 0};
+      SyncReport? lastX1, lastX2;
+      for (var round = 0; round < 6; round++) {
+        kept.add(_add(x1, 'x1-$round', cents: -100 - round));
+        kept.add(_add(x2, 'x2-$round', cents: -200 - round));
+        for (final d in [x1, x2, p]) {
+          final r = await d.sync();
+          if (r.problems.any((q) => q.reason == reason)) inUse[d] = inUse[d]! + 1;
+          if (d == x1) lastX1 = r;
+          if (d == x2) lastX2 = r;
+          c.tick();
+        }
+      }
+      await c.syncAll(rounds: 3);
+      for (final d in [x1, x2, p]) {
+        expect(_ids(d).containsAll(kept), isTrue, reason: 'device ${d.short} lost an edit');
+      }
+      expect(data(x1), data(x2));
+      expect(data(x2), data(p));
+      expect(inUse[x1]! + inUse[x2]!, greaterThanOrEqualTo(1), reason: 'the clash is reported');
+      expect(inUse[x1]!, lessThanOrEqualTo(1), reason: 'reported once per install, not on every run');
+      expect(inUse[x2]!, lessThanOrEqualTo(1));
+      expect(inUse[p], 0, reason: 'the peer shares nobody\'s id');
+      expect((lastX1!.caughtUp, lastX2!.caughtUp), (true, true), reason: 'information only: it does not block catching up');
+    },
+        skip: bugUnless(reasonNamed('deviceIdInUse') != null, 'H6', 'two installs of one device id converge; deviceIdInUse is information'),
+        timeout: _t);
 
     test('a new install takes the id it is given and re-exports the old id\'s outbox as a first connect', () async {
       final clock = SimClock();
