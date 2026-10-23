@@ -126,11 +126,18 @@ Sealed files that rows point to by hash (a bill's photo or PDF). Content-address
     "<device>": {"first": 1, "last": 12, "lastSeen": "2026-10-22T10:00:00Z", "acks": {"<peer>": 5}}
   },
   "snapshot": {"id": "<id>", "covers": {"<device>": 12}},
-  "previous": {"id": "<id>", "covers": {"<device>": 7}}
+  "previous": {"id": "<id>", "covers": {"<device>": 7}},
+  "blobs": {"count": 2, "bytes": 81920},
+  "bytes": 1048576,
+  "maxBytes": 1073741824
 }
 ```
 `first` = lowest seq still stored, or `last + 1` when all were pruned. `snapshot`/`previous` are `null` when absent. A
 device appears once it has stored a file or sent an ack.
+
+`bytes` and `maxBytes` (Stage I, additive; api stays 3): the wallet's stored bytes as `--max-bytes` counts them (sync
+files + kept snapshots + blobs) and the relay's `--max-bytes`, both integers. A `PUT` that would take `bytes` past
+`maxBytes` gets 507. The app shows them as relay usage; a relay without them (older build) = unknown, never an error.
 
 `instance` (H5): random 32 hex characters per wallet, created with the wallet (or, for a wallet stored by an older
 relay, at its first load, and saved at once) and kept in its `meta.json`. A wiped data folder or another relay names

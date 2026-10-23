@@ -37,6 +37,10 @@ class PeriodBudget {
   /// allowanceToday − spentToday is negative when today's spending went over ([overToday]). [planDaily] (flexBudget ÷
   /// length) is 0 or negative when the plan leaves no flexible money ([overBudget]).
   final int flexBudget, spent, spentToday, remaining, allowanceToday, safeToday, planDaily;
+
+  /// Tomorrow's allowance if nothing more is spent today: max(0, round(([flexBudget] − [spent]) ÷ ([daysLeft] − 1))).
+  /// Null when the payday is tomorrow ([daysLeft] ≤ 1) or has passed: a new period starts then. Never negative.
+  final int? allowanceTomorrow;
   final double elapsed;
   final Map<String, int> fixedPaid;
 
@@ -77,6 +81,7 @@ class PeriodBudget {
     required this.allowanceToday,
     required this.safeToday,
     required this.planDaily,
+    this.allowanceTomorrow,
     required this.elapsed,
     required this.fixedPaid,
     this.reservedBills = 0,
@@ -187,6 +192,8 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final spentToday = -_sum(flex.where((t) => t.date == today));
   final leftForToday = flexBudget - (spent - spentToday);
   final allowanceToday = paydayPassed || leftForToday <= 0 ? 0 : (leftForToday / daysLeft).round();
+  final leftAfterToday = flexBudget - spent;
+  final allowanceTomorrow = paydayPassed || daysLeft <= 1 ? null : (leftAfterToday <= 0 ? 0 : (leftAfterToday / (daysLeft - 1)).round());
   final elapsed = ((daysBetween(start, today) + 1) / length).clamp(0.0, 1.0);
   final fixedPaid = <String, int>{};
   for (final t in inPeriod.where((t) => t.kind == BudgetKind.fixed)) {
@@ -231,6 +238,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     allowanceToday: allowanceToday,
     safeToday: allowanceToday - spentToday,
     planDaily: (flexBudget / length).round(),
+    allowanceTomorrow: allowanceTomorrow,
     elapsed: elapsed,
     fixedPaid: fixedPaid,
     reservedBills: reservedBills,

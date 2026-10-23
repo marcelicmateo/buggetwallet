@@ -120,6 +120,24 @@ class MemoryTransport implements SyncTransport {
   /// Largest file a PUT may store ([maxFile] like the relay; lower in tests so a big upload needs few rows).
   int maxFileBytes = maxFile;
 
+  /// The relay's `--max-bytes` as `GET state` reports it (`RelayState.maxBytes`, with `bytes` = files + snapshots +
+  /// blobs stored here). Reported only, not enforced. Null = an older relay that sends neither.
+  int? maxBytes = 1 << 30;
+
+  /// What the relay's `--max-bytes` counts: stored files, kept snapshots and blobs.
+  int get storedBytes {
+    var n = 0;
+    for (final d in _devs.values) {
+      for (final b in d.files.values) {
+        n += b.length;
+      }
+    }
+    for (final b in _blobs.values) {
+      n += b.length;
+    }
+    return n + (_snap?.bytes.length ?? 0) + (_prev?.bytes.length ?? 0);
+  }
+
   /// Every call throws [TransportFailure.unreachable] while true.
   bool offline = false;
 
@@ -181,6 +199,8 @@ class MemoryTransport implements SyncTransport {
       snapshot: _snap == null ? null : RelaySnapshot(_snap!.id, Map.unmodifiable(_snap!.covers)),
       previous: _prev == null ? null : RelaySnapshot(_prev!.id, Map.unmodifiable(_prev!.covers)),
       instance: _devs.isEmpty ? null : instance,
+      bytes: _devs.isEmpty || maxBytes == null ? null : storedBytes,
+      maxBytes: _devs.isEmpty ? null : maxBytes,
     );
   }
 

@@ -41,6 +41,14 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `importBatch`: a known id whose stored row has another `amount` or `description` is an id collision: skipped like a
   duplicate (never overwritten), counted in `ImportSummary.collisions` (also in `duplicates`) and logged as
   `repo.idCollision {source, count}` (WARNING; never ids, amounts or descriptions).
+  Undo (Stage I): `undeleteTransaction(id)` / `undeleteGoal(id)` are owner writes of `deleted: 0` (synced; the later
+  of it and a delete by HLC wins, §4.10; an unknown id → `ArgumentError`, a live row → nothing written). A row keeps
+  its other fields (a hand-added entry its `matched_to`); a goal's contributions come back with it; the tx undo then
+  runs `_reconcileLocal`. `deleteTransaction` keeps the bills it unlinked in device-local meta `undo_bills.<txId>`
+  (`{"at", "bills"}`, only when a bill was unlinked; removed by the undo, or after a day by `_purgeUndo` at open and on
+  every delete); the undo links that bill again in the same write when it is still live, unlinked, and no other live
+  bill holds the row (automatic linking takes only bank rows, so a cash expense from a bill would otherwise count
+  twice). Logs `repo.undelete {entity, bills}`. Tests: `test/undelete_test.dart`.
 - `budget.dart` — period maths: `PeriodBudget` (safe to spend), `MonthSummary`, `Affordability`. **Currency (H1):** only
   rows with `tx.currency == settings.currency` count in `computePeriod`, `monthSummary`, `periodSummaries` (and
   `salaryPaydays`/`detectPaydays`), `averageByCategory`, `suggestBudgets`, `budgetVsActual`, `reviewState`'s pace and
@@ -54,7 +62,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   rows are the next period's; salary parts are "arriving" only while the period runs); `currentPeriodStart(periodStart,
   paydayDay, today)` (dates.dart) = the latest expected payday on or before today, for "start the new period" after
   several missed paydays; `daysLeft` is the real count (0 once passed);
-  `allowanceToday` ≥ 0 always (0 when passed or the money is used up); `safeToday` = allowance − spentToday (negative =
+  `allowanceToday` ≥ 0 always (0 when passed or the money is used up); `allowanceTomorrow` (Stage I) = max(0,
+  round((flexBudget − spent) ÷ (daysLeft − 1))), null when `daysLeft` ≤ 1 or passed; `safeToday` = allowance − spentToday (negative =
   `overToday`); `overBy` = max(0, −remaining); `overBudget` = `overBy > 0 || planDaily <= 0`. `affordability`:
   `Verdict.overBudget` whenever `p.overBudget` (never `now`), `later` once the payday passed or when the price does not
   fit, `newDaily` never negative. `lowIncome` (moved from the app): received > 0, below 90 % of salary (int maths), at
@@ -316,7 +325,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `RelayState`/`RelayDevice`/`RelaySnapshot` (+ `fromJson`), implemented by `MemoryTransport` (`sync_memory.dart`: the
   relay's rules in memory — no gaps, never overwritten, acks grow, snapshot 422 before 409, two kept snapshots, pruning
   incl. the 90-day rule driven by `now`; no signature check; blobs: hash checked, 404 for an unknown wallet, hooks `blobs`, `blobRoutes`, `tamperBlob`; test hooks `offline`, `corrupt`, `failGet`, `replace`, `files`,
-  `calls`, `instance` (random per transport, sent once the wallet exists; null = an api-2 relay), `wipe()` (empty, new
+  `calls`, `instance` (random per transport, sent once the wallet exists; null = an api-2 relay), `maxBytes` (reported
+  with `storedBytes` in state once the wallet exists, not enforced; null = an older relay), `wipe()` (empty, new
   instance), `copy()`/`restore(copy)` (a relay restored from an older copy of its data folder, same instance)) and
   `RelayTransport` (`sync_relay.dart`, `package:http` + `cryptography`, api 3 (`relayApi`), paths under `/v2/`: `wid` and the Ed25519
   key pair from `deriveKey` (`relayIdInfo`, `relaySignInfo`; `ids` = (wid, public key)); every request carries
@@ -331,7 +341,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   above 3 → `newerApi`, else `refused`); 404 state = empty relay, 30 s timeout; `health(base)` asks
   `/v2/health`, on 404 `/v1/health` to tell an older relay apart; `now:` for tests). About 1.8 ms per signature on the VM.
   Stage H (H5–H9) in the engine: `SyncEngine.run` while a run of the same engine is in progress returns that run's
-  future (`sync.run.joined`); relay instance (`RelayState.instance`, device-local `syncInstance` stored when an upload
+  future (`sync.run.joined`); relay usage (Stage I: `RelayState.bytes`/`maxBytes`, null from an older relay or for a
+  value that is not a non-negative int; `SyncReport.relayBytes`/`relayMaxBytes` from the run's state read, so the run's
+  own later upload may not be in it; `test/relay_usage_test.dart`); relay instance (`RelayState.instance`, device-local `syncInstance` stored when an upload
   went through completely; another id = `SyncReport.relayChanged`: every cursor to 0 and a first connect; none stored
   yet = adopted; a run that created the wallet asks `state` once more to learn it); streams and ownership (H5b/HBb,
   RELAY_PROTOCOL.md "Device streams and ownership"; `SyncEngine.streamName/streamBase/streamEpoch`, local
@@ -410,6 +422,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   paths or file names. Noisy per-render logs at FINER. `test/logs_impl_test.dart` checks core logs stay clean.
 
 ## Known limits (for the sync redesign)
+- Undo of a deleted payment row restores its bill link from this device's `undo_bills` record. If another device runs
+  caught up inside the app's 2.5 s Undo window, sees the delete and unlinks the bill with a clock later than the undo,
+  that unlink wins: the bill stays open (reserved) while the row counts again, until the owner links it.
 - The same export imported on two devices before they sync: the later import's `amount` clock wins, so a cash entry
   added in between on the first device can be matched to that row although that device held it.
 - A sync file changed after sealing fails authentication like one sealed with another key: both are `badKey`
