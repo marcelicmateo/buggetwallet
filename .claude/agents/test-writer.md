@@ -10,6 +10,13 @@ changed (`tools/build.sh core|importer|app|lint`, one test file, `tools/emulator
 between runs. End with your own files (`tools/build.sh core|importer|app <file>…`) and `tools/build.sh lint` — never the
 full `tools/build.sh test`: the lead's stage run covers it.
 Hang tripwire: a `:one` run over 2 min or a full suite over 5 min is a hung test, not a slow one (hangs ran to the 10-minute per-test default for hours in earlier stages). Stop it (TaskStop), read `dist/logs/tests-<step>-summary.txt` and the last test name, fix or skip that test — never re-run the same command unchanged.
+
+Tests written ahead of an API (Stage H lessons): a run-time probe through `dynamic` or `Function.apply` cannot see an
+extension method (`repo.setCategoryBudget` is one), so such a probe reports "absent" for ever and its tests skip
+silently after the merge; probe extension APIs by a static call in a separate file with a file-level `@Skip`, or ask
+the lead. `find.text` never matches a `StatusLabel` (rich text with an icon): use `find.textContaining` or a key, and
+prove every `findsNothing` can fail. Never date synthetic rows from the real `DateTime.now()` without a fixed clock: a
+test that passes today can fail on the 1st of the month.
 Never wrap a build in `timeout`, `until` or `while` (a hook rejects it): `run_in_background`, then read the step log once the notification arrives.
 Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool. Preferred for one test file: `tools/build.sh core|importer|app <test file>…` (no analyze, step `<pkg>:one`); `tools/build.sh shell -c '<cmd>'` runs any command non-interactively in the container.
 
