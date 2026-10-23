@@ -18,8 +18,7 @@ const _skipWish = false;
 const _skipToast = false;
 // BUG: I5 - forms: sheetClose, last-used category, filled expected action (testWidgets takes a bool skip; the lead lifts it at merge)
 const _skipForms = false;
-// BUG: I5 - the Add expense sheet still shows its muted explainer below the CTA (spec: above the CTA or behind an info icon)
-const _skipExplainer = true;
+const _skipExplainer = false;
 
 Future<void> _settle(WidgetTester tester) async {
   await tester.pumpAndSettle();

@@ -267,6 +267,10 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         ]),
       ],
       const SizedBox(height: 14),
+      const Muted(
+          'Cash from an ATM is already counted when you withdraw it. Log card payments here; the weekly import matches them so nothing is counted twice.',
+          size: BwType.metaSize),
+      const SizedBox(height: 10),
       FilledButton.icon(
         style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
         key: const ValueKey('addExpenseSave'),
@@ -293,10 +297,6 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                 Navigator.pop(context, 'added');
               },
       ),
-      const SizedBox(height: 10),
-      const Muted(
-          'Cash from an ATM is already counted when you withdraw it. Log card payments here; the weekly import matches them so nothing is counted twice.',
-          size: BwType.metaSize),
     ]);
   }
 }
