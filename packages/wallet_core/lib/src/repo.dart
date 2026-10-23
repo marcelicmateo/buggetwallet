@@ -78,22 +78,45 @@ class WalletRepo {
       final unsent = db.select('SELECT COUNT(*) AS n FROM outbox').first['n'] as int;
       // The old id's stream stays one this install wrote (SyncEngine.streamsKey: acked as, so it never holds back
       // pruning); the new id starts with no stream and a first connect (SyncEngine.sentKey, streamKey, sendingKey).
-      final wrote = _meta('local.syncSent') != null;
+      final sent = int.tryParse(_meta('local.syncSent') ?? '');
+      final sending = _meta('local.syncSending');
+      final wrote = sent != null || sending != null;
       final old = _meta('local.syncStream') ?? dev;
-      List<Object?> streams;
-      try {
-        streams = jsonDecode(_meta('local.syncStreams') ?? '[]') as List;
-      } on Object catch (e, st) {
-        logError(_log, 'repo.streams.unreadable', e, st);
-        streams = [];
+      Object? decode(String key, Object? empty) {
+        try {
+          return jsonDecode(_meta(key) ?? jsonEncode(empty));
+        } on Object catch (e, st) {
+          logError(_log, 'repo.streams.unreadable', e, st, fields: {'key': key});
+          return empty;
+        }
       }
-      if (wrote && !streams.contains(old)) _setMeta('local.syncStreams', jsonEncode([...streams, old]));
+
+      if (wrote) {
+        final streams = decode('local.syncStreams', const []);
+        final list = streams is List ? streams : const <Object?>[];
+        if (!list.contains(old)) _setMeta('local.syncStreams', jsonEncode([...list, old]));
+        // The highest seq this install may have stored there (SyncEngine.streamLastKey): should the stream grow past it,
+        // another install (the original of a copied database) writes it, and this install stops acking as it.
+        var last = sent ?? 0;
+        final sd = decode('local.syncSending', const {});
+        final parts = sd is Map ? sd['parts'] : null;
+        if (parts is Map) {
+          for (final k in parts.keys) {
+            last = max(last, int.tryParse('$k') ?? 0);
+          }
+        }
+        final at = decode('local.syncStreamLast', const {});
+        _setMeta('local.syncStreamLast', jsonEncode({if (at is Map) ...at, old: last}));
+      }
       db.execute("DELETE FROM meta WHERE key IN ('local.syncSent', 'local.syncStream', 'local.syncSending')");
       logEvent(_log, Level.WARNING, 'repo.deviceId.changed', {'outbox': unsent});
       dev = givenId;
     }
     deviceId = dev;
     clock = HlcClock(dev, now: now, last: _meta('hlc'));
+    // H7 guard base: the highest wall-clock reading this device wrote with (never a peer's clock): device-local meta
+    // `wall_high`, raised by every write (an open changes nothing in the file).
+    _wallHigh = int.tryParse(_meta('wall_high') ?? '') ?? 0;
     _dropFolderSync();
     _asInternal(_migrate);
   }
@@ -276,6 +299,9 @@ class WalletRepo {
   /// Nesting depth of [_asInternal]: while above 0, [_write] skips the clock guard.
   int _internalDepth = 0;
 
+  /// The highest wall-clock reading of this device (meta `wall_high`): the owner-write guard compares with it.
+  late int _wallHigh;
+
   /// Runs [body] as an internal write path (H7): the open-time migration, `_reconcile` (pairing, matching, field-pair
   /// repairs, bill links), `refreshRecurring`, `runPendingMatch` and its clean-ups. Their writes are not the owner's,
   /// so a wall clock behind the stored clock never blocks them (the HLC still only moves forward: `tick` takes the
@@ -293,12 +319,14 @@ class WalletRepo {
   void _writeInternal(List<(String, String, Map<String, Object?>)> changes) => _asInternal(() => _write(changes));
 
   /// Every local write: one [Op] per change, applied and queued in the outbox, in one transaction. An owner write (the
-  /// public write API the app calls) throws [ClockBehindException] (nothing written) when the wall clock is more than
-  /// [maxClockDrift] behind the newest clock this database holds: its ops would sort before edits already seen.
-  /// Internal paths go through [_writeInternal] / [_asInternal] and are never refused.
+  /// public write API the app calls) throws [ClockBehindException] (nothing written) when this device's wall clock is
+  /// more than [maxClockDrift] behind the highest reading it made itself (`wall_high`: its clock was set back). Not the
+  /// stored HLC: a database holding a far-future clock from a peer (before Stage H) must not lock its owner out, and the
+  /// HLC orders the writes anyway. Internal paths go through [_writeInternal] / [_asInternal] and are never refused.
   void _write(List<(String, String, Map<String, Object?>)> changes) {
     if (changes.isEmpty) return;
-    final behind = clock.last.millis - clock.now();
+    final wall = clock.now();
+    final behind = _wallHigh - wall;
     if (_internalDepth == 0 && behind > maxClockDrift.inMilliseconds) {
       logEvent(_log, Level.WARNING, 'repo.clockBehind', {'ops': changes.length, 'behindMin': behind ~/ 60000});
       throw const ClockBehindException();
@@ -311,7 +339,9 @@ class WalletRepo {
         db.execute('INSERT INTO outbox(op) VALUES(?)', [jsonEncode(op.toJson())]);
       }
       _setMeta('hlc', clock.last.toString());
+      if (wall > _wallHigh) _setMeta('wall_high', '$wall');
     });
+    if (wall > _wallHigh) _wallHigh = wall;
     t.done({
       'ops': changes.length,
       'entities': {for (final c in changes) c.$1}.join(',')

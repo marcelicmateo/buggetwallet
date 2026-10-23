@@ -147,19 +147,34 @@ A device takes a fresh stream (epoch above every stream of its id it knows) and 
 seq 1, when the current one is not exclusively its own:
 - the relay holds **fewer** of its files than it sent (`last` < `syncSent`: a restored older copy of the data folder,
   or a wiped relay): no seq is ever reused with other content; the old stream stays one it acks as;
-- the relay holds **more** than it sent and no own upload was cut short (device-local `syncSending` = `<from>:<to>`
-  while an upload is under way; only seqs up to `to` are excused): another install writes there (a copied database
-  or key store, or this database restored from an older file copy); also on a fresh database whose id already has
-  files. The old stream is read as a peer and no longer acked as;
+- the relay holds **more** than it sent and the extra seqs are not its own cut-off upload (device-local
+  `syncSending` records, before each PUT, the seq and a hash of the sealed part; an extra seq counts as its own only
+  when the stored file hashes to it, fetched once to check): another install writes there (a copied database or key
+  store, or this database restored from an older file copy); also on a fresh database whose id already has files. The
+  old stream is read as a peer and no longer acked as;
 - a 409 on its own next seq: the same, in the same run (once), with `syncSending` cleared.
 The client reports `deviceIdInUse` once per such move (and once per newly seen stream of its id that it never wrote),
 as information: the run goes on and is caught up; the next runs are normal. Clients show all streams of one device id
 as one device. A cursor for a stream the relay no longer lists is dropped.
+
+Two more guards:
+- **Rolled-back relay.** A relay only ever raises acks. Each install keeps the acks it stored per stream it acks as
+  (`syncAcked`); when the relay shows one lower, its data folder was restored from a copy (the instance stays the
+  same), so seq numbers it hands out again may hold other content than the files read before. The run is then a first
+  connect (`relayChanged`): every cursor back to 0, the stored acks cleared, the whole state uploaded (moving to a
+  fresh stream when its own files went missing).
+- **A left stream that grows.** For every stream it no longer writes but still acks as, an install keeps the relay
+  `last` when it left it (`syncStreamLast`; on an H6 id change the old id's highest stored seq). Should that stream
+  ever hold more, another install writes it (the original of a copied database): it is dropped from `syncStreams`,
+  never acked as again, and reported once as `deviceIdInUse`.
 Limits: abandoned streams stay until snapshots and acks cover them; a stream left to another install is no longer
-acked by this one, so pruning of others' files waits for that install's acks or the 90-day rule; a run that stopped
-after a stored PUT but before it recorded `syncSending`, on a relay then restored to a copy from before that PUT, can
-reuse that seq; two installs with one device id share its HLC node, so two of their writes in the same millisecond
-with the same counter compare equal (the first one applied wins on each device).
+acked by this one, so pruning of others' files waits for that install's acks or the 90-day rule (up to 90 days for an
+orphaned one); after an H6 id change on a copied database, the copy acks as the old stream until the original's next
+upload makes it grow (pruning in that window still needs a covering snapshot, so nothing is lost, the original then
+starts from the snapshot); after a double restore (database and relay folder from the same moment), streams this
+install made later are missing from its restored `syncStreams` and are reported once as `deviceIdInUse`; two installs
+with one device id share its HLC node, so two of their writes in the same millisecond with the same counter compare
+equal (the first one applied wins on each device).
 
 ## Snapshots and pruning
 - The relay keeps the latest snapshot and the one before it (`previous`); an accepted snapshot moves the latest to

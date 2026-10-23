@@ -2,6 +2,7 @@
 // BWOP2 (associated data, inflate cap), field-pair repair and one run at a time. Synthetic data only.
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -479,6 +480,7 @@ void main() {
       await rounds([a, b]);
       // b's clock is set 2 h back; then an older build's Skip arrives, stamped before that (when b's clock was right):
       // owner writes are refused, but the repair that op needs (an internal write) runs.
+      b.repo.updateSettings({'loan': 1}); // normal use first: the guard compares with b's own readings
       now -= 2 * _hour;
       b.repo.applyRemote([
         Op('planned', id, const {'status': 'skipped'}, Hlc(now + 2 * _hour + 1000, 0, 'oldbuild').toString())
@@ -680,6 +682,157 @@ void main() {
       expect(net.relay.calls['state'], before + 2);
     });
   });
+  group('HBc review fixes', () {
+    void copyDb(String from, String to) {
+      for (final s in ['', '-wal', '-shm']) {
+        final f = File('$from$s'), t = File('$to$s');
+        if (t.existsSync()) t.deleteSync();
+        if (f.existsSync()) f.copySync('$to$s');
+      }
+    }
+
+    test('a double restore with consistent copies (database and relay from one moment): nothing is skipped', () async {
+      final pathA = '${tmp.path}/a.db';
+      final a = Device('a', tmp, key, () => now, net: net, dbPath: pathA);
+      devices.add(a);
+      final p = device('p'), q = device('q');
+      a.repo.updateSettings({'salary': 1});
+      await rounds([a, p, q]);
+      // The moment both are copied: A's syncSent = the relay's A.last = N0.
+      final relayCopy = net.relay.copy();
+      a.repo.db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+      copyDb(pathA, '${tmp.path}/a.copy');
+      for (final (k, v) in [('rent', 2), ('loan', 3)]) {
+        now += 1000;
+        a.repo.updateSettings({k: v});
+        await a.run(); // N0 + 1 .. N1
+      }
+      await rounds([p, q]); // both read past the copy; q then goes offline
+      net.relay.restore(relayCopy);
+      a.repo.close();
+      copyDb('${tmp.path}/a.copy', pathA);
+      a.repo = WalletRepo.open(pathA, now: () => now);
+      for (final (k, v) in [('paydayDay', 10), ('salary', 11), ('rent', 12)]) {
+        now += 1000;
+        a.repo.updateSettings({k: v});
+        await a.run(); // new content under the same seqs N0 + 1 .. (≥ N1)
+      }
+      final rp = await p.run();
+      expect(rp.relayChanged, isTrue, reason: 'its acks went backwards: a rolled-back relay');
+      await rounds([p, a], 3);
+      await rounds([q, a, p], 3); // the offline peer comes back
+      expectSame([a, p, q]);
+      final s = q.repo.settings();
+      expect((s.salary, s.rent, s.loan, s.paydayDay), (11, 12, 3, 10));
+    });
+
+    test(
+        'an H6 id change on a copied database while the original keeps writing: the copy stops acking as the old '
+        'stream, nothing is pruned before the original reads it', () async {
+      final pathA = '${tmp.path}/a.db';
+      final a = Device('a', tmp, key, () => now, net: net, dbPath: pathA);
+      devices.add(a);
+      final b = device('b');
+      a.repo.updateSettings({'salary': 1});
+      await rounds([a, b]);
+      final d = a.repo.deviceId;
+      a.repo.db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+      copyDb(pathA, '${tmp.path}/a2.db');
+      final a2 = Device('a2', tmp, key, () => now, net: net, dbPath: '${tmp.path}/a2.db', deviceId: WalletRepo.newDeviceId());
+      devices.add(a2);
+      now += 1000;
+      b.repo.updateSettings({'rent': 5});
+      await b.run();
+      final k = (await net.relay.state()).devices[b.repo.deviceId]!.last;
+      now += 1000;
+      a.repo.updateSettings({'loan': 6});
+      a.deliver(net, Random(1), p: 0); // the original writes on, but has not read b's file k yet
+      await a.run();
+      final id = 's${WalletRepo.schemaVersion}-$now-aa';
+      await net.relay.putSnapshot(id, {b.repo.deviceId: k}, await seal(backupPayload(b.repo.snapshotOps()), key, aad: aadSnapshot(id)));
+      final r2 = await a2.run();
+      expect(r2.problems.map((p) => p.reason), contains(SyncProblemReason.deviceIdInUse), reason: 'the old stream is shared');
+      expect(net.files.containsKey('d/${b.repo.deviceId}/$k'), isTrue, reason: 'the original has not read it');
+      expect((await net.relay.state()).devices[d]!.acks[b.repo.deviceId] ?? 0, lessThan(k));
+      await rounds([a, a2, b], 2);
+      expectSame([a, a2, b]);
+    });
+
+    test('an id change records the old stream also when only a cut-off upload was under way', () {
+      final r = WalletRepo.open('${tmp.path}/w.db');
+      final old = r.deviceId;
+      r.setLocalValue(
+          SyncEngine.sendingKey,
+          jsonEncode({
+            'from': 0,
+            'parts': {'1': 'ab', '2': 'cd'}
+          }));
+      r.close();
+      final again = WalletRepo.open('${tmp.path}/w.db', deviceId: WalletRepo.newDeviceId());
+      addTearDown(again.close);
+      expect(jsonDecode(again.localValue(SyncEngine.streamsKey)!), [old]);
+      expect(jsonDecode(again.localValue(SyncEngine.streamLastKey)!), {old: 2});
+      expect(again.localValue(SyncEngine.sendingKey), isNull);
+    });
+
+    test('a cut-off upload: its own stored part is recognised by hash; a clone\'s file in that range is read', () async {
+      final shared = WalletRepo.newDeviceId();
+      final a = device('a', deviceId: shared), b = device('b');
+      a.repo.updateSettings({'salary': 1});
+      await a.run();
+      // 1. The PUT is stored but its answer is lost: the next run sees its own part, no move, nothing reported.
+      now += 1000;
+      a.repo.updateSettings({'rent': 2});
+      await expectLater(SyncEngine(_LosePut(net.relay, stored: true), key).run(a.repo), throwsA(isA<SyncException>()));
+      final r1 = await a.run();
+      expect(r1.problems, isEmpty);
+      expect(a.repo.localValue(SyncEngine.streamKey), isNull, reason: 'still its first stream');
+      // 2. The PUT never arrives; meanwhile another install with this id stores that seq: read, and this install moves.
+      now += 1000;
+      a.repo.updateSettings({'loan': 3});
+      await expectLater(SyncEngine(_LosePut(net.relay, stored: false), key).run(a.repo), throwsA(isA<SyncException>()));
+      final next = (await net.relay.state()).devices[shared]!.last + 1;
+      final ops = [
+        Op('setting', 'paydayDay', {'value': '7', 'deleted': 0}, Hlc(now, 5, shared).toString()).toJson()
+      ];
+      await net.relay.put(shared, next, await seal(utf8.encode(jsonEncode(ops)), key, aad: aadSyncFile(shared, next)));
+      final r2 = await a.run();
+      expect(r2.problems.single.reason, SyncProblemReason.deviceIdInUse);
+      expect(a.repo.settings().paydayDay, 7, reason: 'the other install\'s file was read');
+      await rounds([a, b]);
+      expect((b.repo.settings().loan, b.repo.settings().paydayDay), (3, 7));
+    });
+
+    test('the owner-write guard follows this device\'s own wall clock, not a far-future clock it received', () {
+      var t = 1767225600000;
+      final r = WalletRepo.inMemory(now: () => t);
+      addTearDown(r.close);
+      // A peer's op a year ahead, taken before Stage H bounded clocks: the owner can still write.
+      r.applyRemote([
+        Op('setting', 'loan', const {'value': '1', 'deleted': 0}, Hlc(t + 365 * 86400000, 0, 'peer').toString())
+      ]);
+      r.updateSettings({'salary': 1});
+      expect(r.settings().salary, 1);
+      // This device's own clock set back 2 h after normal use: refused.
+      t += 60000;
+      r.updateSettings({'salary': 2});
+      t -= 2 * _hour;
+      expect(() => r.updateSettings({'salary': 3}), throwsA(isA<ClockBehindException>()));
+      expect(r.settings().salary, 2);
+    });
+
+    test('the wall high-water mark survives a reopen', () {
+      var t = 1767225600000;
+      final path = '${tmp.path}/w.db';
+      final r = WalletRepo.open(path, now: () => t);
+      r.updateSettings({'salary': 1});
+      r.close();
+      t -= 2 * _hour;
+      final again = WalletRepo.open(path, now: () => t);
+      addTearDown(again.close);
+      expect(() => again.updateSettings({'salary': 2}), throwsA(isA<ClockBehindException>()));
+    });
+  });
 }
 
 /// Forwards to [inner], running [race] once before the first PUT (another install storing a file meanwhile).
@@ -711,4 +864,19 @@ class _RacingTransport implements SyncTransport {
   Future<List<int>?> getBlob(String hash) => inner.getBlob(hash);
   @override
   Future<void> deleteBlob(String hash) => inner.deleteBlob(hash);
+}
+
+/// Forwards to [inner]; the first PUT fails as unreachable, after storing the file when [stored] (an answer lost on the
+/// way back) or before (the request never arrived).
+class _LosePut extends _RacingTransport {
+  final bool stored;
+  _LosePut(SyncTransport inner, {required this.stored}) : super(inner, null);
+  var _done = false;
+  @override
+  Future<void> put(String device, int seq, List<int> bytes) async {
+    if (_done) return inner.put(device, seq, bytes);
+    _done = true;
+    if (stored) await inner.put(device, seq, bytes);
+    throw const TransportException(TransportFailure.unreachable, 'lost');
+  }
 }

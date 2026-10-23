@@ -310,10 +310,34 @@ class SyncEngine {
   /// [SyncProblemReason.deviceIdInUse] (JSON list), so each is reported once.
   static const foreignKey = 'syncForeign';
 
-  /// Device-local: `<from>:<to>` while an upload is under way: the stream's `last` before it and the highest seq it
-  /// may have stored. Cleared once every part is stored (and on a 409). Only those seqs count as this install's own
-  /// cut-off files when the stream holds more than [sentKey] says.
+  /// Device-local: `{"from": <the stream's last before it>, "parts": {"<seq>": "<fileHash of the sealed part>"}}` while
+  /// an upload is under way (each part recorded before its PUT). Cleared once every part is stored (and on a 409).
+  /// When the stream holds more than [sentKey] says, a seq counts as this install's own cut-off file only if its stored
+  /// bytes hash to the recorded part (fetched once to check); anything else is another install's.
   static const sendingKey = 'syncSending';
+
+  /// Device-local: per stream in [streamsKey] that this install no longer writes, the relay `last` when it left it
+  /// (`{"<stream>": n}`; an H6 id change records the old id's `syncSent`). Should the relay ever hold more, another install
+  /// writes it: it is dropped from [streamsKey] (never acked as again) and treated as foreign.
+  static const streamLastKey = 'syncStreamLast';
+
+  /// Device-local: the acks this install stored per stream it acks as (`{"<stream>": {"<device>": seq}}`). The relay
+  /// only ever raises acks, so one below these means the relay was rolled back (its data folder restored from a copy,
+  /// even with the same instance): every cursor goes back to 0 ([SyncReport.relayChanged]).
+  static const ackedKey = 'syncAcked';
+
+  static Map<String, Object?> _map(WalletRepo repo, String key) {
+    final raw = repo.localValue(key);
+    if (raw == null) return {};
+    try {
+      return (jsonDecode(raw) as Map).cast<String, Object?>();
+    } on Object catch (e, st) {
+      logError(_log, 'sync.local.unreadable', e, st, fields: {'key': key});
+      return {};
+    }
+  }
+
+  static void _setMap(WalletRepo repo, String key, Map<String, Object?> v) => repo.setLocalValue(key, v.isEmpty ? null : jsonEncode(v));
 
   /// The relay device name of [deviceId]'s stream [epoch]: the id itself for epoch 0 (every file before Stage H), else
   /// `<id>-<epoch><tag>` with [tag] six random lower-case letters, so two installs (or one install after a double
@@ -358,8 +382,10 @@ class SyncEngine {
     if (shared) {
       written.remove(cur);
       _setList(repo, foreignKey, {..._list(repo, foreignKey), cur}.toList());
-    } else if (repo.localValue(sentKey) != null && !written.contains(cur)) {
-      written.add(cur); // written before the list existed (a build before Stage H)
+    } else {
+      if (repo.localValue(sentKey) != null && !written.contains(cur)) written.add(cur); // listed only since Stage H
+      // Its relay `last` now: should it grow, another install writes it ([streamLastKey]).
+      _setMap(repo, streamLastKey, {..._map(repo, streamLastKey), cur: state.devices[cur]?.last ?? 0});
     }
     var epoch = streamEpoch(cur);
     for (final d in [...state.devices.keys, ...written]) {
@@ -436,7 +462,21 @@ class SyncEngine {
     // when its seq numbers look plausible (an older image restored): a first connect, every cursor from the start.
     final storedInstance = repo.localValue(instanceKey);
     var relayChanged = state.instance != null && storedInstance != null && storedInstance != state.instance;
+    // HBb: acks only ever grow on a relay. One below what this install stored = the relay's folder was restored from an
+    // older copy (same instance): files it now numbers again may differ from the ones read. Start over like a new relay.
+    if (!relayChanged) {
+      var rolledBack = false;
+      for (final MapEntry(key: s, value: m) in _map(repo, ackedKey).entries) {
+        final relay = state.devices[s]?.acks ?? const <String, int>{};
+        if (m is Map && m.entries.any((e) => e.value is int && (relay[e.key] ?? 0) < (e.value as int))) rolledBack = true;
+      }
+      if (rolledBack) {
+        logEvent(_log, Level.WARNING, 'sync.relay.rolledBack');
+        relayChanged = true;
+      }
+    }
     if (relayChanged) {
+      repo.setLocalValue(ackedKey, null);
       final reset = repo.syncCursors();
       for (final d in reset.keys) {
         repo.setSyncCursor(d, 0);
@@ -470,6 +510,21 @@ class SyncEngine {
     // by another install with this id.
     final stream = _streamOf(repo);
     final written = _list(repo, streamsKey);
+    // A stream this install left that holds more files than when it left it: another install writes it (an H6 id
+    // change on a copied database while the original goes on, or a 'behind' stream someone else continued). Never
+    // acked as again: its acks would claim reads that install never made, and let the relay prune too early.
+    final leftAt = _map(repo, streamLastKey);
+    final grown = [
+      for (final d in written)
+        if (d != stream && leftAt[d] is int && (state.devices[d]?.last ?? 0) > (leftAt[d] as int)) d
+    ];
+    if (grown.isNotEmpty) {
+      logEvent(_log, Level.WARNING, 'sync.stream.grown', {'streams': grown.length});
+      written.removeWhere(grown.contains);
+      _setList(repo, streamsKey, written);
+      _setList(repo, foreignKey, {..._list(repo, foreignKey), ...grown}.toList());
+      _setMap(repo, ackedKey, _map(repo, ackedKey)..removeWhere((k, _) => grown.contains(k)));
+    }
     final ownOld = [
       for (final d in written)
         if (d != stream && state.devices.containsKey(d)) d
@@ -485,7 +540,8 @@ class SyncEngine {
       logEvent(_log, Level.WARNING, 'sync.stream.foreign', {'streams': sighted.length});
       _setList(repo, foreignKey, [...reported, ...sighted]);
     }
-    final inUse = inUseUpload ?? (sighted.isNotEmpty ? SyncProblem(_short(me), SyncProblemReason.deviceIdInUse, bytes: 0) : null);
+    final inUse =
+        inUseUpload ?? (sighted.isNotEmpty || grown.isNotEmpty ? SyncProblem(_short(me), SyncProblemReason.deviceIdInUse, bytes: 0) : null);
     if (blobMissing && !walletKnown && myLast > 0) {
       // A relay creates a wallet only with this device's first file: the files it refused before that go now.
       final (more, missingAgain) = await _uploadBlobs(repo);
@@ -647,19 +703,33 @@ class SyncEngine {
       for (final d in peers)
         if (cur(d) > 0 && cur(d) <= state.devices[d]!.last) d: cur(d)
     };
+    final stored = _map(repo, ackedKey);
+    void remember(String as, Map<String, int> m) {
+      final had = stored[as] is Map ? (stored[as] as Map).cast<String, Object?>() : <String, Object?>{};
+      stored[as] = {
+        ...had,
+        for (final e in m.entries)
+          if (e.value > ((had[e.key] as int?) ?? 0)) e.key: e.value,
+      };
+    }
+
     try {
       await transport.ack(stream, acks);
       acked = true;
+      remember(stream, acks);
       for (final old in ownOld) {
-        await transport.ack(old, {
+        final m = {
           for (final e in acks.entries)
             if (e.key != old) e.key: e.value,
           if (myLast > 0) stream: myLast,
-        });
+        };
+        await transport.ack(old, m);
+        remember(old, m);
       }
     } on TransportException catch (e) {
       logEvent(_log, Level.WARNING, 'sync.ack.failed', {'failure': e.failure.name});
     }
+    _setMap(repo, ackedKey, stored);
 
     // 4b. Bill files deleted here go from the relay too (a failure keeps them queued).
     final blobsDeleted = await _deleteBlobs(repo);
@@ -789,16 +859,19 @@ class SyncEngine {
     var me = _streamOf(repo);
     var relayLast = state.devices[me]?.last ?? 0;
     var marker = int.tryParse(repo.localValue(sentKey) ?? '');
-    final sending = RegExp(r'^(\d+):(\d+)$').firstMatch(repo.localValue(sendingKey) ?? '');
-    final cutOffTo = sending == null ? null : int.parse(sending.group(2)!);
     if (marker != null && relayLast < marker) {
       // The relay lost files of this stream (a restored copy, a wiped relay): never reuse a seq with other content.
       me = _move(repo, state, shared: false, reason: 'behind');
-    } else if (relayLast > (marker ?? 0) && (cutOffTo == null || relayLast > cutOffTo)) {
-      // More files than this install stored, and not its own cut-off upload: another install writes here (a copied
-      // database or key store, or this database restored from an older copy). Leave it to them, read it as a peer.
-      me = _move(repo, state, shared: !relayChanged, reason: relayChanged ? 'relay' : 'foreign');
-      if (!relayChanged) inUse = foreign(0);
+    } else if (relayLast > (marker ?? 0)) {
+      // More files than this install stored: its own cut-off upload only if every extra seq holds a part it recorded
+      // ([sendingKey], checked by hash); else another install writes here (a copied database or key store, or this
+      // database restored from an older copy). Leave it to them and read it as a peer.
+      final own = await _ownCutOff(repo, me, marker ?? 0, relayLast);
+      if (own == null) return (0, relayLast, null); // could not check now: nothing sent, checked again next run
+      if (!own) {
+        me = _move(repo, state, shared: !relayChanged, reason: relayChanged ? 'relay' : 'foreign');
+        if (!relayChanged) inUse = foreign(0);
+      }
     }
     relayLast = state.devices[me]?.last ?? 0;
     marker = int.tryParse(repo.localValue(sentKey) ?? '');
@@ -824,6 +897,7 @@ class SyncEngine {
     // measured, halved while over. The outbox and [sentKey] change only once every part is stored, so a run that stops
     // half-way sends everything again next time (ops are idempotent: a clock is only taken when newer).
     var seq = relayLast, done = 0, size = ops.length, jsonBytes = 0, bytes = 0;
+    final parts = <String, Object?>{};
     while (done < ops.length) {
       var count = min(size, ops.length - done);
       List<int> payload, sealed;
@@ -833,7 +907,8 @@ class SyncEngine {
         if (sealed.length <= partBytes || count == 1) break;
         count = (count + 1) ~/ 2;
       }
-      repo.setLocalValue(sendingKey, '$relayLast:${seq + 1}');
+      parts['${seq + 1}'] = await fileHash(sealed);
+      repo.setLocalValue(sendingKey, jsonEncode({'from': relayLast, 'parts': parts}));
       try {
         await transport.put(me, seq + 1, sealed);
       } on TransportException catch (e) {
@@ -871,6 +946,26 @@ class SyncEngine {
     _keepInstance(repo, state);
     t.done({'ops': ops.length, 'seq': seq, 'files': seq - relayLast, 'jsonBytes': jsonBytes, 'bytes': bytes, 'whole': first});
     return (ops.length, seq, inUse);
+  }
+
+  /// Whether seqs `marker + 1 .. relayLast` of this install's stream [me] are its own cut-off upload: each recorded in
+  /// [sendingKey] and its stored bytes hash to the recorded part. Null when one could not be fetched (checked again on
+  /// the next run).
+  Future<bool?> _ownCutOff(WalletRepo repo, String me, int marker, int relayLast) async {
+    final sending = _map(repo, sendingKey);
+    final parts = sending['parts'], from = sending['from'];
+    if (parts is! Map || from is! int) return false;
+    for (var q = max(marker, from) + 1; q <= relayLast; q++) {
+      final want = parts['$q'];
+      if (want is! String) return false;
+      try {
+        if (await fileHash(await transport.get(me, q)) != want) return false;
+      } on TransportException catch (e) {
+        logEvent(_log, Level.WARNING, 'sync.stream.checkFailed', {'seq': q, 'failure': e.failure.name});
+        return null;
+      }
+    }
+    return true;
   }
 
   /// Stores the relay's instance id once an upload went through completely (a first connect that stopped half-way is

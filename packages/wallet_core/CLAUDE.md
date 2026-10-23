@@ -144,8 +144,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `step:` (`copied`, `rekeyed`, `verified`). The app (R6b) passes the key on native and wraps the web VFS
   (`multipleciphers-<fs>`) itself.
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart` (H7 bounded HLC: `maxClockDrift` 1 h; an owner write (the
-  public write API) throws `ClockBehindException` (nothing written, message without clock values) while the wall clock
-  is more than that behind `clock.last`; `repo.clockBehind` logs minutes only. Internal write paths skip the guard:
+  public write API) throws `ClockBehindException` (nothing written, message without clock values) while this device's
+  wall clock is more than that behind the highest reading it wrote with (device-local meta `wall_high`, raised by every
+  write, owner or internal; never a peer's clock, so a database holding a far-future HLC from before Stage H still accepts owner
+  writes); `repo.clockBehind` logs minutes only. Internal write paths skip the guard:
   `WalletRepo._writeInternal(changes)` and `_asInternal(body)` (the open-time migration, `_reconcile` = pairing,
   matching, H9 repairs, bill links, `refreshRecurring`, `runPendingMatch`, `dropOrphanBlobs`); `tick` stays monotonic.
   `SyncEngine.run` catches a `ClockBehindException` from `runPendingMatch` (logged, matching stays pending).
@@ -167,7 +169,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `fromDatabase(db, {file, now, deviceId})`. Null = the meta `device_id` (a new database makes one). Given and
   different from the stored one: meta `device_id` takes it, local `syncSent`/`syncStream`/`syncSending` are cleared,
   so the next sync is a first connect under the new id (whole state, clocks unchanged; the outbox is kept and marked
-  sent by it); the old id's stream is added to `syncStreams` (still acked as) and read like a peer's. Ids are
+  sent by it); the old id's stream (when this install stored or was storing a file there) is added to `syncStreams`
+  with its highest stored seq in `syncStreamLast` (acked as until it grows) and read like a peer's. Ids are
   `[A-Za-z0-9]{1,48}` (`ArgumentError` else; a relay stream name is `<id>-<n><tag>`). `WalletRepo.newDeviceId()` (16 hex), `WalletRepo.storedDeviceId(db)` (read only),
   `repo.deviceId` of a database opened without one = the id to move into the app's key store once.
 - `backup.dart` — backups (M5, owner decision 2026-10-22: no sync folder, "Back up now" saves the sealed `.bwb` through
@@ -292,11 +295,15 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   yet = adopted; a run that created the wallet asks `state` once more to learn it); streams and ownership (H5b/HBb,
   RELAY_PROTOCOL.md "Device streams and ownership"; `SyncEngine.streamName/streamBase/streamEpoch`, local
   `syncStream` (current; absent = the device id), `syncStreams` (every stream this install wrote and acks as),
-  `syncSending` (`<from>:<to>` during an upload), `syncForeign` (same-id streams already reported)): `_move` takes a
-  fresh stream `<id>-<n><6 random letters>` (n above every same-id stream known) and the next upload is the whole state
-  from seq 1, when the relay's `last` of the current stream is below `syncSent` (kept as acked), above it with no own
-  cut-off upload covering it (another install, or this database restored from an older file copy; no longer acked
-  as), or on a 409 (same run, once; `syncSending` cleared). Every stream but the current one is read like a peer's;
+  `syncSending` (`{"from", "parts": {seq: fileHash}}` during an upload, each part recorded before its PUT),
+  `syncForeign` (streams of other installs already reported), `syncStreamLast` (relay `last` of each stream it left),
+  `syncAcked` (the acks it stored per stream)): `_move` takes a fresh stream `<id>-<n><6 random letters>` (n above
+  every same-id stream known) and the next upload is the whole state from seq 1, when the relay's `last` of the current
+  stream is below `syncSent` (kept as acked; its `last` recorded), above it with an extra seq that is not its own
+  recorded part (fetched and hashed once; another install, or this database restored from an older file copy; no
+  longer acked as), or on a 409 (same run, once; `syncSending` cleared). A left stream whose `last` grows past
+  `syncStreamLast` is dropped from `syncStreams` (another install writes it; reported once). An ack on the relay below
+  `syncAcked` = a rolled-back relay: `relayChanged`, every cursor 0, `syncAcked` cleared. Every stream but the current one is read like a peer's;
   acks go under the current stream and every listed stream in `syncStreams` (cursors + the current `last`); cursors of
   streams the relay no longer lists are dropped; `SyncReport.devices` lists one entry per device id. `deviceIdInUse`
   (`SyncProblem.device` = own short id, `bytes` 0 or the refused file's size) is information, reported once per move or
@@ -406,7 +413,12 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   for the 90-day `lastSeen` rule. A database restored from an older file copy looks the same (it reads its own later
   files back from the old stream).
 - Device id per install: the old id's stream after an id change stays on the relay as a peer (read once, idempotent)
-  and acked as until pruned.
+  and acked as until pruned, or until it grows (the original of a copied database writes it): then never again. Until
+  that first growth the copy's acks under it count for pruning; a pruned file is still covered by a snapshot.
+- Double restore (database and relay folder from one moment): peers that read past it notice through their acks
+  (rolled-back relay) and start over; streams this install made after the moment are missing from its restored
+  `syncStreams` and are reported once as `deviceIdInUse`. A stream left to another install that stops syncing holds
+  back pruning for up to 90 days (`lastSeen` rule).
 - The snapshot rule's "500 ops behind" counts only the files this device applied or sent itself (`sync_files`); files it
   skipped by starting from a snapshot are not counted.
 - Own transfers: two devices that pair offline from different row sets can write different partners for one row;
@@ -417,10 +429,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   upgrade) and categorize a paired row by its text, so they can show a transfer as spending until they upgrade.
 - Bounded HLC (H7): a peer whose clock is more than an hour ahead has its files quarantined (`clockDrift`) on the
   others until their clocks catch up or it is corrected (its later files wait behind the first one); it still reads
-  theirs. A device whose clock is set more than an hour back cannot make owner writes until it is set right (sync,
-  matching and repairs go on). Clocks taken before Stage H (a far-future op already applied) still count as the newest
-  clock, so such a database refuses owner writes until the wall clock passes them. Older builds take far-future clocks
-  as before.
+  theirs. A device whose clock is set more than an hour back (behind its own highest reading) cannot make owner
+  writes until it is set right (sync, matching and repairs go on). A database holding far-future clocks taken before
+  Stage H keeps working; its new writes are stamped just after those clocks (the HLC counts on from the newest). A clock that is wrong
+  from the very first open is not detected. Older builds take far-future clocks as before.
 - BWOP2 (H8): files, snapshots and backups written by Stage H builds are unreadable to older builds (`unknownVersion`
   / `newerFormat`, read after their upgrade); a `.bwb` made now does not restore on an older build. `BWOP1` from older
   builds is read without AAD, so an old file moved to another seq on the relay is not detected (only `BWOP2` binds it).
