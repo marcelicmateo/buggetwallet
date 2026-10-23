@@ -111,6 +111,7 @@ class _BackupPanelState extends State<BackupPanel> {
         BackupFailure.unreadable => "This backup file can't be read.",
         BackupFailure.damaged => 'This backup file is damaged.',
         BackupFailure.newerVersion => 'Made by a newer app version. Update first.',
+        BackupFailure.clockAhead => "This backup has changes dated later than this device's clock. Check the date and time.",
       };
     } catch (e, st) {
       logError(_log, 'restore.unexpected', e, st);

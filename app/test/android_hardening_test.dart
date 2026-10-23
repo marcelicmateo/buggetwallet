@@ -11,7 +11,6 @@ import 'package:flutter_test/flutter_test.dart';
 final _root = Platform.environment['BW_ANDROID_ROOT'] ?? 'android/app';
 String _read(String rel) => File('$_root/$rel').readAsStringSync();
 
-const _h10 = 'BUG: H10 - lifted when the Android hardening (platform branch) is merged';
 
 const _domains = [
   'root',
@@ -39,7 +38,7 @@ void main() {
     test('android:allowBackup is "false": the encrypted database and the key store entry are not copied to a cloud backup or adb backup',
         () {
       expect(attr('allowBackup'), 'false');
-    }, skip: _h10);
+    });
 
     test('data_extraction_rules.xml (Android 12+) excludes every domain, device_* ones included, from cloud backup and device transfer',
         () {
@@ -54,7 +53,7 @@ void main() {
           expect(body, contains('<exclude domain="$d"'), reason: '$block excludes $d');
         }
       }
-    }, skip: _h10);
+    });
 
     test('backup_rules.xml (Android 11 and older, android:fullBackupContent) excludes every domain too', () {
       expect(attr('fullBackupContent'), '@xml/backup_rules');
@@ -64,7 +63,7 @@ void main() {
       for (final d in _domains) {
         expect(xml, contains('<exclude domain="$d"'), reason: d);
       }
-    }, skip: _h10);
+    });
   });
 
   group('network', () {
@@ -77,7 +76,7 @@ void main() {
       expect(anchors, isNot(contains('src="user"')));
       expect(xml, isNot(contains('debug-overrides')));
       expect(xml, isNot(contains('<pin-set')), reason: 'a pin would lock the owner out of a relay with a renewed certificate');
-    }, skip: _h10);
+    });
   });
 
   group('permissions and components (unchanged by H10, must keep holding)', () {
@@ -112,7 +111,7 @@ void main() {
       expect(gradle, contains('assembleRelease'));
       expect(gradle, contains('BW_KEYSTORE_PASSWORD'));
       expect(gradle, isNot(contains('else "debug"')));
-    }, skip: _h10);
+    });
   });
 
   group('key sheet', () {
@@ -122,6 +121,6 @@ void main() {
       expect(activity, contains('"setSecure"'));
       expect(activity, contains('window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)'));
       expect(activity, contains('window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)'));
-    }, skip: _h10);
+    });
   });
 }

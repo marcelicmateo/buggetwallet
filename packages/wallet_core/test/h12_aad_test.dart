@@ -1,9 +1,6 @@
-@Skip(
-    'BUG: H8 - needs the AAD constants of the Stage H contract (aadSyncFile, aadSnapshot, aadBackup, aadBlob, aadWebKey); lift this skip and the ignores below when they are exported')
 @TestOn('vm')
 library;
 
-// ignore_for_file: undefined_identifier, undefined_function, argument_type_not_assignable
 // Stage H12 (AAD constants of BWOP2). Written against the contract names: `aadSyncFile(device, seq)`,
 // `aadSnapshot(id)`, `aadBackup`, `aadBlob`, `aadWebKey`, all `List<int>` (UTF-8 of `bw-sync-file\n<device>\n<seq>`,
 // `bw-snapshot\n<id>`, `bw-backup`, `bw-blob` and the web key wrap's own text). The names do not exist on v2, so the file

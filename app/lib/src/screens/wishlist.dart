@@ -115,8 +115,9 @@ class _WishlistScreenState extends State<WishlistScreen> {
       Verdict.now => const StatusLabel(good: true, text: 'Fits this month'),
       Verdict.tight => const StatusLabel(good: false, text: 'Possible, but tight'),
       Verdict.later => const StatusLabel(good: false, text: 'Not this month'),
+      Verdict.overBudget => const StatusLabel(good: false, text: 'Over budget this period'),
     };
-    final body = a.verdict == Verdict.later
+    final body = a.verdict == Verdict.later || a.verdict == Verdict.overBudget
         ? "It's more than the ${money(p.flexBudget - p.spent < 0 ? 0 : p.flexBudget - p.spent, cur, decimals: 0)} you have left until payday."
         : 'Your daily budget would drop from ${money(p.allowanceToday, cur)} to ${money(a.newDaily, cur)} for the next ${p.daysLeft} days.';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

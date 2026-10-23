@@ -99,7 +99,6 @@ class Relay {
     this.maxInFlightBytes = defaultMaxInFlightBytes,
     this.createToken,
     this.trustProxy = false,
-    this.publicHost,
     DateTime Function()? now,
     void Function(String line)? log,
     this.publicHost,
@@ -124,9 +123,6 @@ class Relay {
   /// proxy that is the sole way to reach the relay.
   final bool trustProxy;
 
-  /// The name clients address this relay by (lower case, no port unless not default), for the host in the signed text.
-  /// STUB on this branch: core-builder B's v3 signature check reads it (null = the request's `Host`); nothing here uses it yet.
-  final String? publicHost;
   final DateTime Function() _now;
   final void Function(String) _log;
 

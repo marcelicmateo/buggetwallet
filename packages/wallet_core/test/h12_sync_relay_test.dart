@@ -153,7 +153,7 @@ void main() {
       expect(data(a), data(b));
       expect(_ids(a).containsAll(kept), isTrue);
       expect(_ids(b).containsAll(kept), isTrue);
-    }, skip: 'BUG: H5b - relay restored from an older copy loses edits made after it', timeout: _t);
+    }, timeout: _t);
 
     test('a lagging peer: the restored relay re-numbers a device\'s files, and the peer still gets its newest edit', () async {
       // A uploads seq 1, B reads it, A uploads seq 2 and 3, B reads 2 only. The relay goes back to "A has 1 file".
@@ -176,7 +176,7 @@ void main() {
       await c.syncAll(rounds: 5);
       expect(_ids(b), contains(e2), reason: "B must end with A's newest edit although its cursor says it read that file number");
       expect(data(a), data(b));
-    }, skip: 'BUG: H5b - relay restored from an older copy loses edits made after it', timeout: _t);
+    }, timeout: _t);
     test('both streams roll back: A and B both uploaded past the copy, then new edits on both sides reach the other', () async {
       final (c, rig) = await _relayCluster();
       final [a, b] = [c.add(), c.add()];

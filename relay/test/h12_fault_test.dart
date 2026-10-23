@@ -77,7 +77,6 @@ void main() {
       final names = Directory(h.dir.path).listSync(recursive: true).map((e) => e.uri.pathSegments.where((s) => s.isNotEmpty).last);
       expect(names.where((n) => n.startsWith('.tmp')), isEmpty);
     },
-        skip: 'BUG: H11 - Wallet.load leaves .tmp-* files of an interrupted meta save in the wallet folder (documented as deleted)',
         timeout: _t);
 
     test('the meta save fails after the file was written: 5xx, then the retry of the same bytes succeeds and a restart agrees', () async {
@@ -220,7 +219,7 @@ void main() {
       final r = await h.getData(w1, 'dev1', 2);
       expect(r.statusCode, 404);
       expect(jsonDecode(r.body), {'error': 'missing'});
-    }, skip: 'BUG: H11 - a missing file of a known device answers 500 {"error":"storage"} (wanted 404 {"error":"missing"})', timeout: _t);
+    }, timeout: _t);
 
     test('a damaged meta.json next to data files: the wallet is gone, its data files are not served to another key', () async {
       final h = await freshHarness();

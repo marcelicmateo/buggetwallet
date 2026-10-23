@@ -181,7 +181,7 @@ void main() {
       for (final (day, want) in [(1, 1), (15, 15), (28, 28), (29, 28), (30, 28), (31, 28), (0, 15), (-3, 15), (32, 15), (99, 15)]) {
         expect(WalletSettings.fromMap({'paydayDay': day}).paydayDay, want, reason: '$day');
       }
-    }, skip: 'BUG: H2 - payday day clamp 1..28 (29..31 read as 28, anything else invalid falls back to 15) in WalletSettings', timeout: _t);
+    }, timeout: _t);
   });
 
   group('H2: over budget', () {

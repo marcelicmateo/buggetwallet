@@ -1,5 +1,3 @@
-@Skip(
-    'BUG: H5/H8 - needs the RelayTestHooks seam of the Stage H contract (afterFileWrite, beforeMetaSave); lift this skip and the ignores below when it lands')
 @TestOn('vm')
 library;
 
@@ -8,7 +6,6 @@ library;
 // relay/lib/src/wallet.dart; a throw inside a hook simulates a crash or a full disk between the two writes. The names
 // do not exist on v2, so the file is skipped as a whole (the runner never loads it) and the analyzer errors are ignored
 // until the seam lands; adjust the argument name `hooks:` and the callback shapes to the final signatures.
-// ignore_for_file: undefined_function, undefined_class, undefined_identifier, undefined_named_parameter, argument_type_not_assignable, invalid_assignment
 import 'dart:io';
 
 import 'package:relay/relay.dart';

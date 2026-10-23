@@ -21,7 +21,6 @@ const _pbzHeader = ['DATUM', 'VRSTA TRANSAKCIJE', 'OPIS PLAĆANJA', 'IZNOS', 'VA
 
 void main() {
   group('PBZ detection needs the whole header (H4)', () {
-    const skipH4 = 'BUG: H4 - PbzProfile.detect accepts any sheet with a DATUM cell or the account label';
 
     test('the real header tuple on one row is PBZ (and the synthetic fixture still imports)', () {
       final b = parseRows([
@@ -44,7 +43,7 @@ void main() {
       ];
       expect(parseRows(other), isNull, reason: 'it must be refused, not read with PBZ\'s fixed columns');
       expect(() => importBankFile(_csv(other)), throwsA(isA<ImportException>().having((e) => e.message, 'message', unknownLayoutMessage)));
-    }, skip: skipH4, timeout: _t);
+    }, timeout: _t);
 
     test('a header that holds only some of the five names is not PBZ', () {
       for (final partial in [
@@ -61,7 +60,7 @@ void main() {
             isNull,
             reason: '$partial');
       }
-    }, skip: skipH4, timeout: _t);
+    }, timeout: _t);
 
     test('the names must share one row: a title row with DATUM above a row with the rest is not the tuple', () {
       expect(
@@ -71,7 +70,7 @@ void main() {
             ['10.01.2026', 'x', 'y', '-1,00', 'EUR'],
           ]),
           isNull);
-    }, skip: skipH4, timeout: _t);
+    }, timeout: _t);
 
     test('the account label alone does not make a PBZ file', () {
       expect(
@@ -81,7 +80,7 @@ void main() {
             ['10.01.2026', '-5,00'],
           ]),
           isNull);
-    }, skip: skipH4, timeout: _t);
+    }, timeout: _t);
 
     test('a Revolut sheet that also has a DATUM cell is still Revolut', () {
       final b = parseRows([
@@ -180,7 +179,7 @@ void main() {
           () => importBankFile(bytes),
           throwsA(isA<ImportException>()
               .having((e) => e.message.toLowerCase(), 'message', allOf(contains('password'), isNot(contains('damaged'))))));
-    }, skip: 'BUG: H4 - FILEPASS is not detected: an encrypted .xls is reported as damaged or unknown', timeout: _t);
+    }, timeout: _t);
 
     test('a file over 20 MiB is refused up front; exactly 20 MiB is not refused for its size', () {
       const cap = 20 * 1024 * 1024;
@@ -198,7 +197,7 @@ void main() {
       expect(over, isNot(unknownLayoutMessage));
       expect(over.toString().toLowerCase(), contains('large'), reason: 'a size message, not a layout one');
       expect(message(cap), isNot(over), reason: 'the limit is inclusive');
-    }, skip: 'BUG: H4 - importBankFile has no size cap (maxImportBytes = 20 MiB)', timeout: _t);
+    }, timeout: _t);
 
     test('an .xlsx that inflates to far more than it weighs is refused, quickly', () {
       final bytes = _zipWith({'xl/worksheets/sheet1.xml': _hugeSheet(120 << 20)});
@@ -211,14 +210,14 @@ void main() {
               .having((e) => e.message.toLowerCase(), 'message', contains('too large'))),
           reason: 'the header is valid Revolut: only the size limit may refuse it, and it says so');
       expect(sw.elapsed, lessThan(const Duration(seconds: 30)));
-    }, skip: 'BUG: H4 - XlsxReader has no inflate cap (a 120 MiB sheet is read in full)', timeout: _t);
+    }, timeout: _t);
 
     test('an .xlsx whose directory lies about the size never yields rows from the 120 MiB it really holds, and fails fast', () {
       final bytes = _zipWith({'xl/worksheets/sheet1.xml': _hugeSheet(120 << 20)}, lieAboutSize: true);
       final sw = Stopwatch()..start();
       expect(() => importBankFile(bytes), throwsA(isA<ImportException>()));
       expect(sw.elapsed, lessThan(const Duration(seconds: 30)));
-    }, skip: 'BUG: H4 - XlsxReader has no inflate cap', timeout: _t);
+    }, timeout: _t);
 
     test('an ordinary workbook still opens next to the cap (the fixture and a 3 MiB sheet)', () {
       expect(importBankFile(File('test/fixtures/revolut_synthetic.xlsx').readAsBytesSync()).source, 'revolut');

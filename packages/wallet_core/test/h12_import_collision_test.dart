@@ -80,8 +80,6 @@ void main() {
       expect(_collisions(s), 1);
       expect(r.transactions().firstWhere((t) => t.id == fresh.id).amount, -700);
     },
-        skip:
-            'BUG: H4 - the same id twice in ONE batch with another amount is imported twice (added 2) and the second overwrites the first',
         timeout: _t);
 
     test('the collision event carries a count only: no amount, description, id or date', () {

@@ -302,7 +302,7 @@ void main() {
       // Afterwards a new run is a new run again.
       final r3 = await a.engine.run(a.repo);
       expect(identical(r3, r1), isFalse);
-    }, skip: 'BUG: H9 - SyncEngine.run is not re-entrant: a second call while one runs starts a second run', timeout: _t);
+    }, timeout: _t);
   });
 
   group('concurrent budget edits (H3)', () {
@@ -404,7 +404,7 @@ void main() {
       }
       expect(data(a), data(b));
       expect(a.repo.bills().where((bill) => bill.linkedTx == t1), hasLength(1));
-    }, skip: 'BUG: H9 - bill.linked_tx is not unique across live bills after a merge (two bills pay one transaction)', timeout: _t);
+    }, timeout: _t);
 
     test('one bill linked to two different payments on two devices: one wins on both, its planned row agrees', () async {
       final (c, a, b, x, _, t1, t2) = await setup();
@@ -440,7 +440,7 @@ void main() {
         final planned = d.repo.plannedCosts(includeClosed: true).singleWhere((p) => p.id == 'bill:$x');
         expect(planned.status == PlannedStatus.paid, bill.paid, reason: 'the planned row follows the bill');
       }
-    }, skip: 'BUG: H9 - planned.paid_tx stays set on an open planned row after a concurrent unlink', timeout: _t);
+    }, timeout: _t);
 
     test('one device alone: unlink clears the planned row\'s paid_tx (stray payment on an open row)', () async {
       final (c, a, _, x, _, t1, _) = await setup();
@@ -448,7 +448,7 @@ void main() {
       a.repo.linkBill(x, t1);
       a.repo.unlinkBill(x);
       expect(strayPaidTx(a.repo), isEmpty);
-    }, skip: 'BUG: H9 - planned.paid_tx is not cleared when status != paid', timeout: _t);
+    }, timeout: _t);
 
     test('a payment deleted on one device while linked on the other: the link does not outlive the transaction', () async {
       final (c, a, b, x, _, t1, _) = await setup();
@@ -465,7 +465,7 @@ void main() {
         }
         expect(strayPaidTx(d.repo), isEmpty);
       }
-    }, skip: 'BUG: H9 - a link to a payment row deleted elsewhere is not repaired when caught up', timeout: _t);
+    }, timeout: _t);
   });
 
   group('transfer symmetry and invariants', () {

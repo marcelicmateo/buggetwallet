@@ -122,7 +122,7 @@ void main() {
     final url = Uri.parse('http://127.0.0.1:$port/v2/w/$w1/d/dev1/1');
     Future<int> put(Map<String, String> extra) async => (await http.put(
           url,
-          headers: {...await keyA.headers('PUT', url.path, bytes('x'), timeMs: DateTime.now().millisecondsSinceEpoch), ...extra},
+          headers: {...await keyA.headers('PUT', url.path, bytes('x'), timeMs: DateTime.now().millisecondsSinceEpoch, host: url.authority), ...extra},
           body: 'x',
         ))
             .statusCode;
@@ -138,7 +138,7 @@ void main() {
     final url2 = Uri.parse('http://127.0.0.1:$qport/v2/w/$w1/d/dev1/1');
     final r = await http.put(
       url2,
-      headers: await keyA.headers('PUT', url2.path, bytes('x'), timeMs: DateTime.now().millisecondsSinceEpoch),
+      headers: await keyA.headers('PUT', url2.path, bytes('x'), timeMs: DateTime.now().millisecondsSinceEpoch, host: url2.authority),
       body: 'x',
     );
     expect(r.statusCode, 403);
