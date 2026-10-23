@@ -39,6 +39,12 @@ Future<void> openAddExpense(WidgetTester t) async {
   expect(find.byType(AddExpenseSheet), findsOneWidget);
 }
 
+/// A new expense has no category until one is used: the CTA waits for a pick.
+Future<void> pickCategory(WidgetTester t, String c) async {
+  await tapVisible(t, inSheet(AddExpenseSheet, find.widgetWithText(ChoiceChip, c)));
+  await t.pumpAndSettle();
+}
+
 void main() {
   Harness.init();
   Harness.private(texts: ['Lunch', 'Headphones', 'Taxi', 'Ana'], cents: [2347, 12000, 7510, 3456, 1999, 2999, 3999, 4999, 1599, 98000]);
@@ -51,13 +57,16 @@ void main() {
     expect(safeText(t), money(before.safeToday, 'EUR', decimals: 0));
 
     await openAddExpense(t);
+    final save = find.byKey(const ValueKey('addExpenseSave'));
+    expect(t.widget<FilledButton>(save).onPressed, isNull, reason: 'no category yet: the button waits');
+    await pickCategory(t, 'Eating out');
+    expect(t.widget<FilledButton>(save).onPressed, isNotNull);
     await tapVisible(t, sheetButton('Add expense'));
     await t.pumpAndSettle();
     expect(status('Enter an amount, like 12.50.'), findsOneWidget);
     expect(wc.txs, isEmpty);
 
     await t.enterText(inSheet(AddExpenseSheet, find.byType(TextField)).first, '23,47');
-    await tapVisible(t, inSheet(AddExpenseSheet, find.widgetWithText(ChoiceChip, 'Eating out')));
     await t.enterText(inSheet(AddExpenseSheet, field('Note')), 'Lunch synthetic note');
     await t.pumpAndSettle();
     await tapVisible(t, sheetButton('Add expense'));
@@ -96,6 +105,7 @@ void main() {
     final wc = await Harness.start(t, settings: plan(todayIso()));
     await openAddExpense(t);
     await t.enterText(inSheet(AddExpenseSheet, find.byType(TextField)).first, '120');
+    await pickCategory(t, 'Groceries');
     await t.enterText(inSheet(AddExpenseSheet, field('Note')), 'Headphones synthetic');
     await tapVisible(t, sheetButton('Add expense'));
     await t.pumpAndSettle();
@@ -112,6 +122,7 @@ void main() {
 
     await openAddExpense(t);
     await t.enterText(inSheet(AddExpenseSheet, find.byType(TextField)).first, '75.10');
+    await pickCategory(t, 'Groceries');
     await tapVisible(t, sheetButton('Add expense'));
     await t.pumpAndSettle();
     expect(find.text('Over 50\u00A0€: wishlist first?'), findsOneWidget);
@@ -119,7 +130,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byType(AddExpenseSheet), findsNothing);
     expect(wc.txs.single.amount, -7510);
-    expect(wc.txs.single.category, 'Groceries', reason: 'the default category');
+    expect(wc.txs.single.category, 'Groceries', reason: 'the category picked');
     expect(wc.wish, hasLength(1));
     await Harness.checkLog();
   });

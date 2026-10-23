@@ -73,7 +73,7 @@ void main() {
     // 2500 - 600.50 - 250 - 45.99 - 200 (default goals) = 1403.51
     expect(p.flexBudget, 140351);
     await scrollTo(t, find.text('PAYDAY PLAN'), PlanScreen, delta: -250);
-    expect(find.text('${money(140351, 'EUR', decimals: 0)} to spend · ${money(p.planDaily, 'EUR', decimals: 0)}/day'), findsOneWidget);
+    expect(find.text('${moneyExact(140351, 'EUR')} to spend · ${moneyExact(p.planDaily, 'EUR')}/day'), findsOneWidget);
     await goTab(t, 'Wishlist');
     expect(find.text('Anything over 80\u00A0€ waits 48 hours on the wishlist first.'), findsOneWidget);
     await goTab(t, 'Today');

@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/bill_inputs.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
+import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/today.dart';
@@ -51,11 +52,20 @@ void main() {
     await binding.convertFlutterSurfaceToImage();
     await tester.pumpAndSettle();
     await binding.takeScreenshot('1-today');
+    // The save-key step sits in the one setup panel under the hero; the button may be below the fold.
+    await tester.ensureVisible(find.text('Save now'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Save now'));
     await tester.pumpAndSettle();
     await binding.takeScreenshot('1-today-key');
-    await tester.tap(find.byKey(const ValueKey('keyLater')));
+    Navigator.of(tester.element(find.byType(KeyBackupSheet))).pop();
     await tester.pumpAndSettle();
+    // Hide the setup panel (it becomes one line) so the next shots show Today as it is after setup.
+    await tester.ensureVisible(find.byKey(const ValueKey('setupHide')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('setupHide')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('setupLine')), findsOneWidget);
 
     // Today's Coming up and heads-up lines, then the Upcoming screen (F3).
     await tester.scrollUntilVisible(find.byKey(const ValueKey('comingUpLine')), 200, scrollable: find.byType(Scrollable).first);

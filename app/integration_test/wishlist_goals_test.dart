@@ -83,6 +83,9 @@ void main() {
     expect(find.byType(AddExpenseSheet), findsOneWidget, reason: 'buying opens Add expense, filled in');
     expect(t.widget<TextField>(inSheet(AddExpenseSheet, find.byType(TextField)).first).controller!.text, '80.00');
     expect(t.widget<TextField>(inSheet(AddExpenseSheet, field('Note'))).controller!.text, 'Desk chair synthetic');
+    // A new expense has no category until one is used: the button waits for a pick.
+    await tapVisible(t, inSheet(AddExpenseSheet, find.widgetWithText(ChoiceChip, 'Groceries')));
+    await t.pumpAndSettle();
     await tapVisible(t, inSheet(AddExpenseSheet, find.text('Add expense')).last); // no impulse warning for a waited item
     await t.pumpAndSettle();
     expect(find.byType(AddExpenseSheet), findsNothing);
