@@ -177,6 +177,25 @@ void main() {
       final dir = Directory('${small.dir.path}/$w1/blobs');
       expect(dir.existsSync() ? dir.listSync() : <FileSystemEntity>[], isEmpty);
     });
+
+    test('state reports bytes (files + snapshots + blobs) and maxBytes (Stage I)', () async {
+      final small = await freshHarness(maxBytes: 100);
+      Future<int> sput(Uint8List b) async => (await small.send('PUT', bp(w1, await hashOf(b)), key: keyA, body: b)).statusCode;
+      expect((await small.putData(w1, 'dev1', 1, 'x' * 10)).statusCode, 201);
+      var st = await small.state(w1);
+      expect((st['bytes'], st['maxBytes']), (10, 100));
+      expect(await sput(Uint8List(60)), 201);
+      st = await small.state(w1);
+      expect((st['bytes'], st['maxBytes']), (70, 100));
+      expect(await sput(Uint8List(31)), 507);
+      expect((await small.state(w1))['bytes'], 70, reason: 'a refused PUT adds nothing');
+      expect((await small.putData(w1, 'dev1', 2, 'y' * 20)).statusCode, 201);
+      expect((await small.state(w1))['bytes'], 90);
+      await small.restart();
+      expect((await small.state(w1))['bytes'], 90, reason: 'rebuilt from the folder');
+      expect((await small.send('DELETE', bp(w1, await hashOf(Uint8List(60))), key: keyA)).statusCode, 204);
+      expect((await small.state(w1))['bytes'], 30);
+    });
   });
 
   group('state, pruning, restart', () {

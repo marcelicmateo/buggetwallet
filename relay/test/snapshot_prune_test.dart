@@ -327,6 +327,8 @@ void main() {
           'covers': {'dev1': 1},
         },
         'blobs': {'count': 0, 'bytes': 0},
+        'bytes': st['bytes'],
+        'maxBytes': 1024 * 1024 * 1024,
       });
     });
 

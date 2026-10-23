@@ -315,8 +315,8 @@ decision, not an accident):
 
 | Entity | Concurrent delete on one device, edit on another | Why |
 |---|---|---|
-| `tx` (bank and hand-added) | **Delete wins.** Category, note, match and transfer links written elsewhere keep the row deleted. A re-import of the same bank row is a duplicate (known id) and stays deleted. | Deleting a transaction is deliberate (a wrong entry, a duplicate); money must not reappear by itself. |
-| `goal` | **Later write wins.** `saveGoal` writes `deleted: 0`, so an edit made after the delete (by HLC) restores the goal; an edit made before it loses. Contributions of a deleted goal are hidden, not removed. | Editing a goal is a clear wish to keep it; contributions stay exact either way. |
+| `tx` (bank and hand-added) | **Delete wins.** Category, note, match and transfer links written elsewhere keep the row deleted. A re-import of the same bank row is a duplicate (known id) and stays deleted. Only the explicit revive brings it back: `undeleteTransaction` (Undo, Stage I) writes `deleted: 0`, and the later of it and the delete (by HLC) wins. | Deleting a transaction is deliberate (a wrong entry, a duplicate); money must not reappear by itself. |
+| `goal` | **Later write wins.** `saveGoal` writes `deleted: 0`, so an edit made after the delete (by HLC) restores the goal; an edit made before it loses. `undeleteGoal` (Undo, Stage I) is the explicit revive: it writes `deleted: 0`, and the later write (by HLC) wins. Contributions of a deleted goal are hidden, not removed. | Editing a goal is a clear wish to keep it; contributions stay exact either way. |
 | `goal_contrib` | **Delete wins** (rows are never edited, only added). | Deltas. |
 | `wish` | **Delete wins.** Decisions (`status`) do not revive; `addWish` always makes a new id. | — |
 | `setting`, `rule` (merchant rules) | **Later write wins.** Every write carries `deleted: 0`. | A setting or rule has one current value. |

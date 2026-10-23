@@ -80,6 +80,11 @@ class SyncReport {
   /// every device's files read from the start). False on the very first sync and with an older relay.
   final bool relayChanged;
 
+  /// Relay usage from this run's `GET state` (`RelayState.bytes` / `maxBytes`): this wallet's stored bytes on the relay
+  /// and the relay's limit for it. Null from an older relay that does not send them. Read at the start of the run (or
+  /// again after an upload that created the wallet), so this run's own upload may not be in [relayBytes] yet.
+  final int? relayBytes, relayMaxBytes;
+
   const SyncReport(this.sent, this.received, this.filesRead,
       {this.problems = const [],
       this.caughtUp = false,
@@ -89,7 +94,9 @@ class SyncReport {
       this.blobsWaiting = 0,
       this.blobsUnsupported = false,
       this.relayInstance,
-      this.relayChanged = false});
+      this.relayChanged = false,
+      this.relayBytes,
+      this.relayMaxBytes});
 
   /// How many files were not applied ([problems]).
   int get badFiles => problems.length;

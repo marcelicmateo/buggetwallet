@@ -472,7 +472,7 @@ class Relay {
       if (await verifySignature(w.pubBytes, sig.sig, legacy)) return _Out.json(200, {'api': apiVersion});
       throw _HttpError(401, 'bad signature');
     }
-    return _locked(wid, () async => _Out.json(200, w.stateJson()));
+    return _locked(wid, () async => _Out.json(200, w.stateJson(maxBytes: maxBytes)));
   }
 
   Future<_Out> _getData(String wid, String device, int seq, _LogInfo info, _Sig sig) async {
