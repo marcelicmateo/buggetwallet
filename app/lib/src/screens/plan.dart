@@ -191,8 +191,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 ]),
                 TotalRule(
                     padding: EdgeInsets.zero,
-                    child: LineItem(
-                        'Spending money',
+                    child: LineItem('Spending money',
                         p.flexBudget < 0 ? 'Over by ${moneyExact(-p.flexBudget, cur)}' : money(p.flexBudget, cur, decimals: 0),
                         key: const ValueKey('ledgerSpendingMoney'),
                         valueColor: p.flexBudget < 0 ? context.c.bad : null,

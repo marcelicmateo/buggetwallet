@@ -421,14 +421,14 @@ class _BillSheetState extends State<BillSheet> {
       if (review)
         FilledButton.icon(
             key: const ValueKey('confirmBill'),
-            style: FilledButton.styleFrom(minimumSize: Size.fromHeight(buttonMin)),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
             icon: const Icon(Icons.check),
             label: const Text('Confirm bill'),
             onPressed: () => _confirm(b))
       else
         FilledButton(
             key: const ValueKey('saveBill'),
-            style: FilledButton.styleFrom(minimumSize: Size.fromHeight(buttonMin)),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
             onPressed: () {
               if (_save(b)) Navigator.pop(context, 'saved');
             },
@@ -558,7 +558,8 @@ class _BillFileScreenState extends State<BillFileScreen> {
                     child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    const Text('Stored on your relay. Sync to get it onto this device.', key: ValueKey('fileOnRelay'), textAlign: TextAlign.center),
+                    const Text('Stored on your relay. Sync to get it onto this device.',
+                        key: ValueKey('fileOnRelay'), textAlign: TextAlign.center),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                         icon: const Icon(Icons.sync, size: 18),

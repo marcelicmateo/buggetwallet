@@ -481,18 +481,24 @@ class LineItem extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minHeight: rowMin),
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(children: [
-        if (leading != null) ...[leading!, const SizedBox(width: 10)],
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: TextStyle(fontWeight: w)),
-            if (sub != null)
-              Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub!, style: TextStyle(fontSize: 12.5, color: context.c.ink2))),
-          ]),
-        ),
-        const SizedBox(width: 8),
-        Text(value, textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: w, color: valueColor)),
-      ]),
+      child: LayoutBuilder(
+        builder: (context, box) => Row(children: [
+          if (leading != null) ...[leading!, const SizedBox(width: 10)],
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: TextStyle(fontWeight: w)),
+              if (sub != null)
+                Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub!, style: TextStyle(fontSize: 12.5, color: context.c.ink2))),
+            ]),
+          ),
+          const SizedBox(width: 8),
+          // A long value ("Over by 1,234.56 €" at large text) wraps beyond 60 % of the row instead of overflowing.
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: box.maxWidth * 0.6),
+            child: Text(value, textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: w, color: valueColor)),
+          ),
+        ]),
+      ),
     );
   }
 }
@@ -567,8 +573,7 @@ void toast(BuildContext context, String msg, {String? actionLabel, VoidCallback?
         persist: false,
         action: actionLabel == null || onAction == null
             ? null
-            : SnackBarAction(
-                key: ValueKey(actionLabel == 'Undo' ? 'toastUndo' : 'toastAction'), label: actionLabel, onPressed: onAction)));
+            : SnackBarAction(key: ValueKey(actionLabel == 'Undo' ? 'toastUndo' : 'toastAction'), label: actionLabel, onPressed: onAction)));
 }
 
 /// Removes the toast on screen and any queued one: called on a tab change and when a sheet or page opens.

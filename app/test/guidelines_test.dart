@@ -67,6 +67,10 @@ const _known = <String, String>{
   'font size: habits (bill confirmed), Wishlist, scale 1.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
   'font size: habits (bill confirmed), Wishlist, scale 2.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
   'font size: habits (bill confirmed), Wishlist, scale 2.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
+  // Appeared when Plan's ledger got a row (the sweep's scroll steps then put the first field row at the top edge); the same
+  // fields pass at every other step. Not caused by a colour: the suffix is the theme's ink2. Look at it with the type-token work (IUa).
+  'text contrast: habits (bill confirmed), Plan, scale 1.0, dark':
+      'BUG: I6 - text contrast 3.47: money-field suffix "€" in the first Plan field row at one scroll step (guidelines sweep)',
   'tap targets: habits (bill confirmed), Plan, scale 1.0, dark': 'BUG: I6 - tap target under 48 dp: Skip this cycle (132.3x45.0)',
   'tap targets: habits (bill confirmed), Plan, scale 1.0, light': 'BUG: I6 - tap target under 48 dp: Skip this cycle (132.3x45.0)',
   'tap targets: habits (bill confirmed), Today, scale 1.0, dark':

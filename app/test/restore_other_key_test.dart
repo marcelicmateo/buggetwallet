@@ -220,6 +220,8 @@ void main() {
       await pump(t, c, size: size, scale: scale, inputs: FakeBillInputs());
       expect(_other, findsOneWidget);
       expect(t.takeException(), isNull);
+      await t.ensureVisible(_other);
+      await t.pump();
       await t.tap(_other);
       await t.pump();
       await t.pump();

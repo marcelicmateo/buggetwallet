@@ -124,7 +124,7 @@ class _SearchPaneState extends State<SearchPane> {
                   onTap: () async {
                     logNav('search.open.result', {'kind': 'tx'});
                     final res = await showSheet<String>(context, TxSheet(wc: wc, t: t));
-                    if (res != null && context.mounted) toast(context, res == 'deleted' ? 'Deleted' : 'Category saved');
+                    if (context.mounted) txSheetToast(context, wc, res);
                   }),
             if (r.txs.length > searchTxLimit) const Muted('Showing the first 50. Type more to narrow it down.'),
           ]),

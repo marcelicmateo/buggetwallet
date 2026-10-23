@@ -12,6 +12,10 @@ final _log = Logger('bw.sync');
 
 /// Plan › Sync: the relay address, "Test connection", "Sync now", the state of the last sync, the devices the relay knows and
 /// the wallet key. The address is never logged (only set / unset).
+String _size(int bytes) => bytes < 1024 * 1024
+    ? '${(bytes / 1024).round()} KB'
+    : (bytes < 1073741824 ? '${(bytes / 1048576).round()} MB' : '${(bytes / 1073741824).toStringAsFixed(1)} GB');
+
 class SyncPanel extends StatefulWidget {
   final WalletController wc;
 
@@ -170,6 +174,8 @@ class _SyncPanelState extends State<SyncPanel> {
         else if (last != null)
           StatusLabel(key: const ValueKey('syncStatus'), good: status.good, text: status.text),
         if (last != null) Muted('Last sync ${clockText(last)}'),
+        if (wc.syncRelayBytes != null && wc.syncRelayMaxBytes != null)
+          Muted('${_size(wc.syncRelayBytes!)} of ${_size(wc.syncRelayMaxBytes!)} used on the relay', key: const ValueKey('relayUsage')),
         if (wc.syncRelayChanged)
           _Info(
               key: const ValueKey('relayChanged'),

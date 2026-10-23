@@ -20,8 +20,6 @@ import 'upcoming.dart';
 String shown(int cents, String cur) => cents > 0 && cents < 10000 ? moneyExact(cents, cur) : money(cents, cur, decimals: 0);
 
 /// Tomorrow's daily allowance, or null when a new pay period starts tomorrow.
-// TODO(quickwins-core): `p.allowanceTomorrow` once that branch is merged.
-int? _allowanceTomorrow(PeriodBudget p) => null;
 
 /// The size of a typical delivery order the delivery-hour panel compares with today's money (in cents).
 const typicalOrderCents = 1500;
@@ -66,20 +64,19 @@ class TodayScreen extends StatelessWidget {
     final cur = wc.currency;
     final p = wc.period();
     final ended = p.paydayPassed;
-    // Over the whole period (the plan is spent) outranks over today: the hero then says how far over the plan.
+    final over = p.overToday > 0;
+    // Over the whole period (the plan is spent) outranks over today in the sentence under the hero.
     final overPeriod = !ended && p.overBy > 0;
-    final over = (p.overToday > 0 || overPeriod) && !ended;
-    // The hero number is never negative: what is left once the period ended, how far over, else the safe amount.
-    final hero = ended ? (p.remaining > 0 ? p.remaining : 0) : (overPeriod ? p.overBy : (over ? p.overToday : p.safeToday));
+    // The hero number is never negative: what is left once the period ended, how far over today, else the safe amount.
+    final hero = ended ? (p.remaining > 0 ? p.remaining : 0) : (over ? p.overToday : p.safeToday);
     // The sentence under an over hero (I1). Tomorrow's allowance is null when a new pay period starts tomorrow.
-    final tomorrow = _allowanceTomorrow(p);
-    final overSentence = !over
+    final tomorrow = p.allowanceTomorrow;
+    final periodSentence = overPeriod ? "You're ${shown(p.overBy, cur)} over the plan for this period." : null;
+    final overSentence = ended || !over || overPeriod
         ? null
-        : overPeriod
-            ? "You're ${shown(p.overBy, cur)} over the plan for this period."
-            : tomorrow != null
-                ? "You're ${shown(p.overToday, cur)} over for today. Nothing more today; tomorrow starts at ${money(tomorrow, cur)}."
-                : "You're ${shown(p.overToday, cur)} over for today. Nothing more today; a new pay period starts tomorrow.";
+        : tomorrow != null
+            ? "You're ${shown(p.overToday, cur)} over for today. Nothing more today; tomorrow starts at ${money(tomorrow, cur)}."
+            : "You're ${shown(p.overToday, cur)} over for today. Nothing more today; a new pay period starts tomorrow.";
     final worry = over || p.overBudget;
     final newPayday = wc.newPayday(p.start);
     // The first-run steps (I1): one panel below the hero while any is open.
@@ -122,16 +119,12 @@ class TodayScreen extends StatelessWidget {
               TwoCol(left: [
                 Panel(padding: const EdgeInsets.fromLTRB(0, 14, 0, 14), children: [
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Flexible(
-                        child: Eyebrow(ended
-                            ? 'Left this pay period'
-                            : (overPeriod ? 'Over the plan by' : (over ? 'Over today by' : 'Safe to spend today')))),
+                    Flexible(child: Eyebrow(ended ? 'Left this pay period' : (over ? 'Over today by' : 'Safe to spend today'))),
                     const SizedBox(width: 8),
                     Flexible(
                         child: ended
                             ? const StatusLabel(key: ValueKey('periodEnded'), good: false, text: 'Pay period ended')
-                            : StatusLabel(
-                                good: !worry, text: overPeriod ? 'Over the plan' : (over ? 'Over today' : (p.overBudget ? 'Over the plan' : 'On plan')))),
+                            : StatusLabel(good: !worry, text: over ? 'Over today' : (p.overBudget ? 'Over the plan' : 'On plan'))),
                   ]),
                   TotalRule(
                     padding: const EdgeInsets.fromLTRB(0, 8, 0, 10),
@@ -167,9 +160,12 @@ class TodayScreen extends StatelessWidget {
                         : ('${p.daysLeft} ${p.daysLeft == 1 ? 'day' : 'days'}', 'to ${shortDate(p.end)}'),
                     (money(p.planDaily > 0 ? p.planDaily : 0, cur, decimals: 0), 'plan per day'),
                   ]),
-                  // Over the plan is said once, in the sentence under the hero; this line is for a plan with no money in it.
-                  if (!ended && p.overBudget && p.overBy == 0)
-                    const StatusLabel(key: ValueKey('overBudget'), good: false, text: 'The plan leaves no spending money.'),
+                  // Over the plan is said once (icon + sentence); a plan with no money in it says so.
+                  if (!ended && p.overBudget)
+                    KeyedSubtree(
+                        key: periodSentence == null ? null : const ValueKey('overSentence'),
+                        child: StatusLabel(
+                            key: const ValueKey('overBudget'), good: false, text: periodSentence ?? 'The plan leaves no spending money.')),
                   if (p.planDaily > 0) PaceBar(used: used, elapsed: p.elapsed, over: p.spent > p.flexBudget * p.elapsed),
                   if (p.planDaily > 0)
                     SplitRow(
@@ -237,8 +233,7 @@ class TodayScreen extends StatelessWidget {
                     ),
                   ),
                 ]),
-                if (setupSteps.isNotEmpty)
-                  _SetupPanel(wc: wc, steps: setupSteps, openPlan: openPlan, newPayday: newPayday),
+                if (setupSteps.isNotEmpty) _SetupPanel(wc: wc, steps: setupSteps, openPlan: openPlan, newPayday: newPayday),
                 if (review.due)
                   Panel(key: const ValueKey('reviewCard'), children: [
                     const SectionHead('Weekly review'),
@@ -298,7 +293,7 @@ class TodayScreen extends StatelessWidget {
                             hasBill: wc.billForTx(t.tx.id) != null,
                             onTap: () async {
                               final r = await showSheet<String>(context, TxSheet(wc: wc, t: t));
-                              if (r != null && context.mounted) toast(context, r == 'deleted' ? 'Deleted' : 'Category saved');
+                              if (context.mounted) txSheetToast(context, wc, r);
                             }),
                     ]),
                 ]),

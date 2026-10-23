@@ -1433,6 +1433,9 @@ void main() {
       await tester.tap(line);
       await tester.pumpAndSettle();
       expect(find.text('Category (needed)'), findsOneWidget, reason: 'the bill sheet of the gas slip');
+      await tester.tap(key('sheetClose')); // the sheet is a route of the app: close it so the next page starts clean
+      await tester.pumpAndSettle();
+      expect(find.text('Category (needed)'), findsNothing);
 
       await pumpApp(tester, Scaffold(body: UpcomingScreen(wc: w.wc)), size: const Size(320, 4000), textScale: 2);
       final tag = key('needsCategory:p:${WalletRepo.billPlannedId(w.gas)}');

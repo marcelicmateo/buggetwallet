@@ -73,6 +73,23 @@ Future<T?> showSheet<T>(BuildContext context, Widget child, {bool scrolls = true
       ));
 }
 
+/// The toast after a transaction sheet closed with [result] ('deleted' has an Undo, I4).
+void txSheetToast(BuildContext context, WalletController wc, String? result) {
+  if (result == null) return;
+  final id = wc.lastDeletedTx;
+  if (result == 'deleted' && id != null) {
+    toast(context, 'Deleted', actionLabel: 'Undo', onAction: () => wc.undeleteTransaction(id));
+  } else {
+    toast(context, result == 'deleted' ? 'Deleted' : 'Category saved');
+  }
+}
+
+/// The toast after a goal sheet closed with [result].
+void goalSheetToast(BuildContext context, WalletController wc, String? result) {
+  final id = wc.lastDeletedGoal;
+  if (result == 'deleted' && id != null) toast(context, 'Goal deleted', actionLabel: 'Undo', onAction: () => wc.undeleteGoal(id));
+}
+
 /// The X at the top right of a phone sheet.
 Widget closeRow(BuildContext ctx) => Align(
       alignment: Alignment.centerRight,
@@ -149,6 +166,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
   late final TextEditingController amount =
       TextEditingController(text: widget.amount == null ? '' : (widget.amount! / 100).toStringAsFixed(2));
   late final TextEditingController note = TextEditingController(text: widget.note ?? '');
+
   /// The last category used on this device; none on a fresh device (the CTA waits for a pick).
   late String? cat = widget.wc.lastExpenseCategory;
   final wishName = TextEditingController();
@@ -261,23 +279,23 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         onPressed: cat == null
             ? null
             : () {
-          final a = parseMoney(amount.text);
-          if (a == null || a <= 0) {
-            logNav('expense.invalid');
-            setState(() => error = invalidAmountMessage);
-            return;
-          }
-          if (a > s.impulse && !warned) {
-            logNav('expense.impulseWarning');
-            setState(() {
-              warned = true;
-              error = null;
-            });
-            return;
-          }
-          widget.wc.addExpense(amount: a, category: cat!, note: note.text.trim(), date: isoDate(date));
-          Navigator.pop(context, 'added');
-        },
+                final a = parseMoney(amount.text);
+                if (a == null || a <= 0) {
+                  logNav('expense.invalid');
+                  setState(() => error = invalidAmountMessage);
+                  return;
+                }
+                if (a > s.impulse && !warned) {
+                  logNav('expense.impulseWarning');
+                  setState(() {
+                    warned = true;
+                    error = null;
+                  });
+                  return;
+                }
+                widget.wc.addExpense(amount: a, category: cat!, note: note.text.trim(), date: isoDate(date));
+                Navigator.pop(context, 'added');
+              },
       ),
     ]);
   }
@@ -331,11 +349,11 @@ class _TxSheetState extends State<TxSheet> {
       if (matchedEntry != null)
         Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Row(key: const ValueKey('matchedEntryMark'), children: [
+            child: Row(key: const ValueKey('matchedMark'), children: [
               Icon(Icons.link, size: 16, color: context.c.good),
               const SizedBox(width: 6),
               Expanded(
-                  child: Text('Matches the expense you added on ${longDateOrRaw(matchedEntry!.date)}',
+                  child: Text('Matched with your bank · you added it on ${longDateOrRaw(matchedEntry!.date)}',
                       style: TextStyle(fontSize: 13, color: context.c.ink2))),
             ])),
       if (!manual)

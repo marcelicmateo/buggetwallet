@@ -34,7 +34,10 @@ class GoalsScreen extends StatelessWidget {
           hoverColor: c.surface2,
           focusColor: c.accentSoft,
           mouseCursor: SystemMouseCursors.click,
-          onTap: () => showSheet<void>(context, GoalSheet(wc: wc, goal: g)),
+          onTap: () async {
+            final r = await showSheet<String>(context, GoalSheet(wc: wc, goal: g));
+            if (context.mounted) goalSheetToast(context, wc, r);
+          },
           child: RuledRow(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

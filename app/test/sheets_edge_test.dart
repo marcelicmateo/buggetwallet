@@ -39,6 +39,13 @@ Future<_Opened> _open(WidgetTester tester, Widget sheet, {Size size = const Size
   return o;
 }
 
+/// An empty wallet whose last-used category is Groceries (a fresh device has none and Add expense waits for a pick).
+WalletController _wc() {
+  final wc = emptyWallet();
+  wc.repo.setLocalValue('lastExpenseCategory', 'Groceries');
+  return wc;
+}
+
 /// Lets the controller's 3 s sync debounce fire so no timer is left pending.
 Future<void> _settle(WidgetTester tester) async {
   await tester.pumpAndSettle();
@@ -82,7 +89,7 @@ void main() {
   group('AddExpenseSheet: invalid amounts show one message and save nothing', () {
     for (final input in ['', ' ', '   ', '0', '0.00', '0,00', '-0', '-5', '-0,01', 'abc', '€', '.', ',', '12abc', '1.2.3', '--1']) {
       testWidgets('"$input"', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         final o = await _open(tester, AddExpenseSheet(wc: wc));
         await tester.enterText(find.byType(TextField).first, input);
         await _tap(tester, _primary);
@@ -102,7 +109,7 @@ void main() {
 
   group('AddExpenseSheet: saving', () {
     testWidgets('decimal comma, default category, trimmed note: one expense with the typed cents', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       final o = await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '12,50');
       await tester.enterText(_field('Note'), '  coffee  ');
@@ -116,7 +123,7 @@ void main() {
     });
 
     testWidgets('a whitespace-only note is stored as empty and the row shows the category', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '3');
       await tester.enterText(_field('Note'), '   \n ');
@@ -127,7 +134,7 @@ void main() {
     });
 
     testWidgets('1.234,56 above the impulse limit asks first, then saves 123456 once', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       final o = await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '1.234,56');
       await _tap(tester, _primary);
@@ -142,7 +149,7 @@ void main() {
     });
 
     testWidgets('exactly the impulse limit (50.00) saves at once; 50.01 asks first', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '50.01');
       await _tap(tester, _primary);
@@ -156,7 +163,7 @@ void main() {
     });
 
     testWidgets('the "wishlist first?" warning disappears when the amount is lowered to the limit', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '50.01');
       await _tap(tester, _primary);
@@ -167,7 +174,7 @@ void main() {
     });
 
     testWidgets('an amount beyond 1 billion (core\'s cap) is refused like any other bad amount', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '1000000001');
       await _tap(tester, _primary);
@@ -177,7 +184,7 @@ void main() {
     });
 
     testWidgets('a limit changed by sync (20.00) is respected at the boundary', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       remoteSetting(wc, 'impulse', 2000);
       await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '20.01');
@@ -191,7 +198,7 @@ void main() {
     });
 
     testWidgets('after the warning, an invalid amount shows the message and no warning', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '99');
       await _tap(tester, _primary);
@@ -204,23 +211,26 @@ void main() {
       await _settle(tester);
     });
 
-    testWidgets('"Put on wishlist" with a blank note names the wish after the category; no expense is saved', (tester) async {
-      final wc = emptyWallet();
+    testWidgets('"Put on wishlist" with a blank note asks for a name (never the category); no expense is saved', (tester) async {
+      final wc = _wc();
       final o = await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '120');
       await tester.enterText(_field('Note'), '   ');
       await _tap(tester, _primary);
+      expect(tester.widget<OutlinedButton>(find.byKey(const ValueKey('putOnWishlist'))).onPressed, isNull, reason: 'no name yet');
+      await tester.enterText(find.byKey(const ValueKey('wishName')), 'Synthetic boots');
+      await tester.pump();
       await _tap(tester, find.byKey(const ValueKey('putOnWishlist')));
       await _settle(tester);
       expect(o.result, 'wish');
       expect(wc.txs, isEmpty);
       expect(wc.wish, hasLength(1));
-      expect(wc.wish.single.name, 'Groceries');
+      expect(wc.wish.single.name, 'Synthetic boots');
       expect(wc.wish.single.price, 12000);
     });
 
     testWidgets('a chosen category and an emoji / right-to-left / long note are saved unchanged', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc));
       const note = '🍕 Pizza ‏مطعم ‏שלום 日本語 é';
       await tester.enterText(find.byType(TextField).first, '8');
@@ -233,7 +243,7 @@ void main() {
     });
 
     testWidgets('a 5,000-character note is saved whole and the app keeps working', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc));
       final note = List.filled(5000, 'x').join();
       await tester.enterText(find.byType(TextField).first, '8');
@@ -245,7 +255,7 @@ void main() {
     });
 
     testWidgets('the Bank fees category is not offered for hand-added expenses', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc));
       expect(find.widgetWithText(ChoiceChip, 'Bank fees'), findsNothing);
       expect(find.widgetWithText(ChoiceChip, 'Groceries'), findsOneWidget);
@@ -254,7 +264,7 @@ void main() {
     });
 
     testWidgets('a double tap on Add expense saves once', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '7.25');
       await _ready(tester, _primary);
@@ -270,7 +280,7 @@ void main() {
     });
 
     testWidgets('a double tap on the warning step saves once', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '75');
       await _tap(tester, _primary); // warning
@@ -284,9 +294,10 @@ void main() {
     });
 
     testWidgets('a double tap on Put on wishlist adds one wish', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '75');
+      await tester.enterText(_field('Note'), 'Synthetic item');
       await _tap(tester, _primary);
       final b = find.byKey(const ValueKey('putOnWishlist'));
       await _ready(tester, b);
@@ -299,7 +310,7 @@ void main() {
     });
 
     testWidgets('closing by tapping outside discards what was typed', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       final o = await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '12');
       await tester.enterText(_field('Note'), 'draft');
@@ -317,7 +328,7 @@ void main() {
     });
 
     testWidgets('closing while the warning is showing saves nothing', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       final o = await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '500');
       await _tap(tester, _primary);
@@ -331,7 +342,7 @@ void main() {
 
   group('AddExpenseSheet: prefilled from the wishlist', () {
     testWidgets('amount and note are filled; no warning even above the limit; saved amount is the wish price', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       final o = await _open(tester, AddExpenseSheet(wc: wc, amount: 123456, note: 'Synthetic lamp', skipImpulse: true));
       expect(tester.widget<TextField>(find.byType(TextField).first).controller!.text, '1234.56');
       expect(tester.widget<TextField>(_field('Note')).controller!.text, 'Synthetic lamp');
@@ -344,7 +355,7 @@ void main() {
 
     for (final (cents, text) in [(1, '0.01'), (5, '0.05'), (99, '0.99'), (100, '1.00'), (1999, '19.99'), (10000000, '100000.00')]) {
       testWidgets('prefill $cents cents shows $text and saves $cents again', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         await _open(tester, AddExpenseSheet(wc: wc, amount: cents, skipImpulse: true));
         expect(tester.widget<TextField>(find.byType(TextField).first).controller!.text, text);
         await _tap(tester, _primary);
@@ -354,7 +365,7 @@ void main() {
     }
 
     testWidgets('a zero-price wish prefills 0.00 and is refused like any zero amount', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc, amount: 0, skipImpulse: true));
       await _tap(tester, _primary);
       expect(find.textContaining(_invalidAmount), findsOneWidget);
@@ -366,7 +377,7 @@ void main() {
   group('AddExpenseSheet: narrow and large text', () {
     for (final scale in [1.0, 2.0]) {
       testWidgets('fits 320 dp at text scale $scale, with an error, and with the warning', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         await _open(tester, AddExpenseSheet(wc: wc), size: const Size(320, 640), textScale: scale);
         await tester.enterText(_field('Note'), 'A long synthetic note ' * 20);
         await _tap(tester, _primary);
@@ -384,7 +395,7 @@ void main() {
 
   group('TxSheet', () {
     WalletController two() {
-      final wc = emptyWallet();
+      final wc = _wc();
       wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
         _bank('2026-10-01', -2500, 'PBZ POS PBZ7TESTSHOPA ZAGREB'),
         _bank('2026-10-03', -1200, 'PBZ POS PBZ7TESTSHOPA ZAGREB'),
@@ -437,7 +448,7 @@ void main() {
     });
 
     testWidgets('a bank row has no Delete button; an income row shows a plus sign', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [_bank('2026-10-10', 150000, 'Synthetic payer', type: 'Uplata')]));
       wc.reload();
       await _open(tester, TxSheet(wc: wc, t: wc.txs.single));
@@ -448,7 +459,7 @@ void main() {
     });
 
     testWidgets('a row with an impossible date (e.g. synced from elsewhere) opens and shows the date as stored', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [_bank('2026-02-30', -700, 'PBZ POS PBZ7TESTSHOPA ZAGREB')]));
       wc.reload();
       await _open(tester, TxSheet(wc: wc, t: wc.txs.single));
@@ -458,7 +469,7 @@ void main() {
     });
 
     testWidgets('the list row of a transaction with an impossible date shows the date as stored', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [_bank('2026-13-01', -700, 'PBZ POS PBZ7TESTSHOPA ZAGREB')]));
       wc.reload();
       await pumpApp(tester, Scaffold(body: TxTile(t: wc.txs.single, currency: 'EUR')));
@@ -468,7 +479,7 @@ void main() {
     });
 
     testWidgets('a zero-amount row and an empty description do not crash', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [_bank('2026-10-10', 0, '', type: '')]));
       wc.reload();
       expect(wc.txs, hasLength(1));
@@ -480,7 +491,7 @@ void main() {
     });
 
     testWidgets('a hand-added expense: no "always" switch; Delete removes it once, even on a double tap', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       wc.addExpense(amount: 450, category: 'Eating out', note: 'Lunch', date: wc.today());
       final t = wc.txs.single;
       final o = await _open(tester, TxSheet(wc: wc, t: t));
@@ -499,7 +510,7 @@ void main() {
     });
 
     testWidgets('changing a hand-added expense category does not create a merchant rule', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       wc.addExpense(amount: 450, category: 'Eating out', note: 'Lunch', date: wc.today());
       wc.addExpense(amount: 650, category: 'Eating out', note: 'Lunch', date: wc.today());
       final target = wc.txs.firstWhere((t) => t.amount == -450);
@@ -513,7 +524,7 @@ void main() {
 
     for (final scale in [1.0, 2.0]) {
       testWidgets('a hand-added expense sheet (Save + Delete) fits 320 dp at text scale $scale', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         wc.addExpense(amount: 12345678, category: 'Sport & fitness', note: 'Synthetic note ' * 20, date: '2028-02-29');
         await _open(tester, TxSheet(wc: wc, t: wc.txs.single), size: const Size(320, 640), textScale: scale);
         await tester.ensureVisible(find.byKey(const ValueKey('txDelete')));
@@ -525,7 +536,7 @@ void main() {
 
     for (final scale in [1.0, 2.0]) {
       testWidgets('a very long description and merchant fit 320 dp at text scale $scale', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         final desc = 'PBZ POS PBZ7${'VERYLONGSYNTHETICSHOPNAME ' * 12}ZAGREB 🍕 ‏مطعم';
         wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [_bank('2026-02-28', -12345678, desc)]));
         wc.reload();
@@ -540,7 +551,7 @@ void main() {
     Future<void> save(WidgetTester tester) => _tap(tester, find.byKey(const ValueKey('goalSave')));
 
     testWidgets('a new goal starts with an empty name and target and 50 a month', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, GoalSheet(wc: wc));
       expect(find.text('New goal'), findsOneWidget);
       expect(tester.widget<TextField>(_field('Name')).controller!.text, '');
@@ -553,7 +564,7 @@ void main() {
     });
 
     testWidgets('typed amounts in either format are saved as the typed cents', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       final o = await _open(tester, GoalSheet(wc: wc));
       await tester.enterText(_field('Name'), '  Trip  ');
       await tester.enterText(_field('Target'), '1.234,56');
@@ -567,7 +578,7 @@ void main() {
     });
 
     testWidgets('a whitespace-only name is saved as "Goal"', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, GoalSheet(wc: wc));
       await tester.enterText(_field('Name'), '   ');
       await tester.enterText(_field('Target'), '100');
@@ -577,7 +588,7 @@ void main() {
     });
 
     testWidgets('emoji, right-to-left and 300-character names are kept as typed', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, GoalSheet(wc: wc));
       final name = '🏖️ חופשה ‏رحلة ${'x' * 300}';
       await tester.enterText(_field('Name'), name);
@@ -588,7 +599,7 @@ void main() {
     });
 
     testWidgets('a double tap on Save goal creates one goal', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, GoalSheet(wc: wc));
       await tester.enterText(_field('Name'), 'Trip');
       await tester.enterText(_field('Target'), '100');
@@ -605,7 +616,7 @@ void main() {
     });
 
     testWidgets('cancel (tap outside) saves nothing', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       final o = await _open(tester, GoalSheet(wc: wc));
       await tester.enterText(_field('Name'), 'Trip');
       await tester.enterText(_field('Target'), '100');
@@ -616,7 +627,7 @@ void main() {
     });
 
     testWidgets('a goal opened from the Goals tab by name and target is prefilled', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       await _open(tester, GoalSheet(wc: wc, name: 'Laptop', target: 99999));
       expect(tester.widget<TextField>(_field('Name')).controller!.text, 'Laptop');
       expect(tester.widget<TextField>(_field('Target')).controller!.text, '999.99');
@@ -631,7 +642,7 @@ void main() {
       }
 
       testWidgets('fields show whole units without decimals and cents with two', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         await _open(tester, GoalSheet(wc: wc, goal: makeGoal(wc, target: 100000, saved: 1005, monthly: 1)));
         expect(find.text('Edit goal'), findsOneWidget);
         expect(tester.widget<TextField>(_field('Target')).controller!.text, '1000');
@@ -641,7 +652,7 @@ void main() {
       });
 
       testWidgets('Save with nothing changed keeps every value, the id and the order', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         final g0 = makeGoal(wc, target: 123457, saved: 1999, monthly: 2501);
         await _open(tester, GoalSheet(wc: wc, goal: g0));
         await save(tester);
@@ -651,7 +662,7 @@ void main() {
       });
 
       testWidgets('an old goal saved without a target can be saved with Target left empty', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         await _open(tester, GoalSheet(wc: wc, goal: makeGoal(wc, target: 0)));
         expect(tester.widget<TextField>(_field('Target')).controller!.text, '');
         await tester.enterText(_field('Add money now'), '50');
@@ -661,7 +672,7 @@ void main() {
       });
 
       testWidgets('"Add money now" is added to what is put aside', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         await _open(tester, GoalSheet(wc: wc, goal: makeGoal(wc)));
         await tester.enterText(_field('Add money now'), '10,50');
         await save(tester);
@@ -670,7 +681,7 @@ void main() {
       });
 
       testWidgets('Add money now and a changed "so far" combine without double counting', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         await _open(tester, GoalSheet(wc: wc, goal: makeGoal(wc)));
         await tester.enterText(_field('Put aside so far'), '100');
         await tester.enterText(_field('Add money now'), '1');
@@ -680,7 +691,7 @@ void main() {
       });
 
       testWidgets('Delete removes the goal once, even on a double tap', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         final o = await _open(tester, GoalSheet(wc: wc, goal: makeGoal(wc)));
         final d = find.byKey(const ValueKey('goalDelete'));
         await _ready(tester, d);
@@ -694,7 +705,7 @@ void main() {
       });
 
       testWidgets('a goal deleted on another device while the sheet is open: Save does not crash', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         final g = makeGoal(wc);
         await _open(tester, GoalSheet(wc: wc, goal: g));
         wc.repo.deleteGoal(g.id);
@@ -706,7 +717,7 @@ void main() {
       });
 
       testWidgets('a garbled "Put aside so far" does not wipe the saved money', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         await _open(tester, GoalSheet(wc: wc, goal: makeGoal(wc)));
         await tester.enterText(_field('Put aside so far'), '1O0');
         await save(tester);
@@ -717,7 +728,7 @@ void main() {
 
       // Typed amounts stop at core's maxAmountCents (1 billion units, inclusive) in every money field, goals included.
       testWidgets('an amount beyond 1 billion is refused, and typing clears the message', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         final o = await _open(tester, GoalSheet(wc: wc, goal: makeGoal(wc)));
         await tester.enterText(_field('Target'), '1000000001');
         await save(tester);
@@ -736,7 +747,7 @@ void main() {
       });
 
       testWidgets('a garbled or empty target is refused, not saved as 0', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         await _open(tester, GoalSheet(wc: wc));
         await tester.enterText(_field('Name'), 'Trip');
         await tester.enterText(_field('Target'), 'abc');
@@ -748,7 +759,7 @@ void main() {
       });
 
       testWidgets('a negative target is refused, not saved as 0', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         await _open(tester, GoalSheet(wc: wc));
         await tester.enterText(_field('Target'), '-100');
         await save(tester);
@@ -760,7 +771,7 @@ void main() {
 
     group('the months hint', () {
       testWidgets('rounds months up and mentions the monthly amount', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         await _open(tester, GoalSheet(wc: wc));
         await tester.enterText(_field('Target'), '1001');
         await tester.pump();
@@ -775,7 +786,7 @@ void main() {
       });
 
       testWidgets('no hint when monthly is 0 or empty, when the target is reached, or when the target is empty', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         await _open(tester, GoalSheet(wc: wc));
         await tester.enterText(_field('Target'), '500');
         await tester.enterText(_field('Each month'), '0');
@@ -799,7 +810,7 @@ void main() {
       });
 
       testWidgets('Infinity or 1e999 typed in a goal field must not throw (parseMoney)', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         await _open(tester, GoalSheet(wc: wc));
         for (final v in ['abc', '-5', '1e999', 'Infinity', '0,005', '99999999999999999999']) {
           await tester.enterText(_field('Target'), v);
@@ -812,7 +823,7 @@ void main() {
 
     for (final scale in [1.0, 2.0]) {
       testWidgets('a new goal sheet with a long name fits 320 dp at text scale $scale', (tester) async {
-        final wc = emptyWallet();
+        final wc = _wc();
         await _open(tester, GoalSheet(wc: wc, name: 'A long synthetic goal name ' * 6, target: 98765432199),
             size: const Size(320, 640), textScale: scale);
         await tester.enterText(_field('Each month'), '99999999');
@@ -825,7 +836,7 @@ void main() {
     }
 
     testWidgets('an edit goal sheet fits 320 dp at text scale 1.0', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       wc.repo.saveGoal(name: 'A long synthetic goal name ' * 6, target: 123456789, saved: 1, monthly: 99999, sort: 1);
       wc.reload();
       await _open(tester, GoalSheet(wc: wc, goal: wc.goals.single), size: const Size(320, 640));
@@ -838,7 +849,7 @@ void main() {
     });
 
     testWidgets('an edit goal sheet fits 320 dp at text scale 2.0', (tester) async {
-      final wc = emptyWallet();
+      final wc = _wc();
       wc.repo.saveGoal(name: 'Trip', target: 123456, saved: 1, monthly: 5000, sort: 1);
       wc.reload();
       await _open(tester, GoalSheet(wc: wc, goal: wc.goals.single), size: const Size(320, 640), textScale: 2);

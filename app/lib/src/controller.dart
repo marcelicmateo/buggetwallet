@@ -231,6 +231,9 @@ class WalletController extends ChangeNotifier {
   /// From the last successful sync: the relay's instance id (shown only as [relayFingerprintText]), whether the relay was new or
   /// reset since the previous sync, and the files not applied (a device whose clock is ahead; this device's own id in use).
   String? syncRelayInstance;
+
+  /// What the relay holds for this wallet and its limit, from the last sync (null: not known, e.g. an older relay).
+  int? syncRelayBytes, syncRelayMaxBytes;
   List<SyncProblem> syncProblems = const [];
 
   /// Core reports a changed relay and an id in use once, so each notice is kept on this device (device-local values, never synced)
@@ -1167,6 +1170,8 @@ class WalletController extends ChangeNotifier {
     syncBlobsUnsupported = false;
     syncDevices = const [];
     syncRelayInstance = null;
+    syncRelayBytes = null;
+    syncRelayMaxBytes = null;
     syncProblems = const [];
     repo.setLocalValue(_noticeRelayChanged, null);
     repo.setLocalValue(_noticeIdInUse, null);
@@ -1218,6 +1223,8 @@ class WalletController extends ChangeNotifier {
       syncBlobsUnsupported = r.blobsUnsupported;
       syncDevices = r.devices;
       syncRelayInstance = r.relayInstance;
+      syncRelayBytes = r.relayBytes;
+      syncRelayMaxBytes = r.relayMaxBytes;
       syncProblems = r.problems;
       if (r.relayChanged) repo.setLocalValue(_noticeRelayChanged, '1');
       if (r.problems.any((p) => p.reason == SyncProblemReason.deviceIdInUse)) repo.setLocalValue(_noticeIdInUse, '1');
@@ -1473,9 +1480,27 @@ class WalletController extends ChangeNotifier {
     return null;
   }
 
+  /// The ids last deleted in this session: the toast's Undo restores them.
+  String? lastDeletedTx, lastDeletedGoal;
+
   void deleteTransaction(Tx t) {
+    lastDeletedTx = t.id;
     repo.deleteTransaction(t.id);
     logEvent(_log, Level.INFO, 'tx.delete', {'manual': t.manual});
+    _changed();
+  }
+
+  /// Undo of [deleteTransaction] (the toast's Undo).
+  void undeleteTransaction(String id) {
+    repo.undeleteTransaction(id);
+    logEvent(_log, Level.INFO, 'tx.undelete');
+    _changed();
+  }
+
+  /// Undo of [deleteGoal].
+  void undeleteGoal(String id) {
+    repo.undeleteGoal(id);
+    logEvent(_log, Level.INFO, 'goal.undelete');
     _changed();
   }
 
@@ -1505,6 +1530,7 @@ class WalletController extends ChangeNotifier {
   }
 
   void deleteGoal(String id) {
+    lastDeletedGoal = id;
     repo.deleteGoal(id);
     logEvent(_log, Level.INFO, 'goal.delete');
     _changed();

@@ -93,8 +93,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                 else
                   Rows(children: [
                     for (final w in ready)
-                      WishRow(
-                          key: _rowKey(w), highlight: w.id == _highlight, w: w, currency: cur, sub: 'Waited ${s.coolHours}h', actions: [
+                      WishRow(key: _rowKey(w), highlight: w.id == _highlight, w: w, currency: cur, sub: 'Waited ${s.coolHours}h', actions: [
                         OutlinedButton(style: accentOutlined(context), onPressed: () => _buy(w), child: const Text('Buy it')),
                         TextButton(onPressed: () => _skip(w), child: const Text('Skip')),
                       ]),
@@ -114,8 +113,8 @@ class _WishlistScreenState extends State<WishlistScreen> {
                           currency: cur,
                           sub: timeLeft(w.hoursLeft(s.coolHours, now)),
                           actions: [
-                        TextButton(onPressed: () => _skip(w), child: const Text("Don't need it")),
-                      ]),
+                            TextButton(onPressed: () => _skip(w), child: const Text("Don't need it")),
+                          ]),
                   ]),
                 if (waiting.isNotEmpty)
                   TotalRule(
@@ -235,20 +234,20 @@ class WishRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => HoverTint(
-          child: DecoratedBox(
-        key: highlight ? const ValueKey('wishHighlight') : null,
-        decoration: BoxDecoration(color: highlight ? context.c.accentSoft : null),
-        child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          SplitRow(
-              start: Text(w.name, style: const TextStyle(fontWeight: FontWeight.w500)),
-              end: Text(money(w.price, currency, decimals: 0),
-                  textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
-          Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
-            Text(sub, style: TextStyle(fontSize: 12.5, color: context.c.ink2)),
-            if (actions.isNotEmpty) Wrap(spacing: 4, children: actions),
-          ]),
-        ]),
-      )));
+      child: DecoratedBox(
+          key: highlight ? const ValueKey('wishHighlight') : null,
+          decoration: BoxDecoration(color: highlight ? context.c.accentSoft : null),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              SplitRow(
+                  start: Text(w.name, style: const TextStyle(fontWeight: FontWeight.w500)),
+                  end: Text(money(w.price, currency, decimals: 0),
+                      textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
+              Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
+                Text(sub, style: TextStyle(fontSize: 12.5, color: context.c.ink2)),
+                if (actions.isNotEmpty) Wrap(spacing: 4, children: actions),
+              ]),
+            ]),
+          )));
 }
