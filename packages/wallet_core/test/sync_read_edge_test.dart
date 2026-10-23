@@ -43,14 +43,16 @@ void main() {
   tearDown(() => repo.close());
 
   group('what is read', () {
-    test('this device\'s own files are never applied, even garbage or a valid file', () async {
+    test('files under this device\'s id that it never wrote are another install\'s: read as a peer\'s, in order', () async {
       await peer(repo.deviceId, 1, bytes: [1, 2, 3]);
       await peer(repo.deviceId, 2, ops: [_setting('rent', 999)]);
       final rep = await run();
-      // Files in its own stream that it never wrote: another install writes as this device (H6), reported, not read.
-      expect((rep.filesRead, rep.badFiles, rep.caughtUp), (0, 1, false));
-      expect(rep.problems.single.reason, SyncProblemReason.deviceIdInUse);
+      // HBb ownership rules: this install moves to a stream of its own (deviceIdInUse, information) and reads that
+      // stream like any device's: the garbage file is refused and the valid one waits behind it.
+      expect(rep.problems.map((p) => p.reason).toSet(), {SyncProblemReason.deviceIdInUse, SyncProblemReason.corrupt});
+      expect((rep.filesRead, rep.caughtUp), (0, false));
       expect(repo.settings().rent, 0);
+      expect(repo.localValue(SyncEngine.streamKey), isNot(repo.deviceId));
     });
 
     test('the same seq from two devices is two files', () async {

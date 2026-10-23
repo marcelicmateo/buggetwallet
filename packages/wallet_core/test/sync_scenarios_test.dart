@@ -445,6 +445,13 @@ void main() {
         await syncAll([b, future]);
         expect(b.repo.settings().salary, 2000 + i, reason: 'local edits keep working');
       }
+      // The device ahead reads the others (their files are behind it, not ahead), keeps its own newer value, and
+      // reports nothing: only the devices behind it see clockDrift.
+      final rf = await future.run();
+      expect(rf.problems, isEmpty);
+      expect(rf.caughtUp, isTrue);
+      expect(future.repo.settings().salary, 1000, reason: 'its clock is a year ahead, so its edit is the newest');
+      expect((await b.run()).problems.single.reason, SyncProblemReason.clockDrift);
     });
 
     test('HLCs written by the repo strictly increase, also across remote receives and a clock going backwards', () {

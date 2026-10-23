@@ -362,11 +362,11 @@ void main() {
       await expectLater(noDate.state(), throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.other)));
       expect(seen, hasLength(1));
       expect(noDate.clockOffsetMs, 0);
-      // A plain 401 (wrong key) is refused at once, no retry.
+      // A plain 401 (wrong key) is not retried; only the relay's health is asked once (another api version?).
       seen.clear();
       await expectLater(client((r) => http.Response('{"error":"bad signature"}', 401)).state(),
           throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.refused)));
-      expect(seen, hasLength(1));
+      expect([for (final r in seen) r.url.path.split('/').last], ['state', 'health']);
     });
 
     test('parseHttpDate reads IMF-fixdate and refuses anything else', () {
@@ -402,7 +402,7 @@ void main() {
       final text = lines.join('\n');
       expect(text, contains('relay.failed {"kind":"state","status":401,"failure":"refused"}'));
       expect(text, contains('relay.unreachable'));
-      for (final bad in [wid, pub, 'secret-host', ...seen.map((r) => r.headers['X-BW-Sig']!)]) {
+      for (final bad in [wid, pub, 'secret-host', ...seen.map((r) => r.headers['X-BW-Sig']).nonNulls]) {
         expect(text, isNot(contains(bad)), reason: bad);
       }
     });

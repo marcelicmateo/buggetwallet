@@ -1,5 +1,6 @@
 // Backups: the sealed payload the app saves through the save dialog and restores from a picked file (compiles for the web).
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'dates.dart';
@@ -23,6 +24,10 @@ enum BackupFailure {
 
   /// A backup of a format this build does not know (`v` above [backupVersion]).
   newerVersion,
+
+  /// A clock in it is more than [maxClockDrift] ahead of this device's clock (H7): made on a device with a wrong date,
+  /// or this device's date is wrong. Nothing applied; restorable once the clocks agree.
+  clockAhead,
 }
 
 /// A backup file that cannot be restored. The message names no file content and no path.
@@ -71,6 +76,16 @@ Future<int> restoreBackupBytes(WalletRepo repo, List<int> bytes, VaultKey key) a
     rethrow;
   }
   final ops = _parse(clear, bytes.length);
+  var newest = 0;
+  for (final op in ops) {
+    newest = max(newest, Hlc.parse(op.hlc).millis);
+  }
+  final ahead = newest - repo.clock.now();
+  if (ahead > maxClockDrift.inMilliseconds) {
+    logEvent(_log, Level.WARNING, 'backup.restore.failed', {'reason': BackupFailure.clockAhead.name, 'aheadMin': ahead ~/ 60000});
+    throw const BackupException(
+        BackupFailure.clockAhead, "The backup has changes dated later than this device's clock. Check the date and time on both devices.");
+  }
   final changed = repo.applyRemote(ops, resend: true);
   t.done({'ops': ops.length, 'changed': changed, 'bytes': bytes.length});
   return ops.length;

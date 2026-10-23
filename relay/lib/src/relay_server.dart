@@ -437,7 +437,13 @@ class Relay {
 
   Future<_Out> _getState(String wid, _Sig sig) async {
     final w = _known(wid);
-    await _verify(w.pubBytes, sig, 'GET', const []);
+    if (!await verifySignature(w.pubBytes, sig.sig, sig.text('GET', const []))) {
+      // An api-2 app (its `bw-relay-v2` text, no host) gets only `{"api":3}`, which it reads as "update the app"
+      // instead of "this relay refused the wallet". Nothing else is in the answer.
+      final legacy = signedTextV2('GET', sig.path, sig.covers, sha256OfBytes(const []), sig.time);
+      if (await verifySignature(w.pubBytes, sig.sig, legacy)) return _Out.json(200, {'api': apiVersion});
+      throw _HttpError(401, 'bad signature');
+    }
     return _locked(wid, () async => _Out.json(200, w.stateJson()));
   }
 

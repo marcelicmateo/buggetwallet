@@ -5,6 +5,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -141,7 +143,10 @@ void main() {
     });
   });
 
-  group('H5b stream epochs (a relay restored from an older copy)', () {
+  group('H5b streams (a relay restored from an older copy)', () {
+    List<String> streamsOf(RelayState s, Device d) =>
+        s.devices.keys.where((n) => SyncEngine.streamBase(n) == d.repo.deviceId).toList()..sort();
+
     test('two devices: edits on both sides after the restore all arrive (the lead repro)', () async {
       final a = device('a'), b = device('b');
       a.repo.updateSettings({'salary': 1});
@@ -157,16 +162,19 @@ void main() {
       await rounds([a, b], 4);
       expectSame([a, b]);
       expect((b.repo.settings().rent, b.repo.settings().loan, a.repo.settings().paydayDay), (2, 30, 15));
-      final streams = (await net.relay.state()).devices.keys.where((d) => d.startsWith(a.repo.deviceId)).toList()..sort();
-      expect(streams, [a.repo.deviceId, '${a.repo.deviceId}-1'], reason: 'the new epoch is a new name, seq from 1');
-      expect(a.repo.localValue(SyncEngine.epochKey), '1');
+      final streams = streamsOf(await net.relay.state(), a);
+      expect(streams, hasLength(2), reason: 'the old name and a fresh one, seq from 1');
+      final fresh = streams.firstWhere((n) => n != a.repo.deviceId);
+      expect(fresh, matches(RegExp('^${a.repo.deviceId}-1[a-z]{6}\$')));
+      expect(SyncEngine.streamEpoch(fresh), 1);
+      expect(a.repo.localValue(SyncEngine.streamKey), fresh);
       // One device per id in the report, however many streams.
       final rep = await b.run();
       expect(rep.devices.map((d) => d.device).toList(), hasLength(2));
       expect(rep.problems, isEmpty);
     });
 
-    test('B uploaded past the copy too: both start a new epoch and converge', () async {
+    test('B uploaded past the copy too: both move to fresh streams and converge', () async {
       final a = device('a'), b = device('b');
       a.repo.updateSettings({'salary': 1});
       b.repo.updateSettings({'rent': 1});
@@ -183,42 +191,46 @@ void main() {
       await rounds([a, b], 4);
       expectSame([a, b]);
       expect((a.repo.settings().salary, a.repo.settings().rent, a.repo.settings().loan, a.repo.settings().paydayDay), (2, 2, 3, 20));
-      expect((a.repo.localValue(SyncEngine.epochKey), b.repo.localValue(SyncEngine.epochKey)), ('1', '1'));
+      expect(SyncEngine.streamEpoch(a.repo.localValue(SyncEngine.streamKey)!), 1);
+      expect(SyncEngine.streamEpoch(b.repo.localValue(SyncEngine.streamKey)!), 1);
     });
 
-    test('three devices, a restore and then a second restore of an even older copy', () async {
-      final a = device('a'), b = device('b'), c = device('c');
+    test(
+        'three devices, a restore and then a second restore of an even older copy, an offline peer holding a cursor '
+        'for the old name', () async {
+      final a = device('a'), b = device('b'), c = device('c'), off = device('offline');
       a.repo.updateSettings({'salary': 1});
-      await rounds([a, b, c]);
+      await rounds([a, b, c, off]);
       final oldest = net.relay.copy();
       now += 1000;
       b.repo.updateSettings({'rent': 2});
-      await rounds([a, b, c]);
+      await rounds([a, b, c, off]);
       final older = net.relay.copy();
       now += 1000;
       c.repo.updateSettings({'loan': 3});
       a.repo.updateSettings({'salary': 4});
-      await rounds([a, b, c]);
+      await rounds([a, b, c, off]); // `off` holds cursors for every stream; then it goes offline
       net.relay.restore(older);
       now += 1000;
       a.repo.updateSettings({'paydayDay': 5});
       await rounds([a, b, c], 3);
       expectSame([a, b, c]);
+      final firstMove = a.repo.localValue(SyncEngine.streamKey);
       net.relay.restore(oldest);
       now += 1000;
       b.repo.updateSettings({'rent': 6});
       c.repo.updateSettings({'loan': 7});
       await rounds([c, a, b], 4);
       expectSame([a, b, c]);
-      final s = a.repo.settings();
+      expect(a.repo.localValue(SyncEngine.streamKey), isNot(firstMove), reason: 'a second fresh name, never reused');
+      // The offline device comes back: its cursors name streams the relay lost or renumbered.
+      await rounds([off, a, b, c], 3);
+      expectSame([a, b, c, off]);
+      final s = off.repo.settings();
       expect((s.salary, s.rent, s.loan, s.paydayDay), (4, 6, 7, 5));
-      expect(int.parse(a.repo.localValue(SyncEngine.epochKey)!), greaterThanOrEqualTo(1));
-      expect(SyncEngine.streamBase('${a.repo.deviceId}-2'), a.repo.deviceId);
-      expect(SyncEngine.streamEpoch('${a.repo.deviceId}-2'), 2);
-      expect(SyncEngine.streamEpoch(a.repo.deviceId), 0);
     });
 
-    test('a wiped relay without instance ids (older relay) also moves to a new stream; nothing is skipped', () async {
+    test('a wiped relay without instance ids (older relay) also moves to a fresh stream; nothing is skipped', () async {
       final a = device('a'), b = device('b');
       net.relay.instance = null;
       for (var i = 1; i <= 3; i++) {
@@ -238,9 +250,19 @@ void main() {
       expectSame([a, b]);
       expect(b.repo.settings().rent, 9);
     });
+
+    test('stream names: base and epoch parse back; random tags differ; at most 64 characters', () {
+      final id = 'A' * 48;
+      expect(SyncEngine.streamBase('$id-123456789abcdef'), id);
+      expect(SyncEngine.streamEpoch('$id-123456789abcdef'), 123456789);
+      expect('$id-123456789abcdef'.length, 64);
+      expect(SyncEngine.streamBase(id), id);
+      expect(SyncEngine.streamEpoch(id), 0);
+      expect(SyncEngine.streamName(id, 0, 'abcdef'), id);
+    });
   });
 
-  group('H6 device id per install', () {
+  group('H6 device id per install, stream ownership', () {
     test('open(deviceId:) on a new database takes it; storedDeviceId reads it; newDeviceId is 16 hex', () {
       final id = WalletRepo.newDeviceId();
       expect(id, matches(RegExp(r'^[0-9a-f]{16}$')));
@@ -256,7 +278,7 @@ void main() {
       expect(() => WalletRepo.inMemory(deviceId: ''), throwsArgumentError);
     });
 
-    test('another id for an existing database: the install takes it and the next sync is a first connect under it', () async {
+    test('another id for an existing database: a first connect under it, and the old id\'s stream is still acked', () async {
       final a = Device('a', tmp, key, () => now, net: net, dbPath: '${tmp.path}/a.db');
       devices.add(a);
       final b = device('b');
@@ -271,37 +293,64 @@ void main() {
       expect(a.repo.pendingOps(), isNotEmpty, reason: 'the outbox is kept');
       final r = await a.run();
       expect(r.sent, greaterThan(1), reason: 'whole state under the new id');
-      await rounds([b, a]);
+      for (var i = 0; i < 3; i++) {
+        now += 1000;
+        b.repo.updateSettings({'loan': i + 1});
+        await rounds([b, a]);
+      }
       expectSame([a, b]);
       expect(b.repo.settings().rent, 2);
+      // Pruning: every listed device acks b's files, the old id's stream included (this install acks as it).
+      final st = await net.relay.state();
+      final bLast = st.devices[b.repo.deviceId]!.last;
+      expect(st.devices[old]!.acks[b.repo.deviceId], bLast);
+      expect(st.devices[a.repo.deviceId]!.acks[b.repo.deviceId], bLast);
     });
 
-    test('two installs with one device id (a copied database): deviceIdInUse, never interleaved; a new id fixes it', () async {
+    test('two installs with one device id (a copied database), both editing: they converge and keep syncing', () async {
       final shared = WalletRepo.newDeviceId();
       final a = device('a', deviceId: shared), b = device('b');
+      a.repo.updateSettings({'salary': 1});
+      await rounds([a, b]);
       final clone = Device('clone', tmp, key, () => now, net: net, dbPath: '${tmp.path}/clone.db', deviceId: shared);
       devices.add(clone);
-      a.repo.updateSettings({'salary': 1});
-      await a.run();
-      clone.repo.updateSettings({'rent': 2});
-      final rc = await clone.run();
-      expect(rc.problems.single.reason, SyncProblemReason.deviceIdInUse, reason: 'its own stream already holds files');
-      expect(rc.problems.single.device, SyncProblem.shortId(shared));
-      expect(rc.sent, 0);
-      expect(clone.repo.pendingOps(), isNotEmpty, reason: 'outbox kept, not retried silently');
-      expect(rc.caughtUp, isFalse);
-      expect((await clone.run()).problems.single.reason, SyncProblemReason.deviceIdInUse, reason: 'every run');
-      // The clone gets an id of its own (the app's fix: the database reopened with it) and joins as a new device.
-      clone.deviceId = WalletRepo.newDeviceId();
-      clone.reopen();
-      await rounds([a, clone, b], 3);
+      clone.repo.applyRemote(a.repo.snapshotOps()); // the copied database
+      for (final k in [SyncEngine.sentKey, SyncEngine.streamKey, SyncEngine.streamsKey]) {
+        clone.repo.setLocalValue(k, a.repo.localValue(k));
+      }
+      for (final e in a.repo.syncCursors().entries) {
+        clone.repo.setSyncCursor(e.key, e.value);
+      }
+      final reports = <SyncReport>[];
+      for (var i = 0; i < 4; i++) {
+        now += 1000;
+        a.repo.updateSettings({'rent': 10 + i});
+        now += 1000;
+        clone.repo.updateSettings({'loan': 20 + i});
+        for (final d in [a, clone, b]) {
+          now += 10;
+          reports.add(await d.run());
+        }
+      }
+      await rounds([a, clone, b], 2);
       expectSame([a, clone, b]);
-      expect((b.repo.settings().salary, b.repo.settings().rent), (1, 2));
+      expect((b.repo.settings().rent, b.repo.settings().loan), (13, 23));
+      final inUse = reports.expand((r) => r.problems).where((p) => p.reason == SyncProblemReason.deviceIdInUse).toList();
+      expect(inUse, isNotEmpty, reason: 'reported');
+      expect(inUse.length, lessThanOrEqualTo(2), reason: 'once per move or sighting, not every run');
+      final last = [
+        for (final d in [a, clone]) await d.run()
+      ];
+      expect(last.map((r) => r.problems), everyElement(isEmpty));
+      expect(last.map((r) => r.caughtUp), everyElement(isTrue));
+      final streams = (await net.relay.state()).devices.keys.where((n) => SyncEngine.streamBase(n) == shared).toSet();
+      expect(streams, hasLength(2), reason: 'each install writes its own stream');
+      expect(a.repo.localValue(SyncEngine.streamKey) ?? shared, isNot(clone.repo.localValue(SyncEngine.streamKey) ?? shared));
     });
 
-    test('a 409 on an own seq (another install wrote it since state) is deviceIdInUse with the outbox kept', () async {
+    test('a 409 on an own seq: moves to a fresh stream and sends the whole state in the same run; the next run is normal', () async {
       final shared = WalletRepo.newDeviceId();
-      final a = device('a', deviceId: shared);
+      final a = device('a', deviceId: shared), b = device('b');
       a.repo.updateSettings({'salary': 1});
       await a.run();
       a.repo.updateSettings({'salary': 2});
@@ -309,7 +358,71 @@ void main() {
       final racing = _RacingTransport(net.relay, () => net.relay.put(shared, 2, [1, 2, 3]));
       final rep = await SyncEngine(racing, key).run(a.repo);
       expect(rep.problems.single.reason, SyncProblemReason.deviceIdInUse);
-      expect(a.repo.pendingOps(), isNotEmpty);
+      expect(rep.caughtUp, isTrue, reason: 'information, not a file left unread');
+      expect(a.repo.pendingOps(), isEmpty, reason: 'stored under the fresh stream');
+      expect(a.repo.localValue(SyncEngine.sendingKey), isNull);
+      final moved = a.repo.localValue(SyncEngine.streamKey)!;
+      expect(SyncEngine.streamBase(moved), shared);
+      now += 1000;
+      a.repo.updateSettings({'rent': 3});
+      final next = await a.run();
+      expect(next.problems.where((p) => p.reason == SyncProblemReason.deviceIdInUse), isEmpty);
+      expect(a.repo.localValue(SyncEngine.streamKey), moved);
+      await b.run();
+      expect((b.repo.settings().salary, b.repo.settings().rent), (2, 3));
+      // The stream another install may write is not acked as.
+      expect((await net.relay.state()).devices[shared]!.acks, isEmpty);
+    });
+
+    test('a database restored from an older file copy (stored sent 1, relay 3): converges and keeps uploading', () async {
+      final path = '${tmp.path}/a.db';
+      final a = Device('a', tmp, key, () => now, net: net, dbPath: path);
+      devices.add(a);
+      final b = device('b');
+      a.repo.updateSettings({'salary': 1});
+      await rounds([a, b]);
+      a.close();
+      final copy = File(path).readAsBytesSync();
+      a.reopen();
+      for (var i = 0; i < 2; i++) {
+        now += 1000;
+        a.repo.updateSettings({'rent': 2 + i});
+        await a.run();
+      }
+      a.repo.close();
+      for (final f in [path, '$path-wal', '$path-shm']) {
+        if (File(f).existsSync()) File(f).deleteSync();
+      }
+      File(path).writeAsBytesSync(copy);
+      a.reopen();
+      expect(a.repo.settings().rent, 0, reason: 'the old copy');
+      now += 1000;
+      a.repo.updateSettings({'loan': 9});
+      final r = await a.run();
+      expect(r.problems.single.reason, SyncProblemReason.deviceIdInUse, reason: 'its stream holds files it never sent');
+      await rounds([b, a], 3);
+      expectSame([a, b]);
+      expect((a.repo.settings().rent, b.repo.settings().loan), (3, 9), reason: 'it reads its old stream back');
+      now += 1000;
+      a.repo.updateSettings({'salary': 5});
+      await rounds([a, b]);
+      expect(b.repo.settings().salary, 5, reason: 'keeps uploading');
+    });
+
+    test('a fresh database with a kept device id: converges and keeps uploading', () async {
+      final id = WalletRepo.newDeviceId();
+      final a = device('a', deviceId: id), b = device('b');
+      a.repo.updateSettings({'salary': 1});
+      await rounds([a, b]);
+      final again = device('again', deviceId: id); // reinstalled, the key store kept the id
+      again.repo.updateSettings({'rent': 4});
+      await rounds([again, b], 3);
+      expectSame([again, b]);
+      expect((again.repo.settings().salary, b.repo.settings().rent), (1, 4));
+      now += 1000;
+      again.repo.updateSettings({'loan': 6});
+      await rounds([again, b]);
+      expect(b.repo.settings().loan, 6);
     });
   });
 
@@ -357,6 +470,77 @@ void main() {
       r.updateSettings({'salary': 2});
       expect(r.settings().salary, 2);
       expect(maxClockDrift, const Duration(hours: 1));
+    });
+    test('internal writes are never refused: a sync run with the clock behind matches and repairs, and never throws', () async {
+      final a = device('a'), b = device('b');
+      final tx = a.repo.addTransaction(date: '2026-01-05', amount: -2500, category: 'Groceries');
+      final id = a.repo.addPlanned(title: 'Synthetic dentist', date: '2026-01-06', amount: 2500, category: 'Groceries');
+      a.repo.markPlannedPaid(id, tx);
+      await rounds([a, b]);
+      // b's clock is set 2 h back; then an older build's Skip arrives, stamped before that (when b's clock was right):
+      // owner writes are refused, but the repair that op needs (an internal write) runs.
+      now -= 2 * _hour;
+      b.repo.applyRemote([
+        Op('planned', id, const {'status': 'skipped'}, Hlc(now + 2 * _hour + 1000, 0, 'oldbuild').toString())
+      ], resend: true);
+      expect(() => b.repo.updateSettings({'salary': 1}), throwsA(isA<ClockBehindException>()));
+      final rep = await b.run();
+      expect(rep.caughtUp, isTrue);
+      expect(b.repo.db.select('SELECT paid_tx FROM planned WHERE id = ?', [id]).single['paid_tx'], isNull,
+          reason: 'the H9 repair ran through the internal path');
+    });
+
+    test('a backup with a clock more than an hour ahead is refused (clockAhead), nothing applied', () async {
+      final ahead = device('ahead', skew: 2 * _hour);
+      ahead.repo.updateSettings({'salary': 7});
+      final bytes = await backupBytes(ahead.repo, key);
+      final fresh = WalletRepo.inMemory(now: () => now);
+      addTearDown(fresh.close);
+      await expectLater(restoreBackupBytes(fresh, bytes, key),
+          throwsA(isA<BackupException>().having((e) => e.reason, 'reason', BackupFailure.clockAhead)));
+      expect(fresh.isEmpty, isTrue);
+      final later = WalletRepo.inMemory(now: () => now + 2 * _hour);
+      addTearDown(later.close);
+      expect(await restoreBackupBytes(later, bytes, key), greaterThan(0), reason: 'fine once the clocks agree');
+    });
+
+    test('a pair more than an hour apart converges once time passes the retry point', () async {
+      final ahead = device('ahead', skew: 90 * 60000), a = device('a');
+      ahead.repo.updateSettings({'salary': 1});
+      a.repo.updateSettings({'rent': 2});
+      await rounds([ahead, a]);
+      expect(a.repo.settings().salary, 0, reason: 'quarantined while 90 min ahead');
+      expect(ahead.repo.settings().rent, 2, reason: 'the ahead device reads the others');
+      now += 31 * 60000;
+      await rounds([ahead, a, ahead]);
+      expectSame([ahead, a]);
+      expect(a.repo.settings().salary, 1);
+      expect((await a.run()).problems, isEmpty);
+    });
+  });
+
+  group('mixed versions: a 401 that is not clock asks health once', () {
+    Future<TransportFailure> failureFor(String health) async {
+      final calls = <String>[];
+      final t = RelayTransport(Uri.parse('http://relay.test:8787'), key, client: MockClient((r) async {
+        calls.add(r.url.path);
+        if (r.url.path == '/v2/health') return http.Response(health, 200);
+        return http.Response('{"error":"bad signature"}', 401);
+      }));
+      try {
+        await t.state();
+        fail('accepted');
+      } on TransportException catch (e) {
+        expect(calls.where((p) => p == '/v2/health'), hasLength(1), reason: 'once');
+        return e.failure;
+      }
+    }
+
+    test('api 2 relay → olderApi, api 4 → newerApi, the same api → refused (a key clash)', () async {
+      expect(await failureFor('{"api":2}'), TransportFailure.olderApi);
+      expect(await failureFor('{"api":4}'), TransportFailure.newerApi);
+      expect(await failureFor('{"api":3}'), TransportFailure.refused);
+      expect(await failureFor('not json'), TransportFailure.refused, reason: 'health unusable: as before');
     });
   });
 

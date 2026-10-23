@@ -36,6 +36,27 @@ void main() {
     });
   });
 
+  group('an api-2 app on this relay', () {
+    test('GET state signed with the v2 text answers only {"api":3} (the app says "update the app"); other v2 requests 401', () async {
+      final h = await freshHarness();
+      await h.putData(w1, 'dev1', 1, 'one');
+      const path = '/v2/w/$w1/state';
+      final t = '${h.clock.millisecondsSinceEpoch}';
+      const empty = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+      final v2 = {'x-bw-time': t, 'x-bw-sig': await keyA.sign('bw-relay-v2\nGET\n$path\n\n$empty\n$t')};
+      final r = await h.get(path, headers: v2);
+      expect(r.statusCode, 200);
+      expect(jsonDecode(r.body), {'api': 3});
+      final d = await h.get('/v2/w/$w1/d/dev1/1', headers: {
+        'x-bw-time': t,
+        'x-bw-sig': await keyA.sign('bw-relay-v2\nGET\n/v2/w/$w1/d/dev1/1\n\n$empty\n$t'),
+      });
+      expect(d.statusCode, 401);
+      final wrong = await h.get(path, headers: {'x-bw-time': t, 'x-bw-sig': await keyB.sign('bw-relay-v2\nGET\n$path\n\n$empty\n$t')});
+      expect(wrong.statusCode, 401, reason: 'another key is still refused');
+    });
+  });
+
   group('relay instance id', () {
     test('state carries a 32-hex instance id kept in meta.json across a restart; another data folder has another', () async {
       final h = await freshHarness();

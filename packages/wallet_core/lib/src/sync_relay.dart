@@ -219,6 +219,16 @@ class RelayTransport implements SyncTransport {
         r = await attempt();
       }
     }
+    if (r.statusCode == 401 && !_isClock(r)) {
+      // A relay of another api version refuses this build's signatures (the signed text names its version): ask its
+      // health once, so mixed versions read as "update the app / the relay", and `refused` stays for a real key clash.
+      try {
+        await health(base, client: _client, timeout: timeout);
+      } on TransportException catch (e) {
+        if (e.failure == TransportFailure.olderApi || e.failure == TransportFailure.newerApi) rethrow;
+        logEvent(_log, Level.FINE, 'relay.health.after401', {'failure': e.failure.name});
+      }
+    }
     _check(r, kind);
     return r;
   }

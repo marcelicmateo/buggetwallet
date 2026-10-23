@@ -293,22 +293,35 @@ class SyncEngine {
   /// from the relay = a wiped, restored or replaced relay: that run is a first connect ([SyncReport.relayChanged]).
   static const instanceKey = 'syncInstance';
 
-  /// Device-local: this device's stream epoch (H5b; absent = 0). Its relay files go under [streamName] of its id and
-  /// this epoch. Raised when the relay holds fewer of this device's files than it sent ([sentKey]): a restored copy or
-  /// a wiped relay, where reusing the seq numbers with other content would make peers that read the old ones skip the
-  /// new ones. The new stream starts at seq 1 with the whole state; peers never saw its name, so they read all of it.
-  static const epochKey = 'syncEpoch';
+  /// Device-local (H5b): the relay device name this install writes under now, its **stream** ([streamName]; absent =
+  /// its device id, as every file before Stage H). A fresh stream is taken whenever this one may not be this install's
+  /// alone ([_move]): the relay holds fewer of its files than were sent (a restored copy or a wiped relay: a seq reused
+  /// with other content would be skipped by peers that read the old one), more than were sent with no own upload cut
+  /// short, or a 409 on an own seq (another install with this id, e.g. a copied database). The new stream starts at
+  /// seq 1 with the whole state; peers never saw its name, so they read all of it.
+  static const streamKey = 'syncStream';
 
-  /// Device-local: set while an upload is under way (the stream's `last` before it), cleared once every part is
-  /// stored. A stream with more files than [sentKey] says is then this device's own cut-off upload, not another
-  /// install's.
+  /// Device-local: the streams this install has written (JSON list), the current one included once it uploaded to it,
+  /// the old id's after an id change (H6). It acks under each of them that the relay still lists, so nothing it wrote
+  /// holds back pruning. A stream left because another install may write it is dropped from the list (never acked as).
+  static const streamsKey = 'syncStreams';
+
+  /// Device-local: streams of this device id written by another install, already reported as
+  /// [SyncProblemReason.deviceIdInUse] (JSON list), so each is reported once.
+  static const foreignKey = 'syncForeign';
+
+  /// Device-local: `<from>:<to>` while an upload is under way: the stream's `last` before it and the highest seq it
+  /// may have stored. Cleared once every part is stored (and on a 409). Only those seqs count as this install's own
+  /// cut-off files when the stream holds more than [sentKey] says.
   static const sendingKey = 'syncSending';
 
-  /// The relay device name of [deviceId]'s stream [epoch]: the id itself for epoch 0 (every file before H5b), else
-  /// `<id>-<epoch>`. Device ids hold no `-` ([WalletRepo.newDeviceId]: hex), so the name parses back unambiguously.
-  static String streamName(String deviceId, int epoch) => epoch == 0 ? deviceId : '$deviceId-$epoch';
+  /// The relay device name of [deviceId]'s stream [epoch]: the id itself for epoch 0 (every file before Stage H), else
+  /// `<id>-<epoch><tag>` with [tag] six random lower-case letters, so two installs (or one install after a double
+  /// restore) never pick the same name. Device ids hold only letters and digits (at most 48), so the name parses back
+  /// and stays within the relay's 64 characters.
+  static String streamName(String deviceId, int epoch, [String tag = '']) => epoch == 0 ? deviceId : '$deviceId-$epoch$tag';
 
-  static final _streamPattern = RegExp(r'^(.+)-(\d{1,15})$');
+  static final _streamPattern = RegExp(r'^(.+)-(\d{1,9})([a-z]{6})$');
 
   /// The device id a relay device name belongs to ([streamName] backwards).
   static String streamBase(String stream) => _streamPattern.firstMatch(stream)?.group(1) ?? stream;
@@ -316,8 +329,51 @@ class SyncEngine {
   /// The epoch of a relay device name (0 for a plain id).
   static int streamEpoch(String stream) => int.tryParse(_streamPattern.firstMatch(stream)?.group(2) ?? '') ?? 0;
 
-  /// This device's current stream name.
-  static String _streamOf(WalletRepo repo) => streamName(repo.deviceId, int.tryParse(repo.localValue(epochKey) ?? '') ?? 0);
+  /// This install's current stream name ([streamKey]; one of another id, left over, counts as absent).
+  static String _streamOf(WalletRepo repo) {
+    final s = repo.localValue(streamKey);
+    return s != null && streamBase(s) == repo.deviceId ? s : repo.deviceId;
+  }
+
+  static List<String> _list(WalletRepo repo, String key) {
+    final raw = repo.localValue(key);
+    if (raw == null) return [];
+    try {
+      return [for (final v in jsonDecode(raw) as List) v as String];
+    } on Object catch (e, st) {
+      logError(_log, 'sync.streams.unreadable', e, st);
+      return [];
+    }
+  }
+
+  static void _setList(WalletRepo repo, String key, List<String> v) => repo.setLocalValue(key, v.isEmpty ? null : jsonEncode(v));
+
+  /// Takes a fresh stream ([streamKey]): the next epoch above every stream of this id the relay lists or this install
+  /// wrote, with a random tag. [shared]: the stream left may be written by another install, so it is no longer acked as
+  /// and not reported as foreign later; otherwise (the relay lost files) it stays in [streamsKey]. [sentKey] and
+  /// [sendingKey] are cleared, so the next upload is the whole state.
+  static String _move(WalletRepo repo, RelayState state, {required bool shared, required String reason}) {
+    final cur = _streamOf(repo), id = repo.deviceId;
+    final written = _list(repo, streamsKey);
+    if (shared) {
+      written.remove(cur);
+      _setList(repo, foreignKey, {..._list(repo, foreignKey), cur}.toList());
+    } else if (repo.localValue(sentKey) != null && !written.contains(cur)) {
+      written.add(cur); // written before the list existed (a build before Stage H)
+    }
+    var epoch = streamEpoch(cur);
+    for (final d in [...state.devices.keys, ...written]) {
+      if (streamBase(d) == id) epoch = max(epoch, streamEpoch(d));
+    }
+    final r = Random.secure();
+    final name = streamName(id, epoch + 1, String.fromCharCodes([for (var i = 0; i < 6; i++) 0x61 + r.nextInt(26)]));
+    _setList(repo, streamsKey, written);
+    repo.setLocalValue(streamKey, name);
+    repo.setLocalValue(sentKey, null);
+    repo.setLocalValue(sendingKey, null);
+    logEvent(_log, Level.WARNING, 'sync.stream.moved', {'epoch': epoch + 1, 'reason': reason});
+    return name;
+  }
 
   /// Device-local: per (peer, device) pair where the peer's ack for that device's files is below what this device holds
   /// of them (its cursor, or its own last), that ack and since when (ms) it has stayed there
@@ -412,14 +468,24 @@ class SyncEngine {
     // are read like a peer's (idempotent: this device holds those ops) and acked under their names too, so they never
     // hold back pruning or look stuck. A stream of this id with a higher epoch than this device ever used was written
     // by another install with this id.
-    final stream = _streamOf(repo), epoch = streamEpoch(stream);
+    final stream = _streamOf(repo);
+    final written = _list(repo, streamsKey);
     final ownOld = [
-      for (final d in state.devices.keys)
-        if (d != stream && streamBase(d) == me && streamEpoch(d) < epoch) d
+      for (final d in written)
+        if (d != stream && state.devices.containsKey(d)) d
     ]..sort();
-    final clone = state.devices.keys.any((d) => streamBase(d) == me && streamEpoch(d) > epoch);
-    if (clone) logEvent(_log, Level.WARNING, 'sync.stream.foreign', {'epoch': epoch});
-    final inUse = inUseUpload ?? (clone ? SyncProblem(_short(me), SyncProblemReason.deviceIdInUse, bytes: 0) : null);
+    // A stream of this id that this install never wrote and has not reported yet: another install with this id (it
+    // writes there, so this install only reads it). Reported once; nothing to do, both keep syncing.
+    final reported = _list(repo, foreignKey);
+    final sighted = [
+      for (final d in state.devices.keys)
+        if (streamBase(d) == me && d != stream && !written.contains(d) && !reported.contains(d)) d
+    ];
+    if (sighted.isNotEmpty) {
+      logEvent(_log, Level.WARNING, 'sync.stream.foreign', {'streams': sighted.length});
+      _setList(repo, foreignKey, [...reported, ...sighted]);
+    }
+    final inUse = inUseUpload ?? (sighted.isNotEmpty ? SyncProblem(_short(me), SyncProblemReason.deviceIdInUse, bytes: 0) : null);
     if (blobMissing && !walletKnown && myLast > 0) {
       // A relay creates a wallet only with this device's first file: the files it refused before that go now.
       final (more, missingAgain) = await _uploadBlobs(repo);
@@ -599,15 +665,24 @@ class SyncEngine {
     final blobsDeleted = await _deleteBlobs(repo);
 
     // 5. Caught up: match, and maybe write a snapshot.
-    final heal = _trackStuck(repo, state, cursors, myLast, now, stream);
-    final caughtUp = waiting.isEmpty && problems.isEmpty && peers.every((d) => cur(d) >= state.devices[d]!.last);
+    final heal = _trackStuck(repo, state, cursors, myLast, now, stream, {...ownOld, stream});
+    // deviceIdInUse is information about this install's own stream (already handled), not a file left unread.
+    final caughtUp = waiting.isEmpty &&
+        problems.every((p) => p.reason == SyncProblemReason.deviceIdInUse) &&
+        peers.every((d) => cur(d) >= state.devices[d]!.last);
     // Snapshots not used are reported, but a device that applied every file is caught up without them.
     problems.addAll(badSnaps.problems.values);
     // Local imports and deletes match at once only while this holds (WalletRepo.syncCaughtUp); otherwise they wait
     // for the next caught-up run, like the ops applied here.
     repo.setLocalValue(WalletRepo.caughtUpKey, caughtUp ? '1' : '0');
     if (caughtUp) {
-      repo.runPendingMatch();
+      try {
+        repo.runPendingMatch();
+      } on ClockBehindException catch (e, st) {
+        // Never from the internal write paths it uses; kept so a run can never fail on the device clock. Matching stays
+        // pending (match_pending) for the next run.
+        logError(_log, 'sync.match.clockBehind', e, st);
+      }
       await _maybeSnapshot(repo, state, cursors, myLast, now, heal: heal);
     } else {
       logEvent(_log, Level.INFO, 'sync.match.waiting', {'waiting': waiting.length, 'bad': problems.length});
@@ -704,34 +779,29 @@ class SyncEngine {
     return n;
   }
 
-  /// Uploads this device's next file (several when over [partBytes]). Returns (ops sent, this device's last seq on the
-  /// relay after it, the [SyncProblemReason.deviceIdInUse] problem when the relay refused an own seq with 409).
-  Future<(int, int, SyncProblem?)> _upload(WalletRepo repo, RelayState state, {required bool relayChanged}) async {
+  /// Uploads this device's next file (several when over [partBytes]) to its stream, after moving to a fresh stream
+  /// when the current one may not be this install's alone ([streamKey], [_move]). Returns (ops sent, this stream's last
+  /// seq on the relay after it, the [SyncProblemReason.deviceIdInUse] problem when it moved because another install
+  /// writes with this id: informational, the run goes on and the problem heals itself).
+  Future<(int, int, SyncProblem?)> _upload(WalletRepo repo, RelayState state, {required bool relayChanged, bool moved = false}) async {
+    SyncProblem? inUse;
+    SyncProblem foreign(int bytes) => SyncProblem(_short(repo.deviceId), SyncProblemReason.deviceIdInUse, bytes: bytes);
     var me = _streamOf(repo);
     var relayLast = state.devices[me]?.last ?? 0;
     var marker = int.tryParse(repo.localValue(sentKey) ?? '');
+    final sending = RegExp(r'^(\d+):(\d+)$').firstMatch(repo.localValue(sendingKey) ?? '');
+    final cutOffTo = sending == null ? null : int.parse(sending.group(2)!);
     if (marker != null && relayLast < marker) {
-      // The relay holds fewer of this stream's files than this device sent (a restored copy, a wiped relay): a new
-      // epoch, so no seq is ever used twice with other content. Stored at once; until the whole state is stored under
-      // the new name, [sentKey] stays absent and every run sends it again (appending, never reusing a seq).
-      var epoch = streamEpoch(me) + 1;
-      while (state.devices.containsKey(streamName(repo.deviceId, epoch))) {
-        epoch++;
-      }
-      repo.setLocalValue(epochKey, '$epoch');
-      repo.setLocalValue(sentKey, null);
-      logEvent(_log, Level.WARNING, 'sync.stream.epoch', {'epoch': epoch, 'relayLast': relayLast, 'sent': marker});
-      me = _streamOf(repo);
-      relayLast = state.devices[me]?.last ?? 0;
-      marker = null;
+      // The relay lost files of this stream (a restored copy, a wiped relay): never reuse a seq with other content.
+      me = _move(repo, state, shared: false, reason: 'behind');
+    } else if (relayLast > (marker ?? 0) && (cutOffTo == null || relayLast > cutOffTo)) {
+      // More files than this install stored, and not its own cut-off upload: another install writes here (a copied
+      // database or key store, or this database restored from an older copy). Leave it to them, read it as a peer.
+      me = _move(repo, state, shared: !relayChanged, reason: relayChanged ? 'relay' : 'foreign');
+      if (!relayChanged) inUse = foreign(0);
     }
-    // More files in this stream than this device stored (or any, before its first upload to it), and no upload of its
-    // own was cut short ([sendingKey]): another install writes as this device. Reported; nothing is uploaded (the
-    // outbox is kept) until this install has its own id.
-    if (!relayChanged && relayLast > (marker ?? 0) && repo.localValue(sendingKey) == null) {
-      logEvent(_log, Level.WARNING, 'sync.stream.foreign', {'relayLast': relayLast, 'sent': marker ?? 0});
-      return (0, relayLast, SyncProblem(_short(me), SyncProblemReason.deviceIdInUse, bytes: 0));
-    }
+    relayLast = state.devices[me]?.last ?? 0;
+    marker = int.tryParse(repo.localValue(sentKey) ?? '');
     final first = marker == null || relayChanged;
     final pending = repo.pendingOps();
     final ops = first ? repo.snapshotOps() : [for (final (_, op) in pending) op];
@@ -745,14 +815,15 @@ class SyncEngine {
         logEvent(_log, Level.FINE, 'sync.export.none');
       }
       _keepInstance(repo, state);
-      return (0, relayLast, null);
+      return (0, relayLast, inUse);
     }
     final t = PerfTimer('sync.export', warnMs: 500);
+    final written = _list(repo, streamsKey);
+    if (!written.contains(me)) _setList(repo, streamsKey, [...written, me]);
     // One file per [partBytes] at most (the relay refuses files over 16 MiB): split by op count, sealed size
     // measured, halved while over. The outbox and [sentKey] change only once every part is stored, so a run that stops
     // half-way sends everything again next time (ops are idempotent: a clock is only taken when newer).
     var seq = relayLast, done = 0, size = ops.length, jsonBytes = 0, bytes = 0;
-    repo.setLocalValue(sendingKey, '$relayLast');
     while (done < ops.length) {
       var count = min(size, ops.length - done);
       List<int> payload, sealed;
@@ -762,19 +833,24 @@ class SyncEngine {
         if (sealed.length <= partBytes || count == 1) break;
         count = (count + 1) ~/ 2;
       }
+      repo.setLocalValue(sendingKey, '$relayLast:${seq + 1}');
       try {
         await transport.put(me, seq + 1, sealed);
       } on TransportException catch (e) {
         if (e.failure == TransportFailure.conflict) {
-          // Other bytes under this device's next seq, stored since `state`: another install writes as this device (a
-          // copied database or key store). Reported, never retried silently; the outbox is kept.
+          // Other bytes under this stream's next seq, stored since `state`: another install writes here. Move to a
+          // fresh stream and send the whole state there (once per run); the outbox is kept until it is stored.
           logEvent(_log, Level.WARNING, 'sync.export.conflict', {'seq': seq + 1, 'failure': e.failure.name});
-          return (0, seq, SyncProblem(_short(me), SyncProblemReason.deviceIdInUse, bytes: sealed.length));
+          repo.setLocalValue(sendingKey, null);
+          if (moved) return (0, seq, foreign(sealed.length));
+          _move(repo, state, shared: true, reason: 'conflict');
+          final (n, last, _) = await _upload(repo, state, relayChanged: relayChanged, moved: true);
+          return (n, last, foreign(sealed.length));
         }
         if (e.failure == TransportFailure.rejected) {
           // A gap (the relay moved on since `state`): kept, sent on the next run.
           logEvent(_log, Level.WARNING, 'sync.export.conflict', {'seq': seq + 1, 'failure': e.failure.name});
-          return (0, seq, null);
+          return (0, seq, inUse);
         }
         throw _fatal('put', e);
       }
@@ -794,7 +870,7 @@ class SyncEngine {
     }
     _keepInstance(repo, state);
     t.done({'ops': ops.length, 'seq': seq, 'files': seq - relayLast, 'jsonBytes': jsonBytes, 'bytes': bytes, 'whole': first});
-    return (ops.length, seq, null);
+    return (ops.length, seq, inUse);
   }
 
   /// Stores the relay's instance id once an upload went through completely (a first connect that stopped half-way is
@@ -872,7 +948,7 @@ class SyncEngine {
   /// cursor, or [myLast] for its own files) for longer than [stuckAfter] (a file it refused stops it there for good: the
   /// relay never overwrites one, see the known limits), the newest snapshot does not cover the file it needs (else it
   /// starts from that snapshot by itself), and this device wrote no heal snapshot within [stuckAfter] ([healKey]).
-  bool _trackStuck(WalletRepo repo, RelayState state, Map<String, int> cursors, int myLast, DateTime now, String me) {
+  bool _trackStuck(WalletRepo repo, RelayState state, Map<String, int> cursors, int myLast, DateTime now, String me, Set<String> mine) {
     final stored = repo.localValue(stuckKey);
     var old = const <String, Object?>{};
     if (stored != null) {
@@ -887,8 +963,8 @@ class SyncEngine {
     var stuck = 0;
     for (final MapEntry(key: p, value: peer) in state.devices.entries) {
       final seen = peer.lastSeen;
-      // This device's own older streams are acked by this device itself.
-      if (streamBase(p) == repo.deviceId || seen == null || now.difference(seen) > stuckAfter) continue;
+      // The streams this install acks as are its own.
+      if (mine.contains(p) || seen == null || now.difference(seen) > stuckAfter) continue;
       for (final d in state.devices.keys) {
         if (d == p) continue;
         final held = d == me ? myLast : cursors[d] ?? 0, ack = peer.acks[d] ?? 0;

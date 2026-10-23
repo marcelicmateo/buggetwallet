@@ -76,15 +76,26 @@ class WalletRepo {
       // first connect (the whole state, clocks unchanged), and the old id's own files are read like a peer's.
       _setMeta('device_id', givenId);
       final unsent = db.select('SELECT COUNT(*) AS n FROM outbox').first['n'] as int;
-      // SyncEngine.sentKey (absent = first connect) and epochKey (the new id starts at stream epoch 0).
-      db.execute("DELETE FROM meta WHERE key IN ('local.syncSent', 'local.syncEpoch', 'local.syncSending')");
+      // The old id's stream stays one this install wrote (SyncEngine.streamsKey: acked as, so it never holds back
+      // pruning); the new id starts with no stream and a first connect (SyncEngine.sentKey, streamKey, sendingKey).
+      final wrote = _meta('local.syncSent') != null;
+      final old = _meta('local.syncStream') ?? dev;
+      List<Object?> streams;
+      try {
+        streams = jsonDecode(_meta('local.syncStreams') ?? '[]') as List;
+      } on Object catch (e, st) {
+        logError(_log, 'repo.streams.unreadable', e, st);
+        streams = [];
+      }
+      if (wrote && !streams.contains(old)) _setMeta('local.syncStreams', jsonEncode([...streams, old]));
+      db.execute("DELETE FROM meta WHERE key IN ('local.syncSent', 'local.syncStream', 'local.syncSending')");
       logEvent(_log, Level.WARNING, 'repo.deviceId.changed', {'outbox': unsent});
       dev = givenId;
     }
     deviceId = dev;
     clock = HlcClock(dev, now: now, last: _meta('hlc'));
     _dropFolderSync();
-    _migrate();
+    _asInternal(_migrate);
   }
 
   /// Bump when a new synced entity or field is added. Version 2 added `goal_contrib`, version 3 `tx.kind_hint` and
@@ -122,7 +133,7 @@ class WalletRepo {
         final stale = db.select("SELECT id FROM tx WHERE source = 'revolut' AND bank_type = ? AND kind_hint = ?",
             [revolutExchangeType, TxKind.ownTransfer.name]);
         rehinted = stale.length;
-        _write([
+        _writeInternal([
           for (final r in stale) ('tx', r['id'] as String, {'kind_hint': TxKind.exchange.name})
         ]);
       }
@@ -262,13 +273,33 @@ class WalletRepo {
     }
   }
 
-  /// Every local write: one [Op] per change, applied and queued in the outbox, in one transaction. Throws
-  /// [ClockBehindException] (nothing written) when the wall clock is more than [maxClockDrift] behind the newest clock
-  /// this database holds: its ops would sort before edits it has already seen.
+  /// Nesting depth of [_asInternal]: while above 0, [_write] skips the clock guard.
+  int _internalDepth = 0;
+
+  /// Runs [body] as an internal write path (H7): the open-time migration, `_reconcile` (pairing, matching, field-pair
+  /// repairs, bill links), `refreshRecurring`, `runPendingMatch` and its clean-ups. Their writes are not the owner's,
+  /// so a wall clock behind the stored clock never blocks them (the HLC still only moves forward: `tick` takes the
+  /// stored clock and counts on).
+  T _asInternal<T>(T Function() body) {
+    _internalDepth++;
+    try {
+      return body();
+    } finally {
+      _internalDepth--;
+    }
+  }
+
+  /// [_write] for internal paths (no [ClockBehindException]); see [_asInternal]. Migrations of legacy rows use it.
+  void _writeInternal(List<(String, String, Map<String, Object?>)> changes) => _asInternal(() => _write(changes));
+
+  /// Every local write: one [Op] per change, applied and queued in the outbox, in one transaction. An owner write (the
+  /// public write API the app calls) throws [ClockBehindException] (nothing written) when the wall clock is more than
+  /// [maxClockDrift] behind the newest clock this database holds: its ops would sort before edits already seen.
+  /// Internal paths go through [_writeInternal] / [_asInternal] and are never refused.
   void _write(List<(String, String, Map<String, Object?>)> changes) {
     if (changes.isEmpty) return;
     final behind = clock.last.millis - clock.now();
-    if (behind > maxClockDrift.inMilliseconds) {
+    if (_internalDepth == 0 && behind > maxClockDrift.inMilliseconds) {
       logEvent(_log, Level.WARNING, 'repo.clockBehind', {'ops': changes.length, 'behindMin': behind ~/ 60000});
       throw const ClockBehindException();
     }
@@ -506,13 +537,13 @@ class WalletRepo {
   /// After rows changed (import, delete, remote ops): pairs own-account transfers, then matches hand-added expenses
   /// (a paired row is a transfer, so it is no longer a payment a cash entry could be), then links confirmed bills to
   /// their payments ([planBillLinks]). Returns (pairs, matches).
-  (int, int) _reconcile() {
-    final pairs = _pairTransfers();
-    final matches = _matchManual();
-    _repairFieldPairs();
-    _autoLinkBills();
-    return (pairs, matches);
-  }
+  (int, int) _reconcile() => _asInternal(() {
+        final pairs = _pairTransfers();
+        final matches = _matchManual();
+        _repairFieldPairs();
+        _autoLinkBills();
+        return (pairs, matches);
+      });
 
   /// Device-local: whether this device's last sync run was caught up (`'1'`/`'0'`, written by `SyncEngine` after every
   /// run; absent = never synced, which counts as caught up).
@@ -536,10 +567,12 @@ class WalletRepo {
   /// last ran (also after a crash mid-sync: the flag is stored). `SyncEngine.run` calls it once, only when caught up.
   void runPendingMatch() {
     if (_meta('match_pending') == null) return;
-    _reconcile();
-    refreshRecurring(_today());
-    dropOrphanBlobs();
-    _purgeBlobCache();
+    _asInternal(() {
+      _reconcile();
+      refreshRecurring(_today());
+      dropOrphanBlobs();
+      _purgeBlobCache();
+    });
   }
 
   /// Today's date on this device's clock (the one the HLC uses, so tests can set it).
@@ -913,7 +946,9 @@ class WalletRepo {
   ///   row, `nextDue` = the row's date + `intervalDays` (from the real payment, like detection, so a bill paid on the
   ///   15th stays matched month after month), `expectedAmount` unchanged; cycle after cycle when several payments are
   ///   here. The bank row keeps its category: nothing is reclassified.
-  void refreshRecurring(String today) {
+  void refreshRecurring(String today) => _asInternal(() => _refreshRecurring(today));
+
+  void _refreshRecurring(String today) {
     requireIsoDate(today);
     final t = PerfTimer('repo.recurring');
     final rows = transactions();

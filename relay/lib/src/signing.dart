@@ -14,6 +14,10 @@ const Duration signatureWindow = Duration(minutes: 5);
 String signedText(String method, String host, String path, String covers, String bodyHash, String time) =>
     'bw-relay-v3\n$method\n$host\n$path\n$covers\n$bodyHash\n$time';
 
+/// The api-2 text (`bw-relay-v2`, no host): only to tell an app of that version, on `GET state`, to update.
+String signedTextV2(String method, String path, String covers, String bodyHash, String time) =>
+    'bw-relay-v2\n$method\n$path\n$covers\n$bodyHash\n$time';
+
 /// Lowercase hex SHA-256 of [bytes].
 String sha256OfBytes(List<int> bytes) {
   final h = const DartSha256().hashSync(bytes);

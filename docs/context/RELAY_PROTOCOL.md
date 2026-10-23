@@ -8,7 +8,7 @@ Both sides follow this file exactly; change it here first. Paths are `/v2/…`; 
 |---|---|---|
 | 1 | Bearer token (never deployed). | Paths `/v1/…`: a v2+ client's health check tells it apart (`olderApi`). |
 | 2 | Ed25519-signed requests (`bw-relay-v2`), blobs. | — |
-| 3 (Stage H, 2026-10-23) | The signed text names the host (`bw-relay-v3`, H8); state carries the relay `instance` id (H5); per-device stream epochs `<device>-<n>` (H5b); optional `--create-token` (H11); a missing file of a known device is 404 `missing`. | An api-2 app on an api-3 relay stops with `newerApi` ("The relay runs a newer version. Update the app."); an api-3 app on an api-2 relay stops with `olderApi` ("Update the relay"). Nothing is uploaded or read either way, so no device diverges: each syncs again once both sides run Stage H. A v3 relay accepts only v3 signatures. |
+| 3 (Stage H, 2026-10-23) | The signed text names the host (`bw-relay-v3`, H8); state carries the relay `instance` id (H5); per-device streams `<device>-<n><tag>` (H5b); optional `--create-token` (H11); a missing file of a known device is 404 `missing`. | An api-2 app on an api-3 relay: its `GET state` (v2 signature, which the relay still checks for this one request) is answered with only `{"api":3}`, so it stops with `newerApi` ("The relay runs a newer version. Update the app."); a new wallet created by an api-2 app on an api-3 relay is refused (401, shown as "refused"). An api-3 app on an api-2 relay: the relay answers 401 to its v3 signature; on any 401 that is not `clock` the client asks `/v2/health` once and stops with `olderApi` ("Update the relay") for api 2, `newerApi` above 3, and keeps `refused` only for api 3. Nothing is uploaded or read either way, so no device diverges: each syncs again once both sides run Stage H. Otherwise a v3 relay accepts only v3 signatures. |
 
 ## Identity (client side only)
 - `wid` = lowercase hex of HKDF-SHA256(ikm = wallet key bytes, salt = empty, info = `bw-relay-id-v1`, length 16) → 32 hex chars.
@@ -126,26 +126,40 @@ another id. The client stores the id of the last run whose upload went through (
 id from the relay = `relayChanged`: every cursor goes back to 0 and the run is a first connect (the whole state is
 uploaded again, appended after this device's `last` there). No stored id yet (first sync, or the first sync after the
 upgrade) = adopted without a first connect; a relay without `instance` (api 2) leaves the stored id as it is. The app
-shows `relayFingerprint` (first 8 hex as `xxxx-xxxx`). A restored copy of the same data folder keeps its `instance`:
-that case is caught by the stream epochs below.
+shows `relayFingerprint` (first 8 hex as `xxxx-xxxx`). A run whose upload created the wallet (state had no devices) asks
+`state` once more, so it learns (and reports) the new instance in that run. A restored copy of the same data folder keeps its `instance`:
+that case is caught by the stream rules below.
 
-### Device streams (H5b)
+### Device streams and ownership (H5b, HBb)
 A device writes its files under a relay device name, its **stream**: its device id for epoch 0 (every file written
-before Stage H), else `<device id>-<epoch>` (device ids are letters and digits only, so the name parses back; the
-name stays within the 64-character `device` pattern). The epoch is device-local (`syncEpoch`). When the relay holds
-fewer files of the current stream than the device has sent (`last` < its `syncSent`: a restored older copy of the data
-folder, or a wiped relay), the device moves to the next unused epoch at once and uploads its whole state as seq 1… of
-the new stream; it never stores other content under a seq it used before. Peers never saw the new name, so they read
-all of it; the old stream stays as it is (read and applied like any device's, idempotent), and a peer cursor above a
-stream's `last` is reset to 0 as before. Each device acks under its current stream and, with the same cursors plus its
-current stream's `last`, under each of its older streams still listed, so old streams never hold back pruning or look
-stuck. Clients show all streams of one device id as one device. A stream of this device's id with an epoch above its
-own was written by another install with this id: reported as `deviceIdInUse`, like a 409 on its own next seq.
-Limits: the relay keeps an abandoned stream's files until snapshots and acks cover them (pruned like any device's);
-a device whose run stopped after a stored PUT but before it recorded `syncSent`, on a relay then restored to a copy
-from before that PUT, does not notice (its `last` equals `syncSent`) and can reuse that seq. A client refuses `api` above its own (`newerApi`: update the
-app) and below it (`olderApi`: update the relay); its health check also asks `/v1/health` when `/v2/health` is 404, to
-tell an old relay apart.
+before Stage H), else `<device id>-<n><tag>` with `n` the epoch (decimal) and `tag` six random lower-case letters
+(device ids are letters and digits only, at most 48, so the name parses back and stays within 64 characters; the tag
+keeps two installs, or one install after a double restore, from ever picking the same name). The current stream is
+device-local (`syncStream`). Ownership rules (client side; the relay knows nothing of them):
+1. Never stop syncing for a state the owner cannot fix.
+2. Never write into a stream another install may be writing.
+3. Read every stream not being written now as a peer, streams of this device id included (older or newer epochs, a
+   clone's, the id used before an H6 id change), and ack it.
+4. Ack under every stream this install has written (`syncStreams`, the old id's included), with its cursors plus its
+   current stream's `last`, so nothing it wrote holds back pruning; never under one another install may be writing.
+
+A device takes a fresh stream (epoch above every stream of its id it knows) and uploads its whole state there, from
+seq 1, when the current one is not exclusively its own:
+- the relay holds **fewer** of its files than it sent (`last` < `syncSent`: a restored older copy of the data folder,
+  or a wiped relay): no seq is ever reused with other content; the old stream stays one it acks as;
+- the relay holds **more** than it sent and no own upload was cut short (device-local `syncSending` = `<from>:<to>`
+  while an upload is under way; only seqs up to `to` are excused): another install writes there (a copied database
+  or key store, or this database restored from an older file copy); also on a fresh database whose id already has
+  files. The old stream is read as a peer and no longer acked as;
+- a 409 on its own next seq: the same, in the same run (once), with `syncSending` cleared.
+The client reports `deviceIdInUse` once per such move (and once per newly seen stream of its id that it never wrote),
+as information: the run goes on and is caught up; the next runs are normal. Clients show all streams of one device id
+as one device. A cursor for a stream the relay no longer lists is dropped.
+Limits: abandoned streams stay until snapshots and acks cover them; a stream left to another install is no longer
+acked by this one, so pruning of others' files waits for that install's acks or the 90-day rule; a run that stopped
+after a stored PUT but before it recorded `syncSending`, on a relay then restored to a copy from before that PUT, can
+reuse that seq; two installs with one device id share its HLC node, so two of their writes in the same millisecond
+with the same counter compare equal (the first one applied wins on each device).
 
 ## Snapshots and pruning
 - The relay keeps the latest snapshot and the one before it (`previous`); an accepted snapshot moves the latest to

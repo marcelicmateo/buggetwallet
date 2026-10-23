@@ -143,9 +143,14 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   main/-wal/-shm/-journal replaced by it and converted again; a failed rekey or check restores it at once. Test hook
   `step:` (`copied`, `rekeyed`, `verified`). The app (R6b) passes the key on native and wraps the web VFS
   (`multipleciphers-<fs>`) itself.
-- `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart` (H7 bounded HLC: `maxClockDrift` 1 h; `_write` throws
-  `ClockBehindException` (nothing written, message without clock values) while the wall clock is more than that behind
-  `clock.last`; `repo.clockBehind` logs minutes only), `vault.dart` (key + encryption; `UnsealFailure` says why a
+- `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart` (H7 bounded HLC: `maxClockDrift` 1 h; an owner write (the
+  public write API) throws `ClockBehindException` (nothing written, message without clock values) while the wall clock
+  is more than that behind `clock.last`; `repo.clockBehind` logs minutes only. Internal write paths skip the guard:
+  `WalletRepo._writeInternal(changes)` and `_asInternal(body)` (the open-time migration, `_reconcile` = pairing,
+  matching, H9 repairs, bill links, `refreshRecurring`, `runPendingMatch`, `dropOrphanBlobs`); `tick` stays monotonic.
+  `SyncEngine.run` catches a `ClockBehindException` from `runPendingMatch` (logged, matching stays pending).
+  `restoreBackupBytes` refuses a backup whose newest clock is more than `maxClockDrift` ahead of the wall clock:
+  `BackupException(BackupFailure.clockAhead)`, nothing applied), `vault.dart` (key + encryption; `UnsealFailure` says why a
   file was refused, `tooLarge` past the inflate cap; `deriveKey` = HKDF-SHA256, empty salt), `sync.dart` (`SyncException`,
   `SyncReport`, `SyncWaiting`, `SyncDevice`, `relayFingerprint(instance)` = first 8 hex as `xxxx-xxxx`; web-safe) +
   `sync_engine.dart` (below).
@@ -160,10 +165,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `PRAGMA cipher = 'chacha20'` (sqlite3mc's default so far) before every `PRAGMA key` / `rekey`.
 - Device id per install (H6): `WalletRepo.open(path, {dbKey, now, deviceId})`, `inMemory({now, deviceId})`,
   `fromDatabase(db, {file, now, deviceId})`. Null = the meta `device_id` (a new database makes one). Given and
-  different from the stored one: meta `device_id` takes it, local `syncSent`/`syncEpoch`/`syncSending` are cleared, so
-  the next sync is a first connect under the new id (whole state, clocks unchanged; the outbox is kept and marked sent
-  by it); the old id's stream is read like a peer's. Ids are `[A-Za-z0-9]{1,48}` (`ArgumentError` else; a relay
-  stream name is `<id>-<epoch>`). `WalletRepo.newDeviceId()` (16 hex), `WalletRepo.storedDeviceId(db)` (read only),
+  different from the stored one: meta `device_id` takes it, local `syncSent`/`syncStream`/`syncSending` are cleared,
+  so the next sync is a first connect under the new id (whole state, clocks unchanged; the outbox is kept and marked
+  sent by it); the old id's stream is added to `syncStreams` (still acked as) and read like a peer's. Ids are
+  `[A-Za-z0-9]{1,48}` (`ArgumentError` else; a relay stream name is `<id>-<n><tag>`). `WalletRepo.newDeviceId()` (16 hex), `WalletRepo.storedDeviceId(db)` (read only),
   `repo.deviceId` of a database opened without one = the id to move into the app's key store once.
 - `backup.dart` — backups (M5, owner decision 2026-10-22: no sync folder, "Back up now" saves the sealed `.bwb` through
   the save dialog, encrypted with the wallet key, restore only into an empty wallet; web-safe, no file code here).
@@ -278,24 +283,29 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (403 `createToken` → `TransportFailure.createToken`, fatal for the run). `clockOffsetMs` lives in the transport
   (the app keeps one per relay address for the session; never persisted). 401 `clock` → offset from the
   `Date` header (`parseHttpDate`, no dart:io) and one retry, never more (a second `clock` = `other`); status → failure,
-  `api` above 3 → `newerApi`, below → `olderApi`, 404 state = empty relay, 30 s timeout; `health(base)` asks
+  `api` above 3 → `newerApi`, below → `olderApi`; a 401 that is not `clock` asks `health` once (api 2 → `olderApi`,
+  above 3 → `newerApi`, else `refused`); 404 state = empty relay, 30 s timeout; `health(base)` asks
   `/v2/health`, on 404 `/v1/health` to tell an older relay apart; `now:` for tests). About 1.8 ms per signature on the VM.
   Stage H (H5–H9) in the engine: `SyncEngine.run` while a run of the same engine is in progress returns that run's
   future (`sync.run.joined`); relay instance (`RelayState.instance`, device-local `syncInstance` stored when an upload
   went through completely; another id = `SyncReport.relayChanged`: every cursor to 0 and a first connect; none stored
-  yet = adopted; a run that created the wallet asks `state` once more to learn it); stream epochs (H5b,
-  `SyncEngine.streamName/streamBase/streamEpoch`, local `syncEpoch`): this device writes as `<id>` (epoch 0) or
-  `<id>-<n>`, moves to the next unused epoch at once when the relay's `last` of its stream is below `syncSent` (restored
-  copy or wiped relay; `sync.stream.epoch`), reads its older streams like a peer's and acks under them too (cursors +
-  its current `last`); cursors of streams the relay no longer lists are dropped; `SyncReport.devices` lists one entry
-  per device id. `deviceIdInUse` (`SyncProblem.device` = own short id, outbox kept, nothing uploaded, not caught up):
-  a 409 on an own seq, an own stream with more files than `syncSent` while no own upload was cut short (local
-  `syncSending`, set during an upload), or an own stream with a higher epoch than this device used. `clockDrift`: a file
+  yet = adopted; a run that created the wallet asks `state` once more to learn it); streams and ownership (H5b/HBb,
+  RELAY_PROTOCOL.md "Device streams and ownership"; `SyncEngine.streamName/streamBase/streamEpoch`, local
+  `syncStream` (current; absent = the device id), `syncStreams` (every stream this install wrote and acks as),
+  `syncSending` (`<from>:<to>` during an upload), `syncForeign` (same-id streams already reported)): `_move` takes a
+  fresh stream `<id>-<n><6 random letters>` (n above every same-id stream known) and the next upload is the whole state
+  from seq 1, when the relay's `last` of the current stream is below `syncSent` (kept as acked), above it with no own
+  cut-off upload covering it (another install, or this database restored from an older file copy; no longer acked
+  as), or on a 409 (same run, once; `syncSending` cleared). Every stream but the current one is read like a peer's;
+  acks go under the current stream and every listed stream in `syncStreams` (cursors + the current `last`); cursors of
+  streams the relay no longer lists are dropped; `SyncReport.devices` lists one entry per device id. `deviceIdInUse`
+  (`SyncProblem.device` = own short id, `bytes` 0 or the refused file's size) is information, reported once per move or
+  newly seen same-id stream; it does not stop uploads or `caughtUp`. `clockDrift`: a file
   or snapshot whose newest op clock is more than `maxClockDrift` ahead of the repo's wall clock (`repo.clock.now()`) is
   quarantined with `BadFile.retryAt` (= newest − 1 h, JSON `u`; snapshots `retryAt`) and read again from then on, or
   after a build change. Every file is unsealed with `aadSyncFile(<stream>, seq)`, snapshots with `aadSnapshot(id)`.
   `SyncEngine(transport, key, appVersion:, now:, partBytes:).run(repo)`: reads `state`; uploads pending ops as `last + 1`
-  (seq from the relay, so a failed PUT leaves no gap; 409/422 keep the outbox for the next run); the **first run on a
+  (seq from the relay, so a failed PUT leaves no gap; a 422 keeps the outbox for the next run, a 409 moves the stream); the **first run on a
   relay** (local `syncSent` absent, or the relay's `last` for this device below it = a new or wiped relay) uploads
   `snapshotOps()` instead (the migration from the folder sync). Any upload is split into several seqs, each sealed file
   ≤ `partBytes` (default `maxPartBytes` 8 MiB; the relay refuses > 16 MiB): by op count, sealed size measured, halved
@@ -389,13 +399,14 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   and that seq can be reused; abandoned streams stay on the relay until snapshots and acks let them be pruned, and
   each one costs one ack request per run; builds before Stage H show every stream as its own device (they cannot talk
   to an api-3 relay anyway).
-- Two installs with the same device id (a copied database or key store): the second one to sync finds its stream
-  ahead of its `syncSent` and reports `deviceIdInUse` on every run, uploading nothing (outbox kept) until the app gives
-  it its own id (`open(deviceId:)`); the first keeps syncing. A wallet wiped locally and restored from a backup under the
-  same key-store id looks the same, so the app must make a new id for that. Two installs that each upload between the
-  other's `state` and `PUT` get a 409 instead (same report).
+- Two installs with the same device id (a copied database or key store): the second one to sync moves to a fresh
+  stream (whole state once, `deviceIdInUse` reported once) and both keep syncing. They share the HLC node, so two of
+  their writes with the same millisecond and counter compare equal (the first applied wins on each device). A stream
+  left to another install is no longer acked by this one: if that install stops, pruning of other devices' files waits
+  for the 90-day `lastSeen` rule. A database restored from an older file copy looks the same (it reads its own later
+  files back from the old stream).
 - Device id per install: the old id's stream after an id change stays on the relay as a peer (read once, idempotent)
-  until pruned; its acks freeze, so pruning of other devices' files waits for its 90-day `lastSeen` rule.
+  and acked as until pruned.
 - The snapshot rule's "500 ops behind" counts only the files this device applied or sent itself (`sync_files`); files it
   skipped by starting from a snapshot are not counted.
 - Own transfers: two devices that pair offline from different row sets can write different partners for one row;
@@ -406,10 +417,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   upgrade) and categorize a paired row by its text, so they can show a transfer as spending until they upgrade.
 - Bounded HLC (H7): a peer whose clock is more than an hour ahead has its files quarantined (`clockDrift`) on the
   others until their clocks catch up or it is corrected (its later files wait behind the first one); it still reads
-  theirs. A device whose clock is set more than an hour back cannot write until it is set right. Clocks taken before
-  Stage H (a far-future op already applied) still count as the newest clock, so such a database refuses writes until
-  the wall clock passes them; `restoreBackupBytes` does not check the clocks it applies. Older builds take far-future
-  clocks as before.
+  theirs. A device whose clock is set more than an hour back cannot make owner writes until it is set right (sync,
+  matching and repairs go on). Clocks taken before Stage H (a far-future op already applied) still count as the newest
+  clock, so such a database refuses owner writes until the wall clock passes them. Older builds take far-future clocks
+  as before.
 - BWOP2 (H8): files, snapshots and backups written by Stage H builds are unreadable to older builds (`unknownVersion`
   / `newerFormat`, read after their upgrade); a `.bwb` made now does not restore on an older build. `BWOP1` from older
   builds is read without AAD, so an old file moved to another seq on the relay is not detected (only `BWOP2` binds it).
@@ -464,9 +475,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `test/sync_scenarios_test.dart`, `sync_convergence_test.dart` (random, 2-4 devices), `sync_quarantine*_test.dart`,
   `sync_read_edge_test.dart`, `match_gate_test.dart` (matching only when caught up), `sync_snapshot_use_test.dart`
   (unblock conditions, remembered snapshots), `sync_split_upload_test.dart` (uploads over one file), `sync_engine_spec_test.dart` (+ `support/engine_spec_sim.dart`, shared fake clock: snapshots,
-  pruning, first connect, S1/S2), `harden_sync_test.dart` (Stage H5–H9: relay instance incl. A → B → A, stream epochs on 2 and 3 devices incl. a
-  second restore, device id per install incl. a clone, clockDrift/ClockBehindException, BWOP2 AAD/BWOP1/inflate cap,
-  field-pair repair on two devices, one run at a time), `sync_relay_test.dart` (`deriveKey` vs. a hand-written HKDF, `RelayTransport` over
+  pruning, first connect, S1/S2), `harden_sync_test.dart` (Stage H5–H9 + HBb: relay instance incl. A → B → A, streams on 2,
+  3 and 4 devices incl. a double restore with an offline peer, ownership (clone both editing, 409 then the next run,
+  database restored from an older file, fresh database with a kept id, H6 id change still acks), clockDrift incl. a
+  pair over an hour apart converging, internal writes with the clock behind, `clockAhead` backups, 401 → health
+  (older/newer/refused), BWOP2 AAD/BWOP1/inflate cap, field-pair repair on two devices, one run at a time), `sync_relay_test.dart` (`deriveKey` vs. a hand-written HKDF, `RelayTransport` over
   `MockClient` incl. signatures checked from the protocol text, clock offset retry, older/newer API, `MemoryTransport`
   rules, end to end with the real `relay/` server on port 0 incl. a wrong signature and skewed device clocks).
 - Run: `tools/build.sh test` from the repo root (or `tools/build.sh shell`, then `cd packages/wallet_core && dart test`).
