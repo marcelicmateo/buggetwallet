@@ -44,11 +44,14 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   Undo (Stage I): `undeleteTransaction(id)` / `undeleteGoal(id)` are owner writes of `deleted: 0` (synced; the later
   of it and a delete by HLC wins, §4.10; an unknown id → `ArgumentError`, a live row → nothing written). A row keeps
   its other fields (a hand-added entry its `matched_to`); a goal's contributions come back with it; the tx undo then
-  runs `_reconcileLocal`. `deleteTransaction` keeps the bills it unlinked in device-local meta `undo_bills.<txId>`
-  (`{"at", "bills"}`, only when a bill was unlinked; removed by the undo, or after a day by `_purgeUndo` at open and on
-  every delete); the undo links that bill again in the same write when it is still live, unlinked, and no other live
-  bill holds the row (automatic linking takes only bank rows, so a cash expense from a bill would otherwise count
-  twice). Logs `repo.undelete {entity, bills}`. Tests: `test/undelete_test.dart`.
+  runs `_reconcileLocal`. `deleteTransaction` keeps, in device-local meta `undo.<txId>` (`{"at", "bills", "matched",
+  "transfer"}`, only when one is non-empty; removed by the undo, or after a day by `_purgeUndo` at open and on every
+  delete), the bills it unlinked, the hand-added entries the row replaced (`matched_to`) and its own-transfer partners
+  (`transfer_to`), read before the delete. The undo writes them back in the same write: the bill when it is still
+  live, unlinked, and no other live bill holds the row (automatic linking takes only bank rows); `matched_to` /
+  `transfer_to` when still null and the entry/partner is live (and the row's own `transfer_to` if it was cleared).
+  Without this, an undo while not caught up would count a cash entry and its bank row (or a pair's legs) twice.
+  Logs `repo.undelete {entity, bills, matches, transfers}`. Tests: `test/undelete_test.dart`.
 - `budget.dart` — period maths: `PeriodBudget` (safe to spend), `MonthSummary`, `Affordability`. **Currency (H1):** only
   rows with `tx.currency == settings.currency` count in `computePeriod`, `monthSummary`, `periodSummaries` (and
   `salaryPaydays`/`detectPaydays`), `averageByCategory`, `suggestBudgets`, `budgetVsActual`, `reviewState`'s pace and
@@ -422,7 +425,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   paths or file names. Noisy per-render logs at FINER. `test/logs_impl_test.dart` checks core logs stay clean.
 
 ## Known limits (for the sync redesign)
-- Undo of a deleted payment row restores its bill link from this device's `undo_bills` record. If another device runs
+- Undo of a deleted payment row restores its bill link from this device's `undo.<txId>` record. If another device runs
   caught up inside the app's 2.5 s Undo window, sees the delete and unlinks the bill with a clock later than the undo,
   that unlink wins: the bill stays open (reserved) while the row counts again, until the owner links it.
 - The same export imported on two devices before they sync: the later import's `amount` clock wins, so a cash entry
