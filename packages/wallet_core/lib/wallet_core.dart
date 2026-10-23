@@ -53,7 +53,19 @@ export 'src/budget.dart'
 export 'src/categories.dart'
     show BudgetKind, builtInMerchantRules, categories, Categorizer, flexCategories, kindOf, merchantKey, merchantName, spendingCategories;
 export 'src/dates.dart'
-    show addDays, dayOf, daysBetween, daysInMonth, isIsoDate, isoDate, monthOf, monthsEnding, nextPayday, parseIso, requireIsoDate;
+    show
+        addDays,
+        currentPeriodStart,
+        dayOf,
+        daysBetween,
+        daysInMonth,
+        isIsoDate,
+        isoDate,
+        monthOf,
+        monthsEnding,
+        nextPayday,
+        parseIso,
+        requireIsoDate;
 export 'src/export.dart' show centsToDecimal, csvField, monthlySummaryCsv, monthlySummaryCsvHeader, transactionsCsv, transactionsCsvHeader;
 export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
 export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, parseIcs, plannedIcs;

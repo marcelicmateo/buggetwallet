@@ -50,7 +50,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   home-currency rows make a candidate (`detectRecurring(..., currency:)`) or pay a cycle (`planRecurringPayments(...,
   currency:)`), so a bill paid in another currency is never reserved (owner rule: exact money). Planned costs carry no
   currency (they are entered in the wallet's).
-  **Payday and over budget (H2):** `paydayPassed` = today ≥ `end`; `daysLeft` is the real count (0 once passed);
+  **Payday and over budget (H2):** `paydayPassed` = today ≥ `end`; once passed, only rows dated before `end` count (later
+  rows are the next period's; salary parts are "arriving" only while the period runs); `currentPeriodStart(periodStart,
+  paydayDay, today)` (dates.dart) = the latest expected payday on or before today, for "start the new period" after
+  several missed paydays; `daysLeft` is the real count (0 once passed);
   `allowanceToday` ≥ 0 always (0 when passed or the money is used up); `safeToday` = allowance − spentToday (negative =
   `overToday`); `overBy` = max(0, −remaining); `overBudget` = `overBy > 0 || planDaily <= 0`. `affordability`:
   `Verdict.overBudget` whenever `p.overBudget` (never `now`), `later` once the payday passed or when the price does not
