@@ -45,7 +45,7 @@ jobs:
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
           export BW_KEYSTORE="$RUNNER_TEMP/release.jks"
           cd app
-          flutter pub get 2>&1 | tee -a ../build.log
+          flutter pub get --enforce-lockfile 2>&1 | tee -a ../build.log
           flutter build apk --release --target-platform android-arm64 2>&1 | tail -40 | tee -a ../build.log
           flutter build linux --release 2>&1 | tail -40 | tee -a ../build.log
           mkdir -p ../dist
@@ -70,7 +70,7 @@ jobs:
         run: |
           set -o pipefail
           cd app
-          flutter pub get 2>&1 | tee -a ../build.log
+          flutter pub get --enforce-lockfile 2>&1 | tee -a ../build.log
           flutter build windows --release 2>&1 | tail -40 | tee -a ../build.log
           mkdir -p ../dist
           cd build/windows/x64/runner/Release && 7z a -tzip ../../../../../../dist/BudgetWallet-windows-x64.zip . > /dev/null
@@ -93,7 +93,7 @@ jobs:
         run: |
           set -o pipefail
           cd app
-          flutter pub get 2>&1 | tee -a ../build.log
+          flutter pub get --enforce-lockfile 2>&1 | tee -a ../build.log
           flutter build macos --release 2>&1 | tail -40 | tee -a ../build.log
           flutter build ios --release --no-codesign 2>&1 | tail -40 | tee -a ../build.log
           mkdir -p ../dist

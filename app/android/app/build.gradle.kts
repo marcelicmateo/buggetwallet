@@ -58,7 +58,10 @@ android {
 
     buildTypes {
         release {
-            proguardFiles("proguard-rules.pro")
+            // Pinned explicitly; the Flutter plugin sets the same, so no size change is expected
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
         }
     }

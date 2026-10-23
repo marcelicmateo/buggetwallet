@@ -213,7 +213,7 @@ jobs:
           BW_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BW_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           BW_APK_ABIS: arm64
-        run: .github/scripts/timed.sh apk 'cd app && flutter pub get >/dev/null && flutter build apk --release --target-platform android-arm64 2>&1 | tail -40'
+        run: .github/scripts/timed.sh apk 'cd app && flutter pub get --enforce-lockfile >/dev/null && flutter build apk --release --target-platform android-arm64 2>&1 | tail -40'
       - name: Upload Android app
         if: steps.apk.outcome == 'success'
         uses: actions/upload-artifact@v4

@@ -120,7 +120,7 @@ if [[ "${BW_NATIVE:-}" == 1 ]]; then
       t=$(now_us); boot; log_history boot "$(secs_since "$t")" ok
       mkdir -p "$ROOT/dist/screens"
       cd "$ROOT/app"
-      flutter pub get >/dev/null
+      flutter pub get --enforce-lockfile >/dev/null
       rc=0
       drive screens "" || rc=$?
       exit "$rc" ;;
@@ -137,7 +137,7 @@ if [[ "${BW_NATIVE:-}" == 1 ]]; then
       done
       t=$(now_us); boot; log_history boot "$(secs_since "$t")" ok
       cd "$ROOT/app"
-      flutter pub get >/dev/null
+      flutter pub get --enforce-lockfile >/dev/null
       rc=0 table=()
       for n in "${names[@]}"; do
         rm -rf "$ROOT/dist/screens/$n"
