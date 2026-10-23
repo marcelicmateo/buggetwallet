@@ -26,12 +26,12 @@ const writeFailedText = "Couldn't save. Nothing was changed.";
 /// Counts failed writes (not the clock case, which has its own dialog); the app listens and shows [writeFailedText].
 final ValueNotifier<int> writeFailedNotice = ValueNotifier(0);
 
-/// True (and the notice is raised) when [error] is a database error thrown by a *write*: its stack runs through core's
-/// transaction (`WalletRepo._tx`, which every write uses and no read does). A failed read, or an error while a screen
+/// True (and the notice is raised) when [error] is a database error thrown by a *write*: core marks what leaves a
+/// rolled-back write transaction ([WalletRepo.isWriteError]); reads never are. A failed read, or an error while a screen
 /// builds, is a crash for the log, not a "Couldn't save". The caller still logs it (error type only).
 bool noticeWriteFailed(Object error, StackTrace? stack) {
   if (error is! SqliteException) return false;
-  if (stack == null || !stack.toString().contains('WalletRepo._tx')) return false;
+  if (!WalletRepo.isWriteError(error)) return false;
   writeFailedNotice.value++;
   return true;
 }

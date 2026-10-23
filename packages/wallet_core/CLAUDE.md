@@ -52,6 +52,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `transfer_to` when still null and the entry/partner is live (and the row's own `transfer_to` if it was cleared).
   Without this, an undo while not caught up would count a cash entry and its bank row (or a pair's legs) twice.
   Logs `repo.undelete {entity, bills, matches, transfers}`. Tests: `test/undelete_test.dart`.
+  `WalletRepo.isWriteError(e)`: true for an error that left a rolled-back write transaction (`_tx` marks it in an
+  `Expando`; reads never), so the app's "Couldn't save" fires only for writes (no stack-frame names: web minifies,
+  AOT inlines). Tests: `test/write_error_test.dart`.
 - `budget.dart` — period maths: `PeriodBudget` (safe to spend), `MonthSummary`, `Affordability`. **Currency (H1):** only
   rows with `tx.currency == settings.currency` count in `computePeriod`, `monthSummary`, `periodSummaries` (and
   `salaryPaydays`/`detectPaydays`), `averageByCategory`, `suggestBudgets`, `budgetVsActual`, `reviewState`'s pace and
