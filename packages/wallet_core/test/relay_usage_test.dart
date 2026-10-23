@@ -58,7 +58,8 @@ void main() {
       final first = await a.run();
       // The upload created the wallet, so the run read state again: its own file is counted.
       expect(first.relayMaxBytes, net.relay.maxBytes);
-      expect(first.relayBytes, inInclusiveRange(1, net.relay.storedBytes), reason: 'read before any later upload of the run');
+      expect(first.relayBytes, net.relay.storedBytes, reason: 'exactly the file the run uploaded (nothing stored after the re-read)');
+      expect(first.relayBytes, greaterThan(0));
       final before = net.relay.storedBytes;
       final second = await a.run();
       expect((second.relayBytes, second.relayMaxBytes), (before, net.relay.maxBytes), reason: 'the state read at the start of the run');

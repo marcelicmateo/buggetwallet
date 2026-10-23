@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart' show ImportBatch;
 
 import 'support/sim.dart';
 import 'support/synthetic.dart';
@@ -146,6 +147,79 @@ void main() {
       r.undeleteTransaction(tx);
       expect(r.transaction(tx)!.deleted, isFalse);
       expect(r.bill(id)!.linkedTx, isNull, reason: 'the record is gone: the row comes back, the bill stays open');
+    });
+  });
+
+  group('not caught up (links come back from the undo record, ICb)', () {
+    late WalletRepo r;
+    var now = noon;
+    setUp(() {
+      now = noon;
+      r = WalletRepo.inMemory(now: () => now);
+    });
+    tearDown(() => r.close());
+
+    /// What counts: live rows outside transfers (a matched entry or a paired leg counts once, never twice).
+    int counted() => [
+          for (final t in r.transactions())
+            if (t.live) r.categorizer().categorize(t)
+        ].where((c) => c.kind != BudgetKind.transfer).fold(0, (a, c) => a + c.amount);
+
+    test('a matched cash entry: delete its bank row, undo: matched again, sums unchanged', () {
+      final m = r.addTransaction(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic');
+      now += 1000;
+      expect(r.importBatch(january).matched, 1);
+      final bank = r.transaction(m)!.matchedTo!;
+      final before = counted();
+      r.setLocalValue(WalletRepo.caughtUpKey, '0');
+      r.deleteTransaction(bank);
+      expect(r.transaction(m)!.matchedTo, isNull, reason: 'the entry counts again at once while the bank row is deleted');
+      now += 1000;
+      r.undeleteTransaction(bank);
+      expect(r.transaction(m)!.matchedTo, bank);
+      expect(r.transactions().where((t) => t.amount == -2340 && t.live).map((t) => t.id), [bank]);
+      expect(counted(), before, reason: 'the 23.40 counts once, not twice');
+      final ops = [
+        for (final (_, op) in r.pendingOps())
+          if (op.id == m) op
+      ];
+      expect(ops.last.fields, {'matched_to': bank}, reason: 'written back in the undo (synced)');
+    });
+
+    test('a hinted own-transfer pair: delete one leg, undo: paired again, sums unchanged', () {
+      r.importBatch(ImportBatch(source: 'pbz', transactions: [
+        n('2026-02-10', -5000, 'Plaćanje karticom', 'SYNTH TOP UP', kind: TxKind.ownTransfer),
+        n('2026-02-12', -1800, 'POS plaćanje', 'SYNTH SHOP'),
+      ]));
+      r.importBatch(ImportBatch(source: 'revolut', transactions: [
+        n('2026-02-10', 5000, 'Topup', 'Top-Up by *0000', source: 'revolut', kind: TxKind.ownTransfer),
+      ]));
+      final out = r.transactions().singleWhere((t) => t.amount == -5000).id;
+      final into = r.transactions().singleWhere((t) => t.amount == 5000).id;
+      expect((r.transaction(out)!.transferTo, r.transaction(into)!.transferTo), (into, out), reason: 'paired while caught up');
+      final before = counted();
+      r.setLocalValue(WalletRepo.caughtUpKey, '0');
+      r.deleteTransaction(out);
+      expect(r.transaction(into)!.transferTo, isNull);
+      now += 1000;
+      r.undeleteTransaction(out);
+      expect((r.transaction(out)!.transferTo, r.transaction(into)!.transferTo), (into, out));
+      expect(counted(), before);
+    });
+
+    test('a link changed meanwhile is left alone: an entry deleted before the undo stays deleted', () {
+      final m = r.addTransaction(date: '2026-01-17', amount: 2340, category: 'Eating out');
+      now += 1000;
+      r.importBatch(january);
+      final bank = r.transaction(m)!.matchedTo!;
+      r.setLocalValue(WalletRepo.caughtUpKey, '0');
+      r.deleteTransaction(bank);
+      r.deleteTransaction(m);
+      now += 1000;
+      r.undeleteTransaction(bank);
+      expect(r.transaction(m)!.deleted, isTrue);
+      expect(r.transaction(m)!.matchedTo, isNull, reason: 'a deleted entry is not linked back');
+      expect(r.transaction(bank)!.deleted, isFalse);
     });
   });
 
