@@ -124,11 +124,11 @@ class _WishlistScreenState extends State<WishlistScreen> {
         ? 'The pay period has ended. Start the new period, then check again.'
         : switch (a.verdict) {
             Verdict.overBudget => p.overBy > 0
-                ? 'Spending is already ${money(p.overBy, cur)} over the plan until payday, so nothing more fits.'
+                ? 'Spending is already ${money(p.overBy, cur)} over the plan ${p.paydayPassed ? 'this period' : 'until payday'}, so nothing more fits.'
                 : 'Your plan leaves no spending money this period, so nothing more fits.',
             Verdict.later => "It's more than the ${money(left, cur, decimals: 0)} you have left until payday.",
             _ =>
-              'Your daily budget would drop from ${money(p.allowanceToday, cur)} to ${money(a.newDaily, cur)} for the next ${p.daysLeft} days.',
+              'Your daily budget would drop from ${money(p.allowanceToday, cur)} to ${money(a.newDaily, cur)} for the next ${p.daysLeft} ${p.daysLeft == 1 ? 'day' : 'days'}.',
           };
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       head,

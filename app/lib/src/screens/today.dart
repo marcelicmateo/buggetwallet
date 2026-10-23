@@ -62,9 +62,14 @@ class TodayScreen extends StatelessWidget {
     final ended = p.paydayPassed;
     // The hero number is never negative: what is left once the period ended, how far over today, else the safe amount.
     final hero = ended ? (p.remaining > 0 ? p.remaining : 0) : (over ? p.overToday : p.safeToday);
+    // A small overspend is shown to the cent: "Over today by 0 €" would hide it.
+    String shown(int cents) => cents > 0 && cents < 10000 ? moneyExact(cents, cur) : money(cents, cur, decimals: 0);
+    final worry = over || p.overBudget;
     final used = p.flexBudget > 0 ? p.spent / p.flexBudget : 1.0;
     final ahead = p.aheadOfPace;
     final newPayday = wc.newPayday(p.start);
+    // Several missed paydays move on in one tap: the latest payday on or before today.
+    final newStart = currentPeriodStart(p.start, s.paydayDay, wc.today());
     final now = clock();
     final deliveryHour = (now.hour >= 14 && now.hour < 19) || now.weekday == DateTime.sunday;
     final (deliveryCount, deliverySum) = wc.deliveries;
@@ -108,6 +113,15 @@ class TodayScreen extends StatelessWidget {
                   const Text('Start a new month to reset your daily budget and run the payday checklist.', style: TextStyle(fontSize: 13)),
                   FilledButton(onPressed: () => wc.startNewMonth(newPayday), child: Text('Start new month on ${shortDate(newPayday)}')),
                 ]),
+              if (ended && newPayday == null)
+                Panel(key: const ValueKey('periodEndedPanel'), color: c.accentSoft, children: [
+                  Text('Pay period ended on ${shortDate(p.end)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const Text('Start the new period to get a daily budget again.', style: TextStyle(fontSize: 13)),
+                  FilledButton(
+                      key: const ValueKey('startNewPeriod'),
+                      onPressed: () => wc.startNewMonth(newStart),
+                      child: Text('Start new period on ${shortDate(newStart)}')),
+                ]),
               TwoCol(left: [
                 Panel(padding: const EdgeInsets.fromLTRB(0, 14, 0, 14), children: [
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -116,14 +130,14 @@ class TodayScreen extends StatelessWidget {
                     Flexible(
                         child: ended
                             ? const StatusLabel(key: ValueKey('periodEnded'), good: false, text: 'Pay period ended')
-                            : StatusLabel(good: !over, text: over ? 'Over today' : 'On plan')),
+                            : StatusLabel(good: !worry, text: over ? 'Over today' : (p.overBudget ? 'Over the plan' : 'On plan'))),
                   ]),
                   TotalRule(
                     padding: const EdgeInsets.fromLTRB(0, 8, 0, 10),
                     child: FittedBox(
                       alignment: Alignment.centerLeft,
                       fit: BoxFit.scaleDown,
-                      child: MoneyText(money(hero, cur, decimals: 0),
+                      child: MoneyText((over && !ended ? shown(hero) : money(hero, cur, decimals: 0)),
                           key: const ValueKey('safeToSpend'),
                           style: numStyle.copyWith(
                               fontSize: 78,
@@ -140,16 +154,11 @@ class TodayScreen extends StatelessWidget {
                       : over
                           ? 'Spent ${money(p.spentToday, cur)} today, ${money(p.overToday, cur)} more than the allowance of ${money(p.allowanceToday, cur)}.'
                           : p.spentToday > 0
-                              ? 'Spent ${money(p.spentToday, cur)} today of ${money(p.allowanceToday, cur)}. Spend less today and tomorrow gets more.'
-                              : "Today's allowance is ${money(p.allowanceToday, cur)}. Spend less today and tomorrow gets more."),
-                  if (ended && newPayday == null)
-                    FilledButton(
-                        key: const ValueKey('startNewPeriod'),
-                        onPressed: () => wc.startNewMonth(p.end),
-                        child: Text('Start new period on ${shortDate(p.end)}')),
+                              ? 'Spent ${money(p.spentToday, cur)} today of ${money(p.allowanceToday, cur)}.${p.overBudget ? '' : ' Spend less today and tomorrow gets more.'}'
+                              : "Today's allowance is ${money(p.allowanceToday, cur)}.${p.overBudget ? '' : ' Spend less today and tomorrow gets more.'}"),
                   _Stats([
                     p.overBy > 0 && !ended
-                        ? (money(p.overBy, cur, decimals: 0), 'over the plan')
+                        ? (shown(p.overBy), 'over the plan')
                         : (money(p.remaining > 0 ? p.remaining : 0, cur, decimals: 0), ended ? 'left, period over' : 'left until payday'),
                     ended
                         ? (shortDate(p.end), 'payday was')
@@ -162,15 +171,16 @@ class TodayScreen extends StatelessWidget {
                         good: false,
                         text:
                             p.overBy > 0 ? 'Over the plan by ${money(p.overBy, cur)} until payday.' : 'The plan leaves no spending money.'),
-                  PaceBar(used: used, elapsed: p.elapsed, over: p.spent > p.flexBudget * p.elapsed),
-                  SplitRow(
-                    start: Muted(
-                        '${money(p.spent, cur, decimals: 0)} of ${money(p.flexBudget > 0 ? p.flexBudget : 0, cur, decimals: 0)} used'),
-                    end: ahead >= 0
-                        ? Text('${money(ahead, cur, decimals: 0)} ahead of pace',
-                            textAlign: TextAlign.end, style: const TextStyle(fontSize: 13))
-                        : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace', textAlign: TextAlign.end),
-                  ),
+                  if (p.planDaily > 0) PaceBar(used: used, elapsed: p.elapsed, over: p.spent > p.flexBudget * p.elapsed),
+                  if (p.planDaily > 0)
+                    SplitRow(
+                      start: Muted(
+                          '${money(p.spent, cur, decimals: 0)} of ${money(p.flexBudget > 0 ? p.flexBudget : 0, cur, decimals: 0)} used'),
+                      end: ahead >= 0
+                          ? Text('${money(ahead, cur, decimals: 0)} ahead of pace',
+                              textAlign: TextAlign.end, style: const TextStyle(fontSize: 13))
+                          : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace', textAlign: TextAlign.end),
+                    ),
                   if (p.foreignByCurrency.isNotEmpty) ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote')),
                   if (tight != null) _BudgetLine(tight, cur, openSpending),
                   if (p.dueBills.isNotEmpty) _BillsLine(p.dueBills, p.reservedBills, wc.today(), cur, openBills),

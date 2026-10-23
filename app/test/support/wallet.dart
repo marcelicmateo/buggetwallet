@@ -45,7 +45,9 @@ WalletController demoWallet({String currency = 'EUR'}) {
   ]));
   wc.repo.saveGoal(name: 'Emergency fund with a long synthetic name', target: 300000, saved: 0, monthly: 10000, sort: 1);
   wc.repo.saveGoal(name: 'Yearly costs', target: 120000, saved: 0, monthly: 10000, sort: 2);
-  wc.repo.updateSettings({'salary': 150000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'periodStart': start, 'salaryConfirmed': false});
+  // paydayDay 28 keeps the period running on any real date (start is 25 days ago; the next payday is the 28th of the next month).
+  wc.repo.updateSettings(
+      {'salary': 150000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'periodStart': start, 'paydayDay': 28, 'salaryConfirmed': false});
   final now = DateTime.now().millisecondsSinceEpoch;
   wc.repo.addWish('Synthetic headphones with a long name', 12000);
   final decided = wc.repo.addWish('Synthetic jacket', 9000);

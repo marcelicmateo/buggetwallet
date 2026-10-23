@@ -1,6 +1,7 @@
 // The synthetic demo wallet (`integration_test/demo_data.dart`) used by `tools/emulator.sh screens`,
 // `tools/build.sh desktop-test screens` and `tools/live.sh start --demo`: seeding it must never throw (B6: a core rule
 // once made the seeding fail only in those slow runs).
+import 'package:budget_wallet/src/controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -38,5 +39,18 @@ void main() {
     final p = computePeriod(const [], repo.settings(), const [], today, bills: repo.recurringBills(), planned: repo.plannedCosts());
     expect(p.duePlanned.map((x) => (x.title, x.coveredByPlan)), [('Demo Gym Club', false), ('Demo Water Utility', true)]);
     expect(p.reservedPlanned, 2900);
+  });
+
+  test('the demo wallet has a running pay period on every day of two months (screenshots never show an ended period)', () {
+    for (var day = DateTime.utc(2026, 10, 1); day.isBefore(DateTime.utc(2026, 12, 1)); day = day.add(const Duration(days: 1))) {
+      final today = isoDate(day);
+      final wc =
+          WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => DateTime.parse('${today}T12:00:00'));
+      addTearDown(wc.dispose);
+      wc.repo.importBatch(demoBatch(today));
+      wc.repo.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
+      wc.reload();
+      expect(wc.period().paydayPassed, isFalse, reason: today);
+    }
   });
 }

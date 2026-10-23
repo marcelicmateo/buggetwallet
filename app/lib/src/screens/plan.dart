@@ -168,7 +168,11 @@ class _PlanScreenState extends State<PlanScreen> {
             children: gapped([
               Panel(children: [
                 const SectionHead('Payday plan'),
-                Heading('${money(p.flexBudget, cur, decimals: 0)} to spend · ${money(p.planDaily, cur, decimals: 0)}/day'),
+                Heading(
+                    p.planDaily <= 0
+                        ? 'Nothing to spend: the plan is ${moneyExact(-p.flexBudget, cur)} over'
+                        : '${money(p.flexBudget, cur, decimals: 0)} to spend · ${money(p.planDaily, cur, decimals: 0)}/day',
+                    key: const ValueKey('planHeading')),
                 const Muted('Salary minus bills minus savings. Whatever is left is your spending money until the next payday.'),
                 Rows(children: [
                   LineItem('Salary ${s.incomeMode == 'received' && p.received > 0 ? '(received)' : '(planned)'}',

@@ -136,7 +136,7 @@ class Muted extends StatelessWidget {
   Widget build(BuildContext context) => Text(text, textAlign: align, style: TextStyle(fontSize: size, color: context.c.muted, height: 1.4));
 }
 
-/// One muted line "Not counted: 12 $, ..." for rows in a currency other than the wallet's (they are in no total).
+/// One muted line "Other currencies, not counted: 12 $ spent" for rows in a currency other than the wallet's (they are in no total).
 /// Nothing when [byCurrency] is empty. Signed cents by currency code, never rounded.
 class ForeignNote extends StatelessWidget {
   final Map<String, int> byCurrency;
@@ -145,7 +145,10 @@ class ForeignNote extends StatelessWidget {
   Widget build(BuildContext context) {
     if (byCurrency.isEmpty) return const SizedBox.shrink();
     final codes = byCurrency.keys.toList()..sort();
-    return Muted('Not counted: ${[for (final k in codes) moneyExact(byCurrency[k]!, k)].join(', ')}', size: 12);
+    final parts = [
+      for (final k in codes) '${moneyExact(byCurrency[k]!.abs(), k)} ${byCurrency[k]! < 0 ? 'spent' : 'received'}',
+    ];
+    return Muted('Other currencies, not counted: ${parts.join(', ')}', size: 12);
   }
 }
 
