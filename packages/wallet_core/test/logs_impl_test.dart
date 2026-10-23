@@ -189,14 +189,10 @@ void main() {
       final lines = _captureAll();
       final repo = WalletRepo.inMemory();
       addTearDown(repo.close);
-      repo.updateSettings({
-        'salary': 150000,
-        'rent': 55000,
-        'merchantPatterns': [
-          ['Groceries', 'lidl'],
-          ['Shopping', '(unclosed LIDL'],
-        ]
-      });
+      repo.updateSettings({'salary': 150000, 'rent': 55000});
+      repo.setMerchantPattern('Groceries', 'lidl');
+      expect(() => repo.setMerchantPattern('Shopping', '(unclosed LIDL'), throwsArgumentError);
+
       repo.addTransaction(date: '2026-01-17', amount: 2340, category: 'Groceries', note: 'Lunch note');
       final s = repo.importBatch(january);
       expect(s.added, january.transactions.length);
@@ -213,7 +209,7 @@ void main() {
       expect(text, contains('"added":${january.transactions.length}'));
       expect(text, contains('repo.write'));
       expect(text, contains('repo.transactions'));
-      expect(text, contains('categories.badPattern'));
+      expect(text, contains('settings.badPattern'));
       expect(text, contains('budget.period {"start":"2026-01-25"'));
       expect(text, contains('budget.periods'));
       _expectClean(lines);

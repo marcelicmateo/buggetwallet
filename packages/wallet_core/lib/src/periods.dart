@@ -25,32 +25,33 @@ class PeriodSummary {
   double? get savingsRate => income > 0 ? net / income : null; // can be negative
 }
 
-/// Salary parts this close to a payday's first payment belong to that payday.
-const _samePaydayDays = 20;
+/// Salary parts this close to a payday's first payment belong to that payday (grouping only; the received-income
+/// window is `samePaydayDays` in budget.dart).
+const _salaryGroupDays = 20;
 
 /// After this many days without salary, paydays are assumed on `paydayDay`.
 const _missingSalaryDays = 45;
 
-/// Real paydays from salary payments (sorted, all <= today): the date of the first payment of each payday.
-/// Salary parts within 20 days of a payday's first payment belong to that payday.
-List<String> salaryPaydays(List<CategorizedTx> txs, String today) {
+/// Real paydays from salary payments in [currency] (`WalletSettings.currency`; sorted, all <= today): the date of the
+/// first payment of each payday. Salary parts within 20 days of a payday's first payment belong to that payday.
+List<String> salaryPaydays(List<CategorizedTx> txs, String today, {required String currency}) {
   final salary = txs
-      .where((t) => t.tx.live && t.kind == BudgetKind.income && t.amount > 0 && t.date.compareTo(today) <= 0)
+      .where((t) => t.tx.live && t.kind == BudgetKind.income && t.amount > 0 && t.tx.currency == currency && t.date.compareTo(today) <= 0)
       .map((t) => t.date)
       .toList()
     ..sort();
   final real = <String>[];
   for (final d in salary) {
-    if (real.isEmpty || daysBetween(real.last, d) > _samePaydayDays) real.add(d);
+    if (real.isEmpty || daysBetween(real.last, d) > _salaryGroupDays) real.add(d);
   }
   return real;
 }
 
 /// Payday dates (sorted, all <= today) from salary payments, a hand-set period start and assumed paydays.
 List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String today) {
-  final real = salaryPaydays(txs, today);
+  final real = salaryPaydays(txs, today, currency: st.currency);
   final ps = st.periodStart;
-  if (ps != null && ps.compareTo(today) <= 0 && (real.isEmpty || daysBetween(real.last, ps) > _samePaydayDays)) real.add(ps);
+  if (ps != null && ps.compareTo(today) <= 0 && (real.isEmpty || daysBetween(real.last, ps) > _salaryGroupDays)) real.add(ps);
 
   final out = <String>[];
   for (var i = 0; i < real.length; i++) {
@@ -58,7 +59,7 @@ List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String to
     final until = i + 1 < real.length ? real[i + 1] : null; // next real payday (exclusive) or today (inclusive)
     if (daysBetween(real[i], until ?? today) <= _missingSalaryDays) continue;
     // Before a late real salary, skip assumed days within 20 days of it: they would only cut off a short, empty period.
-    final stop = until == null ? null : addDays(until, -_samePaydayDays);
+    final stop = until == null ? null : addDays(until, -_salaryGroupDays);
     for (var d = nextPayday(real[i], st.paydayDay);
         stop != null ? d.compareTo(stop) < 0 : d.compareTo(today) <= 0;
         d = nextPayday(d, st.paydayDay)) {
@@ -72,7 +73,8 @@ List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String to
   return out;
 }
 
-/// Pay periods, oldest first; the last one is the running period. At most [count] entries.
+/// Pay periods, oldest first; the last one is the running period. At most [count] entries. Only rows in
+/// `st.currency` count, in the sums and in finding the paydays.
 List<PeriodSummary> periodSummaries(List<CategorizedTx> txs, WalletSettings st, String today, {int count = 12}) {
   final days = detectPaydays(txs, st, today);
   if (days.isEmpty || count <= 0) return const [];
@@ -96,7 +98,8 @@ List<PeriodSummary> periodSummaries(List<CategorizedTx> txs, WalletSettings st, 
   }
 
   for (final t in txs) {
-    if (!t.tx.live || t.date.compareTo(starts.first) < 0 || t.date.compareTo(today) > 0) continue;
+    if (!t.tx.live || t.tx.currency != st.currency || t.date.compareTo(starts.first) < 0 || t.date.compareTo(today) > 0) continue;
+
     final i = indexOf(t.date);
     switch (t.kind) {
       case BudgetKind.income || BudgetKind.extra:

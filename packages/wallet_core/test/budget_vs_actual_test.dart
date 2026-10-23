@@ -39,7 +39,7 @@ void main() {
 
   group('budgetVsActual', () {
     test('no budgets: one line per category with spend, nothing budgeted, no remaining or pace', () {
-      final b = budgetVsActual(march, month, const {}, today: mid);
+      final b = budgetVsActual(march, month, const {}, today: mid, currency: 'EUR');
       expect(b.month, month);
       expect([for (final l in b.lines) l.category], ['Rent', 'Groceries', 'Eating out'], reason: 'actual desc');
       expect([for (final l in b.lines) l.actual], [55000, 10000, 2500]);
@@ -56,7 +56,7 @@ void main() {
         ct('2026-03-03', -9000, 'Groceries', deleted: true),
         ct('2026-03-04', -7000, 'Shopping', matchedTo: 'bank-row-here', manual: true),
       ];
-      final b = budgetVsActual(txs, month, const {'Salary': 1, 'Internal transfer': 1}, today: mid);
+      final b = budgetVsActual(txs, month, const {'Salary': 1, 'Internal transfer': 1}, today: mid, currency: 'EUR');
       expect(_line(b, 'Groceries').actual, 10000);
       expect(b.lines.where((l) => l.category == 'Shopping'), isEmpty);
       // A budget on a non-spending category still makes a line (the setting drops such keys before it gets here).
@@ -64,7 +64,7 @@ void main() {
     });
 
     test('zero budget: budgeted, remaining = -actual, pace null, over when anything was spent', () {
-      final b = budgetVsActual(march, month, const {'Groceries': 0, 'Shopping': 0}, today: mid);
+      final b = budgetVsActual(march, month, const {'Groceries': 0, 'Shopping': 0}, today: mid, currency: 'EUR');
       final g = _line(b, 'Groceries'), s = _line(b, 'Shopping');
       expect((g.budget, g.remaining, g.pace, g.over), (0, -10000, null, true));
       expect((s.budget, s.actual, s.remaining, s.pace, s.over), (0, 0, 0, null, false));
@@ -72,7 +72,7 @@ void main() {
     });
 
     test('budget without spend: a line with actual 0, all of it remaining, pace 0', () {
-      final b = budgetVsActual(march, month, const {'Shopping': 12000}, today: mid);
+      final b = budgetVsActual(march, month, const {'Shopping': 12000}, today: mid, currency: 'EUR');
       final s = _line(b, 'Shopping');
       expect((s.actual, s.remaining, s.pace, s.over), (0, 12000, 0.0, false));
       expect(b.lines.last.category, 'Shopping', reason: 'actual 0 sorts after every category with spend');
@@ -80,14 +80,14 @@ void main() {
     });
 
     test('spend without budget counts in actualTotal but not in budgetTotal or remainingTotal', () {
-      final b = budgetVsActual(march, month, const {'Groceries': 15000}, today: mid);
+      final b = budgetVsActual(march, month, const {'Groceries': 15000}, today: mid, currency: 'EUR');
       expect((b.budgetTotal, b.actualTotal, b.remainingTotal), (15000, 67500, 5000));
       expect(_line(b, 'Rent').remaining, isNull);
     });
 
     test('a refund larger than the spend makes actual negative: remaining above the budget, pace below 0', () {
       final txs = [ct('2026-03-03', -3000, 'Shopping'), ct('2026-03-20', 8000, 'Shopping')];
-      final b = budgetVsActual(txs, month, const {'Shopping': 10000}, today: '2026-03-31');
+      final b = budgetVsActual(txs, month, const {'Shopping': 10000}, today: '2026-03-31', currency: 'EUR');
       final s = _line(b, 'Shopping');
       expect((s.actual, s.remaining, s.over), (-5000, 15000, false));
       expect(s.pace, closeTo(-0.5, 1e-9));
@@ -95,7 +95,7 @@ void main() {
     });
 
     test('over: actual above the budget, counted; exactly on the budget is not over', () {
-      final b = budgetVsActual(march, month, const {'Groceries': 9999, 'Rent': 55000, 'Eating out': 2501}, today: mid);
+      final b = budgetVsActual(march, month, const {'Groceries': 9999, 'Rent': 55000, 'Eating out': 2501}, today: mid, currency: 'EUR');
       expect([for (final l in b.lines) l.over], [false, true, false]);
       expect((b.overCount, b.budgetedCount, b.remainingTotal), (1, 3, -1 + 0 + 1));
     });
@@ -107,18 +107,18 @@ void main() {
         ct('2026-03-31', -400, 'Groceries'),
         ct('2026-04-01', -800, 'Groceries'),
       ];
-      expect(_line(budgetVsActual(txs, '2026-03', const {}, today: '2026-05-01'), 'Groceries').actual, 600);
-      expect(_line(budgetVsActual(txs, '2026-02', const {}, today: '2026-05-01'), 'Groceries').actual, 100);
-      expect(_line(budgetVsActual(txs, '2026-04', const {}, today: '2026-05-01'), 'Groceries').actual, 800);
+      expect(_line(budgetVsActual(txs, '2026-03', const {}, today: '2026-05-01', currency: 'EUR'), 'Groceries').actual, 600);
+      expect(_line(budgetVsActual(txs, '2026-02', const {}, today: '2026-05-01', currency: 'EUR'), 'Groceries').actual, 100);
+      expect(_line(budgetVsActual(txs, '2026-04', const {}, today: '2026-05-01', currency: 'EUR'), 'Groceries').actual, 800);
     });
 
     test('pace in the current month uses the day of month: 10000 of 31000 on day 12 is 10000 / 12000', () {
-      final b = budgetVsActual(march, month, const {'Groceries': 31000}, today: mid);
+      final b = budgetVsActual(march, month, const {'Groceries': 31000}, today: mid, currency: 'EUR');
       expect(_line(b, 'Groceries').pace, closeTo(10000 / 12000, 1e-9));
     });
 
     test('pace in a past month uses the whole month: actual / budget', () {
-      final b = budgetVsActual(march, month, const {'Groceries': 8000}, today: '2026-04-03');
+      final b = budgetVsActual(march, month, const {'Groceries': 8000}, today: '2026-04-03', currency: 'EUR');
       expect((b.elapsedDays, b.daysInMonth), (31, 31));
       expect(_line(b, 'Groceries').pace, closeTo(1.25, 1e-9));
       expect(_line(b, 'Groceries').over, isTrue);
@@ -126,26 +126,26 @@ void main() {
 
     test('on the 1st of the month one day has elapsed: pace = actual * days / budget', () {
       final txs = [ct('2026-02-01', -1000, 'Groceries')];
-      final b = budgetVsActual(txs, '2026-02', const {'Groceries': 28000}, today: '2026-02-01');
+      final b = budgetVsActual(txs, '2026-02', const {'Groceries': 28000}, today: '2026-02-01', currency: 'EUR');
       expect((b.elapsedDays, b.daysInMonth), (1, 28));
       expect(_line(b, 'Groceries').pace, closeTo(1.0, 1e-9));
     });
 
     test('a future month has no elapsed days: pace null, the rest as usual', () {
-      final b = budgetVsActual(march, '2026-04', const {'Groceries': 10000}, today: mid);
+      final b = budgetVsActual(march, '2026-04', const {'Groceries': 10000}, today: mid, currency: 'EUR');
       expect(b.elapsedDays, 0);
       expect((_line(b, 'Groceries').pace, _line(b, 'Groceries').remaining), (null, 10000));
     });
 
     test('month lengths: 29 days in a leap February, 30 in April', () {
-      expect(budgetVsActual(const [], '2028-02', const {}, today: '2028-02-10').daysInMonth, 29);
-      expect(budgetVsActual(const [], '2026-04', const {}, today: '2026-04-10').daysInMonth, 30);
-      expect(budgetVsActual(const [], '2026-02', const {}, today: '2026-02-10').daysInMonth, 28);
+      expect(budgetVsActual(const [], '2028-02', const {}, today: '2028-02-10', currency: 'EUR').daysInMonth, 29);
+      expect(budgetVsActual(const [], '2026-04', const {}, today: '2026-04-10', currency: 'EUR').daysInMonth, 30);
+      expect(budgetVsActual(const [], '2026-02', const {}, today: '2026-02-10', currency: 'EUR').daysInMonth, 28);
     });
 
     test('ordering: actual descending, then by name', () {
       final txs = [ct('2026-03-01', -500, 'Shopping'), ct('2026-03-01', -500, 'Cash'), ct('2026-03-01', -700, 'Groceries')];
-      final b = budgetVsActual(txs, month, const {'Bank fees': 100, 'Eating out': 100}, today: mid);
+      final b = budgetVsActual(txs, month, const {'Bank fees': 100, 'Eating out': 100}, today: mid, currency: 'EUR');
       expect([for (final l in b.lines) l.category], ['Groceries', 'Cash', 'Shopping', 'Bank fees', 'Eating out']);
     });
 
@@ -158,21 +158,21 @@ void main() {
         ct('2026-03-10', -50000, 'Groceries'), // this month: out
         ct('2026-01-05', -3, 'Cash'),
       ];
-      final b = budgetVsActual(txs, month, const {'Cash': 100}, today: mid);
+      final b = budgetVsActual(txs, month, const {'Cash': 100}, today: mid, currency: 'EUR');
       expect(_line(b, 'Groceries').average6, ((12000 + 6000 - 1000) / 6).round());
       expect(_line(b, 'Cash').average6, 1, reason: '3 / 6 = 0.5 rounds to 1; a line only because of its budget');
       expect(b.lines.map((l) => l.category), isNot(contains('Internal transfer')));
-      expect(averageByCategory(txs, month), {'Groceries': 2833, 'Cash': 1});
+      expect(averageByCategory(txs, month, currency: 'EUR'), {'Groceries': 2833, 'Cash': 1});
     });
 
     test('nothing at all: no lines, totals zero, remaining null', () {
-      final b = budgetVsActual(const [], month, const {}, today: mid);
+      final b = budgetVsActual(const [], month, const {}, today: mid, currency: 'EUR');
       expect(b.lines, isEmpty);
       expect((b.budgetTotal, b.actualTotal, b.remainingTotal, b.overCount, b.budgetedCount), (0, 0, null, 0, 0));
     });
 
     test('logs the month and counts only', () {
-      final lines = _logs(() => budgetVsActual(march, month, const {'Groceries': 100}, today: mid));
+      final lines = _logs(() => budgetVsActual(march, month, const {'Groceries': 100}, today: mid, currency: 'EUR'));
       final l = lines.where((l) => l.contains('budget.vsActual')).single;
       expect(l, endsWith('{"month":"2026-03","lines":3,"budgeted":1,"over":1,"elapsed":12}'));
     });
@@ -187,7 +187,7 @@ void main() {
         for (var m = 9; m <= 14; m++) ct('${m <= 12 ? 2025 : 2026}-${(m > 12 ? m - 12 : m).toString().padLeft(2, '0')}-05', -3000, 'Cash'),
         ct('2026-01-01', -1, 'Bank fees'), // average 1/6 cent -> 1000
       ];
-      expect(suggestBudgets(txs, month), {'Groceries': 11000, 'Cash': 3000, 'Bank fees': 1000});
+      expect(suggestBudgets(txs, month, currency: 'EUR'), {'Groceries': 11000, 'Cash': 3000, 'Bank fees': 1000});
     });
 
     test('zero or negative averages are omitted; the month itself and months older than 6 do not count', () {
@@ -200,10 +200,10 @@ void main() {
         ct('2025-08-05', -40000, 'Cash'), // 7 months back
         ct('2026-01-05', -100, 'Internal transfer'),
       ];
-      expect(suggestBudgets(txs, month), isEmpty);
+      expect(suggestBudgets(txs, month, currency: 'EUR'), isEmpty);
     });
 
-    test('empty input', () => expect(suggestBudgets(const [], month), isEmpty));
+    test('empty input', () => expect(suggestBudgets(const [], month, currency: 'EUR'), isEmpty));
   });
 
   group('categoryBudgets setting', () {
@@ -274,28 +274,25 @@ void main() {
       expect(spendingCategories, contains('Groceries'));
     });
 
-    test('updateSettings round-trip; a later write replaces the whole map', () {
+    test('setCategoryBudget round-trip: one row per category, null removes it (schema 8)', () {
       final r = WalletRepo.inMemory();
       addTearDown(r.close);
-      r.updateSettings({
-        'categoryBudgets': {'Groceries': 30000, 'Eating out': 8000}
-      });
+      r.setCategoryBudget('Groceries', 30000);
+      r.setCategoryBudget('Eating out', 8000);
       expect(r.settings().categoryBudgets, {'Groceries': 30000, 'Eating out': 8000});
-      r.updateSettings({
-        'categoryBudgets': {'Groceries': 25000}
-      });
+      r.setCategoryBudget('Groceries', 25000);
+      r.setCategoryBudget('Eating out', null);
       expect(r.settings().categoryBudgets, {'Groceries': 25000});
-      r.updateSettings({'categoryBudgets': const <String, int>{}});
+      r.setCategoryBudget('Groceries', null);
       expect(r.settings().categoryBudgets, isEmpty);
+      expect(() => r.updateSettings({'categoryBudgets': const <String, int>{}}), throwsArgumentError);
     });
 
     test('feeds budgetVsActual straight from settings', () {
       final r = WalletRepo.inMemory();
       addTearDown(r.close);
-      r.updateSettings({
-        'categoryBudgets': {'Groceries': 12000}
-      });
-      final b = budgetVsActual(march, month, r.settings().categoryBudgets, today: mid);
+      r.setCategoryBudget('Groceries', 12000);
+      final b = budgetVsActual(march, month, r.settings().categoryBudgets, today: mid, currency: 'EUR');
       expect((_line(b, 'Groceries').remaining, b.budgetedCount), (2000, 1));
     });
   });
@@ -337,29 +334,31 @@ void main() {
 
     test('budgets set on one device arrive on the other; the later edit wins on both', () async {
       final a = device('a'), b = device('b');
-      a.repo.updateSettings({
-        'categoryBudgets': {'Groceries': 30000, 'Rent': 55000}
-      });
+      a.repo.setCategoryBudget('Groceries', 30000);
+      a.repo.setCategoryBudget('Rent', 55000);
       await round();
       await round();
       expect(b.repo.settings().categoryBudgets, {'Groceries': 30000, 'Rent': 55000});
 
       now += 1000;
-      b.repo.updateSettings({
-        'categoryBudgets': {'Groceries': 20000}
-      });
+      b.repo.setCategoryBudget('Groceries', 20000);
+      b.repo.setCategoryBudget('Rent', null);
       await round();
       await round();
       expect(a.repo.settings().categoryBudgets, {'Groceries': 20000});
       expect(b.repo.settings().categoryBudgets, {'Groceries': 20000});
     });
 
-    test('a bad map from a buggy device: the other device keeps the valid entries and its other settings', () async {
+    test('a bad budget row from a buggy device: the other device keeps the valid entries and its other settings', () async {
       final a = device('a'), b = device('b');
       b.repo.updateSettings({'salary': 150000});
-      a.repo.updateSettings({
-        'categoryBudgets': {'Groceries': 30000, 'Nope': -5, 'Cash': 'x'}
-      });
+      a.repo.setCategoryBudget('Groceries', 30000);
+      // Rows a buggy build could send: an unknown category, a negative and a text value.
+      a.repo.applyRemote([
+        for (final (id, v) in const [('budget:Nope', '30000'), ('budget:Shopping', '-5'), ('budget:Cash', '"x"')])
+          Op('setting', id, {'value': v, 'deleted': 0}, a.repo.clock.tick().toString()),
+      ], resend: true);
+
       await round();
       await round();
       expect(b.repo.settings().categoryBudgets, {'Groceries': 30000});

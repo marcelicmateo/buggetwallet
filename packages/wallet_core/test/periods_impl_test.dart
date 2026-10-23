@@ -164,7 +164,7 @@ void main() {
         tx('2026-10-14', -5000, BudgetKind.flex),
         tx('2026-10-15', 2000, BudgetKind.extra),
       ];
-      expect(salaryPaydays(txs, '2026-10-16'), ['2026-09-10', '2026-10-10']);
+      expect(salaryPaydays(txs, '2026-10-16', currency: 'EUR'), ['2026-09-10', '2026-10-10']);
     });
 
     test('ignores deleted salary, salary after today, and refunds', () {
@@ -174,11 +174,11 @@ void main() {
         tx('2026-10-12', -100, BudgetKind.income),
         tx('2026-11-10', 100000, BudgetKind.income),
       ];
-      expect(salaryPaydays(txs, '2026-10-16'), ['2026-09-10']);
+      expect(salaryPaydays(txs, '2026-10-16', currency: 'EUR'), ['2026-09-10']);
     });
 
     test('no salary: empty', () {
-      expect(salaryPaydays([tx('2026-10-01', -500, BudgetKind.flex)], '2026-10-16'), isEmpty);
+      expect(salaryPaydays([tx('2026-10-01', -500, BudgetKind.flex)], '2026-10-16', currency: 'EUR'), isEmpty);
     });
   });
 }

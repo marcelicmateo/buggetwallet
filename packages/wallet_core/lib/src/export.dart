@@ -49,12 +49,14 @@ String get monthlySummaryCsvHeader => 'month,${spendingCategories.join(',')},tot
 /// Spending per calendar month and category: `month,<each category in [spendingCategories] order>,total`, one record
 /// per month with a live row in a spending category, ascending. A cell is that category's outflow as a positive
 /// decimal (refunds, positive rows in the category, reduce it; `0.00` without spending), `total` the sum of the cells.
-/// Income, transfers, deleted rows and replaced entries are not spending and never appear.
-String monthlySummaryCsv(List<CategorizedTx> txs) {
+/// Income, transfers, deleted rows and replaced entries are not spending and never appear; neither do rows in another
+/// currency than [currency] (`WalletSettings.currency`): the cells are sums in one currency.
+String monthlySummaryCsv(List<CategorizedTx> txs, {required String currency}) {
   final cats = spendingCategories;
   final byMonth = <String, Map<String, int>>{};
   for (final t in txs) {
-    if (!t.tx.live || !isSpendingCategory(t.category) || t.date.length < 7) continue;
+    if (!t.tx.live || t.tx.currency != currency || !isSpendingCategory(t.category) || t.date.length < 7) continue;
+
     final m = byMonth[monthOf(t.date)] ??= {};
     m[t.category] = (m[t.category] ?? 0) - t.amount;
   }

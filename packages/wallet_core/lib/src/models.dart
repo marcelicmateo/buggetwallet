@@ -1,3 +1,5 @@
+import 'dart:math' show min;
+
 import 'package:wallet_importer/wallet_importer.dart' show TxKind;
 
 import 'categories.dart';
@@ -380,7 +382,7 @@ class WalletSettings {
   final String incomeMode; // planned | received
   final String? savedFor; // periodStart for which the payday savings were confirmed
   final bool salaryConfirmed;
-  final List<List<String>> merchantPatterns; // [[category, regex], ...]
+  final List<List<String>> merchantPatterns; // [[category, regex], ...] in match order (first match wins)
   final int rentCashThreshold; // ATM withdrawals this big or bigger are rent; 0 = never
   final Map<String, int> categoryBudgets; // spending category -> cents per calendar month; no entry = no budget
   final int reviewDay; // weekly review day, 1 = Monday .. 7 = Sunday
@@ -428,6 +430,19 @@ class WalletSettings {
   /// Largest review streak kept (weeks; about 2000 years).
   static const maxStreak = 100000;
 
+  /// Latest payday day kept: a stored 29..31 reads as 28 (every month has it), so a period never ends on a day some
+  /// months lack (the app no longer clamps it). 0 or above 31 is invalid and falls back to 15.
+  static const maxPaydayDay = 28;
+
+  /// Schema 8 keeps one settings row per category budget and per merchant pattern (H3), so two devices editing
+  /// different entries never overwrite each other. Budget row id: `budget:<spending category>`, value = whole cents
+  /// (JSON int, 0..[maxBudget]). Pattern row id: `pattern:<first 16 hex chars of SHA-256 of the pattern's UTF-8>`
+  /// (`WalletRepo.merchantPatternId`; the id never shows the pattern, which can name a merchant), value = JSON
+  /// `{"category": <category>, "pattern": <regex>, "order": <int ≥ 0>}`; patterns are matched by `order` ascending,
+  /// then by row id. A removed entry is a tombstone (`deleted` 1, value null). [fromMap] reads these keys, after the
+  /// legacy `categoryBudgets` / `merchantPatterns` maps (a row's entry replaces a legacy one).
+  static const budgetPrefix = 'budget:', patternPrefix = 'pattern:';
+
   /// Heads-up defaults (owner, 2026-10-22: 3 days before a planned cost of 100 € or more) and their ranges.
   static const defaultHeadsUpCents = 10000, maxHeadsUpCents = 10000000, defaultHeadsUpDays = 3, maxHeadsUpDays = 14;
 
@@ -468,6 +483,26 @@ class WalletSettings {
     final patterns = m['merchantPatterns'];
     final confirmed = m['salaryConfirmed'];
     final budgets = m['categoryBudgets'];
+    // Per-key rows (schema 8): `budget:<category>` and `pattern:<id>`.
+    final budgetRows = <Object?, Object?>{};
+    final patternRows = <(int, String, String, String)>[]; // (order, id, category, pattern)
+    var badPatternRow = false;
+    for (final MapEntry(:key, :value) in m.entries) {
+      if (key.startsWith(budgetPrefix)) {
+        budgetRows[key.substring(budgetPrefix.length)] = value;
+      } else if (key.startsWith(patternPrefix)) {
+        if (value case {'category': final String c, 'pattern': final String p, 'order': final int o} when o >= 0) {
+          patternRows.add((o, key, c, p));
+        } else {
+          badPatternRow = true;
+        }
+      }
+    }
+    if (badPatternRow) logInvalidSetting('merchantPatterns', 'row');
+    patternRows.sort((a, b) {
+      final d = a.$1.compareTo(b.$1);
+      return d != 0 ? d : a.$2.compareTo(b.$2);
+    });
     return WalletSettings(
       salary: i('salary', 0),
       rent: i('rent', 0),
@@ -476,25 +511,28 @@ class WalletSettings {
       subs: i('subs', 0),
       impulse: i('impulse', 5000),
       coolHours: i('coolHours', 72, max: maxCoolHours),
-      paydayDay: i('paydayDay', 15, min: 1, max: 31),
+      paydayDay: min(i('paydayDay', 15, min: 1, max: 31), maxPaydayDay),
       periodStart: str('periodStart', isIsoDate),
       currency: str('currency', (v) => RegExp(r'^[A-Z]{3}$').hasMatch(v)) ?? 'EUR',
       incomeMode: one('incomeMode', 'planned', const {'planned', 'received'}),
       savedFor: str('savedFor', isIsoDate),
       salaryConfirmed: confirmed == null || confirmed is bool ? confirmed == true : bad('salaryConfirmed', false),
-      merchantPatterns: switch (patterns) {
-        null => const [],
-        final List<Object?> l => [
-            for (final p in l)
-              if (p is List && p.length == 2) [p[0].toString(), p[1].toString()],
-          ],
-        _ => bad('merchantPatterns', const []),
-      },
+      merchantPatterns: [
+        ...switch (patterns) {
+          null => const <List<String>>[],
+          final List<Object?> l => [
+              for (final p in l)
+                if (p is List && p.length == 2) [p[0].toString(), p[1].toString()],
+            ],
+          _ => bad('merchantPatterns', const <List<String>>[]),
+        },
+        for (final (_, _, c, p) in patternRows) [c, p],
+      ],
       rentCashThreshold: i('rentCashThreshold', defaultRentCashThreshold),
       categoryBudgets: switch (budgets) {
-        null => const {},
-        final Map<Object?, Object?> b => _budgets(b),
-        _ => bad('categoryBudgets', const {}),
+        null => budgetRows.isEmpty ? const {} : _budgets(budgetRows),
+        final Map<Object?, Object?> b => _budgets({...b, ...budgetRows}),
+        _ => bad('categoryBudgets', budgetRows.isEmpty ? const <String, int>{} : _budgets(budgetRows)),
       },
       reviewDay: i('reviewDay', DateTime.sunday, min: DateTime.monday, max: DateTime.sunday),
       lastReview: str('lastReview', isIsoDate),

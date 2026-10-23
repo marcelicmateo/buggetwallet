@@ -67,8 +67,9 @@ void main() {
       'salary': 150000,
       'rent': 40000,
       'paydayDay': 15,
-      'categoryBudgets': const {'Groceries': 30000},
     });
+    a.repo.setCategoryBudget('Groceries', 30000);
+
     final gid = a.repo.saveGoal(name: 'Synthetic trip', target: 90000, saved: 1000, monthly: 5000);
     a.repo.addWish('Synthetic headphones', 12999);
     a.repo.setMerchantRule('lidl', 'Groceries');

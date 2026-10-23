@@ -138,7 +138,7 @@ void main() {
     List<String> row(String month, Map<String, String> v, String total) => [month, for (final c in cats) v[c] ?? '0.00', total];
 
     test('empty list is the header only', () {
-      final s = monthlySummaryCsv(const []);
+      final s = monthlySummaryCsv(const [], currency: 'EUR');
       expect(s.trim(), header);
       expect(s.contains('\r'), isFalse);
     });
@@ -150,7 +150,7 @@ void main() {
         _tx('3', '2026-01-05', -1, cat: 'Eating out'),
         _tx('4', '2026-03-31', -4999, cat: 'Rent'),
         _tx('5', '2026-01-10', -333, cat: 'Groceries'),
-      ]));
+      ], currency: 'EUR'));
       expect(rows.first.join(','), header);
       expect(rows, hasLength(3), reason: 'February has no rows, so no line');
       expect(rows[1], row('2026-01', {'Groceries': '23.33', 'Eating out': '0.01'}, '23.34'));
@@ -164,7 +164,7 @@ void main() {
         _tx('3', '2026-01-04', -5000, cat: 'Internal transfer'),
         const CategorizedTx(Tx(id: '4', source: 'pbz', date: '2026-01-05', amount: -7777, category: 'Groceries', deleted: true),
             'Groceries', BudgetKind.flex),
-      ]));
+      ], currency: 'EUR'));
       expect(rows[1], row('2026-01', {'Groceries': '10.00'}, '10.00'));
     });
 
@@ -173,7 +173,7 @@ void main() {
         _tx('1', '2026-01-02', -1010, cat: 'Shopping'),
         _tx('2', '2026-01-03', -2020, cat: 'Shopping'),
         _tx('3', '2026-01-04', 505, cat: 'Shopping'),
-      ]));
+      ], currency: 'EUR'));
       expect(rows[1], row('2026-01', {'Shopping': '25.25'}, '25.25'));
     });
 
@@ -181,7 +181,7 @@ void main() {
       final txs = [
         for (var i = 0; i < 60; i++) _tx('t$i', '2026-0${i % 4 + 1}-1${i % 9}', -(i * 137 + 11), cat: cats[i % cats.length]),
       ];
-      final sum = _parse(monthlySummaryCsv(txs)).skip(1).fold<int>(0, (s, r) => s + (double.parse(r.last) * 100).round());
+      final sum = _parse(monthlySummaryCsv(txs, currency: 'EUR')).skip(1).fold<int>(0, (s, r) => s + (double.parse(r.last) * 100).round());
       expect(sum, -txs.fold<int>(0, (s, t) => s + t.amount));
     });
   });

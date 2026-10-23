@@ -110,14 +110,24 @@ String _edit(Device d, Random r, List<NormalizedTransaction> pool) {
         'periodStart': addDays('2026-01-10', r.nextInt(60)),
         'impulse': 1000 * r.nextInt(10),
         'incomeMode': r.nextBool() ? 'planned' : 'received',
-        'merchantPatterns': [
-          ['Groceries', 'shop ${r.nextInt(3)}']
-        ],
       };
       final pick = {
         for (final k in keys.keys)
           if (r.nextBool()) k: keys[k]
       };
+      // Per-key settings (schema 8): a merchant pattern and a category budget, set or removed.
+      final pattern = 'shop ${r.nextInt(3)}';
+      switch (r.nextInt(4)) {
+        case 0:
+          repo.setMerchantPattern(['Groceries', 'Shopping'][r.nextInt(2)], pattern);
+          return 'pattern';
+        case 1:
+          repo.removeMerchantPattern(pattern);
+          return 'removePattern';
+        case 2:
+          repo.setCategoryBudget(['Groceries', 'Eating out'][r.nextInt(2)], r.nextBool() ? null : 1000 * r.nextInt(50));
+          return 'budget';
+      }
       if (pick.isEmpty) return 'noop';
       repo.updateSettings(pick);
       return 'settings ${pick.keys.join(',')}';

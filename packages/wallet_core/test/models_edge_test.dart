@@ -346,7 +346,7 @@ void main() {
       expect(WalletSettings.fromMap({'salary': _maxInt}).salary, 0);
       expect(WalletSettings.fromMap({'salary': _minInt}).salary, 0);
       expect(WalletSettings.fromMap({'paydayDay': 1}).paydayDay, 1);
-      expect(WalletSettings.fromMap({'paydayDay': 31}).paydayDay, 31);
+      expect(WalletSettings.fromMap({'paydayDay': 31}).paydayDay, 28, reason: 'clamped to maxPaydayDay');
     });
 
     test('dates must exist: impossible days, months, spacing and digit forms fall back to null', () {

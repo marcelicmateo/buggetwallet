@@ -83,7 +83,7 @@ void main() {
 
     test('header lists every spending category in order', () {
       expect(monthlySummaryCsvHeader, 'month,${cats.join(',')},total');
-      expect(monthlySummaryCsv(const []), '$monthlySummaryCsvHeader\n');
+      expect(monthlySummaryCsv(const [], currency: 'EUR'), '$monthlySummaryCsvHeader\n');
       expect(cats, containsAll(['Rent', 'Loan', 'Bills & subscriptions', 'Groceries', 'Cash', 'Bank fees']));
       expect(cats, isNot(contains('Salary')));
       expect(cats, isNot(contains('Internal transfer')));
@@ -95,7 +95,9 @@ void main() {
         _tx('2', '2026-02-05', -5000, cat: 'Internal transfer'),
         _tx('3', '2026-03-05', -700, cat: 'Groceries', deleted: true),
         _tx('4', '2026-04-05', -700, cat: 'Groceries'),
-      ]).trim().split('\n');
+      ], currency: 'EUR')
+          .trim()
+          .split('\n');
       expect(rows, hasLength(2));
       expect(rows[1].startsWith('2026-04,'), isTrue);
     });
@@ -105,7 +107,10 @@ void main() {
         _tx('1', '2026-01-02', -1000, cat: 'Shopping'),
         _tx('2', '2026-01-03', 1500, cat: 'Shopping'),
         _tx('3', '2026-01-04', -250, cat: 'Groceries'),
-      ]).trim().split('\n')[1].split(',');
+      ], currency: 'EUR')
+          .trim()
+          .split('\n')[1]
+          .split(',');
       expect(line[1 + cats.indexOf('Shopping')], '-5.00');
       expect(line[1 + cats.indexOf('Groceries')], '2.50');
       expect(line.last, '-2.50');
@@ -116,7 +121,10 @@ void main() {
       final line = monthlySummaryCsv([
         _tx('bank', '2026-01-02', -1000, cat: 'Groceries'),
         _tx('m', '2026-01-02', -1000, cat: 'Groceries', source: 'manual', matchedTo: 'bank'),
-      ]).trim().split('\n')[1].split(',');
+      ], currency: 'EUR')
+          .trim()
+          .split('\n')[1]
+          .split(',');
       expect(line.last, '10.00');
     });
   });

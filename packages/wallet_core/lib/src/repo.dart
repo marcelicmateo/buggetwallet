@@ -19,6 +19,7 @@ import 'transfers.dart';
 part 'repo_bills.dart';
 part 'repo_blobs.dart';
 part 'repo_planned.dart';
+part 'repo_settings.dart';
 
 /// One field-level change. This is what syncs between devices.
 class Op {
@@ -36,9 +37,13 @@ class Op {
 class ImportSummary {
   final int added, duplicates, matched, skipped;
 
+  /// Rows whose id this wallet already holds with another amount or description (an id collision: the row is
+  /// skipped like a duplicate and logged as `repo.idCollision` with the count only). Counted in [duplicates] too.
+  final int collisions;
+
   /// Pairs of own-account transfers found after this import ([planTransfers]).
   final int transfers;
-  const ImportSummary(this.added, this.duplicates, this.matched, this.skipped, {this.transfers = 0});
+  const ImportSummary(this.added, this.duplicates, this.matched, this.skipped, {this.transfers = 0, this.collisions = 0});
 }
 
 final _log = Logger('bw.repo');
@@ -78,8 +83,9 @@ class WalletRepo {
   /// Bump when a new synced entity or field is added. Version 2 added `goal_contrib`, version 3 `tx.kind_hint` and
   /// `tx.transfer_to` (an older build dropped those fields from the ops it read, so they are replayed once), version 4
   /// the `exchange` hint (Revolut Exchange rows imported by version 3 as `ownTransfer` are rewritten once), version 5
-  /// the `recurring` entity, version 6 the `planned` entity, version 7 the `bill` entity.
-  static const schemaVersion = 7;
+  /// the `recurring` entity, version 6 the `planned` entity, version 7 the `bill` entity, version 8 one settings row
+  /// per category budget and merchant pattern (`budget:<category>`, `pattern:<id>`; the maps are migrated once).
+  static const schemaVersion = 8;
 
   /// The folder sync's bookkeeping (`peer_files`: which files of the shared folder were read) means nothing on a relay,
   /// whose sequence numbers start over (every device's first relay file is its whole state), so it is dropped once.
@@ -102,7 +108,7 @@ class WalletRepo {
   void _migrate() {
     final from = int.tryParse(_meta('schema') ?? '') ?? 1;
     if (from >= schemaVersion) return;
-    var replay = 0, rehinted = 0;
+    var replay = 0, rehinted = 0, perKey = 0;
     if (!_created) {
       replay = db.select('SELECT COUNT(*) AS n FROM sync_cursor').first['n'] as int;
       db.execute('DELETE FROM sync_cursor');
@@ -114,10 +120,11 @@ class WalletRepo {
           for (final r in stale) ('tx', r['id'] as String, {'kind_hint': TxKind.exchange.name})
         ]);
       }
+      if (from < 8) perKey = WalletRepoSettings(this)._migratePerKeySettings();
     }
     _setMeta('schema', '$schemaVersion');
     logEvent(_log, Level.INFO, 'repo.migrate',
-        {'from': from, 'to': schemaVersion, 'new': _created, 'replayDevices': replay, 'rehinted': rehinted});
+        {'from': from, 'to': schemaVersion, 'new': _created, 'replayDevices': replay, 'rehinted': rehinted, 'perKeySettings': perKey});
     if (rehinted > 0) _reconcileLocal();
   }
 
@@ -613,21 +620,8 @@ class WalletRepo {
           if ((r['id'], r['category']) case (final String id, final String c)) id: c,
       };
 
-  WalletSettings settings() {
-    final m = <String, Object?>{};
-    for (final r in db.select('SELECT id, value FROM settings WHERE deleted = 0')) {
-      final v = r['value'], k = r['id'] as String;
-      if (v is! String) continue;
-      try {
-        m[k] = jsonDecode(v);
-      } on FormatException {
-        // A damaged value: that setting falls back to its default. The key only, never the value; once per value.
-        logInvalidSetting(k, 'json:$v');
-      }
-    }
-    final s = WalletSettings.fromMap(m);
-    return s;
-  }
+  /// The stored settings ([_readSettings]: per-key budget and pattern rows, legacy maps only as a fallback).
+  WalletSettings settings() => _readSettings(db);
 
   Categorizer categorizer() {
     final st = settings();
@@ -635,20 +629,28 @@ class WalletRepo {
   }
 
   // ---------- writes ----------
-  void updateSettings(Map<String, Object?> changes) {
-    _write([
-      for (final e in changes.entries) ('setting', e.key, {'value': jsonEncode(e.value), 'deleted': 0})
-    ]);
-  }
+  /// Writes whole-value settings ([_settingChanges]: `categoryBudgets`, `merchantPatterns` and per-key rows throw
+  /// [ArgumentError]; use [WalletRepoSettings.setCategoryBudget] and [WalletRepoSettings.setMerchantPattern]).
+  void updateSettings(Map<String, Object?> changes) => _write(_settingChanges(changes));
 
   /// Imports a normalized batch. Already-known ids are skipped; `kindHint` is stored (`kind_hint`), `account` never is.
+  /// A known id whose stored row has another amount or description is an id collision ([ImportSummary.collisions]):
+  /// skipped all the same (never overwritten) and logged as `repo.idCollision` with the count only.
   /// Then own-account transfers are paired across sources ([planTransfers]) and hand-added expenses with the same
   /// amount within 3 days are matched to a bank row their device did not hold when they were added, which keeps their
   /// category ([planMatches]).
   ImportSummary importBatch(ImportBatch batch) {
     final t = PerfTimer('repo.importBatch', warnMs: 500);
-    final known = <String>{for (final r in db.select('SELECT id FROM tx')) r['id'] as String};
-    final fresh = batch.transactions.where((t) => !known.contains(t.id)).toList();
+    final known = <String, (Object?, Object?)>{
+      for (final r in db.select('SELECT id, amount, description FROM tx')) r['id'] as String: (r['amount'], r['description'])
+    };
+    final fresh = batch.transactions.where((t) => !known.containsKey(t.id)).toList();
+    var collisions = 0;
+    for (final n in batch.transactions) {
+      if (known[n.id] case (final amount, final description) when amount != n.amountMinor || description != n.description) collisions++;
+    }
+    // The count only: never the ids, amounts or descriptions.
+    if (collisions > 0) logEvent(_log, Level.WARNING, 'repo.idCollision', {'source': batch.source, 'count': collisions});
     final changes = <(String, String, Map<String, Object?>)>[];
     for (final n in fresh) {
       changes.add((
@@ -672,7 +674,8 @@ class WalletRepo {
     _write(changes);
     final (transfers, matched) = _reconcileLocal();
     refreshRecurring(_today());
-    final s = ImportSummary(fresh.length, batch.transactions.length - fresh.length, matched, batch.skipped, transfers: transfers);
+    final s = ImportSummary(fresh.length, batch.transactions.length - fresh.length, matched, batch.skipped,
+        transfers: transfers, collisions: collisions);
     t.done({
       'source': batch.source,
       'rows': batch.transactions.length,
@@ -680,6 +683,7 @@ class WalletRepo {
       'dupes': s.duplicates,
       'matched': s.matched,
       'transfers': s.transfers,
+      'collisions': collisions,
       'skipped': s.skipped
     });
     return s;

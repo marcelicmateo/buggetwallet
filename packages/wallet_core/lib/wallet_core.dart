@@ -47,6 +47,7 @@ export 'src/budget.dart'
         monthSummary,
         PeriodBudget,
         reviewState,
+        samePaydayDays,
         suggestBudgets,
         Verdict;
 export 'src/categories.dart'
@@ -106,7 +107,8 @@ export 'src/planned.dart'
         UpcomingItem,
         UpcomingKind;
 export 'src/recurring.dart' show detectRecurring, medianCents, planRecurringPayments, RecurringPayments;
-export 'src/repo.dart' show ImportSummary, Op, WalletRepo, WalletRepoBills, WalletRepoBlobs, WalletRepoPlanned;
+export 'src/repo.dart'
+    show ImportSummary, merchantPatternId, Op, WalletRepo, WalletRepoBills, WalletRepoBlobs, WalletRepoPlanned, WalletRepoSettings;
 export 'src/search.dart' show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchTxLimit;
 export 'src/sync.dart' show SyncDevice, SyncException, SyncProblem, SyncProblemReason, syncReaderVersion, SyncReport, SyncWaiting;
 export 'src/sync_engine.dart'
