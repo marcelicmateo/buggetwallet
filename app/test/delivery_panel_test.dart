@@ -27,9 +27,9 @@ void main() {
 
   testWidgets('the typical order uses the wallet currency, not €', (tester) async {
     await pump(tester, DateTime(2026, 10, 14, 15), currency: 'USD');
-    // The demo wallet's payday has passed (its dates follow the real today), so the panel shows the month's orders,
-    // not the typical-order share of today's money; the amount must still be in the wallet's currency.
-    expect(find.textContaining('This month: 1 order, 19.99\u00A0\$'), findsOneWidget);
+    // The demo wallet's period runs on any date (payday 28), so today's money is left and the typical order shows; it
+    // must be in the wallet's currency. (The month's order count depends on the real date, so it is not asserted.)
+    expect(find.textContaining('A typical 15\u00A0\$ order'), findsOneWidget);
     expect(find.textContaining('€'), findsNothing);
   });
 }

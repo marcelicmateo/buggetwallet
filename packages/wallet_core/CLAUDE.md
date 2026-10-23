@@ -324,7 +324,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   of the URL (lower case, port only when not the default), path from `/v2/` even behind a base path, `X-BW-Covers`,
   body SHA-256, time); `PUT d/<device>/1` also sends `X-BW-Pub` and, with `createToken:` set, `X-BW-Create-Token`
   (403 `createToken` → `TransportFailure.createToken`, fatal for the run). `clockOffsetMs` lives in the transport
-  (the app keeps one per relay address for the session; never persisted). 401 `clock` → offset from the
+  (never persisted; the app builds a new transport per run, so a device whose clock is off pays one 401 `clock` retry
+  per run). 401 `clock` → offset from the
   `Date` header (`parseHttpDate`, no dart:io) and one retry, never more (a second `clock` = `other`); status → failure,
   `api` above 3 → `newerApi`, below → `olderApi`; a 401 that is not `clock` asks `health` once (api 2 → `olderApi`,
   above 3 → `newerApi`, else `refused`); 404 state = empty relay, 30 s timeout; `health(base)` asks

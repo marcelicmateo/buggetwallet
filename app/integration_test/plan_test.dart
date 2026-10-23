@@ -218,6 +218,11 @@ void main() {
     await scrollTo(t, find.text('Show wallet key'), PlanScreen);
     await tapVisible(t, find.text('Show wallet key'));
     await t.pumpAndSettle();
+    // QR first (H10): the text shows only after "Show as text".
+    expect(find.byKey(const ValueKey('keyQr')), findsOneWidget);
+    expect(find.byKey(const ValueKey('keyText')), findsNothing);
+    await tapVisible(t, find.byKey(const ValueKey('keyShowText')));
+    await t.pumpAndSettle();
     expect(t.widget<SelectableText>(find.descendant(of: find.byType(AlertDialog), matching: find.byType(SelectableText))).data, key);
     await tapVisible(t, find.text('Copy'));
     await t.pumpAndSettle();

@@ -624,4 +624,83 @@ void main() {
       expect(s.devices[a.deviceId]!.first, greaterThan(1), reason: 'files the snapshot covers and both acked are pruned');
     });
   });
+
+  // Stage H seams end to end: the client's create token against a relay that requires one (H11), and the host in the
+  // v3 signature against a relay with a public host set (H8), each through the real `Relay` and `RelayTransport`.
+  group('end to end: create token and public host', () {
+    final dirs = <Directory>[];
+    final relays = <Relay>[];
+    tearDown(() async {
+      for (final r in relays) {
+        await r.close();
+      }
+      for (final d in dirs) {
+        d.deleteSync(recursive: true);
+      }
+      relays.clear();
+      dirs.clear();
+    });
+
+    Future<Uri> start({String? createToken, String? Function(int port)? publicHost}) async {
+      // Pick a free port first, so a public host naming that port can be given to the constructor.
+      final probe = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final port = probe.port;
+      await probe.close();
+      final dir = Directory.systemTemp.createTempSync('bw-relay-seam-');
+      dirs.add(dir);
+      final relay = Relay(data: dir, log: (_) {}, createToken: createToken, publicHost: publicHost?.call(port));
+      relays.add(relay);
+      await relay.serve(port: port);
+      return Uri.parse('http://127.0.0.1:$port');
+    }
+
+    const token = 'synthetic-create-token-0001';
+
+    test('without the token the first run stops with the create-token message; with it the wallet is created', () async {
+      final base = await start(createToken: token);
+      final k = VaultKey.generate();
+      final a = WalletRepo.inMemory();
+      addTearDown(a.close);
+      a.importBatch(january);
+      final none = RelayTransport(base, k);
+      addTearDown(none.close);
+      await expectLater(
+          SyncEngine(none, k).run(a), throwsA(isA<SyncException>().having((e) => e.message, 'message', contains('create token'))));
+      final wrong = RelayTransport(base, k, createToken: 'synthetic-wrong-token-0002');
+      addTearDown(wrong.close);
+      await expectLater(SyncEngine(wrong, k).run(a), throwsA(isA<SyncException>()));
+      final right = RelayTransport(base, k, createToken: token);
+      addTearDown(right.close);
+      final r = await SyncEngine(right, k).run(a);
+      expect(r.caughtUp, isTrue);
+      // A second device of the same wallet needs no token: the wallet exists.
+      final b = WalletRepo.inMemory();
+      addTearDown(b.close);
+      final plain = RelayTransport(base, k);
+      addTearDown(plain.close);
+      await SyncEngine(plain, k).run(b);
+      expect(b.transactions().length, january.transactions.length);
+    });
+
+    test('a relay whose public host is the address the client uses verifies; another public host refuses', () async {
+      final ok = await start(publicHost: (port) => '127.0.0.1:$port');
+      final k = VaultKey.generate();
+      final a = WalletRepo.inMemory();
+      addTearDown(a.close);
+      a.importBatch(january);
+      final t = RelayTransport(ok, k);
+      addTearDown(t.close);
+      expect((await SyncEngine(t, k).run(a)).caughtUp, isTrue);
+
+      final other = await start(publicHost: (_) => 'wallet.example.org');
+      final t2 = RelayTransport(other, k);
+      addTearDown(t2.close);
+      final b = WalletRepo.inMemory();
+      addTearDown(b.close);
+      b.importBatch(january);
+      // Signed for 127.0.0.1:<port>, checked against wallet.example.org: a bad signature, never a stored file.
+      await expectLater(SyncEngine(t2, k).run(b), throwsA(isA<SyncException>()));
+      expect(dirs.last.listSync().whereType<Directory>(), isEmpty);
+    });
+  });
 }

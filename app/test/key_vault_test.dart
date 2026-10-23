@@ -1,7 +1,11 @@
 // The browser's key store (lib/src/key_vault.dart): passphrase wrap and unwrap, locked/unlocked state, forget.
 // The browser's localStorage and sessionStorage are replaced by maps. A low round count keeps the tests fast; the real one is a
 // constant. All keys here are random and SYNTHETIC.
+import 'dart:convert';
+import 'dart:io' show gzip;
+
 import 'package:budget_wallet/src/key_vault.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -179,5 +183,20 @@ void main() {
       expect(v.isLocked, isTrue);
       expect((await v.unlock(_pass)).bytes, key.bytes);
     });
+  });
+
+  // A key wrapped by a build from before Stage H: `BWOP1`, no associated data. It must still unlock after the update,
+  // which now seals with `BWOP2` + `aadWebKey`. Built here by hand from the old layout, not with today's `seal`.
+  test('a key wrapped before Stage H (BWOP1, no associated data) still unwraps; a wrong passphrase is still refused', () async {
+    final key = VaultKey.generate();
+    final salt = List<int>.generate(16, (i) => 200 - i);
+    final derived = await (await Pbkdf2(macAlgorithm: Hmac.sha256(), iterations: _rounds, bits: 256)
+            .deriveKeyFromPassword(password: _pass, nonce: salt))
+        .extractBytes();
+    final box = await Xchacha20.poly1305Aead().encrypt(gzip.encode(utf8.encode(await key.toText())), secretKey: SecretKey(derived));
+    final sealed = [...utf8.encode('BWOP1'), ...box.nonce, ...box.mac.bytes, ...box.cipherText];
+    final blob = 'bwk1.$_rounds.${base64Url.encode(salt)}.${base64Url.encode(sealed)}';
+    expect((await unwrapKey(blob, _pass)).bytes, key.bytes);
+    await expectLater(unwrapKey(blob, 'not the passphrase'), throwsA(isA<WrongPassphrase>()));
   });
 }

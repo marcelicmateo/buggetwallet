@@ -531,7 +531,7 @@ designed to be safe to expose.
 | Someone with a laptop image or a stolen disk | Read the key file in the app support directory (desktop: file permissions only) | — see known limits |
 | A malicious bill file or calendar file | Attempt parser abuse | Crash or hang the app: readers never throw, have size caps, inflate caps, step and op budgets; XML external entities and DOCTYPE are refused; PDF text runs off the UI isolate |
 | Repository reader (code is on GitHub) | Read all code, tests, synthetic fixtures | Learn any real figure: fixtures are generated; personal numbers live only in the owner's wallet |
-| A second install with the same device id (a copied app directory or database) | Write under that device id | Go unnoticed: the device id lives next to the key, per install, and a 409 on a device's own sequence number shows "another install uses this device id" instead of retrying |
+| A second install with the same device id (a copied app directory or database) | Write under that device id | Go unnoticed or split the data: the device id lives next to the key, per install, and on a 409 on its own sequence number (or more files in its stream than it sent) a device moves to a fresh stream, uploads its whole state again and says once "another install used this device id"; every device reads both streams |
 | A benign device with a wrong clock | Make its own edits sort as newer than they are, up to an hour | Push every device's clock into the future: files whose newest clock is over an hour ahead are held (`clockDrift`) until the clock is right, and a device whose wall clock is that far behind its stored clock refuses to write |
 | The owner's own lost device, still holding the key | Everything the key allows, on any relay | Be cut off at the relay without rotating the key (no per-device keys yet): see key rotation below |
 
@@ -570,7 +570,7 @@ reporting or update check.
 
 | Permission | Why | When asked |
 |---|---|---|
-| INTERNET | Relay (HTTPS on the owner's domain; `http://` accepted only for loopback, private ranges and `.local`, the app refuses it for public hosts), `.ics` links | install |
+| INTERNET | Relay (HTTPS on the owner's domain; `http://` accepted only for loopback, private ranges, `.local` and one-word home names: the app refuses it for public hosts), `.ics` links. Cleartext stays allowed app-wide in the network config (Android cannot express private ranges, and `.ics` links may be `http://`); the relay check is in the app | install |
 | (no backup) | `allowBackup="false"` and data-extraction rules exclude everything; only system CAs are trusted | — |
 | POST_NOTIFICATIONS | Nudges, heads-ups, bill reminders | when the owner turns nudges on |
 | RECEIVE_BOOT_COMPLETED | Re-schedule notifications after reboot | install |
@@ -619,7 +619,7 @@ the owner starts it. Builds are reproducible in a rootless Podman image.
 8. **Backups hold no bill files.** A backup restores every bill but not its photo or PDF; those live on the relay and
    in each device's cache. If the relay is lost too, the files are gone. A file evicted from this device's cache cannot
    be opened while the relay is down.
-9. **Web** has no sync and keeps the unwrapped key text in `sessionStorage` (localhost only, see Cryptography).
+9. **Web** keeps the unwrapped key text in `sessionStorage` (localhost only, see Cryptography).
 10. **`WRITE_CALENDAR` is declared** although unused; a reviewer may want a plugin that asks for read only (P13).
 
 ## 10. Quality: tests, review and performance

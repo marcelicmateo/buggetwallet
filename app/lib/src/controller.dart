@@ -1214,8 +1214,8 @@ class WalletController extends ChangeNotifier {
       if (r.relayChanged) repo.setLocalValue(_noticeRelayChanged, '1');
       if (r.problems.any((p) => p.reason == SyncProblemReason.deviceIdInUse)) repo.setLocalValue(_noticeIdInUse, '1');
       logEvent(_sync, Level.INFO, 'sync.done', {
-        'relayChanged': r.relayChanged,
         'trigger': trigger,
+        'relayChanged': r.relayChanged,
         'sent': r.sent,
         'received': r.received,
         'files': r.filesRead,

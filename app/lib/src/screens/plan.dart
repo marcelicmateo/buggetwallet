@@ -314,6 +314,9 @@ class _PlanScreenState extends State<PlanScreen> {
     }
     if (_errors.isNotEmpty) setState(_errors.clear);
     final changes = <String, Object?>{...vals};
+    // A typed payday is kept within 1-28 before saving (45 → 28). Core clamps only stored 29-31 to 28 and reads anything
+    // else stored as 15, which suits a bad value from sync, not what the owner just typed.
+    if (changes['paydayDay'] case final int d) changes['paydayDay'] = d.clamp(1, 28);
     if (currency != s.currency) changes['currency'] = currency;
     final now = s.toMap();
     changes.removeWhere((k, v) => now[k] == v);

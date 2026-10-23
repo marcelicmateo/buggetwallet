@@ -6,7 +6,7 @@ Never put a signature, public key, body, full id or client address in a log line
 
 ## Files
 - `bin/relay.dart` — flags `--host --port --data --origin (repeatable) --max-wallets --max-bytes --create-token <file> --trust-proxy
-  --public-host <name> --health-check` (hand-parsed, no `args`; the last two are switches), env `BW_RELAY_HOST/PORT/DATA/ORIGINS/MAX_WALLETS/MAX_BYTES/
+  --public-host <name> --health-check` (hand-parsed, no `args`; `--trust-proxy` and `--health-check` are switches), env `BW_RELAY_HOST/PORT/DATA/ORIGINS/MAX_WALLETS/MAX_BYTES/
   CREATE_TOKEN(_FILE)/TRUST_PROXY/PUBLIC_HOST (or DOMAIN)` (flags win); usage error = exit 64; SIGINT/SIGTERM = graceful stop. `--health-check` GETs `/v2/health`
   on 127.0.0.1:port and exits 0/1 (the image's HEALTHCHECK; no `--data` needed). `relay/deploy/` = quadlets, Caddyfile, env templates (docs/setup.md §5).
 - `lib/relay.dart` — barrel. `lib/src/relay_server.dart` — `Relay({data, origins, maxWallets, maxBytes, maxInFlightBytes, now, log})`:

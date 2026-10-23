@@ -113,6 +113,26 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   60 s, also from the background). User docs (README, setup, architecture) describe the relay, the encrypted database and
   the key. Review: 0 high, 1 medium, 4 low, all fixed. Full run: importer 193, core 885, relay 115, app 774, desktop,
   web, perf 0 missed frames, emulator screens, `tools/relay.sh` health on /v2.
+- 2026-10-23: **Stage H: hardening** (every reviewer item H1–H13 of `PATH_FORWARD.md`; one schema bump to 8, relay api 3).
+  Money: rows in another currency are left out of every sum and shown as "Other currencies, not counted"; an explicit
+  "payday passed" state (an ended period counts only its own rows; "Start new period" catches up over missed months in
+  one tap); no screen prints a negative allowance or "0 days"; over-budget amounts in plain words; salary in parts
+  (7-day window) and low income in core; one settings row per category budget and per merchant pattern (schema 8,
+  migration keeps removals removed); bank import caps (20 MB, xlsx inflate), password-protected PBZ files named,
+  PBZ header check, id collisions counted. Sync: relay instance id, self-healing device streams (a relay restored from an
+  older copy, a restored database or a cloned install converge; acks that went backwards = relay rolled back), device id
+  per install next to the key, clock drift held and a clock gone back refuses owner edits, BWOP2 with associated data,
+  pinned SQLite cipher, relay host in the signature, bill-link and planned-payment field repairs. Relay and Android: creation
+  token (podman secret), `--trust-proxy`, `--public-host`, HEAD, 404 for a missing file, health check, read-only
+  container, Caddy + Let's Encrypt quadlets for sync away from home (D5), backup off, system CAs only, release build
+  refuses the debug key, `FLAG_SECURE` key screens with the QR first, restore a backup made with another key (key
+  rotation). Tests: the H12 list (sync scenarios, invariants, property test, relay fault injection and fuzz, crypto
+  vectors, decompression bombs, old-build schema-7 database and `.bwb` fixtures). Every half reviewed as it landed
+  (sync twice more after its redesign); real bugs found and fixed in the stage: a relay restored from an older copy lost
+  edits, a payment could pay two bills and a planned row kept its payment after an unlink, a stale settings map could
+  revive a removed budget, a foreign-currency bill was reserved as euros, the same id twice in one import overwrote the
+  first, an ended period counted the next period's rows. Stage run: importer 335, core 1444, relay 200, app 1200, desktop
+  12 files, web, perf, emulator screens.
 - 2026-10-23: **Stage G: foundation** (structure and practices first, owner 2026-10-22; every reviewer KEEP/CHANGE placed in
   `PATH_FORWARD.md` §10). Core: typed entity schema (`schema.dart`) drives DDL, migration, type check, snapshot and search;
   `repo.dart` split into part files; `show` lists on every export; one verb vocabulary (`addTransaction`, `markBlobUploaded`,
@@ -253,8 +273,11 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   started yet → "Left this pay period", the "Start new period" panel (one tap, even after missed months). A card payment
   in another currency → "Other currencies, not counted: … spent" on Today and Spending. Key rotation drill once
   (`docs/TECHNICAL_SPEC.md` §9 limit 2: back up, clear storage, new wallet, "Restore a backup made with another key…").
+  Layout call for you (KEEP K19, Today's order): the over-budget line sits between the stat strip and the pace bar, and
+  a "period ended" panel with its own button sits above the hero like the "Salary landed" panel: OK, or fold the
+  over-budget line into the sentence?
 - Build order (owner 2026-10-22: every feature first, the owner tests last): future spending (done) → bills database
-  (done) → outside reviews (done, `docs/review/`) → Stage G foundation (done 2026-10-23) → **Stage H hardening → Stage I UI quick wins → M6 owner live test**
+  (done) → outside reviews (done, `docs/review/`) → Stage G foundation (done 2026-10-23) → Stage H hardening (done 2026-10-23) → **Stage I UI quick wins → M6 owner live test**
   (plan with every review KEEP/CHANGE placed, delegation, owner decisions D1–D7 in `PATH_FORWARD.md`; queue in `PIPELINE.md` Stage G/H/I).
 - M6 adds four disaster drills to the owner checks (`PATH_FORWARD.md` §4 M6): new phone with the relay alive; new phone
   with the relay dead + `.bwb`; relay address switched to a second relay and back; laptop clock a day ahead for one sync.
