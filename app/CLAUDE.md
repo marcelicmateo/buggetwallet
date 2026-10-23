@@ -23,6 +23,12 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   (cached like `spending()`), `saveCategoryBudgets(map)` (logs `budgets.saved` with the count only). Spending's "Where it goes" bars use the
   budget as the 100 % mark (`CategoryBars(budget:)`: ruled track, hatched `bad` stretch and "over by 12 €" when over, "48 € left" otherwise,
   summary line and a total row under a `TotalRule`); Today shows one tappable line for `tightestBudget()` (`TodayScreen.openSpending`).
+- Money screens (stage H): never print a negative allowance or "0 days". Today reads `PeriodBudget`: `paydayPassed` = eyebrow "Left this pay period", `periodEnded` label, the
+  `startNewPeriod` button in its own `periodEndedPanel` above the main panel (`startNewMonth(currentPeriodStart(...))`: one tap over several missed paydays; hidden when a salary row already offers a new month) and "today's money" texts (delivery-hour panel too) say the period ended, never "used";
+  `overToday` = "Over today by" and the amount; `overBy`/`overBudget` = the `overBudget` line ("Over the plan" label, never green "On plan"; no pace bar when `planDaily` ≤ 0); small overs show to the cent; plan per day shows 0 when core says it is ≤ 0, and Plan's heading says "Nothing to spend: the plan is X over". Plan uses `p.lowIncome` (the 7-day
+  window is core's) and sends the payday as typed (core clamps 29–31 to 28). Wishlist shows `Verdict.overBudget` (`verdictOverBudget`) and, once the payday passed, `verdictEnded`.
+  `ForeignNote(map)` (`foreignNote`) = one muted "Other currencies, not counted: 12 $ spent" line (`moneyExact` of the absolute value, spent/received, sorted by code) from `PeriodBudget.foreignByCurrency` on Today and
+  `MonthSummary.foreignByCurrency` on Spending's month panel, only when non-empty. Tests: `test/money_screens_test.dart`.
 - Derived values (`period()`, `payPeriods()`, `spending(month)`) are cached in the controller per `dataVersion` (bumped by
   `reload()`) and day: never compute from `txs` in `build()`. `HomeShell` builds the five pages once per data version and day
   (`'${dataVersion}|${today()}'`), so a tab switch only moves the `IndexedStack` (keep it that way: 20,000 rows made every

@@ -107,6 +107,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
           const Eyebrow('Where it goes'),
           Heading('${monthLong(sel)}: ${money(selSum.out, cur, decimals: 0)} out'),
           if (budgeted) BudgetSummary(budget, cur),
+          if (selSum.foreignByCurrency.isNotEmpty) ForeignNote(selSum.foreignByCurrency, key: const ValueKey('foreignNote')),
           Muted('Income ${money(selSum.income, cur, decimals: 0)}. Spending and bills by category; '
               '${budgeted ? 'the solid mark is the budget, the dark tick' : 'the dark tick'} is your average of the 6 months before.'),
           _MonthChips(

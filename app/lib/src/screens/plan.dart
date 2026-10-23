@@ -140,7 +140,7 @@ class _PlanScreenState extends State<PlanScreen> {
     final s = wc.settings;
     final cur = wc.currency;
     final p = wc.period();
-    final lowIncome = p.received > 0 && p.received < s.salary * 0.9 && daysBetween(p.start, wc.today()) >= 4;
+    final lowIncome = p.lowIncome;
 
     Widget field(String key, String label, {bool money = true}) {
       void changed(String _) {
@@ -168,7 +168,11 @@ class _PlanScreenState extends State<PlanScreen> {
             children: gapped([
               Panel(children: [
                 const SectionHead('Payday plan'),
-                Heading('${money(p.flexBudget, cur, decimals: 0)} to spend · ${money(p.planDaily, cur, decimals: 0)}/day'),
+                Heading(
+                    p.planDaily <= 0
+                        ? 'Nothing to spend: the plan is ${moneyExact(-p.flexBudget, cur)} over'
+                        : '${money(p.flexBudget, cur, decimals: 0)} to spend · ${money(p.planDaily, cur, decimals: 0)}/day',
+                    key: const ValueKey('planHeading')),
                 const Muted('Salary minus bills minus savings. Whatever is left is your spending money until the next payday.'),
                 Rows(children: [
                   LineItem('Salary ${s.incomeMode == 'received' && p.received > 0 ? '(received)' : '(planned)'}',
@@ -311,7 +315,6 @@ class _PlanScreenState extends State<PlanScreen> {
     }
     if (_errors.isNotEmpty) setState(_errors.clear);
     final changes = <String, Object?>{...vals};
-    if (changes['paydayDay'] case final int d) changes['paydayDay'] = d.clamp(1, 28);
     if (currency != s.currency) changes['currency'] = currency;
     final now = s.toMap();
     changes.removeWhere((k, v) => now[k] == v);

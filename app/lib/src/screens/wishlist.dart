@@ -111,15 +111,25 @@ class _WishlistScreenState extends State<WishlistScreen> {
     final p = wc.period();
     final a = affordability(price, p);
     String by(int perDay) => shortDate(addDays(wc.today(), (price / perDay).ceil()));
+    final ended = p.paydayPassed && a.verdict != Verdict.overBudget;
     final head = switch (a.verdict) {
+      _ when ended => const StatusLabel(key: ValueKey('verdictEnded'), good: false, text: 'Pay period ended'),
       Verdict.now => const StatusLabel(good: true, text: 'Fits this month'),
       Verdict.tight => const StatusLabel(good: false, text: 'Possible, but tight'),
       Verdict.later => const StatusLabel(good: false, text: 'Not this month'),
-      Verdict.overBudget => const StatusLabel(good: false, text: 'Over budget this period'),
+      Verdict.overBudget => const StatusLabel(key: ValueKey('verdictOverBudget'), good: false, text: 'Over budget this period'),
     };
-    final body = a.verdict == Verdict.later || a.verdict == Verdict.overBudget
-        ? "It's more than the ${money(p.flexBudget - p.spent < 0 ? 0 : p.flexBudget - p.spent, cur, decimals: 0)} you have left until payday."
-        : 'Your daily budget would drop from ${money(p.allowanceToday, cur)} to ${money(a.newDaily, cur)} for the next ${p.daysLeft} days.';
+    final left = p.remaining > 0 ? p.remaining : 0;
+    final body = ended
+        ? 'The pay period has ended. Start the new period, then check again.'
+        : switch (a.verdict) {
+            Verdict.overBudget => p.overBy > 0
+                ? 'Spending is already ${money(p.overBy, cur)} over the plan ${p.paydayPassed ? 'this period' : 'until payday'}, so nothing more fits.'
+                : 'Your plan leaves no spending money this period, so nothing more fits.',
+            Verdict.later => "It's more than the ${money(left, cur, decimals: 0)} you have left until payday.",
+            _ =>
+              'Your daily budget would drop from ${money(p.allowanceToday, cur)} to ${money(a.newDaily, cur)} for the next ${p.daysLeft} ${p.daysLeft == 1 ? 'day' : 'days'}.',
+          };
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       head,
       const SizedBox(height: 6),

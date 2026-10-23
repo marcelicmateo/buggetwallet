@@ -98,14 +98,14 @@ void main() {
 
     testWidgets('1280: the recent transactions sit right of the main panel', (tester) async {
       await pumpFull(tester, demoWallet(), 1.0, size: const Size(1280, 800));
-      final main = at(tester, 'SAFE TO SPEND TODAY'), recent = at(tester, 'Recent');
+      final main = tester.getTopLeft(find.byKey(const ValueKey('safeToSpend'))), recent = at(tester, 'Recent');
       expect(recent.dx, greaterThan(main.dx + 300));
       expect((recent.dy - main.dy).abs(), lessThan(60), reason: 'both columns start at the top');
     });
 
     testWidgets('800: the recent transactions sit below the main panel', (tester) async {
       await pumpFull(tester, demoWallet(), 1.0, size: const Size(800, 1280));
-      final main = at(tester, 'SAFE TO SPEND TODAY'), recent = at(tester, 'Recent');
+      final main = tester.getTopLeft(find.byKey(const ValueKey('safeToSpend'))), recent = at(tester, 'Recent');
       expect((recent.dx - main.dx).abs(), lessThan(40));
       expect(recent.dy, greaterThan(main.dy + 200));
     });
