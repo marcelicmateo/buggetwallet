@@ -210,7 +210,7 @@ class _SearchPaneState extends State<SearchPane> {
           child: ListView(
             key: const ValueKey('searchResults'),
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(pagePad, 0, pagePad, 24),
+            padding: const EdgeInsets.fromLTRB(pagePad, 0, pagePad, pageBottomPad),
             children: gapped(body),
           ),
         ),

@@ -585,15 +585,17 @@ class WalletController extends ChangeNotifier {
   /// This month's Food delivery orders: how many, and the total spent (positive cents).
   (int, int) get deliveries => _cached('deliveries', () {
         final month = monthOf(today());
-        final xs = txs.where((t) => t.category == 'Food delivery' && monthOf(t.date) == month && t.amount < 0);
+        final xs = txs.where((t) => t.category == 'Food delivery' && t.tx.currency == currency && monthOf(t.date) == month && t.amount < 0);
         return (xs.length, -xs.fold<int>(0, (a, t) => a + t.amount));
       });
 
-  /// How many Food delivery orders the last 90 days hold (today included). Today shows its delivery-hour panel only when this is
+  /// How many Food delivery orders the last 90 days hold (today and the 89 days before it; the wallet's currency only). Today shows its delivery-hour panel only when this is
   /// above 0, so a wallet that never orders in never sees it. Cached per data version and day.
   int get deliveryOrders90 => _cached('deliveryOrders90', () {
-        final from = addDays(today(), -90);
-        return txs.where((t) => t.category == 'Food delivery' && t.amount < 0 && t.date.compareTo(from) >= 0).length;
+        final from = addDays(today(), -89);
+        return txs
+            .where((t) => t.category == 'Food delivery' && t.tx.currency == currency && t.amount < 0 && t.date.compareTo(from) >= 0)
+            .length;
       });
 
   /// The sum of every goal's target (cents).

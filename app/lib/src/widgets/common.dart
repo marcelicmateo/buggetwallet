@@ -148,13 +148,13 @@ class Explainer extends StatefulWidget {
 }
 
 class _ExplainerState extends State<Explainer> {
-  late bool _open;
+  late bool _open = !widget.wc.explainerSeen(widget.id);
 
+  // Marked seen only while it can be seen: the shell builds every tab, and a hidden tab (TickerMode off) must not use it up.
   @override
-  void initState() {
-    super.initState();
-    _open = !widget.wc.explainerSeen(widget.id);
-    widget.wc.markExplainerSeen(widget.id);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_open && TickerMode.valuesOf(context).enabled) widget.wc.markExplainerSeen(widget.id);
   }
 
   @override

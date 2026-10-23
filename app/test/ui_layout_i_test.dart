@@ -1,5 +1,6 @@
 // Stage I (IUa): add button on every tab, search icon, device-local theme choice, explainers shown once, type tokens.
 // SYNTHETIC data only.
+import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/search.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/theme.dart';
@@ -95,6 +96,15 @@ void main() {
       await tester.pump();
       expect(find.text('Some explanation.'), findsOneWidget);
     });
+
+    testWidgets('a hidden tab (TickerMode off) does not use the explainer up', (tester) async {
+      final wc = emptyWallet();
+      Widget page(bool shown) => Scaffold(body: TickerMode(enabled: shown, child: Explainer(wc, 'hidden', 'Some explanation.')));
+      await pumpApp(tester, page(false));
+      expect(wc.explainerSeen('hidden'), isFalse);
+      await tester.pumpWidget(MaterialApp(home: page(true)));
+      expect(wc.explainerSeen('hidden'), isTrue);
+    });
   });
 
   group('delivery-hour panel', () {
@@ -114,6 +124,57 @@ void main() {
     testWidgets('hidden at 15:00 for a wallet that never orders in', (tester) async {
       await pump(tester, false);
       expect(find.text('After-work delivery hour'), findsNothing);
+    });
+  });
+
+  group('delivery gate: 90 days exactly, spending in the wallet currency only', () {
+    // budgetWallet's clock is 20 Oct 2026: the window runs from 23 Jul to 20 Oct (90 days).
+    Future<void> pump(WidgetTester tester, void Function(WalletController wc) setUp) async {
+      final wc = budgetWallet();
+      setUp(wc);
+      wc.reload();
+      await pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => DateTime(2026, 10, 20, 15))),
+          size: const Size(400, 4000));
+    }
+
+    testWidgets('an order on the first day of the window turns the panel on', (tester) async {
+      await pump(tester, (wc) => wc.repo.addTransaction(date: '2026-07-23', amount: 1800, category: 'Food delivery'));
+      expect(find.text('After-work delivery hour'), findsOneWidget);
+    });
+
+    testWidgets('an order one day before the window does not', (tester) async {
+      await pump(tester, (wc) => wc.repo.addTransaction(date: '2026-07-22', amount: 1800, category: 'Food delivery'));
+      expect(find.text('After-work delivery hour'), findsNothing);
+    });
+
+    testWidgets('a refund (money in) does not', (tester) async {
+      await pump(tester, (wc) => wc.repo.addTransaction(date: '2026-10-10', amount: -1800, category: 'Food delivery'));
+      expect(find.text('After-work delivery hour'), findsNothing);
+    });
+
+    testWidgets('an order in another currency does not', (tester) async {
+      await pump(tester, (wc) => wc.repo.addTransaction(date: '2026-10-10', amount: 1800, category: 'Food delivery', currency: 'USD'));
+      expect(find.text('After-work delivery hour'), findsNothing);
+    });
+  });
+
+  group('theme stays put', () {
+    testWidgets('a notify does not build a new theme (no theme animation after a sync or write)', (tester) async {
+      final wc = demoWallet();
+      await pumpFull(tester, wc, 1.0);
+      ThemeData? theme() => tester.widget<MaterialApp>(find.byType(MaterialApp)).theme;
+      final before = theme();
+      wc.reload();
+      wc.setThemeMode('dark');
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(identical(theme(), before), isTrue);
+    });
+
+    test('the theme choice survives a controller reload', () {
+      final wc = emptyWallet();
+      wc.setThemeMode('dark');
+      wc.reload();
+      expect(wc.themeModeName, 'dark');
     });
   });
 

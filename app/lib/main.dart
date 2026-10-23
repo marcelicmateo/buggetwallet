@@ -79,15 +79,28 @@ class BudgetWalletApp extends StatefulWidget {
 class _BudgetWalletAppState extends State<BudgetWalletApp> {
   final _navigator = GlobalKey<NavigatorState>();
   bool _noticeOpen = false;
+  final _light = buildTheme(Brightness.light);
+  final _dark = buildTheme(Brightness.dark);
+
+  /// Device-local choice (Plan › Look), read from the wallet's local values, so it is known before the first frame.
+  late final _mode = ValueNotifier<ThemeMode>(_modeOf(widget.wc));
+
+  static ThemeMode _modeOf(WalletController wc) =>
+      switch (wc.themeModeName) { 'light' => ThemeMode.light, 'dark' => ThemeMode.dark, _ => ThemeMode.system };
+
+  void _syncMode() => _mode.value = _modeOf(widget.wc);
 
   @override
   void initState() {
     super.initState();
     clockBehindNotice.addListener(_clockBehind);
+    widget.wc.addListener(_syncMode);
   }
 
   @override
   void dispose() {
+    widget.wc.removeListener(_syncMode);
+    _mode.dispose();
     clockBehindNotice.removeListener(_clockBehind);
     super.dispose();
   }
@@ -111,27 +124,28 @@ class _BudgetWalletAppState extends State<BudgetWalletApp> {
   @override
   Widget build(BuildContext context) {
     final wc = widget.wc;
-    return ListenableBuilder(
-        listenable: wc,
-        builder: (context, _) => MaterialApp(
-              navigatorKey: _navigator,
-              title: 'Budget Wallet',
-              debugShowCheckedModeBanner: false,
-              theme: buildTheme(Brightness.light),
-              darkTheme: buildTheme(Brightness.dark),
-              // Device-local choice (Plan › Look); read from the wallet's local values, so it is known before the first frame.
-              themeMode: switch (wc.themeModeName) { 'light' => ThemeMode.light, 'dark' => ThemeMode.dark, _ => ThemeMode.system },
-              home: ListenableBuilder(
-                listenable: wc,
-                builder: (context, _) => wc.inUseElsewhere
-                    ? const InUseScreen()
-                    : wc.hasWallet
-                        ? HomeShell(wc: wc)
-                        : wc.locked
-                            ? UnlockScreen(wc: wc)
-                            : OnboardingScreen(wc: wc),
-              ),
-            ));
+    // The themes are built once (a new ThemeData never compares equal and would animate on every notify); only the mode moves.
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: _mode,
+      builder: (context, mode, _) => MaterialApp(
+        navigatorKey: _navigator,
+        title: 'Budget Wallet',
+        debugShowCheckedModeBanner: false,
+        theme: _light,
+        darkTheme: _dark,
+        themeMode: mode,
+        home: ListenableBuilder(
+          listenable: wc,
+          builder: (context, _) => wc.inUseElsewhere
+              ? const InUseScreen()
+              : wc.hasWallet
+                  ? HomeShell(wc: wc)
+                  : wc.locked
+                      ? UnlockScreen(wc: wc)
+                      : OnboardingScreen(wc: wc),
+        ),
+      ),
+    );
   }
 }
 
@@ -480,7 +494,7 @@ class _HomeShellState extends State<HomeShell> {
         // A 2 px rule under the header.
         bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: Container(height: 2, color: context.c.lineStrong)),
         // With a rail, the logo and name sit in the rail.
-        title: size != LayoutSize.expanded
+        title: compact
             ? Row(children: [
                 _logo(context.c),
                 // On a very narrow bar the search icon and the period take the room: the logo stands for the name.
