@@ -123,7 +123,7 @@ class _SyncPanelState extends State<SyncPanel> {
     final now = wc.now;
     return Panel(children: [
       const SectionHead('Sync'),
-      const Muted(
+      Explainer(wc, 'sync',
           'Changes are encrypted on this device and sent through your own relay, a small server at home. Only devices with your wallet key can read them.'),
       TextField(
         key: const ValueKey('relayAddress'),
@@ -218,7 +218,7 @@ class _SyncPanelState extends State<SyncPanel> {
         child: OutlinedButton(key: const ValueKey('relayCreateTokenSave'), onPressed: _saveToken, child: const Text('Save token')),
       ),
       if (wc.syncDevices.isNotEmpty) ...[
-        const Heading('Devices', size: 15),
+        const Heading('Devices', size: BwType.headingSize),
         for (final d in wc.syncDevices)
           LineItem(
             d.isThis ? '${d.device} · this device' : d.device,
@@ -249,7 +249,7 @@ class _Info extends StatelessWidget {
         ),
         TextSpan(text: text),
       ]),
-      style: TextStyle(fontSize: 13, color: context.c.muted, height: 1.4),
+      style: TextStyle(fontSize: BwType.metaSize, color: context.c.muted, height: 1.4),
     );
     if (onOk == null) return line;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

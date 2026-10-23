@@ -19,6 +19,7 @@ import 'forget_browser.dart';
 import 'habits_panels.dart';
 import 'import_flow.dart';
 import 'key_backup.dart';
+import 'look_panel.dart';
 import 'sync_panel.dart';
 
 class PlanScreen extends StatefulWidget {
@@ -146,8 +147,16 @@ class _PlanScreenState extends State<PlanScreen> {
         if (_errors.containsKey(key)) setState(() => _errors.remove(key));
       }
 
-      final decoration =
-          InputDecoration(labelText: label, suffixText: money ? currencySymbol(currency) : null, errorText: _errors[key], errorMaxLines: 3);
+      // The currency sign is drawn always (the label stays floated) and read with the label, not as a node of its own: a lone "€"
+      // node cut by the scroll edge has no readable contrast.
+      final sign = currencySymbol(currency);
+      final decoration = InputDecoration(
+          label: money ? Text(label, semanticsLabel: '$label, $sign') : null,
+          labelText: money ? null : label,
+          floatingLabelBehavior: money ? FloatingLabelBehavior.always : null,
+          suffix: money ? ExcludeSemantics(child: Text(sign, style: numStyle.copyWith(color: context.c.ink2))) : null,
+          errorText: _errors[key],
+          errorMaxLines: 3);
       return money
           ? MoneyField(controller: f[key]!, onChanged: changed, decoration: decoration)
           : TextField(
@@ -163,7 +172,7 @@ class _PlanScreenState extends State<PlanScreen> {
     return NarrowPage(
         child: ListView(
             controller: _scroll,
-            padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
+            padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
             children: gapped([
               Panel(children: [
                 const SectionHead('Payday plan'),
@@ -246,7 +255,7 @@ class _PlanScreenState extends State<PlanScreen> {
                   ),
                 ]),
                 field('rentCashThreshold', 'Cash withdrawal counts as rent from'),
-                const Muted('ATM withdrawals this big or bigger count as rent. 0 turns it off.', size: 12),
+                const Muted('ATM withdrawals this big or bigger count as rent. 0 turns it off.', size: BwType.metaSize),
                 FilledButton(onPressed: _savePlan, child: const Text('Save numbers')),
               ]),
               KeyedSubtree(key: _billsKey, child: ExpectedBillsPanel(wc: wc)),
@@ -272,7 +281,7 @@ class _PlanScreenState extends State<PlanScreen> {
               Panel(children: [
                 const SectionHead('Weekly review'),
                 ReviewDayRow(wc: wc),
-                const Heading('Import bank exports', size: 15),
+                const Heading('Import bank exports', size: BwType.headingSize),
                 const Muted(
                     'PBZ: Excel export of the current account. Revolut: account statement as Excel or CSV. Importing the same dates twice is safe; nothing gets doubled. Expenses you added by hand are matched to the bank rows.'),
                 OutlinedButton.icon(
@@ -290,6 +299,7 @@ class _PlanScreenState extends State<PlanScreen> {
               SyncPanel(wc: wc, onShowKey: () => _showKey(context)),
               BackupPanel(wc: wc, chooser: widget.chooser),
               ExportPanel(wc: wc, chooser: widget.chooser),
+              LookPanel(wc: wc),
               DiagnosticsPanel(wc: wc, chooser: widget.chooser),
               if (isWeb) _browserPanel(context),
             ])));

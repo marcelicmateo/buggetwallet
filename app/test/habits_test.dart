@@ -385,6 +385,8 @@ void main() {
       await tester.tap(_keyed('dismiss:'));
       await tester.pump();
       expect(find.text('Looks like a monthly bill'), findsNothing);
+      // The page is long: scroll the (lazy) list to the note before looking for it.
+      await tester.scrollUntilVisible(find.textContaining('No repeating bills found yet'), -300, scrollable: find.byType(Scrollable).first);
       expect(find.textContaining('No repeating bills found yet'), findsOneWidget);
 
       final wc2 = hw(confirmBill: true);

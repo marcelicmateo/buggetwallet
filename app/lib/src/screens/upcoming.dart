@@ -102,10 +102,10 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
             ],
           ),
           body: ListView(
-              padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
+              padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
               children: gapped([
                 HeadingRow(
-                  Heading(dateRange(range.start, addDays(range.end, 1)), size: 16),
+                  Heading(dateRange(range.start, addDays(range.end, 1)), size: BwType.headingSize),
                   Wrap(spacing: 6, children: [
                     ChoiceChip(
                         key: const ValueKey('periodNow'),
@@ -139,7 +139,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                 const _Legend(),
                 Panel(children: [
                   HeadingRow(
-                    Heading(_day == null ? 'Coming up' : longDateOrRaw(_day!), size: 16),
+                    Heading(_day == null ? 'Coming up' : longDateOrRaw(_day!), size: BwType.headingSize),
                     Wrap(spacing: 6, children: [
                       if (_day != null)
                         TextButton(
@@ -166,7 +166,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                         start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           const Text('Set aside', style: TextStyle(fontWeight: FontWeight.w600)),
                           Text('${counted.count} ${counted.count == 1 ? 'cost' : 'costs'} from today',
-                              style: TextStyle(fontSize: 12.5, color: context.c.ink2)),
+                              style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
                         ]),
                         end: FittedBox(
                             fit: BoxFit.scaleDown,
@@ -194,7 +194,7 @@ class _Legend extends StatelessWidget {
           Row(mainAxisSize: MainAxisSize.min, children: [
             _MarkBox(kind),
             const SizedBox(width: 5),
-            Text(label, style: TextStyle(fontSize: 12.5, color: context.c.ink2)),
+            Text(label, style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
           ]),
       ]);
 }
@@ -250,7 +250,7 @@ class _PeriodGrid extends StatelessWidget {
       for (final m in months) ...[
         Padding(
             padding: const EdgeInsets.only(top: 4, bottom: 4),
-            child: Text(monthLong(m), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14))),
+            child: Text(monthLong(m), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: BwType.bodySize))),
         _MonthGrid(month: m, start: start, end: end, today: today, byDay: byDay, selected: selected, onDay: onDay),
       ],
     ]);
@@ -290,7 +290,8 @@ class _MonthGrid extends StatelessWidget {
     }
     return Column(children: [
       Row(children: [
-        for (final l in _weekdayLetters) Expanded(child: Center(child: Text(l, style: TextStyle(fontSize: 11.5, color: c.muted)))),
+        for (final l in _weekdayLetters)
+          Expanded(child: Center(child: Text(l, style: TextStyle(fontSize: BwType.metaSize, color: c.muted)))),
       ]),
       for (var w = 0; w < days.length; w += 7)
         IntrinsicHeight(
@@ -342,10 +343,11 @@ class _DayCell extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 4),
           decoration: BoxDecoration(
             color: isToday ? c.accentSoft : null,
-            border: Border.all(color: selected ? c.accent : c.line, width: selected ? 2 : 1),
+            border: n == 0 && !selected ? null : Border.all(color: selected ? c.accent : c.line, width: selected ? 2 : 1),
           ),
           child: Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('${dayOf(date)}', style: numStyle.copyWith(fontSize: 13, fontWeight: isToday ? FontWeight.w600 : FontWeight.w400)),
+            Text('${dayOf(date)}',
+                style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: isToday ? FontWeight.w600 : FontWeight.w400)),
             ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 10),
               child: kinds.isEmpty
@@ -379,11 +381,11 @@ class _UpcomingRow extends StatelessWidget {
     final isBillDate = i.kind == UpcomingKind.warranty || i.kind == UpcomingKind.returnBy;
     final past = i.date.compareTo(today) < 0;
     final sub = Wrap(spacing: 8, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
-      Text(shortDateOrRaw(i.date), style: TextStyle(fontSize: 12.5, color: c.ink2)),
+      Text(shortDateOrRaw(i.date), style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       Tag(sourceLabel(i)),
-      if (past && !isSuggestion) Text('past', style: TextStyle(fontSize: 12.5, color: c.muted)),
+      if (past && !isSuggestion) Text('past', style: TextStyle(fontSize: BwType.metaSize, color: c.muted)),
       if ((i.planned?.coveredByPlan ?? false) || (i.bill?.coveredByPlan ?? false))
-        Text('covered by your plan', style: TextStyle(fontSize: 12.5, color: c.ink2)),
+        Text('covered by your plan', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       if (i.planned?.needsCategory ?? false) StatusLabel(key: ValueKey('needsCategory:${i.key}'), good: false, text: 'Needs a category'),
     ]);
     final title =
@@ -394,7 +396,7 @@ class _UpcomingRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [title, const SizedBox(height: 2), sub]),
             end: i.amount == null
-                ? Text('No amount', textAlign: TextAlign.end, style: TextStyle(fontSize: 12.5, color: c.muted))
+                ? Text('No amount', textAlign: TextAlign.end, style: TextStyle(fontSize: BwType.metaSize, color: c.muted))
                 : Text(moneyExact(i.amount!, cur), textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500)),
           );
     return InkWell(
@@ -408,7 +410,7 @@ class _UpcomingRow extends StatelessWidget {
           if (isSuggestion) ...[
             const SizedBox(height: 4),
             Text((i.suggested ?? 0) <= 0 ? 'No amount found' : 'Suggested ${moneyExact(i.suggested!, cur)}',
-                style: numStyle.copyWith(fontSize: 13.5, fontWeight: FontWeight.w500)),
+                style: numStyle.copyWith(fontSize: BwType.bodySize, fontWeight: FontWeight.w500)),
             const SizedBox(height: 2),
             Wrap(spacing: 8, runSpacing: 4, children: [
               if ((i.suggested ?? 0) > 0)

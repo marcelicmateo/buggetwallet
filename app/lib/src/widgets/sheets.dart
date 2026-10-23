@@ -207,7 +207,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         controller: amount,
         autofocus: true,
         onChanged: (_) => setState(() {}),
-        style: numStyle.copyWith(fontSize: 30, fontWeight: FontWeight.w500),
+        style: numStyle.copyWith(fontSize: BwType.entrySize, fontWeight: FontWeight.w500),
         decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur), hintText: '0.00'),
       ),
       const SizedBox(height: 6),
@@ -243,7 +243,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
           Text('Over ${money(s.impulse, cur, decimals: 0)}: wishlist first?',
               style: TextStyle(fontWeight: FontWeight.w600, color: context.c.warnInk)),
           Text('Your rule says big buys wait ${s.coolHours} hours. If you already paid, tap Add expense again.',
-              style: TextStyle(color: context.c.warnInk, fontSize: 13)),
+              style: TextStyle(color: context.c.warnInk, fontSize: BwType.metaSize)),
           // A wish takes its name from the note; with no note the owner names it (never the category).
           if (note.text.trim().isEmpty)
             TextField(
@@ -267,15 +267,11 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         ]),
       ],
       const SizedBox(height: 14),
-      const Muted(
-          'Cash from an ATM is already counted when you withdraw it. Log card payments here; the weekly import matches them so nothing is counted twice.',
-          size: 12.5),
-      const SizedBox(height: 10),
       FilledButton.icon(
         style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
         key: const ValueKey('addExpenseSave'),
         icon: const Icon(Icons.add),
-        label: const Text('Add expense', style: TextStyle(fontSize: 16)),
+        label: const Text('Add expense', style: TextStyle(fontSize: BwType.headingSize)),
         onPressed: cat == null
             ? null
             : () {
@@ -297,6 +293,10 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                 Navigator.pop(context, 'added');
               },
       ),
+      const SizedBox(height: 10),
+      const Muted(
+          'Cash from an ATM is already counted when you withdraw it. Log card payments here; the weekly import matches them so nothing is counted twice.',
+          size: BwType.metaSize),
     ]);
   }
 }
@@ -331,7 +331,7 @@ class _TxSheetState extends State<TxSheet> {
       Heading(merchantName(t)),
       const SizedBox(height: 6),
       Text(money(t.amount, widget.wc.currency, decimals: 2, signed: true),
-          textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: 26, fontWeight: FontWeight.w500)),
+          textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500)),
       const SizedBox(height: 6),
       const DoubleRule(),
       const SizedBox(height: 6),
@@ -344,7 +344,7 @@ class _TxSheetState extends State<TxSheet> {
               const SizedBox(width: 6),
               Expanded(
                   child: Text('Matched with your bank · ${longDateOrRaw(matchedBank!.date)}',
-                      style: TextStyle(fontSize: 13, color: context.c.ink2))),
+                      style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2))),
             ])),
       if (matchedEntry != null)
         Padding(
@@ -354,10 +354,12 @@ class _TxSheetState extends State<TxSheet> {
               const SizedBox(width: 6),
               Expanded(
                   child: Text('Matched with your bank · you added it on ${longDateOrRaw(matchedEntry!.date)}',
-                      style: TextStyle(fontSize: 13, color: context.c.ink2))),
+                      style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2))),
             ])),
       if (!manual)
-        Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(t.description, style: const TextStyle(fontSize: 13))),
+        Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: SelectableText(t.description, style: const TextStyle(fontSize: BwType.metaSize))),
       if (bill != null) ...[
         const SizedBox(height: 10),
         Align(
@@ -383,7 +385,7 @@ class _TxSheetState extends State<TxSheet> {
           contentPadding: EdgeInsets.zero,
           value: always,
           onChanged: (v) => setState(() => always = v),
-          title: Text('Always use this for ${merchantName(t)}', style: const TextStyle(fontSize: 14)),
+          title: Text('Always use this for ${merchantName(t)}', style: const TextStyle(fontSize: BwType.bodySize)),
         ),
       const SizedBox(height: 8),
       Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, children: [

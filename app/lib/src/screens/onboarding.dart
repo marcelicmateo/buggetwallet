@@ -7,6 +7,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../sync_status.dart';
+import '../theme.dart';
 import '../widgets/common.dart';
 
 final _log = Logger('bw.app');
@@ -55,12 +56,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           isWeb
               ? 'Your money, kept in this browser. It syncs only with your own relay, encrypted with a key only your devices have. Save a backup file from Plan now and then.'
               : 'Your money, on your devices. Everything is stored here first and works offline. Sync goes through your own relay, encrypted with a key only your devices have.',
-          size: 14.5),
+          size: BwType.bodySize),
       if (widget.wc.hasUnopenedDb)
         const Row(key: ValueKey('olderWalletNotice'), crossAxisAlignment: CrossAxisAlignment.start, children: [
           Icon(Icons.info_outline, size: 18),
           SizedBox(width: 8),
-          Expanded(child: Muted('An older wallet is on this device. Join with its key to open it.', size: 14.5)),
+          Expanded(child: Muted('An older wallet is on this device. Join with its key to open it.', size: BwType.bodySize)),
         ]),
       if (_passphraseFor != null)
         ..._passphraseStep()
@@ -70,7 +71,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           key: const ValueKey('startWallet'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
           onPressed: busy ? null : (isWeb ? () => _askPassphrase('create') : _create),
-          child: const Text('Start a new wallet', style: TextStyle(fontSize: 16)),
+          child: const Text('Start a new wallet', style: TextStyle(fontSize: BwType.headingSize)),
         ),
         OutlinedButton(
           key: const ValueKey('joinStart'),
@@ -102,7 +103,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           key: const ValueKey('joinWallet'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
           onPressed: busy ? null : (isWeb ? _checkKeyThenAsk : _join),
-          child: const Text('Join wallet', style: TextStyle(fontSize: 16)),
+          child: const Text('Join wallet', style: TextStyle(fontSize: BwType.headingSize)),
         ),
         TextButton(key: const ValueKey('joinBack'), onPressed: () => setState(() => joining = false), child: const Text('Back')),
       ],
@@ -111,7 +112,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   /// Web: two fields and a short explanation. The passphrase protects the key in this browser only.
   List<Widget> _passphraseStep() => [
-        const Heading(key: ValueKey('passphraseHeading'), 'Choose a passphrase', size: 18),
+        const Heading(key: ValueKey('passphraseHeading'), 'Choose a passphrase', size: BwType.headingSize),
         const Muted('It protects your wallet key in this browser only. You type it once each time you open the app in a new tab. '
             'If you lose it, you can only start over here; a backup file or another device still has your data.'),
         TextField(
@@ -136,7 +137,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           key: const ValueKey('passphraseContinue'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
           onPressed: busy ? null : _savePassphrase,
-          child: Text(_passphraseFor == 'create' ? 'Create wallet' : 'Join wallet', style: const TextStyle(fontSize: 16)),
+          child: Text(_passphraseFor == 'create' ? 'Create wallet' : 'Join wallet', style: const TextStyle(fontSize: BwType.headingSize)),
         ),
         TextButton(
             key: const ValueKey('passphraseBack'),

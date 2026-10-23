@@ -137,10 +137,10 @@ class _CalendarsPanelState extends State<CalendarsPanel> {
         final reads = device.any((e) => e.on) || imported.isNotEmpty;
         return Panel(children: [
           const SectionHead('Calendars'),
-          const Muted(
+          Explainer(wc, 'calendars',
               'Events with a cost show up in Upcoming as suggestions. Nothing counts until you confirm an amount. The app only reads; it never changes a calendar. Stays on this device.'),
           if (wc.deviceCalendarsSupported) ...[
-            const Heading('This phone', size: 15),
+            const Heading('This phone', size: BwType.headingSize),
             if (!wc.cal.permission)
               Align(
                 alignment: Alignment.centerLeft,
@@ -164,11 +164,11 @@ class _CalendarsPanelState extends State<CalendarsPanel> {
                   logNav('calendar.switch', {'on': on});
                   wc.setCalendarOn(e.id, on);
                 },
-                title: Text(e.name, style: const TextStyle(fontSize: 14.5)),
-                subtitle: e.account == null ? null : Text(e.account!, style: TextStyle(fontSize: 12.5, color: c.ink2)),
+                title: Text(e.name, style: const TextStyle(fontSize: BwType.bodySize)),
+                subtitle: e.account == null ? null : Text(e.account!, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
               ),
           ],
-          Heading(wc.deviceCalendarsSupported ? 'Files and links' : 'Calendar files', size: 15),
+          Heading(wc.deviceCalendarsSupported ? 'Files and links' : 'Calendar files', size: BwType.headingSize),
           if (imported.isEmpty) const Muted('No .ics calendars yet.'),
           for (final e in imported)
             Container(
@@ -229,15 +229,16 @@ class _CalendarsPanelState extends State<CalendarsPanel> {
             Align(
                 alignment: Alignment.centerLeft,
                 child: FilledButton(key: const ValueKey('calLinkAdd'), onPressed: _busy ? null : _addLink, child: const Text('Add link'))),
-            const Muted('The link is kept on this device only and read again when the app starts.', size: 12.5),
+            const Muted('The link is kept on this device only and read again when the app starts.', size: BwType.metaSize),
           ],
           if (_error != null) StatusLabel(key: const ValueKey('calError'), good: false, text: _error!),
           if (reads && wc.cal.lastRead != null)
-            Muted('Read ${wc.cal.events.length} ${wc.cal.events.length == 1 ? 'event' : 'events'} for the next 90 days.', size: 12.5),
+            Muted('Read ${wc.cal.events.length} ${wc.cal.events.length == 1 ? 'event' : 'events'} for the next 90 days.',
+                size: BwType.metaSize),
           if (!wc.deviceCalendarsSupported && !wc.linksSupported)
-            const Muted('In the browser you can import a .ics file. The phone app reads calendars directly.', size: 12.5),
+            const Muted('In the browser you can import a .ics file. The phone app reads calendars directly.', size: BwType.metaSize),
           const Divider(height: 24),
-          const Heading('Heads-up', size: 15),
+          const Heading('Heads-up', size: BwType.headingSize),
           const Muted('Today and a notification warn you a few days before a planned cost this big or bigger.'),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(

@@ -31,19 +31,23 @@ void main() {
     expect(marginLine, findsOneWidget);
   });
 
-  group('TxTile at 320 dp', () {
-    Future<void> pumpTile(WidgetTester tester, double scale) async {
+  group('TxTile columns', () {
+    // Columns need text scale <= 1.15 and a window of 400 dp or more; below 400 dp the date sits under the name.
+    Future<void> pumpTile(WidgetTester tester, double scale, {double width = 420}) async {
       final wc = demoWallet();
       final t = wc.txs.firstWhere((t) => t.amount < 0);
-      await pumpApp(tester, Scaffold(body: TxTile(t: t, currency: 'EUR')), size: const Size(320, 640), textScale: scale);
+      await pumpApp(tester, Scaffold(body: TxTile(t: t, currency: 'EUR')), size: Size(width, 640), textScale: scale);
       expect(tester.takeException(), isNull);
       // In the columns the date is a cell of its own; stacked, it is part of the "date · category" line.
+      final columns = scale <= 1.15 && width >= 400;
       final date = shortDateOrRaw(t.date);
-      expect(find.text(date), scale <= 1.15 ? findsOneWidget : findsNothing, reason: 'scale $scale');
-      expect(find.textContaining('$date · '), scale <= 1.15 ? findsNothing : findsOneWidget, reason: 'scale $scale');
+      expect(find.text(date), columns ? findsOneWidget : findsNothing, reason: 'scale $scale');
+      expect(find.textContaining('$date · '), columns ? findsNothing : findsOneWidget, reason: 'scale $scale');
     }
 
-    testWidgets('columns at text scale 1.15', (tester) => pumpTile(tester, 1.15));
+    testWidgets('columns at text scale 1.15 and 420 dp', (tester) => pumpTile(tester, 1.15));
+    testWidgets('stacked at 320 dp, even at text scale 1.0', (tester) => pumpTile(tester, 1.0, width: 320));
+    testWidgets('stacked at 399 dp', (tester) => pumpTile(tester, 1.0, width: 399));
     testWidgets('stacked at text scale 1.2', (tester) => pumpTile(tester, 1.2));
   });
 }

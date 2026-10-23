@@ -259,8 +259,8 @@ class _BillSheetState extends State<BillSheet> {
             BillSource.photo => 'Read from a photo.',
             BillSource.manual => 'Added by you.',
           },
-          size: 12.5),
-      if (review) const Muted('Check the fields, then confirm. Nothing counts until you do.', size: 12.5),
+          size: BwType.metaSize),
+      if (review) const Muted('Check the fields, then confirm. Nothing counts until you do.', size: BwType.metaSize),
       if (planner != null)
         Padding(
           padding: const EdgeInsets.only(top: 6),
@@ -268,8 +268,8 @@ class _BillSheetState extends State<BillSheet> {
             Icon(Icons.event_repeat, size: 16, color: c.ink2),
             const SizedBox(width: 6),
             Expanded(
-                child:
-                    Text('Planned by ${planner.label}', key: const ValueKey('plannedBy'), style: TextStyle(fontSize: 12.5, color: c.ink2))),
+                child: Text('Planned by ${planner.label}',
+                    key: const ValueKey('plannedBy'), style: TextStyle(fontSize: BwType.metaSize, color: c.ink2))),
           ]),
         ),
       const SizedBox(height: 12),
@@ -277,7 +277,7 @@ class _BillSheetState extends State<BillSheet> {
         fieldKey: const ValueKey('billTotal'),
         controller: total,
         onChanged: (_) => setState(() => error = null),
-        style: numStyle.copyWith(fontSize: 26, fontWeight: FontWeight.w500),
+        style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500),
         decoration:
             deco('Total', filled: total.text.isNotEmpty, hint: '0.00', suffix: currencySymbol(b.currency.isEmpty ? cur : b.currency)),
       ),
@@ -355,7 +355,7 @@ class _BillSheetState extends State<BillSheet> {
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: SplitRow(
-                  start: Text('${merchantName(tx.tx)} · ${shortDateOrRaw(tx.date)}', style: const TextStyle(fontSize: 13.5)),
+                  start: Text('${merchantName(tx.tx)} · ${shortDateOrRaw(tx.date)}', style: const TextStyle(fontSize: BwType.bodySize)),
                   end: Text(money(tx.amount, cur, decimals: 2, signed: true), textAlign: TextAlign.end, style: numStyle)),
             )
           else
@@ -400,7 +400,9 @@ class _BillSheetState extends State<BillSheet> {
               _saveDates(b, returnBy: v, clearReturnBy: v == null);
             }, clearable: true)),
       ]),
-      if (review) const Padding(padding: EdgeInsets.only(top: 4), child: Muted('Shown in Upcoming once the bill is confirmed.', size: 12)),
+      if (review)
+        const Padding(
+            padding: EdgeInsets.only(top: 4), child: Muted('Shown in Upcoming once the bill is confirmed.', size: BwType.metaSize)),
       if (error != null) ...[const SizedBox(height: 10), StatusLabel(key: const ValueKey('billError'), good: false, text: error!)],
       const SizedBox(height: 14),
       // Delete lives at the end of the form, away from the confirm button.
@@ -448,7 +450,7 @@ class _CandidatesSheet extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const Heading('Paid by…'),
       const SizedBox(height: 4),
-      const Muted('Pick the payment from your bank. Nothing is matched by amount alone.', size: 12.5),
+      const Muted('Pick the payment from your bank. Nothing is matched by amount alone.', size: BwType.metaSize),
       const SizedBox(height: 8),
       if (list.isEmpty)
         const EmptyNote('No payment found near this date. Import your bank files, or add it as a cash expense.')
@@ -489,7 +491,7 @@ class _CashSheetState extends State<_CashSheet> {
       const SizedBox(height: 4),
       Muted(
           'Adds ${b.total == null ? 'an expense' : moneyExact(b.total!, cur)} on ${b.date == null ? 'the bill date' : shortDateOrRaw(b.date!)} as a cash expense.',
-          size: 12.5),
+          size: BwType.metaSize),
       const SizedBox(height: 10),
       const Muted('Category'),
       const SizedBox(height: 6),
