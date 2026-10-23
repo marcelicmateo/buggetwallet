@@ -460,7 +460,7 @@ void main() {
           // fine
         }
       }
-      const pbz = 'DATUM;VRSTA;OPIS;IZNOS;VALUTA\n31.02.2026;POS plaćanje;x;-1,00;EUR\n';
+      const pbz = 'DATUM;VRSTA TRANSAKCIJE;OPIS PLAĆANJA;IZNOS;VALUTA\n31.02.2026;POS plaćanje;x;-1,00;EUR\n';
       try {
         expect(importBankFile(_b(pbz)).transactions, isEmpty);
       } on ImportException {
@@ -473,7 +473,7 @@ void main() {
           'Card Payment,2027-02-29,z,-3,0,COMPLETED\n'));
       expect([for (final t in rev.transactions) (t.date, t.amountMinor)], [('2028-02-29', -200)]);
       expect(rev.invalid, 2);
-      final pbz = importBankFile(_b('DATUM;VRSTA;OPIS;IZNOS;VALUTA\n31.02.2026;POS plaćanje;x;-1,00;EUR\n'
+      final pbz = importBankFile(_b('DATUM;VRSTA TRANSAKCIJE;OPIS PLAĆANJA;IZNOS;VALUTA\n31.02.2026;POS plaćanje;x;-1,00;EUR\n'
           '0.1.2026;POS plaćanje;x;-1,00;EUR\n1.2.2026;POS plaćanje;y;-2,00;EUR\n'));
       expect([for (final t in pbz.transactions) (t.date, t.amountMinor)], [('2026-02-01', -200)]);
       expect(pbz.invalid, 2);

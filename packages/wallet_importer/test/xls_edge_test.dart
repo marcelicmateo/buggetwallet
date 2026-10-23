@@ -26,6 +26,7 @@ List<int> _pbzCells(List<List<int>> rows) => [
       ...labelSst(1, 1, 2),
       ...labelSst(1, 2, 3),
       ...labelSst(1, 3, 4),
+      ...labelSst(1, 4, 5),
       ...rows.expand((r) => r)
     ];
 
@@ -168,6 +169,10 @@ void main() {
         [
           ...label(0, 0, 'TRANSAKCIJSKI RAČUN:'),
           ...label(1, 0, 'DATUM'),
+          ...label(1, 1, 'VRSTA TRANSAKCIJE'),
+          ...label(1, 2, 'OPIS PLAĆANJA', wide: true),
+          ...label(1, 3, 'IZNOS'),
+          ...label(1, 4, 'VALUTA'),
           ...number(2, 0, 46037),
           ...label(2, 1, 'Type'),
           ...label(2, 2, 'Šđ shop', wide: true),
@@ -191,7 +196,7 @@ void main() {
       final file = ole2(workbook([
         [
           ...labelSst(0, 0, 0),
-          ...labelSst(1, 0, 1),
+          for (var c = 0; c < 5; c++) ...labelSst(1, c, c + 1),
           ...mulRk(2, 0, [46037, 0, 0, -250]),
         ],
       ], sstRecords: _sstOf(_hdrTexts)));

@@ -6,6 +6,7 @@ import 'package:logging/logging.dart';
 import 'package:xml/xml.dart';
 
 import 'grid.dart';
+import 'limits.dart';
 import 'log.dart';
 
 final _log = Logger('bw.importer.xlsx');
@@ -15,8 +16,19 @@ final _log = Logger('bw.importer.xlsx');
 class XlsxReader {
   static bool looksLikeZip(Uint8List b) => b.length > 4 && b[0] == 0x50 && b[1] == 0x4B;
 
+  /// Throws [FileRefused] ([tooLargeMessage]) when the entries' stated sizes add up to more than
+  /// [maxXlsxUnpackedBytes], before anything is inflated (the decoder never inflates an entry past its stated size).
   static List<List<Object>> firstSheet(Uint8List bytes) {
     final archive = ZipDecoder().decodeBytes(bytes);
+    var unpacked = 0;
+    for (final f in archive.files) {
+      unpacked += f.size < 0 ? 0 : f.size;
+    }
+    if (unpacked > maxXlsxUnpackedBytes) {
+      logImporter(_log, Level.WARNING, 'xlsx.tooLarge', {'bytes': bytes.length, 'entries': archive.files.length, 'unpacked': unpacked});
+      throw const FileRefused(tooLargeMessage, 'unpackedTooLarge');
+    }
+
     String? text(String name) {
       final f = archive.findFile(name);
       if (f == null) return null;
