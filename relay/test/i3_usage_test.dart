@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 
 import 'support.dart';
 
-const _skip = 'BUG: I8 - relay state bytes / maxBytes';
+const _skip = false;
 
 Future<String> _hash(List<int> b) async => [for (final x in (await Sha256().hash(b)).bytes) x.toRadixString(16).padLeft(2, '0')].join();
 

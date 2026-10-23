@@ -2,7 +2,6 @@
 // JSON; SyncReport.relayBytes / relayMaxBytes; MemoryTransport fills both. All data is SYNTHETIC.
 //
 // The API does not exist on v2 yet: the whole file is skipped until the lead lifts the line below at merge.
-@Skip('BUG: I8 - RelayState.bytes/maxBytes, SyncReport.relayBytes/relayMaxBytes')
 library;
 
 // ignore_for_file: undefined_getter

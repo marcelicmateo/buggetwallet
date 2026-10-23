@@ -2,7 +2,6 @@
 // null when the payday is tomorrow or has passed. Expected values worked out by hand. All data is SYNTHETIC.
 //
 // The API does not exist on v2 yet: the whole file is skipped until the lead lifts the line below at merge.
-@Skip('BUG: I1 - PeriodBudget.allowanceTomorrow')
 library;
 
 // ignore_for_file: undefined_getter

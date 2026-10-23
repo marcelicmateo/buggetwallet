@@ -3,7 +3,6 @@
 // match. Unknown id = ArgumentError; a live row = no-op. All data is SYNTHETIC.
 //
 // The API does not exist on v2 yet: the whole file is skipped until the lead lifts the line below at merge.
-@Skip('BUG: I4 - WalletRepo.undeleteTransaction / undeleteGoal')
 library;
 
 // ignore_for_file: undefined_method
