@@ -151,10 +151,12 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final length = daysBetween(start, end).clamp(1, 1000);
   final paydayPassed = today.compareTo(end) >= 0;
   final daysLeft = paydayPassed ? 0 : daysBetween(today, end);
+  // Once the payday has passed, rows dated on or after it belong to the next period, not to this one.
+  final lastDay = paydayPassed ? addDays(end, -1) : today;
   final inPeriod = <CategorizedTx>[];
   final foreign = <String, int>{};
   for (final t in txs) {
-    if (!t.tx.live || t.date.compareTo(start) < 0 || t.date.compareTo(today) > 0) continue;
+    if (!t.tx.live || t.date.compareTo(start) < 0 || t.date.compareTo(lastDay) > 0) continue;
     if (t.tx.currency == st.currency) {
       inPeriod.add(t);
     } else if (t.kind != BudgetKind.transfer) {
@@ -164,7 +166,8 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final received = _sum(inPeriod.where((t) => t.kind == BudgetKind.income));
   final extras = _sum(inPeriod.where((t) => t.kind == BudgetKind.extra));
   final age = daysBetween(start, today);
-  final partsArriving = age < samePaydayDays;
+  // Salary parts can still be on their way only while the period runs; an ended period has all it will get.
+  final partsArriving = !paydayPassed && age < samePaydayDays;
   final income = st.incomeMode == 'received' && received > 0 ? (partsArriving && st.salary > received ? st.salary : received) : st.salary;
   final lowIncome = received > 0 && received * 10 < st.salary * 9 && age >= 4 && !partsArriving;
   final goalMonthly = goals.fold<int>(0, (s, g) => s + g.monthly);

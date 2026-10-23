@@ -192,8 +192,10 @@ void main() {
         expect(p.elapsed, inInclusiveRange(0.0, 1.0), reason: why);
         expect(p.aheadOfPace, (p.flexBudget * p.elapsed).round() - p.spent, reason: why);
 
-        // Brute force over live rows in [start, today].
-        final live = w.txs.where((t) => t.tx.live && _in(t.date, p.start, today)).toList();
+        // Brute force over live rows in [start, today], or [start, payday) once the payday has passed (later rows are the
+        // next period's).
+        final lastDay = p.paydayPassed ? addDays(p.end, -1) : today;
+        final live = w.txs.where((t) => t.tx.live && _in(t.date, p.start, lastDay)).toList();
         int sum(Iterable<CategorizedTx> xs) => xs.fold(0, (s, t) => s + t.amount);
         expect(p.spent, -sum(live.where((t) => t.kind == BudgetKind.flex)), reason: why);
         expect(p.spentToday, -sum(live.where((t) => t.kind == BudgetKind.flex && t.date == today)), reason: why);
@@ -205,7 +207,7 @@ void main() {
         }
         expect(p.fixedPaid, fixed, reason: why);
         // H2: in the first samePaydayDays days a received salary short of the plan counts as the plan.
-        final arriving = daysBetween(p.start, today) < samePaydayDays;
+        final arriving = !p.paydayPassed && daysBetween(p.start, today) < samePaydayDays;
         expect(p.income, st.incomeMode == 'received' && p.received > 0 ? (arriving ? max(p.received, st.salary) : p.received) : st.salary,
             reason: why);
         expect(p.lowIncome, p.received > 0 && p.received * 10 < st.salary * 9 && !arriving && daysBetween(p.start, today) >= 4,
@@ -227,9 +229,14 @@ void main() {
         // Spending today lowers safe-to-spend by exactly that amount; tomorrow's allowance spreads the rest.
         final spend = 1 + r.nextInt(5000);
         final s2 = computePeriod([...w.txs, ct(today, -spend, 'Groceries')], st, goals, today);
-        expect(s2.safeToday, p.safeToday - spend, reason: why);
-        expect(s2.allowanceToday, p.allowanceToday, reason: '$why: today\'s allowance is fixed at the start of the day');
-        expect(s2.remaining, p.remaining - spend, reason: why);
+        if (p.paydayPassed) {
+          // After the payday, today's row belongs to the next period: the ended period does not move.
+          expect((s2.safeToday, s2.allowanceToday, s2.remaining), (p.safeToday, p.allowanceToday, p.remaining), reason: why);
+        } else {
+          expect(s2.safeToday, p.safeToday - spend, reason: why);
+          expect(s2.allowanceToday, p.allowanceToday, reason: '$why: today\'s allowance is fixed at the start of the day');
+          expect(s2.remaining, p.remaining - spend, reason: why);
+        }
       }
     });
 

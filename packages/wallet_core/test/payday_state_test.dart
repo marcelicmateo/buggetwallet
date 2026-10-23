@@ -8,6 +8,28 @@ void main() {
   const st = WalletSettings(salary: 200000, rent: 50000, periodStart: '2026-03-15', paydayDay: 15);
 
   group('payday passed', () {
+    test('rows on or after the payday are not counted in the ended period (spending and income)', () {
+      const rcv = WalletSettings(salary: 200000, rent: 50000, periodStart: '2026-03-15', paydayDay: 15, incomeMode: 'received');
+      final rows = [
+        ct('2026-03-15', 200000, 'Salary'),
+        ct('2026-04-14', -1000, 'Groceries'), // the period's last day: counted
+        ct('2026-04-15', 210000, 'Salary'), // the next payday: next period
+        ct('2026-04-16', -5000, 'Groceries'), // next period
+      ];
+      final p = computePeriod(rows, rcv, const [], '2026-04-20');
+      expect(p.paydayPassed, isTrue);
+      expect((p.received, p.spent, p.remaining), (200000, 1000, 150000 - 1000));
+      expect(p.overBy, 0);
+    });
+
+    test('currentPeriodStart moves over several missed paydays in one step', () {
+      expect(currentPeriodStart('2026-07-01', 1, '2026-10-20'), '2026-10-01');
+      expect(currentPeriodStart('2026-07-01', 1, '2026-07-31'), '2026-07-01');
+      expect(currentPeriodStart('2026-07-01', 1, '2026-08-01'), '2026-08-01');
+      expect(currentPeriodStart('2026-01-31', 31, '2026-03-30'), '2026-02-28');
+      // Each step is nextPayday from the step before: Feb 28 → Mar 31 is still ahead of Mar 30.
+    });
+
     final txs = [ct('2026-03-15', 200000, 'Salary'), ct('2026-03-20', -3000, 'Groceries')];
 
     test('the day before payday has one day left', () {
@@ -21,8 +43,8 @@ void main() {
         final p = computePeriod([...txs, ct(today, -700, 'Groceries')], st, const [], today);
         expect((p.daysLeft, p.paydayPassed), (0, true));
         expect(p.allowanceToday, 0);
-        expect(p.safeToday, -700);
-        expect(p.overToday, 700);
+        // Today's row is dated on or after the payday: it belongs to the next period, not to the one that ended.
+        expect((p.spent, p.spentToday, p.safeToday, p.overToday), (3000, 0, 0, 0));
         expect(p.length, greaterThan(0));
         expect(affordability(100, p).verdict, Verdict.later);
         expect(affordability(100, p).newDaily, 0);

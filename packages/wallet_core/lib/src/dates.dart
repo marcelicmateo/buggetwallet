@@ -34,6 +34,16 @@ String nextPayday(String periodStart, int paydayDay) {
   return isoDate(DateTime.utc(first.year, first.month, paydayDay > last ? last : paydayDay));
 }
 
+/// The start of the pay period [today] falls in, from a saved [periodStart]: the latest expected payday on or before
+/// [today] ([periodStart] itself when no payday has passed since). Several missed paydays move on in one step.
+String currentPeriodStart(String periodStart, int paydayDay, String today) {
+  var start = periodStart;
+  for (var next = nextPayday(start, paydayDay); next.compareTo(today) <= 0; next = nextPayday(start, paydayDay)) {
+    start = next;
+  }
+  return start;
+}
+
 /// `YYYY-MM` of an ISO date.
 String monthOf(String iso) => iso.substring(0, 7);
 
