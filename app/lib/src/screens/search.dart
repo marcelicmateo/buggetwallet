@@ -96,7 +96,7 @@ class _SearchPaneState extends State<SearchPane> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   start: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
                   end: Text(value, textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
-              Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub, style: TextStyle(fontSize: 12.5, color: c.ink2))),
+              Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2))),
             ]),
           ),
         );

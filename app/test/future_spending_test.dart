@@ -459,7 +459,7 @@ void main() {
       expect(find.text(eur('340 €')), findsOneWidget);
       expect(find.text(eur('Suggested 80 €')), findsOneWidget);
       expect(find.text('No amount found'), findsOneWidget);
-      expect(find.text('Added'), findsWidgets);
+      expect(find.text('Planned by you'), findsWidgets);
       expect(find.text('Calendar'), findsWidgets);
       expect(find.text('Set aside'), findsOneWidget);
     });

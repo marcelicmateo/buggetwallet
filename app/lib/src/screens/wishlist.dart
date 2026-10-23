@@ -33,7 +33,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
 
     return NarrowPage(
         child: ListView(
-            padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
+            padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
             children: gapped([
               Panel(children: [
                 const Eyebrow('Can I afford it?'),
@@ -56,11 +56,11 @@ class _WishlistScreenState extends State<WishlistScreen> {
                 ]),
                 if (p != null && p > 0) _verdict(context, p),
               ]),
-              Panel(children: [
-                HeadingRow(const Heading('Ready to decide', size: 15), Tag('${ready.length}')),
-                if (ready.isEmpty)
-                  const EmptyNote('Nothing has finished waiting yet.')
-                else
+              if (ready.isEmpty)
+                const _EmptySection('Ready to decide', 'Nothing has finished waiting yet.')
+              else
+                Panel(children: [
+                  HeadingRow(const Heading('Ready to decide', size: BwType.headingSize), Tag('${ready.length}')),
                   Rows(children: [
                     for (final w in ready)
                       WishRow(w: w, currency: cur, sub: 'Waited ${s.coolHours}h', actions: [
@@ -68,39 +68,38 @@ class _WishlistScreenState extends State<WishlistScreen> {
                         TextButton(onPressed: () => _skip(w), child: const Text('Skip')),
                       ]),
                   ]),
-              ]),
-              Panel(children: [
-                HeadingRow(const Heading('Cooling off', size: 15), Tag('${waiting.length}')),
-                if (waiting.isEmpty)
-                  const EmptyNote('Your wishlist is empty. Check something above to add it.')
-                else
+                ]),
+              if (waiting.isEmpty)
+                const _EmptySection('Cooling off', 'Your wishlist is empty. Check something above to add it.')
+              else
+                Panel(children: [
+                  HeadingRow(const Heading('Cooling off', size: BwType.headingSize), Tag('${waiting.length}')),
                   Rows(children: [
                     for (final w in waiting)
                       WishRow(w: w, currency: cur, sub: timeLeft(w.hoursLeft(s.coolHours, now)), actions: [
                         TextButton(onPressed: () => _skip(w), child: const Text("Don't need it")),
                       ]),
                   ]),
-                if (waiting.isNotEmpty)
                   TotalRule(
                       child: SplitRow(
                           start: const Text('Waiting in total', style: TextStyle(fontWeight: FontWeight.w600)),
                           end: Text(money(wc.waitingTotal, cur, decimals: 0),
                               textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w600)))),
-              ]),
-              Panel(children: [
-                HeadingRow(
-                  const Heading('Decided', size: 15),
-                  Text('Saved by waiting: ${money(skipped, cur, decimals: 0)}',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                ),
-                if (done.isEmpty)
-                  const EmptyNote('Items you buy or skip show up here.')
-                else
+                ]),
+              if (done.isEmpty)
+                const _EmptySection('Decided', 'Items you buy or skip show up here.')
+              else
+                Panel(children: [
+                  HeadingRow(
+                    const Heading('Decided', size: BwType.headingSize),
+                    Text('Saved by waiting: ${money(skipped, cur, decimals: 0)}',
+                        style: const TextStyle(fontSize: BwType.metaSize, fontWeight: FontWeight.w600)),
+                  ),
                   Rows(children: [
                     for (final w in done.take(20))
                       WishRow(w: w, currency: cur, sub: w.status == 'bought' ? 'Bought' : 'Skipped', actions: const [])
                   ]),
-              ]),
+                ]),
             ])));
   }
 
@@ -133,7 +132,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       head,
       const SizedBox(height: 6),
-      Text(body, style: const TextStyle(fontSize: 14)),
+      Text(body, style: const TextStyle(fontSize: BwType.bodySize)),
       Rows(children: [
         LineItem('Spend ${money(500, cur, decimals: 0)}/day less', by(500), sub: 'ready by'),
         LineItem('Spend ${money(1000, cur, decimals: 0)}/day less', by(1000), sub: 'ready by'),
@@ -195,9 +194,22 @@ class WishRow extends StatelessWidget {
               end: Text(money(w.price, currency, decimals: 0),
                   textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
           Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
-            Text(sub, style: TextStyle(fontSize: 12.5, color: context.c.ink2)),
+            Text(sub, style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
             if (actions.isNotEmpty) Wrap(spacing: 4, children: actions),
           ]),
         ]),
       ));
+}
+
+/// A section with nothing in it: its title and the reason, on one ruled line (not a panel with a heading and a note).
+class _EmptySection extends StatelessWidget {
+  final String title;
+  final String note;
+  const _EmptySection(this.title, this.note);
+  @override
+  Widget build(BuildContext context) => RuledRow(
+        key: ValueKey('emptySection:$title'),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: SplitRow(start: Heading(title, size: BwType.headingSize), end: Muted(note, align: TextAlign.end)),
+      );
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../page_reload.dart';
+import '../theme.dart';
 import '../widgets/common.dart';
 
 /// Web: the wallet is open in another tab of this browser. This tab opened nothing, so the two cannot overwrite each other.
@@ -24,7 +25,7 @@ class _InUseScreenState extends State<InUseScreen> {
 
   @override
   Widget build(BuildContext context) => GatePage(children: [
-        const Muted('Budget Wallet is open in another tab. Close it, then reload this one.', size: 14.5),
+        const Muted('Budget Wallet is open in another tab. Close it, then reload this one.', size: BwType.bodySize),
         FilledButton(
           key: const ValueKey('inUseReload'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
@@ -32,7 +33,7 @@ class _InUseScreenState extends State<InUseScreen> {
             logNav('inUse.reload');
             widget.onReload();
           },
-          child: const Text('Reload', style: TextStyle(fontSize: 16)),
+          child: const Text('Reload', style: TextStyle(fontSize: BwType.headingSize)),
         ),
       ]);
 }

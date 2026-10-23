@@ -46,10 +46,14 @@ class _KeyDisplayState extends State<KeyDisplay> {
       ),
       if (_text && widget.selectable)
         SelectableText(widget.text,
-            key: const ValueKey('keyText'), textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: 14, color: context.c.ink))
+            key: const ValueKey('keyText'),
+            textAlign: TextAlign.center,
+            style: numStyle.copyWith(fontSize: BwType.bodySize, color: context.c.ink))
       else if (_text)
         Text(widget.text,
-            key: const ValueKey('keyText'), textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: 14, color: context.c.ink)),
+            key: const ValueKey('keyText'),
+            textAlign: TextAlign.center,
+            style: numStyle.copyWith(fontSize: BwType.bodySize, color: context.c.ink)),
     ]);
   }
 }
@@ -68,7 +72,8 @@ Future<void> showWalletKey(BuildContext context, WalletController wc) async {
           width: 320,
           child: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              const Text('Anyone with this key can read your wallet. Use it only to add your own devices.', style: TextStyle(fontSize: 13)),
+              const Text('Anyone with this key can read your wallet. Use it only to add your own devices.',
+                  style: TextStyle(fontSize: BwType.metaSize)),
               const SizedBox(height: 12),
               KeyDisplay(text: text, selectable: true),
             ]),
@@ -149,7 +154,7 @@ class _KeyBackupSheetState extends State<KeyBackupSheet> {
     return SecureWindow(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       ...gapped([
-        const Heading('Save your wallet key', size: 18),
+        const Heading('Save your wallet key', size: BwType.headingSize),
         const Text('Without this key, this wallet cannot be opened again on any device.'),
         if (isWeb) const Muted('The passphrase only unlocks this browser.'),
         if (key != null) ...[
@@ -222,7 +227,7 @@ class KeyBackupRow extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(child: Text('Save your wallet key', style: TextStyle(fontWeight: FontWeight.w600, color: c.warnInk))),
       ]),
-      Text('Without it, this wallet cannot be opened again.', style: TextStyle(color: c.warnInk, fontSize: 13)),
+      Text('Without it, this wallet cannot be opened again.', style: TextStyle(color: c.warnInk, fontSize: BwType.metaSize)),
       Wrap(spacing: 8, runSpacing: 8, children: [
         FilledButton(key: const ValueKey('keySaveNow'), onPressed: () => openKeyBackup(context, wc), child: const Text('Save now')),
         TextButton(key: const ValueKey('keyRowLater'), onPressed: wc.snoozeKeyBackup, child: const Text('Later')),

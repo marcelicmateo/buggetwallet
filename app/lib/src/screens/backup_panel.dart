@@ -144,7 +144,7 @@ class _BackupPanelState extends State<BackupPanel> {
     final wc = widget.wc;
     return Panel(children: [
       const SectionHead('Backup'),
-      const Muted('An encrypted copy of your wallet as a file. Only your wallet key opens it. Keep the file somewhere safe.'),
+      Explainer(wc, 'backup', 'An encrypted copy of your wallet as a file. Only your wallet key opens it. Keep the file somewhere safe.'),
       Wrap(spacing: 8, runSpacing: 8, children: [
         OutlinedButton(
             key: const ValueKey('backupNow'),
@@ -204,7 +204,7 @@ class _OldKeyDialogState extends State<_OldKeyDialog> {
       content: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Text('Type or paste the wallet key this backup was made with. It is used once and not kept.',
-              style: TextStyle(fontSize: 13)),
+              style: TextStyle(fontSize: BwType.metaSize)),
           const SizedBox(height: 12),
           TextField(
             key: const ValueKey('oldKeyField'),

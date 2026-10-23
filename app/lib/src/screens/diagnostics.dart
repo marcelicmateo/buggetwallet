@@ -83,7 +83,7 @@ class _DiagnosticsPanelState extends State<DiagnosticsPanel> {
     final s = stats;
     return Panel(children: [
       const SectionHead('Diagnostics'),
-      const Heading('Logs', size: 15),
+      const Heading('Logs', size: BwType.headingSize),
       const Muted(
           'Logs help find bugs and slow spots. Debug logs everything (the default while testing). They never contain amounts, names, notes or your key.'),
       SegmentedButton<String>(

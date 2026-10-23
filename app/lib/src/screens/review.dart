@@ -179,7 +179,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
                   key: const ValueKey('reviewDone'),
                   onPressed: _done,
-                  child: const Text('Done', style: TextStyle(fontSize: 16)),
+                  child: const Text('Done', style: TextStyle(fontSize: BwType.headingSize)),
                 ),
               ])),
         );
@@ -212,7 +212,7 @@ class _Step extends StatelessWidget {
             child: done ? Icon(Icons.check, size: 15, color: c.bg) : null,
           ),
           const SizedBox(width: 10),
-          Expanded(child: Heading(title, size: 16)),
+          Expanded(child: Heading(title, size: BwType.headingSize)),
           if (count != null && count! > 0) Tag('$count'),
         ]),
       ),
@@ -238,7 +238,7 @@ class _PaceRow extends StatelessWidget {
               child: SplitRow(
                 start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(l.category, style: const TextStyle(fontWeight: FontWeight.w500)),
-                  Text(l.over ? 'over budget' : 'behind pace', style: TextStyle(fontSize: 12.5, color: context.c.ink2)),
+                  Text(l.over ? 'over budget' : 'behind pace', style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
                 ]),
                 end: Text(budgetLeftText(l, currency),
                     textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500, color: l.over ? context.c.bad : null)),
@@ -263,7 +263,7 @@ class _CategoryRow extends StatelessWidget {
               end: Text(money(t.amount, wc.currency, decimals: 2, signed: true),
                   textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
           Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
-            Text('${t.category} · ${shortDateOrRaw(t.date)}', style: TextStyle(fontSize: 12.5, color: context.c.ink2)),
+            Text('${t.category} · ${shortDateOrRaw(t.date)}', style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
             Wrap(spacing: 4, children: [
               TextButton(
                   onPressed: () async {

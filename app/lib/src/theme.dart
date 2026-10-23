@@ -101,6 +101,56 @@ const numStyle = TextStyle(
   fontFeatures: [FontFeature.tabularFigures()],
 );
 
+/// Type scale: the only font sizes in the app. Nothing is under 12 dp except [eyebrow] (ALL CAPS, 11 dp, letter-spaced).
+/// Sizes are plain constants (usable in `const TextStyle`); the styles below add family, weight and spacing.
+class BwType {
+  const BwType._();
+  static const double eyebrowSize = 11;
+  static const double metaSize = 12.5;
+  static const double bodySize = 14;
+  static const double headingSize = 16;
+  static const double titleSize = 19;
+  static const double amountSize = 15;
+  static const double amountMdSize = 20;
+  static const double displaySize = 26;
+  static const double entrySize = 30;
+  static const double heroSize = 78;
+
+  /// Section labels and table heads: mono, caps, wide.
+  static const eyebrow = TextStyle(
+    fontFamily: monoFamily,
+    fontFamilyFallback: ['monospace'],
+    fontFeatures: [FontFeature.tabularFigures()],
+    fontSize: eyebrowSize,
+    letterSpacing: eyebrowSize * 0.08,
+    fontWeight: FontWeight.w500,
+  );
+
+  /// Secondary lines: dates, categories, explainers.
+  static const meta = TextStyle(fontSize: metaSize);
+
+  /// Running text.
+  static const body = TextStyle(fontSize: bodySize);
+  static const bodyStrong = TextStyle(fontSize: bodySize, fontWeight: FontWeight.w600);
+
+  /// Sub-headings and button labels.
+  static const heading = TextStyle(fontSize: headingSize, fontWeight: FontWeight.w600, letterSpacing: -0.2);
+
+  /// Screen and dialog titles.
+  static const title = TextStyle(fontSize: titleSize, fontWeight: FontWeight.w600, letterSpacing: -0.2);
+
+  /// Money in lists (mono, tabular), and the larger figures in rows and sheets.
+  static const amount = TextStyle(
+      fontFamily: monoFamily,
+      fontFamilyFallback: ['monospace'],
+      fontFeatures: [FontFeature.tabularFigures()],
+      fontSize: amountSize,
+      fontWeight: FontWeight.w500);
+
+  /// The one big number on Today.
+  static const hero = TextStyle(fontSize: heroSize);
+}
+
 /// Notebook-style red double rule colour (the margin line on wide windows).
 Color marginLineColor(Brightness b) => b == Brightness.light ? const Color(0xFFE3B1AA) : const Color(0xFF7A3F3F);
 
@@ -211,7 +261,7 @@ ThemeData buildTheme(Brightness b) {
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
-      titleTextStyle: tt.titleLarge?.copyWith(fontSize: 17, fontWeight: w6, color: w.ink),
+      titleTextStyle: tt.titleLarge?.copyWith(fontSize: BwType.headingSize, fontWeight: w6, color: w.ink),
     ),
     // Keyboard focus must be visible on rows, buttons and the rail (Tab); hover is lighter.
     focusColor: w.accent.withValues(alpha: 0.2),
@@ -232,7 +282,7 @@ ThemeData buildTheme(Brightness b) {
           WidgetStateProperty.resolveWith((s) => IconThemeData(size: 22, color: s.contains(WidgetState.selected) ? w.accent : w.ink2)),
       labelTextStyle: WidgetStateProperty.resolveWith((s) => TextStyle(
           fontFamily: sansFamily,
-          fontSize: 11,
+          fontSize: BwType.metaSize,
           fontWeight: s.contains(WidgetState.selected) ? w6 : FontWeight.w500,
           color: s.contains(WidgetState.selected) ? w.accent : w.ink2)),
     ),
@@ -244,8 +294,8 @@ ThemeData buildTheme(Brightness b) {
       indicatorShape: _LeftBarBorder(color: w.accent),
       selectedIconTheme: IconThemeData(color: w.accent),
       unselectedIconTheme: IconThemeData(color: w.ink2),
-      selectedLabelTextStyle: TextStyle(fontFamily: sansFamily, fontSize: 12, fontWeight: w6, color: w.accent),
-      unselectedLabelTextStyle: TextStyle(fontFamily: sansFamily, fontSize: 12, fontWeight: FontWeight.w500, color: w.ink2),
+      selectedLabelTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.metaSize, fontWeight: w6, color: w.accent),
+      unselectedLabelTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.metaSize, fontWeight: FontWeight.w500, color: w.ink2),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -275,7 +325,7 @@ ThemeData buildTheme(Brightness b) {
         minimumSize: const Size(64, 44),
         shape: shape(3),
         elevation: 0,
-        textStyle: const TextStyle(fontFamily: sansFamily, fontSize: 16, fontWeight: w6),
+        textStyle: const TextStyle(fontFamily: sansFamily, fontSize: BwType.headingSize, fontWeight: w6),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -284,7 +334,7 @@ ThemeData buildTheme(Brightness b) {
         side: BorderSide(color: w.lineStrong),
         minimumSize: const Size(64, 44),
         shape: shape(3),
-        textStyle: const TextStyle(fontFamily: sansFamily, fontSize: 15, fontWeight: w6),
+        textStyle: const TextStyle(fontFamily: sansFamily, fontSize: BwType.headingSize, fontWeight: w6),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -292,7 +342,7 @@ ThemeData buildTheme(Brightness b) {
         foregroundColor: w.accent,
         minimumSize: const Size(44, 44),
         shape: shape(3),
-        textStyle: const TextStyle(fontFamily: sansFamily, fontSize: 15, fontWeight: w6),
+        textStyle: const TextStyle(fontFamily: sansFamily, fontSize: BwType.headingSize, fontWeight: w6),
       ),
     ),
     iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(foregroundColor: w.ink, shape: shape(3))),
@@ -304,7 +354,7 @@ ThemeData buildTheme(Brightness b) {
         backgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.ink : Colors.transparent),
         foregroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.bg : w.ink),
         iconColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.bg : w.ink),
-        textStyle: const WidgetStatePropertyAll(TextStyle(fontFamily: sansFamily, fontSize: 14, fontWeight: w6)),
+        textStyle: const WidgetStatePropertyAll(TextStyle(fontFamily: sansFamily, fontSize: BwType.bodySize, fontWeight: w6)),
       ),
       selectedIcon: const Icon(Icons.check),
     ),
@@ -324,8 +374,8 @@ ThemeData buildTheme(Brightness b) {
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3), side: BorderSide(color: w.lineStrong)),
-      titleTextStyle: TextStyle(fontFamily: sansFamily, fontSize: 19, fontWeight: w6, color: w.ink),
-      contentTextStyle: TextStyle(fontFamily: sansFamily, fontSize: 15, color: w.ink2, height: 1.4),
+      titleTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.titleSize, fontWeight: w6, color: w.ink),
+      contentTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.bodySize, color: w.ink2, height: 1.4),
     ),
     bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: w.surface,
@@ -339,7 +389,7 @@ ThemeData buildTheme(Brightness b) {
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: w.ink,
-      contentTextStyle: TextStyle(fontFamily: sansFamily, fontSize: 14, color: w.bg),
+      contentTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.bodySize, color: w.bg),
       actionTextColor: w.accentSoft,
       behavior: SnackBarBehavior.floating,
       elevation: 0,
@@ -347,7 +397,7 @@ ThemeData buildTheme(Brightness b) {
     ),
     tooltipTheme: TooltipThemeData(
       decoration: BoxDecoration(color: w.ink, borderRadius: BorderRadius.circular(2)),
-      textStyle: TextStyle(fontFamily: sansFamily, fontSize: 12, color: w.bg),
+      textStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.metaSize, color: w.bg),
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? onAccent : w.ink2),

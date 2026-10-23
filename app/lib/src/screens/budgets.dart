@@ -132,7 +132,7 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
     final sym = currencySymbol(widget.wc.currency);
     return Panel(children: [
       const SectionHead('Budgets per category'),
-      const Muted('A limit for each month. Leave a field empty for no budget.'),
+      Explainer(widget.wc, 'budgets', 'A limit for each month. Leave a field empty for no budget.'),
       Rows(children: [
         for (final k in _cats)
           Container(
@@ -141,7 +141,7 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
             child: SplitRow(
               maxEnd: 0.5,
               gap: 12,
-              start: Text(k, style: const TextStyle(fontSize: 14.5)),
+              start: Text(k, style: const TextStyle(fontSize: BwType.bodySize)),
               end: SizedBox(
                 width: 132,
                 child: Semantics(
@@ -152,7 +152,12 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
                     onChanged: (_) {
                       if (_errors.containsKey(k)) setState(() => _errors.remove(k));
                     },
-                    decoration: InputDecoration(isDense: true, suffixText: sym, hintText: 'None', errorText: _errors[k], errorMaxLines: 2),
+                    decoration: InputDecoration(
+                        isDense: true,
+                        suffix: ExcludeSemantics(child: Text(sym, style: numStyle.copyWith(color: context.c.ink2))),
+                        hintText: 'None',
+                        errorText: _errors[k],
+                        errorMaxLines: 2),
                   ),
                 ),
               ),
