@@ -165,6 +165,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   write lost its notice; ledger rounding; explainers marked seen on hidden tabs), merge delta reviewed. Fixed on v2: a
   core test that used the real date. Stage run: importer 335, core 1501, relay 206, app 1282, desktop 11 files, web, perf,
   emulator screens, dark frames read. Unlink of a matched expense waits for owner decision D2.
+- 2026-10-23: M6 build: `ci` on d33ca66 (started on the owner's request) green: signed APK, Linux bundle + smoke, `dev` release published.
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
