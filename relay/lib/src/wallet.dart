@@ -138,7 +138,8 @@ class Wallet {
   File snapFile(String id) => File('${dir.path}/snap/$id');
   File blobFile(String hash) => File('${dir.path}/blobs/$hash');
 
-  Map<String, Object?> stateJson() {
+  /// The state JSON (RELAY_PROTOCOL.md "State JSON"); [maxBytes] is the relay's `--max-bytes`, reported with [totalBytes].
+  Map<String, Object?> stateJson({required int maxBytes}) {
     final names = devices.keys.toList()..sort();
     return {
       'api': apiVersion,
@@ -155,6 +156,8 @@ class Wallet {
       'snapshot': snapshot?.toJson(),
       'previous': previous?.toJson(),
       'blobs': {'count': blobCount, 'bytes': blobBytes},
+      'bytes': totalBytes,
+      'maxBytes': maxBytes,
     };
   }
 

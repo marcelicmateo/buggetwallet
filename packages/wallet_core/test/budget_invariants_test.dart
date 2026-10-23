@@ -187,6 +187,22 @@ void main() {
         expect(p.safeToday, p.allowanceToday - p.spentToday, reason: why);
         final leftForToday = p.flexBudget - (p.spent - p.spentToday);
         expect(p.allowanceToday, p.paydayPassed || leftForToday <= 0 ? 0 : (leftForToday / p.daysLeft).round(), reason: why);
+        // I: tomorrow's allowance if nothing more is spent today; null when the payday is tomorrow or has passed.
+        final leftAfterToday = p.flexBudget - p.spent;
+        expect(p.allowanceTomorrow,
+            p.paydayPassed || p.daysLeft <= 1 ? isNull : (leftAfterToday <= 0 ? 0 : (leftAfterToday / (p.daysLeft - 1)).round()),
+            reason: why);
+        if (p.allowanceTomorrow case final t?) expect(t, greaterThanOrEqualTo(0), reason: why);
+        // Oracle: with planned income and no rows after today, tomorrow's computePeriod gives that allowance exactly.
+        if (st.incomeMode == 'planned' && p.allowanceTomorrow != null) {
+          final upToToday = [
+            for (final t in w.txs)
+              if (t.date.compareTo(today) <= 0) t
+          ];
+          final now = computePeriod(upToToday, st, goals, today);
+          final next = computePeriod(upToToday, st, goals, addDays(today, 1));
+          expect(next.allowanceToday, now.allowanceTomorrow, reason: '$why: tomorrow, nothing more spent');
+        }
 
         expect(p.planDaily, (p.flexBudget / p.length).round(), reason: why);
         expect(p.elapsed, inInclusiveRange(0.0, 1.0), reason: why);
@@ -244,6 +260,39 @@ void main() {
       final p = computePeriod(const [], const WalletSettings(), const [], '2026-02-28');
       expect((p.flexBudget, p.spent, p.remaining, p.allowanceToday, p.safeToday), (0, 0, 0, 0, 0));
       expect(p.daysLeft, greaterThanOrEqualTo(1));
+    });
+
+    WalletSettings plan(String start) => WalletSettings(salary: 300000, paydayDay: 10, periodStart: start);
+
+    test('allowanceTomorrow: null on the day before payday and once the payday passed', () {
+      final st = plan('2026-03-10');
+      expect(computePeriod(const [], st, const [], '2026-04-09').daysLeft, 1);
+      expect(computePeriod(const [], st, const [], '2026-04-09').allowanceTomorrow, isNull);
+      expect(computePeriod(const [], st, const [], '2026-04-10').paydayPassed, isTrue);
+      expect(computePeriod(const [], st, const [], '2026-04-10').allowanceTomorrow, isNull);
+      expect(computePeriod(const [], st, const [], '2026-04-12').allowanceTomorrow, isNull);
+      // Two days left: everything not spent yet goes to tomorrow.
+      final p = computePeriod([ct('2026-04-08', -1000, 'Groceries')], st, const [], '2026-04-08');
+      expect(p.daysLeft, 2);
+      expect(p.allowanceTomorrow, p.flexBudget - 1000);
+    });
+
+    test('allowanceTomorrow: 0 when over budget, never negative; spreads the rest over the days after today', () {
+      final st = plan('2026-03-10');
+      final over = computePeriod([ct('2026-03-20', -400000, 'Groceries')], st, const [], '2026-03-20');
+      expect(over.overBy, greaterThan(0));
+      expect(over.allowanceTomorrow, 0);
+      final exact = computePeriod([ct('2026-03-20', -300000, 'Groceries')], st, const [], '2026-03-20');
+      expect(exact.remaining, 0);
+      expect(exact.allowanceTomorrow, 0);
+      // 21 days left on 2026-03-20: 3000.00 − 100.00 over the 20 days after today = 145.00 a day.
+      final p = computePeriod([ct('2026-03-20', -10000, 'Groceries')], st, const [], '2026-03-20');
+      expect(p.daysLeft, 21);
+      expect(p.allowanceTomorrow, 14500);
+      // Spending more today lowers it; spending today never changes today's allowance.
+      final more = computePeriod([ct('2026-03-20', -30000, 'Groceries')], st, const [], '2026-03-20');
+      expect(more.allowanceTomorrow, 13500);
+      expect(more.allowanceToday, p.allowanceToday);
     });
   });
 

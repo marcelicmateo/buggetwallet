@@ -124,6 +124,7 @@ class WalletRepo {
     _wallHigh = int.tryParse(_meta('wall_high') ?? '') ?? 0;
     _dropFolderSync();
     _asInternal(_migrate);
+    _purgeUndo();
   }
 
   /// Bump when a new synced entity or field is added. Version 2 added `goal_contrib`, version 3 `tx.kind_hint` and
@@ -859,6 +860,7 @@ class WalletRepo {
   /// Deletes a row. A hand-added expense that this bank row replaced counts again (and may be matched by a later
   /// bank row): see [planMatches]. The other side of an own transfer it was paired with is open again ([planTransfers]).
   void deleteTransaction(String txId) {
+    _purgeUndo();
     _write([
       ('tx', txId, {'deleted': 1})
     ]);
@@ -874,10 +876,85 @@ class WalletRepo {
     }
     // A bill paid by this row is unpaid again at once (its planned row reopens and reserves): exact money.
     final today = _today();
+    final paid = [
+      for (final r in db.select('SELECT * FROM bills WHERE deleted = 0 AND linked_tx = ?', [txId])) Bill.fromRow(r)
+    ];
     _write([
-      for (final r in db.select('SELECT * FROM bills WHERE deleted = 0 AND linked_tx = ?', [txId]))
-        ..._billWrites(Bill.fromRow(r), {'linked_tx': null}, today),
+      for (final b in paid) ..._billWrites(b, {'linked_tx': null}, today),
     ]);
+    // Device-local, for undeleteTransaction: automatic linking takes only bank rows, so a cash expense made from a
+    // bill would come back without its bill (the bill reserved and the expense counted: twice).
+    if (paid.isNotEmpty) {
+      _setMeta(
+          '$_undoBills$txId',
+          jsonEncode({
+            'at': clock.now(),
+            'bills': [for (final b in paid) b.id]
+          }));
+    }
+    _reconcileLocal();
+  }
+
+  /// Meta key prefix (device-local, never synced): `{"at": <wall ms>, "bills": [<id>…]}`, the bills [deleteTransaction]
+  /// unlinked from a row, for its undo. Removed by the undo, or after [_undoKeep] ([_purgeUndo], at open and on every
+  /// delete).
+  static const _undoBills = 'undo_bills.';
+  static const _undoKeep = Duration(days: 1);
+
+  /// Drops the [_undoBills] records older than [_undoKeep] (or unreadable): the app's Undo lasts seconds.
+  void _purgeUndo() {
+    final cutoff = clock.now() - _undoKeep.inMilliseconds;
+    final old = <String>[];
+    for (final r in db.select('SELECT key, value FROM meta WHERE substr(key, 1, ${_undoBills.length}) = ?', [_undoBills])) {
+      final at = _undoRecord(r['value'] as String?)?.$1;
+      if (at == null || at < cutoff) old.add(r['key'] as String);
+    }
+    for (final k in old) {
+      db.execute('DELETE FROM meta WHERE key = ?', [k]);
+    }
+    if (old.isNotEmpty) logEvent(_log, Level.FINE, 'repo.undo.purged', {'records': old.length});
+  }
+
+  /// An [_undoBills] value as (time, bill ids); null when it is not one.
+  static (int?, List<String>)? _undoRecord(String? v) {
+    try {
+      final j = v == null ? null : jsonDecode(v);
+      if (j is! Map) return null;
+      final bills = j['bills'];
+      return (j['at'] is int ? j['at'] as int : null, bills is List ? bills.whereType<String>().toList() : const <String>[]);
+    } on FormatException catch (e, st) {
+      logError(_log, 'repo.undo.badRecord', e, st);
+      return null;
+    }
+  }
+
+  /// Undo of [deleteTransaction] (Stage I): writes `deleted: 0` (an owner write, synced), so the row is live again with
+  /// every other field as it is now (a hand-added entry keeps its `matched_to`). Per DESIGN_DECISIONS §4.10 only this
+  /// write revives a deleted row, and the later of it and the delete (by HLC) wins on every device; edits made
+  /// elsewhere meanwhile stay (per field). The bills the delete on this device unlinked are linked again in the same
+  /// write when each is still live, unlinked, and no other live bill holds the row (a cash expense made from a bill is
+  /// never linked automatically). Pairing, matching and bill links then run as after any change of rows
+  /// ([_reconcileLocal]). A live row: nothing is written. Throws [ArgumentError] for an id this wallet does not hold.
+  void undeleteTransaction(String txId) {
+    final rs = db.select('SELECT deleted FROM tx WHERE id = ?', [txId]);
+    if (rs.isEmpty) throw ArgumentError('No such transaction.');
+    if (rs.first['deleted'] == 0) return;
+    final today = _today();
+    final relink = <Bill>[];
+    if (_undoRecord(_meta('$_undoBills$txId')) case (_, final ids)) {
+      final held = db.select('SELECT 1 FROM bills WHERE deleted = 0 AND linked_tx = ?', [txId]).isNotEmpty;
+      for (final id in ids) {
+        final b = db.select('SELECT * FROM bills WHERE id = ? AND deleted = 0 AND linked_tx IS NULL', [id]);
+        if (!held && b.isNotEmpty) relink.add(Bill.fromRow(b.first));
+      }
+    }
+    _write([
+      ('tx', txId, {'deleted': 0}),
+      // One bill per payment row (the field-pair repair would unlink the others anyway).
+      for (final b in relink.take(1)) ..._billWrites(b, {'linked_tx': txId}, today),
+    ]);
+    db.execute('DELETE FROM meta WHERE key = ?', ['$_undoBills$txId']);
+    logEvent(_log, Level.INFO, 'repo.undelete', {'entity': 'tx', 'bills': relink.take(1).length});
     _reconcileLocal();
   }
 
@@ -941,6 +1018,20 @@ class WalletRepo {
   void deleteGoal(String id) => _write([
         ('goal', id, {'deleted': 1})
       ]);
+
+  /// Undo of [deleteGoal] (Stage I): writes `deleted: 0` (an owner write, synced), so the goal is back as it is now,
+  /// with its contributions (hidden while it was deleted, never removed). Like [saveGoal], the later of this write and
+  /// a delete (by HLC) wins (DESIGN_DECISIONS §4.10). A live goal: nothing is written. Throws [ArgumentError] for an
+  /// id this wallet does not hold.
+  void undeleteGoal(String id) {
+    final rs = db.select('SELECT deleted FROM goals WHERE id = ?', [id]);
+    if (rs.isEmpty) throw ArgumentError('No such goal.');
+    if (rs.first['deleted'] == 0) return;
+    _write([
+      ('goal', id, {'deleted': 0})
+    ]);
+    logEvent(_log, Level.INFO, 'repo.undelete', {'entity': 'goal'});
+  }
 
   /// The payday transfer: adds each goal's monthly amount to its saved total, as a contribution. For a pay
   /// [period] the row id is fixed per goal and period, so paying the same period on two devices (or twice) counts

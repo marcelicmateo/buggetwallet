@@ -36,7 +36,8 @@ Never put a signature, public key, body, full id or client address in a log line
   hash, is not a wallet), `<wid>/d/<device>/<seq>`,
   `<wid>/snap/<id>`, `<wid>/blobs/<sha256 hex>` (bill photos/PDFs, `PUT/GET/DELETE …/blob/<hash>`: content-addressed, hash of
   the body checked, 16 MiB, never pruned, no lastSeen change; counted in `Wallet.blobCount/blobBytes`, rebuilt from the folder on
-  load; `--max-bytes` = `Wallet.totalBytes` = files + kept snapshots + blobs, checked by PUT d, snapshot PUT and blob PUT; state JSON `blobs`). `first` is not stored: it is the lowest seq on disk, or `last + 1` when all were pruned. `last` = max of
+  load; `--max-bytes` = `Wallet.totalBytes` = files + kept snapshots + blobs, checked by PUT d, snapshot PUT and blob PUT; state JSON `blobs`, and `bytes` (= `totalBytes`) + `maxBytes` (Stage I:
+  `Wallet.stateJson(maxBytes:)`, passed by `relay_server.dart`; additive, api stays 3)). `first` is not stored: it is the lowest seq on disk, or `last + 1` when all were pruned. `last` = max of
   meta and disk, so a crash between a file and the meta loses nothing. Load deletes temp files and snapshot files the meta does
   not name; a folder without a readable meta is not a wallet (a new first PUT replaces it).
 - Every wallet operation runs inside `_locked(wid, ...)`; wallet creation reserves its slot in `_wallets` before any await so

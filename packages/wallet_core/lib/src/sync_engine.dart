@@ -46,7 +46,12 @@ class RelayState {
   /// The relay's id for this wallet's store (32 hex, random, kept in its `meta.json`): a wiped or replaced relay
   /// names another one. Null from an older relay (api 2) and for a wallet it does not know yet.
   final String? instance;
-  const RelayState({this.devices = const {}, this.snapshot, this.previous, this.instance});
+
+  /// Relay usage (Stage I): the wallet's stored bytes as the relay's `--max-bytes` counts them (sync files + kept
+  /// snapshots + bill files) and that limit. Null from an older relay, and each alone when its value is not a
+  /// non-negative integer (shown as "unknown"; usage never fails a sync).
+  final int? bytes, maxBytes;
+  const RelayState({this.devices = const {}, this.snapshot, this.previous, this.instance, this.bytes, this.maxBytes});
 
   /// A relay that never heard of this wallet.
   static const empty = RelayState();
@@ -88,8 +93,11 @@ class RelayState {
     if (instance != null && (instance is! String || !RegExp(r'^[0-9a-f]{32}$').hasMatch(instance))) {
       throw const FormatException('bad instance');
     }
+    int? usage(Object? v) => v is int && v >= 0 ? v : null;
     return RelayState(
       instance: instance as String?,
+      bytes: usage(j['bytes']),
+      maxBytes: usage(j['maxBytes']),
       devices: {for (final MapEntry(:key, :value) in devs.entries) '$key': dev(value)},
       snapshot: snap(j['snapshot']),
       previous: snap(j['previous']),
@@ -102,6 +110,8 @@ class RelayState {
         'snapshot': snapshot?.toJson(),
         'previous': previous?.toJson(),
         if (instance != null) 'instance': instance,
+        if (bytes != null) 'bytes': bytes,
+        if (maxBytes != null) 'maxBytes': maxBytes,
       };
 }
 
@@ -794,6 +804,8 @@ class SyncEngine {
         blobsUnsupported: blobsUnsupported,
         relayInstance: state.instance,
         relayChanged: relayChanged,
+        relayBytes: state.bytes,
+        relayMaxBytes: state.maxBytes,
         devices: [
           for (final d in ids)
             SyncDevice(_short(d), lastSeen: d == me ? (acked || sent > 0 ? now : seenById[d]) : seenById[d], isThis: d == me),
