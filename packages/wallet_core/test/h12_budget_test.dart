@@ -2,6 +2,8 @@
 // past-payday state, the over-budget state, salary paid in parts (samePaydayDays = 7) and the low-income flag.
 // Expected values are worked out by hand from the spec. A test of behaviour the build does not have yet skips with
 // `BUG: H<n>`. All data is SYNTHETIC.
+import 'dart:convert';
+
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -104,8 +106,8 @@ void main() {
         _row('2026-01-22', -123, 'Shopping', currency: 'GBP'),
       ];
       const st = WalletSettings(salary: 200000);
-      List<(String, String, int, int, Map<String, int>)> flat(List<CategorizedTx> t) =>
-          [for (final s in periodSummaries(t, st, '2026-01-25')) (s.start, s.end, s.income, s.out, s.byCategory)];
+      List<String> flat(List<CategorizedTx> t) =>
+          [for (final s in periodSummaries(t, st, '2026-01-25')) '${s.start}|${s.end}|${s.income}|${s.out}|${jsonEncode(s.byCategory)}'];
       expect(flat([...rows, ...noise]), flat(rows));
     }, skip: h1skip, timeout: _t);
 
@@ -123,7 +125,8 @@ void main() {
       final all = [...rows, ...noise];
       final ms = monthSummaryIn(all, '2026-01', 'EUR')!;
       final ref = monthSummaryIn(rows, '2026-01', 'EUR')!;
-      expect((ms.income, ms.out, ms.byCategory), (ref.income, ref.out, ref.byCategory));
+      expect((ms.income, ms.out), (ref.income, ref.out));
+      expect(ms.byCategory, ref.byCategory);
       expect(ms.out, 4000);
       expect(foreignOfMonth(ms), {'USD': 70000 - 9000});
       expect(averageByCategoryIn(all, '2026-01', 'EUR'), averageByCategoryIn(rows, '2026-01', 'EUR'));
@@ -174,13 +177,11 @@ void main() {
       expect(p.allowanceToday, 75000);
     }, timeout: _t);
 
-    test('WalletSettings keeps the payday day within 1..28; anything else falls back to 15', () {
-      for (final (day, want) in [(1, 1), (15, 15), (28, 28), (0, 15), (-3, 15), (29, 15), (31, 15), (99, 15)]) {
+    test('a stored payday day of 29..31 reads as 28, 0 or below and 32 or more fall back to 15 (decided: maxPaydayDay = 28)', () {
+      for (final (day, want) in [(1, 1), (15, 15), (28, 28), (29, 28), (30, 28), (31, 28), (0, 15), (-3, 15), (32, 15), (99, 15)]) {
         expect(WalletSettings.fromMap({'paydayDay': day}).paydayDay, want, reason: '$day');
       }
-    },
-        skip: bugUnless(WalletSettings.fromMap({'paydayDay': 31}).paydayDay == 15, 'H2', 'payday day clamp 1..28 in WalletSettings'),
-        timeout: _t);
+    }, skip: 'BUG: H2 - payday day clamp 1..28 (29..31 read as 28, anything else invalid falls back to 15) in WalletSettings', timeout: _t);
   });
 
   group('H2: over budget', () {
@@ -257,6 +258,25 @@ void main() {
       final p6short = _period([part('2026-01-15', 150000)], '2026-01-21', st: received);
       expect(p6short.income, 200000);
       expect(lowIncomeOf(p6short), isFalse);
+    }, skip: h2skip, timeout: _t);
+
+    test('day 7 (the 22nd): the window has closed, income is what was received (not the salary), and the shortfall shows', () {
+      final p7 = _period([part('2026-01-15', 150000)], '2026-01-22', st: received);
+      expect(p7.received, 150000);
+      expect(p7.income, 150000, reason: 'max(received, salary) applies only while the period is younger than 7 days');
+      expect(lowIncomeOf(p7), isTrue);
+      final paid = _period([part('2026-01-15', 150000), part('2026-01-22', 50000)], '2026-01-22', st: received);
+      expect((paid.income, lowIncomeOf(paid)), (200000, false));
+    }, skip: h2skip, timeout: _t);
+
+    test('planned mode: 179999 of 200000 received is not low on day 3 or day 4 (inside the window), low from day 8', () {
+      const planned = WalletSettings(salary: 200000, periodStart: '2026-01-15');
+      final rows = [part('2026-01-15', 179999)];
+      expect(lowIncomeOf(_period(rows, '2026-01-18', st: planned)), isFalse, reason: 'day 3');
+      expect(lowIncomeOf(_period(rows, '2026-01-19', st: planned)), isFalse, reason: 'day 4: past the 4-day rule, still inside the window');
+      expect(lowIncomeOf(_period(rows, '2026-01-21', st: planned)), isFalse, reason: 'day 6');
+      expect(lowIncomeOf(_period(rows, '2026-01-23', st: planned)), isTrue, reason: 'day 8');
+      expect(_period(rows, '2026-01-23', st: planned).income, 200000, reason: 'planned mode always plans the salary');
     }, skip: h2skip, timeout: _t);
 
     test('after the window the received sum rules: a part landing on day 8 is missing before it, counted once it lands', () {

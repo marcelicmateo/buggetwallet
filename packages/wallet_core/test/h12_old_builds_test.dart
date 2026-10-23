@@ -23,7 +23,7 @@ final _key = VaultKey(List<int>.generate(32, (i) => i + 1));
 /// Release names: every `<name>.json` in the folder.
 List<String> _releases() => [
       for (final f in _dir.listSync())
-        if (f is File && f.path.endsWith('.json')) f.uri.pathSegments.last.replaceAll('.json', '')
+        if (f is File && f.path.endsWith('.json') && !f.path.contains('peer')) f.uri.pathSegments.last.replaceAll('.json', '')
     ]..sort();
 
 Map<String, Object?> _expect(String name) => jsonDecode(File('${_dir.path}/$name.json').readAsStringSync()) as Map<String, Object?>;
@@ -213,6 +213,35 @@ void main() {
       addTearDown(again.close);
       expect(again.pendingOps().length, ops, reason: 'migrated once');
     }, skip: bugUnless(WalletRepo.schemaVersion >= 8, 'H3', 'schema 8 per-key settings migration'), timeout: _t);
+
+    test(
+        'peer rows already in the database (budget:/pattern: with an OLDER clock than the legacy maps) are never overwritten by the migration',
+        () async {
+      // schema7peer_plain.db: a build that had synced with a newer one holds budget:Groceries = 450.00 and the
+      // pattern row for "synth shop" in category Groceries, both older than the legacy maps (300.00, Shopping).
+      final path = _copy('schema7peer_plain.db', _scratch());
+      final r = WalletRepo.open(path, dbKey: await localDbKey(_key));
+      addTearDown(r.close);
+      Map<String, Object?> row(String id) => Map<String, Object?>.from(r.db.select('SELECT * FROM settings WHERE id = ?', [id]).single);
+      expect(jsonDecode(row('budget:Groceries')['value']! as String), 45000, reason: 'the peer row stays, whatever the clocks say');
+      expect(jsonDecode(row('budget:Eating out')['value']! as String), 12000, reason: 'an id without a row is created from the map');
+      expect(r.settings().categoryBudgets, {'Groceries': 45000, 'Eating out': 12000});
+      final patterns = [for (final x in r.db.select("SELECT id, value FROM settings WHERE id LIKE 'pattern:%'")) x];
+      expect(patterns, hasLength(1), reason: 'the same pattern is one row, the id never shows the pattern');
+      expect((jsonDecode(patterns.single['value']! as String) as Map)['category'], 'Groceries');
+      expect(r.settings().merchantPatterns, [
+        ['Groceries', 'synth shop']
+      ]);
+      // The migration ran once: a second open queues nothing more.
+      final ops = r.pendingOps().length;
+      r.close();
+      final again = WalletRepo.open(path, dbKey: await localDbKey(_key));
+      addTearDown(again.close);
+      expect(again.pendingOps().length, ops);
+      expect(again.settings().categoryBudgets, {'Groceries': 45000, 'Eating out': 12000});
+    },
+        skip: bugUnless(WalletRepo.schemaVersion >= 8, 'H3', 'schema 8: the migration never overwrites an id that already has a row'),
+        timeout: _t);
 
     test('a schema 7 device and a schema 8 device sync: both end with the same category budgets', () async {
       final clock = SimClock();

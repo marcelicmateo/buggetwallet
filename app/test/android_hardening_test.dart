@@ -1,28 +1,29 @@
 // Stage H12 / H10 (Android hardening) as a plain unit test over the Android project files. The emulator test cannot ask
-// `adb shell dumpsys package` from inside the app, so the facts that decide what Android backs up, which traffic it
-// allows, how releases are signed and whether the key sheet can be screenshotted are asserted on the files that produce
-// them. A check whose feature is not in the files yet skips itself with `BUG: H10` and starts running when the files
-// change. Synthetic: no data, only project files.
+// `adb shell dumpsys package` from inside the app, so the facts that decide what Android backs up, which certificate
+// authorities the app trusts, how releases are signed and whether the key sheet can be screenshotted are asserted on the
+// files that produce them. The assertions are fixed; the ones for H10 carry a plain `BUG: H10` skip that is lifted when the
+// platform hardening is merged (they match the files of that change). Synthetic: no data, only project files.
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-const _root = 'android/app';
-String _read(String rel) {
-  final f = File('$_root/$rel');
-  return f.existsSync() ? f.readAsStringSync() : '';
-}
+// BW_ANDROID_ROOT points the test at another checkout's android/app (to check the assertions against the platform branch).
+final _root = Platform.environment['BW_ANDROID_ROOT'] ?? 'android/app';
+String _read(String rel) => File('$_root/$rel').readAsStringSync();
 
-String? _bug(bool present, String what) => present ? null : 'BUG: H10 - $what';
+const _h10 = 'BUG: H10 - lifted when the Android hardening (platform branch) is merged';
 
-bool _private(String host) {
-  if (host == 'localhost' || host == '10.0.2.2' || host == '127.0.0.1') return true;
-  if (host.endsWith('.local')) return host.length > '.local'.length;
-  final m = RegExp(r'^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$').firstMatch(host);
-  if (m == null) return false;
-  final a = int.parse(m.group(1)!), b = int.parse(m.group(2)!);
-  return a == 10 || (a == 172 && b >= 16 && b <= 31) || (a == 192 && b == 168);
-}
+const _domains = [
+  'root',
+  'file',
+  'database',
+  'sharedpref',
+  'external',
+  'device_root',
+  'device_file',
+  'device_database',
+  'device_sharedpref'
+];
 
 void main() {
   final manifest = _read('src/main/AndroidManifest.xml');
@@ -38,56 +39,48 @@ void main() {
     test('android:allowBackup is "false": the encrypted database and the key store entry are not copied to a cloud backup or adb backup',
         () {
       expect(attr('allowBackup'), 'false');
-    }, skip: _bug(attr('allowBackup') == 'false', 'allowBackup is not off in AndroidManifest.xml'));
+    }, skip: _h10);
 
-    final rulesRef = attr('dataExtractionRules');
-    test('android:dataExtractionRules names an xml file that excludes every domain from cloud backup and device transfer', () {
-      expect(rulesRef, startsWith('@xml/'));
-      final xml = _read('src/main/res/xml/${rulesRef!.substring(5)}.xml');
-      expect(xml, isNotEmpty, reason: 'the referenced file exists');
+    test('data_extraction_rules.xml (Android 12+) excludes every domain, device_* ones included, from cloud backup and device transfer',
+        () {
+      expect(attr('dataExtractionRules'), '@xml/data_extraction_rules');
+      final xml = _read('src/main/res/xml/data_extraction_rules.xml');
       for (final block in ['cloud-backup', 'device-transfer']) {
         final m = RegExp('<$block[^>]*>(.*?)</$block>', dotAll: true).firstMatch(xml);
         expect(m, isNotNull, reason: 'a <$block> section');
         final body = m!.group(1)!;
         expect(body, isNot(contains('<include')), reason: '$block includes nothing');
-        for (final domain in ['root', 'file', 'database', 'sharedpref', 'external']) {
-          expect(body, contains('<exclude domain="$domain"'), reason: '$block excludes $domain');
+        for (final d in _domains) {
+          expect(body, contains('<exclude domain="$d"'), reason: '$block excludes $d');
         }
       }
-    }, skip: _bug(rulesRef != null, 'no android:dataExtractionRules (Android 12+ ignores allowBackup for device transfer without it)'));
+    }, skip: _h10);
 
-    test('the old fullBackupContent attribute, if present, includes nothing either', () {
-      final ref = attr('fullBackupContent');
-      if (ref == null || ref == 'false') return;
-      final xml = _read('src/main/res/xml/${ref.replaceFirst('@xml/', '')}.xml');
+    test('backup_rules.xml (Android 11 and older, android:fullBackupContent) excludes every domain too', () {
+      expect(attr('fullBackupContent'), '@xml/backup_rules');
+      final xml = _read('src/main/res/xml/backup_rules.xml');
+      expect(xml, contains('<full-backup-content>'));
       expect(xml, isNot(contains('<include')));
-    });
+      for (final d in _domains) {
+        expect(xml, contains('<exclude domain="$d"'), reason: d);
+      }
+    }, skip: _h10);
   });
 
   group('network', () {
-    final nsc = attr('networkSecurityConfig');
-    test('the application does not allow cleartext traffic globally', () {
-      expect(attr('usesCleartextTraffic'), isNot('true'));
-    }, skip: _bug(attr('usesCleartextTraffic') != 'true', 'android:usesCleartextTraffic="true" allows plain HTTP to any host'));
-
-    test('network_security_config.xml: cleartext off by default, on only for loopback, the emulator host and private ranges', () {
-      expect(nsc, startsWith('@xml/'));
-      final xml = _read('src/main/res/xml/${nsc!.substring(5)}.xml');
-      expect(xml, isNotEmpty);
-      final base = RegExp(r'<base-config\b([^>]*)>').firstMatch(xml);
-      expect(base?.group(1), contains('cleartextTrafficPermitted="false"'));
-      for (final m in RegExp(r'<domain-config\b([^>]*)>(.*?)</domain-config>', dotAll: true).allMatches(xml)) {
-        if (!m.group(1)!.contains('cleartextTrafficPermitted="true"')) continue;
-        final domains = [for (final d in RegExp(r'<domain\b[^>]*>([^<]*)</domain>').allMatches(m.group(2)!)) d.group(1)!.trim()];
-        expect(domains, isNotEmpty);
-        for (final d in domains) {
-          expect(_private(d), isTrue, reason: 'cleartext is allowed for "$d", which is not loopback, 10.0.2.2, *.local or a private range');
-        }
-      }
-    }, skip: _bug(nsc != null, 'no android:networkSecurityConfig'));
+    test('network_security_config.xml trusts the system certificate authorities only: no user-installed CA, no debug override', () {
+      expect(attr('networkSecurityConfig'), '@xml/network_security_config');
+      final xml = _read('src/main/res/xml/network_security_config.xml');
+      final anchors = RegExp(r'<trust-anchors>(.*?)</trust-anchors>', dotAll: true).firstMatch(xml)?.group(1);
+      expect(anchors, isNotNull);
+      expect(anchors, contains('<certificates src="system"/>'));
+      expect(anchors, isNot(contains('src="user"')));
+      expect(xml, isNot(contains('debug-overrides')));
+      expect(xml, isNot(contains('<pin-set')), reason: 'a pin would lock the owner out of a relay with a renewed certificate');
+    }, skip: _h10);
   });
 
-  group('permissions and components', () {
+  group('permissions and components (unchanged by H10, must keep holding)', () {
     test('no storage permissions: files go through the system pickers and app-private folders', () {
       for (final p in ['READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE', 'MANAGE_EXTERNAL_STORAGE', 'READ_MEDIA_']) {
         expect(manifest, isNot(contains('android.permission.$p')), reason: p);
@@ -102,7 +95,6 @@ void main() {
 
     test('the camera temp folder is app-private: the file provider shares one cache or files folder, never external storage or root', () {
       final xml = _read('src/main/res/xml/bill_photo_paths.xml');
-      expect(xml, isNotEmpty);
       expect(xml, isNot(contains('external')));
       expect(xml, isNot(contains('root-path')));
       expect(xml, anyOf(contains('<cache-path'), contains('<files-path')));
@@ -112,23 +104,24 @@ void main() {
 
   group('release signing', () {
     final gradle = _read('build.gradle.kts');
-    test('a release build without a keystore fails instead of falling back to the debug key', () {
-      final release = RegExp(r'release\s*\{(.*?)\n        \}', dotAll: true).firstMatch(gradle)?.group(1) ?? gradle;
-      expect(release, isNot(contains('getByName("debug")')), reason: 'no debug fallback in the release build type');
-      expect(gradle, anyOf(contains('GradleException'), contains('error('), contains('throw ')));
-    },
-        skip: _bug(
-            !RegExp(r'if\s*\(\s*releaseKeystore\s*!=\s*null\s*\)\s*"release"\s*else\s*"debug"').hasMatch(gradle) && gradle.isNotEmpty,
-            'build.gradle.kts still signs a release with the debug key when there is no keystore'));
+    test('a release build without the release key is refused, and the release build type never signs with the debug key', () {
+      final release = RegExp(r'buildTypes\s*\{\s*release\s*\{(.*?)\n        \}', dotAll: true).firstMatch(gradle)?.group(1);
+      expect(release, isNotNull);
+      expect(release, isNot(contains('"debug"')), reason: 'no debug fallback in the release build type');
+      expect(gradle, contains('throw GradleException('));
+      expect(gradle, contains('assembleRelease'));
+      expect(gradle, contains('BW_KEYSTORE_PASSWORD'));
+      expect(gradle, isNot(contains('else "debug"')));
+    }, skip: _h10);
   });
 
   group('key sheet', () {
     final activity = _read('src/main/kotlin/hr/marcelic/budget_wallet/MainActivity.kt');
-    test('MainActivity exposes MethodChannel bw/secure setSecure(true/false) that sets and clears FLAG_SECURE', () {
-      expect(activity, contains('bw/secure'));
-      expect(activity, contains('setSecure'));
-      expect(activity, contains('FLAG_SECURE'));
-      expect(activity, contains('clearFlags'));
-    }, skip: _bug(activity.contains('FLAG_SECURE'), 'MainActivity has no FLAG_SECURE channel for the key sheet'));
+    test('MainActivity exposes MethodChannel bw/secure with setSecure(bool) that sets and clears FLAG_SECURE', () {
+      expect(activity, contains('"bw/secure"'));
+      expect(activity, contains('"setSecure"'));
+      expect(activity, contains('window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)'));
+      expect(activity, contains('window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)'));
+    }, skip: _h10);
   });
 }

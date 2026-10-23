@@ -6,6 +6,7 @@ import 'package:relay/relay.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'engine_spec_sim.dart';
+import 'h_compat.dart';
 
 /// Devices sharing one transport and one fake clock (so "91 days later" is [SimClock.advance]).
 class Cluster {
@@ -15,10 +16,12 @@ class Cluster {
   final SimClock clock;
   final VaultKey key;
   final List<Dev> devs = [];
+  int _made = 0;
 
-  /// A device with an in-memory database; [skewMs] shifts its wall clock (for repo clock and engine alike).
+  /// A device with an in-memory database; [skewMs] shifts its wall clock (for repo clock and engine alike). Device ids are
+  /// fixed (`c0de…01`, `c0de…02`, …) where the build lets a repo be given one, so seeds and traces reproduce.
   Dev add({int skewMs = 0, String appVersion = '1.0.0'}) {
-    final repo = WalletRepo.inMemory(now: () => clock.ms + skewMs);
+    final repo = repoWithDeviceId('c0de${(++_made).toRadixString(16).padLeft(12, '0')}', now: () => clock.ms + skewMs);
     final d = Dev(repo, SyncEngine(transport, key, appVersion: appVersion, now: () => clock.t.add(Duration(milliseconds: skewMs))));
     devs.add(d);
     return d;
@@ -52,10 +55,11 @@ List<String> data(Dev d) => canon(d.repo);
 Future<List<String>> invariantViolations(SyncTransport t, List<Dev> devs) async {
   final s = await t.state();
   final out = <String>[];
-  final held = <String, int>{}; // best any device holds of device P's files
+  final held = <String, int>{}; // best any device holds of relay stream P's files
   for (final d in devs) {
     final sent = int.tryParse(d.repo.localValue(SyncEngine.sentKey) ?? '') ?? 0;
-    if (sent > (held[d.id] ?? 0)) held[d.id] = sent;
+    final own = ownStream(s, d);
+    if (sent > (held[own] ?? 0)) held[own] = sent;
     for (final e in d.repo.syncCursors().entries) {
       if (e.value > (held[e.key] ?? 0)) held[e.key] = e.value;
     }
@@ -67,7 +71,7 @@ Future<List<String>> invariantViolations(SyncTransport t, List<Dev> devs) async 
     }
   }
   for (final d in devs) {
-    final mine = s.devices[d.id];
+    final mine = s.devices[ownStream(s, d)];
     final cursors = d.repo.syncCursors();
     for (final MapEntry(key: p, value: c) in cursors.entries) {
       final last = s.devices[p]?.last ?? 0;
@@ -93,6 +97,18 @@ Future<List<String>> invariantViolations(SyncTransport t, List<Dev> devs) async 
 }
 
 String _s(String id) => SyncProblem.shortId(id);
+
+/// The relay name this device's files go under now: its id, or `<id>-<n>` after the relay lost some of its files (a
+/// restored copy starts a new stream of the same device, Stage H5b). The newest stream the relay lists for the device.
+String ownStream(RelayState s, Dev d) {
+  var best = d.id, bestEpoch = 0;
+  for (final name in s.devices.keys) {
+    if (!name.startsWith('${d.id}-')) continue;
+    final epoch = int.tryParse(name.substring(d.id.length + 1)) ?? 0;
+    if (epoch > bestEpoch) (best, bestEpoch) = (name, epoch);
+  }
+  return best;
+}
 
 /// Transfer symmetry: whenever a live row names a partner, the partner is live and names it back.
 List<String> transferAsymmetries(WalletRepo r) {

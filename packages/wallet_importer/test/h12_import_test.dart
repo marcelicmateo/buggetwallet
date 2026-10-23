@@ -204,13 +204,20 @@ void main() {
       final bytes = _zipWith({'xl/worksheets/sheet1.xml': _hugeSheet(120 << 20)});
       expect(bytes.length, lessThan(2 << 20), reason: 'a bomb: ~100 KB on disk');
       final sw = Stopwatch()..start();
-      expect(() => importBankFile(bytes), throwsA(isA<ImportException>()));
+      expect(
+          () => importBankFile(bytes),
+          throwsA(isA<ImportException>()
+              .having((e) => e.message, 'message', isNot(unknownLayoutMessage))
+              .having((e) => e.message.toLowerCase(), 'message', contains('too large'))),
+          reason: 'the header is valid Revolut: only the size limit may refuse it, and it says so');
       expect(sw.elapsed, lessThan(const Duration(seconds: 30)));
     }, skip: 'BUG: H4 - XlsxReader has no inflate cap (a 120 MiB sheet is read in full)', timeout: _t);
 
-    test('an .xlsx whose directory lies about the size is refused as well (the cap counts bytes read, not bytes declared)', () {
+    test('an .xlsx whose directory lies about the size never yields rows from the 120 MiB it really holds, and fails fast', () {
       final bytes = _zipWith({'xl/worksheets/sheet1.xml': _hugeSheet(120 << 20)}, lieAboutSize: true);
+      final sw = Stopwatch()..start();
       expect(() => importBankFile(bytes), throwsA(isA<ImportException>()));
+      expect(sw.elapsed, lessThan(const Duration(seconds: 30)));
     }, skip: 'BUG: H4 - XlsxReader has no inflate cap', timeout: _t);
 
     test('an ordinary workbook still opens next to the cap (the fixture and a 3 MiB sheet)', () {
@@ -285,9 +292,13 @@ void main() {
 Uint8List _csv(List<List<String>> rows) =>
     Uint8List.fromList(utf8.encode('${rows.map((r) => r.map((c) => '"$c"').join(',')).join('\n')}\n'));
 
+/// A sheet with a valid Revolut header row first (so only a size limit can refuse it) and [bytes] of padding after it.
 String _hugeSheet(int bytes) {
   const head = '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
-      '<row r="1"><c r="A1" t="inlineStr"><is><t xml:space="preserve">';
+      '<row r="1"><c r="C1" t="inlineStr"><is><t>Started Date</t></is></c><c r="E1" t="inlineStr"><is><t>Description</t></is></c>'
+      '<c r="F1" t="inlineStr"><is><t>Amount</t></is></c></row>'
+      '<row r="2"><c r="C2" t="inlineStr"><is><t>2026-01-03 10:15:00</t></is></c><c r="E2" t="inlineStr"><is><t>Wolt</t></is></c>'
+      '<c r="F2"><v>-1.5</v></c><c r="K2" t="inlineStr"><is><t xml:space="preserve">';
   return '$head${' ' * bytes}</t></is></c></row></sheetData></worksheet>';
 }
 

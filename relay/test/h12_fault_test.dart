@@ -121,6 +121,22 @@ void main() {
       expect((await h.get('/v2/health')).statusCode, 200, reason: 'the relay stays up');
     }, timeout: _t);
 
+    test('a failed write leaves no temp file after a restart, and its bytes never count against the quota', () async {
+      final h = await freshHarness(maxBytes: 100);
+      expect((await h.putData(w1, 'dev1', 1, 'a' * 60)).statusCode, 201);
+      Directory(_p(h, w1, 'd/dev1/2')).createSync();
+      expect((await h.putData(w1, 'dev1', 2, 'b' * 30)).statusCode, greaterThanOrEqualTo(500));
+      Directory(_p(h, w1, 'd/dev1/2')).deleteSync();
+      // 60 stored + 39 fits only if the 30 bytes that never reached the disk were not counted (60 + 30 + 39 would not).
+      expect((await h.putData(w1, 'dev1', 2, 'c' * 39)).statusCode, 201);
+      await h.restart();
+      final names = Directory(h.dir.path).listSync(recursive: true).map((e) => e.uri.pathSegments.where((s) => s.isNotEmpty).last);
+      expect(names.where((n) => n.startsWith('.tmp')), isEmpty, reason: 'the failed write\'s temp file is cleaned at the next start');
+      // After the restart the count is rebuilt from the disk: 99 bytes, so two more do not fit and one would.
+      expect((await h.putData(w1, 'dev1', 3, 'dd')).statusCode, anyOf(507, 413));
+      expect((await h.device(w1, 'dev1'))['last'], 2);
+    }, timeout: _t);
+
     test('a failed snapshot write is not kept and prunes nothing', () async {
       final h = await freshHarness();
       await h.putData(w1, 'dev1', 1, 'one');

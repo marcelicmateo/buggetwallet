@@ -162,7 +162,7 @@ void main() {
       expect(data(a), data(b));
     }, timeout: _t);
 
-    test('back after 91 days with files pruned AND a newer schema snapshot: one run is enough to catch up', () async {
+    test('back after 100 days, its peer\'s files pruned: one run catches up from the snapshot', () async {
       final c = _cluster();
       addTearDown(c.closeAll);
       final [a, b] = [c.add(), c.add()];
@@ -173,6 +173,9 @@ void main() {
         a.repo.addTransaction(date: '2026-02-01', amount: -100 - i, category: 'Groceries');
         await a.sync();
       }
+      final s = await c.transport.state();
+      expect(s.snapshot, isNotNull);
+      expect(s.devices[a.id]!.first, greaterThan(1), reason: 'the files B would need next are gone: only the snapshot can catch it up');
       final r = await b.sync();
       expect(r.problems, isEmpty);
       expect(r.waiting, isEmpty);
@@ -526,7 +529,7 @@ void main() {
     // device that the relay still counts as live (seen within 90 days) must be able to continue from its cursor
     // (its next file exists, or it can start from a snapshot); at the end everyone converges and keeps every edit
     // that was ever made and never deleted.
-    var prunedSomewhere = 0;
+    var seedsThatPruned = 0;
     for (final seed in [1, 7, 42, 2026, 31337, 99991]) {
       test('seed $seed', () async {
         final r = Random(seed);
@@ -536,6 +539,7 @@ void main() {
         final kept = <String>{};
         final sleepingUntil = <Dev, DateTime>{};
         var noteN = 0;
+        var pruned = false;
         for (var step = 0; step < 70; step++) {
           final d = devs[r.nextInt(3)];
           switch (r.nextInt(10)) {
@@ -567,9 +571,9 @@ void main() {
           if (step % 5 == 4) c.tick(Duration(days: 1 + r.nextInt(12)));
           // The property: every live device can continue.
           final s = await c.transport.state();
-          if (s.devices.values.any((d) => d.first > 1)) prunedSomewhere++;
+          if (s.devices.values.any((d) => d.first > 1)) pruned = true;
           for (final x in devs) {
-            final me = s.devices[x.id];
+            final me = s.devices[ownStream(s, x)];
             if (me?.lastSeen == null) continue;
             if (c.clock.t.difference(me!.lastSeen!) > MemoryTransport.activeFor) continue;
             final cursors = x.repo.syncCursors();
@@ -596,6 +600,7 @@ void main() {
           expect(have.containsAll(kept), isTrue, reason: 'seed $seed: device ${x.short} lost an edit');
         }
         expect(await invariantViolations(c.transport, devs), isEmpty, reason: 'seed $seed');
+        if (pruned) seedsThatPruned++;
         for (final x in devs) {
           final rep = await x.sync();
           expect((rep.sent, rep.received), (0, 0), reason: 'seed $seed: second full round is idle');
@@ -603,7 +608,7 @@ void main() {
       }, timeout: _t);
     }
     test('the seeds above really pruned files (the property is not vacuous)', () {
-      expect(prunedSomewhere, greaterThan(20));
+      expect(seedsThatPruned, greaterThanOrEqualTo(4), reason: 'at least 4 of the 6 seeds saw a device\'s first file rise');
     });
   });
 }

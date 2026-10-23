@@ -65,7 +65,7 @@ void main() {
     await r.close();
     await h.restart();
     expect((await h.device(w1, 'dev2'))['acks'], isEmpty);
-    expect((await h.ack(w1, 'dev2', {'dev1': 1})).statusCode, 200);
+    expect((await h.ack(w1, 'dev2', {'dev1': 1})).statusCode, 204);
     expect((await h.device(w1, 'dev2'))['acks'], {'dev1': 1});
   });
 

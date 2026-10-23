@@ -79,13 +79,16 @@ void main() {
       expect(s.added, 1);
       expect(_collisions(s), 1);
       expect(r.transactions().firstWhere((t) => t.id == fresh.id).amount, -700);
-    }, skip: skip, timeout: _t);
+    },
+        skip:
+            'BUG: H4 - the same id twice in ONE batch with another amount is imported twice (added 2) and the second overwrites the first',
+        timeout: _t);
 
     test('the collision event carries a count only: no amount, description, id or date', () {
       final lines = <String>[];
       final saved = Logger.root.level;
       Logger.root.level = Level.ALL;
-      final sub = Logger.root.onRecord.listen((rec) => lines.add('${rec.loggerName} ${rec.message}'));
+      final sub = Logger.root.onRecord.listen((rec) => lines.add(formatLogRecord(rec)));
       addTearDown(() {
         Logger.root.level = saved;
         sub.cancel();

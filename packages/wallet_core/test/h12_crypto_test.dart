@@ -187,19 +187,60 @@ void main() {
       expect(sw.elapsed, lessThan(const Duration(seconds: 30)));
     }, skip: bugUnless(tooLarge.isNotEmpty, 'H8', '256 MiB inflate cap in unseal (UnsealFailure.tooLarge)'), timeout: _t);
 
-    test('a sync file that is a bomb is quarantined, not applied, and the other files still apply', () async {
+    test('a sync file that is a bomb is quarantined, not applied, and the other devices\' files still apply', () async {
       final clock = SimClock();
       final mem = MemoryTransport(now: () => clock.t);
       final c = Cluster(mem, clock);
       addTearDown(c.closeAll);
-      final [a, b] = [c.add(), c.add()];
-      a.repo.addTransaction(date: '2026-01-14', amount: -100, category: 'Groceries', note: 'ok');
+      final [a, b, d] = [c.add(), c.add(), c.add()];
+      a.repo.addTransaction(date: '2026-01-14', amount: -100, category: 'Groceries', note: 'from the bomb\'s device');
       await a.sync();
+      d.repo.addTransaction(date: '2026-01-14', amount: -200, category: 'Groceries', note: 'from the other device');
+      await d.sync();
       mem.replace(a.id, 1, await _box1(gzip.encode(Uint8List(257 << 20)), c.key));
       final r = await b.sync();
       expect(r.problems, hasLength(1));
-      expect(b.repo.transactions(), isEmpty);
+      expect(b.repo.transactions().map((t) => t.note), ['from the other device']);
     }, skip: bugUnless(tooLarge.isNotEmpty, 'H8', 'a file inflating past the cap is refused'), timeout: _t);
+  });
+
+  group('a sync file moved to another slot is refused (the AAD names device and seq)', () {
+    final skip = bugUnless(sealHasAad, 'H8', 'BWOP2 binds each sync file to its device and seq');
+
+    Future<(Cluster, MemoryTransport, Dev, Dev, Dev)> setup() async {
+      final clock = SimClock();
+      final mem = MemoryTransport(now: () => clock.t);
+      final c = Cluster(mem, clock);
+      addTearDown(c.closeAll);
+      final [a, b, d] = [c.add(), c.add(), c.add()];
+      a.repo.addTransaction(date: '2026-01-14', amount: -100, category: 'Groceries', note: 'x');
+      await a.sync();
+      a.repo.addTransaction(date: '2026-01-14', amount: -110, category: 'Groceries', note: 'y');
+      await a.sync();
+      d.repo.addTransaction(date: '2026-01-14', amount: -120, category: 'Groceries', note: 'z');
+      await d.sync();
+      return (c, mem, a, b, d);
+    }
+
+    test(
+        'device D\'s file put in A\'s slot: one problem, nothing of D\'s file applied through it, A\'s first file and D\'s own slot are fine',
+        () async {
+      final (_, mem, a, b, d) = await setup();
+      mem.replace(a.id, 2, mem.files['d/${d.id}/1']!);
+      final r = await b.sync();
+      expect(r.problems, hasLength(1));
+      expect(r.problems.single.device, a.short);
+      expect(b.repo.transactions().map((t) => t.note).toSet(), {'x', 'z'}, reason: 'y was in the moved file; z arrives from D\'s own slot');
+    }, skip: skip, timeout: _t);
+
+    test('A\'s first file copied into A\'s second slot: refused, the second edit is not invented', () async {
+      final (_, mem, a, b, _) = await setup();
+      mem.replace(a.id, 2, mem.files['d/${a.id}/1']!);
+      final r = await b.sync();
+      expect(r.problems, hasLength(1));
+      expect(b.repo.transactions().map((t) => t.note), isNot(contains('y')));
+      expect(b.repo.transactions().map((t) => t.note), contains('x'));
+    }, skip: skip, timeout: _t);
   });
 
   group('a sync file is never a backup, and the other way round', () {
