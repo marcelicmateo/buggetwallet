@@ -122,7 +122,10 @@ void main() {
     final url = Uri.parse('http://127.0.0.1:$port/v2/w/$w1/d/dev1/1');
     Future<int> put(Map<String, String> extra) async => (await http.put(
           url,
-          headers: {...await keyA.headers('PUT', url.path, bytes('x'), timeMs: DateTime.now().millisecondsSinceEpoch, host: url.authority), ...extra},
+          headers: {
+            ...await keyA.headers('PUT', url.path, bytes('x'), timeMs: DateTime.now().millisecondsSinceEpoch, host: url.authority),
+            ...extra
+          },
           body: 'x',
         ))
             .statusCode;

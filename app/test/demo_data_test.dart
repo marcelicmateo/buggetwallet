@@ -14,7 +14,9 @@ void main() {
       addTearDown(repo.close);
       repo.importBatch(demoBatch(today));
       repo.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
-      repo.updateSettings({'categoryBudgets': demoBudgets});
+      for (final MapEntry(:key, :value) in demoBudgets.entries) {
+        repo.setCategoryBudget(key, value);
+      }
       final st = repo.settings();
       final p = computePeriod(const [], st, const [], today);
       seedDemoPlanned(repo, today, p.end);

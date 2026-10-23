@@ -41,22 +41,10 @@ bool _hasClockBehindGuard() {
   }
 }
 
-bool _hasPerKeyBudgets() {
-  final r = WalletRepo.inMemory();
-  try {
-    (r as dynamic).setCategoryBudget('Groceries', 100);
-    return true;
-  } on NoSuchMethodError {
-    return false;
-  } finally {
-    r.close();
-  }
-}
-
 void main() {
   final clockGuard = _hasClockBehindGuard();
   final clockDrift = reasonNamed('clockDrift') != null;
-  final perKey = _hasPerKeyBudgets();
+  const perKey = true; // H3 merged: setCategoryBudget is an extension method, which a dynamic probe cannot see
 
   group('zero ops on the second full round', () {
     test('three devices, every kind of data: after convergence a full round sends, reads and writes nothing', () async {
@@ -306,31 +294,14 @@ void main() {
   });
 
   group('concurrent budget edits (H3)', () {
-    test('today: whole-map edits on two devices converge to one value on both (last writer wins), nothing diverges', () async {
-      final c = _cluster();
-      addTearDown(c.closeAll);
-      final [a, b] = [c.add(), c.add()];
-      await c.syncAll(rounds: 2);
-      a.repo.updateSettings({
-        'categoryBudgets': {'Groceries': 30000}
-      });
-      c.tick();
-      b.repo.updateSettings({
-        'categoryBudgets': {'Eating out': 15000}
-      });
-      await c.syncAll(rounds: 3);
-      expect(a.repo.settings().categoryBudgets, b.repo.settings().categoryBudgets);
-      expect(data(a), data(b));
-    }, skip: perKey ? 'whole-map writes are refused with H3 (updateSettings throws ArgumentError)' : null, timeout: _t);
-
     test('two devices set different categories offline: both budgets survive the merge', () async {
       final c = _cluster();
       addTearDown(c.closeAll);
       final [a, b] = [c.add(), c.add()];
       await c.syncAll(rounds: 2);
-      (a.repo as dynamic).setCategoryBudget('Groceries', 30000);
+      a.repo.setCategoryBudget('Groceries', 30000);
       c.tick();
-      (b.repo as dynamic).setCategoryBudget('Eating out', 15000);
+      b.repo.setCategoryBudget('Eating out', 15000);
       await c.syncAll(rounds: 3);
       for (final x in [a, b]) {
         expect(x.repo.settings().categoryBudgets, {'Groceries': 30000, 'Eating out': 15000});
@@ -342,17 +313,17 @@ void main() {
       final c = _cluster();
       addTearDown(c.closeAll);
       final [a, b] = [c.add(), c.add()];
-      (a.repo as dynamic).setCategoryBudget('Groceries', 30000);
+      a.repo.setCategoryBudget('Groceries', 30000);
       await c.syncAll(rounds: 3);
-      (a.repo as dynamic).setCategoryBudget('Groceries', 31000);
+      a.repo.setCategoryBudget('Groceries', 31000);
       c.tick();
-      (b.repo as dynamic).setCategoryBudget('Groceries', 32000);
+      b.repo.setCategoryBudget('Groceries', 32000);
       await c.syncAll(rounds: 3);
       expect(a.repo.settings().categoryBudgets, {'Groceries': 32000});
       expect(b.repo.settings().categoryBudgets, {'Groceries': 32000});
       // Removal on one, edit on the other: whichever wins, both devices agree and the map is valid.
-      (a.repo as dynamic).setCategoryBudget('Groceries', null);
-      (b.repo as dynamic).setCategoryBudget('Groceries', 33000);
+      a.repo.setCategoryBudget('Groceries', null);
+      b.repo.setCategoryBudget('Groceries', 33000);
       await c.syncAll(rounds: 3);
       expect(a.repo.settings().categoryBudgets, b.repo.settings().categoryBudgets);
       expect(a.repo.settings().categoryBudgets.values.every((v) => v > 0), isTrue);

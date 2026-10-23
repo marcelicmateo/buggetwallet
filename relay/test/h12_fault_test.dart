@@ -76,8 +76,7 @@ void main() {
       await h.restart();
       final names = Directory(h.dir.path).listSync(recursive: true).map((e) => e.uri.pathSegments.where((s) => s.isNotEmpty).last);
       expect(names.where((n) => n.startsWith('.tmp')), isEmpty);
-    },
-        timeout: _t);
+    }, timeout: _t);
 
     test('the meta save fails after the file was written: 5xx, then the retry of the same bytes succeeds and a restart agrees', () async {
       final h = await freshHarness();

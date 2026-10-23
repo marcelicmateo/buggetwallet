@@ -537,7 +537,8 @@ class WalletController extends ChangeNotifier {
         () => timed('spending.derive', () {
               final sums = [
                 for (final m in months)
-                  _cached('monthSummary$m', () => timed('wc.monthSummary', () => monthSummary(txs, m, currency: currency), fields: {'month': m}))
+                  _cached('monthSummary$m',
+                      () => timed('wc.monthSummary', () => monthSummary(txs, m, currency: currency), fields: {'month': m}))
               ];
               final selSum = sums.firstWhere((s) => s.month == month);
               final avg = averageByCategory(txs, month, currency: currency); // the same 6-month average the suggested budgets use
@@ -576,8 +577,8 @@ class WalletController extends ChangeNotifier {
           fields: {'month': month, 'tx': txs.length}, warnMs: 50));
 
   /// Budgets worked out from the 6 months before [month], per category (cents, rounded up to 10).
-  Map<String, int> suggestedBudgets(String month) =>
-      _cached('suggest$month', () => timed('wc.suggestBudgets', () => suggestBudgets(txs, month, currency: currency), fields: {'month': month}, warnMs: 50));
+  Map<String, int> suggestedBudgets(String month) => _cached('suggest$month',
+      () => timed('wc.suggestBudgets', () => suggestBudgets(txs, month, currency: currency), fields: {'month': month}, warnMs: 50));
 
   /// The budgeted category with the least money left this month, or null when nothing is budgeted.
   CategoryBudgetLine? tightestBudget() => _cached('tightest', () {

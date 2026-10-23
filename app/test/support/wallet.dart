@@ -10,14 +10,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
-NormalizedTransaction _n(String date, int cents, String type, String desc, {String source = 'pbz'}) => NormalizedTransaction(
-    id: transactionId(date, cents, desc, 0),
-    source: source,
-    date: date,
-    amountMinor: cents,
-    currency: 'EUR',
-    bankType: type,
-    description: desc);
+NormalizedTransaction _n(String date, int cents, String type, String desc, {String source = 'pbz', String currency = 'EUR'}) =>
+    NormalizedTransaction(
+        id: transactionId(date, cents, desc, 0),
+        source: source,
+        date: date,
+        amountMinor: cents,
+        currency: currency,
+        bankType: type,
+        description: desc);
 
 /// One synthetic bank row (for wallets whose dates are fixed by a test clock).
 NormalizedTransaction syntheticTx(String date, int cents, String type, String desc) => _n(date, cents, type, desc);
@@ -28,17 +29,19 @@ WalletController emptyWallet({bool withKey = true}) =>
 
 /// A wallet that shows every optional Today/Wishlist panel: salary not confirmed, a new payday waiting,
 /// the payday checklist, goals, recent rows, wishlist items waiting / ready / decided.
-WalletController demoWallet() {
+/// [currency]: the rows' currency (the wallet setting stays EUR unless a test sets it; rows in another currency are
+/// left out of every total).
+WalletController demoWallet({String currency = 'EUR'}) {
   final wc = emptyWallet();
   final today = wc.today();
   final start = addDays(today, -25);
   wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
-    _n(start, 150000, 'Plaća/Mirovina', 'Neto placa synthetic'),
-    _n(addDays(today, -1), 150000, 'Plaća/Mirovina', 'Neto placa synthetic two'),
-    _n(addDays(start, 1), -55000, 'Isplata ATM', 'ATM SYNTHETIC STREET'),
-    _n(addDays(start, 2), -2340, 'POS plaćanje', 'PBZ POS PBZ7LIDL HRVATSKA ZAGREB'),
-    _n(addDays(start, 3), -25000, 'Trajni nalog', 'Naplata kredita 0000000000'),
-    _n(addDays(today, -2), -1999, 'POS plaćanje', 'PBZ POS PBZ7WOLT ZAGREB'),
+    _n(start, 150000, 'Plaća/Mirovina', 'Neto placa synthetic', currency: currency),
+    _n(addDays(today, -1), 150000, 'Plaća/Mirovina', 'Neto placa synthetic two', currency: currency),
+    _n(addDays(start, 1), -55000, 'Isplata ATM', 'ATM SYNTHETIC STREET', currency: currency),
+    _n(addDays(start, 2), -2340, 'POS plaćanje', 'PBZ POS PBZ7LIDL HRVATSKA ZAGREB', currency: currency),
+    _n(addDays(start, 3), -25000, 'Trajni nalog', 'Naplata kredita 0000000000', currency: currency),
+    _n(addDays(today, -2), -1999, 'POS plaćanje', 'PBZ POS PBZ7WOLT ZAGREB', currency: currency),
   ]));
   wc.repo.saveGoal(name: 'Emergency fund with a long synthetic name', target: 300000, saved: 0, monthly: 10000, sort: 1);
   wc.repo.saveGoal(name: 'Yearly costs', target: 120000, saved: 0, monthly: 10000, sort: 2);
@@ -98,8 +101,11 @@ WalletController budgetWallet({bool budgets = true, int eatingOutBudget = 10000,
     'salary': 150000,
     'salaryConfirmed': true,
     'periodStart': '2026-10-01',
-    if (budgets) 'categoryBudgets': {'Groceries': groceriesBudget, 'Eating out': eatingOutBudget},
   });
+  if (budgets) {
+    wc.repo.setCategoryBudget('Groceries', groceriesBudget);
+    wc.repo.setCategoryBudget('Eating out', eatingOutBudget);
+  }
   wc.reload();
   return wc;
 }
@@ -238,8 +244,9 @@ WalletController habitsWallet({FakeNudges? nudges, bool confirmBill = false}) {
     'salary': 150000,
     'salaryConfirmed': true,
     'periodStart': '2026-10-01',
-    'categoryBudgets': {'Groceries': 30000, 'Eating out': 10000},
   });
+  wc.repo.setCategoryBudget('Groceries', 30000);
+  wc.repo.setCategoryBudget('Eating out', 10000);
   wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
     syntheticTx('2026-10-18', -1850, 'POS plaćanje', 'PBZ POS PBZ7LIDL HRVATSKA ZAGREB'),
     syntheticTx('2026-10-19', -940, 'POS plaćanje', 'POS KONZUM 0000 ZAGREB'),

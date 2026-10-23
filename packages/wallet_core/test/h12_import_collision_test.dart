@@ -79,8 +79,7 @@ void main() {
       expect(s.added, 1);
       expect(_collisions(s), 1);
       expect(r.transactions().firstWhere((t) => t.id == fresh.id).amount, -700);
-    },
-        timeout: _t);
+    }, timeout: _t);
 
     test('the collision event carries a count only: no amount, description, id or date', () {
       final lines = <String>[];

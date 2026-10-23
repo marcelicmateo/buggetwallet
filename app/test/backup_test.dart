@@ -193,7 +193,11 @@ void main() {
     ('unreadable file', const BackupException(BackupFailure.unreadable, 'x'), "This backup file can't be read."),
     ('damaged file', const BackupException(BackupFailure.damaged, 'x'), 'This backup file is damaged.'),
     ('newer version', const BackupException(BackupFailure.newerVersion, 'x'), 'Made by a newer app version. Update first.'),
-    ('clock ahead', const BackupException(BackupFailure.clockAhead, 'x'), "This backup has changes dated later than this device's clock. Check the date and time."),
+    (
+      'clock ahead',
+      const BackupException(BackupFailure.clockAhead, 'x'),
+      "This backup has changes dated later than this device's clock. Check the date and time."
+    ),
     ('not empty any more', StateError('not empty'), 'The wallet is not empty, so nothing was restored.'),
     ('anything else', const FormatException('boom'), "Couldn't restore the backup."),
   ]) {

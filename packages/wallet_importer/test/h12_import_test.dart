@@ -21,7 +21,6 @@ const _pbzHeader = ['DATUM', 'VRSTA TRANSAKCIJE', 'OPIS PLAĆANJA', 'IZNOS', 'VA
 
 void main() {
   group('PBZ detection needs the whole header (H4)', () {
-
     test('the real header tuple on one row is PBZ (and the synthetic fixture still imports)', () {
       final b = parseRows([
         ['', 'TRANSAKCIJSKI RAČUN:', '', '', ''],

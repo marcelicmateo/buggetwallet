@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/charts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallet_core/wallet_core.dart' show WalletRepoSettings;
 
 import 'support/wallet.dart';
 
@@ -140,9 +141,7 @@ void main() {
 
     testWidgets('a budgeted category with no spending yet still shows its budget', (tester) async {
       final wc = budgetWallet(budgets: false);
-      wc.repo.updateSettings({
-        'categoryBudgets': {'Sport & fitness': 4000}
-      });
+      wc.repo.setCategoryBudget('Sport & fitness', 4000);
       wc.reload();
       await pumpApp(tester, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(360, 3000));
       expect(find.text(_eur('40 € left')), findsNWidgets(2), reason: 'the row and the total');

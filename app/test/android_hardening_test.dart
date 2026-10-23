@@ -11,7 +11,6 @@ import 'package:flutter_test/flutter_test.dart';
 final _root = Platform.environment['BW_ANDROID_ROOT'] ?? 'android/app';
 String _read(String rel) => File('$_root/$rel').readAsStringSync();
 
-
 const _domains = [
   'root',
   'file',
