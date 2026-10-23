@@ -149,6 +149,35 @@ void main() {
     expect(await exitOf(['--data', dir.path, '--create-token']), 64);
   });
 
+  test('the template placeholders are refused as a create token (also from a file)', () async {
+    final dir = await Directory.systemTemp.createTemp('relay-bin-');
+    addTearDown(() => dir.delete(recursive: true));
+    for (final placeholder in ['CHANGE_ME', 'replace-with-a-long-random-token']) {
+      expect(await exitOf(['--data', dir.path], env: {'BW_RELAY_CREATE_TOKEN': placeholder}), 64, reason: placeholder);
+      final file = File('${dir.path}/token')..writeAsStringSync('$placeholder\n');
+      expect(await exitOf(['--data', dir.path, '--create-token', file.path]), 64, reason: 'file $placeholder');
+    }
+  });
+
+  test('BW_RELAY_TRUST_PROXY: 1/true turn it on, 0/false/empty off, anything else is a usage error', () async {
+    final dir = await Directory.systemTemp.createTemp('relay-bin-');
+    addTearDown(() => dir.delete(recursive: true));
+    for (final bad in ['yes', 'on', 'TRUE', '2', 'enabled', ' 1']) {
+      expect(await exitOf(['--data', dir.path], env: {'BW_RELAY_TRUST_PROXY': bad}), 64, reason: 'value "$bad"');
+    }
+    final (p, _, _) = await start(['--host', '127.0.0.1', '--port=0', '--data', dir.path], env: {'BW_RELAY_TRUST_PROXY': 'true'});
+    addTearDown(p.kill);
+    await stdoutOf[p]!.saw('X-Forwarded-For');
+    p.kill(ProcessSignal.sigterm);
+    await p.exitCode.timeout(const Duration(seconds: 30));
+    final (q, _, _) = await start(['--host', '127.0.0.1', '--port=0', '--data', dir.path], env: {'BW_RELAY_TRUST_PROXY': '0'});
+    addTearDown(q.kill);
+    await stdoutOf[q]!.saw('creation is OPEN');
+    expect(stdoutOf[q]!.lines.any((l) => l.contains('X-Forwarded-For')), isFalse);
+    q.kill(ProcessSignal.sigterm);
+    await q.exitCode.timeout(const Duration(seconds: 30));
+  });
+
   test('without --create-token the startup log says creation is open', () async {
     final dir = await Directory.systemTemp.createTemp('relay-bin-');
     addTearDown(() => dir.delete(recursive: true));

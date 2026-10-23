@@ -58,6 +58,20 @@ void main() {
       expect((await h.putData(w2, 'dev1', 5, 'a')).statusCode, 403);
     });
 
+    test('a refusal drains a large upload, so the client sees the 403 / 401 / 400, not a reset', () async {
+      final h = await freshHarness(createToken: token);
+      final big = List<int>.filled(8 * 1024 * 1024, 7);
+      final denied = await h.send('PUT', '/v2/w/$w1/d/dev1/1', key: keyA, body: big);
+      expect(denied.statusCode, 403);
+      expect(jsonDecode(denied.body), {'error': 'createToken'});
+      final open = await freshHarness();
+      final noPub = await open.send('PUT', '/v2/w/$w1/d/dev1/1', key: keyA, body: big, withPub: false);
+      expect(noPub.statusCode, 401);
+      final badPub = await open.send('PUT', '/v2/w/$w1/d/dev1/1', key: keyA, body: big, headers: {'x-bw-pub': 'short'});
+      expect(badPub.statusCode, 400);
+      expect(open.relay.walletCount, 0);
+    });
+
     test('the token is never logged', () async {
       final h = await freshHarness(createToken: token);
       await h.putData(w1, 'dev1', 1, 'one');

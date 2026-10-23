@@ -69,6 +69,16 @@ Forward **TCP 443** to the server. For the certificate, Let's Encrypt must reach
 - 443 only: leave 80 unforwarded. Caddy then gets the certificate with the TLS-ALPN challenge on 443 alone (the redirect just is not
   reachable from outside).
 
+**Firewall on the server itself.** On Fedora and other firewalld systems the host drops incoming 80/443 until you allow them (the
+router forward alone is not enough):
+
+```sh
+sudo firewall-cmd --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload
+```
+
+(With the high-port variant below use `--add-port=8080/tcp --add-port=8443/tcp` instead; with 443 only, `--add-service=https` alone is
+enough.) Check with `sudo firewall-cmd --list-services`.
+
 Do **not** forward 8787 or any other port. The relay container publishes no port at all. Rootless Podman cannot bind ports below
 1024 by default: either `sudo sysctl -w net.ipv4.ip_unprivileged_port_start=80` (and put it in `/etc/sysctl.d/`), or change
 the two `PublishPort=` lines in `bw-relay-caddy.container` to `8080:80` / `8443:443` and forward external 80/443 to those on the router.
@@ -88,10 +98,17 @@ cp relay/deploy/bw-relay.env.example ~/.config/budget-wallet-relay/bw-relay.env
 chmod 600 ~/.config/budget-wallet-relay/bw-relay.env
 ```
 
+Create the wallet-creation token as a Podman secret (it is mounted into the relay container only, not into Caddy). The command
+prints the token once: save it in your password manager, the app asks for it when it creates the wallet on this relay.
+
+```sh
+token=$(openssl rand -base64 24) && printf %s "$token" | podman secret create bw-relay-create-token - && echo "$token"
+```
+
 Edit `~/.config/budget-wallet-relay/bw-relay.env` (read by both containers):
 - `BW_RELAY_DOMAIN=<your name from 5.1>`: the one place the name is set (the file holds the placeholder `wallet.example.org`). Caddy
   gets the certificate for it, and the relay uses it as its public host (the host that signed requests must be addressed to).
-- `BW_RELAY_CREATE_TOKEN=<a long random secret>` (make one with `openssl rand -base64 24`), and keep `BW_RELAY_TRUST_PROXY=1`.
+- keep `BW_RELAY_TRUST_PROXY=1`. The token is not in this file (the secret above).
   Optional: `BW_RELAY_MAX_WALLETS`, `BW_RELAY_MAX_BYTES`.
 
 `--format docker` keeps the image's HEALTHCHECK (the quadlet sets the same check anyway). Then start both (Caddy needs the relay)
@@ -112,17 +129,21 @@ curl -sI https://<your name>/v2/health             # HTTP/2 200 once the certifi
 ```
 
 If the certificate is not issued, read `journalctl --user -u bw-relay-caddy`: usually the name does not point at the router yet,
-or 443 (and 80) are not forwarded.
+or 443 (and 80) are not forwarded on the router, or the server's firewall blocks them (`sudo firewall-cmd --list-services` should
+list `http` and `https`; see 5.2). If `bw-relay` does not start with "no secret with name", create the token secret first (5.3). Test
+from outside your network (mobile data), not from inside it: many routers do not loop a forwarded port back to the LAN.
 
 ### 5.4 What is protected
 - **Create token.** The relay refuses to create a wallet unless the request carries the token (403 otherwise). Only the device that
   creates the wallet on the relay needs it (the app asks once); devices that join an existing wallet and every later sync do not.
-  Without `BW_RELAY_CREATE_TOKEN` anyone who finds the address could fill the relay with wallets: that is development mode only, and
-  the relay says so in its log at start (`wallet creation is OPEN`). The token is a shared secret between you and the relay, not part
+  The token is a Podman secret (`bw-relay-create-token`), visible only inside the relay container. Without it anyone who finds the
+  address could fill the relay with wallets: that is development mode only, and the relay says so in its log at start
+  (`wallet creation is OPEN`); the template values `CHANGE_ME` and `replace-with-a-long-random-token` are refused as a token. The token is a shared secret between you and the relay, not part
   of the wallet key.
 - **Limits.** The relay rate-limits per client address (Caddy passes the real one in `X-Forwarded-For`; the relay trusts that only
   because of `BW_RELAY_TRUST_PROXY=1`, which must never be set when the relay is reachable directly), caps request bodies (Caddy
-  64 MiB, the same as the relay) and keeps no access log.
+  64 MiB, the same as the relay) and keeps no access log; Caddy's error log (which would hold the request, client address and
+  headers on a 502) is switched off.
 - **Container.** Read-only root file system except `/data`, all capabilities dropped, no new privileges, a non-root user.
 - **Backup.** Stop the relay (or snapshot the file system) and copy `/srv/budget-wallet-relay`. It holds only sealed files and the
   wallets' public keys, but losing it means every device must upload its history again; keep it in your normal backup. Restoring is

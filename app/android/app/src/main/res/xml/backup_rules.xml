@@ -6,4 +6,8 @@
     <exclude domain="database"/>
     <exclude domain="sharedpref"/>
     <exclude domain="external"/>
+    <exclude domain="device_root"/>
+    <exclude domain="device_file"/>
+    <exclude domain="device_database"/>
+    <exclude domain="device_sharedpref"/>
 </full-backup-content>

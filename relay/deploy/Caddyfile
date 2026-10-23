@@ -1,6 +1,15 @@
 # Caddy for the Budget Wallet relay. BW_RELAY_DOMAIN (bw-relay.env) is the one setting: the public name of this server.
 # Caddy gets and renews the certificate itself and answers plain http:// on port 80 with a redirect to https://.
 # No access log is configured on purpose: request paths hold wallet ids and Caddy would log client addresses.
+# Caddy's error logger (http.log.error, written on every 5xx such as a 502 while the relay restarts) would log the whole request
+# (client address, full URI with the wallet id, all headers); it is dropped. Checked against a stopped upstream: the default
+# Caddyfile logs those fields, this one logs nothing for the request. Startup and certificate messages stay.
+{
+	log default {
+		exclude http.log.error
+	}
+}
+
 {$BW_RELAY_DOMAIN} {
 	# Same as the relay's largest body (a 64 MiB snapshot); bigger is refused here with 413.
 	request_body {

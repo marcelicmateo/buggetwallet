@@ -68,6 +68,25 @@ void main() {
     expect(File('${keyDir.path}/wallet.key.tmp').existsSync(), isFalse);
   }, skip: posix);
 
+  test('reading an older install tightens its open folder and key file (no write needed)', () async {
+    final key = VaultKey.generate();
+    await keyDir.create();
+    final file = File('${keyDir.path}/wallet.key')..writeAsStringSync(await key.toText());
+    await Process.run('chmod', ['755', keyDir.path]);
+    await Process.run('chmod', ['644', file.path]);
+    expect(mode(keyDir.path), '755');
+    expect((await KeyStore.read())!.bytes, key.bytes);
+    expect(mode(keyDir.path), '700');
+    expect(mode(file.path), '600');
+  }, skip: posix);
+
+  test('reading with no key file leaves the folder alone and gives null', () async {
+    await keyDir.create();
+    await Process.run('chmod', ['755', keyDir.path]);
+    expect(await KeyStore.read(), isNull);
+    expect(mode(keyDir.path), '755');
+  }, skip: posix);
+
   test('the key file holds only the key text, forget deletes it, read then gives null', () async {
     final key = VaultKey.generate();
     await KeyStore.write(key);

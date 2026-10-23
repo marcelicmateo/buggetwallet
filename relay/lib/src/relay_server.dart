@@ -492,12 +492,12 @@ class Relay {
     } else {
       // An unknown wallet: refuse what cannot create it before reading (and buffering) a body. Checked again in the lock.
       // The creation token is a header check, so it comes first: a client without it learns nothing about capacity.
-      _checkCreateToken(req);
+      if (!_createTokenOk(req)) await _refuseBody(req, maxFileBytes, 403, 'createToken');
       if (seq != 1) await _refuseBody(req, maxFileBytes, 422, 'seq beyond last + 1');
       if (_wallets.length >= maxWallets) await _refuseBody(req, maxFileBytes, 507, 'relay full');
       final h = _header(req, 'x-bw-pub', 'X-BW-Pub');
-      if (h == null) throw _HttpError(401, 'unknown wallet without X-BW-Pub');
-      if (decodeBase64Url(h, 32) == null) throw _HttpError(400, 'bad X-BW-Pub');
+      if (h == null) await _refuseBody(req, maxFileBytes, 401, 'unknown wallet without X-BW-Pub');
+      if (decodeBase64Url(h, 32) == null) await _refuseBody(req, maxFileBytes, 400, 'bad X-BW-Pub');
       pub = h;
     }
     final body = await _readBody(req, maxFileBytes, info);
@@ -538,13 +538,13 @@ class Relay {
     });
   }
 
-  /// 403 `createToken` unless creation is open ([createToken] null) or the request carries the token.
-  /// Constant-time compare; the token is never logged.
-  void _checkCreateToken(HttpRequest req) {
+  /// Whether creation is open ([createToken] null) or the request carries the token (constant-time compare; the token is
+  /// never logged). The caller answers 403 `createToken` otherwise, draining the body first so the client sees the status.
+  bool _createTokenOk(HttpRequest req) {
     final want = createToken;
-    if (want == null) return;
+    if (want == null) return true;
     final got = _header(req, createTokenHeader, 'X-BW-Create-Token');
-    if (got == null || !constantTimeEquals(got, want)) throw _HttpError(403, 'createToken');
+    return got != null && constantTimeEquals(got, want);
   }
 
   /// The first accepted `PUT d/...` of a wallet creates it and stores its public key [pub] (trust on first use).

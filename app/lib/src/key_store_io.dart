@@ -50,7 +50,12 @@ class KeyStore {
       text = await const FlutterSecureStorage().read(key: _name);
     } else {
       final f = await _file();
-      if (await f.exists()) text = (await f.readAsString()).trim();
+      if (await f.exists()) {
+        // An install from before the private modes: tighten the folder and the file on the next read, not only on the next write.
+        await _chmod('700', f.parent.path, 'key.dirChmodFailed');
+        await _chmod('600', f.path, 'key.chmodFailed');
+        text = (await f.readAsString()).trim();
+      }
     }
     t.done({'store': _store, 'found': text != null && text.isNotEmpty});
     if (text == null || text.isEmpty) return null;

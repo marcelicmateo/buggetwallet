@@ -17,7 +17,7 @@ Usage: relay --data <dir> [options]
                       X-BW-Create-Token (403 otherwise). Env BW_RELAY_CREATE_TOKEN_FILE (file) or BW_RELAY_CREATE_TOKEN
                       (the token itself, at least 16 characters). Not set = anyone can create a wallet (dev mode).
   --trust-proxy       take the client address from the last X-Forwarded-For hop (only behind a reverse proxy that is the
-                      sole way to reach the relay)                env BW_RELAY_TRUST_PROXY=1
+                      sole way to reach the relay)                env BW_RELAY_TRUST_PROXY=1 (or 0)
   --public-host <name>  the name clients use to reach the relay (e.g. the domain behind Caddy); the host in signed requests must
                       match it. Default: the request's Host header   env BW_RELAY_PUBLIC_HOST (or BW_RELAY_DOMAIN)
   --health-check      ask http://127.0.0.1:<port>/v2/health and exit 0 (healthy) or 1; for the container HEALTHCHECK
@@ -64,7 +64,7 @@ class _Config {
     maxWallets = _int('max-wallets', one('max-wallets', 'BW_RELAY_MAX_WALLETS'), 16, min: 1);
     maxBytes = _int('max-bytes', one('max-bytes', 'BW_RELAY_MAX_BYTES'), 1024 * 1024 * 1024, min: 1);
     healthCheck = on.contains('health-check');
-    trustProxy = on.contains('trust-proxy') || const {'1', 'true'}.contains(env['BW_RELAY_TRUST_PROXY']);
+    trustProxy = on.contains('trust-proxy') || _envSwitch('BW_RELAY_TRUST_PROXY', env['BW_RELAY_TRUST_PROXY']);
     final host0 = (one('public-host', 'BW_RELAY_PUBLIC_HOST') ?? env['BW_RELAY_DOMAIN'])?.trim().toLowerCase();
     if (host0 != null && host0.isNotEmpty && !RegExp(r'^[a-z0-9.-]+(:[0-9]{1,5})?$').hasMatch(host0)) {
       throw _UsageError('--public-host must be a host name (optionally with :port), without scheme or path');
@@ -91,6 +91,16 @@ class _Config {
   late final String? publicHost;
   late final String? createToken;
 
+  /// An on/off environment setting: 1/true = on, 0/false/unset/empty = off; any other value is a usage error (never silently off).
+  static bool _envSwitch(String name, String? raw) {
+    if (raw == null || raw.isEmpty || raw == '0' || raw == 'false') return false;
+    if (raw == '1' || raw == 'true') return true;
+    throw _UsageError('$name must be 1, true, 0 or false');
+  }
+
+  /// Values from the shipped templates: refused so a copied-but-unedited file never goes live.
+  static const _placeholderTokens = {'CHANGE_ME', 'replace-with-a-long-random-token'};
+
   /// The token from [file] (trimmed) or, without a file, from [inline]; null when neither is set.
   static String? _token(String? file, String? inline) {
     String? t = inline;
@@ -103,6 +113,7 @@ class _Config {
     }
     if (t == null) return null;
     t = t.trim();
+    if (_placeholderTokens.contains(t)) throw _UsageError('the create token is still the placeholder from the template: set your own');
     if (t.length < 16) throw _UsageError('the create token must have at least 16 characters');
     return t;
   }

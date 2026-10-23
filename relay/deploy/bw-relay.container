@@ -10,9 +10,12 @@ Network=bw-relay.network
 # The only writable place. The container user (uid 10001) is mapped to your user, so the folder stays yours.
 Volume=/srv/budget-wallet-relay:/data:z
 UserNS=keep-id:uid=10001,gid=10001
-# BW_RELAY_DOMAIN (also the relay's public host), BW_RELAY_TRUST_PROXY, BW_RELAY_CREATE_TOKEN, limits: see bw-relay.env.example
+# BW_RELAY_DOMAIN (also the relay's public host), BW_RELAY_TRUST_PROXY, limits: see bw-relay.env.example
 # (copy to bw-relay.env, chmod 600). The relay reads BW_RELAY_DOMAIN as its --public-host unless BW_RELAY_PUBLIC_HOST is set.
 EnvironmentFile=%h/.config/budget-wallet-relay/bw-relay.env
+# The wallet-creation token is a Podman secret (podman secret create bw-relay-create-token -), mounted as an environment variable
+# into this container only: Caddy, which shares bw-relay.env, never sees it. Create the secret before the first start.
+Secret=bw-relay-create-token,type=env,target=BW_RELAY_CREATE_TOKEN
 ReadOnly=true
 DropCapability=ALL
 NoNewPrivileges=true
