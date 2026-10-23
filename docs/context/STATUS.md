@@ -244,6 +244,15 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   Today's safe-to-spend, then "Paid by…" the bank row and check the receipt mark in Spending; scan the same slip next
   month → "Add as new bill"; open the photo/PDF on the laptop after a sync; set a return-by date and wait for the 09:00
   reminder (no payee or amount in it); install the 44 MB APK from the `ci` run over the old app.
+- Owner checks after Stage H (hardening): set up the relay away from home per `docs/setup.md` §5 (your domain or a
+  dynamic-DNS name, router forward of 443 and 80, firewalld step, `podman secret create bw-relay-create-token`, the two
+  quadlets) → on the phone Plan › Sync: `https://<domain>` address, the creation token, Test connection → Sync now; the
+  fingerprint shows under the address. Type a public `http://` address → refused with the https hint (a home address
+  still works). Open Show wallet key → QR first, a screenshot is blocked and the recent-apps thumbnail is blank. Set the
+  phone's clock back 2 h and add an expense → the clock dialog; set it right again. Today after a payday you have not
+  started yet → "Left this pay period", the "Start new period" panel (one tap, even after missed months). A card payment
+  in another currency → "Other currencies, not counted: … spent" on Today and Spending. Key rotation drill once
+  (`docs/TECHNICAL_SPEC.md` §9 limit 2: back up, clear storage, new wallet, "Restore a backup made with another key…").
 - Build order (owner 2026-10-22: every feature first, the owner tests last): future spending (done) → bills database
   (done) → outside reviews (done, `docs/review/`) → Stage G foundation (done 2026-10-23) → **Stage H hardening → Stage I UI quick wins → M6 owner live test**
   (plan with every review KEEP/CHANGE placed, delegation, owner decisions D1–D7 in `PATH_FORWARD.md`; queue in `PIPELINE.md` Stage G/H/I).

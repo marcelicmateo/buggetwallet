@@ -235,16 +235,17 @@ Design consequences a reviewer should know:
   devices both count.
 - A device's clock far in the future is accepted as is (its writes win until real time catches up). Known limit.
 
-### Relay protocol v2
+### Relay protocol (api 3)
 
 HTTP, JSON for metadata, octet streams for files. Every request under `/v2/w/<wid>/` is signed: `X-BW-Sig` = Ed25519
-over `bw-relay-v2\n<METHOD>\n<path>\n<X-BW-Covers>\n<sha256(body)>\n<X-BW-Time>`, window ± 5 min, client clock offset
-learned from the relay's `Date` header and capped at 24 h. Full specification: `docs/context/RELAY_PROTOCOL.md`.
+over `bw-relay-v3\n<METHOD>\n<host>\n<path>\n<X-BW-Covers>\n<sha256(body)>\n<X-BW-Time>`, window ± 5 min, client
+clock offset learned from the relay's `Date` header and capped at 24 h. `GET state` carries a random relay `instance`
+id per wallet; a new one means "first connect". Full specification: `docs/context/RELAY_PROTOCOL.md`.
 
 | Endpoint | Semantics |
 |---|---|
 | `GET state` | Per device: first and last seq, last seen, acks; current and previous snapshot; blob counts |
-| `PUT d/<device>/<seq>` | Store a sealed file; never overwritten (same bytes 200, other bytes 409); no gaps (422); pruned (410); ≤ 16 MiB |
+| `PUT d/<stream>/<seq>` | Store a sealed file; never overwritten (same bytes 200, other bytes 409); no gaps (422); pruned (410); ≤ 16 MiB; the first file of a new wallet needs the creation token when the relay has one (403) |
 | `PUT ack/<device>` | What this device has applied of each peer; only grows |
 | `PUT snapshot/<id>` | Full-state snapshot with `X-BW-Covers`; must dominate the current one |
 | `PUT/GET/DELETE blob/<hash>` | Content-addressed sealed bill files; hash of body checked; counted toward the wallet byte limit |
@@ -253,12 +254,33 @@ Every mutating endpoint is idempotent or monotonic, so a replay inside the signa
 16 wallets, 1 GiB per wallet, 20 req/s per address, 32 MiB in flight per address. Storage is plain files plus a
 `meta.json` per wallet with atomic writes; the relay rebuilds counts from disk on start.
 
+**Version numbers that must agree** (one table, so a release note can say which ones moved):
+
+| Constant | Value | Where | Changes when | Who notices |
+|---|---|---|---|---|
+| Relay API | 3 | `apiVersion`, health and state `{"api":3}`, paths stay `/v2/` | endpoint or signature semantics change | client: `olderApi` / `newerApi` with a message; nothing uploaded or read |
+| Sealed-file magic | `BWOP2` (reads `BWOP1`) | `vault.dart` | the sealed layout or associated data changes | `unseal`: `newerFormat` → the file is quarantined until the app is updated |
+| Payload version | 1 | `backupVersion`, `"v"` in snapshots and backups | the JSON op envelope changes | backup restore refuses a newer one |
+| Sync reader version | 2 | `syncReaderVersion` | how a file's ops are read | part of the build string that retries a quarantined file once |
+| Schema version | 8 | `WalletRepo.schemaVersion` | an entity or synced field is added, or settings change shape | cursors cleared once on upgrade → replay; snapshot id tag decides "this schema or newer" |
+| App version | `pubspec.yaml` | `appVersion` | every release | in the build string only |
+
+Policy: update the relay and every device together when the relay API changes (an older app stops with "update the
+app" and syncs again once updated); otherwise update every device before the relay prunes a silent one (90 days). A
+schema bump replays every peer's files once (`docs/release-notes-template.md`).
+
 ### Sync engine
 
 `SyncEngine.run` per trigger (start, resume, 3 s after a change, every 5 min, manual): read state → upload queued
 blobs → upload outbox as `last + 1` (split into ≤ 8 MiB parts, outbox cleared only after every part is stored) →
 apply each peer's files in order from its cursor → ack → if caught up: run matching and pairing once, write a snapshot
-if due, self-heal a stuck peer after 24 h. First run on an empty relay uploads the full state. Transport is an
+if due, self-heal a stuck peer after 24 h. First run on an empty relay uploads the full state. A device writes one
+stream at a time (`<device id>` or `<device id>-<n><tag>`); any sign that its stream is not its own alone (the relay
+holds fewer or more of its files than it sent, a 409 on its own seq) moves it to a fresh stream with its whole state,
+and every stream it is not writing is read like a peer's, so a relay restored from an older copy, a restored database
+or a cloned install heal on the next run. Acks only grow, so a device that sees its own acks lower on the relay knows
+the relay was rolled back and reads everything again. Peer files whose clocks are more than an hour ahead are held
+(`clockDrift`); an owner edit is refused while this device's own clock has gone back by more than an hour. Transport is an
 interface (`SyncTransport`) with an HTTP implementation and an in-memory one that enforces the same relay rules for
 tests and simulations.
 
@@ -455,26 +477,26 @@ carry an "Unsure" mark until checked.
 Budget Wallet sits between the envelope budgeters (YNAB, Actual Budget) and the self-hosted finance trackers (Firefly
 III): it has the daily "what can I spend" of the first group and the data ownership of the second, plus a
 bills-with-documents layer none of them ship. It deliberately lacks bank connections and multi-user features. The
-comparison is from the products' public feature lists as known in mid-2026 and has not been re-verified for this
-document; treat it as approximate.
+comparison is from the products' public feature lists as known in mid-2026, corrected after the outside feature-parity
+review (`docs/review/FEATURE_PARITY_REVIEW.md` §2, October 2026, which has the fuller matrix); treat it as approximate.
 
 | Capability | Budget Wallet | YNAB | Actual Budget | Firefly III | Monarch | Bank app (typical) |
 |---|---|---|---|---|---|---|
 | Daily safe-to-spend from a payday plan | Yes, the core number | Age of money, category balances | Category balances | No | Cash-flow forecast | Sometimes a monthly view |
-| Bank data | File import (PBZ, Revolut), deterministic ids | Direct import (US/CA/UK), file import | Direct (SimpleFIN/GoCardless), file | Direct (Nordigen/Salt Edge), file | Direct (Plaid) | Own accounts only |
-| Recurring bills detected and reserved | Yes, owner confirms, reserved until paid | Scheduled transactions | Schedules | Bills + rules | Recurring detection | Standing orders |
+| Bank data | File import (PBZ, Revolut), deterministic ids | Direct import (US/CA/UK, more European banks since 2025), file import | Direct (GoCardless, SimpleFIN, Pluggy), file | Direct (Nordigen/Salt Edge), file | Direct (Plaid) | Own accounts only |
+| Recurring bills detected and reserved | Monthly only (3+ payments, 30 ± 3 days, ± 10 %); owner confirms, reserved until paid | Scheduled transactions | Schedules | Bills with amount ranges, any frequency | Recurring detection | Standing orders |
 | Planned costs from calendar events | Yes, device calendars + `.ics`, suggested amounts | No | No | No | No | No |
 | Bills with documents (receipt QR, slip barcode, PDF, OCR) | Yes, line items, encrypted file storage, warranty/return reminders | No | No | Attachments on transactions | No | Some (e-bills) |
 | Multi-device sync | Self-hosted relay, E2E encrypted, offline-first | Cloud | Self-hosted server or cloud, E2E option | Self-hosted server | Cloud | Cloud |
-| Local data encryption | Encrypted SQLite, key derived from wallet key | n/a (cloud) | Optional | Server-side | n/a | n/a |
+| Local data encryption | Encrypted SQLite, key derived from wallet key | Cloud, encrypted at rest server-side | Optional | Server-side | n/a | n/a |
 | Goals / sinking funds | Goals with deadlines, paid once per period | Targets | Goals (templates) | Piggy banks | Goals | Savings pots |
 | Wishlist with cooling-off | Yes, 72 h, affordability from safe-to-spend | No | No | No | No | No |
 | Weekly review habit | Guided 4-step review, streak | Reports | Reports | Reports | Review emails | No |
 | Budgets per category with pace | Monthly, 6-month average suggestions, pace vs. month elapsed | Core feature | Core feature | Budgets | Budgets | Spending caps |
-| Rules / categorisation | Importer hints + merchant rules learned on tap, never amount-based | Payee rules | Rules | Rules engine | Rules | Merchant category |
+| Rules / categorisation | Importer hints + merchant rules learned on tap; never reclassified on amount alone (one named exception: a hand-added expense is matched to a bank row of equal amount within 3 days that the adding device had not seen) | Payee rules | Rules | Rules engine | Rules | Merchant category |
 | Platforms | Android, Linux, web (localhost) | iOS, Android, web | Web, desktop (Electron), mobile PWA | Web (self-hosted) | iOS, Android, web | iOS, Android |
-| Multi-currency | Single currency (EUR), exchange rows handled as transfers | Yes | Yes | Yes | Yes | Yes |
-| Shared household users | Single wallet, any number of the owner's devices | Shared plans | Shared servers | Multi-user | Household | Joint accounts |
+| Multi-currency | Single currency: rows in another currency are left out of every sum and shown as "not counted"; exchange rows are transfers | Yes | Yes | Yes | Yes | Yes |
+| Shared household users | One wallet per person, any number of their devices; a couple uses the two-wallet recipe below | Shared plans | Shared servers | Multi-user | Household | Joint accounts |
 | Price | Self-hosted, free | Subscription | Free, open source | Free, open source | Subscription | Free |
 
 **Ahead:** the combination of a payday-based daily number, reserved future costs and the owner-confirms rule produces
@@ -486,6 +508,12 @@ only ciphertext and a public key, including the bill documents.
 currency and single household; two bank formats; no reports beyond the Spending view and CSV export; Android only on
 mobile.
 
+**Household recipe (no shared wallet by design).** The op log has no user identity, so two people never share one
+wallet. A couple runs two wallets with two keys on one relay (each wallet is a separate wallet id; the relay holds 16).
+Each person imports their own bank files. A shared bill is imported into the wallet of whoever pays it, and the other
+person adds their share as a hand-added expense or a planned cost in their own wallet. Nothing crosses between the two
+wallets; that is the point.
+
 ## 9. Security and privacy
 
 The security goal is narrow and testable: **nobody but the holder of the wallet key can read or change the owner's
@@ -496,33 +524,45 @@ designed to be safe to expose.
 
 | Adversary | Can see or do | Cannot |
 |---|---|---|
-| Network sniffer on the LAN (plain `http://` to the relay) | Wallet id, device ids, sequence numbers, sizes, times, sealed bytes; replay a request unchanged within 5 min (idempotent, so no effect); block or delay sync | Read content, forge or alter files, ack, prune or delete anything, learn the key |
-| Someone who controls the relay or steals its disk | Everything above plus: drop, withhold, roll back or delete files and blobs; lie in the state | Read, forge or alter sealed content; sign requests to another relay; derive the key |
-| Someone who wipes the relay before the owner reconnects | Squat the wallet id with their own public key (devices then get 401: denial of service) | Read anything; the owner points devices at a fresh relay and they re-upload |
-| Someone with the phone unlocked | Use the app | Export the key without seeing the "Show wallet key" screen; read the database file from another app (sandbox + encryption) |
+| Network observer (TLS through the Caddy sidecar by default; plain `http://` only in dev/LAN mode) | With TLS: that a device talks to the relay host, when and how much. In plain-HTTP mode also wallet id, device ids, seqs, sizes, sealed bytes, and replaying a request unchanged within 5 min (idempotent, so no effect) | Read content, forge or alter files, ack, prune or delete anything, learn the key; replay a request against another relay (the host is in the signed text, `bw-relay-v3`) |
+| Someone who controls the relay or steals its disk | Everything above plus: drop, withhold, roll back or delete files and blobs; lie in the state; correlate the wallet's activity (see metadata below) | Read, forge or alter sealed content; serve one file, snapshot or backup in place of another (each is sealed with associated data naming what it is, `BWOP2`); sign requests to another relay; derive the key |
+| Someone who wipes the relay before the owner reconnects | Squat the wallet id only if they also hold the relay's creation token (devices then get 401: denial of service) | Read anything; create wallets without the token; the owner points devices at a fresh relay and they re-upload (a new relay instance id makes every device treat it as a first connect) |
+| Someone with the phone unlocked | Use the app | Export the key without seeing the "Show wallet key" screen; capture that screen in a screenshot or the recents thumbnail (`FLAG_SECURE` while it is open); read the database file from another app (sandbox + encryption); carry the database off by Android backup or device transfer (`allowBackup` off) |
 | Someone with a laptop image or a stolen disk | Read the key file in the app support directory (desktop: file permissions only) | — see known limits |
 | A malicious bill file or calendar file | Attempt parser abuse | Crash or hang the app: readers never throw, have size caps, inflate caps, step and op budgets; XML external entities and DOCTYPE are refused; PDF text runs off the UI isolate |
 | Repository reader (code is on GitHub) | Read all code, tests, synthetic fixtures | Learn any real figure: fixtures are generated; personal numbers live only in the owner's wallet |
+| A second install with the same device id (a copied app directory or database) | Write under that device id | Go unnoticed: the device id lives next to the key, per install, and a 409 on a device's own sequence number shows "another install uses this device id" instead of retrying |
+| A benign device with a wrong clock | Make its own edits sort as newer than they are, up to an hour | Push every device's clock into the future: files whose newest clock is over an hour ahead are held (`clockDrift`) until the clock is right, and a device whose wall clock is that far behind its stored clock refuses to write |
+| The owner's own lost device, still holding the key | Everything the key allows, on any relay | Be cut off at the relay without rotating the key (no per-device keys yet): see key rotation below |
 
 ### Cryptography
 
 - **Content:** XChaCha20-Poly1305 (via `package:cryptography`), fresh 24-byte nonce per file, 16-byte tag; the magic
-  `BWOP1` precedes the nonce. Same construction for sync files, snapshots, backups and bill blobs.
+  `BWOP2` precedes the nonce, and the associated data names the use (`bw-sync-file\n<device>\n<seq>`,
+  `bw-snapshot\n<id>`, `bw-backup`, `bw-blob`, the web key wrap), so a file cannot stand in for another. `BWOP1`
+  (no associated data) from older builds is still read. Plaintext after inflation is capped at 256 MiB.
 - **Key derivation:** HKDF-SHA256 with empty salt and distinct info strings (`bw-local-db-v1`, `bw-relay-id-v1`,
   `bw-relay-sign-v1`); the wallet key itself is 32 random bytes from the platform CSPRNG.
-- **Request authentication:** Ed25519 signatures over method, path, covers header, body SHA-256 and time; ± 5 min
-  window; the relay stores the public key on wallet creation (trust on first use) and verifies every later request
+- **Request authentication:** Ed25519 signatures over method, relay host, path, covers header, body SHA-256 and time
+  (`bw-relay-v3`); ± 5 min window; the relay stores the public key on wallet creation (trust on first use) and verifies every later request
   with it. The signed text is specified byte-for-byte in `docs/context/RELAY_PROTOCOL.md`; the relay's tests use a
   hand-written signer from that text, not the client library.
-- **Local database:** SQLite3 Multiple Ciphers with a raw 32-byte key (no KDF inside SQLite), WAL disabled during
+- **Local database:** SQLite3 Multiple Ciphers with a raw 32-byte key (no KDF inside SQLite), the cipher pinned with
+  `PRAGMA cipher` before every `PRAGMA key` (a library default change cannot alter the format), WAL disabled during
   rekey, crash-safe conversion with a side copy that is deleted after verification.
+- **Memory:** Dart cannot zero memory, so key bytes stay in the heap for the life of the process. This is inherent to
+  the platform.
 - **Web:** the key is wrapped under PBKDF2-HMAC-SHA256 (310,000 iterations) with a per-browser salt; the unwrapped
-  key lives in session memory; "Forget this browser" wipes it. Database in IndexedDB through the same encrypted VFS.
+  key text lives in `sessionStorage` (readable by any script on the origin and inherited by tabs opened from the page;
+  acceptable while web is localhost only, P18 moves it to memory); "Forget this browser" wipes it. Database in IndexedDB through the same encrypted VFS.
 
 ### What leaves the device
 
 Only to the owner's relay: sealed files, sealed snapshots, sealed blobs, the wallet id, device ids, sequence numbers,
-acks, signatures and the public key. Nothing to any other host. `.ics` links the owner adds are fetched from the host
+acks, signatures and the public key. From these the relay can correlate a stable wallet id, device count, activity
+rhythm, edit volume and blob sizes (it can tell a receipt photo was just taken), and link the wallet across every
+relay the owner uses, because the wallet id is derived from the key alone. Fine for a self-hosted relay; if a relay is
+ever shared, derive the wallet id per relay (HKDF salted with the relay's instance id). Nothing to any other host. `.ics` links the owner adds are fetched from the host
 they name (60 s cap, 2 MB cap, https never downgraded, an `http://` link shows a warning). There is no analytics, crash
 reporting or update check.
 
@@ -530,7 +570,8 @@ reporting or update check.
 
 | Permission | Why | When asked |
 |---|---|---|
-| INTERNET, cleartext traffic | Relay on LAN/VPN by IP, `.ics` links | install |
+| INTERNET | Relay (HTTPS on the owner's domain; `http://` accepted only for loopback, private ranges and `.local`, the app refuses it for public hosts), `.ics` links | install |
+| (no backup) | `allowBackup="false"` and data-extraction rules exclude everything; only system CAs are trusted | — |
 | POST_NOTIFICATIONS | Nudges, heads-ups, bill reminders | when the owner turns nudges on |
 | RECEIVE_BOOT_COMPLETED | Re-schedule notifications after reboot | install |
 | READ_CALENDAR, WRITE_CALENDAR | Read device calendars; WRITE is declared because the plugin's permission request needs the whole group; the app never writes (reviewed and tested) | when the owner taps "Allow calendar access" |
@@ -554,17 +595,32 @@ the owner starts it. Builds are reproducible in a rootless Podman image.
 
 ### Known security limits
 
-1. **Desktop key at rest** is a private file, not a keystore; a stolen unencrypted laptop disk exposes the key.
-   Mitigation: full-disk encryption on the laptop (outside the app).
-2. **Relay over plain HTTP** exposes metadata (who syncs, when, how much) and allows denial of service by anyone on
-   the network; the recommended setup is a VPN (WireGuard) or a TLS reverse proxy.
-3. **TOFU on wallet creation:** a wiped relay can be squatted before the owner reconnects (denial of service only).
-4. **Losing the key loses everything** by design; the app prompts once to save it in a password manager and nags on
+1. **Desktop key at rest** is a private file (directory 0700, written to a temporary name, set to 0600, then renamed),
+   not a keystore; a stolen unencrypted laptop disk exposes the key. Mitigation: full-disk encryption on the laptop.
+2. **No key rotation flow and no per-device revocation.** The wallet id and the signing key are derived from the wallet
+   key, so a lost device that still holds the key cannot be cut off at the relay. Procedure until per-device keys
+   exist: on a device you trust, Plan › Backup "Back up now" (sealed with the old key); start fresh on that device
+   (Android: Settings › Apps › Budget Wallet › Clear storage; Linux: remove the app's data folder; web: "Forget this
+   browser"), then "Start a new wallet" (new key); Plan › Backup "Restore a backup made with another key…" with the old key typed or scanned;
+   join every other device you still have with the new key; delete the old wallet's folder on the relay. The lost
+   device keeps the data it had but sees nothing newer.
+3. **Restoring the relay's data folder from an older copy is the one dangerous operation.** Devices detect it (their
+   own files missing, or their acks lower than they stored them) and upload and read everything again, but a device
+   that never syncs after the restore leaves its newer edits only on its own disk. Prefer a fresh, empty relay: every
+   device then treats it as a first connect (new instance id) and re-uploads.
+4. **Plain HTTP** is a dev/LAN mode only; in it the network sees metadata and can deny service. The deployed path is
+   the Caddy sidecar with Let's Encrypt on the owner's domain (`docs/setup.md` §5).
+5. **TOFU on wallet creation:** with the creation token set, only someone holding the token can squat a wiped relay
+   (denial of service only).
+6. **Losing the key loses everything** by design; the app prompts once to save it in a password manager and nags on
    Today until the owner confirms the last four characters.
-5. **Clipboard:** the key is cleared after 60 s, but a clipboard manager may have kept a copy.
-6. **Android backup:** the database is encrypted, but `allowBackup` settings and the keystore's behaviour across
-   device migrations have not been audited.
-7. **`WRITE_CALENDAR` is declared** although unused; a reviewer may want a plugin that asks for read only.
+7. **Clipboard:** the key is cleared after 60 s, but a clipboard manager may have kept a copy. The key sheet shows the
+   QR first, and the text only on request, so the default path to a second device never touches the clipboard.
+8. **Backups hold no bill files.** A backup restores every bill but not its photo or PDF; those live on the relay and
+   in each device's cache. If the relay is lost too, the files are gone. A file evicted from this device's cache cannot
+   be opened while the relay is down.
+9. **Web** has no sync and keeps the unwrapped key text in `sessionStorage` (localhost only, see Cryptography).
+10. **`WRITE_CALENDAR` is declared** although unused; a reviewer may want a plugin that asks for read only (P13).
 
 ## 10. Quality: tests, review and performance
 
@@ -587,6 +643,11 @@ verification on the owner's laptop before a push; CI exists for the signed build
 Spec tests are written by a separate agent from the API document before the implementation exists; the implementation
 then has to satisfy them. For the bills stage that was 150 tests; 7 were adjusted after discussion and listed with
 reasons.
+
+**Real bills stay out of the repository.** Fixtures are synthetic; real receipts, slips and PDFs the owner wants checked
+go, anonymised, into `~/.local/share/budget-wallet/bill-corpus/` on the laptop (beside the run logs, never committed,
+never copied into a fixture). A bill reader change is tried against that folder by hand before release; the
+"same month, newer template" fixtures per bank are the synthetic stand-ins in the tests.
 
 ### Performance budgets
 
@@ -638,8 +699,12 @@ Documented in `docs/context/STATUS.md` and the package notes; either accepted by
 ### Sync
 
 - A device stays stuck on a damaged file only if no caught-up device that applied it before the damage still syncs.
-- A wiped relay plus a peer that re-uploaded more files than the old cursor before this device syncs: the cursor is
-  trusted and the files between are skipped (seq numbers carry no relay identity).
+- A wiped or rolled-back relay is detected (a new instance id, or this device's acks lower than it stored them) and
+  every device reads everything again; a device that never syncs after it keeps its own edits only on its own disk.
+- After a restore or a clone, a device may report "another install used this device id" once even when it was itself
+  (a double restore), and a stream nobody writes any more holds back the relay's pruning until its 90-day rule drops it.
+- A device whose clock is already wrong at its very first write is not caught by the clock-behind guard (it compares
+  with the device's own earlier readings).
 - Mixed versions: older builds ignore entities they do not know and replay once on upgrade; upgrade all devices
   together.
 - Blobs: the same bill imported with a file on two devices before a sync leaves one orphan upload until the next
