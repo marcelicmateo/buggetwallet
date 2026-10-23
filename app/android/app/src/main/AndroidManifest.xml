@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Sync with the relay on the home server over the LAN or a VPN. -->
+    <!-- Sync with the relay on the home server: https:// through the reverse proxy from anywhere, plain http:// on the home network. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Reminders (Plan > Nudges): permission to show them (asked when the switch is turned on, Android 13+), and to
          schedule them again after a reboot. Inexact alarms only: no exact-alarm permission. -->
@@ -13,7 +13,10 @@
     <!-- Scan bill (mobile_scanner) declares CAMERA itself (merged into this manifest); the app asks for it only when Scan bill is
          opened, and camera hardware is not required. -->
     <application
-        android:usesCleartextTraffic="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:label="Budget Wallet"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">

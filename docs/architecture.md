@@ -44,7 +44,7 @@ re-importing a file never duplicates rows. The id scheme matches v1.
 - `SyncEngine` uploads pending ops as this device's next file (uploads over 8 MiB are split into parts), then applies every other device's files strictly in order. Devices only write their own files, so there are no file conflicts.
 - Matching of hand-added expenses and transfer pairing run only when the device is caught up.
 - Weekly snapshots let a new device start from state, not history. The relay prunes files covered by both kept snapshots and acked by every device seen in the last 90 days. A device stuck behind pruned files is unstuck by a snapshot from any caught-up device after 24 h.
-- Relay requests are signed with an Ed25519 key derived from the wallet key; the relay keeps only the public key. A captured request can only be repeated unchanged for 5 minutes (every write is idempotent or only grows), and nobody without the key can read or forge content; on plain `http://` someone on the network can still block or delay sync, so a VPN is recommended (it also hides who syncs, when and how much).
+- Relay requests are signed with an Ed25519 key derived from the wallet key; the relay keeps only the public key. A captured request can only be repeated unchanged for 5 minutes (every write is idempotent or only grows), and nobody without the key can read or forge content; the relay is reached over `https://` through a Caddy reverse proxy (no VPN, only port 443 forwarded; docs/setup.md §5), and on plain `http://` (home-network try-outs only) someone on the network can still block or delay sync and see who syncs, when and how much.
 
 ## Encryption
 

@@ -1,0 +1,4 @@
+# Private network of the relay and its Caddy front. The relay joins it and publishes no port at all: only Caddy
+# (bw-relay-caddy.container) reaches it, by the name bw-relay.
+[Network]
+NetworkName=bw-relay

@@ -16,6 +16,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -28,7 +29,7 @@ import java.io.File
 import kotlin.concurrent.thread
 
 /**
- * Two tiny channels: the time zone name (for reminders), and the bills helpers (no PDF package): `renderPdf` draws the pages of a
+ * Three tiny channels: `bw/secure` (FLAG_SECURE while the wallet key is shown), the time zone name (for reminders), and the bills helpers (no PDF package): `renderPdf` draws the pages of a
  * PDF with the platform's PdfRenderer, `toJpeg` sizes a picture down (both on a background thread) and `takePhoto` lets the
  * phone's own camera app take one full-size picture into the app's cache (returns its path; null when cancelled).
  */
@@ -59,6 +60,22 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "budget_wallet/timezone").setMethodCallHandler { call, result ->
             when (call.method) {
                 "getTimeZone" -> result.success(java.util.TimeZone.getDefault().id)
+                else -> result.notImplemented()
+            }
+        }
+        // `setSecure(bool)`: FLAG_SECURE on the window while the wallet key is on screen (no screenshots, screen recording or
+        // thumbnail in the recent-apps list). The Dart side switches it on when the key sheet opens and off when it closes.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "bw/secure").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "setSecure" -> {
+                    val on = call.arguments as? Boolean ?: call.argument<Boolean>("secure")
+                    if (on == null) {
+                        result.error("args", "setSecure needs a bool", null)
+                    } else {
+                        if (on) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE) else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        result.success(null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }

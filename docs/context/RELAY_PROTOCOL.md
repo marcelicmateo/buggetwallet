@@ -17,7 +17,7 @@ Every request under `/v2/w/<wid>/` (GETs too: the state is metadata) carries:
   ```
   bw-relay-v2\n<METHOD>\n<path>\n<covers>\n<body hash>\n<time>
   ```
-  `<METHOD>` = `GET`, `PUT` or `DELETE` (blobs only); `<path>` = the request path from `/v2/` on (`/v2/w/<wid>/d/<device>/<seq>`), without query
+  `<METHOD>` = `GET`, `HEAD`, `PUT` or `DELETE` (blobs only); `<path>` = the request path from `/v2/` on (`/v2/w/<wid>/d/<device>/<seq>`), without query
   and without any prefix in the relay address the client was given; `<covers>` = the `X-BW-Covers` header value as sent,
   or empty when the request has none; `<body hash>` = lowercase hex SHA-256 of the body bytes (a GET or an empty body
   hashes the empty string: `e3b0c442…b855`); `<time>` = the `X-BW-Time` value as sent. `\n` is one LF; no trailing LF.
@@ -25,11 +25,22 @@ Every request under `/v2/w/<wid>/` (GETs too: the state is metadata) carries:
   verifies that request's signature with it and stores `pub` in `meta.json` (trust on first use). Later requests are
   verified with the stored key; their `X-BW-Pub` is ignored. Clients send `X-BW-Pub` on every `PUT d/<device>/1`.
 
+- **Creation token (Stage H, H11).** A relay started with `--create-token <file>` (or `BW_RELAY_CREATE_TOKEN(_FILE)`) lets only
+  a request that would create a wallet through when it carries `X-BW-Create-Token: <token>` (the shared secret, sent as is; the
+  relay compares in constant time). Missing or wrong: **403** `{"error":"createToken"}`, nothing is created. The header is
+  not part of the signed text (it is a shared secret, not a request property) and is ignored for existing wallets. **Client
+  contract:** send it on every `PUT d/<device>/1` when the user has entered a token (clients may send it on all seq-1 PUTs; a
+  relay without the flag ignores it); a 403 `createToken` is fatal for the run ("this relay needs a create token") and must
+  not be retried or logged with the token. Without the flag the relay is in development mode (creation open) and says so at
+  startup. CORS allows the header name.
+
 Checks, in this order (all before the wallet lock):
 1. Route, names and method (400 / 404 / 405, below).
 2. `X-BW-Time` or `X-BW-Sig` missing → 401 `unsigned`; present but malformed (or sent twice) → 400.
 3. `|X-BW-Time − relay clock| > 5 min` → 401 `{"error":"clock"}`. Every relay answer has a `Date` header (relay clock).
-4. Unknown wallet: GETs, acks and snapshot PUTs → 404. A `PUT d` with seq ≠ 1 → 422 and a relay already at
+4. Unknown wallet: GETs, acks and snapshot PUTs → 404. A `PUT d` first needs the creation token when the relay requires one
+   (403 `createToken`, header check, before the 422 / 507 below so a client without the token learns nothing about
+   capacity); then seq ≠ 1 → 422 and a relay already at
    `--max-wallets` → 507, both before the body is buffered (it is read and discarded, up to 2× the file limit); then
    `X-BW-Pub` missing → 401, malformed (not 43 base64url chars) → 400.
 5. The body is read within the size limits and the in-flight cap (413 / 429), then hashed.
@@ -60,10 +71,11 @@ dominates (same covers: same genuine content, nothing more pruned) or is refused
 | `GET /v2/health` (not signed) | 200 `{"api":2}` |
 | `GET /v2/w/<wid>/state` | 200 state JSON (below) |
 | `PUT /v2/w/<wid>/d/<device>/<seq>` body = sealed bytes (≤ 16 MiB) | 201 stored; 200 same bytes already stored; 409 other bytes already stored for that seq (never overwritten); 422 `seq > last + 1` (no gaps on the relay); 410 `seq < first` (pruned); 413 too big |
-| `GET /v2/w/<wid>/d/<device>/<seq>` | 200 bytes; 410 pruned (`seq < first`); 404 never stored |
+| `GET /v2/w/<wid>/d/<device>/<seq>` | 200 bytes; 410 pruned (`seq < first`); 404 never stored; 404 `{"error":"missing"}` when the relay's own state says the file exists but it is gone from disk (damaged or restored data folder; never 500) |
 | `PUT /v2/w/<wid>/ack/<device>` body `{"<peer>": seq, …}` | 204. Each ack only ever grows (max with the stored one); an ack above the peer's `last` → 422 |
 | `PUT /v2/w/<wid>/snapshot/<id>` header `X-BW-Covers: {"<device>": seq, …}`, body = sealed bytes (≤ 64 MiB) | 201 when `covers` ≥ the current snapshot's covers for every device in it (a device missing from `covers` counts as 0), and ≤ each device's `last`; checked in that order: 422 beyond `last` (unknown device = `last` 0), then 409 does not dominate; same id with the same bytes and covers again = 200, same id with other content = 409; missing/invalid `X-BW-Covers` = 400 |
-| `GET /v2/w/<wid>/snapshot/<id>` | 200 bytes; 404 |
+| `GET /v2/w/<wid>/snapshot/<id>` | 200 bytes; 404 (also `{"error":"missing"}` when a kept snapshot's file is gone from disk) |
+| `HEAD` on `/v2/health` and on every `GET` endpoint | Same status and headers (including `Content-Length`) as the `GET`, no body. On wallet paths it is signed with `<METHOD>` = `HEAD` (a GET signature does not authorize a HEAD and the other way round) |
 | any `OPTIONS` | CORS preflight, 204 |
 
 `lastSeen` of a known device is set to now by any signed `PUT d/<device>/...` that reaches the seq check (200, 201, 409,
@@ -77,7 +89,7 @@ Sealed files that rows point to by hash (a bill's photo or PDF). Content-address
 | Request | Result |
 |---|---|
 | `PUT /v2/w/<wid>/blob/<hash>` body = sealed bytes (≤ 16 MiB) | `<hash>` = lowercase hex SHA-256 of the body (64 chars, else 400); body hash ≠ `<hash>` → 400 `hash`; 201 stored; 200 already stored (same hash = same bytes); 404 unknown wallet (a wallet is created only by `PUT d/<device>/1`); 413 too big; 507 wallet over `--max-bytes` (blobs count) |
-| `GET /v2/w/<wid>/blob/<hash>` | 200 bytes; 404 never stored or deleted |
+| `GET /v2/w/<wid>/blob/<hash>` | 200 bytes; 404 never stored or deleted (`{"error":"missing"}`) |
 | `DELETE /v2/w/<wid>/blob/<hash>` (empty body) | 204, also when absent (idempotent) |
 
 - Signed like every wallet request; `<METHOD>` in the signed text may now also be `DELETE`. CORS allowed methods become
@@ -124,9 +136,23 @@ limit, so a 64 MiB snapshot still goes through); 507 relay full (wallet count ov
   `http://127.0.0.1:8080`, `http://localhost:8080`); allowed methods `GET, PUT, DELETE, OPTIONS`; allowed headers
   `Content-Type, X-BW-Covers, X-BW-Time, X-BW-Sig, X-BW-Pub`; exposed header `Date` (the client's clock offset).
 
+## Behind a reverse proxy (Stage H, D5)
+The deployment is Caddy (HTTPS, Let's Encrypt) in front of the relay on a private network; only 443 (and 80 for the redirect and
+the ACME challenge) is forwarded to the home server and the relay port is never exposed (`relay/deploy/`, docs/setup.md §5).
+- `--trust-proxy` (`BW_RELAY_TRUST_PROXY=1`): the client address used for the rate limit and the in-flight byte cap is the **last**
+  entry of `X-Forwarded-For` (the hop the proxy appended; earlier entries are client-supplied and ignored); a missing or
+  invalid value falls back to the connection address. Without the flag the header is ignored. Addresses are still never logged.
+  Only use it when the relay is reachable through that proxy alone.
+- The proxy must pass `Host` and every `X-BW-*` header unchanged and must not buffer-limit below the relay's body limits
+  (Caddyfile: `request_body max_size 64MiB`).
+- `--public-host <name>` (`BW_RELAY_PUBLIC_HOST`, falling back to `BW_RELAY_DOMAIN`): the host the signed text must name instead of the
+  request's `Host` (Stage H signed-text change; the deployment sets it from the one domain setting).
+- `relay --health-check` (container HEALTHCHECK): requests `http://127.0.0.1:<port>/v2/health`, exit 0 on 200, else 1.
+
 ## Logs
 Request kind, status, byte sizes, first 6 hex of `wid` and first 6 chars of `device`. Never signatures, public keys,
-bodies, full ids or client addresses.
+bodies, full ids or client addresses. The creation token never appears. A file missing on disk adds `!missing` to the kind
+(`get-d!missing`).
 
 ## Threat model
 Assumes the wallet key stays on the devices (only `wid`, `pub` and signatures derived from it ever leave them).
@@ -136,10 +162,10 @@ Assumes the wallet key stays on the devices (only `wid`, `pub` and signatures de
   idempotent request. The window stays 5 minutes because a client never takes a clock offset above 24 h from a `Date`
   (a faked `Date` of, say, +30 days is refused), so it never signs a request far ahead to be replayed later.
   Can still read metadata and, if the relay is ever wiped, squat the `wid` with its own key first
-  (devices then get 401 `refused`: a denial of service, not a read). The VPN hides all of this.
+  (devices then get 401 `refused`: a denial of service, not a read). Over `https://` (the deployment) none of this is visible to a sniffer; the creation token also stops strangers from squatting a `wid` on a fresh relay.
 - **Denial of service** (anyone who can reach the port): the relay must read a body before it can verify the signature
   (the hash covers it), so an unsigned or badly signed request still costs a read. That cost is bounded by the size
-  limits, the per-address in-flight cap and the rate limit (413 / 429); the VPN keeps strangers away.
+  limits, the per-address in-flight cap and the rate limit (413 / 429); the creation token (403) keeps strangers from creating wallets, and Caddy limits body size before the relay sees it.
 - **Stolen relay disk**: sealed files plus `meta.json` (public key, seqs, acks, times). Nothing in it can sign or decrypt.
 - **Malicious relay** (or someone controlling it): can drop, withhold, roll back or delete files and snapshots, lie in
   the state, refuse requests or replay its stored bytes to clients; it cannot read, forge or alter sealed content

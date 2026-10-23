@@ -5,12 +5,18 @@ Pure Dart server (`dart:io` + `cryptography` for SHA-256 and Ed25519 verificatio
 Never put a signature, public key, body, full id or client address in a log line, a test fixture or a comment.
 
 ## Files
-- `bin/relay.dart` — flags `--host --port --data --origin (repeatable) --max-wallets --max-bytes` (hand-parsed, no `args`),
-  env `BW_RELAY_HOST/PORT/DATA/ORIGINS/MAX_WALLETS/MAX_BYTES` (flags win); usage error = exit 64; SIGINT/SIGTERM = graceful stop.
+- `bin/relay.dart` — flags `--host --port --data --origin (repeatable) --max-wallets --max-bytes --create-token <file> --trust-proxy
+  --public-host <name> --health-check` (hand-parsed, no `args`; the last two are switches), env `BW_RELAY_HOST/PORT/DATA/ORIGINS/MAX_WALLETS/MAX_BYTES/
+  CREATE_TOKEN(_FILE)/TRUST_PROXY/PUBLIC_HOST (or DOMAIN)` (flags win); usage error = exit 64; SIGINT/SIGTERM = graceful stop. `--health-check` GETs `/v2/health`
+  on 127.0.0.1:port and exits 0/1 (the image's HEALTHCHECK; no `--data` needed). `relay/deploy/` = quadlets, Caddyfile, env templates (docs/setup.md §5).
 - `lib/relay.dart` — barrel. `lib/src/relay_server.dart` — `Relay({data, origins, maxWallets, maxBytes, maxInFlightBytes, now, log})`:
   `serve({host, port})` (port 0 for tests), `close()`, `handle(HttpRequest)`, `walletCount`. Routing, signature checks
   (`_signature`: headers + ±5 min clock window, before any wallet lookup or body read; `_verify` after the body is read,
   with the stored key or, on creation, `X-BW-Pub`), body limits, the per-wallet async lock (`_locked`), every endpoint.
+  `createToken` (403 `createToken` on a creating `PUT d` without `X-BW-Create-Token`; open when null, startup log says so), `trustProxy`
+  (client address = last `X-Forwarded-For` hop). HEAD = GET without a body (signed as `HEAD`). A file the meta lists but the disk lacks = 404
+  `missing` (kind `…!missing`), never 500. Pipeline order is protected: limit → OPTIONS → path/validate → signature headers (`_signature`) → create
+  token (in `_putData`, first of the unknown-wallet header checks, before the 422/507 refusals) → body caps → verify → per-wallet lock.
   Every answer carries `Date` (relay clock, exposed to CORS). Body bytes buffered per client address (`_held`, released when the
   request is answered) are capped by `maxInFlightBytes` (32 MiB → 429 when other requests of that address hold bytes;
   test hook `onHold`); an unknown wallet's `PUT d` with seq ≠ 1 or on a full relay is refused before buffering. `now` drives lastSeen, the 90-day rule and the rate limit.

@@ -70,6 +70,8 @@ class Harness {
     int maxBytes = 1024 * 1024 * 1024,
     int maxInFlightBytes = defaultMaxInFlightBytes,
     List<String>? origins,
+    String? createToken,
+    bool trustProxy = false,
     Directory? dir,
     DateTime? clock,
   }) async {
@@ -78,6 +80,8 @@ class Harness {
     h._maxWallets = maxWallets;
     h._maxBytes = maxBytes;
     h._maxInFlight = maxInFlightBytes;
+    h._createToken = createToken;
+    h._trustProxy = trustProxy;
     await h._boot();
     return h;
   }
@@ -86,6 +90,8 @@ class Harness {
   late int _maxWallets;
   late int _maxBytes;
   late int _maxInFlight;
+  String? _createToken;
+  bool _trustProxy = false;
 
   Future<void> _boot() async {
     relay = Relay(
@@ -94,6 +100,8 @@ class Harness {
       maxWallets: _maxWallets,
       maxBytes: _maxBytes,
       maxInFlightBytes: _maxInFlight,
+      createToken: _createToken,
+      trustProxy: _trustProxy,
       now: () => clock,
       log: logs.add,
     );
@@ -177,8 +185,15 @@ class Harness {
 }
 
 /// Starts a [Harness] and stops it when the test ends.
-Future<Harness> freshHarness({int maxWallets = 16, int maxBytes = 1024 * 1024 * 1024, List<String>? origins}) async {
-  final h = await Harness.start(maxWallets: maxWallets, maxBytes: maxBytes, origins: origins);
+Future<Harness> freshHarness({
+  int maxWallets = 16,
+  int maxBytes = 1024 * 1024 * 1024,
+  List<String>? origins,
+  String? createToken,
+  bool trustProxy = false,
+}) async {
+  final h =
+      await Harness.start(maxWallets: maxWallets, maxBytes: maxBytes, origins: origins, createToken: createToken, trustProxy: trustProxy);
   addTearDown(h.stop);
   return h;
 }

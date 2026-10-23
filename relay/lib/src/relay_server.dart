@@ -19,6 +19,9 @@ const int _maxJsonBytes = 64 * 1024;
 
 /// Default for [Relay.maxInFlightBytes]: request body bytes one client address may have buffered at once.
 const int defaultMaxInFlightBytes = 32 * _mib;
+
+/// Header that carries the creation token on the `PUT d/<device>/1` that creates a wallet (see `Relay.createToken`).
+const String createTokenHeader = 'x-bw-create-token';
 const List<String> defaultOrigins = ['http://127.0.0.1:8080', 'http://localhost:8080'];
 final RegExp _timePattern = RegExp(r'^[0-9]{1,16}$');
 
@@ -55,7 +58,10 @@ class _Out {
 
 /// The signature headers of a request and what it signs besides method and body (RELAY_PROTOCOL.md "Signed requests").
 class _Sig {
-  _Sig(this.path, this.time, this.sig, this.covers);
+  _Sig(this.method, this.path, this.time, this.sig, this.covers);
+
+  /// `GET` or `HEAD` for the read endpoints (a HEAD request is signed as `HEAD`).
+  final String method;
 
   /// From `/v2/` on, rebuilt from the checked segments.
   final String path;
@@ -88,6 +94,9 @@ class Relay {
     this.maxWallets = 16,
     this.maxBytes = 1024 * _mib,
     this.maxInFlightBytes = defaultMaxInFlightBytes,
+    this.createToken,
+    this.trustProxy = false,
+    this.publicHost,
     DateTime Function()? now,
     void Function(String line)? log,
   })  : _now = now ?? DateTime.now,
@@ -101,6 +110,18 @@ class Relay {
   /// Body bytes one client address may have buffered across its concurrent requests; a request that would pass it
   /// while others from that address hold bytes gets 429 (a lone request is limited only by its own size limit).
   final int maxInFlightBytes;
+
+  /// When set, the `PUT d/<device>/1` that creates a wallet must carry this value in `X-BW-Create-Token` (403 otherwise).
+  /// Null = creation is open (development mode). Existing wallets are not affected.
+  final String? createToken;
+
+  /// Take the client address (rate limit, in-flight cap) from the last hop of `X-Forwarded-For`; only behind a reverse
+  /// proxy that is the sole way to reach the relay.
+  final bool trustProxy;
+
+  /// The name clients address this relay by (lower case, no port unless not default), for the host in the signed text.
+  /// STUB on this branch: core-builder B's v3 signature check reads it (null = the request's `Host`); nothing here uses it yet.
+  final String? publicHost;
   final DateTime Function() _now;
   final void Function(String) _log;
 
@@ -185,7 +206,7 @@ class Relay {
         res.headers.set('Access-Control-Allow-Origin', origin);
         if (req.method == 'OPTIONS') {
           res.headers.set('Access-Control-Allow-Methods', 'GET, PUT, DELETE, OPTIONS');
-          res.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-BW-Covers, X-BW-Time, X-BW-Sig, X-BW-Pub');
+          res.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-BW-Covers, X-BW-Time, X-BW-Sig, X-BW-Pub, X-BW-Create-Token');
           res.headers.set('Access-Control-Max-Age', '600');
         } else {
           res.headers.set('Access-Control-Expose-Headers', 'Date');
@@ -203,7 +224,7 @@ class Relay {
   }
 
   Future<_Out> _dispatch(HttpRequest req, _LogInfo info) async {
-    final remote = req.connectionInfo?.remoteAddress.address ?? '?';
+    final remote = _client(req);
     info.remote = remote;
     if (!_limiter.allow(remote, _now())) {
       info.kind = 'limited';
@@ -217,7 +238,7 @@ class Relay {
     if (seg.length < 2 || seg[0] != 'v2') throw _HttpError(404, 'not found');
     if (seg[1] == 'health' && seg.length == 2) {
       info.kind = 'health';
-      _method(req, ['GET']);
+      _method(req, ['GET', 'HEAD']);
       return _Out.json(200, {'api': apiVersion});
     }
     if (seg[1] != 'w' || seg.length < 4) throw _HttpError(404, 'not found');
@@ -229,16 +250,16 @@ class Relay {
     switch ((route, seg.length)) {
       case ('state', 4):
         info.kind = 'state';
-        _method(req, ['GET']);
+        _method(req, ['GET', 'HEAD']);
         return _getState(wid, _signature(req, path));
       case ('d', 6):
         final device = _name(seg[4], 'bad device');
         info.device = _short(device);
         final seq = parseSeq(seg[5]);
         if (seq == null) throw _HttpError(400, 'bad seq');
-        _method(req, ['GET', 'PUT']);
+        _method(req, ['GET', 'HEAD', 'PUT']);
         final sig = _signature(req, path);
-        if (req.method == 'GET') {
+        if (req.method != 'PUT') {
           info.kind = 'get-d';
           return _getData(wid, device, seq, info, sig);
         }
@@ -252,9 +273,9 @@ class Relay {
         return _putAck(req, wid, device, info, _signature(req, path));
       case ('snapshot', 5):
         final id = _name(seg[4], 'bad snapshot id');
-        _method(req, ['GET', 'PUT']);
+        _method(req, ['GET', 'HEAD', 'PUT']);
         final sig = _signature(req, path);
-        if (req.method == 'GET') {
+        if (req.method != 'PUT') {
           info.kind = 'get-snap';
           return _getSnapshot(wid, id, info, sig);
         }
@@ -263,10 +284,10 @@ class Relay {
       case ('blob', 5):
         final hash = seg[4];
         if (!blobHashPattern.hasMatch(hash)) throw _HttpError(400, 'bad blob hash');
-        _method(req, ['GET', 'PUT', 'DELETE']);
+        _method(req, ['GET', 'HEAD', 'PUT', 'DELETE']);
         final sig = _signature(req, path);
         switch (req.method) {
-          case 'GET':
+          case 'GET' || 'HEAD':
             info.kind = 'get-blob';
             return _getBlob(wid, hash, info, sig);
           case 'PUT':
@@ -278,6 +299,17 @@ class Relay {
         }
     }
     throw _HttpError(404, 'not found');
+  }
+
+  /// The client address: the connection's, or with [trustProxy] the last hop of `X-Forwarded-For` (the one the proxy
+  /// appended) when it is a valid IP address.
+  String _client(HttpRequest req) {
+    final peer = req.connectionInfo?.remoteAddress.address ?? '?';
+    if (!trustProxy) return peer;
+    final xff = req.headers['x-forwarded-for'];
+    if (xff == null || xff.isEmpty) return peer;
+    final last = xff.last.split(',').last.trim();
+    return InternetAddress.tryParse(last)?.address ?? peer;
   }
 
   static String _short(String name) => name.length > 6 ? name.substring(0, 6) : name;
@@ -311,7 +343,7 @@ class Relay {
     final bytes = decodeBase64Url(sig, 64);
     if (bytes == null) throw _HttpError(400, 'bad X-BW-Sig');
     if ((int.parse(time) - _now().millisecondsSinceEpoch).abs() > signatureWindow.inMilliseconds) throw _HttpError(401, 'clock');
-    return _Sig(path, time, bytes, _header(req, 'x-bw-covers', 'X-BW-Covers') ?? '');
+    return _Sig(req.method, path, time, bytes, _header(req, 'x-bw-covers', 'X-BW-Covers') ?? '');
   }
 
   /// 401 unless [sig] signs this request ([method], [body]) for [pub].
@@ -422,25 +454,34 @@ class Relay {
 
   Future<_Out> _getState(String wid, _Sig sig) async {
     final w = _known(wid);
-    await _verify(w.pubBytes, sig, 'GET', const []);
+    await _verify(w.pubBytes, sig, sig.method, const []);
     return _locked(wid, () async => _Out.json(200, w.stateJson()));
   }
 
   Future<_Out> _getData(String wid, String device, int seq, _LogInfo info, _Sig sig) async {
     final w = _known(wid);
-    await _verify(w.pubBytes, sig, 'GET', const []);
+    await _verify(w.pubBytes, sig, sig.method, const []);
     return _locked(wid, () async {
       final st = w.devices[device];
       if (st == null || seq > st.last) throw _HttpError(404, 'not stored');
       if (seq < st.first) throw _HttpError(410, 'pruned');
-      try {
-        final bytes = await w.dataFile(device, seq).readAsBytes();
-        info.bytes = bytes.length;
-        return _Out.octets(bytes);
-      } on FileSystemException {
-        throw _HttpError(500, 'storage');
-      }
+      final bytes = await _stored(w.dataFile(device, seq), info);
+      info.bytes = bytes.length;
+      return _Out.octets(bytes);
     });
+  }
+
+  /// Reads a file the meta says exists. A missing file (the data folder was damaged or restored from an older copy) is
+  /// 404 `missing` (410 stays for pruned), logged as kind `...!missing`. Any other read error stays a 500 `storage`.
+  Future<Uint8List> _stored(File f, _LogInfo info) async {
+    try {
+      return await f.readAsBytes();
+    } on PathNotFoundException {
+      info.kind = '${info.kind}!missing';
+      throw _HttpError(404, 'missing');
+    } on FileSystemException {
+      throw _HttpError(500, 'storage');
+    }
   }
 
   Future<_Out> _putData(HttpRequest req, String wid, String device, int seq, _LogInfo info, _Sig sig) async {
@@ -450,6 +491,8 @@ class Relay {
       pub = known.pub;
     } else {
       // An unknown wallet: refuse what cannot create it before reading (and buffering) a body. Checked again in the lock.
+      // The creation token is a header check, so it comes first: a client without it learns nothing about capacity.
+      _checkCreateToken(req);
       if (seq != 1) await _refuseBody(req, maxFileBytes, 422, 'seq beyond last + 1');
       if (_wallets.length >= maxWallets) await _refuseBody(req, maxFileBytes, 507, 'relay full');
       final h = _header(req, 'x-bw-pub', 'X-BW-Pub');
@@ -472,7 +515,7 @@ class Relay {
         st!.lastSeen = _now();
         await w.saveMeta();
         if (seq < first) throw _HttpError(410, 'pruned');
-        final stored = await w.dataFile(device, seq).readAsBytes();
+        final stored = await _stored(w.dataFile(device, seq), info);
         if (_same(stored, body)) return _Out.json(200, {'seq': seq});
         throw _HttpError(409, 'other bytes stored');
       }
@@ -493,6 +536,15 @@ class Relay {
       await w.prune(_now());
       return _Out.json(201, {'seq': seq});
     });
+  }
+
+  /// 403 `createToken` unless creation is open ([createToken] null) or the request carries the token.
+  /// Constant-time compare; the token is never logged.
+  void _checkCreateToken(HttpRequest req) {
+    final want = createToken;
+    if (want == null) return;
+    final got = _header(req, createTokenHeader, 'X-BW-Create-Token');
+    if (got == null || !constantTimeEquals(got, want)) throw _HttpError(403, 'createToken');
   }
 
   /// The first accepted `PUT d/...` of a wallet creates it and stores its public key [pub] (trust on first use).
@@ -553,7 +605,7 @@ class Relay {
       final w = _known(wid);
       final existing = w.snapshot?.id == id ? w.snapshot : (w.previous?.id == id ? w.previous : null);
       if (existing != null) {
-        final stored = await w.snapFile(id).readAsBytes();
+        final stored = await _stored(w.snapFile(id), info);
         if (_same(stored, body) && _sameCovers(existing.covers, covers)) return _Out.json(200, {'id': id});
         throw _HttpError(409, 'snapshot id in use');
       }
@@ -589,29 +641,25 @@ class Relay {
 
   Future<_Out> _getSnapshot(String wid, String id, _LogInfo info, _Sig sig) async {
     final w = _known(wid);
-    await _verify(w.pubBytes, sig, 'GET', const []);
+    await _verify(w.pubBytes, sig, sig.method, const []);
     return _locked(wid, () async {
       if (w.snapshot?.id != id && w.previous?.id != id) throw _HttpError(404, 'no such snapshot');
-      try {
-        final bytes = await w.snapFile(id).readAsBytes();
-        info.bytes = bytes.length;
-        return _Out.octets(bytes);
-      } on FileSystemException {
-        throw _HttpError(500, 'storage');
-      }
+      final bytes = await _stored(w.snapFile(id), info);
+      info.bytes = bytes.length;
+      return _Out.octets(bytes);
     });
   }
 
   Future<_Out> _getBlob(String wid, String hash, _LogInfo info, _Sig sig) async {
     final w = _known(wid);
-    await _verify(w.pubBytes, sig, 'GET', const []);
+    await _verify(w.pubBytes, sig, sig.method, const []);
     return _locked(wid, () async {
       try {
         final bytes = await w.blobFile(hash).readAsBytes();
         info.bytes = bytes.length;
         return _Out.octets(bytes);
       } on PathNotFoundException {
-        throw _HttpError(404, 'no such blob');
+        throw _HttpError(404, 'missing');
       } on FileSystemException {
         throw _HttpError(500, 'storage');
       }
