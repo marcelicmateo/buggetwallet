@@ -12,6 +12,7 @@ import 'bill_inputs.dart';
 import 'bill_platform.dart';
 import 'calendar_platform.dart';
 import 'calendar_source.dart';
+import 'clock_notice.dart';
 import 'ics_fetch.dart';
 import 'key_store.dart';
 import 'logging.dart';
@@ -140,9 +141,14 @@ class WalletController extends ChangeNotifier {
   /// Runs the sync against the relay at an address; tests replace it (with a [MemoryTransport] or a fake).
   @visibleForTesting
   Future<SyncReport> Function(Uri relay, VaultKey key, WalletRepo repo) syncRunner = _runRelaySync;
+
+  /// The creation token to send to [relay]: [stored] unless it is empty or the address is a public `http://` one (a stored address
+  /// from before the https rule; the token would travel in the clear).
+  static String? createTokenFor(Uri relay, String? stored) =>
+      stored == null || stored.isEmpty || relayAddressIssue(relay.toString()) != null ? null : stored;
+
   static Future<SyncReport> _runRelaySync(Uri relay, VaultKey key, WalletRepo repo) async {
-    final token = repo.localValue(relayCreateTokenKey);
-    final transport = RelayTransport(relay, key, createToken: token == null || token.isEmpty ? null : token);
+    final transport = RelayTransport(relay, key, createToken: createTokenFor(relay, repo.localValue(relayCreateTokenKey)));
     try {
       return await SyncEngine(transport, key, appVersion: appVersion).run(repo);
     } finally {
@@ -225,14 +231,24 @@ class WalletController extends ChangeNotifier {
   /// From the last successful sync: the relay's instance id (shown only as [relayFingerprintText]), whether the relay was new or
   /// reset since the previous sync, and the files not applied (a device whose clock is ahead; this device's own id in use).
   String? syncRelayInstance;
-  bool syncRelayChanged = false;
   List<SyncProblem> syncProblems = const [];
+
+  /// Core reports a changed relay and an id in use once, so each notice is kept on this device (device-local values, never synced)
+  /// until the owner taps OK on it; a new relay address clears both.
+  bool get syncRelayChanged => repo.localValue(_noticeRelayChanged) != null;
+  bool get syncDeviceIdInUse => repo.localValue(_noticeIdInUse) != null;
+  static const _noticeRelayChanged = 'noticeRelayChanged';
+  static const _noticeIdInUse = 'noticeDeviceIdInUse';
+
+  /// OK on a Plan › Sync notice: [relayChanged] or the device id one.
+  void dismissSyncNotice({required bool relayChanged}) {
+    repo.setLocalValue(relayChanged ? _noticeRelayChanged : _noticeIdInUse, null);
+    logNav('sync.noticeDismissed', {'which': relayChanged ? 'relayChanged' : 'deviceIdInUse'});
+    notifyListeners();
+  }
 
   /// `xxxx-xxxx` of the relay's instance id, to compare with the other devices; null from an older relay.
   String? get relayFingerprintText => syncRelayInstance == null ? null : relayFingerprint(syncRelayInstance!);
-
-  /// Another install synced as this device (it moved to a new stream on its own): information only.
-  bool get syncDeviceIdInUse => syncProblems.any((p) => p.reason == SyncProblemReason.deviceIdInUse);
 
   /// A device's clock is ahead, so its newest file waits.
   bool get syncClockDrift => syncProblems.any((p) => p.reason == SyncProblemReason.clockDrift);
@@ -800,6 +816,8 @@ class WalletController extends ChangeNotifier {
     try {
       await repo.skipRecurring(id);
       logEvent(_habits, Level.INFO, 'recurring.skip', {'bills': recurringBills().length});
+    } on ClockBehindException catch (e) {
+      noticeClockBehind(e);
     } catch (e, st) {
       logError(_habits, 'recurring.skipFailed', e, st);
     }
@@ -1110,11 +1128,13 @@ class WalletController extends ChangeNotifier {
 
   static bool _privateHost(String host) {
     final h = host.toLowerCase();
-    if (h == 'localhost' || h == '::1' || h.endsWith('.local') || h.endsWith('.localhost') || !h.contains('.') && !h.contains(':')) {
-      return true;
-    }
+    if (h == 'localhost' || h == '::1' || h.endsWith('.local') || h.endsWith('.localhost')) return true;
+    // A name without a dot is a home-network name, unless it is a number (`134744072` and `0x08080808` are 8.8.8.8 to the resolver).
+    if (!h.contains('.') && !h.contains(':')) return !RegExp(r'^(\d+|0x[0-9a-f]*)$').hasMatch(h);
     final m = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$').firstMatch(h);
     if (m == null) return false;
+    // A leading zero is octal to some resolvers (`010.8.8.8` is 8.8.8.8 there): never taken as 10/8.
+    if ([for (var i = 1; i <= 4; i++) m.group(i)!].any((x) => x.length > 1 && x.startsWith('0'))) return false;
     final o = [for (var i = 1; i <= 4; i++) int.parse(m.group(i)!)];
     if (o.any((n) => n > 255)) return false;
     return o[0] == 127 || o[0] == 10 || (o[0] == 172 && o[1] >= 16 && o[1] <= 31) || (o[0] == 192 && o[1] == 168);
@@ -1139,8 +1159,9 @@ class WalletController extends ChangeNotifier {
     syncBlobsUnsupported = false;
     syncDevices = const [];
     syncRelayInstance = null;
-    syncRelayChanged = false;
     syncProblems = const [];
+    repo.setLocalValue(_noticeRelayChanged, null);
+    repo.setLocalValue(_noticeIdInUse, null);
     _relayFollowUp = u != null && syncing; // a run is going: exactly one follow-up for the new address when it ends
     logEvent(_sync, Level.INFO, 'sync.relay', {'set': u != null}); // never the address
     notifyListeners();
@@ -1189,8 +1210,9 @@ class WalletController extends ChangeNotifier {
       syncBlobsUnsupported = r.blobsUnsupported;
       syncDevices = r.devices;
       syncRelayInstance = r.relayInstance;
-      syncRelayChanged = r.relayChanged;
       syncProblems = r.problems;
+      if (r.relayChanged) repo.setLocalValue(_noticeRelayChanged, '1');
+      if (r.problems.any((p) => p.reason == SyncProblemReason.deviceIdInUse)) repo.setLocalValue(_noticeIdInUse, '1');
       logEvent(_sync, Level.INFO, 'sync.done', {
         'relayChanged': r.relayChanged,
         'trigger': trigger,
@@ -1390,6 +1412,9 @@ class WalletController extends ChangeNotifier {
             '$bank: ${s.added} new, ${s.duplicates} already here${s.matched > 0 ? ', ${s.matched} matched to expenses you added' : ''}'
             '${batch.invalid > 0 ? ', ${batch.invalid} unreadable ${batch.invalid == 1 ? 'row' : 'rows'} left out' : ''}.',
             true));
+      } on ClockBehindException catch (e) {
+        noticeClockBehind(e); // nothing of this file was written; say why instead of "couldn't read"
+        lines.add(ImportLine(name, clockBehindText, false));
       } on ImportException catch (e, st) {
         logError(_import, 'import.rejected', e, st, fields: f);
         lines.add(ImportLine(name, e.message, false));

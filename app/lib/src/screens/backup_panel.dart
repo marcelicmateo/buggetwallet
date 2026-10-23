@@ -9,6 +9,7 @@ import '../controller.dart';
 import '../file_chooser.dart';
 import '../layout.dart';
 import '../logging.dart';
+import '../secure_window.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
@@ -196,7 +197,8 @@ class _OldKeyDialogState extends State<_OldKeyDialog> {
   @override
   Widget build(BuildContext context) {
     final canScan = widget.wc.billInputs.camera.supported;
-    return AlertDialog(
+    return SecureWindow(
+        child: AlertDialog(
       key: const ValueKey('oldKeyDialog'),
       title: const Text('Key of the backup'),
       content: SingleChildScrollView(
@@ -226,19 +228,44 @@ class _OldKeyDialogState extends State<_OldKeyDialog> {
         FilledButton(
             key: const ValueKey('oldKeyRestore'), onPressed: () => Navigator.pop(context, _text.text.trim()), child: const Text('Restore')),
       ],
-    );
+    ));
   }
 }
 
-/// The camera looking for the QR code of a wallet key; pops the first code it reads.
-class _ScanKeyScreen extends StatelessWidget {
+/// The camera looking for the QR code of a wallet key; pops the first code that is a key and ignores every other one (another QR
+/// in view, a second code in the same frame).
+class _ScanKeyScreen extends StatefulWidget {
   final WalletController wc;
   const _ScanKeyScreen({required this.wc});
+  @override
+  State<_ScanKeyScreen> createState() => _ScanKeyScreenState();
+}
+
+class _ScanKeyScreenState extends State<_ScanKeyScreen> {
+  bool _busy = false;
+  bool _done = false;
+
+  Future<void> _onCode(ScannedCode c) async {
+    if (_done || _busy) return;
+    final plain = c.raw.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
+    if (!plain.startsWith('BW1')) return; // not a wallet key
+    _busy = true; // set before the first await: a second code in the same frame is ignored
+    try {
+      await VaultKey.parse(c.raw);
+    } on VaultException {
+      _busy = false;
+      return;
+    }
+    if (_done || !mounted) return;
+    _done = true;
+    Navigator.pop(context, c);
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: const DialogAppBar(title: 'Scan the key'),
         body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Expanded(child: wc.billInputs.camera.view(onCode: (c) => Navigator.maybePop(context, c))),
+          Expanded(child: widget.wc.billInputs.camera.view(onCode: _onCode)),
           const Padding(
               padding: EdgeInsets.fromLTRB(pagePad, 10, pagePad, 14), child: Muted('Point at the QR code of the old wallet key.')),
         ]),

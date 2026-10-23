@@ -160,6 +160,8 @@ class _SyncPanelState extends State<SyncPanel> {
         Muted('Relay fingerprint ${wc.relayFingerprintText}. It should read the same on every device.',
             key: const ValueKey('relayFingerprint')),
       if (_testResult != null) StatusLabel(key: const ValueKey('relayTestResult'), good: _testResult!.good, text: _testResult!.text),
+      if (hasRelay && WalletController.relayAddressIssue(wc.relayUrl.toString()) == RelayAddressIssue.needsHttps)
+        const StatusLabel(key: ValueKey('relayNeedsHttps'), good: false, text: storedAddressNeedsHttpsText),
       if (!hasRelay)
         const Muted('No relay set: nothing is sent or received. The wallet works without it.')
       else ...[
@@ -168,8 +170,18 @@ class _SyncPanelState extends State<SyncPanel> {
         else if (last != null)
           StatusLabel(key: const ValueKey('syncStatus'), good: status.good, text: status.text),
         if (last != null) Muted('Last sync ${clockText(last)}'),
-        if (wc.syncRelayChanged) const _Info(key: ValueKey('relayChanged'), text: relayChangedText),
-        if (wc.syncDeviceIdInUse) const _Info(key: ValueKey('deviceIdInUse'), text: deviceIdInUseText),
+        if (wc.syncRelayChanged)
+          _Info(
+              key: const ValueKey('relayChanged'),
+              text: relayChangedText,
+              okKey: const ValueKey('relayChangedOk'),
+              onOk: () => wc.dismissSyncNotice(relayChanged: true)),
+        if (wc.syncDeviceIdInUse)
+          _Info(
+              key: const ValueKey('deviceIdInUse'),
+              text: deviceIdInUseText,
+              okKey: const ValueKey('deviceIdInUseOk'),
+              onOk: () => wc.dismissSyncNotice(relayChanged: false)),
         if (wc.syncClockDrift) const StatusLabel(key: ValueKey('clockDrift'), good: false, text: clockDriftText),
         if (wc.syncBlobsUnsupported)
           const StatusLabel(key: ValueKey('blobsUnsupported'), good: false, text: blobsUnsupportedText)
@@ -215,19 +227,28 @@ class _SyncPanelState extends State<SyncPanel> {
   }
 }
 
-/// A neutral line with an info icon (state is never colour alone).
+/// A neutral line with an info icon (state is never colour alone), optionally with a small OK that dismisses it.
 class _Info extends StatelessWidget {
   final String text;
-  const _Info({super.key, required this.text});
+  final Key? okKey;
+  final VoidCallback? onOk;
+  const _Info({super.key, required this.text, this.okKey, this.onOk});
   @override
-  Widget build(BuildContext context) => Text.rich(
-        TextSpan(children: [
-          WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: Padding(padding: const EdgeInsets.only(right: 5), child: Icon(Icons.info_outline, size: 16, color: context.c.muted)),
-          ),
-          TextSpan(text: text),
-        ]),
-        style: TextStyle(fontSize: 13, color: context.c.muted, height: 1.4),
-      );
+  Widget build(BuildContext context) {
+    final line = Text.rich(
+      TextSpan(children: [
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Padding(padding: const EdgeInsets.only(right: 5), child: Icon(Icons.info_outline, size: 16, color: context.c.muted)),
+        ),
+        TextSpan(text: text),
+      ]),
+      style: TextStyle(fontSize: 13, color: context.c.muted, height: 1.4),
+    );
+    if (onOk == null) return line;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      line,
+      TextButton(key: okKey, onPressed: onOk, child: const Text('OK')),
+    ]);
+  }
 }

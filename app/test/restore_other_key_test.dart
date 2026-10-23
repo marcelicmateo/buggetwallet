@@ -1,14 +1,15 @@
 // Plan › Backup › "Restore a backup made with another key…" (HU 12): a real backup sealed with key A restores into an empty wallet
 // with key B once the old key A is given (typed or scanned); a wrong key shows the vault error; the old key is used once and
 // never stored or logged. Real core backup functions, SYNTHETIC data.
-import 'dart:typed_data';
 
 import 'package:budget_wallet/src/bill_inputs.dart' show CodeKind, ScannedCode;
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/screens/backup_panel.dart';
+import 'package:budget_wallet/src/secure_window.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -227,4 +228,68 @@ void main() {
       expect(_go, findsOneWidget);
     });
   }
+
+  testWidgets('the scanner ignores a QR that is not a key and a second code in the same frame; only the first key closes it', (t) async {
+    final keyA = VaultKey.generate(), keyOther = VaultKey.generate();
+    final inputs = FakeBillInputs();
+    final c = _Chooser()..picks = [_Picked(await _backupWith(keyA))];
+    final wc = await pump(t, c, inputs: inputs);
+    await t.tap(_other);
+    await t.pump();
+    await t.pump();
+    await t.tap(find.byKey(const ValueKey('oldKeyScan')));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 500));
+    expect(find.text('Scan the key'), findsOneWidget);
+
+    inputs.camera.emit(const ScannedCode(CodeKind.qr, 'https://example.org/not-a-key'));
+    inputs.camera.emit(const ScannedCode(CodeKind.qr, 'BW1-NOT-A-REAL-KEY'));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.text('Scan the key'), findsOneWidget, reason: 'still looking');
+
+    // two real keys in one frame: the first one wins, the second cannot pop a closed screen
+    final first = await keyA.toText(), second = await keyOther.toText();
+    inputs.camera.emit(ScannedCode(CodeKind.qr, first));
+    inputs.camera.emit(ScannedCode(CodeKind.qr, second));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 500));
+    await t.pump(const Duration(milliseconds: 500));
+    expect(t.takeException(), isNull);
+    expect(find.text('Scan the key'), findsNothing);
+    expect(find.byKey(const ValueKey('oldKeyDialog')), findsOneWidget, reason: 'the dialog under it is still open');
+    expect(t.widget<TextField>(_field).controller!.text, first);
+    await t.tap(_go);
+    await t.pump();
+    await t.pump();
+    await t.pump();
+    expect(wc.walletIsEmpty, isFalse);
+    expect(log(), isNot(contains(first)));
+    expect(log(), isNot(contains(second)));
+    await t.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('the old-key dialog keeps the window secure on Android while it is open', (t) async {
+    final calls = <Object?>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('bw/secure'),
+        (call) async {
+      calls.add(call.arguments);
+      return null;
+    });
+    addTearDown(() =>
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('bw/secure'), null));
+    resetSecureWindowCount();
+    final c = _Chooser()..picks = [_Picked(await _backupWith(VaultKey.generate()))];
+    await pump(t, c);
+    await t.tap(_other);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(const ValueKey('oldKeyDialog')), findsOneWidget);
+    expect(calls, [true]);
+    await t.tap(find.byKey(const ValueKey('oldKeyCancel')));
+    await t.pump(const Duration(milliseconds: 500));
+    await t.pump(const Duration(milliseconds: 500));
+    await t.pump(const Duration(milliseconds: 50));
+    expect(calls, [true, false]);
+  });
 }

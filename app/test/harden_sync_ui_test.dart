@@ -44,6 +44,8 @@ void main() {
     const ok = [
       'https://relay.example.org',
       'https://203.0.113.5:8787',
+      'HTTPS://relay.example.org', // the scheme is not case sensitive
+      'http://10.0.0.5', // single digits are fine; only a leading zero is octal
       'http://localhost:8787',
       'http://127.0.0.1:8787',
       'http://127.1.2.3',
@@ -72,6 +74,13 @@ void main() {
       'http://192.168.1.1.example.org', // looks private, is a public name
       'http://notlocal.example.com',
       'relay.example.org:8787', // a bare host gets http, which a public host may not use
+      'HTTP://relay.example.org',
+      'http://010.8.8.8', // octal for some resolvers: 8.8.8.8, not 10/8
+      'http://10.08.8.8',
+      'http://192.168.01.1',
+      'http://134744072', // one number = 8.8.8.8
+      'http://0x08080808',
+      '134744072:8787',
     ];
     test('https and every private, loopback or .local http address is accepted', () {
       for (final a in ok) {
@@ -85,7 +94,7 @@ void main() {
         expect(WalletController.relayAddressIssue(a), RelayAddressIssue.needsHttps, reason: a);
         expect(WalletController.parseRelayAddress(a), isNull, reason: a);
       }
-      for (final a in ['ftp://host', 'http://', 'not an address', '']) {
+      for (final a in ['ftp://host', 'http://', 'not an address', '', 'http://user:pw@10.0.0.5', 'https://user@relay.example.org']) {
         expect(WalletController.relayAddressIssue(a), RelayAddressIssue.notAnAddress, reason: a);
       }
     });
@@ -138,7 +147,7 @@ void main() {
       expect(relayTestFailureText(TransportFailure.createToken), createTokenText);
     });
 
-    testWidgets('fingerprint under the address; relayChanged line only for the run that saw the change', (t) async {
+    testWidgets('fingerprint under the address; the relayChanged note stays until OK', (t) async {
       final wc = emptyWallet()..relayUrl = _relay;
       await _pumpSync(t, wc);
       expect(find.byKey(const ValueKey('relayFingerprint')), findsNothing);
@@ -152,9 +161,43 @@ void main() {
       wc.syncRunner = (r, k, repo) async => _report(instance: 'A1B2C3D4E5F60718');
       await t.runAsync(wc.syncNow);
       await t.pump();
-      expect(find.textContaining(relayChangedText, findRichText: true), findsNothing);
+      expect(find.textContaining(relayChangedText, findRichText: true), findsOneWidget, reason: 'core reports it once; the note stays');
       expect(find.textContaining('a1b2-c3d4'), findsOneWidget);
       expect(log(), isNot(contains('a1b2')));
+      await t.tap(find.byKey(const ValueKey('relayChangedOk')));
+      await t.pump();
+      expect(find.textContaining(relayChangedText, findRichText: true), findsNothing);
+      expect(wc.syncRelayChanged, isFalse);
+    });
+
+    testWidgets('both notes are kept on this device across restarts and next runs until OK; a new address clears them', (t) async {
+      final repo = WalletRepo.inMemory();
+      final wc = WalletController.forTest(repo, key: VaultKey.generate())..relayUrl = _relay;
+      wc.syncRunner =
+          (r, k, rp) async => _report(changed: true, problems: const [SyncProblem('abcd1234', SyncProblemReason.deviceIdInUse, bytes: 0)]);
+      await t.runAsync(wc.syncNow);
+      wc.syncRunner = (r, k, rp) async => _report(); // the next run: core does not say it again
+      await t.runAsync(wc.syncNow);
+      expect(wc.syncRelayChanged && wc.syncDeviceIdInUse, isTrue);
+
+      final again = WalletController.forTest(repo, key: wc.key)..relayUrl = _relay; // the app was restarted
+      await _pumpSync(t, again);
+      expect(find.textContaining(relayChangedText, findRichText: true), findsOneWidget);
+      expect(find.textContaining(deviceIdInUseText, findRichText: true), findsOneWidget);
+      // OK on one leaves the other
+      await t.tap(find.byKey(const ValueKey('deviceIdInUseOk')));
+      await t.pump();
+      expect(find.textContaining(deviceIdInUseText, findRichText: true), findsNothing);
+      expect(find.textContaining(relayChangedText, findRichText: true), findsOneWidget);
+      expect(repo.localValue('noticeDeviceIdInUse'), isNull);
+      expect(log(), isNot(contains('abcd1234')));
+
+      again.syncRunner = (r, k, rp) async => _report();
+      await t.runAsync(() => again.setRelay(Uri.parse('http://other.local:8787')));
+      await t.pump();
+      expect(find.textContaining(relayChangedText, findRichText: true), findsNothing);
+      expect(repo.localValue('noticeRelayChanged'), isNull);
+      await t.pump(const Duration(seconds: 5));
     });
 
     testWidgets('an older relay (no instance): no fingerprint line', (t) async {
@@ -210,6 +253,38 @@ void main() {
       expect(t.takeException(), isNull);
       expect(find.textContaining(relayChangedText, findRichText: true), findsOneWidget);
       expect(_tokenField, findsOneWidget);
+    });
+  });
+
+  group('a saved public http address (HUbb 4)', () {
+    final stored = Uri.parse('http://relay.example.org:8787');
+
+    testWidgets('Plan › Sync says to switch to the https address; private and https addresses get no such line', (t) async {
+      final wc = emptyWallet()..relayUrl = stored; // saved before the rule: read leniently
+      await _pumpSync(t, wc);
+      expect(find.textContaining(storedAddressNeedsHttpsText, findRichText: true), findsOneWidget);
+      expect(find.byKey(const ValueKey('relayNeedsHttps')), findsOneWidget);
+      expect(find.textContaining('https://'), findsWidgets);
+      for (final ok in ['https://relay.example.org', 'http://homeserver.local:8787', 'http://192.168.1.5:8787']) {
+        wc.relayUrl = Uri.parse(ok);
+        await _pumpSync(t, wc);
+        expect(find.byKey(const ValueKey('relayNeedsHttps')), findsNothing, reason: ok);
+      }
+      wc.relayUrl = null;
+      await _pumpSync(t, wc);
+      expect(find.byKey(const ValueKey('relayNeedsHttps')), findsNothing);
+      expect(log(), isNot(contains('example.org')));
+    });
+
+    test('the creation token is never sent to a public http address, and is sent to https and home addresses', () {
+      expect(WalletController.createTokenFor(stored, _token), isNull);
+      expect(WalletController.createTokenFor(Uri.parse('http://203.0.113.5'), _token), isNull);
+      expect(WalletController.createTokenFor(Uri.parse('https://relay.example.org'), _token), _token);
+      expect(WalletController.createTokenFor(Uri.parse('http://homeserver.local:8787'), _token), _token);
+      expect(WalletController.createTokenFor(Uri.parse('http://192.168.1.5:8787'), _token), _token);
+      expect(WalletController.createTokenFor(Uri.parse('http://127.0.0.1:1'), _token), _token);
+      expect(WalletController.createTokenFor(Uri.parse('https://relay.example.org'), null), isNull);
+      expect(WalletController.createTokenFor(Uri.parse('https://relay.example.org'), ''), isNull);
     });
   });
 

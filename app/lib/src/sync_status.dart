@@ -31,6 +31,10 @@ const clockDriftText = "A device's clock is ahead; its changes wait until the cl
 /// The text under the relay address when the relay needs a creation token.
 const createTokenText = 'The relay needs its creation token.';
 
+/// The saved relay address is plain `http://` to a public host (saved before the https rule): it still works, the creation token is not sent.
+const storedAddressNeedsHttpsText =
+    'This relay address uses plain http. Switch to its https:// address; the creation token is not sent over http.';
+
 /// Why a typed relay address was refused.
 const addressNotAnAddressText = 'Enter an address like http://homeserver:8787';
 const addressNeedsHttpsText = 'Use the https:// address of your relay. http:// is only for your home network.';

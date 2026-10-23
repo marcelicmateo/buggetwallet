@@ -49,15 +49,15 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   on the owner's domain (Caddy + Let's Encrypt, no VPN). Plain `http://` is accepted only for this device (`localhost`, `127.x`, `::1`), the emulator's `10.0.2.2`,
   private IPv4 (10/8, 172.16/12, 192.168/16), `.local` names and names without a dot (`homeserver`); any other `http://` host is refused with "Use the https://
   address of your relay. http:// is only for your home network." (`WalletController.relayAddressIssue` → `RelayAddressIssue.needsHttps | notAnAddress`;
-  `parseRelayAddress`, `setRelay` and `joinWallet` use it; the stored address is read leniently so an upgrade never drops it). The manifest still allows
+  `parseRelayAddress`, `setRelay` and `joinWallet` use it; octets with a leading zero and all-digit or `0x…` dotless hosts are never private; the stored address is read leniently so an upgrade never drops it, but Plan › Sync then says to switch to https and `createTokenFor` never sends the token to it). The manifest still allows
   cleartext for the LAN case. **Sync panel (H5–H8):** after each run the controller keeps `syncRelayInstance` (shown as `relayFingerprintText`, `xxxx-xxxx`, under the
-  address), `syncRelayChanged` ("This relay is new or was reset; this device sent everything again."), `syncProblems` (`syncDeviceIdInUse`: information only, "Another
+  address), `syncRelayChanged` (device-local notice kept until OK, like `syncDeviceIdInUse`; a new address clears both; "This relay is new or was reset; this device sent everything again."), `syncProblems` (`syncDeviceIdInUse`: information only, "Another
   install used this device id; this device now syncs under a new stream."; `syncClockDrift`: "A device's clock is ahead; its changes wait until the clocks
   agree."); `TransportFailure.createToken` → "The relay needs its creation token." (`relayTestFailureText`; a sync run says it through core's message). Creation token:
   device-local value `relayCreateToken` (`relayCreateToken`, `setRelayCreateToken`; obscured field `relayCreateToken` + `relayCreateTokenSave` in Plan › Sync),
   passed to `RelayTransport(createToken:)`, never synced, in no backup, never logged (`sync.createToken {set}`). **Clock behind (H7):** an owner write refused with
   `ClockBehindException` is caught by the error hooks in `logging.dart` (`clock_notice.dart` `noticeClockBehind`; logged `write.clockBehind`, not a crash) and
-  `BudgetWalletApp` shows one dialog sentence (`clockBehindDialog`): "This device's clock is behind. Set the date and time, then try again.".
+  `BudgetWalletApp` shows one dialog sentence (`clockBehindDialog`): "This device's clock is behind. Set the date and time, then try again.". Catch-alls around owner writes (`importFiles`, bill imports → `BillImportKind.clockBehind`, `skipRecurring`) catch `ClockBehindException` first and call `noticeClockBehind`.
 - Device id (H6): each install has its own id, stored next to the key and not only in the database: `KeyStore.readDeviceId/writeDeviceId` (`key_store_io.dart`: file
   `device.id` beside `wallet.key`, same 0700/0600 temp + rename write (`_writePrivate`); Android secure storage `budget_wallet_device_id`; `key_store_web.dart`: localStorage
   `bw.deviceId`; `KeyStore.forget` removes it too). `WalletController._openWithId`: no id stored (first open after an upgrade) → the database opens with its own id and
