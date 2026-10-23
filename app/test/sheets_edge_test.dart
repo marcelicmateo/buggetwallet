@@ -166,10 +166,10 @@ void main() {
       expect(find.textContaining('wishlist first?'), findsNothing);
     });
 
-    testWidgets('an amount beyond 10 billion is refused like any other bad amount', (tester) async {
+    testWidgets('an amount beyond 1 billion (core\'s cap) is refused like any other bad amount', (tester) async {
       final wc = emptyWallet();
       await _open(tester, AddExpenseSheet(wc: wc));
-      await tester.enterText(find.byType(TextField).first, '10000000001');
+      await tester.enterText(find.byType(TextField).first, '1000000001');
       await _tap(tester, _primary);
       expect(find.textContaining(_invalidAmount), findsOneWidget);
       expect(wc.txs, isEmpty);
@@ -715,18 +715,19 @@ void main() {
         expect(find.textContaining('Put aside so far: enter an amount, like 500.'), findsOneWidget);
       });
 
-      testWidgets('an amount beyond 10 billion is refused, and typing clears the message', (tester) async {
+      // Typed amounts stop at core's maxAmountCents (1 billion units, inclusive) in every money field, goals included.
+      testWidgets('an amount beyond 1 billion is refused, and typing clears the message', (tester) async {
         final wc = emptyWallet();
         final o = await _open(tester, GoalSheet(wc: wc, goal: makeGoal(wc)));
-        await tester.enterText(_field('Target'), '10000000001');
+        await tester.enterText(_field('Target'), '1000000001');
         await save(tester);
         expect(wc.goals.single.target, 100000);
         expect(find.textContaining('Target: enter an amount'), findsOneWidget);
         expect(o.done, isFalse);
-        await tester.enterText(_field('Target'), '10000000000');
+        await tester.enterText(_field('Target'), '1000000000');
         await tester.pump();
         expect(find.textContaining('Target: enter an amount'), findsNothing);
-        await tester.enterText(_field('Put aside so far'), '10000000000');
+        await tester.enterText(_field('Put aside so far'), '1000000000');
         await tester.enterText(_field('Add money now'), '1');
         await save(tester);
         expect(find.textContaining('Put aside so far: enter an amount'), findsOneWidget);

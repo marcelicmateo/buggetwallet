@@ -113,6 +113,19 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   60 s, also from the background). User docs (README, setup, architecture) describe the relay, the encrypted database and
   the key. Review: 0 high, 1 medium, 4 low, all fixed. Full run: importer 193, core 885, relay 115, app 774, desktop,
   web, perf 0 missed frames, emulator screens, `tools/relay.sh` health on /v2.
+- 2026-10-23: **Stage G: foundation** (structure and practices first, owner 2026-10-22; every reviewer KEEP/CHANGE placed in
+  `PATH_FORWARD.md` §10). Core: typed entity schema (`schema.dart`) drives DDL, migration, type check, snapshot and search;
+  `repo.dart` split into part files; `show` lists on every export; one verb vocabulary (`addTransaction`, `markBlobUploaded`,
+  `BudgetKind`, `PlannedCost.isBill`); `parseMoneyCents` with the one amount cap (`WalletSettings.maxAmount`, 1 billion
+  units: the UI now refuses what the repo refused); importer `ReadResult`. App: `openPageOrDialog`, `DialogAppBar`,
+  `GatePage`, `RuledRow`, `MoneyField(fieldKey:)`, one invalid-amount sentence, `WalletController.now`, `_io` file names;
+  four sweep bugs fixed with tests. Tests by contract: `ValueKey`s instead of texts, importer messages, font-size probe and
+  contrast control (`guidelines_test.dart`; 44 known I6 failures skipped by widget name = Stage I6 targets). Local CI
+  (D1: nothing in GitHub): 60 s per-test cap, `tools/build.sh analyze|stage|outdated`, no-poll hook, `tools/lsp.py refs|def`
+  for the scout, `tools/stage_summary.py`, release-notes template. Four halves reviewed as they landed (all findings
+  fixed); merge delta reviewed. Stage run: importer 296, core 1233, relay, app 1094, desktop 12 files, web, perf,
+  emulator screens (two stale tests fixed: old 10-billion cap, privacy check matching a log timestamp). Follow-up:
+  `searchRows` not yet wired into `searchAll` (J1).
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -232,7 +245,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   month → "Add as new bill"; open the photo/PDF on the laptop after a sync; set a return-by date and wait for the 09:00
   reminder (no payee or amount in it); install the 44 MB APK from the `ci` run over the old app.
 - Build order (owner 2026-10-22: every feature first, the owner tests last): future spending (done) → bills database
-  (done) → outside reviews (done, `docs/review/`) → **Stage G foundation (structure + practices, owner 2026-10-22) → Stage H hardening → Stage I UI quick wins → M6 owner live test**
+  (done) → outside reviews (done, `docs/review/`) → Stage G foundation (done 2026-10-23) → **Stage H hardening → Stage I UI quick wins → M6 owner live test**
   (plan with every review KEEP/CHANGE placed, delegation, owner decisions D1–D7 in `PATH_FORWARD.md`; queue in `PIPELINE.md` Stage G/H/I).
 - M6 adds four disaster drills to the owner checks (`PATH_FORWARD.md` §4 M6): new phone with the relay alive; new phone
   with the relay dead + `.bwb`; relay address switched to a second relay and back; laptop clock a day ahead for one sync.

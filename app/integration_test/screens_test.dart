@@ -214,10 +214,12 @@ void main() {
     expect(log, contains('bills.import'));
     expect(log, contains('review.open'));
     expect(log, contains('log.level {"from":"info","to":"all"}'));
+    // Each line starts with an ISO timestamp ("…T05:36:12.993+00:00"); its seconds can spell a demo amount by chance.
+    final body = log.replaceAll(RegExp(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+[+-]\d\d:\d\d ', multiLine: true), '');
     for (final p in _private) {
-      expect(log, isNot(contains(p)), reason: 'private text "$p" in the log');
+      expect(body, isNot(contains(p)), reason: 'private text "$p" in the log');
     }
-    expect(_cents.firstMatch(log)?.group(0), isNull, reason: 'an amount in cents in the log');
+    expect(_cents.firstMatch(body)?.group(0), isNull, reason: 'an amount in cents in the log');
     expect(log, isNot(contains(await wc.keyText())));
   });
 }

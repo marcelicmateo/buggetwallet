@@ -65,7 +65,9 @@ int? amountFromText(String text) {
   return found;
 }
 
-/// Most cents an amount typed by the owner may be ([parseMoneyCents]): the one cap, the repo's [WalletSettings.maxAmount].
+/// Most cents an amount typed by the owner may be ([parseMoneyCents]): the repo's [WalletSettings.maxAmount] (1 billion
+/// units). Goals and budgets would store up to [Goal.maxSaved] / [WalletSettings.maxBudget] (10× more), but typed input
+/// stops here on purpose: one cap for every money field.
 const maxAmountCents = WalletSettings.maxAmount;
 
 final _plainNumber = RegExp(r'^[+-]?(\d+\.?\d*|\.\d+)$');
