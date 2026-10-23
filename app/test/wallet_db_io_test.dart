@@ -10,7 +10,9 @@ import 'package:wallet_core/wallet_core.dart';
 void main() {
   late Directory dir;
   late String path;
+  String? storedId; // the device id in the fake key store
   setUp(() {
+    storedId = null;
     dir = Directory.systemTemp.createTempSync('bw-dbio-');
     walletDbDirOverride = dir.path;
     path = '${dir.path}${Platform.pathSeparator}wallet.db';
@@ -22,6 +24,8 @@ void main() {
 
   Future<WalletController> load(VaultKey? key) async {
     final wc = await WalletController.load(
+      deviceIdReader: () async => storedId,
+      deviceIdWriter: (id) async => storedId = id,
       keyReader: () async => key,
       isLocked: () => false,
       clock: () => DateTime(2026, 10, 22, 12),
@@ -115,5 +119,31 @@ void main() {
     expect(await walletDbExists(), isFalse);
     plaintextWallet();
     expect(await walletDbExists(), isTrue);
+  });
+
+  group('device id (H6) with a real file', () {
+    test('upgrade: the id inside the database moves to the store once, then it is passed on every open', () async {
+      final key = VaultKey.generate();
+      final dbKey = await localDbKey(key);
+      final r = WalletRepo.open(path, dbKey: dbKey);
+      final inside = r.deviceId;
+      r.close();
+
+      final first = await load(key);
+      expect(first.repo.deviceId, inside);
+      expect(storedId, inside);
+
+      storedId = 'installidABC123'; // this install's own id: a copied database takes it
+      final second = await load(key);
+      expect(second.repo.deviceId, 'installidABC123');
+      expect(second.repo.db.select("SELECT value FROM meta WHERE key = 'device_id'").first['value'], 'installidABC123');
+    });
+
+    test('a fresh install makes an id, stores it and the new database uses it', () async {
+      final wc = await load(null);
+      await wc.createWallet();
+      expect(storedId, isNotNull);
+      expect(wc.repo.deviceId, storedId);
+    });
   });
 }

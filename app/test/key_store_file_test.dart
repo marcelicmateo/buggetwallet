@@ -95,4 +95,39 @@ void main() {
     expect(File('${keyDir.path}/wallet.key').existsSync(), isFalse);
     expect(await KeyStore.read(), isNull);
   });
+
+  group('device id (H6)', () {
+    test('none stored reads null; written it is read back from device.id beside wallet.key, 0600 in a 0700 folder', () async {
+      expect(await KeyStore.readDeviceId(), isNull);
+      await KeyStore.writeDeviceId('abcDEF0123456789');
+      expect(await KeyStore.readDeviceId(), 'abcDEF0123456789');
+      expect(File('${keyDir.path}/device.id').readAsStringSync(), 'abcDEF0123456789');
+      expect(mode('${keyDir.path}/device.id'), '600');
+      expect(mode(keyDir.path), '700');
+    }, skip: posix);
+
+    test('writing again replaces it atomically (no temp file left) and a stale temp file does not break it', () async {
+      await keyDir.create(recursive: true);
+      File('${keyDir.path}/device.id.tmp').writeAsStringSync('stale');
+      await KeyStore.writeDeviceId('first1');
+      await KeyStore.writeDeviceId('second2');
+      expect(await KeyStore.readDeviceId(), 'second2');
+      final names = keyDir.listSync().map((e) => e.uri.pathSegments.where((s) => s.isNotEmpty).last).toList();
+      expect(names, ['device.id']);
+    }, skip: posix);
+
+    test('the key and the id are separate files; forget removes both', () async {
+      await KeyStore.write(VaultKey.generate());
+      await KeyStore.writeDeviceId('idid1234');
+      await KeyStore.forget();
+      expect(await KeyStore.read(), isNull);
+      expect(await KeyStore.readDeviceId(), isNull);
+    });
+
+    test('an empty file reads as none', () async {
+      await keyDir.create(recursive: true);
+      File('${keyDir.path}/device.id').writeAsStringSync('\n');
+      expect(await KeyStore.readDeviceId(), isNull);
+    });
+  });
 }

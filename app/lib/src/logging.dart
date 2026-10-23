@@ -12,6 +12,7 @@ import 'package:flutter/services.dart' show FlutterVersion, PlatformException;
 import 'package:flutter/widgets.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'clock_notice.dart';
 import 'log_backend.dart';
 
 export 'log_backend.dart' show LogStats, nativeInfo;
@@ -108,6 +109,7 @@ class AppLog {
   static void _hookErrors() {
     final prevFlutter = FlutterError.onError;
     FlutterError.onError = (details) {
+      if (noticeClockBehind(details.exception)) return; // a refused write: the app says so, it is not a crash
       // Only the exception and stack: the full details can describe widgets and their text.
       _err.log(Level.SEVERE, LogEvent('flutter.error', {'library': details.library, 'silent': details.silent}), details.exception,
           details.stack);
@@ -115,13 +117,17 @@ class AppLog {
     };
     final prevPlatform = PlatformDispatcher.instance.onError;
     PlatformDispatcher.instance.onError = (error, stack) {
+      if (noticeClockBehind(error)) return true;
       logError(_err, 'platform.error', error, stack, level: Level.SEVERE);
       return prevPlatform?.call(error, stack) ?? false;
     };
   }
 
   /// For the zone around the app (runZonedGuarded).
-  static void zoneError(Object error, StackTrace stack) => logError(_err, 'zone.error', error, stack, level: Level.SEVERE);
+  static void zoneError(Object error, StackTrace stack) {
+    if (noticeClockBehind(error)) return;
+    logError(_err, 'zone.error', error, stack, level: Level.SEVERE);
+  }
 
   /// Applies a stored level name ('all', 'info', 'warning'); unknown or missing → all.
   static void setLevel(String? name) {

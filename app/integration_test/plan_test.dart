@@ -163,7 +163,7 @@ void main() {
   itest('Sync (relay), wallet key, Diagnostics: level, log size, clear', (t) async {
     final wc = await Harness.start(t);
     final key = await wc.keyText();
-    Harness.private(texts: ['it-relay.invalid']);
+    Harness.private(texts: ['it-relay.local']);
     await goTab(t, 'Plan');
 
     // Log level.
@@ -198,15 +198,15 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Enter an address like http://homeserver:8787'), findsOneWidget);
     expect(wc.relayUrl, isNull);
-    await t.enterText(field, 'http://it-relay.invalid:8787');
+    await t.enterText(field, 'http://it-relay.local:8787');
     await tapVisible(t, find.text('Test connection'));
     await t.pumpAndSettle();
     expect(status('Relay reachable'), findsOneWidget);
     await tapVisible(t, find.text('Save address'));
     await waitFor(t, () => wc.lastSync != null || wc.syncError != null, what: 'the first sync');
     expect(wc.syncError, isNull);
-    expect(wc.relayUrl, Uri.parse('http://it-relay.invalid:8787'));
-    expect(wc.repo.localValue('relayUrl'), 'http://it-relay.invalid:8787');
+    expect(wc.relayUrl, Uri.parse('http://it-relay.local:8787'));
+    expect(wc.repo.localValue('relayUrl'), 'http://it-relay.local:8787');
     expect(status('Up to date'), findsOneWidget);
     expect(find.textContaining('Last sync '), findsOneWidget);
 

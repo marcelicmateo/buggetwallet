@@ -32,6 +32,16 @@ class KeyStore {
   /// Wraps and stores [key]; the web needs a [passphrase] (at least [minPassphraseLength] characters).
   static Future<void> write(VaultKey key, {String? passphrase}) => _vault.write(key, passphrase: passphrase);
 
-  /// Removes the stored key and this tab's copy.
-  static Future<void> forget() async => _vault.forget();
+  static const _idName = 'bw.deviceId';
+
+  /// This browser's device id (H6), next to the wrapped key; not secret, so plain in localStorage. Never logged.
+  static Future<String?> readDeviceId() async => web.window.localStorage.getItem(_idName);
+
+  static Future<void> writeDeviceId(String id) async => web.window.localStorage.setItem(_idName, id);
+
+  /// Removes the stored key, its device id and this tab's copy.
+  static Future<void> forget() async {
+    _vault.forget();
+    web.window.localStorage.removeItem(_idName);
+  }
 }

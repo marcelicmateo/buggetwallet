@@ -19,6 +19,22 @@ String blobsWaitingText(int n) => '$n bill ${n == 1 ? 'file' : 'files'} waiting 
 /// What Plan › Sync says when the relay cannot keep bill files.
 const blobsUnsupportedText = "This relay can't keep bill photos yet. Update the relay on the home server.";
 
+/// Plan › Sync: the relay was wiped, restored or replaced, so this device sent everything again.
+const relayChangedText = 'This relay is new or was reset; this device sent everything again.';
+
+/// Information only: another install used this device's id; core moved this device to a new stream by itself.
+const deviceIdInUseText = 'Another install used this device id; this device now syncs under a new stream.';
+
+/// A peer's newest file waits because its clock is ahead of this device's.
+const clockDriftText = "A device's clock is ahead; its changes wait until the clocks agree.";
+
+/// The text under the relay address when the relay needs a creation token.
+const createTokenText = 'The relay needs its creation token.';
+
+/// Why a typed relay address was refused.
+const addressNotAnAddressText = 'Enter an address like http://homeserver:8787';
+const addressNeedsHttpsText = 'Use the https:// address of your relay. http:// is only for your home network.';
+
 /// "just now", "5 min ago", "3 h ago", "2 days ago"; "never" without a time.
 String lastSeenText(DateTime? seen, DateTime now) {
   if (seen == null) return 'never';
@@ -38,6 +54,7 @@ String relayTestFailureText(TransportFailure f) => switch (f) {
       TransportFailure.newerApi => 'This relay needs a newer app',
       TransportFailure.clockSkew =>
         "This device's clock and the relay's clock differ by more than a day. Check the date and time settings.",
+      TransportFailure.createToken => createTokenText,
       TransportFailure.olderApi => 'This relay is older than the app. Update the relay on the home server.',
       TransportFailure.unreachable => "Can't reach the relay",
       _ => 'The relay answered, but not as expected',

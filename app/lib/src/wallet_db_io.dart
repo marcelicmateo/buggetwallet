@@ -69,11 +69,11 @@ Future<bool> walletDbIsPlaintext() async {
 
 /// `wallet.db` in the app support folder, encrypted with [dbKey] (`localDbKey`). An older plaintext file is converted in place
 /// (crash-safe in core). A key that does not open it throws [WalletDbKeyException]; the file is not touched then.
-/// [WalletDb.forget] closes it and deletes the file and its side files.
-Future<WalletDb> openWalletDb(Uint8List dbKey) async {
+/// [deviceId] is this install's id from the key store (null = the database's own). [WalletDb.forget] closes it and deletes the file and its side files.
+Future<WalletDb> openWalletDb(Uint8List dbKey, {String? deviceId}) async {
   final path = await _path();
   final converted = _isPlaintext(path);
-  final repo = WalletRepo.open(path, dbKey: dbKey);
+  final repo = WalletRepo.open(path, dbKey: dbKey, deviceId: deviceId);
   return WalletDb(repo, converted: converted, forget: () async {
     for (final suffix in ['', ..._sideSuffixes]) {
       final f = File('$path$suffix');

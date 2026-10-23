@@ -119,7 +119,7 @@ Web webWallet({bool full = false, bool withKey = true, bool locked = false}) {
   }
   wc.keyWriter = (key, {passphrase}) async => w.keyWrites.add(passphrase);
   wc.keyForgetter = () async => w.keyForgets++;
-  wc.dbOpener = (dbKey) async => FakeDb(WalletRepo.inMemory()).db;
+  wc.dbOpener = (dbKey, {deviceId}) async => FakeDb(WalletRepo.inMemory()).db;
   return w;
 }
 

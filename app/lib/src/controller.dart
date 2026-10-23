@@ -100,6 +100,12 @@ class SpendingView {
   });
 }
 
+/// Why a typed relay address is refused ([WalletController.relayAddressIssue]).
+enum RelayAddressIssue { notAnAddress, needsHttps }
+
+/// The device-local value that holds the relay's creation token.
+const relayCreateTokenKey = 'relayCreateToken';
+
 /// App state. Reads everything from the local database and writes through [WalletRepo].
 class WalletController extends ChangeNotifier {
   /// The open wallet. Replaced by a fresh empty one after [forgetBrowser].
@@ -135,7 +141,8 @@ class WalletController extends ChangeNotifier {
   @visibleForTesting
   Future<SyncReport> Function(Uri relay, VaultKey key, WalletRepo repo) syncRunner = _runRelaySync;
   static Future<SyncReport> _runRelaySync(Uri relay, VaultKey key, WalletRepo repo) async {
-    final transport = RelayTransport(relay, key);
+    final token = repo.localValue(relayCreateTokenKey);
+    final transport = RelayTransport(relay, key, createToken: token == null || token.isEmpty ? null : token);
     try {
       return await SyncEngine(transport, key, appVersion: appVersion).run(repo);
     } finally {
@@ -164,7 +171,13 @@ class WalletController extends ChangeNotifier {
 
   /// Database work; tests replace them. [dbOpener] opens (or creates) the keyed wallet database with `localDbKey(key)`.
   @visibleForTesting
-  Future<WalletDb> Function(Uint8List dbKey) dbOpener = openWalletDb;
+  Future<WalletDb> Function(Uint8List dbKey, {String? deviceId}) dbOpener = openWalletDb;
+
+  /// This install's device id (H6), kept next to the key; tests replace them.
+  @visibleForTesting
+  Future<String?> Function() deviceIdReader = KeyStore.readDeviceId;
+  @visibleForTesting
+  Future<void> Function(String id) deviceIdWriter = KeyStore.writeDeviceId;
 
   /// Is there a wallet database file on this device? (Asked only while no key is known.)
   @visibleForTesting
@@ -208,6 +221,34 @@ class WalletController extends ChangeNotifier {
 
   /// Files from other devices the last sync could not read (damaged or half-synced); retried on every sync.
   int syncBadFiles = 0;
+
+  /// From the last successful sync: the relay's instance id (shown only as [relayFingerprintText]), whether the relay was new or
+  /// reset since the previous sync, and the files not applied (a device whose clock is ahead; this device's own id in use).
+  String? syncRelayInstance;
+  bool syncRelayChanged = false;
+  List<SyncProblem> syncProblems = const [];
+
+  /// `xxxx-xxxx` of the relay's instance id, to compare with the other devices; null from an older relay.
+  String? get relayFingerprintText => syncRelayInstance == null ? null : relayFingerprint(syncRelayInstance!);
+
+  /// Another install synced as this device (it moved to a new stream on its own): information only.
+  bool get syncDeviceIdInUse => syncProblems.any((p) => p.reason == SyncProblemReason.deviceIdInUse);
+
+  /// A device's clock is ahead, so its newest file waits.
+  bool get syncClockDrift => syncProblems.any((p) => p.reason == SyncProblemReason.clockDrift);
+
+  /// The relay's creation token, device-local (`relayCreateToken`, never synced, never logged); empty when none.
+  String get relayCreateToken => repo.localValue(relayCreateTokenKey) ?? '';
+
+  /// Saves (or, empty, removes) the creation token and syncs again when a relay is set. Logs `sync.createToken {set}` only.
+  Future<void> setRelayCreateToken(String token) async {
+    final t = token.trim();
+    repo.setLocalValue(relayCreateTokenKey, t.isEmpty ? null : t);
+    logEvent(_sync, Level.INFO, 'sync.createToken', {'set': t.isNotEmpty});
+    notifyListeners();
+    if (t.isNotEmpty && relayUrl != null) await syncNow(trigger: 'token');
+  }
+
   bool syncing = false;
   List<ImportLine> lastImport = const [];
 
@@ -278,7 +319,9 @@ class WalletController extends ChangeNotifier {
   /// `app.start`. If another browser tab has the wallet open ([claim] throws [WalletInUse]), nothing is opened or written and
   /// [inUseElsewhere] is true. The other parameters are for tests.
   static Future<WalletController> load({
-    Future<WalletDb> Function(Uint8List dbKey) opener = openWalletDb,
+    Future<WalletDb> Function(Uint8List dbKey, {String? deviceId}) opener = openWalletDb,
+    Future<String?> Function() deviceIdReader = KeyStore.readDeviceId,
+    Future<void> Function(String id) deviceIdWriter = KeyStore.writeDeviceId,
     Future<bool> Function() exists = walletDbExists,
     Future<void> Function(String stamp) setAside = setAsideWalletDb,
     Future<bool> Function() isPlaintext = walletDbIsPlaintext,
@@ -311,7 +354,7 @@ class WalletController extends ChangeNotifier {
     var unopened = false;
     if (key != null) {
       try {
-        db = await _openKeyed(opener, key);
+        db = await _openWithId(opener, key, deviceIdReader, deviceIdWriter);
       } on WalletInUse {
         logEvent(_log, Level.WARNING, 'app.start', {'phase': 'db', 'inUse': true});
         return WalletController._(WalletRepo.inMemory(), null, inUseElsewhere: true);
@@ -337,6 +380,8 @@ class WalletController extends ChangeNotifier {
     c._dbPending = db == null;
     c.hasUnopenedDb = unopened;
     c.dbOpener = opener;
+    c.deviceIdReader = deviceIdReader;
+    c.deviceIdWriter = deviceIdWriter;
     c.dbExists = exists;
     c.dbSetAside = setAside;
     c.dbIsPlaintext = isPlaintext;
@@ -351,11 +396,52 @@ class WalletController extends ChangeNotifier {
   }
 
   /// Opens the keyed database for [key] through [opener]; logs `db.open` (phases and timings only).
-  static Future<WalletDb> _openKeyed(Future<WalletDb> Function(Uint8List dbKey) opener, VaultKey key) async {
+  static Future<WalletDb> _openKeyed(Future<WalletDb> Function(Uint8List dbKey, {String? deviceId}) opener, VaultKey key,
+      {String? deviceId}) async {
     final sw = Stopwatch()..start();
-    final db = await opener(await localDbKey(key));
+    final db = await opener(await localDbKey(key), deviceId: deviceId);
     logEvent(_log, Level.INFO, 'db.open', {'keyed': true, 'converted': db.converted, 'ms': sw.elapsedMilliseconds});
     return db;
+  }
+
+  static final _deviceIdOk = RegExp(r'^[A-Za-z0-9]{1,48}$');
+
+  /// Opens the keyed database with this install's device id (H6). The id lives next to the key, not in the database. The first
+  /// open after an upgrade finds none: the database's own id is opened as it is and moved into the store once; from then on
+  /// every open passes the stored id. [fresh] (a new or joined wallet) makes and stores a new id before opening. The id is
+  /// never logged, a store that fails is (`deviceId.storeFailed`) and the app goes on with the database's own id.
+  static Future<WalletDb> _openWithId(Future<WalletDb> Function(Uint8List dbKey, {String? deviceId}) opener, VaultKey key,
+      Future<String?> Function() read, Future<void> Function(String id) write,
+      {bool fresh = false}) async {
+    String? id;
+    var store = false;
+    if (fresh) {
+      id = WalletRepo.newDeviceId();
+      store = true;
+    } else {
+      try {
+        id = await read();
+      } catch (e, st) {
+        logError(_log, 'deviceId.readFailed', e, st);
+      }
+      if (id != null && !_deviceIdOk.hasMatch(id)) {
+        logEvent(_log, Level.WARNING, 'deviceId.invalid');
+        id = null;
+      }
+      store = id == null;
+    }
+    if (fresh) await _storeDeviceId(write, id!);
+    final db = await _openKeyed(opener, key, deviceId: id);
+    if (store && !fresh) await _storeDeviceId(write, db.repo.deviceId);
+    return db;
+  }
+
+  static Future<void> _storeDeviceId(Future<void> Function(String id) write, String id) async {
+    try {
+      await write(id);
+    } catch (e, st) {
+      logError(_log, 'deviceId.storeFailed', e, st);
+    }
   }
 
   /// Switches from the in-memory placeholder to the opened [db]: the screens reload from it.
@@ -378,15 +464,16 @@ class WalletController extends ChangeNotifier {
   /// Opens the keyed database for [k] and switches to it. An unopened older file is never overwritten: if [k] opens it, it is
   /// used; if not, it is set aside first (`db.setAside`, no paths logged) and a new database is created. With [newWallet] the
   /// file is set aside without trying [k]. With [asideOnMismatch] false a [WalletDbKeyException] is thrown instead (unlock).
-  Future<void> _openFileDb(VaultKey k, {bool newWallet = false, bool asideOnMismatch = true}) async {
+  Future<void> _openFileDb(VaultKey k, {bool newWallet = false, bool asideOnMismatch = true, bool freshId = false}) async {
     if (newWallet && hasUnopenedDb) await _setAsideUnopened();
+    Future<WalletDb> open() => _openWithId(dbOpener, k, deviceIdReader, deviceIdWriter, fresh: freshId);
     WalletDb db;
     try {
-      db = await _openKeyed(dbOpener, k);
+      db = await open();
     } on WalletDbKeyException {
       if (!asideOnMismatch) rethrow;
       await _setAsideUnopened();
-      db = await _openKeyed(dbOpener, k);
+      db = await open();
     }
     hasUnopenedDb = false;
     _useDb(db);
@@ -783,7 +870,7 @@ class WalletController extends ChangeNotifier {
     // (the next start would convert that file under the new wallet's key). A crash after the key only costs an empty database.
     if (_dbPending && hasUnopenedDb) await _setAsideUnopened();
     await keyWriter(k, passphrase: passphrase);
-    if (_dbPending) await _openFileDb(k, newWallet: true);
+    if (_dbPending) await _openFileDb(k, newWallet: true, freshId: true);
     key = k;
     _keyPromptPending = true; // HomeShell asks the owner to save the key before the first Today
     logEvent(_log, Level.INFO, 'wallet.create', {'defaultGoals': repo.goals().isEmpty});
@@ -797,13 +884,13 @@ class WalletController extends ChangeNotifier {
   /// Joins with the wallet [text] key. [relay] (optional, can be set later in Plan) is the relay address; the first sync follows.
   Future<void> joinWallet(String text, {String? passphrase, Uri? relay}) async {
     final k = await VaultKey.parse(text); // errors are logged by the caller (never the text)
-    final r = relay == null ? null : _parseRelay(relay.toString());
+    final r = relay == null ? null : parseRelayAddress(relay.toString());
     if (relay != null && r == null) throw const FormatException('Not a relay address');
     // No key was stored but an unkeyed (plaintext) file exists: it belongs to no wallet we can name, and opening it with this key
     // would convert it and merge its data into the joined wallet. Set it aside (before the key is written, as in create).
     if (_dbPending && hasUnopenedDb && await dbIsPlaintext()) await _setAsideUnopened();
     await keyWriter(k, passphrase: passphrase);
-    if (_dbPending) await _openFileDb(k);
+    if (_dbPending) await _openFileDb(k, freshId: true);
     key = k;
     repo.setLocalValue('keyBackupConfirmed', today()); // they typed the key in, so they have it
     if (r != null) {
@@ -1009,13 +1096,38 @@ class WalletController extends ChangeNotifier {
     return u.replace(path: path);
   }
 
-  /// The address typed in [raw] as a relay [Uri], or null when it is not a usable one (for the Plan field and onboarding).
-  static Uri? parseRelayAddress(String raw) => _parseRelay(raw);
+  /// Why a typed relay address is refused, or null when it is usable: [RelayAddressIssue.notAnAddress], or
+  /// [RelayAddressIssue.needsHttps] for plain `http://` to a host on the internet (anyone on the way could read or change
+  /// the traffic, and the creation token travels in the clear). `http://` is accepted for this device (localhost, `127.x`, `::1`),
+  /// the emulator's `10.0.2.2`, private IPv4 ranges (10/8, 172.16/12, 192.168/16), `.local` names and names without a dot
+  /// (a home-network name such as `homeserver`).
+  static RelayAddressIssue? relayAddressIssue(String? raw) {
+    final u = _parseRelay(raw);
+    if (u == null) return RelayAddressIssue.notAnAddress;
+    if (u.scheme == 'http' && !_privateHost(u.host)) return RelayAddressIssue.needsHttps;
+    return null;
+  }
+
+  static bool _privateHost(String host) {
+    final h = host.toLowerCase();
+    if (h == 'localhost' || h == '::1' || h.endsWith('.local') || h.endsWith('.localhost') || !h.contains('.') && !h.contains(':')) {
+      return true;
+    }
+    final m = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$').firstMatch(h);
+    if (m == null) return false;
+    final o = [for (var i = 1; i <= 4; i++) int.parse(m.group(i)!)];
+    if (o.any((n) => n > 255)) return false;
+    return o[0] == 127 || o[0] == 10 || (o[0] == 172 && o[1] >= 16 && o[1] <= 31) || (o[0] == 192 && o[1] == 168);
+  }
+
+  /// The address typed in [raw] as a relay [Uri], or null when it is not a usable one (for the Plan field and onboarding):
+  /// see [relayAddressIssue].
+  static Uri? parseRelayAddress(String raw) => relayAddressIssue(raw) == null ? _parseRelay(raw) : null;
 
   /// Sets (or, with null, clears) the relay address, device-local, then syncs. Throws [FormatException] for a bad address
   /// (the address is never logged: only `set` / `unset`).
   Future<void> setRelay(Uri? url) async {
-    final u = url == null ? null : _parseRelay(url.toString());
+    final u = url == null ? null : parseRelayAddress(url.toString());
     if (url != null && u == null) throw const FormatException('Not a relay address');
     repo.setLocalValue('relayUrl', u?.toString());
     relayUrl = u;
@@ -1026,6 +1138,9 @@ class WalletController extends ChangeNotifier {
     syncBlobsWaiting = 0;
     syncBlobsUnsupported = false;
     syncDevices = const [];
+    syncRelayInstance = null;
+    syncRelayChanged = false;
+    syncProblems = const [];
     _relayFollowUp = u != null && syncing; // a run is going: exactly one follow-up for the new address when it ends
     logEvent(_sync, Level.INFO, 'sync.relay', {'set': u != null}); // never the address
     notifyListeners();
@@ -1073,7 +1188,11 @@ class WalletController extends ChangeNotifier {
       syncBlobsWaiting = r.blobsWaiting;
       syncBlobsUnsupported = r.blobsUnsupported;
       syncDevices = r.devices;
+      syncRelayInstance = r.relayInstance;
+      syncRelayChanged = r.relayChanged;
+      syncProblems = r.problems;
       logEvent(_sync, Level.INFO, 'sync.done', {
+        'relayChanged': r.relayChanged,
         'trigger': trigger,
         'sent': r.sent,
         'received': r.received,
@@ -1139,18 +1258,23 @@ class WalletController extends ChangeNotifier {
   }
 
   /// Reads a picked backup file ([bytes]) into the empty wallet; returns the number of rows restored.
-  /// Throws [StateError] when the wallet is not empty, [VaultException] on a wrong key, [BackupException] on a bad file.
-  Future<int> restoreBackupFile(Uint8List bytes) async {
+  /// With [otherKey] (the typed or scanned text of the key the backup was made with) the file is opened with that key instead of
+  /// this wallet's; the restored rows then belong to this wallet. That key is used once: not stored, not logged, not kept.
+  /// Throws [StateError] when the wallet is not empty, [VaultException] on a wrong key (`failure` is null when [otherKey] is not a
+  /// key at all), [BackupException] on a bad file.
+  Future<int> restoreBackupFile(Uint8List bytes, {String? otherKey}) async {
     final k = key;
     if (k == null) throw const BackupException(BackupFailure.unreadable, 'No wallet key on this device.');
     final sw = Stopwatch()..start();
     try {
-      final rows = await backupBytesReader(repo, bytes, k);
-      logEvent(_backupLog, Level.INFO, 'backup.restored', {'ms': sw.elapsedMilliseconds, 'rows': rows, 'bytes': bytes.length});
+      final opener = otherKey == null ? k : await VaultKey.parse(otherKey);
+      final rows = await backupBytesReader(repo, bytes, opener);
+      logEvent(_backupLog, Level.INFO, 'backup.restored',
+          {'ms': sw.elapsedMilliseconds, 'rows': rows, 'bytes': bytes.length, 'otherKey': otherKey != null});
       _changed();
       return rows;
     } catch (e, st) {
-      logError(_backupLog, 'backup.restoreFailed', e, st, fields: {'type': e.runtimeType.toString()});
+      logError(_backupLog, 'backup.restoreFailed', e, st, fields: {'type': e.runtimeType.toString(), 'otherKey': otherKey != null});
       rethrow;
     }
   }
