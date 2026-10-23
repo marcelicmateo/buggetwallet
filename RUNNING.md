@@ -91,7 +91,7 @@ Then in the app: Plan › Sync → relay address `http://127.0.0.1:8787` (the An
 device**, the wallet key (Plan › Sync › Show wallet key) and the same address. To watch two devices converge, run the
 live window and the emulator against the same relay.
 
-For a home-server deployment (Podman quadlet, VPN, backups) see `docs/setup.md` §5.
+For a home-server deployment (Podman quadlet, Caddy HTTPS, backups) see `docs/setup.md` §5.
 
 ## B. With your own Flutter SDK
 

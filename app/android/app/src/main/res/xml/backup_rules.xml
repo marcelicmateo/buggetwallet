@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older (android:fullBackupContent): exclude everything, same as data_extraction_rules.xml. -->
+<full-backup-content>
+    <exclude domain="root"/>
+    <exclude domain="file"/>
+    <exclude domain="database"/>
+    <exclude domain="sharedpref"/>
+    <exclude domain="external"/>
+    <exclude domain="device_root"/>
+    <exclude domain="device_file"/>
+    <exclude domain="device_database"/>
+    <exclude domain="device_sharedpref"/>
+</full-backup-content>

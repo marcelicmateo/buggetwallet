@@ -71,6 +71,8 @@ class Harness {
     int maxBytes = 1024 * 1024 * 1024,
     int maxInFlightBytes = defaultMaxInFlightBytes,
     List<String>? origins,
+    String? createToken,
+    bool trustProxy = false,
     Directory? dir,
     DateTime? clock,
     String? publicHost,
@@ -83,6 +85,8 @@ class Harness {
     h._maxInFlight = maxInFlightBytes;
     h.publicHost = publicHost;
     h.hooks = hooks;
+    h._createToken = createToken;
+    h._trustProxy = trustProxy;
     await h._boot();
     return h;
   }
@@ -91,6 +95,8 @@ class Harness {
   late int _maxWallets;
   late int _maxBytes;
   late int _maxInFlight;
+  String? _createToken;
+  bool _trustProxy = false;
 
   /// Passed to [Relay] on every boot (tests may change them before [restart]).
   String? publicHost;
@@ -107,6 +113,8 @@ class Harness {
       maxWallets: _maxWallets,
       maxBytes: _maxBytes,
       maxInFlightBytes: _maxInFlight,
+      createToken: _createToken,
+      trustProxy: _trustProxy,
       now: () => clock,
       log: logs.add,
       publicHost: publicHost,
@@ -193,8 +201,15 @@ class Harness {
 }
 
 /// Starts a [Harness] and stops it when the test ends.
-Future<Harness> freshHarness({int maxWallets = 16, int maxBytes = 1024 * 1024 * 1024, List<String>? origins}) async {
-  final h = await Harness.start(maxWallets: maxWallets, maxBytes: maxBytes, origins: origins);
+Future<Harness> freshHarness({
+  int maxWallets = 16,
+  int maxBytes = 1024 * 1024 * 1024,
+  List<String>? origins,
+  String? createToken,
+  bool trustProxy = false,
+}) async {
+  final h =
+      await Harness.start(maxWallets: maxWallets, maxBytes: maxBytes, origins: origins, createToken: createToken, trustProxy: trustProxy);
   addTearDown(h.stop);
   return h;
 }

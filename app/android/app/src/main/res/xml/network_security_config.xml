@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Trust the system certificate authorities only: a CA the user (or someone with the unlocked phone) installed does not count,
+     so a rogue CA cannot make a fake relay look valid. Cleartext HTTP stays allowed because the relay may be reached by plain
+     http:// on the home network (dev/LAN mode) and Android cannot express "private addresses only" here; the app itself refuses
+     http:// to a public host (see the Sync address check in the app). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>

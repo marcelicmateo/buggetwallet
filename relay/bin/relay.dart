@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:relay/relay.dart';
@@ -12,6 +13,14 @@ Usage: relay --data <dir> [options]
                       (default http://127.0.0.1:8080 and http://localhost:8080)
   --max-wallets <n>   most wallets (default 16)               env BW_RELAY_MAX_WALLETS
   --max-bytes <n>     most bytes per wallet (default 1 GiB)   env BW_RELAY_MAX_BYTES
+  --create-token <file>  file holding the creation token: a request that would create a wallet must send it in
+                      X-BW-Create-Token (403 otherwise). Env BW_RELAY_CREATE_TOKEN_FILE (file) or BW_RELAY_CREATE_TOKEN
+                      (the token itself, at least 16 characters). Not set = anyone can create a wallet (dev mode).
+  --trust-proxy       take the client address from the last X-Forwarded-For hop (only behind a reverse proxy that is the
+                      sole way to reach the relay)                env BW_RELAY_TRUST_PROXY=1 (or 0)
+  --public-host <name>  the name clients use to reach the relay (e.g. the domain behind Caddy); the host in signed requests must
+                      match it. Default: the request's Host header   env BW_RELAY_PUBLIC_HOST (or BW_RELAY_DOMAIN)
+  --health-check      ask http://127.0.0.1:<port>/v2/health and exit 0 (healthy) or 1; for the container HEALTHCHECK
 Flags win over environment variables.''';
 
 class _UsageError implements Exception {
@@ -24,7 +33,9 @@ class _UsageError implements Exception {
 class _Config {
   _Config(List<String> args, Map<String, String> env) {
     final flags = <String, List<String>>{};
-    const known = {'host', 'port', 'data', 'origin', 'max-wallets', 'max-bytes'};
+    const known = {'host', 'port', 'data', 'origin', 'max-wallets', 'max-bytes', 'create-token', 'public-host'};
+    const switches = {'trust-proxy', 'health-check'};
+    final on = <String>{};
     for (var i = 0; i < args.length; i++) {
       var a = args[i];
       if (!a.startsWith('--')) throw _UsageError('unexpected argument');
@@ -34,6 +45,11 @@ class _Config {
       if (eq >= 0) {
         value = a.substring(eq + 1);
         a = a.substring(0, eq);
+      }
+      if (switches.contains(a)) {
+        if (value != null) throw _UsageError('--$a takes no value');
+        on.add(a);
+        continue;
       }
       if (!known.contains(a)) throw _UsageError('unknown flag --$a');
       if (value == null) {
@@ -47,9 +63,18 @@ class _Config {
     port = _int('port', one('port', 'BW_RELAY_PORT'), 8787, max: 65535);
     maxWallets = _int('max-wallets', one('max-wallets', 'BW_RELAY_MAX_WALLETS'), 16, min: 1);
     maxBytes = _int('max-bytes', one('max-bytes', 'BW_RELAY_MAX_BYTES'), 1024 * 1024 * 1024, min: 1);
+    healthCheck = on.contains('health-check');
+    trustProxy = on.contains('trust-proxy') || _envSwitch('BW_RELAY_TRUST_PROXY', env['BW_RELAY_TRUST_PROXY']);
+    final host0 = (one('public-host', 'BW_RELAY_PUBLIC_HOST') ?? env['BW_RELAY_DOMAIN'])?.trim().toLowerCase();
+    if (host0 != null && host0.isNotEmpty && !RegExp(r'^[a-z0-9.-]+(:[0-9]{1,5})?$').hasMatch(host0)) {
+      throw _UsageError('--public-host must be a host name (optionally with :port), without scheme or path');
+    }
+    publicHost = host0 == null || host0.isEmpty ? null : host0;
     final dir = one('data', 'BW_RELAY_DATA');
-    if (dir == null || dir.isEmpty) throw _UsageError('--data is required');
-    data = dir;
+    if (!healthCheck && (dir == null || dir.isEmpty)) throw _UsageError('--data is required');
+    data = dir ?? '';
+    createToken =
+        healthCheck ? null : _token(flags['create-token']?.last ?? env['BW_RELAY_CREATE_TOKEN_FILE'], env['BW_RELAY_CREATE_TOKEN']);
     final envOrigins = env['BW_RELAY_ORIGINS'];
     origins = flags['origin'] ??
         (envOrigins == null ? defaultOrigins : envOrigins.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList());
@@ -61,12 +86,58 @@ class _Config {
   late final List<String> origins;
   late final int maxWallets;
   late final int maxBytes;
+  late final bool healthCheck;
+  late final bool trustProxy;
+  late final String? publicHost;
+  late final String? createToken;
+
+  /// An on/off environment setting: 1/true = on, 0/false/unset/empty = off; any other value is a usage error (never silently off).
+  static bool _envSwitch(String name, String? raw) {
+    if (raw == null || raw.isEmpty || raw == '0' || raw == 'false') return false;
+    if (raw == '1' || raw == 'true') return true;
+    throw _UsageError('$name must be 1, true, 0 or false');
+  }
+
+  /// Values from the shipped templates: refused so a copied-but-unedited file never goes live.
+  static const _placeholderTokens = {'CHANGE_ME', 'replace-with-a-long-random-token'};
+
+  /// The token from [file] (trimmed) or, without a file, from [inline]; null when neither is set.
+  static String? _token(String? file, String? inline) {
+    String? t = inline;
+    if (file != null) {
+      try {
+        t = File(file).readAsStringSync();
+      } on FileSystemException {
+        throw _UsageError('cannot read the create-token file');
+      }
+    }
+    if (t == null) return null;
+    t = t.trim();
+    if (_placeholderTokens.contains(t)) throw _UsageError('the create token is still the placeholder from the template: set your own');
+    if (t.length < 16) throw _UsageError('the create token must have at least 16 characters');
+    return t;
+  }
 
   static int _int(String name, String? raw, int fallback, {int min = 0, int max = 1 << 62}) {
     if (raw == null) return fallback;
     final n = int.tryParse(raw);
     if (n == null || n < min || n > max) throw _UsageError('--$name must be a number from $min to $max');
     return n;
+  }
+}
+
+/// 0 when `/v2/health` on localhost answers 200 with an `api` number, else 1.
+Future<int> _healthCheck(int port) async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
+  try {
+    final req = await client.get('127.0.0.1', port, '/v2/health').timeout(const Duration(seconds: 3));
+    final res = await req.close().timeout(const Duration(seconds: 3));
+    final body = await utf8.decodeStream(res).timeout(const Duration(seconds: 3));
+    return res.statusCode == 200 && body.contains('"api"') ? 0 : 1;
+  } on Object {
+    return 1;
+  } finally {
+    client.close(force: true);
   }
 }
 
@@ -82,9 +153,23 @@ Future<void> main(List<String> args) async {
     stderr.writeln('relay: ${e.message}\n$_usage');
     exit(64);
   }
-  final relay = Relay(data: Directory(cfg.data), origins: cfg.origins, maxWallets: cfg.maxWallets, maxBytes: cfg.maxBytes);
+  if (cfg.healthCheck) exit(await _healthCheck(cfg.port));
+  final relay = Relay(
+    data: Directory(cfg.data),
+    origins: cfg.origins,
+    maxWallets: cfg.maxWallets,
+    maxBytes: cfg.maxBytes,
+    createToken: cfg.createToken,
+    trustProxy: cfg.trustProxy,
+    publicHost: cfg.publicHost,
+  );
   final server = await relay.serve(host: cfg.host, port: cfg.port);
   stdout.writeln('relay listening port=${server.port} wallets=${relay.walletCount}');
+  stdout.writeln(cfg.createToken == null
+      ? 'relay wallet creation is OPEN (no --create-token): development mode only'
+      : 'relay wallet creation needs the create token');
+  if (cfg.publicHost != null) stdout.writeln('relay public host is set (--public-host)');
+  if (cfg.trustProxy) stdout.writeln('relay client addresses taken from X-Forwarded-For (--trust-proxy)');
 
   final stop = Completer<void>();
   final subs = <StreamSubscription<ProcessSignal>>[];

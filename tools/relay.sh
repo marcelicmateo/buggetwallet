@@ -8,6 +8,7 @@
 #   tools/relay.sh reset     stop and delete the data folder (asks first; BW_YES=1 skips the question)
 #   tools/relay.sh image     (re)build the image
 #
+# Dev mode: plain HTTP on 127.0.0.1, wallet creation open. The real deployment (Caddy + HTTPS + create token) is relay/deploy/.
 # Data: ${BW_DATA_DIR:-~/.local/share/budget-wallet}/relay/. Allowed origins: BW_RELAY_ORIGINS, default the local web build
 # (http://127.0.0.1:8080, http://localhost:8080; tools/web.sh serve).
 set -euo pipefail
@@ -38,7 +39,8 @@ case "$CMD" in
     podman rm -f "$NAME" >/dev/null 2>&1 || true
     mkdir -p "$DATA"
     # The container user (uid 10001) is mapped to the host user, so the data folder stays yours.
-    podman run -d --name "$NAME" --userns=keep-id:uid=10001,gid=10001 \
+    podman run -d --name "$NAME" --read-only --userns=keep-id:uid=10001,gid=10001 \
+      --health-cmd 'relay --health-check' --health-interval 30s \
       -p "127.0.0.1:$PORT:8787" -v "$DATA:/data:z" \
       -e "BW_RELAY_ORIGINS=$ORIGINS" "$IMAGE" >/dev/null
     if health --retry 15 --retry-delay 1 --retry-connrefused --retry-all-errors >/dev/null; then
