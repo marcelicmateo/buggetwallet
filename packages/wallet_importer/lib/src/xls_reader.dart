@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:logging/logging.dart';
 
 import 'grid.dart';
+import 'limits.dart';
 import 'log.dart';
 
 final _log = Logger('bw.importer.xls');
@@ -24,9 +25,14 @@ class XlsReader {
     return true;
   }
 
-  /// Rows of the first sheet. Empty cells are `''`, numbers are `double`.
+  /// Rows of the first sheet. Empty cells are `''`, numbers are `double`. A password-protected file throws
+  /// [FileRefused] ([passwordProtectedMessage]): an .xls whose workbook globals hold a FILEPASS record, or an Office
+  /// file encrypted as a whole (an `EncryptedPackage` stream, which is how a protected .xlsx is stored).
   static List<List<Object>> firstSheet(Uint8List bytes) {
     final cf = _CompoundFile(bytes);
+    if (cf.entries.any((e) => e.type == 2 && e.name == 'EncryptedPackage')) {
+      throw const FileRefused(passwordProtectedMessage, 'encryptedPackage');
+    }
     final wb = cf.stream(const ['Workbook', 'Book']);
     logImporter(_log, Level.FINE, 'xls.container',
         {'bytes': bytes.length, 'sector': cf.sectorSize, 'entries': cf.entries.length, 'workbookBytes': wb.length});
@@ -165,6 +171,9 @@ class _Biff {
   static const _bof = 0x0809, _eof = 0x000A, _boundSheet = 0x0085, _sst = 0x00FC, _continue = 0x003C;
   static const _labelSst = 0x00FD, _number = 0x0203, _rk = 0x027E, _mulRk = 0x00BD, _label = 0x0204, _formula = 0x0006;
 
+  /// FILEPASS: the workbook is encrypted from here on (record headers stay readable, their data does not).
+  static const _filepass = 0x002F;
+
   List<_Record> _records() {
     final bd = ByteData.sublistView(wb);
     final out = <_Record>[];
@@ -266,6 +275,11 @@ class _Biff {
 
   List<List<Object>> firstSheet() {
     final recs = _records();
+    for (final r in recs) {
+      if (r.type == _eof) break; // the end of the workbook globals
+      if (r.type == _filepass) throw const FileRefused(passwordProtectedMessage, 'filepass');
+    }
+
     var sst = <String>[];
     int? sheetOffset;
     for (var i = 0; i < recs.length; i++) {

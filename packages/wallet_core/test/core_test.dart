@@ -54,13 +54,9 @@ void main() {
 
     test('settings and goals round-trip', () {
       final r = WalletRepo.inMemory();
-      r.updateSettings({
-        'salary': 150000,
-        'merchantPatterns': [
-          ['Groceries', 'corner']
-        ],
-        'salaryConfirmed': true
-      });
+      r.updateSettings({'salary': 150000, 'salaryConfirmed': true});
+      r.setMerchantPattern('Groceries', 'corner');
+
       expect(r.settings().salary, 150000);
       expect(r.settings().salaryConfirmed, isTrue);
       expect(r.settings().merchantPatterns.first, ['Groceries', 'corner']);
@@ -96,7 +92,7 @@ void main() {
       final r = WalletRepo.inMemory();
       r.importBatch(january);
       final cz = r.categorizer();
-      final s = monthSummary(r.transactions().map(cz.categorize).toList(), '2026-01');
+      final s = monthSummary(r.transactions().map(cz.categorize).toList(), '2026-01', currency: 'EUR');
       expect(s.income, 180000);
       expect(s.out, 82373);
     });

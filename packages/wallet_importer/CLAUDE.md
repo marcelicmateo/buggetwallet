@@ -6,11 +6,18 @@ Pure Dart. **The only code that knows bank formats.** Turns PBZ .xls, Revolut .x
 ## Files
 - `importer.dart` — `importBankFile(bytes, {fileName})`: detects the container format, reads the rows, then tries
   each profile in `bankProfiles` (`parseRows`); the first `detect` wins, none → `ImportException(unknownLayoutMessage)`.
+  Refused before reading (`limits.dart`, `importer.refused {reason, bytes}`): over `maxImportBytes` (20 MiB) and an .xlsx
+  whose entries' stated sizes sum past `maxXlsxUnpackedBytes` (64 MiB; archive 4.5 never inflates an entry past its
+  stated size) → `tooLargeMessage`; an .xls with FILEPASS in the workbook globals or an OLE2 file with an
+  `EncryptedPackage` stream (a protected .xlsx) → `passwordProtectedMessage`. Readers throw `FileRefused` for these.
 - `profiles/profile.dart` — the contract: `BankProfile` (`id`, `label`, `detect(ctx)`, `prepare(ctx)`, `mapRow(row, ctx)`,
   `parse`), `ImportContext` (first `headRows` rows as text, format, file name; per-file `firstRow`, `columns`, `account`;
   `v1Id` / `sourceId` with the occurrence counter), `RowResult` / `RowOutcome` (transaction, ignored, skipped, invalid).
 - `profiles/pbz.dart`, `profiles/revolut.dart` — one file per bank. `profiles/registry.dart` — `bankProfiles` in
-  detection order (Revolut first: its header row is specific; PBZ matches any `DATUM` cell) and `bankLabels()`.
+  detection order (Revolut first: its header row is specific; PBZ needs the whole header `PbzProfile.header` — DATUM,
+  VRSTA TRANSAKCIJE, OPIS PLAĆANJA, IZNOS, VALUTA — on one row of the head from column A, trimmed, any case,
+  mojibake repaired) and `bankLabels()`.
+
 - `profiles/cells.dart` — cell helpers every profile uses: `cellText`, `cellDate`, `cellNumber`, `cellCents`,
   `serialDate`/`excelDate`, `jsRound` (v1's Math.round), `fixMojibake`.
 - `xls_reader.dart` (own BIFF8 reader), `xlsx_reader.dart` (`archive` + `xml`), `csv_reader.dart`. `grid.dart` —

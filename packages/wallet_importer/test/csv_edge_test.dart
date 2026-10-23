@@ -290,7 +290,7 @@ void main() {
     });
 
     test('PBZ: a dated row with an unreadable amount is counted, an empty amount is ignored', () {
-      final b = _imp('TRANSAKCIJSKI RAČUN;HR00\nDATUM;VRSTA;OPIS;IZNOS;VALUTA\n'
+      final b = _imp('TRANSAKCIJSKI RAČUN;HR00\nDATUM;VRSTA TRANSAKCIJE;OPIS PLAĆANJA;IZNOS;VALUTA\n'
           '15.01.2026;POS;Shop;abc;EUR\n15.01.2026;POS;Shop;;EUR\n15.01.2026;POS;Shop;-1,00;EUR\n');
       expect(_amounts(b), [-100]);
       expect(b.invalid, 1);
@@ -410,7 +410,7 @@ void main() {
   });
 
   group('semicolon exports (PBZ-style CSV)', () {
-    String pbz(List<String> rows) => 'TRANSAKCIJSKI RAČUN;HR00\nDATUM;VRSTA;OPIS;IZNOS;VALUTA\n${rows.join('\n')}\n';
+    String pbz(List<String> rows) => 'TRANSAKCIJSKI RAČUN;HR00\nDATUM;VRSTA TRANSAKCIJE;OPIS PLAĆANJA;IZNOS;VALUTA\n${rows.join('\n')}\n';
 
     test('d.m.yyyy dates, comma decimals with thousands dots, signed amounts', () {
       final b = _imp(pbz(['15.01.2026;Plaća;Neto plaća;1.500,00;EUR', '3.1.2026;POS plaćanje;Shop;-1.234,56;EUR']));

@@ -31,9 +31,20 @@ class PbzProfile extends BankProfile {
     'Ostalo': TxKind.other,
   };
 
-  /// The header block names the account (`TRANSAKCIJSKI RAČUN:`) or the column row starts with `DATUM`.
+  /// The column header row, from the first column: mapRow reads the columns by position.
+  static const header = ['DATUM', 'VRSTA TRANSAKCIJE', 'OPIS PLAĆANJA', 'IZNOS', 'VALUTA'];
+
+  /// One row of the first [headRows] holds the whole column [header] from its first cell (trimmed, any case, a
+  /// mis-decoded `Ć` repaired). A lone `DATUM` cell or the account label alone is not enough: another bank's export
+  /// can have either.
   @override
-  bool detect(ImportContext ctx) => ctx.head.any((r) => r.any((c) => _accountLabel.hasMatch(c) || c == 'DATUM'));
+  bool detect(ImportContext ctx) => ctx.head.any((r) {
+        if (r.length < header.length) return false;
+        for (var i = 0; i < header.length; i++) {
+          if (fixMojibake(r[i]).toUpperCase() != header[i]) return false;
+        }
+        return true;
+      });
 
   /// Columns are fixed (DATUM, VRSTA TRANSAKCIJE, OPIS PLAĆANJA, IZNOS, VALUTA); every row is tried, a dated first
   /// cell marks a transaction. The IBAN is the cell under or after the `TRANSAKCIJSKI RAČUN:` label.

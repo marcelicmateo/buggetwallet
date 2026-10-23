@@ -675,7 +675,7 @@ void main() {
   group('matching while a sync file never arrives (strict order: the match never comes without its rows)', () {
     int out(Device d) {
       final cz = d.repo.categorizer();
-      return monthSummary(d.repo.transactions().map(cz.categorize).toList(), '2026-01').out;
+      return monthSummary(d.repo.transactions().map(cz.categorize).toList(), '2026-01', currency: 'EUR').out;
     }
 
     test(

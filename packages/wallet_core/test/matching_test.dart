@@ -294,7 +294,7 @@ void main() {
       expect(r.transaction(m)!.matchedTo, isNull);
       expect(spending(r).map((t) => t.id), [m], reason: 'the expense still counts, once');
       final cz = r.categorizer();
-      expect(monthSummary(r.transactions().map(cz.categorize).toList(), '2026-01').byCategory['Eating out'], 2340);
+      expect(monthSummary(r.transactions().map(cz.categorize).toList(), '2026-01', currency: 'EUR').byCategory['Eating out'], 2340);
       // Re-importing the same export does not bring the deleted row back, nor match it.
       expect(r.importBatch(january).matched, 0);
       expect(spending(r).map((t) => t.id), [m]);

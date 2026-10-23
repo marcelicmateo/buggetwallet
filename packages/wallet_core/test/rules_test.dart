@@ -82,7 +82,7 @@ void main() {
         ct('2026-01-16', 5000, 'Internal transfer'),
         ct('2026-01-17', -2000, 'Groceries'),
       ];
-      final m = monthSummary(txs, '2026-01');
+      final m = monthSummary(txs, '2026-01', currency: 'EUR');
       expect((m.income, m.out), (150000, 2000));
       final p = periodSummaries(txs, const WalletSettings(), '2026-01-20').single;
       expect((p.income, p.out), (150000, 2000));
@@ -285,7 +285,7 @@ void main() {
       final manual = r.transactions(includeHidden: true).firstWhere((t) => t.manual);
       expect(manual.matchedTo, bankRow.id);
       expect(manual.live, isFalse);
-      final m = monthSummary(r.transactions().map(cz.categorize).toList(), '2026-01');
+      final m = monthSummary(r.transactions().map(cz.categorize).toList(), '2026-01', currency: 'EUR');
       expect(m.byCategory['Eating out'], 2340);
       expect(m.byCategory['Groceries'], isNull);
       r.close();

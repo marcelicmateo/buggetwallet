@@ -56,7 +56,7 @@ NormalizedTransaction gym(String date, int cents) => n(date, -cents, 'POS plaća
 void main() {
   group('detectRecurring', () {
     test('three monthly payments make a candidate: id from the payee key, median amount, next due 30 days on', () {
-      final c = detectRecurring(monthly('Synthetic Gym 2026', 2999), today: today);
+      final c = detectRecurring(monthly('Synthetic Gym 2026', 2999), today: today, currency: 'EUR');
       expect(c, hasLength(1));
       final b = c.single;
       expect(b.id, 'rec:synthetic_gym');
@@ -73,8 +73,8 @@ void main() {
 
     test('two occurrences are not enough, three are', () {
       final two = monthly('Synthetic Gym', 2999).sublist(1);
-      expect(detectRecurring(two, today: today), isEmpty);
-      expect(detectRecurring(monthly('Synthetic Gym', 2999), today: today), hasLength(1));
+      expect(detectRecurring(two, today: today, currency: 'EUR'), isEmpty);
+      expect(detectRecurring(monthly('Synthetic Gym', 2999), today: today, currency: 'EUR'), hasLength(1));
     });
 
     test('gaps of 27 and 33 days pass, 26 and 34 do not', () {
@@ -83,10 +83,10 @@ void main() {
             row(addDays('2025-12-10', a), -1000, 'Synthetic Gym'),
             row(addDays(addDays('2025-12-10', a), b), -1000, 'Synthetic Gym'),
           ];
-      expect(detectRecurring(gaps(27, 33), today: today), hasLength(1));
-      expect(detectRecurring(gaps(33, 27), today: today), hasLength(1));
-      expect(detectRecurring(gaps(26, 30), today: today), isEmpty);
-      expect(detectRecurring(gaps(30, 34), today: today), isEmpty);
+      expect(detectRecurring(gaps(27, 33), today: today, currency: 'EUR'), hasLength(1));
+      expect(detectRecurring(gaps(33, 27), today: today, currency: 'EUR'), hasLength(1));
+      expect(detectRecurring(gaps(26, 30), today: today, currency: 'EUR'), isEmpty);
+      expect(detectRecurring(gaps(30, 34), today: today, currency: 'EUR'), isEmpty);
     });
 
     test('amounts within 10 % of the median pass (inclusive), one outside breaks the candidate', () {
@@ -95,9 +95,9 @@ void main() {
             row('2026-01-09', -b, 'Synthetic Gym'),
             row('2026-02-08', -c, 'Synthetic Gym'),
           ];
-      expect(detectRecurring(amounts(9000, 10000, 11000), today: today).single.expectedAmount, 10000);
-      expect(detectRecurring(amounts(10000, 10000, 11001), today: today), isEmpty);
-      expect(detectRecurring(amounts(8999, 10000, 10000), today: today), isEmpty);
+      expect(detectRecurring(amounts(9000, 10000, 11000), today: today, currency: 'EUR').single.expectedAmount, 10000);
+      expect(detectRecurring(amounts(10000, 10000, 11001), today: today, currency: 'EUR'), isEmpty);
+      expect(detectRecurring(amounts(8999, 10000, 10000), today: today, currency: 'EUR'), isEmpty);
     });
 
     test('the median of an even count is the mean of the two middle values', () {
@@ -108,37 +108,37 @@ void main() {
 
     test('an extra purchase at the same payee breaks the monthly chain (shops are not bills)', () {
       final txs = [...monthly('Synthetic Gym', 2999), row('2026-01-20', -500, 'Synthetic Gym')];
-      expect(detectRecurring(txs, today: today), isEmpty);
+      expect(detectRecurring(txs, today: today, currency: 'EUR'), isEmpty);
     });
 
     test('inflows, transfers, hand-added, deleted and future rows never count', () {
       final inflow = [for (final t in monthly('Synthetic Refund', 2999)) row(t.date, 2999, 'Synthetic Refund')];
-      expect(detectRecurring(inflow, today: today), isEmpty);
-      expect(detectRecurring(monthly('Synthetic Top Up', 2999, category: 'Internal transfer'), today: today), isEmpty);
+      expect(detectRecurring(inflow, today: today, currency: 'EUR'), isEmpty);
+      expect(detectRecurring(monthly('Synthetic Top Up', 2999, category: 'Internal transfer'), today: today, currency: 'EUR'), isEmpty);
       final manual = [for (final t in monthly('Synthetic Gym', 2999)) row(t.date, -2999, 'Synthetic Gym', manual: true)];
-      expect(detectRecurring(manual, today: today), isEmpty);
+      expect(detectRecurring(manual, today: today, currency: 'EUR'), isEmpty);
       final deleted = monthly('Synthetic Gym', 2999)..[1] = row('2026-01-09', -2999, 'Synthetic Gym', deleted: true);
-      expect(detectRecurring(deleted, today: today), isEmpty);
+      expect(detectRecurring(deleted, today: today, currency: 'EUR'), isEmpty);
       // The last payment lies after today: not here yet.
-      expect(detectRecurring(monthly('Synthetic Gym', 2999), today: '2026-02-07'), isEmpty);
+      expect(detectRecurring(monthly('Synthetic Gym', 2999), today: '2026-02-07', currency: 'EUR'), isEmpty);
     });
 
     test('only the last 7 calendar months count', () {
       final txs = monthly('Synthetic Gym', 2999); // Dec, Jan, Feb
-      expect(detectRecurring(txs, today: '2026-06-30'), hasLength(1), reason: 'Dec 2025 is within Dec..Jun');
-      expect(detectRecurring(txs, today: '2026-07-01'), isEmpty, reason: 'Dec 2025 falls out of Jan..Jul');
+      expect(detectRecurring(txs, today: '2026-06-30', currency: 'EUR'), hasLength(1), reason: 'Dec 2025 is within Dec..Jun');
+      expect(detectRecurring(txs, today: '2026-07-01', currency: 'EUR'), isEmpty, reason: 'Dec 2025 falls out of Jan..Jul');
     });
 
     test('a fixed-category bill is a candidate too (rent by standing order)', () {
-      final c = detectRecurring(monthly('Synthetic Landlord', 55000, category: 'Rent'), today: today).single;
+      final c = detectRecurring(monthly('Synthetic Landlord', 55000, category: 'Rent'), today: today, currency: 'EUR').single;
       expect(c.category, 'Rent');
       expect(c.expectedAmount, 55000);
     });
 
     test('candidates are ordered by label and derived the same from a shuffled list', () {
       final txs = [...monthly('Synthetic Zeta Club', 1000), ...monthly('Synthetic Alpha Net', 2000)];
-      final a = detectRecurring(txs, today: today);
-      final b = detectRecurring(txs.reversed.toList(), today: today);
+      final a = detectRecurring(txs, today: today, currency: 'EUR');
+      final b = detectRecurring(txs.reversed.toList(), today: today, currency: 'EUR');
       expect([for (final x in a) x.label], ['Synthetic Alpha Net', 'Synthetic Zeta Club']);
       expect([for (final x in b) (x.id, x.expectedAmount, x.nextDue)], [for (final x in a) (x.id, x.expectedAmount, x.nextDue)]);
     });
@@ -235,35 +235,36 @@ void main() {
 
     test('a row within ± 3 days of the due date and within 10 % pays the cycle; 4 days or 10 % + 1 cent do not', () {
       final b = bill('2026-03-10', 5000);
-      expect(planRecurringPayments([b], [bank('2026-03-13', 5000, id: 'x')]).paidBy[b.id]?.id, 'x');
-      expect(planRecurringPayments([b], [bank('2026-03-07', 5000, id: 'x')]).paidBy[b.id]?.id, 'x');
-      expect(planRecurringPayments([b], [bank('2026-03-14', 5000)]).isEmpty, isTrue);
-      expect(planRecurringPayments([b], [bank('2026-03-06', 5000)]).isEmpty, isTrue);
-      expect(planRecurringPayments([b], [bank('2026-03-10', 5500, id: 'x')]).paidBy[b.id]?.id, 'x');
-      expect(planRecurringPayments([b], [bank('2026-03-10', 4500, id: 'x')]).paidBy[b.id]?.id, 'x');
-      expect(planRecurringPayments([b], [bank('2026-03-10', 5501)]).isEmpty, isTrue);
-      expect(planRecurringPayments([b], [bank('2026-03-10', 4499)]).isEmpty, isTrue);
+      expect(planRecurringPayments([b], [bank('2026-03-13', 5000, id: 'x')], currency: 'EUR').paidBy[b.id]?.id, 'x');
+      expect(planRecurringPayments([b], [bank('2026-03-07', 5000, id: 'x')], currency: 'EUR').paidBy[b.id]?.id, 'x');
+      expect(planRecurringPayments([b], [bank('2026-03-14', 5000)], currency: 'EUR').isEmpty, isTrue);
+      expect(planRecurringPayments([b], [bank('2026-03-06', 5000)], currency: 'EUR').isEmpty, isTrue);
+      expect(planRecurringPayments([b], [bank('2026-03-10', 5500, id: 'x')], currency: 'EUR').paidBy[b.id]?.id, 'x');
+      expect(planRecurringPayments([b], [bank('2026-03-10', 4500, id: 'x')], currency: 'EUR').paidBy[b.id]?.id, 'x');
+      expect(planRecurringPayments([b], [bank('2026-03-10', 5501)], currency: 'EUR').isEmpty, isTrue);
+      expect(planRecurringPayments([b], [bank('2026-03-10', 4499)], currency: 'EUR').isEmpty, isTrue);
     });
 
     test('the closest row wins, then the earliest, then the smallest id; another payee, a refund, a deleted or hand-added row never pay',
         () {
       final b = bill('2026-03-10', 5000);
       final rows = [bank('2026-03-12', 5000, id: 'far'), bank('2026-03-09', 5000, id: 'near')];
-      expect(planRecurringPayments([b], rows).paidBy[b.id]?.id, 'near');
+      expect(planRecurringPayments([b], rows, currency: 'EUR').paidBy[b.id]?.id, 'near');
       final tie = [bank('2026-03-11', 5000, id: 'later'), bank('2026-03-09', 5000, id: 'earlier')];
-      expect(planRecurringPayments([b], tie).paidBy[b.id]?.id, 'earlier');
+      expect(planRecurringPayments([b], tie, currency: 'EUR').paidBy[b.id]?.id, 'earlier');
       final same = [bank('2026-03-10', 5000, id: 'z'), bank('2026-03-10', 5000, id: 'a')];
-      expect(planRecurringPayments([b], same).paidBy[b.id]?.id, 'a');
-      expect(planRecurringPayments([b], [bank('2026-03-10', 5000, desc: 'Synthetic Other')]).isEmpty, isTrue);
-      expect(planRecurringPayments([b], [bank('2026-03-10', -5000)]).isEmpty, isTrue);
-      expect(planRecurringPayments([b], [bank('2026-03-10', 5000, deleted: true)]).isEmpty, isTrue);
-      expect(planRecurringPayments([b], [bank('2026-03-10', 5000, manual: true)]).isEmpty, isTrue);
+      expect(planRecurringPayments([b], same, currency: 'EUR').paidBy[b.id]?.id, 'a');
+      expect(planRecurringPayments([b], [bank('2026-03-10', 5000, desc: 'Synthetic Other')], currency: 'EUR').isEmpty, isTrue);
+      expect(planRecurringPayments([b], [bank('2026-03-10', -5000)], currency: 'EUR').isEmpty, isTrue);
+      expect(planRecurringPayments([b], [bank('2026-03-10', 5000, deleted: true)], currency: 'EUR').isEmpty, isTrue);
+      expect(planRecurringPayments([b], [bank('2026-03-10', 5000, manual: true)], currency: 'EUR').isEmpty, isTrue);
     });
 
     test('only confirmed bills are paid, and the row that paid the last cycle never pays again', () {
-      expect(planRecurringPayments([bill('2026-03-10', 5000, status: 'candidate')], [bank('2026-03-10', 5000)]).isEmpty, isTrue);
+      expect(planRecurringPayments([bill('2026-03-10', 5000, status: 'candidate')], [bank('2026-03-10', 5000)], currency: 'EUR').isEmpty,
+          isTrue);
       final b = bill('2026-03-10', 5000, lastPaidTx: 'x');
-      expect(planRecurringPayments([b], [bank('2026-03-10', 5000, id: 'x')]).isEmpty, isTrue);
+      expect(planRecurringPayments([b], [bank('2026-03-10', 5000, id: 'x')], currency: 'EUR').isEmpty, isTrue);
     });
   });
 

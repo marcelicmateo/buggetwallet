@@ -94,7 +94,7 @@ void main() {
         expect(ps.last.end, nextPayday(ps.last.start, st.paydayDay), reason: why);
 
         // Every real payday (first salary part) starts a period.
-        for (final d in salaryPaydays(w.txs, today)) {
+        for (final d in salaryPaydays(w.txs, today, currency: 'EUR')) {
           expect(ps.map((p) => p.start), contains(d), reason: '$why: payday $d');
         }
 
@@ -163,7 +163,8 @@ void main() {
         final today = _randomDay(r, w.from, w.to);
         // The app always passes a period start (a detected payday, else today), on or before today.
         final saved = st0.periodStart != null && st0.periodStart!.compareTo(today) <= 0 ? st0.periodStart : null;
-        final st = WalletSettings.fromMap({...st0.toMap(), 'periodStart': saved ?? salaryPaydays(w.txs, today).lastOrNull ?? today});
+        final st = WalletSettings.fromMap(
+            {...st0.toMap(), 'periodStart': saved ?? salaryPaydays(w.txs, today, currency: 'EUR').lastOrNull ?? today});
         final goals = [for (var g = r.nextInt(4); g > 0; g--) Goal(id: 'g$g', name: 'Synthetic $g', monthly: r.nextInt(20000))];
         final why = 'seed $seed today $today start ${st.periodStart} paydayDay ${st.paydayDay}';
         final p = computePeriod(w.txs, st, goals, today);
@@ -171,14 +172,22 @@ void main() {
         expect(p.start, st.periodStart, reason: why);
         expect(p.end, nextPayday(p.start, st.paydayDay), reason: why);
         expect(p.length, daysBetween(p.start, p.end).clamp(1, 1000), reason: why);
-        expect(p.daysLeft, greaterThanOrEqualTo(1), reason: why);
-        expect(p.daysLeft, daysBetween(today, p.end).clamp(1, 1000), reason: why);
+        // H2: the real count of days left, 0 once the payday passed; never a negative allowance.
+        expect(p.paydayPassed, today.compareTo(p.end) >= 0, reason: why);
+        expect(p.daysLeft, p.paydayPassed ? 0 : daysBetween(today, p.end), reason: why);
+        if (!p.paydayPassed) expect(p.daysLeft, greaterThanOrEqualTo(1), reason: why);
+        expect(p.allowanceToday, greaterThanOrEqualTo(0), reason: why);
+        expect(p.overBy, p.remaining < 0 ? -p.remaining : 0, reason: why);
+        expect(p.overToday, p.safeToday < 0 ? -p.safeToday : 0, reason: why);
+        expect(p.overBudget, p.overBy > 0 || p.planDaily <= 0, reason: why);
         expect(p.fixedPlan, st.rent + st.loan + st.subs, reason: why);
         expect(p.goalMonthly, goals.fold<int>(0, (s, g) => s + g.monthly), reason: why);
         expect(p.flexBudget, p.income - p.fixedPlan - p.goalMonthly, reason: why);
         expect(p.remaining, p.flexBudget - p.spent, reason: why);
         expect(p.safeToday, p.allowanceToday - p.spentToday, reason: why);
-        expect(p.allowanceToday, ((p.flexBudget - (p.spent - p.spentToday)) / p.daysLeft).round(), reason: why);
+        final leftForToday = p.flexBudget - (p.spent - p.spentToday);
+        expect(p.allowanceToday, p.paydayPassed || leftForToday <= 0 ? 0 : (leftForToday / p.daysLeft).round(), reason: why);
+
         expect(p.planDaily, (p.flexBudget / p.length).round(), reason: why);
         expect(p.elapsed, inInclusiveRange(0.0, 1.0), reason: why);
         expect(p.aheadOfPace, (p.flexBudget * p.elapsed).round() - p.spent, reason: why);
@@ -195,7 +204,12 @@ void main() {
           fixed[t.category] = (fixed[t.category] ?? 0) - t.amount;
         }
         expect(p.fixedPaid, fixed, reason: why);
-        expect(p.income, st.incomeMode == 'received' && p.received > 0 ? p.received : st.salary, reason: why);
+        // H2: in the first samePaydayDays days a received salary short of the plan counts as the plan.
+        final arriving = daysBetween(p.start, today) < samePaydayDays;
+        expect(p.income, st.incomeMode == 'received' && p.received > 0 ? (arriving ? max(p.received, st.salary) : p.received) : st.salary,
+            reason: why);
+        expect(p.lowIncome, p.received > 0 && p.received * 10 < st.salary * 9 && !arriving && daysBetween(p.start, today) >= 4,
+            reason: why);
 
         // Extras and transfers are never daily money; planned salary ignores what actually arrived.
         final more = [
@@ -228,7 +242,7 @@ void main() {
 
   group('affordability', () {
     test('verdict is monotonic in price and "now" never means money you do not have ($n cases)', () {
-      int rank(Verdict v) => v.index; // now < tight < later
+      int rank(Verdict v) => v.index; // now < tight < later < overBudget
       for (var i = 0; i < n; i++) {
         final seed = base * 7 + i;
         final r = Random(seed);
@@ -238,7 +252,7 @@ void main() {
             salary: r.nextInt(300000),
             rent: r.nextInt(80000),
             paydayDay: 1 + r.nextInt(31),
-            periodStart: salaryPaydays(w.txs, today).lastOrNull ?? today);
+            periodStart: salaryPaydays(w.txs, today, currency: 'EUR').lastOrNull ?? today);
         final p = computePeriod(w.txs, st, const [], today);
         final prices = [for (var k = 0; k < 30; k++) r.nextInt(400000)]..sort();
         Affordability? prev;
@@ -246,8 +260,10 @@ void main() {
           final a = affordability(price, p);
           final left = p.flexBudget - p.spent - price;
           final why = 'seed $seed price $price flex ${p.flexBudget} spent ${p.spent} daysLeft ${p.daysLeft} planDaily ${p.planDaily}';
-          expect(a.newDaily, (left / p.daysLeft).round(), reason: why);
-          if (a.verdict == Verdict.now) expect(left, greaterThanOrEqualTo(0), reason: '$why: "now" with nothing left');
+          expect(a.newDaily, p.overBudget || p.paydayPassed || left <= 0 ? 0 : (left / p.daysLeft).round(), reason: why);
+          expect(a.newDaily, greaterThanOrEqualTo(0), reason: why);
+          if (p.overBudget) expect(a.verdict, Verdict.overBudget, reason: '$why: the plan is over');
+          if (a.verdict == Verdict.now) expect(left, greaterThan(0), reason: '$why: "now" with nothing left');
           if (a.verdict == Verdict.tight) expect(left, greaterThan(0), reason: why);
           if (a.verdict == Verdict.later) expect(left <= 0 || a.newDaily < p.planDaily * 0.75, isTrue, reason: why);
           if (prev != null) {
@@ -256,7 +272,7 @@ void main() {
           }
           prev = a;
         }
-        expect(affordability(1 << 40, p).verdict, Verdict.later);
+        expect(affordability(1 << 40, p).verdict, p.overBudget ? Verdict.overBudget : Verdict.later);
       }
     });
   });

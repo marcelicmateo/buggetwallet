@@ -117,7 +117,7 @@ void main() {
           'periodStart': '2028-02-29',
           'loanEnd': '2027-12',
         }));
-    expect([s.salary, s.coolHours, s.paydayDay, s.rentCashThreshold, s.impulse, s.rent], [0, 0, 31, 0, 0, 12000]);
+    expect([s.salary, s.coolHours, s.paydayDay, s.rentCashThreshold, s.impulse, s.rent], [0, 0, WalletSettings.maxPaydayDay, 0, 0, 12000]);
     expect(s.periodStart, '2028-02-29');
     expect(s.loanEnd, '2027-12');
     expect(lines.where((l) => l.contains('settings.invalid')), isEmpty);

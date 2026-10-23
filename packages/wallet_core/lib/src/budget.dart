@@ -6,11 +6,36 @@ import 'models.dart';
 
 final _log = Logger('bw.budget');
 
+/// In `incomeMode == 'received'`, the first [samePaydayDays] days of a pay period count `max(received, salary)` as
+/// income: the employer pays the salary in parts over several days (owner: between the 10th and the 15th), so the
+/// period is not shown short before every part has landed, and [PeriodBudget.lowIncome] stays false.
+const samePaydayDays = 7;
+
 /// The budget for the current pay period ("month" = salary to salary).
 class PeriodBudget {
   final String start, end; // end = expected next payday (exclusive)
+
+  /// [length]: days in the period (at least 1). [daysLeft]: days from today to [end], the real count: 0 once
+  /// [paydayPassed], never raised to 1.
   final int length, daysLeft;
+
+  /// Today is on or after [end]: the expected payday came and the period was not moved on yet. [daysLeft] is 0 and
+  /// [allowanceToday] 0; nothing divides by the days left.
+  final bool paydayPassed;
+
+  /// The income received so far is short of the planned salary: received > 0, below 90 % of `salary`, at least 4
+  /// days into the period and past the first [samePaydayDays] days (salary parts still arriving).
+  final bool lowIncome;
+
+  /// Only rows in `WalletSettings.currency` count in every sum here. The period's live rows in other currencies
+  /// (income, extra, fixed and flex; transfers count nowhere) are left out: their signed sums by currency code.
+  /// Empty when there are none.
+  final Map<String, int> foreignByCurrency;
   final int received, extras, income, goalMonthly, fixedPlan;
+
+  /// [allowanceToday] is never negative (0 once the flexible money is used up or [paydayPassed]); [safeToday] =
+  /// allowanceToday − spentToday is negative when today's spending went over ([overToday]). [planDaily] (flexBudget ÷
+  /// length) is 0 or negative when the plan leaves no flexible money ([overBudget]).
   final int flexBudget, spent, spentToday, remaining, allowanceToday, safeToday, planDaily;
   final double elapsed;
   final Map<String, int> fixedPaid;
@@ -37,6 +62,9 @@ class PeriodBudget {
     required this.end,
     required this.length,
     required this.daysLeft,
+    this.paydayPassed = false,
+    this.lowIncome = false,
+    this.foreignByCurrency = const {},
     required this.received,
     required this.extras,
     required this.income,
@@ -60,6 +88,16 @@ class PeriodBudget {
 
   /// Positive = under budget so far, negative = over.
   int get aheadOfPace => (flexBudget * elapsed).round() - spent;
+
+  /// How far the period's spending is over the flexible money: max(0, −[remaining]).
+  int get overBy => remaining < 0 ? -remaining : 0;
+
+  /// How far today's spending is over today's allowance: max(0, −[safeToday]).
+  int get overToday => safeToday < 0 ? -safeToday : 0;
+
+  /// The plan is over: spending passed the flexible money ([overBy] > 0) or the plan leaves none ([planDaily] ≤ 0).
+  /// [affordability] then answers [Verdict.overBudget].
+  bool get overBudget => overBy > 0 || planDaily <= 0;
 }
 
 int _sum(Iterable<CategorizedTx> xs) => xs.fold(0, (s, x) => s + x.amount);
@@ -111,11 +149,24 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final start = st.periodStart ?? today;
   final end = nextPayday(start, st.paydayDay);
   final length = daysBetween(start, end).clamp(1, 1000);
-  final daysLeft = daysBetween(today, end).clamp(1, 1000);
-  final inPeriod = txs.where((t) => t.date.compareTo(start) >= 0 && t.date.compareTo(today) <= 0 && t.tx.live).toList();
+  final paydayPassed = today.compareTo(end) >= 0;
+  final daysLeft = paydayPassed ? 0 : daysBetween(today, end);
+  final inPeriod = <CategorizedTx>[];
+  final foreign = <String, int>{};
+  for (final t in txs) {
+    if (!t.tx.live || t.date.compareTo(start) < 0 || t.date.compareTo(today) > 0) continue;
+    if (t.tx.currency == st.currency) {
+      inPeriod.add(t);
+    } else if (t.kind != BudgetKind.transfer) {
+      foreign[t.tx.currency] = (foreign[t.tx.currency] ?? 0) + t.amount;
+    }
+  }
   final received = _sum(inPeriod.where((t) => t.kind == BudgetKind.income));
   final extras = _sum(inPeriod.where((t) => t.kind == BudgetKind.extra));
-  final income = st.incomeMode == 'received' && received > 0 ? received : st.salary;
+  final age = daysBetween(start, today);
+  final partsArriving = age < samePaydayDays;
+  final income = st.incomeMode == 'received' && received > 0 ? (partsArriving && st.salary > received ? st.salary : received) : st.salary;
+  final lowIncome = received > 0 && received * 10 < st.salary * 9 && age >= 4 && !partsArriving;
   final goalMonthly = goals.fold<int>(0, (s, g) => s + g.monthly);
   final fixedPlan = st.rent + st.loan + st.subs;
   final due = dueBills(bills, txs, start, end);
@@ -131,7 +182,8 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final flex = inPeriod.where((t) => t.kind == BudgetKind.flex);
   final spent = -_sum(flex);
   final spentToday = -_sum(flex.where((t) => t.date == today));
-  final allowanceToday = ((flexBudget - (spent - spentToday)) / daysLeft).round();
+  final leftForToday = flexBudget - (spent - spentToday);
+  final allowanceToday = paydayPassed || leftForToday <= 0 ? 0 : (leftForToday / daysLeft).round();
   final elapsed = ((daysBetween(start, today) + 1) / length).clamp(0.0, 1.0);
   final fixedPaid = <String, int>{};
   for (final t in inPeriod.where((t) => t.kind == BudgetKind.fixed)) {
@@ -145,7 +197,9 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
       'saved': st.periodStart != null,
       'days': length,
       'daysLeft': daysLeft,
+      'passed': paydayPassed,
       'tx': inPeriod.length,
+      'foreignCurrencies': foreign.length,
       'incomeMode': st.incomeMode,
       'goals': goals.length,
       'bills': bills.length,
@@ -159,6 +213,9 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     end: end,
     length: length,
     daysLeft: daysLeft,
+    paydayPassed: paydayPassed,
+    lowIncome: lowIncome,
+    foreignByCurrency: foreign,
     received: received,
     extras: extras,
     income: income,
@@ -185,15 +242,26 @@ class MonthSummary {
   final String month;
   final int income, out;
   final Map<String, int> byCategory;
-  const MonthSummary(this.month, this.income, this.out, this.byCategory);
+
+  /// The month's live rows in other currencies than the one summed (income, extra, fixed and flex): signed sums by
+  /// currency code, left out of every other field. Empty when there are none.
+  final Map<String, int> foreignByCurrency;
+  const MonthSummary(this.month, this.income, this.out, this.byCategory, {this.foreignByCurrency = const {}});
   int get net => income - out;
 }
 
-MonthSummary monthSummary(List<CategorizedTx> txs, String month) {
+/// Money in and out of calendar [month] (`YYYY-MM`), counting only rows in [currency] (`WalletSettings.currency`);
+/// the others are in [MonthSummary.foreignByCurrency].
+MonthSummary monthSummary(List<CategorizedTx> txs, String month, {required String currency}) {
   var income = 0, out = 0;
   final byCat = <String, int>{};
+  final foreign = <String, int>{};
   for (final t in txs) {
     if (!t.tx.live || monthOf(t.date) != month) continue;
+    if (t.tx.currency != currency) {
+      if (t.kind != BudgetKind.transfer) foreign[t.tx.currency] = (foreign[t.tx.currency] ?? 0) + t.amount;
+      continue;
+    }
     switch (t.kind) {
       case BudgetKind.income || BudgetKind.extra:
         income += t.amount;
@@ -204,15 +272,15 @@ MonthSummary monthSummary(List<CategorizedTx> txs, String month) {
         break;
     }
   }
-  return MonthSummary(month, income, out, byCat);
+  return MonthSummary(month, income, out, byCat, foreignByCurrency: foreign);
 }
 
 /// Spending (fixed + flex, refunds subtracted, transfers and income left out: the "Where it goes" sums) per
-/// category over the live rows of [months], in one pass.
-Map<String, int> _outByCategory(List<CategorizedTx> txs, Set<String> months) {
+/// category over the live rows of [months] in [currency], in one pass.
+Map<String, int> _outByCategory(List<CategorizedTx> txs, Set<String> months, String currency) {
   final out = <String, int>{};
   for (final t in txs) {
-    if (!t.tx.live || !months.contains(monthOf(t.date))) continue;
+    if (!t.tx.live || t.tx.currency != currency || !months.contains(monthOf(t.date))) continue;
     if (t.kind == BudgetKind.fixed || t.kind == BudgetKind.flex) out[t.category] = (out[t.category] ?? 0) - t.amount;
   }
   return out;
@@ -223,17 +291,17 @@ List<String> _monthsBefore(String month, int count) => monthsEnding(month, count
 
 /// Average monthly spending per category over the [months] calendar months before [month] (the month itself left
 /// out), in cents, rounded to the cent. Always divided by [months]: a month without spend counts as zero. Only
-/// categories with any spend in those months appear.
-Map<String, int> averageByCategory(List<CategorizedTx> txs, String month, {int months = 6}) {
-  final sums = _outByCategory(txs, _monthsBefore(month, months).toSet());
+/// categories with any spend in those months appear. Only rows in [currency] count.
+Map<String, int> averageByCategory(List<CategorizedTx> txs, String month, {int months = 6, required String currency}) {
+  final sums = _outByCategory(txs, _monthsBefore(month, months).toSet(), currency);
   return {for (final e in sums.entries) e.key: (e.value / months).round()};
 }
 
 /// Budgets to propose for [month]: each category's average over the 6 months before it, rounded UP to the nearest
-/// 1000 cents (10 €). A category whose average is zero or negative (refunds) is omitted.
-Map<String, int> suggestBudgets(List<CategorizedTx> txs, String month) {
+/// 1000 cents (10 €). A category whose average is zero or negative (refunds) is omitted. Only rows in [currency] count.
+Map<String, int> suggestBudgets(List<CategorizedTx> txs, String month, {required String currency}) {
   const months = 6, step = 1000;
-  final sums = _outByCategory(txs, _monthsBefore(month, months).toSet());
+  final sums = _outByCategory(txs, _monthsBefore(month, months).toSet(), currency);
   return {
     for (final e in sums.entries)
       if (e.value > 0) e.key: (e.value + months * step - 1) ~/ (months * step) * step,
@@ -297,10 +365,12 @@ class BudgetVsActual {
 
 /// Compares [budgets] (`category -> cents per month`, see `WalletSettings.categoryBudgets`) with what went out in
 /// [month] per category, exactly as [monthSummary] counts it (live rows, fixed + flex, refunds subtracted, transfers
-/// and income left out). [today] (`YYYY-MM-DD`) decides how much of the month has elapsed for the pace.
-BudgetVsActual budgetVsActual(List<CategorizedTx> txs, String month, Map<String, int> budgets, {required String today}) {
-  final actual = monthSummary(txs, month).byCategory;
-  final average = averageByCategory(txs, month);
+/// and income left out; only rows in [currency]). [today] (`YYYY-MM-DD`) decides how much of the month has elapsed
+/// for the pace.
+BudgetVsActual budgetVsActual(List<CategorizedTx> txs, String month, Map<String, int> budgets,
+    {required String today, required String currency}) {
+  final actual = monthSummary(txs, month, currency: currency).byCategory;
+  final average = averageByCategory(txs, month, currency: currency);
   final current = monthOf(today);
   final days = daysInMonth(month);
   final elapsed = month == current ? dayOf(today) : (month.compareTo(current) < 0 ? days : 0);
@@ -382,7 +452,10 @@ ReviewState reviewState(List<CategorizedTx> txs, WalletSettings st, List<WishIte
     final own = t.tx.category;
     if (own == null || !categories.containsKey(own)) automatic++; // no override, or one this build does not know
   }
-  final pace = budgetVsActual(txs, monthOf(today), budgets, today: today).lines.where((l) => l.over || (l.pace ?? 0) > 1).length;
+  final pace = budgetVsActual(txs, monthOf(today), budgets, today: today, currency: st.currency)
+      .lines
+      .where((l) => l.over || (l.pace ?? 0) > 1)
+      .length;
   final now = nowMillis ?? parseIso(addDays(today, 1)).millisecondsSinceEpoch;
   final waiting = wishes.where((w) => w.status == 'waiting' && w.hoursLeft(st.coolHours, now) <= 0).length;
   final steps = [
@@ -397,20 +470,29 @@ ReviewState reviewState(List<CategorizedTx> txs, WalletSettings st, List<WishIte
   return ReviewState(due: due, nextReviewDate: next, streak: st.reviewStreak, steps: steps);
 }
 
-enum Verdict { now, tight, later }
+/// [overBudget]: the plan is already over ([PeriodBudget.overBudget]), whatever the price.
+enum Verdict { now, tight, later, overBudget }
 
 class Affordability {
   final Verdict verdict;
+
+  /// The daily allowance left after buying it, never negative (0 when it does not fit or the payday passed).
   final int newDaily;
   const Affordability(this.verdict, this.newDaily);
 }
 
+/// Whether [price] (cents, in the settings' currency) fits the period [p]. [Verdict.overBudget] whenever the plan is
+/// over ([PeriodBudget.overBudget]), never [Verdict.now]; [Verdict.later] once the payday passed (no days left to
+/// spread it over) or when it does not fit; [Verdict.now] when the new daily allowance keeps 75 % of the plan's,
+/// [Verdict.tight] when it fits with less.
 Affordability affordability(int price, PeriodBudget p) {
+  if (p.overBudget) return const Affordability(Verdict.overBudget, 0);
+  if (p.paydayPassed || p.daysLeft <= 0) return const Affordability(Verdict.later, 0);
   final left = p.flexBudget - p.spent - price;
+  if (left <= 0) return const Affordability(Verdict.later, 0);
   final newDaily = (left / p.daysLeft).round();
   if (newDaily >= p.planDaily * 0.75) return Affordability(Verdict.now, newDaily);
-  if (left > 0) return Affordability(Verdict.tight, newDaily);
-  return Affordability(Verdict.later, newDaily);
+  return Affordability(Verdict.tight, newDaily);
 }
 
 /// Months until a goal is reached at its monthly amount, or null if never.

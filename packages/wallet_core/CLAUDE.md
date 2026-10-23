@@ -35,9 +35,30 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   and checks each field's type (`_fieldValue` by its `ColumnDef`): a wrong-typed one is ignored (`repo.badField`, entity +
   field only) without recording its clock, the op's other fields apply, and a row is only created when some field applies.
   Sections live in `part` files as extensions on `WalletRepo` (same library, so they use `_write`): `repo_planned.dart`
-  (`WalletRepoPlanned`), `repo_bills.dart` (`WalletRepoBills`), `repo_blobs.dart` (`WalletRepoBlobs`).
-- `budget.dart` — period maths: `PeriodBudget` (safe to spend), `MonthSummary`, `Affordability`. Budget vs actual per
-  category (calendar months, owner decision 2026-10-20): `budgetVsActual(txs, month, budgets, today:)` →
+  (`WalletRepoPlanned`), `repo_bills.dart` (`WalletRepoBills`), `repo_blobs.dart` (`WalletRepoBlobs`), `repo_settings.dart`
+  (`WalletRepoSettings`: `setCategoryBudget`, `setMerchantPattern`, `removeMerchantPattern`, the schema-8 migration, and
+  `_readSettings`/`_settingChanges` behind `settings()`/`updateSettings`).
+  `importBatch`: a known id whose stored row has another `amount` or `description` is an id collision: skipped like a
+  duplicate (never overwritten), counted in `ImportSummary.collisions` (also in `duplicates`) and logged as
+  `repo.idCollision {source, count}` (WARNING; never ids, amounts or descriptions).
+- `budget.dart` — period maths: `PeriodBudget` (safe to spend), `MonthSummary`, `Affordability`. **Currency (H1):** only
+  rows with `tx.currency == settings.currency` count in `computePeriod`, `monthSummary`, `periodSummaries` (and
+  `salaryPaydays`/`detectPaydays`), `averageByCategory`, `suggestBudgets`, `budgetVsActual`, `reviewState`'s pace and
+  `monthlySummaryCsv`; functions without settings take `currency:` (required). `PeriodBudget.foreignByCurrency` /
+  `MonthSummary.foreignByCurrency` = signed sums of the live income/extra/fixed/flex rows left out, by currency (empty
+  when none; transfers count nowhere). `transactionsCsv` and search keep every currency. Recurring bills too: only
+  home-currency rows make a candidate (`detectRecurring(..., currency:)`) or pay a cycle (`planRecurringPayments(...,
+  currency:)`), so a bill paid in another currency is never reserved (owner rule: exact money). Planned costs carry no
+  currency (they are entered in the wallet's).
+  **Payday and over budget (H2):** `paydayPassed` = today ≥ `end`; `daysLeft` is the real count (0 once passed);
+  `allowanceToday` ≥ 0 always (0 when passed or the money is used up); `safeToday` = allowance − spentToday (negative =
+  `overToday`); `overBy` = max(0, −remaining); `overBudget` = `overBy > 0 || planDaily <= 0`. `affordability`:
+  `Verdict.overBudget` whenever `p.overBudget` (never `now`), `later` once the payday passed or when the price does not
+  fit, `newDaily` never negative. `lowIncome` (moved from the app): received > 0, below 90 % of salary (int maths), at
+  least 4 days in and not in the first `samePaydayDays` (7) days; in `incomeMode == 'received'` those first 7 days count
+  `max(received, salary)` (salary parts still landing; owner: paid 10th–15th). `periods.dart`'s grouping constant is
+  `_salaryGroupDays` (20). `WalletSettings.fromMap` reads a stored `paydayDay` 29..31 as 28 (`maxPaydayDay`).
+  Budget vs actual per category (calendar months, owner decision 2026-10-20): `budgetVsActual(txs, month, budgets, today:, currency:)` →
   `BudgetVsActual` (one `CategoryBudgetLine` per category with a budget or any spend, actual desc then name; `actual` =
   `monthSummary(...).byCategory`, i.e. the "Where it goes" sums: live rows, fixed + flex, refunds subtracted, transfers
   and income out; `average6` = `averageByCategory`, the mean of the 6 months before, always ÷ 6; `remaining` = budget −
@@ -57,12 +78,12 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   category, `pace` = `budgetVsActual` lines over or behind pace this calendar month, `wishlist` = waiting items past
   their cooling-off at the end of `today`. `WalletRepo.markReviewDone(today)`: `lastReview` = today, `reviewStreak` +1
   when the previous review was < 14 days before (no review day skipped), else 1; the same day twice is a no-op.
-- `recurring.dart` — recurring bills (M4). `detectRecurring(txs, today:)`: candidates = a payee (`merchantKey`) with ≥ 3
+- `recurring.dart` — recurring bills (M4). `detectRecurring(txs, today:, currency:)`: candidates = a payee (`merchantKey`) with ≥ 3
   live bank outflows (no transfers, no hand-added rows) in the last 7 calendar months, every gap 30 ± 3 days, every
   amount within 10 % of the median (`withinBand`, inclusive, int arithmetic); `expectedAmount` = median, `nextDue` =
   last payment + 30, label/category from the latest row, id `rec:<payee>` (`RecurringBill.idFor`) so every device
   derives the same row; ordered by label. One extra purchase at the payee breaks the chain (shops are never bills).
-  `planRecurringPayments(bills, rows)`: for each confirmed bill the live bank row with its payee key within ± 3 days of
+  `planRecurringPayments(bills, rows, currency:)`: for each confirmed bill the live bank row with its payee key within ± 3 days of
   `nextDue` and within 10 % of `expectedAmount` (closest, then earliest, then smallest id; never the row that paid the
   last cycle). `RecurringBill` (`models.dart`): synced entity `recurring` (`payee`, `label`, `category`,
   `expected_amount`, `interval_days`, `next_due`, `status` candidate|confirmed|dismissed, `last_paid_tx`, `deleted`).
@@ -113,10 +134,20 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   re-planned. A delete still undoes the links to the deleted row at once (cash entry `matched_to`, partner
   `transfer_to` cleared through `_write`), so the entry it replaced counts again immediately; only new ones wait.
 - `models.dart` — `Tx`, `Goal`, `GoalContribution`, `WishItem`, `WalletSettings` (row ↔ object), `goalTotal`.
-  `WalletSettings.categoryBudgets` (synced setting, `{category: cents per month}`, default `{}`) is validated entry
-  by entry: only `spendingCategories` (fixed + flex) with whole cents 0..`maxBudget` are kept, other entries are
-  dropped (one `settings.invalid` with the key), a non-map value falls back to `{}`. Written whole by
-  `updateSettings({'categoryBudgets': ...})`, last writer wins across devices like any setting.
+  `WalletSettings.categoryBudgets` (`{category: cents per month}`, default `{}`) is validated entry by entry: only
+  `spendingCategories` (fixed + flex) with whole cents 0..`maxBudget` are kept, other entries are dropped (one
+  `settings.invalid` with the key `categoryBudgets`). **Per-key rows (schema 8, H3):** one settings row per budget, id
+  `budget:<category>`, value = JSON int cents; one per merchant pattern, id `pattern:<16 hex>` = `merchantPatternId(pattern)`
+  (first 16 hex of SHA-256 of the pattern's UTF-8: the same pattern on two devices is one row, and the id does not show the
+  pattern; it is still never logged, since an unsalted hash of a short pattern is reversed with a word list: problems
+  with `pattern:*` rows are logged under the key `merchantPatterns`, `budget:*` under `categoryBudgets`), value = JSON
+  `{"category": c, "pattern": regex, "order": int ≥ 0}`. Patterns match in `order` ascending, ties
+  by row id; `setMerchantPattern` gives a new pattern the largest live order + 1 and keeps an existing one's order when its
+  category changes. Removal = tombstone (`deleted` 1, value null). Writes: `setCategoryBudget(category, cents?)`,
+  `setMerchantPattern(category, pattern)`, `removeMerchantPattern(pattern)` (`ArgumentError` for a non-spending category,
+  cents out of range, an unknown category, an empty or non-compiling pattern; nothing written when unchanged);
+  `updateSettings` with `categoryBudgets`, `merchantPatterns`, `budget:*` or `pattern:*` throws `ArgumentError` (nothing
+  of that call is written). `fromMap` reads the legacy maps first and lets per-key rows replace their entries.
 - Goals: `Goal.saved` = stored `saved` column (the base) + live `goal_contrib` rows (synced entity: `goal_id`, `amount`
   cents, may be negative, `date`, `deleted`; created clock = its `amount` clock), summed at read (`goalTotal`, clamped to
   ±`Goal.maxSaved`; each row counts at most `Goal.maxContribution`; negative totals allowed, not clamped to 0). New
@@ -128,7 +159,13 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   may have removed it meanwhile); a goal that never existed here is an `ArgumentError`.
 - `WalletRepo.schemaVersion` (meta `schema`): bump it when adding a synced entity or field (3 = `tx.kind_hint`,
   `tx.transfer_to`; 4 = the `exchange` hint: Revolut Exchange rows a version-3 build hinted `ownTransfer` are rewritten
-  once through `_write` and reconciled, `revolutExchangeType`; 5 = the `recurring` entity; 6 = the `planned` entity; 7 = the `bill` entity). Opening an existing database with an older version
+  once through `_write` and reconciled, `revolutExchangeType`; 5 = the `recurring` entity; 6 = the `planned` entity; 7 = the `bill` entity;
+  8 = per-key budget and pattern rows: the legacy `categoryBudgets`/`merchantPatterns` map rows are migrated once, in one
+  transaction, to rows written with the legacy row's own `value` clock and queued in the outbox (so they sync; every
+  device migrating the same map writes identical ops); an entry whose id already has a row, live or removed (another
+  device's per-key write that arrived first), is skipped, as the read fallback does, so a stale map with a newer clock
+  never revives or undoes a per-key change; new patterns get orders after the largest live one; a clock-less legacy row
+  goes through `_write`; the map rows are left in place for older builds; `repo.migrate` logs `perKeySettings` (count)). Opening an existing database with an older version
   clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
   written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
 - `local_db.dart` — encrypted local database (§4.9, SQLite3MultipleCiphers, web-safe): `localDbKey(VaultKey)` = HKDF
@@ -195,7 +232,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   no deleted rows, no hand-added entries replaced by a bank row that is here), sorted date then id, `amount` the
   stored signed cents as an exact decimal (`centsToDecimal`: int arithmetic, dot, two digits, never `-0.00`),
   `category` the resolved one, RFC 4180 fields (`csvField`: quoted when holding `"`, `,`, LF or CR; quotes doubled),
-  LF ends, UTF-8 without BOM. `monthlySummaryCsv(List<CategorizedTx>)`: `month,<spendingCategories in order>,total`,
+  LF ends, UTF-8 without BOM. `monthlySummaryCsv(txs, currency:)` (rows in that currency only): `month,<spendingCategories in order>,total`,
   one record per month with a live row in a spending category, ascending; a cell = Σ −amount of that category (refunds
   reduce it, a net refund prints negative, `0.00` without spending), `total` = Σ cells; income, transfers, deleted and
   replaced rows never count.
@@ -458,7 +495,15 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   A slip is matched to a confirmed recurring bill by exact payee key only (slip payee vs bank text may differ; then only
   its category keeps it from being reserved on top of the fixed plan). Files attached before B5a are not in `blob_own`,
   so an orphan among them stays on the relay. Two devices adding an `asNew` copy before syncing make one bill.
+- Legacy settings maps after schema 8: a `categoryBudgets`/`merchantPatterns` map row (an older build's write, or an
+  old `.bwb` restored) fills in only entries that have no per-key row at all, live or removed. So an older build's
+  change or removal of an entry that already has a row is ignored by upgraded devices (make it again on an upgraded
+  build), while an entry it adds shows up. When that older device upgrades, its migration writes only the map entries
+  that still have no row (with the map's clock); its edits to entries that have one are lost. Upgraded devices'
+  per-key edits never reach an older build (it keeps showing its own map).
+
 - Calendar refs are built from the normalized title and date (`calendarEventRef`): two events with the same normalized
+
   title on the same day (amounts stripped: `Dentist 80 €` and `Dentist 90 €`) show as one suggestion, and renaming an
   event in the calendar makes it a new suggestion. A title without letters (`80 €`) gets a per-calendar ref, so its
   "No cost" or confirm on one device does not reach the same event read on another device. A huge `.ics` file

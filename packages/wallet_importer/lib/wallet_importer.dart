@@ -13,6 +13,7 @@ export 'src/bills/read_result.dart' show ReadFailure, ReadResult;
 export 'src/bills/text_bill.dart' show billFromText, billFromTextResult, maxBillTextChars;
 export 'src/ids.dart' show transactionId, sourceTransactionId;
 export 'src/importer.dart' show importBankFile, parseRows, ImportException, unknownLayoutMessage;
+export 'src/limits.dart' show maxImportBytes, maxXlsxUnpackedBytes, passwordProtectedMessage, tooLargeMessage;
 export 'src/model.dart';
 export 'src/profiles/profile.dart' show BankProfile, ImportContext, RowResult, RowOutcome, headRows;
 export 'src/profiles/registry.dart' show bankProfiles;
