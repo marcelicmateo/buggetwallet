@@ -221,7 +221,8 @@ extension WalletRepoSettings on WalletRepo {
         }
       }
     });
-    _write(fresh);
+    // Runs inside open (schema 8 migration): internal, so a device clock that went back cannot stop the wallet opening.
+    _writeInternal(fresh);
     return rows;
   }
 }
