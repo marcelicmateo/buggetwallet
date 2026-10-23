@@ -117,7 +117,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                       const Muted('All categories from the last 7 days are confirmed.')
                     else ...[
                       const Muted('Tap Looks right, or Change to pick another. It remembers the merchant.'),
-                      Rows(children: [for (final t in rows.take(8)) _CategoryRow(wc: wc, t: t)]),
+                      Rows(children: [for (final t in rows.take(8)) _CategoryRow(wc: wc, t: t, host: context)]),
                       if (rows.length > 8) Muted('${rows.length - 8} more after these.'),
                     ],
                   ],
@@ -252,7 +252,10 @@ class _PaceRow extends StatelessWidget {
 class _CategoryRow extends StatelessWidget {
   final WalletController wc;
   final CategorizedTx t;
-  const _CategoryRow({required this.wc, required this.t});
+
+  /// The screen's context: the row itself is removed when its transaction is deleted, the toast needs one that stays.
+  final BuildContext host;
+  const _CategoryRow({required this.wc, required this.t, required this.host});
   @override
   Widget build(BuildContext context) => HoverTint(
           child: Padding(
@@ -269,6 +272,7 @@ class _CategoryRow extends StatelessWidget {
                   onPressed: () async {
                     final r = await showSheet<String>(context, TxSheet(wc: wc, t: t));
                     if (r == 'saved') wc.confirmCategory(t.tx); // the picked category is now the owner's choice
+                    if (r != 'saved' && host.mounted) txSheetToast(host, wc, r); // a delete says so, with Undo (the row is gone by then)
                   },
                   child: const Text('Change')),
               FilledButton(

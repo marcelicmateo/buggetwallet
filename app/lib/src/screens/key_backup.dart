@@ -212,26 +212,3 @@ Future<bool> openKeyBackup(BuildContext context, WalletController wc) async {
   final r = await showSheet<String>(context, KeyBackupSheet(wc: wc));
   return r == 'confirmed';
 }
-
-/// Today's notice row until the key is confirmed (the controller hides it while "Later" is in force).
-class KeyBackupRow extends StatelessWidget {
-  final WalletController wc;
-  const KeyBackupRow({super.key, required this.wc});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.c;
-    return Panel(key: const ValueKey('keyBackupRow'), color: c.warnBg, children: [
-      Row(children: [
-        Icon(Icons.key, size: 18, color: c.warnInk),
-        const SizedBox(width: 8),
-        Expanded(child: Text('Save your wallet key', style: TextStyle(fontWeight: FontWeight.w600, color: c.warnInk))),
-      ]),
-      Text('Without it, this wallet cannot be opened again.', style: TextStyle(color: c.warnInk, fontSize: BwType.metaSize)),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        FilledButton(key: const ValueKey('keySaveNow'), onPressed: () => openKeyBackup(context, wc), child: const Text('Save now')),
-        TextButton(key: const ValueKey('keyRowLater'), onPressed: wc.snoozeKeyBackup, child: const Text('Later')),
-      ]),
-    ]);
-  }
-}

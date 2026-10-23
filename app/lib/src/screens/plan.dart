@@ -177,31 +177,32 @@ class _PlanScreenState extends State<PlanScreen> {
               Panel(children: [
                 const SectionHead('Payday plan'),
                 Heading(
-                    p.planDaily <= 0
+                    p.flexBudget < 0
                         ? 'Nothing to spend: the plan is ${moneyExact(-p.flexBudget, cur)} over'
-                        : '${money(p.flexBudget, cur, decimals: 0)} to spend · ${money(p.planDaily, cur, decimals: 0)}/day',
+                        : p.flexBudget == 0
+                            ? 'Nothing to spend: the plan leaves no spending money'
+                            : '${moneyExact(p.flexBudget, cur)} to spend · ${moneyExact(p.planDaily, cur)}/day',
                     key: const ValueKey('planHeading')),
                 const Muted('Salary minus bills minus savings. Whatever is left is your spending money until the next payday.'),
                 Rows(children: [
-                  LineItem('Salary ${s.incomeMode == 'received' && p.received > 0 ? '(received)' : '(planned)'}',
-                      money(p.income, cur, decimals: 0)),
-                  LineItem('Rent', money(-s.rent, cur, decimals: 0),
-                      sub: 'Paid since payday: ${money(p.fixedPaid['Rent'] ?? 0, cur, decimals: 0)}'),
-                  LineItem('Loan', money(-s.loan, cur, decimals: 0),
+                  LineItem(
+                      'Salary ${s.incomeMode == 'received' && p.received > 0 ? '(received)' : '(planned)'}', moneyExact(p.income, cur)),
+                  LineItem('Rent', moneyExact(-s.rent, cur), sub: 'Paid since payday: ${moneyExact(p.fixedPaid['Rent'] ?? 0, cur)}'),
+                  LineItem('Loan', moneyExact(-s.loan, cur),
                       sub:
-                          'Paid since payday: ${money(p.fixedPaid['Loan'] ?? 0, cur, decimals: 0)}${s.loanEnd != null ? ' · ends ${monthLong(s.loanEnd!)}' : ''}'),
-                  LineItem('Bills & subscriptions', money(-s.subs, cur, decimals: 0),
-                      sub: 'Paid since payday: ${money(p.fixedPaid['Bills & subscriptions'] ?? 0, cur, decimals: 0)}'),
-                  for (final g in wc.goals) LineItem(g.name, money(-g.monthly, cur, decimals: 0), sub: 'savings goal'),
+                          'Paid since payday: ${moneyExact(p.fixedPaid['Loan'] ?? 0, cur)}${s.loanEnd != null ? ' · ends ${monthLong(s.loanEnd!)}' : ''}'),
+                  LineItem('Bills & subscriptions', moneyExact(-s.subs, cur),
+                      sub: 'Paid since payday: ${moneyExact(p.fixedPaid['Bills & subscriptions'] ?? 0, cur)}'),
+                  for (final g in wc.goals) LineItem(g.name, moneyExact(-g.monthly, cur), sub: 'savings goal'),
                   // Bills and planned costs due before payday come off the spending money too: the rows add up to the total.
                   if (p.reservedBills + p.reservedPlanned > 0)
-                    LineItem('Set aside for coming costs', money(-(p.reservedBills + p.reservedPlanned), cur, decimals: 0),
+                    LineItem('Set aside for coming costs', moneyExact(-(p.reservedBills + p.reservedPlanned), cur),
                         key: const ValueKey('ledgerSetAside'), sub: 'Bills and planned costs due before payday'),
                 ]),
                 TotalRule(
                     padding: EdgeInsets.zero,
-                    child: LineItem('Spending money',
-                        p.flexBudget < 0 ? 'Over by ${moneyExact(-p.flexBudget, cur)}' : money(p.flexBudget, cur, decimals: 0),
+                    child: LineItem(
+                        'Spending money', p.flexBudget < 0 ? 'Over by ${moneyExact(-p.flexBudget, cur)}' : moneyExact(p.flexBudget, cur),
                         key: const ValueKey('ledgerSpendingMoney'),
                         valueColor: p.flexBudget < 0 ? context.c.bad : null,
                         bold: true,

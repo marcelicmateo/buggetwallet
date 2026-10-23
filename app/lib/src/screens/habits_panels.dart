@@ -107,7 +107,11 @@ class ExpectedBillsPanel extends StatelessWidget {
               child: Row(children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(_name(b), style: const TextStyle(fontWeight: FontWeight.w500)),
+                    // The amount shares the name's line (at most half the row): at large text a side-by-side amount left the column 34 dp wide.
+                    SplitRow(
+                        start: Text(_name(b), style: const TextStyle(fontWeight: FontWeight.w500)),
+                        end: Text(moneyExact(b.expectedAmount, cur),
+                            textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
                     Text('${b.category} · next ${shortDateOrRaw(b.nextDue)}',
                         style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
                     if (b.coveredByPlan) Text('Covered by your plan', style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
@@ -131,8 +135,6 @@ class ExpectedBillsPanel extends StatelessWidget {
                     ),
                   ]),
                 ),
-                const SizedBox(width: 8),
-                Text(moneyExact(b.expectedAmount, cur), textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500)),
                 IconButton(
                   tooltip: 'Remove bill',
                   icon: const Icon(Icons.delete_outline),

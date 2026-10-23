@@ -81,6 +81,7 @@ class _BudgetWalletAppState extends State<BudgetWalletApp> {
   final _messenger = GlobalKey<ScaffoldMessengerState>();
   late final _toastClearer = ToastClearer(_messenger);
   bool _noticeOpen = false;
+  bool _failedOpen = false;
   final _light = buildTheme(Brightness.light);
   final _dark = buildTheme(Brightness.dark);
 
@@ -109,12 +110,25 @@ class _BudgetWalletAppState extends State<BudgetWalletApp> {
     super.dispose();
   }
 
-  /// A write failed in the database (any screen): a toast, never silent.
+  /// A write failed in the database (any screen): a dialog on the top route like the clock notice, so it shows over an open
+  /// sheet too (a toast sits in the page's Scaffold, under a modal sheet). Deferred: the error can arrive while a frame builds.
   void _writeFailed() {
-    final ctx = _navigator.currentContext;
-    if (ctx == null) return;
-    logNav('write.failed.shown');
-    toast(ctx, writeFailedText);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _navigator.currentContext;
+      if (!mounted || ctx == null || !ctx.mounted || _failedOpen) return;
+      _failedOpen = true;
+      logNav('write.failed.shown');
+      showDialog<void>(
+        context: ctx,
+        builder: (c) => AlertDialog(
+          key: const ValueKey('writeFailedDialog'),
+          content: const Text(writeFailedText),
+          actions: [TextButton(key: const ValueKey('writeFailedOk'), onPressed: () => Navigator.of(c).pop(), child: const Text('OK'))],
+        ),
+      ).whenComplete(() => _failedOpen = false);
+    });
+    // A frame must run for the callback to fire when the app is idle.
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   /// A write was refused because this device's clock is behind (any screen): one sentence over whatever is open.

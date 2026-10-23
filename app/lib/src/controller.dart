@@ -962,11 +962,12 @@ class WalletController extends ChangeNotifier {
   /// Logs that the save-key screen was shown.
   void keyBackupShown() => logEvent(_key, Level.INFO, 'key.backup', {'action': 'shown'});
 
-  /// Whether the owner hid the first-run panel on Today (device-local); it is then one line.
-  bool get setupCollapsed => repo.localValue('setupCollapsed') == '1';
+  /// Whether the owner hid the first-run panel on Today for exactly these open [steps] (device-local); it is then one line.
+  /// A different set of open steps (a new one appeared, or one was done) shows the panel open again.
+  bool setupCollapsedFor(List<String> steps) => repo.localValue('setupCollapsed') == steps.join(',');
 
-  void setSetupCollapsed(bool v) {
-    repo.setLocalValue('setupCollapsed', v ? '1' : null);
+  void setSetupCollapsed(bool v, List<String> steps) {
+    repo.setLocalValue('setupCollapsed', v ? steps.join(',') : null);
     _keyBackupChanged();
   }
 
@@ -1487,8 +1488,9 @@ class WalletController extends ChangeNotifier {
   }
 
   void addExpense({required int amount, required String category, required String note, required String date}) {
-    repo.addTransaction(date: date, amount: amount, category: category, note: note, currency: currency);
+    // The device-local default first: if the save then fails nothing is written, and a failure here never follows a saved expense.
     repo.setLocalValue('lastExpenseCategory', category);
+    repo.addTransaction(date: date, amount: amount, category: category, note: note, currency: currency);
     logEvent(_log, Level.INFO, 'expense.add', {'category': category}); // category only
     _changed();
   }

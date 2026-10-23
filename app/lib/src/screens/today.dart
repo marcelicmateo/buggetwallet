@@ -19,8 +19,6 @@ import 'upcoming.dart';
 /// A small overspend is shown to the cent: "Over today by 0 €" would hide it.
 String shown(int cents, String cur) => cents > 0 && cents < 10000 ? moneyExact(cents, cur) : money(cents, cur, decimals: 0);
 
-/// Tomorrow's daily allowance, or null when a new pay period starts tomorrow.
-
 /// The size of a typical delivery order the delivery-hour panel compares with today's money (in cents).
 const typicalOrderCents = 1500;
 
@@ -458,12 +456,12 @@ class _SetupPanel extends StatelessWidget {
     final c = context.c;
     final s = wc.settings;
     final cur = wc.currency;
-    if (wc.setupCollapsed) {
+    if (wc.setupCollapsedFor(steps)) {
       final n = steps.length;
       return Panel(color: c.warnBg, children: [
         InkWell(
           key: const ValueKey('setupLine'),
-          onTap: () => wc.setSetupCollapsed(false),
+          onTap: () => wc.setSetupCollapsed(false, steps),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 48),
             child: Row(children: [
@@ -483,7 +481,7 @@ class _SetupPanel extends StatelessWidget {
         Icon(Icons.checklist, size: 18, color: c.warnInk),
         const SizedBox(width: 8),
         Expanded(child: Text('Set up your wallet', style: TextStyle(fontWeight: FontWeight.w600, color: c.warnInk))),
-        TextButton(key: const ValueKey('setupHide'), onPressed: () => wc.setSetupCollapsed(true), child: const Text('Hide')),
+        TextButton(key: const ValueKey('setupHide'), onPressed: () => wc.setSetupCollapsed(true, steps), child: const Text('Hide')),
       ]),
       if (steps.contains('key')) ...[
         Row(key: const ValueKey('keyBackupRow'), children: [

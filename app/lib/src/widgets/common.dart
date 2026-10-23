@@ -604,7 +604,7 @@ const toastDuration = Duration(milliseconds: 2500);
 
 /// A short message at the bottom: full width on a phone, a 400 dp floating card on wide windows.
 ///
-/// Stays [toastDuration] (also with an action: it does not persist) and is cleared by [clearToasts] when the owner changes
+/// Stays [toastDuration] (also with an action; only with a screen reader on does an action toast persist) and is cleared by [clearToasts] when the owner changes
 /// tab or opens a sheet or page. With [actionLabel] and [onAction] the snack bar has one action button (like "Undo"); the
 /// action gets the key `toastAction` (`toastUndo` for an action labelled "Undo").
 void toast(BuildContext context, String msg, {String? actionLabel, VoidCallback? onAction}) {
@@ -616,7 +616,8 @@ void toast(BuildContext context, String msg, {String? actionLabel, VoidCallback?
         behavior: SnackBarBehavior.floating,
         width: wide ? 400 : null,
         duration: toastDuration,
-        persist: false,
+        // With an action it stays for screen-reader users (they need time to reach it); otherwise it times out (I4).
+        persist: onAction != null && MediaQuery.accessibleNavigationOf(context),
         action: actionLabel == null || onAction == null
             ? null
             : SnackBarAction(key: ValueKey(actionLabel == 'Undo' ? 'toastUndo' : 'toastAction'), label: actionLabel, onPressed: onAction)));

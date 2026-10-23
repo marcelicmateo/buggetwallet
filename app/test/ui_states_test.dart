@@ -2,8 +2,10 @@
 // toasts (2.5 s, Undo, Open), form defaults, backup and relay texts. All data SYNTHETIC; fixed clocks (20 Oct 2026).
 import 'package:budget_wallet/src/clock_notice.dart';
 import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/backup_panel.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/sync_panel.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/wishlist.dart';
@@ -11,9 +13,11 @@ import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/common.dart' show SqliteException;
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart' show ImportBatch;
 
+import 'support/layout.dart' show pumpFull, tapTab;
 import 'support/wallet.dart';
 
 Finder key(String k) => find.byKey(ValueKey(k));
@@ -62,7 +66,23 @@ void main() {
       expect(find.textContaining('for this period', findRichText: true), findsOneWidget, reason: 'said once');
     });
 
-    testWidgets('last day: no tomorrow figure (everything left is today\'s)', (t) async {
+    testWidgets('last day, over the plan: the period sentence, no tomorrow figure', (t) async {
+      final wc = wallet(now: DateTime(2026, 10, 31, 12));
+      wc.repo.addTransaction(date: '2026-10-31', amount: 400000, category: 'Shopping');
+      wc.reload();
+      final p = wc.period();
+      expect(p.allowanceTomorrow, isNull);
+      expect(p.overToday > 0 && p.overBy > 0, isTrue, reason: 'precondition: over on the last day (${p.overToday}, ${p.overBy})');
+      await pumpApp(
+          t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), wc: wc, openPlan: () {}, clock: () => DateTime(2026, 10, 31, 12))),
+          size: const Size(400, 1600));
+      expect(find.descendant(of: key('overSentence'), matching: find.textContaining('over the plan for this period.', findRichText: true)),
+          findsOneWidget);
+      expect(find.textContaining('tomorrow', findRichText: true), findsNothing);
+      expect(find.textContaining('-'), findsNothing, reason: 'no minus sign on Today');
+    });
+
+    testWidgets('last day, under the plan: no over sentence', (t) async {
       final wc = wallet(now: DateTime(2026, 10, 31, 12));
       expect(wc.period().allowanceTomorrow, isNull);
       await pumpApp(
@@ -84,6 +104,80 @@ void main() {
     });
   });
 
+  group('IUbb Plan ledger', () {
+    double valueOf(String text) => double.parse(text.replaceAll('\u2212', '-').replaceAll(RegExp(r'[^0-9.\-]'), ''));
+
+    testWidgets('the rows add up to the total to the cent, the set-aside row included', (t) async {
+      final wc = wallet(salary: 100000);
+      wc.repo.updateSettings({'rent': 1050, 'loan': 2050});
+      wc.addPlannedCost(title: 'Dentist', date: '2026-10-25', amount: 3333);
+      wc.reload();
+      await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 4000));
+      expect(key('ledgerSetAside'), findsOneWidget, reason: 'precondition: a coming cost is set aside');
+      String value(Finder row) =>
+          t.widgetList<Text>(find.descendant(of: row, matching: find.byType(Text))).map((w) => w.data ?? '').toList().last;
+      final rows = find.ancestor(of: find.text('Salary (planned)'), matching: find.byType(Rows)).first;
+      final items = find.descendant(of: rows, matching: find.byType(LineItem));
+      var sum = 0.0;
+      for (var i = 0; i < items.evaluate().length; i++) {
+        final texts = t.widgetList<Text>(find.descendant(of: items.at(i), matching: find.byType(Text))).map((w) => w.data ?? '').toList();
+        // label, optional sub-line, value last
+        sum += valueOf(texts.last);
+      }
+      final total = valueOf(value(key('ledgerSpendingMoney')));
+      expect(sum.toStringAsFixed(2), total.toStringAsFixed(2), reason: 'the ledger rows sum to the spending money');
+      expect(total, wc.period().flexBudget / 100);
+      expect(find.textContaining('10.50'), findsWidgets, reason: 'cents shown, not rounded');
+      await t.pump(const Duration(seconds: 4));
+    });
+
+    testWidgets('a few cents of spending money: the heading never shows a negative', (t) async {
+      final wc = wallet(salary: 100000);
+      wc.repo.updateSettings({'rent': 99990});
+      wc.reload();
+      final p = wc.period();
+      expect(p.flexBudget > 0 && p.planDaily == 0, isTrue, reason: 'precondition: ${p.flexBudget} cents, ${p.planDaily}/day');
+      await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 4000));
+      final h = textOf(t, 'planHeading');
+      expect(h, contains('0.10'));
+      expect(h, isNot(contains('over')));
+      expect(h.contains('-') || h.contains('\u2212'), isFalse);
+    });
+  });
+
+  group('IUbb Review delete', () {
+    testWidgets('deleting from Review says so, with Undo', (t) async {
+      final wc = wallet();
+      wc.repo.addTransaction(date: '2026-10-19', amount: 1234, category: 'Old category'); // not one of the wallet's categories
+      wc.reload();
+      expect(wc.reviewRows(), hasLength(1));
+      await pumpApp(t, ReviewScreen(wc: wc), size: const Size(400, 1600));
+      await t.tap(find.widgetWithText(TextButton, 'Change'));
+      await t.pumpAndSettle();
+      await t.tap(key('txDelete'));
+      await t.pumpAndSettle();
+      expect(find.text('Deleted'), findsOneWidget);
+      expect(key('toastUndo'), findsOneWidget);
+      await t.tap(key('toastUndo'));
+      await t.pump();
+      expect(wc.txs, hasLength(1), reason: 'Undo brought it back');
+      await t.pump(const Duration(seconds: 4));
+    });
+  });
+
+  group('IUbb confirmed bill row', () {
+    testWidgets('at 320 dp and text scale 2 the Skip button keeps a readable width (the amount no longer squeezes it)', (t) async {
+      final wc = habitsWallet(confirmBill: true);
+      await pumpFull(t, wc, 2.0);
+      await tapTab(t, 'Plan');
+      final skip = find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key! as ValueKey).value}'.startsWith('skip:'));
+      await t.dragUntilVisible(skip, find.byType(Scrollable).first, const Offset(0, -300));
+      expect(t.getSize(skip).width, greaterThan(120), reason: 'the label "Skip this cycle" must not wrap letter by letter');
+      await t.pumpWidget(const SizedBox.shrink());
+      await t.pump(const Duration(minutes: 6));
+    });
+  });
+
   group('I1 setup panel', () {
     testWidgets('the open steps are one panel; hide leaves one line that opens it again', (t) async {
       final wc = emptyWallet();
@@ -102,6 +196,27 @@ void main() {
       await t.pump();
       await pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), wc: wc, openPlan: () {})), size: const Size(400, 1600));
       expect(key('setupPanel'), findsOneWidget);
+    });
+
+    testWidgets('a different set of open steps shows the panel open again', (t) async {
+      final wc = emptyWallet();
+      addTearDown(wc.dispose);
+      Future<void> rebuild(WidgetTester t) =>
+          pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), wc: wc, openPlan: () {})), size: const Size(400, 1600));
+      await rebuild(t);
+      await t.tap(key('setupHide'));
+      await t.pump();
+      await rebuild(t);
+      expect(key('setupLine'), findsOneWidget);
+      wc.updateSettings({'salaryConfirmed': true}); // one step done: the set changed
+      await rebuild(t);
+      expect(key('setupPanel'), findsOneWidget, reason: 'open again for the changed set');
+      expect(key('setupLine'), findsNothing);
+      expect(wc.setupCollapsedFor(['key']), isFalse);
+      wc.setSetupCollapsed(true, ['key']);
+      expect(wc.setupCollapsedFor(['key']), isTrue);
+      expect(wc.setupCollapsedFor(['key', 'payday']), isFalse, reason: 'a new step opens it again');
+      await t.pump(const Duration(seconds: 4));
     });
 
     testWidgets('no open step: no panel and no line', (t) async {
@@ -278,14 +393,94 @@ void main() {
       await t.pump(const Duration(seconds: 4));
     });
 
-    testWidgets('a failed database write shows a toast', (t) async {
-      final wc = wallet();
-      await pumpApp(
-          t, Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => toast(c, writeFailedText), child: const Text('go')))));
-      await t.tap(find.text('go'));
-      await t.pump();
-      expect(find.text("Couldn't save. Nothing was changed."), findsOneWidget);
-      expect(wc.txs, isEmpty);
+    testWidgets('a toast with an action stays for a screen reader, one without times out', (t) async {
+      Future<void> run(int ms) async {
+        for (var i = 0; i < ms ~/ 100; i++) {
+          await t.pump(const Duration(milliseconds: 100));
+        }
+      }
+
+      Future<void> hostA11y(void Function(BuildContext) go, {required bool reader}) async {
+        t.view.physicalSize = const Size(400, 900);
+        t.view.devicePixelRatio = 1;
+        addTearDown(t.view.reset);
+        await t.pumpWidget(MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(size: const Size(400, 900), accessibleNavigation: reader),
+            child: Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => go(c), child: const Text('go')))),
+          ),
+        ));
+        await t.tap(find.text('go'));
+        await t.pump();
+      }
+
+      await hostA11y((c) => toast(c, 'Kept', actionLabel: 'Undo', onAction: () {}), reader: true);
+      await run(6000);
+      expect(find.text('Kept'), findsOneWidget, reason: 'screen reader on: the action toast stays');
+      await hostA11y((c) => toast(c, 'Plain'), reader: true);
+      await run(4000);
+      expect(find.text('Plain'), findsNothing, reason: 'no action: it times out even with a screen reader');
+      await hostA11y((c) => toast(c, 'Gone', actionLabel: 'Undo', onAction: () {}), reader: false);
+      await run(4000);
+      expect(find.text('Gone'), findsNothing, reason: 'no screen reader: it times out');
+    });
+
+    group('write failures', () {
+      late void Function(FlutterErrorDetails)? prevOnError;
+      setUp(() => prevOnError = FlutterError.onError);
+      tearDown(() => FlutterError.onError = prevOnError);
+
+      test('only a database error out of a write is a "Couldn\'t save"', () {
+        final before = writeFailedNotice.value;
+        final e = SqliteException(extendedResultCode: 1, message: 'x');
+        expect(noticeWriteFailed(StateError('x'), StackTrace.current), isFalse);
+        expect(noticeWriteFailed(e, null), isFalse);
+        expect(noticeWriteFailed(e, StackTrace.current), isFalse, reason: 'a read or a build-time error: not from a write');
+        expect(writeFailedNotice.value, before);
+      });
+
+      testWidgets('a write the database refuses shows a dialog over the open Add expense sheet; a failed read does not', (t) async {
+        await t.runAsync(AppLog.init);
+        final wc = wallet();
+        // The outbox insert of every write fails: a real SqliteException out of a real repo write.
+        wc.repo.db.execute("CREATE TEMP TRIGGER bw_fail BEFORE INSERT ON outbox BEGIN SELECT RAISE(ABORT, 'disk full'); END");
+        await pumpFull(t, wc, 1, size: const Size(400, 900));
+        await t.tap(key('addFab'));
+        await t.pumpAndSettle();
+        await t.enterText(find.byType(TextField).first, '5');
+        await t.pump();
+        final chip = find.widgetWithText(ChoiceChip, 'Groceries');
+        await t.ensureVisible(chip);
+        await t.pumpAndSettle();
+        await t.tap(chip);
+        await t.pump();
+        await t.tap(key('addExpenseSave'));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 400));
+        expect(t.takeException(), isA<SqliteException>());
+        expect(key('writeFailedDialog'), findsOneWidget, reason: 'on the top route, not under the sheet');
+        expect(find.text(writeFailedText), findsOneWidget);
+        expect(wc.txs, isEmpty, reason: 'nothing was written');
+        await t.tap(key('writeFailedOk'));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 400));
+        expect(key('writeFailedDialog'), findsNothing);
+
+        // A database error that did not come out of a write is logged as a crash, not shown as "Couldn't save".
+        FlutterError.onError!(
+            FlutterErrorDetails(exception: SqliteException(extendedResultCode: 1, message: 'read failed'), stack: StackTrace.current));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 400));
+        expect(t.takeException(), isA<SqliteException>());
+        expect(key('writeFailedDialog'), findsNothing);
+      });
+
+      test('a saved expense is never followed by a failure of the remembered category', () {
+        final wc = wallet();
+        wc.addExpense(amount: 500, category: 'Groceries', note: '', date: '2026-10-20');
+        expect(wc.txs, hasLength(1));
+        expect(wc.lastExpenseCategory, 'Groceries');
+      });
     });
 
     testWidgets('a bank row that replaced a hand-added expense shows the mark', (t) async {
