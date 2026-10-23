@@ -9,7 +9,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 
-/// "Calendar", "Bill" or "Added": where a planned cost came from; "Warranty" and "Return by" for a bill's dates.
+/// "Calendar", "Bill" or "Planned by you": where a planned cost came from; "Warranty" and "Return by" for a bill's dates.
 String sourceLabel(UpcomingItem i) => switch (i.kind) {
       UpcomingKind.bill => 'Bill',
       UpcomingKind.suggestion => 'Calendar',
@@ -18,7 +18,7 @@ String sourceLabel(UpcomingItem i) => switch (i.kind) {
       UpcomingKind.planned => switch (i.planned?.source) {
           PlannedSource.calendar => 'Calendar',
           PlannedSource.bill => 'Bill',
-          _ => 'Added',
+          _ => 'Planned by you',
         },
     };
 
@@ -96,7 +96,7 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
       MoneyField(
         fieldKey: const ValueKey('plannedAmount'),
         controller: _amount,
-        style: numStyle.copyWith(fontSize: 24, fontWeight: FontWeight.w500),
+        style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500),
         decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur), hintText: '0.00'),
       ),
       const SizedBox(height: 12),
@@ -135,7 +135,7 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
           onPressed: _save,
           child: Text(editing ? 'Save' : (widget.suggestion != null ? 'Add to my plan' : 'Add planned cost'))),
       const SizedBox(height: 8),
-      const Muted('It is set aside from your daily money until it is paid or its day has passed.', size: 12.5),
+      const Muted('It is set aside from your daily money until it is paid or its day has passed.', size: BwType.metaSize),
     ]);
   }
 }
@@ -162,7 +162,7 @@ class _PlannedEntrySheetState extends State<PlannedEntrySheet> {
       Heading(p.title.isEmpty ? 'Planned cost' : p.title),
       const SizedBox(height: 6),
       Text(p.amount == null ? 'No amount yet' : moneyExact(p.amount!, cur),
-          textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: 26, fontWeight: FontWeight.w500)),
+          textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500)),
       const SizedBox(height: 6),
       const DoubleRule(),
       const SizedBox(height: 6),
@@ -205,10 +205,10 @@ class _PlannedEntrySheetState extends State<PlannedEntrySheet> {
               child: const Text('Delete')),
         ])
       else ...[
-        const Heading(key: ValueKey('paidWhich'), 'Which payment was it?', size: 15),
+        const Heading(key: ValueKey('paidWhich'), 'Which payment was it?', size: BwType.headingSize),
         const SizedBox(height: 4),
         if (candidates.isEmpty)
-          const Muted('No matching payment yet. Import your bank file, then come back.', size: 13.5)
+          const Muted('No matching payment yet. Import your bank file, then come back.', size: BwType.bodySize)
         else ...[
           const Muted('Payments in the same category within 3 days. Tap the one that paid it.'),
           Rows(children: [
@@ -226,7 +226,7 @@ class _PlannedEntrySheetState extends State<PlannedEntrySheet> {
                   child: SplitRow(
                     start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(merchantName(t.tx), style: const TextStyle(fontWeight: FontWeight.w500)),
-                      Text(shortDateOrRaw(t.date), style: TextStyle(fontSize: 12.5, color: context.c.ink2)),
+                      Text(shortDateOrRaw(t.date), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
                     ]),
                     end: Text(moneyExact(-t.amount, cur), textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500)),
                   ),

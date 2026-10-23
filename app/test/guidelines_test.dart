@@ -16,64 +16,7 @@ const _tabs = ['Today', 'Spending', 'Wishlist', 'Goals', 'Plan'];
 const _minFont = 12.0;
 
 /// Known failures, keyed by the test name; each reason names the failing widgets (Stage I builds against these).
-const _known = <String, String>{
-  'font size: demo, Goals, scale 1.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Goals, scale 1.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Goals, scale 2.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Goals, scale 2.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Plan, scale 1.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Plan, scale 1.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Plan, scale 2.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Plan, scale 2.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Spending, scale 1.0, dark':
-      'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235); chart axis day labels, charts.dart:43',
-  'font size: demo, Spending, scale 1.0, light':
-      'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235); chart axis day labels, charts.dart:43',
-  'font size: demo, Spending, scale 2.0, dark':
-      'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235); chart axis day labels, charts.dart:43',
-  'font size: demo, Spending, scale 2.0, light':
-      'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235); chart axis day labels, charts.dart:43',
-  'font size: demo, Today, scale 1.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Today, scale 1.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Today, scale 2.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Today, scale 2.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Wishlist, scale 1.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Wishlist, scale 1.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Wishlist, scale 2.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: demo, Wishlist, scale 2.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Goals, scale 1.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Goals, scale 1.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Goals, scale 2.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Goals, scale 2.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Plan, scale 1.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Plan, scale 1.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Plan, scale 2.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Plan, scale 2.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Spending, scale 1.0, dark':
-      'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235); numeric badge, common.dart:260; \'added\' Tag, common.dart:156; budget caption \'of N\' 11.0 dp, charts.dart:288; bar summary \'11.5 dp, charts.dart:186; \'behind pace\' PaceBar, charts.dart:301',
-  'font size: habits (bill confirmed), Spending, scale 1.0, light':
-      'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235); numeric badge, common.dart:260; \'added\' Tag, common.dart:156; budget caption \'of N\' 11.0 dp, charts.dart:288; bar summary \'11.5 dp, charts.dart:186; \'behind pace\' PaceBar, charts.dart:301',
-  'font size: habits (bill confirmed), Spending, scale 2.0, dark':
-      'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235); numeric badge, common.dart:260; \'added\' Tag, common.dart:156; budget caption \'of N\' 11.0 dp, charts.dart:288; bar summary \'11.5 dp, charts.dart:186; \'behind pace\' PaceBar, charts.dart:301',
-  'font size: habits (bill confirmed), Spending, scale 2.0, light':
-      'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235); numeric badge, common.dart:260; \'added\' Tag, common.dart:156; budget caption \'of N\' 11.0 dp, charts.dart:288; bar summary \'11.5 dp, charts.dart:186; \'behind pace\' PaceBar, charts.dart:301',
-  'font size: habits (bill confirmed), Today, scale 1.0, dark':
-      'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235); \'added\' Tag, common.dart:156',
-  'font size: habits (bill confirmed), Today, scale 1.0, light':
-      'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235); \'added\' Tag, common.dart:156',
-  'font size: habits (bill confirmed), Today, scale 2.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Today, scale 2.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Wishlist, scale 1.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Wishlist, scale 1.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Wishlist, scale 2.0, dark': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'font size: habits (bill confirmed), Wishlist, scale 2.0, light': 'BUG: I6 - text below 12 dp: bottom-bar labels 11 dp (theme.dart:235)',
-  'tap targets: habits (bill confirmed), Plan, scale 1.0, dark': 'BUG: I6 - tap target under 48 dp: Skip this cycle (132.3x45.0)',
-  'tap targets: habits (bill confirmed), Plan, scale 1.0, light': 'BUG: I6 - tap target under 48 dp: Skip this cycle (132.3x45.0)',
-  'tap targets: habits (bill confirmed), Today, scale 1.0, dark':
-      'BUG: I6 - tap target under 48 dp: Eating out: over by 12 € (288.0x44.0); Due by payday: 1 bill, 29.99 € (288.0x44.0)',
-  'tap targets: habits (bill confirmed), Today, scale 1.0, light':
-      'BUG: I6 - tap target under 48 dp: Eating out: over by 12 € (288.0x44.0); Due by payday: 1 bill, 29.99 € (288.0x44.0)',
-};
+const _known = <String, String>{};
 
 /// Text below [_minFont] on screen: "size 'text'" per run. Eyebrows (ALL CAPS with letter spacing) and icon glyphs are excepted.
 Set<String> smallText(WidgetTester tester) {

@@ -79,15 +79,28 @@ class BudgetWalletApp extends StatefulWidget {
 class _BudgetWalletAppState extends State<BudgetWalletApp> {
   final _navigator = GlobalKey<NavigatorState>();
   bool _noticeOpen = false;
+  final _light = buildTheme(Brightness.light);
+  final _dark = buildTheme(Brightness.dark);
+
+  /// Device-local choice (Plan › Look), read from the wallet's local values, so it is known before the first frame.
+  late final _mode = ValueNotifier<ThemeMode>(_modeOf(widget.wc));
+
+  static ThemeMode _modeOf(WalletController wc) =>
+      switch (wc.themeModeName) { 'light' => ThemeMode.light, 'dark' => ThemeMode.dark, _ => ThemeMode.system };
+
+  void _syncMode() => _mode.value = _modeOf(widget.wc);
 
   @override
   void initState() {
     super.initState();
     clockBehindNotice.addListener(_clockBehind);
+    widget.wc.addListener(_syncMode);
   }
 
   @override
   void dispose() {
+    widget.wc.removeListener(_syncMode);
+    _mode.dispose();
     clockBehindNotice.removeListener(_clockBehind);
     super.dispose();
   }
@@ -111,21 +124,26 @@ class _BudgetWalletAppState extends State<BudgetWalletApp> {
   @override
   Widget build(BuildContext context) {
     final wc = widget.wc;
-    return MaterialApp(
-      navigatorKey: _navigator,
-      title: 'Budget Wallet',
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(Brightness.light),
-      darkTheme: buildTheme(Brightness.dark),
-      home: ListenableBuilder(
-        listenable: wc,
-        builder: (context, _) => wc.inUseElsewhere
-            ? const InUseScreen()
-            : wc.hasWallet
-                ? HomeShell(wc: wc)
-                : wc.locked
-                    ? UnlockScreen(wc: wc)
-                    : OnboardingScreen(wc: wc),
+    // The themes are built once (a new ThemeData never compares equal and would animate on every notify); only the mode moves.
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: _mode,
+      builder: (context, mode, _) => MaterialApp(
+        navigatorKey: _navigator,
+        title: 'Budget Wallet',
+        debugShowCheckedModeBanner: false,
+        theme: _light,
+        darkTheme: _dark,
+        themeMode: mode,
+        home: ListenableBuilder(
+          listenable: wc,
+          builder: (context, _) => wc.inUseElsewhere
+              ? const InUseScreen()
+              : wc.hasWallet
+                  ? HomeShell(wc: wc)
+                  : wc.locked
+                      ? UnlockScreen(wc: wc)
+                      : OnboardingScreen(wc: wc),
+        ),
       ),
     );
   }
@@ -359,6 +377,45 @@ class _HomeShellState extends State<HomeShell> {
 
   Widget _logo(WalletColors c) => const LedgerLogo();
 
+  /// The persistent add action (same path as Ctrl+N; a second tap while the sheet opens does nothing).
+  Widget _addButton(BuildContext context, {bool small = false}) {
+    final c = context.c;
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(3));
+    final label = _hint('Add expense', 'Ctrl+N');
+    void tap() {
+      logNav('nav.addFab');
+      _addExpense();
+    }
+
+    return small
+        ? FloatingActionButton.small(
+            key: const ValueKey('addFab'),
+            heroTag: null,
+            tooltip: label,
+            backgroundColor: c.ink,
+            foregroundColor: c.bg,
+            elevation: 0,
+            focusElevation: 0,
+            hoverElevation: 0,
+            highlightElevation: 0,
+            shape: shape,
+            onPressed: tap,
+            child: const Icon(Icons.add))
+        : FloatingActionButton(
+            key: const ValueKey('addFab'),
+            heroTag: null,
+            tooltip: label,
+            backgroundColor: c.ink,
+            foregroundColor: c.bg,
+            elevation: 0,
+            focusElevation: 0,
+            hoverElevation: 0,
+            highlightElevation: 0,
+            shape: shape,
+            onPressed: tap,
+            child: const Icon(Icons.add));
+  }
+
   /// The rail: labels always shown, wide (extended) at expanded. It scrolls when the window is short.
   Widget _rail(BuildContext context, LayoutSize size) {
     final c = context.c;
@@ -384,18 +441,24 @@ class _HomeShellState extends State<HomeShell> {
                 // The name never makes the rail wider than minExtendedWidth (so the content width does not depend on the font).
                 leading: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: SizedBox(
-                    width: extended ? 188 : null,
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      _logo(c),
-                      if (extended) ...[
-                        const SizedBox(width: 8),
-                        const Flexible(
-                            child: Text('Budget Wallet',
-                                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 17))),
-                      ],
-                    ]),
-                  ),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    SizedBox(
+                      width: extended ? 188 : null,
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        _logo(c),
+                        if (extended) ...[
+                          const SizedBox(width: 8),
+                          const Flexible(
+                              child: Text('Budget Wallet',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: BwType.headingSize))),
+                        ],
+                      ]),
+                    ),
+                    const SizedBox(height: 16),
+                    _addButton(context, small: true),
+                  ]),
                 ),
                 destinations: [
                   for (final (i, d) in _destinations.indexed)
@@ -434,13 +497,27 @@ class _HomeShellState extends State<HomeShell> {
         title: compact
             ? Row(children: [
                 _logo(context.c),
-                const SizedBox(width: 8),
-                const Flexible(
-                    child: Text('Budget Wallet',
-                        maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 17))),
+                // On a very narrow bar the search icon and the period take the room: the logo stands for the name.
+                if (width >= 360) ...[
+                  const SizedBox(width: 8),
+                  const Flexible(
+                      child: Text('Budget Wallet',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: BwType.headingSize))),
+                ],
               ])
             : null,
         actions: [
+          IconButton(
+            key: const ValueKey('appBarSearch'),
+            tooltip: _hint('Search', 'Ctrl+F'),
+            icon: const Icon(Icons.search),
+            onPressed: () => _key('appBarSearch', () {
+              _go(1, 'appbar');
+              _searchRequest.value++;
+            }),
+          ),
           if (wc.syncing)
             const Padding(
                 padding: EdgeInsets.only(right: 8),
@@ -457,7 +534,7 @@ class _HomeShellState extends State<HomeShell> {
                     label: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}',
-                            style: numStyle.copyWith(fontSize: 12, fontWeight: FontWeight.w500))),
+                            style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500))),
                     side: BorderSide(color: context.c.ink),
                     visualDensity: VisualDensity.compact),
               ),
@@ -493,6 +570,7 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ),
       ),
+      floatingActionButton: compact ? _addButton(context) : null,
       bottomNavigationBar: compact
           ? NavBarFrame(
               selected: tab,

@@ -15,7 +15,7 @@ class PeriodNetChart extends StatelessWidget {
   final String currency;
   const PeriodNetChart({super.key, required this.periods, required this.trend, required this.currency});
 
-  static const _height = 200.0, _labels = 30.0;
+  static const _height = 200.0, _labels = 34.0;
 
   @override
   Widget build(BuildContext context) {
@@ -40,8 +40,8 @@ class PeriodNetChart extends StatelessWidget {
           final d = shortDate(periods[i].start).split(' ');
           return Padding(
             padding: const EdgeInsets.only(top: 3),
-            child:
-                Text('${d[0]}\n${d[1]}', textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: 10, height: 1.15, color: c.muted)),
+            child: Text('${d[0]}\n${d[1]}',
+                textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: BwType.metaSize, height: 1.15, color: c.muted)),
           );
         },
       ),
@@ -75,7 +75,7 @@ class PeriodNetChart extends StatelessWidget {
                   return BarTooltipItem(
                     '$range\nIn ${money(p.income, currency, decimals: 0)} · Out ${money(p.out, currency, decimals: 0)}\n'
                     '${p.net >= 0 ? 'Saved' : 'Lost'} ${money(p.net.abs(), currency, decimals: 0)} · kept ${percent(p.savingsRate)}',
-                    numStyle.copyWith(fontSize: 11, color: c.bg),
+                    numStyle.copyWith(fontSize: BwType.metaSize, color: c.bg),
                   );
                 },
               ),
@@ -178,13 +178,13 @@ class CategoryBars extends StatelessWidget {
         TotalRule(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(key: const ValueKey('budgetTotal'), children: [
-            const SizedBox(width: 118, child: Text('Budgeted', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600))),
+            const SizedBox(width: 118, child: Text('Budgeted', style: TextStyle(fontSize: BwType.bodySize, fontWeight: FontWeight.w600))),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                   '${moneyExact(total.budgetTotal - total.remainingTotal!, currency)} of ${moneyExact(total.budgetTotal, currency)}',
                   textAlign: TextAlign.end,
-                  style: numStyle.copyWith(fontSize: 11.5, color: c.ink2)),
+                  style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.ink2)),
             ),
             const SizedBox(width: 8),
             _LeftText(text: leftText(total.remainingTotal!, currency), over: total.remainingTotal! < 0, width: _rightCol),
@@ -205,7 +205,7 @@ class _LeftText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final style = numStyle.copyWith(fontSize: 13, fontWeight: FontWeight.w600, color: over ? c.bad : c.ink);
+    final style = numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w600, color: over ? c.bad : c.ink);
     return SizedBox(
       width: width,
       child: FittedBox(
@@ -244,7 +244,8 @@ class _CategoryRow extends StatelessWidget {
           child: Row(children: [
             SizedBox(
                 width: 118,
-                child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, color: c.ink2))),
+                child:
+                    Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.bodySize, color: c.ink2))),
             const SizedBox(width: 8),
             Expanded(
               child: LayoutBuilder(builder: (ctx, box) {
@@ -272,7 +273,8 @@ class _CategoryRow extends StatelessWidget {
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerRight,
-                  child: Text(money(value, currency, decimals: 0), textAlign: TextAlign.right, style: numStyle.copyWith(fontSize: 13)),
+                  child: Text(money(value, currency, decimals: 0),
+                      textAlign: TextAlign.right, style: numStyle.copyWith(fontSize: BwType.metaSize)),
                 ),
               )
             else
@@ -285,7 +287,8 @@ class _CategoryRow extends StatelessWidget {
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerRight,
-                      child: Text('of ${moneyExact(budget!, currency)}', style: numStyle.copyWith(fontSize: 11, color: c.ink2)),
+                      child:
+                          Text('of ${moneyExact(budget!, currency)}', style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.ink2)),
                     ),
                   ),
                   if (behindPace(l))
@@ -298,7 +301,7 @@ class _CategoryRow extends StatelessWidget {
                         child: Row(mainAxisSize: MainAxisSize.min, children: [
                           Icon(Icons.warning_amber_outlined, size: 13, color: c.warnInk),
                           const SizedBox(width: 3),
-                          Text('behind pace', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: c.warnInk)),
+                          Text('behind pace', style: TextStyle(fontSize: BwType.metaSize, fontWeight: FontWeight.w600, color: c.warnInk)),
                         ]),
                       ),
                     ),

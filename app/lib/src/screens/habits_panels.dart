@@ -18,7 +18,7 @@ class ReviewDayRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final day = wc.reviewDay;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const Heading('Review day', size: 15),
+      const Heading('Review day', size: BwType.headingSize),
       const SizedBox(height: 4),
       Muted('Today shows the review from ${_dayNames[day - 1]} until you finish it.'),
       const SizedBox(height: 8),
@@ -57,12 +57,12 @@ class ExpectedBillsPanel extends StatelessWidget {
     final confirmed = bills.where((b) => b.status == 'confirmed').toList();
     return Panel(children: [
       const SectionHead('Expected bills'),
-      const Muted(
+      Explainer(wc, 'expectedBills',
           'Found in your imports. A confirmed bill is set aside from your daily money until it is paid. Rent, loan and bills in your plan are already counted.'),
       if (candidates.isEmpty && confirmed.isEmpty)
         const EmptyNote('No repeating bills found yet. They show up after a few months of imports.'),
       if (candidates.isNotEmpty) ...[
-        const Heading('Looks like a monthly bill', size: 15),
+        const Heading('Looks like a monthly bill', size: BwType.headingSize),
         Rows(children: [
           for (final b in candidates)
             Padding(
@@ -73,7 +73,7 @@ class ExpectedBillsPanel extends StatelessWidget {
                     start: Text(_name(b), style: const TextStyle(fontWeight: FontWeight.w500)),
                     end: Text(moneyExact(b.expectedAmount, cur),
                         textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
-                Text('Next about ${shortDateOrRaw(b.nextDue)}', style: TextStyle(fontSize: 12.5, color: context.c.ink2)),
+                Text('Next about ${shortDateOrRaw(b.nextDue)}', style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
                 const SizedBox(height: 4),
                 Wrap(spacing: 8, runSpacing: 4, children: [
                   OutlinedButton(
@@ -97,7 +97,7 @@ class ExpectedBillsPanel extends StatelessWidget {
         ]),
       ],
       if (confirmed.isNotEmpty) ...[
-        const Heading('Confirmed', size: 15),
+        const Heading('Confirmed', size: BwType.headingSize),
         Rows(children: [
           for (final b in confirmed)
             Container(
@@ -108,8 +108,9 @@ class ExpectedBillsPanel extends StatelessWidget {
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(_name(b), style: const TextStyle(fontWeight: FontWeight.w500)),
-                    Text('${b.category} · next ${shortDateOrRaw(b.nextDue)}', style: TextStyle(fontSize: 12.5, color: context.c.ink2)),
-                    if (b.coveredByPlan) Text('Covered by your plan', style: TextStyle(fontSize: 12.5, color: context.c.ink2)),
+                    Text('${b.category} · next ${shortDateOrRaw(b.nextDue)}',
+                        style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+                    if (b.coveredByPlan) Text('Covered by your plan', style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
                     if (b.nextDue.compareTo(today) < 0)
                       const StatusLabel(good: false, text: 'Overdue')
                     else if (wc.billPaidThisPeriod(b))
@@ -118,7 +119,7 @@ class ExpectedBillsPanel extends StatelessWidget {
                       key: ValueKey('skip:${b.id}'),
                       style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
-                          minimumSize: const Size(48, 36),
+                          minimumSize: const Size(48, touchMin),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           alignment: Alignment.centerLeft),
                       onPressed: () {
@@ -169,7 +170,7 @@ class NudgesPanel extends StatelessWidget {
                 if (on && !granted && context.mounted) toast(context, 'Notifications are blocked.');
               }
             : null,
-        title: const Text('Remind me at 15:00 on weekdays and Sunday 11:00', style: TextStyle(fontSize: 14.5)),
+        title: const Text('Remind me at 15:00 on weekdays and Sunday 11:00', style: TextStyle(fontSize: BwType.bodySize)),
       ),
       const Muted('Short, friendly lines. A reminder never shows amounts, shops or names. This device only.'),
       SwitchListTile(
@@ -183,7 +184,7 @@ class NudgesPanel extends StatelessWidget {
                 if (on && !granted && context.mounted) toast(context, 'Notifications are blocked.');
               }
             : null,
-        title: const Text('Warn me before big planned costs', style: TextStyle(fontSize: 14.5)),
+        title: const Text('Warn me before big planned costs', style: TextStyle(fontSize: BwType.bodySize)),
       ),
       const Muted(
           'At 09:00, a few days ahead (set in Calendars). Also tells you when a return window or a warranty from your bills is about to end. The text has no amounts or names. This device only.'),

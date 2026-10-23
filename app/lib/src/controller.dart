@@ -585,8 +585,17 @@ class WalletController extends ChangeNotifier {
   /// This month's Food delivery orders: how many, and the total spent (positive cents).
   (int, int) get deliveries => _cached('deliveries', () {
         final month = monthOf(today());
-        final xs = txs.where((t) => t.category == 'Food delivery' && monthOf(t.date) == month && t.amount < 0);
+        final xs = txs.where((t) => t.category == 'Food delivery' && t.tx.currency == currency && monthOf(t.date) == month && t.amount < 0);
         return (xs.length, -xs.fold<int>(0, (a, t) => a + t.amount));
+      });
+
+  /// How many Food delivery orders the last 90 days hold (today and the 89 days before it; the wallet's currency only). Today shows its delivery-hour panel only when this is
+  /// above 0, so a wallet that never orders in never sees it. Cached per data version and day.
+  int get deliveryOrders90 => _cached('deliveryOrders90', () {
+        final from = addDays(today(), -89);
+        return txs
+            .where((t) => t.category == 'Food delivery' && t.tx.currency == currency && t.amount < 0 && t.date.compareTo(from) >= 0)
+            .length;
       });
 
   /// The sum of every goal's target (cents).
@@ -1346,6 +1355,31 @@ class WalletController extends ChangeNotifier {
         });
         return r;
       });
+
+  // ---------- look (device-local) ----------
+  /// Theme mode: 'system' (default), 'light' or 'dark'. Device-local, never synced.
+  String get themeModeName {
+    final v = repo.localValue('themeMode');
+    return v == 'light' || v == 'dark' ? v! : 'system';
+  }
+
+  void setThemeMode(String mode) {
+    if (mode != 'system' && mode != 'light' && mode != 'dark') return;
+    final from = themeModeName;
+    if (mode == from) return;
+    repo.setLocalValue('themeMode', mode);
+    logEvent(_log, Level.INFO, 'theme.mode', {'from': from, 'to': mode});
+    notifyListeners();
+  }
+
+  /// Whether the explainer paragraphs (the muted text under section heads) have been shown once. Device-local.
+  bool explainerSeen(String key) => repo.localValue('explainer:$key') != null;
+
+  /// Notes that the explainer [key] was shown; later it starts collapsed behind an info icon.
+  void markExplainerSeen(String key) {
+    if (explainerSeen(key)) return;
+    repo.setLocalValue('explainer:$key', today());
+  }
 
   // ---------- diagnostics ----------
   /// Device-local log level: 'all' (debug, the default while testing), 'info' or 'warning'.

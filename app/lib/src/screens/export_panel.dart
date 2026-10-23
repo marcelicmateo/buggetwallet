@@ -48,7 +48,7 @@ class _ExportPanelState extends State<ExportPanel> {
   @override
   Widget build(BuildContext context) => Panel(children: [
         const SectionHead('Export'),
-        const Muted('CSV files for your spreadsheet: date, amount, category, description, source and note.'),
+        Explainer(widget.wc, 'export', 'CSV files for your spreadsheet: date, amount, category, description, source and note.'),
         Wrap(spacing: 6, runSpacing: 6, children: [
           for (final r in ExportRange.values)
             ChoiceChip(
@@ -77,6 +77,6 @@ class _ExportPanelState extends State<ExportPanel> {
               child: const Text('Planned costs (.ics)')),
         ]),
         const Muted('Plain files, not encrypted.'),
-        const Muted('The .ics file shows your planned costs in any calendar app.', size: 12.5),
+        const Muted('The .ics file shows your planned costs in any calendar app.', size: BwType.metaSize),
       ]);
 }

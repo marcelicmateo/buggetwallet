@@ -5,6 +5,7 @@ import '../controller.dart';
 import '../key_store.dart' show WrongPassphrase;
 import '../layout.dart';
 import '../logging.dart';
+import '../theme.dart';
 import '../widgets/common.dart';
 import 'forget_browser.dart';
 
@@ -66,7 +67,7 @@ class _UnlockScreenState extends State<UnlockScreen> {
 
   @override
   Widget build(BuildContext context) => GatePage(children: [
-        const Muted('Your wallet is locked. Type your passphrase to open it in this browser.', size: 14.5),
+        const Muted('Your wallet is locked. Type your passphrase to open it in this browser.', size: BwType.bodySize),
         TextField(
           key: const ValueKey('unlockPassphrase'),
           controller: _pass,
@@ -83,7 +84,7 @@ class _UnlockScreenState extends State<UnlockScreen> {
           key: const ValueKey('unlockButton'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
           onPressed: _busy ? null : _unlock,
-          child: Text(_busy ? 'Opening…' : 'Unlock', style: const TextStyle(fontSize: 16)),
+          child: Text(_busy ? 'Opening…' : 'Unlock', style: const TextStyle(fontSize: BwType.headingSize)),
         ),
         TextButton(
           key: const ValueKey('unlockForget'),

@@ -163,12 +163,12 @@ class _BillsPanelState extends State<BillsPanel> {
             crossAxisAlignment: CrossAxisAlignment.start,
             start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
-              if (dates.isNotEmpty) Text(dates, style: TextStyle(fontSize: 12.5, color: c.ink2)),
+              if (dates.isNotEmpty) Text(dates, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
               if (overdue) const StatusLabel(good: false, text: 'Overdue'),
               if (b.paid) const StatusLabel(good: true, text: 'Paid'),
             ]),
             end: b.total == null
-                ? Text('No total', textAlign: TextAlign.end, style: TextStyle(fontSize: 12.5, color: c.muted))
+                ? Text('No total', textAlign: TextAlign.end, style: TextStyle(fontSize: BwType.metaSize, color: c.muted))
                 : Text(moneyExact(b.total!, b.currency.isEmpty ? cur : b.currency),
                     textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500)),
           ),
@@ -179,7 +179,7 @@ class _BillsPanelState extends State<BillsPanel> {
     Widget group(String title, List<Bill> list, {bool unpaid = false, int? limit}) {
       final shown = limit == null || _allPaid ? list : list.take(limit).toList();
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Heading('$title (${list.length})', size: 15),
+        Heading('$title (${list.length})', size: BwType.headingSize),
         Rows(children: [for (final b in shown) row(b, unpaid: unpaid)]),
         if (limit != null && list.length > limit)
           Align(
@@ -194,7 +194,7 @@ class _BillsPanelState extends State<BillsPanel> {
 
     return Panel(children: [
       const SectionHead('Bills'),
-      const Muted(
+      Explainer(wc, 'bills',
           'Receipts, payment slips and PDF bills. Read from a code or file, they wait here until you check and confirm them. Photos and PDFs are kept, encrypted.'),
       Wrap(spacing: 8, runSpacing: 8, children: [
         OutlinedButton.icon(
@@ -219,7 +219,7 @@ class _BillsPanelState extends State<BillsPanel> {
       if (lists.unpaid.isNotEmpty) group('Unpaid', lists.unpaid, unpaid: true),
       if (lists.paid.isNotEmpty) group('Paid', lists.paid, limit: _paidShown),
       const Divider(height: 24),
-      const Heading('Reminder days', size: 15),
+      const Heading('Reminder days', size: BwType.headingSize),
       const Muted('How many days before a return window or a warranty ends you get a reminder (0 = on the day).'),
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(

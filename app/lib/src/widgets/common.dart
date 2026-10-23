@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import '../controller.dart';
 import '../format.dart';
 import '../layout.dart';
 import '../theme.dart';
@@ -40,8 +41,7 @@ class Eyebrow extends StatelessWidget {
   final String text;
   const Eyebrow(this.text, {super.key});
   @override
-  Widget build(BuildContext context) => Text(text.toUpperCase(),
-      style: numStyle.copyWith(fontSize: 11, letterSpacing: 11 * 0.08, fontWeight: FontWeight.w500, color: context.c.muted));
+  Widget build(BuildContext context) => Text(text.toUpperCase(), style: BwType.eyebrow.copyWith(color: context.c.muted));
 }
 
 /// A section title: mono 11 px capitals over a strong underline, with something on the right if given.
@@ -53,7 +53,7 @@ class SectionHead extends StatelessWidget {
   Widget build(BuildContext context) {
     final label = Eyebrow(text);
     return Container(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(border: Border(bottom: BorderSide(color: context.c.lineStrong))),
       child: trailing == null ? label : SplitRow(start: label, end: trailing!),
     );
@@ -63,7 +63,7 @@ class SectionHead extends StatelessWidget {
 class Heading extends StatelessWidget {
   final String text;
   final double size;
-  const Heading(this.text, {super.key, this.size = 19});
+  const Heading(this.text, {super.key, this.size = BwType.titleSize});
   @override
   Widget build(BuildContext context) => Text(text, style: TextStyle(fontSize: size, fontWeight: FontWeight.w600, letterSpacing: -0.2));
 }
@@ -117,7 +117,7 @@ class GatePage extends StatelessWidget {
                     const Row(children: [
                       LedgerLogo(),
                       SizedBox(width: 10),
-                      Flexible(child: Heading('Budget Wallet', size: 24)),
+                      Flexible(child: Heading('Budget Wallet', size: BwType.displaySize)),
                     ]),
                     ...children,
                   ])),
@@ -131,9 +131,46 @@ class Muted extends StatelessWidget {
   final String text;
   final double size;
   final TextAlign align;
-  const Muted(this.text, {super.key, this.size = 13, this.align = TextAlign.start});
+  const Muted(this.text, {super.key, this.size = BwType.metaSize, this.align = TextAlign.start});
   @override
   Widget build(BuildContext context) => Text(text, textAlign: align, style: TextStyle(fontSize: size, color: context.c.muted, height: 1.4));
+}
+
+/// The muted paragraph under a section head, shown in full the first time (per [id], remembered on this device), then folded
+/// behind an info icon (`explainerInfo`) that opens it again.
+class Explainer extends StatefulWidget {
+  final WalletController wc;
+  final String id;
+  final String text;
+  const Explainer(this.wc, this.id, this.text, {super.key});
+  @override
+  State<Explainer> createState() => _ExplainerState();
+}
+
+class _ExplainerState extends State<Explainer> {
+  late bool _open = !widget.wc.explainerSeen(widget.id);
+
+  // Marked seen only while it can be seen: the shell builds every tab, and a hidden tab (TickerMode off) must not use it up.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_open && TickerMode.valuesOf(context).enabled) widget.wc.markExplainerSeen(widget.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_open) return Muted(widget.text);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: IconButton(
+        key: const ValueKey('explainerInfo'),
+        tooltip: 'Show explanation',
+        icon: const Icon(Icons.info_outline, size: 20),
+        color: context.c.ink2,
+        onPressed: () => setState(() => _open = true),
+      ),
+    );
+  }
 }
 
 /// One muted line "Other currencies, not counted: 12 $ spent" for rows in a currency other than the wallet's (they are in no total).
@@ -148,7 +185,7 @@ class ForeignNote extends StatelessWidget {
     final parts = [
       for (final k in codes) '${moneyExact(byCurrency[k]!.abs(), k)} ${byCurrency[k]! < 0 ? 'spent' : 'received'}',
     ];
-    return Muted('Other currencies, not counted: ${parts.join(', ')}', size: 12);
+    return Muted('Other currencies, not counted: ${parts.join(', ')}', size: BwType.metaSize);
   }
 }
 
@@ -174,7 +211,7 @@ class StatusLabel extends StatelessWidget {
         TextSpan(text: text),
       ]),
       textAlign: textAlign,
-      style: TextStyle(color: col, fontWeight: FontWeight.w600, fontSize: 13),
+      style: TextStyle(color: col, fontWeight: FontWeight.w600, fontSize: BwType.metaSize),
     );
   }
 }
@@ -225,7 +262,7 @@ class Tag extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
         decoration:
             BoxDecoration(color: context.c.surface2, borderRadius: BorderRadius.circular(2), border: Border.all(color: context.c.line)),
-        child: Text(text, style: TextStyle(fontSize: 11, color: context.c.ink2)),
+        child: Text(text, style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
       );
 }
 
@@ -321,7 +358,11 @@ const _dateCol = 52.0, _amountCol = 104.0;
 /// would not fit a phone at large text).
 const _stackScale = 1.15;
 
-bool _columnsFit(BuildContext context) => MediaQuery.textScalerOf(context).scale(1) <= _stackScale;
+/// Below this screen width the date goes under the name (no date column).
+const _compactWidth = 400.0;
+
+bool _columnsFit(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(1) <= _stackScale && MediaQuery.sizeOf(context).width >= _compactWidth;
 
 /// The column heads over a list of [TxTile]s.
 class TxHeaderRow extends StatelessWidget {
@@ -329,7 +370,7 @@ class TxHeaderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final st = numStyle.copyWith(fontSize: 10, letterSpacing: 0.8, fontWeight: FontWeight.w500, color: c.muted);
+    final st = numStyle.copyWith(fontSize: BwType.eyebrowSize, letterSpacing: 0.8, fontWeight: FontWeight.w500, color: c.muted);
     Widget cell(String t, {TextAlign align = TextAlign.start}) => Text(t.toUpperCase(), textAlign: align, style: st);
     final bottom = BoxDecoration(border: Border(bottom: BorderSide(color: c.line)));
     if (!_columnsFit(context)) {
@@ -366,14 +407,14 @@ class TxTile extends StatelessWidget {
     final inc = t.amount > 0;
     final src = switch (t.tx.source) { 'manual' => 'added', 'revolut' => 'Revolut', 'pbz' => 'PBZ', final s => s };
     final amount = money(t.amount, currency, decimals: 2, signed: true);
-    final amountStyle = numStyle.copyWith(fontSize: 15, fontWeight: FontWeight.w500, color: inc ? c.good : c.ink);
+    final amountStyle = numStyle.copyWith(fontSize: BwType.amountSize, fontWeight: FontWeight.w500, color: inc ? c.good : c.ink);
     final columns = _columnsFit(context);
     final name =
         Text(merchantName(t.tx), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500));
     final date = shortDateOrRaw(t.date);
     final sub = Wrap(spacing: 6, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
       Text(columns ? t.category : '$date · ${t.category}',
-          maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: c.ink2)),
+          maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       Tag(src),
       if (hasBill) Icon(Icons.receipt_long_outlined, key: const ValueKey('billMark'), size: 15, semanticLabel: 'Has a bill', color: c.ink2),
     ]);
@@ -383,8 +424,9 @@ class TxTile extends StatelessWidget {
       body = Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         SizedBox(
             width: _dateCol,
-            child:
-                Padding(padding: const EdgeInsets.only(top: 12), child: Text(date, style: numStyle.copyWith(fontSize: 12, color: c.ink2)))),
+            child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(date, style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.ink2)))),
         Expanded(
           child: Container(
             decoration: BoxDecoration(border: Border(left: divider, right: divider)),
@@ -411,12 +453,14 @@ class TxTile extends StatelessWidget {
         ),
       );
     }
-    return InkWell(
-      onTap: onTap,
-      hoverColor: c.surface2,
-      focusColor: c.accentSoft,
-      mouseCursor: onTap == null ? null : SystemMouseCursors.click,
-      child: RuledRow(child: body),
+    return MergeSemantics(
+      child: InkWell(
+        onTap: onTap,
+        hoverColor: c.surface2,
+        focusColor: c.accentSoft,
+        mouseCursor: onTap == null ? null : SystemMouseCursors.click,
+        child: RuledRow(child: body),
+      ),
     );
   }
 }
@@ -484,7 +528,9 @@ class LineItem extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: TextStyle(fontWeight: w)),
             if (sub != null)
-              Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub!, style: TextStyle(fontSize: 12.5, color: context.c.ink2))),
+              Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(sub!, style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2))),
           ]),
         ),
         const SizedBox(width: 8),

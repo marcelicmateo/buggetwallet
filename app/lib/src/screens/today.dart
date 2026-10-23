@@ -71,7 +71,8 @@ class TodayScreen extends StatelessWidget {
     // Several missed paydays move on in one tap: the latest payday on or before today.
     final newStart = currentPeriodStart(p.start, s.paydayDay, wc.today());
     final now = clock();
-    final deliveryHour = (now.hour >= 14 && now.hour < 19) || now.weekday == DateTime.sunday;
+    // Only for a wallet that ordered food in the last 90 days.
+    final deliveryHour = ((now.hour >= 14 && now.hour < 19) || now.weekday == DateTime.sunday) && wc.deliveryOrders90 > 0;
     final (deliveryCount, deliverySum) = wc.deliveries;
     final tight = wc.tightestBudget();
     final review = wc.reviewState();
@@ -90,7 +91,7 @@ class TodayScreen extends StatelessWidget {
 
     return MarginLine(
         child: ListView(
-            padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
+            padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
             children: gapped([
               if (wc.keyBackupRowVisible) KeyBackupRow(wc: wc),
               if (!s.salaryConfirmed)
@@ -101,7 +102,7 @@ class TodayScreen extends StatelessWidget {
                       s.salary > 0
                           ? 'Check this matches a normal month of pay. Fix it in Plan if not.'
                           : 'Enter your monthly salary in Plan so the daily budget can be worked out.',
-                      style: TextStyle(color: c.warnInk, fontSize: 13)),
+                      style: TextStyle(color: c.warnInk, fontSize: BwType.metaSize)),
                   Wrap(alignment: WrapAlignment.spaceBetween, spacing: 8, runSpacing: 8, children: [
                     OutlinedButton(onPressed: openPlan, child: const Text('Open Plan')),
                     TextButton(onPressed: () => wc.updateSettings({'salaryConfirmed': true}), child: const Text('Looks right')),
@@ -110,13 +111,14 @@ class TodayScreen extends StatelessWidget {
               if (newPayday != null)
                 Panel(color: c.accentSoft, children: [
                   Text('Salary landed on ${shortDate(newPayday)}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const Text('Start a new month to reset your daily budget and run the payday checklist.', style: TextStyle(fontSize: 13)),
+                  const Text('Start a new month to reset your daily budget and run the payday checklist.',
+                      style: TextStyle(fontSize: BwType.metaSize)),
                   FilledButton(onPressed: () => wc.startNewMonth(newPayday), child: Text('Start new month on ${shortDate(newPayday)}')),
                 ]),
               if (ended && newPayday == null)
                 Panel(key: const ValueKey('periodEndedPanel'), color: c.accentSoft, children: [
                   Text('Pay period ended on ${shortDate(p.end)}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const Text('Start the new period to get a daily budget again.', style: TextStyle(fontSize: 13)),
+                  const Text('Start the new period to get a daily budget again.', style: TextStyle(fontSize: BwType.metaSize)),
                   FilledButton(
                       key: const ValueKey('startNewPeriod'),
                       onPressed: () => wc.startNewMonth(newStart),
@@ -140,7 +142,7 @@ class TodayScreen extends StatelessWidget {
                       child: MoneyText((over && !ended ? shown(hero) : money(hero, cur, decimals: 0)),
                           key: const ValueKey('safeToSpend'),
                           style: numStyle.copyWith(
-                              fontSize: 78,
+                              fontSize: BwType.heroSize,
                               height: 0.95,
                               fontWeight: FontWeight.w500,
                               letterSpacing: -3,
@@ -178,7 +180,7 @@ class TodayScreen extends StatelessWidget {
                           '${money(p.spent, cur, decimals: 0)} of ${money(p.flexBudget > 0 ? p.flexBudget : 0, cur, decimals: 0)} used'),
                       end: ahead >= 0
                           ? Text('${money(ahead, cur, decimals: 0)} ahead of pace',
-                              textAlign: TextAlign.end, style: const TextStyle(fontSize: 13))
+                              textAlign: TextAlign.end, style: const TextStyle(fontSize: BwType.metaSize))
                           : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace', textAlign: TextAlign.end),
                     ),
                   if (p.foreignByCurrency.isNotEmpty) ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote')),
@@ -233,7 +235,7 @@ class TodayScreen extends StatelessWidget {
                       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
                       key: const ValueKey('addExpense'),
                       icon: const Icon(Icons.add),
-                      label: const Text('Add expense', style: TextStyle(fontSize: 16)),
+                      label: const Text('Add expense', style: TextStyle(fontSize: BwType.headingSize)),
                       onPressed: addExpense ?? () => addExpenseFlow(context, wc),
                     ),
                   ),
@@ -242,7 +244,7 @@ class TodayScreen extends StatelessWidget {
                   Panel(key: const ValueKey('reviewCard'), children: [
                     const SectionHead('Weekly review'),
                     Text(reviewSummary(review) ?? 'Nothing to fix. Import your latest files and tick it off.',
-                        style: const TextStyle(fontSize: 14)),
+                        style: const TextStyle(fontSize: BwType.bodySize)),
                     FilledButton(
                       key: const ValueKey('startReview'),
                       onPressed: () {
@@ -254,9 +256,9 @@ class TodayScreen extends StatelessWidget {
                   ]),
                 if (s.savedFor != p.start && wc.goals.isNotEmpty)
                   Panel(children: [
-                    const HeadingRow(Heading('Payday checklist', size: 15), Tag('pay yourself first')),
+                    const HeadingRow(Heading('Payday checklist', size: BwType.headingSize), Tag('pay yourself first')),
                     Text('Move ${money(p.goalMonthly, cur, decimals: 0)} to your savings account before you spend anything else.',
-                        style: const TextStyle(fontSize: 14)),
+                        style: const TextStyle(fontSize: BwType.bodySize)),
                     Rows(children: [
                       for (final g in wc.goals) LineItem(g.name, money(g.monthly, cur, decimals: 0), leading: const CheckSquare())
                     ]),
@@ -273,18 +275,21 @@ class TodayScreen extends StatelessWidget {
                   Panel(children: [
                     Row(children: [
                       Expanded(
-                          child: Heading(now.weekday == DateTime.sunday ? 'Sunday delivery hour' : 'After-work delivery hour', size: 15)),
+                          child: Heading(now.weekday == DateTime.sunday ? 'Sunday delivery hour' : 'After-work delivery hour',
+                              size: BwType.headingSize)),
                       Icon(Icons.schedule, size: 18, color: c.muted)
                     ]),
                     Text(
                       'This month: $deliveryCount ${deliveryCount == 1 ? 'order' : 'orders'}, ${money(deliverySum, cur)}. '
                       '${ended ? 'The pay period has ended; start the new one to get a daily budget.' : p.allowanceToday > 0 ? 'A typical ${money(typicalOrderCents, cur, decimals: 0)} order is ${(typicalOrderCents / p.allowanceToday * 100).round()}% of today\'s money.' : 'Today\'s money is used up.'}',
-                      style: const TextStyle(fontSize: 14),
+                      style: const TextStyle(fontSize: BwType.bodySize),
                     ),
                   ]),
               ], right: [
                 Panel(children: [
-                  SplitRow(start: const Heading('Recent', size: 15), end: Muted(_freshness(wc), size: 12, align: TextAlign.end)),
+                  SplitRow(
+                      start: const Heading('Recent', size: BwType.headingSize),
+                      end: Muted(_freshness(wc), size: BwType.metaSize, align: TextAlign.end)),
                   if (recent.isEmpty)
                     const EmptyNote('No transactions yet. Import your bank exports in Plan, or add your first expense.')
                   else
@@ -336,7 +341,9 @@ class _BudgetLine extends StatelessWidget {
         child: Row(children: [
           Icon(over ? Icons.error_outline : Icons.pie_chart_outline, size: 18, color: col),
           const SizedBox(width: 8),
-          Expanded(child: Text(text, style: TextStyle(fontSize: 14, color: col, fontWeight: over ? FontWeight.w600 : FontWeight.w400))),
+          Expanded(
+              child: Text(text,
+                  style: TextStyle(fontSize: BwType.bodySize, color: col, fontWeight: over ? FontWeight.w600 : FontWeight.w400))),
           if (onTap != null) Icon(Icons.chevron_right, size: 20, color: c.muted),
         ]),
       ),
@@ -373,7 +380,7 @@ class _BillsLine extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(text, style: TextStyle(fontSize: 14, color: c.ink2)),
+            Text(text, style: TextStyle(fontSize: BwType.bodySize, color: c.ink2)),
             if (overdue > 0) StatusLabel(key: const ValueKey('billsOverdue'), good: false, text: '$overdue overdue'),
           ])),
           if (onTap != null) Icon(Icons.chevron_right, size: 20, color: c.muted),
@@ -399,7 +406,7 @@ class _InfoLine extends StatelessWidget {
         child: Row(children: [
           Icon(icon, size: 18, color: c.ink2),
           const SizedBox(width: 8),
-          Expanded(child: Text(text, style: TextStyle(fontSize: 14, color: c.ink2))),
+          Expanded(child: Text(text, style: TextStyle(fontSize: BwType.bodySize, color: c.ink2))),
           Icon(Icons.chevron_right, size: 20, color: c.muted),
         ]),
       ),
@@ -425,12 +432,13 @@ class _Stats extends StatelessWidget {
                 decoration: BoxDecoration(border: i == 0 ? null : Border(left: BorderSide(color: c.line))),
                 padding: EdgeInsets.fromLTRB(i == 0 ? 0 : 10, 9, i == items.length - 1 ? 0 : 10, 9),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Text(label, style: TextStyle(fontSize: 12, color: c.ink2)),
+                  Text(label, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
                   const SizedBox(height: 4),
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerRight,
-                    child: MoneyText(value, textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: 20, fontWeight: FontWeight.w500)),
+                    child: MoneyText(value,
+                        textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: BwType.amountMdSize, fontWeight: FontWeight.w500)),
                   ),
                 ]),
               ),

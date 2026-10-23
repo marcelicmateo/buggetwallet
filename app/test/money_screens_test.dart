@@ -104,6 +104,8 @@ void main() {
 
     testWidgets('the delivery-hour panel says the period ended, never "already used"', (tester) async {
       final wc = passedWallet();
+      wc.repo.addTransaction(date: '2026-09-25', amount: 1800, category: 'Food delivery'); // the panel needs an order in 90 days
+      wc.reload();
       await pumpApp(tester, today(wc, at: DateTime(2026, 10, 20, 15)), size: const Size(400, 3000));
       expect(find.text('After-work delivery hour'), findsOneWidget);
       expect(find.textContaining('The pay period has ended'), findsWidgets);

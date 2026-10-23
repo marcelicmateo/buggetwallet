@@ -6,6 +6,7 @@ import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
+import '../theme.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
@@ -81,7 +82,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
     final (selSum, avg, periods, trend, done, top, monthTxs) =
         (v.summary, v.average, v.periods, v.trend, v.overview, v.topPlaces, v.transactions);
 
-    return ListView(padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24), children: [
+    return ListView(padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad), children: [
       Align(
         alignment: Alignment.centerRight,
         child: IconButton(
@@ -122,7 +123,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
           CategoryBars(values: selSum.byCategory, average: avg, currency: cur, budget: budgeted ? budget : null),
         ]),
         Panel(children: [
-          Heading('Top places in ${monthLong(sel)}', size: 15),
+          Heading('Top places in ${monthLong(sel)}', size: BwType.headingSize),
           if (top.isEmpty)
             const EmptyNote('No card spending this month yet.')
           else
@@ -133,7 +134,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
         ]),
       ], right: [
         Panel(children: [
-          Heading('All transactions in ${monthLong(sel)}', size: 15),
+          Heading('All transactions in ${monthLong(sel)}', size: BwType.headingSize),
           const Muted('Tap one to change its category. Transfers between your own accounts are hidden.'),
           if (monthTxs.isEmpty)
             const EmptyNote('No transactions.')

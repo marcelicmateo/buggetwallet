@@ -4,6 +4,7 @@ import 'package:wallet_core/wallet_core.dart';
 import '../controller.dart';
 import '../layout.dart';
 import '../logging.dart';
+import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 
@@ -45,7 +46,7 @@ class _ForgetBrowserSheetState extends State<ForgetBrowserSheet> {
   @override
   Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         ...gapped([
-          const Heading('Forget this browser?', size: 18),
+          const Heading('Forget this browser?', size: BwType.headingSize),
           const Text('This deletes the wallet and the key stored in this browser. A backup file or another device is not touched.'),
           const Muted('Without a backup file, the data in this browser is gone for good. Older wallet copies kept aside stay.'),
           if (_error != null) StatusLabel(good: false, text: _error!),

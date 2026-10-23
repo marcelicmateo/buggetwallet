@@ -45,23 +45,23 @@ class GoalsScreen extends StatelessWidget {
               const SizedBox(height: 8),
               RuledBar(value: g.target > 0 ? g.saved / g.target : 0.0),
               const SizedBox(height: 6),
-              Text('${money(g.monthly, cur, decimals: 0)} a month · ${eta(g)}', style: TextStyle(fontSize: 12.5, color: c.ink2)),
+              Text('${money(g.monthly, cur, decimals: 0)} a month · ${eta(g)}', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
             ]),
           ),
         );
 
     return MarginLine(
         child: ListView(
-            padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
+            padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
             children: gapped([
               if (p.extras > 0 || extraAbove > 0)
                 Panel(color: c.accentSoft, children: [
-                  const Heading('Extra money this month', size: 15),
+                  const Heading('Extra money this month', size: BwType.headingSize),
                   Text(
                     '${extraAbove > 0 ? 'Salary came in ${money(extraAbove, cur, decimals: 0)} above plan. ' : ''}'
                     '${p.extras > 0 ? 'Other income: ${money(p.extras, cur, decimals: 0)}. ' : ''}'
                     "Put it straight into a goal so it doesn't leak into daily spending.",
-                    style: const TextStyle(fontSize: 14),
+                    style: const TextStyle(fontSize: BwType.bodySize),
                   ),
                 ]),
               Panel(children: [
