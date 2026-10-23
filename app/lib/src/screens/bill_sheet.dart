@@ -18,7 +18,7 @@ import '../widgets/sheets.dart';
 /// be shown.
 Future<void> openBill(BuildContext context, WalletController wc, String billId, {FileChooser chooser = const FileChooser()}) async {
   logNav('bill.open');
-  final r = await showSheet<String>(context, BillSheet(wc: wc, billId: billId, chooser: chooser));
+  final r = await showSheet<String>(context, BillSheet(wc: wc, billId: billId, chooser: chooser), scrolls: false);
   if (!context.mounted) return;
   final msg = switch (r) {
     'confirmed' => 'Bill confirmed',
@@ -232,31 +232,22 @@ class _BillSheetState extends State<BillSheet> {
         suffixIcon: guessed && filled ? Icon(Icons.help_outline, size: 18, color: c.warnInk) : null);
 
     Widget dateButton(String label, String? value, ValueChanged<String?> onPick, {bool clearable = false, bool guess = false}) {
-      return Row(children: [
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Muted(label, size: BwType.metaSize),
-            const SizedBox(height: 2),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.event, size: 18),
-              label: Text(value == null ? 'Set date' : shortDateOrRaw(value), overflow: TextOverflow.ellipsis),
-              onPressed: () async {
-                final d = await _pick(value);
-                if (d != null) setState(() => onPick(d));
-              },
-            ),
-            if (guess && value != null) Text('Unsure: check it.', style: TextStyle(fontSize: BwType.metaSize, color: c.warnInk)),
-          ]),
-        ),
-        if (clearable && value != null)
-          IconButton(tooltip: 'Clear $label', icon: const Icon(Icons.close, size: 18), onPressed: () => setState(() => onPick(null))),
-      ]);
+      return DateField(
+        label: label,
+        value: value,
+        helper: guess && value != null ? 'Unsure: check it.' : null,
+        onPick: () async {
+          final d = await _pick(value);
+          if (d != null) setState(() => onPick(d));
+        },
+        onClear: clearable ? () => setState(() => onPick(null)) : null,
+      );
     }
 
     final tx = b.linkedTx == null ? null : wc.txs.where((t) => t.tx.id == b.linkedTx).firstOrNull;
     final fileType = b.blobType;
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    final content = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(review ? 'Bill to review' : 'Bill'),
       const SizedBox(height: 4),
       Muted(
@@ -414,26 +405,36 @@ class _BillSheetState extends State<BillSheet> {
             padding: EdgeInsets.only(top: 4), child: Muted('Shown in Upcoming once the bill is confirmed.', size: BwType.metaSize)),
       if (error != null) ...[const SizedBox(height: 10), StatusLabel(key: const ValueKey('billError'), good: false, text: error!)],
       const SizedBox(height: 14),
-      Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, spacing: 8, children: [
-        if (review)
-          FilledButton.icon(
-              key: const ValueKey('confirmBill'),
-              icon: const Icon(Icons.check),
-              label: const Text('Confirm bill'),
-              onPressed: () => _confirm(b))
-        else
-          FilledButton(
-              key: const ValueKey('saveBill'),
-              onPressed: () {
-                if (_save(b)) Navigator.pop(context, 'saved');
-              },
-              child: const Text('Save')),
-        TextButton(
+      // Delete lives at the end of the form, away from the confirm button.
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton(
             key: const ValueKey('deleteBill'),
             style: TextButton.styleFrom(foregroundColor: c.bad),
             onPressed: () => _delete(b),
-            child: const Text('Delete')),
-      ]),
+            child: const Text('Delete this bill')),
+      ),
+    ]);
+
+    // The main button stays in view while the form scrolls.
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Flexible(child: SingleChildScrollView(child: content)),
+      const SizedBox(height: 10),
+      if (review)
+        FilledButton.icon(
+            key: const ValueKey('confirmBill'),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
+            icon: const Icon(Icons.check),
+            label: const Text('Confirm bill'),
+            onPressed: () => _confirm(b))
+      else
+        FilledButton(
+            key: const ValueKey('saveBill'),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
+            onPressed: () {
+              if (_save(b)) Navigator.pop(context, 'saved');
+            },
+            child: const Text('Save')),
     ]);
   }
 }
@@ -559,7 +560,8 @@ class _BillFileScreenState extends State<BillFileScreen> {
                     child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    const Text('The file is on the relay; sync to fetch it', key: ValueKey('fileOnRelay'), textAlign: TextAlign.center),
+                    const Text('Stored on your relay. Sync to get it onto this device.',
+                        key: ValueKey('fileOnRelay'), textAlign: TextAlign.center),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                         icon: const Icon(Icons.sync, size: 18),

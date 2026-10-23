@@ -365,9 +365,18 @@ class WalletRepo {
     } catch (e, st) {
       logError(_log, 'repo.rollback', e, st, level: Level.SEVERE);
       db.execute('ROLLBACK');
+      _writeErrors[e] = true;
       rethrow;
     }
   }
+
+  /// Errors thrown out of a rolled-back write transaction ([_tx]), marked on the error object itself: no type change for
+  /// callers, and unlike a stack-frame name it survives inlining and minified web builds.
+  static final _writeErrors = Expando<bool>('writeFailed');
+
+  /// True when [error] came out of a write this repo rolled back, so nothing it tried to write was saved (the app's
+  /// "Couldn't save"). Reads never mark their errors.
+  static bool isWriteError(Object error) => _writeErrors[error] ?? false;
 
   /// Ops written on this device that have not been exported yet, oldest first.
   List<(int, Op)> pendingOps() => [

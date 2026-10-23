@@ -231,6 +231,9 @@ class WalletController extends ChangeNotifier {
   /// From the last successful sync: the relay's instance id (shown only as [relayFingerprintText]), whether the relay was new or
   /// reset since the previous sync, and the files not applied (a device whose clock is ahead; this device's own id in use).
   String? syncRelayInstance;
+
+  /// What the relay holds for this wallet and its limit, from the last sync (null: not known, e.g. an older relay).
+  int? syncRelayBytes, syncRelayMaxBytes;
   List<SyncProblem> syncProblems = const [];
 
   /// Core reports a changed relay and an id in use once, so each notice is kept on this device (device-local values, never synced)
@@ -959,6 +962,15 @@ class WalletController extends ChangeNotifier {
   /// Logs that the save-key screen was shown.
   void keyBackupShown() => logEvent(_key, Level.INFO, 'key.backup', {'action': 'shown'});
 
+  /// Whether the owner hid the first-run panel on Today for exactly these open [steps] (device-local); it is then one line.
+  /// A different set of open steps (a new one appeared, or one was done) shows the panel open again.
+  bool setupCollapsedFor(List<String> steps) => repo.localValue('setupCollapsed') == steps.join(',');
+
+  void setSetupCollapsed(bool v, List<String> steps) {
+    repo.setLocalValue('setupCollapsed', v ? steps.join(',') : null);
+    _keyBackupChanged();
+  }
+
   /// "Later": hides Today's row for 7 days.
   void snoozeKeyBackup() {
     repo.setLocalValue('keyBackupSnoozedUntil', addDays(today(), 7));
@@ -1168,6 +1180,8 @@ class WalletController extends ChangeNotifier {
     syncBlobsUnsupported = false;
     syncDevices = const [];
     syncRelayInstance = null;
+    syncRelayBytes = null;
+    syncRelayMaxBytes = null;
     syncProblems = const [];
     repo.setLocalValue(_noticeRelayChanged, null);
     repo.setLocalValue(_noticeIdInUse, null);
@@ -1219,6 +1233,8 @@ class WalletController extends ChangeNotifier {
       syncBlobsUnsupported = r.blobsUnsupported;
       syncDevices = r.devices;
       syncRelayInstance = r.relayInstance;
+      syncRelayBytes = r.relayBytes;
+      syncRelayMaxBytes = r.relayMaxBytes;
       syncProblems = r.problems;
       if (r.relayChanged) repo.setLocalValue(_noticeRelayChanged, '1');
       if (r.problems.any((p) => p.reason == SyncProblemReason.deviceIdInUse)) repo.setLocalValue(_noticeIdInUse, '1');
@@ -1465,7 +1481,15 @@ class WalletController extends ChangeNotifier {
   }
 
   // ---------- edits ----------
+  /// The category of the last expense added on this device (device-local `lastExpenseCategory`), or null.
+  String? get lastExpenseCategory {
+    final c = repo.localValue('lastExpenseCategory');
+    return c != null && flexCategories.contains(c) && c != 'Bank fees' ? c : null;
+  }
+
   void addExpense({required int amount, required String category, required String note, required String date}) {
+    // The device-local default first: if the save then fails nothing is written, and a failure here never follows a saved expense.
+    repo.setLocalValue('lastExpenseCategory', category);
     repo.addTransaction(date: date, amount: amount, category: category, note: note, currency: currency);
     logEvent(_log, Level.INFO, 'expense.add', {'category': category}); // category only
     _changed();
@@ -1484,9 +1508,35 @@ class WalletController extends ChangeNotifier {
     _changed();
   }
 
+  /// The hand-added expense that the bank row [bankId] replaced (hidden from lists), or null.
+  Tx? entryMatchedTo(String bankId) {
+    for (final t in repo.transactions(includeHidden: true)) {
+      if (t.manual && t.matchedTo == bankId && !t.deleted) return t;
+    }
+    return null;
+  }
+
+  /// The ids last deleted in this session: the toast's Undo restores them.
+  String? lastDeletedTx, lastDeletedGoal;
+
   void deleteTransaction(Tx t) {
+    lastDeletedTx = t.id;
     repo.deleteTransaction(t.id);
     logEvent(_log, Level.INFO, 'tx.delete', {'manual': t.manual});
+    _changed();
+  }
+
+  /// Undo of [deleteTransaction] (the toast's Undo).
+  void undeleteTransaction(String id) {
+    repo.undeleteTransaction(id);
+    logEvent(_log, Level.INFO, 'tx.undelete');
+    _changed();
+  }
+
+  /// Undo of [deleteGoal].
+  void undeleteGoal(String id) {
+    repo.undeleteGoal(id);
+    logEvent(_log, Level.INFO, 'goal.undelete');
     _changed();
   }
 
@@ -1516,15 +1566,38 @@ class WalletController extends ChangeNotifier {
   }
 
   void deleteGoal(String id) {
+    lastDeletedGoal = id;
     repo.deleteGoal(id);
     logEvent(_log, Level.INFO, 'goal.delete');
     _changed();
   }
 
-  void addWish(String name, int price) {
-    repo.addWish(name, price);
+  /// The id of the wish added last in this session (the "Open" action of its toast).
+  String? lastAddedWish;
+
+  /// Adds a wish (cooling off) and returns its id.
+  String addWish(String name, int price) {
+    final id = repo.addWish(name, price);
+    lastAddedWish = id;
     logEvent(_log, Level.INFO, 'wish.add', {'status': 'waiting'}); // never the name or price
     _changed();
+    return id;
+  }
+
+  /// Set by the home shell: switches to tab 0..4 (Today, Spending, Wishlist, Goals, Plan). Null outside the shell (tests of a
+  /// single screen), where [openTab] does nothing.
+  void Function(int tab, String via)? tabHook;
+
+  /// The wish the Wishlist tab shows highlighted after a toast's "Open" (cleared by the screen once it scrolled there).
+  final ValueNotifier<String?> highlightWish = ValueNotifier<String?>(null);
+
+  /// Opens a tab from anywhere (a toast action, a row).
+  void openTab(int tab, {String via = 'toast'}) => tabHook?.call(tab, via);
+
+  /// Opens the Wishlist tab on [wishId].
+  void openWish(String wishId) {
+    highlightWish.value = wishId;
+    openTab(2);
   }
 
   void decideWish(String id, String status) {

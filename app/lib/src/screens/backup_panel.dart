@@ -145,6 +145,8 @@ class _BackupPanelState extends State<BackupPanel> {
     return Panel(children: [
       const SectionHead('Backup'),
       Explainer(wc, 'backup', 'An encrypted copy of your wallet as a file. Only your wallet key opens it. Keep the file somewhere safe.'),
+      const Muted('Photos and PDFs of bills are not in the backup; they stay on your relay.',
+          key: ValueKey('backupNoFiles'), size: BwType.metaSize),
       Wrap(spacing: 8, runSpacing: 8, children: [
         OutlinedButton(
             key: const ValueKey('backupNow'),

@@ -414,9 +414,8 @@ class _UpcomingRow extends StatelessWidget {
             const SizedBox(height: 2),
             Wrap(spacing: 8, runSpacing: 4, children: [
               if ((i.suggested ?? 0) > 0)
-                OutlinedButton(
+                FilledButton(
                     key: ValueKey('confirm:${i.key}'),
-                    style: accentOutlined(context),
                     onPressed: () {
                       logNav('suggestion.confirm');
                       wc.confirmSuggestion(i, amount: i.suggested!, category: i.category);

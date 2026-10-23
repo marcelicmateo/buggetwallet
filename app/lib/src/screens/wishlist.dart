@@ -19,6 +19,36 @@ class _WishlistScreenState extends State<WishlistScreen> {
   final name = TextEditingController();
   final price = TextEditingController();
 
+  /// The wish a toast's "Open" pointed at: tinted and scrolled into view once.
+  String? _highlight;
+  final _highlightKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.wc.highlightWish.addListener(_takeHighlight);
+    _takeHighlight();
+  }
+
+  @override
+  void dispose() {
+    widget.wc.highlightWish.removeListener(_takeHighlight);
+    name.dispose();
+    price.dispose();
+    super.dispose();
+  }
+
+  void _takeHighlight() {
+    final id = widget.wc.highlightWish.value;
+    if (id == null) return;
+    widget.wc.highlightWish.value = null;
+    setState(() => _highlight = id);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _highlightKey.currentContext;
+      if (ctx != null && ctx.mounted) Scrollable.ensureVisible(ctx, alignment: 0.3);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final wc = widget.wc;
@@ -63,7 +93,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                   HeadingRow(const Heading('Ready to decide', size: BwType.headingSize), Tag('${ready.length}')),
                   Rows(children: [
                     for (final w in ready)
-                      WishRow(w: w, currency: cur, sub: 'Waited ${s.coolHours}h', actions: [
+                      WishRow(key: _rowKey(w), highlight: w.id == _highlight, w: w, currency: cur, sub: 'Waited ${s.coolHours}h', actions: [
                         OutlinedButton(style: accentOutlined(context), onPressed: () => _buy(w), child: const Text('Buy it')),
                         TextButton(onPressed: () => _skip(w), child: const Text('Skip')),
                       ]),
@@ -76,9 +106,15 @@ class _WishlistScreenState extends State<WishlistScreen> {
                   HeadingRow(const Heading('Cooling off', size: BwType.headingSize), Tag('${waiting.length}')),
                   Rows(children: [
                     for (final w in waiting)
-                      WishRow(w: w, currency: cur, sub: timeLeft(w.hoursLeft(s.coolHours, now)), actions: [
-                        TextButton(onPressed: () => _skip(w), child: const Text("Don't need it")),
-                      ]),
+                      WishRow(
+                          key: _rowKey(w),
+                          highlight: w.id == _highlight,
+                          w: w,
+                          currency: cur,
+                          sub: timeLeft(w.hoursLeft(s.coolHours, now)),
+                          actions: [
+                            TextButton(onPressed: () => _skip(w), child: const Text("Don't need it")),
+                          ]),
                   ]),
                   TotalRule(
                       child: SplitRow(
@@ -97,11 +133,19 @@ class _WishlistScreenState extends State<WishlistScreen> {
                   ),
                   Rows(children: [
                     for (final w in done.take(20))
-                      WishRow(w: w, currency: cur, sub: w.status == 'bought' ? 'Bought' : 'Skipped', actions: const [])
+                      WishRow(
+                          key: _rowKey(w),
+                          highlight: w.id == _highlight,
+                          w: w,
+                          currency: cur,
+                          sub: w.status == 'bought' ? 'Bought' : 'Skipped',
+                          actions: const [])
                   ]),
                 ]),
             ])));
   }
+
+  Key _rowKey(WishItem w) => w.id == _highlight ? _highlightKey : ValueKey('wish:${w.id}');
 
   Widget _verdict(BuildContext context, int price) {
     final wc = widget.wc;
@@ -182,23 +226,29 @@ class WishRow extends StatelessWidget {
   final String currency;
   final String sub;
   final List<Widget> actions;
-  const WishRow({super.key, required this.w, required this.currency, required this.sub, required this.actions});
+
+  /// Tinted: the wish a toast's "Open" pointed at.
+  final bool highlight;
+  const WishRow({super.key, required this.w, required this.currency, required this.sub, required this.actions, this.highlight = false});
 
   @override
   Widget build(BuildContext context) => HoverTint(
+      child: DecoratedBox(
+          key: highlight ? const ValueKey('wishHighlight') : null,
+          decoration: BoxDecoration(color: highlight ? context.c.accentSoft : null),
           child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          SplitRow(
-              start: Text(w.name, style: const TextStyle(fontWeight: FontWeight.w500)),
-              end: Text(money(w.price, currency, decimals: 0),
-                  textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
-          Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
-            Text(sub, style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
-            if (actions.isNotEmpty) Wrap(spacing: 4, children: actions),
-          ]),
-        ]),
-      ));
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              SplitRow(
+                  start: Text(w.name, style: const TextStyle(fontWeight: FontWeight.w500)),
+                  end: Text(money(w.price, currency, decimals: 0),
+                      textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
+              Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
+                Text(sub, style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+                if (actions.isNotEmpty) Wrap(spacing: 4, children: actions),
+              ]),
+            ]),
+          )));
 }
 
 /// A section with nothing in it: its title and the reason, on one ruled line (not a panel with a heading and a note).

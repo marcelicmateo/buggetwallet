@@ -136,7 +136,7 @@ void main() {
       expect(p.paydayPassed, isFalse);
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
       expect(find.byKey(const ValueKey('overBudget')), findsOneWidget);
-      expect(find.textContaining('Over the plan by ${money(p.overBy, 'EUR')} until payday.'), findsOneWidget);
+      expect(find.textContaining("You're ${money(p.overBy, 'EUR')} over the plan for this period."), findsOneWidget);
       expect(_hero(tester), money(0, 'EUR', decimals: 0)); // nothing left for today
       expect(find.textContaining('ON PLAN'), findsNothing);
       expect(find.textContaining('On plan'), findsNothing);

@@ -100,21 +100,19 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
         decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur), hintText: '0.00'),
       ),
       const SizedBox(height: 12),
-      Wrap(spacing: 10, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-        OutlinedButton.icon(
-          key: const ValueKey('plannedDate'),
-          icon: const Icon(Icons.event, size: 18),
-          label: Text(longDateOrRaw(_date)),
-          onPressed: () async {
-            final d = await showDatePicker(
-                context: context,
-                initialDate: parseIso(_date),
-                firstDate: parseIso(addDays(today, -60)),
-                lastDate: parseIso(addDays(today, 730)));
-            if (d != null) setState(() => _date = isoDate(d));
-          },
-        ),
-      ]),
+      DateField(
+        key: const ValueKey('plannedDate'),
+        label: 'Date',
+        value: _date,
+        onPick: () async {
+          final d = await showDatePicker(
+              context: context,
+              initialDate: parseIso(_date),
+              firstDate: parseIso(addDays(today, -60)),
+              lastDate: parseIso(addDays(today, 730)));
+          if (d != null) setState(() => _date = isoDate(d));
+        },
+      ),
       const SizedBox(height: 12),
       DropdownButtonFormField<String?>(
         key: const ValueKey('plannedCategory'),
