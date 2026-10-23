@@ -703,13 +703,13 @@ case "$CMD" in
   importer|core|relay|app)
     if (($# > 1)); then run_pub; [[ $failed == 0 ]] && one_suite "$CMD" "${@:2}"
     else run_pub; [[ $failed == 0 ]] && steps "$CMD" "${SUITE[$CMD]}"; fi ;;
-  apk)    build_apk ;;
-  linux)  build_linux ;;
+  apk)    run_pub; [[ $failed == 0 ]] && build_apk ;;
+  linux)  run_pub; [[ $failed == 0 ]] && build_linux ;;
   desktop-test)  run_pub; [[ $failed == 0 ]] && desktop_tests "${@:2}" ;;
   perf)   run_pub; [[ $failed == 0 ]] && step perf perf_run ;;
   web)    run_pub; [[ $failed == 0 ]] && step web build_web ;;
   web-test) run_pub; [[ $failed == 0 ]] && step web-test "web_test$( (($# > 1)) && printf " %q" "${@:2}")" ;;
-  desktop-smoke) build_linux; [[ $failed == 0 ]] && step desktop-smoke desktop_smoke ;;
+  desktop-smoke) run_pub; [[ $failed == 0 ]] && build_linux; [[ $failed == 0 ]] && step desktop-smoke desktop_smoke ;;
   all)    run_pub; [[ $failed == 0 ]] && steps "${LINT[@]}" "${TESTS[@]}"
           if [[ $failed == 0 ]]; then build_apk; build_linux; desktop_tests; step desktop-smoke desktop_smoke; fi ;;
   *)      usage ;;

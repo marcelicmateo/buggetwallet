@@ -4,9 +4,9 @@
 # Reads the hook JSON on stdin; exit 2 + one line on stderr blocks the call. `--self-test` checks the pattern.
 set -euo pipefail
 
-POLL_RE='\b(until|while)\b.*\bsleep\b|\btimeout +[0-9]+[smh]? .*\b(until|while)\b'
+POLL_RE='\b(until|while)\b.*\bsleep\b|(?<![-\w])timeout +[0-9]+[smh]? .*\b(until|while)\b'
 
-is_poll() { grep -qP "$POLL_RE" <<<"$1"; }
+is_poll() { tr '\n' ' ' <<<"$1" | grep -qP "$POLL_RE"; }
 
 if [[ ${1:-} == --self-test ]]; then
   rc=0
@@ -25,6 +25,12 @@ if [[ ${1:-} == --self-test ]]; then
   check pass 'sleep 1'
   check pass 'grep -rn until docs'
   check pass 'timeout 60s tools/build.sh lint'
+  check block $'until grep -q done log; do\n  sleep 5\ndone'
+  # shellcheck disable=SC2016  # the quoted $l is test data
+  check pass 'tools/build.sh app --timeout 60s | while read -r l; do echo "$l"; done'
+  # the stdin path with real hook JSON
+  printf '{"tool_input":{"command":"while true; do sleep 1; done"}}' | "$0" 2>/dev/null && { echo "self-test FAILED: stdin block" >&2; rc=1; }
+  printf '{"tool_input":{"command":"timeout 120 tools/build.sh test"}}' | "$0" || { echo "self-test FAILED: stdin pass" >&2; rc=1; }
   [[ $rc == 0 ]] && echo "no-poll-hook self-test ok"
   exit "$rc"
 fi

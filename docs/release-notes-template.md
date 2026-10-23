@@ -12,7 +12,7 @@ Copy into the GitHub release body. Delete the sections that do not apply; keep t
 
 ### Before you update
 
-- **Update all your devices within a week.** Synced devices must run a compatible version. A device on an older version
+- **Update every device before the relay prunes a silent one (90 days).** A device upgraded later replays from a snapshot. A device on an older version
   keeps working on its own data but may be unable to read what newer devices write until it is updated.
 - **Schema bump (only when the database schema version changes).** The first start after the update migrates the local
   database and replays the change log once; this can take a moment on a large wallet. Do not close the app meanwhile.

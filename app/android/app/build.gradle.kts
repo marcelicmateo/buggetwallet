@@ -58,7 +58,7 @@ android {
 
     buildTypes {
         release {
-            // R8: shrink code and resources explicitly (not left to the Flutter plugin default)
+            // Pinned explicitly; the Flutter plugin sets the same, so no size change is expected
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

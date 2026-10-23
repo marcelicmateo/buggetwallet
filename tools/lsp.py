@@ -25,7 +25,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 class Lsp:
     def __init__(self):
         self.proc = subprocess.Popen([os.path.join(ROOT, "tools", "build.sh"), "lsp"], stdin=subprocess.PIPE,
-                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                                     stdout=subprocess.PIPE, stderr=sys.stderr)
         self.next_id = 0
 
     def _send(self, msg):
@@ -44,6 +44,8 @@ class Lsp:
                 break
             if line.lower().startswith(b"content-length:"):
                 length = int(line.split(b":", 1)[1])
+        if length is None:
+            raise ConnectionError("language server sent a header without Content-Length")
         return json.loads(self.proc.stdout.read(length))
 
     def notify(self, method, **params):

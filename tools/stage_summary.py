@@ -4,6 +4,7 @@
 Reads run directories (one per line) on stdin, parses their tests-*.json (package:test JSON reporter) and prints
 the names of failed tests and of skipped tests whose skip reason or name mentions BUG:.
 """
+# web-test and emulator screens write no tests-*.json, so their failures show only as the FAILED row.
 import glob
 import json
 import os
