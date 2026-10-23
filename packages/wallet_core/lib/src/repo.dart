@@ -880,12 +880,13 @@ class WalletRepo {
     final existing = {for (final r in db.select('SELECT * FROM recurring')) r['id'] as String: RecurringBill.fromRow(r)};
     final deleted = {for (final r in db.select('SELECT id FROM recurring WHERE deleted = 1')) r['id'] as String};
     final cz = categorizer();
+    final currency = settings().currency; // only rows in the wallet's currency make or pay a bill
     final categorized = [for (final r in rows) cz.categorize(r)];
-    final detected = detectRecurring(categorized, today: today);
+    final detected = detectRecurring(categorized, today: today, currency: currency);
     // The latest live bank outflow per payee: its category is the payee's current one.
     final latest = <String, CategorizedTx>{};
     for (final t in categorized) {
-      if (!t.tx.live || t.tx.manual || t.amount >= 0 || t.kind == BudgetKind.transfer) continue;
+      if (!t.tx.live || t.tx.manual || t.amount >= 0 || t.kind == BudgetKind.transfer || t.tx.currency != currency) continue;
       final key = merchantKey(t.tx);
       final have = latest[key];
       if (have == null || t.date.compareTo(have.date) > 0 || (t.date == have.date && t.tx.id.compareTo(have.tx.id) > 0)) {
@@ -929,7 +930,8 @@ class WalletRepo {
     var paid = 0;
     // One payment per bill per pass; repeated so a history import with several cycles catches up (bounded).
     for (var pass = 0; pass < 120 && bills.isNotEmpty; pass++) {
-      final plan = planRecurringPayments(bills, rows);
+      final plan = planRecurringPayments(bills, rows, currency: currency);
+
       if (plan.isEmpty) break;
       bills = [
         for (final b in bills)

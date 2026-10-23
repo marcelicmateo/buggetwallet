@@ -1,5 +1,6 @@
 // H4: PBZ detection by the whole header row, password-protected files, size and inflate caps. Files are built in code
 // (test/support/biff.dart, archive), SYNTHETIC.
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -154,6 +155,46 @@ void main() {
       final part = Uint8List(maxXlsxUnpackedBytes ~/ 3 + 1);
       final bomb = _zip({'xl/worksheets/sheet1.xml': part, 'xl/sharedStrings.xml': part, 'xl/styles.xml': part});
       expect(() => importBankFile(bomb), _refused(tooLargeMessage));
+    });
+
+    test('an .xlsx whose zip directory states a smaller size than it inflates to is cut there, not inflated in full', () {
+      const head = ['Type', 'Product', 'Started Date', 'Completed Date', 'Description', 'Amount', 'Fee', 'Currency', 'State', 'Balance'];
+      const row = [
+        'Card Payment',
+        'Current',
+        '2026-01-15 10:00:00',
+        '2026-01-15 10:00:00',
+        'Synthetic shop',
+        -2.5,
+        0,
+        'EUR',
+        'COMPLETED',
+        100
+      ];
+      String cells(int r, List<Object> vs) => [
+            for (var c = 0; c < vs.length; c++)
+              vs[c] is num
+                  ? '<c r="${String.fromCharCode(65 + c)}$r"><v>${vs[c]}</v></c>'
+                  : '<c r="${String.fromCharCode(65 + c)}$r" t="inlineStr"><is><t>${vs[c]}</t></is></c>'
+          ].join();
+      // A valid sheet padded with 1 MiB of whitespace inside the XML, so it inflates far past what the patch states.
+      const open = '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">';
+      final sheet =
+          '$open<sheetData><row r="1">${cells(1, head)}</row><row r="2">${cells(2, row)}</row></sheetData>${' ' * (1 << 20)}</worksheet>';
+      Uint8List build() => _zip({'xl/worksheets/sheet1.xml': utf8.encode(sheet)});
+      expect(importBankFile(build()).transactions.single.amountMinor, -250, reason: 'the file itself is fine');
+
+      final zip = build();
+      final bd = ByteData.sublistView(zip);
+      final eocd = zip.length - 22; // no zip comment
+      final cd = bd.getUint32(eocd + 16, Endian.little);
+      expect(bd.getUint32(cd, Endian.little), 0x02014b50);
+      bd.setUint32(cd + 24, 200, Endian.little); // central directory: uncompressed size
+      final local = bd.getUint32(cd + 42, Endian.little);
+      expect(bd.getUint32(local, Endian.little), 0x04034b50);
+      bd.setUint32(local + 22, 200, Endian.little); // local header: uncompressed size
+      // Cut at 200 bytes the XML is incomplete: a damaged file, never more than the stated size in memory.
+      expect(() => importBankFile(zip), throwsA(isA<ImportException>().having((e) => e.message, 'message', contains('Could not read'))));
     });
 
     test('refusals log the reason and sizes only', () {

@@ -32,12 +32,14 @@ int medianCents(List<int> xs) {
 /// the same merchant breaks the chain, so shops never qualify. `nextDue` = the last payment + 30 days,
 /// `expectedAmount` = the median, `category` and `label` from the latest row. Ordered by label, then id. A pure
 /// function: every device derives the same candidates (and ids, `RecurringBill.idFor`) from the same rows. Nothing
-/// here changes a row's category: a bill is information, not a reclassification.
-List<RecurringBill> detectRecurring(List<CategorizedTx> txs, {required String today}) {
+/// here changes a row's category: a bill is information, not a reclassification. Only rows in [currency]
+/// (`WalletSettings.currency`) count: a bill paid in another currency is never a candidate, so it is never reserved
+/// from the flexible money, and a foreign row at the same payee neither breaks nor joins the chain.
+List<RecurringBill> detectRecurring(List<CategorizedTx> txs, {required String today, required String currency}) {
   final from = '${monthsEnding(monthOf(today), _recurringMonths).first}-01';
   final byPayee = <String, List<CategorizedTx>>{};
   for (final t in txs) {
-    if (!t.tx.live || t.tx.manual || t.amount >= 0 || t.kind == BudgetKind.transfer) continue;
+    if (!t.tx.live || t.tx.manual || t.amount >= 0 || t.kind == BudgetKind.transfer || t.tx.currency != currency) continue;
     if (t.date.compareTo(from) < 0 || t.date.compareTo(today) > 0) continue;
     (byPayee[merchantKey(t.tx)] ??= []).add(t);
   }
@@ -89,11 +91,12 @@ class RecurringPayments {
 /// payee key, dated within ± [recurringDays] of its `nextDue`, whose outflow is within [recurringPercent] of
 /// `expectedAmount`; the closest to `nextDue` wins (then the earliest date, then the smallest id). The row that paid
 /// the previous cycle never pays again. Deterministic, so every device marks the same cycle paid with the same row;
-/// the row itself is left as it is (its category is never changed by a bill).
-RecurringPayments planRecurringPayments(List<RecurringBill> bills, List<Tx> rows) {
+/// the row itself is left as it is (its category is never changed by a bill). Only rows in [currency] pay a bill.
+RecurringPayments planRecurringPayments(List<RecurringBill> bills, List<Tx> rows, {required String currency}) {
   final byPayee = <String, List<Tx>>{};
   for (final t in rows) {
-    if (!t.live || t.manual || t.amount >= 0 || t.date.length != 10) continue;
+    if (!t.live || t.manual || t.amount >= 0 || t.date.length != 10 || t.currency != currency) continue;
+
     (byPayee[merchantKey(t)] ??= []).add(t);
   }
   final paid = <String, Tx>{};

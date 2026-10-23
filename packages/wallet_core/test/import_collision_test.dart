@@ -54,7 +54,8 @@ void main() {
     expect((after.amount, after.description), (before.amount, before.description));
     final logged = lines.where((l) => l.contains('repo.idCollision')).toList();
     expect(logged, [endsWith('WARNING bw.repo repo.idCollision {"source":"pbz","count":2}')]);
-    final text = lines.join('\n');
+    // Without the time prefixes: a time can hold the digits of an amount.
+    final text = lines.join('\n').replaceAll(RegExp(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+[+-]\d\d:\d\d ', multiLine: true), '');
     for (final secret in ['9876', '98.76', 'Synthetic other text', t[3].id, t[4].id, t[3].description]) {
       expect(text, isNot(contains(secret)), reason: secret);
     }

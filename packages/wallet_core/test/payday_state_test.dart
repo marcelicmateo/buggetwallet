@@ -119,6 +119,15 @@ void main() {
   });
 
   group('lowIncome (moved from the app)', () {
+    test('planned mode, days 4 to 6: a short salary is not low yet (parts still landing); day 7 it is', () {
+      for (var age = 4; age <= 7; age++) {
+        final today = addDays('2026-03-15', age);
+        final p = computePeriod([ct('2026-03-15', 120000, 'Salary')], st, const [], today);
+        expect(st.incomeMode, 'planned');
+        expect((p.income, p.lowIncome), (200000, age >= samePaydayDays), reason: today);
+      }
+    });
+
     test('90 % of the salary is not low, one cent less is', () {
       for (final (cents, low) in [(180000, false), (179999, true)]) {
         final p = computePeriod([ct('2026-03-15', cents, 'Salary')], st, const [], '2026-03-25');

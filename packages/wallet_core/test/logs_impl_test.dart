@@ -12,6 +12,13 @@ import 'package:wallet_importer/wallet_importer.dart' show ImportException;
 import 'support/synthetic.dart';
 
 /// Formatted lines of everything logged during the test, at every level.
+/// [formatLogRecord]'s ISO time prefix. Dropped before the private-text checks: a time such as `06:05:23.403` holds the
+/// synthetic amount "23.40" (a flaky failure seen in stage H).
+final _time = RegExp(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+[+-]\d\d:\d\d ', multiLine: true);
+
+/// The captured lines as one text without the time prefixes, for the private-text checks.
+String _body(List<String> lines) => lines.join('\n').replaceAll(_time, '');
+
 List<String> _captureAll() {
   final lines = <String>[];
   final was = Logger.root.level;
@@ -44,7 +51,7 @@ const _private = [
 final _amounts = RegExp(r'(?<![\d.])-?(150000|55000|2340|30000)(?![\d.])');
 
 void _expectClean(List<String> lines) {
-  final text = lines.join('\n');
+  final text = _body(lines);
   for (final p in _private) {
     expect(text, isNot(contains(p)), reason: 'private text "$p" in the log');
   }
@@ -204,7 +211,7 @@ void main() {
       computePeriod(txs, st, repo.goals(), '2026-01-25');
       periodSummaries(txs, st, '2026-01-25');
 
-      final text = lines.join('\n');
+      final text = _body(lines);
       expect(text, contains('repo.importBatch {"ms":'));
       expect(text, contains('"added":${january.transactions.length}'));
       expect(text, contains('repo.write'));
@@ -238,7 +245,7 @@ void main() {
       relay.offline = true;
       await expectLater(SyncEngine(relay, VaultKey.generate()).run(WalletRepo.inMemory()), throwsA(isA<SyncException>()));
 
-      final text = lines.join('\n');
+      final text = _body(lines);
       expect(text, contains('sync.export {"ms":'));
       expect(text, contains('sync.run {"ms":'));
       expect(text, contains('vault.seal'));
@@ -253,13 +260,32 @@ void main() {
       expect(text, isNot(contains(SyncProblem.shortId(a.deviceId))), reason: 'not even short ones');
     });
 
+    test('a damaged merchant pattern row is logged under merchantPatterns, never by its id (a reversible hash)', () {
+      final lines = _captureAll();
+      resetInvalidSettingLog();
+      final repo = WalletRepo.inMemory();
+      addTearDown(repo.close);
+      final id = merchantPatternId('lidl');
+      repo.applyRemote([
+        Op('setting', id, {'value': '{not json', 'deleted': 0}, repo.clock.tick().toString()),
+        Op('setting', 'budget:Groceries', {'value': '{not json', 'deleted': 0}, repo.clock.tick().toString()),
+      ]);
+      repo.settings();
+      final text = _body(lines);
+      expect(text, contains('settings.invalid {"key":"merchantPatterns"}'));
+      expect(text, contains('settings.invalid {"key":"categoryBudgets"}'));
+      expect(text, isNot(contains(id.substring('pattern:'.length))));
+      expect(text, isNot(contains('budget:Groceries')));
+      _expectClean(lines);
+    });
+
     test('a failed write logs a SEVERE rollback without the values', () {
       final lines = _captureAll();
       final repo = WalletRepo.inMemory();
       addTearDown(repo.close);
       repo.db.execute('CREATE TRIGGER no_goals BEFORE UPDATE ON goals BEGIN SELECT RAISE(ABORT, \'blocked\'); END');
       expect(() => repo.saveGoal(name: 'Laptop fund', target: 150000, saved: 0, monthly: 2340), throwsA(isA<SqliteException>()));
-      final text = lines.join('\n');
+      final text = _body(lines);
       expect(text, contains('SEVERE bw.repo repo.rollback'));
       expect(text, contains('blocked'));
       _expectClean(lines);

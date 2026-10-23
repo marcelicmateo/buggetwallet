@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:sqlite3/sqlite3.dart' show sqlite3;
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -26,7 +27,9 @@ List<String> captureLogs() {
   final lines = <String>[];
   final was = Logger.root.level;
   Logger.root.level = Level.ALL;
-  final sub = Logger.root.onRecord.listen((r) => lines.add(formatLogRecord(r)));
+  // Without the time prefix: a time can hold digits a private-text check looks for.
+  final sub = Logger.root.onRecord.listen(
+      (r) => lines.add(formatLogRecord(r).replaceAll(RegExp(r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+[+-]\d\d:\d\d ', multiLine: true), '')));
   addTearDown(() async {
     await sub.cancel();
     Logger.root.level = was;
@@ -239,6 +242,29 @@ void main() {
       expect(outbox(again), queued + 4, reason: 'migrates once');
     });
 
+    test('a crash between the budget and the pattern rows leaves schema 7 and nothing written; the next open migrates once', () {
+      final path = '${tmp.path}/w.db';
+      final old = schema7(path);
+      final queued = outbox(old);
+      old.close();
+      // A full disk or a killed process while the pattern rows are queued.
+      final raw = sqlite3.open(path);
+      raw.execute("CREATE TRIGGER crash BEFORE INSERT ON outbox WHEN NEW.op LIKE '%pattern:%' BEGIN SELECT RAISE(ABORT, 'disk full'); END");
+      raw.close();
+      expect(() => WalletRepo.open(path), throwsA(anything));
+      final check = sqlite3.open(path);
+      expect(check.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '7');
+      expect(check.select("SELECT COUNT(*) AS n FROM settings WHERE id LIKE 'budget:%'").first['n'], 0, reason: 'rolled back');
+      check.execute('DROP TRIGGER crash');
+      check.close();
+
+      final r = WalletRepo.open(path);
+      addTearDown(r.close);
+      expect(outbox(r), queued + 4, reason: 'each row queued once');
+      expect(r.settings().categoryBudgets, {'Groceries': 30000, 'Rent': 55000});
+      expect(r.settings().merchantPatterns.map((p) => p[1]), ['corner', 'mall']);
+    });
+
     test('a legacy row without a clock is migrated with a fresh one', () {
       final path = '${tmp.path}/w.db';
       final old = WalletRepo.open(path);
@@ -304,6 +330,72 @@ void main() {
               if (c['entity'] == 'setting') c
           ];
       expect(settingClocks(b.repo), settingClocks(a.repo));
+    });
+
+    test('a stale map edited on a schema-7 device after the first upgrade never revives or undoes a per-key change', () async {
+      var now = 1767225600000;
+      final net = Net();
+      final key = VaultKey.generate();
+      final devices = <Device>[];
+      Device device(String name) {
+        final d = Device(name, Directory('${tmp.path}/$name')..createSync(), key, () => now, dbPath: '${tmp.path}/$name.db');
+        devices.add(d);
+        return d;
+      }
+
+      Future<void> round() async {
+        for (final d in devices) {
+          now += 1000;
+          d.deliver(net, Random(1));
+          await d.run();
+          d.upload(net);
+        }
+      }
+
+      addTearDown(() {
+        for (final d in devices) {
+          d.close();
+        }
+      });
+      final a = device('a'), b = device('b');
+      legacyWrite(a.repo, 'categoryBudgets', {'Groceries': 30000, 'Rent': 55000});
+      legacyWrite(a.repo, 'merchantPatterns', [
+        ['Groceries', 'corner']
+      ]);
+      await round();
+      await round();
+      for (final d in [a, b]) {
+        d.repo.db.execute("UPDATE meta SET value = '7' WHERE key = 'schema'");
+      }
+      a.reopen(); // a upgrades, removes one budget, changes another and moves the pattern
+      now += 60000;
+      a.repo.setCategoryBudget('Groceries', null);
+      a.repo.setCategoryBudget('Rent', 60000);
+      a.repo.setMerchantPattern('Shopping', 'corner');
+      await round(); // b, still on schema 7, receives a's rows
+      now += 60000;
+      // b's older build edits an unrelated entry: it writes its whole (stale) maps with a newer clock.
+      legacyWrite(b.repo, 'categoryBudgets', {'Groceries': 30000, 'Rent': 55000, 'Eating out': 5000});
+      legacyWrite(b.repo, 'merchantPatterns', [
+        ['Groceries', 'corner'],
+        ['Shopping', 'mall']
+      ]);
+      b.reopen(); // b upgrades: entries with a row are skipped
+      await round();
+      await round();
+
+      for (final d in [a, b]) {
+        expect(d.repo.settings().categoryBudgets, {'Rent': 60000, 'Eating out': 5000}, reason: d.name);
+        expect(
+            d.repo.settings().merchantPatterns,
+            [
+              ['Shopping', 'corner'],
+              ['Shopping', 'mall']
+            ],
+            reason: d.name);
+      }
+      expect(row(b.repo, 'budget:Groceries'), {'value': null, 'deleted': 1});
+      expect(dump(b.repo)['settings'], dump(a.repo)['settings']);
     });
 
     test('two devices edit different budgets at the same time: both edits survive', () async {

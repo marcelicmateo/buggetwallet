@@ -1,6 +1,7 @@
 // H1: only rows in the settings' currency count in the budget sums; the others are reported by currency. SYNTHETIC.
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/synthetic.dart';
 
@@ -116,6 +117,81 @@ void main() {
     test('reviewState pace uses the settings currency', () {
       final r = reviewState([fx('2026-03-18', -900000, 'Groceries', 'USD')], st, const [], const {'Groceries': 1000}, today: today);
       expect(r.step('pace')!.count, 0);
+    });
+
+    test('foreignByCurrency covers the period only: rows before start or after today are not listed', () {
+      final p = computePeriod(
+          [
+            ...eur,
+            fx('2026-03-14', -100, 'Groceries', 'USD'), // the day before the period
+            fx('2026-03-21', -200, 'Groceries', 'USD'), // the day after today
+            fx('2026-03-15', -300, 'Groceries', 'USD'), // first day
+            fx(today, -400, 'Groceries', 'USD'), // today
+          ],
+          st,
+          const [],
+          today);
+      expect(p.foreignByCurrency, {'USD': -700});
+    });
+
+    test('monthSummary lists only the month\'s foreign rows', () {
+      final m = monthSummary([...all, fx('2026-02-28', -100, 'Groceries', 'USD'), fx('2026-04-01', -200, 'Groceries', 'CHF')], '2026-03',
+          currency: 'EUR');
+      expect(m.foreignByCurrency, {'USD': 43500, 'CHF': -1234});
+    });
+  });
+
+  group('recurring bills in another currency (owner rule: exact money)', () {
+    const home = WalletSettings(salary: 200000, periodStart: '2026-03-15', paydayDay: 15);
+    final clock = DateTime.utc(2026, 4, 12).millisecondsSinceEpoch;
+    NormalizedTransaction row(String date, int cents, String currency, {String desc = 'Synthetic Gym 2026'}) => NormalizedTransaction(
+        id: transactionId(date, cents, '$desc $currency', 0),
+        source: 'revolut',
+        date: date,
+        amountMinor: cents,
+        currency: currency,
+        bankType: 'Card Payment',
+        description: desc);
+    PeriodBudget period(WalletRepo r) {
+      final cz = r.categorizer();
+      return computePeriod([for (final t in r.transactions()) cz.categorize(t)], home, const [], '2026-04-12', bills: r.recurringBills());
+    }
+
+    test('a USD monthly payee is no candidate and reserves nothing', () {
+      final r = WalletRepo.inMemory(now: () => clock);
+      addTearDown(r.close);
+      final usd = [row('2026-01-10', -1500, 'USD'), row('2026-02-09', -1500, 'USD'), row('2026-03-11', -1500, 'USD')];
+      r.importBatch(ImportBatch(source: 'revolut', transactions: usd));
+      expect(r.recurringBills(), isEmpty);
+      final cz = r.categorizer();
+      final txs = [for (final t in r.transactions()) cz.categorize(t)];
+      expect(detectRecurring(txs, today: '2026-04-12', currency: 'USD'), hasLength(1), reason: 'the rows themselves qualify');
+      expect(detectRecurring(txs, today: '2026-04-12', currency: 'EUR'), isEmpty);
+      expect(period(r).reservedBills, 0);
+      expect(period(r).dueBills, isEmpty);
+    });
+
+    test('mixed currencies at one payee: only the home-currency rows make and pay the bill', () {
+      final r = WalletRepo.inMemory(now: () => clock);
+      addTearDown(r.close);
+      r.importBatch(ImportBatch(source: 'revolut', transactions: [
+        row('2026-01-10', -2000, 'EUR'),
+        row('2026-02-09', -2000, 'EUR'),
+        row('2026-02-20', -9000, 'USD'), // would break the chain and the band if it counted
+        row('2026-03-11', -2000, 'EUR'),
+      ]));
+      final bill = r.recurringBills().single;
+      expect((bill.expectedAmount, bill.nextDue), (2000, '2026-04-10'));
+      r.confirmRecurring(bill.id);
+      // A USD row of the same size on the due date does not pay it: it stays reserved from the EUR money.
+      r.importBatch(ImportBatch(source: 'revolut', transactions: [row('2026-04-10', -2000, 'USD')]));
+      expect(r.recurringBills().single.lastPaidTx, isNull);
+      expect(period(r).reservedBills, 2000);
+      expect(planRecurringPayments(r.recurringBills(), r.transactions(), currency: 'EUR').isEmpty, isTrue);
+      // The EUR payment does.
+      r.importBatch(ImportBatch(source: 'revolut', transactions: [row('2026-04-11', -2000, 'EUR')]));
+      expect(r.recurringBills().single.nextDue, '2026-05-11');
+      expect(period(r).reservedBills, 0);
     });
   });
 }

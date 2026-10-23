@@ -1,12 +1,18 @@
 part of 'repo.dart';
 
 /// The settings row id of merchant [pattern] (schema 8): `pattern:` + the first 16 hex characters of the SHA-256 of
-/// its UTF-8 bytes. The same pattern added on two devices is one row; the id never shows the pattern (it can name a
-/// merchant), so it is safe in a log as a setting key.
+/// its UTF-8 bytes. The same pattern added on two devices is one row, and the id does not show the pattern. It is not
+/// safe in a log: an unsalted hash of a short pattern is reversed with a word list, so problems with these rows are
+/// logged under the key `merchantPatterns` (budget rows under `categoryBudgets`).
 String merchantPatternId(String pattern) => '${WalletSettings.patternPrefix}${sha256Hex(utf8.encode(pattern)).substring(0, 16)}';
 
 /// The settings row id of [category]'s monthly budget (schema 8).
 String _budgetId(String category) => '${WalletSettings.budgetPrefix}$category';
+
+/// The key a settings problem is logged under: a per-key row by its map's name, never its id.
+String _logKey(String key) => key.startsWith(WalletSettings.patternPrefix)
+    ? 'merchantPatterns'
+    : (key.startsWith(WalletSettings.budgetPrefix) ? 'categoryBudgets' : key);
 
 bool _perKeySetting(String key) =>
     key == 'categoryBudgets' ||
@@ -29,8 +35,9 @@ WalletSettings _readSettings(CommonDatabase db) {
     try {
       m[k] = jsonDecode(v);
     } on FormatException {
-      // A damaged value: that setting falls back to its default. The key only, never the value; once per value.
-      logInvalidSetting(k, 'json:$v');
+      // A damaged value: that setting falls back to its default. The key only, never the value; once per value. A
+      // per-key row is logged under its map's key: a pattern id is a hash a word list reverses.
+      logInvalidSetting(_logKey(k), 'json:$v');
     }
   }
   if (m['categoryBudgets'] case final Map<String, Object?> legacy) {
@@ -146,14 +153,30 @@ extension WalletRepoSettings on WalletRepo {
     ]);
   }
 
-  /// Schema 8 (H3): the legacy `categoryBudgets` / `merchantPatterns` maps become one row per entry. The rows are
-  /// written with the clock of the legacy row's `value` (queued in the outbox like a write, so they sync), not a fresh
-  /// one: every device that migrates the same map writes the same ops, and an entry another device changed or removed
-  /// after the map was written keeps that newer change. A legacy row without a clock goes through [_write]. The
-  /// legacy rows stay as they are, so an older build keeps reading its map. Returns the number of rows written.
+  /// Schema 8 (H3): the legacy `categoryBudgets` / `merchantPatterns` maps become one row per entry. An entry whose id
+  /// already has a settings row, live or removed (another device's per-key write that arrived first), is skipped: the
+  /// row is newer information than the map, and [_readSettings] ignores the map for it too, so the migration never
+  /// changes what is shown. The other entries are written with the clock of the legacy row's `value`, not a fresh one,
+  /// and queued in the outbox (so they sync): every device migrating the same map writes the same ops. Patterns get
+  /// `order` after the largest live one, in map order, as the read fallback does. Everything is one transaction (a crash
+  /// midway leaves schema 7 and no rows, and the next open starts over). A legacy row without a clock goes through
+  /// [_write] after it. The legacy rows stay as they are, so an older build keeps reading its map. Returns the number of
+  /// rows written.
   int _migratePerKeySettings() {
+    final have = <String>{
+      for (final r in db.select("SELECT id FROM settings WHERE id LIKE 'budget:%' OR id LIKE 'pattern:%'")) r['id'] as String
+    };
+    var next = 0;
+    for (final r in db.select("SELECT value FROM settings WHERE deleted = 0 AND id LIKE 'pattern:%'")) {
+      final v = r['value'];
+      if (v is! String) continue;
+      try {
+        if (jsonDecode(v) case {'order': final int o} when o >= next) next = o + 1;
+      } on FormatException {
+        logInvalidSetting('merchantPatterns', 'json:$v'); // the key only, once per value
+      }
+    }
     final ops = <(String, Map<String, Object?>)>[]; // legacy key, the per-key changes made from it
-    var rows = 0;
     for (final key in const ['categoryBudgets', 'merchantPatterns']) {
       final r = db.select('SELECT value FROM settings WHERE id = ? AND deleted = 0', [key]).firstOrNull;
       final v = r?['value'];
@@ -169,36 +192,36 @@ extension WalletRepoSettings on WalletRepo {
       final changes = <String, Object?>{};
       if (key == 'categoryBudgets') {
         for (final MapEntry(key: c, value: cents) in st.categoryBudgets.entries) {
-          changes[_budgetId(c)] = jsonEncode(cents);
+          if (!have.contains(_budgetId(c))) changes[_budgetId(c)] = jsonEncode(cents);
         }
       } else {
-        var order = 0;
         for (final [c, p] in st.merchantPatterns) {
           final id = merchantPatternId(p);
-          if (changes.containsKey(id)) continue; // a repeated pattern: the first one matched anyway
-          changes[id] = jsonEncode({'category': c, 'pattern': p, 'order': order++});
+          // A repeated pattern: the first one matched anyway. One with a row: that row wins.
+          if (changes.containsKey(id) || have.contains(id)) continue;
+          changes[id] = jsonEncode({'category': c, 'pattern': p, 'order': next++});
         }
       }
-      ops.add((key, changes));
+      if (changes.isNotEmpty) ops.add((key, changes));
     }
-    for (final (key, changes) in ops) {
-      if (changes.isEmpty) continue;
-      rows += changes.length;
-      final hlc = db.select("SELECT hlc FROM clocks WHERE entity = 'setting' AND id = ? AND field = 'value'", [key]).firstOrNull?['hlc'];
-      if (hlc is! String) {
-        _write([
-          for (final MapEntry(:key, :value) in changes.entries) ('setting', key, {'value': value, 'deleted': 0})
-        ]);
-        continue;
-      }
-      _tx(() {
+    final fresh = <(String, String, Map<String, Object?>)>[];
+    var rows = 0;
+    _tx(() {
+      for (final (key, changes) in ops) {
+        rows += changes.length;
+        final hlc = db.select("SELECT hlc FROM clocks WHERE entity = 'setting' AND id = ? AND field = 'value'", [key]).firstOrNull?['hlc'];
         for (final MapEntry(:key, :value) in changes.entries) {
+          if (hlc is! String) {
+            fresh.add(('setting', key, {'value': value, 'deleted': 0}));
+            continue;
+          }
           final op = Op('setting', key, {'value': value, 'deleted': 0}, hlc);
           _apply(op);
           db.execute('INSERT INTO outbox(op) VALUES(?)', [jsonEncode(op.toJson())]);
         }
-      });
-    }
+      }
+    });
+    _write(fresh);
     return rows;
   }
 }
