@@ -363,9 +363,17 @@ class WalletRepo {
       db.execute('COMMIT');
       return r;
     } catch (e, st) {
+      // Marked first: on SQLITE_FULL / IOERR / NOMEM / BUSY SQLite may have rolled back already, and the original error is
+      // what the app must see (a ROLLBACK error would replace it).
+      if (e is SqliteException) _writeErrors[e] = true;
       logError(_log, 'repo.rollback', e, st, level: Level.SEVERE);
-      db.execute('ROLLBACK');
-      _writeErrors[e] = true;
+      if (!db.autocommit) {
+        try {
+          db.execute('ROLLBACK');
+        } on SqliteException catch (re, rst) {
+          logError(_log, 'repo.rollback.failed', re, rst, level: Level.SEVERE);
+        }
+      }
       rethrow;
     }
   }

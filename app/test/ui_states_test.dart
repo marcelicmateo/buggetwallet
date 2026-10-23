@@ -251,6 +251,8 @@ void main() {
       expect(t.widget<FilledButton>(key('addExpenseSave')).onPressed, isNull);
       await pick(t, 'Eating out');
       expect(t.widget<FilledButton>(key('addExpenseSave')).onPressed, isNotNull);
+      await t.ensureVisible(key('addExpenseSave'));
+      await t.pumpAndSettle();
       await t.tap(key('addExpenseSave'));
       await t.pump(const Duration(milliseconds: 500));
       expect(wc.lastExpenseCategory, 'Eating out');
@@ -273,6 +275,8 @@ void main() {
       await openFlow(t, wc);
       await t.enterText(find.byType(TextField).first, '900');
       await pick(t, 'Shopping');
+      await t.ensureVisible(key('addExpenseSave'));
+      await t.pumpAndSettle();
       await t.ensureVisible(key('addExpenseSave'));
       await t.pumpAndSettle();
       await t.tap(key('addExpenseSave'));
@@ -454,6 +458,8 @@ void main() {
         await t.pumpAndSettle();
         await t.tap(chip);
         await t.pump();
+        await t.ensureVisible(key('addExpenseSave'));
+        await t.pumpAndSettle();
         await t.tap(key('addExpenseSave'));
         await t.pump();
         await t.pump(const Duration(milliseconds: 400));

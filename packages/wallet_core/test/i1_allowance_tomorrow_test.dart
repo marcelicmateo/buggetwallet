@@ -98,7 +98,7 @@ void main() {
                   ['Groceries', 'Eating out', 'Transport'][r.nextInt(3)]),
           ];
           final today = addDays('2026-01-15', r.nextInt(34)); // some days past the payday
-          final p = _period(txs, today);
+          final p = _period(txs, today, st: st);
           final ctx = 'seed $seed #$i today $today';
           if (p.paydayPassed || p.daysLeft <= 1) {
             expect(p.allowanceTomorrow, isNull, reason: ctx);
@@ -108,7 +108,7 @@ void main() {
           expect(a, greaterThanOrEqualTo(0), reason: ctx);
           expect(a, max(0, ((p.flexBudget - p.spent) / (p.daysLeft - 1)).round()), reason: ctx);
           // Tomorrow, with nothing more spent today, is the same wallet one day on: its allowance is the figure.
-          final tomorrow = _period(txs, addDays(today, 1));
+          final tomorrow = _period(txs, addDays(today, 1), st: st);
           expect(a, tomorrow.allowanceToday, reason: ctx);
         }
       }, timeout: _t);
