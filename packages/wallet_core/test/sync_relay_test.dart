@@ -345,7 +345,7 @@ void main() {
 
     test('clock: a relay that keeps saying clock, or gives no Date, fails the call without looping', () async {
       final relayNow = DateTime.utc(2026, 10, 22, 10);
-      final always = RelayTransport(Uri.parse('http://relay.test'), key, client: MockClient((r) async {
+      final always = RelayTransport(Uri.parse('http://relay.test'), key, now: () => relayNow, client: MockClient((r) async {
         seen.add(r);
         return _clockGate(r, relayNow, alwaysClock: true);
       }));
