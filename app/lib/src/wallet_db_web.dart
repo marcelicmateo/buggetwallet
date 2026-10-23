@@ -139,12 +139,12 @@ Future<bool> walletDbIsPlaintext() async {
 /// file system, encrypted with [dbKey] (`localDbKey`) through the wrapped VFS. An unkeyed database from an older build is
 /// converted. A key that does not open it throws [WalletDbKeyException]. Changes are in memory until [WalletDb.persist]
 /// flushes them to IndexedDB.
-Future<WalletDb> openWalletDb(Uint8List dbKey) async {
+Future<WalletDb> openWalletDb(Uint8List dbKey, {String? deviceId}) async {
   await _takeTabLock();
   final (sqlite, fs) = await _store();
   final converted = _isPlaintext(fs);
   final db = openKeyed(() => sqlite.open(_path, vfs: 'multipleciphers-${fs.name}'), dbKey);
-  final repo = WalletRepo.fromDatabase(db, file: true);
+  final repo = WalletRepo.fromDatabase(db, file: true, deviceId: deviceId);
   return WalletDb(
     repo,
     converted: converted,

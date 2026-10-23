@@ -10,7 +10,7 @@ part of 'controller.dart';
 final _billLog = Logger('bw.bills');
 
 /// How a try to add a bill ended.
-enum BillImportKind { added, duplicate, unreadable, tooBig, failed }
+enum BillImportKind { added, duplicate, unreadable, tooBig, failed, clockBehind }
 
 class BillImport {
   final BillImportKind kind;
@@ -38,6 +38,7 @@ class BillImport {
         BillImportKind.unreadable => "Couldn't read that bill. Try another file or photo.",
         BillImportKind.tooBig => billTooBigMessage,
         BillImportKind.failed => "Couldn't add that bill.",
+        BillImportKind.clockBehind => clockBehindText,
       };
 }
 
@@ -171,6 +172,9 @@ extension BillsDb on WalletController {
         return const BillImport(BillImportKind.unreadable);
       }
       return await _storeBill(bill, keep, type, trigger: trigger);
+    } on ClockBehindException catch (e) {
+      noticeClockBehind(e);
+      return const BillImport(BillImportKind.clockBehind);
     } catch (err, st) {
       logError(_billLog, 'bills.importFailed', err, st, fields: {'trigger': trigger, 'type': err.runtimeType.toString()});
       return const BillImport(BillImportKind.failed);
@@ -187,6 +191,9 @@ extension BillsDb on WalletController {
         return const BillImport(BillImportKind.unreadable);
       }
       return await _storeBill(b, null, null, trigger: 'scan');
+    } on ClockBehindException catch (e) {
+      noticeClockBehind(e);
+      return const BillImport(BillImportKind.clockBehind);
     } catch (err, st) {
       logError(_billLog, 'bills.importFailed', err, st, fields: {'trigger': 'scan', 'type': err.runtimeType.toString()});
       return const BillImport(BillImportKind.failed);

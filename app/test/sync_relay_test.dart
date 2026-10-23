@@ -13,7 +13,7 @@ import 'package:wallet_core/wallet_core.dart';
 import 'support/layout.dart';
 import 'support/wallet.dart';
 
-final _relay = Uri.parse('http://homeserver.test:8787');
+final _relay = Uri.parse('http://homeserver.local:8787');
 
 Finder get _address => find.byKey(const ValueKey('relayAddress'));
 Finder get _save => find.byKey(const ValueKey('relaySave'));
@@ -153,7 +153,7 @@ void main() {
     test('setRelay while a sync runs: old status cleared at once, old result dropped, exactly one follow-up run for the new address',
         () async {
       final wc = emptyWallet();
-      final other = Uri.parse('http://second.test:8787');
+      final other = Uri.parse('http://second.local:8787');
       final gates = <Completer<SyncReport>>[];
       final used = <Uri>[];
       wc.syncRunner = (relay, k, r) {
@@ -264,7 +264,7 @@ void main() {
       final wc = emptyWallet();
       wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true);
       await _pumpSync(t, wc);
-      await t.enterText(_address, '  http://homeserver.test:8787/ ');
+      await t.enterText(_address, '  http://homeserver.local:8787/ ');
       await t.tap(_save);
       await t.pumpAndSettle();
       expect(wc.relayUrl, _relay);
@@ -296,13 +296,13 @@ void main() {
           if (failure != null) throw TransportException(failure, 'x');
         };
         await _pumpSync(t, wc);
-        await t.enterText(_address, 'homeserver.test:8787');
+        await t.enterText(_address, 'homeserver.local:8787');
         await t.tap(_test);
         await t.pumpAndSettle();
         expect(find.textContaining(text), findsOneWidget);
         expect(asked, _relay, reason: 'a bare host gets http://');
         expect(wc.relayUrl, isNull, reason: 'testing does not save');
-        await t.enterText(_address, 'homeserver.test:8788'); // editing clears the old answer
+        await t.enterText(_address, 'homeserver.local:8788'); // editing clears the old answer
         await t.pump();
         expect(find.textContaining(text), findsNothing);
       });
@@ -416,7 +416,7 @@ void main() {
         return const SyncReport(0, 0, 0, caughtUp: true);
       };
       await t.enterText(find.widgetWithText(TextField, 'Wallet key'), await key.toText());
-      await t.enterText(_address, 'homeserver.test:8787');
+      await t.enterText(_address, 'homeserver.local:8787');
       await t.tap(find.byKey(const ValueKey('joinWallet')));
       await t.pumpAndSettle();
       expect(wc.hasWallet, isTrue);

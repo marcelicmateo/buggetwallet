@@ -1230,7 +1230,7 @@ void main() {
     tw('Plan › Sync tells that an older relay cannot keep bill photos', (tester) async {
       final wc = bw();
       wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 2, blobsUnsupported: true);
-      await tester.runAsync(() => wc.setRelay(Uri.parse('http://homeserver.test:8787')));
+      await tester.runAsync(() => wc.setRelay(Uri.parse('http://homeserver.local:8787')));
       await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: SyncPanel(wc: wc, onShowKey: () {}))), size: const Size(400, 1200));
       expect(find.textContaining("This relay can't keep bill photos yet. Update the relay on the home server.", findRichText: true),
           findsOneWidget);
@@ -1279,7 +1279,7 @@ void main() {
     tw('Plan › Sync says how many bill files wait to upload, only when some do', (tester) async {
       final wc = bw();
       wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 2);
-      await tester.runAsync(() => wc.setRelay(Uri.parse('http://homeserver.test:8787')));
+      await tester.runAsync(() => wc.setRelay(Uri.parse('http://homeserver.local:8787')));
       await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: SyncPanel(wc: wc, onShowKey: () {}))), size: const Size(400, 1200));
       expect(find.textContaining('2 bill files waiting to upload', findRichText: true), findsOneWidget);
       wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 1);

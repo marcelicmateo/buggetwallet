@@ -4,11 +4,15 @@ import 'package:file_picker/file_picker.dart' show PlatformFile;
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import '../bill_inputs.dart' show ScannedCode;
 import '../controller.dart';
 import '../file_chooser.dart';
+import '../layout.dart';
 import '../logging.dart';
+import '../secure_window.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/sheets.dart';
 
 final _log = Logger('bw.backup');
 
@@ -53,9 +57,9 @@ class _BackupPanelState extends State<BackupPanel> {
     if (saved != null) toast(context, 'Saved $saved');
   }
 
-  /// Pick a `.bwb` file, confirm, restore.
-  Future<void> _restoreFile() async {
-    logNav('restore.pressed');
+  /// Pick a `.bwb` file, confirm, restore. With [otherKey] the file was made with another wallet key: ask for it, then restore.
+  Future<void> _restoreFile({bool otherKey = false}) async {
+    logNav(otherKey ? 'restore.otherKey.pressed' : 'restore.pressed');
     final List<PlatformFile> picked;
     try {
       picked = await widget.chooser.pickBackupFile();
@@ -73,7 +77,14 @@ class _BackupPanelState extends State<BackupPanel> {
       if (mounted) setState(() => _error = "This backup file can't be read.");
       return;
     }
-    if (!mounted || !await _confirmRestore()) return;
+    if (!mounted) return;
+    if (otherKey) {
+      final text = await askOldKey(context, widget.wc);
+      if (text == null || !mounted) return;
+      await _runRestore(() => widget.wc.restoreBackupFile(bytes, otherKey: text), otherKey: true);
+      return;
+    }
+    if (!await _confirmRestore()) return;
     await _runRestore(() => widget.wc.restoreBackupFile(bytes));
   }
 
@@ -93,7 +104,7 @@ class _BackupPanelState extends State<BackupPanel> {
   }
 
   /// Runs a restore and shows its error text (one text per failure) or the toast with the row count.
-  Future<void> _runRestore(Future<int> Function() restore) async {
+  Future<void> _runRestore(Future<int> Function() restore, {bool otherKey = false}) async {
     setState(() {
       _busy = true;
       _error = null;
@@ -104,8 +115,11 @@ class _BackupPanelState extends State<BackupPanel> {
       rows = await restore();
     } on StateError {
       error = 'The wallet is not empty, so nothing was restored.';
-    } on VaultException {
-      error = 'This backup was made with a different wallet key.';
+    } on VaultException catch (e) {
+      // `failure` null: the typed text is not a key (its message says what is wrong with it); else the file did not open.
+      error = e.failure == null && otherKey
+          ? e.message
+          : (otherKey ? 'That key does not open this backup.' : 'This backup was made with a different wallet key.');
     } on BackupException catch (e) {
       error = switch (e.reason) {
         BackupFailure.unreadable => "This backup file can't be read.",
@@ -141,7 +155,119 @@ class _BackupPanelState extends State<BackupPanel> {
           OutlinedButton(
               key: const ValueKey('restoreBackup'), onPressed: _busy ? null : _restoreFile, child: const Text('Restore from backup…')),
       ]),
+      if (wc.walletIsEmpty)
+        TextButton(
+            key: const ValueKey('restoreOtherKey'),
+            onPressed: _busy ? null : () => _restoreFile(otherKey: true),
+            child: const Text('Restore a backup made with another key…')),
       if (_error != null) StatusLabel(good: false, text: _error!),
     ]);
   }
+}
+
+/// Asks for the key an old backup was made with: typed, pasted or scanned from its QR code (where the camera works). Returns the
+/// text (not yet checked) or null when cancelled. The text lives in this dialog only: it is never stored or logged.
+Future<String?> askOldKey(BuildContext context, WalletController wc) {
+  logNav('dialog.open', {'dialog': 'oldKey'});
+  return showDialog<String>(context: context, builder: (ctx) => _OldKeyDialog(wc: wc));
+}
+
+class _OldKeyDialog extends StatefulWidget {
+  final WalletController wc;
+  const _OldKeyDialog({required this.wc});
+  @override
+  State<_OldKeyDialog> createState() => _OldKeyDialogState();
+}
+
+class _OldKeyDialogState extends State<_OldKeyDialog> {
+  final _text = TextEditingController();
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  Future<void> _scan() async {
+    logNav('oldKey.scan');
+    final code = await openPageOrDialog<ScannedCode>(context, _ScanKeyScreen(wc: widget.wc), width: 520);
+    if (code != null && mounted) setState(() => _text.text = code.raw);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canScan = widget.wc.billInputs.camera.supported;
+    return SecureWindow(
+        child: AlertDialog(
+      key: const ValueKey('oldKeyDialog'),
+      title: const Text('Key of the backup'),
+      content: SingleChildScrollView(
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('Type or paste the wallet key this backup was made with. It is used once and not kept.',
+              style: TextStyle(fontSize: 13)),
+          const SizedBox(height: 12),
+          TextField(
+            key: const ValueKey('oldKeyField'),
+            controller: _text,
+            minLines: 2,
+            maxLines: 4,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: const InputDecoration(labelText: 'Old wallet key', hintText: 'BW1-…'),
+          ),
+          if (canScan)
+            TextButton.icon(
+                key: const ValueKey('oldKeyScan'),
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('Scan its QR code'),
+                onPressed: _scan),
+        ]),
+      ),
+      actions: [
+        TextButton(key: const ValueKey('oldKeyCancel'), onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(
+            key: const ValueKey('oldKeyRestore'), onPressed: () => Navigator.pop(context, _text.text.trim()), child: const Text('Restore')),
+      ],
+    ));
+  }
+}
+
+/// The camera looking for the QR code of a wallet key; pops the first code that is a key and ignores every other one (another QR
+/// in view, a second code in the same frame).
+class _ScanKeyScreen extends StatefulWidget {
+  final WalletController wc;
+  const _ScanKeyScreen({required this.wc});
+  @override
+  State<_ScanKeyScreen> createState() => _ScanKeyScreenState();
+}
+
+class _ScanKeyScreenState extends State<_ScanKeyScreen> {
+  bool _busy = false;
+  bool _done = false;
+
+  Future<void> _onCode(ScannedCode c) async {
+    if (_done || _busy) return;
+    final plain = c.raw.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
+    if (!plain.startsWith('BW1')) return; // not a wallet key
+    _busy = true; // set before the first await: a second code in the same frame is ignored
+    try {
+      await VaultKey.parse(c.raw);
+    } on VaultException {
+      _busy = false;
+      return;
+    }
+    if (_done || !mounted) return;
+    _done = true;
+    Navigator.pop(context, c);
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: const DialogAppBar(title: 'Scan the key'),
+        body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Expanded(child: widget.wc.billInputs.camera.view(onCode: _onCode)),
+          const Padding(
+              padding: EdgeInsets.fromLTRB(pagePad, 10, pagePad, 14), child: Muted('Point at the QR code of the old wallet key.')),
+        ]),
+      );
 }

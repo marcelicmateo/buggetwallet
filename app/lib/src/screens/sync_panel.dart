@@ -24,6 +24,7 @@ class SyncPanel extends StatefulWidget {
 
 class _SyncPanelState extends State<SyncPanel> {
   late final TextEditingController _address = TextEditingController(text: widget.wc.relayUrl?.toString() ?? '');
+  late final TextEditingController _token = TextEditingController(text: widget.wc.relayCreateToken);
   String? _addressError;
   bool _testing = false;
 
@@ -40,6 +41,7 @@ class _SyncPanelState extends State<SyncPanel> {
   void dispose() {
     widget.wc.removeListener(_onChange);
     _address.dispose();
+    _token.dispose();
     super.dispose();
   }
 
@@ -51,13 +53,13 @@ class _SyncPanelState extends State<SyncPanel> {
   (bool ok, Uri? url) _read() {
     final t = _address.text.trim();
     if (t.isEmpty) return (true, null);
-    final u = WalletController.parseRelayAddress(t);
-    if (u == null) {
-      setState(() => _addressError = 'Enter an address like http://homeserver:8787');
-      logNav('sync.addressRejected');
+    final issue = WalletController.relayAddressIssue(t);
+    if (issue != null) {
+      setState(() => _addressError = issue == RelayAddressIssue.needsHttps ? addressNeedsHttpsText : addressNotAnAddressText);
+      logNav('sync.addressRejected', {'reason': issue.name});
       return (false, null);
     }
-    return (true, u);
+    return (true, WalletController.parseRelayAddress(t));
   }
 
   Future<void> _save() async {
@@ -70,6 +72,11 @@ class _SyncPanelState extends State<SyncPanel> {
     logNav('sync.relaySave', {'set': url != null}); // never the address
     await widget.wc.setRelay(url);
     if (mounted && url != null) _address.text = widget.wc.relayUrl.toString();
+  }
+
+  Future<void> _saveToken() async {
+    logNav('sync.tokenSave', {'set': _token.text.trim().isNotEmpty}); // never the token
+    await widget.wc.setRelayCreateToken(_token.text);
   }
 
   Future<void> _test() async {
@@ -149,7 +156,12 @@ class _SyncPanelState extends State<SyncPanel> {
               child: Text(wc.syncing ? 'Syncing…' : 'Sync now')),
         ),
       ]),
+      if (wc.relayFingerprintText != null)
+        Muted('Relay fingerprint ${wc.relayFingerprintText}. It should read the same on every device.',
+            key: const ValueKey('relayFingerprint')),
       if (_testResult != null) StatusLabel(key: const ValueKey('relayTestResult'), good: _testResult!.good, text: _testResult!.text),
+      if (hasRelay && WalletController.relayAddressIssue(wc.relayUrl.toString()) == RelayAddressIssue.needsHttps)
+        const StatusLabel(key: ValueKey('relayNeedsHttps'), good: false, text: storedAddressNeedsHttpsText),
       if (!hasRelay)
         const Muted('No relay set: nothing is sent or received. The wallet works without it.')
       else ...[
@@ -158,6 +170,19 @@ class _SyncPanelState extends State<SyncPanel> {
         else if (last != null)
           StatusLabel(key: const ValueKey('syncStatus'), good: status.good, text: status.text),
         if (last != null) Muted('Last sync ${clockText(last)}'),
+        if (wc.syncRelayChanged)
+          _Info(
+              key: const ValueKey('relayChanged'),
+              text: relayChangedText,
+              okKey: const ValueKey('relayChangedOk'),
+              onOk: () => wc.dismissSyncNotice(relayChanged: true)),
+        if (wc.syncDeviceIdInUse)
+          _Info(
+              key: const ValueKey('deviceIdInUse'),
+              text: deviceIdInUseText,
+              okKey: const ValueKey('deviceIdInUseOk'),
+              onOk: () => wc.dismissSyncNotice(relayChanged: false)),
+        if (wc.syncClockDrift) const StatusLabel(key: ValueKey('clockDrift'), good: false, text: clockDriftText),
         if (wc.syncBlobsUnsupported)
           const StatusLabel(key: ValueKey('blobsUnsupported'), good: false, text: blobsUnsupportedText)
         else if (wc.syncBlobsWaiting > 0)
@@ -169,6 +194,23 @@ class _SyncPanelState extends State<SyncPanel> {
                   ? '1 sync file could not be read. It was skipped and will be tried again.'
                   : '${wc.syncBadFiles} sync files could not be read. They were skipped and will be tried again.'),
       ],
+      TextField(
+        key: const ValueKey('relayCreateToken'),
+        controller: _token,
+        obscureText: true,
+        enableSuggestions: false,
+        autocorrect: false,
+        onSubmitted: (_) => _saveToken(),
+        decoration: const InputDecoration(
+          labelText: 'Creation token (only if the relay asks)',
+          helperText: 'Kept on this device only. Never synced.',
+          helperMaxLines: 2,
+        ),
+      ),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: OutlinedButton(key: const ValueKey('relayCreateTokenSave'), onPressed: _saveToken, child: const Text('Save token')),
+      ),
       if (wc.syncDevices.isNotEmpty) ...[
         const Heading('Devices', size: 15),
         for (final d in wc.syncDevices)
@@ -181,6 +223,32 @@ class _SyncPanelState extends State<SyncPanel> {
       if (!isWeb)
         OutlinedButton.icon(
             key: const ValueKey('showKey'), icon: const Icon(Icons.key), label: const Text('Show wallet key'), onPressed: widget.onShowKey),
+    ]);
+  }
+}
+
+/// A neutral line with an info icon (state is never colour alone), optionally with a small OK that dismisses it.
+class _Info extends StatelessWidget {
+  final String text;
+  final Key? okKey;
+  final VoidCallback? onOk;
+  const _Info({super.key, required this.text, this.okKey, this.onOk});
+  @override
+  Widget build(BuildContext context) {
+    final line = Text.rich(
+      TextSpan(children: [
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Padding(padding: const EdgeInsets.only(right: 5), child: Icon(Icons.info_outline, size: 16, color: context.c.muted)),
+        ),
+        TextSpan(text: text),
+      ]),
+      style: TextStyle(fontSize: 13, color: context.c.muted, height: 1.4),
+    );
+    if (onOk == null) return line;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      line,
+      TextButton(key: okKey, onPressed: onOk, child: const Text('OK')),
     ]);
   }
 }

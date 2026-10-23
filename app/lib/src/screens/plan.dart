@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
@@ -20,6 +18,7 @@ import 'export_panel.dart';
 import 'forget_browser.dart';
 import 'habits_panels.dart';
 import 'import_flow.dart';
+import 'key_backup.dart';
 import 'sync_panel.dart';
 
 class PlanScreen extends StatefulWidget {
@@ -361,37 +360,5 @@ class _PlanScreenState extends State<PlanScreen> {
         ]),
       ]);
 
-  Future<void> _showKey(BuildContext context) async {
-    logNav('dialog.open', {'dialog': 'walletKey'}); // the key itself is never logged
-    final text = await widget.wc.keyText();
-    if (!context.mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Wallet key'),
-        content: SizedBox(
-          width: 320,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Anyone with this key can read your wallet. Use it only to add your own devices.', style: TextStyle(fontSize: 13)),
-            const SizedBox(height: 12),
-            Container(color: Colors.white, padding: const EdgeInsets.all(8), child: QrImageView(data: text, size: 200)),
-            const SizedBox(height: 12),
-            SelectableText(text, textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: 13)),
-          ]),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              logNav('key.copied');
-              await Clipboard.setData(ClipboardData(text: text));
-              if (ctx.mounted) Navigator.pop(ctx);
-              if (context.mounted) toast(context, 'Key copied');
-            },
-            child: const Text('Copy'),
-          ),
-          FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
-        ],
-      ),
-    );
-  }
+  Future<void> _showKey(BuildContext context) => showWalletKey(context, widget.wc);
 }

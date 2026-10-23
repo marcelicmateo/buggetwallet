@@ -195,10 +195,13 @@ void main() {
       expect(find.text('Save your wallet key'), findsWidgets);
       expect(find.text('Without this key, this wallet cannot be opened again on any device.'), findsOneWidget);
       expect(find.byKey(const ValueKey('keyQr')), findsOneWidget);
+      expect(find.byKey(const ValueKey('keyText')), findsNothing, reason: 'QR first; the text is behind "Show as text"');
+      await t.tap(find.byKey(const ValueKey('keyShowText')));
+      await t.pump();
+      expect(find.byType(SelectableText), findsNothing, reason: 'Copy key is the only copy path (it clears the clipboard)');
       final shown = (t.widget(find.byKey(const ValueKey('keyText'))) as Text).data!;
       expect(shown, await f.wc.keyText());
       expect(find.text('The passphrase only unlocks this browser.'), findsNothing);
-      expect(find.byType(SelectableText), findsNothing, reason: 'Copy key is the only copy path (it clears the clipboard)');
 
       await t.tap(find.byKey(const ValueKey('keySaved')));
       await t.pump();
@@ -294,6 +297,9 @@ void main() {
         await t.tap(find.text('open'));
         await t.pump();
         await t.pump(const Duration(milliseconds: 500));
+        await t.ensureVisible(find.byKey(const ValueKey('keyShowText')));
+        await t.tap(find.byKey(const ValueKey('keyShowText')));
+        await t.pump();
         expect(find.byKey(const ValueKey('keyText')), findsOneWidget);
         expect(t.takeException(), isNull);
         await t.ensureVisible(find.byKey(const ValueKey('keySaved')));

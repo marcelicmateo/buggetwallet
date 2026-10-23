@@ -6,6 +6,7 @@ import '../key_store.dart' show minPassphraseLength;
 import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
+import '../sync_status.dart';
 import '../widgets/common.dart';
 
 final _log = Logger('bw.app');
@@ -159,7 +160,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   /// Web join: a typo in the key shows at once, before the passphrase is asked for.
   Future<void> _checkKeyThenAsk() async {
     if (_relayInvalid) {
-      setState(() => error = _relayError);
+      final https = WalletController.relayAddressIssue(relayText.text) == RelayAddressIssue.needsHttps;
+      setState(() => error = https ? addressNeedsHttpsText : _relayError);
       return;
     }
     try {
@@ -215,7 +217,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _join({String? passphrase}) async {
     if (_relayInvalid) {
-      setState(() => error = _relayError);
+      final https = WalletController.relayAddressIssue(relayText.text) == RelayAddressIssue.needsHttps;
+      setState(() => error = https ? addressNeedsHttpsText : _relayError);
       return;
     }
     setState(() {

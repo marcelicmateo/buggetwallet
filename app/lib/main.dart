@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'src/clock_notice.dart';
 import 'src/controller.dart';
 import 'src/format.dart';
 import 'src/layout.dart';
@@ -67,13 +68,51 @@ Future<void> logFirstFrame(Stopwatch sinceRunApp, Stopwatch total) async {
   logEvent(_log, Level.INFO, 'app.start', {'phase': 'total', 'ms': total.elapsedMilliseconds});
 }
 
-class BudgetWalletApp extends StatelessWidget {
+class BudgetWalletApp extends StatefulWidget {
   final WalletController wc;
   const BudgetWalletApp({super.key, required this.wc});
 
   @override
+  State<BudgetWalletApp> createState() => _BudgetWalletAppState();
+}
+
+class _BudgetWalletAppState extends State<BudgetWalletApp> {
+  final _navigator = GlobalKey<NavigatorState>();
+  bool _noticeOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    clockBehindNotice.addListener(_clockBehind);
+  }
+
+  @override
+  void dispose() {
+    clockBehindNotice.removeListener(_clockBehind);
+    super.dispose();
+  }
+
+  /// A write was refused because this device's clock is behind (any screen): one sentence over whatever is open.
+  void _clockBehind() {
+    final ctx = _navigator.currentContext;
+    if (ctx == null || _noticeOpen) return;
+    _noticeOpen = true;
+    logNav('write.clockBehind.shown');
+    showDialog<void>(
+      context: ctx,
+      builder: (c) => AlertDialog(
+        key: const ValueKey('clockBehindDialog'),
+        content: const Text(clockBehindText),
+        actions: [TextButton(key: const ValueKey('clockBehindOk'), onPressed: () => Navigator.of(c).pop(), child: const Text('OK'))],
+      ),
+    ).whenComplete(() => _noticeOpen = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final wc = widget.wc;
     return MaterialApp(
+      navigatorKey: _navigator,
       title: 'Budget Wallet',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(Brightness.light),

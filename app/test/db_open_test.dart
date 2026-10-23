@@ -20,9 +20,12 @@ class World {
   WalletRepo? contents;
   final aside = <String, WalletRepo?>{};
   final opens = <Uint8List>[];
+  final ids = <String?>[]; // the deviceId each open was given
   int existsCalls = 0;
   int forgets = 0;
   Object? openError;
+  String? storedId; // the device id in the (fake) key store
+  final idWrites = <String>[];
 
   World({this.hasFile = false, this.fileKey}) {
     if (hasFile) contents = _seeded();
@@ -34,7 +37,8 @@ class World {
     return r;
   }
 
-  Future<WalletDb> open(Uint8List dbKey) async {
+  Future<WalletDb> open(Uint8List dbKey, {String? deviceId}) async {
+    ids.add(deviceId);
     opens.add(dbKey);
     if (openError != null) Error.throwWithStackTrace(openError!, StackTrace.current);
     var converted = false;
@@ -43,7 +47,7 @@ class World {
       converted = fileKey == null;
     } else {
       hasFile = true;
-      contents = WalletRepo.inMemory();
+      contents = WalletRepo.inMemory(deviceId: deviceId);
     }
     fileKey = dbKey;
     return WalletDb(contents!, converted: converted, forget: () async {
@@ -51,6 +55,13 @@ class World {
       hasFile = false;
       contents = null;
     });
+  }
+
+  Future<String?> readId() async => storedId;
+
+  Future<void> writeId(String id) async {
+    idWrites.add(id);
+    storedId = id;
   }
 
   Future<bool> exists() async {
@@ -84,6 +95,8 @@ Future<WalletController> loadWith(
 }) async {
   final wc = await WalletController.load(
     opener: w.open,
+    deviceIdReader: w.readId,
+    deviceIdWriter: w.writeId,
     exists: w.exists,
     setAside: w.setAside,
     isPlaintext: w.isPlaintext,
@@ -160,6 +173,76 @@ void main() {
       final hex = (await localDbKey(key)).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
       expect(log(), isNot(contains(hex)));
       expect(log(), isNot(contains(await key.toText())));
+    });
+  });
+
+  group('device id (H6)', () {
+    test('upgrade: no id stored, the database is opened with none and its own id is moved into the store once', () async {
+      final key = VaultKey.generate();
+      final w = World(hasFile: true, fileKey: await localDbKey(key));
+      final wc = await loadWith(w, key: key);
+      expect(w.ids, [null]);
+      expect(w.idWrites, [wc.repo.deviceId]);
+      expect(w.storedId, wc.repo.deviceId);
+    });
+
+    test('after the move every open passes the stored id and nothing is written again', () async {
+      final key = VaultKey.generate();
+      final w = World(hasFile: true, fileKey: await localDbKey(key))..storedId = 'abc123DEF456';
+      await loadWith(w, key: key);
+      expect(w.ids, ['abc123DEF456']);
+      expect(w.idWrites, isEmpty);
+    });
+
+    test('a stored id that is not letters and digits is ignored and replaced by the database id', () async {
+      final key = VaultKey.generate();
+      final w = World(hasFile: true, fileKey: await localDbKey(key))..storedId = 'not/valid id';
+      final wc = await loadWith(w, key: key);
+      expect(w.ids, [null]);
+      expect(w.storedId, wc.repo.deviceId);
+    });
+
+    test('fresh install: create makes a new id, stores it before opening and opens with it', () async {
+      final w = World();
+      final wc = await loadWith(w);
+      await wc.createWallet();
+      expect(w.ids.single, isNotNull);
+      expect(w.idWrites, [w.ids.single]);
+      expect(wc.repo.deviceId, w.ids.single);
+      expect(RegExp(r'^[0-9a-f]{16}$').hasMatch(w.ids.single!), isTrue);
+    });
+
+    test('join gets a new id too, whatever was stored before (a wiped install)', () async {
+      final w = World()..storedId = 'oldidoldidold';
+      final wc = await loadWith(w);
+      await wc.joinWallet(await VaultKey.generate().toText());
+      expect(w.ids.single, isNot('oldidoldidold'));
+      expect(w.storedId, w.ids.single);
+    });
+
+    test('a store that cannot be written does not stop the start, and the id is not in the log', () async {
+      final key = VaultKey.generate();
+      final w = World(hasFile: true, fileKey: await localDbKey(key));
+      final wc = await WalletController.load(
+        opener: w.open,
+        deviceIdReader: () async => null,
+        deviceIdWriter: (_) async => throw StateError('disk'),
+        exists: w.exists,
+        claim: () async {},
+        keyReader: () async => key,
+        isLocked: () => false,
+      );
+      addTearDown(wc.dispose);
+      expect(wc.hasWallet, isTrue);
+      expect(log(), contains('deviceId.storeFailed'));
+      expect(log(), isNot(contains(wc.repo.deviceId)));
+    });
+
+    test('no log line holds the id', () async {
+      final w = World();
+      final wc = await loadWith(w);
+      await wc.createWallet();
+      expect(log(), isNot(contains(wc.repo.deviceId)));
     });
   });
 

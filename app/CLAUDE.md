@@ -51,7 +51,25 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   2-minute timer only checks the day), Ctrl+R/F5 (toast without an address), on web too. Logs say `sync.relay {set}`, never the address.
   `sync_status.dart` = pure texts (`syncStatusLine`, `lastSeenText`, `clockText`, `relayTestFailureText`); `screens/sync_panel.dart` = Plan › Sync (address field, Save
   address, Test connection, Sync now, status line, devices, Show wallet key). Onboarding join takes the key plus an optional relay address (`joinWallet(…, relay:)`).
-  Android: INTERNET permission and cleartext HTTP (LAN/VPN); no storage permission, no `budget_wallet/storage` channel.
+  Android: INTERNET permission; no storage permission, no `budget_wallet/storage` channel. **Address rule (D5, HU 10):** the relay is reached over HTTPS
+  on the owner's domain (Caddy + Let's Encrypt, no VPN). Plain `http://` is accepted only for this device (`localhost`, `127.x`, `::1`), the emulator's `10.0.2.2`,
+  private IPv4 (10/8, 172.16/12, 192.168/16), `.local` names and names without a dot (`homeserver`); any other `http://` host is refused with "Use the https://
+  address of your relay. http:// is only for your home network." (`WalletController.relayAddressIssue` → `RelayAddressIssue.needsHttps | notAnAddress`;
+  `parseRelayAddress`, `setRelay` and `joinWallet` use it; octets with a leading zero and all-digit or `0x…` dotless hosts are never private; the stored address is read leniently so an upgrade never drops it, but Plan › Sync then says to switch to https and `createTokenFor` never sends the token to it). The manifest still allows
+  cleartext for the LAN case. **Sync panel (H5–H8):** after each run the controller keeps `syncRelayInstance` (shown as `relayFingerprintText`, `xxxx-xxxx`, under the
+  address), `syncRelayChanged` (device-local notice kept until OK, like `syncDeviceIdInUse`; a new address clears both; "This relay is new or was reset; this device sent everything again."), `syncProblems` (`syncDeviceIdInUse`: information only, "Another
+  install used this device id; this device now syncs under a new stream."; `syncClockDrift`: "A device's clock is ahead; its changes wait until the clocks
+  agree."); `TransportFailure.createToken` → "The relay needs its creation token." (`relayTestFailureText`; a sync run says it through core's message). Creation token:
+  device-local value `relayCreateToken` (`relayCreateToken`, `setRelayCreateToken`; obscured field `relayCreateToken` + `relayCreateTokenSave` in Plan › Sync),
+  passed to `RelayTransport(createToken:)`, never synced, in no backup, never logged (`sync.createToken {set}`). **Clock behind (H7):** an owner write refused with
+  `ClockBehindException` is caught by the error hooks in `logging.dart` (`clock_notice.dart` `noticeClockBehind`; logged `write.clockBehind`, not a crash) and
+  `BudgetWalletApp` shows one dialog sentence (`clockBehindDialog`): "This device's clock is behind. Set the date and time, then try again.". Catch-alls around owner writes (`importFiles`, bill imports → `BillImportKind.clockBehind`, `skipRecurring`) catch `ClockBehindException` first and call `noticeClockBehind`.
+- Device id (H6): each install has its own id, stored next to the key and not only in the database: `KeyStore.readDeviceId/writeDeviceId` (`key_store_io.dart`: file
+  `device.id` beside `wallet.key`, same 0700/0600 temp + rename write (`_writePrivate`); Android secure storage `budget_wallet_device_id`; `key_store_web.dart`: localStorage
+  `bw.deviceId`; `KeyStore.forget` removes it too). `WalletController._openWithId`: no id stored (first open after an upgrade) → the database opens with its own id and
+  `repo.deviceId` is moved into the store once; from then on every open passes `deviceId:` (`openWalletDb(dbKey, {deviceId})` → `WalletRepo.open/fromDatabase`);
+  `createWallet` / `joinWallet` make a new id (`WalletRepo.newDeviceId()`), stored before the database opens. A store that fails is logged (`deviceId.storeFailed`) and the
+  app goes on; the id is never logged. Tests replace the store with `WalletController.load(deviceIdReader:, deviceIdWriter:)` / `wc.deviceIdReader/Writer`.
 - Polish (M5): Plan › Backup (`screens/backup_panel.dart`: "Back up now" = `wc.backupDownload()` → `FileChooser.saveBackup` (the system save dialog on every platform; a cancel
   shows nothing), "Restore from backup…" only while `walletIsEmpty`: `pickBackupFile()` → confirm → `restoreBackupFile(bytes)` → toast with the row count; the core
   functions sit behind `backupBytesWriter/backupBytesReader` so tests use fakes) and Plan › Export (`screens/export_panel.dart`: range chips This period/year/Everything,
@@ -125,7 +143,15 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   `sheets.dart` (bottom sheets: add expense, transaction details, goal).
 - `lib/src/format.dart` — money/date formatting and parsing (unit-tested in `test/widget_test.dart`).
 - `key_store.dart` — wallet key: `key_store_io.dart` = system keystore (phones) or a private file (desktop); `key_store_web.dart` = the
-  browser (see Web build). Same members everywhere: `read`, `write(key, {passphrase})`, `forget`, `isLocked`, `unlock`.
+  browser (see Web build). Same members everywhere: `read`, `write(key, {passphrase})`, `forget`, `isLocked`, `unlock`, `readDeviceId`, `writeDeviceId` (see Device id).
+- Key screens (H10, `screens/key_backup.dart`): `KeyDisplay` = the key as a QR code first, the text only after "Show as text" (`keyShowText`; `keyQr`, `keyText`);
+  used by the save-key sheet and by Plan › Show wallet key (`showWalletKey`, a dialog; `plan.dart` just calls it). `secure_window.dart` `SecureWindow` wraps both: on Android it
+  calls `MethodChannel('bw/secure').invokeMethod('setSecure', true)` when the view is built and `false` when it is removed (close, back, dispose; counted, so two open views
+  keep the flag until the last closes); other platforms never touch the channel; a channel error is logged (`secure.failed`, no values). `MainActivity.kt` sets FLAG_SECURE.
+- Restore with another key (H13, `screens/backup_panel.dart`): while the wallet is empty, "Restore a backup made with another key…" (`restoreOtherKey`) picks the file, then
+  `askOldKey` asks for the old wallet key (typed, pasted, or scanned from its QR where `billInputs.camera.supported`) and calls `restoreBackupFile(bytes, otherKey:)`
+  → `VaultKey.parse` + `restoreBackupBytes(repo, bytes, oldKey)`. The wallet keeps its own key; the old key is used once, never stored or logged (`backup.restored {otherKey}`).
+  Errors: not a key → the key error's own text; a key that does not open the file → "That key does not open this backup.".
 - `logging.dart` — `AppLog`: console (`debugPrint` → logcat) + a `LogBackend` (`log_backend_io.dart`: `RotatingFileSink` in
   `<app support>/logs/`; `log_backend_web.dart`: `MemoryLogSink`), error hooks,
   frame/memory/lifecycle monitors, `logNav` (UI actions), `loggedRoute` (sheets), `fileExt`. `main.dart`'s `bootstrap()`
@@ -208,4 +234,7 @@ key fails on the first read (`SqliteException` 26 "file is not a database"); pla
 - `test/theme_*_test.dart` — the Ledger theme: contrast ratios of every token, structure (no `Card`, nav by width, Panel without radius), text
   scale 2.0 at 320/360 with the real fonts, amounts in Plex Mono with tabular figures and a shared right edge, the six font files and `OFL.txt`.
 - `test/sync_relay_test.dart` (texts, controller, two controllers through one `MemoryTransport`, Plan › Sync, join with an address), `test/backup_test.dart` (save/restore through a fake chooser).
+- Stage H app half: `test/harden_sync_ui_test.dart` (address table, Plan › Sync texts, create token incl. the header over a loopback socket, clock-behind dialog through the real error hooks),
+  `test/secure_key_test.dart` (mocked `bw/secure` channel, QR first), `test/restore_other_key_test.dart` (a backup sealed with key A restored into a wallet with key B), the device id in
+  `test/db_open_test.dart`, `test/wallet_db_io_test.dart` (real file) and `test/key_store_file_test.dart`.
 - `test/` — formatting and widget tests. Run: `tools/build.sh test` (format check, `flutter analyze`, `flutter test`).
