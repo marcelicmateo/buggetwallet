@@ -147,6 +147,25 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   emulator screens (two stale tests fixed: old 10-billion cap, privacy check matching a log timestamp). Follow-up:
   `searchRows` not yet wired into `searchAll` (J1).
 
+- 2026-10-23: **Stage I: UI quick wins** (`PATH_FORWARD.md` §4 I1–I9; no schema change, relay api stays 3). Today: "You're X over
+  for today. Nothing more today; tomorrow starts at Y." (core `PeriodBudget.allowanceTomorrow`) and "You're X over the plan for
+  this period."; one setup panel under the hero (save key, salary, payday) that folds to one line and opens again when a step
+  is added; Plan's ledger in exact cents with "Set aside for coming costs" and "Over by X" (rows add up to the total, no
+  negative anywhere). Undo after deleting a transaction or a goal (core `undeleteTransaction`/`undeleteGoal`, synced; links to a
+  bill, a matched cash entry or a transfer partner come back from a device-local record, also while a sync is pending);
+  toasts 2.5 s with actions, cleared on navigation, kept for screen readers; a wish needs its own name ("Open" jumps to it);
+  forms: floating labels, filled expected action, X on phone sheets, pinned "Confirm bill", last-used category (none = pick
+  one first), explainers above the CTA. Type tokens (`BwType`, nothing under 12 dp but eyebrows), 48 dp targets, add button
+  on every tab (FAB / rail "+"), search icon in the app bar, explainers shown once then behind an info icon, Plan › Look
+  (system / light / dark, device-local), compact rows below 400 dp, delivery-hour panel only after a delivery order in 90
+  days. Honest states: "Couldn't save. Nothing was changed." dialog for a refused write (core marks it: `isWriteError`),
+  "Stored on your relay", backup note on bill files, relay space "X of Y used" (relay `GET state` adds `bytes`/`maxBytes`),
+  "Matched with your bank" mark. Each half reviewed as it landed (found and fixed: undo while not caught up counted money
+  twice; theme rebuilt with a fade on every sync; "Couldn't save" hidden under phone sheets and raised for reads; disk-full
+  write lost its notice; ledger rounding; explainers marked seen on hidden tabs), merge delta reviewed. Fixed on v2: a
+  core test that used the real date. Stage run: importer 335, core 1501, relay 206, app 1282, desktop 11 files, web, perf,
+  emulator screens, dark frames read. Unlink of a matched expense waits for owner decision D2.
+
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -277,8 +296,14 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   a "period ended" panel with its own button sits above the hero like the "Salary landed" panel: OK, or fold the
   over-budget line into the sentence?
 - Build order (owner 2026-10-22: every feature first, the owner tests last): future spending (done) → bills database
-  (done) → outside reviews (done, `docs/review/`) → Stage G foundation (done 2026-10-23) → Stage H hardening (done 2026-10-23) → **Stage I UI quick wins → M6 owner live test**
+  (done) → outside reviews (done, `docs/review/`) → Stage G foundation (done 2026-10-23) → Stage H hardening (done 2026-10-23) → Stage I UI quick wins (done 2026-10-23) → **M6 owner live test** (owner starts `ci` for the M6 build)
   (plan with every review KEEP/CHANGE placed, delegation, owner decisions D1–D7 in `PATH_FORWARD.md`; queue in `PIPELINE.md` Stage G/H/I).
+- Owner checks after Stage I (phone): Add expense on a fresh wallet waits for a category; the add button never covers the
+  last rows (Today, Spending, Plan, search results); 320 dp app bar (logo, search, period chip); Plan › Look Dark switches at
+  once and survives a restart; spend past today's money and past the plan → both sentences, no negative figure; Plan's ledger
+  rows add up to the total; delete an expense and a goal → Undo (also from Weekly review); a big buy → name the wish → "Open";
+  bill sheet: "Confirm bill" stays in view; with storage full, saving shows "Couldn't save. Nothing was changed." over the
+  sheet; Plan › Sync against the updated relay shows "X of Y used"; TalkBack: the Undo toast stays until handled.
 - M6 adds four disaster drills to the owner checks (`PATH_FORWARD.md` §4 M6): new phone with the relay alive; new phone
   with the relay dead + `.bwb`; relay address switched to a second relay and back; laptop clock a day ahead for one sync.
 
