@@ -136,6 +136,19 @@ class Muted extends StatelessWidget {
   Widget build(BuildContext context) => Text(text, textAlign: align, style: TextStyle(fontSize: size, color: context.c.muted, height: 1.4));
 }
 
+/// One muted line "Not counted: 12 $, ..." for rows in a currency other than the wallet's (they are in no total).
+/// Nothing when [byCurrency] is empty. Signed cents by currency code, never rounded.
+class ForeignNote extends StatelessWidget {
+  final Map<String, int> byCurrency;
+  const ForeignNote(this.byCurrency, {super.key});
+  @override
+  Widget build(BuildContext context) {
+    if (byCurrency.isEmpty) return const SizedBox.shrink();
+    final codes = byCurrency.keys.toList()..sort();
+    return Muted('Not counted: ${[for (final k in codes) moneyExact(byCurrency[k]!, k)].join(', ')}', size: 12);
+  }
+}
+
 /// Status pill with icon + label, so state is never colour alone. The label wraps (the icon stays on the first
 /// line), so long messages fit narrow screens and large text; inside a Row, wrap it in Flexible.
 class StatusLabel extends StatelessWidget {

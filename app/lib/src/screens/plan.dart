@@ -140,7 +140,7 @@ class _PlanScreenState extends State<PlanScreen> {
     final s = wc.settings;
     final cur = wc.currency;
     final p = wc.period();
-    final lowIncome = p.received > 0 && p.received < s.salary * 0.9 && daysBetween(p.start, wc.today()) >= 4;
+    final lowIncome = p.lowIncome;
 
     Widget field(String key, String label, {bool money = true}) {
       void changed(String _) {
@@ -311,7 +311,6 @@ class _PlanScreenState extends State<PlanScreen> {
     }
     if (_errors.isNotEmpty) setState(_errors.clear);
     final changes = <String, Object?>{...vals};
-    if (changes['paydayDay'] case final int d) changes['paydayDay'] = d.clamp(1, 28);
     if (currency != s.currency) changes['currency'] = currency;
     final now = s.toMap();
     changes.removeWhere((k, v) => now[k] == v);
