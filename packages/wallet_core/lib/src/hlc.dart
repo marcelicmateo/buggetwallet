@@ -33,6 +33,24 @@ class Hlc implements Comparable<Hlc> {
   static int compareStrings(String a, String b) => a == b ? 0 : parse(a).compareTo(parse(b));
 }
 
+/// How far apart a device's wall clock and the clocks it takes may be (H7, bounded HLC): a peer file whose newest
+/// clock is further ahead of the wall clock is quarantined (`SyncProblemReason.clockDrift`), and a local write is
+/// refused ([ClockBehindException]) while the wall clock is further behind the newest clock the database holds.
+const maxClockDrift = Duration(hours: 1);
+
+/// A local write refused because this device's clock is more than [maxClockDrift] behind the newest clock its
+/// database holds (the date or time was set back). Nothing was written. The message is for people and holds no
+/// clock values.
+class ClockBehindException implements Exception {
+  const ClockBehindException();
+
+  String get message => "This device's clock is behind the time of the wallet's latest change. "
+      'Set the correct date and time, then try again.';
+
+  @override
+  String toString() => message;
+}
+
 /// Issues timestamps for local writes and absorbs remote ones.
 class HlcClock {
   final String node;

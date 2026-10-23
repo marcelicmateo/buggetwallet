@@ -37,11 +37,12 @@ class TestKey {
   /// base64url signature over [text].
   Future<String> sign(String text) async => _b64((await Ed25519().sign(utf8.encode(text), keyPair: await _pair)).bytes);
 
-  /// The v2 signature headers for one request. [covers] is the `X-BW-Covers` value ('' when none).
+  /// The v3 signature headers for one request to [host] (what the client addressed: lower case, `:port` unless the
+  /// default). [covers] is the `X-BW-Covers` value ('' when none).
   Future<Map<String, String>> headers(String method, String path, List<int> body,
-      {required int timeMs, String covers = '', bool withPub = true}) async {
+      {required int timeMs, required String host, String covers = '', bool withPub = true}) async {
     final hash = _hex((await Sha256().hash(body)).bytes);
-    final text = 'bw-relay-v2\n$method\n$path\n$covers\n$hash\n$timeMs';
+    final text = 'bw-relay-v3\n$method\n$host\n$path\n$covers\n$hash\n$timeMs';
     return {
       'x-bw-time': '$timeMs',
       'x-bw-sig': await sign(text),
@@ -72,12 +73,16 @@ class Harness {
     List<String>? origins,
     Directory? dir,
     DateTime? clock,
+    String? publicHost,
+    RelayTestHooks? hooks,
   }) async {
     final h = Harness._(dir ?? await Directory.systemTemp.createTemp('relay-test-'), clock ?? DateTime.utc(2026, 10, 22, 10));
     h._origins = origins;
     h._maxWallets = maxWallets;
     h._maxBytes = maxBytes;
     h._maxInFlight = maxInFlightBytes;
+    h.publicHost = publicHost;
+    h.hooks = hooks;
     await h._boot();
     return h;
   }
@@ -86,6 +91,14 @@ class Harness {
   late int _maxWallets;
   late int _maxBytes;
   late int _maxInFlight;
+
+  /// Passed to [Relay] on every boot (tests may change them before [restart]).
+  String? publicHost;
+  RelayTestHooks? hooks;
+
+  /// The host signed requests name: `127.0.0.1:<port>` unless a test sets another one (a request meant for another
+  /// relay).
+  String? signHost;
 
   Future<void> _boot() async {
     relay = Relay(
@@ -96,6 +109,8 @@ class Harness {
       maxInFlightBytes: _maxInFlight,
       now: () => clock,
       log: logs.add,
+      publicHost: publicHost,
+      hooks: hooks,
     );
     server = await relay.serve(port: 0);
     base = Uri.parse('http://127.0.0.1:${server.port}');
@@ -117,7 +132,8 @@ class Harness {
 
   /// The signature headers [key] would send now for this request ([path] from `/v2/` on).
   Future<Map<String, String>> sign(TestKey key, String method, String path, List<int> body, {String covers = '', bool withPub = true}) =>
-      key.headers(method, path, body, timeMs: clock.add(skew).millisecondsSinceEpoch, covers: covers, withPub: withPub);
+      key.headers(method, path, body,
+          timeMs: clock.add(skew).millisecondsSinceEpoch, host: signHost ?? base.authority, covers: covers, withPub: withPub);
 
   /// Sends a request signed with [key] (unsigned when null); [headers] are added after the signature headers, so a
   /// test can override them.

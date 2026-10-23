@@ -15,7 +15,7 @@ void main() {
   tearDown(() => sim.closeAll());
 
   int snapGets() => sim.transport.calls['getSnapshot'] ?? 0;
-  Future<List<int>> sealed(WalletRepo r) async => seal(backupPayload(r.snapshotOps()), sim.key);
+  Future<List<int>> sealed(WalletRepo r, String id) async => seal(backupPayload(r.snapshotOps()), sim.key, aad: aadSnapshot(id));
 
   /// A uploads two files; B applies the first one.
   Future<(Dev, Dev)> twoFiles() async {
@@ -33,7 +33,8 @@ void main() {
   group('unblock (M2)', () {
     test('a file that merely could not be fetched does not pull the snapshot', () async {
       final (a, b) = await twoFiles();
-      await sim.transport.putSnapshot('s${WalletRepo.schemaVersion}-0-aa', {a.id: 2}, await sealed(a.repo));
+      await sim.transport
+          .putSnapshot('s${WalletRepo.schemaVersion}-0-aa', {a.id: 2}, await sealed(a.repo, 's${WalletRepo.schemaVersion}-0-aa'));
       sim.transport.failGet(a.id, 2);
       final r = await b.sync();
       expect(snapGets(), 0, reason: 'one network blip is not worth a full snapshot download');
@@ -48,7 +49,8 @@ void main() {
 
     test('a quarantined file is not unblocked by a snapshot of an older schema', () async {
       final (a, b) = await twoFiles();
-      await sim.transport.putSnapshot('s${WalletRepo.schemaVersion - 1}-0-aa', {a.id: 2}, await sealed(a.repo));
+      await sim.transport
+          .putSnapshot('s${WalletRepo.schemaVersion - 1}-0-aa', {a.id: 2}, await sealed(a.repo, 's${WalletRepo.schemaVersion - 1}-0-aa'));
       sim.transport.corrupt(a.id, 2);
       final r = await b.sync();
       expect(snapGets(), 0);
@@ -59,7 +61,8 @@ void main() {
 
     test('a quarantined file a current snapshot covers is still unblocked by it', () async {
       final (a, b) = await twoFiles();
-      await sim.transport.putSnapshot('s${WalletRepo.schemaVersion}-0-aa', {a.id: 2}, await sealed(a.repo));
+      await sim.transport
+          .putSnapshot('s${WalletRepo.schemaVersion}-0-aa', {a.id: 2}, await sealed(a.repo, 's${WalletRepo.schemaVersion}-0-aa'));
       sim.transport.corrupt(a.id, 2);
       final r = await b.sync();
       expect(snapGets(), 1);
@@ -84,7 +87,8 @@ void main() {
 
     test('a refused snapshot is downloaded once, reported, and skipped until another id appears', () async {
       final other = VaultKey.generate();
-      final a = await pruned('s${WalletRepo.schemaVersion}-0-aa', (a) => seal(backupPayload(a.repo.snapshotOps()), other));
+      final a = await pruned('s${WalletRepo.schemaVersion}-0-aa',
+          (a) => seal(backupPayload(a.repo.snapshotOps()), other, aad: aadSnapshot('s${WalletRepo.schemaVersion}-0-aa')));
       final c = sim.device();
       final r1 = await c.sync();
       expect(snapGets(), 1);
@@ -101,7 +105,8 @@ void main() {
 
       // Another device writes a good snapshot: a new id, fetched and applied.
       sim.tick();
-      await sim.transport.putSnapshot('s${WalletRepo.schemaVersion}-1-bb', {a.id: 2}, await sealed(a.repo));
+      await sim.transport
+          .putSnapshot('s${WalletRepo.schemaVersion}-1-bb', {a.id: 2}, await sealed(a.repo, 's${WalletRepo.schemaVersion}-1-bb'));
       final r3 = await c.sync();
       expect(snapGets(), 2);
       expect(r3.caughtUp, isTrue);
@@ -111,7 +116,7 @@ void main() {
 
     test('a snapshot that could not be fetched is tried again after an hour, not before', () async {
       const id = 's${WalletRepo.schemaVersion}-0-aa';
-      await pruned(id, (a) => sealed(a.repo));
+      await pruned(id, (a) => sealed(a.repo, id));
       sim.transport.failGetSnapshot(id);
       final c = sim.device();
       final r1 = await c.sync();
@@ -133,7 +138,7 @@ void main() {
       final a = sim.device();
       a.repo.updateSettings({'rent': 1});
       await a.sync();
-      await sim.transport.putSnapshot(id, {a.id: 1}, await seal(utf8.encode('{"v":99,"ops":[]}'), sim.key));
+      await sim.transport.putSnapshot(id, {a.id: 1}, await seal(utf8.encode('{"v":99,"ops":[]}'), sim.key, aad: aadSnapshot(id)));
       final c = sim.device();
       expect((await c.sync()).problems.singleWhere((p) => p.snapshot).reason, SyncProblemReason.unknownVersion);
       await c.sync();

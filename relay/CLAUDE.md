@@ -14,10 +14,15 @@ Never put a signature, public key, body, full id or client address in a log line
   Every answer carries `Date` (relay clock, exposed to CORS). Body bytes buffered per client address (`_held`, released when the
   request is answered) are capped by `maxInFlightBytes` (32 MiB → 429 when other requests of that address hold bytes;
   test hook `onHold`); an unknown wallet's `PUT d` with seq ≠ 1 or on a full relay is refused before buffering. `now` drives lastSeen, the 90-day rule and the rate limit.
-- `lib/src/signing.dart` — `signedText`, `sha256OfBytes`, `decodeBase64Url` (exact length, no padding),
-  `verifySignature` (Ed25519, never throws), `signatureWindow`.
-- `lib/src/wallet.dart` — `apiVersion` (2), `Wallet` (public key `pub`, devices, snapshots, byte total), `meta.json` save/load (atomic temp + rename), `prune`,
-  name patterns, `writeAtomic`. `lib/src/rate_limit.dart` — token bucket (20/s, burst 100) per client address.
+- `lib/src/signing.dart` — `signedText` (`bw-relay-v3`: method, host, path, covers, body hash, time; the host is
+  `Relay(publicHost:)` when set, else the request's `Host`, lower case), `sha256OfBytes`, `decodeBase64Url` (exact
+  length, no padding), `verifySignature` (Ed25519, never throws), `signatureWindow`.
+- `lib/src/wallet.dart` — `apiVersion` (3), `Wallet` (public key `pub`, `instance` (32 random hex per wallet, kept in
+  `meta.json`, made and saved at the first load of a meta without one; state JSON `instance`), devices, snapshots, byte
+  total), `meta.json` save/load (atomic temp + rename; load deletes `.tmp-*` files of an interrupted meta save), `prune`,
+  name patterns, `writeAtomic`, `writeData` (sync file + `RelayTestHooks.afterFileWrite(wid, device, seq)`),
+  `RelayTestHooks` (`Relay(hooks:)`, tests only: `afterFileWrite`, `beforeMetaSave(wid)` before a request's meta save;
+  a throw = a crash or full disk there). `lib/src/rate_limit.dart` — token bucket (20/s, burst 100) per client address.
 
 ## Rules
 - Storage: `<wid>/meta.json` (`v` 2, the public key `pub` stored by the creating request (trust on first use; nothing

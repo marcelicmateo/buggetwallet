@@ -1,4 +1,4 @@
-// Request signatures of protocol v2 (docs/context/RELAY_PROTOCOL.md, "Signed requests"): the relay only verifies.
+// Request signatures of protocol v3 (docs/context/RELAY_PROTOCOL.md, "Signed requests"): the relay only verifies.
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -8,9 +8,14 @@ import 'package:cryptography/dart.dart';
 /// Allowed distance between `X-BW-Time` and the relay clock.
 const Duration signatureWindow = Duration(minutes: 5);
 
-/// The string a v2 request signs (UTF-8): method, path from `/v2/` on, the `X-BW-Covers` value (or empty), the body's
-/// SHA-256 as lowercase hex, and the `X-BW-Time` value, joined by LF.
-String signedText(String method, String path, String covers, String bodyHash, String time) =>
+/// The string a v3 request signs (UTF-8): method, the host the client addressed (lower case, `:port` only when not the
+/// scheme's default), path from `/v2/` on, the `X-BW-Covers` value (or empty), the body's SHA-256 as lowercase hex, and
+/// the `X-BW-Time` value, joined by LF. The relay accepts only v3.
+String signedText(String method, String host, String path, String covers, String bodyHash, String time) =>
+    'bw-relay-v3\n$method\n$host\n$path\n$covers\n$bodyHash\n$time';
+
+/// The api-2 text (`bw-relay-v2`, no host): only to tell an app of that version, on `GET state`, to update.
+String signedTextV2(String method, String path, String covers, String bodyHash, String time) =>
     'bw-relay-v2\n$method\n$path\n$covers\n$bodyHash\n$time';
 
 /// Lowercase hex SHA-256 of [bytes].

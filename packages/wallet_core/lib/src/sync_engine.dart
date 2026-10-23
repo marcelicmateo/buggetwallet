@@ -42,7 +42,11 @@ class RelayDevice {
 class RelayState {
   final Map<String, RelayDevice> devices;
   final RelaySnapshot? snapshot, previous;
-  const RelayState({this.devices = const {}, this.snapshot, this.previous});
+
+  /// The relay's id for this wallet's store (32 hex, random, kept in its `meta.json`): a wiped or replaced relay
+  /// names another one. Null from an older relay (api 2) and for a wallet it does not know yet.
+  final String? instance;
+  const RelayState({this.devices = const {}, this.snapshot, this.previous, this.instance});
 
   /// A relay that never heard of this wallet.
   static const empty = RelayState();
@@ -80,7 +84,12 @@ class RelayState {
 
     final devs = j['devices'] ?? const <String, Object?>{};
     if (devs is! Map) throw const FormatException('bad devices');
+    final instance = j['instance'];
+    if (instance != null && (instance is! String || !RegExp(r'^[0-9a-f]{32}$').hasMatch(instance))) {
+      throw const FormatException('bad instance');
+    }
     return RelayState(
+      instance: instance as String?,
       devices: {for (final MapEntry(:key, :value) in devs.entries) '$key': dev(value)},
       snapshot: snap(j['snapshot']),
       previous: snap(j['previous']),
@@ -92,6 +101,7 @@ class RelayState {
         'devices': {for (final e in devices.entries) e.key: e.value.toJson()},
         'snapshot': snapshot?.toJson(),
         'previous': previous?.toJson(),
+        if (instance != null) 'instance': instance,
       };
 }
 
@@ -126,6 +136,9 @@ enum TransportFailure {
 
   /// The relay's clock (its `Date` header) differs from this device's by more than a day: not trusted, not retried.
   clockSkew,
+
+  /// 403 `createToken`: the relay creates wallets only with its create token, and this device sent none or a wrong one.
+  createToken,
 
   /// Anything else.
   other,
@@ -170,22 +183,27 @@ class _Refused implements Exception {
   final SyncProblemReason reason;
   final Object error;
   final StackTrace stack;
-  _Refused(this.reason, this.error, this.stack);
+
+  /// [SyncProblemReason.clockDrift]: when (wall clock, ms) the file is no longer too far ahead.
+  final int? retryAt;
+  _Refused(this.reason, this.error, this.stack, {this.retryAt});
 }
 
 SyncProblemReason _unsealReason(VaultException e) => switch (e.failure) {
       UnsealFailure.badKey => SyncProblemReason.badKey,
       UnsealFailure.newerFormat => SyncProblemReason.unknownVersion,
-      _ => SyncProblemReason.corrupt,
+      UnsealFailure.damaged || UnsealFailure.tooLarge || null => SyncProblemReason.corrupt,
     };
 
-/// Unseals [bytes], parses them with [parse] and applies the ops (matching is left to the caller). Returns (fields
-/// changed, ops read). Throws [_Refused] when the file cannot be used; database errors from [_dbTrouble] are rethrown
-/// as they are. The file is applied in one transaction: a refused file changes nothing.
-Future<(int, int)> _applyBytes(WalletRepo repo, VaultKey key, List<int> bytes, List<Op> Function(List<int> clear) parse) async {
+/// Unseals [bytes] (sealed for [aad]), parses them with [parse] and applies the ops (matching is left to the caller).
+/// Returns (fields changed, ops read). Throws [_Refused] when the file cannot be used, also when its newest clock is
+/// more than [maxClockDrift] ahead of [nowMs]; database errors from [_dbTrouble] are rethrown as they are. The file is
+/// applied in one transaction: a refused file changes nothing.
+Future<(int, int)> _applyBytes(
+    WalletRepo repo, VaultKey key, List<int> bytes, List<Op> Function(List<int> clear) parse, List<int> aad, int nowMs) async {
   final List<int> clear;
   try {
-    clear = await unseal(bytes, key);
+    clear = await unseal(bytes, key, aad: aad);
   } on VaultException catch (e, st) {
     throw _Refused(_unsealReason(e), e, st);
   }
@@ -196,6 +214,16 @@ Future<(int, int)> _applyBytes(WalletRepo repo, VaultKey key, List<int> bytes, L
     throw _Refused(e.reason == BackupFailure.newerVersion ? SyncProblemReason.unknownVersion : SyncProblemReason.corrupt, e, st);
   } on Object catch (e, st) {
     throw _Refused(SyncProblemReason.corrupt, e, st);
+  }
+  var newest = 0;
+  for (final op in ops) {
+    final m = Hlc.parse(op.hlc).millis;
+    if (m > newest) newest = m;
+  }
+  final drift = maxClockDrift.inMilliseconds;
+  if (newest - nowMs > drift) {
+    throw _Refused(SyncProblemReason.clockDrift, StateError('clock ahead by ${(newest - nowMs) ~/ 60000} min'), StackTrace.current,
+        retryAt: newest - drift);
   }
   try {
     return (repo.applyRemote(ops, match: false), ops.length);
@@ -261,6 +289,118 @@ class SyncEngine {
   /// Device-local values: this device's last uploaded seq (absent = never met a relay) and when it first did.
   static const sentKey = 'syncSent', sinceKey = 'syncSince';
 
+  /// Device-local: the relay instance id ([RelayState.instance]) of the last run whose upload went through. Another id
+  /// from the relay = a wiped, restored or replaced relay: that run is a first connect ([SyncReport.relayChanged]).
+  static const instanceKey = 'syncInstance';
+
+  /// Device-local (H5b): the relay device name this install writes under now, its **stream** ([streamName]; absent =
+  /// its device id, as every file before Stage H). A fresh stream is taken whenever this one may not be this install's
+  /// alone ([_move]): the relay holds fewer of its files than were sent (a restored copy or a wiped relay: a seq reused
+  /// with other content would be skipped by peers that read the old one), more than were sent with no own upload cut
+  /// short, or a 409 on an own seq (another install with this id, e.g. a copied database). The new stream starts at
+  /// seq 1 with the whole state; peers never saw its name, so they read all of it.
+  static const streamKey = 'syncStream';
+
+  /// Device-local: the streams this install has written (JSON list), the current one included once it uploaded to it,
+  /// the old id's after an id change (H6). It acks under each of them that the relay still lists, so nothing it wrote
+  /// holds back pruning. A stream left because another install may write it is dropped from the list (never acked as).
+  static const streamsKey = 'syncStreams';
+
+  /// Device-local: streams of this device id written by another install, already reported as
+  /// [SyncProblemReason.deviceIdInUse] (JSON list), so each is reported once.
+  static const foreignKey = 'syncForeign';
+
+  /// Device-local: `{"from": <the stream's last before it>, "parts": {"<seq>": "<fileHash of the sealed part>"}}` while
+  /// an upload is under way (each part recorded before its PUT). Cleared once every part is stored (and on a 409).
+  /// When the stream holds more than [sentKey] says, a seq counts as this install's own cut-off file only if its stored
+  /// bytes hash to the recorded part (fetched once to check); anything else is another install's.
+  static const sendingKey = 'syncSending';
+
+  /// Device-local: per stream in [streamsKey] that this install no longer writes, the relay `last` when it left it
+  /// (`{"<stream>": n}`; an H6 id change records the old id's `syncSent`). Should the relay ever hold more, another install
+  /// writes it: it is dropped from [streamsKey] (never acked as again) and treated as foreign.
+  static const streamLastKey = 'syncStreamLast';
+
+  /// Device-local: the acks this install stored per stream it acks as (`{"<stream>": {"<device>": seq}}`). The relay
+  /// only ever raises acks, so one below these means the relay was rolled back (its data folder restored from a copy,
+  /// even with the same instance): every cursor goes back to 0 ([SyncReport.relayChanged]).
+  static const ackedKey = 'syncAcked';
+
+  static Map<String, Object?> _map(WalletRepo repo, String key) {
+    final raw = repo.localValue(key);
+    if (raw == null) return {};
+    try {
+      return (jsonDecode(raw) as Map).cast<String, Object?>();
+    } on Object catch (e, st) {
+      logError(_log, 'sync.local.unreadable', e, st, fields: {'key': key});
+      return {};
+    }
+  }
+
+  static void _setMap(WalletRepo repo, String key, Map<String, Object?> v) => repo.setLocalValue(key, v.isEmpty ? null : jsonEncode(v));
+
+  /// The relay device name of [deviceId]'s stream [epoch]: the id itself for epoch 0 (every file before Stage H), else
+  /// `<id>-<epoch><tag>` with [tag] six random lower-case letters, so two installs (or one install after a double
+  /// restore) never pick the same name. Device ids hold only letters and digits (at most 48), so the name parses back
+  /// and stays within the relay's 64 characters.
+  static String streamName(String deviceId, int epoch, [String tag = '']) => epoch == 0 ? deviceId : '$deviceId-$epoch$tag';
+
+  static final _streamPattern = RegExp(r'^(.+)-(\d{1,9})([a-z]{6})$');
+
+  /// The device id a relay device name belongs to ([streamName] backwards).
+  static String streamBase(String stream) => _streamPattern.firstMatch(stream)?.group(1) ?? stream;
+
+  /// The epoch of a relay device name (0 for a plain id).
+  static int streamEpoch(String stream) => int.tryParse(_streamPattern.firstMatch(stream)?.group(2) ?? '') ?? 0;
+
+  /// This install's current stream name ([streamKey]; one of another id, left over, counts as absent).
+  static String _streamOf(WalletRepo repo) {
+    final s = repo.localValue(streamKey);
+    return s != null && streamBase(s) == repo.deviceId ? s : repo.deviceId;
+  }
+
+  static List<String> _list(WalletRepo repo, String key) {
+    final raw = repo.localValue(key);
+    if (raw == null) return [];
+    try {
+      return [for (final v in jsonDecode(raw) as List) v as String];
+    } on Object catch (e, st) {
+      logError(_log, 'sync.streams.unreadable', e, st);
+      return [];
+    }
+  }
+
+  static void _setList(WalletRepo repo, String key, List<String> v) => repo.setLocalValue(key, v.isEmpty ? null : jsonEncode(v));
+
+  /// Takes a fresh stream ([streamKey]): the next epoch above every stream of this id the relay lists or this install
+  /// wrote, with a random tag. [shared]: the stream left may be written by another install, so it is no longer acked as
+  /// and not reported as foreign later; otherwise (the relay lost files) it stays in [streamsKey]. [sentKey] and
+  /// [sendingKey] are cleared, so the next upload is the whole state.
+  static String _move(WalletRepo repo, RelayState state, {required bool shared, required String reason}) {
+    final cur = _streamOf(repo), id = repo.deviceId;
+    final written = _list(repo, streamsKey);
+    if (shared) {
+      written.remove(cur);
+      _setList(repo, foreignKey, {..._list(repo, foreignKey), cur}.toList());
+    } else {
+      if (repo.localValue(sentKey) != null && !written.contains(cur)) written.add(cur); // listed only since Stage H
+      // Its relay `last` now: should it grow, another install writes it ([streamLastKey]).
+      _setMap(repo, streamLastKey, {..._map(repo, streamLastKey), cur: state.devices[cur]?.last ?? 0});
+    }
+    var epoch = streamEpoch(cur);
+    for (final d in [...state.devices.keys, ...written]) {
+      if (streamBase(d) == id) epoch = max(epoch, streamEpoch(d));
+    }
+    final r = Random.secure();
+    final name = streamName(id, epoch + 1, String.fromCharCodes([for (var i = 0; i < 6; i++) 0x61 + r.nextInt(26)]));
+    _setList(repo, streamsKey, written);
+    repo.setLocalValue(streamKey, name);
+    repo.setLocalValue(sentKey, null);
+    repo.setLocalValue(sendingKey, null);
+    logEvent(_log, Level.WARNING, 'sync.stream.moved', {'epoch': epoch + 1, 'reason': reason});
+    return name;
+  }
+
   /// Device-local: per (peer, device) pair where the peer's ack for that device's files is below what this device holds
   /// of them (its cursor, or its own last), that ack and since when (ms) it has stayed there
   /// (`{"<peer>/<device>": [ack, ms]}`); and when this device last wrote a heal snapshot (ms).
@@ -276,7 +416,9 @@ class SyncEngine {
   /// [SyncProblemReason.corrupt] are never retried for a build change: only a changed file is.
   String get build => '$syncReaderVersion.${WalletRepo.schemaVersion}+$appVersion';
 
-  static String _short(String device) => SyncProblem.shortId(device);
+  /// The short id the app shows for relay device name [device]: of its device id, so every stream of one device
+  /// reads as that device.
+  static String _short(String device) => SyncProblem.shortId(streamBase(device));
 
   /// A transport failure that ends the run, as a short message for people (no address, id or path).
   static SyncException _fatal(String step, TransportException e) {
@@ -289,26 +431,117 @@ class SyncEngine {
       TransportFailure.olderApi => 'The relay runs an older version. Update the relay on the home server.',
       TransportFailure.clockSkew =>
         "This device's clock and the relay's clock differ by more than a day. Check the date and time settings.",
+      TransportFailure.createToken => "The relay needs its create token to start a new wallet. Enter it in this device's sync settings.",
       _ => 'The relay answered with an error. Try again later.',
     });
   }
 
-  Future<SyncReport> run(WalletRepo repo) async {
+  Future<SyncReport>? _running;
+
+  /// One sync run: upload, apply, ack, match/snapshot when caught up. A call while a run of this engine is still in
+  /// progress starts no second one: it returns the running run's future (`sync.run.joined`). Runs of two engines on
+  /// one database are not guarded (the app keeps one engine per wallet).
+  Future<SyncReport> run(WalletRepo repo) {
+    if (_running case final r?) {
+      logEvent(_log, Level.FINE, 'sync.run.joined');
+      return r;
+    }
+    return _running = _run(repo).whenComplete(() => _running = null);
+  }
+
+  Future<SyncReport> _run(WalletRepo repo) async {
     final t = PerfTimer('sync.run', warnMs: 2000);
     final me = repo.deviceId;
-    final RelayState state;
+    RelayState state;
     try {
       state = await transport.state();
     } on TransportException catch (e) {
       throw _fatal('state', e);
     }
+    // H5: a relay that names another instance than last time lost (or never had) what this device knows of it, even
+    // when its seq numbers look plausible (an older image restored): a first connect, every cursor from the start.
+    final storedInstance = repo.localValue(instanceKey);
+    var relayChanged = state.instance != null && storedInstance != null && storedInstance != state.instance;
+    // HBb: acks only ever grow on a relay. One below what this install stored = the relay's folder was restored from an
+    // older copy (same instance): files it now numbers again may differ from the ones read. Start over like a new relay.
+    if (!relayChanged) {
+      var rolledBack = false;
+      for (final MapEntry(key: s, value: m) in _map(repo, ackedKey).entries) {
+        final relay = state.devices[s]?.acks ?? const <String, int>{};
+        if (m is Map && m.entries.any((e) => e.value is int && (relay[e.key] ?? 0) < (e.value as int))) rolledBack = true;
+      }
+      if (rolledBack) {
+        logEvent(_log, Level.WARNING, 'sync.relay.rolledBack');
+        relayChanged = true;
+      }
+    }
+    if (relayChanged) {
+      repo.setLocalValue(ackedKey, null);
+      final reset = repo.syncCursors();
+      for (final d in reset.keys) {
+        repo.setSyncCursor(d, 0);
+      }
+      logEvent(_log, Level.WARNING, 'sync.relay.changed', {'cursors': reset.length});
+    }
 
     // 1. Upload: bill files first (a peer that reads a bill row can then fetch its file), then the ops.
     var (blobsSent, blobMissing) = await _uploadBlobs(repo);
-    final walletKnown = (state.devices[me]?.last ?? 0) > 0;
+    final walletKnown = (state.devices[_streamOf(repo)]?.last ?? 0) > 0;
     // 404 on a bill file of a wallet the relay knows: an older relay without blob storage.
     var blobsUnsupported = blobMissing && walletKnown;
-    final (sent, myLast) = await _upload(repo, state);
+    final (sent, myLast, inUseUpload) = await _upload(repo, state, relayChanged: relayChanged);
+    if (state.devices.isEmpty && myLast > 0) {
+      // The relay did not know this wallet (new, or wiped) and this upload created it: its instance id exists only now.
+      // Asked once more, so this run reports and keeps it (a wiped relay is then `relayChanged` here too).
+      try {
+        state = await transport.state();
+        if (state.instance != null && storedInstance != null && storedInstance != state.instance) {
+          relayChanged = true;
+          logEvent(_log, Level.WARNING, 'sync.relay.changed', {'cursors': 0});
+        }
+        _keepInstance(repo, state);
+      } on TransportException catch (e) {
+        logEvent(_log, Level.WARNING, 'sync.state.again', {'failure': e.failure.name});
+      }
+    }
+    // From here on `stream` is this device's relay name (the upload may have started a new epoch). Its older streams
+    // are read like a peer's (idempotent: this device holds those ops) and acked under their names too, so they never
+    // hold back pruning or look stuck. A stream of this id with a higher epoch than this device ever used was written
+    // by another install with this id.
+    final stream = _streamOf(repo);
+    final written = _list(repo, streamsKey);
+    // A stream this install left that holds more files than when it left it: another install writes it (an H6 id
+    // change on a copied database while the original goes on, or a 'behind' stream someone else continued). Never
+    // acked as again: its acks would claim reads that install never made, and let the relay prune too early.
+    final leftAt = _map(repo, streamLastKey);
+    final grown = [
+      for (final d in written)
+        if (d != stream && leftAt[d] is int && (state.devices[d]?.last ?? 0) > (leftAt[d] as int)) d
+    ];
+    if (grown.isNotEmpty) {
+      logEvent(_log, Level.WARNING, 'sync.stream.grown', {'streams': grown.length});
+      written.removeWhere(grown.contains);
+      _setList(repo, streamsKey, written);
+      _setList(repo, foreignKey, {..._list(repo, foreignKey), ...grown}.toList());
+      _setMap(repo, ackedKey, _map(repo, ackedKey)..removeWhere((k, _) => grown.contains(k)));
+    }
+    final ownOld = [
+      for (final d in written)
+        if (d != stream && state.devices.containsKey(d)) d
+    ]..sort();
+    // A stream of this id that this install never wrote and has not reported yet: another install with this id (it
+    // writes there, so this install only reads it). Reported once; nothing to do, both keep syncing.
+    final reported = _list(repo, foreignKey);
+    final sighted = [
+      for (final d in state.devices.keys)
+        if (streamBase(d) == me && d != stream && !written.contains(d) && !reported.contains(d)) d
+    ];
+    if (sighted.isNotEmpty) {
+      logEvent(_log, Level.WARNING, 'sync.stream.foreign', {'streams': sighted.length});
+      _setList(repo, foreignKey, [...reported, ...sighted]);
+    }
+    final inUse =
+        inUseUpload ?? (sighted.isNotEmpty || grown.isNotEmpty ? SyncProblem(_short(me), SyncProblemReason.deviceIdInUse, bytes: 0) : null);
     if (blobMissing && !walletKnown && myLast > 0) {
       // A relay creates a wallet only with this device's first file: the files it refused before that go now.
       final (more, missingAgain) = await _uploadBlobs(repo);
@@ -317,8 +550,15 @@ class SyncEngine {
     }
 
     // 2. + 3. Apply the other devices' files.
-    final peers = state.devices.keys.where((d) => d != me).toList()..sort();
+    final peers = state.devices.keys.where((d) => d != stream).toList()..sort();
     final cursors = repo.syncCursors();
+    for (final d in cursors.keys.where((d) => !state.devices.containsKey(d)).toList()) {
+      // A stream the relay does not list any more (a wiped relay, or one restored from a copy made before it): if that
+      // name comes back, its files start at 1 and are read from there.
+      logEvent(_log, Level.WARNING, 'sync.cursor.reset', {'was': cursors[d], 'last': 0});
+      repo.setSyncCursor(d, 0);
+      cursors.remove(d);
+    }
     for (final d in peers) {
       final c = cursors[d] ?? 0, last = state.devices[d]!.last;
       if (c > last) {
@@ -331,7 +571,7 @@ class SyncEngine {
     int cur(String d) => cursors[d] ?? 0;
 
     var received = 0, filesRead = 0, opsRead = 0, bytesRead = 0, known = 0;
-    final problems = <SyncProblem>[];
+    final problems = <SyncProblem>[if (inUse != null) inUse];
     final waiting = <SyncWaiting>[];
     final bad = BadFiles.load(repo), listed = <String>{};
     final badSnaps = _BadSnapshots.load(repo);
@@ -369,7 +609,7 @@ class SyncEngine {
           return;
         }
         final was = bad.byKey[k];
-        if (was != null && !was.retryAfterUpgrade(build) && was.hash == await fileHash(bytes)) {
+        if (was != null && !was.retryNow(build, repo.clock.now()) && was.hash == await fileHash(bytes)) {
           listed.add(k);
           blocked[d] = (SyncWaiting(_short(d), seq, reason: was.reason), was.problem(isNew: false));
           known++;
@@ -377,11 +617,11 @@ class SyncEngine {
         }
         final int changed, count;
         try {
-          (changed, count) = await _applyBytes(repo, key, bytes, _fileOps);
+          (changed, count) = await _applyBytes(repo, key, bytes, _fileOps, aadSyncFile(d, seq), repo.clock.now());
         } on _Refused catch (r) {
           logError(_log, 'sync.file.failed', r.error, r.stack, fields: {'seq': seq, 'reason': r.reason.name, 'bytes': bytes.length});
           listed.add(k);
-          bad.byKey[k] = BadFile(d, '$seq', r.reason, size: bytes.length, hash: await fileHash(bytes), build: build);
+          bad.byKey[k] = BadFile(d, '$seq', r.reason, size: bytes.length, hash: await fileHash(bytes), build: build, retryAt: r.retryAt);
           badChanged = true;
           blocked[d] = (SyncWaiting(_short(d), seq, reason: r.reason), SyncProblem(_short(d), r.reason, bytes: bytes.length));
           return;
@@ -459,29 +699,60 @@ class SyncEngine {
     // 4. Ack what was applied.
     final now = _now();
     var acked = false;
+    final acks = {
+      for (final d in peers)
+        if (cur(d) > 0 && cur(d) <= state.devices[d]!.last) d: cur(d)
+    };
+    final stored = _map(repo, ackedKey);
+    void remember(String as, Map<String, int> m) {
+      final had = stored[as] is Map ? (stored[as] as Map).cast<String, Object?>() : <String, Object?>{};
+      stored[as] = {
+        ...had,
+        for (final e in m.entries)
+          if (e.value > ((had[e.key] as int?) ?? 0)) e.key: e.value,
+      };
+    }
+
     try {
-      await transport.ack(me, {
-        for (final d in peers)
-          if (cur(d) > 0 && cur(d) <= state.devices[d]!.last) d: cur(d)
-      });
+      await transport.ack(stream, acks);
       acked = true;
+      remember(stream, acks);
+      for (final old in ownOld) {
+        final m = {
+          for (final e in acks.entries)
+            if (e.key != old) e.key: e.value,
+          if (myLast > 0) stream: myLast,
+        };
+        await transport.ack(old, m);
+        remember(old, m);
+      }
     } on TransportException catch (e) {
       logEvent(_log, Level.WARNING, 'sync.ack.failed', {'failure': e.failure.name});
     }
+    _setMap(repo, ackedKey, stored);
 
     // 4b. Bill files deleted here go from the relay too (a failure keeps them queued).
     final blobsDeleted = await _deleteBlobs(repo);
 
     // 5. Caught up: match, and maybe write a snapshot.
-    final heal = _trackStuck(repo, state, cursors, myLast, now);
-    final caughtUp = waiting.isEmpty && problems.isEmpty && peers.every((d) => cur(d) >= state.devices[d]!.last);
+    final heal = _trackStuck(repo, state, cursors, myLast, now, stream, {...ownOld, stream});
+    // deviceIdInUse is information about this install's own stream (already handled), not a file left unread.
+    final caughtUp = waiting.isEmpty &&
+        problems.every((p) => p.reason == SyncProblemReason.deviceIdInUse) &&
+        peers.every((d) => cur(d) >= state.devices[d]!.last);
     // Snapshots not used are reported, but a device that applied every file is caught up without them.
     problems.addAll(badSnaps.problems.values);
     // Local imports and deletes match at once only while this holds (WalletRepo.syncCaughtUp); otherwise they wait
     // for the next caught-up run, like the ops applied here.
     repo.setLocalValue(WalletRepo.caughtUpKey, caughtUp ? '1' : '0');
     if (caughtUp) {
-      repo.runPendingMatch();
+      try {
+        repo.runPendingMatch();
+      } on ClockBehindException catch (e, st) {
+        // Never from the internal write paths it uses; kept so a run can never fail on the device clock. Matching stays
+        // pending (match_pending) for the next run.
+        logError(_log, 'sync.match.clockBehind', e, st);
+      }
       await _maybeSnapshot(repo, state, cursors, myLast, now, heal: heal);
     } else {
       logEvent(_log, Level.INFO, 'sync.match.waiting', {'waiting': waiting.length, 'bad': problems.length});
@@ -491,7 +762,13 @@ class SyncEngine {
     if (problems.isNotEmpty) {
       logEvent(_log, fresh > 0 ? Level.WARNING : Level.INFO, 'sync.files.skipped', {'bad': problems.length, 'new': fresh});
     }
-    final ids = {...state.devices.keys, me}.toList()..sort();
+    // One entry per device id, however many streams it has (lastSeen = the newest of them).
+    final seenById = <String, DateTime?>{};
+    for (final MapEntry(key: d, value: dev) in state.devices.entries) {
+      final b = streamBase(d), was = seenById[b], seen = dev.lastSeen;
+      seenById[b] = was == null || (seen != null && seen.isAfter(was)) ? seen : was;
+    }
+    final ids = {...seenById.keys, me}.toList()..sort();
     t.done({
       'devices': peers.length,
       'sent': sent,
@@ -515,10 +792,11 @@ class SyncEngine {
         blobsSent: blobsSent,
         blobsWaiting: repo.queuedBlobs().length,
         blobsUnsupported: blobsUnsupported,
+        relayInstance: state.instance,
+        relayChanged: relayChanged,
         devices: [
           for (final d in ids)
-            SyncDevice(_short(d),
-                lastSeen: d == me ? (acked || sent > 0 ? now : state.devices[d]?.lastSeen) : state.devices[d]!.lastSeen, isThis: d == me),
+            SyncDevice(_short(d), lastSeen: d == me ? (acked || sent > 0 ? now : seenById[d]) : seenById[d], isThis: d == me),
         ]);
   }
 
@@ -571,13 +849,33 @@ class SyncEngine {
     return n;
   }
 
-  /// Uploads this device's next file (several when over [partBytes]). Returns (ops sent, this device's last seq on the
-  /// relay after it).
-  Future<(int, int)> _upload(WalletRepo repo, RelayState state) async {
-    final me = repo.deviceId;
-    final relayLast = state.devices[me]?.last ?? 0;
-    final marker = int.tryParse(repo.localValue(sentKey) ?? '');
-    final first = marker == null || relayLast < marker;
+  /// Uploads this device's next file (several when over [partBytes]) to its stream, after moving to a fresh stream
+  /// when the current one may not be this install's alone ([streamKey], [_move]). Returns (ops sent, this stream's last
+  /// seq on the relay after it, the [SyncProblemReason.deviceIdInUse] problem when it moved because another install
+  /// writes with this id: informational, the run goes on and the problem heals itself).
+  Future<(int, int, SyncProblem?)> _upload(WalletRepo repo, RelayState state, {required bool relayChanged, bool moved = false}) async {
+    SyncProblem? inUse;
+    SyncProblem foreign(int bytes) => SyncProblem(_short(repo.deviceId), SyncProblemReason.deviceIdInUse, bytes: bytes);
+    var me = _streamOf(repo);
+    var relayLast = state.devices[me]?.last ?? 0;
+    var marker = int.tryParse(repo.localValue(sentKey) ?? '');
+    if (marker != null && relayLast < marker) {
+      // The relay lost files of this stream (a restored copy, a wiped relay): never reuse a seq with other content.
+      me = _move(repo, state, shared: false, reason: 'behind');
+    } else if (relayLast > (marker ?? 0)) {
+      // More files than this install stored: its own cut-off upload only if every extra seq holds a part it recorded
+      // ([sendingKey], checked by hash); else another install writes here (a copied database or key store, or this
+      // database restored from an older copy). Leave it to them and read it as a peer.
+      final own = await _ownCutOff(repo, me, marker ?? 0, relayLast);
+      if (own == null) return (0, relayLast, null); // could not check now: nothing sent, checked again next run
+      if (!own) {
+        me = _move(repo, state, shared: !relayChanged, reason: relayChanged ? 'relay' : 'foreign');
+        if (!relayChanged) inUse = foreign(0);
+      }
+    }
+    relayLast = state.devices[me]?.last ?? 0;
+    marker = int.tryParse(repo.localValue(sentKey) ?? '');
+    final first = marker == null || relayChanged;
     final pending = repo.pendingOps();
     final ops = first ? repo.snapshotOps() : [for (final (_, op) in pending) op];
     if (ops.isEmpty) {
@@ -589,29 +887,45 @@ class SyncEngine {
       } else {
         logEvent(_log, Level.FINE, 'sync.export.none');
       }
-      return (0, relayLast);
+      _keepInstance(repo, state);
+      return (0, relayLast, inUse);
     }
     final t = PerfTimer('sync.export', warnMs: 500);
+    final written = _list(repo, streamsKey);
+    if (!written.contains(me)) _setList(repo, streamsKey, [...written, me]);
     // One file per [partBytes] at most (the relay refuses files over 16 MiB): split by op count, sealed size
     // measured, halved while over. The outbox and [sentKey] change only once every part is stored, so a run that stops
     // half-way sends everything again next time (ops are idempotent: a clock is only taken when newer).
     var seq = relayLast, done = 0, size = ops.length, jsonBytes = 0, bytes = 0;
+    final parts = <String, Object?>{};
     while (done < ops.length) {
       var count = min(size, ops.length - done);
       List<int> payload, sealed;
       while (true) {
         payload = _filePayload(ops.sublist(done, done + count));
-        sealed = await seal(payload, key);
+        sealed = await seal(payload, key, aad: aadSyncFile(me, seq + 1));
         if (sealed.length <= partBytes || count == 1) break;
         count = (count + 1) ~/ 2;
       }
+      parts['${seq + 1}'] = await fileHash(sealed);
+      repo.setLocalValue(sendingKey, jsonEncode({'from': relayLast, 'parts': parts}));
       try {
         await transport.put(me, seq + 1, sealed);
       } on TransportException catch (e) {
-        if (e.failure == TransportFailure.conflict || e.failure == TransportFailure.rejected) {
-          // The relay moved on since `state` (another install with this device id): kept, sent on the next run.
+        if (e.failure == TransportFailure.conflict) {
+          // Other bytes under this stream's next seq, stored since `state`: another install writes here. Move to a
+          // fresh stream and send the whole state there (once per run); the outbox is kept until it is stored.
           logEvent(_log, Level.WARNING, 'sync.export.conflict', {'seq': seq + 1, 'failure': e.failure.name});
-          return (0, seq);
+          repo.setLocalValue(sendingKey, null);
+          if (moved) return (0, seq, foreign(sealed.length));
+          _move(repo, state, shared: true, reason: 'conflict');
+          final (n, last, _) = await _upload(repo, state, relayChanged: relayChanged, moved: true);
+          return (n, last, foreign(sealed.length));
+        }
+        if (e.failure == TransportFailure.rejected) {
+          // A gap (the relay moved on since `state`): kept, sent on the next run.
+          logEvent(_log, Level.WARNING, 'sync.export.conflict', {'seq': seq + 1, 'failure': e.failure.name});
+          return (0, seq, inUse);
         }
         throw _fatal('put', e);
       }
@@ -624,12 +938,41 @@ class SyncEngine {
     }
     if (pending.isNotEmpty) repo.markExported(pending.last.$1);
     repo.setLocalValue(sentKey, '$seq');
+    repo.setLocalValue(sendingKey, null);
     if (first) {
       repo.setLocalValue(sinceKey, repo.localValue(sinceKey) ?? '${_now().millisecondsSinceEpoch}');
       logEvent(_log, Level.INFO, 'sync.connect', {'ops': ops.length, 'relayLast': relayLast});
     }
+    _keepInstance(repo, state);
     t.done({'ops': ops.length, 'seq': seq, 'files': seq - relayLast, 'jsonBytes': jsonBytes, 'bytes': bytes, 'whole': first});
-    return (ops.length, seq);
+    return (ops.length, seq, inUse);
+  }
+
+  /// Whether seqs `marker + 1 .. relayLast` of this install's stream [me] are its own cut-off upload: each recorded in
+  /// [sendingKey] and its stored bytes hash to the recorded part. Null when one could not be fetched (checked again on
+  /// the next run).
+  Future<bool?> _ownCutOff(WalletRepo repo, String me, int marker, int relayLast) async {
+    final sending = _map(repo, sendingKey);
+    final parts = sending['parts'], from = sending['from'];
+    if (parts is! Map || from is! int) return false;
+    for (var q = max(marker, from) + 1; q <= relayLast; q++) {
+      final want = parts['$q'];
+      if (want is! String) return false;
+      try {
+        if (await fileHash(await transport.get(me, q)) != want) return false;
+      } on TransportException catch (e) {
+        logEvent(_log, Level.WARNING, 'sync.stream.checkFailed', {'seq': q, 'failure': e.failure.name});
+        return null;
+      }
+    }
+    return true;
+  }
+
+  /// Stores the relay's instance id once an upload went through completely (a first connect that stopped half-way is
+  /// a first connect again next run). An older relay without one leaves the stored id as it is.
+  static void _keepInstance(WalletRepo repo, RelayState state) {
+    final id = state.instance;
+    if (id != null && repo.localValue(instanceKey) != id) repo.setLocalValue(instanceKey, id);
   }
 
   /// The schema version a snapshot id names (`s<schema>-<ms>-<random>`, see [_snapshotId]); null for another form.
@@ -659,7 +1002,7 @@ class SyncEngine {
     final now = _now();
     for (final (which, s) in [('latest', state.snapshot), ('previous', state.previous)]) {
       if (s == null || (usable != null && !usable(s))) continue;
-      if (bad.skip(s.id, build, now)) {
+      if (bad.skip(s.id, build, now, repo.clock.now())) {
         logEvent(_log, Level.INFO, 'sync.snapshot.skipped', {'which': which, 'reason': 'known'});
         continue;
       }
@@ -673,16 +1016,17 @@ class SyncEngine {
       }
       final int changed, count;
       try {
-        (changed, count) = await _applyBytes(repo, key, bytes, (c) => backupPayloadOps(c, event: 'sync.snapshot.damaged'));
+        (changed, count) = await _applyBytes(
+            repo, key, bytes, (c) => backupPayloadOps(c, event: 'sync.snapshot.damaged'), aadSnapshot(s.id), repo.clock.now());
       } on _Refused catch (r) {
         logError(_log, 'sync.snapshot.failed', r.error, r.stack, fields: {'which': which, 'reason': r.reason.name, 'bytes': bytes.length});
-        bad.refused(s.id, r.reason, bytes.length, await fileHash(bytes), build, now);
+        bad.refused(s.id, r.reason, bytes.length, await fileHash(bytes), build, now, retryAt: r.retryAt);
         continue;
       }
       bad.applied(s.id);
       var raised = 0;
       for (final MapEntry(key: d, value: seq) in s.covers.entries) {
-        if (d == repo.deviceId || seq <= (cursors[d] ?? 0)) continue;
+        if (d == _streamOf(repo) || seq <= (cursors[d] ?? 0)) continue;
         repo.setSyncCursor(d, seq);
         cursors[d] = seq;
         raised++;
@@ -699,8 +1043,7 @@ class SyncEngine {
   /// cursor, or [myLast] for its own files) for longer than [stuckAfter] (a file it refused stops it there for good: the
   /// relay never overwrites one, see the known limits), the newest snapshot does not cover the file it needs (else it
   /// starts from that snapshot by itself), and this device wrote no heal snapshot within [stuckAfter] ([healKey]).
-  bool _trackStuck(WalletRepo repo, RelayState state, Map<String, int> cursors, int myLast, DateTime now) {
-    final me = repo.deviceId;
+  bool _trackStuck(WalletRepo repo, RelayState state, Map<String, int> cursors, int myLast, DateTime now, String me, Set<String> mine) {
     final stored = repo.localValue(stuckKey);
     var old = const <String, Object?>{};
     if (stored != null) {
@@ -715,7 +1058,8 @@ class SyncEngine {
     var stuck = 0;
     for (final MapEntry(key: p, value: peer) in state.devices.entries) {
       final seen = peer.lastSeen;
-      if (p == me || seen == null || now.difference(seen) > stuckAfter) continue;
+      // The streams this install acks as are its own.
+      if (mine.contains(p) || seen == null || now.difference(seen) > stuckAfter) continue;
       for (final d in state.devices.keys) {
         if (d == p) continue;
         final held = d == me ? myLast : cursors[d] ?? 0, ack = peer.acks[d] ?? 0;
@@ -740,7 +1084,7 @@ class SyncEngine {
   /// newer one.
   Future<void> _maybeSnapshot(WalletRepo repo, RelayState state, Map<String, int> cursors, int myLast, DateTime now,
       {bool heal = false}) async {
-    final me = repo.deviceId;
+    final me = _streamOf(repo);
     final current = state.snapshot;
     final old = current?.covers ?? const <String, int>{};
     repo.forgetSyncFiles(old);
@@ -767,9 +1111,10 @@ class SyncEngine {
     }
     final t = PerfTimer('sync.snapshot.write', warnMs: 2000);
     final ops = repo.snapshotOps();
-    final sealed = await seal(backupPayload(ops), key);
+    final id = _snapshotId(now);
+    final sealed = await seal(backupPayload(ops), key, aad: aadSnapshot(id));
     try {
-      await transport.putSnapshot(_snapshotId(now), covers, sealed);
+      await transport.putSnapshot(id, covers, sealed);
     } on TransportException catch (e) {
       logEvent(_log, Level.WARNING, 'sync.snapshot.refused', {'failure': e.failure.name});
       return;
@@ -814,8 +1159,9 @@ class _BadSnapshots {
         _ => null,
       };
 
-  /// Whether [id] is skipped in this run (and then listed in [problems] as known).
-  bool skip(String id, String build, DateTime now) {
+  /// Whether [id] is skipped in this run (and then listed in [problems] as known). [wallMs] is this device's wall
+  /// clock (the one its HLC uses) for a [SyncProblemReason.clockDrift] record.
+  bool skip(String id, String build, DateTime now, int wallMs) {
     final r = _byId[id];
     if (r == null) return false;
     final reason = _reason(r);
@@ -823,6 +1169,7 @@ class _BadSnapshots {
     final skipped = switch (reason) {
       null => now.difference(DateTime.fromMillisecondsSinceEpoch(at, isUtc: true)) < SyncEngine.snapshotRetry,
       SyncProblemReason.unknownVersion || SyncProblemReason.applyFailed => r['build'] == build,
+      SyncProblemReason.clockDrift => r['build'] == build && (r['retryAt'] is! int || wallMs < (r['retryAt'] as int)),
       _ => true,
     };
     if (skipped) {
@@ -837,8 +1184,15 @@ class _BadSnapshots {
     problems[id] = const SyncProblem('', SyncProblemReason.unreadable, bytes: 0, snapshot: true);
   }
 
-  void refused(String id, SyncProblemReason reason, int bytes, String hash, String build, DateTime now) {
-    _byId[id] = {'reason': reason.name, 'bytes': bytes, 'hash': hash, 'build': build, 'at': now.millisecondsSinceEpoch};
+  void refused(String id, SyncProblemReason reason, int bytes, String hash, String build, DateTime now, {int? retryAt}) {
+    _byId[id] = {
+      'reason': reason.name,
+      'bytes': bytes,
+      'hash': hash,
+      'build': build,
+      'at': now.millisecondsSinceEpoch,
+      if (retryAt != null) 'retryAt': retryAt,
+    };
     problems[id] = SyncProblem('', reason, bytes: bytes, snapshot: true);
   }
 

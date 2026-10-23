@@ -69,7 +69,9 @@ extension WalletRepoBlobs on WalletRepo {
   /// upload is forgotten (never sent), an uploaded one is queued for deletion on the relay; the cached copy goes. Runs
   /// after a caught-up sync ([runPendingMatch]) and before uploading (`SyncEngine.run`); a file added but not yet
   /// attached to a bill is never touched. Returns how many were dropped.
-  int dropOrphanBlobs() {
+  int dropOrphanBlobs() => _asInternal(_dropOrphanBlobs);
+
+  int _dropOrphanBlobs() {
     final orphans = [
       for (final r in db.select('SELECT hash FROM blob_own WHERE hash NOT IN '
           '(SELECT blob FROM bills WHERE deleted = 0 AND blob IS NOT NULL) ORDER BY hash'))

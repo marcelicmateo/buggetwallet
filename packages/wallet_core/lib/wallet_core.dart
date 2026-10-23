@@ -54,7 +54,7 @@ export 'src/categories.dart'
 export 'src/dates.dart'
     show addDays, dayOf, daysBetween, daysInMonth, isIsoDate, isoDate, monthOf, monthsEnding, nextPayday, parseIso, requireIsoDate;
 export 'src/export.dart' show centsToDecimal, csvField, monthlySummaryCsv, monthlySummaryCsvHeader, transactionsCsv, transactionsCsvHeader;
-export 'src/hlc.dart' show Hlc, HlcClock;
+export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
 export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, parseIcs, plannedIcs;
 export 'src/local_db.dart' show localDbKey, localDbKeyInfo, openKeyed, WalletDbKeyException;
 export 'src/logs.dart'
@@ -108,7 +108,8 @@ export 'src/planned.dart'
 export 'src/recurring.dart' show detectRecurring, medianCents, planRecurringPayments, RecurringPayments;
 export 'src/repo.dart' show ImportSummary, Op, WalletRepo, WalletRepoBills, WalletRepoBlobs, WalletRepoPlanned;
 export 'src/search.dart' show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchTxLimit;
-export 'src/sync.dart' show SyncDevice, SyncException, SyncProblem, SyncProblemReason, syncReaderVersion, SyncReport, SyncWaiting;
+export 'src/sync.dart'
+    show relayFingerprint, SyncDevice, SyncException, SyncProblem, SyncProblemReason, syncReaderVersion, SyncReport, SyncWaiting;
 export 'src/sync_engine.dart'
     show
         MemoryTransport,
@@ -122,4 +123,17 @@ export 'src/sync_engine.dart'
         TransportException,
         TransportFailure;
 export 'src/transfers.dart' show openTransfers, planTransfers, transferDays, TransferPlan;
-export 'src/vault.dart' show deriveKey, seal, unseal, UnsealFailure, VaultException, VaultKey;
+export 'src/vault.dart'
+    show
+        aadBackup,
+        aadBlob,
+        aadSnapshot,
+        aadSyncFile,
+        aadWebKey,
+        deriveKey,
+        maxUnsealBytes,
+        seal,
+        unseal,
+        UnsealFailure,
+        VaultException,
+        VaultKey;

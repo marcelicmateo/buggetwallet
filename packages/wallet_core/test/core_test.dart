@@ -120,11 +120,11 @@ void main() {
 
     test('seal/unseal and tamper detection', () async {
       final k = VaultKey.generate();
-      final box = await seal([1, 2, 3], k);
-      expect(await unseal(box, k), [1, 2, 3]);
+      final box = await seal([1, 2, 3], k, aad: aadBackup);
+      expect(await unseal(box, k, aad: aadBackup), [1, 2, 3]);
       box[box.length - 1] ^= 1;
-      expect(() => unseal(box, k), throwsA(isA<VaultException>()));
-      expect(() => unseal(box, VaultKey.generate()), throwsA(isA<VaultException>()));
+      expect(() => unseal(box, k, aad: aadBackup), throwsA(isA<VaultException>()));
+      expect(() => unseal(box, VaultKey.generate(), aad: aadBackup), throwsA(isA<VaultException>()));
     });
   });
 

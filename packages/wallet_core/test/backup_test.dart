@@ -46,7 +46,7 @@ void main() {
   });
 
   /// [json] (already a string) sealed with the wallet key, like a backup file.
-  Future<List<int>> sealed(String json) async => seal(utf8.encode(json), key);
+  Future<List<int>> sealed(String json) async => seal(utf8.encode(json), key, aad: aadBackup);
 
   group('snapshotOps', () {
     test('one op per row and clock, fields grouped by the write that set them; defaults without a clock are left out', () {
@@ -96,7 +96,7 @@ void main() {
       final r = WalletRepo.inMemory(now: () => now);
       addTearDown(r.close);
       r.importBatch(january);
-      final clear = await unseal(await backupBytes(r, key), key);
+      final clear = await unseal(await backupBytes(r, key), key, aad: aadBackup);
       final json = jsonDecode(utf8.decode(clear)) as Map;
       expect(json['v'], 1);
       expect((json['ops'] as List).length, january.transactions.length);

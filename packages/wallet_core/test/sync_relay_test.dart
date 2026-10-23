@@ -48,10 +48,14 @@ class _BadSignature extends http.BaseClient {
   }
 }
 
-/// Whether [r] carries a v2 signature by [pub] over [path] (from `/v2/` on), written from the protocol text.
+/// Whether [r] carries a v3 signature by [pub] over [path] (from `/v2/` on), written from the protocol text.
 Future<bool> _signedBy(http.Request r, String pub, {String? path}) async {
   final hash = _hex((await Sha256().hash(r.bodyBytes)).bytes);
-  final text = 'bw-relay-v2\n${r.method}\n${path ?? r.url.path}\n${r.headers['X-BW-Covers'] ?? ''}\n$hash\n${r.headers['X-BW-Time']}';
+  // v3 (RELAY_PROTOCOL.md): the host the client addressed, lower case, the port only when not the scheme's default.
+  final u = r.url, def = u.scheme == 'https' ? 443 : 80;
+  final host = u.hasPort && u.port != def ? '${u.host.toLowerCase()}:${u.port}' : u.host.toLowerCase();
+  final text =
+      'bw-relay-v3\n${r.method}\n$host\n${path ?? r.url.path}\n${r.headers['X-BW-Covers'] ?? ''}\n$hash\n${r.headers['X-BW-Time']}';
   return Ed25519().verify(utf8.encode(text),
       signature: Signature(_unb64(r.headers['X-BW-Sig']!), publicKey: SimplePublicKey(_unb64(pub), type: KeyPairType.ed25519)));
 }
@@ -62,7 +66,7 @@ http.Response _clockGate(http.Request r, DateTime relayNow, {bool sendDate = tru
   if (alwaysClock || (t - relayNow.millisecondsSinceEpoch).abs() > 300000) {
     return http.Response('{"error":"clock"}', 401, headers: {if (sendDate) 'date': HttpDate.format(relayNow)});
   }
-  return http.Response('{"api":2,"devices":{}}', 200);
+  return http.Response('{"api":3,"devices":{}}', 200);
 }
 
 void main() {
@@ -107,7 +111,7 @@ void main() {
 
     test('state: the URL, a valid signature, the parsed JSON; 404 is an empty relay', () async {
       final body = {
-        'api': 2,
+        'api': 3,
         'devices': {
           'dev1': {
             'first': 3,
@@ -146,7 +150,7 @@ void main() {
     test('a base address with a path, with or without a trailing slash; the signed path starts at /v2/', () async {
       for (final base in ['http://relay.test:8787/bw', 'http://relay.test:8787/bw/']) {
         seen.clear();
-        await client((r) => http.Response('{"api":2,"devices":{}}', 200), base: base).state();
+        await client((r) => http.Response('{"api":3,"devices":{}}', 200), base: base).state();
         expect(seen.single.url.path, '/bw/v2/w/$wid/state', reason: base);
         expect(await _signedBy(seen.single, pub, path: '/v2/w/$wid/state'), isTrue, reason: base);
       }
@@ -223,12 +227,12 @@ void main() {
           client: MockClient((r) => Future.delayed(const Duration(seconds: 2), () => http.Response('{}', 200))));
       await expectLater(slow.get('d', 1), throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.unreachable)));
       for (final (body, failure) in [
-        ('{"api":3,"devices":{}}', TransportFailure.newerApi),
+        ('{"api":4,"devices":{}}', TransportFailure.newerApi),
         ('{"api":1,"devices":{}}', TransportFailure.olderApi),
         ('not json', TransportFailure.other),
         ('[1]', TransportFailure.other),
         ('{"devices":{}}', TransportFailure.other),
-        ('{"api":2,"devices":{"d":{"first":"x"}}}', TransportFailure.other),
+        ('{"api":3,"devices":{"d":{"first":"x"}}}', TransportFailure.other),
       ]) {
         await expectLater(
             client((r) => http.Response(body, 200)).state(), throwsA(isA<TransportException>().having((e) => e.failure, 'f', failure)),
@@ -242,10 +246,10 @@ void main() {
             requests.add(r);
             return http.Response(body, 200);
           });
-      await RelayTransport.health(Uri.parse('http://relay.test:8787'), client: answering('{"api":2}'));
+      await RelayTransport.health(Uri.parse('http://relay.test:8787'), client: answering('{"api":3}'));
       expect(requests.single.url.toString(), 'http://relay.test:8787/v2/health');
       expect(requests.single.headers.keys.where((h) => h.startsWith('X-BW') || h == 'Authorization'), isEmpty);
-      await expectLater(RelayTransport.health(Uri.parse('http://relay.test'), client: answering('{"api":3}')),
+      await expectLater(RelayTransport.health(Uri.parse('http://relay.test'), client: answering('{"api":4}')),
           throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.newerApi)));
       // A v1 relay: /v2/health is an unknown path there, /v1/health says api 1.
       final v1 = MockClient(
@@ -265,7 +269,7 @@ void main() {
       final repo = WalletRepo.inMemory();
       addTearDown(repo.close);
       repo.updateSettings({'salary': 1});
-      final t = client((r) => http.Response('{"api":3,"devices":{}}', 200));
+      final t = client((r) => http.Response('{"api":4,"devices":{}}', 200));
       await expectLater(SyncEngine(t, key).run(repo), throwsA(isA<SyncException>()));
       expect(repo.pendingOps(), hasLength(1));
       final old = client((r) => http.Response('{"api":1,"devices":{}}', 200));
@@ -358,11 +362,11 @@ void main() {
       await expectLater(noDate.state(), throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.other)));
       expect(seen, hasLength(1));
       expect(noDate.clockOffsetMs, 0);
-      // A plain 401 (wrong key) is refused at once, no retry.
+      // A plain 401 (wrong key) is not retried; only the relay's health is asked once (another api version?).
       seen.clear();
       await expectLater(client((r) => http.Response('{"error":"bad signature"}', 401)).state(),
           throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.refused)));
-      expect(seen, hasLength(1));
+      expect([for (final r in seen) r.url.path.split('/').last], ['state', 'health']);
     });
 
     test('parseHttpDate reads IMF-fixdate and refuses anything else', () {
@@ -398,7 +402,7 @@ void main() {
       final text = lines.join('\n');
       expect(text, contains('relay.failed {"kind":"state","status":401,"failure":"refused"}'));
       expect(text, contains('relay.unreachable'));
-      for (final bad in [wid, pub, 'secret-host', ...seen.map((r) => r.headers['X-BW-Sig']!)]) {
+      for (final bad in [wid, pub, 'secret-host', ...seen.map((r) => r.headers['X-BW-Sig']).nonNulls]) {
         expect(text, isNot(contains(bad)), reason: bad);
       }
     });

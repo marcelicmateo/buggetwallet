@@ -15,7 +15,7 @@ Future<Socket> rawPut(Harness h, String path, int length, List<int> part) async 
   final sig = await h.sign(keyA, 'PUT', path, Uint8List(length));
   final s = await Socket.connect('127.0.0.1', h.server.port);
   final head = [for (final e in sig.entries) '${e.key}: ${e.value}\r\n'].join();
-  s.write('PUT $path HTTP/1.1\r\nHost: 127.0.0.1\r\n${head}Content-Length: $length\r\n\r\n');
+  s.write('PUT $path HTTP/1.1\r\nHost: ${h.base.authority}\r\n${head}Content-Length: $length\r\n\r\n');
   s.add(part);
   await s.flush();
   return s;

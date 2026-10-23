@@ -248,7 +248,7 @@ void main() {
       a.repo.importBatch(january);
       await a.run();
       // A snapshot an older build wrote: it claims to cover a's file 1 but holds nothing this schema needs.
-      await net.relay.putSnapshot('s1-0-aa', {a.repo.deviceId: 1}, await seal(backupPayload(const []), key));
+      await net.relay.putSnapshot('s1-0-aa', {a.repo.deviceId: 1}, await seal(backupPayload(const []), key, aad: aadSnapshot('s1-0-aa')));
       final rep = await b.run();
       expect(rep.filesRead, 1);
       expect(b.repo.transactions().length, january.transactions.length);
@@ -305,8 +305,8 @@ void main() {
       final a = device('a'), b = device('b');
       a.repo.updateSettings({'salary': 5});
       await a.run();
-      final clear = await unseal(net.files['d/${a.repo.deviceId}/1']!, key);
-      net.relay.replace(a.repo.deviceId, 1, await seal(clear, VaultKey.generate()));
+      final clear = await unseal(net.files['d/${a.repo.deviceId}/1']!, key, aad: aadSyncFile(a.repo.deviceId, 1));
+      net.relay.replace(a.repo.deviceId, 1, await seal(clear, VaultKey.generate(), aad: aadSyncFile(a.repo.deviceId, 1)));
       final before = dump(b.repo);
       final rep = await b.run();
       expect(rep.badFiles, 1);
@@ -373,7 +373,7 @@ void main() {
       ];
       final before = dump(b.repo);
       for (final p in payloads) {
-        net.relay.replace(a.repo.deviceId, 1, await seal(utf8.encode(p as String), key));
+        net.relay.replace(a.repo.deviceId, 1, await seal(utf8.encode(p as String), key, aad: aadSyncFile(a.repo.deviceId, 1)));
         expect((await b.run()).badFiles, 1, reason: p);
         expect(dump(b.repo), before, reason: p);
         expect(b.repo.settings().salary, 0);
@@ -389,7 +389,7 @@ void main() {
       await a.run();
       // A snapshot from a device that read file 2 before it was damaged on the relay.
       await net.relay.putSnapshot('s${WalletRepo.schemaVersion}-0-aa', {a.repo.deviceId: 2, b.repo.deviceId: 0},
-          await seal(backupPayload(a.repo.snapshotOps()), key));
+          await seal(backupPayload(a.repo.snapshotOps()), key, aad: aadSnapshot('s${WalletRepo.schemaVersion}-0-aa')));
       net.relay.corrupt(a.repo.deviceId, 2);
       final rep = await b.run();
       expect((rep.caughtUp, rep.waiting.length, rep.problems.length), (true, 0, 0));
@@ -429,17 +429,29 @@ void main() {
       expect(b.repo.transaction(lidl)!.category, 'Eating out');
     });
 
-    test('a device a year in the future does not freeze the others: their later edits still win', () async {
+    test('a device a year in the future is quarantined (clockDrift) and does not freeze the others', () async {
+      // H7: before Stage H the others took its clocks and kept working only because their HLC moved on with them.
       final future = device('future', skew: 365 * 86400000), b = device('b');
       future.repo.updateSettings({'salary': 1000});
       await syncAll([future, b]);
-      expect(b.repo.clock.last.millis, greaterThanOrEqualTo(now + 365 * 86400000));
-      for (var i = 0; i < 5; i++) {
+      final rep = await b.run();
+      expect(rep.problems.single.reason, SyncProblemReason.clockDrift);
+      expect(rep.caughtUp, isFalse);
+      expect(b.repo.clock.last.millis, lessThan(now + 3600000), reason: 'its clock was not taken');
+      expect(b.repo.settings().salary, 0);
+      for (var i = 0; i < 3; i++) {
         now += 10;
         b.repo.updateSettings({'salary': 2000 + i});
         await syncAll([b, future]);
-        expect(future.repo.settings().salary, 2000 + i);
+        expect(b.repo.settings().salary, 2000 + i, reason: 'local edits keep working');
       }
+      // The device ahead reads the others (their files are behind it, not ahead), keeps its own newer value, and
+      // reports nothing: only the devices behind it see clockDrift.
+      final rf = await future.run();
+      expect(rf.problems, isEmpty);
+      expect(rf.caughtUp, isTrue);
+      expect(future.repo.settings().salary, 1000, reason: 'its clock is a year ahead, so its edit is the newest');
+      expect((await b.run()).problems.single.reason, SyncProblemReason.clockDrift);
     });
 
     test('HLCs written by the repo strictly increase, also across remote receives and a clock going backwards', () {
@@ -464,7 +476,8 @@ void main() {
     test('HLC order stays correct past 99999 events in one millisecond', () {
       expect(const Hlc(1, 100000, 'a').compareTo(const Hlc(1, 99999, 'a')), greaterThan(0));
       // A peer's op far ahead of this device's wall clock, then a later local edit of the same setting.
-      final r = WalletRepo.inMemory(now: () => 0);
+      // The wall clock is that millisecond too (H7 refuses local writes more than an hour behind it).
+      final r = WalletRepo.inMemory(now: () => 9000000000000);
       r.applyRemote([
         Op('setting', 'salary', const {'value': '1'}, const Hlc(9000000000000, 99998, 'peer').toString())
       ]);

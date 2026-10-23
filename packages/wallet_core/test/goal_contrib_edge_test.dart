@@ -11,6 +11,10 @@ import 'support/sim.dart';
 import 'support/synthetic.dart';
 
 int _h = 5000000000000;
+
+/// This device's wall clock in these tests: the synthetic clock the ops above are stamped with, so they are never more
+/// than an hour ahead of it (H7 would quarantine them as clockDrift, or refuse local writes behind them).
+int _wall() => _h;
 String _hlc([String node = 'peer']) => Hlc(_h++, 0, node).toString();
 
 Op _goal(String id, {int saved = 0, int monthly = 0, int deleted = 0, String? hlc}) => Op('goal', id,
@@ -119,7 +123,7 @@ void main() {
 
   group('saveGoal(saved:) writes a delta', () {
     late WalletRepo r;
-    setUp(() => r = WalletRepo.inMemory());
+    setUp(() => r = WalletRepo.inMemory(now: _wall));
     tearDown(() => r.close());
 
     test('editing "so far" to the same value writes no contribution op', () {
@@ -178,7 +182,7 @@ void main() {
 
   group('addGoalContribution', () {
     late WalletRepo r;
-    setUp(() => r = WalletRepo.inMemory());
+    setUp(() => r = WalletRepo.inMemory(now: _wall));
     tearDown(() => r.close());
 
     test('amount 0 leaves the total as it was (whether or not a row is written)', () {
@@ -230,7 +234,7 @@ void main() {
 
   group('applying remote contribution ops', () {
     late WalletRepo r;
-    setUp(() => r = WalletRepo.inMemory());
+    setUp(() => r = WalletRepo.inMemory(now: _wall));
     tearDown(() => r.close());
 
     test('the same op applied twice (or in one list twice) counts once', () {
@@ -260,7 +264,7 @@ void main() {
         [1, 2, 3, 0],
         [3, 0, 2, 1]
       ]) {
-        final x = WalletRepo.inMemory();
+        final x = WalletRepo.inMemory(now: _wall);
         for (final i in p) {
           x.applyRemote([ops[i]]);
         }
@@ -343,7 +347,7 @@ void main() {
 
   group('migration of existing data', () {
     test('goals stored by an older build keep their exact total', () {
-      final r = WalletRepo.inMemory();
+      final r = WalletRepo.inMemory(now: _wall);
       r.db.execute("INSERT INTO goals(id, name, target, saved, monthly, sort) VALUES('old1', 'Synthetic old', 90000, 12345, 2000, 1)");
       r.db.execute("INSERT INTO goals(id, name, target, saved, monthly, sort) VALUES('old2', 'Synthetic old 2', 50000, 0, 0, 2)");
       r.db.execute("INSERT INTO goals(id, name, target, saved, monthly, sort) VALUES('old3', 'Synthetic neg', 50000, -700, 0, 3)");
@@ -357,21 +361,21 @@ void main() {
 
     test('a database file written before the feature reopens with the same totals', () {
       final path = '${tmp.path}/old.db';
-      final first = WalletRepo.open(path);
+      final first = WalletRepo.open(path, now: _wall);
       first.saveGoal(id: 'g1', name: 'Synthetic goal', target: 100000, saved: 0, monthly: 3000);
       first.db.execute("UPDATE goals SET saved = 7777 WHERE id = 'g1'");
       first.close();
-      final again = WalletRepo.open(path);
+      final again = WalletRepo.open(path, now: _wall);
       expect(_saved(again, 'g1'), 7777);
       again.addGoalContribution('g1', 223);
       again.close();
-      final third = WalletRepo.open(path);
+      final third = WalletRepo.open(path, now: _wall);
       expect(_saved(third, 'g1'), 8000);
       third.close();
     });
 
     test('a legacy saved value synced from an old build still counts alongside contributions', () {
-      final r = WalletRepo.inMemory();
+      final r = WalletRepo.inMemory(now: _wall);
       r.applyRemote([_goal('g1', saved: 2000)]);
       r.addGoalContribution('g1', 300);
       r.applyRemote([
@@ -384,7 +388,7 @@ void main() {
 
   group('budget engine is unchanged', () {
     test('per-period goal monthly depends only on the goals\' monthly, not on contributions', () {
-      final r = WalletRepo.inMemory();
+      final r = WalletRepo.inMemory(now: _wall);
       final g1 = r.saveGoal(name: 'Synthetic A', target: 500000, saved: 0, monthly: 10000);
       final g2 = r.saveGoal(name: 'Synthetic B', target: 500000, saved: 0, monthly: 5000);
       const st = WalletSettings(salary: 150000, paydayDay: 15, periodStart: '2026-01-15');
@@ -400,7 +404,7 @@ void main() {
     });
 
     test('a contribution is not a transaction', () {
-      final r = WalletRepo.inMemory();
+      final r = WalletRepo.inMemory(now: _wall);
       final g = r.saveGoal(name: 'Synthetic A', target: 500000, saved: 0, monthly: 0);
       r.importBatch(january);
       final txBefore = r.transactions().length;

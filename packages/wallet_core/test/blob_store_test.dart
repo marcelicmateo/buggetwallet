@@ -203,7 +203,10 @@ void main() {
 
     Future<bool> signedBy(http.Request r) async {
       final hash = [for (final b in (await Sha256().hash(r.bodyBytes)).bytes) b.toRadixString(16).padLeft(2, '0')].join();
-      final text = 'bw-relay-v2\n${r.method}\n${r.url.path}\n${r.headers['X-BW-Covers'] ?? ''}\n$hash\n${r.headers['X-BW-Time']}';
+      // v3 (RELAY_PROTOCOL.md): the host the client addressed, lower case, the port only when not the scheme's default.
+      final u = r.url, def = u.scheme == 'https' ? 443 : 80;
+      final host = u.hasPort && u.port != def ? '${u.host.toLowerCase()}:${u.port}' : u.host.toLowerCase();
+      final text = 'bw-relay-v3\n${r.method}\n$host\n${r.url.path}\n${r.headers['X-BW-Covers'] ?? ''}\n$hash\n${r.headers['X-BW-Time']}';
       return Ed25519().verify(utf8.encode(text),
           signature: Signature(_unb64(r.headers['X-BW-Sig']!), publicKey: SimplePublicKey(_unb64(pub), type: KeyPairType.ed25519)));
     }
@@ -226,7 +229,8 @@ void main() {
       expect(seen[0].bodyBytes, [9, 9]);
       expect(seen[0].headers['Content-Type'], startsWith('application/octet-stream'));
       expect(seen[2].bodyBytes, isEmpty);
-      expect(RelayTransport.signedText('DELETE', '/v2/w/x/blob/$h', '', 'e3b0', '1'), 'bw-relay-v2\nDELETE\n/v2/w/x/blob/$h\n\ne3b0\n1');
+      expect(RelayTransport.signedText('DELETE', 'relay.test:8787', '/v2/w/x/blob/$h', '', 'e3b0', '1'),
+          'bw-relay-v3\nDELETE\nrelay.test:8787\n/v2/w/x/blob/$h\n\ne3b0\n1');
     });
 
     test('404: GET is null, PUT and DELETE are missing; 507 is full; 400 hash is rejected', () async {

@@ -13,8 +13,8 @@ import 'package:wallet_core/wallet_core.dart';
 Future<void> main(List<String> args) async {
   final log = Logger('bw.smoke');
   final key = VaultKey.generate();
-  final sealed = await seal(utf8.encode('[]'), key);
-  final clear = await unseal(sealed, key);
+  final sealed = await seal(utf8.encode('[]'), key, aad: aadBackup);
+  final clear = await unseal(sealed, key, aad: aadBackup);
   final sink = MemoryLogSink()..add('web smoke: ${clear.length} bytes');
   if (args.isEmpty) {
     // Not reached when run without a database; here only so the symbols are used.

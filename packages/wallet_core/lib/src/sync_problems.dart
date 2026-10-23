@@ -9,7 +9,7 @@ final _log = Logger('bw.sync');
 
 /// The highest sync file format (`BWOPn`) this build reads. Bump it with a new format: files refused as
 /// [SyncProblemReason.unknownVersion] are read again after the upgrade.
-const syncReaderVersion = 1;
+const syncReaderVersion = 2;
 
 /// Why a sync file from another device was not applied.
 enum SyncProblemReason {
@@ -27,6 +27,16 @@ enum SyncProblemReason {
 
   /// The file could not be read at all this time (removed or locked mid-run). Not quarantined: read again next run.
   unreadable,
+
+  /// This device's own upload was refused with 409: the relay already holds another file under this device's next
+  /// seq, so another install writes as this device (a copied database or key store). Never retried silently; the
+  /// outbox is kept. [SyncProblem.device] is this device's short id.
+  deviceIdInUse,
+
+  /// The file's newest clock is more than an hour ahead of this device's wall clock (a peer with a wrong date, or this
+  /// device's clock is behind). Quarantined; read again when it changes, the build changes, or the wall clock has
+  /// caught up.
+  clockDrift,
 }
 
 /// A file from another device that this run did not apply, for the UI ("1 file from device X could not be read").
@@ -68,30 +78,48 @@ class BadFile {
   final String? stamp;
   final String hash;
   final String build;
-  const BadFile(this.device, this.file, this.reason, {required this.size, this.stamp, required this.hash, required this.build});
+
+  /// [SyncProblemReason.clockDrift] only: the wall clock (ms since epoch) from which the file is no longer too far
+  /// ahead (its newest clock − 1 h), so it is read again then.
+  final int? retryAt;
+  const BadFile(this.device, this.file, this.reason,
+      {required this.size, this.stamp, required this.hash, required this.build, this.retryAt});
 
   String get key => keyOf(device, file);
   static String keyOf(String device, String file) => '$device/$file';
 
   /// Whether this build might read it now although the file has not changed.
   bool retryAfterUpgrade(String build) =>
-      (reason == SyncProblemReason.unknownVersion || reason == SyncProblemReason.applyFailed) && this.build != build;
+      (reason == SyncProblemReason.unknownVersion || reason == SyncProblemReason.applyFailed || reason == SyncProblemReason.clockDrift) &&
+      this.build != build;
+
+  /// Whether to read it again now although neither the file nor [build] changed: a [SyncProblemReason.clockDrift]
+  /// file once the wall clock [nowMs] reached [retryAt].
+  bool retryNow(String build, int nowMs) => retryAfterUpgrade(build) || (retryAt != null && nowMs >= retryAt!);
 
   /// Whether a file listed with [size] and [stamp] (no content read) differs from the refused one.
   bool listedChanged(int? size, String? stamp) => size != this.size || stamp != this.stamp;
 
   SyncProblem problem({required bool isNew}) => SyncProblem(SyncProblem.shortId(device), reason, bytes: size, isNew: isNew);
 
-  Map<String, Object?> toJson() => {'d': device, 'f': file, 'r': reason.name, 'n': size, 's': stamp, 'h': hash, 'b': build};
+  Map<String, Object?> toJson() =>
+      {'d': device, 'f': file, 'r': reason.name, 'n': size, 's': stamp, 'h': hash, 'b': build, if (retryAt != null) 'u': retryAt};
 
   static BadFile? fromJson(Object? j) {
     if (j is! Map) return null;
     final reason = SyncProblemReason.values.asNameMap()[j['r']];
-    final (d, f, n, s, h, b) = (j['d'], j['f'], j['n'], j['s'], j['h'], j['b']);
-    if (reason == null || d is! String || f is! String || n is! int || (s != null && s is! String) || h is! String || b is! String) {
+    final (d, f, n, s, h, b, u) = (j['d'], j['f'], j['n'], j['s'], j['h'], j['b'], j['u']);
+    if (reason == null ||
+        d is! String ||
+        f is! String ||
+        n is! int ||
+        (s != null && s is! String) ||
+        h is! String ||
+        b is! String ||
+        (u != null && u is! int)) {
       return null;
     }
-    return BadFile(d, f, reason, size: n, stamp: s as String?, hash: h, build: b);
+    return BadFile(d, f, reason, size: n, stamp: s as String?, hash: h, build: b, retryAt: u as int?);
   }
 }
 

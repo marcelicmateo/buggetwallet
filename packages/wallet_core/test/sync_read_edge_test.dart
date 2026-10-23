@@ -8,6 +8,10 @@ import 'package:wallet_core/wallet_core.dart';
 
 int _clock = 3000000000000;
 
+/// This device's wall clock in these tests: the synthetic clock the ops above are stamped with, so they are never more
+/// than an hour ahead of it (H7 would quarantine them as clockDrift, or refuse local writes behind them).
+int _wall() => _clock;
+
 /// A setting op from a peer, newer than anything local.
 Map<String, Object?> _setting(String key, Object? value) =>
     Op('setting', key, {'value': jsonEncode(value), 'deleted': 0}, Hlc(_clock++, 0, 'peer').toString()).toJson();
@@ -19,7 +23,7 @@ void main() {
 
   /// Puts a peer's file [seq]: sealed [ops], or raw [bytes] when given; replaces a stored one (a repair on the server).
   Future<void> peer(String device, int seq, {List<Object?>? ops, List<int>? bytes}) async {
-    final b = bytes ?? await seal(utf8.encode(jsonEncode(ops)), key);
+    final b = bytes ?? await seal(utf8.encode(jsonEncode(ops)), key, aad: aadSyncFile(device, seq));
     if (relay.files.containsKey('d/$device/$seq')) {
       relay.replace(device, seq, b);
     } else {
@@ -34,17 +38,21 @@ void main() {
   setUp(() {
     relay = MemoryTransport();
     key = VaultKey.generate();
-    repo = WalletRepo.inMemory();
+    repo = WalletRepo.inMemory(now: _wall);
   });
   tearDown(() => repo.close());
 
   group('what is read', () {
-    test('this device\'s own files are never applied, even garbage or a valid file', () async {
+    test('files under this device\'s id that it never wrote are another install\'s: read as a peer\'s, in order', () async {
       await peer(repo.deviceId, 1, bytes: [1, 2, 3]);
       await peer(repo.deviceId, 2, ops: [_setting('rent', 999)]);
       final rep = await run();
-      expect((rep.filesRead, rep.badFiles, rep.caughtUp), (0, 0, true));
+      // HBb ownership rules: this install moves to a stream of its own (deviceIdInUse, information) and reads that
+      // stream like any device's: the garbage file is refused and the valid one waits behind it.
+      expect(rep.problems.map((p) => p.reason).toSet(), {SyncProblemReason.deviceIdInUse, SyncProblemReason.corrupt});
+      expect((rep.filesRead, rep.caughtUp), (0, false));
       expect(repo.settings().rent, 0);
+      expect(repo.localValue(SyncEngine.streamKey), isNot(repo.deviceId));
     });
 
     test('the same seq from two devices is two files', () async {
@@ -87,7 +95,8 @@ void main() {
 
   group('payloads that are sealed correctly but wrong inside', () {
     Future<void> expectBad(Object? payload) async {
-      await peer('p1', 1, bytes: await seal(utf8.encode(payload is String ? payload : jsonEncode(payload)), key));
+      await peer('p1', 1,
+          bytes: await seal(utf8.encode(payload is String ? payload : jsonEncode(payload)), key, aad: aadSyncFile('p1', 1)));
       final before = repo.db.select('SELECT COUNT(*) AS n FROM clocks').first['n'];
       final rep = await run();
       expect(rep.badFiles, 1, reason: jsonEncode(payload));
@@ -109,7 +118,7 @@ void main() {
         <int>[0xC3, 0x28],
         <int>[0x5b, 0xC3, 0x5d],
       ]) {
-        await peer('p1', 1, bytes: await seal(raw, key));
+        await peer('p1', 1, bytes: await seal(raw, key, aad: aadSyncFile('p1', 1)));
         final rep = await run();
         expect(rep.badFiles, 1, reason: raw.toString());
       }
@@ -221,9 +230,9 @@ void main() {
       expect(repo.transactions().length, 1);
     });
 
-    test('a file with a newer format version (BWOP2) is skipped and holds up the later files of that device', () async {
-      final good = await seal(utf8.encode(jsonEncode([_setting('salary', 9)])), key);
-      final future = Uint8List.fromList([...utf8.encode('BWOP2'), ...good.sublist(5)]);
+    test('a file with a newer format version (BWOP3) is skipped and holds up the later files of that device', () async {
+      final good = await seal(utf8.encode(jsonEncode([_setting('salary', 9)])), key, aad: aadSyncFile('p1', 1));
+      final future = Uint8List.fromList([...utf8.encode('BWOP3'), ...good.sublist(5)]);
       await peer('p1', 1, bytes: future);
       await peer('p1', 2, ops: [_setting('rent', 4)]);
       final rep = await run();
@@ -257,15 +266,17 @@ void main() {
       expect(sw.elapsed, lessThan(const Duration(seconds: 30)));
     });
 
-    test('ops with huge clocks from a peer are applied and later local writes still win', () async {
+    test('ops with huge clocks from a peer are quarantined (clockDrift, H7); local writes keep working', () async {
       final far = const Hlc(900000000000000, 99999, 'peer').toString();
       await peer('p1', 1, ops: [
         Op('setting', 'salary', {'value': '1', 'deleted': 0}, far).toJson()
       ]);
-      await run();
+      final rep = await run();
+      expect(rep.problems.single.reason, SyncProblemReason.clockDrift);
+      expect(repo.settings().salary, 0);
       repo.updateSettings({'salary': 2});
       expect(repo.settings().salary, 2);
-      expect(Hlc.compareStrings(repo.pendingOps().last.$2.hlc, far), greaterThan(0));
+      expect(Hlc.parse(repo.pendingOps().last.$2.hlc).millis, lessThan(900000000000000), reason: 'the far clock was not taken');
     });
   });
 

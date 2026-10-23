@@ -30,6 +30,10 @@ CREATE TABLE IF NOT EXISTS peer_files(device TEXT NOT NULL, file TEXT NOT NULL, 
 ''';
 
 var _t = 4000000000000;
+
+/// This device's wall clock in these tests: the synthetic clock the ops above are stamped with, so they are never more
+/// than an hour ahead of it (H7 would quarantine them as clockDrift, or refuse local writes behind them).
+int _wall() => _t;
 String _h([String node = 'peer']) => Hlc(_t++, 0, node).toString();
 
 Op _goalOp(String id, Map<String, Object?> f, {String node = 'peer'}) => Op('goal', id, f, _h(node));
@@ -67,7 +71,7 @@ void main() {
 
   group('saveGoal and addGoalContribution (one device)', () {
     late WalletRepo r;
-    setUp(() => r = WalletRepo.inMemory());
+    setUp(() => r = WalletRepo.inMemory(now: _wall));
     tearDown(() => r.close());
 
     test('a new goal stores its saved total as the base; no contribution', () {
@@ -251,7 +255,7 @@ void main() {
 
   group('remote contribution ops', () {
     late WalletRepo r;
-    setUp(() => r = WalletRepo.inMemory());
+    setUp(() => r = WalletRepo.inMemory(now: _wall));
     tearDown(() => r.close());
 
     test('the same op applied twice counts once (idempotent by id and clock)', () {
@@ -321,7 +325,7 @@ void main() {
 
   group('mixed versions (an older build only knows the saved field)', () {
     late WalletRepo r;
-    setUp(() => r = WalletRepo.inMemory());
+    setUp(() => r = WalletRepo.inMemory(now: _wall));
     tearDown(() => r.close());
 
     test('a later remote write of saved is the new base; contributions still add on top (no double count)', () {
@@ -373,7 +377,7 @@ void main() {
     }
 
     test('existing goals keep their saved totals exactly; nothing is written', () {
-      final r = WalletRepo.open(oldDb());
+      final r = WalletRepo.open(oldDb(), now: _wall);
       expect([for (final g in r.goals()) (g.id, g.saved, g.monthly)], [('g1', 2345, 5000), ('g2', 0, 1000)]);
       expect(r.pendingOps(), isEmpty);
       expect(r.db.select('SELECT * FROM goal_contrib'), isEmpty);
@@ -388,15 +392,15 @@ void main() {
         _goalOp('g1', {'name': 'Synthetic fund'}).toJson(),
         _contribOp('c1', 'g1', 5000).toJson(),
       ];
-      await relay.put('p1', 1, await seal(utf8.encode(jsonEncode(ops)), key));
+      await relay.put('p1', 1, await seal(utf8.encode(jsonEncode(ops)), key, aad: aadSyncFile('p1', 1)));
       final path = oldDb(peerFiles: ['0000000001.bwop']);
-      var r = WalletRepo.open(path);
+      var r = WalletRepo.open(path, now: _wall);
       expect(r.db.select("SELECT 1 FROM sqlite_master WHERE name = 'peer_files'"), isEmpty, reason: 'folder bookkeeping dropped');
       // As if an older build had applied p1's file 1 and ignored the contribution: cursor at 1, schema before goal_contrib.
       r.setSyncCursor('p1', 1);
       r.db.execute("UPDATE meta SET value = '1' WHERE key = 'schema'");
       r.close();
-      r = WalletRepo.open(path);
+      r = WalletRepo.open(path, now: _wall);
       expect(r.syncCursors(), isEmpty, reason: 'the schema bump forgets the cursors');
       expect(_savedOf(r, 'g1'), 2345);
       final rep = await SyncEngine(relay, key).run(r);
@@ -404,7 +408,7 @@ void main() {
       expect(_savedOf(r, 'g1'), 7345);
       expect((await SyncEngine(relay, key).run(r)).filesRead, 0);
       r.close();
-      final again = WalletRepo.open(path);
+      final again = WalletRepo.open(path, now: _wall);
       expect(again.syncCursors(), {'p1': 1}, reason: 'the replay happens once, not on every open');
       expect(_savedOf(again, 'g1'), 7345);
       again.close();
@@ -412,10 +416,10 @@ void main() {
 
     test('a new database records the schema version and keeps its sync cursors on reopen', () {
       final path = '${tmp.path}/new.db';
-      final r = WalletRepo.open(path);
+      final r = WalletRepo.open(path, now: _wall);
       r.setSyncCursor('p1', 1);
       r.close();
-      final again = WalletRepo.open(path);
+      final again = WalletRepo.open(path, now: _wall);
       expect(again.syncCursors(), {'p1': 1});
       again.close();
     });

@@ -66,6 +66,11 @@ void main() {
       expect(r.clock.last.toString(), last);
       expect(r.syncCursors(), {'peer': 4});
       expect(r.localValue(SyncEngine.sentKey), '7');
+      // H7: more than an hour behind the newest clock it holds, a write is refused (nothing written) instead of
+      // stamping an edit that would sort before ones already seen.
+      expect(() => r.updateSettings({'salary': 160000}), throwsA(isA<ClockBehindException>()));
+      expect(r.pendingOps().length, pending);
+      t = 1767225600000 - 60000; // set right again (a minute behind is fine)
       r.updateSettings({'salary': 160000});
       expect(r.pendingOps().last.$2.hlc.compareTo(last), greaterThan(0), reason: 'new edits must still win over older ones');
       expect(r.settings().salary, 160000);

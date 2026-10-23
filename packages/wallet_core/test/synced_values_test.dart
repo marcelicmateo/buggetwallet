@@ -30,7 +30,8 @@ List<String> _capture(void Function() body) {
 
 void main() {
   late WalletRepo r;
-  setUp(() => r = WalletRepo.inMemory());
+  // The ops of these tests are stamped from 2000000000000 on (_h): the wall clock is kept just after them (H7).
+  setUp(() => r = WalletRepo.inMemory(now: () => 2000000000000 + 1000000));
   tearDown(() => r.close());
 
   group('a wrong-typed field from another device', () {
@@ -147,7 +148,7 @@ void main() {
       await sync(a);
       // A third device with a bug writes a file with a newer clock than anything local: a bad amount and a good note.
       Future<void> peerFile(int n, List<Op> ops) async =>
-          relay.put('peer', n, await seal(utf8.encode(jsonEncode([for (final o in ops) o.toJson()])), key));
+          relay.put('peer', n, await seal(utf8.encode(jsonEncode([for (final o in ops) o.toJson()])), key, aad: aadSyncFile('peer', n)));
       final now = DateTime.now().millisecondsSinceEpoch;
       await peerFile(1, [
         Op('tx', 't', {..._base, 'note': 'n0'}, Hlc(now - 1000, 0, 'peer').toString()),

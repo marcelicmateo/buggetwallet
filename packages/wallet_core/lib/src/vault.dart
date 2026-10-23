@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:archive/archive.dart' show GZipDecoder, GZipEncoder;
+import 'package:archive/archive.dart' show ArchiveException, GZipDecoder, GZipEncoder;
 import 'package:cryptography/cryptography.dart';
 
 import 'logs.dart';
@@ -23,8 +23,11 @@ enum UnsealFailure {
   /// Too short, not a sync file, or authenticated content that is not whole gzip.
   damaged,
 
-  /// A sync file of a newer format (`BWOP2` and up) that this build cannot read yet.
+  /// A sync file of a newer format (`BWOP3` and up) that this build cannot read yet.
   newerFormat,
+
+  /// Authenticated, but it would inflate past [maxUnsealBytes] (a decompression bomb or a writer bug).
+  tooLarge,
 }
 
 class VaultException implements Exception {
@@ -117,16 +120,41 @@ class VaultKey {
       .join();
 }
 
-final _magic = utf8.encode('BWOP1');
+final _magic1 = utf8.encode('BWOP1');
+final _magic2 = utf8.encode('BWOP2');
 final _aead = Xchacha20.poly1305Aead();
 
-/// gzip + XChaCha20-Poly1305. Layout: "BWOP1" | nonce(24) | mac(16) | ciphertext.
+/// The most [unseal] inflates (256 MiB); more is [UnsealFailure.tooLarge].
+const maxUnsealBytes = 256 * 1024 * 1024;
+
+// Associated data per use (H8): a sealed file opens only where it was sealed for, so whoever holds the files (the
+// relay, a copied folder) cannot pass one device's file off as another's, a snapshot as a sync file, or a blob as a
+// backup.
+
+/// AAD of sync file [seq] of device [device].
+List<int> aadSyncFile(String device, int seq) => utf8.encode('bw-sync-file\n$device\n$seq');
+
+/// AAD of snapshot [id].
+List<int> aadSnapshot(String id) => utf8.encode('bw-snapshot\n$id');
+
+/// AAD of a backup file (`.bwb`).
+final List<int> aadBackup = List.unmodifiable(utf8.encode('bw-backup'));
+
+/// AAD of a bill file (blob).
+final List<int> aadBlob = List.unmodifiable(utf8.encode('bw-blob'));
+
+/// AAD of the web app's wrapped wallet key.
+final List<int> aadWebKey = List.unmodifiable(utf8.encode('bw-web-key'));
+
+/// gzip + XChaCha20-Poly1305 with [aad] as associated data. Layout: "BWOP2" | nonce(24) | mac(16) | ciphertext.
+/// [nonce] (24 bytes) is a test seam for known-answer vectors only; otherwise a fresh random one is drawn.
 /// Logs `vault.seal` on `bw.perf` with the plain and sealed sizes.
-Future<Uint8List> seal(List<int> plain, VaultKey key) async {
+Future<Uint8List> seal(List<int> plain, VaultKey key, {required List<int> aad, List<int>? nonce}) async {
   final t = PerfTimer('vault.seal', warnMs: 500);
+  if (nonce != null && nonce.length != 24) throw ArgumentError.value(nonce.length, 'nonce', 'must be 24 bytes');
   final zipped = _gzip.encodeBytes(plain);
-  final box = await _aead.encrypt(zipped, secretKey: SecretKey(key.bytes));
-  final out = Uint8List.fromList([..._magic, ...box.nonce, ...box.mac.bytes, ...box.cipherText]);
+  final box = await _aead.encrypt(zipped, secretKey: SecretKey(key.bytes), nonce: nonce, aad: aad);
+  final out = Uint8List.fromList([..._magic2, ...box.nonce, ...box.mac.bytes, ...box.cipherText]);
   t.done({'plainBytes': plain.length, 'bytes': out.length});
   return out;
 }
@@ -141,32 +169,47 @@ bool _wholeGzip(List<int> z, int length) {
   return size == length & 0xFFFFFFFF;
 }
 
+/// Opens what [seal] made. `BWOP2` is checked against [aad] (sealed for another use, device, seq or snapshot id =
+/// `badKey`, like a changed file); `BWOP1` from older builds carries no associated data and is still read with any
+/// [aad]. Inflates at most [maxBytes] ([maxUnsealBytes]; lower only in tests) ([UnsealFailure.tooLarge]).
 /// Logs `vault.unseal` on `bw.perf` with the sealed and plain sizes.
-Future<Uint8List> unseal(List<int> data, VaultKey key) async {
+Future<Uint8List> unseal(List<int> data, VaultKey key, {required List<int> aad, int maxBytes = maxUnsealBytes}) async {
   final t = PerfTimer('vault.unseal', warnMs: 500);
   if (data.length < 5 + 24 + 16) {
     logEvent(_log, Level.WARNING, 'vault.unseal.short', {'bytes': data.length});
     throw const VaultException('Sync file is damaged.', failure: UnsealFailure.damaged);
   }
-  for (var i = 0; i < 5; i++) {
-    if (data[i] != _magic[i]) {
-      // "BWOP" and a version digit above 1: a format from a newer build, readable after an upgrade.
-      final newer = i == 4 && data[4] >= 0x32 && data[4] <= 0x39;
-      logEvent(_log, Level.WARNING, 'vault.unseal.magic', {'bytes': data.length, 'newer': newer});
-      throw VaultException('Not a Budget Wallet sync file.', failure: newer ? UnsealFailure.newerFormat : UnsealFailure.damaged);
-    }
+  var bwop = true;
+  for (var i = 0; i < 4; i++) {
+    if (data[i] != _magic1[i]) bwop = false;
   }
+  final digit = data[4];
+  if (!bwop || digit < _magic1[4] || digit > 0x39) {
+    logEvent(_log, Level.WARNING, 'vault.unseal.magic', {'bytes': data.length, 'newer': false});
+    throw const VaultException('Not a Budget Wallet sync file.', failure: UnsealFailure.damaged);
+  }
+  if (digit > _magic2[4]) {
+    // "BWOP" and a version digit above 2: a format from a newer build, readable after an upgrade.
+    logEvent(_log, Level.WARNING, 'vault.unseal.magic', {'bytes': data.length, 'newer': true});
+    throw const VaultException('Not a Budget Wallet sync file.', failure: UnsealFailure.newerFormat);
+  }
+  final format = digit - 0x30;
   final nonce = data.sublist(5, 29), mac = data.sublist(29, 45), cipher = data.sublist(45);
   try {
-    final clear = await _aead.decrypt(SecretBox(cipher, nonce: nonce, mac: Mac(mac)), secretKey: SecretKey(key.bytes));
-    final out = _gunzip.decodeBytes(clear);
+    final clear = await _aead.decrypt(SecretBox(cipher, nonce: nonce, mac: Mac(mac)),
+        secretKey: SecretKey(key.bytes), aad: format >= 2 ? aad : const <int>[]);
+    final out = _gunzip.decodeBytes(clear, maxOutputSize: maxBytes);
     if (!_wholeGzip(clear, out.length)) throw const FormatException('gzip data is cut off');
-    t.done({'bytes': data.length, 'plainBytes': out.length});
+    t.done({'bytes': data.length, 'plainBytes': out.length, 'format': format});
     return out;
   } on SecretBoxAuthenticationError catch (e, st) {
-    logError(_log, 'vault.unseal.auth', e, st, fields: {'bytes': data.length});
+    logError(_log, 'vault.unseal.auth', e, st, fields: {'bytes': data.length, 'format': format});
     throw const VaultException('Sync file was made with a different key, or was changed.', failure: UnsealFailure.badKey);
   } on Object catch (e, st) {
+    if (e is ArchiveException && '$e'.contains('larger than')) {
+      logError(_log, 'vault.unseal.tooLarge', e, st, fields: {'bytes': data.length, 'maxBytes': maxBytes});
+      throw const VaultException('Sync file is too large to open.', failure: UnsealFailure.tooLarge);
+    }
     // Authenticated, so made with this key, but not gzip: a writer bug or a format this build does not know.
     logError(_log, 'vault.unseal.format', e, st, fields: {'bytes': data.length});
     throw const VaultException('Sync file is damaged.', failure: UnsealFailure.damaged);

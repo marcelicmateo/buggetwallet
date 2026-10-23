@@ -299,8 +299,11 @@ void main() {
       await h.ack(w1, 'dev2', {'dev1': 2});
       await h.putSnapshot(w1, 's1', {'dev1': 1}, 'a');
       await h.putSnapshot(w1, 's2', {'dev1': 2, 'dev2': 1}, 'b');
-      expect(await h.state(w1), {
-        'api': 2,
+      final st = await h.state(w1);
+      expect(st['instance'], matches(RegExp(r'^[0-9a-f]{32}$')));
+      expect(st, {
+        'api': 3,
+        'instance': st['instance'],
         'devices': {
           'dev1': {
             'first': 2,
