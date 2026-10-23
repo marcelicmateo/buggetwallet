@@ -950,6 +950,14 @@ class WalletController extends ChangeNotifier {
   /// Logs that the save-key screen was shown.
   void keyBackupShown() => logEvent(_key, Level.INFO, 'key.backup', {'action': 'shown'});
 
+  /// Whether the owner hid the first-run panel on Today (device-local); it is then one line.
+  bool get setupCollapsed => repo.localValue('setupCollapsed') == '1';
+
+  void setSetupCollapsed(bool v) {
+    repo.setLocalValue('setupCollapsed', v ? '1' : null);
+    _keyBackupChanged();
+  }
+
   /// "Later": hides Today's row for 7 days.
   void snoozeKeyBackup() {
     repo.setLocalValue('keyBackupSnoozedUntil', addDays(today(), 7));
@@ -1431,8 +1439,15 @@ class WalletController extends ChangeNotifier {
   }
 
   // ---------- edits ----------
+  /// The category of the last expense added on this device (device-local `lastExpenseCategory`), or null.
+  String? get lastExpenseCategory {
+    final c = repo.localValue('lastExpenseCategory');
+    return c != null && flexCategories.contains(c) && c != 'Bank fees' ? c : null;
+  }
+
   void addExpense({required int amount, required String category, required String note, required String date}) {
     repo.addTransaction(date: date, amount: amount, category: category, note: note, currency: currency);
+    repo.setLocalValue('lastExpenseCategory', category);
     logEvent(_log, Level.INFO, 'expense.add', {'category': category}); // category only
     _changed();
   }
@@ -1448,6 +1463,14 @@ class WalletController extends ChangeNotifier {
       repo.setCategory(t.id, category);
     }
     _changed();
+  }
+
+  /// The hand-added expense that the bank row [bankId] replaced (hidden from lists), or null.
+  Tx? entryMatchedTo(String bankId) {
+    for (final t in repo.transactions(includeHidden: true)) {
+      if (t.manual && t.matchedTo == bankId && !t.deleted) return t;
+    }
+    return null;
   }
 
   void deleteTransaction(Tx t) {
@@ -1487,10 +1510,32 @@ class WalletController extends ChangeNotifier {
     _changed();
   }
 
-  void addWish(String name, int price) {
-    repo.addWish(name, price);
+  /// The id of the wish added last in this session (the "Open" action of its toast).
+  String? lastAddedWish;
+
+  /// Adds a wish (cooling off) and returns its id.
+  String addWish(String name, int price) {
+    final id = repo.addWish(name, price);
+    lastAddedWish = id;
     logEvent(_log, Level.INFO, 'wish.add', {'status': 'waiting'}); // never the name or price
     _changed();
+    return id;
+  }
+
+  /// Set by the home shell: switches to tab 0..4 (Today, Spending, Wishlist, Goals, Plan). Null outside the shell (tests of a
+  /// single screen), where [openTab] does nothing.
+  void Function(int tab, String via)? tabHook;
+
+  /// The wish the Wishlist tab shows highlighted after a toast's "Open" (cleared by the screen once it scrolled there).
+  final ValueNotifier<String?> highlightWish = ValueNotifier<String?>(null);
+
+  /// Opens a tab from anywhere (a toast action, a row).
+  void openTab(int tab, {String via = 'toast'}) => tabHook?.call(tab, via);
+
+  /// Opens the Wishlist tab on [wishId].
+  void openWish(String wishId) {
+    highlightWish.value = wishId;
+    openTab(2);
   }
 
   void decideWish(String id, String status) {

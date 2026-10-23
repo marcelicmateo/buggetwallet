@@ -184,11 +184,20 @@ class _PlanScreenState extends State<PlanScreen> {
                   LineItem('Bills & subscriptions', money(-s.subs, cur, decimals: 0),
                       sub: 'Paid since payday: ${money(p.fixedPaid['Bills & subscriptions'] ?? 0, cur, decimals: 0)}'),
                   for (final g in wc.goals) LineItem(g.name, money(-g.monthly, cur, decimals: 0), sub: 'savings goal'),
+                  // Bills and planned costs due before payday come off the spending money too: the rows add up to the total.
+                  if (p.reservedBills + p.reservedPlanned > 0)
+                    LineItem('Set aside for coming costs', money(-(p.reservedBills + p.reservedPlanned), cur, decimals: 0),
+                        key: const ValueKey('ledgerSetAside'), sub: 'Bills and planned costs due before payday'),
                 ]),
                 TotalRule(
                     padding: EdgeInsets.zero,
-                    child: LineItem('Spending money', money(p.flexBudget, cur, decimals: 0),
-                        bold: true, sub: '${p.length} days, ${shortDate(p.start)} to ${shortDate(addDays(p.end, -1))}')),
+                    child: LineItem(
+                        'Spending money',
+                        p.flexBudget < 0 ? 'Over by ${moneyExact(-p.flexBudget, cur)}' : money(p.flexBudget, cur, decimals: 0),
+                        key: const ValueKey('ledgerSpendingMoney'),
+                        valueColor: p.flexBudget < 0 ? context.c.bad : null,
+                        bold: true,
+                        sub: '${p.length} days, ${shortDate(p.start)} to ${shortDate(addDays(p.end, -1))}')),
                 if (lowIncome)
                   Panel(color: context.c.warnBg, children: [
                     Text(

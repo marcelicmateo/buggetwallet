@@ -471,7 +471,10 @@ class LineItem extends StatelessWidget {
   final String? sub;
   final bool bold;
   final Widget? leading;
-  const LineItem(this.label, this.value, {super.key, this.sub, this.bold = false, this.leading});
+
+  /// The value's colour (default: the text colour), e.g. `bad` for "Over by …".
+  final Color? valueColor;
+  const LineItem(this.label, this.value, {super.key, this.sub, this.bold = false, this.leading, this.valueColor});
   @override
   Widget build(BuildContext context) {
     final w = bold ? FontWeight.w600 : FontWeight.w500;
@@ -488,7 +491,7 @@ class LineItem extends StatelessWidget {
           ]),
         ),
         const SizedBox(width: 8),
-        Text(value, textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: w)),
+        Text(value, textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: w, color: valueColor)),
       ]),
     );
   }
@@ -513,9 +516,45 @@ class EmptyNote extends StatelessWidget {
       child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: context.c.muted)));
 }
 
+/// A date picker that looks like a text field: floating [label], the date inside, a calendar icon (or a clear button with
+/// [onClear]). A tap calls [onPick]; the sheet opens `showDatePicker` there.
+class DateField extends StatelessWidget {
+  final String label;
+
+  /// `YYYY-MM-DD`, or null when not set.
+  final String? value;
+  final VoidCallback onPick;
+  final VoidCallback? onClear;
+  final String? helper;
+  const DateField({super.key, required this.label, required this.value, required this.onPick, this.onClear, this.helper});
+
+  @override
+  Widget build(BuildContext context) {
+    final v = value;
+    final text = v == null ? 'Set date' : shortDateOrRaw(v);
+    return Row(children: [
+      Expanded(
+        child: InkWell(
+          onTap: onPick,
+          child: InputDecorator(
+            decoration: InputDecoration(labelText: label, helperText: helper, suffixIcon: const Icon(Icons.event, size: 18)),
+            child: Text(text, overflow: TextOverflow.ellipsis, style: v == null ? TextStyle(color: context.c.muted) : null),
+          ),
+        ),
+      ),
+      if (onClear != null && v != null) IconButton(tooltip: 'Clear $label', icon: const Icon(Icons.close, size: 18), onPressed: onClear),
+    ]);
+  }
+}
+
+/// How long a toast stays, with or without an action (I4).
+const toastDuration = Duration(milliseconds: 2500);
+
 /// A short message at the bottom: full width on a phone, a 400 dp floating card on wide windows.
 ///
-/// With [actionLabel] and [onAction] the snack bar has one action button (like "Undo") and stays a little longer.
+/// Stays [toastDuration] (also with an action: it does not persist) and is cleared by [clearToasts] when the owner changes
+/// tab or opens a sheet or page. With [actionLabel] and [onAction] the snack bar has one action button (like "Undo"); the
+/// action gets the key `toastAction` (`toastUndo` for an action labelled "Undo").
 void toast(BuildContext context, String msg, {String? actionLabel, VoidCallback? onAction}) {
   final wide = layoutOf(context) != LayoutSize.compact;
   ScaffoldMessenger.of(context)
@@ -524,8 +563,25 @@ void toast(BuildContext context, String msg, {String? actionLabel, VoidCallback?
         content: Text(msg),
         behavior: SnackBarBehavior.floating,
         width: wide ? 400 : null,
-        duration: Duration(seconds: onAction == null ? 3 : 6),
-        action: actionLabel == null || onAction == null ? null : SnackBarAction(label: actionLabel, onPressed: onAction)));
+        duration: toastDuration,
+        persist: false,
+        action: actionLabel == null || onAction == null
+            ? null
+            : SnackBarAction(
+                key: ValueKey(actionLabel == 'Undo' ? 'toastUndo' : 'toastAction'), label: actionLabel, onPressed: onAction)));
+}
+
+/// Removes the toast on screen and any queued one: called on a tab change and when a sheet or page opens.
+void clearToasts(BuildContext context) => ScaffoldMessenger.maybeOf(context)?.clearSnackBars();
+
+/// Clears toasts when a route is pushed (any `Navigator.push`, sheet or dialog), so a message never stays over a new screen.
+class ToastClearer extends NavigatorObserver {
+  final GlobalKey<ScaffoldMessengerState> messenger;
+  ToastClearer(this.messenger);
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (previousRoute != null) messenger.currentState?.clearSnackBars();
+  }
 }
 
 /// The bottom bar with a 1 px ink rule on top and a 3 px accent bar over the selected destination (the bar's destinations

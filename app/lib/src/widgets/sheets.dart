@@ -12,8 +12,10 @@ import '../theme.dart';
 import 'common.dart';
 
 /// Opens a bottom sheet on a phone, a dialog on windows [dialogMin] wide or more; logs `sheet.open` / `sheet.close` with
-/// the sheet's type and result word. Both pop with the same result (the dialog's close button pops null).
-Future<T?> showSheet<T>(BuildContext context, Widget child) {
+/// the sheet's type and result word. With `scrolls: false` the sheet scrolls its own body (a `Flexible` scroll view) and
+/// keeps a button pinned below it. Both pop with the same result (the dialog's close button pops null).
+Future<T?> showSheet<T>(BuildContext context, Widget child, {bool scrolls = true}) {
+  clearToasts(context);
   final name = child.runtimeType.toString();
   if (MediaQuery.sizeOf(context).width >= dialogMin) {
     return loggedRoute(
@@ -35,13 +37,16 @@ Future<T?> showSheet<T>(BuildContext context, Widget child) {
                     child: Padding(
                       padding: const EdgeInsets.only(top: 4, right: 4),
                       child: IconButton(
+                          key: const ValueKey('sheetClose'),
                           icon: const Icon(Icons.close),
                           tooltip: hasKeyboard ? 'Close (Esc)' : 'Close',
                           onPressed: () => Navigator.pop(ctx)),
                     ),
                   ),
                   Flexible(
-                    child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(20, 0, 20, 20), child: child),
+                    child: scrolls
+                        ? SingleChildScrollView(padding: const EdgeInsets.fromLTRB(20, 0, 20, 20), child: child)
+                        : Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 20), child: child),
                   ),
                 ]),
               ),
@@ -58,14 +63,27 @@ Future<T?> showSheet<T>(BuildContext context, Widget child) {
         barrierColor: Colors.black.withValues(alpha: 0.4),
         builder: (ctx) => Padding(
           padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20),
-          child: SingleChildScrollView(child: child),
+          child: scrolls
+              ? SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [closeRow(ctx), child]))
+              : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  closeRow(ctx),
+                  Flexible(child: child),
+                ]),
         ),
       ));
 }
 
+/// The X at the top right of a phone sheet.
+Widget closeRow(BuildContext ctx) => Align(
+      alignment: Alignment.centerRight,
+      child: IconButton(
+          key: const ValueKey('sheetClose'), icon: const Icon(Icons.close), tooltip: 'Close', onPressed: () => Navigator.pop(ctx)),
+    );
+
 /// Opens [screen] (a Scaffold with a [DialogAppBar]) as a full-screen page on a phone and as a dialog [width] wide from [dialogMin]
 /// (at most [maxHeight] tall, the window height minus 48 when that is less). With [logName] the open and close are logged like a sheet.
 Future<T?> openPageOrDialog<T>(BuildContext context, Widget screen, {required double width, double maxHeight = 760, String? logName}) {
+  clearToasts(context);
   final Future<T?> route;
   if (MediaQuery.sizeOf(context).width >= dialogMin) {
     route = showDialog<T>(
@@ -96,7 +114,8 @@ class DialogAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) => AppBar(
         title: Text(title),
-        leading: IconButton(icon: const Icon(Icons.close), tooltip: 'Close', onPressed: () => Navigator.pop(context)),
+        leading: IconButton(
+            key: const ValueKey('sheetClose'), icon: const Icon(Icons.close), tooltip: 'Close', onPressed: () => Navigator.pop(context)),
         actions: actions,
         bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: Container(height: 2, color: context.c.lineStrong)),
       );
@@ -107,7 +126,11 @@ Future<void> addExpenseFlow(BuildContext context, WalletController wc) async {
   final r = await showSheet<String>(context, AddExpenseSheet(wc: wc));
   if (!context.mounted) return;
   if (r == 'added') toast(context, 'Expense added');
-  if (r == 'wish') toast(context, 'On the wishlist. Decide in ${wc.settings.coolHours} hours.');
+  if (r == 'wish') {
+    final id = wc.lastAddedWish;
+    toast(context, 'On the wishlist. Decide in ${wc.settings.coolHours} hours.',
+        actionLabel: id == null ? null : 'Open', onAction: id == null ? null : () => wc.openWish(id));
+  }
   if (r == 'scan') await scanBillFlow(context, wc);
 }
 
@@ -126,7 +149,9 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
   late final TextEditingController amount =
       TextEditingController(text: widget.amount == null ? '' : (widget.amount! / 100).toStringAsFixed(2));
   late final TextEditingController note = TextEditingController(text: widget.note ?? '');
-  String cat = 'Groceries';
+  /// The last category used on this device; none on a fresh device (the CTA waits for a pick).
+  late String? cat = widget.wc.lastExpenseCategory;
+  final wishName = TextEditingController();
   late DateTime date = widget.wc.now;
   String? error;
   bool warned = false;
@@ -165,31 +190,34 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         autofocus: true,
         onChanged: (_) => setState(() {}),
         style: numStyle.copyWith(fontSize: 30, fontWeight: FontWeight.w500),
-        decoration: InputDecoration(suffixText: currencySymbol(cur), hintText: '0.00'),
+        decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur), hintText: '0.00'),
       ),
       const SizedBox(height: 6),
       const DoubleRule(),
       const SizedBox(height: 14),
-      const Muted('Category'),
-      const SizedBox(height: 6),
-      Wrap(spacing: 6, runSpacing: 6, children: [
-        for (final c in flexCategories.where((c) => c != 'Bank fees'))
-          ChoiceChip(label: Text(c), selected: c == cat, onSelected: (_) => setState(() => cat = c)),
-      ]),
+      InputDecorator(
+        key: const ValueKey('categoryField'),
+        decoration: InputDecoration(labelText: cat == null ? 'Category (pick one)' : 'Category'),
+        child: Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final c in flexCategories.where((c) => c != 'Bank fees'))
+            ChoiceChip(label: Text(c), selected: c == cat, onSelected: (_) => setState(() => cat = c)),
+        ]),
+      ),
       const SizedBox(height: 14),
-      Row(children: [
-        Expanded(child: TextField(controller: note, decoration: const InputDecoration(labelText: 'Note', hintText: 'Lunch with Ana'))),
-        const SizedBox(width: 10),
-        OutlinedButton.icon(
-          icon: const Icon(Icons.event, size: 18),
-          label: Text(shortDate(isoDate(date))),
-          onPressed: () async {
-            final d = await showDatePicker(
-                context: context, initialDate: date, firstDate: DateTime(2020), lastDate: widget.wc.now.add(const Duration(days: 1)));
-            if (d != null) setState(() => date = d);
-          },
-        ),
-      ]),
+      TextField(
+          controller: note,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(labelText: 'Note', hintText: 'Lunch with Ana')),
+      const SizedBox(height: 14),
+      DateField(
+        label: 'Date',
+        value: isoDate(date),
+        onPick: () async {
+          final d = await showDatePicker(
+              context: context, initialDate: date, firstDate: DateTime(2020), lastDate: widget.wc.now.add(const Duration(days: 1)));
+          if (d != null) setState(() => date = d);
+        },
+      ),
       if (error != null) ...[const SizedBox(height: 10), StatusLabel(good: false, text: error!)],
       if (warned && !widget.skipImpulse && (parseMoney(amount.text) ?? 0) > s.impulse) ...[
         const SizedBox(height: 12),
@@ -198,13 +226,22 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
               style: TextStyle(fontWeight: FontWeight.w600, color: context.c.warnInk)),
           Text('Your rule says big buys wait ${s.coolHours} hours. If you already paid, tap Add expense again.',
               style: TextStyle(color: context.c.warnInk, fontSize: 13)),
+          // A wish takes its name from the note; with no note the owner names it (never the category).
+          if (note.text.trim().isEmpty)
+            TextField(
+                key: const ValueKey('wishName'),
+                controller: wishName,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: 'Name of the wish', hintText: 'Running shoes')),
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton(
-              onPressed: () {
-                widget.wc.addWish(note.text.trim().isEmpty ? cat : note.text.trim(), parseMoney(amount.text)!);
-                Navigator.pop(context, 'wish');
-              },
+              onPressed: (note.text.trim().isEmpty ? wishName.text.trim() : note.text.trim()).isEmpty
+                  ? null
+                  : () {
+                      widget.wc.addWish(note.text.trim().isEmpty ? wishName.text.trim() : note.text.trim(), parseMoney(amount.text)!);
+                      Navigator.pop(context, 'wish');
+                    },
               key: const ValueKey('putOnWishlist'),
               child: const Text('Put on wishlist'),
             ),
@@ -212,12 +249,18 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         ]),
       ],
       const SizedBox(height: 14),
+      const Muted(
+          'Cash from an ATM is already counted when you withdraw it. Log card payments here; the weekly import matches them so nothing is counted twice.',
+          size: 12.5),
+      const SizedBox(height: 10),
       FilledButton.icon(
         style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
         key: const ValueKey('addExpenseSave'),
         icon: const Icon(Icons.add),
         label: const Text('Add expense', style: TextStyle(fontSize: 16)),
-        onPressed: () {
+        onPressed: cat == null
+            ? null
+            : () {
           final a = parseMoney(amount.text);
           if (a == null || a <= 0) {
             logNav('expense.invalid');
@@ -232,14 +275,10 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
             });
             return;
           }
-          widget.wc.addExpense(amount: a, category: cat, note: note.text.trim(), date: isoDate(date));
+          widget.wc.addExpense(amount: a, category: cat!, note: note.text.trim(), date: isoDate(date));
           Navigator.pop(context, 'added');
         },
       ),
-      const SizedBox(height: 10),
-      const Muted(
-          'Cash from an ATM is already counted when you withdraw it. Log card payments here; the weekly import matches them so nothing is counted twice.',
-          size: 12.5),
     ]);
   }
 }
@@ -257,6 +296,13 @@ class _TxSheetState extends State<TxSheet> {
   late String cat = widget.t.category;
   bool always = true;
 
+  /// The bank row that replaced this hand-added expense, or the expense a bank row replaced (read once: it scans the rows).
+  /// Read-only: there is no unlink yet.
+  late final Tx? matchedBank = widget.t.tx.manual && widget.t.tx.matchedTo != null && !widget.t.tx.matchPending
+      ? widget.wc.repo.transaction(widget.t.tx.matchedTo!)
+      : null;
+  late final Tx? matchedEntry = widget.t.tx.manual ? null : widget.wc.entryMatchedTo(widget.t.tx.id);
+
   @override
   Widget build(BuildContext context) {
     final t = widget.t.tx;
@@ -272,6 +318,26 @@ class _TxSheetState extends State<TxSheet> {
       const DoubleRule(),
       const SizedBox(height: 6),
       Muted('${longDateOrRaw(t.date)} · $src${t.bankType.isNotEmpty ? ' · ${t.bankType}' : ''}'),
+      if (matchedBank != null)
+        Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(key: const ValueKey('matchedMark'), children: [
+              Icon(Icons.link, size: 16, color: context.c.good),
+              const SizedBox(width: 6),
+              Expanded(
+                  child: Text('Matched with your bank · ${longDateOrRaw(matchedBank!.date)}',
+                      style: TextStyle(fontSize: 13, color: context.c.ink2))),
+            ])),
+      if (matchedEntry != null)
+        Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(key: const ValueKey('matchedEntryMark'), children: [
+              Icon(Icons.link, size: 16, color: context.c.good),
+              const SizedBox(width: 6),
+              Expanded(
+                  child: Text('Matches the expense you added on ${longDateOrRaw(matchedEntry!.date)}',
+                      style: TextStyle(fontSize: 13, color: context.c.ink2))),
+            ])),
       if (!manual)
         Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(t.description, style: const TextStyle(fontSize: 13))),
       if (bill != null) ...[

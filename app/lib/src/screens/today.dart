@@ -16,6 +16,13 @@ import 'key_backup.dart';
 import 'review.dart';
 import 'upcoming.dart';
 
+/// A small overspend is shown to the cent: "Over today by 0 €" would hide it.
+String shown(int cents, String cur) => cents > 0 && cents < 10000 ? moneyExact(cents, cur) : money(cents, cur, decimals: 0);
+
+/// Tomorrow's daily allowance, or null when a new pay period starts tomorrow.
+// TODO(quickwins-core): `p.allowanceTomorrow` once that branch is merged.
+int? _allowanceTomorrow(PeriodBudget p) => null;
+
 /// The size of a typical delivery order the delivery-hour panel compares with today's money (in cents).
 const typicalOrderCents = 1500;
 
@@ -58,16 +65,27 @@ class TodayScreen extends StatelessWidget {
     final s = wc.settings;
     final cur = wc.currency;
     final p = wc.period();
-    final over = p.overToday > 0;
     final ended = p.paydayPassed;
-    // The hero number is never negative: what is left once the period ended, how far over today, else the safe amount.
-    final hero = ended ? (p.remaining > 0 ? p.remaining : 0) : (over ? p.overToday : p.safeToday);
-    // A small overspend is shown to the cent: "Over today by 0 €" would hide it.
-    String shown(int cents) => cents > 0 && cents < 10000 ? moneyExact(cents, cur) : money(cents, cur, decimals: 0);
+    // Over the whole period (the plan is spent) outranks over today: the hero then says how far over the plan.
+    final overPeriod = !ended && p.overBy > 0;
+    final over = (p.overToday > 0 || overPeriod) && !ended;
+    // The hero number is never negative: what is left once the period ended, how far over, else the safe amount.
+    final hero = ended ? (p.remaining > 0 ? p.remaining : 0) : (overPeriod ? p.overBy : (over ? p.overToday : p.safeToday));
+    // The sentence under an over hero (I1). Tomorrow's allowance is null when a new pay period starts tomorrow.
+    final tomorrow = _allowanceTomorrow(p);
+    final overSentence = !over
+        ? null
+        : overPeriod
+            ? "You're ${shown(p.overBy, cur)} over the plan for this period."
+            : tomorrow != null
+                ? "You're ${shown(p.overToday, cur)} over for today. Nothing more today; tomorrow starts at ${money(tomorrow, cur)}."
+                : "You're ${shown(p.overToday, cur)} over for today. Nothing more today; a new pay period starts tomorrow.";
     final worry = over || p.overBudget;
+    final newPayday = wc.newPayday(p.start);
+    // The first-run steps (I1): one panel below the hero while any is open.
+    final setupSteps = [if (wc.keyBackupRowVisible) 'key', if (!s.salaryConfirmed) 'salary', if (newPayday != null) 'payday'];
     final used = p.flexBudget > 0 ? p.spent / p.flexBudget : 1.0;
     final ahead = p.aheadOfPace;
-    final newPayday = wc.newPayday(p.start);
     // Several missed paydays move on in one tap: the latest payday on or before today.
     final newStart = currentPeriodStart(p.start, s.paydayDay, wc.today());
     final now = clock();
@@ -92,27 +110,6 @@ class TodayScreen extends StatelessWidget {
         child: ListView(
             padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
             children: gapped([
-              if (wc.keyBackupRowVisible) KeyBackupRow(wc: wc),
-              if (!s.salaryConfirmed)
-                Panel(color: c.warnBg, children: [
-                  Text('Planning on ${money(s.salary, cur, decimals: 0)} a month',
-                      style: TextStyle(fontWeight: FontWeight.w600, color: c.warnInk)),
-                  Text(
-                      s.salary > 0
-                          ? 'Check this matches a normal month of pay. Fix it in Plan if not.'
-                          : 'Enter your monthly salary in Plan so the daily budget can be worked out.',
-                      style: TextStyle(color: c.warnInk, fontSize: 13)),
-                  Wrap(alignment: WrapAlignment.spaceBetween, spacing: 8, runSpacing: 8, children: [
-                    OutlinedButton(onPressed: openPlan, child: const Text('Open Plan')),
-                    TextButton(onPressed: () => wc.updateSettings({'salaryConfirmed': true}), child: const Text('Looks right')),
-                  ]),
-                ]),
-              if (newPayday != null)
-                Panel(color: c.accentSoft, children: [
-                  Text('Salary landed on ${shortDate(newPayday)}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const Text('Start a new month to reset your daily budget and run the payday checklist.', style: TextStyle(fontSize: 13)),
-                  FilledButton(onPressed: () => wc.startNewMonth(newPayday), child: Text('Start new month on ${shortDate(newPayday)}')),
-                ]),
               if (ended && newPayday == null)
                 Panel(key: const ValueKey('periodEndedPanel'), color: c.accentSoft, children: [
                   Text('Pay period ended on ${shortDate(p.end)}', style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -125,19 +122,23 @@ class TodayScreen extends StatelessWidget {
               TwoCol(left: [
                 Panel(padding: const EdgeInsets.fromLTRB(0, 14, 0, 14), children: [
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Flexible(child: Eyebrow(ended ? 'Left this pay period' : (over ? 'Over today by' : 'Safe to spend today'))),
+                    Flexible(
+                        child: Eyebrow(ended
+                            ? 'Left this pay period'
+                            : (overPeriod ? 'Over the plan by' : (over ? 'Over today by' : 'Safe to spend today')))),
                     const SizedBox(width: 8),
                     Flexible(
                         child: ended
                             ? const StatusLabel(key: ValueKey('periodEnded'), good: false, text: 'Pay period ended')
-                            : StatusLabel(good: !worry, text: over ? 'Over today' : (p.overBudget ? 'Over the plan' : 'On plan'))),
+                            : StatusLabel(
+                                good: !worry, text: overPeriod ? 'Over the plan' : (over ? 'Over today' : (p.overBudget ? 'Over the plan' : 'On plan')))),
                   ]),
                   TotalRule(
                     padding: const EdgeInsets.fromLTRB(0, 8, 0, 10),
                     child: FittedBox(
                       alignment: Alignment.centerLeft,
                       fit: BoxFit.scaleDown,
-                      child: MoneyText((over && !ended ? shown(hero) : money(hero, cur, decimals: 0)),
+                      child: MoneyText((over && !ended ? shown(hero, cur) : money(hero, cur, decimals: 0)),
                           key: const ValueKey('safeToSpend'),
                           style: numStyle.copyWith(
                               fontSize: 78,
@@ -147,30 +148,28 @@ class TodayScreen extends StatelessWidget {
                               color: over && !ended ? c.bad : c.ink)),
                     ),
                   ),
-                  Muted(ended
-                      ? (p.overBy > 0
-                          ? 'The pay period ended on ${shortDate(p.end)}. Spending was ${money(p.overBy, cur)} over the plan.'
-                          : 'The pay period ended on ${shortDate(p.end)}. Start the new period to get a daily budget again.')
-                      : over
-                          ? 'Spent ${money(p.spentToday, cur)} today, ${money(p.overToday, cur)} more than the allowance of ${money(p.allowanceToday, cur)}.'
-                          : p.spentToday > 0
-                              ? 'Spent ${money(p.spentToday, cur)} today of ${money(p.allowanceToday, cur)}.${p.overBudget ? '' : ' Spend less today and tomorrow gets more.'}'
-                              : "Today's allowance is ${money(p.allowanceToday, cur)}.${p.overBudget ? '' : ' Spend less today and tomorrow gets more.'}"),
+                  Muted(
+                      ended
+                          ? (p.overBy > 0
+                              ? 'The pay period ended on ${shortDate(p.end)}. Spending was ${money(p.overBy, cur)} over the plan.'
+                              : 'The pay period ended on ${shortDate(p.end)}. Start the new period to get a daily budget again.')
+                          : overSentence ??
+                              (p.spentToday > 0
+                                  ? 'Spent ${money(p.spentToday, cur)} today of ${money(p.allowanceToday, cur)}.${p.overBudget ? '' : ' Spend less today and tomorrow gets more.'}'
+                                  : "Today's allowance is ${money(p.allowanceToday, cur)}.${p.overBudget ? '' : ' Spend less today and tomorrow gets more.'}"),
+                      key: overSentence == null ? null : const ValueKey('overSentence')),
                   _Stats([
                     p.overBy > 0 && !ended
-                        ? (shown(p.overBy), 'over the plan')
+                        ? (shown(p.overBy, cur), 'over the plan')
                         : (money(p.remaining > 0 ? p.remaining : 0, cur, decimals: 0), ended ? 'left, period over' : 'left until payday'),
                     ended
                         ? (shortDate(p.end), 'payday was')
                         : ('${p.daysLeft} ${p.daysLeft == 1 ? 'day' : 'days'}', 'to ${shortDate(p.end)}'),
                     (money(p.planDaily > 0 ? p.planDaily : 0, cur, decimals: 0), 'plan per day'),
                   ]),
-                  if (!ended && p.overBudget)
-                    StatusLabel(
-                        key: const ValueKey('overBudget'),
-                        good: false,
-                        text:
-                            p.overBy > 0 ? 'Over the plan by ${money(p.overBy, cur)} until payday.' : 'The plan leaves no spending money.'),
+                  // Over the plan is said once, in the sentence under the hero; this line is for a plan with no money in it.
+                  if (!ended && p.overBudget && p.overBy == 0)
+                    const StatusLabel(key: ValueKey('overBudget'), good: false, text: 'The plan leaves no spending money.'),
                   if (p.planDaily > 0) PaceBar(used: used, elapsed: p.elapsed, over: p.spent > p.flexBudget * p.elapsed),
                   if (p.planDaily > 0)
                     SplitRow(
@@ -238,6 +237,8 @@ class TodayScreen extends StatelessWidget {
                     ),
                   ),
                 ]),
+                if (setupSteps.isNotEmpty)
+                  _SetupPanel(wc: wc, steps: setupSteps, openPlan: openPlan, newPayday: newPayday),
                 if (review.due)
                   Panel(key: const ValueKey('reviewCard'), children: [
                     const SectionHead('Weekly review'),
@@ -438,5 +439,80 @@ class _Stats extends StatelessWidget {
         ]),
       ),
     );
+  }
+}
+
+/// The first-run steps in one panel under the hero (I1): save the key, confirm the salary, start a new month. After the owner
+/// hides it once it is a single line (`setupLine`) that opens it again.
+class _SetupPanel extends StatelessWidget {
+  final WalletController wc;
+  final List<String> steps;
+  final VoidCallback openPlan;
+  final String? newPayday;
+  const _SetupPanel({required this.wc, required this.steps, required this.openPlan, required this.newPayday});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final s = wc.settings;
+    final cur = wc.currency;
+    if (wc.setupCollapsed) {
+      final n = steps.length;
+      return Panel(color: c.warnBg, children: [
+        InkWell(
+          key: const ValueKey('setupLine'),
+          onTap: () => wc.setSetupCollapsed(false),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Row(children: [
+              Icon(Icons.checklist, size: 18, color: c.warnInk),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Text('$n ${n == 1 ? 'step' : 'steps'} left to set up',
+                      style: TextStyle(fontWeight: FontWeight.w600, color: c.warnInk))),
+              Icon(Icons.expand_more, color: c.warnInk),
+            ]),
+          ),
+        ),
+      ]);
+    }
+    return Panel(key: const ValueKey('setupPanel'), color: c.warnBg, children: [
+      Row(children: [
+        Icon(Icons.checklist, size: 18, color: c.warnInk),
+        const SizedBox(width: 8),
+        Expanded(child: Text('Set up your wallet', style: TextStyle(fontWeight: FontWeight.w600, color: c.warnInk))),
+        TextButton(key: const ValueKey('setupHide'), onPressed: () => wc.setSetupCollapsed(true), child: const Text('Hide')),
+      ]),
+      if (steps.contains('key')) ...[
+        Row(key: const ValueKey('keyBackupRow'), children: [
+          Icon(Icons.key, size: 16, color: c.warnInk),
+          const SizedBox(width: 8),
+          Expanded(child: Text('Save your wallet key', style: TextStyle(fontWeight: FontWeight.w600, color: c.warnInk))),
+        ]),
+        Text('Without it, this wallet cannot be opened again.', style: TextStyle(color: c.warnInk, fontSize: 13)),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          FilledButton(key: const ValueKey('keySaveNow'), onPressed: () => openKeyBackup(context, wc), child: const Text('Save now')),
+          TextButton(key: const ValueKey('keyRowLater'), onPressed: wc.snoozeKeyBackup, child: const Text('Later')),
+        ]),
+      ],
+      if (steps.contains('salary')) ...[
+        Text('Planning on ${money(s.salary, cur, decimals: 0)} a month', style: TextStyle(fontWeight: FontWeight.w600, color: c.warnInk)),
+        Text(
+            s.salary > 0
+                ? 'Check this matches a normal month of pay. Fix it in Plan if not.'
+                : 'Enter your monthly salary in Plan so the daily budget can be worked out.',
+            style: TextStyle(color: c.warnInk, fontSize: 13)),
+        Wrap(alignment: WrapAlignment.spaceBetween, spacing: 8, runSpacing: 8, children: [
+          OutlinedButton(onPressed: openPlan, child: const Text('Open Plan')),
+          FilledButton(onPressed: () => wc.updateSettings({'salaryConfirmed': true}), child: const Text('Looks right')),
+        ]),
+      ],
+      if (steps.contains('payday') && newPayday != null) ...[
+        Text('Salary landed on ${shortDate(newPayday!)}', style: TextStyle(fontWeight: FontWeight.w600, color: c.warnInk)),
+        Text('Start a new month to reset your daily budget and run the payday checklist.',
+            style: TextStyle(fontSize: 13, color: c.warnInk)),
+        FilledButton(onPressed: () => wc.startNewMonth(newPayday!), child: Text('Start new month on ${shortDate(newPayday!)}')),
+      ],
+    ]);
   }
 }

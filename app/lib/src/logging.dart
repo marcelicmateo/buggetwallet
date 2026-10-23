@@ -113,12 +113,14 @@ class AppLog {
       // Only the exception and stack: the full details can describe widgets and their text.
       _err.log(Level.SEVERE, LogEvent('flutter.error', {'library': details.library, 'silent': details.silent}), details.exception,
           details.stack);
+      noticeWriteFailed(details.exception);
       prevFlutter?.call(details);
     };
     final prevPlatform = PlatformDispatcher.instance.onError;
     PlatformDispatcher.instance.onError = (error, stack) {
       if (noticeClockBehind(error)) return true;
       logError(_err, 'platform.error', error, stack, level: Level.SEVERE);
+      noticeWriteFailed(error);
       return prevPlatform?.call(error, stack) ?? false;
     };
   }
@@ -127,6 +129,7 @@ class AppLog {
   static void zoneError(Object error, StackTrace stack) {
     if (noticeClockBehind(error)) return;
     logError(_err, 'zone.error', error, stack, level: Level.SEVERE);
+    noticeWriteFailed(error);
   }
 
   /// Applies a stored level name ('all', 'info', 'warning'); unknown or missing → all.

@@ -271,9 +271,8 @@ class _CategoryRow extends StatelessWidget {
                     if (r == 'saved') wc.confirmCategory(t.tx); // the picked category is now the owner's choice
                   },
                   child: const Text('Change')),
-              OutlinedButton(
+              FilledButton(
                 key: ValueKey('looksRight:${t.tx.id}'),
-                style: accentOutlined(context),
                 onPressed: () {
                   logNav('review.confirm');
                   wc.confirmCategory(t.tx);

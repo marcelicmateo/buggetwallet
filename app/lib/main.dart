@@ -78,18 +78,30 @@ class BudgetWalletApp extends StatefulWidget {
 
 class _BudgetWalletAppState extends State<BudgetWalletApp> {
   final _navigator = GlobalKey<NavigatorState>();
+  final _messenger = GlobalKey<ScaffoldMessengerState>();
+  late final _toastClearer = ToastClearer(_messenger);
   bool _noticeOpen = false;
 
   @override
   void initState() {
     super.initState();
     clockBehindNotice.addListener(_clockBehind);
+    writeFailedNotice.addListener(_writeFailed);
   }
 
   @override
   void dispose() {
     clockBehindNotice.removeListener(_clockBehind);
+    writeFailedNotice.removeListener(_writeFailed);
     super.dispose();
+  }
+
+  /// A write failed in the database (any screen): a toast, never silent.
+  void _writeFailed() {
+    final ctx = _navigator.currentContext;
+    if (ctx == null) return;
+    logNav('write.failed.shown');
+    toast(ctx, writeFailedText);
   }
 
   /// A write was refused because this device's clock is behind (any screen): one sentence over whatever is open.
@@ -113,6 +125,8 @@ class _BudgetWalletAppState extends State<BudgetWalletApp> {
     final wc = widget.wc;
     return MaterialApp(
       navigatorKey: _navigator,
+      scaffoldMessengerKey: _messenger,
+      navigatorObservers: [_toastClearer],
       title: 'Budget Wallet',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(Brightness.light),
@@ -253,6 +267,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
+    widget.wc.tabHook = _go;
     AppLog.setScreen(_tabs[tab]);
     _refreshPages();
     _life = AppLifecycleListener(
@@ -285,6 +300,7 @@ class _HomeShellState extends State<HomeShell> {
 
   void _go(int i, String via) {
     if (i == tab) return;
+    clearToasts(context);
     logNav('nav.tab', {'from': _tabs[tab], 'to': _tabs[i], 'via': via});
     AppLog.setScreen(_tabs[i]);
     // Today and Wishlist show the time of day (delivery hour, hours left): they get a fresh build when opened.
@@ -340,6 +356,7 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   void dispose() {
+    widget.wc.tabHook = null;
     _life.dispose();
     _focus.dispose();
     _billsRequest.dispose();
