@@ -61,4 +61,20 @@ void main() {
     }
     expect(text, contains('"collisions":2'));
   });
+
+  test('the same id twice inside one batch: the first wins; other content is a collision, the same content a duplicate', () {
+    final fresh = n('2026-01-26', -700, 'POS plaćanje', 'Synthetic cafe');
+    final s = r.importBatch(ImportBatch(source: 'pbz', transactions: [
+      fresh,
+      _same(fresh, amount: -701),
+      _same(fresh, description: 'Synthetic other cafe'),
+      fresh, // an exact repeat: a plain duplicate
+    ]));
+    expect((s.added, s.duplicates, s.collisions), (1, 3, 2));
+    final stored = r.transactions().where((t) => t.id == fresh.id).toList();
+    expect(stored.map((t) => (t.amount, t.description)), [(-700, 'Synthetic cafe')]);
+    expect(lines.where((l) => l.contains('repo.idCollision')), [endsWith('repo.idCollision {"source":"pbz","count":2}')]);
+    final again = r.importBatch(ImportBatch(source: 'pbz', transactions: [fresh, fresh]));
+    expect((again.added, again.duplicates, again.collisions), (0, 2, 0));
+  });
 }

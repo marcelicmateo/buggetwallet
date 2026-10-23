@@ -644,11 +644,19 @@ class WalletRepo {
     final known = <String, (Object?, Object?)>{
       for (final r in db.select('SELECT id, amount, description FROM tx')) r['id'] as String: (r['amount'], r['description'])
     };
-    final fresh = batch.transactions.where((t) => !known.containsKey(t.id)).toList();
+    // In batch order: a stored id, or one an earlier row of this batch took, is a duplicate (the first row wins and is
+    // never overwritten); with another amount or description it is also a collision.
+    final fresh = <NormalizedTransaction>[];
     var collisions = 0;
     for (final n in batch.transactions) {
-      if (known[n.id] case (final amount, final description) when amount != n.amountMinor || description != n.description) collisions++;
+      if (known[n.id] case (final amount, final description)) {
+        if (amount != n.amountMinor || description != n.description) collisions++;
+        continue;
+      }
+      known[n.id] = (n.amountMinor, n.description);
+      fresh.add(n);
     }
+
     // The count only: never the ids, amounts or descriptions.
     if (collisions > 0) logEvent(_log, Level.WARNING, 'repo.idCollision', {'source': batch.source, 'count': collisions});
     final changes = <(String, String, Map<String, Object?>)>[];
