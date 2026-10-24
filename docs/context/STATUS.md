@@ -5,7 +5,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 
 **Current milestone:** M2 Standalone app — v2.0 first builds published for all platforms (branch `v2`), waiting for owner testing. v1 web app still live.
 
-**Sync:** relay on the home server (stage R, 2026-10-22); Syncthing is no longer used.
+**Sync:** relay (stage R, 2026-10-22); Syncthing is no longer used. Hosting: owner chose a Hetzner Cloud server (2026-10-24, guide docs/setup.md §6; not set up yet), home server (§5) stays documented.
 
 **v2 downloads (GitHub releases, private repo):**
 - All platforms: release tag `dev-all` (Android .apk, Linux .tar.gz, Windows .zip, macOS .zip unsigned, iPhone .ipa unsigned)

@@ -46,6 +46,8 @@ Plan → **Choose files** and select the PBZ (.xls) and Revolut (.xlsx/.csv) exp
 
 ## 5. Relay on the home server
 
+Or rent a small server instead of running one at home: §6 (Hetzner Cloud) uses the same files.
+
 The relay is a small server that stores the encrypted sync files for your devices; it cannot read them. It is one container
 (image built from `dev/Containerfile.relay`) that listens on port 8787 inside a private Podman network and keeps everything in one data
 folder. **A second container, Caddy, is the only thing reachable from the internet**: it gets a Let's Encrypt certificate for your
@@ -167,3 +169,96 @@ podman run -d --name bw-relay-lan --read-only --userns=keep-id:uid=10001,gid=100
 and use `http://<server-lan-name>:8787` in the app. The app refuses `http://` to a public host: anything on the internet must be
 `https://`. Never forward this port on the router and do not keep real wallets on an open plain-HTTP relay; try things out, then
 switch to the setup above and point every device at the new address.
+
+## 6. Relay on a rented server (Hetzner Cloud)
+
+Same containers as §5, on a small server in a data centre instead of at home: no router, no port forward, no dynamic DNS, and
+sync keeps working when the home internet or power is down. The server only ever holds sealed files and the wallets' public keys
+(5.4), so the host can see sizes, times and client addresses but nothing of the wallet.
+
+```
+phone / laptop --https :443--> Hetzner server: Caddy (bw-relay-caddy) --private network--> relay (bw-relay) --> /srv/budget-wallet-relay
+```
+
+### 6.1 Create the server
+In the Hetzner Cloud console (console.hetzner.cloud), new project, **Add server**:
+- **Location:** an EU one (Falkenstein, Nuremberg or Helsinki).
+- **Image:** Fedora (newest offered; the same Podman and firewalld as the laptop) or Ubuntu 24.04 (Podman 4.9, quadlets work).
+- **Type:** the smallest **shared x86** plan (2 vCPU, 4 GB at the time of writing) is plenty. Pick x86, not ARM (CAX): the image is
+  built on the laptop (6.3), and an x86 image does not run on ARM.
+- **Networking:** public IPv4 and IPv6 (IPv4 costs a little extra but phones on mobile data often have no IPv6).
+- **SSH key:** add your laptop's public key (`~/.ssh/id_ed25519.pub`); no root password.
+- **Firewall:** create one with inbound **TCP 22**, **TCP 80** and **TCP 443** only (22 limited to your home IP if it is fixed) and
+  attach it. Nothing else, never 8787.
+- **Backups:** optional (+20 % of the server price, daily, 7 kept); see 6.5.
+
+### 6.2 First login: a user, updates, ports
+```sh
+ssh root@<server IP>
+# on the server, as root:
+useradd -m -G wheel bw && mkdir -p /home/bw/.ssh && cp ~/.ssh/authorized_keys /home/bw/.ssh/ \
+  && chown -R bw: /home/bw/.ssh && chmod 700 /home/bw/.ssh && echo 'bw ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/bw
+# (Ubuntu: -G sudo instead of -G wheel)
+printf 'PermitRootLogin no\nPasswordAuthentication no\n' > /etc/ssh/sshd_config.d/10-bw.conf && systemctl restart sshd
+dnf -y upgrade && dnf -y install podman dnf-automatic && systemctl enable --now dnf-automatic-install.timer
+# (Ubuntu: apt update && apt -y upgrade && apt -y install podman unattended-upgrades)
+echo 'net.ipv4.ip_unprivileged_port_start=80' > /etc/sysctl.d/90-bw-relay.conf && sysctl --system
+```
+
+The last line lets rootless Caddy bind 80 and 443 (5.2). If firewalld is running on the server (`systemctl is-active firewalld`),
+also allow the ports there: `firewall-cmd --permanent --add-service=http --add-service=https && firewall-cmd --reload`. From now on
+log in as `ssh bw@<server IP>`.
+
+### 6.3 Name, image and files
+1. **DNS:** at your domain's DNS provider, an `A` record (and `AAAA` with the server's IPv6) for the name, e.g. `wallet.example.org`,
+   pointing at the server. Check with `dig +short wallet.example.org` before starting Caddy, or the first certificate attempt fails
+   (Caddy retries on its own).
+2. **Image:** the repository is private, so build on the laptop and copy the image over (no checkout on the server):
+   ```sh
+   # on the laptop, in a checkout of this repository:
+   podman build --format docker -f dev/Containerfile.relay -t localhost/budget-wallet-relay:latest .
+   podman save localhost/budget-wallet-relay:latest | ssh bw@<server IP> podman load
+   scp relay/deploy/bw-relay.network relay/deploy/bw-relay.container relay/deploy/bw-relay-caddy.container \
+       relay/deploy/Caddyfile relay/deploy/bw-relay.env.example bw@<server IP>:
+   ```
+3. **On the server** (as `bw`):
+   ```sh
+   sudo mkdir -p /srv/budget-wallet-relay && sudo chown bw: /srv/budget-wallet-relay
+   mkdir -p ~/.config/containers/systemd ~/.config/budget-wallet-relay
+   mv bw-relay.network bw-relay.container bw-relay-caddy.container ~/.config/containers/systemd/
+   mv Caddyfile ~/.config/budget-wallet-relay/Caddyfile
+   mv bw-relay.env.example ~/.config/budget-wallet-relay/bw-relay.env && chmod 600 ~/.config/budget-wallet-relay/bw-relay.env
+   ```
+   Then exactly as in 5.3 from "Create the wallet-creation token" on: the token secret, `BW_RELAY_DOMAIN=<your name>` in
+   `bw-relay.env`, `systemctl --user daemon-reload && systemctl --user start bw-relay-caddy`, `loginctl enable-linger bw`, and the
+   checks (`curl -sI https://<your name>/v2/health` from the laptop should answer `HTTP/2 200`).
+
+In the app the relay address is `https://<your name>` (Plan › Sync › Test connection).
+
+### 6.4 Upgrading
+Relay: rebuild on the laptop and copy it again (6.3 step 2, the `podman build` and `podman save | ssh … podman load` lines), then
+`ssh bw@<server IP> systemctl --user restart bw-relay`. Caddy and system packages as in 5.5; the system updates itself
+(`dnf-automatic` / `unattended-upgrades`), reboot now and then with `sudo systemctl reboot` (the containers start again by themselves).
+
+### 6.5 Backup
+Either turn on Hetzner's backups (6.1; restore = the whole server as it was) or copy the data folder to the laptop now and then:
+
+```sh
+ssh bw@<server IP> systemctl --user stop bw-relay
+rsync -a bw@<server IP>:/srv/budget-wallet-relay/ ~/backups/budget-wallet-relay/
+ssh bw@<server IP> systemctl --user start bw-relay
+```
+
+A copy older than the devices is safe: they notice the relay went back and upload what it is missing (Stage H). The devices' own
+`.bwb` backups stay the real backup of the wallet.
+
+### 6.6 Moving from the home server
+1. Stop the home relay (`systemctl --user stop bw-relay-caddy bw-relay`) and copy `/srv/budget-wallet-relay` to the new server
+   (`rsync -a /srv/budget-wallet-relay/ bw@<server IP>:/srv/budget-wallet-relay/`), then set up 6.3 with **the same name** and
+   the same creation token.
+2. Point the name's DNS records at the new server. With the same name nothing changes in the app: the signed host stays the same
+   and devices carry on once DNS has switched (up to the record's TTL).
+3. Remove the router forward for 80/443 at home and disable the home units
+   (`rm ~/.config/containers/systemd/bw-relay*.{container,network} && systemctl --user daemon-reload`).
+
+With a new name instead, change the relay address in Plan › Sync on every device.
