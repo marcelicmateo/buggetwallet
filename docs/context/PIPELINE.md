@@ -30,6 +30,15 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 Agent models: scout, ci-watcher haiku/low; test-writer, devops sonnet/medium; ui-builder sonnet/high; core-builder, reviewer Fable/high.
 Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the lead from the branch named in "Base".
 
+## Stage P4: recurring beyond monthly (2026-10-25, spec `P4_SPEC.md`; schema 12)
+| # | Item | Agent | Branch | Depends on | Status |
+|---|---|---|---|---|---|
+| P4-0 | Context pack (recurring model, matching, money, app panels, tests) | scout | – | – | done |
+| P4-C | Core: period classes, ranges, parts, `dueCycles`, long bills held in full, `addRecurring`/`updateRecurring`, schema 12, bill history per cycle | core-builder | p4-core | P4-0 | running |
+| P4-T | Spec tests (pure + repo) | test-writer | p4-tests | P4-0 | running |
+| P4-U | App: Expected bills (period, range, parts, instalments, held), Add/Edit bill sheet, Mark paid, Today line, history per cycle | ui-builder | p4-ui | P4-C | queued |
+| P4 | Merge, review, stage run, push, STATUS | lead | v2 | all | queued |
+
 ## Stage G: foundation — structure and practices (2026-10-22, `PATH_FORWARD.md` §4; behaviour-neutral, no schema change)
 Owner direction: structure and practices first. Merge order: A → ui → tests → devops.
 | # | Item | Agent | Branch | Depends on | Status |

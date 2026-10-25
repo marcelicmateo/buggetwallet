@@ -91,3 +91,13 @@ List<DueCycle> dueCycles(List<RecurringBill> bills, List<CategorizedTx> txs, Str
 - addRecurring/updateRecurring validation, ids, no-payee bill never matches, instalmentsLeft.
 - Schema 11 → 12, backup round trip, two devices editing the same bill offline.
 - Bill history per cycle for quarterly/yearly; monthly unchanged.
+
+## Clarifications (lead, 2026-10-25)
+1. Parts need 2 or more rows; a single row pays a cycle only through the single-payment rule (so a monthly full-amount row 4 days early is not paid, as today).
+2. `int? WalletRepo.instalmentsLeft(RecurringBill b)` lives on the repo (may delegate to the model).
+3. A manual bill's payee is excluded from detection in the repo refresh; `detectRecurring`'s signature may stay.
+4. `computePeriod` works out parts from `txs` (`planRecurringPayments` in `st.currency`); `dueCycles(payments: null)` does the same.
+5. `billHistory` for non-monthly bills: one line per cycle, newest first; `BillMonth.month` = the cycle due date's `YYYY-MM`, new `String? due` (null on monthly lines).
+6. Long bills: the "paid in this period" drop does not apply; after a payment moves `nextDue` on, the next cycle is held at once. A paying row not yet applied by refresh makes that cycle reserve 0.
+7. `RecurringPeriod.of(days)` is null when the days are further than that class's tolerance from every class.
+8. `updateRecurring` validates like `addRecurring`, including a range that must contain the amount after the edit.
