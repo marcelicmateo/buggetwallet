@@ -96,6 +96,10 @@ Only home-currency rows (`st.currency`) count. A value is null when there is not
   - `Suggested` and `PlanSuggestion` take named arguments, and `const PlanSuggestion()` has every field null.
   - Rent and loan come out as positive cents.
   - A budget of 0 counts as empty.
+- Review fixes:
+  - Evidence age: suggestions use only the last 6 complete calendar months before `monthOf(today)`. Rent and loan use only months in that window. A payday group counts only if it starts on or after the window's first day; the running group counts too. Older evidence alone gives null.
+  - Partial first payday: the data's oldest payday group counts, for salary and as a payday start, only when some home-currency row is dated at least 20 days (`_salaryGroupDays`) before its start.
+  - `opening` and `openingDate` form one pair. When `updateAccount` gets either one, it writes both, taking the other from the stored row. Both fields then share one clock, so a sync merge never pairs one device's balance with another device's date.
 
 ## 6. Tests the spec requires (test-writer writes these independently)
 Use synthetic data only.

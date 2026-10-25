@@ -2,14 +2,16 @@
 // from docs/context/N2_SPEC.md. Rent and loan amounts are read as positive cents (a setting's sign). All data SYNTHETIC.
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
-import 'package:wallet_importer/wallet_importer.dart' show TxKind;
 
 import 'support/n2.dart';
 
 const _today = '2026-10-25';
 const _st = WalletSettings();
 
-PlanSuggestion _suggest(List<CategorizedTx> txs, {WalletSettings st = _st}) => suggestPlan(txs, st, _today);
+/// Review fix 2 (N2_SPEC Clarifications): the data's oldest payday group counts only when the data reaches 20 days
+/// before it, so every fixture gets one early home-currency non-salary row ("the import starts well before").
+PlanSuggestion _suggest(List<CategorizedTx> txs, {WalletSettings st = _st}) =>
+    suggestPlan([n2Cz('2026-01-02', -100, 'Groceries', currency: st.currency), ...txs], st, _today);
 
 CategorizedTx _sal(String date, int cents, {String id = '', String currency = 'EUR'}) =>
     n2Cz(date, cents, 'Salary', currency: currency, id: id);
@@ -101,7 +103,7 @@ void main() {
     });
 
     test('non-income rows are not salary, and a deleted salary row does not count', () {
-      final gone =
+      const gone =
           CategorizedTx(Tx(id: 'del', source: 'pbz', date: '2026-08-15', amount: 100000, deleted: true), 'Salary', BudgetKind.income);
       final s =
           _suggest([_sal('2026-07-15', 100000), gone, n2Cz('2026-09-15', 100000, 'Extra income'), n2Cz('2026-09-16', 100000, 'Shopping')]);

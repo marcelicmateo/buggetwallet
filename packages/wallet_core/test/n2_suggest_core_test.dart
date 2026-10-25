@@ -23,6 +23,7 @@ void main() {
   group('suggestPlan: salary and payday', () {
     test('salary paid in parts is grouped per payday; the median of the complete groups', () {
       final txs = [
+        _r('2026-07-01', -1000, 'Groceries'), // the data reaches back before the first payday: its group is whole
         _r('2026-08-10', 100000, 'Salary', id: 'a1'),
         _r('2026-08-14', 50000, 'Salary', id: 'a2'),
         _r('2026-09-11', 100000, 'Salary', id: 'b1'),
@@ -48,7 +49,7 @@ void main() {
 
     test('not enough evidence gives null', () {
       expect(suggestPlan(const [], _st, _today).salary, isNull);
-      final one = [_r('2026-09-15', 100000, 'Salary'), _r('2026-10-15', 100000, 'Salary')];
+      final one = [_r('2026-08-01', -1000, 'Groceries'), _r('2026-09-15', 100000, 'Salary'), _r('2026-10-15', 100000, 'Salary')];
       final s = suggestPlan(one, _st, _today);
       expect(s.salary, isNull, reason: 'one complete group');
       expect(s.paydayDay, isNotNull, reason: 'two groups are enough for the day');
@@ -65,7 +66,7 @@ void main() {
     });
 
     test('payday day: a tie goes to the later day; 29–31 read as 28', () {
-      final tie = [_r('2026-08-10', 1000, 'Salary'), _r('2026-09-12', 1000, 'Salary')];
+      final tie = [_r('2026-07-01', -1000, 'Groceries'), _r('2026-08-10', 1000, 'Salary'), _r('2026-09-12', 1000, 'Salary')];
       expect(suggestPlan(tie, _st, _today).paydayDay!.value, 12);
       final late = [_r('2026-07-31', 1000, 'Salary'), _r('2026-08-30', 1000, 'Salary'), _r('2026-10-01', 1000, 'Salary')];
       expect(suggestPlan(late, _st, _today).paydayDay!.value, 28);
@@ -159,6 +160,49 @@ void main() {
         ('Shopping', 10000, 12000, false),
       ]);
       expect(budgetProposals({'Groceries': 1000}, {}), isEmpty);
+    });
+  });
+
+  group('review fixes: old evidence and a partial first payday', () {
+    test('a loan paid off and a salary stopped in March suggest nothing in October (window Apr-Sep)', () {
+      final txs = [
+        for (final m in ['01', '02', '03']) _r('2026-$m-05', -25000, 'Loan'),
+        _r('2025-12-01', -1000, 'Groceries'),
+        for (final m in ['01', '02', '03']) _r('2026-$m-15', 100000, 'Salary'),
+      ];
+      final s = suggestPlan(txs, _st, '2026-10-25');
+      expect((s.loan, s.salary, s.paydayDay), (null, null, null));
+      // In July the window is Jan-Jun: the same rows count.
+      expect(suggestPlan(txs, _st, '2026-07-25').loan!.value, 25000);
+    });
+
+    test('rows older than the 6-month window never join the median', () {
+      final txs = [
+        _r('2026-03-01', -90000, 'Rent'),
+        _r('2026-04-01', -50000, 'Rent'),
+        _r('2026-05-01', -50000, 'Rent'),
+      ];
+      final s = suggestPlan(txs, _st, '2026-10-25');
+      expect(s.rent!.value, 50000);
+      expect(s.rent!.evidence, hasLength(2));
+    });
+
+    test('an import that starts inside a payday: the oldest group is not counted for salary or the day', () {
+      final txs = [
+        _r('2026-07-05', 20000, 'Salary'),
+        _r('2026-08-01', 100000, 'Salary'),
+        _r('2026-08-05', 20000, 'Salary'),
+        _r('2026-09-01', 100000, 'Salary'),
+        _r('2026-09-05', 20000, 'Salary'),
+      ];
+      final s = suggestPlan(txs, _st, '2026-09-20');
+      expect(s.salary, isNull, reason: 'only August is a whole, complete group');
+      expect(suggestPlan(txs, _st, '2026-08-20').paydayDay, isNull, reason: 'the partial July group is no payday start');
+      final whole = [_r('2026-06-10', -500, 'Groceries'), ...txs];
+      expect(suggestPlan(whole, _st, '2026-09-20').salary!.value, 70000, reason: 'with data before it, July counts');
+      final s2 = suggestPlan([...whole, _r('2026-10-01', 100000, 'Salary'), _r('2026-10-05', 20000, 'Salary')], _st, '2026-10-20');
+      expect(s2.salary!.value, 120000);
+      expect(s2.paydayDay!.value, 1);
     });
   });
 }

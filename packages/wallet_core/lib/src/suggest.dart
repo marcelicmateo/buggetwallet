@@ -41,11 +41,18 @@ const _lookBack = 3;
 /// Groups needed for a salary or payday suggestion, months for rent or loan.
 const _minEvidence = 2;
 
-/// Plan values from the owner's own rows, in the home currency (`st.currency`) only:
+/// Calendar months before today's month that evidence may come from: older rows (a paid-off loan, a salary that
+/// stopped) suggest nothing.
+const _windowMonths = 6;
+
+/// Plan values from the owner's own rows, in the home currency (`st.currency`) only, and only from the last
+/// [_windowMonths] complete calendar months (payday groups starting from then on, the running one included):
 /// - **salary**: the median total of the last up to 3 complete payday groups ([salaryPaydays]; a group is complete
 ///   when the next payday has started). Needs 2 complete groups.
 /// - **paydayDay**: the most common day of month of the payday groups' starts (29–31 read as 28, like
 ///   `WalletSettings.paydayDay`); a tie goes to the later day. Needs 2 groups.
+/// - The oldest payday group of the data counts (for both) only when some home-currency row is at least 20 days
+///   (the grouping window) before its start: otherwise the import may begin in the middle of that payday.
 /// - **rent** / **loan**: the median monthly outflow of the rows categorised Rent / Loan (the categoriser decides,
 ///   never the amount) over the last 3 complete calendar months that have such rows. Needs 2 months.
 /// - **subs**: the sum of the expected (median) amounts of the [confirmed] recurring bills in Bills & subscriptions;
@@ -56,11 +63,13 @@ PlanSuggestion suggestPlan(List<CategorizedTx> txs, WalletSettings st, String to
     for (final t in txs)
       if (t.tx.live && t.tx.currency == st.currency && t.date.compareTo(today) <= 0) t
   ];
+  final from = '${monthsEnding(monthOf(today), _windowMonths + 1).first}-01'; // the window's first day
+  final groups = _salaryGroups(home, today, st.currency, from);
   final s = PlanSuggestion(
-    salary: _salary(home, today, st.currency),
-    paydayDay: _paydayDay(home, today, st.currency),
-    rent: _fixedMonthly(home, today, 'Rent', 'rentRows'),
-    loan: _fixedMonthly(home, today, 'Loan', 'loanRows'),
+    salary: _salary(groups),
+    paydayDay: _paydayDay(groups),
+    rent: _fixedMonthly(home, today, from, 'Rent', 'rentRows'),
+    loan: _fixedMonthly(home, today, from, 'Loan', 'loanRows'),
     subs: _subs(confirmed),
   );
   logEvent(_log, Level.FINE, 'budget.suggestPlan', {
@@ -78,9 +87,21 @@ int _byDateThenId(CategorizedTx a, CategorizedTx b) {
   return d != 0 ? d : a.tx.id.compareTo(b.tx.id);
 }
 
-/// The salary rows (as [salaryPaydays] reads them) grouped by payday, oldest first.
-List<List<CategorizedTx>> _salaryGroups(List<CategorizedTx> home, String today, String currency) {
-  final starts = salaryPaydays(home, today, currency: currency);
+/// Days before the oldest payday group's start the data must reach for that group to be whole (`_salaryGroupDays` in
+/// periods.dart: salary parts this close to a payday's first payment belong to it).
+const _wholeGroupDays = 20;
+
+/// The salary rows (as [salaryPaydays] reads them) grouped by payday, oldest first: only groups starting on or after
+/// [from], and the data's oldest group only when [home] holds a row [_wholeGroupDays] or more before its start.
+List<List<CategorizedTx>> _salaryGroups(List<CategorizedTx> home, String today, String currency, String from) {
+  final all = salaryPaydays(home, today, currency: currency);
+  if (all.isEmpty) return const [];
+  final reach = addDays(all.first, -_wholeGroupDays);
+  final whole = home.any((t) => t.date.compareTo(reach) <= 0);
+  final starts = [
+    for (final (i, d) in all.indexed)
+      if ((i > 0 || whole) && d.compareTo(from) >= 0) d
+  ];
   if (starts.isEmpty) return const [];
   final groups = [for (final _ in starts) <CategorizedTx>[]];
   final rows = [
@@ -89,6 +110,7 @@ List<List<CategorizedTx>> _salaryGroups(List<CategorizedTx> home, String today, 
   ]..sort(_byDateThenId);
   var g = 0;
   for (final t in rows) {
+    if (t.date.compareTo(starts.first) < 0) continue; // an earlier group's (left out above)
     while (g + 1 < starts.length && t.date.compareTo(starts[g + 1]) >= 0) {
       g++;
     }
@@ -97,8 +119,7 @@ List<List<CategorizedTx>> _salaryGroups(List<CategorizedTx> home, String today, 
   return groups;
 }
 
-Suggested? _salary(List<CategorizedTx> home, String today, String currency) {
-  final groups = _salaryGroups(home, today, currency);
+Suggested? _salary(List<List<CategorizedTx>> groups) {
   if (groups.length - 1 < _minEvidence) return null; // the last group is still running
   final complete = groups.sublist(0, groups.length - 1);
   final used = complete.sublist(complete.length > _lookBack ? complete.length - _lookBack : 0);
@@ -110,8 +131,7 @@ Suggested? _salary(List<CategorizedTx> home, String today, String currency) {
   ]);
 }
 
-Suggested? _paydayDay(List<CategorizedTx> home, String today, String currency) {
-  final groups = _salaryGroups(home, today, currency);
+Suggested? _paydayDay(List<List<CategorizedTx>> groups) {
   if (groups.length < _minEvidence) return null;
   final counts = <int, int>{};
   for (final g in groups) {
@@ -125,12 +145,12 @@ Suggested? _paydayDay(List<CategorizedTx> home, String today, String currency) {
   return Suggested(value: best, basis: 'paydayDates', evidence: [for (final g in groups) g.first.tx.id]);
 }
 
-Suggested? _fixedMonthly(List<CategorizedTx> home, String today, String category, String basis) {
+Suggested? _fixedMonthly(List<CategorizedTx> home, String today, String from, String category, String basis) {
   final thisMonth = monthOf(today);
   final byMonth = <String, List<CategorizedTx>>{};
   for (final t in home) {
     final m = monthOf(t.date);
-    if (t.category == category && m.compareTo(thisMonth) < 0) (byMonth[m] ??= []).add(t);
+    if (t.category == category && m.compareTo(thisMonth) < 0 && t.date.compareTo(from) >= 0) (byMonth[m] ??= []).add(t);
   }
   final months = byMonth.keys.toList()..sort();
   final used = months.sublist(months.length > _lookBack ? months.length - _lookBack : 0);

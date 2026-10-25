@@ -1,6 +1,5 @@
 // Shared SYNTHETIC helpers of the N2 (accounts, balances, suggestions) tests.
 import 'package:wallet_core/wallet_core.dart';
-import 'package:wallet_importer/wallet_importer.dart' show TxKind;
 
 /// 2026-10-10 00:00 UTC in ms: the fixed "today" of the N2 repo tests.
 const n2Now = 1791590400000;

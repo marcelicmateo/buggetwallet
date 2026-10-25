@@ -57,17 +57,20 @@ extension WalletRepoAccounts on WalletRepo {
     return rs.first;
   }
 
-  /// Changes the given fields only (null = unchanged). Source and currency never change: delete the account and add
+  /// Changes the given fields only (null = unchanged). [opening] and [openingDate] are one pair: when either is given
+  /// both are written (the other from the stored row), so they always share one clock and a sync merge never pairs
+  /// one device's balance with another device's date. Source and currency never change: delete the account and add
   /// a new one. Unknown id or a bad value: [ArgumentError].
   Future<void> updateAccount(String id, {String? name, int? opening, String? openingDate}) async {
-    _accountRow(id);
+    final stored = Account.fromRow(_accountRow(id));
     final n = name == null ? null : _checkName(name);
     if (opening != null) _checkAmount(opening);
     if (openingDate != null) _checkDate(openingDate);
+    final pair = opening != null || openingDate != null;
     final fields = {
       if (n != null) 'name': n,
-      if (opening != null) 'opening': opening,
-      if (openingDate != null) 'opening_date': openingDate,
+      if (pair) 'opening': opening ?? stored.opening,
+      if (pair) 'opening_date': openingDate ?? stored.openingDate,
     };
     if (fields.isEmpty) return;
     _write([('account', id, fields)]);

@@ -271,6 +271,28 @@ void main() {
       }
     }, timeout: _t);
 
+    test('opening and its date are one pair: a balance from A and a later date-only edit on B never mix', () async {
+      final a = Device('A', null, key, () => clock), b = Device('B', null, key, () => clock);
+      addTearDown(a.close);
+      addTearDown(b.close);
+      final id = await a.repo.addAccount(name: 'Bank 1', source: 'pbz', currency: 'EUR', opening: 1000, openingDate: '2026-10-01');
+      await settle([a, b]);
+      clock += 1000;
+      await a.repo.correctBalance(id, balance: 2500, date: '2026-10-09');
+      clock += 1000;
+      await b.repo.updateAccount(id, openingDate: '2026-10-03'); // B offline, later clock
+      final op = b.repo.pendingOps().last.$2;
+      expect(op.fields.keys.toSet(), {'opening', 'opening_date'});
+      await settle([a, b]);
+      for (final d in [a, b]) {
+        final x = d.repo.accounts().single;
+        expect((x.opening, x.openingDate), (1000, '2026-10-03'), reason: "B's single write: its stored balance with its date");
+      }
+      clock += 1000;
+      await a.repo.updateAccount(id, name: 'Bank one');
+      expect(a.repo.pendingOps().last.$2.fields.keys.toSet(), {'name'}, reason: 'a name edit leaves the pair alone');
+    }, timeout: _t);
+
     test('a backup round trip keeps accounts (deleted ones included)', () async {
       final r = WalletRepo.inMemory(now: () => clock);
       addTearDown(r.close);
