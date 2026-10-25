@@ -6,14 +6,14 @@ part of 'repo.dart';
 /// (sync never refuses an op). Logs carry counts only, never names or ids.
 extension WalletRepoTags on WalletRepo {
   /// The trimmed [name], or an [ArgumentError] when it is empty, longer than [TagRow.maxName] characters, already the
-  /// name of a live tag other than [exceptId], or the label of a live main tag (category); case and accents ignored.
-  String _checkTagName(String name, TagTable t, {String? exceptId}) {
+  /// name of a live tag other than [except], or the label of a live main tag (category); case and accents ignored.
+  String _checkTagName(String name, TagTable t, {Set<String> except = const {}}) {
     final n = name.trim();
     if (n.isEmpty) throw ArgumentError('Give the tag a name.');
     if (n.runes.length > TagRow.maxName) throw ArgumentError('The tag name is limited to ${TagRow.maxName} characters.');
     final key = foldText(n);
     for (final id in t.liveIds) {
-      if (id != exceptId && foldText(t.label(id)) == key) throw ArgumentError('There is already a tag with this name.');
+      if (!except.contains(id) && foldText(t.label(id)) == key) throw ArgumentError('There is already a tag with this name.');
     }
     final cats = categoryTable();
     for (final c in cats.topLevelIds) {
@@ -51,49 +51,82 @@ extension WalletRepoTags on WalletRepo {
     return id;
   }
 
-  /// Changes the given fields only (null = unchanged). An unknown or deleted id, a bad or taken name, or a negative
-  /// position: [ArgumentError].
+  /// [id] and the live sync duplicates that resolve to it ([TagTable.resolve]), or empty when it is not live. A
+  /// duplicate itself is acted on alone (the owner cleaning up the copy), an original with its whole group.
+  static List<String> _group(TagTable t, String id) {
+    if (!t.isLive(id)) return const [];
+    return [id, ...t.liveIds.where((x) => x != id && t.resolve(x) == id)];
+  }
+
+  /// Changes the given fields only (null = unchanged), on [id]'s whole duplicate group ([TagTable.resolve]), so the
+  /// tag the owner sees changes as one. An unknown or deleted id, a bad or taken name, or a negative position:
+  /// [ArgumentError].
   Future<void> updateTag(String id, {String? name, int? position, bool? hidden}) async {
     final t = tagTable();
     if (!t.isLive(id)) throw ArgumentError('No such tag.');
     if (position != null && position < 0) throw ArgumentError('Bad position.');
-    final n = name == null ? null : _checkTagName(name, t, exceptId: id);
+    final group = _group(t, id);
+    final n = name == null ? null : _checkTagName(name, t, except: group.toSet());
     final fields = <String, Object?>{
       if (n != null) 'name': n,
       if (position != null) 'position': position,
       if (hidden != null) 'hidden': hidden ? 1 : 0,
     };
     if (fields.isEmpty) return;
-    _write([('tag', id, fields)]);
-    logEvent(_log, Level.INFO, 'tag.update', {'fields': fields.length});
+    _write([for (final g in group) ('tag', g, fields)]);
+    logEvent(_log, Level.INFO, 'tag.update', {'fields': fields.length, 'group': group.length});
   }
 
-  /// Removes a tag (`deleted: 1`). Its links and rule tags stay, unused until [undeleteTag]. Already deleted: nothing
-  /// is written. Unknown id: [ArgumentError].
+  /// Removes a tag (`deleted: 1`) with its whole duplicate group. Its links and rule tags stay, unused until
+  /// [undeleteTag]. Already deleted: nothing is written. Unknown id: [ArgumentError].
   Future<void> deleteTag(String id) async {
     final t = tagTable();
     if (!t.isKnown(id)) throw ArgumentError('No such tag.');
     if (!t.isLive(id)) return;
+    final group = _group(t, id);
     _write([
-      ('tag', id, {'deleted': 1})
+      for (final g in group) ('tag', g, {'deleted': 1})
     ]);
-    logEvent(_log, Level.INFO, 'tag.delete', {'live': t.liveIds.length - 1});
+    logEvent(_log, Level.INFO, 'tag.delete', {'live': t.liveIds.length - group.length, 'group': group.length});
   }
 
-  /// Undo of [deleteTag]: writes `deleted: 0`, so its rows have it again. A live id: nothing is written. Unknown id,
-  /// a name taken in between, or [TagRow.maxLive] live tags already: [ArgumentError].
+  /// The ids of [entity] whose `deleted` field was written in the same millisecond by the same device as [id]'s (one
+  /// write ticks one clock per op: same millis and node, counters in a row): the members of a duplicate group one
+  /// delete removed together.
+  Set<String> _deletedWith(String entity, String id) {
+    final rs = db.select("SELECT hlc FROM clocks WHERE entity = ? AND id = ? AND field = 'deleted'", [entity, id]);
+    if (rs.isEmpty) return {id};
+    final mine = Hlc.parse(rs.first['hlc'] as String);
+    return {
+      id,
+      for (final r in db.select("SELECT id, hlc FROM clocks WHERE entity = ? AND field = 'deleted' AND hlc LIKE ?",
+          [entity, '${mine.millis.toString().padLeft(15, '0')}:%']))
+        if (Hlc.parse(r['hlc'] as String).node == mine.node) r['id'] as String
+    };
+  }
+
+  /// Undo of [deleteTag]: writes `deleted: 0` for [id] and every deleted tag with the same folded name that the same
+  /// delete removed (its duplicate group; the same `deleted` clock), so its rows have it again. A live id: nothing is written. Unknown id, a name taken in
+  /// between, or more than [TagRow.maxLive] live tags after it: [ArgumentError].
   Future<void> undeleteTag(String id) async {
     final t = tagTable();
     if (!t.isKnown(id)) throw ArgumentError('No such tag.');
     if (t.isLive(id)) return;
     final row = t.rows.lastWhere((r) => r.id == id);
     if (row.name.trim().isEmpty) throw ArgumentError('No such tag.');
-    if (t.liveIds.length >= TagRow.maxLive) throw ArgumentError('You can have at most ${TagRow.maxLive} tags.');
-    _checkTagName(row.name, t, exceptId: id);
+    final key = foldText(row.name.trim());
+    final together = _deletedWith('tag', id);
+    final group = {
+      id,
+      for (final r in t.rows)
+        if (r.deleted && together.contains(r.id) && r.name.trim().isNotEmpty && foldText(r.name.trim()) == key) r.id
+    };
+    if (t.liveIds.length + group.length > TagRow.maxLive) throw ArgumentError('You can have at most ${TagRow.maxLive} tags.');
+    _checkTagName(row.name, t, except: group);
     _write([
-      ('tag', id, {'deleted': 0})
+      for (final g in group) ('tag', g, {'deleted': 0})
     ]);
-    logEvent(_log, Level.INFO, 'repo.undelete', {'entity': 'tag'});
+    logEvent(_log, Level.INFO, 'repo.undelete', {'entity': 'tag', 'group': group.length});
   }
 
   /// The stored tags, by position, then id; deleted ones only with [includeDeleted].
@@ -131,56 +164,65 @@ extension WalletRepoTags on WalletRepo {
     return ctx;
   }
 
-  /// Turns tag [tagId] on or off for transaction [txId] by writing the link's state. On: the tag must be live; a
-  /// no-op when the row already has it (a rule gives it, or the link is `on`) and the link is not `off`. Off: a no-op
-  /// when the link is already `off`, or when neither a link nor a rule gives it. Unknown transaction or tag:
-  /// [ArgumentError].
+  /// Turns tag [tagId] on or off for transaction [txId], judged by the row's effective tags ([tagsOf]) and written on
+  /// the tag the owner sees ([TagTable.resolve]: a sync duplicate counts as its original). On: the tag must be live; a
+  /// no-op when the row already has it; else the original's link is written `on`, and any link of the group that is
+  /// `off` too. Off: a no-op when the row does not have it; else the original's link is written `off`, and any link of
+  /// the group that is `on` too (a rule tag stays: `off` overrides it on this row). A tag that is not live (off
+  /// only): its own link, as stored. Unknown transaction or tag: [ArgumentError].
   Future<void> setTxTag(String txId, String tagId, bool on) async {
     final tx = transaction(txId);
     if (tx == null) throw ArgumentError('No such transaction.');
     final t = tagTable();
     if (on ? !t.isLive(tagId) : !t.isKnown(tagId)) throw ArgumentError('No such tag.');
-    final linkId = '$txId|$tagId';
-    final rs = db.select('SELECT state FROM tx_tags WHERE id = ?', [linkId]);
-    final state = rs.isEmpty ? null : rs.first['state'] as String?;
-    if (on) {
-      if (state == 'on') return;
-      if (state != 'off' && _ruleGives(tx, tagId, t)) return;
+    final links = <String, bool>{
+      for (final r in db.select("SELECT tag, state FROM tx_tags WHERE tx = ? AND state IN ('on', 'off')", [txId]))
+        r['tag'] as String: r['state'] == 'on',
+    };
+    final o = t.resolve(tagId);
+    final changes = <(String, String, Map<String, Object?>)>[];
+    void link(String tag, bool state) => changes.add(('txtag', '$txId|$tag', {'tx': txId, 'tag': tag, 'state': state ? 'on' : 'off'}));
+    if (o == null) {
+      if (links[tagId] == true) link(tagId, false);
     } else {
-      if (state == 'off') return;
-      if (state != 'on' && !_ruleGives(tx, tagId, t)) return;
+      final payee = tagPayee(tx);
+      final rules = <String>{
+        if (payee != null)
+          for (final r in db.select('SELECT tag FROM rule_tags WHERE payee = ? AND deleted = 0', [payee])) r['tag'] as String
+      };
+      final has = tagsOf(tx, tags: t, ruleTags: {if (payee != null) payee: rules}, links: {txId: links}).contains(o);
+      if (has != on) {
+        link(o, on);
+        for (final MapEntry(key: g, value: state) in links.entries) {
+          if (g != o && t.resolve(g) == o && state != on) link(g, on);
+        }
+      }
     }
-    _write([
-      ('txtag', linkId, {'tx': txId, 'tag': tagId, 'state': on ? 'on' : 'off'})
-    ]);
-    logEvent(_log, Level.INFO, 'tag.link', {'on': on});
+    if (changes.isEmpty) return;
+    _write(changes);
+    logEvent(_log, Level.INFO, 'tag.link', {'on': on, 'links': changes.length});
   }
 
-  /// Whether a live rule tag of [tx]'s payee gives [tagId] (through duplicates).
-  bool _ruleGives(Tx tx, String tagId, TagTable t) {
-    final payee = tagPayee(tx);
-    if (payee == null) return false;
-    final want = t.resolve(tagId);
-    if (want == null) return false;
-    for (final r in db.select('SELECT tag FROM rule_tags WHERE payee = ? AND deleted = 0', [payee])) {
-      if (t.resolve(r['tag'] as String) == want) return true;
-    }
-    return false;
-  }
-
-  /// Gives (or stops giving) tag [tagId] to every row of [payee] (a `merchantKey`). On: the tag must be live. Already
-  /// in that state: nothing is written. An empty payee or one with `|`, or an unknown tag: [ArgumentError].
+  /// Gives (or stops giving) tag [tagId] to every row of [payee] (a `merchantKey`), judged on the tag the owner sees
+  /// ([TagTable.resolve]). On: the tag must be live; a no-op when a live rule of its group already gives it, else the
+  /// original's rule is written. Off: every live rule of the group is removed (none: nothing written). A tag that is
+  /// not live (off only): its own rule. An empty payee or one with `|`, or an unknown tag: [ArgumentError].
   Future<void> setRuleTag(String payee, String tagId, bool on) async {
     if (payee.isEmpty || payee.contains('|')) throw ArgumentError('No such payee.');
     final t = tagTable();
     if (on ? !t.isLive(tagId) : !t.isKnown(tagId)) throw ArgumentError('No such tag.');
-    final id = '$payee|$tagId';
-    final rs = db.select('SELECT deleted FROM rule_tags WHERE id = ?', [id]);
-    final live = rs.isNotEmpty && rs.first['deleted'] == 0;
-    if (live == on) return;
-    _write([
-      ('ruletag', id, {'payee': payee, 'tag': tagId, 'deleted': on ? 0 : 1})
-    ]);
-    logEvent(_log, Level.INFO, 'tag.rule', {'on': on});
+    final o = t.resolve(tagId);
+    final live = [
+      for (final r in db.select('SELECT tag FROM rule_tags WHERE payee = ? AND deleted = 0', [payee]))
+        if (o == null ? r['tag'] == tagId : t.resolve(r['tag'] as String) == o) r['tag'] as String
+    ];
+    final changes = <(String, String, Map<String, Object?>)>[
+      if (on && live.isEmpty) ('ruletag', '$payee|$o', {'payee': payee, 'tag': o, 'deleted': 0}),
+      if (!on)
+        for (final g in live) ('ruletag', '$payee|$g', {'payee': payee, 'tag': g, 'deleted': 1}),
+    ];
+    if (changes.isEmpty) return;
+    _write(changes);
+    logEvent(_log, Level.INFO, 'tag.rule', {'on': on, 'rules': changes.length});
   }
 }

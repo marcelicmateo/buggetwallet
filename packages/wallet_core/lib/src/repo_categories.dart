@@ -12,11 +12,11 @@ extension WalletRepoCategories on WalletRepo {
     return n;
   }
 
-  /// Throws when a live category other than [exceptId] already has [label], case and accents ignored ([foldText]).
-  static void _checkUniqueLabel(CategoryTable t, String label, {String? exceptId}) {
+  /// Throws when a live category not in [except] already has [label], case and accents ignored ([foldText]).
+  static void _checkUniqueLabel(CategoryTable t, String label, {Set<String> except = const {}}) {
     final key = foldText(label.trim());
     for (final s in t.topLevelIds) {
-      if (s != exceptId && foldText(t.label(s).trim()) == key) throw ArgumentError('There is already a category with this name.');
+      if (!except.contains(s) && foldText(t.label(s).trim()) == key) throw ArgumentError('There is already a category with this name.');
     }
   }
 
@@ -29,6 +29,10 @@ extension WalletRepoCategories on WalletRepo {
     }
     return next;
   }
+
+  /// [id] and the live sync duplicates of it ([CategoryTable.duplicateOf]). A duplicate itself is acted on alone (the
+  /// owner cleaning up the copy), an original with its whole group.
+  static List<String> _group(CategoryTable t, String id) => [id, ...t.topLevelIds.where((x) => x != id && t.duplicateOf(x) == id)];
 
   int _liveCustomCount(CategoryTable t) => t.rows.where((r) => r.isLiveCustom).length;
 
@@ -60,9 +64,9 @@ extension WalletRepoCategories on WalletRepo {
   }
 
   /// Changes the given fields only (null = unchanged). On a built-in id it writes an override: [name] (the label),
-  /// [position] and [hidden] only. A [parent] is refused (T1: use a tag); [clearParent] is accepted and does nothing
-  /// (every category is top-level). A label already used, a negative position, or an unknown or deleted id:
-  /// [ArgumentError].
+  /// [position] and [hidden] only. The change goes to [id]'s whole sync duplicate group, so the category the owner
+  /// sees changes as one. A [parent] is refused (T1: use a tag); [clearParent] is accepted and does nothing (every
+  /// category is top-level). A label already used, a negative position, or an unknown or deleted id: [ArgumentError].
   Future<void> updateCategory(String id, {String? name, int? position, bool? hidden, String? parent, bool clearParent = false}) async {
     if (parent != null) throw ArgumentError('Use a tag for this.');
     final t = categoryTable();
@@ -70,48 +74,61 @@ extension WalletRepoCategories on WalletRepo {
     if (!builtIn && !t.isLive(id)) throw ArgumentError('No such category.');
     if (position != null && position < 0) throw ArgumentError('Bad position.');
     final n = name == null ? null : _checkName(name);
-    if (n != null) _checkUniqueLabel(t, n, exceptId: id);
+    final group = _group(t, id);
+    if (n != null) _checkUniqueLabel(t, n, except: group.toSet());
     final fields = <String, Object?>{
       if (n != null) 'name': n,
       if (position != null) 'position': position,
       if (hidden != null) 'hidden': hidden ? 1 : 0,
     };
     if (fields.isEmpty) return;
-    _write([('category', id, fields)]);
-    logEvent(_log, Level.INFO, 'category.update', {'fields': fields.length, 'builtIn': builtIn});
+    _write([for (final g in group) ('category', g, fields)]);
+    logEvent(_log, Level.INFO, 'category.update', {'fields': fields.length, 'builtIn': builtIn, 'group': group.length});
   }
 
   /// Removes a custom category (`deleted: 1`; the row stays for [undeleteCategory], and rows pointing at it fall back
-  /// until then). A built-in (hide it instead) or an unknown id: [ArgumentError].
+  /// until then), with the custom members of its sync duplicate group. A built-in (hide it instead) or an unknown id:
+  /// [ArgumentError].
   Future<void> deleteCategory(String id) async {
     if (categories.containsKey(id)) throw ArgumentError('A built-in category cannot be deleted; hide it instead.');
     final t = categoryTable();
     if (!t.isCustom(id)) throw ArgumentError('No such category.');
     if (!t.isLive(id)) return;
+    final group = [
+      for (final g in _group(t, id))
+        if (t.isCustom(g)) g
+    ];
     _write([
-      ('category', id, {'deleted': 1})
+      for (final g in group) ('category', g, {'deleted': 1})
     ]);
-    logEvent(_log, Level.INFO, 'category.delete', {'kind': t.kindOf(id).name});
+    logEvent(_log, Level.INFO, 'category.delete', {'kind': t.kindOf(id).name, 'group': group.length});
   }
 
-  /// Undo of [deleteCategory]: writes `deleted: 0` (synced; the later write by HLC wins). A live or built-in id:
-  /// nothing is written. Unknown id, a label taken in between, or [CategoryRow.maxCustom] live custom
-  /// categories already: [ArgumentError].
+  /// Undo of [deleteCategory]: writes `deleted: 0` for [id] and every deleted custom category with the same folded
+  /// label that the same delete removed (its duplicate group, the same `deleted` clock; synced, the later write by HLC
+  /// wins). A live or built-in id: nothing
+  /// is written. Unknown id, a label taken in between, or more than [CategoryRow.maxCustom] live custom categories
+  /// after it: [ArgumentError].
   Future<void> undeleteCategory(String id) async {
     if (categories.containsKey(id)) return;
     final t = categoryTable();
     if (!t.isCustom(id)) throw ArgumentError('No such category.');
     if (t.isLive(id)) return;
-    if (_liveCustomCount(t) >= CategoryRow.maxCustom) throw ArgumentError('You can have at most ${CategoryRow.maxCustom} own categories.');
-    final after = CategoryTable.from([
+    final key = foldText(t.label(id).trim());
+    final together = _deletedWith('category', id);
+    final group = {
+      id,
       for (final r in t.rows)
-        r.id == id ? CategoryRow(id: r.id, name: r.name, kind: r.kind, parent: r.parent, position: r.position, hidden: r.hidden) : r,
-    ]);
-    _checkUniqueLabel(after, after.label(id), exceptId: id);
+        if (!r.isOverride && r.deleted && r.kind != null && together.contains(r.id) && foldText(t.label(r.id).trim()) == key) r.id
+    };
+    if (_liveCustomCount(t) + group.length > CategoryRow.maxCustom) {
+      throw ArgumentError('You can have at most ${CategoryRow.maxCustom} own categories.');
+    }
+    _checkUniqueLabel(t, t.label(id));
     _write([
-      ('category', id, {'deleted': 0})
+      for (final g in group) ('category', g, {'deleted': 0})
     ]);
-    logEvent(_log, Level.INFO, 'repo.undelete', {'entity': 'category'});
+    logEvent(_log, Level.INFO, 'repo.undelete', {'entity': 'category', 'group': group.length});
   }
 
   /// The stored category rows (custom ones and built-in overrides), ordered by position, then id; deleted custom

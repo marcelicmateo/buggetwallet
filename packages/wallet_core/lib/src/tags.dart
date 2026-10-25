@@ -137,6 +137,7 @@ String? tagPayee(Tx t) {
 /// ([TagTable.resolve]: a duplicate counts as its original, a dead tag is dropped). In table order; unmodifiable.
 List<String> tagsOf(Tx t,
     {required TagTable tags, required Map<String, Set<String>> ruleTags, required Map<String, Map<String, bool>> links}) {
+  if (ruleTags.isEmpty && (links[t.id]?.isEmpty ?? true)) return const [];
   final payee = tagPayee(t);
   final fromRules = payee == null ? null : ruleTags[payee];
   final own = links[t.id];
