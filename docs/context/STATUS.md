@@ -309,6 +309,14 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **App:** Split… on the payment sheet (editor with "Left to split", Save off until 0.00, Remove with Undo); Spending, Today and search show "Split · N"; category/tag/insight lists show parts ("part of …"); demo wallet has a split supermarket payment.
   - **Reviews:** core 2 medium (a part could fall back to a transfer and vanish from spending; a split made on another device after matching was lost), 2 low; UI 1 medium (search listed a split payment once per part), 7 low. All fixed with tests.
   - **Stage run:** importer 335, core 2367, relay 206, app 1577, desktop 13 files, web-test, emulator screens, perf ok (0 over budget).
+- 2026-10-25: **Stage P13: Android widget, quick add, calendar permission, first-import plan** (spec `P13_SPEC.md`; no new packages, one removed).
+  - **Home-screen widget** (2×1, resizable): "SAFE TO SPEND TODAY" with today's amount (as Today's hero) and "to 10 Nov" / "Over today" / "Over the plan"; only today's figure is ever shown — on another day it says "Open the app to update". Only the formatted amount, a status word and the date reach the widget (app-private prefs, not backed up). Tap opens the app. Cleared when no wallet is open, on forget and on join.
+  - **Quick add:** long-press the app icon → "Add expense" (a dynamic shortcut with its own action; a running app opens the sheet without restarting).
+  - **Calendar:** read through the app's own channel with READ_CALENDAR only; `device_calendar_plus` and WRITE_CALENDAR are gone.
+  - **"Looks right?"** after the first import that adds rows: the suggested payday plan (salary, payday, rent, loan, subs) with Accept all / Choose… / Not now (same as Plan › Suggestions), once per wallet.
+  - **Review:** 2 medium (the shortcut looked like a shared link to the share plugin; the widget could show yesterday's amount as today's), 4 low. All fixed with tests.
+  - **Not verified on a device:** the widget and the shortcut (tests use mocked channels; the release APK builds).
+  - **Stage run:** importer 335, core 2515, relay 206, app 1701, desktop 13 files, web-test, emulator screens, perf ok.
 - 2026-10-25: **Stage P15: other currencies in the budget** (spec `P15_SPEC.md`, owner rates; no schema change, settings `fx:<CODE>`).
   - **Plan › Currencies:** one row per foreign currency seen in payments: set "1 USD = 0.9240 EUR" (both decimal styles, up to 6 decimals, max 100 per unit), edit, remove with Undo (keeps the original date). Payments in that currency then count in every total, budget, insight and CSV at the converted amount (rounded half away from zero, once per payment; split parts add up exactly); rows show the home amount with "100.00 $ at 0.9240" under it. A currency without a rate stays "not counted" as before (ForeignNote taps to Plan › Currencies).
   - **Kept raw on purpose:** matching, transfers (Revolut exchanges stay transfers), accounts, recurring bills/income matching (`matchRows`), paydays and plan suggestions, the payment sheet and the split editor (they work in the bank's amount and currency).
@@ -415,6 +423,11 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
   N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
+- Owner checks after P13 (phone):
+  - Add the "Safe to spend today" widget; it matches Today; tap opens the app; after midnight it says "Open the app to update" until you open the app.
+  - Long-press the app icon → Add expense, with the app closed and with it open (it must not restart).
+  - Plan › Calendars › allow access: Android asks for read access only; events still show in Upcoming.
+  - Import a bank file into a new wallet: "Looks right?" appears once.
 - Owner checks after P15 (phone):
   - Plan › Currencies: set a rate for a currency you paid in (e.g. 0,9240); Today and Spending totals change, the "not counted" line goes away; the payment shows both amounts; Remove, then Undo.
 - Owner checks after P8 (phone):
