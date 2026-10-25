@@ -111,8 +111,17 @@ extension BillsDb on WalletController {
         }
         final bill = found;
         if (bill == null) return null;
-        final months =
-            timed('wc.billHistory', () => billHistory(bill, [for (final c in txs) c.tx], billsAll(), today: today(), currency: currency));
+        final months = timed(
+            'wc.billHistory',
+            () => billHistory(
+                bill,
+                [
+                  for (final c in txs)
+                    if (c.kind != BudgetKind.transfer) c.tx
+                ],
+                billsAll(),
+                today: today(),
+                currency: currency));
         final byId = {for (final c in txs) c.tx.id: c};
         return BillHistoryView(bill, months, {
           for (final m in months)

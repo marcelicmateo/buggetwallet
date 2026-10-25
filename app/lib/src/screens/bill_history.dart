@@ -19,11 +19,17 @@ Future<void> openBillHistory(BuildContext context, WalletController wc, String b
 /// The plain words for a month's state.
 String billMonthStateText(BillMonth m) => switch (m.state) {
       BillMonthState.paid => 'Paid',
-      BillMonthState.slipOnly => 'Bill only, not paid yet',
+      BillMonthState.slipOnly =>
+        m.slips.isNotEmpty && m.slips.every((s) => s.linkedTx != null) ? 'Bill paid (not from the bank)' : 'Bill only, not paid yet',
       BillMonthState.missing => 'Missing (no payment or bill found)',
       BillMonthState.upcoming => 'Coming up',
       BillMonthState.paidNearby => 'Paid in ${m.paidIn == null ? 'another month' : monthLong(m.paidIn!)}',
     };
+
+/// A slip the owner has not confirmed, or one a reader was unsure about: its amount carries "(to check)".
+bool slipToCheck(Bill s) => s.status == BillStatus.review || s.unsure > 0;
+
+const _toCheck = ' (to check)';
 
 /// One line per month of a recurring bill, newest first: the month, a state word and the exact amounts. A month with rows opens
 /// to its payments (the transaction sheet) and its bills (the bill sheet). An amount is shown only when it is stored: never guessed.
@@ -69,13 +75,17 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
     final open = expandable && _open.contains(m.month);
     final (icon, color) = switch (m.state) {
       BillMonthState.paid => (Icons.check_circle_outline, c.good),
-      BillMonthState.slipOnly => (Icons.receipt_long_outlined, c.ink2),
+      BillMonthState.slipOnly => (
+          m.slips.every((s) => s.linkedTx != null) ? Icons.check_circle_outline : Icons.receipt_long_outlined,
+          c.ink2
+        ),
       BillMonthState.missing => (Icons.error_outline, c.bad),
       BillMonthState.upcoming => (Icons.schedule, c.ink2),
       BillMonthState.paidNearby => (Icons.check_circle_outline, c.ink2),
     };
     final stateText = billMonthStateText(m);
     final billed = m.billed;
+    final check = m.slips.any(slipToCheck) ? _toCheck : '';
     final head = Container(
       constraints: const BoxConstraints(minHeight: touchMin),
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -94,7 +104,7 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
               if (m.payments.isNotEmpty)
                 MoneyText(moneyExact(m.paid, cur), textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500)),
               if (billed != null)
-                MoneyText('Bill ${moneyExact(billed, cur)}',
+                MoneyText('Bill ${moneyExact(billed, cur)}$check',
                     textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.ink2)),
             ]),
           ),
@@ -106,7 +116,7 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
       monthLong(m.month),
       stateText,
       if (m.payments.isNotEmpty) 'paid ${moneyExact(m.paid, cur)}',
-      if (billed != null) 'bill ${moneyExact(billed, cur)}',
+      if (billed != null) 'bill ${moneyExact(billed, cur)}$check',
     ].join(', ');
     return Column(key: ValueKey('historyMonth_${m.month}'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (expandable)
@@ -177,7 +187,7 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
           ]),
           end: s.total == null
               ? Text('No total', textAlign: TextAlign.end, style: TextStyle(fontSize: BwType.metaSize, color: c.muted))
-              : MoneyText(moneyExact(s.total!, cur), textAlign: TextAlign.end, style: numStyle),
+              : MoneyText('${moneyExact(s.total!, cur)}${slipToCheck(s) ? _toCheck : ''}', textAlign: TextAlign.end, style: numStyle),
         ),
       ),
     );
