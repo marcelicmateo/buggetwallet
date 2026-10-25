@@ -260,6 +260,30 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
       - Medium: an untouched Save could write a fallback over the stored id.
       - All fixed, with tests.
   - **Stage run:** importer 335, core 1965, relay 206, app 1461 (1468 after the last fixes), desktop 12 files (plan and layout rerun after the last fixes), emulator screens.
+- 2026-10-25: **Stage T1: tags** (owner request; spec and decisions in `T1_SPEC.md`; schema 11).
+  - **Model:**
+    - One **main tag** per payment. This is the category (built-in or your own). It decides every money path, which is unchanged.
+    - Any number of **extra tags** for tracking. Their totals overlap, and the UI says so.
+    - The suggested top 20 tags are the 20 categories, picked as before (bank hint, rules, never by amount).
+    - Subcategories from P1 are replaced by tags (`parent` is refused and stored parents are ignored). Plan lines stay.
+  - **Core:**
+    - New entities: `tag`; `txtag` (a per-payment link, `on`/`off`, id `<tx>|<tag>`); `ruletag` (a payee rule, so every payment from that payee gets the tag).
+    - Effective tags are worked out at read time: rule tags plus `on` links, minus `off` links. Nothing is written on import.
+    - Suggestions are tags used on at least 2 rows of that payee, applied only on a tap. Recommended order puts the payee's tags first.
+    - `tagShare`, `rowsForTag` and `tagTrend` power the graphs; search and the CSV `tags` column use tags too.
+    - Sync duplicates are merged, and duplicate groups are edited as one (also for P1 categories). A matched hand entry passes its tags on to the bank row that replaces it.
+  - **App:**
+    - The picker: main tag (★) and extra tags (#), with "from rule" marks, faded suggestions and "New tag…".
+    - "Also tag every payment from …".
+    - The payment sheet writes the main tag and tags together on Save; closing the sheet writes nothing.
+    - Plan › Tags (add, rename, hide, move, delete + Undo, counts). Plan › Categories is now "Main tags".
+    - Up to 3 `#tag` chips on each row.
+    - Insights › Tags, with a drill-down.
+  - **Review:**
+    - Core: 4 findings (2 medium), all fixed.
+    - UI: 5 findings (1 medium, about Save versus close), all fixed.
+    - The 68 independent spec tests turned up no core bug.
+  - **Stage run:** importer 335, core 2029, relay 206, app 1494 (1499 after the last fixes), desktop 13 files (tags and plan rerun after the last fixes), emulator screens.
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -346,6 +370,13 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
   N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
+- Owner checks after T1 (phone):
+  - Open a bank payment:
+    - pick a main tag and add two extra tags, tap a suggestion, and create a new tag;
+    - close the sheet with X: nothing is saved. Then do it again and tap Save.
+  - Remove a tag that came from a rule: it goes from that payment only.
+  - Use "Also tag every payment from …".
+  - Check Plan › Tags, the `#tag` chips on rows, Insights › Tags with its drill-down, and search by a tag.
 - Owner checks after P1 (phone):
   - Plan › Categories:
     - add a category, then a subcategory under Groceries; add an expense in it;
