@@ -258,6 +258,44 @@ class RecurringBill {
       );
 }
 
+/// One of the owner's accounts (N2, synced entity `account`, table `accounts`): a bank account ([source] = a bank
+/// profile id, `pbz` / `revolut`) or cash ([source] null). [opening] (signed cents) is the balance at the end of
+/// [openingDate]; `accountBalances` adds the rows after it. At most one live account per (source, currency).
+class Account {
+  final String id;
+  final String name;
+  final String? source;
+  final String currency;
+  final int opening;
+  final String openingDate; // YYYY-MM-DD
+  final bool deleted;
+
+  const Account({
+    required this.id,
+    required this.name,
+    this.source,
+    required this.currency,
+    required this.opening,
+    required this.openingDate,
+    this.deleted = false,
+  });
+
+  /// Longest accepted name (characters, after trimming).
+  static const maxName = 60;
+
+  bool get isCash => source == null;
+
+  static Account fromRow(Map<String, Object?> r) => Account(
+        id: r['id'] as String,
+        name: _str(r['name']) ?? '',
+        source: _str(r['source']),
+        currency: _str(r['currency']) ?? 'EUR',
+        opening: _int(r['opening']) ?? 0,
+        openingDate: _str(r['opening_date']) ?? '',
+        deleted: r['deleted'] == 1,
+      );
+}
+
 /// Where a planned cost came from: typed by hand, a calendar event the owner gave an amount (or dismissed), or (later,
 /// §4.2) a bill with a due date.
 enum PlannedSource { manual, calendar, bill }

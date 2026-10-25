@@ -319,6 +319,34 @@ Map<String, int> suggestBudgets(List<CategorizedTx> txs, String month, {required
   };
 }
 
+/// One row of the budget Suggest diff ([budgetProposals]): [current] is null when the category has no budget (or 0).
+class BudgetProposal {
+  final String category;
+  final int? current;
+  final int suggested;
+  const BudgetProposal({required this.category, this.current, required this.suggested});
+  bool get fillsEmpty => current == null;
+}
+
+/// What Suggest would change: each [suggested] category whose [current] budget is missing or 0 (fills an empty field)
+/// or differs; equal values are left out. Empty fields first, then by category name. Nothing is written.
+List<BudgetProposal> budgetProposals(Map<String, int> current, Map<String, int> suggested) {
+  final out = <BudgetProposal>[];
+  for (final MapEntry(key: c, value: v) in suggested.entries) {
+    final have = current[c];
+    if (have == null || have == 0) {
+      out.add(BudgetProposal(category: c, suggested: v));
+    } else if (have != v) {
+      out.add(BudgetProposal(category: c, current: have, suggested: v));
+    }
+  }
+  out.sort((a, b) {
+    if (a.fillsEmpty != b.fillsEmpty) return a.fillsEmpty ? -1 : 1;
+    return a.category.compareTo(b.category);
+  });
+  return out;
+}
+
 /// One category of [BudgetVsActual]. Cents; [budget] is null when none is set.
 class CategoryBudgetLine {
   final String category;
