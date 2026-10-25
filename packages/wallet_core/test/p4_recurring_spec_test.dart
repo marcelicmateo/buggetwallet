@@ -151,10 +151,10 @@ void main() {
       expect(bill('2026-03-10', 5000, interval: 365).isLong, isTrue);
     });
 
-    test('finished: nextDue strictly after endsOn + tolerance (lead decision, P4 review HIGH 2)', () {
+    test('finished: nextDue strictly after endsOn + intervalDays ~/ 2 (lead decision, P4 re-review)', () {
       expect(bill('2026-05-04', 5000, endsOn: '2026-05-04').finished, isFalse, reason: 'the last due date is still a cycle');
-      expect(bill('2026-05-07', 5000, endsOn: '2026-05-04').finished, isFalse, reason: 'endsOn + tolerance (3) is still a cycle');
-      expect(bill('2026-05-08', 5000, endsOn: '2026-05-04').finished, isTrue);
+      expect(bill('2026-05-19', 5000, endsOn: '2026-05-04').finished, isFalse, reason: 'endsOn + 15 is still a cycle');
+      expect(bill('2026-05-20', 5000, endsOn: '2026-05-04').finished, isTrue);
       expect(bill('2030-01-01', 5000).finished, isFalse, reason: 'no end');
     });
 
@@ -530,14 +530,16 @@ void main() {
       expect(cycles([bill('2026-03-05', 5000, min: 7001, max: 7000)]), [('2026-03-05', 5000)], reason: 'invalid range ignored');
     });
 
-    test('instalments stop at endsOn, inclusive', () {
+    test('instalments stop after endsOn + half an interval (endsBy)', () {
       expect(cycles([bill('2026-03-02', 1000, interval: 7, endsOn: '2026-03-09')]), [('2026-03-02', 1000), ('2026-03-09', 1000)]);
-      expect(cycles([bill('2026-03-02', 1000, interval: 7, endsOn: '2026-03-07')]), [('2026-03-02', 1000)]);
+      expect(cycles([bill('2026-03-02', 1000, interval: 7, endsOn: '2026-03-06')]), [('2026-03-02', 1000), ('2026-03-09', 1000)],
+          reason: 'endsBy 03-09');
+      expect(cycles([bill('2026-03-02', 1000, interval: 7, endsOn: '2026-03-05')]), [('2026-03-02', 1000)]);
       expect(cycles([bill('2026-03-05', 5000, endsOn: '2026-03-05')]), [('2026-03-05', 5000)]);
     });
 
     test('a finished bill and an unconfirmed one have no cycle', () {
-      expect(cycles([bill('2026-03-05', 5000, endsOn: '2026-03-01')]), isEmpty);
+      expect(cycles([bill('2026-03-05', 5000, endsOn: '2026-02-17')]), isEmpty);
       expect(cycles([bill('2026-03-05', 5000, status: 'candidate')]), isEmpty);
       expect(cycles([bill('2026-03-05', 5000, status: 'dismissed')]), isEmpty);
       expect(cycles([bill('2030-03-05', 50000, interval: 365, status: 'candidate')]), isEmpty);
@@ -558,7 +560,7 @@ void main() {
     });
 
     test('a long bill with no endsOn problem: finished long bill holds nothing', () {
-      expect(cycles([bill('2026-08-01', 9000, interval: 91, endsOn: '2026-07-24')]), isEmpty);
+      expect(cycles([bill('2026-08-01', 9000, interval: 91, endsOn: '2026-06-16')]), isEmpty);
       expect(cycles([bill('2026-08-01', 9000, interval: 91, endsOn: '2026-08-01')]), [('2026-08-01', 9000)]);
     });
 

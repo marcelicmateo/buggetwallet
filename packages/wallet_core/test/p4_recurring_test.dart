@@ -210,7 +210,7 @@ void main() {
           id: 'rec:m0', payee: '', label: 'x', category: 'Shopping', expectedAmount: 10000, nextDue: '2026-03-10', status: 'confirmed');
       const blank = Tx(id: 'e', source: 'pbz', date: '2026-03-10', amount: -10000, description: '');
       expect(planRecurringPayments([none], [...rows, blank], currency: 'EUR').isEmpty, isTrue);
-      expect(planRecurringPayments([bill('2026-03-10', 10000, endsOn: '2026-03-01')], rows, currency: 'EUR').isEmpty, isTrue);
+      expect(planRecurringPayments([bill('2026-03-10', 10000, endsOn: '2026-02-20')], rows, currency: 'EUR').isEmpty, isTrue);
       final candidate =
           RecurringBill(id: 'rec:$zorblex', payee: zorblex, label: 'x', category: 'Shopping', expectedAmount: 10000, nextDue: '2026-03-10');
       expect(planRecurringPayments([candidate], rows, currency: 'EUR').isEmpty, isTrue);
@@ -402,8 +402,8 @@ void main() {
       final last = bill('2027-12-14', 5000, endsOn: '2027-12-15');
       expect((last.finished, last.instalmentsLeft), (false, 1));
       expect(cycles([last], const [], '2027-12-10', '2028-01-10').single.reserve, 5000);
-      expect(bill('2027-12-18', 5000, endsOn: '2027-12-15').finished, isFalse, reason: 'within tolerance of the end');
-      expect(bill('2027-12-19', 5000, endsOn: '2027-12-15').finished, isTrue);
+      expect(bill('2027-12-30', 5000, endsOn: '2027-12-15').finished, isFalse, reason: 'within half an interval of the end');
+      expect(bill('2027-12-31', 5000, endsOn: '2027-12-15').finished, isTrue);
     });
 
     test('MED 3: purchases at a detected bill\'s payee days before do not pay it; inside ± tolerance they can', () {
@@ -448,6 +448,51 @@ void main() {
       final before = r.pendingOps().length;
       r.updateRecurring(id, maxAmount: 3300);
       expect(r.pendingOps().skip(before).single.$2.fields, {'min_amount': 2800, 'max_amount': 3300});
+    });
+
+    test('re-review MED: a late payment never finishes a monthly plan before its last cycle', () async {
+      final r = WalletRepo.inMemory(now: () => DateTime.utc(2027, 3, 1, 12).millisecondsSinceEpoch);
+      addTearDown(r.close);
+      NormalizedTransaction pay(String date) => NormalizedTransaction(
+          id: transactionId(date, -5000, 'Zorblex Utility', 0),
+          source: 'pbz',
+          date: date,
+          amountMinor: -5000,
+          currency: 'EUR',
+          bankType: 'Trajni nalog',
+          description: 'Zorblex Utility');
+      final id = r.addRecurring(
+          label: 'Plan', category: 'Shopping', amount: 5000, intervalDays: 30, firstDue: '2027-01-15', payee: zorblex, instalments: 3);
+      r.importBatch(ImportBatch(source: 'pbz', transactions: [pay('2027-01-15'), pay('2027-02-17')]));
+      final b = r.recurringBills().singleWhere((x) => x.id == id);
+      expect((b.endsOn, b.nextDue, b.finished, b.instalmentsLeft), ('2027-03-15', '2027-03-19', false, 1));
+      expect(cycles([b], const [], '2027-03-10', '2027-04-10').single.reserve, 5000, reason: 'the 3rd cycle is still reserved');
+      final feb = bill('2027-03-04', 5000, endsOn: '2027-02-28'); // 01-31 plan of 2, first paid 02-02
+      expect((feb.finished, cycles([feb], const [], '2027-02-15', '2027-03-15').length), (false, 1));
+      expect(bill('2027-03-31', 5000, endsOn: '2027-02-28').finished, isTrue);
+    });
+
+    test('re-review LOW: skipping every cycle of a monthly plan ends it after exactly its instalments', () async {
+      final r = WalletRepo.inMemory(now: () => DateTime.utc(2027, 1, 1, 12).millisecondsSinceEpoch);
+      addTearDown(r.close);
+      final id =
+          r.addRecurring(label: 'Plan', category: 'Shopping', amount: 1000, intervalDays: 30, firstDue: '2027-01-15', instalments: 72);
+      RecurringBill now() => r.recurringBills().singleWhere((x) => x.id == id);
+      for (var i = 0; i < 71; i++) {
+        await r.skipRecurring(id);
+      }
+      expect((now().nextDue, now().finished, now().instalmentsLeft), ('2032-12-15', false, 1));
+      await r.skipRecurring(id);
+      expect((now().nextDue, now().finished), ('2033-01-15', true));
+      // A month-end plan keeps its day: 01-31 → 02-28 → 03-31.
+      final end =
+          r.addRecurring(label: 'End', category: 'Shopping', amount: 1000, intervalDays: 30, firstDue: '2027-01-31', instalments: 3);
+      await r.skipRecurring(end);
+      expect(r.recurringBills().singleWhere((x) => x.id == end).nextDue, '2027-02-28');
+      await r.skipRecurring(end);
+      expect(r.recurringBills().singleWhere((x) => x.id == end).nextDue, '2027-03-31');
+      // Without an end a monthly bill still steps 30 days, as before P4.
+      expect(bill('2027-01-31', 1000).stepFrom('2027-01-31'), '2027-03-02');
     });
 
     test('LOW 8: a bad stored ends_on reads as no end', () {

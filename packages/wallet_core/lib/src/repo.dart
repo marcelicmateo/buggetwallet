@@ -1380,7 +1380,8 @@ class WalletRepo {
   void deleteRecurring(String id) => _setRecurring(id, {'deleted': 1});
 
   /// The owner skips the bill's current cycle (no payment is coming, or it was paid in a way the match cannot see):
-  /// `nextDue` moves one `intervalDays` on from its current value, so the bill is no longer due or reserved in this
+  /// `nextDue` moves one `intervalDays` on from its current value (a monthly instalment plan: one calendar month,
+  /// [RecurringBill.stepFrom]), so the bill is no longer due or reserved in this
   /// period and the match looks for the next payment around the new date. No bank row is needed. `lastPaidTx` (the
   /// row that paid the previous cycle) stays as it is: the skipped cycle has none. Synced like every write; an
   /// unknown id is an [ArgumentError], a bill with no due date yet (see [refreshRecurring]) a [StateError].
@@ -1390,7 +1391,7 @@ class WalletRepo {
     final b = RecurringBill.fromRow(r.first);
     if (!isIsoDate(b.nextDue)) throw StateError('The bill has no due date yet.');
     _write([
-      ('recurring', id, {'next_due': addDays(b.nextDue, b.intervalDays)})
+      ('recurring', id, {'next_due': b.stepFrom(b.nextDue)})
     ]);
     logEvent(_log, Level.INFO, 'recurring.skip', {'intervalDays': b.intervalDays});
   }
