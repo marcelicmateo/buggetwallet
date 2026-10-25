@@ -235,7 +235,11 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
       - UI: cash-paid slips, (to check) marks, transfers left out.
   - **Stage run:**
     - importer 335, core 1810, relay 206, app 1412 (1418 after the N4 fixes), desktop 12 files, emulator screens.
-    - **perf fails:** `spending_scroll` misses 3 frames against a limit of 2; build p90 went from 1.1 ms to 2.2–2.7 ms. The regression came between bfb7388 and e774b2d (N0–N2). It is being bisected and fixed in this stage.
+    - **perf over budget, cause is the host, not the code:**
+      - `spending_scroll` misses 3–5 frames against a limit of 2; build p90 is 2.2–2.8 ms (was 1.1).
+      - The same old commits (d99db16, bfb7388) that measured 1.1 ms / 0 missed on 10-22 and 10-23 measure 2.4–2.8 ms / 3–5 missed today. No app commit stands out; the whole perf step is ~14 % slower on the same image.
+      - Host changes since 10-23 include a 55-package `dnf install`, Steam, and kernel split-lock / iwlwifi warnings.
+      - Next: after a reboot, rerun `tools/build.sh perf` on bfb7388. The budget is not loosened.
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -321,7 +325,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   photos are not in `.bwb` backups (they stay on the relay).
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
-  N0–N4 built 2026-10-25. Open: the Spending scroll perf regression (being fixed). N4 ready (D10: slips + bank payments, one line per month).
+  N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
 - Owner checks after N2 (phone):
   - new wallet → Skip the cash question, then a second wallet with Add cash (Today shows "Held");
   - Plan › Accounts: add PBZ with today's real balance, import, then check the balance and its "as of" date; Correct balance; Delete → Undo;
