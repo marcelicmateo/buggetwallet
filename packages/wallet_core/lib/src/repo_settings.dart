@@ -164,7 +164,9 @@ extension WalletRepoSettings on WalletRepo {
     final lo = clearRange ? minCents : (minCents ?? old.minCents), hi = clearRange ? maxCents : (maxCents ?? old.maxCents);
     final text = _checkPattern(c, pattern ?? old.pattern, m, lo, hi);
     final newId = merchantPatternId(text);
-    if (newId != id && rows.containsKey(newId)) throw ArgumentError('a rule with this text already exists');
+    if (newId != id && (rows.containsKey(newId) || _readSettings(db, table: categoryTable()).patternRules.any((p) => p.id == newId))) {
+      throw ArgumentError('a rule with this text already exists');
+    }
     final next = MerchantPattern(id: newId, category: c, pattern: text, match: m, minCents: lo, maxCents: hi, order: old.order);
     if (_samePattern(old, next)) return id;
     _write([
@@ -176,8 +178,9 @@ extension WalletRepoSettings on WalletRepo {
   }
 
   /// Moves pattern [id] one place up or down in the match order ([WalletSettings.patternRules]): it swaps `order`
-  /// with its neighbour (two writes). Patterns that share an order (a sync of two adds) are numbered again in the new
-  /// sequence, writing only the rows whose order changes. Nothing at the ends. [ArgumentError] for an unknown id.
+  /// with its neighbour (two writes). When any two patterns share an order (a sync of two adds), the whole list is
+  /// numbered 0..n-1 in its current order first and then the two swap, in one write (only rows whose order changes),
+  /// so one press moves exactly one place. Nothing at the ends. [ArgumentError] for an unknown id.
   void movePattern(String id, MoveDirection direction) {
     final list = [..._readSettings(db, table: categoryTable()).patternRules];
     final i = list.indexWhere((p) => p.id == id);
@@ -186,7 +189,7 @@ extension WalletRepoSettings on WalletRepo {
     if (j < 0 || j >= list.length) return;
     final a = list[i], b = list[j];
     final List<MerchantPattern> changed;
-    if (a.order != b.order) {
+    if (list.map((p) => p.order).toSet().length == list.length) {
       changed = [_withOrder(a, b.order), _withOrder(b, a.order)];
     } else {
       list[i] = b;
@@ -213,6 +216,7 @@ extension WalletRepoSettings on WalletRepo {
     if (!categoryTable().isLive(category)) throw ArgumentError.value(category, 'category', 'unknown category');
     if (match != MerchantPattern.regex && match != MerchantPattern.contains) throw ArgumentError.value(match, 'match', 'regex or contains');
     if (MerchantPattern.rangeError(minCents, maxCents) case final e?) throw ArgumentError(e);
+    if (match == MerchantPattern.regex && (minCents != null || maxCents != null)) throw ArgumentError(MerchantPattern.rangeNeedsContains);
     // Never a rule without text: a range alone would classify on the amount (owner rule).
     if (pattern.trim().isEmpty) throw ArgumentError('empty pattern');
     if (match == MerchantPattern.contains) {
@@ -220,12 +224,14 @@ extension WalletRepoSettings on WalletRepo {
       if (t.length > MerchantPattern.maxContainsLength) throw ArgumentError('text over ${MerchantPattern.maxContainsLength} characters');
       return t;
     }
+    final RegExp re;
     try {
-      RegExp(pattern, caseSensitive: false);
+      re = RegExp(pattern, caseSensitive: false);
     } on FormatException catch (e) {
       logEvent(_log, Level.INFO, 'settings.badPattern', {'offset': e.offset, 'length': pattern.length});
       throw ArgumentError('pattern does not compile');
     }
+    if (MerchantPattern.matchesEverything(re)) throw ArgumentError('the pattern matches every payment');
     return pattern;
   }
 

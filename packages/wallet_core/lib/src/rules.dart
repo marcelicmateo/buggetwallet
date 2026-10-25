@@ -73,7 +73,11 @@ class MerchantPattern {
       if (m != null && m != regex && m != contains) return (null, false);
       final min = value['minCents'], max = value['maxCents'];
       final lo = _cents(min), hi = _cents(max);
-      final bad = (min != null && lo == null) || (max != null && hi == null) || (lo != null && hi != null && lo > hi);
+      // A range only narrows a `contains` rule (owner rule, P7 review): on a regex row it is dropped, the rule kept.
+      final bad = (min != null && lo == null) ||
+          (max != null && hi == null) ||
+          (lo != null && hi != null && lo > hi) ||
+          (m != contains && (min != null || max != null));
       return (
         MerchantPattern(
             id: id,
@@ -97,6 +101,12 @@ class MerchantPattern {
     };
     return c != null && c >= 0 && c <= WalletSettings.maxAmount ? c : null;
   }
+
+  /// The [ArgumentError] text for a range on a regex pattern: ranges need a `contains` rule.
+  static const rangeNeedsContains = "Amount ranges need a 'description contains' rule.";
+
+  /// Whether regex [re] matches the empty text, so every description (`.*`, `^`, `x*`, an empty group): never a rule.
+  static bool matchesEverything(RegExp re) => re.hasMatch('');
 
   /// Why a range cannot be stored ([ArgumentError] text), or null when it can: each bound whole cents in
   /// 0..[WalletSettings.maxAmount], and min ≤ max.

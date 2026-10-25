@@ -7,7 +7,6 @@
 import 'dart:io';
 import 'dart:math';
 
-import 'package:logging/logging.dart';
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -132,10 +131,9 @@ void main() {
       expect(catOf(repo, pos('exakt', -1235)), 'Shopping');
     });
 
-    test('a range works on a regex pattern too', () {
-      repo.setMerchantPattern('Home & tools', r'^reg\d+$', minCents: 100, maxCents: 200);
-      expect(catOf(repo, pos('reg12', -150)), 'Home & tools');
-      expect(catOf(repo, pos('reg12', -250)), 'Shopping');
+    test('a range on a regex pattern is refused (P7 review: ranges need a contains rule)', () {
+      expect(() => repo.setMerchantPattern('Home & tools', r'^reg\d+$', minCents: 100, maxCents: 200), throwsArgumentError);
+      expect(texts(repo).contains(r'^reg\d+$'), isFalse);
     });
 
     test('the range reads back', () {
@@ -254,7 +252,7 @@ void main() {
 
     test('an item override beats everything', () {
       repo.setMerchantPattern('Home & tools', 'cafe', match: 'contains');
-      final t = Tx(
+      const t = Tx(
           id: 'ovr',
           source: 'pbz',
           date: '2026-10-05',
@@ -267,7 +265,7 @@ void main() {
 
     test('a salary hint is not touched by a pattern', () {
       repo.setMerchantPattern('Home & tools', 'neto', match: 'contains');
-      final t = Tx(
+      const t = Tx(
           id: 'sal',
           source: 'pbz',
           date: '2026-10-05',
@@ -583,7 +581,12 @@ void main() {
       await syncAll([a, b]);
       expect(dump(a.repo, 'settings'), dump(b.repo, 'settings'));
       expect(texts(a.repo), texts(b.repo));
-      expect(texts(a.repo), isNotEmpty);
+      // Known limit: b's later write to the old row revives it, so both rules stay (the renamed one keeps its
+      // category, the old text gets b's).
+      for (final d in [a, b]) {
+        final byText = {for (final v in patternsOf(d.repo)) v.text: v.category};
+        expect(byText, {'kavana': 'Eating out', 'zorblex': 'Home & tools'}, reason: d.name);
+      }
     }, timeout: _t);
   });
 }
