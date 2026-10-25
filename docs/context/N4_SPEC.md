@@ -44,3 +44,21 @@ Use synthetic data:
 - an own-transfer row;
 - the 12-month limit;
 - ordering.
+
+## Clarifications (core, 2026-10-25)
+- Code names used: slip date = `Bill.date` (issue date), else `Bill.dueDate`; link = `Bill.linkedTx` (column `linked_tx`);
+  payee key = `billPayeeKey(slip)` as is. API in `packages/wallet_core/lib/src/bill_history.dart`, exported from the barrel.
+- `today` must be `YYYY-MM-DD` and `months` ≥ 1, else `ArgumentError`.
+- Payments are outflows only (amount < 0, like `planRecurringPayments`); a refund from the payee is not listed. Own
+  transfers are left out by what a `Tx` carries: `transferTo` set, hint `ownTransfer`/`exchange`, or an owner category
+  of the transfer kind. The `lastPaidTx` row passes the same checks (live, bank, home currency, outflow) but not the key.
+- Slips in another currency than the home one are left out (billed stays home-currency cents). A slip linked to a row
+  that is not a listed payment (a hand-added expense, a foreign row) goes in its own date's month. A slip with neither
+  date nor due date and no listed payment is not shown.
+- Months: the window is `months` months ending with the later of today's month and the newest month holding something
+  (a slip due next month adds that month). Inside it, months run from the oldest one holding something (or today's
+  month, if earlier; the window's first month when the oldest is before the window) to the end. No data at all = today's month alone, `upcoming`.
+- `missing`: a `RecurringBill` stores no confirmation date, so every empty month before today's month in that range is
+  `missing` (History is shown for confirmed bills only). An empty month after today's month is `upcoming`.
+- State order: payment → `paid`; else slip → `slipOnly` (also in the current month); else `missing` / `upcoming`.
+- Slips sort by their own date (else their payment's date), then id. Duplicate ids in the inputs are listed once.

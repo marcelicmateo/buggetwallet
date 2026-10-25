@@ -119,6 +119,12 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `next_due` += `interval_days` from its current value, no row needed, `last_paid_tx` untouched; no due date yet →
   `StateError`). Settings `reviewDay` (1..7, default 7), `lastReview` (date),
   `reviewStreak` (0..`maxStreak`) are validated like the others.
+- `bill_history.dart` — N4 bill history (spec + clarifications `docs/context/N4_SPEC.md`), pure and web-safe.
+  `billHistory(bill, rows, slips, today:, months: 12, currency:)` → `List<BillMonth>` (`month`, `payments`, `slips`,
+  `paid` = Σ −amount, `billed` = Σ slip totals or null, `BillMonthState` paid|slipOnly|missing|upcoming), newest first.
+  Payments: live bank outflows in the home currency, no own transfers, `merchantKey == bill.payee` (or the
+  `lastPaidTx` row); slips: live, home currency, `billPayeeKey == bill.payee`, in their linked payment's month, else
+  `date ?? dueDate`. Never by amount. Tests: `test/n4_bill_history_test.dart`.
 - `categories.dart` — `Categorizer`: item override → (paired transfer → importer `kindHint` → source/pattern rules) →
   per-merchant rules. `kindHint` (importer `TxKind`, stored as `tx.kind_hint` by `importBatch`, edited only by the schema-4 rewrite) decides
   first where it can: `salary` → Salary, `atm` → Rent at or above `rentCashThreshold` else Cash, `fee` → Bank fees,
