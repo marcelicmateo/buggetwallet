@@ -22,7 +22,12 @@ import 'perf_budget.dart';
 /// missed-build-frames limit of 2. An action without an entry gets the default.
 const _baseline = PerfBudget(buildP90Ms: 4, buildMaxMs: 20, rasterP90Ms: 30, rasterMaxMs: 60, missedBuildFrames: 2, minFrames: 100);
 const _scroll = PerfBudget(buildP90Ms: 4, buildMaxMs: 28, rasterP90Ms: 30, rasterMaxMs: 60, missedBuildFrames: 2, minFrames: 100);
-const budgets = <String, PerfBudget>{'spending_scroll': _scroll, 'tab_switch': _baseline};
+
+/// Insights (2026-10-25): open, six range switches over ~20k rows, a scroll through five graphs, close. Measured 92-94 frames,
+/// build p90 1.8-1.9 ms, build max 4.9-8.1 ms, raster p90 24 ms, raster max 27-31 ms, 0 missed build frames. Raster is higher
+/// than elsewhere (software GL draws the bar charts); limits sit at about 1.5-2x the measured numbers.
+const _insights = PerfBudget(buildP90Ms: 4, buildMaxMs: 28, rasterP90Ms: 40, rasterMaxMs: 80, missedBuildFrames: 2, minFrames: 50);
+const budgets = <String, PerfBudget>{'spending_scroll': _scroll, 'tab_switch': _baseline, 'insights': _insights};
 
 /// Counts timeline events that look like shader compilation (any stream). Flutter 3.47 has no summary field for shader
 /// jank, so this is the closest available signal; a run with Impeller (precompiled shaders) is expected to show 0.

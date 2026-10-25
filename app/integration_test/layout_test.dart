@@ -5,7 +5,9 @@ import 'dart:math';
 
 import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/screens/accounts_panel.dart';
+import 'package:budget_wallet/src/screens/category_detail.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
+import 'package:budget_wallet/src/screens/insights.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
@@ -149,6 +151,29 @@ void main() {
         await tapVisible(t, find.descendant(of: find.byType(SpendingScreen), matching: find.byType(TxTile)).first);
         await Harness.shot(t, '$name-sheet-tx');
         await closeSheet(t, TxSheet);
+
+        where = 'insights';
+        debugPrint('layout $name: $where');
+        await goTab(t, 'Spending');
+        // Spending is still scrolled down from the transaction sheet step: back up to the Insights button
+        await scrollTo(t, find.byKey(const ValueKey('insightsOpen')), SpendingScreen, delta: -400);
+        await tapVisible(t, find.byKey(const ValueKey('insightsOpen')));
+        await scrollThrough(t, InsightsScreen, '$name-insights', shots: 6);
+        await scrollTo(t, find.byKey(const ValueKey('rangeChip_spending_months12')), InsightsScreen);
+        await tapVisible(t, find.byKey(const ValueKey('rangeChip_spending_months12')));
+        await tapVisible(t, find.byKey(const ValueKey('rangeChip_spending_custom')));
+        await Harness.shot(t, '$name-insights-custom');
+        final shareRow =
+            find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('shareRow_')).first;
+        await scrollTo(t, find.byKey(const ValueKey('insightPanel_share')), InsightsScreen);
+        await tapVisible(t, shareRow);
+        expect(find.byType(CategoryDetailScreen), findsOneWidget);
+        await scrollThrough(t, CategoryDetailScreen, '$name-category-detail', shots: 4);
+        await t.tap(find.byKey(const ValueKey('sheetClose')).last);
+        await t.pumpAndSettle();
+        await t.tap(find.byKey(const ValueKey('sheetClose')).last);
+        await t.pumpAndSettle();
+        expect(find.byType(InsightsScreen), findsNothing);
 
         where = 'goal-sheet';
         debugPrint('layout $name: $where');

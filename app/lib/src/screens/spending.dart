@@ -3,6 +3,7 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
+import '../insights_api.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
@@ -10,6 +11,8 @@ import '../theme.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
+import 'category_detail.dart';
+import 'insights.dart';
 import 'search.dart';
 
 class SpendingScreen extends StatefulWidget {
@@ -83,15 +86,29 @@ class _SpendingScreenState extends State<SpendingScreen> {
         (v.summary, v.average, v.periods, v.trend, v.overview, v.topPlaces, v.transactions);
 
     return ListView(padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad), children: [
-      Align(
-        alignment: Alignment.centerRight,
-        child: IconButton(
+      Row(children: [
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const ValueKey('insightsOpen'),
+              style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+              icon: const Icon(Icons.insights_outlined),
+              label: const Text('Insights', maxLines: 1, overflow: TextOverflow.ellipsis),
+              onPressed: () {
+                logNav('spending.insights');
+                openInsights(context, wc);
+              },
+            ),
+          ),
+        ),
+        IconButton(
           key: const ValueKey('searchOpen'),
           tooltip: hasKeyboard ? 'Search (Ctrl+F)' : 'Search',
           icon: const Icon(Icons.search),
           onPressed: () => setState(() => searching = true),
         ),
-      ),
+      ]),
       TwoCol(left: [
         Panel(children: [
           const Eyebrow('Saving or losing'),
@@ -120,7 +137,15 @@ class _SpendingScreenState extends State<SpendingScreen> {
               setState(() => selected = m);
             },
           ),
-          CategoryBars(values: selSum.byCategory, average: avg, currency: cur, budget: budgeted ? budget : null),
+          CategoryBars(
+              values: selSum.byCategory,
+              average: avg,
+              currency: cur,
+              budget: budgeted ? budget : null,
+              onOpen: (cat) {
+                logNav('spending.category');
+                openCategory(context, wc, cat, wc.monthRange(sel));
+              }),
         ]),
         Panel(children: [
           Heading('Top places in ${monthLong(sel)}', size: BwType.headingSize),
