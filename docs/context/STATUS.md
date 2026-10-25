@@ -296,6 +296,13 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Review:** 1 high (catch-all regex + range = amount alone), 1 medium (a move after offline ties jumped two places), 2 low. All fixed.
   - **Known limit:** builds before P7 read a contains rule as a regex and ignore its range (text only).
   - **Stage run:** importer 335, core 2104, relay 206, app 1520, desktop 13 files, emulator screens.
+- 2026-10-25: **Stage P4: recurring bills beyond monthly** (spec + decisions `P4_SPEC.md`, schema 12).
+  - **Owner decisions:** quarterly/yearly bills hold their full amount from confirmation until paid (never covered by a monthly plan line); a range sets aside its highest amount; a bill paid in parts is done when the parts add up; weekly / every-2-weeks / quarterly / yearly bills are detected and suggested for confirmation.
+  - **Core:** period classes (7/14/30/91/365 days, own tolerance each), amount ranges, parts (wide window only for manual and range bills), `dueCycles` (weekly bills reserve each week before payday), instalments ending on calendar months (`endsBy` = end + half an interval), manual bills (`addRecurring`, optional payee: without one it never matches a payment), `updateRecurring` with `own_category`, history per cycle.
+  - **App:** Plan › Expected bills: Add bill / Edit sheet (period, range, payee, instalments), labels for period, range, "N payments left", "x of y paid", "Held in full until paid"; Mark paid with Undo; Today lists held long bills; bill history per cycle; demo wallet has a yearly and a weekly bill.
+  - **Reviews:** core 2 high (a lone early part left a cycle open with no reserve later; monthly instalments ended early), 3 medium, 4 low; re-review 1 medium (late payment still ended a plan early), 1 low; UI 1 high (Edit rewrote the instalment end in 30-day steps), 1 medium, 3 low. All fixed with tests.
+  - **Known limits:** the payee of a bill can't be changed after it is created; instalments are edited as "payments left"; `suggestPlan` still counts a weekly subscription as one monthly amount.
+  - **Stage run:** importer 335, core 2272, relay 206, app 1555, desktop 13 files, web-test, emulator screens. Perf: spending_scroll over budget again (5 missed build frames) — the known host slowdown, not P4.
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -382,6 +389,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
   N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
+- Owner checks after P4 (phone):
+  - Plan › Expected bills › Add bill: a yearly bill (e.g. insurance) → Today shows "… held until paid" and safe-to-spend drops by the full amount.
+  - Add a bill with "The amount changes" (from–to): it sets aside the top of the range.
+  - Add a monthly bill with instalments (e.g. 12): "12 payments left"; Edit, rename, Save: the count stays.
+  - A bill without payee: Mark paid, then Undo.
+  - Check the add sheet fits at phone width with range and instalments on.
 - Owner checks after P7 (phone):
   - Plan › Rules: add a "description contains" rule with a range, then Preview and Save.
   - Try a range with no text: it is refused.
