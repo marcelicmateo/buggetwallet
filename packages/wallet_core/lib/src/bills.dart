@@ -281,6 +281,7 @@ bool _named(List<String> words, CategorizedTx t) {
 /// description holds a word of the payee ([_billPayeeWords]) first, then
 /// the closest to the bill's date or due date, then the amount closest to the total, then date, then id. Never filtered
 /// by amount. A bill without a date has none.
+/// P6: expects whole payments (`Categorizer.categorize`, one row per payment), never the expanded list (`Categorizer.expand`).
 List<CategorizedTx> billCandidates(Bill b, List<CategorizedTx> txs, List<Bill> all) {
   final window = _billLinkWindow(b, after: _billCandidateDaysAfter);
   if (window == null) return const [];
@@ -396,6 +397,7 @@ bool plannedReserves(PlannedCost p, List<RecurringBill> recurring, Set<String> c
 /// reserve): the category of the confirmed recurring bill with the same payee key ([billPayeeKey]); else the category
 /// of the latest live bank expense (not hand-added, not an own transfer) whose description holds a payee word
 /// ([_billPayeeWords], like [billCandidates]); else null. Never by amount.
+/// P6: expects whole payments (`Categorizer.categorize`, one row per payment), never the expanded list (`Categorizer.expand`).
 String? suggestBillCategory(Bill b, {required List<RecurringBill> recurring, required List<CategorizedTx> txs, CategoryTable? table}) {
   final cats = table ?? CategoryTable.builtIn;
   final key = billPayeeKey(b);

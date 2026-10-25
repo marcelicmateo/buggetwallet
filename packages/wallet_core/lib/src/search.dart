@@ -134,6 +134,10 @@ List<Map<String, Object?>> searchRows(String entity, String query, Iterable<Map<
 /// category also matches by its label ([CategoryTable.label], folded), so a custom category is found by its name. With
 /// [tags], a transaction also matches when the label of one of its extra tags ([CategorizedTx.tags],
 /// [TagTable.label]) holds the query.
+///
+/// P6: [txs] is the expanded list (`Categorizer.expand`). A part also matches by its own note, main tag, tags and
+/// amount (and by the payment's whole amount); a payment is found once, as its first matching row (so the result
+/// names the part that matched, [CategorizedTx.part]).
 SearchResult searchAll(
   String query, {
   required List<CategorizedTx> txs,
@@ -154,9 +158,20 @@ SearchResult searchAll(
   bool category(String? c) => text(c) || (c != null && table != null && text(table.label(c)));
   bool tagged(CategorizedTx t) => tags != null && t.tags.any((g) => text(tags.label(g)));
 
+  final seen = <String>{};
   final hits = [
     for (final t in txs)
-      if (t.tx.live && (amount(t.amount) || text(t.tx.description) || text(t.tx.note) || category(t.category) || tagged(t))) t
+      if (t.tx.live &&
+          !seen.contains(t.tx.id) &&
+          (amount(t.amount) ||
+              (t.isPart && amount(t.tx.amount)) ||
+              text(t.tx.description) ||
+              text(t.tx.note) ||
+              text(t.partNote) ||
+              category(t.category) ||
+              tagged(t)) &&
+          seen.add(t.tx.id))
+        t
   ]..sort((a, b) {
       final c = b.date.compareTo(a.date);
       return c != 0 ? c : b.tx.id.compareTo(a.tx.id);

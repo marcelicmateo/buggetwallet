@@ -35,13 +35,18 @@ const transactionsCsvTagsHeader = 'date,amount,category,tags,description,source,
 /// custom category reads as its name; built-ins keep their names unless relabelled), `note` empty when there is none.
 /// With [tags], a `tags` column follows `category` ([transactionsCsvTagsHeader]): the labels of the row's extra tags
 /// ([CategorizedTx.tags], in their order) joined with `; `, empty when it has none. `category` stays the main tag.
+///
+/// P6: [txs] is the expanded list (`Categorizer.expand`). A split payment gives one record per part, in part order:
+/// the part's amount, main tag and tags, the payment's description with ` #<n>` (n from 1; the CSV has no id column),
+/// and the part's note (the payment's when the part has none). An unsplit payment is one record as before.
 String transactionsCsv(List<CategorizedTx> txs, {CategoryTable? table, TagTable? tags}) {
   final rows = [
     for (final t in txs)
       if (t.tx.live) t
   ]..sort((a, b) {
-      final c = a.date.compareTo(b.date);
-      return c != 0 ? c : a.tx.id.compareTo(b.tx.id);
+      var c = a.date.compareTo(b.date);
+      if (c == 0) c = a.tx.id.compareTo(b.tx.id);
+      return c != 0 ? c : comparePart(a, b);
     });
   final sb = StringBuffer('${tags == null ? transactionsCsvHeader : transactionsCsvTagsHeader}\n');
   for (final t in rows) {
@@ -51,9 +56,9 @@ String transactionsCsv(List<CategorizedTx> txs, {CategoryTable? table, TagTable?
       centsToDecimal(t.amount),
       c,
       if (tags != null) t.tags.map(tags.label).join('; '),
-      t.tx.description,
+      if (t.part case final p?) (t.tx.description.isEmpty ? '#${p + 1}' : '${t.tx.description} #${p + 1}') else t.tx.description,
       t.tx.source,
-      t.tx.note ?? '',
+      t.partNote ?? t.tx.note ?? '',
     ]));
   }
   return sb.toString();

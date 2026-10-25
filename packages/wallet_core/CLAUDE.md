@@ -198,6 +198,14 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `untaggedSpent`). `searchAll(tags:)`, `transactionsCsv(tags:)` (`tags` column after `category`, labels joined
   `; `). Name rules (1–40 chars, unique folded among live tags, not a live category label, ≤ 500 live) are checked on
   local writes only. Logs: counts only. Tests: `test/t1_tags_impl_test.dart`.
+- `splits.dart` + `repo_splits.dart` — split transactions (P6, schema 13, spec `docs/context/P6_SPEC.md`). Entity
+  `split` (table `tx_splits`, id = the tx id, `parts` = one JSON field `[{a, c, t, n?}]`, so LWW keeps a whole split).
+  `setSplit`/`removeSplit`/`splitOf`/`splits`; rules (2–20 parts, payment's sign, exact sum, live non-transfer main
+  tag, live resolved tags ≤ 20, note ≤ 200; no transfers) on local writes only. Read time: `Categorizer.expand(t)` /
+  `expandAll` = one `CategorizedTx` per part (`amount`, `part`, `parts`, `partNote`; `tx` stays the payment), or the
+  payment whole (`splitBroken` when the stored split no longer fits, `splitFits`). Money by category/tag/kind takes the
+  expanded list; pickers and detection take whole payments (`categorize`, `wholePayments`). Matching copies an entry's
+  split onto its bank row (like T1 tag links). Tests: `test/p6_split_impl_test.dart`.
 - `transfers.dart` — `planTransfers`: own transfers between accounts. Only a row the bank itself marks as one
   (`kindHint == ownTransfer`: Revolut `Topup`, PBZ card payments to Revolut; not `exchange`, a conversion inside one bank) may pair: with the equal,
   opposite-sign row of the same currency in another source within `transferDays` (3, inclusive, either way in time),

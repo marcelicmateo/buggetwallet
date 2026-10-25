@@ -210,6 +210,12 @@ const Map<String, EntityDef> entitySchema = {
     ColumnDef('tag'),
     ColumnDef.flag('deleted'),
   ]),
+  // Split transactions (v13, P6): id = the tx id; the whole split is one JSON field (see `SplitPart`), so
+  // last-writer-wins never mixes two devices' parts.
+  'split': EntityDef('tx_splits', [
+    ColumnDef('parts', defaultSql: "'[]'"),
+    ColumnDef.flag('deleted'),
+  ]),
 };
 
 /// The device-local tables: never synced or backed up.

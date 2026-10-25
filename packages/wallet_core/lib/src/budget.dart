@@ -166,7 +166,7 @@ List<DueCycle> dueCycles(List<RecurringBill> bills, List<CategorizedTx> txs, Str
       if (b.confirmed && isIsoDate(b.nextDue) && !b.finished) b
   ];
   if (live.isEmpty) return const [];
-  final pay = payments ?? planRecurringPayments(live, [for (final t in txs) t.tx], currency: currency);
+  final pay = payments ?? planRecurringPayments(live, wholePayments(txs), currency: currency);
   final paidOn = <String, String>{for (final t in txs) t.tx.id: t.date};
   final out = <DueCycle>[];
   DueCycle first(RecurringBill b) {
@@ -233,7 +233,9 @@ List<PlannedCost> duePlanned(List<PlannedCost> planned, String today, String end
 /// ([PlannedCost.needsCategory]: listed, not added; the owner is asked for the category). The rule is
 /// [plannedReserves]; the rows it accepts are [PeriodBudget.reservedPlannedRows]. Without planned costs every number is as before.
 /// [table] decides which categories are fixed ([RecurringBill.coveredByPlanIn], [PlannedCost.coveredByPlanIn]); it is
-/// required so a custom fixed category is never reserved a second time as flex.
+/// required so a custom fixed category is never reserved a second time as flex. [txs] is the expanded list (P6,
+/// `Categorizer.expand`: each part of a split payment counts in its own category; recurring bills are matched on the
+/// whole payments, [wholePayments]).
 PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today,
     {List<RecurringBill> bills = const [], List<PlannedCost> planned = const [], required CategoryTable table}) {
   final start = st.periodStart ?? today;
@@ -361,7 +363,8 @@ bool countsAsSpending(CategorizedTx t, String currency) =>
     t.tx.live && t.tx.currency == currency && (t.kind == BudgetKind.fixed || t.kind == BudgetKind.flex);
 
 /// Money in and out of calendar [month] (`YYYY-MM`), counting only rows in [currency] (`WalletSettings.currency`);
-/// the others are in [MonthSummary.foreignByCurrency].
+/// the others are in [MonthSummary.foreignByCurrency]. Like every money sum here (budgets, averages, the review),
+/// [txs] is the expanded list (P6, `Categorizer.expand`).
 MonthSummary monthSummary(List<CategorizedTx> txs, String month, {required String currency}) {
   var income = 0, out = 0;
   final byCat = <String, int>{};
@@ -589,6 +592,7 @@ ReviewState reviewState(List<CategorizedTx> txs, WalletSettings st, List<WishIte
   for (final t in txs) {
     if (!t.tx.live || t.date.compareTo(since) <= 0 || t.date.compareTo(today) > 0) continue;
     if (t.kind != BudgetKind.fixed && t.kind != BudgetKind.flex) continue;
+    if (t.isPart) continue; // the owner gave each part its main tag
     final own = t.tx.category;
     if (own == null || !cats.isLive(own)) automatic++; // no override, or one that is deleted or unknown here
   }

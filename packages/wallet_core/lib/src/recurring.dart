@@ -51,6 +51,7 @@ int medianCents(List<int> xs) {
 /// here changes a row's category: a bill is information, not a reclassification. Only rows in [currency]
 /// (`WalletSettings.currency`) count: a bill paid in another currency is never a candidate, so it is never reserved
 /// from the flexible money, and a foreign row at the same payee neither breaks nor joins the chain.
+/// P6: expects whole payments (`Categorizer.categorize`, one row per payment), never the expanded list (`Categorizer.expand`).
 List<RecurringBill> detectRecurring(List<CategorizedTx> txs, {required String today, required String currency}) {
   final starts = [for (final c in _classes) _lookbackStart(today, c.weeks, c.months)];
   final from = starts.reduce((a, b) => a.compareTo(b) <= 0 ? a : b);

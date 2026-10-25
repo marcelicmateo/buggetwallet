@@ -1,6 +1,7 @@
 // Graph data and the Spending drill-down (stage N3, docs/context/N3_SPEC.md §2–3). Pure functions over a
 // [DateRange]. Spending is counted exactly as "Where it goes" (`monthSummary(...).byCategory`): live rows in the home
-// currency, fixed + flex, refunds subtracted, transfers and income left out. Nothing is reclassified.
+// currency, fixed + flex, refunds subtracted, transfers and income left out. Nothing is reclassified. P6: every
+// function takes the expanded list (`Categorizer.expand`): a split payment counts as its parts, never also whole.
 import 'budget.dart' show averageByCategory, budgetVsActual, countsAsSpending, monthSummary;
 import 'categories.dart' show BudgetKind, CategoryTable, merchantKey, merchantName;
 import 'dates.dart';
@@ -128,7 +129,9 @@ List<CategorizedTx> _categoryRows(String category, List<CategorizedTx> txs, Date
 
 int _newestFirst(CategorizedTx a, CategorizedTx b) {
   final d = b.date.compareTo(a.date);
-  return d != 0 ? d : b.tx.id.compareTo(a.tx.id);
+  if (d != 0) return d;
+  final i = b.tx.id.compareTo(a.tx.id);
+  return i != 0 ? i : comparePart(a, b);
 }
 
 /// One bar per calendar month overlapping [r], months without spending included.
@@ -272,7 +275,7 @@ CategoryCompare compareCategory(String category, List<CategorizedTx> txs, String
       ? txs
       : [
           for (final t in txs)
-            if (_inTree(t.category, category, table)) CategorizedTx(t.tx, category, t.kind, tags: t.tags)
+            if (_inTree(t.category, category, table)) t.withCategory(category)
         ];
   final before = monthsEnding(month, 2).first;
   return CategoryCompare(
@@ -292,7 +295,8 @@ List<CategorizedTx> biggestRows(List<CategorizedTx> txs, DateRange r, {int limit
   ]..sort((a, b) {
       var d = a.amount.compareTo(b.amount); // most negative first
       if (d == 0) d = b.date.compareTo(a.date);
-      return d != 0 ? d : a.tx.id.compareTo(b.tx.id);
+      if (d == 0) d = a.tx.id.compareTo(b.tx.id);
+      return d != 0 ? d : comparePart(a, b);
     });
   return rows.length > limit ? rows.sublist(0, limit) : rows;
 }

@@ -105,6 +105,15 @@ class TagTable {
   /// The tag [id] counts as: its original when it is a duplicate, itself when live, null when deleted or unknown.
   String? resolve(String id) => isLive(id) ? (_dup[id] ?? id) : null;
 
+  /// [ids] each [resolve]d (dead ones dropped), without repeats, in table order; unmodifiable (P6: a split part's tags).
+  List<String> resolveAll(Iterable<String> ids) {
+    final out = <String>{
+      for (final id in ids)
+        if (resolve(id) case final r?) r
+    };
+    return out.isEmpty ? const [] : List.unmodifiable(_ordered(out));
+  }
+
   /// The live tags, originals only (hidden ones included), in order.
   List<String> get ids => [
         for (final id in _live)
@@ -183,6 +192,7 @@ class TagContext {
 /// Extra tags to suggest for [t] (never applied): tags on at least 2 other live rows of [history] with the same payee
 /// ([tagPayee]), not already on [t] (its row in [history]) and not turned off on it ([off]: the tag ids of [t]'s `off`
 /// links, `TagContext.offTags`). Pickable tags only. Ordered by count, then the most recent use, then the label; at most [limit].
+/// P6: expects whole payments (`Categorizer.categorize`, one row per payment), never the expanded list (`Categorizer.expand`).
 List<String> suggestTags(Tx t, List<CategorizedTx> history, TagTable tags, {int limit = 5, Set<String> off = const {}}) {
   final payee = tagPayee(t);
   if (payee == null || limit <= 0) return const [];
@@ -245,10 +255,12 @@ List<String> _recommended(Tx t, List<CategorizedTx> history, List<String> candid
 /// The main tags (built-in and own categories) to offer for [t]: [CategoryTable.pickable] (of [kinds] when given),
 /// first those used with its payee by count, then by how often they are used overall, then the table order. A sync
 /// duplicate's rows count for its original.
+/// P6: expects whole payments (`Categorizer.categorize`, one row per payment), never the expanded list (`Categorizer.expand`).
 List<String> recommendedMainTags(Tx t, List<CategorizedTx> history, CategoryTable table, {Set<BudgetKind>? kinds}) =>
     _recommended(t, history, table.pickable(kinds: kinds), (h) => [table.duplicateOf(h.category) ?? h.category]);
 
 /// The extra tags to offer for [t] ([TagTable.pickable]) in the same order as [recommendedMainTags].
+/// P6: expects whole payments (`Categorizer.categorize`, one row per payment), never the expanded list (`Categorizer.expand`).
 List<String> recommendedTags(Tx t, List<CategorizedTx> history, TagTable tags) => _recommended(
     t,
     history,

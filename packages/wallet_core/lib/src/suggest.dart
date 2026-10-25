@@ -63,6 +63,7 @@ const _windowMonths = 6;
 ///   candidates and dismissed bills never count.
 /// - **plan lines** (P1): each custom fixed category of [table] with a plan line, like rent from its rows.
 /// Rent, loan, subs and plan lines each count their whole tree ([CategoryTable.topLevel]): a child of Rent is rent.
+/// [txs] is the expanded list (P6, `Categorizer.expand`): a split payment's Rent part counts as rent, the rest not.
 PlanSuggestion suggestPlan(List<CategorizedTx> txs, WalletSettings st, String today,
     {List<RecurringBill> confirmed = const [], CategoryTable? table}) {
   final cats = table ?? CategoryTable.builtIn;
@@ -96,8 +97,9 @@ PlanSuggestion suggestPlan(List<CategorizedTx> txs, WalletSettings st, String to
 }
 
 int _byDateThenId(CategorizedTx a, CategorizedTx b) {
-  final d = a.date.compareTo(b.date);
-  return d != 0 ? d : a.tx.id.compareTo(b.tx.id);
+  var d = a.date.compareTo(b.date);
+  if (d == 0) d = a.tx.id.compareTo(b.tx.id);
+  return d != 0 ? d : comparePart(a, b);
 }
 
 /// Days before the oldest payday group's start the data must reach for that group to be whole (`_salaryGroupDays` in
@@ -138,10 +140,13 @@ Suggested? _salary(List<List<CategorizedTx>> groups) {
   final used = complete.sublist(complete.length > _lookBack ? complete.length - _lookBack : 0);
   final total = medianCents([for (final g in used) g.fold<int>(0, (s, t) => s + t.amount)]);
   if (total <= 0 || total > WalletSettings.maxAmount) return null;
-  return Suggested(value: total, basis: 'salaryRows', evidence: [
-    for (final g in used)
-      for (final t in g) t.tx.id
-  ]);
+  return Suggested(
+      value: total,
+      basis: 'salaryRows',
+      evidence: <String>{
+        for (final g in used)
+          for (final t in g) t.tx.id // a split payment once (P6)
+      }.toList());
 }
 
 Suggested? _paydayDay(List<List<CategorizedTx>> groups) {
@@ -170,10 +175,13 @@ Suggested? _fixedMonthly(List<CategorizedTx> home, String today, String from, St
   if (used.length < _minEvidence) return null;
   final value = medianCents([for (final m in used) byMonth[m]!.fold<int>(0, (s, t) => s - t.amount)]);
   if (value <= 0 || value > WalletSettings.maxAmount) return null;
-  return Suggested(value: value, basis: basis, evidence: [
-    for (final m in used)
-      for (final t in byMonth[m]!..sort(_byDateThenId)) t.tx.id
-  ]);
+  return Suggested(
+      value: value,
+      basis: basis,
+      evidence: <String>{
+        for (final m in used)
+          for (final t in byMonth[m]!..sort(_byDateThenId)) t.tx.id // a split payment once (P6)
+      }.toList());
 }
 
 /// The fixed category subscriptions are planned in.

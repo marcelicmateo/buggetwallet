@@ -15,6 +15,7 @@ import 'recurring.dart';
 import 'rules.dart';
 import 'schema.dart';
 import 'search.dart' show foldText;
+import 'splits.dart';
 import 'sqlite_io.dart' if (dart.library.js_interop) 'sqlite_web.dart' as sqlite;
 import 'tags.dart';
 import 'transfers.dart';
@@ -26,6 +27,7 @@ part 'repo_blobs.dart';
 part 'repo_planned.dart';
 part 'repo_recurring.dart';
 part 'repo_settings.dart';
+part 'repo_splits.dart';
 part 'repo_tags.dart';
 
 /// One field-level change. This is what syncs between devices.
@@ -142,8 +144,9 @@ class WalletRepo {
   /// version 9: accounts (the `account` entity; no data migration), version 10: categories (the `category` entity:
   /// custom categories, subcategories and built-in overrides; no data migration), version 11: tags (the `tag`,
   /// `txtag` and `ruletag` entities; no data migration), version 12: recurring bills beyond monthly (P4: `recurring`
-  /// gains `min_amount`, `max_amount`, `ends_on`, `manual`; no data migration).
-  static const schemaVersion = 12;
+  /// gains `min_amount`, `max_amount`, `ends_on`, `manual`; no data migration), version 13: split transactions (P6:
+  /// the `split` entity; no data migration).
+  static const schemaVersion = 13;
 
   /// The folder sync's bookkeeping (`peer_files`: which files of the shared folder were read) means nothing on a relay,
   /// whose sequence numbers start over (every device's first relay file is its whole state), so it is dropped once.
@@ -563,6 +566,7 @@ class WalletRepo {
       for (final e in plan.matchedTo.entries) ('tx', e.key, {'matched_to': e.value}),
       for (final e in plan.bankCategory.entries) ('tx', e.key, {'category': e.value}),
       ..._matchedTagLinks(plan.matchedTo),
+      ...WalletRepoSplits(this)._matchedSplits(plan.matchedTo),
     ]);
     _clearMatchPending();
     t.done({
@@ -837,7 +841,9 @@ class WalletRepo {
   CategoryTable categoryTable() => CategoryTable.from(categoryRows(includeDeleted: true));
 
   /// The categorizer for the current settings, rules and categories. With [withTags] (the default) it also holds one
-  /// read of the tag tables ([WalletRepoTags.tagContext]), so [Categorizer.categorize] fills [CategorizedTx.tags].
+  /// read of the tag tables ([WalletRepoTags.tagContext]), so [Categorizer.categorize] fills [CategorizedTx.tags], and
+  /// one read of the live splits ([WalletRepoSplits.splits], P6) for [Categorizer.expand]. Without it (the internal
+  /// whole-payment paths: matching, recurring) [Categorizer.expand] gives whole payments.
   Categorizer categorizer({bool withTags = true}) {
     final table = categoryTable();
     final st = _readSettings(db, table: table);
@@ -846,7 +852,8 @@ class WalletRepo {
         patternRules: st.patternRules,
         rentCashThreshold: st.rentCashThreshold,
         table: table,
-        tagContext: withTags ? tagContext() : null);
+        tagContext: withTags ? tagContext() : null,
+        splits: withTags ? splits() : const {});
   }
 
   // ---------- writes ----------

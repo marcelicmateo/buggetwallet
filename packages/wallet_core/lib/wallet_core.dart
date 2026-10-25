@@ -143,6 +143,7 @@ export 'src/models.dart'
     show
         Account,
         CategorizedTx,
+        comparePart,
         Goal,
         GoalContribution,
         goalTotal,
@@ -157,6 +158,7 @@ export 'src/models.dart'
         ReviewStep,
         Tx,
         WalletSettings,
+        wholePayments,
         WishItem;
 export 'src/periods.dart' show detectPaydays, periodSummaries, PeriodSummary, salaryPaydays, SavingsOverview, savingsOverview, trendNet;
 export 'src/planned.dart'
@@ -185,9 +187,11 @@ export 'src/repo.dart'
         WalletRepoPlanned,
         WalletRepoRecurring,
         WalletRepoSettings,
+        WalletRepoSplits,
         WalletRepoTags;
 export 'src/rules.dart' show merchantPatternId, MerchantPattern, MerchantRule, MoveDirection, RuleKind, ruleHits, rulesView, RuleView;
 export 'src/search.dart' show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchTxLimit;
+export 'src/splits.dart' show decodeSplitParts, encodeSplitParts, SplitPart, splitFits;
 export 'src/suggest.dart' show PlanSuggestion, planProposals, SettingProposal, Suggested, suggestPlan;
 export 'src/sync.dart'
     show relayFingerprint, SyncDevice, SyncException, SyncProblem, SyncProblemReason, syncReaderVersion, SyncReport, SyncWaiting;

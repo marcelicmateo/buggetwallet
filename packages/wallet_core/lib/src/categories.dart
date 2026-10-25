@@ -4,7 +4,8 @@ import 'logs.dart';
 import 'models.dart';
 import 'rules.dart' show MerchantPattern, merchantPatternId;
 import 'search.dart' show foldText;
-import 'tags.dart' show TagContext;
+import 'splits.dart' show SplitPart, splitFits;
+import 'tags.dart' show TagContext, TagTable;
 
 final _log = Logger('bw.categories');
 
@@ -307,6 +308,9 @@ class Categorizer {
   /// The tag tables [categorize] fills [CategorizedTx.tags] from (T1; `WalletRepo.tagContext`, read once). Null: no tags.
   final TagContext? tagContext;
 
+  /// Tx id → its live split's parts (P6, `WalletRepoSplits.splits`, read once), for [expand]. Empty: no splits.
+  final Map<String, List<SplitPart>> splits;
+
   /// [patternRules] (P7, [WalletSettings.patternRules]) are the personal patterns with their match kind and range; when
   /// null, [patterns] (`[category, regex]` pairs, [WalletSettings.merchantPatterns]) are used as regex patterns.
   factory Categorizer(
@@ -315,7 +319,8 @@ class Categorizer {
       List<MerchantPattern>? patternRules,
       int rentCashThreshold = defaultRentCashThreshold,
       CategoryTable? table,
-      TagContext? tagContext}) {
+      TagContext? tagContext,
+      Map<String, List<SplitPart>> splits = const {}}) {
     final t = table ?? CategoryTable.builtIn;
     final rules = patternRules ??
         [
@@ -328,10 +333,10 @@ class Categorizer {
     ];
     // Counts only: merchant rules and patterns are personal.
     logEvent(_log, Level.FINE, 'categories.build', {'rules': merchantRules.length, 'patterns': rules.length, 'patternsUsed': used.length});
-    return Categorizer._(merchantRules, used, rentCashThreshold, t, tagContext);
+    return Categorizer._(merchantRules, used, rentCashThreshold, t, tagContext, splits);
   }
 
-  Categorizer._(this.merchantRules, this._patterns, this.rentCashThreshold, this.table, this.tagContext)
+  Categorizer._(this.merchantRules, this._patterns, this.rentCashThreshold, this.table, this.tagContext, this.splits)
       : userPatterns = List.unmodifiable([for (final p in _patterns) (p.rule.category, p.rule)]);
 
   /// A pattern ready to match, or null (logged as `categories.badPattern`) when its text is empty (only spaces
@@ -453,9 +458,9 @@ class Categorizer {
   /// override, a transfer or kind hint, a bank rule, a hand-added row's own category, the fallback).
   String? ruleFor(Tx t) => _decide(t).$2;
 
-  (String, String?) _decide(Tx t) {
+  (String, String?) _decide(Tx t, {bool override = true}) {
     final o = t.category;
-    if (o != null && table.isLive(o)) return (o, null);
+    if (override && o != null && table.isLive(o)) return (o, null);
     final auto = _auto(t);
     final k = table.kindOf(auto.$1);
     if (t.source != 'manual' && (k == BudgetKind.flex || k == BudgetKind.fixed)) {
@@ -477,10 +482,45 @@ class Categorizer {
     return merchantCategory(text) ?? orElse;
   }
 
+  /// [t] as one row: the whole payment, whatever its split. For pickers and detection (matching, transfers, bills,
+  /// recurring, paydays, balances, rule hits, tag suggestions); money by category, tag or kind uses [expand].
   CategorizedTx categorize(Tx t) {
     final c = categoryOf(t);
     return CategorizedTx(t, c, table.kindOf(c), tags: tagContext?.of(t) ?? const []);
   }
+
+  /// The rows [t] counts as (P6): [categorize] when it has no live split in [splits] or is not live itself (a deleted
+  /// row, an entry replaced by its bank row: it counts nothing, so it stays one row); else one row per part, in stored
+  /// order ([CategorizedTx.part], [CategorizedTx.parts], the part's amount, main tag, tags and note). A split that no
+  /// longer fits the payment ([splitFits]: its amount was edited, a synced split arrived for a changed row, or it is
+  /// unreadable) is ignored: the payment counts whole and is marked [CategorizedTx.splitBroken]. A split on a payment
+  /// that is now a transfer (paired as an own transfer, or its main tag is a transfer) is ignored without the mark:
+  /// a transfer is never split. A part whose main tag is not live falls back to the payment's own automatic one
+  /// ([categoryOf] without its override; P1 §3); dead tags are dropped ([TagTable.resolveAll]; no [tagContext]: no
+  /// tags). Pure: nothing is written.
+  List<CategorizedTx> expand(Tx t) {
+    final stored = splits[t.id];
+    if (stored == null || !t.live) return [categorize(t)];
+    final whole = categorize(t);
+    if (t.transferTo != null || whole.kind == BudgetKind.transfer) return [whole];
+    if (!splitFits(t.amount, stored)) {
+      return [CategorizedTx(t, whole.category, whole.kind, tags: whole.tags, splitBroken: true)];
+    }
+    String? fallback;
+    final tags = tagContext?.tags;
+    return [
+      for (final (i, p) in stored.indexed)
+        if (table.isLive(p.category) ? p.category : (fallback ??= _automatic(t)) case final c)
+          CategorizedTx(t, c, table.kindOf(c),
+              tags: tags == null ? const [] : tags.resolveAll(p.tags), amount: p.amount, part: i, parts: stored.length, partNote: p.note),
+    ];
+  }
+
+  /// [expand] over [txs], in order.
+  List<CategorizedTx> expandAll(Iterable<Tx> txs) => [for (final t in txs) ...expand(t)];
+
+  /// [t]'s main tag without its own override: a payee rule, else the automatic one ([autoCategory]).
+  String _automatic(Tx t) => _decide(t, override: false).$1;
 }
 
 /// Display name for a merchant, with bank prefixes removed.

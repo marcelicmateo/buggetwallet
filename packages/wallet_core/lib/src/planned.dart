@@ -280,6 +280,7 @@ const _paidWindowDays = 3;
 /// [p]'s category dated within its date ± [_paidWindowDays], that are not already the `paidTx` of another planned cost
 /// in [all]. Closest date first, then the amount closest to [p]'s amount, then date, then id. Never matched by amount
 /// alone (exact money rule): a planned cost without a category has no candidates. Only the owner's pick links one.
+/// P6: expects whole payments (`Categorizer.categorize`, one row per payment), never the expanded list (`Categorizer.expand`).
 List<CategorizedTx> paidCandidates(PlannedCost p, List<CategorizedTx> txs, List<PlannedCost> all) {
   final cat = p.category;
   if (cat == null || cat.isEmpty || !isIsoDate(p.date)) return const [];

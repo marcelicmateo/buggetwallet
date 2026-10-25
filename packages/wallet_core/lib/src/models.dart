@@ -101,18 +101,61 @@ class Tx {
       );
 }
 
-/// A transaction with its resolved category.
+/// A transaction with its resolved category, or one part of a split payment (P6, `Categorizer.expand`): then [tx] is
+/// still the whole payment and [amount], [category], [kind], [tags] and [partNote] are the part's.
 class CategorizedTx {
   final Tx tx;
   final String category;
   final BudgetKind kind;
 
-  /// The row's extra tags (T1, `tagsOf`): resolved tag ids in table order; empty when none. Unmodifiable.
+  /// The row's extra tags (T1, `tagsOf`): resolved tag ids in table order; empty when none. Unmodifiable. A part's are
+  /// its own list only (resolved; dead tags dropped), never the payee's rule tags or the payment's links.
   final List<String> tags;
-  const CategorizedTx(this.tx, this.category, this.kind, {this.tags = const []});
+
+  /// The part's amount; null = the payment's ([amount]).
+  final int? _amount;
+
+  /// A part's 0-based index in its split; null when this row is the whole payment.
+  final int? part;
+
+  /// How many parts the payment's split has; 0 when this row is the whole payment.
+  final int parts;
+
+  /// A part's own note; null when it has none (and for a whole payment).
+  final String? partNote;
+
+  /// The payment has a stored split that no longer adds up or cannot be read ([splitFits]): it counts whole.
+  final bool splitBroken;
+
+  const CategorizedTx(this.tx, this.category, this.kind,
+      {this.tags = const [], int? amount, this.part, this.parts = 0, this.partNote, this.splitBroken = false})
+      : _amount = amount;
   String get date => tx.date;
-  int get amount => tx.amount;
+
+  /// What this row counts: the part's amount for a part, else the payment's ([Tx.amount]).
+  int get amount => _amount ?? tx.amount;
+
+  /// One part of a split payment ([part] is set).
+  bool get isPart => part != null;
+
+  /// This row with another [category] and/or [kind]; everything else (part fields included) kept.
+  CategorizedTx withCategory(String category, [BudgetKind? kind]) => CategorizedTx(tx, category, kind ?? this.kind,
+      tags: tags, amount: _amount, part: part, parts: parts, partNote: partNote, splitBroken: splitBroken);
 }
+
+/// The distinct payments of [rows] ([CategorizedTx.tx], first appearance order): an expanded list
+/// (`Categorizer.expand`) holds a split payment once per part.
+List<Tx> wholePayments(Iterable<CategorizedTx> rows) {
+  final seen = <String>{};
+  return [
+    for (final t in rows)
+      if (seen.add(t.tx.id)) t.tx
+  ];
+}
+
+/// Compares two rows of the same payment by part (whole first): the tie-break after the tx id in sorted lists, so the
+/// parts of one payment keep their stored order (List.sort is not stable).
+int comparePart(CategorizedTx a, CategorizedTx b) => (a.part ?? -1).compareTo(b.part ?? -1);
 
 class Goal {
   final String id;

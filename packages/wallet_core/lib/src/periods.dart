@@ -34,6 +34,8 @@ const _missingSalaryDays = 45;
 
 /// Real paydays from salary payments in [currency] (`WalletSettings.currency`; sorted, all <= today): the date of the
 /// first payment of each payday. Salary parts within 20 days of a payday's first payment belong to that payday.
+/// P6: whole payments (`Categorizer.categorize`) or the expanded list ([periodSummaries], the ranges): only the dates
+/// of income rows count, so a split salary payment gives its date once either way (unless no part of it is income).
 List<String> salaryPaydays(List<CategorizedTx> txs, String today, {required String currency}) {
   final salary = txs
       .where((t) => t.tx.live && t.kind == BudgetKind.income && t.amount > 0 && t.tx.currency == currency && t.date.compareTo(today) <= 0)
@@ -48,6 +50,7 @@ List<String> salaryPaydays(List<CategorizedTx> txs, String today, {required Stri
 }
 
 /// Payday dates (sorted, all <= today) from salary payments, a hand-set period start and assumed paydays.
+/// P6: either list, as [salaryPaydays].
 List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String today) {
   final real = salaryPaydays(txs, today, currency: st.currency);
   final ps = st.periodStart;
@@ -74,7 +77,7 @@ List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String to
 }
 
 /// Pay periods, oldest first; the last one is the running period. At most [count] entries. Only rows in
-/// `st.currency` count, in the sums and in finding the paydays.
+/// `st.currency` count, in the sums and in finding the paydays. P6: [txs] is the expanded list (`Categorizer.expand`).
 List<PeriodSummary> periodSummaries(List<CategorizedTx> txs, WalletSettings st, String today, {int count = 12}) {
   final days = detectPaydays(txs, st, today);
   if (days.isEmpty || count <= 0) return const [];

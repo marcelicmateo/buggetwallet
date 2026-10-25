@@ -54,7 +54,7 @@ void main() {
 
   group('schema', () {
     test('schema version is 12 and the recurring entity declares the new columns', () {
-      expect(WalletRepo.schemaVersion, 12);
+      expect(WalletRepo.schemaVersion, greaterThanOrEqualTo(12)); // P6 made it 13
       final e = entitySchema['recurring']!;
       expect(e.columnNames, containsAll(['min_amount', 'max_amount', 'ends_on', 'manual']));
       expect(e.column('min_amount')!.type, ColumnType.integer);
@@ -85,7 +85,7 @@ void main() {
       addTearDown(o.close);
       final cols = [for (final c in o.db.select('PRAGMA table_info(recurring)')) c['name']];
       expect(cols, containsAll(['min_amount', 'max_amount', 'ends_on', 'manual']));
-      expect(o.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '12');
+      expect(o.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '${WalletRepo.schemaVersion}');
       final b = o.recurringBills().singleWhere((x) => x.id == 'rec:old');
       expect((b.minAmount, b.maxAmount, b.endsOn, b.manual, b.expectedAmount, b.intervalDays), (null, null, null, false, 2500, 30));
       expect(b.hasRange, isFalse);
