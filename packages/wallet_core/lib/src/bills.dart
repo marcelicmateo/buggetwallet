@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'package:cryptography/dart.dart' show DartSha256;
 import 'package:wallet_importer/wallet_importer.dart' show BillItem, BillSource;
 
-import 'categories.dart' show BudgetKind, merchantKey;
+import 'categories.dart' show BudgetKind, CategoryTable, merchantKey;
 import 'dates.dart';
 import 'models.dart';
 import 'recurring.dart' show recurringDays;
@@ -367,11 +367,12 @@ String occurrenceKey(String recurringId, String date) => '$recurringId@$date';
 /// ([PlannedCost.needsCategory]), and not a slip a confirmed recurring bill already holds ([plannedCoverage]: that bill
 /// is `coveredByPlan`, the cycle is the one just paid or skipped, or the covering occurrence is in [counted]). Dates are
 /// the caller's to check (today .. payday for a period).
-bool plannedReserves(PlannedCost p, List<RecurringBill> recurring, Set<String> counted) {
-  if (!p.isOpen || (p.amount ?? 0) <= 0 || p.coveredByPlan || p.needsCategory) return false;
+/// [table] decides which categories are fixed ([PlannedCost.coveredByPlanIn], [RecurringBill.coveredByPlanIn]).
+bool plannedReserves(PlannedCost p, List<RecurringBill> recurring, Set<String> counted, {required CategoryTable table}) {
+  if (!p.isOpen || (p.amount ?? 0) <= 0 || p.coveredByPlanIn(table) || p.needsCategory) return false;
   final c = plannedCoverage(p, recurring);
   if (c == null) return true;
-  return !(c.bill.coveredByPlan || c.occurrence == null || counted.contains(occurrenceKey(c.bill.id, c.occurrence!)));
+  return !(c.bill.coveredByPlanIn(table) || c.occurrence == null || counted.contains(occurrenceKey(c.bill.id, c.occurrence!)));
 }
 
 ({RecurringBill bill, String? occurrence})? _coverage(String? key, String? due, List<RecurringBill> recurring) {
@@ -396,11 +397,12 @@ bool plannedReserves(PlannedCost p, List<RecurringBill> recurring, Set<String> c
 /// reserve): the category of the confirmed recurring bill with the same payee key ([billPayeeKey]); else the category
 /// of the latest live bank expense (not hand-added, not an own transfer) whose description holds a payee word
 /// ([_billPayeeWords], like [billCandidates]); else null. Never by amount.
-String? suggestBillCategory(Bill b, {required List<RecurringBill> recurring, required List<CategorizedTx> txs}) {
+String? suggestBillCategory(Bill b, {required List<RecurringBill> recurring, required List<CategorizedTx> txs, CategoryTable? table}) {
+  final cats = table ?? CategoryTable.builtIn;
   final key = billPayeeKey(b);
   if (key != null) {
     for (final r in recurring) {
-      if (r.confirmed && r.payee == key && r.category.isNotEmpty) return r.category;
+      if (r.confirmed && r.payee == key && r.category.isNotEmpty && cats.isLive(r.category)) return r.category;
     }
   }
   final words = _billPayeeWords(b);

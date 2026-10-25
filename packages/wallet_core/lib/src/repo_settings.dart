@@ -25,7 +25,7 @@ bool _perKeySetting(String key) =>
 /// older; migrated once by `_migrate`) only fill in entries that have no row at all, live or removed: an old backup
 /// restored here, or an entry an older build added after this device migrated. An entry with a row never reads the
 /// legacy map again, so a removed budget stays removed.
-WalletSettings _readSettings(CommonDatabase db) {
+WalletSettings _readSettings(CommonDatabase db, {CategoryTable? table}) {
   final m = <String, Object?>{};
   final rowIds = <String>{}; // per-key rows, live or removed
   for (final r in db.select('SELECT id, value, deleted FROM settings')) {
@@ -61,7 +61,7 @@ WalletSettings _readSettings(CommonDatabase db) {
       m[id] = {'category': p[0].toString(), 'pattern': p[1].toString(), 'order': next++};
     }
   }
-  return WalletSettings.fromMap(m);
+  return WalletSettings.fromMap(m, table: table);
 }
 
 /// [WalletRepo.updateSettings]: whole-value settings, one row per key. `categoryBudgets`, `merchantPatterns` and the
@@ -89,12 +89,17 @@ List<(String, String, Map<String, Object?>)> _settingChanges(Map<String, Object?
 /// [WalletSettings.budgetPrefix]) and their migration.
 extension WalletRepoSettings on WalletRepo {
   /// Sets [category]'s monthly budget to [cents], or removes it when null. Throws [ArgumentError] for a category that
-  /// is not a spending one ([isSpendingCategory]) or cents outside 0..[WalletSettings.maxBudget]. Writes nothing when
-  /// the budget is already that value.
+  /// is not a live top-level spending one ([CategoryTable.isSpending]; budgets are set on top-level categories only,
+  /// children roll up into them) or cents outside 0..[WalletSettings.maxBudget]. Writes nothing when the budget is
+  /// already that value.
   void setCategoryBudget(String category, int? cents) {
-    if (!isSpendingCategory(category)) throw ArgumentError.value(category, 'category', 'not a spending category');
+    final table = categoryTable();
+    if (!table.isSpending(category)) throw ArgumentError.value(category, 'category', 'not a spending category');
+    if (table.parentOf(category) != null) {
+      throw ArgumentError.value(category, 'category', 'a subcategory has no budget of its own; set it on its parent');
+    }
     if (cents != null && (cents < 0 || cents > WalletSettings.maxBudget)) throw ArgumentError('budget out of range');
-    if (settings().categoryBudgets[category] == cents) return;
+    if (_readSettings(db, table: table).categoryBudgets[category] == cents) return;
     _write([
       ('setting', _budgetId(category), cents == null ? {'value': null, 'deleted': 1} : {'value': jsonEncode(cents), 'deleted': 0})
     ]);
@@ -102,10 +107,10 @@ extension WalletRepoSettings on WalletRepo {
 
   /// Adds merchant [pattern] (a case-insensitive regex matched against the lower-cased description) for [category],
   /// or moves an existing one to [category]. A new pattern is matched after every other one (`order` = the largest
-  /// live order + 1); an existing one keeps its place. Throws [ArgumentError] for an unknown category, an empty
+  /// live order + 1); an existing one keeps its place. Throws [ArgumentError] for an unknown or deleted category ([CategoryTable.isLive]), an empty
   /// pattern or one that does not compile (the message never quotes the pattern). Writes nothing when unchanged.
   void setMerchantPattern(String category, String pattern) {
-    if (!categories.containsKey(category)) throw ArgumentError.value(category, 'category', 'unknown category');
+    if (!categoryTable().isLive(category)) throw ArgumentError.value(category, 'category', 'unknown category');
     if (pattern.trim().isEmpty) throw ArgumentError('empty pattern');
     try {
       RegExp(pattern, caseSensitive: false);

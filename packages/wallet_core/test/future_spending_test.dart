@@ -313,7 +313,8 @@ void main() {
     test('a bill and a planned cost reserve once each, never twice; no category is reserved', () {
       final p = computePeriod(const [], st, const [], today,
           bills: [bill('2026-03-05', 2999)],
-          planned: [pc('2026-03-05', 1000, category: 'Groceries'), pc('2026-03-06', 500, category: null)]);
+          planned: [pc('2026-03-05', 1000, category: 'Groceries'), pc('2026-03-06', 500, category: null)],
+          table: CategoryTable.builtIn);
       expect((p.reservedBills, p.reservedPlanned), (2999, 1500));
       expect(p.flexBudget, 200000 - 50000 - 2999 - 1500);
       expect(p.remaining, p.flexBudget);
@@ -323,25 +324,28 @@ void main() {
       final rent = pc('2026-03-05', 50000, title: 'Rent', category: 'Rent');
       expect(rent.coveredByPlan, isTrue);
       expect(pc('2026-03-05', 1, category: null).coveredByPlan, isFalse);
-      final p = computePeriod(const [], st, const [], today, planned: [rent, pc('2026-03-06', 700, category: 'Loan')]);
+      final p = computePeriod(const [], st, const [], today,
+          planned: [rent, pc('2026-03-06', 700, category: 'Loan')], table: CategoryTable.builtIn);
       expect(p.reservedPlanned, 0);
       expect(p.duePlanned, hasLength(2));
-      expect(p.flexBudget, computePeriod(const [], st, const [], today).flexBudget);
+      expect(p.flexBudget, computePeriod(const [], st, const [], today, table: CategoryTable.builtIn).flexBudget);
       final items = upcoming(planned: [rent], bills: const [], events: const [], from: today, to: '2026-03-31');
       expect(items.single.amount, 50000);
       expect(headsUps(items, today, thresholdCents: 10000, days: 7).single.item.planned, rent);
     });
 
     test('a damaged non-positive amount reserves nothing', () {
-      final p = computePeriod(const [], st, const [], today, planned: [pc('2026-03-05', -1000), pc('2026-03-05', 0)]);
+      final p = computePeriod(const [], st, const [], today,
+          planned: [pc('2026-03-05', -1000), pc('2026-03-05', 0)], table: CategoryTable.builtIn);
       expect(p.reservedPlanned, 0);
     });
 
     test('the paying row counts as spent only once it is marked: while open, spending and reservation both count (until its date)', () {
       final txs = [row('2026-03-01', -4000, category: 'Shopping', id: 'pay')];
-      final open = computePeriod(txs, st, const [], today, planned: [pc('2026-03-03', 4000, category: 'Shopping')]);
+      final open =
+          computePeriod(txs, st, const [], today, planned: [pc('2026-03-03', 4000, category: 'Shopping')], table: CategoryTable.builtIn);
       final paid = computePeriod(txs, st, const [], today,
-          planned: [pc('2026-03-03', 4000, category: 'Shopping', status: PlannedStatus.paid, paidTx: 'pay')]);
+          planned: [pc('2026-03-03', 4000, category: 'Shopping', status: PlannedStatus.paid, paidTx: 'pay')], table: CategoryTable.builtIn);
       expect(open.reservedPlanned, 4000);
       expect(paid.reservedPlanned, 0);
       expect(paid.spent, 4000);
@@ -482,8 +486,8 @@ void main() {
       await round();
       expect(a.repo.plannedCosts().map((p) => p.id), isNot(contains(id)));
       final st = WalletSettings.fromMap({'salary': 100000, 'periodStart': '2026-02-15', 'paydayDay': 15});
-      final pa = computePeriod(const [], st, const [], '2026-03-01', planned: a.repo.plannedCosts());
-      final pb = computePeriod(const [], st, const [], '2026-03-01', planned: b.repo.plannedCosts());
+      final pa = computePeriod(const [], st, const [], '2026-03-01', planned: a.repo.plannedCosts(), table: CategoryTable.builtIn);
+      final pb = computePeriod(const [], st, const [], '2026-03-01', planned: b.repo.plannedCosts(), table: CategoryTable.builtIn);
       expect((pa.reservedPlanned, pb.reservedPlanned), (4500, 4500));
     });
   });

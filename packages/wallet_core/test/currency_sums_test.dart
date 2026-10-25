@@ -36,8 +36,8 @@ void main() {
 
   group('computePeriod', () {
     test('foreign rows change no sum; their signed totals are listed by currency', () {
-      final only = computePeriod(eur, st, const [], today);
-      final mixed = computePeriod([...eur, ...foreign], st, const [], today);
+      final only = computePeriod(eur, st, const [], today, table: CategoryTable.builtIn);
+      final mixed = computePeriod([...eur, ...foreign], st, const [], today, table: CategoryTable.builtIn);
       for (final (name, get) in <(String, int Function(PeriodBudget))>[
         ('received', (p) => p.received),
         ('extras', (p) => p.extras),
@@ -57,13 +57,13 @@ void main() {
 
     test('received income in another currency does not count as received', () {
       final s = WalletSettings.fromMap({...st.toMap(), 'incomeMode': 'received'});
-      final p = computePeriod([fx('2026-03-15', 300000, 'Salary', 'USD')], s, const [], today);
+      final p = computePeriod([fx('2026-03-15', 300000, 'Salary', 'USD')], s, const [], today, table: CategoryTable.builtIn);
       expect((p.received, p.income), (0, s.salary));
     });
 
     test('a wallet in CHF counts its CHF rows and lists the EUR ones', () {
       final chf = WalletSettings.fromMap({...st.toMap(), 'currency': 'CHF'});
-      final p = computePeriod([...eur, ...foreign], chf, const [], today);
+      final p = computePeriod([...eur, ...foreign], chf, const [], today, table: CategoryTable.builtIn);
       expect(p.spent, 1234);
       expect(p.foreignByCurrency['EUR'], 200000 - 3000 - 50000 + 1000);
       expect(p.foreignByCurrency.containsKey('CHF'), isFalse);
@@ -130,7 +130,8 @@ void main() {
           ],
           st,
           const [],
-          today);
+          today,
+          table: CategoryTable.builtIn);
       expect(p.foreignByCurrency, {'USD': -700});
     });
 
@@ -154,7 +155,8 @@ void main() {
         description: desc);
     PeriodBudget period(WalletRepo r) {
       final cz = r.categorizer();
-      return computePeriod([for (final t in r.transactions()) cz.categorize(t)], home, const [], '2026-04-12', bills: r.recurringBills());
+      return computePeriod([for (final t in r.transactions()) cz.categorize(t)], home, const [], '2026-04-12',
+          bills: r.recurringBills(), table: CategoryTable.builtIn);
     }
 
     test('a USD monthly payee is no candidate and reserves nothing', () {

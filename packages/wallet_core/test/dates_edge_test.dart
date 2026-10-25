@@ -104,28 +104,29 @@ void main() {
     WalletSettings st(String start, int day) => WalletSettings(salary: 310000, rent: 0, periodStart: start, paydayDay: day);
 
     test('a period over the March DST change has 31 days', () {
-      final p = computePeriod(const [], st('2026-03-15', 15), goals, '2026-03-29');
+      final p = computePeriod(const [], st('2026-03-15', 15), goals, '2026-03-29', table: CategoryTable.builtIn);
       expect((p.end, p.length, p.daysLeft), ('2026-04-15', 31, 17));
     });
 
     test('over the year end', () {
       final p = computePeriod(
-          [ct('2026-12-31', -1000, 'Groceries'), ct('2027-01-01', -2000, 'Groceries')], st('2026-12-12', 12), goals, '2027-01-01');
+          [ct('2026-12-31', -1000, 'Groceries'), ct('2027-01-01', -2000, 'Groceries')], st('2026-12-12', 12), goals, '2027-01-01',
+          table: CategoryTable.builtIn);
       expect((p.end, p.length, p.daysLeft, p.spent, p.spentToday), ('2027-01-12', 31, 11, 3000, 2000));
     });
 
     test('February in a leap year with paydayDay 29/30/31', () {
-      expect(computePeriod(const [], st('2028-01-29', 29), goals, '2028-02-01').length, 31); // to Feb 29
-      expect(computePeriod(const [], st('2028-01-31', 31), goals, '2028-02-01').end, '2028-02-29');
-      expect(computePeriod(const [], st('2028-02-29', 31), goals, '2028-03-01').end, '2028-03-31');
-      expect(computePeriod(const [], st('2027-01-30', 30), goals, '2027-02-01').end, '2027-02-28');
+      expect(computePeriod(const [], st('2028-01-29', 29), goals, '2028-02-01', table: CategoryTable.builtIn).length, 31); // to Feb 29
+      expect(computePeriod(const [], st('2028-01-31', 31), goals, '2028-02-01', table: CategoryTable.builtIn).end, '2028-02-29');
+      expect(computePeriod(const [], st('2028-02-29', 31), goals, '2028-03-01', table: CategoryTable.builtIn).end, '2028-03-31');
+      expect(computePeriod(const [], st('2027-01-30', 30), goals, '2027-02-01', table: CategoryTable.builtIn).end, '2027-02-28');
     });
 
     test('payday day itself and the last day of the period', () {
-      final first = computePeriod(const [], st('2026-01-15', 15), goals, '2026-01-15');
+      final first = computePeriod(const [], st('2026-01-15', 15), goals, '2026-01-15', table: CategoryTable.builtIn);
       expect((first.daysLeft, first.length), (31, 31));
       expect(first.allowanceToday, (310000 / 31).round());
-      final last = computePeriod(const [], st('2026-01-15', 15), goals, '2026-02-14');
+      final last = computePeriod(const [], st('2026-01-15', 15), goals, '2026-02-14', table: CategoryTable.builtIn);
       expect(last.daysLeft, 1);
       expect(last.allowanceToday, 310000, reason: 'everything unspent is available on the last day');
       expect(last.elapsed, 1.0);

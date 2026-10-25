@@ -43,25 +43,33 @@ String transactionsCsv(List<CategorizedTx> txs) {
   return sb.toString();
 }
 
-/// Header of [monthlySummaryCsv]: `month,<each spending category>,total`.
-String get monthlySummaryCsvHeader => 'month,${spendingCategories.join(',')},total';
+/// Header of [monthlySummaryCsv] over the built-in categories: `month,<each spending category>,total`.
+String get monthlySummaryCsvHeader => monthlySummaryCsvHeaderFor(CategoryTable.builtIn);
+
+/// Header of [monthlySummaryCsv] for [t]: `month,<each label of [CategoryTable.spending]>,total` (fields quoted as
+/// needed, so a label with a comma stays one column).
+String monthlySummaryCsvHeaderFor(CategoryTable t) => ['month', for (final c in t.spending) t.label(c), 'total'].map(csvField).join(',');
 
 /// Spending per calendar month and category: `month,<each category in [spendingCategories] order>,total`, one record
 /// per month with a live row in a spending category, ascending. A cell is that category's outflow as a positive
 /// decimal (refunds, positive rows in the category, reduce it; `0.00` without spending), `total` the sum of the cells.
 /// Income, transfers, deleted rows and replaced entries are not spending and never appear; neither do rows in another
-/// currency than [currency] (`WalletSettings.currency`): the cells are sums in one currency.
-String monthlySummaryCsv(List<CategorizedTx> txs, {required String currency}) {
-  final cats = spendingCategories;
+/// currency than [currency] (`WalletSettings.currency`): the cells are sums in one currency. With [table], the
+/// columns are its [CategoryTable.spending] (labels in the header, [monthlySummaryCsvHeaderFor]) and each child's
+/// rows count in its parent's column ([rollUp]).
+String monthlySummaryCsv(List<CategorizedTx> txs, {required String currency, CategoryTable? table}) {
+  final t0 = table ?? CategoryTable.builtIn;
+  final cats = t0.spending;
   final byMonth = <String, Map<String, int>>{};
   for (final t in txs) {
-    if (!t.tx.live || t.tx.currency != currency || !isSpendingCategory(t.category) || t.date.length < 7) continue;
+    if (!t.tx.live || t.tx.currency != currency || !t0.isSpending(t.category) || t.date.length < 7) continue;
 
     final m = byMonth[monthOf(t.date)] ??= {};
-    m[t.category] = (m[t.category] ?? 0) - t.amount;
+    final c = t0.topLevel(t.category);
+    m[c] = (m[c] ?? 0) - t.amount;
   }
   final months = byMonth.keys.toList()..sort();
-  final sb = StringBuffer('$monthlySummaryCsvHeader\n');
+  final sb = StringBuffer('${monthlySummaryCsvHeaderFor(t0)}\n');
   for (final month in months) {
     final sums = byMonth[month]!;
     var total = 0;

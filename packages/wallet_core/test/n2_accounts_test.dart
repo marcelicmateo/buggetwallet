@@ -18,7 +18,7 @@ void main() {
       repo.addAccount(name: name, source: source, currency: currency, opening: opening, openingDate: date);
 
   test('schema 9 with an accounts entity', () {
-    expect(WalletRepo.schemaVersion, 9);
+    expect(WalletRepo.schemaVersion, greaterThanOrEqualTo(9));
     expect(entitySchema.containsKey('account'), isTrue);
     expect(repo.accounts(), isEmpty);
     expect(repo.db.select("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'accounts'"), hasLength(1));

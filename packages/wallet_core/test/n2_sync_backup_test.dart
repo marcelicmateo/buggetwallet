@@ -203,12 +203,12 @@ void main() {
 
     for (final keyed in [false, true]) {
       final file = 'schema7_${keyed ? 'keyed' : 'plain'}.db';
-      test('$file opens at schema 9 with an empty accounts table, keeps its rows, and accepts accounts', () async {
+      test('$file opens at the current schema (9+) with an empty accounts table, keeps its rows, and accepts accounts', () async {
         final path = copy(file);
         final r = WalletRepo.open(path, dbKey: keyed ? await localDbKey(fixKey) : null);
         addTearDown(r.close);
-        expect(WalletRepo.schemaVersion, 9);
-        expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '9');
+        expect(WalletRepo.schemaVersion, greaterThanOrEqualTo(9));
+        expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '${WalletRepo.schemaVersion}');
         expect(r.accounts(includeDeleted: true), isEmpty);
         expect(r.transactions(includeHidden: true), isNotEmpty);
         expect(r.settings().salary, 150000);

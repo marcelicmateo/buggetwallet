@@ -231,7 +231,12 @@ class RecurringBill {
   /// A bill in a fixed category (Rent, Loan, Bills & subscriptions) is already planned through the fixed-cost
   /// settings, so `computePeriod` lists it as due but does not reserve it a second time (owner rule: exact). A
   /// confirmed bill's `category` is kept current by `WalletRepo.refreshRecurring`, so this follows a later rule.
+  /// Built-in categories only (a custom id is never covered here); code that can meet a custom category uses
+  /// [coveredByPlanIn].
   bool get coveredByPlan => kindOf(category) == BudgetKind.fixed;
+
+  /// [coveredByPlan] against [t]: a live category of kind fixed (a child of a fixed category included).
+  bool coveredByPlanIn(CategoryTable t) => t.isLive(category) && t.kindOf(category) == BudgetKind.fixed;
 
   static RecurringBill fromRow(Map<String, Object?> r) => RecurringBill(
         id: r['id'] as String,
@@ -349,7 +354,14 @@ class PlannedCost {
   /// A planned cost in a fixed category (Rent, Loan, Bills & subscriptions) is already in the payday plan's fixed
   /// amounts, so `computePeriod` lists it in `duePlanned` but does not reserve it again (exact-money rule, same as
   /// [RecurringBill.coveredByPlan]). Still listed in Upcoming and heads-ups.
+  /// Built-in categories only; code that can meet a custom category uses [coveredByPlanIn].
   bool get coveredByPlan => category != null && kindOf(category!) == BudgetKind.fixed;
+
+  /// [coveredByPlan] against [t]: a live category of kind fixed. A deleted or unknown custom id counts as none.
+  bool coveredByPlanIn(CategoryTable t) {
+    final c = category;
+    return c != null && t.isLive(c) && t.kindOf(c) == BudgetKind.fixed;
+  }
 
   /// A bill's row without a category (a bill confirmed before categories were asked for, or reopened after its cash expense was deleted):
   /// only the category tells whether the payday plan already holds it, so `computePeriod` lists it in `duePlanned` but
@@ -490,7 +502,9 @@ class WalletSettings {
   /// Reads settings from stored/synced values. A value of the wrong type or outside its range (another device's
   /// bug, a damaged op) falls back to that setting's default alone, logged as `settings.invalid` with the key only
   /// (never the value), once per key and value ([logInvalidSetting]); the other settings are kept.
-  static WalletSettings fromMap(Map<String, Object?> m) {
+  /// [table] decides which category budgets are valid (live top-level spending categories); null = built-ins only.
+  static WalletSettings fromMap(Map<String, Object?> m, {CategoryTable? table}) {
+    final cats = table ?? CategoryTable.builtIn;
     T bad<T>(String k, T d) {
       logInvalidSetting(k, m[k]);
       return d;
@@ -568,9 +582,9 @@ class WalletSettings {
       ],
       rentCashThreshold: i('rentCashThreshold', defaultRentCashThreshold),
       categoryBudgets: switch (budgets) {
-        null => budgetRows.isEmpty ? const {} : _budgets(budgetRows),
-        final Map<Object?, Object?> b => _budgets({...b, ...budgetRows}),
-        _ => bad('categoryBudgets', budgetRows.isEmpty ? const <String, int>{} : _budgets(budgetRows)),
+        null => budgetRows.isEmpty ? const {} : _budgets(budgetRows, cats),
+        final Map<Object?, Object?> b => _budgets({...b, ...budgetRows}, cats),
+        _ => bad('categoryBudgets', budgetRows.isEmpty ? const <String, int>{} : _budgets(budgetRows, cats)),
       },
       reviewDay: i('reviewDay', DateTime.sunday, min: DateTime.monday, max: DateTime.sunday),
       lastReview: str('lastReview', isIsoDate),
@@ -582,10 +596,11 @@ class WalletSettings {
     );
   }
 
-  /// The valid entries of a `categoryBudgets` value: a spending category ([spendingCategories]) -> whole cents
-  /// 0..[maxBudget]. Every other entry (unknown category, negative, fraction, text, too big) is dropped, the rest is
+  /// The valid entries of a `categoryBudgets` value: a live top-level spending category of [t] ([CategoryTable.spending])
+  /// -> whole cents 0..[maxBudget]. Every other entry (unknown, deleted or child category, negative, fraction, text,
+  /// too big) is dropped (only from the result: the stored row stays, so an undelete brings it back), the rest is
   /// kept, and the drop is logged once as `settings.invalid` with the key only. Never throws.
-  static Map<String, int> _budgets(Map<Object?, Object?> raw) {
+  static Map<String, int> _budgets(Map<Object?, Object?> raw, CategoryTable t) {
     final out = <String, int>{};
     var dropped = false;
     for (final MapEntry(:key, :value) in raw.entries) {
@@ -594,7 +609,7 @@ class WalletSettings {
         final double v when v.isFinite && v == v.roundToDouble() => v.toInt(),
         _ => null,
       };
-      if (key is String && isSpendingCategory(key) && cents != null && cents >= 0 && cents <= maxBudget) {
+      if (key is String && t.isSpending(key) && t.parentOf(key) == null && cents != null && cents >= 0 && cents <= maxBudget) {
         out[key] = cents;
       } else {
         dropped = true;

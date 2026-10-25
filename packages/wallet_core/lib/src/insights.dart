@@ -2,7 +2,7 @@
 // [DateRange]. Spending is counted exactly as "Where it goes" (`monthSummary(...).byCategory`): live rows in the home
 // currency, fixed + flex, refunds subtracted, transfers and income left out. Nothing is reclassified.
 import 'budget.dart' show averageByCategory, budgetVsActual, countsAsSpending, monthSummary;
-import 'categories.dart' show BudgetKind, merchantKey, merchantName;
+import 'categories.dart' show BudgetKind, CategoryTable, merchantKey, merchantName;
 import 'dates.dart';
 import 'models.dart';
 import 'ranges.dart';
@@ -133,14 +133,18 @@ List<MonthBar> spendingByMonth(List<CategorizedTx> txs, DateRange r, {required S
         MonthBar(month: m, spent: monthSummary(rows, m, currency: currency).out, partial: _partial(m, r, today)),
     ];
 
-/// Spending per category over [r] ("Where it goes" summed over its days), with the largest-remainder permille.
-CategoryShare categoryShare(List<CategorizedTx> txs, DateRange r, {required String currency}) {
+/// Spending per category over [r] ("Where it goes" summed over its days), with the largest-remainder permille. Per row
+/// category (a child is its own slice); with [rollUp], children are summed into their top-level category of [table]
+/// (built-ins when null), like the `rollUp` helper.
+CategoryShare categoryShare(List<CategorizedTx> txs, DateRange r, {required String currency, bool rollUp = false, CategoryTable? table}) {
+  final cats = table ?? CategoryTable.builtIn;
   final byCat = <String, int>{};
   final foreign = <String, int>{};
   for (final MapEntry(key: m, value: rows) in _byMonth(txs, r).entries) {
     final s = monthSummary(rows, m, currency: currency);
     for (final e in s.byCategory.entries) {
-      byCat[e.key] = (byCat[e.key] ?? 0) + e.value;
+      final k = rollUp ? cats.topLevel(e.key) : e.key;
+      byCat[k] = (byCat[k] ?? 0) + e.value;
     }
     for (final e in s.foreignByCurrency.entries) {
       foreign[e.key] = (foreign[e.key] ?? 0) + e.value;
@@ -191,14 +195,14 @@ IncomeVsSpending _incomeVsSpending(String month, List<CategorizedTx> rows, Strin
 
 /// Budgets against actual spending per calendar month overlapping [r], from `budgetVsActual`. Budgets are monthly
 /// (owner decision 2026-10-20), so each bar counts its WHOLE calendar month, also the days outside [r]; the current
-/// month counts its spending so far.
+/// month counts its spending so far. [table]: as in `budgetVsActual` (children count in their parent's budget).
 List<BudgetMonth> budgetVsActualSeries(List<CategorizedTx> txs, DateRange r, Map<String, int> budgets,
-    {required String today, required String currency}) {
+    {required String today, required String currency, CategoryTable? table}) {
   final whole = DateRange(start: '${monthOf(r.start)}-01', end: '${monthOf(r.end)}-${daysInMonth(monthOf(r.end))}');
   final out = <BudgetMonth>[];
   for (final MapEntry(key: m, value: rows) in _byMonth(txs, whole).entries) {
     var budgeted = 0, actual = 0, over = 0;
-    for (final l in budgetVsActual(rows, m, budgets, today: today, currency: currency).lines) {
+    for (final l in budgetVsActual(rows, m, budgets, today: today, currency: currency, table: table).lines) {
       if (l.budget case final b?) {
         budgeted += b;
         actual += l.actual;

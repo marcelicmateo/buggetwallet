@@ -52,9 +52,22 @@ const entityTables = {
     ]
   ),
   'account': ('accounts', ['name', 'source', 'currency', 'opening', 'opening_date', 'deleted']),
+  'category': ('categories', ['name', 'kind', 'parent', 'position', 'hidden', 'deleted']),
 };
 
-const dataTables = ['tx', 'goals', 'wish', 'settings', 'merchant_rules', 'goal_contrib', 'recurring', 'planned', 'bills', 'accounts'];
+const dataTables = [
+  'tx',
+  'goals',
+  'wish',
+  'settings',
+  'merchant_rules',
+  'goal_contrib',
+  'recurring',
+  'planned',
+  'bills',
+  'accounts',
+  'categories'
+];
 
 /// Every row of the data tables (and the field clocks), in a stable order, as plain maps.
 Map<String, List<Map<String, Object?>>> dump(WalletRepo r, {bool clocks = true}) => {

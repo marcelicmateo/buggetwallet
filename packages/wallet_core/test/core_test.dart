@@ -75,7 +75,7 @@ void main() {
       const st = WalletSettings(salary: 150000, rent: 55000, loan: 25000, subs: 0, periodStart: '2026-01-15');
       final cz = r.categorizer();
       final txs = r.transactions().map(cz.categorize).toList();
-      final p = computePeriod(txs, st, const [Goal(id: 'g', name: 'g', monthly: 10000)], '2026-01-20');
+      final p = computePeriod(txs, st, const [Goal(id: 'g', name: 'g', monthly: 10000)], '2026-01-20', table: CategoryTable.builtIn);
       expect(p.end, '2026-02-15');
       expect(p.length, 31);
       expect(p.daysLeft, 26);

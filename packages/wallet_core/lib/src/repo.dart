@@ -13,11 +13,13 @@ import 'matching.dart';
 import 'models.dart';
 import 'recurring.dart';
 import 'schema.dart';
+import 'search.dart' show foldText;
 import 'sqlite_io.dart' if (dart.library.js_interop) 'sqlite_web.dart' as sqlite;
 import 'transfers.dart';
 
 part 'repo_accounts.dart';
 part 'repo_bills.dart';
+part 'repo_categories.dart';
 part 'repo_blobs.dart';
 part 'repo_planned.dart';
 part 'repo_settings.dart';
@@ -133,8 +135,9 @@ class WalletRepo {
   /// the `exchange` hint (Revolut Exchange rows imported by version 3 as `ownTransfer` are rewritten once), version 5
   /// the `recurring` entity, version 6 the `planned` entity, version 7 the `bill` entity, version 8 one settings row
   /// per category budget and merchant pattern (`budget:<category>`, `pattern:<id>`; the maps are migrated once),
-  /// version 9: accounts (the `account` entity; no data migration).
-  static const schemaVersion = 9;
+  /// version 9: accounts (the `account` entity; no data migration), version 10: categories (the `category` entity:
+  /// custom categories, subcategories and built-in overrides; no data migration).
+  static const schemaVersion = 10;
 
   /// The folder sync's bookkeeping (`peer_files`: which files of the shared folder were read) means nothing on a relay,
   /// whose sequence numbers start over (every device's first relay file is its whole state), so it is dropped once.
@@ -460,7 +463,7 @@ class WalletRepo {
   }
 
   /// Whether nothing has been put into this wallet yet: no transactions, goals, goal contributions, wishes, recurring
-  /// bills, planned costs, bills (receipts, slips), accounts, merchant rules (deleted rows count: they were data once) and no synced settings. Only such a wallet may
+  /// bills, planned costs, bills (receipts, slips), accounts, categories (overrides included), merchant rules (deleted rows count: they were data once) and no synced settings. Only such a wallet may
   /// take a restore from a backup; anything else merges through the sync folder.
   bool get isEmpty {
     for (final e in entitySchema.values) {
@@ -526,7 +529,7 @@ class WalletRepo {
     }
     final cz = categorizer();
     final plan = planMatches(manual, [...bank.values], (b) {
-      final k = kindOf(cz.autoCategory(b));
+      final k = cz.table.kindOf(cz.autoCategory(b));
       return k == BudgetKind.flex || k == BudgetKind.fixed;
     }, written, seenBank: seenBank);
     _write([
@@ -753,11 +756,16 @@ class WalletRepo {
       };
 
   /// The stored settings ([_readSettings]: per-key budget and pattern rows, legacy maps only as a fallback).
-  WalletSettings settings() => _readSettings(db);
+  WalletSettings settings() => _readSettings(db, table: categoryTable());
+
+  /// Built-ins plus the stored category rows ([categoryRows], deleted ones included: a row pointing at one falls back).
+  CategoryTable categoryTable() => CategoryTable.from(categoryRows(includeDeleted: true));
 
   Categorizer categorizer() {
-    final st = settings();
-    return Categorizer(merchantRules: merchantRules(), patterns: st.merchantPatterns, rentCashThreshold: st.rentCashThreshold);
+    final table = categoryTable();
+    final st = _readSettings(db, table: table);
+    return Categorizer(
+        merchantRules: merchantRules(), patterns: st.merchantPatterns, rentCashThreshold: st.rentCashThreshold, table: table);
   }
 
   // ---------- writes ----------

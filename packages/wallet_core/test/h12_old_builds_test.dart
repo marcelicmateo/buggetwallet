@@ -74,6 +74,11 @@ void main() {
           expect(r.accounts(includeDeleted: true), isEmpty);
           await r.addAccount(name: 'Cash', currency: 'EUR', opening: 1000, openingDate: '2026-01-01');
           expect(r.accounts().single.isCash, isTrue);
+          // P1 (schema 10): it gains the categories table too, empty, and takes custom categories.
+          expect(WalletRepo.schemaVersion, greaterThanOrEqualTo(10));
+          expect(r.categoryRows(includeDeleted: true), isEmpty);
+          final k = await r.addCategory(name: 'Pets', kind: BudgetKind.flex);
+          expect(r.categoryTable().isLive(k), isTrue);
         }, timeout: _t);
 
         test('$file: a second open changes nothing and queues no new ops', () async {

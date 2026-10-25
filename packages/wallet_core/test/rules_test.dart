@@ -102,7 +102,8 @@ void main() {
 
     test('rent is a fixed bill: not in safe-to-spend, shown as paid', () {
       final txs = [ct('2026-01-15', -55000, 'Rent'), ct('2026-01-16', -2000, 'Cash')];
-      final p = computePeriod(txs, const WalletSettings(salary: 150000, rent: 55000, periodStart: '2026-01-15'), const [], '2026-01-16');
+      final p = computePeriod(txs, const WalletSettings(salary: 150000, rent: 55000, periodStart: '2026-01-15'), const [], '2026-01-16',
+          table: CategoryTable.builtIn);
       expect(p.spent, 2000);
       expect(p.fixedPaid, {'Rent': 55000});
       expect(p.flexBudget, 95000);
@@ -121,7 +122,8 @@ void main() {
       const st = WalletSettings(salary: 150000, rent: 50000, periodStart: '2026-01-15');
       final base = [ct('2026-01-15', 150000, 'Salary'), ct('2026-01-16', -3000, 'Groceries')];
       final bonus = [...base, ct('2026-01-17', 80000, 'Extra income')];
-      final p0 = computePeriod(base, st, const [], '2026-01-18'), p1 = computePeriod(bonus, st, const [], '2026-01-18');
+      final p0 = computePeriod(base, st, const [], '2026-01-18', table: CategoryTable.builtIn),
+          p1 = computePeriod(bonus, st, const [], '2026-01-18', table: CategoryTable.builtIn);
       expect((p1.flexBudget, p1.allowanceToday, p1.remaining), (p0.flexBudget, p0.allowanceToday, p0.remaining));
       expect(p1.extras, 80000);
       expect(periodSummaries(bonus, st, '2026-01-18').single.net - periodSummaries(base, st, '2026-01-18').single.net, 80000);
@@ -129,7 +131,8 @@ void main() {
 
     test('a salary month above plan does not raise daily money in planned mode', () {
       const st = WalletSettings(salary: 150000, periodStart: '2026-01-15');
-      final p = computePeriod([ct('2026-01-15', 150000, 'Salary'), ct('2026-01-16', 40000, 'Salary')], st, const [], '2026-01-18');
+      final p = computePeriod([ct('2026-01-15', 150000, 'Salary'), ct('2026-01-16', 40000, 'Salary')], st, const [], '2026-01-18',
+          table: CategoryTable.builtIn);
       expect(p.income, 150000);
       expect(p.received, 190000);
     });

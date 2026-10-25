@@ -2,6 +2,7 @@ import 'package:wallet_importer/wallet_importer.dart' show TxKind;
 
 import 'logs.dart';
 import 'models.dart';
+import 'search.dart' show foldText;
 
 final _log = Logger('bw.categories');
 
@@ -48,6 +49,209 @@ bool isSpendingCategory(String category) => switch (categories[category]) { Budg
 
 BudgetKind kindOf(String category) => categories[category] ?? BudgetKind.flex;
 
+/// One row of the synced `category` entity (P1, schema 10; table `categories`). A row whose [id] is a built-in name
+/// ([categories]) is an *override* of that built-in: only [name] (the label; empty = the built-in name), [hidden] and
+/// [position] count. Any other id (`k` + 12 hex) is a custom category of [kind], a child of [parent] when set.
+class CategoryRow {
+  final String id;
+  final String name;
+  final BudgetKind kind;
+  final String? parent;
+
+  /// Sort order among siblings (≥ 0); null = the default (a built-in's index in [categories], a custom one last).
+  final int? position;
+  final bool hidden;
+  final bool deleted;
+
+  const CategoryRow(
+      {required this.id,
+      this.name = '',
+      this.kind = BudgetKind.flex,
+      this.parent,
+      this.position,
+      this.hidden = false,
+      this.deleted = false});
+
+  /// Longest label (characters, after trimming).
+  static const maxName = 40;
+
+  /// Most custom rows (deleted ones included) a wallet may hold.
+  static const maxCustom = 200;
+
+  /// Whether this row overrides a built-in category.
+  bool get isOverride => categories.containsKey(id);
+
+  static CategoryRow fromRow(Map<String, Object?> r) => CategoryRow(
+        id: r['id'] as String,
+        name: r['name'] is String ? r['name'] as String : '',
+        kind: BudgetKind.values.asNameMap()[r['kind']] ?? BudgetKind.flex,
+        parent: r['parent'] is String && (r['parent'] as String).isNotEmpty ? r['parent'] as String : null,
+        position: r['position'] is int ? r['position'] as int : null,
+        hidden: r['hidden'] == 1,
+        deleted: r['deleted'] == 1,
+      );
+}
+
+/// The built-in categories plus the owner's own ones and overrides ([CategoryRow]), resolved once. Pure; with no rows
+/// ([builtIn]) every answer is the built-in globals' ([categories], [kindOf], [spendingCategories]).
+///
+/// Subcategories are one level deep: a custom row's parent counts only while it is live, is not the row itself and
+/// has no live parent of its own; otherwise the row is top-level with its own kind (an orphan after a sync race
+/// stays visible until the owner fixes it). A child's kind is always its parent's. Of two live top-level categories
+/// with the same folded label ([foldText]), or two siblings, one is the original and the other [duplicateOf] it: a
+/// built-in first, then the smallest id (the same answer on every device).
+class CategoryTable {
+  /// The rows it was built from, as given.
+  final List<CategoryRow> rows;
+  final Map<String, CategoryRow> _custom = {};
+  final Map<String, CategoryRow> _override = {};
+  final Map<String, String> _parent = {};
+  final List<String> _top = [];
+  final Map<String, List<String>> _children = {};
+  final Map<String, String> _dup = {};
+
+  /// Only the built-in categories, unchanged.
+  static final CategoryTable builtIn = CategoryTable.from(const []);
+
+  static final List<String> _builtInOrder = categories.keys.toList();
+  static const _noPosition = 1 << 30;
+
+  CategoryTable.from(List<CategoryRow> rows) : rows = List.unmodifiable(rows) {
+    for (final r in rows) {
+      (r.isOverride ? _override : _custom)[r.id] = r;
+    }
+    bool live(String id) => categories.containsKey(id) || (_custom[id]?.deleted == false);
+    String? rawParent(String id) => _custom[id]?.parent;
+    bool hasLiveParent(String id) {
+      final p = rawParent(id);
+      return p != null && p != id && live(p);
+    }
+
+    for (final r in _custom.values) {
+      final p = r.parent;
+      if (p != null && p != r.id && live(p) && !hasLiveParent(p)) _parent[r.id] = p;
+    }
+    int order(String a, String b) {
+      var d = position(a).compareTo(position(b));
+      if (d == 0) d = foldText(label(a)).compareTo(foldText(label(b)));
+      return d != 0 ? d : a.compareTo(b);
+    }
+
+    _top.addAll([
+      ..._builtInOrder,
+      for (final r in _custom.values)
+        if (!r.deleted && !_parent.containsKey(r.id)) r.id
+    ]);
+    _top.sort(order);
+    for (final r in _custom.values) {
+      if (r.deleted) continue;
+      if (_parent[r.id] case final p?) (_children[p] ??= []).add(r.id);
+    }
+    for (final c in _children.values) {
+      c.sort(order);
+    }
+    _markDuplicates(_top);
+    for (final c in _children.values) {
+      _markDuplicates(c);
+    }
+  }
+
+  /// Within one sibling list: each folded label's original is a built-in (lowest index) or else the smallest id.
+  void _markDuplicates(List<String> ids) {
+    int rank(String a, String b) {
+      final ia = _builtInOrder.indexOf(a), ib = _builtInOrder.indexOf(b);
+      if (ia >= 0 || ib >= 0) return ia < 0 ? 1 : (ib < 0 ? -1 : ia.compareTo(ib));
+      return a.compareTo(b);
+    }
+
+    final first = <String, String>{};
+    for (final id in [...ids]..sort(rank)) {
+      final key = foldText(label(id).trim());
+      final have = first[key];
+      if (have == null) {
+        first[key] = id;
+      } else {
+        _dup[id] = have;
+      }
+    }
+  }
+
+  /// The label shown for [id]: an override's or custom row's name, else the built-in name; an unknown id itself.
+  String label(String id) {
+    final n = (_override[id] ?? _custom[id])?.name.trim() ?? '';
+    return n.isEmpty ? id : n;
+  }
+
+  /// The built-in kind, a custom top-level row's own kind, or its parent's for a child. Unknown: flex.
+  BudgetKind kindOf(String id) {
+    if (categories[id] case final k?) return k;
+    if (_parent[id] case final p?) return kindOf(p);
+    return _custom[id]?.kind ?? BudgetKind.flex;
+  }
+
+  /// The parent of a child; null for a top-level, unknown or orphaned id.
+  String? parentOf(String id) => _parent[id];
+
+  /// [id]'s parent, or [id] itself when it is top-level.
+  String topLevel(String id) => _parent[id] ?? id;
+
+  /// The live children of [id], by position, then label.
+  List<String> childrenOf(String id) => List.unmodifiable(_children[id] ?? const <String>[]);
+
+  /// A built-in, or a custom row that is not deleted.
+  bool isLive(String id) => categories.containsKey(id) || (_custom[id]?.deleted == false);
+
+  /// The sort position among siblings: a stored one, else a built-in's index in [categories]; a custom row without
+  /// one sorts last (a large value).
+  int position(String id) =>
+      categories.containsKey(id) ? (_override[id]?.position ?? _builtInOrder.indexOf(id)) : (_custom[id]?.position ?? _noPosition);
+
+  /// Hidden from pickers (existing rows still show it).
+  bool isHidden(String id) => (_override[id] ?? _custom[id])?.hidden ?? false;
+
+  /// Whether [id] is a custom id (deleted or not).
+  bool isCustom(String id) => _custom.containsKey(id);
+
+  /// The original of a sync duplicate (same folded label among live siblings), or null.
+  String? duplicateOf(String id) => _dup[id];
+
+  /// The live top-level ids in order (hidden and duplicate ones included).
+  List<String> get topLevelIds => List.unmodifiable(_top);
+
+  /// What a picker offers: live, not hidden, not a duplicate, of one of [kinds] (all when null); each top-level id
+  /// followed by its children. A hidden parent hides its children too.
+  List<String> pickable({Set<BudgetKind>? kinds}) => [
+        for (final t in _top)
+          if (!isHidden(t) && !_dup.containsKey(t) && (kinds == null || kinds.contains(kindOf(t)))) ...[
+            t,
+            for (final c in _children[t] ?? const <String>[])
+              if (!isHidden(c) && !_dup.containsKey(c)) c,
+          ],
+      ];
+
+  /// The live fixed and flex top-level ids, in order: the categories a budget can be set for and the CSV columns.
+  List<String> get spending => [
+        for (final t in _top)
+          if (_spendingKind(kindOf(t))) t
+      ];
+
+  /// A live category money goes out through (fixed or flex), children included.
+  bool isSpending(String id) => isLive(id) && _spendingKind(kindOf(id));
+
+  static bool _spendingKind(BudgetKind k) => k == BudgetKind.fixed || k == BudgetKind.flex;
+}
+
+/// [byCategory] with each child's sum added into its top-level category ([CategoryTable.topLevel]); exact cents. Keys
+/// keep their first-seen order; with [CategoryTable.builtIn] the result equals the input.
+Map<String, int> rollUp(Map<String, int> byCategory, CategoryTable t) {
+  final out = <String, int>{};
+  for (final MapEntry(:key, :value) in byCategory.entries) {
+    final k = t.topLevel(key);
+    out[k] = (out[k] ?? 0) + value;
+  }
+  return out;
+}
+
 /// Built-in rules: well-known chains and brands only. Personal merchants live in
 /// settings (merchantPatterns) so nobody's habits end up in the code.
 final List<(String, RegExp)> builtInMerchantRules = [
@@ -85,10 +289,19 @@ class Categorizer {
   /// ATM withdrawals of at least this much (minor units, positive) count as rent (setting `rentCashThreshold`).
   final int rentCashThreshold;
 
-  Categorizer({this.merchantRules = const {}, List<List<String>> patterns = const [], this.rentCashThreshold = defaultRentCashThreshold})
-      : userPatterns = [
+  /// The categories rows resolve against: an override, rule or pattern naming an id that is not live here (a deleted
+  /// or unknown custom category) is ignored, so the row falls back as if it had none (P1 §3; nothing is rewritten).
+  final CategoryTable table;
+
+  Categorizer(
+      {this.merchantRules = const {},
+      List<List<String>> patterns = const [],
+      this.rentCashThreshold = defaultRentCashThreshold,
+      CategoryTable? table})
+      : table = table ?? CategoryTable.builtIn,
+        userPatterns = [
           for (final p in patterns)
-            if (categories.containsKey(p[0]))
+            if ((table ?? CategoryTable.builtIn).isLive(p[0]))
               if (_tryRegex(p[1]) case final re?) (p[0], re),
         ] {
     // Counts only: merchant rules and patterns are personal.
@@ -171,27 +384,27 @@ class Categorizer {
         if (type == 'POS plaćanje') return merchantCategory(d) ?? 'Shopping';
         return 'Bills & one-offs';
       default:
-        // Hand-added and unknown-source rows: their stored category if it is a known one, else Shopping.
+        // Hand-added and unknown-source rows: their stored category if it is a live one, else Shopping.
         final c = t.category;
-        return c != null && categories.containsKey(c) ? c : 'Shopping';
+        return c != null && table.isLive(c) ? c : 'Shopping';
     }
   }
 
   String categoryOf(Tx t) {
     final o = t.category;
-    if (o != null && categories.containsKey(o)) return o;
+    if (o != null && table.isLive(o)) return o;
     final auto = autoCategory(t);
-    final k = kindOf(auto);
+    final k = table.kindOf(auto);
     if (t.source != 'manual' && (k == BudgetKind.flex || k == BudgetKind.fixed)) {
       final r = merchantRules[merchantKey(t)];
-      if (r != null && categories.containsKey(r)) return r;
+      if (r != null && table.isLive(r)) return r;
     }
     return auto;
   }
 
   CategorizedTx categorize(Tx t) {
     final c = categoryOf(t);
-    return CategorizedTx(t, c, kindOf(c));
+    return CategorizedTx(t, c, table.kindOf(c));
   }
 }
 

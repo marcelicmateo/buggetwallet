@@ -392,11 +392,11 @@ void main() {
       final g1 = r.saveGoal(name: 'Synthetic A', target: 500000, saved: 0, monthly: 10000);
       final g2 = r.saveGoal(name: 'Synthetic B', target: 500000, saved: 0, monthly: 5000);
       const st = WalletSettings(salary: 150000, paydayDay: 15, periodStart: '2026-01-15');
-      final before = computePeriod(const [], st, r.goals(), '2026-01-20');
+      final before = computePeriod(const [], st, r.goals(), '2026-01-20', table: CategoryTable.builtIn);
       r.addGoalContribution(g1, 123456);
       r.addGoalContribution(g2, -999);
       r.saveGoal(id: g2, name: 'Synthetic B', target: 500000, saved: 70000, monthly: 5000);
-      final after = computePeriod(const [], st, r.goals(), '2026-01-20');
+      final after = computePeriod(const [], st, r.goals(), '2026-01-20', table: CategoryTable.builtIn);
       expect(before.goalMonthly, 15000);
       expect(after.goalMonthly, 15000);
       expect(after.allowanceToday, before.allowanceToday);

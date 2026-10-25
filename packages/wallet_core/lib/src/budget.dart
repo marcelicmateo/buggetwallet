@@ -149,8 +149,10 @@ List<PlannedCost> duePlanned(List<PlannedCost> planned, String today, String end
 /// payday whose recurring cycle falls after it is reserved here) and a bill's row without a category
 /// ([PlannedCost.needsCategory]: listed, not added; the owner is asked for the category). The rule is
 /// [plannedReserves]; the rows it accepts are [PeriodBudget.reservedPlannedRows]. Without planned costs every number is as before.
+/// [table] decides which categories are fixed ([RecurringBill.coveredByPlanIn], [PlannedCost.coveredByPlanIn]); it is
+/// required so a custom fixed category is never reserved a second time as flex.
 PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today,
-    {List<RecurringBill> bills = const [], List<PlannedCost> planned = const []}) {
+    {List<RecurringBill> bills = const [], List<PlannedCost> planned = const [], required CategoryTable table}) {
   final start = st.periodStart ?? today;
   final end = nextPayday(start, st.paydayDay);
   final length = daysBetween(start, end).clamp(1, 1000);
@@ -178,12 +180,12 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final goalMonthly = goals.fold<int>(0, (s, g) => s + g.monthly);
   final fixedPlan = st.rent + st.loan + st.subs;
   final due = dueBills(bills, txs, start, end);
-  final reservedBills = due.fold<int>(0, (s, b) => s + (b.coveredByPlan ? 0 : b.expectedAmount));
+  final reservedBills = due.fold<int>(0, (s, b) => s + (b.coveredByPlanIn(table) ? 0 : b.expectedAmount));
   final duePl = duePlanned(planned, today, end);
   final counted = {for (final b in due) occurrenceKey(b.id, b.nextDue)};
   final reservedRows = [
     for (final p in duePl)
-      if (plannedReserves(p, bills, counted)) p
+      if (plannedReserves(p, bills, counted, table: table)) p
   ];
   final reservedPlanned = reservedRows.fold<int>(0, (s, p) => s + p.amount!);
   final flexBudget = income - fixedPlan - goalMonthly - reservedBills - reservedPlanned;
@@ -303,17 +305,20 @@ List<String> _monthsBefore(String month, int count) => monthsEnding(month, count
 
 /// Average monthly spending per category over the [months] calendar months before [month] (the month itself left
 /// out), in cents, rounded to the cent. Always divided by [months]: a month without spend counts as zero. Only
-/// categories with any spend in those months appear. Only rows in [currency] count.
-Map<String, int> averageByCategory(List<CategorizedTx> txs, String month, {int months = 6, required String currency}) {
-  final sums = _outByCategory(txs, _monthsBefore(month, months).toSet(), currency);
+/// categories with any spend in those months appear. Only rows in [currency] count. With [table], children's sums are
+/// rolled up into their top-level category ([rollUp]) before dividing.
+Map<String, int> averageByCategory(List<CategorizedTx> txs, String month,
+    {int months = 6, required String currency, CategoryTable? table}) {
+  final sums = rollUp(_outByCategory(txs, _monthsBefore(month, months).toSet(), currency), table ?? CategoryTable.builtIn);
   return {for (final e in sums.entries) e.key: (e.value / months).round()};
 }
 
 /// Budgets to propose for [month]: each category's average over the 6 months before it, rounded UP to the nearest
 /// 1000 cents (10 €). A category whose average is zero or negative (refunds) is omitted. Only rows in [currency] count.
-Map<String, int> suggestBudgets(List<CategorizedTx> txs, String month, {required String currency}) {
+/// With [table], per top-level category (children rolled up, [rollUp]): budgets are set on top-level categories only.
+Map<String, int> suggestBudgets(List<CategorizedTx> txs, String month, {required String currency, CategoryTable? table}) {
   const months = 6, step = 1000;
-  final sums = _outByCategory(txs, _monthsBefore(month, months).toSet(), currency);
+  final sums = rollUp(_outByCategory(txs, _monthsBefore(month, months).toSet(), currency), table ?? CategoryTable.builtIn);
   return {
     for (final e in sums.entries)
       if (e.value > 0) e.key: (e.value + months * step - 1) ~/ (months * step) * step,
@@ -406,11 +411,13 @@ class BudgetVsActual {
 /// Compares [budgets] (`category -> cents per month`, see `WalletSettings.categoryBudgets`) with what went out in
 /// [month] per category, exactly as [monthSummary] counts it (live rows, fixed + flex, refunds subtracted, transfers
 /// and income left out; only rows in [currency]). [today] (`YYYY-MM-DD`) decides how much of the month has elapsed
-/// for the pace.
+/// for the pace. With [table], children are rolled up into their top-level category ([rollUp]): budgets are set on
+/// top-level categories only.
 BudgetVsActual budgetVsActual(List<CategorizedTx> txs, String month, Map<String, int> budgets,
-    {required String today, required String currency}) {
-  final actual = monthSummary(txs, month, currency: currency).byCategory;
-  final average = averageByCategory(txs, month, currency: currency);
+    {required String today, required String currency, CategoryTable? table}) {
+  final t = table ?? CategoryTable.builtIn;
+  final actual = rollUp(monthSummary(txs, month, currency: currency).byCategory, t);
+  final average = averageByCategory(txs, month, currency: currency, table: t);
   final current = monthOf(today);
   final days = daysInMonth(month);
   final elapsed = month == current ? dayOf(today) : (month.compareTo(current) < 0 ? days : 0);
@@ -472,7 +479,8 @@ String _nextWeekday(String from, int day) {
 /// month behind pace or over budget ([budgetVsActual]); `wishlist` = waiting items whose cooling-off (`coolHours`)
 /// has run out by [nowMillis] (default: the end of [today], UTC). [streak] is the stored `reviewStreak`.
 ReviewState reviewState(List<CategorizedTx> txs, WalletSettings st, List<WishItem> wishes, Map<String, int> budgets,
-    {required String today, int? nowMillis}) {
+    {required String today, int? nowMillis, CategoryTable? table}) {
+  final cats = table ?? CategoryTable.builtIn;
   final last = st.lastReview;
   final String next;
   final bool due;
@@ -490,9 +498,9 @@ ReviewState reviewState(List<CategorizedTx> txs, WalletSettings st, List<WishIte
     if (!t.tx.live || t.date.compareTo(since) <= 0 || t.date.compareTo(today) > 0) continue;
     if (t.kind != BudgetKind.fixed && t.kind != BudgetKind.flex) continue;
     final own = t.tx.category;
-    if (own == null || !categories.containsKey(own)) automatic++; // no override, or one this build does not know
+    if (own == null || !cats.isLive(own)) automatic++; // no override, or one that is deleted or unknown here
   }
-  final pace = budgetVsActual(txs, monthOf(today), budgets, today: today, currency: st.currency)
+  final pace = budgetVsActual(txs, monthOf(today), budgets, today: today, currency: st.currency, table: cats)
       .lines
       .where((l) => l.over || (l.pace ?? 0) > 1)
       .length;

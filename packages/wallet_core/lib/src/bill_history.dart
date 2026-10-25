@@ -3,7 +3,7 @@
 import 'package:wallet_importer/wallet_importer.dart' show TxKind;
 
 import 'bills.dart';
-import 'categories.dart' show BudgetKind, categories, merchantKey;
+import 'categories.dart' show BudgetKind, CategoryTable, merchantKey;
 import 'dates.dart' show addDays, daysBetween, isIsoDate, monthOf;
 import 'logs.dart';
 import 'models.dart';
@@ -67,6 +67,7 @@ class BillMonth {
 /// before today's month are [BillMonthState.missing] (the bill stores no confirmation date: the app opens History only
 /// for confirmed bills) or [BillMonthState.paidNearby]; an empty today's month is [BillMonthState.upcoming]. Dates
 /// that are not real `YYYY-MM-DD` values are skipped. [today] is `YYYY-MM-DD`; [months] ≥ 1, else an [ArgumentError].
+/// [table] tells which stored categories are own transfers (built-ins when null).
 List<BillMonth> billHistory(
   RecurringBill bill,
   List<Tx> rows,
@@ -74,13 +75,15 @@ List<BillMonth> billHistory(
   required String today,
   int months = 12,
   required String currency,
+  CategoryTable? table,
 }) {
+  final cats = table ?? CategoryTable.builtIn;
   if (months < 1) throw ArgumentError.value(months, 'months', 'must be at least 1');
   if (!isIsoDate(today)) throw ArgumentError.value(today, 'today', 'must be YYYY-MM-DD');
 
   final payments = <String, Tx>{};
   for (final t in rows) {
-    if (!_isPayment(t, currency)) continue;
+    if (!_isPayment(t, currency, cats)) continue;
     if (t.id == bill.lastPaidTx || merchantKey(t) == bill.payee) payments[t.id] = t;
   }
 
@@ -178,7 +181,7 @@ Map<int, String> _paidNearby(List<int> empty, Map<String, List<Tx>> payByMonth) 
 }
 
 /// A row that may pay a recurring bill: the rows `planRecurringPayments` accepts, minus own transfers.
-bool _isPayment(Tx t, String currency) =>
+bool _isPayment(Tx t, String currency, CategoryTable cats) =>
     t.live &&
     !t.manual &&
     t.amount < 0 &&
@@ -187,7 +190,7 @@ bool _isPayment(Tx t, String currency) =>
     t.transferTo == null &&
     t.kindHint != TxKind.ownTransfer &&
     t.kindHint != TxKind.exchange &&
-    categories[t.category] != BudgetKind.transfer;
+    (t.category == null || !cats.isLive(t.category!) || cats.kindOf(t.category!) != BudgetKind.transfer);
 
 /// A slip's own date: its issue date, else its due date; a value that is not a real `YYYY-MM-DD` counts as absent.
 String? _slipDate(Bill s) => [s.date, s.dueDate].firstWhere((d) => d != null && isIsoDate(d), orElse: () => null);

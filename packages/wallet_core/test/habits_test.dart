@@ -150,37 +150,46 @@ void main() {
 
     test('a confirmed bill due before payday is reserved exactly like a fixed cost', () {
       final b = bill('2026-03-05', 5000);
-      final p = computePeriod(txs, st, const [], today, bills: [b]);
-      final fixed = computePeriod(txs, WalletSettings.fromMap({...st.toMap(), 'subs': 5000}), const [], today);
+      final p = computePeriod(txs, st, const [], today, bills: [b], table: CategoryTable.builtIn);
+      final fixed =
+          computePeriod(txs, WalletSettings.fromMap({...st.toMap(), 'subs': 5000}), const [], today, table: CategoryTable.builtIn);
       expect(p.reservedBills, 5000);
       expect(p.dueBills.single.id, b.id);
       expect(p.flexBudget, 195000);
       expect(p.fixedPlan, 0, reason: 'the reservation is its own line, not a fixed cost');
       expect((p.flexBudget, p.remaining, p.allowanceToday, p.safeToday, p.planDaily),
           (fixed.flexBudget, fixed.remaining, fixed.allowanceToday, fixed.safeToday, fixed.planDaily));
-      final none = computePeriod(txs, st, const [], today);
+      final none = computePeriod(txs, st, const [], today, table: CategoryTable.builtIn);
       expect(none.reservedBills, 0);
       expect(none.dueBills, isEmpty);
       expect(none.safeToday - p.safeToday, (5000 / p.daysLeft).round(), reason: 'spread over the days left');
     });
 
     test('a bill due on or after payday is not reserved; a candidate or dismissed bill never is', () {
-      expect(computePeriod(txs, st, const [], today, bills: [bill('2026-03-15', 5000)]).reservedBills, 0, reason: 'due on payday');
-      expect(computePeriod(txs, st, const [], today, bills: [bill('2026-03-16', 5000)]).reservedBills, 0);
-      expect(computePeriod(txs, st, const [], today, bills: [bill('2026-03-14', 5000)]).reservedBills, 5000, reason: 'the day before');
-      expect(computePeriod(txs, st, const [], today, bills: [bill('2026-03-05', 5000, status: 'candidate')]).reservedBills, 0);
-      expect(computePeriod(txs, st, const [], today, bills: [bill('2026-03-05', 5000, status: 'dismissed')]).reservedBills, 0);
+      expect(computePeriod(txs, st, const [], today, bills: [bill('2026-03-15', 5000)], table: CategoryTable.builtIn).reservedBills, 0,
+          reason: 'due on payday');
+      expect(computePeriod(txs, st, const [], today, bills: [bill('2026-03-16', 5000)], table: CategoryTable.builtIn).reservedBills, 0);
+      expect(computePeriod(txs, st, const [], today, bills: [bill('2026-03-14', 5000)], table: CategoryTable.builtIn).reservedBills, 5000,
+          reason: 'the day before');
+      expect(
+          computePeriod(txs, st, const [], today, bills: [bill('2026-03-05', 5000, status: 'candidate')], table: CategoryTable.builtIn)
+              .reservedBills,
+          0);
+      expect(
+          computePeriod(txs, st, const [], today, bills: [bill('2026-03-05', 5000, status: 'dismissed')], table: CategoryTable.builtIn)
+              .reservedBills,
+          0);
     });
 
     test('an overdue bill (due before the period) stays reserved until paid', () {
-      expect(computePeriod(txs, st, const [], today, bills: [bill('2026-02-10', 5000)]).reservedBills, 5000);
+      expect(computePeriod(txs, st, const [], today, bills: [bill('2026-02-10', 5000)], table: CategoryTable.builtIn).reservedBills, 5000);
     });
 
     test('a bill paid early is released: its next due date lies past payday', () {
       // Paid on 2026-02-20 for a cycle due 2026-02-22: nextDue moved to 2026-03-24.
       final paid = bill('2026-03-24', 5000, lastPaidTx: 'pay1');
       final rows = [...txs, row('2026-02-20', -5000, 'Synthetic Gym', id: 'pay1', category: 'Sport & fitness')];
-      final p = computePeriod(rows, st, const [], today, bills: [paid]);
+      final p = computePeriod(rows, st, const [], today, bills: [paid], table: CategoryTable.builtIn);
       expect(p.reservedBills, 0);
       expect(p.spent, 8000, reason: 'the payment counts as spending like any flex row');
     });
@@ -190,10 +199,10 @@ void main() {
       final long = WalletSettings.fromMap({'salary': 200000, 'periodStart': '2026-01-15', 'paydayDay': 15});
       final rows = [row('2026-01-15', -5000, 'Synthetic Gym', id: 'pay1', category: 'Sport & fitness')];
       final b = bill('2026-02-14', 5000, lastPaidTx: 'pay1');
-      expect(computePeriod(rows, long, const [], '2026-01-20', bills: [b]).reservedBills, 0);
+      expect(computePeriod(rows, long, const [], '2026-01-20', bills: [b], table: CategoryTable.builtIn).reservedBills, 0);
       // The same bill whose payment row is from before the period: due again, reserved.
       final earlier = [row('2026-01-14', -5000, 'Synthetic Gym', id: 'pay1', category: 'Sport & fitness')];
-      expect(computePeriod(earlier, long, const [], '2026-01-20', bills: [b]).reservedBills, 5000);
+      expect(computePeriod(earlier, long, const [], '2026-01-20', bills: [b], table: CategoryTable.builtIn).reservedBills, 5000);
     });
 
     test('a confirmed bill in a fixed category is due but covered by the plan: nothing changes, a flex one reserves', () {
@@ -202,21 +211,21 @@ void main() {
       final subs = bill('2026-03-07', 999, payee: 'synthetic_stream', category: 'Bills & subscriptions');
       final gym = bill('2026-03-08', 5000);
       expect((rent.coveredByPlan, loan.coveredByPlan, subs.coveredByPlan, gym.coveredByPlan), (true, true, true, false));
-      final none = computePeriod(txs, st, const [], today);
-      final fixedOnly = computePeriod(txs, st, const [], today, bills: [rent, loan, subs]);
+      final none = computePeriod(txs, st, const [], today, table: CategoryTable.builtIn);
+      final fixedOnly = computePeriod(txs, st, const [], today, bills: [rent, loan, subs], table: CategoryTable.builtIn);
       expect(fixedOnly.reservedBills, 0);
       expect((fixedOnly.safeToday, fixedOnly.planDaily, fixedOnly.flexBudget), (none.safeToday, none.planDaily, none.flexBudget));
       expect([for (final b in fixedOnly.dueBills) b.id], [rent.id, loan.id, subs.id], reason: 'listed, so the UI can show them');
-      final mixed = computePeriod(txs, st, const [], today, bills: [gym, rent]);
+      final mixed = computePeriod(txs, st, const [], today, bills: [gym, rent], table: CategoryTable.builtIn);
       expect(mixed.reservedBills, 5000, reason: 'only the flex bill');
       expect([for (final b in mixed.dueBills) (b.id, b.coveredByPlan)], [(rent.id, true), (gym.id, false)]);
-      expect(mixed.safeToday, computePeriod(txs, st, const [], today, bills: [gym]).safeToday);
+      expect(mixed.safeToday, computePeriod(txs, st, const [], today, bills: [gym], table: CategoryTable.builtIn).safeToday);
     });
 
     test('several bills add up; dueBills is ordered by due date then label', () {
       final a = bill('2026-03-10', 1000, payee: 'synthetic_b');
       final b = bill('2026-03-05', 2000, payee: 'synthetic_a');
-      final p = computePeriod(txs, st, const [], today, bills: [a, b]);
+      final p = computePeriod(txs, st, const [], today, bills: [a, b], table: CategoryTable.builtIn);
       expect(p.reservedBills, 3000);
       expect([for (final x in p.dueBills) x.id], [b.id, a.id]);
     });
@@ -472,7 +481,8 @@ void main() {
       expect(b.nextDue, '2026-03-10');
       final st = WalletSettings.fromMap({'salary': 200000, 'periodStart': '2026-02-15', 'paydayDay': 15});
       final cz = r.categorizer();
-      final p = computePeriod([for (final t in r.transactions()) cz.categorize(t)], st, const [], '2026-03-01', bills: r.recurringBills());
+      final p = computePeriod([for (final t in r.transactions()) cz.categorize(t)], st, const [], '2026-03-01',
+          bills: r.recurringBills(), table: CategoryTable.builtIn);
       expect(p.reservedBills, 2999);
     });
 
@@ -532,7 +542,8 @@ void main() {
         // The pay period that holds the payment (payday on the 1st): paid, so neither due nor reserved.
         final st = WalletSettings.fromMap({'salary': 200000, 'periodStart': '${monthOf(d)}-01', 'paydayDay': 1});
         final cz = r.categorizer();
-        final p = computePeriod([for (final t in r.transactions()) cz.categorize(t)], st, const [], d, bills: r.recurringBills());
+        final p = computePeriod([for (final t in r.transactions()) cz.categorize(t)], st, const [], d,
+            bills: r.recurringBills(), table: CategoryTable.builtIn);
         expect(p.dueBills, isEmpty, reason: d);
         expect(p.reservedBills, 0, reason: d);
       }
@@ -545,7 +556,8 @@ void main() {
       final st = WalletSettings.fromMap({'salary': 200000, 'periodStart': '2026-02-15', 'paydayDay': 15});
       PeriodBudget period() {
         final cz = r.categorizer();
-        return computePeriod([for (final t in r.transactions()) cz.categorize(t)], st, const [], '2026-03-01', bills: r.recurringBills());
+        return computePeriod([for (final t in r.transactions()) cz.categorize(t)], st, const [], '2026-03-01',
+            bills: r.recurringBills(), table: CategoryTable.builtIn);
       }
 
       var b = r.recurringBills().single;
@@ -593,7 +605,8 @@ void main() {
       PeriodBudget period(String start, String today) {
         final st = WalletSettings.fromMap({'salary': 200000, 'periodStart': start, 'paydayDay': 15});
         final cz = r.categorizer();
-        return computePeriod([for (final t in r.transactions()) cz.categorize(t)], st, const [], today, bills: r.recurringBills());
+        return computePeriod([for (final t in r.transactions()) cz.categorize(t)], st, const [], today,
+            bills: r.recurringBills(), table: CategoryTable.builtIn);
       }
 
       expect((period('2026-02-15', '2026-03-01').reservedBills, period('2026-02-15', '2026-03-01').dueBills.length), (2999, 1));
@@ -758,7 +771,8 @@ void main() {
         final bill = d.repo.recurringBills().single;
         expect((bill.category, bill.coveredByPlan, bill.nextDue), ('Loan', true, '2026-03-01'), reason: d.name);
         final cz = d.repo.categorizer();
-        final p = computePeriod([for (final t in d.repo.transactions()) cz.categorize(t)], st, const [], '2026-02-20', bills: [bill]);
+        final p = computePeriod([for (final t in d.repo.transactions()) cz.categorize(t)], st, const [], '2026-02-20',
+            bills: [bill], table: CategoryTable.builtIn);
         expect(p.reservedBills, 0, reason: d.name);
         expect(p.dueBills.single.id, bill.id);
         expect(p.flexBudget, 145000, reason: 'salary minus the planned rent only');

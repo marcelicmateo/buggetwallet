@@ -23,7 +23,8 @@ CategorizedTx _row(String date, int cents, String category) => CategorizedTx(
 // Salary 2000.00, rent 500, loan 200, subs 50: flexible money 1250.00 (125000) for 2026-01-15 .. 2026-02-15 (31 days).
 const _st = WalletSettings(salary: 200000, rent: 50000, loan: 20000, subs: 5000, periodStart: '2026-01-15');
 
-PeriodBudget _period(List<CategorizedTx> txs, String today, {WalletSettings st = _st}) => computePeriod(txs, st, const [], today);
+PeriodBudget _period(List<CategorizedTx> txs, String today, {WalletSettings st = _st}) =>
+    computePeriod(txs, st, const [], today, table: CategoryTable.builtIn);
 
 void main() {
   group('allowanceTomorrow, hand-worked', () {

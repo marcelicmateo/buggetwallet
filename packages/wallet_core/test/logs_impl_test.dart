@@ -208,7 +208,7 @@ void main() {
       final cz = repo.categorizer();
       final txs = repo.transactions().map(cz.categorize).toList();
       final st = repo.settings();
-      computePeriod(txs, st, repo.goals(), '2026-01-25');
+      computePeriod(txs, st, repo.goals(), '2026-01-25', table: CategoryTable.builtIn);
       periodSummaries(txs, st, '2026-01-25');
 
       final text = _body(lines);

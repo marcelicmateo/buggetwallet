@@ -187,16 +187,16 @@ void main() {
 
     test('computePeriod reserves an unpaid slip and releases it when linked', () {
       final st = WalletSettings.fromMap({'salary': 200000, 'rent': 50000, 'periodStart': '2026-02-15', 'paydayDay': 15});
-      final base = computePeriod(const [], st, const [], today).flexBudget;
+      final base = computePeriod(const [], st, const [], today, table: CategoryTable.builtIn).flexBudget;
       final (id, _) = repo.importBill(slip());
       repo.updateBill(id, category: 'Bills & subscriptions');
       repo.updateBill(id, category: 'Groceries');
       repo.confirmWithCategory(id);
-      var p = computePeriod(const [], st, const [], today, planned: repo.plannedCosts());
+      var p = computePeriod(const [], st, const [], today, planned: repo.plannedCosts(), table: CategoryTable.builtIn);
       expect(p.reservedPlanned, 4599);
       expect(p.flexBudget, base - 4599);
       repo.linkBill(id, repo.addTransaction(date: '2026-03-01', amount: 4599, category: 'Groceries'));
-      p = computePeriod(const [], st, const [], today, planned: repo.plannedCosts());
+      p = computePeriod(const [], st, const [], today, planned: repo.plannedCosts(), table: CategoryTable.builtIn);
       expect(p.reservedPlanned, 0);
     });
   });

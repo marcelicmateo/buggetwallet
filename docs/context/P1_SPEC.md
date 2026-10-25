@@ -100,3 +100,16 @@ All writes go through `_write`, and logs record counts and kinds only, never lab
 - Sync duplicates.
 - Backup round-trip.
 - Schema 9 → 10.
+
+## Clarifications (core builder, approved by the lead 2026-10-25)
+1. **The table is a parameter.** Optional `CategoryTable? table` (null = `CategoryTable.builtIn`) on `budgetVsActual`, `budgetVsActualSeries`, `averageByCategory`, `suggestBudgets`, `reviewState`, `monthlySummaryCsv`, `suggestBillCategory`, `billHistory` and `WalletSettings.fromMap(m, table:)`. Also `categoryShare(..., rollUp: true, table: t)` and `Categorizer({..., table})` (field `table`).
+   - **Exception: the paths that reserve money take it as REQUIRED:** `computePeriod(..., required CategoryTable table)` and `plannedReserves(p, recurring, counted, {required CategoryTable table})`. Otherwise a custom fixed category would be reserved as flex.
+2. **CSV header for a table:** `monthlySummaryCsvHeaderFor(CategoryTable t)` gives the labels, CSV-quoted. The `monthlySummaryCsvHeader` getter stays built-in.
+3. **`coveredByPlan` getters stay built-in only.** The new `RecurringBill.coveredByPlanIn(t)` and `PlannedCost.coveredByPlanIn(t)` mean: live and of kind fixed. A child of a fixed category counts.
+4. **`duplicateOf` works like accounts.** A built-in always wins, then the smallest id among custom rows. Ids are random, so this is decided by id, the same on every device.
+5. **Ids** are `k` + 12 random hex characters.
+6. **Hiding:** hiding a parent also removes its children from `pickable`. `spending` keeps hidden and duplicate top-level ids, because they are live.
+7. **Order:** children by position, then folded label, then id. Top-level by position (a built-in's default position is its index 0..19), then folded label, then id. A new or moved category goes after its siblings (largest position + 1). `position` is a nullable column: null means the default, so an override that only hides keeps its place.
+8. **Orphans:** a row whose parent is deleted or is not top-level acts as top-level everywhere, with its own stored kind.
+9. **The 200 limit counts live custom rows.** `undeleteCategory` checks it too.
+10. **Budgets:** a budget row whose category is deleted, a child or unknown is dropped from `settings().categoryBudgets`. The stored row stays, so an undelete brings it back.

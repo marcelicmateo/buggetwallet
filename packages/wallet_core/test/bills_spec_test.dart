@@ -90,7 +90,8 @@ void main() {
   });
 
   final st = WalletSettings.fromMap({'salary': 200000, 'periodStart': '2026-02-15', 'paydayDay': 15});
-  int reserved(WalletRepo r) => computePeriod(const [], st, const [], '2026-03-01', planned: r.plannedCosts()).reservedPlanned;
+  int reserved(WalletRepo r) =>
+      computePeriod(const [], st, const [], '2026-03-01', planned: r.plannedCosts(), table: CategoryTable.builtIn).reservedPlanned;
   List<PlannedCost> billRows(WalletRepo r, [String? billId]) => [
         for (final p in r.plannedCosts(includeClosed: true))
           if (p.source == PlannedSource.bill && (billId == null || p.sourceRef == billId)) p
@@ -311,7 +312,9 @@ void main() {
       final (id, _) = repo.importBill(nb());
       repo.confirmWithCategory(id);
       now = DateTime.utc(2026, 3, 11, 12).millisecondsSinceEpoch;
-      expect(computePeriod(const [], st, const [], '2026-03-11', planned: repo.plannedCosts()).reservedPlanned, 0);
+      expect(
+          computePeriod(const [], st, const [], '2026-03-11', planned: repo.plannedCosts(), table: CategoryTable.builtIn).reservedPlanned,
+          0);
       expect(only(repo).paid, isFalse);
     });
 
@@ -728,8 +731,8 @@ void main() {
     });
 
     test('never counted: the budget does not move', () {
-      final base = computePeriod(const [], st, const [], '2026-03-01');
-      final p = computePeriod(const [], st, const [], '2026-03-01', planned: repo.plannedCosts());
+      final base = computePeriod(const [], st, const [], '2026-03-01', table: CategoryTable.builtIn);
+      final p = computePeriod(const [], st, const [], '2026-03-01', planned: repo.plannedCosts(), table: CategoryTable.builtIn);
       expect(p.reservedPlanned, base.reservedPlanned);
       expect(p.flexBudget, base.flexBudget);
     });

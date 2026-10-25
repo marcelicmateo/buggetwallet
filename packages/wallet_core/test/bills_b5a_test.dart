@@ -56,7 +56,7 @@ void main() {
 
   PeriodBudget period(WalletRepo r) => computePeriod([for (final t in r.transactions()) r.categorizer().categorize(t)],
       const WalletSettings(salary: 100000, paydayDay: 15, periodStart: '2026-02-15'), const [], today,
-      bills: r.recurringBills(), planned: r.plannedCosts());
+      bills: r.recurringBills(), planned: r.plannedCosts(), table: CategoryTable.builtIn);
 
   group('1. double reserve: a bill that reserves needs a category', () {
     test('B5a bug: confirmBill without a category on an unpaid bill due from today on is refused', () {

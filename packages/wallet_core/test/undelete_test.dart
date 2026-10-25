@@ -100,7 +100,7 @@ void main() {
 
     PeriodBudget period() => computePeriod([for (final t in repo.transactions()) repo.categorizer().categorize(t)],
         const WalletSettings(salary: 100000, paydayDay: 15, periodStart: '2026-02-15'), const [], today,
-        bills: repo.recurringBills(), planned: repo.plannedCosts());
+        bills: repo.recurringBills(), planned: repo.plannedCosts(), table: CategoryTable.builtIn);
 
     test('deleted then undone: the bill is paid again, not reserved, and the expense counts once', () {
       final (id, _) = repo.importBill(slip());

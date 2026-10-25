@@ -58,7 +58,7 @@ void main() {
   const today = '2026-03-01'; // period 2026-02-15 .. payday 2026-03-15 (exclusive)
   final st = WalletSettings.fromMap({'salary': 200000, 'periodStart': '2026-02-15', 'paydayDay': 15});
   final txs = [row('2026-02-20', -3000, 'Synthetic Market', category: 'Groceries')];
-  int reserved(List<PlannedCost> p) => computePeriod(txs, st, const [], today, planned: p).reservedPlanned;
+  int reserved(List<PlannedCost> p) => computePeriod(txs, st, const [], today, planned: p, table: CategoryTable.builtIn).reservedPlanned;
 
   group('computePeriod reservation of planned costs', () {
     test('dated today, tomorrow and the day before payday are reserved', () {
@@ -105,21 +105,21 @@ void main() {
     test('duePlanned lists exactly the reserved rows', () {
       final inside = pc('2026-03-05', 1000, title: 'In');
       final p = computePeriod(txs, st, const [], today,
-          planned: [inside, pc('2026-03-15', 1000), pc('2026-02-28', 1000), pc('2026-03-05', null)]);
+          planned: [inside, pc('2026-03-15', 1000), pc('2026-02-28', 1000), pc('2026-03-05', null)], table: CategoryTable.builtIn);
       expect([for (final d in p.duePlanned) d.id], [inside.id]);
     });
 
     test('planned and confirmed bills together are the sum, never double', () {
       final p = computePeriod(txs, st, const [], today,
-          bills: [bill('2026-03-05', 5000)], planned: [pc('2026-03-06', 3000), pc('2026-03-07', 1250)]);
+          bills: [bill('2026-03-05', 5000)], planned: [pc('2026-03-06', 3000), pc('2026-03-07', 1250)], table: CategoryTable.builtIn);
       expect(p.reservedBills, 5000);
       expect(p.reservedPlanned, 4250);
       expect(p.flexBudget, 200000 - 5000 - 4250);
     });
 
     test('a bill in a fixed category is not reserved a second time, planned still is', () {
-      final p =
-          computePeriod(txs, st, const [], today, bills: [bill('2026-03-05', 5000, category: 'Rent')], planned: [pc('2026-03-06', 3000)]);
+      final p = computePeriod(txs, st, const [], today,
+          bills: [bill('2026-03-05', 5000, category: 'Rent')], planned: [pc('2026-03-06', 3000)], table: CategoryTable.builtIn);
       expect(p.reservedBills, 0, reason: 'already in the fixed plan');
       expect(p.reservedPlanned, 3000);
     });
@@ -146,26 +146,27 @@ void main() {
             p.reservedBills,
           ];
       final bills = [bill('2026-03-05', 5000)];
-      final base = computePeriod(txs, st, const [], today, bills: bills);
-      final withEmpty = computePeriod(txs, st, const [], today, bills: bills, planned: const []);
+      final base = computePeriod(txs, st, const [], today, bills: bills, table: CategoryTable.builtIn);
+      final withEmpty = computePeriod(txs, st, const [], today, bills: bills, planned: const [], table: CategoryTable.builtIn);
       expect(all(withEmpty), all(base));
       expect(withEmpty.reservedPlanned, 0);
       expect(withEmpty.duePlanned, isEmpty);
-      expect(all(computePeriod(txs, st, const [], today, planned: const [])), all(computePeriod(txs, st, const [], today)));
+      expect(all(computePeriod(txs, st, const [], today, planned: const [], table: CategoryTable.builtIn)),
+          all(computePeriod(txs, st, const [], today, table: CategoryTable.builtIn)));
     });
 
     test('safe to spend: a planned cost lowers the daily amount by cost / days left (spec example shape)', () {
-      final base = computePeriod(txs, st, const [], today);
+      final base = computePeriod(txs, st, const [], today, table: CategoryTable.builtIn);
       final days = base.daysLeft;
       // 4 EUR a day over the days left, whole cents so the division is exact (spec: 92 EUR turns 14 EUR/day into 10 EUR/day).
-      final p = computePeriod(txs, st, const [], today, planned: [pc('2026-03-10', 400 * days)]);
+      final p = computePeriod(txs, st, const [], today, planned: [pc('2026-03-10', 400 * days)], table: CategoryTable.builtIn);
       expect(p.reservedPlanned, 400 * days);
       expect(base.safeToday - p.safeToday, 400);
       expect(base.flexBudget - p.flexBudget, 400 * days);
     });
 
     test('a cost larger than the flexible money makes the flexible budget negative, not clamped away', () {
-      final p = computePeriod(txs, st, const [], today, planned: [pc('2026-03-05', 900000)]);
+      final p = computePeriod(txs, st, const [], today, planned: [pc('2026-03-05', 900000)], table: CategoryTable.builtIn);
       expect(p.flexBudget, lessThan(0));
     });
   });

@@ -30,7 +30,8 @@ CategorizedTx _row(String date, int cents, String category, {String currency = '
 // The period is 2026-01-15 .. 2026-02-15 (exclusive): 31 days.
 const _st = WalletSettings(salary: 200000, rent: 50000, loan: 20000, subs: 5000, periodStart: '2026-01-15');
 
-PeriodBudget _period(List<CategorizedTx> txs, String today, {WalletSettings st = _st}) => computePeriod(txs, st, const [], today);
+PeriodBudget _period(List<CategorizedTx> txs, String today, {WalletSettings st = _st}) =>
+    computePeriod(txs, st, const [], today, table: CategoryTable.builtIn);
 
 void main() {
   final h1 = foreignOf(_period(const [], '2026-01-20')) != null;

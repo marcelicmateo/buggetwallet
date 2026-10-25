@@ -167,7 +167,7 @@ void main() {
             {...st0.toMap(), 'periodStart': saved ?? salaryPaydays(w.txs, today, currency: 'EUR').lastOrNull ?? today});
         final goals = [for (var g = r.nextInt(4); g > 0; g--) Goal(id: 'g$g', name: 'Synthetic $g', monthly: r.nextInt(20000))];
         final why = 'seed $seed today $today start ${st.periodStart} paydayDay ${st.paydayDay}';
-        final p = computePeriod(w.txs, st, goals, today);
+        final p = computePeriod(w.txs, st, goals, today, table: CategoryTable.builtIn);
 
         expect(p.start, st.periodStart, reason: why);
         expect(p.end, nextPayday(p.start, st.paydayDay), reason: why);
@@ -199,8 +199,8 @@ void main() {
             for (final t in w.txs)
               if (t.date.compareTo(today) <= 0) t
           ];
-          final now = computePeriod(upToToday, st, goals, today);
-          final next = computePeriod(upToToday, st, goals, addDays(today, 1));
+          final now = computePeriod(upToToday, st, goals, today, table: CategoryTable.builtIn);
+          final next = computePeriod(upToToday, st, goals, addDays(today, 1), table: CategoryTable.builtIn);
           expect(next.allowanceToday, now.allowanceTomorrow, reason: '$why: tomorrow, nothing more spent');
         }
 
@@ -236,15 +236,15 @@ void main() {
           ct(today, -40000, 'Internal transfer'),
           ct(today, 30000, 'Loan received'),
         ];
-        final q = computePeriod(more, st, goals, today);
+        final q = computePeriod(more, st, goals, today, table: CategoryTable.builtIn);
         expect((q.flexBudget, q.allowanceToday, q.safeToday, q.spent), (p.flexBudget, p.allowanceToday, p.safeToday, p.spent), reason: why);
         if (st.incomeMode == 'planned') {
-          final salaryLater = computePeriod([...w.txs, ct(today, 99999, 'Salary')], st, goals, today);
+          final salaryLater = computePeriod([...w.txs, ct(today, 99999, 'Salary')], st, goals, today, table: CategoryTable.builtIn);
           expect(salaryLater.flexBudget, p.flexBudget, reason: '$why: planned income must not follow received salary');
         }
         // Spending today lowers safe-to-spend by exactly that amount; tomorrow's allowance spreads the rest.
         final spend = 1 + r.nextInt(5000);
-        final s2 = computePeriod([...w.txs, ct(today, -spend, 'Groceries')], st, goals, today);
+        final s2 = computePeriod([...w.txs, ct(today, -spend, 'Groceries')], st, goals, today, table: CategoryTable.builtIn);
         if (p.paydayPassed) {
           // After the payday, today's row belongs to the next period: the ended period does not move.
           expect((s2.safeToday, s2.allowanceToday, s2.remaining), (p.safeToday, p.allowanceToday, p.remaining), reason: why);
@@ -257,7 +257,7 @@ void main() {
     });
 
     test('a new wallet (nothing set) gives zero budget, not errors', () {
-      final p = computePeriod(const [], const WalletSettings(), const [], '2026-02-28');
+      final p = computePeriod(const [], const WalletSettings(), const [], '2026-02-28', table: CategoryTable.builtIn);
       expect((p.flexBudget, p.spent, p.remaining, p.allowanceToday, p.safeToday), (0, 0, 0, 0, 0));
       expect(p.daysLeft, greaterThanOrEqualTo(1));
     });
@@ -266,31 +266,31 @@ void main() {
 
     test('allowanceTomorrow: null on the day before payday and once the payday passed', () {
       final st = plan('2026-03-10');
-      expect(computePeriod(const [], st, const [], '2026-04-09').daysLeft, 1);
-      expect(computePeriod(const [], st, const [], '2026-04-09').allowanceTomorrow, isNull);
-      expect(computePeriod(const [], st, const [], '2026-04-10').paydayPassed, isTrue);
-      expect(computePeriod(const [], st, const [], '2026-04-10').allowanceTomorrow, isNull);
-      expect(computePeriod(const [], st, const [], '2026-04-12').allowanceTomorrow, isNull);
+      expect(computePeriod(const [], st, const [], '2026-04-09', table: CategoryTable.builtIn).daysLeft, 1);
+      expect(computePeriod(const [], st, const [], '2026-04-09', table: CategoryTable.builtIn).allowanceTomorrow, isNull);
+      expect(computePeriod(const [], st, const [], '2026-04-10', table: CategoryTable.builtIn).paydayPassed, isTrue);
+      expect(computePeriod(const [], st, const [], '2026-04-10', table: CategoryTable.builtIn).allowanceTomorrow, isNull);
+      expect(computePeriod(const [], st, const [], '2026-04-12', table: CategoryTable.builtIn).allowanceTomorrow, isNull);
       // Two days left: everything not spent yet goes to tomorrow.
-      final p = computePeriod([ct('2026-04-08', -1000, 'Groceries')], st, const [], '2026-04-08');
+      final p = computePeriod([ct('2026-04-08', -1000, 'Groceries')], st, const [], '2026-04-08', table: CategoryTable.builtIn);
       expect(p.daysLeft, 2);
       expect(p.allowanceTomorrow, p.flexBudget - 1000);
     });
 
     test('allowanceTomorrow: 0 when over budget, never negative; spreads the rest over the days after today', () {
       final st = plan('2026-03-10');
-      final over = computePeriod([ct('2026-03-20', -400000, 'Groceries')], st, const [], '2026-03-20');
+      final over = computePeriod([ct('2026-03-20', -400000, 'Groceries')], st, const [], '2026-03-20', table: CategoryTable.builtIn);
       expect(over.overBy, greaterThan(0));
       expect(over.allowanceTomorrow, 0);
-      final exact = computePeriod([ct('2026-03-20', -300000, 'Groceries')], st, const [], '2026-03-20');
+      final exact = computePeriod([ct('2026-03-20', -300000, 'Groceries')], st, const [], '2026-03-20', table: CategoryTable.builtIn);
       expect(exact.remaining, 0);
       expect(exact.allowanceTomorrow, 0);
       // 21 days left on 2026-03-20: 3000.00 − 100.00 over the 20 days after today = 145.00 a day.
-      final p = computePeriod([ct('2026-03-20', -10000, 'Groceries')], st, const [], '2026-03-20');
+      final p = computePeriod([ct('2026-03-20', -10000, 'Groceries')], st, const [], '2026-03-20', table: CategoryTable.builtIn);
       expect(p.daysLeft, 21);
       expect(p.allowanceTomorrow, 14500);
       // Spending more today lowers it; spending today never changes today's allowance.
-      final more = computePeriod([ct('2026-03-20', -30000, 'Groceries')], st, const [], '2026-03-20');
+      final more = computePeriod([ct('2026-03-20', -30000, 'Groceries')], st, const [], '2026-03-20', table: CategoryTable.builtIn);
       expect(more.allowanceTomorrow, 13500);
       expect(more.allowanceToday, p.allowanceToday);
     });
@@ -309,7 +309,7 @@ void main() {
             rent: r.nextInt(80000),
             paydayDay: 1 + r.nextInt(31),
             periodStart: salaryPaydays(w.txs, today, currency: 'EUR').lastOrNull ?? today);
-        final p = computePeriod(w.txs, st, const [], today);
+        final p = computePeriod(w.txs, st, const [], today, table: CategoryTable.builtIn);
         final prices = [for (var k = 0; k < 30; k++) r.nextInt(400000)]..sort();
         Affordability? prev;
         for (final price in prices) {

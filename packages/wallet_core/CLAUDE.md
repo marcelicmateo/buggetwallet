@@ -133,6 +133,17 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `ownTransfer` and `exchange` → Internal transfer; `standingOrder`, `card`, `other` and null fall through to the description rules
   (built-in merchant patterns, `merchantPatterns`). A row with `transferTo` is an Internal transfer before any hint.
   `account` from the importer is never stored (it names the owner's account).
+  **Own categories (P1, schema 10, spec `docs/context/P1_SPEC.md` incl. Clarifications):** `CategoryTable.from(rows)`
+  resolves built-ins + `CategoryRow`s (entity `category`, table `categories`; id `k` + 12 hex, or a built-in name =
+  override of label/hidden/position only). One level of subcategories; a child's kind is its parent's; an orphan
+  (parent deleted/not top-level) is top-level; `duplicateOf` = built-in first, then smallest id. `rollUp` sums
+  children into `topLevel`. **Code that can meet a custom id uses the table, never the globals** (`categories`,
+  `kindOf`, `spendingCategories`, `isSpendingCategory`, `coveredByPlan` getters stay built-in only): `Categorizer(table:)`
+  (an override/rule/pattern to a deleted or unknown id is ignored, nothing rewritten), settings budget parse,
+  `setCategoryBudget` (top-level only), `setMerchantPattern`, CSV, budget-vs-actual, review, bill suggestion/history.
+  `computePeriod` and `plannedReserves` take `table` as **required** (a custom fixed category must never be reserved as
+  flex). `repo_categories.dart` (`WalletRepoCategories`): add/update/delete/undeleteCategory, `categoryRows`;
+  `WalletRepo.categoryTable()`. Logs: counts and kinds only, never labels. Tests: `test/p1_categories_test.dart`.
 - `transfers.dart` — `planTransfers`: own transfers between accounts. Only a row the bank itself marks as one
   (`kindHint == ownTransfer`: Revolut `Topup`, PBZ card payments to Revolut; not `exchange`, a conversion inside one bank) may pair: with the equal,
   opposite-sign row of the same currency in another source within `transferDays` (3, inclusive, either way in time),

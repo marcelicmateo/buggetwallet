@@ -55,7 +55,19 @@ export 'src/budget.dart'
         suggestBudgets,
         Verdict;
 export 'src/categories.dart'
-    show BudgetKind, builtInMerchantRules, categories, Categorizer, flexCategories, kindOf, merchantKey, merchantName, spendingCategories;
+    show
+        BudgetKind,
+        builtInMerchantRules,
+        categories,
+        Categorizer,
+        CategoryRow,
+        CategoryTable,
+        flexCategories,
+        kindOf,
+        merchantKey,
+        merchantName,
+        rollUp,
+        spendingCategories;
 export 'src/dates.dart'
     show
         addDays,
@@ -70,7 +82,15 @@ export 'src/dates.dart'
         nextPayday,
         parseIso,
         requireIsoDate;
-export 'src/export.dart' show centsToDecimal, csvField, monthlySummaryCsv, monthlySummaryCsvHeader, transactionsCsv, transactionsCsvHeader;
+export 'src/export.dart'
+    show
+        centsToDecimal,
+        csvField,
+        monthlySummaryCsv,
+        monthlySummaryCsvHeader,
+        monthlySummaryCsvHeaderFor,
+        transactionsCsv,
+        transactionsCsvHeader;
 export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
 export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, parseIcs, plannedIcs;
 export 'src/insights.dart'
@@ -150,6 +170,7 @@ export 'src/repo.dart'
         Op,
         WalletRepo,
         WalletRepoAccounts,
+        WalletRepoCategories,
         WalletRepoBills,
         WalletRepoBlobs,
         WalletRepoPlanned,

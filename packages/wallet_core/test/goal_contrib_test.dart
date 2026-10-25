@@ -224,7 +224,7 @@ void main() {
       r.addGoalContribution(gone, 1000);
       r.deleteGoal(gone);
       r.updateSettings({'salary': 200000, 'periodStart': '2026-01-15', 'paydayDay': 15});
-      final p = computePeriod(const [], r.settings(), r.goals(), '2026-01-20');
+      final p = computePeriod(const [], r.settings(), r.goals(), '2026-01-20', table: CategoryTable.builtIn);
       expect(p.goalMonthly, 10000);
       expect(p.flexBudget, 200000 - 10000);
       expect(r.goals().single.saved, 50000);

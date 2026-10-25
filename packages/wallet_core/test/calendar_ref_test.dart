@@ -129,7 +129,7 @@ void main() {
       await round();
       for (final d in [a, b]) {
         expect(d.repo.plannedCosts(includeClosed: true), hasLength(1));
-        final p = computePeriod(const [], _st, const [], '2026-03-01', planned: d.repo.plannedCosts());
+        final p = computePeriod(const [], _st, const [], '2026-03-01', planned: d.repo.plannedCosts(), table: CategoryTable.builtIn);
         expect(p.reservedPlanned, 4500);
       }
     });

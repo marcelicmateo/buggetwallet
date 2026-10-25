@@ -177,6 +177,15 @@ const Map<String, EntityDef> entitySchema = {
     ColumnDef('opening_date'),
     ColumnDef.flag('deleted'),
   ]),
+  // Categories (v10, P1): custom categories and subcategories, and overrides of the built-ins (see `CategoryRow`).
+  'category': EntityDef('categories', [
+    ColumnDef('name', searchable: true),
+    ColumnDef('kind'),
+    ColumnDef('parent', nullable: true),
+    ColumnDef.integer('position', nullable: true),
+    ColumnDef.flag('hidden'),
+    ColumnDef.flag('deleted'),
+  ]),
 };
 
 /// The device-local tables: never synced or backed up.

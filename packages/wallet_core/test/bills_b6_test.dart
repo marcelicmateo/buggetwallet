@@ -22,7 +22,7 @@ void main() {
 
   PeriodBudget period() => computePeriod([for (final t in repo.transactions()) repo.categorizer().categorize(t)],
       const WalletSettings(salary: 100000, paydayDay: 15, periodStart: '2026-02-15'), const [], today,
-      bills: repo.recurringBills(), planned: repo.plannedCosts());
+      bills: repo.recurringBills(), planned: repo.plannedCosts(), table: CategoryTable.builtIn);
 
   group('1. a bill confirmed by its cash expense keeps a category', () {
     test('B6 bug: deleting the cash expense of a fixed-category slip reopened it with no category and reserved it twice', () {
@@ -103,7 +103,7 @@ void main() {
           PlannedCost(id: 'bill:y', title: 'Synthetic', date: '2026-03-05', amount: 1000, category: ' ', source: PlannedSource.bill);
       expect([manual.needsCategory, billRow.needsCategory, blank.needsCategory], [false, true, true]);
       final b = computePeriod(const [], const WalletSettings(salary: 100000, paydayDay: 15, periodStart: '2026-02-15'), const [], today,
-          planned: const [manual, billRow, blank]);
+          planned: const [manual, billRow, blank], table: CategoryTable.builtIn);
       expect(b.reservedPlanned, 1000);
       expect(b.duePlanned, hasLength(3));
     });
@@ -128,7 +128,7 @@ void main() {
       final r = rec('2026-11-02');
       final p = row('2026-10-30');
       expect(plannedCoveredBy(p, [r]), r, reason: 'the same payment as far as matching goes');
-      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [p]);
+      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [p], table: CategoryTable.builtIn);
       expect(b.dueBills, isEmpty);
       expect(b.reservedBills, 0);
       expect(b.duePlanned.map((p) => p.id), ['bill:b6']);
@@ -143,7 +143,7 @@ void main() {
 
     test('the other side: recurring cycle 10-31 inside the period reserves it; the slip is listed, not added', () {
       final r = rec('2026-10-31');
-      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [row('2026-10-30')]);
+      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [row('2026-10-30')], table: CategoryTable.builtIn);
       expect((b.reservedBills, b.reservedPlanned), (3000, 0));
       expect(b.duePlanned, hasLength(1));
       final up = upcoming(planned: [row('2026-10-30')], bills: [r], events: const [], from: '2026-10-01', to: '2026-10-31');
@@ -152,7 +152,7 @@ void main() {
 
     test('symmetric: slip due 11-02 after the period, recurring 10-30 inside: reserved once by the recurring bill', () {
       final r = rec('2026-10-30');
-      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [row('2026-11-02')]);
+      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [row('2026-11-02')], table: CategoryTable.builtIn);
       expect((b.reservedBills, b.reservedPlanned), (3000, 0));
       expect(b.dueBills.single.id, r.id);
       expect(b.duePlanned, isEmpty, reason: 'the slip falls in the next period');
@@ -160,14 +160,14 @@ void main() {
 
     test('a recurring bill in a fixed category: the fixed plan holds it, the slip is not reserved in either period', () {
       final r = rec('2026-11-02', category: 'Bills & subscriptions');
-      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [row('2026-10-30')]);
+      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [row('2026-10-30')], table: CategoryTable.builtIn);
       expect((b.reservedBills, b.reservedPlanned), (0, 0));
     });
 
     test('the cycle just paid (before nextDue): the slip for it stays unreserved', () {
       // Paid early on 10-27; the next cycle moved to 11-26. The slip for the paid cycle is due 10-29.
       final r = rec('2026-11-26');
-      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [row('2026-10-29')]);
+      final b = computePeriod(const [], st, const [], day, bills: [r], planned: [row('2026-10-29')], table: CategoryTable.builtIn);
       expect((b.reservedBills, b.reservedPlanned), (0, 0));
       expect(plannedCoverage(row('2026-10-29'), [r])?.occurrence, isNull);
     });
@@ -192,14 +192,15 @@ void main() {
     final noCategory = billRow('c', 'Synth Gas', null, 2500);
 
     test('computePeriod sums exactly reservedPlannedRows, the rows plannedReserves accepts', () {
-      final b = computePeriod(const [], st, const [], day, bills: const [rec], planned: [plain, covered, fixed, noCategory]);
+      final b = computePeriod(const [], st, const [], day,
+          bills: const [rec], planned: [plain, covered, fixed, noCategory], table: CategoryTable.builtIn);
       expect(b.duePlanned, hasLength(4));
       expect(b.reservedPlannedRows.map((p) => p.id), ['p1']);
       expect(b.reservedPlanned, 8000);
       expect(b.reservedPlanned, b.reservedPlannedRows.fold<int>(0, (s, p) => s + p.amount!));
       final counted = {occurrenceKey(rec.id, rec.nextDue)};
       expect([
-        for (final p in b.duePlanned) plannedReserves(p, const [rec], counted)
+        for (final p in b.duePlanned) plannedReserves(p, const [rec], counted, table: CategoryTable.builtIn)
       ], [
         true,
         false,
@@ -209,9 +210,9 @@ void main() {
     });
 
     test('the covering occurrence not counted by the caller: the slip reserves', () {
-      expect(plannedReserves(covered, const [rec], const {}), isTrue);
-      expect(plannedReserves(covered, const [rec], {occurrenceKey(rec.id, '2026-11-24')}), isTrue);
-      expect(plannedReserves(covered, const [rec], {occurrenceKey(rec.id, '2026-10-25')}), isFalse);
+      expect(plannedReserves(covered, const [rec], const {}, table: CategoryTable.builtIn), isTrue);
+      expect(plannedReserves(covered, const [rec], {occurrenceKey(rec.id, '2026-11-24')}, table: CategoryTable.builtIn), isTrue);
+      expect(plannedReserves(covered, const [rec], {occurrenceKey(rec.id, '2026-10-25')}, table: CategoryTable.builtIn), isFalse);
     });
 
     test('closed, empty or zero rows never reserve', () {
@@ -219,7 +220,7 @@ void main() {
       const none = PlannedCost(id: 'p3', title: 'x', date: '2026-10-22');
       const gone = PlannedCost(id: 'p4', title: 'x', date: '2026-10-22', amount: 100, deleted: true);
       expect([
-        for (final p in [paid, none, gone]) plannedReserves(p, const [], const {})
+        for (final p in [paid, none, gone]) plannedReserves(p, const [], const {}, table: CategoryTable.builtIn)
       ], [
         false,
         false,
