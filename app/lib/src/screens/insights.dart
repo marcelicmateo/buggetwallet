@@ -14,6 +14,7 @@ import '../widgets/common.dart';
 import '../widgets/insight_charts.dart';
 import '../widgets/sheets.dart';
 import 'category_detail.dart';
+import 'tag_detail.dart';
 
 /// Opens Insights. [picker] replaces the system date range picker (tests).
 Future<void> openInsights(BuildContext context, WalletController wc, {RangePicker? picker}) =>
@@ -56,16 +57,18 @@ class InsightPanel extends StatelessWidget {
         final body = switch (id) {
           'spending' => _spending(context, r, cur),
           'share' => _share(context, r, cur),
+          'tags' => _tags(context, r, cur),
           'income' => _income(context, r, cur),
           'budget' => _budget(context, r, cur),
           _ => _biggest(context, r, cur),
         };
         final (eyebrow, note) = switch (id) {
           'spending' => ('Spending per month', 'What went out each month.'),
-          'share' => ('Where it goes', 'Each category as a share of the spending. Tap one to see where it went.'),
+          'share' => ('Where it goes', 'Each main tag as a share of the spending. Tap one to see where it went.'),
+          'tags' => ('Tags', 'Spent per extra tag. Tap one to see its payments.'),
           'income' => ('Income and spending', 'What came in against what went out, per month.'),
           'budget' => ('Budget and actual', 'Each bar is a whole calendar month.'),
-          _ => ('Biggest payments', 'The ten largest. Tap one to change its category.'),
+          _ => ('Biggest payments', 'The ten largest. Tap one to change its main tag.'),
         };
         return Panel(children: [
           Eyebrow(eyebrow),
@@ -126,6 +129,24 @@ class InsightPanel extends StatelessWidget {
           openCategory(context, wc, cat, r);
         },
       ),
+    ];
+  }
+
+  List<Widget> _tags(BuildContext context, DateRange r, String cur) {
+    final share = wc.tagShareFor(r);
+    return [
+      const Muted('A payment can have several tags, so these overlap.', key: ValueKey('tagsOverlapNote')),
+      TagBars(
+        share: share,
+        tags: wc.tagTable,
+        currency: cur,
+        onOpen: (tag) {
+          logNav('insights.tag', {'graph': id});
+          openTag(context, wc, tag, r);
+        },
+      ),
+      if (share.slices.isNotEmpty || share.untaggedSpent > 0)
+        Rows(children: [LineItem('No extra tag', moneyExact(share.untaggedSpent, cur), key: const ValueKey('tagsUntagged'))]),
     ];
   }
 
@@ -214,6 +235,7 @@ class InsightPanel extends StatelessWidget {
         for (final t in rows)
           TxTile(
               table: wc.categoryTable,
+              tagTable: wc.tagTable,
               t: t,
               currency: cur,
               hasBill: wc.billForTx(t.tx.id) != null,

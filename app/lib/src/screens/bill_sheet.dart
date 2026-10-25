@@ -466,6 +466,7 @@ class _CandidatesSheet extends StatelessWidget {
           for (final t in list.take(30))
             TxTile(
                 table: wc.categoryTable,
+                tagTable: wc.tagTable,
                 key: ValueKey('cand:${t.tx.id}'),
                 t: t,
                 currency: wc.currency,
@@ -513,7 +514,7 @@ class _CashSheetState extends State<_CashSheet> {
           'Adds ${b.total == null ? 'an expense' : moneyExact(b.total!, cur)} on ${b.date == null ? 'the bill date' : shortDateOrRaw(b.date!)} as a cash expense.',
           size: BwType.metaSize),
       const SizedBox(height: 10),
-      const Muted('Category'),
+      const Muted('Main tag'),
       const SizedBox(height: 6),
       Wrap(spacing: 6, runSpacing: 6, children: [
         ...categoryChips(widget.wc.categoryTable,

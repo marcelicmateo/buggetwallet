@@ -1,6 +1,6 @@
-// Stage P1 UI: own categories and subcategories. Plan › Categories (add / subcategory / rename / hide / move / delete + Undo, refusals,
-// the sync duplicate), the pickers, Spending's rolled-up "Where it goes", the drill-down's subcategories, the CSV header, and the money
-// paths that must use the table. All data is SYNTHETIC (budgetWallet, fixed clock 20 Oct 2026).
+// Stage P1 UI (T1: subcategories were replaced by tags): own main tags. Plan › Main tags (add / rename / hide / move / delete + Undo,
+// refusals, the sync duplicate), the pickers, Spending's "Where it goes", the drill-down, the CSV header, and the money paths that must
+// use the table. All data is SYNTHETIC (budgetWallet, fixed clock 20 Oct 2026).
 import 'dart:convert';
 
 import 'package:budget_wallet/src/controller.dart';
@@ -54,10 +54,10 @@ void remoteCategory(WalletController wc, String id, String name, {String kind = 
   wc.reload();
 }
 
-/// Groceries 252 and a Bakery subcategory with 40 more this month.
+/// Groceries 252 and a Bakery main tag of its own with 40 more this month.
 Future<({WalletController wc, String bakery})> withBakery() async {
   final wc = budgetWallet(budgets: false);
-  final bakery = await wc.addOwnCategory(name: 'Bakery', kind: BudgetKind.flex, parent: 'Groceries');
+  final bakery = await wc.addOwnCategory(name: 'Bakery', kind: BudgetKind.flex);
   wc.repo.addTransaction(date: '2026-10-05', amount: 4000, category: bakery, note: 'Morning bread');
   wc.reload();
   return (wc: wc, bakery: bakery);
@@ -117,7 +117,7 @@ void main() {
       wc.dispose();
     });
 
-    test('the summary CSV header uses the labels and a subcategory counts in its parent', () async {
+    test('the summary CSV header uses the labels and each main tag counts on its own', () async {
       final (:wc, :bakery) = await withBakery();
       await wc.renameCategory('Groceries', 'Food');
       await wc.addOwnCategory(name: 'Pets', kind: BudgetKind.flex);
@@ -125,11 +125,13 @@ void main() {
       expect(lines.first.split(','), contains('Food'));
       expect(lines.first.split(','), contains('Pets'));
       expect(lines.first, isNot(contains('Groceries')));
+      expect(lines.first.split(','), contains('Bakery'));
       expect(lines.first, isNot(contains(bakery)));
       // October: Groceries 252 + Bakery 40 + Eating out 112 + Shopping 60 = 464.
       expect(lines.last, startsWith('2026-10,'));
       expect(lines.last, endsWith(',464.00'));
-      expect(lines.last.split(',')[lines.first.split(',').indexOf('Food')], '292.00');
+      expect(lines.last.split(',')[lines.first.split(',').indexOf('Food')], '252.00');
+      expect(lines.last.split(',')[lines.first.split(',').indexOf('Bakery')], '40.00');
       wc.dispose();
     });
 
@@ -148,8 +150,8 @@ void main() {
     });
   });
 
-  group('Plan › Categories', () {
-    testWidgets('grouped by kind, every built-in is listed, children sit under their parent', (t) async {
+  group('Plan › Main tags', () {
+    testWidgets('grouped by kind, every built-in is listed, an own one sits in its kind, no subcategory action', (t) async {
       final (:wc, :bakery) = await withBakery();
       await pumpApp(t, panel(wc), size: const Size(400, 5000));
       for (final g in ['fixed', 'flex', 'income', 'transfer']) {
@@ -158,15 +160,16 @@ void main() {
       expect(find.byKey(const ValueKey('category:Rent')), findsOneWidget);
       expect(find.byKey(const ValueKey('category:Salary')), findsOneWidget);
       expect(find.byKey(const ValueKey('category:Internal transfer')), findsOneWidget);
-      final parent = t.getTopLeft(find.byKey(const ValueKey('category:Groceries')));
-      final child = t.getTopLeft(find.byKey(ValueKey('category:$bakery')));
-      expect(child.dy, greaterThan(parent.dy));
-      expect(t.getTopLeft(find.byKey(ValueKey('category:$bakery'))).dy,
-          lessThan(t.getTopLeft(find.byKey(const ValueKey('category:Food delivery'))).dy));
+      final groceries = t.getTopLeft(find.byKey(const ValueKey('category:Groceries')));
+      final own = t.getTopLeft(find.byKey(ValueKey('category:$bakery')));
+      expect(own.dx, groceries.dx, reason: 'a flat list: nothing is indented under another');
+      expect(own.dy, greaterThan(t.getTopLeft(find.byKey(const ValueKey('category:Food delivery'))).dy), reason: 'own ones come last');
       expect(find.text('Bakery'), findsOneWidget);
-      // The child's menu has no "Add subcategory": one level only.
+      expect(find.text('Main tags'.toUpperCase()), findsOneWidget);
+      // There is no "Add subcategory": tags replaced subcategories.
       await tapKey(t, 'categoryMenu:$bakery');
       expect(find.byKey(ValueKey('categoryAddChild:$bakery')), findsNothing);
+      expect(find.textContaining('subcategory'), findsNothing);
       expect(find.byKey(ValueKey('categoryDeleteItem:$bakery')), findsOneWidget);
       await t.tapAt(const Offset(5, 5));
       await settle(t);
@@ -201,21 +204,34 @@ void main() {
       wc.dispose();
     }, timeout: _timeout);
 
-    testWidgets('add a subcategory: no kind field, the kind follows the parent', (t) async {
+    testWidgets('a category stored with a parent (older data) shows as a main tag of its own and counts once', (t) async {
       final wc = budgetWallet(budgets: false);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      wc.repo.applyRemote([
+        Op(
+            'category',
+            'kcccccccccccc',
+            {'name': 'Old child', 'kind': 'flex', 'parent': 'Groceries', 'position': 0, 'hidden': 0, 'deleted': 0},
+            Hlc(now + 60000, 0, 'peer').toString())
+      ]);
+      wc.reload();
       await pumpApp(t, panel(wc), size: const Size(400, 5000));
-      await menu(t, 'Rent', 'categoryAddChild');
-      expect(find.byKey(const ValueKey('categoryKind')), findsNothing);
-      expect(find.textContaining('In Rent'), findsOneWidget);
-      await typeName(t, 'Parking');
-      await tapKey(t, 'categorySave');
-      final kid = wc.categoryTable.childrenOf('Rent').single;
-      expect(wc.categoryTable.label(kid), 'Parking');
-      expect(wc.categoryTable.kindOf(kid), BudgetKind.fixed);
-      expect(find.byKey(ValueKey('category:$kid')), findsOneWidget);
+      expect(find.byKey(const ValueKey('category:kcccccccccccc')), findsOneWidget);
+      expect(t.getTopLeft(find.byKey(const ValueKey('category:kcccccccccccc'))).dx,
+          t.getTopLeft(find.byKey(const ValueKey('category:Groceries'))).dx);
+      expect(wc.categoryTable.childrenOf('Groceries'), isEmpty);
+      await tapKey(t, 'categoryMenu:kcccccccccccc');
+      expect(find.byKey(const ValueKey('categoryAddChild:kcccccccccccc')), findsNothing);
+      await t.tapAt(const Offset(5, 5));
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);
+
+    test('a new main tag refuses a parent with core\'s message (tags replaced subcategories)', () async {
+      final wc = budgetWallet(budgets: false);
+      await expectLater(wc.repo.addCategory(name: 'Bakery', kind: BudgetKind.flex, parent: 'Groceries'), throwsA(isA<ArgumentError>()));
+      wc.dispose();
+    });
 
     testWidgets('rename a built-in: the label changes, the id stays, rows keep their category', (t) async {
       final wc = budgetWallet(budgets: false);
@@ -284,23 +300,17 @@ void main() {
       wc.dispose();
     }, timeout: _timeout);
 
-    testWidgets('delete shows Undo and Undo brings it back; a category with subcategories is refused with core\'s message', (t) async {
+    testWidgets('delete shows Undo and Undo brings it back', (t) async {
       final wc = budgetWallet(budgets: false);
       final pets = await wc.addOwnCategory(name: 'Pets', kind: BudgetKind.flex);
-      final kid = await wc.addOwnCategory(name: 'Vet', kind: BudgetKind.flex, parent: pets);
       await pumpApp(t, panel(wc), size: const Size(400, 2600));
       await menu(t, pets, 'categoryDeleteItem');
-      expect(find.text('Move or delete its subcategories first.'), findsOneWidget);
-      expect(find.byKey(ValueKey('category:$pets')), findsOneWidget);
-
-      await menu(t, kid, 'categoryDeleteItem');
-      expect(find.text('Category removed'), findsOneWidget);
-      expect(find.byKey(ValueKey('category:$kid')), findsNothing);
-      await t.pump(const Duration(milliseconds: 600)); // the refusal toast leaves first
+      expect(find.text('Main tag removed'), findsOneWidget);
+      expect(find.byKey(ValueKey('category:$pets')), findsNothing);
       await t.tap(find.byKey(const ValueKey('toastUndo')));
       await t.pump(const Duration(milliseconds: 400));
-      expect(find.byKey(ValueKey('category:$kid')), findsOneWidget);
-      expect(wc.categoryTable.parentOf(kid), pets);
+      expect(find.byKey(ValueKey('category:$pets')), findsOneWidget);
+      expect(wc.categoryTable.isLive(pets), isTrue);
 
       // Built-ins have no Delete item.
       await tapKey(t, 'categoryMenu:Groceries');
@@ -332,7 +342,7 @@ void main() {
       ('400 dp dark', const Size(400, 6000), 1.0, Brightness.dark),
       ('1280 wide', const Size(1280, 4000), 1.0, Brightness.light),
     ]) {
-      testWidgets('the panel fits at $name (children, hidden, duplicate, long name)', (t) async {
+      testWidgets('the panel fits at $name (hidden, duplicate, long name)', (t) async {
         final (:wc, :bakery) = await withBakery();
         await wc.setCategoryHidden('Cash', true);
         await wc.addOwnCategory(name: 'A very long category name for a screen', kind: BudgetKind.fixed);
@@ -363,30 +373,28 @@ void main() {
   });
 
   group('pickers', () {
-    test('pickable offers children right after their parent, indented in the menu, and leaves hidden ones out', () async {
+    test('pickable is flat and leaves hidden ones out unless one is the current value', () async {
       final (:wc, :bakery) = await withBakery();
       await wc.setCategoryHidden('Cash', true);
       final ids = pickerIds(wc.categoryTable, kinds: const {BudgetKind.flex});
-      expect(ids[ids.indexOf('Groceries') + 1], bakery);
+      expect(ids, contains(bakery));
       expect(ids, isNot(contains('Cash')));
       expect(ids, isNot(contains('Rent')), reason: 'fixed is not in the flex list');
-      // A hidden parent takes its children with it, unless one of them is the current value.
-      await wc.setCategoryHidden('Groceries', true);
+      await wc.setCategoryHidden(bakery, true);
       expect(pickerIds(wc.categoryTable, kinds: const {BudgetKind.flex}), isNot(contains(bakery)));
       expect(pickerIds(wc.categoryTable, kinds: const {BudgetKind.flex}, current: bakery), contains(bakery));
       expect(pickerLabel(wc.categoryTable, bakery), 'Bakery (hidden)');
       wc.dispose();
     });
 
-    testWidgets('the transaction sheet\'s menu shows a child indented under its parent and no hidden category', (t) async {
+    testWidgets('the transaction sheet\'s menu lists an own main tag, no hidden one, and a change can go to any kind', (t) async {
       final (:wc, :bakery) = await withBakery();
       await wc.setCategoryHidden('Cash', true);
       final row = wc.txs.firstWhere((x) => x.category == 'Groceries');
       await pumpApp(t, Scaffold(body: SingleChildScrollView(child: TxSheet(wc: wc, t: row))), size: const Size(400, 900));
       await tapKey(t, 'txCategory');
-      final pad = t.widget<Padding>(find.byKey(ValueKey('pick:$bakery')).last).padding as EdgeInsets;
-      expect(pad.left, categoryIndent);
-      expect(t.widget<Padding>(find.byKey(const ValueKey('pick:Groceries')).last).padding as EdgeInsets, EdgeInsets.zero);
+      expect(find.byKey(ValueKey('pick:$bakery')), findsWidgets);
+      expect(find.byKey(const ValueKey('pick:Groceries')), findsWidgets);
       expect(find.byKey(const ValueKey('pick:Cash')), findsNothing);
       expect(pickerIds(wc.categoryTable), contains('Rent'), reason: 'a change can go to any kind');
       await t.tap(find.byKey(ValueKey('pick:$bakery')).last);
@@ -396,17 +404,15 @@ void main() {
       wc.dispose();
     }, timeout: _timeout);
 
-    testWidgets('the add-expense chips list children after the parent and hide hidden ones', (t) async {
+    testWidgets('the add-expense chips list an own main tag and hide hidden ones', (t) async {
       final (:wc, :bakery) = await withBakery();
       await wc.setCategoryHidden('Cash', true);
       await pumpApp(t, Scaffold(body: SingleChildScrollView(child: AddExpenseSheet(wc: wc, skipImpulse: true))),
           size: const Size(400, 1600));
       expect(find.byKey(const ValueKey('cat:Groceries')), findsOneWidget);
-      expect(find.text('↳ Bakery'), findsOneWidget);
+      expect(find.text('Bakery'), findsOneWidget);
       expect(find.byKey(const ValueKey('cat:Cash')), findsNothing);
       expect(find.byKey(const ValueKey('cat:Bank fees')), findsNothing);
-      expect(t.getTopLeft(find.byKey(ValueKey('cat:$bakery'))).dy,
-          greaterThanOrEqualTo(t.getTopLeft(find.byKey(const ValueKey('cat:Groceries'))).dy));
       await t.tap(find.byKey(ValueKey('cat:$bakery')));
       await t.pump();
       expect(t.widget<ChoiceChip>(find.byKey(ValueKey('cat:$bakery'))).selected, isTrue);
@@ -416,17 +422,17 @@ void main() {
   });
 
   group('Spending and the drill-down', () {
-    testWidgets('"Where it goes" shows main categories with their subcategories added in; the sum of the rows is unchanged', (t) async {
+    testWidgets('"Where it goes" lists each main tag on its own; the sum of the rows is unchanged', (t) async {
       final (:wc, :bakery) = await withBakery();
       final v = wc.spending();
-      expect(v.summary.byCategory[bakery], 4000, reason: 'per row id stays');
-      expect(v.byTopLevel['Groceries'], 29200);
-      expect(v.byTopLevel.containsKey(bakery), isFalse);
+      expect(v.summary.byCategory[bakery], 4000);
+      expect(v.byTopLevel['Groceries'], 25200);
+      expect(v.byTopLevel[bakery], 4000);
       expect(v.byTopLevel.values.fold<int>(0, (a, b) => a + b), v.summary.byCategory.values.fold<int>(0, (a, b) => a + b));
       await pumpApp(t, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(400, 3000));
       expect(find.byKey(const ValueKey('categoryRow_Groceries')), findsOneWidget);
-      expect(find.byKey(ValueKey('categoryRow_$bakery')), findsNothing);
-      expect(find.descendant(of: find.byType(CategoryBars), matching: find.text(money(29200, 'EUR', decimals: 0))), findsOneWidget);
+      expect(find.byKey(ValueKey('categoryRow_$bakery')), findsOneWidget);
+      expect(find.descendant(of: find.byType(CategoryBars), matching: find.text(money(25200, 'EUR', decimals: 0))), findsOneWidget);
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);
@@ -441,32 +447,22 @@ void main() {
       wc.dispose();
     }, timeout: _timeout);
 
-    testWidgets('the detail lists the subcategories with totals above the merchants and they add up to the total', (t) async {
+    testWidgets('the detail total is the rows of the main tag alone, and there is no subcategory panel', (t) async {
       final (:wc, :bakery) = await withBakery();
       final range = wc.monthRange('2026-10');
       await pumpApp(t, CategoryDetailScreen(wc: wc, category: 'Groceries', range: range), size: const Size(400, 5000));
       expect(t.widget<Text>(find.descendant(of: find.byKey(const ValueKey('detailTotal')), matching: find.byType(Text))).data,
-          moneyExact(29200, 'EUR'));
-      final child = find.byKey(ValueKey('childRow_$bakery'));
-      expect(find.descendant(of: child, matching: find.text('Bakery')), findsOneWidget);
-      expect(find.descendant(of: child, matching: find.text(moneyExact(4000, 'EUR'))), findsOneWidget);
-      expect(find.descendant(of: find.byKey(const ValueKey('childOwn')), matching: find.text(moneyExact(25200, 'EUR'))), findsOneWidget);
-      expect(wc.categoryTotal('Groceries', range),
-          wc.ownTotal('Groceries', range) + wc.childTotals('Groceries', range).fold<int>(0, (a, e) => a + e.$2));
-      // Above the merchants.
-      expect(t.getTopLeft(find.byKey(const ValueKey('subcategories'))).dy, lessThan(t.getTopLeft(find.text('WHERE IT WENT')).dy));
-      // The compare lines count the subcategory too.
-      expect(wc.compareFor('Groceries', range).thisMonth, 29200);
-      // Tapping a subcategory opens its own detail.
-      await tapKey(t, 'childRow_$bakery');
-      expect(find.text('Bakery'), findsWidgets);
-      expect(t.widget<Text>(find.descendant(of: find.byKey(const ValueKey('detailTotal')), matching: find.byType(Text)).last).data,
-          moneyExact(4000, 'EUR'));
+          moneyExact(25200, 'EUR'));
+      expect(wc.categoryTotal('Groceries', range), 25200);
+      expect(-wc.rowsOf('Groceries', null, range).fold<int>(0, (a, e) => a + e.amount), 25200);
+      expect(find.byKey(const ValueKey('subcategories')), findsNothing);
+      expect(find.byKey(ValueKey('childRow_$bakery')), findsNothing);
+      expect(wc.compareFor('Groceries', range).thisMonth, 25200);
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);
 
-    testWidgets('a category without subcategories shows no subcategory panel', (t) async {
+    testWidgets('a main tag shows no subcategory panel', (t) async {
       final wc = budgetWallet(budgets: false);
       await pumpApp(t, CategoryDetailScreen(wc: wc, category: 'Eating out', range: wc.monthRange('2026-10')), size: const Size(400, 4000));
       expect(find.byKey(const ValueKey('subcategories')), findsNothing);

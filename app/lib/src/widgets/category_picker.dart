@@ -1,10 +1,11 @@
-// Category pickers (P1): the ids a picker offers come from core's `CategoryTable.pickable`; subcategories sit indented under their
-// parent. A category already chosen stays in the list even when it was hidden or removed since, so the field never loses its value.
+// Main tag pickers (P1, T1): the ids a picker offers come from core's `CategoryTable.pickable`; the order for one payment is core's
+// `recommendedMainTags` (the payee's tags first). A main tag already chosen stays in the list even when it was hidden or removed since,
+// so the field never loses its value. T1 replaced subcategories by tags, so the list is flat.
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
-/// How far a subcategory is indented in a menu.
-const double categoryIndent = 18;
+/// How many main tags a picker shows before "More…".
+const int mainTagTop = 20;
 
 /// The ids a picker offers: `table.pickable(kinds:)`, plus [current] (a hidden or removed one) at the end.
 List<String> pickerIds(CategoryTable t, {Set<BudgetKind>? kinds, String? current, Iterable<String> except = const []}) {
@@ -20,12 +21,11 @@ List<String> pickerIds(CategoryTable t, {Set<BudgetKind>? kinds, String? current
 String pickerLabel(CategoryTable t, String id) {
   final base = t.label(id);
   if (!t.isLive(id) && t.isCustom(id)) return '$base (removed)';
-  if (t.isHidden(id) || (t.parentOf(id) != null && t.isHidden(t.parentOf(id)!))) return '$base (hidden)';
+  if (t.isHidden(id)) return '$base (hidden)';
   return base;
 }
 
-/// Menu items for a dropdown: [noneLabel] first when given (value null), then every offered category, a child indented under
-/// its parent (key `pick:<id>`).
+/// Menu items for a dropdown: [noneLabel] first when given (value null), then every offered main tag (key `pick:<id>`).
 List<DropdownMenuItem<String?>> categoryMenuItems(CategoryTable t,
     {Set<BudgetKind>? kinds, String? current, String? noneLabel, Iterable<String> except = const []}) {
   return [
@@ -33,31 +33,103 @@ List<DropdownMenuItem<String?>> categoryMenuItems(CategoryTable t,
     for (final id in pickerIds(t, kinds: kinds, current: current, except: except))
       DropdownMenuItem<String?>(
         value: id,
-        child: Padding(
-          key: ValueKey('pick:$id'),
-          padding: EdgeInsets.only(left: t.parentOf(id) == null ? 0 : categoryIndent),
-          child: Text(pickerLabel(t, id), overflow: TextOverflow.ellipsis),
-        ),
+        child: Text(pickerLabel(t, id), key: ValueKey('pick:$id'), overflow: TextOverflow.ellipsis),
       ),
   ];
 }
 
-/// [categoryMenuItems] for a field that always has a value (no "none" entry).
-List<DropdownMenuItem<String>> categoryValueItems(CategoryTable t, {Set<BudgetKind>? kinds, required String current}) => [
-      for (final i in categoryMenuItems(t, kinds: kinds, current: current)) DropdownMenuItem<String>(value: i.value!, child: i.child),
-    ];
-
-/// Choice chips for the add-expense sheet: a main category, then its subcategories marked "↳" (key `cat:<id>`).
+/// Choice chips for a plain list of main tags (key `cat:<id>`).
 List<Widget> categoryChips(CategoryTable t,
     {required Set<BudgetKind> kinds, required String? selected, required ValueChanged<String> onPick, Iterable<String> except = const []}) {
   return [
     for (final id in pickerIds(t, kinds: kinds, current: selected, except: except))
       ChoiceChip(
         key: ValueKey('cat:$id'),
-        label: Text(t.parentOf(id) == null ? pickerLabel(t, id) : '↳ ${pickerLabel(t, id)}'),
-        tooltip: t.parentOf(id) == null ? null : '${t.label(id)}, in ${t.label(t.parentOf(id)!)}',
+        label: Text(pickerLabel(t, id)),
         selected: id == selected,
         onSelected: (_) => onPick(id),
       ),
   ];
+}
+
+const _moreValue = '\u0000more';
+
+/// The main tag picker of a transaction sheet, the add-expense sheet and the review: [ids] are already in recommended order
+/// (`wc.recommendedMainFor`); the first [mainTagTop] show, a "More…" entry (`mainTagMore`) opens the rest. The chosen one is always
+/// shown. [dropdown]: a menu (key `txCategory`, items `pick:<id>`), else choice chips (`cat:<id>`).
+class MainTagPicker extends StatefulWidget {
+  final CategoryTable table;
+  final List<String> ids;
+  final String? selected;
+  final ValueChanged<String> onPick;
+  final bool dropdown;
+
+  /// The field label of the dropdown form.
+  final String label;
+  const MainTagPicker(
+      {super.key,
+      required this.table,
+      required this.ids,
+      required this.selected,
+      required this.onPick,
+      this.dropdown = false,
+      this.label = 'Main tag'});
+  @override
+  State<MainTagPicker> createState() => _MainTagPickerState();
+}
+
+class _MainTagPickerState extends State<MainTagPicker> {
+  bool _all = false;
+
+  /// What shows now: the top ones (or all), with the selected one in front when it is not among them.
+  List<String> get _shown {
+    final base = _all ? widget.ids : widget.ids.take(mainTagTop).toList();
+    final s = widget.selected;
+    return s == null || base.contains(s) ? base : [...base, s];
+  }
+
+  bool get _hasMore => !_all && widget.ids.length > mainTagTop;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.table;
+    if (widget.dropdown) {
+      return InputDecorator(
+        decoration: InputDecoration(labelText: widget.label),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            key: const ValueKey('txCategory'),
+            isExpanded: true,
+            isDense: true,
+            value: widget.selected,
+            items: [
+              for (final id in _shown)
+                DropdownMenuItem<String>(
+                    value: id, child: Text(pickerLabel(t, id), key: ValueKey('pick:$id'), overflow: TextOverflow.ellipsis)),
+              if (_hasMore) const DropdownMenuItem<String>(value: _moreValue, child: Text('More…', key: ValueKey('mainTagMore'))),
+            ],
+            onChanged: (v) {
+              if (v == null) return;
+              if (v == _moreValue) {
+                setState(() => _all = true);
+              } else {
+                widget.onPick(v);
+              }
+            },
+          ),
+        ),
+      );
+    }
+    return Wrap(spacing: 6, runSpacing: 6, children: [
+      for (final id in _shown)
+        ChoiceChip(
+          key: ValueKey('cat:$id'),
+          label: Text(pickerLabel(t, id)),
+          selected: id == widget.selected,
+          onSelected: (_) => widget.onPick(id),
+        ),
+      if (_hasMore)
+        ActionChip(key: const ValueKey('mainTagMore'), label: const Text('More…'), onPressed: () => setState(() => _all = true)),
+    ]);
+  }
 }

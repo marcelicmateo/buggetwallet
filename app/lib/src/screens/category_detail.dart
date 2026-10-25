@@ -94,8 +94,6 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
   List<Widget> _categoryView(BuildContext context, String cur, List<MerchantTotal> merchants) {
     final total = wc.categoryTotal(widget.category, range);
     final cmp = wc.compareFor(widget.category, range);
-    final kids = wc.childTotals(widget.category, range);
-    final own = wc.ownTotal(widget.category, range);
     final month = wc.monthIn(range);
     return gapped([
       Panel(children: [
@@ -115,23 +113,6 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
         const Eyebrow('Per month'),
         _bars(context, wc.categoryBars(widget.category, range), cur, '$name per month', 'category'),
       ]),
-      if (kids.isNotEmpty)
-        Panel(key: const ValueKey('subcategories'), children: [
-          const Eyebrow('Subcategories'),
-          Rows(children: [
-            for (final (id, spent) in kids)
-              InkWell(
-                key: ValueKey('childRow_$id'),
-                onTap: () {
-                  logNav('insights.subcategory');
-                  openCategory(context, wc, id, range);
-                },
-                child: LineItem(wc.categoryTable.label(id), moneyExact(spent, cur)),
-              ),
-            if (wc.ownRowsOf(widget.category, range).isNotEmpty)
-              LineItem('Not in a subcategory', moneyExact(own, cur), key: const ValueKey('childOwn')),
-          ]),
-        ]),
       Panel(children: [
         const Eyebrow('Where it went'),
         if (merchants.isEmpty)
@@ -181,6 +162,7 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
             for (final t in rows)
               TxTile(
                   table: wc.categoryTable,
+                  tagTable: wc.tagTable,
                   t: t,
                   currency: cur,
                   hasBill: wc.billForTx(t.tx.id) != null,

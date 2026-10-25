@@ -1,4 +1,4 @@
-// Own categories and subcategories in the controller (P1, core API in docs/context/P1_SPEC.md). A `part` of controller.dart so it can
+// Own categories (main tags) in the controller (P1; T1 replaced subcategories by tags, core API in docs/context/P1_SPEC.md). A `part` of controller.dart so it can
 // use the cache and `_changed`.
 //
 // Privacy: logs carry counts and enum words only, never labels or ids.
@@ -7,15 +7,14 @@ part of 'controller.dart';
 final _catLog = Logger('bw.categories.ui');
 
 extension CategoriesDb on WalletController {
-  /// The built-in categories plus the owner's own: labels, kinds, children, hidden. Rebuilt on every [reload] (it comes from the
+  /// The built-in categories (main tags) plus the owner's own: labels, kinds, hidden. Rebuilt on every [reload] (it comes from the
   /// categorizer), so it is always the one the shown totals were computed with.
   CategoryTable get categoryTable => categorizer.table;
 
-  /// Adds a main category (or a subcategory when [parent] is set; its kind follows the parent) and returns its id. A refused
-  /// value is an [ArgumentError] with a readable message.
-  Future<String> addOwnCategory({required String name, required BudgetKind kind, String? parent}) async {
-    final id = await repo.addCategory(name: name, kind: parent == null ? kind : categoryTable.kindOf(parent), parent: parent);
-    logEvent(_catLog, Level.INFO, 'categories.add', {'kind': kind.name, 'child': parent != null});
+  /// Adds a main tag and returns its id. A refused value is an [ArgumentError] with a readable message.
+  Future<String> addOwnCategory({required String name, required BudgetKind kind}) async {
+    final id = await repo.addCategory(name: name, kind: kind);
+    logEvent(_catLog, Level.INFO, 'categories.add', {'kind': kind.name});
     _changed();
     return id;
   }
@@ -32,12 +31,9 @@ extension CategoriesDb on WalletController {
     _changed();
   }
 
-  /// The ids [id] is ordered among in the Categories panel: its siblings of the same kind (a child's siblings, or the top-level
-  /// categories of its kind), in table order.
+  /// The ids [id] is ordered among in the Main tags panel: the main tags of its kind, in table order.
   List<String> categorySiblings(String id) {
     final t = categoryTable;
-    final p = t.parentOf(id);
-    if (p != null) return t.childrenOf(p);
     final k = t.kindOf(id);
     return [
       for (final s in t.topLevelIds)
@@ -70,7 +66,7 @@ extension CategoriesDb on WalletController {
     _changed();
   }
 
-  /// Deletes an own category; an [ArgumentError] while it still has subcategories.
+  /// Deletes an own main tag.
   Future<void> deleteOwnCategory(String id) async {
     await repo.deleteCategory(id);
     logEvent(_catLog, Level.INFO, 'categories.delete');

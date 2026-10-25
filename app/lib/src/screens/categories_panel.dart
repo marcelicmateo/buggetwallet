@@ -1,6 +1,6 @@
-// Plan › Categories (P1): the built-in categories and the owner's own, grouped by kind, each main category with its subcategories
-// indented under it. Add / add subcategory / rename / hide / move / delete with Undo. The rules (one level, same kind as the parent,
-// unique names, at most 200) are core's; its `ArgumentError` text is shown under the field or in a toast.
+// Plan › Main tags (P1, T1): the built-in categories and the owner's own, grouped by kind. A main tag decides the money (budgets, plan,
+// safe-to-spend); the extra tags for tracking are in tags_panel.dart. Add / rename / hide / move / delete with Undo. The rules (unique
+// names, at most 200) are core's; its `ArgumentError` text is shown under the field or in a toast.
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -32,7 +32,7 @@ const _groups = <(String, String, Set<BudgetKind>)>[
   ('transfer', 'Transfers', {BudgetKind.transfer}),
 ];
 
-enum _Act { rename, hide, up, down, addChild, delete }
+enum _Act { rename, hide, up, down, delete }
 
 class CategoriesPanel extends StatelessWidget {
   final WalletController wc;
@@ -42,14 +42,14 @@ class CategoriesPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = wc.categoryTable;
     return Panel(children: [
-      SectionHead('Categories',
+      SectionHead('Main tags',
           trailing: TextButton.icon(
               key: const ValueKey('categoryAdd'),
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Add'),
               onPressed: () => openAddCategory(context, wc))),
       Explainer(wc, 'categories',
-          'Your own categories sit next to the built-in ones. A subcategory counts in its main category. Hide one to stop it showing in pickers.'),
+          'A payment has one main tag. It decides what the payment counts for: budgets, your plan and what is safe to spend. Add your own next to the built-in ones. Hide one to stop it showing in pickers. For more detail, give a payment extra tags (Plan › Tags).'),
       for (final (id, title, kinds) in _groups) ...[
         Padding(
           padding: const EdgeInsets.only(top: 6),
@@ -57,10 +57,7 @@ class CategoriesPanel extends StatelessWidget {
         ),
         Rows(children: [
           for (final c in t.topLevelIds)
-            if (kinds.contains(t.kindOf(c))) ...[
-              _CategoryRow(wc: wc, id: c),
-              for (final k in t.childrenOf(c)) _CategoryRow(wc: wc, id: k, child: true),
-            ],
+            if (kinds.contains(t.kindOf(c))) _CategoryRow(wc: wc, id: c),
         ]),
       ],
     ]);
@@ -70,20 +67,18 @@ class CategoriesPanel extends StatelessWidget {
 class _CategoryRow extends StatelessWidget {
   final WalletController wc;
   final String id;
-  final bool child;
-  const _CategoryRow({required this.wc, required this.id, this.child = false});
+  const _CategoryRow({required this.wc, required this.id});
 
   @override
   Widget build(BuildContext context) {
     final t = wc.categoryTable;
     final c = context.c;
     final label = t.label(id);
-    final indent = child ? categoryRowIndent : 0.0;
     final dupOf = t.duplicateOf(id);
     if (dupOf != null) {
       return Padding(
         key: ValueKey('categoryDuplicate:$id'),
-        padding: EdgeInsets.only(left: indent, top: 8, bottom: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(children: [
           Icon(Icons.content_copy_outlined, size: 18, color: c.muted),
           const SizedBox(width: 8),
@@ -102,19 +97,17 @@ class _CategoryRow extends StatelessWidget {
     return Container(
       key: ValueKey('category:$id'),
       constraints: const BoxConstraints(minHeight: touchMin),
-      padding: EdgeInsets.only(left: indent),
       child: Row(children: [
-        if (child) ...[Icon(Icons.subdirectory_arrow_right, size: 16, color: c.muted), const SizedBox(width: 4)],
         Expanded(
           child: Wrap(spacing: 8, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            Text(label, style: TextStyle(fontSize: BwType.bodySize, fontWeight: child ? FontWeight.w400 : FontWeight.w500)),
+            Text(label, style: const TextStyle(fontSize: BwType.bodySize, fontWeight: FontWeight.w500)),
             if (hidden)
               Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(Icons.visibility_off_outlined, size: 14, color: c.ink2, semanticLabel: 'Hidden'),
                 const SizedBox(width: 3),
                 Text('hidden', key: ValueKey('categoryHidden:$id'), style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
               ]),
-            if (!custom && !child) const Tag('built in'),
+            if (!custom) const Tag('built in'),
           ]),
         ),
         PopupMenuButton<_Act>(
@@ -132,7 +125,6 @@ class _CategoryRow extends StatelessWidget {
                 value: _Act.down,
                 enabled: pos >= 0 && pos < sibs.length - 1,
                 child: const Text('Move down')),
-            if (!child) PopupMenuItem(key: ValueKey('categoryAddChild:$id'), value: _Act.addChild, child: const Text('Add subcategory')),
             if (custom) PopupMenuItem(key: ValueKey('categoryDeleteItem:$id'), value: _Act.delete, child: const Text('Delete')),
           ],
         ),
@@ -145,8 +137,6 @@ class _CategoryRow extends StatelessWidget {
     switch (a) {
       case _Act.rename:
         await showSheet<bool>(context, CategoryFormSheet(wc: wc, rename: id));
-      case _Act.addChild:
-        await showSheet<bool>(context, CategoryFormSheet(wc: wc, parent: id));
       case _Act.hide:
         await _run(context, () => wc.setCategoryHidden(id, !wc.categoryTable.isHidden(id)));
       case _Act.up:
@@ -170,11 +160,7 @@ class _CategoryRow extends StatelessWidget {
   }
 }
 
-/// How far a subcategory row is indented in the panel.
-const double categoryRowIndent = 24;
-
-/// Deletes the own category [id] and offers Undo in the toast. Core refuses while it has subcategories: its message is shown
-/// instead. A sync duplicate ([duplicate]) is only removed (it was never offered).
+/// Deletes the own main tag [id] and offers Undo in the toast. A sync duplicate ([duplicate]) is only removed (it was never offered).
 Future<void> deleteCategoryWithUndo(BuildContext context, WalletController wc, String id, {bool duplicate = false}) async {
   logNav('categories.delete');
   // A category with a plan line: say what goes with it before it is deleted.
@@ -184,7 +170,7 @@ Future<void> deleteCategoryWithUndo(BuildContext context, WalletController wc, S
       context: context,
       builder: (ctx) => AlertDialog(
         key: const ValueKey('categoryDeleteConfirm'),
-        title: const Text('Delete this category?'),
+        title: const Text('Delete this main tag?'),
         content: Text('Its plan line (${moneyExact(line, wc.currency)}) goes too. Its bills then count under the automatic category.'),
         actions: [
           TextButton(key: const ValueKey('categoryDeleteCancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -209,7 +195,7 @@ Future<void> deleteCategoryWithUndo(BuildContext context, WalletController wc, S
     say('Removed');
     return;
   }
-  say('Category removed', label: 'Undo', action: () async {
+  say('Main tag removed', label: 'Undo', action: () async {
     try {
       await wc.undeleteOwnCategory(id);
     } catch (e, st) {
@@ -224,13 +210,12 @@ Future<void> openAddCategory(BuildContext context, WalletController wc) async {
   await showSheet<bool>(context, CategoryFormSheet(wc: wc));
 }
 
-/// The add / add-subcategory / rename form: a name, and for a new main category its kind. [parent] set = a subcategory (its kind is
-/// the parent's); [rename] set = the label of that category. Pops `true` once saved; core's refusal shows under the field.
+/// The add / rename form: a name, and for a new main tag its kind. [rename] set = the label of that main tag. Pops `true` once saved;
+/// core's refusal shows under the field.
 class CategoryFormSheet extends StatefulWidget {
   final WalletController wc;
-  final String? parent;
   final String? rename;
-  const CategoryFormSheet({super.key, required this.wc, this.parent, this.rename});
+  const CategoryFormSheet({super.key, required this.wc, this.rename});
   @override
   State<CategoryFormSheet> createState() => _CategoryFormSheetState();
 }
@@ -251,7 +236,7 @@ class _CategoryFormSheetState extends State<CategoryFormSheet> {
       if (widget.rename != null) {
         await widget.wc.renameCategory(widget.rename!, _name.text);
       } else {
-        await widget.wc.addOwnCategory(name: _name.text, kind: _kind, parent: widget.parent);
+        await widget.wc.addOwnCategory(name: _name.text, kind: _kind);
       }
       if (mounted) Navigator.pop(context, true);
     } on ArgumentError catch (e) {
@@ -261,18 +246,9 @@ class _CategoryFormSheetState extends State<CategoryFormSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final t = widget.wc.categoryTable;
-    final title = widget.rename != null
-        ? 'Rename category'
-        : widget.parent != null
-            ? 'Add subcategory'
-            : 'Add category';
+    final title = widget.rename != null ? 'Rename main tag' : 'Add main tag';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(title),
-      if (widget.parent != null) ...[
-        const SizedBox(height: 4),
-        Muted('In ${t.label(widget.parent!)}. It counts in that category.', size: BwType.metaSize),
-      ],
       const SizedBox(height: 12),
       TextField(
         key: const ValueKey('categoryName'),
@@ -285,7 +261,7 @@ class _CategoryFormSheetState extends State<CategoryFormSheet> {
         },
         decoration: InputDecoration(labelText: 'Name', errorText: _error, errorMaxLines: 3, counterText: ''),
       ),
-      if (widget.rename == null && widget.parent == null) ...[
+      if (widget.rename == null) ...[
         const SizedBox(height: 12),
         DropdownButtonFormField<BudgetKind>(
           key: const ValueKey('categoryKind'),

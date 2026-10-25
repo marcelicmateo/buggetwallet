@@ -11,6 +11,7 @@ import '../screens/scan_bill.dart';
 import '../theme.dart';
 import 'category_picker.dart';
 import 'common.dart';
+import 'tag_picker.dart';
 
 /// Opens a bottom sheet on a phone, a dialog on windows [dialogMin] wide or more; logs `sheet.open` / `sheet.close` with
 /// the sheet's type and result word. With `scrolls: false` the sheet scrolls its own body (a `Flexible` scroll view) and
@@ -81,7 +82,7 @@ void txSheetToast(BuildContext context, WalletController wc, String? result) {
   if (result == 'deleted' && id != null) {
     toast(context, 'Deleted', actionLabel: 'Undo', onAction: () => wc.undeleteTransaction(id));
   } else {
-    toast(context, result == 'deleted' ? 'Deleted' : 'Category saved');
+    toast(context, result == 'deleted' ? 'Deleted' : 'Saved');
   }
 }
 
@@ -170,6 +171,15 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
 
   /// The last category used on this device; none on a fresh device (the CTA waits for a pick).
   late String? cat = widget.wc.lastExpenseCategory;
+
+  /// Extra tags the new expense starts with (written with it).
+  Set<String> tags = {};
+
+  /// The main tags in recommended order, read once (core's ordering reads every row).
+  late final List<String> mainIds = [
+    for (final id in widget.wc.recommendedMainFor(null, kinds: const {BudgetKind.flex}))
+      if (id != 'Bank fees') id
+  ];
   final wishName = TextEditingController();
   late DateTime date = widget.wc.now;
   String? error;
@@ -216,12 +226,11 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       const SizedBox(height: 14),
       InputDecorator(
         key: const ValueKey('categoryField'),
-        decoration: InputDecoration(labelText: cat == null ? 'Category (pick one)' : 'Category'),
-        child: Wrap(spacing: 6, runSpacing: 6, children: [
-          ...categoryChips(widget.wc.categoryTable,
-              kinds: const {BudgetKind.flex}, selected: cat, except: const ['Bank fees'], onPick: (c) => setState(() => cat = c)),
-        ]),
+        decoration: InputDecoration(labelText: cat == null ? 'Main tag (pick one)' : 'Main tag'),
+        child: MainTagPicker(table: widget.wc.categoryTable, ids: mainIds, selected: cat, onPick: (c) => setState(() => cat = c)),
       ),
+      const SizedBox(height: 14),
+      ExtraTagsEditor(wc: widget.wc, initial: tags, onChanged: (v) => tags = v),
       const SizedBox(height: 14),
       TextField(
           controller: note,
@@ -294,7 +303,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                   });
                   return;
                 }
-                widget.wc.addExpense(amount: a, category: cat!, note: note.text.trim(), date: isoDate(date));
+                widget.wc.addExpense(amount: a, category: cat!, note: note.text.trim(), date: isoDate(date), tags: tags.toList());
                 Navigator.pop(context, 'added');
               },
       ),
@@ -314,6 +323,9 @@ class TxSheet extends StatefulWidget {
 class _TxSheetState extends State<TxSheet> {
   late String cat = widget.t.category;
   bool always = true;
+
+  /// The main tags in recommended order for this payment (the payee's first), read once.
+  late final List<String> mainIds = widget.wc.recommendedMainFor(widget.t.tx);
 
   /// The bank row that replaced this hand-added expense, or the expense a bank row replaced (read once: it scans the rows).
   /// Read-only: there is no unlink yet.
@@ -374,21 +386,22 @@ class _TxSheetState extends State<TxSheet> {
         ),
       ],
       const SizedBox(height: 14),
-      DropdownButtonFormField<String>(
-        key: const ValueKey('txCategory'),
-        isExpanded: true,
-        initialValue: cat,
-        decoration: const InputDecoration(labelText: 'Category'),
-        items: categoryValueItems(widget.wc.categoryTable, current: cat),
-        onChanged: (v) => setState(() => cat = v ?? cat),
+      MainTagPicker(
+        dropdown: true,
+        table: widget.wc.categoryTable,
+        ids: mainIds,
+        selected: cat,
+        onPick: (v) => setState(() => cat = v),
       ),
       if (!manual)
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           value: always,
           onChanged: (v) => setState(() => always = v),
-          title: Text('Always use this for ${merchantName(t)}', style: const TextStyle(fontSize: BwType.bodySize)),
+          title: Text('Always use this main tag for ${merchantName(t)}', style: const TextStyle(fontSize: BwType.bodySize)),
         ),
+      const SizedBox(height: 8),
+      ExtraTagsEditor(wc: widget.wc, tx: widget.t, payeeRule: !manual && tagPayee(t) != null),
       const SizedBox(height: 8),
       Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, children: [
         FilledButton(

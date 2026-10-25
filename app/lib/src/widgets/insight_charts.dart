@@ -236,3 +236,60 @@ class ShareBars extends StatelessWidget {
     ]);
   }
 }
+
+/// Spent per extra tag as ruled bars (T1): the biggest tag is the full bar, and the number of payments sits on the right. Tags
+/// overlap (a payment can have several), so there is no percent and the bars do not add up. Tap a row to open the tag.
+class TagBars extends StatelessWidget {
+  final TagShare share;
+  final TagTable tags;
+  final String currency;
+  final ValueChanged<String>? onOpen;
+  const TagBars({super.key, required this.share, required this.tags, required this.currency, this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final slices = share.slices;
+    if (slices.isEmpty) return const EmptyNote('No tagged spending in this range.');
+    final top = slices.first.spent.clamp(1, 1 << 60);
+    return Column(children: [
+      for (final s in slices)
+        Semantics(
+          button: onOpen != null,
+          label: '#${tags.label(s.tag)}: ${moneyExact(s.spent, currency)}, ${s.count} ${s.count == 1 ? 'payment' : 'payments'}',
+          excludeSemantics: true,
+          onTap: onOpen == null ? null : () => onOpen!(s.tag),
+          child: InkWell(
+            key: ValueKey('tagRow_${s.tag}'),
+            onTap: onOpen == null ? null : () => onOpen!(s.tag),
+            child: RuledRow(
+              minHeight: rowMin,
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                SplitRow(
+                  start: Text('#${tags.label(s.tag)}',
+                      maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: BwType.bodySize)),
+                  end: MoneyText(moneyExact(s.spent, currency),
+                      textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w600)),
+                ),
+                const SizedBox(height: 4),
+                Row(children: [
+                  Expanded(child: RuledBar(value: s.spent / top, color: c.bar)),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 84,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text('${s.count} ${s.count == 1 ? 'payment' : 'payments'}',
+                          style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+                    ),
+                  ),
+                ]),
+              ]),
+            ),
+          ),
+        ),
+    ]);
+  }
+}

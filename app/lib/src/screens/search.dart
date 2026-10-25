@@ -118,6 +118,7 @@ class _SearchPaneState extends State<SearchPane> {
             for (final t in r.txs.take(searchTxLimit))
               TxTile(
                   table: wc.categoryTable,
+                  tagTable: wc.tagTable,
                   key: ValueKey('hit:${t.tx.id}'),
                   t: t,
                   currency: cur,

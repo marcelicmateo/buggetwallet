@@ -126,7 +126,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
           Heading('${monthLong(sel)}: ${money(selSum.out, cur, decimals: 0)} out'),
           if (budgeted) BudgetSummary(budget, cur),
           if (selSum.foreignByCurrency.isNotEmpty) ForeignNote(selSum.foreignByCurrency, key: const ValueKey('foreignNote')),
-          Muted('Income ${money(selSum.income, cur, decimals: 0)}. Spending and bills by category; '
+          Muted('Income ${money(selSum.income, cur, decimals: 0)}. Spending and bills by main tag; '
               '${budgeted ? 'the solid mark is the budget, the dark tick' : 'the dark tick'} is your average of the 6 months before.'),
           _MonthChips(
             months: v.months.sublist(v.months.length - 7),
@@ -161,7 +161,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
       ], right: [
         Panel(children: [
           Heading('All transactions in ${monthLong(sel)}', size: BwType.headingSize),
-          const Muted('Tap one to change its category. Transfers between your own accounts are hidden.'),
+          const Muted('Tap one to change its main tag. Transfers between your own accounts are hidden.'),
           if (monthTxs.isEmpty)
             const EmptyNote('No transactions.')
           else
@@ -170,6 +170,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
               for (final t in monthTxs)
                 TxTile(
                     table: wc.categoryTable,
+                    tagTable: wc.tagTable,
                     t: t,
                     currency: cur,
                     hasBill: wc.billForTx(t.tx.id) != null,

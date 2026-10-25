@@ -5,6 +5,7 @@ import '../controller.dart';
 import '../format.dart';
 import '../layout.dart';
 import '../theme.dart';
+import 'tag_picker.dart';
 
 export '../layout.dart' show gapped;
 export '../theme.dart' show numStyle;
@@ -402,7 +403,10 @@ class TxTile extends StatelessWidget {
 
   /// The categories the row label comes from (null: the built-in names).
   final CategoryTable? table;
-  const TxTile({super.key, required this.t, required this.currency, this.onTap, this.hasBill = false, this.table});
+
+  /// The tags the row's `#tag` chips come from (null: no chips).
+  final TagTable? tagTable;
+  const TxTile({super.key, required this.t, required this.currency, this.onTap, this.hasBill = false, this.table, this.tagTable});
 
   @override
   Widget build(BuildContext context) {
@@ -420,6 +424,7 @@ class TxTile extends StatelessWidget {
       Text(columns ? catLabel : '$date · $catLabel',
           maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       Tag(src),
+      if (tagTable != null) ...rowTagChips(tagTable!, t.tags),
       if (hasBill) Icon(Icons.receipt_long_outlined, key: const ValueKey('billMark'), size: 15, semanticLabel: 'Has a bill', color: c.ink2),
     ]);
     final Widget body;

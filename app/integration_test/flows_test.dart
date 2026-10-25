@@ -155,21 +155,21 @@ void main() {
     expect(find.byType(TxSheet), findsOneWidget);
     expect(inSheet(TxSheet, find.text('ZARA ZAGREB')), findsOneWidget);
     expect(inSheet(TxSheet, find.text('Delete')), findsNothing, reason: 'bank rows cannot be deleted');
-    await pickDropdown(t, inSheet(TxSheet, find.byType(DropdownButtonFormField<String>)), 'Home & tools');
+    await pickDropdown(t, inSheet(TxSheet, find.byKey(const ValueKey('txCategory'))), 'Home & tools');
     final sw = inSheet(TxSheet, find.byType(Switch));
     expect(t.widget<Switch>(sw).value, isTrue, reason: '"Always" is on by default');
     await tapVisible(t, sw);
     await t.pumpAndSettle();
     await tapVisible(t, inSheet(TxSheet, find.text('Save')));
     await t.pumpAndSettle();
-    expect(find.text('Category saved'), findsOneWidget);
+    expect(find.text('Saved'), findsOneWidget);
     expect([for (final id in ids) cat(id)], ['Home & tools', 'Shopping', 'Shopping', 'Groceries']);
     expect(wc.repo.transaction(ids[0])!.category, 'Home & tools');
     expect(wc.repo.merchantRules(), isEmpty);
     expect(tileOn(today, 'Home & tools'), findsOneWidget);
 
     await tapVisible(t, tile('−29.99\u00A0€'));
-    await pickDropdown(t, inSheet(TxSheet, find.byType(DropdownButtonFormField<String>)), 'Sport & fitness');
+    await pickDropdown(t, inSheet(TxSheet, find.byKey(const ValueKey('txCategory'))), 'Sport & fitness');
     await tapVisible(t, inSheet(TxSheet, find.text('Save')));
     await t.pumpAndSettle();
     expect(wc.repo.merchantRules(), {'zara_zagreb': 'Sport & fitness'});
@@ -187,7 +187,7 @@ void main() {
     // "Always" on the row with its own category: the rule changes and the row's own choice is cleared.
     await scrollTo(t, tile('−19.99\u00A0€'), SpendingScreen);
     await tapVisible(t, tile('−19.99\u00A0€'));
-    await pickDropdown(t, inSheet(TxSheet, find.byType(DropdownButtonFormField<String>)), 'Shopping');
+    await pickDropdown(t, inSheet(TxSheet, find.byKey(const ValueKey('txCategory'))), 'Shopping');
     await tapVisible(t, inSheet(TxSheet, find.text('Save')));
     await t.pumpAndSettle();
     expect(wc.repo.merchantRules(), {'zara_zagreb': 'Shopping'});

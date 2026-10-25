@@ -305,6 +305,7 @@ class TodayScreen extends StatelessWidget {
                       for (final t in recent)
                         TxTile(
                             table: wc.categoryTable,
+                            tagTable: wc.tagTable,
                             t: t,
                             currency: cur,
                             hasBill: wc.billForTx(t.tx.id) != null,

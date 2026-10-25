@@ -25,6 +25,7 @@ import 'key_backup.dart';
 import 'look_panel.dart';
 import 'plan_suggestions.dart';
 import 'sync_panel.dart';
+import 'tags_panel.dart';
 
 class PlanScreen extends StatefulWidget {
   final WalletController wc;
@@ -246,7 +247,7 @@ class _PlanScreenState extends State<PlanScreen> {
                   for (final id in planIds) ...[
                     field('planLine_$id', wc.categoryTable.label(id), ctl: _pl[id], fieldKey: ValueKey('planLine_$id')),
                     if (id == planIds.last)
-                      const Muted('Your own fixed categories: what you spend on each every month.', size: BwType.metaSize),
+                      const Muted('Your own fixed main tags: what you spend on each every month.', size: BwType.metaSize),
                   ],
                   Wrap(spacing: 8, runSpacing: 8, children: [
                     FilledButton(key: const ValueKey('planSave'), onPressed: _savePlan, child: const Text('Save')),
@@ -317,6 +318,7 @@ class _PlanScreenState extends State<PlanScreen> {
               KeyedSubtree(key: _billsKey, child: ExpectedBillsPanel(wc: wc)),
               KeyedSubtree(key: _billsDbKey, child: BillsPanel(wc: wc, chooser: widget.chooser)),
               CategoriesPanel(key: const ValueKey('categoriesPanel'), wc: wc),
+              TagsPanel(key: const ValueKey('tagsPanel'), wc: wc),
               BudgetsPanel(key: const ValueKey('budgetsPanel'), wc: wc),
               CalendarsPanel(key: const ValueKey('calendarsPanel'), wc: wc, chooser: widget.chooser),
               Panel(children: [

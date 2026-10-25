@@ -7,7 +7,6 @@ import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/insights_api.dart';
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
 import 'package:budget_wallet/src/screens/categories_panel.dart';
-import 'package:budget_wallet/src/screens/category_detail.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/plan_suggestions.dart';
 import 'package:budget_wallet/src/screens/planned_sheets.dart';
@@ -176,10 +175,9 @@ void main() {
       wc.dispose();
     }, timeout: _timeout);
 
-    testWidgets('a subcategory or a flex category has no line', (t) async {
+    testWidgets('a flex category has no line', (t) async {
       final (:wc, :id) = await withFixed();
       await wc.addOwnCategory(name: 'Cat food', kind: BudgetKind.flex);
-      await wc.addOwnCategory(name: 'Collar', kind: BudgetKind.fixed, parent: id);
       await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
       await openPlanEdit(t);
       expect(find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('planLine_')),
@@ -254,26 +252,26 @@ void main() {
       wc.dispose();
     });
 
-    test('the drill-down total of a parent equals its rows and its merchants, children included', () async {
+    test('the drill-down total equals its rows and its merchants; an own main tag is counted apart', () async {
       final wc = budgetWallet(budgets: false);
-      final bakery = await wc.addOwnCategory(name: 'Bakery', kind: BudgetKind.flex, parent: 'Groceries');
+      final bakery = await wc.addOwnCategory(name: 'Bakery', kind: BudgetKind.flex);
       wc.repo.addTransaction(date: '2026-10-05', amount: 4000, category: bakery, note: 'Morning bread');
       wc.reload();
       final r = wc.monthRange('2026-10');
       final rows = wc.rowsOf('Groceries', null, r);
       final merchants = wc.merchantsFor('Groceries', r);
-      expect(wc.categoryTotal('Groceries', r), 29200);
-      expect(-rows.fold<int>(0, (s, x) => s + x.amount), 29200);
-      expect(merchants.fold<int>(0, (s, m) => s + m.spent), 29200, reason: 'the merchants cover the whole tree');
-      expect(rows.any((x) => x.category == bakery), isTrue);
-      expect(wc.ownTotal('Groceries', r) + wc.childTotals('Groceries', r).fold<int>(0, (s, e) => s + e.$2), 29200);
+      expect(wc.categoryTotal('Groceries', r), 25200);
+      expect(-rows.fold<int>(0, (s, x) => s + x.amount), 25200);
+      expect(merchants.fold<int>(0, (s, m) => s + m.spent), 25200);
+      expect(rows.any((x) => x.category == bakery), isFalse);
+      expect(wc.categoryTotal(bakery, r), 4000);
       for (final m in merchants) {
         final mine = wc.rowsOf('Groceries', m.key, r);
         expect(-mine.fold<int>(0, (s, x) => s + x.amount), m.spent, reason: 'each merchant total equals its rows');
         expect(wc.merchantBars('Groceries', m.key, r).fold<int>(0, (s, b) => s + b.spent), m.spent);
       }
-      expect(wc.categoryBars('Groceries', r).fold<int>(0, (s, b) => s + b.spent), 29200);
-      expect(wc.compareFor('Groceries', r).thisMonth, 29200);
+      expect(wc.categoryBars('Groceries', r).fold<int>(0, (s, b) => s + b.spent), 25200);
+      expect(wc.compareFor('Groceries', r).thisMonth, 25200);
       wc.dispose();
     });
   });
@@ -424,7 +422,7 @@ void main() {
       await _tapSheet(t, 'categoryDeleteGo');
       await t.pump(const Duration(milliseconds: 400));
       expect(wc.categoryTable.isLive(id), isFalse);
-      expect(find.text('Category removed'), findsOneWidget);
+      expect(find.text('Main tag removed'), findsOneWidget);
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);
@@ -487,35 +485,6 @@ void main() {
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);
-
-    testWidgets('"Not in a subcategory" shows only when the category has rows of its own', (t) async {
-      final wc = budgetWallet(budgets: false);
-      final pets = await wc.addOwnCategory(name: 'Pets', kind: BudgetKind.flex);
-      final vet = await wc.addOwnCategory(name: 'Vet', kind: BudgetKind.flex, parent: pets);
-      wc.repo.addTransaction(date: '2026-10-05', amount: 3000, category: vet, note: 'Checkup');
-      wc.reload();
-      final range = wc.monthRange('2026-10');
-      await pumpApp(t, CategoryDetailScreen(wc: wc, category: pets, range: range), size: const Size(400, 3000));
-      expect(_key('childRow_$vet'), findsOneWidget);
-      expect(_key('childOwn'), findsNothing, reason: 'every row is in the subcategory');
-      wc.repo.addTransaction(date: '2026-10-06', amount: 1000, category: pets, note: 'Toy');
-      wc.reload();
-      await t.pump();
-      expect(_key('childOwn'), findsOneWidget);
-      await settle(t);
-      wc.dispose();
-    }, timeout: _timeout);
-
-    test('a subcategory of Food delivery counts as a delivery', () async {
-      final wc = budgetWallet(budgets: false);
-      final kid = await wc.addOwnCategory(name: 'Courier', kind: wc.categoryTable.kindOf('Food delivery'), parent: 'Food delivery');
-      wc.repo.addTransaction(date: '2026-10-10', amount: 1800, category: kid, note: 'Dinner');
-      wc.repo.addTransaction(date: '2026-10-11', amount: 1200, category: 'Food delivery', note: 'Lunch');
-      wc.reload();
-      expect(wc.deliveries, (2, 3000));
-      expect(wc.deliveryOrders90, 2);
-      wc.dispose();
-    });
 
     testWidgets('Paid in cash starts on the first offered flex category when Groceries is hidden', (t) async {
       final wc = billsWallet();

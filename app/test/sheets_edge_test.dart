@@ -408,7 +408,7 @@ void main() {
     CategorizedTx find2(WalletController wc, int cents) => wc.txs.firstWhere((t) => t.amount == cents);
 
     Future<void> pick(WidgetTester tester, String category) async {
-      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.tap(find.byKey(const ValueKey('txCategory')));
       await tester.pumpAndSettle();
       await tester.tap(find.text(category).last);
       await tester.pumpAndSettle();

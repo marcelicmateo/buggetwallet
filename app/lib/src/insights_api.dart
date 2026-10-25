@@ -9,11 +9,11 @@ import 'controller.dart';
 final _log = Logger('bw.insights');
 
 /// The graphs that have a range control, by id (also the key of the device-local setting).
-const insightGraphs = ['spending', 'share', 'income', 'budget', 'biggest'];
+const insightGraphs = ['spending', 'share', 'tags', 'income', 'budget', 'biggest'];
 
 /// The kind each graph starts with.
 RangeKind defaultKindFor(String id) => switch (id) {
-      'share' || 'biggest' => RangeKind.month,
+      'share' || 'tags' || 'biggest' => RangeKind.month,
       _ => RangeKind.months6,
     };
 
@@ -187,39 +187,12 @@ extension WalletInsights on WalletController {
   List<MonthBar> spendingBars(DateRange r) => memo(_k('bars', r),
       () => timed('insights.bars', () => spendingByMonth(txs, r, currency: currency, today: today()), fields: _f(r), warnMs: 50));
 
-  CategoryShare shareFor(DateRange r) => memo(
-      _k('share', r),
-      () => timed('insights.share', () => categoryShare(txs, r, currency: currency, rollUp: true, table: categoryTable),
-          fields: _f(r), warnMs: 50));
+  CategoryShare shareFor(DateRange r) => memo(_k('share', r),
+      () => timed('insights.share', () => categoryShare(txs, r, currency: currency, table: categoryTable), fields: _f(r), warnMs: 50));
 
-  /// Spending of [category] over [r] with its subcategories: the rows' sum, so a refund-only category shows its negative total
-  /// (the share drops it). It equals the rolled-up "Where it goes" total.
+  /// Spending of [category] over [r]: the rows' sum, so a refund-only category shows its negative total (the share drops it). It
+  /// equals the "Where it goes" total.
   int categoryTotal(String category, DateRange r) => -rowsOf(category, null, r).fold<int>(0, (s, t) => s + t.amount);
-
-  /// Spending of [category]'s own rows over [r] (not its subcategories').
-  int ownTotal(String category, DateRange r) => -ownRowsOf(category, r).fold<int>(0, (s, t) => s + t.amount);
-
-  /// The subcategories of [category] with rows in [r] and their totals, biggest spend first (then label). With [ownTotal] they
-  /// add up to [categoryTotal].
-  List<(String, int)> childTotals(String category, DateRange r) => memo('${_k('children', r)}.$category', () {
-        final out = <(String, int)>[
-          for (final c in categoryTable.childrenOf(category))
-            if (ownRowsOf(c, r).isNotEmpty) (c, ownTotal(c, r)),
-        ];
-        out.sort((a, b) {
-          final d = b.$2.compareTo(a.$2);
-          return d != 0 ? d : categoryTable.label(a.$1).compareTo(categoryTable.label(b.$1));
-        });
-        return out;
-      });
-
-  /// The rows of exactly [category] (no subcategories), newest first.
-  List<CategorizedTx> ownRowsOf(String category, DateRange r) => memo(
-      '${_k('own', r)}.$category',
-      () => [
-            for (final t in rowsOf(category, null, r))
-              if (t.category == category) t
-          ]);
 
   List<IncomeVsSpending> incomeBars(DateRange r) => memo(_k('income', r),
       () => timed('insights.income', () => incomeVsSpending(txs, r, currency: currency, today: today()), fields: _f(r), warnMs: 50));
@@ -235,8 +208,7 @@ extension WalletInsights on WalletController {
       () => timed('insights.merchants', () => merchantsIn(category, txs, r, currency: currency, table: categoryTable),
           fields: _f(r), warnMs: 50));
 
-  /// The rows behind a total ([merchantKey] null: the whole category), newest first. A main category's rows include its
-  /// subcategories' (core's tree match), so they add up to its rolled-up total.
+  /// The rows behind a total ([merchantKey] null: the whole category), newest first; they add up to the total.
   List<CategorizedTx> rowsOf(String category, String? merchantKey, DateRange r) => memo(
       '${_k('rows', r)}.$category.$merchantKey',
       () => timed('insights.rows', () => rowsFor(category, merchantKey, txs, r, currency: currency, table: categoryTable),
@@ -257,8 +229,7 @@ extension WalletInsights on WalletController {
         return [for (final b in spendingBars(r)) MonthBar(month: b.month, spent: spent[b.month] ?? 0, partial: b.partial)];
       });
 
-  /// This month, last month and the 6-month average of [category]; a main category counts its subcategories too (core matches
-  /// the whole tree, so the figures equal the "Where it goes" rows).
+  /// This month, last month and the 6-month average of [category] (the figures equal the "Where it goes" rows).
   CategoryCompare compareFor(String category, DateRange r) =>
       memo('${_k('compare', r)}.$category', () => compareCategory(category, txs, monthIn(r), currency: currency, table: categoryTable));
 

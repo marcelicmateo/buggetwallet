@@ -25,6 +25,7 @@ import 'wallet_db.dart';
 
 part 'controller_accounts.dart';
 part 'controller_categories.dart';
+part 'controller_tags.dart';
 part 'controller_bills.dart';
 part 'controller_future.dart';
 
@@ -83,8 +84,8 @@ class SpendingView {
   final List<String> months;
   final MonthSummary summary;
 
-  /// The month's spending per main category: [MonthSummary.byCategory] with each subcategory added into its parent (`rollUp`).
-  /// The "Where it goes" rows; the detail screen lists the subcategories.
+  /// The month's spending per main tag ([MonthSummary.byCategory]; subcategories are gone, tags replaced them).
+  /// The "Where it goes" rows.
   final Map<String, int> byTopLevel;
 
   /// Average per category over the 6 months before [month] (a month without spend counts as zero), from `averageByCategory`.
@@ -764,7 +765,7 @@ class WalletController extends ChangeNotifier {
                 month: month,
                 months: months,
                 summary: selSum,
-                byTopLevel: rollUp(selSum.byCategory, categoryTable),
+                byTopLevel: selSum.byCategory,
                 average: avg,
                 periods: periods,
                 trend: trendNet(periods),
@@ -1597,7 +1598,7 @@ class WalletController extends ChangeNotifier {
         if (t.date.compareTo(from) >= 0 && t.date.compareTo(to) <= 0) t
     ];
     logEvent(_log, Level.INFO, 'export.transactions', {'range': range.name, 'rows': rows.length});
-    return ExportFile('bw-transactions-$from-$to.csv', _csvBytes(transactionsCsv(rows, table: categoryTable)), rows.length);
+    return ExportFile('bw-transactions-$from-$to.csv', _csvBytes(transactionsCsv(rows, table: categoryTable, tags: tagTable)), rows.length);
   }
 
   /// The spending summary per month and category over every transaction.
@@ -1623,7 +1624,8 @@ class WalletController extends ChangeNotifier {
               for (final p in plannedEverything())
                 if (!p.deleted && p.title.isNotEmpty) p
             ],
-            table: categoryTable);
+            table: categoryTable,
+            tags: tagTable);
         logEvent(_searchLog, Level.FINE, 'search.run', {
           'chars': query.length,
           'tx': r.txs.length,
@@ -1750,12 +1752,16 @@ class WalletController extends ChangeNotifier {
     return lastExpensePick;
   }
 
-  void addExpense({required int amount, required String category, required String note, required String date}) {
+  /// Adds a hand-made expense and returns its id; [tags] are extra tags it starts with.
+  String addExpense(
+      {required int amount, required String category, required String note, required String date, List<String> tags = const []}) {
     // The device-local default first: if the save then fails nothing is written, and a failure here never follows a saved expense.
     repo.setLocalValue('lastExpenseCategory', category);
-    repo.addTransaction(date: date, amount: amount, category: category, note: note, currency: currency);
-    logEvent(_log, Level.INFO, 'expense.add', {'category': _logCategory(category)}); // category only
+    final id = repo.addTransaction(date: date, amount: amount, category: category, note: note, currency: currency);
+    _linkNewTags(id, tags);
+    logEvent(_log, Level.INFO, 'expense.add', {'category': _logCategory(category), 'tags': tags.length}); // category only
     _changed();
+    return id;
   }
 
   void setCategory(Tx t, String category, {required bool always}) {

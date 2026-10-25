@@ -141,7 +141,7 @@ void main() {
       final wc = hw();
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
       expect(find.byKey(const ValueKey('reviewCard')), findsOneWidget);
-      expect(find.text('3 categories to confirm · 2 behind pace · 1 wishlist decision'), findsOneWidget);
+      expect(find.text('3 main tags to confirm · 2 behind pace · 1 wishlist decision'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('startReview')));
       await tester.pumpAndSettle();
       expect(find.byType(ReviewScreen), findsOneWidget);
@@ -239,7 +239,7 @@ void main() {
     tw('four steps with their counts; only finished ones are ticked', (tester) async {
       final wc = hw();
       await open(tester, wc);
-      for (final t in ['Import', 'Confirm categories', 'Pace', 'Wishlist']) {
+      for (final t in ['Import', 'Confirm main tags', 'Pace', 'Wishlist']) {
         expect(find.text(t), findsOneWidget);
       }
       expect(find.descendant(of: find.byKey(const ValueKey('step:categories')), matching: find.text('3')), findsOneWidget);
@@ -345,7 +345,7 @@ void main() {
   });
 
   group('Plan', () {
-    Future<void> plan(WidgetTester tester, WalletController wc, {Size size = const Size(400, 6000), double scale = 1}) =>
+    Future<void> plan(WidgetTester tester, WalletController wc, {Size size = const Size(400, 8000), double scale = 1}) =>
         pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: size, textScale: scale);
 
     tw('review day chips: Sunday selected, a tap changes the day', (tester) async {

@@ -17,11 +17,11 @@ import 'wishlist.dart';
 /// "4 weeks in a row" for the review streak.
 String streakText(int weeks) => '$weeks ${weeks == 1 ? 'week' : 'weeks'} in a row';
 
-/// "3 categories to confirm · 1 behind pace · 2 wishlist decisions": the steps that have something to do (null when none).
+/// "3 main tags to confirm · 1 behind pace · 2 wishlist decisions": the steps that have something to do (null when none).
 String? reviewSummary(ReviewState r) {
   final cats = r.count('categories'), pace = r.count('pace'), wishes = r.count('wishlist');
   final parts = [
-    if (cats > 0) '$cats ${cats == 1 ? 'category' : 'categories'} to confirm',
+    if (cats > 0) '$cats main ${cats == 1 ? 'tag' : 'tags'} to confirm',
     if (pace > 0) '$pace behind pace',
     if (wishes > 0) '$wishes wishlist ${wishes == 1 ? 'decision' : 'decisions'}',
   ];
@@ -109,14 +109,14 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 ),
                 _Step(
                   key: const ValueKey('step:categories'),
-                  title: 'Confirm categories',
+                  title: 'Confirm main tags',
                   count: r.count('categories'),
                   done: rows.isEmpty,
                   children: [
                     if (rows.isEmpty)
-                      const Muted('All categories from the last 7 days are confirmed.')
+                      const Muted('All main tags from the last 7 days are confirmed.')
                     else ...[
-                      const Muted('Tap Looks right, or Change to pick another. It remembers the merchant.'),
+                      const Muted('Tap Looks right, or Change to pick another main tag or add tags. It remembers the merchant.'),
                       Rows(children: [for (final t in rows.take(8)) _CategoryRow(wc: wc, t: t, host: context)]),
                       if (rows.length > 8) Muted('${rows.length - 8} more after these.'),
                     ],
