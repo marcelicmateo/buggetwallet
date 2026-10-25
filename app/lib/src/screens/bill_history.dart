@@ -60,7 +60,9 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
                 : [
                     Heading(name, size: BwType.headingSize),
                     const SizedBox(height: 4),
-                    const Muted('Payments and bills of this payee, a month at a time. A month shows only what is stored.'),
+                    Muted(h.months.any((m) => m.due != null)
+                        ? 'Payments and bills of this payee, one payment due date at a time. Parts of a payment are listed under it. Only what is stored shows.'
+                        : 'Payments and bills of this payee, a month at a time. A month shows only what is stored.'),
                     const SizedBox(height: 8),
                     Rows(children: [for (final m in h.months) _month(context, wc, h, m)]),
                   ],
@@ -68,11 +70,19 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
         );
       });
 
+  /// The line's id: its due date for a bill that is not monthly (a weekly bill has several in one month), else its month.
+  static String _id(BillMonth m) => m.due ?? m.month;
+
   Widget _month(BuildContext context, WalletController wc, BillHistoryView h, BillMonth m) {
     final c = context.c;
     final cur = wc.currency;
     final expandable = m.payments.isNotEmpty || m.slips.isNotEmpty;
-    final open = expandable && _open.contains(m.month);
+    final open = expandable && _open.contains(_id(m));
+    // A bill that is not monthly has a line per payment due date; the parts of one are listed when it is opened.
+    final due = m.due;
+    final title = due == null ? monthLong(m.month) : 'Due ${longDateOrRaw(due)}';
+    final inParts = due != null && m.payments.length > 1;
+    final unfinished = due != null && m.payments.isNotEmpty && m.state != BillMonthState.paid;
     final (icon, color) = switch (m.state) {
       BillMonthState.paid => (Icons.check_circle_outline, c.good),
       BillMonthState.slipOnly => (
@@ -94,11 +104,14 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
           child: SplitRow(
             crossAxisAlignment: CrossAxisAlignment.start,
             start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(monthLong(m.month), style: const TextStyle(fontWeight: FontWeight.w500)),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Padding(padding: const EdgeInsets.only(top: 1, right: 5), child: Icon(icon, size: 16, color: color)),
                 Flexible(child: Text(stateText, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: BwType.metaSize))),
               ]),
+              if (unfinished)
+                Text('${centsToFieldText(m.paid)} of ${moneyExact(h.bill.reserveAmount, cur)} paid',
+                    key: ValueKey('historyParts_${_id(m)}'), style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
             ]),
             end: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
               if (m.payments.isNotEmpty)
@@ -113,24 +126,25 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
       ]),
     );
     final label = [
-      monthLong(m.month),
+      title,
       stateText,
+      if (unfinished) 'in parts',
       if (m.payments.isNotEmpty) 'paid ${moneyExact(m.paid, cur)}',
       if (billed != null) 'bill ${moneyExact(billed, cur)}$check',
     ].join(', ');
-    return Column(key: ValueKey('historyMonth_${m.month}'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    return Column(key: ValueKey('historyMonth_${_id(m)}'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (expandable)
         Semantics(
           label: label,
           button: true,
           expanded: open,
           excludeSemantics: true,
-          onTap: () => setState(() => open ? _open.remove(m.month) : _open.add(m.month)),
+          onTap: () => setState(() => open ? _open.remove(_id(m)) : _open.add(_id(m))),
           child: InkWell(
-            key: ValueKey('historyToggle_${m.month}'),
+            key: ValueKey('historyToggle_${_id(m)}'),
             hoverColor: c.surface2,
             focusColor: c.accentSoft,
-            onTap: () => setState(() => open ? _open.remove(m.month) : _open.add(m.month)),
+            onTap: () => setState(() => open ? _open.remove(_id(m)) : _open.add(_id(m))),
             child: head,
           ),
         )
@@ -138,13 +152,13 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
         Semantics(container: true, label: label, excludeSemantics: true, child: head),
       if (open) ...[
         for (final p in m.payments)
-          if (h.rows[p.id] case final t?) _paymentRow(context, wc, t, cur),
+          if (h.rows[p.id] case final t?) _paymentRow(context, wc, t, cur, part: inParts),
         for (final s in m.slips) _slipRow(context, wc, s, cur),
       ],
     ]);
   }
 
-  Widget _paymentRow(BuildContext context, WalletController wc, CategorizedTx t, String cur) {
+  Widget _paymentRow(BuildContext context, WalletController wc, CategorizedTx t, String cur, {bool part = false}) {
     final c = context.c;
     return InkWell(
       key: ValueKey('historyPayment_${t.tx.id}'),
@@ -160,7 +174,7 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
         padding: const EdgeInsets.only(left: 16, top: 6, bottom: 6),
         child: SplitRow(
           start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Payment', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+            Text(part ? 'Part' : 'Payment', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
             Text(shortDateOrRaw(t.date)),
           ]),
           end: MoneyText(moneyExact(-t.amount, cur), textAlign: TextAlign.end, style: numStyle),

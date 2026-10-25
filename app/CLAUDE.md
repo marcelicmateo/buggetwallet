@@ -45,6 +45,14 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   bill; confirmed rows with Paid/Overdue/Covered and Remove) and Nudges (a device-local switch, `setNudges`). The "Due by payday" tap
   switches to Plan and scrolls to Expected bills (`PlanScreen.showBills`, a notifier owned by `HomeShell`).
   Controller log events (counts and enum words only): `review.done`, `review.day`, `recurring.confirm|dismiss|delete`, `nudges.enabled|scheduled`.
+- Recurring bills beyond monthly (P4; spec `docs/context/P4_SPEC.md`): `controller_recurring.dart` (a `part`: `extension RecurringDb`) = `recurringPayments()` (core's `planRecurringPayments`, cached),
+  `billPartsPaid(b)`, `addRecurringBill` / `updateRecurringBill` (throw core's `ArgumentError` text; both run `refreshRecurring`; logs `recurring.added|edited` with period word and flags only),
+  `restoreRecurringDue` (the Undo of Mark paid). `screens/recurring_sheet.dart` = `RecurringFormSheet` (`recurringSheet`: name, main tag, amount or "The amount changes" From/To (the highest is saved as the amount),
+  how often chips `recurringPeriod:<name>`, first/next due, payee from `recentPayees()` (add only), "Instalments"/"Payments left"; `recurringSave`, error `recurringError`) + the period/range/instalment texts.
+  Plan › Expected bills: `addRecurring` button, per row period (not for monthly), `billRange:`, `billInstalments:`, `billParts:` ("60 of 100 € paid"), `billHeld:` ("Held in full until paid"), `recurringEdit:`,
+  and `recurringMarkPaid:` (replaces Skip when parts are paid or the bill has no payee; Undo through `restoreRecurringDue`). Today's bills line reads `p.dueCycles`: "1 bill (4 payments), 120 €" and one
+  "Name 600 € held until paid" line per long bill due after payday (`billHeld:<id>`). Bill history lines of a non-monthly bill are keyed `historyMonth_<due>` ("Due 14 Jan 2027"; parts shown as "Part").
+  Tests: `test/recurring_ui_test.dart`; the demo wallet has a yearly and a weekly bill (`seedDemoBills`).
 - Insights (N3): Spending's **Insights** button (`insightsOpen`) opens `screens/insights.dart` `InsightsScreen` (page on phones, 760 dp dialog from `dialogMin`): five
   panels (`insightGraphs`: spending per month, category share, income vs spending, budget vs actual, biggest payments), each with its own **`RangeControl`**
   (`widgets/charts.dart`: chips This pay period / Month / 3 / 6 / 12 months / Custom, ‹ › steps (forward off at the current range), the dates button opens
