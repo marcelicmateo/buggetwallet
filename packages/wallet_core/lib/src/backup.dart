@@ -48,20 +48,24 @@ String backupFileName(String today) {
   return 'bw-backup-$today.bwb';
 }
 
-/// The most sealed bill-file bytes [backupBytes] puts into a backup by default (32 MiB).
-const backupBlobBytesDefault = 32 << 20;
+/// The most bill-file bytes [backupBytes] puts into a backup by default (16 MiB), counted as they sit in the payload
+/// (base64 of the sealed files). Writing a backup holds about four times the cap at its peak (the sealed files, the
+/// JSON text, its UTF-8 bytes and the sealed result: about 64 MiB at the default) plus the ops.
+const backupBlobBytesDefault = 16 << 20;
 
 /// What [backupBytesWithInfo] wrote: the sealed file ([bytes]), its op count and the bill files it carries ([blobs]
-/// files of [blobBytes] sealed bytes; [blobsSkipped] cached files of live bills that did not fit under the cap).
+/// files taking [blobBytes] bytes in the payload (base64); [blobsSkipped] cached files of live bills that did not fit
+/// under the cap).
 class BackupResult {
   final Uint8List bytes;
   final int ops, blobs, blobBytes, blobsSkipped;
   const BackupResult(this.bytes, {required this.ops, required this.blobs, required this.blobBytes, required this.blobsSkipped});
 }
 
-/// What [mergeBackupBytes] brought in (with `dryRun`: would bring in). [ops] = ops in the file; [changed] = those that
-/// changed at least one field here, per entity (`tx`, `tag`, `setting`, ... as in `entitySchema`; entities with none
-/// left out) in [changedByEntity]. [blobs] = bill files put into this device's cache (dry run: the files that pass the
+/// What [mergeBackupBytes] brought in (with `dryRun`: would bring in). [ops] = ops in the file; [changed] = ops with at
+/// least one field whose clock won here (may include equal values: a newer write of the same value counts; the app
+/// calls them "updates"), per entity (`tx`, `tag`, `setting`, ... as in `entitySchema`; entities with none left out) in
+/// [changedByEntity]. [blobs] = bill files put into this device's cache (dry run: the files that pass the
 /// hash check and are not cached yet).
 class MergeResult {
   final int ops, changed, blobs;
@@ -76,7 +80,7 @@ Future<Uint8List> backupBytes(WalletRepo repo, VaultKey key, {int maxBlobBytes =
     (await backupBytesWithInfo(repo, key, maxBlobBytes: maxBlobBytes)).bytes;
 
 /// [backupBytes] with what it wrote. The payload also carries `"blobs": {"<hash>": "<base64 of the sealed file>"}`: the
-/// files in this device's cache that live bills point to, newest bill first, while the sealed total stays within
+/// files in this device's cache that live bills point to, newest bill first, while their base64 total stays within
 /// [maxBlobBytes] (a file that does not fit is skipped, never cut; a smaller later one may still fit). No key when there
 /// is none. Logs `backup.write` with counts and byte totals.
 Future<BackupResult> backupBytesWithInfo(WalletRepo repo, VaultKey key, {int maxBlobBytes = backupBlobBytesDefault}) async {
@@ -84,7 +88,8 @@ Future<BackupResult> backupBytesWithInfo(WalletRepo repo, VaultKey key, {int max
   final ops = repo.snapshotOps();
   final blobs = <String, List<int>>{};
   var blobBytes = 0, skipped = 0;
-  for (final (hash, size) in repo.backupBlobCandidates()) {
+  for (final (hash, sealedSize) in repo.backupBlobCandidates()) {
+    final size = 4 * ((sealedSize + 2) ~/ 3); // its base64 length in the payload
     if (blobBytes + size > maxBlobBytes) {
       skipped++;
       continue;
@@ -92,7 +97,7 @@ Future<BackupResult> backupBytesWithInfo(WalletRepo repo, VaultKey key, {int max
     final sealed = repo.cachedBlob(hash, touch: false);
     if (sealed == null) continue;
     blobs[hash] = sealed;
-    blobBytes += sealed.length;
+    blobBytes += size;
   }
   final sealed = await seal(backupPayload(ops, blobs: blobs), key, aad: aadBackup);
   t.done({'ops': ops.length, 'blobs': blobs.length, 'blobBytes': blobBytes, 'blobsSkipped': skipped, 'bytes': sealed.length});
