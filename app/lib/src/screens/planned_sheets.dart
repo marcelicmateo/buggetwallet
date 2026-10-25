@@ -69,7 +69,15 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
     }
     final wc = widget.wc;
     if (widget.edit != null) {
-      wc.updatePlanned(widget.edit!.id, title: title, date: _date, amount: amount, category: _category, clearCategory: _category == null);
+      // The category is sent only when the owner changed it: the one shown is the resolved one, so a cost whose stored category was
+      // deleted must not get the fallback written back by an edit of something else.
+      final old = widget.edit!.category;
+      wc.updatePlanned(widget.edit!.id,
+          title: title,
+          date: _date,
+          amount: amount,
+          category: _category != old ? _category : null,
+          clearCategory: _category == null && old != null);
     } else if (widget.suggestion != null) {
       wc.confirmSuggestion(widget.suggestion!, amount: amount, title: title, date: _date, category: _category);
     } else {

@@ -5,12 +5,17 @@ import 'dart:convert';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/insights_api.dart';
+import 'package:budget_wallet/src/screens/bill_sheet.dart';
+import 'package:budget_wallet/src/screens/categories_panel.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/plan_suggestions.dart';
+import 'package:budget_wallet/src/screens/planned_sheets.dart';
+import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'support/bills.dart';
 import 'support/wallet.dart';
 
 const _timeout = Timeout(Duration(seconds: 90));
@@ -24,6 +29,12 @@ Future<void> _tapKey(WidgetTester t, String k) async {
   await t.pump();
   await t.tap(_key(k));
   await t.pump();
+}
+
+/// Taps a key inside a sheet or dialog (scrolls it into view when it can).
+Future<void> _tapSheet(WidgetTester t, String k) async {
+  await t.tap(_key(k));
+  await t.pumpAndSettle();
 }
 
 /// A wallet with a fixed category of its own (`Pet insurance`) and its id.
@@ -253,5 +264,139 @@ void main() {
       expect(wc.compareFor('Groceries', r).thisMonth, 29200);
       wc.dispose();
     });
+  });
+
+  group('fields cover every plan line', () {
+    testWidgets('a hidden category and a sync duplicate still get a field (core subtracts their lines)', (t) async {
+      final (:wc, :id) = await withFixed();
+      await wc.setCategoryHidden(id, true);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      const dup = 'kffffffffffff'; // the same label as `id`; the smaller id is the original
+      wc.repo.applyRemote([
+        Op('category', dup, {'name': 'Pet insurance', 'kind': 'fixed', 'position': 0, 'hidden': 0, 'deleted': 0},
+            Hlc(now + 60000, 0, 'peer').toString())
+      ]);
+      wc.reload();
+      expect(wc.categoryTable.planLineIds, containsAll([id, dup]));
+      await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+      await openPlanEdit(t);
+      expect(_key('planLine_$id'), findsOneWidget);
+      expect(_key('planLine_$dup'), findsOneWidget);
+      wc.dispose();
+    }, timeout: _timeout);
+  });
+
+  group('edits that do not touch the category write no category', () {
+    int categoryOps(WalletController wc, String entity, String id) =>
+        wc.repo.pendingOps().where((o) => o.$2.entity == entity && o.$2.id == id && o.$2.fields.containsKey('category')).length;
+
+    testWidgets('editing only the amount of a planned cost whose category was deleted', (t) async {
+      final (:wc, :id) = await withFixed();
+      wc.addPlannedCost(title: 'Cover plan', date: '2026-10-25', amount: 5000, category: id);
+      wc.reload();
+      await wc.deleteOwnCategory(id);
+      final p = wc.plannedEverything().firstWhere((x) => x.title == 'Cover plan');
+      final before = categoryOps(wc, 'planned', p.id);
+      expect(before, greaterThan(0), reason: 'the add wrote the category once');
+      await pumpApp(
+          t,
+          Scaffold(
+              body: Builder(
+                  builder: (c) =>
+                      TextButton(onPressed: () => showSheet<String>(c, PlannedFormSheet(wc: wc, edit: p)), child: const Text('open')))),
+          size: const Size(400, 2600));
+      await t.tap(find.text('open'));
+      await t.pumpAndSettle();
+      await t.enterText(_key('plannedAmount'), '75');
+      await _tapSheet(t, 'plannedSave');
+      await t.pump(const Duration(milliseconds: 500));
+      wc.reload();
+      expect(wc.plannedEverything().firstWhere((x) => x.title == 'Cover plan').amount, 7500);
+      expect(categoryOps(wc, 'planned', p.id), before, reason: 'no new category op');
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+
+    testWidgets('confirming a past bill with only a suggestion shown does not write the suggestion', (t) async {
+      final wc = billsWallet();
+      wc.billCategorySuggester = (b) => 'Groceries';
+      final (id, _) = wc.repo.importBill(syntheticBill('dead-cat', due: '2000-01-01'));
+      wc.reload();
+      expect(wc.bill(id)!.category, isNull);
+      await pumpApp(t, Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => openBill(c, wc, id), child: const Text('open')))),
+          size: const Size(400, 3200));
+      await t.tap(find.text('open'));
+      await t.pumpAndSettle();
+      expect(find.text('Suggested from your earlier bills. Check it.'), findsOneWidget);
+      await _tapSheet(t, 'confirmBill');
+      await t.pump(const Duration(milliseconds: 500));
+      wc.reload();
+      expect(wc.bill(id)!.status, BillStatus.confirmed);
+      expect(categoryOps(wc, 'bill', id), 0, reason: 'nothing needed a category, and the owner did not pick one');
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+
+    testWidgets('confirming a bill that is still to be paid accepts the shown suggestion', (t) async {
+      final wc = billsWallet();
+      wc.billCategorySuggester = (b) => 'Groceries';
+      final (id, _) = wc.repo.importBill(syntheticBill('live-cat', due: '2026-10-28'));
+      wc.reload();
+      await pumpApp(t, Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => openBill(c, wc, id), child: const Text('open')))),
+          size: const Size(400, 3200));
+      await t.tap(find.text('open'));
+      await t.pumpAndSettle();
+      await _tapSheet(t, 'confirmBill');
+      await t.pump(const Duration(milliseconds: 500));
+      wc.reload();
+      expect(wc.bill(id)!.category, 'Groceries');
+      expect(wc.bill(id)!.status, BillStatus.confirmed);
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+  });
+
+  group('deleting a category with a plan line', () {
+    Widget panel(WalletController wc) =>
+        ListenableBuilder(listenable: wc, builder: (_, __) => Scaffold(body: SingleChildScrollView(child: CategoriesPanel(wc: wc))));
+
+    Future<void> menuDelete(WidgetTester t, String id) async {
+      await _tapKey(t, 'categoryMenu:$id');
+      await t.pump(const Duration(milliseconds: 400));
+      await _tapKey(t, 'categoryDeleteItem:$id');
+      await t.pump(const Duration(milliseconds: 400));
+    }
+
+    testWidgets('the dialog names the line and what happens to the bills; Cancel keeps the category, Delete removes it', (t) async {
+      final (:wc, :id) = await withFixed();
+      wc.savePlanLines({id: 12000});
+      await pumpApp(t, panel(wc), size: const Size(400, 2600));
+      await menuDelete(t, id);
+      expect(_key('categoryDeleteConfirm'), findsOneWidget);
+      expect(find.text('Its plan line (${moneyExact(12000, 'EUR')}) goes too. Its bills then count under the automatic category.'),
+          findsOneWidget);
+      expect(wc.categoryTable.isLive(id), isTrue, reason: 'nothing is deleted before the answer');
+      await _tapSheet(t, 'categoryDeleteCancel');
+      await t.pump(const Duration(milliseconds: 400));
+      expect(wc.categoryTable.isLive(id), isTrue);
+      expect(wc.settings.planLines[id], 12000);
+      await menuDelete(t, id);
+      await _tapSheet(t, 'categoryDeleteGo');
+      await t.pump(const Duration(milliseconds: 400));
+      expect(wc.categoryTable.isLive(id), isFalse);
+      expect(find.text('Category removed'), findsOneWidget);
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+
+    testWidgets('without a plan line there is no dialog', (t) async {
+      final (:wc, :id) = await withFixed();
+      await pumpApp(t, panel(wc), size: const Size(400, 2600));
+      await menuDelete(t, id);
+      expect(_key('categoryDeleteConfirm'), findsNothing);
+      expect(wc.categoryTable.isLive(id), isFalse);
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
   });
 }
