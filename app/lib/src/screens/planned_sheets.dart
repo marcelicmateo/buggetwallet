@@ -46,7 +46,7 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
 
   String _initialAmount() {
     final a = widget.edit?.amount ?? widget.suggestion?.suggested;
-    return a == null ? '' : (a / 100).toStringAsFixed(2);
+    return a == null ? '' : centsToFieldText(a);
   }
 
   @override
@@ -106,7 +106,7 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
         fieldKey: const ValueKey('plannedAmount'),
         controller: _amount,
         style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500),
-        decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur), hintText: '0.00'),
+        decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur), hintText: amountHint),
       ),
       const SizedBox(height: 12),
       DateField(

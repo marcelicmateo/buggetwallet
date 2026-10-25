@@ -353,7 +353,7 @@ void main() {
       expect(wc.txs.single.tx.note, 'Synthetic lamp');
     });
 
-    for (final (cents, text) in [(1, '0.01'), (5, '0.05'), (99, '0.99'), (100, '1.00'), (1999, '19.99'), (10000000, '100000.00')]) {
+    for (final (cents, text) in [(1, '0.01'), (5, '0.05'), (99, '0.99'), (100, '1'), (1999, '19.99'), (10000000, '100000')]) {
       testWidgets('prefill $cents cents shows $text and saves $cents again', (tester) async {
         final wc = _wc();
         await _open(tester, AddExpenseSheet(wc: wc, amount: cents, skipImpulse: true));
@@ -364,7 +364,7 @@ void main() {
       });
     }
 
-    testWidgets('a zero-price wish prefills 0.00 and is refused like any zero amount', (tester) async {
+    testWidgets('a zero-price wish prefills 0 and is refused like any zero amount', (tester) async {
       final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc, amount: 0, skipImpulse: true));
       await _tap(tester, _primary);

@@ -103,7 +103,7 @@ class _BillSheetState extends State<BillSheet> {
   bool _save(Bill b, {bool acceptShown = false}) {
     final t = total.text.trim().isEmpty ? null : parseMoney(total.text);
     if (total.text.trim().isNotEmpty && (t == null || t <= 0)) {
-      setState(() => error = 'Total: enter an amount, like 12.50.');
+      setState(() => error = 'Total: enter an amount, like ${amountExample()}.');
       return false;
     }
     String? changed(TextEditingController c, String? old) {
@@ -287,7 +287,7 @@ class _BillSheetState extends State<BillSheet> {
         onChanged: (_) => setState(() => error = null),
         style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500),
         decoration:
-            deco('Total', filled: total.text.isNotEmpty, hint: '0.00', suffix: currencySymbol(b.currency.isEmpty ? cur : b.currency)),
+            deco('Total', filled: total.text.isNotEmpty, hint: amountHint, suffix: currencySymbol(b.currency.isEmpty ? cur : b.currency)),
       ),
       const SizedBox(height: 4),
       const DoubleRule(),

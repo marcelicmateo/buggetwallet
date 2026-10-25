@@ -263,7 +263,7 @@ class _HomeShellState extends State<HomeShell> {
 
   /// Builds the pages again when the data or the day changed since they were built (a new day moves the period and months).
   void _refreshPages() {
-    final key = '${widget.wc.dataVersion}|${widget.wc.today()}';
+    final key = '${widget.wc.dataVersion}|${widget.wc.today()}|${widget.wc.numberStyleName}';
     if (key == _pagesKey) return;
     _pagesKey = key;
     _pages = _buildPages();
