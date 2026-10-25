@@ -335,7 +335,8 @@ class Categorizer {
       : userPatterns = List.unmodifiable([for (final p in _patterns) (p.rule.category, p.rule)]);
 
   /// A pattern ready to match, or null (logged as `categories.badPattern`) when its text is empty (only spaces
-  /// included: an empty pattern would match every merchant), a regex does not compile, or `contains` is too long.
+  /// included: an empty pattern would match every merchant), a regex does not compile or matches the empty text
+  /// ([MerchantPattern.matchesEverything]), or `contains` is too long. A range on a regex is dropped.
   static _UserPattern? _compile(MerchantPattern r) {
     final s = r.pattern;
     if (s.trim().isEmpty) {
@@ -351,7 +352,17 @@ class Categorizer {
       return _UserPattern(r, null, f);
     }
     try {
-      return _UserPattern(r, RegExp(s, caseSensitive: false), null);
+      final re = RegExp(s, caseSensitive: false);
+      if (MerchantPattern.matchesEverything(re)) {
+        logEvent(_log, Level.WARNING, 'categories.badPattern', {'matchesAll': true, 'length': s.length});
+        return null;
+      }
+      if (r.hasRange) {
+        // A range only narrows a `contains` rule: on a regex it is dropped, the rule kept.
+        logInvalidSetting('merchantPatterns', 'range');
+        return _UserPattern(MerchantPattern(id: r.id, category: r.category, pattern: s, order: r.order), re, null);
+      }
+      return _UserPattern(r, re, null);
     } on FormatException catch (e) {
       // Not the error text: a RegExp error can quote the pattern, which names personal merchants.
       logEvent(_log, Level.WARNING, 'categories.badPattern', {'offset': e.offset, 'length': s.length});

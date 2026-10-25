@@ -144,8 +144,8 @@ void main() {
       r.setMerchantPattern('Groceries', 'b');
       r.setMerchantPattern('Groceries', 'c');
       final b = merchantPatternId('b');
-      expect(r.updateMerchantPattern(b, category: 'Shopping', minCents: 100), b);
-      expect(_value(r, b), {'category': 'Shopping', 'pattern': 'b', 'order': 1, 'minCents': 100});
+      expect(r.updateMerchantPattern(b, category: 'Shopping', match: 'contains', minCents: 100), b);
+      expect(_value(r, b), {'category': 'Shopping', 'pattern': 'b', 'order': 1, 'match': 'contains', 'minCents': 100});
       expect(r.updateMerchantPattern(b, maxCents: 500), b);
       expect(r.settings().patternRules[1].maxCents, 500);
       expect(r.settings().patternRules[1].minCents, 100);
@@ -303,7 +303,8 @@ void main() {
 
     test('ruleHits counts live home-currency rows per rule; an edit preview is a second categorizer', () {
       final id = merchantPatternId('acme');
-      MerchantPattern rule({int? max}) => MerchantPattern(id: id, category: 'Groceries', pattern: 'acme', maxCents: max);
+      MerchantPattern rule({int? max}) =>
+          MerchantPattern(id: id, category: 'Groceries', pattern: 'acme', match: MerchantPattern.contains, maxCents: max);
       final rows = [
         _card('1', 'acme', -500),
         _card('2', 'acme', -1500),
@@ -328,6 +329,121 @@ void main() {
       final cz = r.categorizer(withTags: false);
       expect(cz.ruleFor(_card('1', 'Big SHOP', -100)), merchantPatternId('shop'));
       expect(cz.ruleFor(_card('2', 'Big SHOP', -99)), isNull);
+    });
+  });
+
+  group('P7 review fixes', () {
+    test('1: a regex that matches every text is refused, with or without a range; synced rows are not applied', () {
+      final r = WalletRepo.inMemory();
+      for (final p in ['.*', '^', '()', 'x*', 'a|']) {
+        expect(() => r.setMerchantPattern('Groceries', p), throwsArgumentError, reason: p);
+        expect(() => r.setMerchantPattern('Groceries', p, minCents: 1, maxCents: 2), throwsArgumentError, reason: p);
+      }
+      r.setMerchantPattern('Groceries', 'x*', match: 'contains'); // a contains text is literal
+      r.setMerchantPattern('Groceries', 'ok');
+      expect(() => r.updateMerchantPattern(merchantPatternId('ok'), pattern: '.*'), throwsArgumentError);
+      final cz = Categorizer(patternRules: [
+        MerchantPattern(id: merchantPatternId('.*'), category: 'Groceries', pattern: '.*'),
+        MerchantPattern(id: merchantPatternId('^'), category: 'Groceries', pattern: '^', order: 1),
+      ]);
+      expect(cz.userPatterns, isEmpty);
+      expect(cz.categoryOf(_card('1', 'zzunknownzz', -100)), 'Shopping');
+      expect(cz.ruleFor(_card('1', 'zzunknownzz', -100)), isNull);
+    });
+
+    test('1: an amount range needs a contains rule: refused on a regex, dropped (rule kept) when read', () {
+      final r = WalletRepo.inMemory();
+      expect(() => r.setMerchantPattern('Groceries', 'acme', minCents: 100),
+          throwsA(isA<ArgumentError>().having((e) => e.message, 'message', "Amount ranges need a 'description contains' rule.")));
+      expect(() => r.setMerchantPattern('Groceries', 'acme', maxCents: 100), throwsArgumentError);
+      r.setMerchantPattern('Groceries', 'acme');
+      final id = merchantPatternId('acme');
+      expect(() => r.updateMerchantPattern(id, minCents: 1), throwsArgumentError);
+      r.setMerchantPattern('Groceries', 'shop', match: 'contains', minCents: 100);
+      expect(() => r.updateMerchantPattern(merchantPatternId('shop'), match: 'regex'), throwsArgumentError, reason: 'keeps the range');
+      expect(r.updateMerchantPattern(merchantPatternId('shop'), match: 'regex', clearRange: true), merchantPatternId('shop'));
+
+      final st = WalletSettings.fromMap({
+        id: {'category': 'Groceries', 'pattern': 'acme', 'order': 0, 'minCents': 100, 'maxCents': 200},
+      });
+      final p = st.patternRules.single;
+      expect((p.pattern, p.match, p.minCents, p.maxCents), ('acme', 'regex', null, null));
+      final fromRows = Categorizer(patternRules: st.patternRules);
+      expect(fromRows.ruleFor(_card('1', 'acme', -900)), id, reason: 'the rule stays, without its range');
+      final direct =
+          Categorizer(patternRules: [MerchantPattern(id: id, category: 'Groceries', pattern: 'acme', minCents: 100, maxCents: 200)]);
+      expect(direct.ruleFor(_card('1', 'acme', -900)), id);
+      expect(direct.merchantCategory('acme'), 'Groceries', reason: 'the range is dropped, so no amount is needed');
+    });
+
+    test('2: three devices: with tied orders one press moves exactly one place, on every device', () async {
+      var now = 1767225600000;
+      final net = Net();
+      final key = VaultKey.generate();
+      final ds = [
+        for (final n in ['a', 'b', 'c']) Device(n, null, key, () => now, net: net)
+      ];
+      for (final d in ds) {
+        addTearDown(d.close);
+      }
+      Future<void> syncAll() async {
+        for (var i = 0; i < 2; i++) {
+          for (final d in ds) {
+            now += 1000;
+            d.deliver(net, Random(1));
+            await d.run();
+          }
+        }
+      }
+
+      final [a, b, c] = ds;
+      a.repo.setMerchantPattern('Groceries', 'pone', match: 'contains');
+      await syncAll();
+      b.repo.setMerchantPattern('Groceries', 'ptwo', match: 'contains');
+      c.repo.setMerchantPattern('Groceries', 'pthree', match: 'contains');
+      await syncAll();
+      expect(a.repo.settings().patternRules.map((p) => p.order), [0, 1, 1], reason: 'two adds at once share an order');
+      // A fourth text whose id sorts before both tied ones: a plain swap would land it two places up.
+      final low = [merchantPatternId('ptwo'), merchantPatternId('pthree')].reduce((x, y) => x.compareTo(y) < 0 ? x : y);
+      final four = [for (var i = 0; i < 200; i++) 'pfour$i'].firstWhere((t) => merchantPatternId(t).compareTo(low) < 0);
+      a.repo.setMerchantPattern('Groceries', four, match: 'contains');
+      await syncAll();
+      List<String> order(Device d) => d.repo.settings().patternRules.map((p) => p.pattern).toList();
+      final before = order(c);
+      expect(before.indexOf(four), 3);
+      c.repo.movePattern(merchantPatternId(four), MoveDirection.up);
+      expect(order(c).indexOf(four), 2, reason: 'one place');
+      await syncAll();
+      for (final d in ds) {
+        expect(order(d), order(c), reason: d.name);
+        expect(order(d).indexOf(four), 2, reason: d.name);
+        final orders = d.repo.settings().patternRules.map((p) => p.order).toList();
+        expect(orders.toSet().length, orders.length, reason: 'distinct after the press');
+      }
+      b.repo.movePattern(merchantPatternId(four), MoveDirection.up);
+      await syncAll();
+      for (final d in ds) {
+        expect(order(d).indexOf(four), 1, reason: d.name);
+      }
+    });
+
+    test('4: a rename onto a legacy-map entry\'s text is refused', () {
+      final r = WalletRepo.inMemory();
+      r.setMerchantPattern('Groceries', 'fresh');
+      r.applyRemote([
+        Op(
+            'setting',
+            'merchantPatterns',
+            {
+              'value': jsonEncode([
+                ['Shopping', 'oldtext']
+              ]),
+              'deleted': 0
+            },
+            r.clock.tick().toString())
+      ]);
+      expect(r.settings().patternRules.map((p) => p.pattern), containsAll(['fresh', 'oldtext']));
+      expect(() => r.updateMerchantPattern(merchantPatternId('fresh'), pattern: 'oldtext'), throwsArgumentError);
     });
   });
 }

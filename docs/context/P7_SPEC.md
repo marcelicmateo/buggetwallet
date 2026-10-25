@@ -74,3 +74,9 @@ Do not change how these are stored. Only add the new optional fields described b
 - `Categorizer(patternRules:)` (`patterns:` still works as regex without range); `merchantCategory(text, {int? amount})`: a ranged pattern never matches without an amount (`resolveStored` passes none).
 - `fromMap`: an unknown `match` drops that row (logged under `merchantPatterns`); a bad range drops only the range (`settings.invalid`, key `merchantPatterns`).
 - Older builds read a `contains` row as a regex and ignore its range (no schema bump, by design).
+- Review fixes (lead decisions, 2026-10-25):
+  - An amount range is allowed only on a `contains` pattern: `setMerchantPattern`/`updateMerchantPattern` refuse a range on a regex ("Amount ranges need a 'description contains' rule."). A stored or synced regex row with a range keeps the rule and loses the range when read (`fromMap`, `Categorizer`), logged as `settings.invalid` under `merchantPatterns`.
+  - A regex that matches the empty text (`.*`, `^`, `()`, `x*`, `a|`) matches every payment: refused on write, with or without a range; such a row arriving by sync is not applied by the categorizer (still listed in `rulesView`, so it can be deleted).
+  - `movePattern`: when any two patterns share an order, the whole list is renumbered 0..n-1 in its current order and then the two swap, in one write (only rows whose order changes), so one press moves exactly one place.
+  - A text rename checks for a duplicate among all patterns read (legacy-map entries included): `ArgumentError`.
+  - Known limit: a text rename on one device plus an edit of the same rule on another revives the old text (the later write to the old row wins over its tombstone), so both rules exist after sync.

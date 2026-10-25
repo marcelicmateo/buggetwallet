@@ -168,7 +168,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `Categorizer.ruleFor` (`payee:<key>`, pattern row id, `builtIn:<n>`, null). Writes in `repo_settings.dart`:
   `setMerchantPattern(category, pattern, {match, minCents, maxCents})` (sets the whole rule, keeps order),
   `updateMerchantPattern(id, {…, clearRange})` (text change = new id, same order, old row tombstoned, one write),
-  `movePattern(id, MoveDirection)` (swap orders; ties renumbered). Logs `settings.pattern {op, match, range}`.
+  `movePattern(id, MoveDirection)` (swap orders; any tie in the list = renumber all, then swap, one write). Review
+  fixes: a range only on `contains` (refused on a regex; dropped from a regex row when read), a regex matching the
+  empty text is refused and never applied. Logs `settings.pattern {op, match, range}`.
   Tests: `test/p7_rules_impl_test.dart`.
 - `tags.dart` + `repo_tags.dart` — tags (T1, schema 11, spec `docs/context/T1_SPEC.md`). The main tag is the row's
   category; extra tags are entity `tag` (table `tags`, id `t` + 12 hex, `TagRow`, `TagTable`: order by position, label,
@@ -599,7 +601,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   so an orphan among them stays on the relay. Two devices adding an `asNew` copy before syncing make one bill.
 - Rules (P7, no schema bump): a build before P7 reads a `contains` pattern as a regex and ignores its amount range, so
   it can categorize differently (text only) until it upgrades. A deleted pattern's tombstone keeps no order: Undo
-  (set again) puts it last.
+  (set again) puts it last. A text rename (new row + tombstone of the old one) on one device and an edit of the same
+  rule on another, offline: the later edit revives the old row, so both texts are rules after sync.
 - Legacy settings maps after schema 8: a `categoryBudgets`/`merchantPatterns` map row (an older build's write, or an
   old `.bwb` restored) fills in only entries that have no per-key row at all, live or removed. So an older build's
   change or removal of an entry that already has a row is ignored by upgraded devices (make it again on an upgraded
