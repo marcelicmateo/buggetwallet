@@ -279,27 +279,37 @@ void main() {
   });
 
   group('bill files in backups', () {
-    /// A wallet with three bills, each with its own file, dated oldest to newest; returns their hashes newest first.
+    /// A wallet with three bills, each with its own file, dated oldest to newest; the middle one's file is the largest.
+    /// Returns their hashes newest first.
     Future<(WalletRepo, List<String>)> billWallet() async {
       final a = repo();
       final hashes = <String>[];
       for (final (i, date) in ['2026-02-01', '2026-02-10', '2026-02-20'].indexed) {
-        final ref = await BlobStore(a, key).add(_bytes(2000 + 500 * i, i), 'jpg');
+        final ref = await BlobStore(a, key).add(_bytes(const [2000, 6000, 2500][i], i), 'jpg');
         a.importBill(_slip('hub3:SYNTH:$i', date), file: ref);
         hashes.insert(0, ref.hash);
       }
       return (a, hashes);
     }
 
-    int sealedSize(WalletRepo r, String h) => r.cachedBlob(h, touch: false)!.length;
+    /// The size a file takes in the payload (base64 of its sealed bytes): what the cap counts.
+    int inPayload(WalletRepo r, String h) => base64Encode(r.cachedBlob(h, touch: false)!).length;
 
-    test('newest first up to the cap: a total exactly at the cap fits, the one that would pass it is skipped', () async {
+    test(
+        'newest first up to the cap (base64 size): a total exactly at the cap fits, a file that would pass it is skipped and '
+        'an older smaller one still fits', () async {
       final (a, h) = await billWallet();
-      final cap = sealedSize(a, h[0]) + sealedSize(a, h[1]);
+      final cap = inPayload(a, h[0]) + inPayload(a, h[2]);
+      expect(inPayload(a, h[0]) + inPayload(a, h[1]), greaterThan(cap));
       final info = await backupBytesWithInfo(a, key, maxBlobBytes: cap);
       expect((info.blobs, info.blobsSkipped, info.blobBytes), (2, 1, cap));
       final payload = jsonDecode(utf8.decode(await unseal(info.bytes, key, aad: aadBackup))) as Map;
-      expect((payload['blobs'] as Map).keys.toSet(), {h[0], h[1]});
+      expect((payload['blobs'] as Map).keys.toSet(), {h[0], h[2]}, reason: 'the middle (largest) file is skipped, not the oldest');
+      for (final x in [h[0], h[2]]) {
+        expect(base64Decode((payload['blobs'] as Map)[x] as String), a.cachedBlob(x, touch: false));
+      }
+      final tight = await backupBytesWithInfo(a, key, maxBlobBytes: cap - 1);
+      expect((tight.blobs, tight.blobsSkipped), (1, 2), reason: 'one byte less: the oldest no longer fits');
       // An older build's parser reads only "v" and "ops": the version stays 1 and the ops are the same.
       expect(payload['v'], 1);
       expect(backupVersion, 1);
@@ -323,7 +333,7 @@ void main() {
       }
       expect(b.queuedBlobs(), (h.toList()..sort()));
       expect(b.db.select('SELECT * FROM blob_own'), isEmpty);
-      expect(await BlobStore(b, key).read(h[0]), _bytes(3000, 2));
+      expect(await BlobStore(b, key).read(h[0]), _bytes(2500, 2));
 
       final c = repo();
       await restoreBackupBytes(c, file, key, walletKey: VaultKey.generate());

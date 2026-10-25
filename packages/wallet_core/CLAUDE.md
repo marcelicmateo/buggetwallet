@@ -335,7 +335,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   changedByEntity, blobs}`: same unseal/parse/clockAhead checks (shared `_open`), then `applyRemoteByEntity(resendChanged: true)`
   = field-level LWW, only the fields that changed are queued (op cut to them, clock kept); `dryRun` applies in a rolled-back
   transaction without `clock.receive` (same counts; tables, clocks, outbox, HLC untouched). Bill files: `backupBytesWithInfo(repo,
-  key, {maxBlobBytes = 32 MiB})` → `BackupResult {bytes, ops, blobs, blobBytes, blobsSkipped}` adds `"blobs": {hash: base64 sealed}`
+  key, {maxBlobBytes = 16 MiB, base64 size})` → `BackupResult {bytes, ops, blobs, blobBytes, blobsSkipped}` adds `"blobs": {hash: base64 sealed}`
   (cached files of live bills, newest bill date first, one that would pass the cap skipped); still `v: 1` (every parser reads only
   `v`/`ops`). Restore/merge cache each file whose SHA-256 of the sealed bytes is its hash and that a live bill uses, queued for upload,
   never `blob_own` (bad ones: `backup.blobBad {files}`); `walletKey` ≠ `key` (old-key restore) skips the files.
