@@ -292,7 +292,14 @@ void main() {
             expect(find.descendant(of: _rail, matching: find.text(l)), findsOneWidget);
           }
         }
-        expect(find.byType(Chip), findsOneWidget, reason: 'the AppBar period chip');
+        // Compact: the AppBar period chip. From 600 dp there is no app bar: the period sits in the rail and scales down, never overflows.
+        expect(find.byType(Chip), w >= 600 ? findsNothing : findsOneWidget);
+        expect(find.byType(AppBar), w >= 600 ? findsNothing : findsOneWidget);
+        expect(find.byKey(const ValueKey('periodBadge')), w >= 600 ? findsOneWidget : findsNothing);
+        if (w >= 600) {
+          expect(find.descendant(of: _rail, matching: find.byKey(const ValueKey('periodBadge'))), findsOneWidget);
+          expect(find.descendant(of: _rail, matching: find.byKey(const ValueKey('appBarSearch'))), findsOneWidget);
+        }
         await _allTabsClean(tester);
       });
     }

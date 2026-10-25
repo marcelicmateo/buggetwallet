@@ -447,6 +447,37 @@ class _HomeShellState extends State<HomeShell> {
             child: const Icon(Icons.add));
   }
 
+  Widget _searchButton() => IconButton(
+        key: const ValueKey('appBarSearch'),
+        tooltip: _hint('Search', 'Ctrl+F'),
+        icon: const Icon(Icons.search),
+        onPressed: () => _key('appBarSearch', () {
+          _go(1, 'appbar');
+          _searchRequest.value++;
+        }),
+      );
+
+  /// The pay period as a small boxed label for the rail (the wide layouts have no app bar): one line when the rail is extended,
+  /// two short lines when it is narrow. It scales down rather than growing the rail.
+  Widget _periodBadge(BuildContext context, bool extended) {
+    final p = widget.wc.period();
+    final from = shortDate(p.start), to = shortDate(addDays(p.end, -1));
+    return Tooltip(
+      message: 'This pay period',
+      child: Container(
+        key: const ValueKey('periodBadge'),
+        width: extended ? 188 : 72,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(border: Border.all(color: context.c.ink), borderRadius: BorderRadius.circular(2)),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(extended ? '$from – $to' : '$from –\n$to',
+              textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500)),
+        ),
+      ),
+    );
+  }
+
   /// The rail: labels always shown, wide (extended) at expanded. It scrolls when the window is short.
   Widget _rail(BuildContext context, LayoutSize size) {
     final c = context.c;
@@ -489,6 +520,11 @@ class _HomeShellState extends State<HomeShell> {
                     ),
                     const SizedBox(height: 16),
                     _addButton(context, small: true),
+                    const SizedBox(height: 8),
+                    _searchButton(),
+                    const SizedBox(height: 4),
+                    _periodBadge(context, extended),
+                    if (widget.wc.syncing) const _SyncSpinner(),
                   ]),
                 ),
                 destinations: [
@@ -518,61 +554,56 @@ class _HomeShellState extends State<HomeShell> {
     final compact = size == LayoutSize.compact;
     final width = MediaQuery.sizeOf(context).width;
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: context.c.bg,
-        surfaceTintColor: Colors.transparent,
-        titleSpacing: 16,
-        // A 2 px rule under the header.
-        bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: Container(height: 2, color: context.c.lineStrong)),
-        // With a rail, the logo and name sit in the rail.
-        title: compact
-            ? Row(children: [
-                _logo(context.c),
-                // On a very narrow bar the search icon and the period take the room: the logo stands for the name.
-                if (width >= 360) ...[
-                  const SizedBox(width: 8),
-                  const Flexible(
-                      child: Text('Budget Wallet',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: BwType.headingSize))),
-                ],
-              ])
-            : null,
-        actions: [
-          IconButton(
-            key: const ValueKey('appBarSearch'),
-            tooltip: _hint('Search', 'Ctrl+F'),
-            icon: const Icon(Icons.search),
-            onPressed: () => _key('appBarSearch', () {
-              _go(1, 'appbar');
-              _searchRequest.value++;
-            }),
-          ),
-          if (wc.syncing)
-            const Padding(
-                padding: EdgeInsets.only(right: 8),
-                child:
-                    Tooltip(message: 'Syncing', child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))),
-          // The period always shows in full: 280 at most, and on a narrow screen with large text it shrinks to half the bar.
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: width / 2 < 280 ? width / 2 : 280),
-              child: Tooltip(
-                message: 'This pay period',
-                child: Chip(
-                    label: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}',
-                            style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500))),
-                    side: BorderSide(color: context.c.ink),
-                    visualDensity: VisualDensity.compact),
-              ),
+      // Wide windows have no app bar: the search button and the pay period sit in the rail, so nothing stays pinned above the page.
+      appBar: !compact
+          ? null
+          : AppBar(
+              backgroundColor: context.c.bg,
+              surfaceTintColor: Colors.transparent,
+              titleSpacing: 16,
+              // A 2 px rule under the header.
+              bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: Container(height: 2, color: context.c.lineStrong)),
+              // With a rail, the logo and name sit in the rail.
+              title: compact
+                  ? Row(children: [
+                      _logo(context.c),
+                      // On a very narrow bar the search icon and the period take the room: the logo stands for the name.
+                      if (width >= 360) ...[
+                        const SizedBox(width: 8),
+                        const Flexible(
+                            child: Text('Budget Wallet',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontWeight: FontWeight.w600, fontSize: BwType.headingSize))),
+                      ],
+                    ])
+                  : null,
+              actions: [
+                _searchButton(),
+                if (wc.syncing)
+                  const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: Tooltip(
+                          message: 'Syncing', child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))),
+                // The period always shows in full: 280 at most, and on a narrow screen with large text it shrinks to half the bar.
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: width / 2 < 280 ? width / 2 : 280),
+                    child: Tooltip(
+                      message: 'This pay period',
+                      child: Chip(
+                          label: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}',
+                                  style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500))),
+                          side: BorderSide(color: context.c.ink),
+                          visualDensity: VisualDensity.compact),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
       body: Shortcuts(
         shortcuts: _shortcuts,
         child: Actions(
@@ -619,4 +650,12 @@ class _HomeShellState extends State<HomeShell> {
           : null,
     );
   }
+}
+
+class _SyncSpinner extends StatelessWidget {
+  const _SyncSpinner();
+  @override
+  Widget build(BuildContext context) => const Padding(
+      padding: EdgeInsets.only(top: 8),
+      child: Tooltip(message: 'Syncing', child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))));
 }
