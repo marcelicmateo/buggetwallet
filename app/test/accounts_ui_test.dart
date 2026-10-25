@@ -103,6 +103,8 @@ void main() {
       await tapKey(t, 'accountDelete:zzz-dup');
       expect(find.byKey(const ValueKey('accountDuplicate:zzz-dup')), findsNothing);
       expect(wc.accountsAll().map((a) => a.id), [id]);
+      expect(find.text('Removed'), findsOneWidget);
+      expect(find.byKey(const ValueKey('toastUndo')), findsNothing, reason: 'a duplicate was never counted: no Undo');
       await settle(t);
     });
   });
@@ -230,6 +232,22 @@ void main() {
       await t.pump(const Duration(milliseconds: 400));
       expect(find.byKey(ValueKey('account:${ids.cash}')), findsOneWidget);
       expect(wc.heldTotals()['EUR'], 102450);
+      await settle(t);
+    });
+
+    testWidgets('Undo of the last-sorted row still says why it failed (the row is gone by then)', (t) async {
+      final wc = wallet();
+      final ids = await seed(wc); // Bank 1, Cash, Travel: Travel sorts last
+      await pumpApp(t, panel(wc), size: const Size(400, 2400));
+      await tapKey(t, 'accountDelete:${ids.usd}');
+      expect(find.byKey(ValueKey('account:${ids.usd}')), findsNothing);
+      await wc.addAccount(name: 'Travel 2', source: 'revolut', currency: 'USD', opening: 1, openingDate: '2026-10-20');
+      await t.pump();
+      await t.tap(find.byKey(const ValueKey('toastUndo')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.text('There is already an account for this bank in USD.'), findsOneWidget);
       await settle(t);
     });
 

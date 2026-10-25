@@ -135,6 +135,7 @@ void main() {
     expect(wc.hasWallet, isTrue);
     expect(await wc.keyText(), other);
     expect(find.byType(HomeShell), findsOneWidget);
+    expect(find.byType(WelcomeBalanceSheet), findsNothing, reason: 'the cash step is for a new wallet only');
     expect(wc.goals, isEmpty, reason: 'a joined wallet gets its goals from sync, not new defaults');
     await Harness.checkLog(allowSevere: false);
   });

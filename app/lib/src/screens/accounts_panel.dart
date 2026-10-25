@@ -123,29 +123,40 @@ class _DuplicateRow extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(child: Muted('${a.name}: duplicate of $ofName, not counted', size: BwType.bodySize)),
         TextButton(
-            key: ValueKey('accountDelete:${a.id}'), onPressed: () => deleteAccountWithUndo(context, wc, a), child: const Text('Delete')),
+            key: ValueKey('accountDelete:${a.id}'),
+            onPressed: () => deleteAccountWithUndo(context, wc, a, duplicate: true),
+            child: const Text('Delete')),
       ]),
     );
   }
 }
 
-/// Deletes [a] and offers Undo in the toast (the Stage I pattern); Undo says why when another account took its place.
-Future<void> deleteAccountWithUndo(BuildContext context, WalletController wc, Account a) async {
+/// Deletes [a] and offers Undo in the toast (the Stage I pattern); Undo says why when another account took its place. A sync
+/// duplicate ([duplicate]) is only removed, with no Undo (it was never counted). The messenger is taken before the first await: the
+/// row may be gone (a list that shrank) when Undo fails, and its context is then unmounted.
+Future<void> deleteAccountWithUndo(BuildContext context, WalletController wc, Account a, {bool duplicate = false}) async {
   logNav('accounts.delete');
+  final messenger = ScaffoldMessenger.of(context);
+  final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
+  void say(String m, {String? label, VoidCallback? action}) =>
+      toastOn(messenger, m, wide: wide, accessible: accessible, actionLabel: label, onAction: action);
   try {
     await wc.deleteAccount(a.id);
   } catch (e, st) {
     logError(Logger('bw.accounts'), 'accounts.delete.failed', e, st);
-    if (context.mounted) toast(context, _problem(e));
+    say(_problem(e));
     return;
   }
-  if (!context.mounted) return;
-  toast(context, 'Account removed', actionLabel: 'Undo', onAction: () async {
+  if (duplicate) {
+    say('Removed');
+    return;
+  }
+  say('Account removed', label: 'Undo', action: () async {
     try {
       await wc.undeleteAccount(a.id);
     } catch (e, st) {
       logError(Logger('bw.accounts'), 'accounts.undelete.failed', e, st);
-      if (context.mounted) toast(context, _problem(e));
+      say(_problem(e));
     }
   });
 }

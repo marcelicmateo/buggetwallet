@@ -101,6 +101,20 @@ void main() {
     await settle(t);
   });
 
+  testWidgets('accepting the last suggestion keeps what was typed in Budgets', (t) async {
+    final wc = proposalWallet();
+    await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));
+    final field = find.byKey(const ValueKey('budget:Groceries'));
+    await t.ensureVisible(field);
+    await t.enterText(field, '123');
+    t.state<ScrollableState>(find.byType(Scrollable).first).position.jumpTo(0); // back to the suggestions
+    await t.pump();
+    await tapKey(t, 'proposalAcceptAll');
+    expect(find.byKey(const ValueKey('planSuggestions')), findsNothing, reason: 'the panel left the page');
+    expect(t.widget<TextField>(field).controller!.text, '123', reason: 'the Budgets panel kept its state');
+    await settle(t);
+  });
+
   testWidgets('Not now hides the row without writing; it comes back when the suggested value changes', (t) async {
     final wc = proposalWallet();
     await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));

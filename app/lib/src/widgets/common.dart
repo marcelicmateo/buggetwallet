@@ -607,9 +607,16 @@ const toastDuration = Duration(milliseconds: 2500);
 /// Stays [toastDuration] (also with an action; only with a screen reader on does an action toast persist) and is cleared by [clearToasts] when the owner changes
 /// tab or opens a sheet or page. With [actionLabel] and [onAction] the snack bar has one action button (like "Undo"); the
 /// action gets the key `toastAction` (`toastUndo` for an action labelled "Undo").
-void toast(BuildContext context, String msg, {String? actionLabel, VoidCallback? onAction}) {
-  final wide = layoutOf(context) != LayoutSize.compact;
-  ScaffoldMessenger.of(context)
+void toast(BuildContext context, String msg, {String? actionLabel, VoidCallback? onAction}) => toastOn(ScaffoldMessenger.of(context), msg,
+    wide: layoutOf(context) != LayoutSize.compact,
+    accessible: MediaQuery.accessibleNavigationOf(context),
+    actionLabel: actionLabel,
+    onAction: onAction);
+
+/// [toast] through a messenger taken earlier: for a message shown after the widget that asked may be gone (an Undo action).
+void toastOn(ScaffoldMessengerState messenger, String msg,
+    {required bool wide, required bool accessible, String? actionLabel, VoidCallback? onAction}) {
+  messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
         content: Text(msg),
@@ -617,7 +624,7 @@ void toast(BuildContext context, String msg, {String? actionLabel, VoidCallback?
         width: wide ? 400 : null,
         duration: toastDuration,
         // With an action it stays for screen-reader users (they need time to reach it); otherwise it times out (I4).
-        persist: onAction != null && MediaQuery.accessibleNavigationOf(context),
+        persist: onAction != null && accessible,
         action: actionLabel == null || onAction == null
             ? null
             : SnackBarAction(key: ValueKey(actionLabel == 'Undo' ? 'toastUndo' : 'toastAction'), label: actionLabel, onPressed: onAction)));

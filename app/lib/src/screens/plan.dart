@@ -287,12 +287,12 @@ class _PlanScreenState extends State<PlanScreen> {
                       ),
                     ]),
                 ]),
-              if (wc.planProposalList().isNotEmpty) PlanSuggestionsPanel(wc: wc),
+              PlanSuggestionsPanel(wc: wc),
               KeyedSubtree(key: _accountsKey, child: AccountsPanel(wc: wc)),
               KeyedSubtree(key: _billsKey, child: ExpectedBillsPanel(wc: wc)),
               KeyedSubtree(key: _billsDbKey, child: BillsPanel(wc: wc, chooser: widget.chooser)),
-              BudgetsPanel(wc: wc),
-              CalendarsPanel(wc: wc, chooser: widget.chooser),
+              BudgetsPanel(key: const ValueKey('budgetsPanel'), wc: wc),
+              CalendarsPanel(key: const ValueKey('calendarsPanel'), wc: wc, chooser: widget.chooser),
               Panel(children: [
                 const SectionHead('Month'),
                 Muted(
