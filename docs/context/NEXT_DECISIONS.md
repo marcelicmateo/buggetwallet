@@ -12,3 +12,4 @@ Owner: "Finish all" — run the remaining PATH_FORWARD P items one stage at a ti
 - **P16:** "Pay" on a HUB-3 slip copies IBAN, amount and reference (nothing sent automatically); attachments on any payment, stored like bill files (relay, backups up to 16 MB).
 - **P5:** mockup first. Pain points: Plan is too long (Settings index, one page per section), Bills hard to find (own tab), Wishlist + Goals as separate tabs (merge into Save).
 - **P14:** do it now; the owner updates the relay on the home server together with the phones.
+- **P5 (revised after the mockup, 2026-10-26):** tabs Today · **Budget** · Bills · Save · **Settings**. Budget = the payday plan (moved from Plan) on top of today's Spending tab (budgets, where it goes, insights). Settings = today's Plan sections, left where they are on one page (no per-section pages). Bills gets its own tab (expected bills, slips, scan). Save = Wishlist + Goals.
