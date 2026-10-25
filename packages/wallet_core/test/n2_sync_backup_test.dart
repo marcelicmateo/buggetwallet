@@ -123,12 +123,23 @@ void main() {
 
     test('two devices adding the same cash account offline both sync without error and converge identically', () async {
       final a = device('a'), b = device('b');
-      await a.repo.addAccount(name: 'Cash', source: null, currency: 'EUR', opening: 100, openingDate: '2026-10-01');
-      await b.repo.addAccount(name: 'Cash', source: null, currency: 'EUR', opening: 200, openingDate: '2026-10-01');
+      final ia = await a.repo.addAccount(name: 'Cash', source: null, currency: 'EUR', opening: 100, openingDate: '2026-10-01');
+      final ib = await b.repo.addAccount(name: 'Cash', source: null, currency: 'EUR', opening: 200, openingDate: '2026-10-01');
       await syncAll([a, b]);
       expect(rows(a.repo), rows(b.repo));
       expect(a.repo.accounts(), hasLength(2), reason: 'sync cannot refuse; the app lets the owner delete one');
-      expect(() => accountBalances(a.repo.accounts(), const []), returnsNormally);
+      final smallest = ia.compareTo(ib) < 0 ? ia : ib;
+      final other = smallest == ia ? ib : ia;
+      for (final d in [a, b]) {
+        final bal = accountBalances(d.repo.accounts(), const []);
+        final kept = bal.firstWhere((x) => x.account.id == smallest);
+        final dup = bal.firstWhere((x) => x.account.id == other);
+        expect(kept.duplicateOf, isNull, reason: d.name);
+        expect(dup.duplicateOf, smallest, reason: d.name);
+        expect((dup.rowsCounted, dup.lastRowDate), (0, null));
+        expect(dup.balance, dup.account.opening);
+        expect(balanceTotals(bal), {'EUR': kept.account.opening}, reason: 'counted once');
+      }
     }, timeout: _t);
   });
 

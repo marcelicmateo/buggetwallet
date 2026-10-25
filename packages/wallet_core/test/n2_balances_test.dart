@@ -166,4 +166,20 @@ void main() {
     expect(totals, {'EUR': 800, 'USD': 300});
     expect(totals.keys.toList(), ['EUR', 'USD']);
   }, timeout: _t);
+
+  test('two live accounts with the same (source, currency): only the smallest id counts, the other is a duplicate', () {
+    Account acc(String id, int opening, {String? source = 'pbz', String currency = 'EUR'}) =>
+        Account(id: id, name: 'Dup $id', source: source, currency: currency, opening: opening, openingDate: '2026-09-30', deleted: false);
+    final rows = [n2Tx('2026-10-02', -1000)];
+    final b = accountBalances([acc('a2', 500), acc('a1', 700), acc('a3', 90, source: 'revolut')], rows);
+    AccountBalance get(String id) => b.firstWhere((x) => x.account.id == id);
+    expect((get('a1').balance, get('a1').rowsCounted, get('a1').duplicateOf), (700 - 1000, 1, null));
+    final d = get('a2');
+    expect((d.balance, d.rowsCounted, d.lastRowDate, d.duplicateOf), (500, 0, null, 'a1'));
+    expect(get('a3').duplicateOf, isNull);
+    expect(balanceTotals(b), {'EUR': 700 - 1000 + 90});
+    final c = accountBalances([acc('c2', 10, source: null), acc('c1', 20, source: null)], const []);
+    expect(c.firstWhere((x) => x.account.id == 'c2').duplicateOf, 'c1');
+    expect(balanceTotals(c), {'EUR': 20});
+  }, timeout: _t);
 }
