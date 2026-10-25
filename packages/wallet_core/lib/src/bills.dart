@@ -378,7 +378,7 @@ bool plannedReserves(PlannedCost p, List<RecurringBill> recurring, Set<String> c
 ({RecurringBill bill, String? occurrence})? _coverage(String? key, String? due, List<RecurringBill> recurring) {
   if (key == null || !_validDate(due)) return null;
   for (final r in recurring) {
-    if (!r.confirmed || r.payee != key || !_validDate(r.nextDue)) continue;
+    if (!r.confirmed || r.isIncome || r.payee != key || !_validDate(r.nextDue)) continue; // an income (P9) plans no bill
     final d = daysBetween(r.nextDue, due!);
     final i = r.intervalDays;
     if (i < 1) {
@@ -403,7 +403,7 @@ String? suggestBillCategory(Bill b, {required List<RecurringBill> recurring, req
   final key = billPayeeKey(b);
   if (key != null) {
     for (final r in recurring) {
-      if (r.confirmed && r.payee == key && r.category.isNotEmpty && cats.isLive(r.category)) return r.category;
+      if (r.confirmed && !r.isIncome && r.payee == key && r.category.isNotEmpty && cats.isLive(r.category)) return r.category;
     }
   }
   final words = _billPayeeWords(b);

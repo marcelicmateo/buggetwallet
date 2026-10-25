@@ -43,7 +43,7 @@ const entityTables = {
     'recurring',
     [
       'payee', 'label', 'category', 'expected_amount', 'interval_days', 'next_due', 'status', 'last_paid_tx', 'deleted', //
-      'min_amount', 'max_amount', 'ends_on', 'manual', 'own_category',
+      'min_amount', 'max_amount', 'ends_on', 'manual', 'own_category', 'direction',
     ]
   ),
   'planned': ('planned', ['title', 'date', 'amount', 'category', 'source', 'source_ref', 'status', 'paid_tx', 'deleted']),

@@ -51,13 +51,18 @@ String? billInstalmentText(RecurringBill b) {
   return n == 1 ? '1 payment left' : '$n payments left';
 }
 
-/// Opens the add-bill sheet ([edit] null) or the change sheet for [edit], and says what happened.
-Future<void> openRecurringForm(BuildContext context, WalletController wc, {RecurringBill? edit}) async {
-  logNav(edit == null ? 'bill.add.open' : 'bill.edit.open');
+/// Opens the add-bill sheet ([edit] null) or the change sheet for [edit], and says what happened. With [income] (or an [edit] that is
+/// an income, P9) it is the income form: payee required, main tags of kind extra only, no instalments.
+Future<void> openRecurringForm(BuildContext context, WalletController wc, {RecurringBill? edit, bool income = false}) async {
+  final isIncome = income || (edit?.isIncome ?? false);
+  logNav(edit == null ? (isIncome ? 'income.add.open' : 'bill.add.open') : (isIncome ? 'income.edit.open' : 'bill.edit.open'));
   final messenger = ScaffoldMessenger.of(context);
   final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
-  final r = await showSheet<String>(context, RecurringFormSheet(wc: wc, edit: edit));
-  if (r == 'saved') toastOn(messenger, edit == null ? 'Bill added' : 'Bill saved', wide: wide, accessible: accessible);
+  final r = await showSheet<String>(context, RecurringFormSheet(wc: wc, edit: edit, income: isIncome));
+  if (r == 'saved') {
+    toastOn(messenger, isIncome ? (edit == null ? 'Income added' : 'Income saved') : (edit == null ? 'Bill added' : 'Bill saved'),
+        wide: wide, accessible: accessible);
+  }
 }
 
 /// Add a bill by hand, or change one (found or added): name, main tag, amount or range, how often, first due date, payee and an
@@ -65,13 +70,17 @@ Future<void> openRecurringForm(BuildContext context, WalletController wc, {Recur
 class RecurringFormSheet extends StatefulWidget {
   final WalletController wc;
   final RecurringBill? edit;
-  const RecurringFormSheet({super.key, required this.wc, this.edit});
+
+  /// Income mode (P9): "Add income". Also on when [edit] is an income.
+  final bool income;
+  const RecurringFormSheet({super.key, required this.wc, this.edit, this.income = false});
   @override
   State<RecurringFormSheet> createState() => _RecurringFormSheetState();
 }
 
 class _RecurringFormSheetState extends State<RecurringFormSheet> {
   RecurringBill? get _b => widget.edit;
+  bool get _income => widget.income || (_b?.isIncome ?? false);
   late final TextEditingController _name = TextEditingController(text: _b?.label ?? '');
   late final TextEditingController _amount = TextEditingController(text: _b == null ? '' : centsToFieldText(_b!.expectedAmount));
   late final TextEditingController _min = TextEditingController(text: _b?.hasRange == true ? centsToFieldText(_b!.minAmount!) : '');
@@ -82,7 +91,7 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
   late int _days = _b?.intervalDays ?? RecurringPeriod.monthly.days;
   late String _due = _b?.nextDue.isNotEmpty == true && isCalendarDate(_b!.nextDue) ? _b!.nextDue : widget.wc.today();
   late String? _category = _b?.category;
-  late final List<RulePayee> _payees = widget.wc.recentPayees();
+  late final List<RulePayee> _payees = _income ? widget.wc.incomePayees() : widget.wc.recentPayees();
   String? _payee;
   String? _error;
 
@@ -128,7 +137,7 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
       if (count == null) return _fail('Enter how many payments, like 12.');
     }
     final category = _category;
-    if (category == null) return _fail('Pick a main tag for the bill.');
+    if (category == null) return _fail(_income ? 'Pick a main tag for the income.' : 'Pick a main tag for the bill.');
     try {
       if (b == null) {
         wc.addRecurringBill(
@@ -140,7 +149,8 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
             intervalDays: _days,
             firstDue: _due,
             payee: _payee,
-            instalments: count);
+            instalments: _income ? null : count,
+            direction: _income ? RecurringBill.directionIn : RecurringBill.directionOut);
       } else {
         // The last due date is worked out (calendar months for a monthly bill) only when the count, the due date or the interval changed.
         final endChanged =
@@ -171,8 +181,9 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
     final editing = _b != null;
     final today = wc.today();
     final selected = RecurringPeriod.of(_days);
-    return Column(key: const ValueKey('recurringSheet'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Heading(editing ? 'Change bill' : 'Add bill'),
+    final income = _income;
+    return Column(key: ValueKey(income ? 'incomeSheet' : 'recurringSheet'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Heading(income ? (editing ? 'Change income' : 'Add income') : (editing ? 'Change bill' : 'Add bill')),
       const SizedBox(height: 12),
       TextField(
         key: const ValueKey('recurringName'),
@@ -180,7 +191,7 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
         autofocus: !editing,
         maxLength: 40,
         textCapitalization: TextCapitalization.sentences,
-        decoration: const InputDecoration(labelText: 'Name', hintText: 'Car insurance', counterText: ''),
+        decoration: InputDecoration(labelText: 'Name', hintText: income ? 'Side job' : 'Car insurance', counterText: ''),
       ),
       const SizedBox(height: 12),
       DropdownButtonFormField<String?>(
@@ -188,7 +199,8 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
         isExpanded: true,
         initialValue: _category,
         decoration: const InputDecoration(labelText: 'Main tag'),
-        items: categoryMenuItems(wc.categoryTable, kinds: const {BudgetKind.fixed, BudgetKind.flex}, current: _category),
+        items: categoryMenuItems(wc.categoryTable,
+            kinds: income ? const {BudgetKind.extra} : const {BudgetKind.fixed, BudgetKind.flex}, current: _category),
         onChanged: (v) => setState(() => _category = v),
       ),
       const SizedBox(height: 4),
@@ -196,7 +208,7 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
         key: const ValueKey('recurringRange'),
         contentPadding: EdgeInsets.zero,
         title: const Text('The amount changes', style: TextStyle(fontSize: BwType.bodySize)),
-        subtitle: const Text('Set aside the highest.', style: TextStyle(fontSize: BwType.metaSize)),
+        subtitle: Text(income ? 'Counted at the lowest.' : 'Set aside the highest.', style: const TextStyle(fontSize: BwType.metaSize)),
         value: _range,
         onChanged: (v) => setState(() => _range = v),
       ),
@@ -251,7 +263,7 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
       if (editing)
         InputDecorator(
           decoration: const InputDecoration(labelText: 'Payee'),
-          child: Text(_b!.payee.isEmpty ? 'None: you mark each payment paid' : _b!.payee.replaceAll('_', ' '),
+          child: Text(_b!.payee.isEmpty ? (income ? 'None' : 'None: you mark each payment paid') : _b!.payee.replaceAll('_', ' '),
               key: const ValueKey('recurringPayeeFixed')),
         )
       else
@@ -259,25 +271,29 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
           key: const ValueKey('recurringPayee'),
           isExpanded: true,
           initialValue: _payee,
-          decoration: const InputDecoration(
-              labelText: 'Payee (optional)', helperText: 'Pick it so bank payments mark the bill paid.', helperMaxLines: 2),
+          decoration: InputDecoration(
+              labelText: income ? 'Paid by' : 'Payee (optional)',
+              helperText:
+                  income ? 'Pick who pays you, so the payment is found when it lands.' : 'Pick it so bank payments mark the bill paid.',
+              helperMaxLines: 2),
           items: [
-            const DropdownMenuItem<String?>(value: null, child: Text('None: I mark each payment paid')),
+            if (!income) const DropdownMenuItem<String?>(value: null, child: Text('None: I mark each payment paid')),
             for (final p in _payees)
               DropdownMenuItem<String?>(
                   value: p.key, child: Text(p.label, key: ValueKey('payeeItem:${p.key}'), overflow: TextOverflow.ellipsis)),
           ],
           onChanged: (v) => setState(() => _payee = v),
         ),
-      SwitchListTile(
-        key: const ValueKey('recurringEnds'),
-        contentPadding: EdgeInsets.zero,
-        title: Text(editing ? 'Ends after some payments' : 'Instalments', style: const TextStyle(fontSize: BwType.bodySize)),
-        subtitle: const Text('A fixed number of payments.', style: TextStyle(fontSize: BwType.metaSize)),
-        value: _ends,
-        onChanged: (v) => setState(() => _ends = v),
-      ),
-      if (_ends)
+      if (!income)
+        SwitchListTile(
+          key: const ValueKey('recurringEnds'),
+          contentPadding: EdgeInsets.zero,
+          title: Text(editing ? 'Ends after some payments' : 'Instalments', style: const TextStyle(fontSize: BwType.bodySize)),
+          subtitle: const Text('A fixed number of payments.', style: TextStyle(fontSize: BwType.metaSize)),
+          value: _ends,
+          onChanged: (v) => setState(() => _ends = v),
+        ),
+      if (_ends && !income)
         TextField(
           key: const ValueKey('recurringCount'),
           controller: _count,
@@ -290,12 +306,14 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
           key: const ValueKey('recurringSave'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
           onPressed: _save,
-          child: Text(editing ? 'Save' : 'Add bill')),
+          child: Text(editing ? 'Save' : (income ? 'Add income' : 'Add bill'))),
       const SizedBox(height: 8),
       Muted(
-          _days > 31
-              ? 'A bill that comes less often than monthly is set aside in full from today until it is paid.'
-              : 'It is set aside from your daily money until it is paid.',
+          income
+              ? 'It shows as expected. It counts toward your spending money only once the payment is in.'
+              : _days > 31
+                  ? 'A bill that comes less often than monthly is set aside in full from today until it is paid.'
+                  : 'It is set aside from your daily money until it is paid.',
           size: BwType.metaSize),
     ]);
   }

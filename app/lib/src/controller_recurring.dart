@@ -9,7 +9,7 @@ extension RecurringDb on WalletController {
   RecurringPayments recurringPayments() => _cached(
       'recurringPayments',
       () => planRecurringPayments([
-            for (final b in recurringBills())
+            for (final b in expectedBills())
               if (b.confirmed) b
           ], [
             for (final c in wholeTxs) c.tx
@@ -30,6 +30,7 @@ extension RecurringDb on WalletController {
     required String firstDue,
     String? payee,
     int? instalments,
+    String direction = RecurringBill.directionOut,
   }) {
     final id = repo.addRecurring(
         label: label,
@@ -40,8 +41,10 @@ extension RecurringDb on WalletController {
         intervalDays: intervalDays,
         firstDue: firstDue,
         payee: payee,
-        instalments: instalments);
+        instalments: instalments,
+        direction: direction);
     logEvent(_habits, Level.INFO, 'recurring.added', {
+      'income': direction == RecurringBill.directionIn,
       'period': RecurringPeriod.of(intervalDays)?.name ?? 'custom',
       'range': minAmount != null,
       'payee': payee != null && payee.isNotEmpty
@@ -50,6 +53,26 @@ extension RecurringDb on WalletController {
     _changed();
     return id;
   }
+
+  /// The payees of the most recent incoming payments of kind extra (newest first, one each), for the payee picker of an income. Once per data version.
+  List<RulePayee> incomePayees({int limit = 40}) => memo('recurring.incomePayees.$limit', () {
+        final seen = <String>{};
+        final out = <RulePayee>[];
+        final rows = [...wholeTxs]..sort((a, b) => b.date.compareTo(a.date));
+        // Only a payee whose incoming rows are all kind extra: not a salary, a transfer or a refund from a shop.
+        final skip = {
+          for (final c in rows)
+            if (c.tx.live && c.amount > 0 && c.kind != BudgetKind.extra) tagPayee(c.tx) ?? '',
+        };
+        for (final c in rows) {
+          if (!c.tx.live || c.amount <= 0) continue;
+          final k = tagPayee(c.tx);
+          if (k == null || skip.contains(k) || !seen.add(k)) continue;
+          out.add(RulePayee(k, k.replaceAll('_', ' ')));
+          if (out.length >= limit) break;
+        }
+        return out;
+      });
 
   /// Edits a bill (any status). Same rules and errors as [addRecurringBill]; only changed fields are written.
   void updateRecurringBill(
@@ -78,6 +101,18 @@ extension RecurringDb on WalletController {
         clearEnd: clearEnd);
     logEvent(_habits, Level.INFO, 'recurring.edited', {'range': minAmount != null, 'clearRange': clearRange, 'clearEnd': clearEnd});
     refreshRecurring();
+    _changed();
+  }
+
+  /// The Undo of removing a bill or an income: the same row (same id) comes back. A refusal is logged, not thrown.
+  void undeleteRecurring(String id) {
+    try {
+      repo.undeleteRecurring(id);
+      logEvent(_habits, Level.INFO, 'recurring.undeleted');
+      refreshRecurring();
+    } on ArgumentError catch (e, st) {
+      logError(_habits, 'recurring.undeleteFailed', e, st);
+    }
     _changed();
   }
 

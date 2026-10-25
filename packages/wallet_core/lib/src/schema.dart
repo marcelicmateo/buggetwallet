@@ -131,6 +131,8 @@ const Map<String, EntityDef> entitySchema = {
     ColumnDef('ends_on', nullable: true),
     ColumnDef.flag('manual'),
     ColumnDef.flag('own_category'), // the owner chose the category (updateRecurring/addRecurring)
+    // P9 (v14): null/'out' = a bill, 'in' = a recurring income.
+    ColumnDef('direction', nullable: true),
   ]),
   // Planned costs (v6, §4.3): hand-added, calendar events given an amount or dismissed (see `PlannedCost`).
   'planned': EntityDef('planned', [

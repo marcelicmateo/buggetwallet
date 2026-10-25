@@ -251,6 +251,7 @@ class _HomeShellState extends State<HomeShell> {
   /// Counts the taps on Today's "N bills to review" line; Plan scrolls to Bills on each.
   final _billsDbRequest = ValueNotifier<int>(0);
   final _accountsRequest = ValueNotifier<int>(0);
+  final _incomeRequest = ValueNotifier<int>(0);
   StreamSubscription<BillImport>? _sharedSub;
 
   /// Counts the Ctrl+F presses; Spending opens its search view on each.
@@ -288,6 +289,10 @@ class _HomeShellState extends State<HomeShell> {
             openAccounts: () {
               _go(4, 'today');
               _accountsRequest.value++; // Plan scrolls to Accounts
+            },
+            openIncome: () {
+              _go(4, 'today');
+              _incomeRequest.value++; // Plan scrolls to Expected income
             }),
         1 => SpendingScreen(
             wc: widget.wc,
@@ -299,7 +304,12 @@ class _HomeShellState extends State<HomeShell> {
             }),
         2 => WishlistScreen(wc: widget.wc),
         3 => GoalsScreen(wc: widget.wc),
-        _ => PlanScreen(wc: widget.wc, showBills: _billsRequest, showBillsDb: _billsDbRequest, showAccounts: _accountsRequest),
+        _ => PlanScreen(
+            wc: widget.wc,
+            showBills: _billsRequest,
+            showBillsDb: _billsDbRequest,
+            showAccounts: _accountsRequest,
+            showIncome: _incomeRequest),
       };
 
   @override
@@ -403,6 +413,7 @@ class _HomeShellState extends State<HomeShell> {
     _billsRequest.dispose();
     _billsDbRequest.dispose();
     _accountsRequest.dispose();
+    _incomeRequest.dispose();
     _sharedSub?.cancel();
     _searchRequest.dispose();
     super.dispose();

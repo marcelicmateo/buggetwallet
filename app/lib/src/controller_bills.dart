@@ -107,7 +107,8 @@ extension BillsDb on WalletController {
   BillHistoryView? billHistoryFor(String billId) => _cached<BillHistoryView?>('billHistory:$billId', () {
         RecurringBill? found;
         for (final b in recurringBills()) {
-          if (b.id == billId && b.status == 'confirmed') found = b;
+          // An income has its own cycles, not a bill's history (P9): `found` stays null for it.
+          if (!b.isIncome && b.id == billId && b.status == 'confirmed') found = b;
         }
         final bill = found;
         if (bill == null) return null;
@@ -444,11 +445,11 @@ extension BillsDb on WalletController {
   /// The category worth suggesting for [b] (earlier bills and payments of the same payee); null when nothing fits.
   String? suggestedBillCategory(Bill b) => billCategorySuggester != null
       ? billCategorySuggester!(b)
-      : suggestBillCategory(b, recurring: recurringBills(), txs: wholeTxs, table: categoryTable);
+      : suggestBillCategory(b, recurring: expectedBills(), txs: wholeTxs, table: categoryTable);
 
   /// The confirmed expected bill that already plans this slip (same payee, due about one cycle), or null. Such a bill's planned row is
   /// listed but not reserved (decided by core when read).
-  RecurringBill? billPlannedBy(Bill b) => billCoveredBy(b, recurringBills());
+  RecurringBill? billPlannedBy(Bill b) => billCoveredBy(b, expectedBills());
 
   /// "Paid by…": the owner picked the payment. Returns false when that payment already belongs to another bill.
   bool linkBill(String id, String txId) {

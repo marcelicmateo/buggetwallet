@@ -41,6 +41,9 @@ class TodayScreen extends StatelessWidget {
   /// Opens Plan › Accounts ("Held: …"); without it the line opens Plan.
   final VoidCallback? openAccounts;
 
+  /// Opens Plan at Expected income (the expected-income line); without it the line is not tappable.
+  final VoidCallback? openIncome;
+
   /// The file chooser of the review's Import step (tests pass one that fails).
   final FileChooser chooser;
 
@@ -55,6 +58,7 @@ class TodayScreen extends StatelessWidget {
     this.openBills,
     this.openBillsReview,
     this.openAccounts,
+    this.openIncome,
     this.chooser = const FileChooser(),
     this.clock = DateTime.now,
   });
@@ -182,6 +186,13 @@ class TodayScreen extends StatelessWidget {
                     ),
                   if (p.foreignByCurrency.isNotEmpty) ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote')),
                   if (tight != null) _BudgetLine(tight, wc.categoryTable.label(tight.category), cur, openSpending),
+                  if (p.expectedIncome.isNotEmpty)
+                    _InfoLine(
+                        key: const ValueKey('expectedIncomeLine'),
+                        icon: Icons.south_west,
+                        text: 'Expected income: ${moneyExact(p.expectedIncome.fold<int>(0, (a, x) => a + x.amount), cur)} '
+                            'by ${shortDateOrRaw(p.expectedIncome.last.due)} (counts when it lands)',
+                        onTap: openIncome),
                   if (p.dueCycles.isNotEmpty) _BillsLine(p.dueCycles, p.end, wc.today(), cur, openBills, wc.categoryTable),
                   if (comingUp.count > 0 || suggestions > 0)
                     _InfoLine(
@@ -431,7 +442,7 @@ class _BillsLine extends StatelessWidget {
 class _InfoLine extends StatelessWidget {
   final IconData icon;
   final String text;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   const _InfoLine({super.key, required this.icon, required this.text, required this.onTap});
   @override
   Widget build(BuildContext context) {
@@ -444,7 +455,7 @@ class _InfoLine extends StatelessWidget {
           Icon(icon, size: 18, color: c.ink2),
           const SizedBox(width: 8),
           Expanded(child: Text(text, style: TextStyle(fontSize: BwType.bodySize, color: c.ink2))),
-          Icon(Icons.chevron_right, size: 20, color: c.muted),
+          if (onTap != null) Icon(Icons.chevron_right, size: 20, color: c.muted),
         ]),
       ),
     );

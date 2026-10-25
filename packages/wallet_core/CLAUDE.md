@@ -131,6 +131,18 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (`WalletRepoRecurring`): `addRecurring` (`rec:m` + 12 hex, confirmed, never detected or recategorized; no payee =
   never matches), `updateRecurring`, `instalmentsLeft`. Bill history per cycle for non-monthly bills (`BillMonth.due`).
   Tests: `test/p4_recurring_test.dart` (+ `p4_recurring_spec_test.dart`, `p4_recurring_repo_spec_test.dart`).
+  **P9 recurring income** (schema 14, `recurring.direction`: null/`out` bill, `in` income, `isIncome`): detected on
+  inflows of kind extra (id `recin:<payee>`), landed by a positive payee row (no parts); `recurringBills()` lists both,
+  so bill paths skip `isIncome` (dueCycles, upcoming, plannedIcs, bill coverage, suggestBillCategory). An income's
+  stored `status` is `in:candidate|in:confirmed|in:dismissed` (`storedStatus`; `fromRow` maps it back, and an `in:`
+  status alone marks an income): builds before P9 never list, reserve, recategorize or pay such a row; the creation op
+  of a detected income carries `in:candidate`. `computePeriod`: `expectedIncome` (`IncomeCycle`, shown, never added; a
+  cycle with an in-band payee payment in `[due − interval/2, due + tolerance]` is hidden), `landedIncome` = max(0, Σ
+  kind-extra rows of a confirmed income's payee whose payment fits its band/range (`incomeFits`) + Σ its negative
+  kind-extra rows), added to `flexBudget`; `extrasForGoals` = max(0, extras − landedIncome). `refreshRecurring` moves a
+  confirmed income's `nextDue` on once `due + tolerance` passed without a landing. Bill history: an income's landed
+  inflows. `addRecurring(direction: 'in')`: payee required, kind extra, no instalments.
+  Tests: `test/p9_income_test.dart` (+ `p9_income_spec_test.dart`, `p9_income_repo_spec_test.dart`).
   Settings `reviewDay` (1..7, default 7), `lastReview` (date),
   `reviewStreak` (0..`maxStreak`) are validated like the others.
 - `bill_history.dart` — N4 bill history (spec + clarifications `docs/context/N4_SPEC.md`), pure and web-safe.
@@ -620,6 +632,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   spending, the bill is not reserved for that cycle), dismiss or delete end it. The amount band is not adjusted by a
   skip: a bill whose amount moved for good needs delete + re-confirm once detection sees three new rows. Older builds
   ignore the `recurring` entity (replayed once on upgrade).
+- Recurring incomes (P9): the creation op of a detected income carries `status: in:candidate` (so older builds never
+  take it for a bill candidate). Two devices that detect the same income from their own imports before syncing: the
+  later creation op resets a confirm or dismiss made on the other device in between to candidate (the owner confirms
+  again; the income then does not count until he does). Older builds show an income in search as a bill, and refuse a
+  hand-added bill for a payee that has a live income.
 - Planned costs: a planned cost whose bank row already landed still reserves until the owner marks it Paid or its date
   passes (counted as spent and reserved meanwhile; the app suggests "Paid by this?"). `.ics` UNTIL is compared by date
   only; a UTC time without `toLocal` takes its UTC date. Older builds ignore the `planned` entity (replayed once).

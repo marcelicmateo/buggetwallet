@@ -108,7 +108,7 @@ extension FutureSpending on WalletController {
       for (final i in items)
         if (i.kind == UpcomingKind.bill && i.bill != null && ahead(i)) occurrenceKey(i.bill!.id, i.date)
     };
-    final recurring = recurringBills();
+    final recurring = expectedBills();
     final xs = items.where((i) => switch (i.kind) {
           UpcomingKind.bill => ahead(i) && !(i.bill?.coveredByPlanIn(categoryTable) ?? false),
           UpcomingKind.planned =>

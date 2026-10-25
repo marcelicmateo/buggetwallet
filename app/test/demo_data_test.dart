@@ -46,6 +46,20 @@ void main() {
     expect(p.reservedPlanned, 2900);
   });
 
+  test('the demo wallet has one confirmed monthly side income, landed this period once its day has passed', () {
+    const today = '2026-10-20';
+    final wc = WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => DateTime.parse('${today}T12:00:00'));
+    addTearDown(wc.dispose);
+    wc.repo.importBatch(demoBatch(today));
+    wc.repo.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
+    seedDemoBills(wc.repo, today);
+    wc.reload();
+    final incomes = wc.expectedIncomes();
+    expect(incomes.map((b) => (b.confirmed, b.expectedAmount)), [(true, 15000)]);
+    expect(wc.period().landedIncome, 15000);
+    expect(wc.period().expectedIncome, isEmpty);
+  });
+
   test('the demo wallet has a running pay period on every day of two months (screenshots never show an ended period)', () {
     for (var day = DateTime.utc(2026, 10, 1); day.isBefore(DateTime.utc(2026, 12, 1)); day = day.add(const Duration(days: 1))) {
       final today = isoDate(day);

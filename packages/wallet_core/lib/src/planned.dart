@@ -205,7 +205,7 @@ List<UpcomingItem> upcoming({
         kind: UpcomingKind.planned, key: 'p:${p.id}', date: p.date, title: p.title, amount: p.amount, category: p.category, planned: p));
   }
   for (final b in bills) {
-    if (!b.confirmed) continue;
+    if (!b.confirmed || b.isIncome) continue; // an income (P9) is not a cost coming up
     for (final d in billOccurrences(b, from, to)) {
       out.add(UpcomingItem(
           kind: UpcomingKind.bill, key: 'b:${b.id}@$d', date: d, title: b.label, amount: b.reserveAmount, category: b.category, bill: b));
