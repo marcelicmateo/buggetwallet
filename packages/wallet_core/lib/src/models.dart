@@ -303,11 +303,34 @@ class RecurringBill {
   /// a pay period is a cycle of its own (`dueCycles`). A monthly bill has one cycle per period, as before P4.
   bool get isShort => intervalDays < defaultIntervalDays - toleranceFor(defaultIntervalDays);
 
-  /// The last date a cycle may be due: [endsOn] + [tolerance] (a `nextDue` moved on from the real payment's date drifts a
-  /// few days from the plan's calendar dates). Null without a valid [endsOn].
-  String? get endsBy => switch (endsOn) { final e? when isIsoDate(e) => addDays(e, tolerance), _ => null };
+  /// The last date a cycle may be due: [endsOn] + half an interval (`intervalDays ~/ 2`). A `nextDue` moved on from a
+  /// late payment's date can land days after the plan's last date, while the cycle after the last one is always more
+  /// than half an interval later. Null without a valid [endsOn].
+  String? get endsBy => switch (endsOn) { final e? when isIsoDate(e) => addDays(e, intervalDays ~/ 2), _ => null };
 
-  /// The instalment plan is over: the next due date is after [endsBy]. Nothing is due or reserved any more.
+  /// The due date one cycle after [from] for a skip: a monthly instalment plan (27..31 days with [endsOn]) steps calendar
+  /// months on [endsOn]'s day of the month (the date with that day nearest to `from + intervalDays`, clamped to the
+  /// month's end), so skipping every cycle ends exactly at [endsOn]; every other bill `from + intervalDays`.
+  String stepFrom(String from) {
+    final plain = addDays(from, intervalDays);
+    final e = endsOn;
+    if (!_monthly || e == null || !isIsoDate(e)) return plain;
+    final day = dayOf(e);
+    final m0 = int.parse(plain.substring(0, 4)) * 12 + int.parse(plain.substring(5, 7)) - 1;
+    String at(int m) {
+      final ym = '${(m ~/ 12).toString().padLeft(4, '0')}-${(m % 12 + 1).toString().padLeft(2, '0')}';
+      final last = daysInMonth(ym);
+      return '$ym-${(day < last ? day : last).toString().padLeft(2, '0')}';
+    }
+
+    var best = at(m0);
+    for (final c in [at(m0 - 1), at(m0 + 1)]) {
+      if (daysBetween(plain, c).abs() < daysBetween(plain, best).abs()) best = c;
+    }
+    return best;
+  }
+
+  /// The instalment plan is over: the next due date is after [endsBy] ([endsOn] + half an interval). Nothing is due or reserved any more.
   bool get finished => endsBy != null && nextDue.compareTo(endsBy!) > 0;
 
   /// A monthly interval (27..31 days): instalment plans then run on calendar months ([lastDueFor]).
