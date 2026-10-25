@@ -14,6 +14,7 @@ import '../theme.dart';
 import '../widgets/category_picker.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
+import 'pay_sheet.dart';
 
 /// Opens one bill (the sheet with its fields) and shows the toast for its result. [chooser] saves the original file where it cannot
 /// be shown.
@@ -334,6 +335,22 @@ class _BillSheetState extends State<BillSheet> {
         Rows(children: [
           for (final i in b.items) LineItem(i.name, moneyExact(i.amount, cur), sub: i.quantity == null ? null : 'Quantity ${i.quantity}'),
         ]),
+      ],
+      if (!b.paid && (b.iban ?? '').isNotEmpty && b.total != null) ...[
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            key: const ValueKey('billPay'),
+            style: accentOutlined(context),
+            icon: const Icon(Icons.payments_outlined, size: 18),
+            label: const Text('Pay'),
+            onPressed: () {
+              logNav('bill.pay');
+              showSheet<void>(context, PaySheet(key: const ValueKey('paySheet'), wc: wc, bill: b));
+            },
+          ),
+        ),
       ],
       if (fileType != null) ...[
         const SizedBox(height: 12),

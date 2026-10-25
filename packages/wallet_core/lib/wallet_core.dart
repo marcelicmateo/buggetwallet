@@ -135,6 +135,7 @@ export 'src/insights.dart'
         tagShare,
         TagSlice,
         tagTrend;
+export 'src/loan.dart' show LoanLeft, loanLeft;
 export 'src/local_db.dart' show localDbKey, localDbKeyInfo, openKeyed, WalletDbKeyException;
 export 'src/logs.dart'
     show

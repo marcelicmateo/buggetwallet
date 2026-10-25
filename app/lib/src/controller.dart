@@ -652,6 +652,9 @@ class WalletController extends ChangeNotifier {
 
   String today() => isoDate(_clock());
 
+  /// The payments left on the loan (core's [loanLeft]) or null; Plan's ledger shows it under the Loan line.
+  LoanLeft? loanLeftNow() => loanLeft(settings, today());
+
   /// Tells the screens when the day has changed since they were last built (the app stayed open over midnight), so periods,
   /// months and the delivery panel move on without a data change. Called on resume and by the periodic timer.
   void checkDay() {
@@ -1353,8 +1356,14 @@ class WalletController extends ChangeNotifier {
   Future<void> copyKeyBackup() async {
     final t = await keyText();
     if (t.isEmpty) return;
-    await clipboardWrite(t);
+    await copySensitive(t);
     logEvent(_key, Level.INFO, 'key.backup', {'action': 'copied'});
+  }
+
+  /// Puts [text] on the clipboard and empties it again after [keyClipboardLife] (the rules of [copyKeyBackup]); a later copy
+  /// replaces the pending clear. Used for the wallet key and the pay-sheet fields.
+  Future<void> copySensitive(String t) async {
+    await clipboardWrite(t);
     _clipboardTimer?.cancel();
     _resumeClear?.dispose();
     _resumeClear = null;
