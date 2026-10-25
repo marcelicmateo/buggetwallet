@@ -555,6 +555,20 @@ void main() {
       expect(find.textContaining('held until paid'), findsNothing);
     });
 
+    tw('Mark paid then Undo restores the exact old due date of a monthly plan with an end', (tester) async {
+      final wc = hw();
+      final id = wc.addRecurringBill(
+          label: 'Zorblex loan', category: 'Groceries', amount: 3000, intervalDays: 30, firstDue: '2026-10-31', instalments: 6);
+      await plan(tester, wc);
+      await see(tester, find.byKey(ValueKey('recurringMarkPaid:$id')));
+      await tester.tap(find.byKey(ValueKey('recurringMarkPaid:$id')));
+      await settle(tester);
+      expect(wc.recurringBills().firstWhere((b) => b.id == id).nextDue, isNot('2026-10-31'));
+      await tester.tap(find.byKey(const ValueKey('toastUndo')));
+      await settle(tester);
+      expect(wc.recurringBills().firstWhere((b) => b.id == id).nextDue, '2026-10-31');
+    });
+
     test('billPaidText writes both numbers in the money format', () {
       expect(billPaidText(6000, 10000, 'EUR'), '60 of 100 € paid');
       expect(billPaidText(123456, 200000, 'EUR'), '1,234.56 of 2,000 € paid');
