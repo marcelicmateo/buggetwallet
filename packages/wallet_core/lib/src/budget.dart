@@ -121,7 +121,7 @@ int _sum(Iterable<CategorizedTx> xs) => xs.fold(0, (s, x) => s + x.amount);
 List<RecurringBill> dueBills(List<RecurringBill> bills, List<CategorizedTx> txs, String start, String end) {
   final seen = <String>{};
   return [
-    for (final c in dueCycles(bills, txs, start, end, payments: const RecurringPayments({})))
+    for (final c in dueCycles(bills, txs, start, end, payments: const RecurringPayments({}), currency: ''))
       if (seen.add(c.bill.id)) c.bill
   ];
 }
@@ -149,26 +149,28 @@ const _maxCycles = 100;
 /// - **Monthly** (27..31 days): its `nextDue` cycle when before [end] (overdue included) and not paid in this period
 ///   (no `lastPaidTx` row in [txs] dated on or after [start]), as before P4.
 /// - **Short** ([RecurringBill.isShort]): `nextDue` (overdue included) and every `nextDue + k × intervalDays` (k ≥ 1)
-///   from [start] up to before [end], not past `endsOn`: a weekly bill reserves each week in the period. Only the first
+///   from [start] up to before [end], not past `endsBy`: a weekly bill reserves each week in the period. Only the first
 ///   cycle can hold parts.
 /// - **Long** ([RecurringBill.isLong]): the `nextDue` cycle only, whatever its date (also after [end]), until paid or
 ///   skipped: held in full from confirmation (owner). The paid-in-this-period rule does not apply: once a payment moves
 ///   `nextDue` on, the next cycle is held at once. A cycle whose paying row is here but not yet recorded
 ///   ([RecurringPayments.paidBy]) reserves 0.
-/// The first cycle's [DueCycle.paid] = [RecurringPayments.partsPaid]; [payments] defaults to [planRecurringPayments] over
-/// [txs] in [currency] (default EUR, the wallet default; `computePeriod` passes the wallet's).
+/// The first cycle's [DueCycle.paid] = [RecurringPayments.partsPaid], but 0 once that cycle's match window closed
+/// before [start] (`nextDue + tolerance < start`): parts that never added up do not lower the reserve of later periods
+/// (the owner marks the cycle paid or skips it). [payments] defaults to [planRecurringPayments] over [txs] in
+/// [currency] (the wallet's, `WalletSettings.currency`; used only then).
 List<DueCycle> dueCycles(List<RecurringBill> bills, List<CategorizedTx> txs, String start, String end,
-    {RecurringPayments? payments, String? currency}) {
+    {RecurringPayments? payments, required String currency}) {
   final live = [
     for (final b in bills)
       if (b.confirmed && isIsoDate(b.nextDue) && !b.finished) b
   ];
   if (live.isEmpty) return const [];
-  final pay = payments ?? planRecurringPayments(live, [for (final t in txs) t.tx], currency: currency ?? 'EUR');
+  final pay = payments ?? planRecurringPayments(live, [for (final t in txs) t.tx], currency: currency);
   final paidOn = <String, String>{for (final t in txs) t.tx.id: t.date};
   final out = <DueCycle>[];
   DueCycle first(RecurringBill b) {
-    final paid = pay.partsPaid(b.id);
+    final paid = addDays(b.nextDue, b.tolerance).compareTo(start) < 0 ? 0 : pay.partsPaid(b.id);
     final r = b.reserveAmount - paid;
     return DueCycle(bill: b, due: b.nextDue, reserve: r < 0 ? 0 : r, paid: paid);
   }
@@ -188,10 +190,15 @@ List<DueCycle> dueCycles(List<RecurringBill> bills, List<CategorizedTx> txs, Str
       continue;
     }
     out.add(first(b));
-    var d = addDays(b.nextDue, b.intervalDays);
-    for (var n = 1; n < _maxCycles && d.compareTo(end) < 0 && (b.endsOn == null || d.compareTo(b.endsOn!) <= 0); n++) {
-      if (d.compareTo(start) >= 0) out.add(DueCycle(bill: b, due: d, reserve: b.reserveAmount, paid: 0));
-      d = addDays(d, b.intervalDays);
+    // Later occurrences from the first one on or after the period start (k ≥ 1); only the cycles added are capped.
+    final i = b.intervalDays;
+    final behind = daysBetween(b.nextDue, start);
+    final k0 = behind <= 0 ? 1 : (behind + i - 1) ~/ i;
+    var d = addDays(b.nextDue, (k0 < 1 ? 1 : k0) * i);
+    final last = b.endsBy;
+    for (var n = 1; n < _maxCycles && d.compareTo(end) < 0 && (last == null || d.compareTo(last) <= 0); n++) {
+      out.add(DueCycle(bill: b, due: d, reserve: b.reserveAmount, paid: 0));
+      d = addDays(d, i);
     }
   }
   out.sort((a, b) {

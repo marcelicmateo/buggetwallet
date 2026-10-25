@@ -1282,15 +1282,28 @@ class WalletRepo {
         final want = _candidateFields(c), has = _candidateFields(have);
         final diff = {
           for (final e in want.entries)
-            if (has[e.key] != e.value && !(e.key == 'category' && cz.table.isDeadCustom(have.category))) e.key: e.value
+            if (has[e.key] != e.value && !(e.key == 'category' && (have.ownCategory || cz.table.isDeadCustom(have.category))))
+              e.key: e.value
         };
         if (diff.isNotEmpty) {
           updated++;
           changes.add(('recurring', c.id, diff));
-          current[c.id] = c.copyWith(
+          // The detection's fields over the stored row; the owner's fields (range, end, own category) stay.
+          current[c.id] = RecurringBill(
+              id: c.id,
+              payee: c.payee,
+              label: c.label,
+              category: have.ownCategory || cz.table.isDeadCustom(have.category) ? have.category : c.category,
+              expectedAmount: c.expectedAmount,
+              intervalDays: c.intervalDays,
+              nextDue: c.nextDue,
               status: have.status,
               lastPaidTx: have.lastPaidTx,
-              category: cz.table.isDeadCustom(have.category) ? have.category : c.category);
+              minAmount: have.minAmount,
+              maxAmount: have.maxAmount,
+              endsOn: have.endsOn,
+              manual: have.manual,
+              ownCategory: have.ownCategory);
         }
       }
     }
@@ -1301,7 +1314,7 @@ class WalletRepo {
       final category = latest[b.payee]?.category;
       // Never over a stored deleted custom category: it is resolved when read, and an undelete brings it back. A
       // manual bill keeps the category the owner gave it.
-      if (!b.manual && category != null && category != b.category && !cz.table.isDeadCustom(b.category)) {
+      if (!b.manual && !b.ownCategory && category != null && category != b.category && !cz.table.isDeadCustom(b.category)) {
         recategorized++;
         changes.add(('recurring', b.id, {'category': category}));
         current[b.id] = b.copyWith(category: category);

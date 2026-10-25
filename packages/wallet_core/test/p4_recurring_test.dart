@@ -25,8 +25,16 @@ CategorizedTx cat(Tx t, [String category = 'Shopping']) => CategorizedTx(t, cate
 final zorblex = merchantKey(bank('2026-01-01', 1));
 
 RecurringBill bill(String nextDue, int cents,
-        {int interval = 30, String category = 'Shopping', String? lastPaid, int? min, int? max, String? endsOn, String? payee}) =>
+        {int interval = 30,
+        String category = 'Shopping',
+        String? lastPaid,
+        int? min,
+        int? max,
+        String? endsOn,
+        String? payee,
+        bool manual = false}) =>
     RecurringBill(
+      manual: manual,
       id: 'rec:${payee ?? zorblex}',
       payee: payee ?? zorblex,
       label: 'Zorblex',
@@ -131,7 +139,7 @@ void main() {
     test('instalmentsLeft and finished', () {
       expect(bill('2026-03-01', 100).instalmentsLeft, isNull);
       expect(bill('2026-03-01', 100, endsOn: '2026-11-26').instalmentsLeft, 10); // 03-01 + 9 × 30
-      expect(bill('2026-03-01', 100, endsOn: '2026-12-25').instalmentsLeft, 10);
+      expect(bill('2026-03-01', 100, endsOn: '2026-12-01').instalmentsLeft, 10); // monthly: calendar months
       expect(bill('2026-12-26', 100, endsOn: '2026-12-26').instalmentsLeft, 1);
       final done = bill('2027-01-25', 100, endsOn: '2026-12-26');
       expect((done.instalmentsLeft, done.finished, instalmentsLeft(done)), (0, true, 0));
@@ -165,7 +173,7 @@ void main() {
   });
 
   group('payments and parts', () {
-    final b = bill('2026-03-10', 10000);
+    final b = bill('2026-03-10', 10000, manual: true); // manual: the wide parts window
 
     test('partsDays and the threshold', () {
       expect([
@@ -358,6 +366,109 @@ void main() {
       expect(dump(a.repo), dump(b.repo));
       a.close();
       b.close();
+    });
+  });
+
+  group('review fixes', () {
+    List<DueCycle> cycles(List<RecurringBill> bills, List<Tx> rows, String start, String end) =>
+        dueCycles(bills, [for (final t in rows) cat(t)], start, end, currency: 'EUR');
+
+    test('HIGH 1: a lone part lowers the reserve only while its window is open, not in later periods', () {
+      final b = bill('2026-11-15', 10000, manual: true);
+      final rows = [bank('2026-11-10', 10000)];
+      expect(cycles([b], rows, '2026-11-10', '2026-12-10').single.reserve, 0, reason: 'window open: the part counts');
+      final later = cycles([b], rows, '2026-12-10', '2027-01-10').single;
+      expect((later.reserve, later.paid), (10000, 0), reason: 'window closed on 11-18: full reserve until marked paid');
+      final two = [bank('2026-11-03', 4000), bank('2026-11-08', 4000)];
+      expect(cycles([b], two, '2026-11-10', '2026-12-10').single.reserve, 2000);
+      expect(cycles([b], two, '2026-12-10', '2027-01-10').single.reserve, 10000);
+      final yearly = bill('2026-11-15', 60000, interval: 365, manual: true);
+      final early = [bank('2026-11-03', 60000)];
+      expect(cycles([yearly], early, '2026-11-10', '2026-12-10').single.reserve, 0);
+      expect(cycles([yearly], early, '2026-12-10', '2027-01-10').single.reserve, 60000);
+    });
+
+    test('HIGH 2: monthly instalments run on calendar months; the last one is still reserved', () {
+      expect(RecurringBill.lastDueFor('2027-01-15', 30, 12), '2027-12-15');
+      expect(RecurringBill.lastDueFor('2027-01-31', 30, 2), '2027-02-28');
+      expect(RecurringBill.lastDueFor('2027-01-15', 30, 1), '2027-01-15');
+      expect(RecurringBill.lastDueFor('2027-01-15', 7, 3), '2027-01-29');
+      final r = WalletRepo.inMemory();
+      addTearDown(r.close);
+      r.addRecurring(label: 'Loan', category: 'Shopping', amount: 5000, intervalDays: 30, firstDue: '2027-01-15', instalments: 12);
+      final b = r.recurringBills().single;
+      expect((b.endsOn, b.instalmentsLeft), ('2027-12-15', 12));
+      // The 12th cycle, its nextDue drifted to 12-14 by the payments' dates: due, reserved, one left.
+      final last = bill('2027-12-14', 5000, endsOn: '2027-12-15');
+      expect((last.finished, last.instalmentsLeft), (false, 1));
+      expect(cycles([last], const [], '2027-12-10', '2028-01-10').single.reserve, 5000);
+      expect(bill('2027-12-18', 5000, endsOn: '2027-12-15').finished, isFalse, reason: 'within tolerance of the end');
+      expect(bill('2027-12-19', 5000, endsOn: '2027-12-15').finished, isTrue);
+    });
+
+    test('MED 3: purchases at a detected bill\'s payee days before do not pay it; inside ± tolerance they can', () {
+      final b = bill('2026-03-10', 3000);
+      final early = [bank('2026-03-01', 1500), bank('2026-03-05', 1500)];
+      final p = planRecurringPayments([b], early, currency: 'EUR');
+      expect((p.isEmpty, p.parts.isEmpty), (true, true));
+      final near = planRecurringPayments([b], [bank('2026-03-08', 1500), bank('2026-03-09', 1500, id: 'n2')], currency: 'EUR');
+      expect(near.paidBy[b.id]?.id, 'n2');
+      final own = bill('2026-03-10', 3000, manual: true);
+      expect(planRecurringPayments([own], early, currency: 'EUR').paidInParts, {own.id}, reason: 'manual: the wide window');
+      final ranged = bill('2026-03-10', 3000, min: 2800, max: 3200);
+      expect(planRecurringPayments([ranged], early, currency: 'EUR').paidInParts, {ranged.id});
+    });
+
+    test('MED 4: a long-overdue weekly bill still lists the occurrences in the period', () {
+      final c = cycles([bill('2024-01-01', 1000, interval: 7)], const [], '2026-02-15', '2026-03-15');
+      expect([for (final x in c) x.due], ['2024-01-01', '2026-02-16', '2026-02-23', '2026-03-02', '2026-03-09']);
+    });
+
+    test('MED 5: a category the owner set on a detected bill survives refresh; LOW 6: the range is written as a pair', () {
+      final r = WalletRepo.inMemory(now: () => DateTime.utc(2026, 3, 1, 12).millisecondsSinceEpoch);
+      addTearDown(r.close);
+      NormalizedTransaction nt(String date) => NormalizedTransaction(
+          id: transactionId(date, -3000, 'Zorblex Utility', 0),
+          source: 'pbz',
+          date: date,
+          amountMinor: -3000,
+          currency: 'EUR',
+          bankType: 'Trajni nalog',
+          description: 'Zorblex Utility');
+      r.importBatch(ImportBatch(source: 'pbz', transactions: [nt('2025-12-10'), nt('2026-01-09'), nt('2026-02-08')]));
+      final id = r.recurringBills().single.id;
+      r.confirmRecurring(id);
+      final auto = r.recurringBills().single.category;
+      final mine = auto == 'Groceries' ? 'Shopping' : 'Groceries';
+      r.updateRecurring(id, category: mine);
+      r.importBatch(ImportBatch(source: 'pbz', transactions: [nt('2026-03-10')]));
+      final b = r.recurringBills().single;
+      expect((b.category, b.ownCategory, b.nextDue), (mine, true, '2026-04-09'));
+      r.updateRecurring(id, minAmount: 2800, maxAmount: 3200);
+      final before = r.pendingOps().length;
+      r.updateRecurring(id, maxAmount: 3300);
+      expect(r.pendingOps().skip(before).single.$2.fields, {'min_amount': 2800, 'max_amount': 3300});
+    });
+
+    test('LOW 8: a bad stored ends_on reads as no end', () {
+      final b = RecurringBill.fromRow({'id': 'rec:x', 'next_due': '2026-03-01', 'ends_on': '2026-02-30', 'status': 'confirmed'});
+      expect((b.endsOn, b.finished, b.instalmentsLeft), (null, false, null));
+    });
+
+    test('LOW 9: a weekly bill covers a slip only within its own tolerance (1 day)', () {
+      final payee = merchantKey(const Tx(id: '', source: 'bill', date: '', amount: 0, description: 'Zorblex Club'));
+      PlannedCost slip(String date) => PlannedCost(
+          id: 'planned:bill:s1',
+          title: 'Zorblex Club',
+          date: date,
+          amount: 1000,
+          category: 'Shopping',
+          sourceRef: 's1',
+          source: PlannedSource.bill);
+      final weekly = bill('2026-03-02', 1000, interval: 7, payee: payee);
+      expect(plannedCoveredBy(slip('2026-03-03'), [weekly])?.id, weekly.id);
+      expect(plannedCoveredBy(slip('2026-03-05'), [weekly]), isNull, reason: '3 days from 03-02 and 4 from 03-09');
+      expect(plannedCoveredBy(slip('2026-03-05'), [bill('2026-03-02', 1000, payee: payee)])?.id, 'rec:$payee', reason: 'monthly: ± 3');
     });
   });
 }

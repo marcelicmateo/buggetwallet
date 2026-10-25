@@ -151,9 +151,10 @@ void main() {
       expect(bill('2026-03-10', 5000, interval: 365).isLong, isTrue);
     });
 
-    test('finished: nextDue strictly after endsOn', () {
+    test('finished: nextDue strictly after endsOn + tolerance (lead decision, P4 review HIGH 2)', () {
       expect(bill('2026-05-04', 5000, endsOn: '2026-05-04').finished, isFalse, reason: 'the last due date is still a cycle');
-      expect(bill('2026-05-05', 5000, endsOn: '2026-05-04').finished, isTrue);
+      expect(bill('2026-05-07', 5000, endsOn: '2026-05-04').finished, isFalse, reason: 'endsOn + tolerance (3) is still a cycle');
+      expect(bill('2026-05-08', 5000, endsOn: '2026-05-04').finished, isTrue);
       expect(bill('2030-01-01', 5000).finished, isFalse, reason: 'no end');
     });
 
@@ -384,21 +385,30 @@ void main() {
   });
 
   group('planRecurringPayments: parts', () {
+    // Lead decision (P4 review MED 3): the wide window (nextDue − partsDays) is for manual and ranged bills only.
     test('60 + 40 pays a 100 cycle; the completing row is the paying row', () {
-      final b = bill('2026-03-10', 10000);
+      final b = bill('2026-03-10', 10000, manual: true);
       final p = plan([b], [bankTx('2026-03-05', 6000, id: 'p1'), bankTx('2026-03-09', 4000, id: 'p2')]);
       expect(p.paidBy[b.id]?.id, 'p2');
       expect(p.parts[b.id] ?? const [], isEmpty, reason: 'parts lists unpaid cycles only');
     });
 
-    test('rows are summed oldest first, whatever the input order', () {
+    test('a detected bill without range: rows 5 days early are not counted as parts', () {
       final b = bill('2026-03-10', 10000);
+      final p = plan([b], [bankTx('2026-03-05', 6000, id: 'p1'), bankTx('2026-03-09', 4000, id: 'p2')]);
+      expect(p.paidBy, isEmpty);
+      expect([for (final t in p.parts[b.id] ?? const <Tx>[]) t.id], ['p2'], reason: 'only the row within ± 3 days counts');
+      expect(p.partsPaid(b.id), 4000);
+    });
+
+    test('rows are summed oldest first, whatever the input order', () {
+      final b = bill('2026-03-10', 10000, manual: true);
       final p = plan([b], [bankTx('2026-03-09', 4000, id: 'p2'), bankTx('2026-03-05', 6000, id: 'p1')]);
       expect(p.paidBy[b.id]?.id, 'p2');
     });
 
     test('60 alone stays open: 40 rest, the row is listed', () {
-      final b = bill('2026-03-10', 10000);
+      final b = bill('2026-03-10', 10000, manual: true);
       final p = plan([b], [bankTx('2026-03-05', 6000, id: 'p1')]);
       expect(p.paidBy, isEmpty);
       expect(p.partsPaid(b.id), 6000);
@@ -406,7 +416,7 @@ void main() {
     });
 
     test('threshold is the low end of the 10 % band: 9000 pays, 8999 does not', () {
-      final b = bill('2026-03-10', 10000);
+      final b = bill('2026-03-10', 10000, manual: true);
       final pays = plan([b], [bankTx('2026-03-05', 5000, id: 'a'), bankTx('2026-03-09', 4000, id: 'b')]);
       expect(pays.paidBy[b.id]?.id, 'b');
       final short = plan([b], [bankTx('2026-03-05', 5000, id: 'a'), bankTx('2026-03-09', 3999, id: 'b')]);
@@ -430,14 +440,14 @@ void main() {
     });
 
     test('another payee\'s rows are never counted', () {
-      final b = bill('2026-03-10', 10000);
+      final b = bill('2026-03-10', 10000, manual: true);
       final p = plan([b], [bankTx('2026-03-05', 6000, id: 'p1'), bankTx('2026-03-08', 4000, desc: 'Quorvant Shop')]);
       expect(p.paidBy, isEmpty);
       expect(p.partsPaid(b.id), 6000);
     });
 
     test('window: monthly parts count from nextDue - 14 (inclusive) to nextDue + 3', () {
-      final b = bill('2026-03-10', 10000);
+      final b = bill('2026-03-10', 10000, manual: true);
       expect(plan([b], [bankTx('2026-02-24', 6000)]).partsPaid(b.id), 6000);
       expect(plan([b], [bankTx('2026-02-23', 6000)]).partsPaid(b.id), 0);
       expect(plan([b], [bankTx('2026-03-13', 6000)]).partsPaid(b.id), 6000);
@@ -445,19 +455,19 @@ void main() {
     });
 
     test('window: weekly parts count from nextDue - 5 (partsDays = interval - tolerance - 1)', () {
-      final b = bill('2026-03-10', 1000, interval: 7);
+      final b = bill('2026-03-10', 1000, interval: 7, manual: true);
       expect(plan([b], [bankTx('2026-03-05', 600)]).partsPaid(b.id), 600);
       expect(plan([b], [bankTx('2026-03-04', 600)]).partsPaid(b.id), 0);
     });
 
     test('window: biweekly parts count from nextDue - 11', () {
-      final b = bill('2026-03-20', 1000, interval: 14);
+      final b = bill('2026-03-20', 1000, interval: 14, manual: true);
       expect(plan([b], [bankTx('2026-03-09', 600)]).partsPaid(b.id), 600);
       expect(plan([b], [bankTx('2026-03-08', 600)]).partsPaid(b.id), 0);
     });
 
     test('a part on or before the last paid row never counts again', () {
-      final b = bill('2026-03-10', 10000, lastPaidTx: 'last');
+      final b = bill('2026-03-10', 10000, lastPaidTx: 'last', manual: true);
       final rows = [
         bankTx('2026-02-27', 6000, id: 'last'),
         bankTx('2026-02-26', 4000, id: 'before'),
@@ -483,7 +493,7 @@ void main() {
     });
 
     test('quarterly bill paid in two parts: window up to nextDue - 14', () {
-      final b = bill('2026-06-10', 9000, interval: 91);
+      final b = bill('2026-06-10', 9000, interval: 91, manual: true);
       final p = plan([b], [bankTx('2026-05-27', 5000, id: 'a'), bankTx('2026-06-09', 4000, id: 'b')]);
       expect(p.paidBy[b.id]?.id, 'b');
       expect(plan([b], [bankTx('2026-05-26', 5000)]).partsPaid(b.id), 0);
@@ -495,7 +505,7 @@ void main() {
   group('dueCycles', () {
     const start = '2026-02-15', end = '2026-03-15';
     List<(String, int)> cycles(List<RecurringBill> bills, {List<CategorizedTx> txs = const [], RecurringPayments? payments}) => [
-          for (final c in dueCycles(bills, txs, start, end, payments: payments)) (c.due, c.reserve),
+          for (final c in dueCycles(bills, txs, start, end, payments: payments, currency: 'EUR')) (c.due, c.reserve),
         ];
 
     test('a monthly bill with no new fields: one cycle at nextDue, as dueBills', () {
@@ -522,12 +532,12 @@ void main() {
 
     test('instalments stop at endsOn, inclusive', () {
       expect(cycles([bill('2026-03-02', 1000, interval: 7, endsOn: '2026-03-09')]), [('2026-03-02', 1000), ('2026-03-09', 1000)]);
-      expect(cycles([bill('2026-03-02', 1000, interval: 7, endsOn: '2026-03-08')]), [('2026-03-02', 1000)]);
+      expect(cycles([bill('2026-03-02', 1000, interval: 7, endsOn: '2026-03-07')]), [('2026-03-02', 1000)]);
       expect(cycles([bill('2026-03-05', 5000, endsOn: '2026-03-05')]), [('2026-03-05', 5000)]);
     });
 
     test('a finished bill and an unconfirmed one have no cycle', () {
-      expect(cycles([bill('2026-03-05', 5000, endsOn: '2026-03-04')]), isEmpty);
+      expect(cycles([bill('2026-03-05', 5000, endsOn: '2026-03-01')]), isEmpty);
       expect(cycles([bill('2026-03-05', 5000, status: 'candidate')]), isEmpty);
       expect(cycles([bill('2026-03-05', 5000, status: 'dismissed')]), isEmpty);
       expect(cycles([bill('2030-03-05', 50000, interval: 365, status: 'candidate')]), isEmpty);
@@ -548,14 +558,14 @@ void main() {
     });
 
     test('a long bill with no endsOn problem: finished long bill holds nothing', () {
-      expect(cycles([bill('2026-08-01', 9000, interval: 91, endsOn: '2026-07-31')]), isEmpty);
+      expect(cycles([bill('2026-08-01', 9000, interval: 91, endsOn: '2026-07-24')]), isEmpty);
       expect(cycles([bill('2026-08-01', 9000, interval: 91, endsOn: '2026-08-01')]), [('2026-08-01', 9000)]);
     });
 
     test('parts paid reduce the first cycle only; later weekly occurrences reserve in full', () {
-      final b = bill('2026-03-02', 1000, interval: 7);
+      final b = bill('2026-03-02', 1000, interval: 7, manual: true);
       final p = plan([b], [bankTx('2026-02-28', 600, id: 'part')]);
-      final cs = dueCycles([b], const [], start, end, payments: p);
+      final cs = dueCycles([b], const [], start, end, payments: p, currency: 'EUR');
       expect([for (final c in cs) (c.due, c.paid, c.reserve)], [('2026-03-02', 600, 400), ('2026-03-09', 0, 1000)]);
       expect(cs.first.bill.id, b.id);
     });
@@ -569,7 +579,7 @@ void main() {
     });
 
     test('the cycle carries the bill and the paid amount', () {
-      final c = dueCycles([bill('2026-03-05', 5000)], const [], start, end).single;
+      final c = dueCycles([bill('2026-03-05', 5000)], const [], start, end, currency: 'EUR').single;
       expect((c.bill.id, c.due, c.reserve, c.paid), ('rec:zorblex_club', '2026-03-05', 5000, 0));
     });
 
@@ -633,7 +643,7 @@ void main() {
 
     test('rest of a bill paid in parts stays set aside (rows in the period)', () {
       final part = cat(bankTx('2026-02-28', 600, id: 'part'));
-      final p = period([bill('2026-03-02', 1000, interval: 7)], txs: [part]);
+      final p = period([bill('2026-03-02', 1000, interval: 7, manual: true)], txs: [part]);
       expect(p.reservedBills, 400 + 1000);
     });
 

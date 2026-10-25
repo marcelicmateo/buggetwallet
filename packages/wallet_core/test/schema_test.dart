@@ -32,7 +32,7 @@ CREATE INDEX IF NOT EXISTS goal_contrib_goal ON goal_contrib(goal_id);
 CREATE TABLE IF NOT EXISTS recurring(id TEXT PRIMARY KEY, payee TEXT NOT NULL DEFAULT '', label TEXT NOT NULL DEFAULT '',
   category TEXT NOT NULL DEFAULT '', expected_amount INTEGER NOT NULL DEFAULT 0, interval_days INTEGER NOT NULL DEFAULT 30,
   next_due TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'candidate', last_paid_tx TEXT, deleted INTEGER NOT NULL DEFAULT 0,
-  min_amount INTEGER, max_amount INTEGER, ends_on TEXT, manual INTEGER NOT NULL DEFAULT 0);
+  min_amount INTEGER, max_amount INTEGER, ends_on TEXT, manual INTEGER NOT NULL DEFAULT 0, own_category INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS planned(id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', date TEXT NOT NULL DEFAULT '', amount INTEGER,
   category TEXT, source TEXT NOT NULL DEFAULT 'manual', source_ref TEXT, status TEXT NOT NULL DEFAULT 'open', paid_tx TEXT,
   deleted INTEGER NOT NULL DEFAULT 0);

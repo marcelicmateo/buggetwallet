@@ -120,8 +120,8 @@ void main() {
       expect(edge.hasRange, isTrue);
     });
 
-    test('instalments set endsOn = firstDue + (N - 1) * interval', () {
-      expect(byId(add(instalments: 3)).endsOn, '2026-05-19', reason: '2026-03-20 + 60 days');
+    test('instalments set endsOn: calendar months for a monthly interval, else firstDue + (N - 1) * interval', () {
+      expect(byId(add(instalments: 3)).endsOn, '2026-05-20', reason: '2026-03-20 + 2 calendar months (lead decision, HIGH 2)');
       expect(byId(add(instalments: 1, firstDue: '2026-03-21')).endsOn, '2026-03-21');
       expect(byId(add(instalments: 4, interval: 7, firstDue: '2026-03-02')).endsOn, '2026-03-23');
       expect(byId(add(firstDue: '2026-03-22')).endsOn, isNull);
@@ -393,7 +393,7 @@ void main() {
     test('an instalment bill finishes after its last payment and is then left alone', () {
       now = DateTime.utc(2026, 5, 20, 12).millisecondsSinceEpoch;
       final id = add(payee: zorblex, firstDue: '2026-03-10', amount: 5000, instalments: 2);
-      expect(byId(id).endsOn, '2026-04-09');
+      expect(byId(id).endsOn, '2026-04-10', reason: 'calendar months (lead decision, HIGH 2)');
       r.importBatch(batch([zorb('2026-03-10', 5000)]));
       expect(byId(id).nextDue, '2026-04-09');
       final last = zorb('2026-04-09', 5000);
