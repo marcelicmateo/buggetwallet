@@ -81,6 +81,16 @@ class ImportLine {
   const ImportLine(this.file, this.message, this.ok);
 }
 
+/// What the Map columns sheet hands back (P12): the layout and the shape id of the file at the layout's header row.
+class CsvChoice {
+  final String shapeId;
+  final CsvMapping mapping;
+  const CsvChoice(this.shapeId, this.mapping);
+}
+
+/// Asked for a CSV no bank profile and no saved layout fits: the owner maps its columns (null = cancel, nothing imported).
+typedef AskMapping = Future<CsvChoice?> Function(NeedsMapping need, Uint8List bytes);
+
 /// Everything the Spending tab shows for one month, worked out in [WalletController.spending].
 class SpendingView {
   final String month;
@@ -1827,18 +1837,28 @@ class WalletController extends ChangeNotifier {
 
   // ---------- import ----------
   /// Logs per file on `bw.import`: index, extension, size and counts. Never the file name.
-  Future<List<ImportLine>> importFiles(List<(String, Uint8List)> files) async {
+  /// A CSV no bank profile knows is read with its saved layout, else [askMapping] opens the Map columns sheet (null = the
+  /// message "map its columns"); the chosen layout is saved, then the file is read with it.
+  Future<List<ImportLine>> importFiles(List<(String, Uint8List)> files, {AskMapping? askMapping}) async {
     final all = PerfTimer('import.files', warnMs: 3000);
     final lines = <ImportLine>[];
     for (final (i, (name, bytes)) in files.indexed) {
       final f = <String, Object?>{'file': i, 'ext': fileExt(name), 'bytes': bytes.length};
       final t = PerfTimer('import.file', warnMs: 1500);
       try {
-        final batch = timed('import.parse', () => importBankFile(bytes), fields: f, warnMs: 1000);
+        final read = await _readImportFile(name, bytes, askMapping);
+        if (read == null) {
+          logEvent(_import, Level.INFO, 'import.mapCancelled', f);
+          lines.add(ImportLine(name, 'Not imported. Map its columns to read it.', false));
+          continue;
+        }
+        final (batch, usedMapping) = read;
+        final mapped = usedMapping != null;
         final s = repo.importBatch(batch); // logs repo.importBatch
         t.done({
           ...f,
-          'source': batch.source,
+          'source': sourceLogKey(batch.source),
+          if (mapped) 'mapped': true,
           'rows': batch.transactions.length,
           'added': s.added,
           'dupes': s.duplicates,
@@ -1846,7 +1866,7 @@ class WalletController extends ChangeNotifier {
           'skipped': s.skipped,
           'invalid': batch.invalid
         });
-        final bank = batch.source == 'pbz' ? 'PBZ' : 'Revolut';
+        final bank = usedMapping?.name ?? accountSourceLabel(batch.source, csvMappings: settings.csvMappings);
         lines.add(ImportLine(
             name,
             '$bank: ${s.added} new, ${s.duplicates} already here${s.matched > 0 ? ', ${s.matched} matched to expenses you added' : ''}'
@@ -1858,6 +1878,9 @@ class WalletController extends ChangeNotifier {
       } on ImportException catch (e, st) {
         logError(_import, 'import.rejected', e, st, fields: f);
         lines.add(ImportLine(name, e.message, false));
+      } on ArgumentError catch (e, st) {
+        logError(_import, 'import.layoutRefused', e, st, fields: f); // core's owner-readable text, no cell content
+        lines.add(ImportLine(name, e.message.toString(), false));
       } catch (e, st) {
         logError(_import, 'import.failed', e, st, fields: f, level: Level.SEVERE);
         lines.add(ImportLine(name, "Couldn't read this file.", false));
@@ -1868,6 +1891,59 @@ class WalletController extends ChangeNotifier {
     refreshRecurring();
     _changed();
     return lines;
+  }
+
+  /// The batch of one file and the column mapping that read it (null for a bank profile): a bank profile, a saved layout that fits, or the layout
+  /// [ask] returns (saved first). Null = the owner cancelled the mapping.
+  Future<(ImportBatch, CsvMapping?)?> _readImportFile(String name, Uint8List bytes, AskMapping? ask) async {
+    try {
+      return (importBankFile(bytes), null);
+    } on NeedsMapping catch (need) {
+      final saved = settings.csvMappings;
+      final key = matchCsvMapping(bytes, need.shape, saved);
+      CsvMapping m;
+      if (key != null) {
+        m = saved[key]!;
+      } else {
+        if (ask == null) rethrow;
+        final choice = await ask(need, bytes);
+        if (choice == null) return null;
+        repo.setCsvMapping(choice.shapeId, choice.mapping);
+        logEvent(_import, Level.INFO, 'import.layoutSaved', {'columns': need.shape.headers.length});
+        m = choice.mapping;
+      }
+      return (parseMappedCsv(bytes, m, fileName: name, walletCurrency: currency), m);
+    }
+  }
+
+  // ---------- saved CSV layouts (P12) ----------
+  /// Saved file layouts, shape id → layout, sorted by name.
+  List<MapEntry<String, CsvMapping>> csvLayouts() =>
+      settings.csvMappings.entries.toList()..sort((a, b) => a.value.name.toLowerCase().compareTo(b.value.name.toLowerCase()));
+
+  /// Renames layout [id]. An [ArgumentError] carries core's owner-readable text.
+  void renameCsvLayout(String id, String name) {
+    final m = settings.csvMappings[id];
+    if (m == null) throw ArgumentError('That layout is gone.');
+    repo.setCsvMapping(id, m.copyWith(name: name));
+    logEvent(_import, Level.INFO, 'csvLayout.rename');
+    _changed();
+  }
+
+  /// Removes layout [id] and returns it (the toast's Undo is [restoreCsvLayout]); null when it is already gone.
+  CsvMapping? deleteCsvLayout(String id) {
+    final m = settings.csvMappings[id];
+    if (m == null) return null;
+    repo.removeCsvMapping(id);
+    logEvent(_import, Level.INFO, 'csvLayout.delete');
+    _changed();
+    return m;
+  }
+
+  void restoreCsvLayout(String id, CsvMapping m) {
+    repo.setCsvMapping(id, m);
+    logEvent(_import, Level.INFO, 'csvLayout.restore');
+    _changed();
   }
 
   // ---------- edits ----------

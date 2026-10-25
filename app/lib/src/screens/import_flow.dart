@@ -8,6 +8,7 @@ import '../controller.dart';
 import '../file_chooser.dart';
 import '../logging.dart';
 import '../widgets/common.dart';
+import 'csv_map_sheet.dart';
 
 final _log = Logger('bw.app');
 
@@ -44,5 +45,8 @@ Future<void> pickAndImport(BuildContext context, WalletController wc, FileChoose
     'exts': [for (final (n, _) in files) fileExt(n)],
     'bytes': [for (final (_, b) in files) b.length],
   });
-  await wc.importFiles(files);
+  await wc.importFiles(files, askMapping: (need, bytes) async {
+    if (!context.mounted) return null;
+    return openMapColumns(context, wc, need.shape, bytes);
+  });
 }
