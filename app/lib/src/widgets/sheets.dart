@@ -82,7 +82,7 @@ void txSheetToast(BuildContext context, WalletController wc, String? result) {
   if (result == 'deleted' && id != null) {
     toast(context, 'Deleted', actionLabel: 'Undo', onAction: () => wc.undeleteTransaction(id));
   } else {
-    toast(context, result == 'deleted' ? 'Deleted' : 'Saved');
+    toast(context, result == 'deleted' ? 'Deleted' : (tagFailureText(wc.takeTagFailures()) ?? 'Saved'));
   }
 }
 
@@ -144,7 +144,7 @@ class DialogAppBar extends StatelessWidget implements PreferredSizeWidget {
 Future<void> addExpenseFlow(BuildContext context, WalletController wc) async {
   final r = await showSheet<String>(context, AddExpenseSheet(wc: wc));
   if (!context.mounted) return;
-  if (r == 'added') toast(context, 'Expense added');
+  if (r == 'added') toast(context, tagFailureText(wc.takeTagFailures())?.replaceFirst('Saved', 'Expense added') ?? 'Expense added');
   if (r == 'wish') {
     final id = wc.lastAddedWish;
     toast(context, 'On the wishlist. Decide in ${wc.settings.coolHours} hours.',
@@ -230,7 +230,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         child: MainTagPicker(table: widget.wc.categoryTable, ids: mainIds, selected: cat, onPick: (c) => setState(() => cat = c)),
       ),
       const SizedBox(height: 14),
-      ExtraTagsEditor(wc: widget.wc, initial: tags, onChanged: (v) => tags = v),
+      ExtraTagsEditor(wc: widget.wc, initial: tags, onChanged: (v, _) => tags = v),
       const SizedBox(height: 14),
       TextField(
           controller: note,
@@ -327,6 +327,10 @@ class _TxSheetState extends State<TxSheet> {
   /// The main tags in recommended order for this payment (the payee's first), read once.
   late final List<String> mainIds = widget.wc.recommendedMainFor(widget.t.tx);
 
+  /// The tag draft the editor reports (null: untouched). Save writes it; closing writes nothing.
+  Set<String>? tagOn, tagRule;
+  bool saving = false;
+
   /// The bank row that replaced this hand-added expense, or the expense a bank row replaced (read once: it scans the rows).
   /// Read-only: there is no unlink yet.
   late final Tx? matchedBank = widget.t.tx.manual && widget.t.tx.matchedTo != null && !widget.t.tx.matchPending
@@ -401,16 +405,28 @@ class _TxSheetState extends State<TxSheet> {
           title: Text('Always use this main tag for ${merchantName(t)}', style: const TextStyle(fontSize: BwType.bodySize)),
         ),
       const SizedBox(height: 8),
-      ExtraTagsEditor(wc: widget.wc, tx: widget.t, payeeRule: !manual && tagPayee(t) != null),
+      ExtraTagsEditor(
+          wc: widget.wc,
+          tx: widget.t,
+          payeeRule: !manual && tagPayee(t) != null,
+          onChanged: (on, rule) {
+            tagOn = on;
+            tagRule = rule;
+          }),
       const SizedBox(height: 8),
       Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, children: [
         FilledButton(
-          onPressed: () {
-            // Only an owner's pick is written: the category shown is the resolved one, so an untouched Save must not overwrite a
-            // deleted custom id (or the merchant rule that points at it).
-            if (cat != widget.t.category) widget.wc.setCategory(t, cat, always: always && !manual);
-            Navigator.pop(context, 'saved');
-          },
+          onPressed: saving
+              ? null
+              : () async {
+                  saving = true;
+                  // Only an owner's pick is written: the category shown is the resolved one, so an untouched Save must not overwrite a
+                  // deleted custom id (or the merchant rule that points at it).
+                  if (cat != widget.t.category) widget.wc.setCategory(t, cat, always: always && !manual);
+                  // The tag draft: only what differs is written; a tag deleted meanwhile is counted and the toast says so.
+                  if (tagOn != null) await widget.wc.saveTagChanges(widget.t, on: tagOn!, rule: tagRule ?? const {});
+                  if (context.mounted) Navigator.pop(context, 'saved');
+                },
           child: const Text('Save'),
         ),
         if (manual)

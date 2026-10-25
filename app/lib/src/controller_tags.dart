@@ -9,6 +9,9 @@ final _tagLog = Logger('bw.tags.ui');
 /// A hand-added expense without a note has no payee, so recommendations for a new expense go by overall use.
 const _placeholderTx = Tx(id: 'new', source: 'manual', date: '2000-01-01', amount: 0, manual: true);
 
+/// "Saved; one tag could not be added" for [n] tag writes that failed in a save, or null when none did.
+String? tagFailureText(int n) => n <= 0 ? null : (n == 1 ? 'Saved; one tag could not be added' : 'Saved; $n tags could not be added');
+
 extension TagsDb on WalletController {
   /// The owner's tags as the shown rows were computed with (rebuilt on every [reload], from the categorizer).
   TagTable get tagTable => categorizer.tagContext?.tags ?? TagTable.empty;
@@ -128,12 +131,91 @@ extension TagsDb on WalletController {
     _changed();
   }
 
-  /// Links [tags] to the new payment [txId]. Core writes synchronously (nothing awaits inside), so the caller can reload right
-  /// after. A failure is logged and skipped.
+  /// Links [tags] to the new payment [txId]; a tag that is no longer live, or a write that fails, is counted in [takeTagFailures] and
+  /// logged. Core writes synchronously (nothing awaits inside), so the caller can reload right after.
   void _linkNewTags(String txId, Iterable<String> tags) {
+    final table = tagTable;
     for (final g in tags) {
-      repo.setTxTag(txId, g, true).catchError((Object e, StackTrace st) => logError(_tagLog, 'tags.link.failed', e, st));
+      if (!table.isLive(g)) {
+        _tagFailures++;
+        continue;
+      }
+      repo.setTxTag(txId, g, true).catchError((Object e, StackTrace st) {
+        _tagFailures++;
+        logError(_tagLog, 'tags.link.failed', e, st);
+      });
     }
+  }
+
+  /// How many tag writes of the last save could not be made (a tag deleted while the sheet was open, a refused write), then 0. The
+  /// toast after a save says so ([tagFailureText]).
+  int takeTagFailures() {
+    final n = _tagFailures;
+    _tagFailures = 0;
+    return n;
+  }
+
+  /// The sheet's Save for tags: makes the payment [row] have exactly the tags [on] and its payee give exactly [rule] to every payment,
+  /// writing only what differs (nothing for an untouched draft). Tags that are no longer live are not written; they and any write that
+  /// fails are counted in [takeTagFailures]. Reloads once when something was written. Returns the number of failures.
+  Future<int> saveTagChanges(CategorizedTx row, {required Set<String> on, required Set<String> rule}) async {
+    final tx = row.tx;
+    final table = repo.tagTable();
+    var failed = 0, wrote = 0;
+    Set<String> resolved(Iterable<String> ids) => {
+          for (final id in ids)
+            if (table.resolve(id) case final r?) r
+        };
+    // The payee rule first, so the row's tags below are judged with it.
+    final payee = tagPayee(tx);
+    if (payee != null) {
+      final now = resolved(repo.ruleTags()[payee] ?? const <String>{});
+      final want = resolved(rule);
+      for (final id in want.difference(now)) {
+        try {
+          await repo.setRuleTag(payee, id, true);
+          wrote++;
+        } catch (e, st) {
+          failed++;
+          logError(_tagLog, 'tags.rule.failed', e, st);
+        }
+      }
+      for (final id in now.difference(want)) {
+        try {
+          await repo.setRuleTag(payee, id, false);
+          wrote++;
+        } catch (e, st) {
+          failed++;
+          logError(_tagLog, 'tags.rule.failed', e, st);
+        }
+      }
+    }
+    final want = resolved(on);
+    // A tag that was picked and is gone now cannot be added; one the payment had before and that is gone just disappears.
+    failed += on.where((id) => table.resolve(id) == null && !row.tags.contains(id)).length;
+    final have = {...tagsOf(tx, tags: table, ruleTags: repo.ruleTags(), links: repo.tagLinks())};
+    for (final id in want.difference(have)) {
+      try {
+        await repo.setTxTag(tx.id, id, true);
+        wrote++;
+      } catch (e, st) {
+        failed++;
+        logError(_tagLog, 'tags.link.failed', e, st);
+      }
+    }
+    for (final id in have.difference(want)) {
+      try {
+        await repo.setTxTag(tx.id, id, false);
+        wrote++;
+      } catch (e, st) {
+        failed++;
+        logError(_tagLog, 'tags.link.failed', e, st);
+      }
+    }
+    _tagFailures += failed;
+    logEvent(_tagLog, Level.INFO, 'tags.save', {'written': wrote, 'failed': failed});
+    if (wrote > 0) _changed();
+    return failed;
   }
 
   // ---------- Insights ----------

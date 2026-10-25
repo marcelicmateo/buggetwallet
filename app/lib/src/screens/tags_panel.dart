@@ -26,6 +26,7 @@ class TagsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = wc.tagTable;
     final counts = wc.tagUseCounts();
+    final ids = t.ids; // once per build: the rows get their place in it
     // Sync duplicates (the same name added on two devices) are listed apart: the original counts their payments.
     final dups = [
       for (final id in t.liveIds)
@@ -43,13 +44,13 @@ class TagsPanel extends StatelessWidget {
           'tags',
           'Tags track what a payment was for, as deep as you like. A payment can have any number of them. They never change your budget: '
               'its main tag does that. Hide a tag to stop it showing in pickers.'),
-      if (t.ids.isEmpty && dups.isEmpty)
+      if (ids.isEmpty && dups.isEmpty)
         const Padding(
             padding: EdgeInsets.only(top: 6),
             child: EmptyNote('No tags yet. Add one here, or tag a payment from its sheet.', key: ValueKey('tagsEmpty')))
       else
         Rows(children: [
-          for (final id in t.ids) _TagRow(wc: wc, id: id, count: counts[id] ?? 0),
+          for (var i = 0; i < ids.length; i++) _TagRow(wc: wc, id: ids[i], count: counts[ids[i]] ?? 0, pos: i, last: ids.length - 1),
           for (final id in dups) _DuplicateRow(wc: wc, id: id),
         ]),
     ]);
@@ -83,7 +84,10 @@ class _TagRow extends StatelessWidget {
   final WalletController wc;
   final String id;
   final int count;
-  const _TagRow({required this.wc, required this.id, required this.count});
+
+  /// This tag's place in the list and the last place (Move up / down are off at the ends).
+  final int pos, last;
+  const _TagRow({required this.wc, required this.id, required this.count, required this.pos, required this.last});
 
   @override
   Widget build(BuildContext context) {
@@ -91,8 +95,6 @@ class _TagRow extends StatelessWidget {
     final c = context.c;
     final label = t.label(id);
     final hidden = t.isHidden(id);
-    final order = t.ids;
-    final pos = order.indexOf(id);
     return Container(
       key: ValueKey('tag:$id'),
       constraints: const BoxConstraints(minHeight: touchMin),
@@ -120,11 +122,7 @@ class _TagRow extends StatelessWidget {
             PopupMenuItem(key: ValueKey('tagRename:$id'), value: _Act.rename, child: const Text('Rename')),
             PopupMenuItem(key: ValueKey('tagHide:$id'), value: _Act.hide, child: Text(hidden ? 'Show' : 'Hide')),
             PopupMenuItem(key: ValueKey('tagUp:$id'), value: _Act.up, enabled: pos > 0, child: const Text('Move up')),
-            PopupMenuItem(
-                key: ValueKey('tagDown:$id'),
-                value: _Act.down,
-                enabled: pos >= 0 && pos < order.length - 1,
-                child: const Text('Move down')),
+            PopupMenuItem(key: ValueKey('tagDown:$id'), value: _Act.down, enabled: pos < last, child: const Text('Move down')),
             PopupMenuItem(key: ValueKey('tagDeleteItem:$id'), value: _Act.delete, child: const Text('Delete')),
           ],
         ),

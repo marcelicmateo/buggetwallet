@@ -135,6 +135,9 @@ class WalletController extends ChangeNotifier {
 
   WalletSettings settings = const WalletSettings();
   late Categorizer categorizer;
+
+  /// Tag writes of the last save that could not be made ([takeTagFailures]).
+  int _tagFailures = 0;
   List<CategorizedTx> txs = const [];
   List<Goal> goals = const [];
   List<WishItem> wish = const [];

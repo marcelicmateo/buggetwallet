@@ -273,7 +273,11 @@ class _CategoryRow extends StatelessWidget {
               TextButton(
                   onPressed: () async {
                     final r = await showSheet<String>(context, TxSheet(wc: wc, t: t));
-                    if (r == 'saved') wc.confirmCategory(t.tx); // the picked category is now the owner's choice
+                    if (r == 'saved') {
+                      wc.confirmCategory(t.tx); // the picked category is now the owner's choice
+                      final failed = tagFailureText(wc.takeTagFailures());
+                      if (failed != null && host.mounted) toast(host, failed);
+                    }
                     if (r != 'saved' && host.mounted) txSheetToast(host, wc, r); // a delete says so, with Undo (the row is gone by then)
                   },
                   child: const Text('Change')),

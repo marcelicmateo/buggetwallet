@@ -2,8 +2,8 @@
 // (tags on the payment, suggestions, every tag in recommended order, a new tag, and the payee rule). The main tag is the row's category
 // (category_picker.dart); extra tags only track, they never move money.
 //
-// Nothing is tagged without a tap: a suggestion is a faded chip with a "+". A change on a saved payment is written at once (core's
-// `setTxTag` / `setRuleTag`); on a payment being added it is kept and written with the payment.
+// Nothing is tagged without a tap: a suggestion is a faded chip with a "+". Taps are a draft: the sheet's Save writes them (core's
+// `setTxTag` / `setRuleTag`), closing it writes nothing.
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -46,10 +46,9 @@ List<Widget> rowTagChips(TagTable table, List<String> tags) => [
             semanticsLabel: '${tags.length - rowTagsShown} more tags'),
     ];
 
-final _log = Logger('bw.tags.ui');
-
-/// The extra tags of one payment. With [tx] (a saved payment) every tap is written at once; without it (the add-expense sheet) the
-/// chosen ids are reported through [onChanged] and the caller writes them with the payment.
+/// The extra tags of one payment, as a draft: a tap changes only what this widget holds and reports it through [onChanged] (the tags on the
+/// payment and the tags its payee gives to every payment). The sheet writes them with its Save (`WalletController.saveTagChanges`, or
+/// `addExpense(tags:)` for a payment being added); closing the sheet writes nothing. Only "New tag" writes at once: it makes the tag.
 class ExtraTagsEditor extends StatefulWidget {
   final WalletController wc;
 
@@ -58,7 +57,7 @@ class ExtraTagsEditor extends StatefulWidget {
 
   /// The tags chosen so far for a payment being added.
   final Set<String> initial;
-  final ValueChanged<Set<String>>? onChanged;
+  final void Function(Set<String> on, Set<String> rule)? onChanged;
 
   /// Offer "Also tag every payment from this payee with…" (a bank row with a payee).
   final bool payeeRule;
@@ -68,8 +67,12 @@ class ExtraTagsEditor extends StatefulWidget {
 }
 
 class _ExtraTagsEditorState extends State<ExtraTagsEditor> {
-  late Set<String> _on = widget.tx != null ? {...widget.tx!.tags} : {...widget.initial};
-  late Set<String> _rule = widget.tx == null ? {} : widget.wc.ruleTagsOf(widget.tx!.tx);
+  late final Set<String> _rule0 = widget.tx == null ? {} : widget.wc.ruleTagsOf(widget.tx!.tx);
+  late final Set<String> _on = widget.tx != null ? {...widget.tx!.tags} : {...widget.initial};
+  late final Set<String> _rule = {..._rule0};
+
+  /// The tags the payee rule chips ever showed (they stay while toggled, so a tap can be undone).
+  late final Set<String> _ruleChips = {..._rule0, ..._on};
 
   /// Recommended order and suggestions: read once per sheet (core's ordering reads every row).
   late final List<String> _recommended = widget.wc.recommendedTagsFor(widget.tx?.tx);
@@ -86,53 +89,36 @@ class _ExtraTagsEditorState extends State<ExtraTagsEditor> {
 
   TagTable get _table => widget.wc.tagTable;
 
-  /// Re-reads the payment's tags after a write (the controller reloaded).
-  void _refresh() {
-    final id = widget.tx!.tx.id;
-    final now = widget.wc.txs.where((x) => x.tx.id == id).firstOrNull;
-    _on = {...?now?.tags};
-    _rule = widget.wc.ruleTagsOf(widget.tx!.tx);
-  }
+  void _report() => widget.onChanged?.call({..._on}, {..._rule});
 
-  Future<void> _set(String id, bool on) async {
-    if (widget.tx == null) {
-      setState(() {
-        on ? _on.add(id) : _on.remove(id);
-        _error = null;
-      });
-      widget.onChanged?.call({..._on});
-      return;
-    }
-    try {
-      await widget.wc.setPaymentTag(widget.tx!.tx.id, id, on);
-    } catch (e, st) {
-      logError(_log, 'tags.set.failed', e, st);
-      if (mounted) setState(() => _error = e is ArgumentError ? e.message.toString() : 'Could not save. Try again.');
-      return;
-    }
-    if (!mounted) return;
+  void _set(String id, bool on) {
     setState(() {
-      final wasRule = _rule.contains(id);
-      _refresh();
-      _removedFromRule = !on && wasRule;
+      if (on) {
+        _on.add(id);
+        _ruleChips.add(id);
+      } else {
+        _on.remove(id);
+      }
+      _removedFromRule = !on && _rule.contains(id);
       _error = null;
     });
+    _report();
   }
 
-  Future<void> _setRule(String id, bool on) async {
-    try {
-      await widget.wc.setPayeeTag(widget.tx!.tx, id, on);
-    } catch (e, st) {
-      logError(_log, 'tags.rule.failed', e, st);
-      if (mounted) setState(() => _error = e is ArgumentError ? e.message.toString() : 'Could not save. Try again.');
-      return;
-    }
-    if (!mounted) return;
+  void _setRule(String id, bool on) {
     setState(() {
-      _refresh();
+      if (on) {
+        _rule.add(id);
+        _on.add(id);
+      } else {
+        _rule.remove(id);
+        // A tag the row had only because of the rule goes with it; one the owner added to this payment stays.
+        if (_rule0.contains(id) && widget.wc.tagContext.links[widget.tx!.tx.id]?[id] != true) _on.remove(id);
+      }
       _removedFromRule = false;
       _error = null;
     });
+    _report();
   }
 
   Future<void> _create() async {
@@ -140,7 +126,7 @@ class _ExtraTagsEditorState extends State<ExtraTagsEditor> {
     try {
       final id = await widget.wc.addTag(text);
       _name.clear();
-      await _set(id, true);
+      if (mounted) _set(id, true);
     } on ArgumentError catch (e) {
       setState(() => _error = e.message.toString());
     }
@@ -159,13 +145,21 @@ class _ExtraTagsEditorState extends State<ExtraTagsEditor> {
       for (final id in _suggested)
         if (!_on.contains(id) && table.isLive(id)) id
     ];
+    // The recommended order first, then every other tag that can be picked (one made or hidden since the sheet opened).
+    final rest = [
+      for (final id in table.pickable())
+        if (!_recommended.contains(id)) id
+    ];
     final others = [
-      for (final id in _recommended)
+      for (final id in [..._recommended.where(table.pickable().contains), ...rest])
         if (!_on.contains(id) && !suggested.contains(id)) id
     ];
     final shown = _all ? others : others.take(extraTagTop).toList();
     final payee = widget.tx == null ? null : merchantName(widget.tx!.tx);
-    final ruleIds = {..._rule, ..._on};
+    final ruleIds = [
+      for (final id in table.ids)
+        if (_ruleChips.contains(id)) id
+    ];
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, key: const ValueKey('extraTags'), children: [
       InputDecorator(
         decoration: const InputDecoration(labelText: 'Tags'),
@@ -260,14 +254,13 @@ class _ExtraTagsEditorState extends State<ExtraTagsEditor> {
           const Muted('Tag this payment first, then pick the tags here.', key: ValueKey('payeeRuleEmpty'))
         else
           Wrap(spacing: 6, runSpacing: 6, children: [
-            for (final id in table.ids)
-              if (ruleIds.contains(id))
-                FilterChip(
-                  key: ValueKey('ruleTag:$id'),
-                  selected: _rule.contains(id),
-                  label: Text(tagText(table, id)),
-                  onSelected: (v) => _setRule(id, v),
-                ),
+            for (final id in ruleIds)
+              FilterChip(
+                key: ValueKey('ruleTag:$id'),
+                selected: _rule.contains(id),
+                label: Text(tagText(table, id)),
+                onSelected: (v) => _setRule(id, v),
+              ),
           ]),
       ],
     ]);

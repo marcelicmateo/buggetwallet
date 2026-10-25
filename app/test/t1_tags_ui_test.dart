@@ -57,8 +57,10 @@ List<CategorizedTx> rowsOfPayee(WalletController wc, String word) =>
 
 CategorizedTx fresh(WalletController wc, CategorizedTx t) => wc.txs.firstWhere((x) => x.tx.id == t.tx.id);
 
-Future<void> openSheet(WidgetTester t, WalletController wc, CategorizedTx row, {Size size = const Size(400, 3200)}) =>
-    pumpApp(t, Scaffold(body: SingleChildScrollView(child: TxSheet(wc: wc, t: row))), size: size);
+Future<void> openSheet(WidgetTester t, WalletController wc, CategorizedTx row, {Size size = const Size(400, 3200)}) async {
+  await t.pumpWidget(const SizedBox.shrink()); // a fresh Navigator: a sheet that was saved has popped the old one
+  await pumpApp(t, Scaffold(body: SingleChildScrollView(child: TxSheet(wc: wc, t: row))), size: size);
+}
 
 Widget tagsPanel(WalletController wc) =>
     ListenableBuilder(listenable: wc, builder: (_, __) => Scaffold(body: SingleChildScrollView(child: TagsPanel(wc: wc))));
@@ -160,28 +162,99 @@ void main() {
     }, timeout: _timeout);
   });
 
-  group('the tag editor in the transaction sheet', () {
-    testWidgets('a tag toggles on and off from the list and writes the payment\'s link', (t) async {
+  group('the tag editor in the transaction sheet (a draft: Save writes it)', () {
+    int outbox(WalletController wc) => wc.repo.db.select('SELECT COUNT(*) AS n FROM outbox').first['n'] as int;
+    Future<void> save(WidgetTester t) async {
+      await t.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+      await t.tap(find.widgetWithText(FilledButton, 'Save'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+    }
+
+    testWidgets('a tag toggles on and off in the draft; Save writes the link', (t) async {
       final (:wc, :holiday, :kids, work: _) = await tagsWallet();
       final row = rowsOfPayee(wc, 'LIDL').single;
       await openSheet(t, wc, row);
       expect(k('noTags'), findsOneWidget);
       await tapKey(t, 'tagAdd');
       await tapKey(t, 'tagPick:$holiday');
-      expect(fresh(wc, row).tags, [holiday]);
+      expect(fresh(wc, row).tags, isEmpty, reason: 'a draft: nothing is written before Save');
       expect(k('tagOn:$holiday'), findsOneWidget);
       expect(k('tagPick:$holiday'), findsNothing, reason: 'it moved to the chosen tags');
       await tapKey(t, 'tagPick:$kids');
-      expect(fresh(wc, row).tags.toSet(), {holiday, kids});
       await tapKey(t, 'tagOn:$holiday');
-      expect(fresh(wc, row).tags, [kids]);
       expect(k('tagOn:$holiday'), findsNothing);
       expect(k('tagPick:$holiday'), findsOneWidget, reason: 'back in the list');
+      await save(t);
+      expect(fresh(wc, row).tags, [kids]);
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);
 
-    testWidgets('a suggestion is only a faded chip: nothing is applied until it is tapped', (t) async {
+    testWidgets('closing after tapping tags and changing the main tag writes no op', (t) async {
+      final (:wc, :holiday, :kids, work: _) = await tagsWallet();
+      final konzum = rowsOfPayee(wc, 'KONZUM');
+      await wc.setPaymentTag(konzum[0].tx.id, kids, true);
+      await wc.setPaymentTag(konzum[1].tx.id, kids, true);
+      final row = fresh(wc, konzum[2]);
+      final before = outbox(wc);
+      await openSheet(t, wc, row);
+      await tapKey(t, 'tagSuggest:$kids');
+      await tapKey(t, 'tagAdd');
+      await tapKey(t, 'tagPick:$holiday');
+      await tapKey(t, 'txCategory');
+      await t.tap(k('pick:Shopping').last);
+      await t.pump(const Duration(milliseconds: 400));
+      await tapKey(t, 'ruleTag:$kids');
+      await t.pumpWidget(const SizedBox.shrink()); // closed: X, back or Esc all end here
+      expect(outbox(wc), before);
+      expect(fresh(wc, row).tags, isEmpty);
+      expect(fresh(wc, row).category, row.category);
+      expect(wc.ruleTagsOf(row.tx), isEmpty);
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+
+    testWidgets('Save writes exactly the changed links', (t) async {
+      final (:wc, :holiday, :kids, :work) = await tagsWallet();
+      final konzum = rowsOfPayee(wc, 'KONZUM');
+      await wc.setPaymentTag(konzum[2].tx.id, kids, true);
+      await wc.setPaymentTag(konzum[2].tx.id, work, true);
+      final row = fresh(wc, konzum[2]);
+      await openSheet(t, wc, row);
+      await tapKey(t, 'tagOn:$work'); // off
+      await tapKey(t, 'tagAdd');
+      await tapKey(t, 'tagPick:$holiday'); // on
+      final before = outbox(wc);
+      await save(t);
+      expect(outbox(wc) - before, 2, reason: 'one op per changed link, none for the untouched Kids');
+      expect(fresh(wc, row).tags.toSet(), {kids, holiday});
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+
+    testWidgets('an untouched Save writes no op at all', (t) async {
+      final (:wc, :holiday, kids: _, work: _) = await tagsWallet();
+      final konzum = rowsOfPayee(wc, 'KONZUM');
+      await wc.setPayeeTag(konzum[0].tx, holiday, true);
+      final row = fresh(wc, konzum[1]);
+      await openSheet(t, wc, row);
+      final before = outbox(wc);
+      await save(t);
+      expect(outbox(wc), before);
+      // A draft that ends where it began (tap a chosen tag off, then on again) writes nothing either.
+      final again = fresh(wc, konzum[1]);
+      await openSheet(t, wc, again);
+      await tapKey(t, 'tagOn:$holiday');
+      await tapKey(t, 'tagAdd');
+      await tapKey(t, 'tagPick:$holiday');
+      await save(t);
+      expect(outbox(wc), before);
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+
+    testWidgets('a suggestion is only a faded chip: nothing is applied until it is tapped, and written with Save', (t) async {
       final (:wc, :holiday, :kids, work: _) = await tagsWallet();
       final konzum = rowsOfPayee(wc, 'KONZUM');
       await wc.setPaymentTag(konzum[0].tx.id, kids, true);
@@ -195,14 +268,16 @@ void main() {
       expect(fresh(wc, row).tags, isEmpty, reason: 'shown, not applied');
       expect(find.descendant(of: k('tagSuggest:$kids'), matching: find.byIcon(Icons.add)), findsOneWidget);
       await tapKey(t, 'tagSuggest:$kids');
-      expect(fresh(wc, row).tags, [kids]);
       expect(k('tagSuggest:$kids'), findsNothing);
       expect(k('tagOn:$kids'), findsOneWidget);
+      expect(fresh(wc, row).tags, isEmpty, reason: 'still a draft');
+      await save(t);
+      expect(fresh(wc, row).tags, [kids]);
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);
 
-    testWidgets('a tag a rule gives is marked, and removing it is for this payment only', (t) async {
+    testWidgets('a tag a rule gives is marked, and removing it is for this payment only (written with Save)', (t) async {
       final (:wc, :holiday, kids: _, work: _) = await tagsWallet();
       final konzum = rowsOfPayee(wc, 'KONZUM');
       await wc.setPayeeTag(konzum[0].tx, holiday, true);
@@ -213,6 +288,8 @@ void main() {
       await tapKey(t, 'tagOn:$holiday');
       expect(k('ruleOffNote'), findsOneWidget);
       expect(find.textContaining('this payment only'), findsOneWidget);
+      expect(fresh(wc, konzum[0]).tags, [holiday], reason: 'a draft until Save');
+      await save(t);
       expect(fresh(wc, konzum[0]).tags, isEmpty);
       expect(fresh(wc, konzum[1]).tags, [holiday], reason: 'the other payments keep it');
       expect(fresh(wc, konzum[2]).tags, [holiday]);
@@ -220,7 +297,7 @@ void main() {
       wc.dispose();
     }, timeout: _timeout);
 
-    testWidgets('a new tag is created and applied; a taken name shows core\'s message', (t) async {
+    testWidgets('a new tag is created and applied with Save; a taken name shows core\'s message', (t) async {
       final (:wc, holiday: _, kids: _, work: _) = await tagsWallet();
       final row = rowsOfPayee(wc, 'LIDL').single;
       await openSheet(t, wc, row);
@@ -228,19 +305,39 @@ void main() {
       await t.enterText(k('tagNew'), 'Garden');
       await tapKey(t, 'tagNewGo');
       final garden = wc.tagTable.ids.firstWhere((id) => wc.tagTable.label(id) == 'Garden');
-      expect(fresh(wc, row).tags, [garden]);
       expect(k('tagOn:$garden'), findsOneWidget);
+      expect(fresh(wc, row).tags, isEmpty, reason: 'applied to the draft');
       // The same name again (any case) is refused and nothing new is made.
       final before = wc.tagTable.ids.length;
       await t.enterText(k('tagNew'), 'garden');
       await tapKey(t, 'tagNewGo');
       expect(wc.tagTable.ids.length, before);
       expect(t.widget<TextField>(k('tagNew')).decoration!.errorText, isNotNull);
+      await save(t);
+      expect(fresh(wc, row).tags, [garden]);
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);
 
-    testWidgets('"Also tag every payment from this payee with…" writes a rule for all of its payments', (t) async {
+    testWidgets('a tag created and removed again can be added back from the list', (t) async {
+      final (:wc, holiday: _, kids: _, work: _) = await tagsWallet();
+      final row = rowsOfPayee(wc, 'LIDL').single;
+      await openSheet(t, wc, row);
+      await tapKey(t, 'tagAdd');
+      await t.enterText(k('tagNew'), 'Garden');
+      await tapKey(t, 'tagNewGo');
+      final garden = wc.tagTable.ids.firstWhere((id) => wc.tagTable.label(id) == 'Garden');
+      expect(k('tagPick:$garden'), findsNothing);
+      await tapKey(t, 'tagOn:$garden');
+      expect(k('tagOn:$garden'), findsNothing);
+      expect(k('tagPick:$garden'), findsOneWidget, reason: 'made after the sheet opened, so not in its recommended list');
+      await tapKey(t, 'tagPick:$garden');
+      expect(k('tagOn:$garden'), findsOneWidget);
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+
+    testWidgets('"Also tag every payment from this payee with…" is saved with Save', (t) async {
       final (:wc, :holiday, kids: _, work: _) = await tagsWallet();
       final konzum = rowsOfPayee(wc, 'KONZUM');
       await openSheet(t, wc, konzum[0]);
@@ -248,13 +345,49 @@ void main() {
       expect(k('payeeRuleEmpty'), findsOneWidget, reason: 'nothing to pick before this payment has a tag');
       await tapKey(t, 'tagAdd');
       await tapKey(t, 'tagPick:$holiday');
-      expect(fresh(wc, konzum[1]).tags, isEmpty);
       await tapKey(t, 'ruleTag:$holiday');
+      expect(fresh(wc, konzum[1]).tags, isEmpty, reason: 'a draft until Save');
+      await save(t);
+      expect(fresh(wc, konzum[0]).tags, [holiday]);
       expect(fresh(wc, konzum[1]).tags, [holiday]);
       expect(fresh(wc, konzum[2]).tags, [holiday]);
       expect(fresh(wc, rowsOfPayee(wc, 'LIDL').single).tags, isEmpty, reason: 'another payee');
+      // And switched off again with Save.
+      await openSheet(t, wc, fresh(wc, konzum[0]));
       await tapKey(t, 'ruleTag:$holiday');
-      expect(fresh(wc, konzum[2]).tags.contains(holiday), isFalse);
+      await save(t);
+      expect(fresh(wc, konzum[2]).tags, isEmpty);
+      expect(fresh(wc, konzum[0]).tags, isEmpty, reason: 'the row had it only from the rule');
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+
+    testWidgets('a picked tag deleted while the sheet is open is not written; the toast says so', (t) async {
+      final (:wc, :holiday, :kids, work: _) = await tagsWallet();
+      final row = rowsOfPayee(wc, 'LIDL').single;
+      await pumpApp(t, Scaffold(body: Builder(builder: (ctx) {
+        return TextButton(
+            key: const ValueKey('openIt'),
+            onPressed: () async {
+              final r = await showSheet<String>(ctx, TxSheet(wc: wc, t: row));
+              if (ctx.mounted) txSheetToast(ctx, wc, r);
+            },
+            child: const Text('open'));
+      })), size: const Size(400, 3200));
+      await tapKey(t, 'openIt');
+      await tapKey(t, 'tagAdd');
+      await tapKey(t, 'tagPick:$holiday');
+      await tapKey(t, 'tagPick:$kids');
+      await wc.deleteTag(holiday); // another device, or Plan › Tags, while the sheet is open
+      final before = outbox(wc);
+      await t.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
+      await t.tap(find.widgetWithText(FilledButton, 'Save'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(fresh(wc, row).tags, [kids], reason: 'the live tag is written, the dead one is not');
+      expect(outbox(wc) - before, 1);
+      expect(find.text('Saved; one tag could not be added'), findsOneWidget);
+      expect(wc.takeTagFailures(), 0, reason: 'taken by the toast');
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);
