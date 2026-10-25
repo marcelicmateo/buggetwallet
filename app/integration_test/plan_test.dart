@@ -1,5 +1,6 @@
 // Tap-through on Plan: numbers (validation, save), start a new month, Sync (relay address), wallet key, Diagnostics (level,
 // log size, clear). Run: tools/emulator.sh test plan
+import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/diagnostics.dart';
@@ -10,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'demo_data.dart';
 import 'support/harness.dart';
 
 Finder inPlan(Finder f) => find.descendant(of: find.byType(PlanScreen), matching: f);
@@ -47,7 +49,7 @@ String logFilesValue(WidgetTester t) {
 
 void main() {
   Harness.init();
-  Harness.private(cents: [250000, 60050, 25000, 4599, 8000, 70000, 40000, 260000]);
+  Harness.private(cents: [250000, 60050, 25000, 4599, 8000, 70000, 40000, 260000, 123456, 7500]);
 
   itest('Plan numbers: bad input is refused, good input is saved and used everywhere', (t) async {
     final wc = await Harness.start(t);
@@ -136,6 +138,51 @@ void main() {
     await save(t);
     expect(find.text('Plan saved'), findsOneWidget);
     expect((wc.settings.loan, wc.settings.subs, wc.settings.salary, wc.settings.rent), (30000, 5000, 260000, 70000));
+    await Harness.checkLog();
+  });
+
+  itest('Accounts and plan suggestions: shown, accepted, added, corrected, deleted with Undo', (t) async {
+    final today = todayIso();
+    final wc = await Harness.start(t,
+        batch: demoBatch(today), settings: {'salary': 100000, 'salaryConfirmed': true, 'paydayDay': 15, 'rent': 0, 'loan': 0});
+    await wc.addAccount(name: 'Bank 1', source: 'pbz', currency: 'EUR', opening: 123456, openingDate: addDays(today, -30));
+    final cash = await wc.addAccount(name: 'Cash', currency: 'EUR', opening: 7500, openingDate: addDays(today, -30));
+    await goTab(t, 'Plan');
+
+    // Suggestions from the imports: nothing is written until a tap; Not now hides one, Accept writes one key.
+    await scrollTo(t, find.text('SUGGESTIONS FROM YOUR IMPORTS'), PlanScreen);
+    expect(find.byKey(const ValueKey('proposal:salary')), findsOneWidget);
+    expect(find.byKey(const ValueKey('proposal:paydayDay')), findsOneWidget);
+    expect(wc.settings.salary, 100000);
+    await Harness.shot(t, 'plan-suggestions');
+    await tapVisible(t, find.byKey(const ValueKey('proposalLater:salary')));
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('proposal:salary')), findsNothing);
+    expect(wc.settings.salary, 100000);
+    await tapVisible(t, find.byKey(const ValueKey('proposalAccept:paydayDay')));
+    await t.pumpAndSettle();
+    expect(wc.settings.paydayDay, 10);
+
+    // Accounts: balances, correct, delete + Undo.
+    await scrollTo(t, find.byKey(const ValueKey('accountAdd')), PlanScreen);
+    expect(find.byKey(ValueKey('account:$cash')), findsOneWidget);
+    await Harness.shot(t, 'plan-accounts');
+    await tapVisible(t, find.byKey(ValueKey('accountCorrect:$cash')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const ValueKey('accountCorrectAmount')), '80');
+    await t.tap(find.byKey(const ValueKey('accountCorrectSave')));
+    await t.pumpAndSettle();
+    expect(wc.accountBalanceList().firstWhere((b) => b.account.id == cash).balance, 8000);
+    await tapVisible(t, find.byKey(ValueKey('accountDelete:$cash')));
+    await t.pumpAndSettle();
+    expect(find.byKey(ValueKey('account:$cash')), findsNothing);
+    await tapVisible(t, find.byKey(const ValueKey('toastUndo')));
+    await t.pumpAndSettle();
+    expect(find.byKey(ValueKey('account:$cash')), findsOneWidget);
+
+    await goTab(t, 'Today');
+    expect(find.byKey(const ValueKey('heldLine')), findsOneWidget);
+    await Harness.shot(t, 'today-held');
     await Harness.checkLog();
   });
 

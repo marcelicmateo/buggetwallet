@@ -44,6 +44,7 @@ void main() {
     wc.saveCategoryBudgets(demoBudgets);
     seedDemoPlanned(wc.repo, wc.today(), wc.period().end);
     seedDemoBills(wc.repo, wc.today());
+    await seedDemoAccounts(wc.repo, wc.today());
     wc.reload();
     await wc.importIcsFile('demo.ics', Uint8List.fromList(utf8.encode(demoIcs(wc.today()))));
 

@@ -10,7 +10,7 @@ import '../integration_test/demo_data.dart';
 void main() {
   // Several days, so due dates fall before, on and after a payday (the 10th in the demo settings).
   for (final today in ['2026-10-20', '2026-10-05', '2026-10-09', '2026-12-31', '2027-03-01']) {
-    test('the demo wallet seeds without errors ($today)', () {
+    test('the demo wallet seeds without errors ($today)', () async {
       final repo = WalletRepo.inMemory(now: () => DateTime.parse('${today}T12:00:00Z').millisecondsSinceEpoch);
       addTearDown(repo.close);
       repo.importBatch(demoBatch(today));
@@ -22,6 +22,8 @@ void main() {
       final p = computePeriod(const [], st, const [], today);
       seedDemoPlanned(repo, today, p.end);
       seedDemoBills(repo, today);
+      await seedDemoAccounts(repo, today);
+      expect(repo.accounts(), hasLength(3));
       final bills = repo.bills();
       expect(bills, hasLength(4));
       expect(bills.where((b) => b.dueDate != null).every((b) => b.category != null), isTrue);

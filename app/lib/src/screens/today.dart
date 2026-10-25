@@ -38,6 +38,9 @@ class TodayScreen extends StatelessWidget {
   /// Opens Plan › Bills at "To review" ("N bills to review"); without it the line opens Plan.
   final VoidCallback? openBillsReview;
 
+  /// Opens Plan › Accounts ("Held: …"); without it the line opens Plan.
+  final VoidCallback? openAccounts;
+
   /// The file chooser of the review's Import step (tests pass one that fails).
   final FileChooser chooser;
 
@@ -51,6 +54,7 @@ class TodayScreen extends StatelessWidget {
     this.addExpense,
     this.openBills,
     this.openBillsReview,
+    this.openAccounts,
     this.chooser = const FileChooser(),
     this.clock = DateTime.now,
   });
@@ -91,6 +95,7 @@ class TodayScreen extends StatelessWidget {
     final review = wc.reviewState();
     final reviewedToday = wc.lastReview == wc.today() && !review.due;
     final comingUp = wc.comingUp();
+    final held = wc.heldTotals();
     final suggestions = wc.suggestionCount();
     final headsUps = wc.headsUpLines();
     final needCategory = wc.plannedNeedingCategory();
@@ -194,6 +199,15 @@ class TodayScreen extends StatelessWidget {
                         onTap: () {
                           logNav('bill.needsCategory');
                           openBill(context, wc, n.sourceRef!);
+                        }),
+                  if (held.isNotEmpty)
+                    _InfoLine(
+                        key: const ValueKey('heldLine'),
+                        icon: Icons.account_balance_wallet_outlined,
+                        text: 'Held: ${held.entries.map((e) => moneyExact(e.value, e.key)).join(' · ')}',
+                        onTap: () {
+                          logNav('accounts.heldOpen');
+                          (openAccounts ?? openPlan)();
                         }),
                   if (toReview > 0)
                     _InfoLine(

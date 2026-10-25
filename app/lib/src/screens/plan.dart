@@ -9,6 +9,7 @@ import '../logging.dart';
 import '../platform.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'accounts_panel.dart';
 import 'backup_panel.dart';
 import 'bills_panel.dart';
 import 'budgets.dart';
@@ -21,6 +22,7 @@ import 'import_flow.dart';
 import 'join_another.dart';
 import 'key_backup.dart';
 import 'look_panel.dart';
+import 'plan_suggestions.dart';
 import 'sync_panel.dart';
 
 class PlanScreen extends StatefulWidget {
@@ -34,7 +36,10 @@ class PlanScreen extends StatefulWidget {
 
   /// Fires when Today's "N bills to review" line is tapped: the page then scrolls to Bills.
   final Listenable? showBillsDb;
-  const PlanScreen({super.key, required this.wc, this.chooser = const FileChooser(), this.showBills, this.showBillsDb});
+
+  /// Fires when Today's "Held" line is tapped: the page then scrolls to Accounts.
+  final Listenable? showAccounts;
+  const PlanScreen({super.key, required this.wc, this.chooser = const FileChooser(), this.showBills, this.showBillsDb, this.showAccounts});
   @override
   State<PlanScreen> createState() => _PlanScreenState();
 }
@@ -55,6 +60,7 @@ class _PlanScreenState extends State<PlanScreen> {
   bool _editing = false;
   final _billsKey = GlobalKey();
   final _billsDbKey = GlobalKey();
+  final _accountsKey = GlobalKey();
   final _scroll = ScrollController();
 
   /// Field errors from the last Save, by key (shown under the field until it is edited).
@@ -72,6 +78,7 @@ class _PlanScreenState extends State<PlanScreen> {
     widget.wc.addListener(_onChange);
     widget.showBills?.addListener(_scrollToBills);
     widget.showBillsDb?.addListener(_scrollToBillsDb);
+    widget.showAccounts?.addListener(_scrollToAccounts);
   }
 
   /// Scrolls to Expected bills. A ListView builds only the rows near the window, so when the panel is not built yet the page
@@ -79,6 +86,8 @@ class _PlanScreenState extends State<PlanScreen> {
   Future<void> _scrollToBills() => _scrollTo(_billsKey);
 
   Future<void> _scrollToBillsDb() => _scrollTo(_billsDbKey);
+
+  Future<void> _scrollToAccounts() => _scrollTo(_accountsKey);
 
   Future<void> _scrollTo(GlobalKey key) async {
     for (var i = 0; i < 12 && mounted; i++) {
@@ -109,6 +118,10 @@ class _PlanScreenState extends State<PlanScreen> {
       old.showBillsDb?.removeListener(_scrollToBillsDb);
       widget.showBillsDb?.addListener(_scrollToBillsDb);
     }
+    if (old.showAccounts != widget.showAccounts) {
+      old.showAccounts?.removeListener(_scrollToAccounts);
+      widget.showAccounts?.addListener(_scrollToAccounts);
+    }
   }
 
   @override
@@ -116,6 +129,7 @@ class _PlanScreenState extends State<PlanScreen> {
     widget.wc.removeListener(_onChange);
     widget.showBills?.removeListener(_scrollToBills);
     widget.showBillsDb?.removeListener(_scrollToBillsDb);
+    widget.showAccounts?.removeListener(_scrollToAccounts);
     _scroll.dispose();
     for (final c in f.values) {
       c.dispose();
@@ -273,6 +287,8 @@ class _PlanScreenState extends State<PlanScreen> {
                       ),
                     ]),
                 ]),
+              if (wc.planProposalList().isNotEmpty) PlanSuggestionsPanel(wc: wc),
+              KeyedSubtree(key: _accountsKey, child: AccountsPanel(wc: wc)),
               KeyedSubtree(key: _billsKey, child: ExpectedBillsPanel(wc: wc)),
               KeyedSubtree(key: _billsDbKey, child: BillsPanel(wc: wc, chooser: widget.chooser)),
               BudgetsPanel(wc: wc),

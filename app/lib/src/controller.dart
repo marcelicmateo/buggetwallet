@@ -22,6 +22,7 @@ import 'pdf_parse.dart';
 import 'platform.dart' show isWeb;
 import 'wallet_db.dart';
 
+part 'controller_accounts.dart';
 part 'controller_bills.dart';
 part 'controller_future.dart';
 

@@ -60,6 +60,20 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   `hasUnopenedDb = true`, slot kept. **Crash recovery:** `WalletController.load` reads the marker (`joinMarkerReader`); marker + key that opens no `wallet.db` (absent, or a mismatch: the old file is set aside now) → the new wallet opens with the
   marker's device id, the marker's relay is saved, `keyBackupConfirmed` is set, the marker is cleared and the normal start-up sync follows (`wallet.joinResumed`); marker + a wallet that opens → just clear it (relay filled in if missing). A failure
   after the set-aside sets `key = null`, marker kept. Tests: `test/join_another_test.dart`, `test/key_store_file_test.dart`, `test/wallet_db_io_test.dart`.
+- Accounts and plan suggestions (N2; core API in `docs/context/N2_SPEC.md`): `controller_accounts.dart` (a `part`: `extension AccountsDb`) = `accountsAll()`, `accountBalanceList()`,
+  `heldTotals()` (cached per data version), `addAccount/renameAccount/correctAccountBalance/deleteAccount/undeleteAccount` (async; an `ArgumentError` carries the owner-readable text),
+  `planSuggestion()`, `planProposalList()` (core's `planProposals` minus the ones put off), `acceptPlanProposals({only})` (one `updateSettings` with exactly those keys; salary also sets
+  `salaryConfirmed`), `putOffPlanProposal(key)` ("Not now": device-local `planNotNow:<key>` = the suggested value, hidden until that value changes). Logs `accounts.*`, `plan.suggestion.*`
+  (keys and `cash` flag only). Screens: `screens/accounts_panel.dart` (Plan › Accounts, after Payday plan: a row per account with `MoneyText` balance in its own currency and
+  "as of <last row or opening date>", Rename / Correct balance / Delete with the Stage I Undo toast, a muted "X: duplicate of Y, not counted" row for `duplicateOf`, a `Total <CUR>` line per
+  currency, never mixed; `AccountFormSheet` type = Cash or an importer bank profile, name follows the type until edited, currency, balance + "Below zero" box, date not after today;
+  `ArgumentError` text shown under the field or as `accountError`), `screens/plan_suggestions.dart` (Plan › "Suggestions from your imports", shown only when proposals exist: current →
+  suggested, a basis sentence, Accept / Not now per row, Accept all from 2 rows; nothing is written without a tap), `screens/welcome_balance.dart` (`openWelcomeBalance`: after a **new**
+  wallet's save-key sheet closes, `HomeShell` offers "How much cash do you have right now?" with Add cash / Skip; Cash account in the wallet currency dated today; the join flow never
+  shows it), Today's `heldLine` ("Held: 1,234.56 € · 80 $", only with accounts; `TodayScreen.openAccounts` → Plan scrolls to Accounts through `PlanScreen.showAccounts`).
+  Budgets Suggest (`budgets.dart` + `suggest_budgets_dialog.dart`): core's `budgetProposals(fields as typed, suggested)`; empty fields are filled at once, fields with a number open a
+  dialog (checkbox per row, Accept ticked / Accept all / Cancel); a field with text that is no number is left alone; only Save writes. Tests: `test/accounts_ui_test.dart`,
+  `test/plan_suggestions_ui_test.dart`, `test/budgets_plan_test.dart`, `integration_test/onboarding_test.dart` + `plan_test.dart`; demo accounts: `seedDemoAccounts`.
 - Theme (N1, softer Ledger): graphite ink, warmer paper, `lineStrong` is a mid grey (3:1 on bg: inputs, buttons, panel top rule, double rule), `line` is used for row separators,
   `SectionHead` underlines, `TotalRule`'s top line, header rules and the rail border; the double rule (1 px, 2 px gap) sits under totals only. Values: `docs/design/ledger-spec.md` §1.
 - Sync (R5): `controller.dart` keeps `relayUrl` (device-local `relayUrl` value; `setRelay(Uri?)` validates http/https + host, saves, syncs with trigger `relay`;
