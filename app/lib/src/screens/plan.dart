@@ -53,6 +53,10 @@ class _PlanScreenState extends State<PlanScreen> {
   /// The text each field last got from the settings. A field whose text differs was edited by the user:
   /// only those are saved, and only the others follow setting changes (sync, other screens).
   final Map<String, String> _shown = {};
+
+  /// One field per plan line (P1: a fixed category of your own, by id), made when its category appears. Same rules as [f].
+  final Map<String, TextEditingController> _pl = {};
+  final Map<String, String> _plShown = {};
   String currency = 'EUR';
   String _shownCurrency = 'EUR';
   bool importing = false;
@@ -135,6 +139,9 @@ class _PlanScreenState extends State<PlanScreen> {
     for (final c in f.values) {
       c.dispose();
     }
+    for (final c in _pl.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -149,6 +156,12 @@ class _PlanScreenState extends State<PlanScreen> {
       if ((force || c.text.trim() == _shown[k]) && c.text != t) c.text = t;
       _shown[k] = t;
     }
+    for (final id in widget.wc.categoryTable.planLineIds) {
+      final t = centsToFieldText(s.planLines[id] ?? 0, blankZero: true);
+      final c = _pl.putIfAbsent(id, () => TextEditingController(text: t));
+      if ((force || c.text.trim() == _plShown[id]) && c.text != t) c.text = t;
+      _plShown[id] = t;
+    }
     if (force || currency == _shownCurrency) currency = s.currency;
     _shownCurrency = s.currency;
   }
@@ -160,8 +173,9 @@ class _PlanScreenState extends State<PlanScreen> {
     final cur = wc.currency;
     final p = wc.period();
     final lowIncome = p.lowIncome;
+    final planIds = wc.categoryTable.planLineIds;
 
-    Widget field(String key, String label, {bool money = true}) {
+    Widget field(String key, String label, {bool money = true, TextEditingController? ctl, Key? fieldKey}) {
       void changed(String _) {
         if (_errors.containsKey(key)) setState(() => _errors.remove(key));
       }
@@ -177,7 +191,7 @@ class _PlanScreenState extends State<PlanScreen> {
           errorText: _errors[key],
           errorMaxLines: 3);
       return money
-          ? MoneyField(controller: f[key]!, onChanged: changed, decoration: decoration)
+          ? MoneyField(controller: ctl ?? f[key]!, fieldKey: fieldKey, onChanged: changed, decoration: decoration)
           : TextField(
               controller: f[key],
               keyboardType: TextInputType.number,
@@ -229,6 +243,11 @@ class _PlanScreenState extends State<PlanScreen> {
                   ]),
                   field('rentCashThreshold', 'Cash withdrawal counts as rent from'),
                   const Muted('ATM withdrawals this big or bigger count as rent. 0 turns it off.', size: BwType.metaSize),
+                  for (final id in planIds) ...[
+                    field('planLine_$id', wc.categoryTable.label(id), ctl: _pl[id], fieldKey: ValueKey('planLine_$id')),
+                    if (id == planIds.last)
+                      const Muted('Your own fixed categories: what you spend on each every month.', size: BwType.metaSize),
+                  ],
                   Wrap(spacing: 8, runSpacing: 8, children: [
                     FilledButton(key: const ValueKey('planSave'), onPressed: _savePlan, child: const Text('Save')),
                     OutlinedButton(key: const ValueKey('planCancel'), onPressed: _cancelEdit, child: const Text('Cancel')),
@@ -259,6 +278,11 @@ class _PlanScreenState extends State<PlanScreen> {
                             'Paid since payday: ${moneyExact(p.fixedPaid['Loan'] ?? 0, cur)}${s.loanEnd != null ? ' · ends ${monthLong(s.loanEnd!)}' : ''}'),
                     LineItem('Bills & subscriptions', moneyExact(-s.subs, cur),
                         sub: 'Paid since payday: ${moneyExact(p.fixedPaid['Bills & subscriptions'] ?? 0, cur)}'),
+                    for (final id in planIds)
+                      LineItem(wc.categoryTable.label(id), moneyExact(-(s.planLines[id] ?? 0), cur),
+                          key: ValueKey('ledgerPlanLine_$id'),
+                          sub: 'Paid since payday: ${moneyExact(p.fixedPaid[id] ?? 0, cur)}'
+                              '${(s.planLines[id] ?? 0) > 0 ? '' : '\nNot taken off your daily money until you fill this in.'}'),
                     for (final g in wc.goals) LineItem(g.name, moneyExact(-g.monthly, cur), sub: 'savings goal'),
                     // Bills and planned costs due before payday come off the spending money too: the rows add up to the total.
                     if (p.reservedBills + p.reservedPlanned > 0)
@@ -377,6 +401,20 @@ class _PlanScreenState extends State<PlanScreen> {
       for (final e in vals.entries)
         if (e.value == null) e.key: 'Numbers only' else if (e.value! < 0) e.key: "Can't be negative",
     };
+    // Plan lines: only the edited ones; an emptied field removes the line, 0 on a missing line is no change.
+    final lines = <String, int?>{};
+    for (final id in widget.wc.categoryTable.planLineIds) {
+      final c = _pl[id];
+      if (c == null || c.text.trim() == _plShown[id]) continue;
+      final text = c.text.trim();
+      final cents = text.isEmpty ? null : parseMoney(text);
+      if (text.isNotEmpty && cents == null) {
+        errors['planLine_$id'] = 'Numbers only';
+        continue;
+      }
+      if (cents == s.planLines[id] || (cents == 0 && !s.planLines.containsKey(id))) continue;
+      lines[id] = cents;
+    }
     if (errors.isNotEmpty) {
       logNav('plan.invalid', {'keys': errors.keys.join(',')}); // keys only
       setState(() => _errors
@@ -404,12 +442,19 @@ class _PlanScreenState extends State<PlanScreen> {
       f[k]!.text = t;
       _shown[k] = t;
     }
-    if (changes.isEmpty) {
+    for (final id in _pl.keys) {
+      // Edited lines show the saved value; an edit that was no change goes back to what is stored.
+      final t = centsToFieldText((lines.containsKey(id) ? lines[id] : s.planLines[id]) ?? 0, blankZero: true);
+      _pl[id]!.text = t;
+      _plShown[id] = t;
+    }
+    if (changes.isEmpty && lines.isEmpty) {
       setState(() => _editing = false);
       toast(context, 'Nothing to save');
       return;
     }
-    widget.wc.updateSettings(changes);
+    if (lines.isNotEmpty) widget.wc.savePlanLines(lines);
+    if (changes.isNotEmpty) widget.wc.updateSettings(changes);
     setState(() => _editing = false);
     toast(context, 'Plan saved');
   }

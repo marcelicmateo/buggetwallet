@@ -214,8 +214,12 @@ extension WalletInsights on WalletController {
       });
 
   /// The rows of exactly [category] (no subcategories), newest first.
-  List<CategorizedTx> ownRowsOf(String category, DateRange r) => memo('${_k('own', r)}.$category',
-      () => timed('insights.rows', () => rowsFor(category, null, txs, r, currency: currency), fields: _f(r), warnMs: 50));
+  List<CategorizedTx> ownRowsOf(String category, DateRange r) => memo(
+      '${_k('own', r)}.$category',
+      () => [
+            for (final t in rowsOf(category, null, r))
+              if (t.category == category) t
+          ]);
 
   List<IncomeVsSpending> incomeBars(DateRange r) => memo(_k('income', r),
       () => timed('insights.income', () => incomeVsSpending(txs, r, currency: currency, today: today()), fields: _f(r), warnMs: 50));
@@ -226,28 +230,22 @@ extension WalletInsights on WalletController {
           'insights.budget', () => budgetVsActualSeries(txs, r, categoryBudgets, today: today(), currency: currency, table: categoryTable),
           fields: _f(r), warnMs: 50));
 
-  List<MerchantTotal> merchantsFor(String category, DateRange r) => memo('${_k('merchants', r)}.$category',
-      () => timed('insights.merchants', () => merchantsIn(category, txs, r, currency: currency), fields: _f(r), warnMs: 50));
+  List<MerchantTotal> merchantsFor(String category, DateRange r) => memo(
+      '${_k('merchants', r)}.$category',
+      () => timed('insights.merchants', () => merchantsIn(category, txs, r, currency: currency, table: categoryTable),
+          fields: _f(r), warnMs: 50));
 
-  /// The rows behind a total ([merchantKey] null: the whole category), newest first.
-  /// With no [merchantKey] a main category's rows include its subcategories' (their sum is the rolled-up total).
-  List<CategorizedTx> rowsOf(String category, String? merchantKey, DateRange r) => memo('${_k('rows', r)}.$category.$merchantKey', () {
-        if (merchantKey != null) return ownRowsOfMerchant(category, merchantKey, r);
-        final kids = categoryTable.childrenOf(category);
-        if (kids.isEmpty) return ownRowsOf(category, r);
-        // Newest first, like core's rows (date, then id, descending).
-        return [
-          for (final c in [category, ...kids]) ...ownRowsOf(c, r)
-        ]..sort((a, b) => a.date != b.date ? b.date.compareTo(a.date) : b.tx.id.compareTo(a.tx.id));
-      });
-
-  List<CategorizedTx> ownRowsOfMerchant(String category, String merchantKey, DateRange r) => memo(
-      '${_k('orows', r)}.$category.$merchantKey',
-      () => timed('insights.rows', () => rowsFor(category, merchantKey, txs, r, currency: currency), fields: _f(r), warnMs: 50));
+  /// The rows behind a total ([merchantKey] null: the whole category), newest first. A main category's rows include its
+  /// subcategories' (core's tree match), so they add up to its rolled-up total.
+  List<CategorizedTx> rowsOf(String category, String? merchantKey, DateRange r) => memo(
+      '${_k('rows', r)}.$category.$merchantKey',
+      () => timed('insights.rows', () => rowsFor(category, merchantKey, txs, r, currency: currency, table: categoryTable),
+          fields: _f(r), warnMs: 50));
 
   List<MonthBar> merchantBars(String category, String merchantKey, DateRange r) => memo(
       '${_k('mtrend', r)}.$category.$merchantKey',
-      () => timed('insights.merchantTrend', () => merchantTrend(category, merchantKey, txs, r, currency: currency, today: today()),
+      () => timed('insights.merchantTrend',
+          () => merchantTrend(category, merchantKey, txs, r, currency: currency, today: today(), table: categoryTable),
           fields: _f(r), warnMs: 50));
 
   /// The category's spending per month over [r]: its rows added up per calendar month (the same rows as [categoryTotal]).
@@ -259,19 +257,10 @@ extension WalletInsights on WalletController {
         return [for (final b in spendingBars(r)) MonthBar(month: b.month, spent: spent[b.month] ?? 0, partial: b.partial)];
       });
 
-  /// This month, last month and the 6-month average of [category]; a main category counts its subcategories too (core's `rollUp`
-  /// and `averageByCategory(table:)`, so the figures equal the "Where it goes" rows).
-  CategoryCompare compareFor(String category, DateRange r) => memo('${_k('compare', r)}.$category', () {
-        final t = categoryTable;
-        final month = monthIn(r);
-        if (t.childrenOf(category).isEmpty) return compareCategory(category, txs, month, currency: currency);
-        int inMonth(String m) => rollUp(monthSummary(txs, m, currency: currency).byCategory, t)[category] ?? 0;
-        return CategoryCompare(
-          thisMonth: inMonth(month),
-          lastMonth: inMonth(monthsEnding(month, 2).first),
-          average6: averageByCategory(txs, month, currency: currency, table: t)[category] ?? 0,
-        );
-      });
+  /// This month, last month and the 6-month average of [category]; a main category counts its subcategories too (core matches
+  /// the whole tree, so the figures equal the "Where it goes" rows).
+  CategoryCompare compareFor(String category, DateRange r) =>
+      memo('${_k('compare', r)}.$category', () => compareCategory(category, txs, monthIn(r), currency: currency, table: categoryTable));
 
   List<CategorizedTx> biggestIn(DateRange r) =>
       memo(_k('biggest', r), () => timed('insights.biggest', () => biggestRows(txs, r, currency: currency), fields: _f(r), warnMs: 50));

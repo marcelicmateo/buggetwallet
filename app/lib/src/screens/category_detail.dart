@@ -132,7 +132,7 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
           ]),
         ]),
       Panel(children: [
-        Eyebrow(kids.isEmpty ? 'Where it went' : 'Where it went, not in a subcategory'),
+        const Eyebrow('Where it went'),
         if (merchants.isEmpty)
           const EmptyNote('Nothing spent in this range.')
         else

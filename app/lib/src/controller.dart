@@ -1589,7 +1589,7 @@ class WalletController extends ChangeNotifier {
         if (t.date.compareTo(from) >= 0 && t.date.compareTo(to) <= 0) t
     ];
     logEvent(_log, Level.INFO, 'export.transactions', {'range': range.name, 'rows': rows.length});
-    return ExportFile('bw-transactions-$from-$to.csv', _csvBytes(transactionsCsv(rows)), rows.length);
+    return ExportFile('bw-transactions-$from-$to.csv', _csvBytes(transactionsCsv(rows, table: categoryTable)), rows.length);
   }
 
   /// The spending summary per month and category over every transaction.
@@ -1605,10 +1605,17 @@ class WalletController extends ChangeNotifier {
 
   /// Everything that matches [query] (transactions, goals, wishlist, expected bills). Cached per data version. Logs counts only.
   SearchResult search(String query) => _cached('search$query', () {
-        final r = searchAll(query, txs: txs, goals: goals, wishlist: wish, bills: recurringBills(), billsDb: billsAll(), planned: [
-          for (final p in plannedEverything())
-            if (!p.deleted && p.title.isNotEmpty) p
-        ]);
+        final r = searchAll(query,
+            txs: txs,
+            goals: goals,
+            wishlist: wish,
+            bills: recurringBills(),
+            billsDb: billsAll(),
+            planned: [
+              for (final p in plannedEverything())
+                if (!p.deleted && p.title.isNotEmpty) p
+            ],
+            table: categoryTable);
         logEvent(_searchLog, Level.FINE, 'search.run', {
           'chars': query.length,
           'tx': r.txs.length,

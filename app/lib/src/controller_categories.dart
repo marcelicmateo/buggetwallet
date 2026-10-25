@@ -84,6 +84,16 @@ extension CategoriesDb on WalletController {
     _changed();
   }
 
+  /// Saves plan lines (a fixed category of your own -> cents a month; null removes the line). Each goes through core's `setPlanLine`.
+  /// Logs the count only.
+  void savePlanLines(Map<String, int?> lines) {
+    for (final e in lines.entries) {
+      repo.setPlanLine(e.key, e.value);
+    }
+    logEvent(_catLog, Level.INFO, 'planLines.saved', {'count': lines.length});
+    _changed();
+  }
+
   /// The category the add-expense sheet starts on: the last one used on this device while it is still live and offered.
   String? get lastExpensePick {
     final c = repo.localValue('lastExpenseCategory');

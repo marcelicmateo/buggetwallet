@@ -454,8 +454,7 @@ void main() {
       expect(wc.categoryTotal('Groceries', range),
           wc.ownTotal('Groceries', range) + wc.childTotals('Groceries', range).fold<int>(0, (a, e) => a + e.$2));
       // Above the merchants.
-      expect(t.getTopLeft(find.byKey(const ValueKey('subcategories'))).dy,
-          lessThan(t.getTopLeft(find.text('WHERE IT WENT, NOT IN A SUBCATEGORY')).dy));
+      expect(t.getTopLeft(find.byKey(const ValueKey('subcategories'))).dy, lessThan(t.getTopLeft(find.text('WHERE IT WENT')).dy));
       // The compare lines count the subcategory too.
       expect(wc.compareFor('Groceries', range).thisMonth, 29200);
       // Tapping a subcategory opens its own detail.
