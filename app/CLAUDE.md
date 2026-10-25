@@ -53,6 +53,10 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   and `recurringMarkPaid:` (replaces Skip when parts are paid or the bill has no payee; Undo through `restoreRecurringDue`). Today's bills line reads `p.dueCycles`: "1 bill (4 payments), 120 €" and one
   "Name 600 € held until paid" line per long bill due after payday (`billHeld:<id>`). Bill history lines of a non-monthly bill are keyed `historyMonth_<due>` ("Due 14 Jan 2027"; parts shown as "Part").
   Tests: `test/recurring_ui_test.dart`; the demo wallet has a yearly and a weekly bill (`seedDemoBills`).
+- Recurring income (P9; spec `docs/context/P9_SPEC.md` §6): `recurringBills()` also holds incomes; widgets and controllers that treat rows as bills read `expectedBills()` (no incomes), the income panel `expectedIncomes()` (both cached).
+  `screens/habits_panels.dart` `ExpectedIncomePanel` (`expectedIncomePanel`; `incomeCandidate:|incomeConfirm:|incomeDismiss:|income:|incomeEdit:|incomeDelete:<id>`, `addIncome`) opens `RecurringFormSheet(income: true)` (`incomeSheet`: main tags of kind extra, payee from `incomePayees()` required, no instalments;
+  core's text shows as `recurringError`). Delete's Undo adds the income again (`restoreRecurringIncome`; core has no undelete). Plan ledger: `ledgerLandedIncome` ("Extra income received +300 €", `p.landedIncome`) and `ledgerExpectedIncome` (one muted "Expected, not counted yet: …" line per `p.expectedIncome` cycle);
+  Today `expectedIncomeLine`; Goals reads `p.extrasForGoals`. Tests: `test/p9_income_ui_test.dart`; the demo wallet confirms its monthly side income (`seedDemoBills`).
 - Insights (N3): Spending's **Insights** button (`insightsOpen`) opens `screens/insights.dart` `InsightsScreen` (page on phones, 760 dp dialog from `dialogMin`): five
   panels (`insightGraphs`: spending per month, category share, income vs spending, budget vs actual, biggest payments), each with its own **`RangeControl`**
   (`widgets/charts.dart`: chips This pay period / Month / 3 / 6 / 12 months / Custom, ‹ › steps (forward off at the current range), the dates button opens

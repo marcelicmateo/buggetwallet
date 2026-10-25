@@ -937,7 +937,24 @@ class WalletController extends ChangeNotifier {
   }
 
   /// Recurring bills worth showing: candidates and confirmed (dismissed ones stay hidden). Cached per data version.
+  /// P9: this list holds the recurring **incomes** too; anything that treats a row as a bill reads [expectedBills] instead.
   List<RecurringBill> recurringBills() => _cached('recurringBills', repo.recurringBills);
+
+  /// The recurring bills only (no incomes): candidates and confirmed. Cached per data version.
+  List<RecurringBill> expectedBills() => _cached(
+      'expectedBills',
+      () => [
+            for (final b in recurringBills())
+              if (!b.isIncome) b
+          ]);
+
+  /// The recurring incomes only (P9): candidates and confirmed. Cached per data version.
+  List<RecurringBill> expectedIncomes() => _cached(
+      'expectedIncomes',
+      () => [
+            for (final b in recurringBills())
+              if (b.isIncome) b
+          ]);
 
   /// Looks for bills again in the imported rows (after an import and at start).
   void refreshRecurring() {
@@ -1662,7 +1679,7 @@ class WalletController extends ChangeNotifier {
             txs: txs,
             goals: goals,
             wishlist: wish,
-            bills: recurringBills(),
+            bills: expectedBills(),
             billsDb: billsAll(),
             planned: [
               for (final p in plannedEverything())

@@ -16,6 +16,7 @@ ImportBatch demoBatch(String today) {
     rows
       ..add((day(10), 100000, 'Plaća/Mirovina', 'Neto plaća dio 1'))
       ..add((day(13), 40000, 'Plaća/Mirovina', 'Neto plaća dio 2'))
+      ..add((day(12), 15000, 'Ostalo', 'UPLATA DEMO SIDE JOB')) // P9: a monthly side income
       ..add((day(11), -55000, 'Isplata ATM', 'PBZ ATM TEST ULICA ZAGREB'))
       ..add((day(18), -25000, 'Trajni nalog', 'Naplata kredita 0000000000'))
       ..add((day(5), -1299, 'POS plaćanje', 'POS NETFLIX.COM'))
@@ -129,6 +130,10 @@ void seedDemoBills(WalletRepo repo, String today) {
       maxAmount: 1200,
       intervalDays: RecurringPeriod.weekly.days,
       firstDue: addDays(today, 2));
+  // P9: the side income, confirmed (the detection finds the monthly rows as a candidate; a row after the 12th has landed this period).
+  repo.refreshRecurring(today);
+  final side = repo.recurringBills().where((b) => b.isIncome && b.status == 'candidate').firstOrNull;
+  if (side != null) repo.confirmRecurring(side.id);
   final spent = repo.transactions().where((t) => t.live && t.amount < 0 && !t.description.toUpperCase().contains('ATM')).firstOrNull;
   if (spent == null) return;
   final (receipt, _) = repo.importBill(NormalizedBill(

@@ -182,6 +182,13 @@ class TodayScreen extends StatelessWidget {
                     ),
                   if (p.foreignByCurrency.isNotEmpty) ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote')),
                   if (tight != null) _BudgetLine(tight, wc.categoryTable.label(tight.category), cur, openSpending),
+                  if (p.expectedIncome.isNotEmpty)
+                    _InfoLine(
+                        key: const ValueKey('expectedIncomeLine'),
+                        icon: Icons.south_west,
+                        text: 'Expected income: ${moneyExact(p.expectedIncome.fold<int>(0, (a, x) => a + x.amount), cur)} '
+                            'by ${shortDateOrRaw(p.expectedIncome.last.due)} (counts when it lands)',
+                        onTap: openBills ?? () {}),
                   if (p.dueCycles.isNotEmpty) _BillsLine(p.dueCycles, p.end, wc.today(), cur, openBills, wc.categoryTable),
                   if (comingUp.count > 0 || suggestions > 0)
                     _InfoLine(

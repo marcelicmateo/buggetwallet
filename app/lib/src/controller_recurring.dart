@@ -9,7 +9,7 @@ extension RecurringDb on WalletController {
   RecurringPayments recurringPayments() => _cached(
       'recurringPayments',
       () => planRecurringPayments([
-            for (final b in recurringBills())
+            for (final b in expectedBills())
               if (b.confirmed) b
           ], [
             for (final c in wholeTxs) c.tx
@@ -30,6 +30,7 @@ extension RecurringDb on WalletController {
     required String firstDue,
     String? payee,
     int? instalments,
+    String direction = RecurringBill.directionOut,
   }) {
     final id = repo.addRecurring(
         label: label,
@@ -40,8 +41,10 @@ extension RecurringDb on WalletController {
         intervalDays: intervalDays,
         firstDue: firstDue,
         payee: payee,
-        instalments: instalments);
+        instalments: instalments,
+        direction: direction);
     logEvent(_habits, Level.INFO, 'recurring.added', {
+      'income': direction == RecurringBill.directionIn,
       'period': RecurringPeriod.of(intervalDays)?.name ?? 'custom',
       'range': minAmount != null,
       'payee': payee != null && payee.isNotEmpty
@@ -50,6 +53,21 @@ extension RecurringDb on WalletController {
     _changed();
     return id;
   }
+
+  /// The payees of the most recent incoming payments (newest first, one each), for the payee picker of an income. Once per data version.
+  List<RulePayee> incomePayees({int limit = 40}) => memo('recurring.incomePayees.$limit', () {
+        final seen = <String>{};
+        final out = <RulePayee>[];
+        final rows = [...wholeTxs]..sort((a, b) => b.date.compareTo(a.date));
+        for (final c in rows) {
+          if (!c.tx.live || c.amount <= 0) continue;
+          final k = tagPayee(c.tx);
+          if (k == null || !seen.add(k)) continue;
+          out.add(RulePayee(k, k.replaceAll('_', ' ')));
+          if (out.length >= limit) break;
+        }
+        return out;
+      });
 
   /// Edits a bill (any status). Same rules and errors as [addRecurringBill]; only changed fields are written.
   void updateRecurringBill(
@@ -79,6 +97,26 @@ extension RecurringDb on WalletController {
     logEvent(_habits, Level.INFO, 'recurring.edited', {'range': minAmount != null, 'clearRange': clearRange, 'clearEnd': clearEnd});
     refreshRecurring();
     _changed();
+  }
+
+  /// The Undo of removing an income: core has no undelete for a recurring row, so the income is added again with the same fields
+  /// (confirmed at once; a new id). A refusal (the payee is used meanwhile) is logged, not thrown.
+  void restoreRecurringIncome(RecurringBill b) {
+    try {
+      addRecurringBill(
+          label: b.label,
+          category: b.category,
+          amount: b.hasRange ? b.maxAmount! : b.expectedAmount,
+          minAmount: b.minAmount,
+          maxAmount: b.maxAmount,
+          intervalDays: b.intervalDays,
+          firstDue: b.nextDue,
+          payee: b.payee,
+          direction: RecurringBill.directionIn);
+      logEvent(_habits, Level.INFO, 'recurring.incomeRestored');
+    } on ArgumentError catch (e, st) {
+      logError(_habits, 'recurring.incomeRestoreFailed', e, st);
+    }
   }
 
   /// Puts a bill's due date back (the Undo of "Mark paid").
