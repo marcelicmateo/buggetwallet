@@ -15,6 +15,7 @@ import 'bills_panel.dart';
 import 'budgets.dart';
 import 'calendars_panel.dart';
 import 'categories_panel.dart';
+import 'csv_layouts_panel.dart';
 import 'currencies_panel.dart';
 import 'diagnostics.dart';
 import 'export_panel.dart';
@@ -387,7 +388,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 ReviewDayRow(wc: wc),
                 const Heading('Import bank exports', size: BwType.headingSize),
                 const Muted(
-                    'PBZ: Excel export of the current account. Revolut: account statement as Excel or CSV. Importing the same dates twice is safe; nothing gets doubled. Expenses you added by hand are matched to the bank rows.'),
+                    'PBZ: Excel export of the current account. Revolut: account statement as Excel or CSV. Any other CSV: say what its columns are once. Importing the same dates twice is safe; nothing gets doubled. Expenses you added by hand are matched to the bank rows.'),
                 OutlinedButton.icon(
                   style: accentOutlined(context),
                   icon: importing
@@ -399,6 +400,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 ),
                 for (final l in wc.lastImport) StatusLabel(good: l.ok, text: '${l.file}: ${l.message}'),
               ]),
+              CsvLayoutsPanel(wc: wc, chooser: widget.chooser),
               if (!isWeb) NudgesPanel(wc: wc),
               SyncPanel(wc: wc, onShowKey: () => _showKey(context)),
               if (!isWeb)

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:logging/logging.dart';
 
+import 'csv_generic.dart' show NeedsMapping, csvShape;
 import 'csv_reader.dart';
 import 'limits.dart';
 import 'log.dart';
@@ -35,6 +36,9 @@ final unknownLayoutMessage = 'This is not a ${bankLabels()} export I recognise.'
 ///
 /// Refused before reading: a file over [maxImportBytes] and an .xlsx unpacking to more than [maxXlsxUnpackedBytes]
 /// ([tooLargeMessage]), a password-protected file ([passwordProtectedMessage]).
+///
+/// A CSV no profile recognises throws [NeedsMapping] with its [CsvShape] (P12: the app maps its columns once and reads
+/// it with `parseMappedCsv`); an .xls/.xlsx no profile recognises throws [unknownLayoutMessage].
 ImportBatch importBankFile(Uint8List bytes, {String? fileName}) {
   final sw = Stopwatch()..start();
   List<List<Object>> rows;
@@ -67,6 +71,9 @@ ImportBatch importBankFile(Uint8List bytes, {String? fileName}) {
   if (batch == null) {
     logImporter(_log, Level.WARNING, 'importer.unknown',
         {'format': format, 'rows': rows.length, 'cols': rows.isEmpty ? 0 : rows.first.length, 'readMs': readMs});
+    // A CSV can still be read by a column mapping (P12): the app gets its shape. One with no header row of two or
+    // more columns, or too many columns, throws csvShape's ImportException instead.
+    if (format == 'csv') throw NeedsMapping(csvShape(bytes));
     throw ImportException(unknownLayoutMessage);
   }
   logImporter(_log, Level.INFO, 'importer.parse', {

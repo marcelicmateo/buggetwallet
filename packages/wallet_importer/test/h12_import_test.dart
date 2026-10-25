@@ -41,7 +41,8 @@ void main() {
         ['11.01.2026', 'Uplata plaće', '1500,00', '', '1600,00'],
       ];
       expect(parseRows(other), isNull, reason: 'it must be refused, not read with PBZ\'s fixed columns');
-      expect(() => importBankFile(_csv(other)), throwsA(isA<ImportException>().having((e) => e.message, 'message', unknownLayoutMessage)));
+      // P12: refused by PBZ, so it asks for a column mapping.
+      expect(() => importBankFile(_csv(other)), throwsA(isA<NeedsMapping>().having((e) => e.shape.headerRow, 'headerRow', 1)));
     }, timeout: _t);
 
     test('a header that holds only some of the five names is not PBZ', () {

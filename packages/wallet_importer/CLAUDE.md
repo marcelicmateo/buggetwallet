@@ -18,6 +18,12 @@ Pure Dart. **The only code that knows bank formats.** Turns PBZ .xls, Revolut .x
   VRSTA TRANSAKCIJE, OPIS PLAĆANJA, IZNOS, VALUTA — on one row of the head from column A, trimmed, any case,
   mojibake repaired) and `bankLabels()`.
 
+- `csv_generic.dart` + `csv_mapping.dart` + `text_codec.dart` — any other CSV by the owner's column mapping (P12,
+  rules in `docs/context/IMPORT_FORMATS.md`): an unknown CSV throws `NeedsMapping(shape)`; `csvShape`, `CsvMapping`
+  (JSON for the synced `csvmap:<shapeId>` setting), `guessMapping`, `mappingProblems`, `previewMapping`,
+  `matchCsvMapping`, `parseMappedCsv` (source `csv:<shapeId>`, `sourceTransactionId`, exact cents). Windows-1250 and
+  SHA-256 are pure Dart (`text_codec.dart`). Tests: `test/csv_mapping_test.dart`, fixtures `test/fixtures/generic/`
+  (`make_fixtures.py <dir> generic`).
 - `profiles/cells.dart` — cell helpers every profile uses: `cellText`, `cellDate`, `cellNumber`, `cellCents`,
   `serialDate`/`excelDate`, `jsRound` (v1's Math.round), `fixMojibake`.
 - `xls_reader.dart` (own BIFF8 reader), `xlsx_reader.dart` (`archive` + `xml`), `csv_reader.dart`. `grid.dart` —

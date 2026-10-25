@@ -1,6 +1,6 @@
 import 'dart:math' show min;
 
-import 'package:wallet_importer/wallet_importer.dart' show TxKind;
+import 'package:wallet_importer/wallet_importer.dart' show CsvMapping, TxKind;
 
 import 'categories.dart';
 import 'dates.dart';
@@ -802,6 +802,11 @@ class WalletSettings {
   final int warrantyReminderDays; // ... before a bill's warranty ends
   final String? syncFolder; // device-local, not synced
 
+  /// Saved CSV layouts (P12): shape id (`CsvShape.shapeId`) → the owner's column mapping. Row `csvmap:<shapeId>`
+  /// ([csvMapPrefix]), value = [CsvMapping.toJson]; a row that does not read or has a problem of its own is dropped
+  /// (logged once as `settings.invalid` under `csvmap`).
+  final Map<String, CsvMapping> csvMappings;
+
   const WalletSettings({
     this.salary = 0,
     this.rent = 0,
@@ -831,6 +836,7 @@ class WalletSettings {
     this.returnReminderDays = defaultReturnReminderDays,
     this.warrantyReminderDays = defaultWarrantyReminderDays,
     this.syncFolder,
+    this.csvMappings = const {},
   });
 
   /// Largest accepted amount (minor units) and wait (hours: a year) in a stored or synced value.
@@ -860,6 +866,12 @@ class WalletSettings {
 
   /// An ISO 4217 code as the wallet currency and the rate rows use it.
   static final currencyCode = RegExp(r'^[A-Z]{3}$');
+
+  /// Saved CSV layout rows (P12, [csvMappings]): `csvmap:<16 hex shape id>`, value = [CsvMapping.toJson].
+  static const csvMapPrefix = 'csvmap:';
+
+  /// A shape id as a `csvmap:` row key holds it: 16 lower-case hex characters.
+  static final csvShapeIdPattern = RegExp(r'^[0-9a-f]{16}$');
 
   /// Heads-up defaults (owner, 2026-10-22: 3 days before a planned cost of 100 € or more) and their ranges.
   static const defaultHeadsUpCents = 10000, maxHeadsUpCents = 10000000, defaultHeadsUpDays = 3, maxHeadsUpDays = 14;
@@ -908,9 +920,18 @@ class WalletSettings {
     final planRows = <Object?, Object?>{};
     final fxRows = <String, Object?>{};
     final patternRows = <MerchantPattern>[];
-    var badPatternRow = false, badRange = false;
+    final csvRows = <String, CsvMapping>{};
+    var badPatternRow = false, badRange = false, badCsvRow = false;
     for (final MapEntry(:key, :value) in m.entries) {
-      if (key.startsWith(budgetPrefix)) {
+      if (key.startsWith(csvMapPrefix)) {
+        final id = key.substring(csvMapPrefix.length);
+        final mapping = _csvMapping(id, value);
+        if (mapping == null) {
+          badCsvRow = true;
+        } else {
+          csvRows[id] = mapping;
+        }
+      } else if (key.startsWith(budgetPrefix)) {
         budgetRows[key.substring(budgetPrefix.length)] = value;
       } else if (key.startsWith(planPrefix)) {
         planRows[key.substring(planPrefix.length)] = value;
@@ -926,6 +947,7 @@ class WalletSettings {
         }
       }
     }
+    if (badCsvRow) logInvalidSetting('csvmap', 'row');
     if (badPatternRow) logInvalidSetting('merchantPatterns', 'row');
     if (badRange) logInvalidSetting('merchantPatterns', 'range');
     patternRows.sort((a, b) {
@@ -975,7 +997,20 @@ class WalletSettings {
       headsUpDays: i('headsUpDays', defaultHeadsUpDays, max: maxHeadsUpDays),
       returnReminderDays: i('returnReminderDays', defaultReturnReminderDays, max: maxReturnReminderDays),
       warrantyReminderDays: i('warrantyReminderDays', defaultWarrantyReminderDays, max: maxWarrantyReminderDays),
+      csvMappings: csvRows.isEmpty ? const {} : Map.unmodifiable(csvRows),
     );
+  }
+
+  /// A stored `csvmap:<id>` value as a layout, or null when the id is not a shape id, the value does not read
+  /// ([CsvMapping.fromJson]) or the layout has a problem of its own ([CsvMapping.structureProblems]).
+  static CsvMapping? _csvMapping(String id, Object? value) {
+    if (!csvShapeIdPattern.hasMatch(id)) return null;
+    try {
+      final m = CsvMapping.fromJson(value);
+      return m.structureProblems().isEmpty ? m : null;
+    } on FormatException {
+      return null;
+    }
   }
 
   /// The valid entries of a `categoryBudgets` value: a live top-level spending category of [t] ([CategoryTable.spending])
@@ -1100,6 +1135,8 @@ class WalletSettings {
         for (final MapEntry(:key, :value) in fxStale.entries) '$fxPrefix$key': value.toJson(),
         for (final MapEntry(:key, :value) in fxRates.entries)
           '$fxPrefix$key': FxRate(value.rate, value.date, home: value.home ?? currency).toJson(),
+        // Saved CSV layouts as stored, one row each, so fromMap(toMap()) keeps them.
+        for (final MapEntry(:key, :value) in csvMappings.entries) '$csvMapPrefix$key': value.toJson(),
         'reviewDay': reviewDay,
         'lastReview': lastReview,
         'reviewStreak': reviewStreak,

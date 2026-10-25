@@ -9,6 +9,7 @@ String _logKey(String key) => switch (key) {
       _ when key.startsWith(WalletSettings.budgetPrefix) => 'categoryBudgets',
       _ when key.startsWith(WalletSettings.planPrefix) => 'planLines',
       _ when key.startsWith(WalletSettings.fxPrefix) => 'fx',
+      _ when key.startsWith(WalletSettings.csvMapPrefix) => 'csvmap',
       _ => key,
     };
 
@@ -17,6 +18,8 @@ bool _perKeySetting(String key) =>
     key == 'merchantPatterns' ||
     key == 'planLines' ||
     key == 'fxRates' ||
+    key == 'csvMappings' ||
+    key.startsWith(WalletSettings.csvMapPrefix) ||
     key.startsWith(WalletSettings.planPrefix) ||
     key.startsWith(WalletSettings.fxPrefix) ||
     key.startsWith(WalletSettings.budgetPrefix) ||
@@ -164,6 +167,98 @@ extension WalletRepoSettings on WalletRepo {
     final st = _readSettings(db, table: categoryTable());
     if (code == st.currency) throw ArgumentError.value(code, 'code', 'the wallet currency needs no rate');
     return st;
+  }
+
+  /// Saves the owner's column mapping for CSV shape [shapeId] (P12, [WalletSettings.csvMappings]): the synced row
+  /// `csvmap:<shapeId>` holds [mapping]'s JSON, so every device imports that shape the same way. Adding and changing
+  /// (a rename, another column) are the same call; the Undo of a removal sets it again. Throws [ArgumentError] for a
+  /// shape id that is not 16 lower-case hex characters or a mapping with a problem of its own (the first
+  /// [CsvMapping.structureProblems] text, owner-readable), a mapping made for another file (its [csvLayoutId] is not
+  /// [shapeId]: `headers` must be the shape's), and a change to how rows are read (header row, date column/format,
+  /// amount/debit/credit columns, decimal, negate, description columns) once payments were imported with the layout
+  /// (live or removed; [csvRowsFor]): those would import again with other ids. With [force] such a change goes on and
+  /// first deletes those payments (each through `deleteTransaction`, so each can be undone with `undeleteTransaction`);
+  /// the deleted ids are returned (empty otherwise). The name, currency and skip column change freely. Writes nothing
+  /// when the stored layout is already that. Logs `settings.csvMapping {op}` (and `deleted`) only: never the name or
+  /// the columns.
+  List<String> setCsvMapping(String shapeId, CsvMapping mapping, {bool force = false}) {
+    if (!WalletSettings.csvShapeIdPattern.hasMatch(shapeId)) throw ArgumentError.value(shapeId, 'shapeId', 'not a CSV shape id');
+    final problems = mapping.structureProblems();
+    if (problems.isNotEmpty) throw ArgumentError(problems.first);
+    if (csvLayoutId(mapping) != shapeId) throw ArgumentError('This layout was made for another file.');
+    final live = _storedCsvMapping(shapeId);
+    final last = live ?? _storedCsvMapping(shapeId, includeRemoved: true);
+    final next = mapping.copyWith(name: mapping.name.trim());
+    if (live == next) return const [];
+    final deleted = <String>[];
+    if (last != null && !_sameReading(last, next)) {
+      final ids = _csvRowIds(shapeId);
+      if (ids.isNotEmpty && !force) {
+        throw ArgumentError('This layout was used for ${ids.length} payments. Changing how it reads dates, amounts or descriptions '
+            'would import them again, so they are removed first.');
+      }
+      for (final id in ids) {
+        deleteTransaction(id);
+        deleted.add(id);
+      }
+    }
+    _write([
+      ('setting', '${WalletSettings.csvMapPrefix}$shapeId', {'value': jsonEncode(next.toJson()), 'deleted': 0})
+    ]);
+    logEvent(
+        _log, Level.INFO, 'settings.csvMapping', {'op': live == null ? 'add' : 'set', if (deleted.isNotEmpty) 'deleted': deleted.length});
+    return deleted;
+  }
+
+  /// The layout [shapeId] had before it was removed (the deleted row keeps its value), or null while it is live or was never saved.
+  /// The app's Undo of an import that replaced a removed layout's payments writes it back.
+  CsvMapping? removedCsvMapping(String shapeId) =>
+      _storedCsvMapping(shapeId) != null ? null : _storedCsvMapping(shapeId, includeRemoved: true);
+
+  /// How many live payments were imported with the layout of [shapeId] (source `csv:<shapeId>`): what a change to how
+  /// it reads rows would delete ([setCsvMapping] with `force`).
+  int csvRowsFor(String shapeId) => _csvRowIds(shapeId).length;
+
+  List<String> _csvRowIds(String shapeId) => [
+        for (final r in db.select('SELECT id FROM tx WHERE source = ? AND deleted = 0 ORDER BY id', ['$csvSourcePrefix$shapeId']))
+          r['id'] as String
+      ];
+
+  /// Whether two layouts read every row to the same date, amount and description (so the same ids).
+  static bool _sameReading(CsvMapping a, CsvMapping b) =>
+      a.headerRow == b.headerRow &&
+      a.dateCol == b.dateCol &&
+      a.dateFormat == b.dateFormat &&
+      a.amountCol == b.amountCol &&
+      a.debitCol == b.debitCol &&
+      a.creditCol == b.creditCol &&
+      a.decimal == b.decimal &&
+      a.negate == b.negate &&
+      a.descriptionCols.length == b.descriptionCols.length &&
+      Iterable<int>.generate(a.descriptionCols.length).every((i) => a.descriptionCols[i] == b.descriptionCols[i]);
+
+  /// Removes the saved layout of [shapeId] (synced). Only `deleted` is written: the value stays, so [setCsvMapping]
+  /// still knows how the layout read rows (an Undo with the same layout goes through; another reading of rows already
+  /// imported is refused). Rows imported with it keep their source. Nothing is written when there is no live layout.
+  void removeCsvMapping(String shapeId) {
+    if (_storedCsvMapping(shapeId) == null) return;
+    _write([
+      ('setting', '${WalletSettings.csvMapPrefix}$shapeId', {'deleted': 1})
+    ]);
+    logEvent(_log, Level.INFO, 'settings.csvMapping', {'op': 'remove'});
+  }
+
+  /// The valid layout stored for [shapeId] (one row read, as [WalletSettings.csvMappings] reads it; a removed one too
+  /// with [includeRemoved]), or null.
+  CsvMapping? _storedCsvMapping(String shapeId, {bool includeRemoved = false}) {
+    final key = '${WalletSettings.csvMapPrefix}$shapeId';
+    final v = db.select('SELECT value FROM settings WHERE id = ?${includeRemoved ? '' : ' AND deleted = 0'}', [key]).firstOrNull?['value'];
+    if (v is! String) return null;
+    try {
+      return WalletSettings.fromMap({key: jsonDecode(v)}).csvMappings[shapeId];
+    } on FormatException {
+      return null;
+    }
   }
 
   /// Adds merchant [pattern] for [category], or sets an existing one (same text) to exactly this rule: [category],

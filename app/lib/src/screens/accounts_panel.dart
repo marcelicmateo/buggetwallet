@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
-import 'package:wallet_importer/wallet_importer.dart' show bankProfiles;
+import 'package:wallet_importer/wallet_importer.dart' show CsvMapping, bankProfiles, csvSourcePrefix;
 
 import '../controller.dart';
 import '../format.dart';
@@ -14,13 +14,8 @@ import '../widgets/sheets.dart';
 const _currencies = ['EUR', 'USD', 'GBP', 'CHF'];
 
 /// "Cash" or the bank's name for an account `source` (`null` = cash).
-String accountTypeLabel(String? source) {
-  if (source == null) return 'Cash';
-  for (final p in bankProfiles) {
-    if (p.id == source) return p.label;
-  }
-  return source;
-}
+String accountTypeLabel(String? source, {Map<String, CsvMapping> csvMappings = const {}}) =>
+    accountSourceLabel(source, csvMappings: csvMappings);
 
 /// The readable text of an [ArgumentError] from core.
 String _problem(Object e) => e is ArgumentError ? e.message.toString() : 'Could not save. Try again.';
@@ -87,7 +82,7 @@ class _AccountRow extends StatelessWidget {
           end: MoneyText(moneyExact(b.balance, a.currency),
               textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500, color: b.balance < 0 ? context.c.bad : null)),
         ),
-        Text('${accountTypeLabel(a.source)} · ${a.currency} · as of ${shortDateOrRaw(asOf)}',
+        Text('${accountTypeLabel(a.source, csvMappings: wc.settings.csvMappings)} · ${a.currency} · as of ${shortDateOrRaw(asOf)}',
             style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
         const SizedBox(height: 4),
         Wrap(spacing: 8, runSpacing: 4, children: [
@@ -261,10 +256,13 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
         items: [
           const DropdownMenuItem<String?>(value: null, child: Text('Cash')),
           for (final p in bankProfiles) DropdownMenuItem<String?>(value: p.id, child: Text(p.label)),
+          for (final e in wc.settings.csvMappings.entries)
+            DropdownMenuItem<String?>(
+                key: ValueKey('accountType:csv:${e.key}'), value: '$csvSourcePrefix${e.key}', child: Text(e.value.name)),
         ],
         onChanged: (v) => setState(() {
           _source = v;
-          if (!_nameEdited) _name.text = accountTypeLabel(v);
+          if (!_nameEdited) _name.text = accountTypeLabel(v, csvMappings: wc.settings.csvMappings);
         }),
       ),
       const SizedBox(height: 12),

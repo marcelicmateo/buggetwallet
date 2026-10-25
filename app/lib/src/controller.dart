@@ -84,8 +84,34 @@ class ImportLine {
 
   /// How many rows the file added to the wallet (0 for a file that failed or held nothing new).
   final int added;
-  const ImportLine(this.file, this.message, this.ok, {this.added = 0});
+
+  /// Set when this import replaced a saved layout's earlier payments (P12): the toast's Undo puts them back.
+  final VoidCallback? undo;
+  const ImportLine(this.file, this.message, this.ok, {this.added = 0, this.undo});
 }
+
+/// What a saved layout replaced while one file was imported (P12): filled by [WalletController._readImportFile] the moment a forced save
+/// deleted payments, so every outcome of the file (success, clock behind, unreadable) can still offer the Undo.
+class _Remap {
+  String? id;
+  List<String> removed = const [];
+
+  /// The layout as it was before (the removed one), written back by the Undo; null when core kept none.
+  CsvMapping? old;
+}
+
+/// What the Map columns sheet hands back (P12): the layout and the shape id of the file at the layout's header row.
+class CsvChoice {
+  final String shapeId;
+  final CsvMapping mapping;
+  const CsvChoice(this.shapeId, this.mapping);
+}
+
+/// Asked for a CSV no bank profile and no saved layout fits: the owner maps its columns (null = cancel, nothing imported).
+typedef AskMapping = Future<CsvChoice?> Function(NeedsMapping need, Uint8List bytes);
+
+/// Asked when the chosen layout reads differently from a removed one that imported [payments] payments: true = remove them.
+typedef ConfirmRemoval = Future<bool> Function(int payments);
 
 /// Everything the Spending tab shows for one month, worked out in [WalletController.spending].
 class SpendingView {
@@ -1875,18 +1901,42 @@ class WalletController extends ChangeNotifier {
 
   // ---------- import ----------
   /// Logs per file on `bw.import`: index, extension, size and counts. Never the file name.
-  Future<List<ImportLine>> importFiles(List<(String, Uint8List)> files) async {
+  /// A CSV no bank profile knows is read with its saved layout, else [askMapping] opens the Map columns sheet (null = the
+  /// message "map its columns"); the chosen layout is saved, then the file is read with it.
+  Future<List<ImportLine>> importFiles(List<(String, Uint8List)> files, {AskMapping? askMapping, ConfirmRemoval? confirmRemoval}) async {
     final all = PerfTimer('import.files', warnMs: 3000);
     final lines = <ImportLine>[];
     for (final (i, (name, bytes)) in files.indexed) {
       final f = <String, Object?>{'file': i, 'ext': fileExt(name), 'bytes': bytes.length};
       final t = PerfTimer('import.file', warnMs: 1500);
+      final remap = _Remap();
+      VoidCallback? undoOf() => remap.id == null ? null : () => undoCsvRemap(remap.id!, remap.removed, remap.old);
       try {
-        final batch = timed('import.parse', () => importBankFile(bytes), fields: f, warnMs: 1000);
-        final s = repo.importBatch(batch); // logs repo.importBatch
+        final read = await _readImportFile(name, bytes, askMapping, confirmRemoval, remap);
+        if (read == null) {
+          logEvent(_import, Level.INFO, 'import.mapCancelled', f);
+          lines.add(ImportLine(name, 'Not imported. Map its columns to read it.', false));
+          continue;
+        }
+        final (batch, usedMapping) = read;
+        final mapped = usedMapping != null;
+        // Payments a forced layout edit removed come back exactly once when the same file is read the new way (`csvRevive:<shape id>`).
+        final reviveKey = batch.source.startsWith(csvSourcePrefix) ? batch.source.substring(csvSourcePrefix.length) : null;
+        final revive = reviveKey == null ? const <String>[] : csvReviveIds(reviveKey);
+        final s = repo.importBatch(batch, revive: revive.toSet()); // logs repo.importBatch
+        if (revive.isNotEmpty) {
+          // Only the ids this file read are done; the rest wait for their own files (January's and February's rows both come back).
+          final read = {for (final t in batch.transactions) t.id};
+          final rest = [
+            for (final id in revive)
+              if (!read.contains(id)) id
+          ];
+          repo.setLocalValue('csvRevive:$reviveKey', rest.isEmpty ? null : jsonEncode(rest));
+        }
         t.done({
           ...f,
-          'source': batch.source,
+          'source': sourceLogKey(batch.source),
+          if (mapped) 'mapped': true,
           'rows': batch.transactions.length,
           'added': s.added,
           'dupes': s.duplicates,
@@ -1894,22 +1944,28 @@ class WalletController extends ChangeNotifier {
           'skipped': s.skipped,
           'invalid': batch.invalid
         });
-        final bank = batch.source == 'pbz' ? 'PBZ' : 'Revolut';
+        final bank = usedMapping?.name ?? accountSourceLabel(batch.source, csvMappings: settings.csvMappings);
+        final replaced = remap.removed.length;
         lines.add(ImportLine(
             name,
             '$bank: ${s.added} new, ${s.duplicates} already here${s.matched > 0 ? ', ${s.matched} matched to expenses you added' : ''}'
-            '${batch.invalid > 0 ? ', ${batch.invalid} unreadable ${batch.invalid == 1 ? 'row' : 'rows'} left out' : ''}.',
+            '${batch.invalid > 0 ? ', ${batch.invalid} unreadable ${batch.invalid == 1 ? 'row' : 'rows'} left out' : ''}'
+            '${replaced > 0 ? ', $replaced earlier ${replaced == 1 ? 'payment' : 'payments'} read again' : ''}.',
             true,
-            added: s.added));
+            added: s.added,
+            undo: undoOf()));
       } on ClockBehindException catch (e) {
         noticeClockBehind(e); // nothing of this file was written; say why instead of "couldn't read"
-        lines.add(ImportLine(name, clockBehindText, false));
+        lines.add(ImportLine(name, clockBehindText, false, undo: undoOf()));
       } on ImportException catch (e, st) {
         logError(_import, 'import.rejected', e, st, fields: f);
-        lines.add(ImportLine(name, e.message, false));
+        lines.add(ImportLine(name, e.message, false, undo: undoOf()));
+      } on ArgumentError catch (e, st) {
+        logError(_import, 'import.layoutRefused', e, st, fields: f); // core's owner-readable text, no cell content
+        lines.add(ImportLine(name, e.message.toString(), false, undo: undoOf()));
       } catch (e, st) {
         logError(_import, 'import.failed', e, st, fields: f, level: Level.SEVERE);
-        lines.add(ImportLine(name, "Couldn't read this file.", false));
+        lines.add(ImportLine(name, "Couldn't read this file.", false, undo: undoOf()));
       }
     }
     all.done({'files': files.length, 'ok': lines.where((l) => l.ok).length});
@@ -1917,6 +1973,137 @@ class WalletController extends ChangeNotifier {
     refreshRecurring();
     _changed();
     return lines;
+  }
+
+  /// The batch of one file and the column mapping that read it (null for a bank profile): a bank profile, a saved layout that fits, or the
+  /// layout [ask] returns (saved first; [confirm] answers the "used for N payments" case). Null = the owner cancelled. When saving
+  /// the layout replaced the payments of a removed one that read differently, [remap] says which (and the old layout).
+  Future<(ImportBatch, CsvMapping?)?> _readImportFile(
+      String name, Uint8List bytes, AskMapping? ask, ConfirmRemoval? confirm, _Remap remap) async {
+    try {
+      return (importBankFile(bytes), null);
+    } on NeedsMapping catch (need) {
+      final saved = settings.csvMappings;
+      final key = matchCsvMapping(bytes, need.shape, saved);
+      CsvMapping m;
+      if (key != null) {
+        m = saved[key]!;
+      } else {
+        if (ask == null) rethrow;
+        final choice = await ask(need, bytes);
+        if (choice == null) return null;
+        final before = repo.removedCsvMapping(choice.shapeId); // what the Undo writes back
+        var removed = const <String>[];
+        try {
+          removed = repo.setCsvMapping(choice.shapeId, choice.mapping);
+        } on ArgumentError {
+          final n = repo.csvRowsFor(choice.shapeId);
+          if (n == 0 || confirm == null) rethrow;
+          if (!await confirm(n)) return null;
+          removed = repo.setCsvMapping(choice.shapeId, choice.mapping, force: true);
+        }
+        settings = repo.settings(); // a second file of this shape in the same pick reads with it, no new question
+        if (removed.isNotEmpty) {
+          // Added to what is waiting already: another file's rows, or rows an Undo took away that this reading brings back.
+          repo.setLocalValue('csvRevive:${choice.shapeId}', jsonEncode({...csvReviveIds(choice.shapeId), ...removed}.toList()));
+          remap
+            ..id = choice.shapeId
+            ..removed = removed
+            ..old = before;
+        }
+        logEvent(_import, Level.INFO, 'import.layoutSaved', {'columns': need.shape.headers.length, 'removed': removed.length});
+        m = choice.mapping;
+      }
+      return (parseMappedCsv(bytes, m, fileName: name, walletCurrency: currency), m);
+    }
+  }
+
+  /// Undo of an import that replaced a layout's earlier payments: everything now live from that layout is deleted, the earlier payments
+  /// are back, and the layout is the removed one again with the reading it had ([old]), so reading the file the new way later asks again.
+  void undoCsvRemap(String id, List<String> removed, CsvMapping? old) {
+    final earlier = removed.toSet();
+    final taken = <String>[];
+    for (final t in repo.transactions(includeHidden: true)) {
+      if (t.source == '$csvSourcePrefix$id' && !t.deleted && !earlier.contains(t.id)) {
+        repo.deleteTransaction(t.id);
+        taken.add(t.id);
+      }
+    }
+    if (old != null) repo.setCsvMapping(id, old, force: true); // deletes what is still live (the revived ones), they come back next
+    for (final r in removed) {
+      repo.undeleteTransaction(r);
+    }
+    repo.removeCsvMapping(id);
+    // The rows the new reading made stay deleted; reading the file that way again must bring them back, not skip them as known.
+    repo.setLocalValue('csvRevive:$id', taken.isEmpty ? null : jsonEncode(taken));
+    logEvent(_import, Level.INFO, 'csvLayout.remapUndone', {'restored': removed.length});
+    _changed();
+  }
+
+  // ---------- saved CSV layouts (P12) ----------
+  /// Saved file layouts, shape id → layout, sorted by name.
+  List<MapEntry<String, CsvMapping>> csvLayouts() =>
+      settings.csvMappings.entries.toList()..sort((a, b) => a.value.name.toLowerCase().compareTo(b.value.name.toLowerCase()));
+
+  /// Renames layout [id]. An [ArgumentError] carries core's owner-readable text.
+  void renameCsvLayout(String id, String name) {
+    final m = settings.csvMappings[id];
+    if (m == null) throw ArgumentError('That layout is gone.');
+    repo.setCsvMapping(id, m.copyWith(name: name));
+    logEvent(_import, Level.INFO, 'csvLayout.rename');
+    _changed();
+  }
+
+  /// Removes layout [id] and returns it (the toast's Undo is [restoreCsvLayout]); null when it is already gone.
+  CsvMapping? deleteCsvLayout(String id) {
+    final m = settings.csvMappings[id];
+    if (m == null) return null;
+    repo.removeCsvMapping(id);
+    logEvent(_import, Level.INFO, 'csvLayout.delete');
+    _changed();
+    return m;
+  }
+
+  /// How many payments layout [id] has imported (not deleted).
+  int csvRowsFor(String id) => repo.csvRowsFor(id);
+
+  /// Saves a changed layout [m] for [id]. Changing how it reads (columns, formats, sign) when it has imported payments throws core's
+  /// [ArgumentError] unless [force]; with [force] those payments are deleted and their ids returned (the toast's Undo is
+  /// [undoCsvLayoutEdit]). The ids are kept device-local as `csvRevive:<id>` for the next import of that shape.
+  List<String> saveCsvLayout(String id, CsvMapping m, {bool force = false}) {
+    final removed = repo.setCsvMapping(id, m, force: force);
+    if (removed.isNotEmpty) repo.setLocalValue('csvRevive:$id', jsonEncode(removed));
+    logEvent(_import, Level.INFO, 'csvLayout.edit', {'removed': removed.length, 'force': force});
+    _changed();
+    return removed;
+  }
+
+  /// The payment ids a forced edit of layout [id] removed and the next import of its shape may bring back (see [saveCsvLayout]).
+  List<String> csvReviveIds(String id) {
+    final v = repo.localValue('csvRevive:$id');
+    if (v == null) return const [];
+    try {
+      return [for (final x in jsonDecode(v) as List) x as String];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Undo of a forced [saveCsvLayout]: the old layout is back and its removed payments with it.
+  void undoCsvLayoutEdit(String id, CsvMapping old, List<String> removed) {
+    repo.setCsvMapping(id, old, force: true);
+    for (final r in removed) {
+      repo.undeleteTransaction(r);
+    }
+    repo.setLocalValue('csvRevive:$id', null);
+    logEvent(_import, Level.INFO, 'csvLayout.editUndone', {'restored': removed.length});
+    _changed();
+  }
+
+  void restoreCsvLayout(String id, CsvMapping m) {
+    repo.setCsvMapping(id, m);
+    logEvent(_import, Level.INFO, 'csvLayout.restore');
+    _changed();
   }
 
   // ---------- edits ----------
