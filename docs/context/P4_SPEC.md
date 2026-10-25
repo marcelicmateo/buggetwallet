@@ -101,3 +101,14 @@ List<DueCycle> dueCycles(List<RecurringBill> bills, List<CategorizedTx> txs, Str
 6. Long bills: the "paid in this period" drop does not apply; after a payment moves `nextDue` on, the next cycle is held at once. A paying row not yet applied by refresh makes that cycle reserve 0.
 7. `RecurringPeriod.of(days)` is null when the days are further than that class's tolerance from every class.
 8. `updateRecurring` validates like `addRecurring`, including a range that must contain the amount after the edit.
+
+## Builder decisions + review fixes (lead, 2026-10-25)
+- Only bills under 27 days reserve every occurrence in a period (from the first occurrence on or after the period start, plus the overdue one); 30-day bills keep one cycle per period. The paid-this-period drop applies to monthly bills only.
+- With a range, a single payment must be inside it; the 10 % band applies only without a range.
+- A lone part lowers the reserve but never pays the cycle. Once a cycle's window has closed before the period (`nextDue + tolerance < start`), it reserves in full again, so a stuck cycle never under-reserves later periods.
+- The wide parts window (`nextDue − partsDays`) applies only to manual bills and bills with a range; a detected bill without a range counts parts only within `nextDue ± tolerance` (ordinary purchases at the payee don't pay the bill).
+- Instalments with a 27–31-day interval end on calendar months (same day, clamped); `finished` = `nextDue > endsOn + tolerance`; a bad stored `ends_on` reads as no end.
+- New flag `own_category`: set by `addRecurring` and `updateRecurring(category:)`; refresh never recategorises such a bill. Manual bills are never recategorised; a bill without payee never matches.
+- `addRecurring` refuses a payee used by another bill that is not deleted or dismissed (candidates count).
+- `updateRecurring` writes `min_amount` and `max_amount` together. `dueCycles(currency:)` is required. Slip coverage uses the bill's `tolerance`.
+- History for non-monthly bills always shows `months` cycles; no `paidNearby` for cycles.
