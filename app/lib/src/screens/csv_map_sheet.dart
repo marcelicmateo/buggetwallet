@@ -149,7 +149,9 @@ class _MapColumnsSheetState extends State<MapColumnsSheet> {
     final m = _mapping;
     if (_problems(m).isNotEmpty) return;
     logNav('csvmap.save', {'split': _split, 'negate': _negate, 'desc': _desc.length});
-    Navigator.pop(context, CsvChoice(_shape.shapeId, m));
+    // A layout being changed keeps its own header row (this file may have a title line more or less): that is no change of reading.
+    final own = widget.editing?.headerRow;
+    Navigator.pop(context, CsvChoice(_shape.shapeId, own == null ? m : m.copyWith(headerRow: own)));
   }
 
   @override

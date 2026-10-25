@@ -43,6 +43,16 @@ void main() {
   tearDown(() => repo.close());
 
   group('setting rows', () {
+    test('removedCsvMapping: the layout a removal left behind, null while live or never saved', () {
+      expect(repo.removedCsvMapping(shape.shapeId), isNull);
+      repo.setCsvMapping(shape.shapeId, mapping);
+      expect(repo.removedCsvMapping(shape.shapeId), isNull);
+      repo.removeCsvMapping(shape.shapeId);
+      expect(repo.removedCsvMapping(shape.shapeId), mapping);
+      repo.setCsvMapping(shape.shapeId, mapping.copyWith(negate: true));
+      expect(repo.removedCsvMapping(shape.shapeId), isNull);
+    });
+
     test('set, read back, unchanged = no write, rename, remove, set again (Undo)', () {
       expect(repo.settings().csvMappings, isEmpty);
       repo.setCsvMapping(shape.shapeId, mapping.copyWith(name: '  Synth bank (CSV) '));

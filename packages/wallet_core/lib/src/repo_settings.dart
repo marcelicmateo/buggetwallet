@@ -167,6 +167,11 @@ extension WalletRepoSettings on WalletRepo {
     return deleted;
   }
 
+  /// The layout [shapeId] had before it was removed (the deleted row keeps its value), or null while it is live or was never saved.
+  /// The app's Undo of an import that replaced a removed layout's payments writes it back.
+  CsvMapping? removedCsvMapping(String shapeId) =>
+      _storedCsvMapping(shapeId) != null ? null : _storedCsvMapping(shapeId, includeRemoved: true);
+
   /// How many live payments were imported with the layout of [shapeId] (source `csv:<shapeId>`): what a change to how
   /// it reads rows would delete ([setCsvMapping] with `force`).
   int csvRowsFor(String shapeId) => _csvRowIds(shapeId).length;

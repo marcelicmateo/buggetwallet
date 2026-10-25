@@ -4,6 +4,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:budget_wallet/src/clock_notice.dart' show clockBehindText;
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/format.dart';
@@ -24,6 +25,14 @@ import 'support/wallet.dart';
 const _csvNoHeader = '03.10.2026;Synthetic coffee;-3,50\n'
     '04.10.2026;Synthetic refund;12,00\n'
     '05.10.2026;Synthetic bakery;-9,99\n';
+
+/// January and February exports of one account: the same shape.
+const _csvJan = 'Datum;Opis;Iznos;Valuta\n'
+    '03.01.2026;Synthetic jan one;-1,00;EUR\n'
+    '04.01.2026;Synthetic jan two;-2,00;EUR\n';
+const _csvFeb = 'Datum;Opis;Iznos;Valuta\n'
+    '03.02.2026;Synthetic feb one;-3,00;EUR\n'
+    '04.02.2026;Synthetic feb two;-4,00;EUR\n';
 
 const _t = Timeout(Duration(seconds: 90));
 
@@ -186,7 +195,6 @@ void main() {
     final lines = await wc.importFiles([('a.csv', _bytes(_csvA))]);
     expect(lines.single.message, startsWith('Erste (CSV): 3 new'));
     expect(wc.txs.map((t) => t.tx.amount), unorderedEquals([350, -1200, 123456]));
-    expect(wc.csvReviveIds(id), isEmpty);
     // Again: nothing doubled.
     final again = await wc.importFiles([('a.csv', _bytes(_csvA))]);
     expect(again.single.message, startsWith('Erste (CSV): 0 new, 3 already here'));
@@ -232,7 +240,6 @@ void main() {
       expect(lines.single.ok, isTrue, reason: lines.single.message);
       expect(lines.single.message, contains('3 earlier payments read again'));
       expect(wc.txs.map((t) => t.tx.amount), unorderedEquals([350, -1200, 123456]));
-      expect(wc.csvReviveIds(id), isEmpty);
       lines.single.undo!();
       expect(wc.txs.map((t) => t.tx.amount), unorderedEquals([-350, 1200, -123456]));
       expect(wc.csvLayouts(), isEmpty);
@@ -254,6 +261,81 @@ void main() {
       expect(lines.single.ok, isFalse);
       expect(lines.single.message, contains('used for 3 payments'));
       expect(wc.txs.length, 3);
+    });
+
+    test('Undo restores the OLD reading: reading the file the new way again asks again and is not doubled', () async {
+      final (wc, _) = await removedLayout();
+      final lines = await wc
+          .importFiles([('a.csv', _bytes(_csvA))], askMapping: (_, bytes) async => negated(bytes), confirmRemoval: (_) async => true);
+      lines.single.undo!();
+      var asked = 0;
+      final again = await wc.importFiles([('a.csv', _bytes(_csvA))],
+          askMapping: (_, bytes) async => negated(bytes),
+          confirmRemoval: (n) async {
+            asked = n;
+            return true;
+          });
+      expect(asked, 3, reason: 'the old reading is back, so the new one replaces it again');
+      expect(again.single.ok, isTrue, reason: again.single.message);
+      expect(wc.txs.length, 3);
+      expect(wc.txs.map((t) => t.tx.amount), unorderedEquals([350, -1200, 123456]));
+    });
+
+    test('two files of one shape in one pick: asked once, and Undo takes both files\' new rows away', () async {
+      final (wc, _) = await removedLayout();
+      var asked = 0;
+      final lines = await wc.importFiles([('a.csv', _bytes(_csvA)), ('b.csv', _bytes(_csvB))],
+          askMapping: (_, bytes) async {
+            asked++;
+            return negated(bytes);
+          },
+          confirmRemoval: (_) async => true);
+      expect(asked, 1, reason: 'the second file uses the layout just saved');
+      expect(lines.every((l) => l.ok), isTrue, reason: lines.map((l) => l.message).join(' | '));
+      expect(wc.txs.map((t) => t.tx.amount), unorderedEquals([350, -1200, 123456, 200]));
+      lines.firstWhere((l) => l.undo != null).undo!();
+      expect(wc.txs.map((t) => t.tx.amount), unorderedEquals([-350, 1200, -123456]));
+    });
+
+    test('revive keeps the ids a file did not read: January and February both come back', () async {
+      final wc = emptyWallet();
+      await wc.importFiles([('jan.csv', _bytes(_csvJan))], askMapping: (_, bytes) async => _choiceFor(bytes));
+      await wc.importFiles([('feb.csv', _bytes(_csvFeb))]);
+      final id = wc.csvLayouts().single.key;
+      final old = wc.settings.csvMappings[id]!;
+      expect(wc.saveCsvLayout(id, old.copyWith(dateFormat: CsvDateFormat.dmyDotShort), force: true).length, 4);
+      expect(wc.txs, isEmpty);
+      final jan = await wc.importFiles([('jan.csv', _bytes(_csvJan))]);
+      expect(jan.single.message, contains('2 new'));
+      expect(wc.csvReviveIds(id).length, 2, reason: "February's ids wait for February's file");
+      final feb = await wc.importFiles([('feb.csv', _bytes(_csvFeb))]);
+      expect(feb.single.message, contains('2 new'));
+      expect(wc.txs.length, 4);
+      expect(wc.csvReviveIds(id), isEmpty);
+    });
+
+    test('the clock behind after the forced delete: the line is the clock sentence and still carries the Undo', () async {
+      var wall = DateTime(2026, 10, 20, 12).millisecondsSinceEpoch;
+      final repo = WalletRepo.inMemory(now: () => wall);
+      final wc = WalletController.forTest(repo, key: VaultKey.generate(), clock: () => DateTime(2026, 10, 20, 12));
+      addTearDown(wc.dispose);
+      await wc.importFiles([('a.csv', _bytes(_csvA))], askMapping: (_, bytes) async => _choiceFor(bytes));
+      wc.deleteCsvLayout(wc.csvLayouts().single.key);
+      Logger.root.level = Level.ALL;
+      final sub = Logger.root.onRecord.listen((r) {
+        if (r.message.contains('import.layoutSaved')) wall -= 3 * 3600 * 1000; // the clock slips right after the forced save
+      });
+      addTearDown(sub.cancel);
+      final lines = await wc
+          .importFiles([('a.csv', _bytes(_csvA))], askMapping: (_, bytes) async => negated(bytes), confirmRemoval: (_) async => true);
+      await sub.cancel();
+      expect(lines.single.message, clockBehindText);
+      expect(lines.single.ok, isFalse);
+      expect(lines.single.undo, isNotNull);
+      expect(wc.txs, isEmpty, reason: 'the earlier payments were removed and nothing was read');
+      wall += 3 * 3600 * 1000;
+      lines.single.undo!();
+      expect(wc.txs.map((t) => t.tx.amount), unorderedEquals([-350, 1200, -123456]));
     });
 
     testWidgets('through the import button: Map columns, the question, then a toast with Undo', (t) async {
@@ -623,6 +705,38 @@ void main() {
       expect(wc.txs.length, 3);
       expect(wc.settings.csvMappings[id]!.negate, isFalse);
       expect(wc.csvReviveIds(id), isEmpty);
+      await _settle(t);
+    });
+
+    testWidgets('Change: a header that moved (a title line) is no change of reading', (t) async {
+      final wc = await layoutWallet();
+      final id = wc.csvLayouts().single.key;
+      expect(wc.settings.csvMappings[id]!.headerRow, 0);
+      await pumpApp(
+          t,
+          Scaffold(
+              body: SingleChildScrollView(
+                  child: AnimatedBuilder(
+                      animation: wc,
+                      builder: (_, __) =>
+                          CsvLayoutsPanel(wc: wc, chooser: _Chooser([_pf('again.csv', 'Synthetic export title\n$_csvA')]))))),
+          size: const Size(400, 2400));
+      await t.tap(find.byKey(ValueKey('csvLayoutEdit:$id')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey('csvMapSheet')), findsOneWidget);
+      await t.enterText(find.byKey(const ValueKey('csvMap:name')), 'Still the same reading');
+      await t.pump();
+      await _scrollTo(t, 'csvMapSave');
+      await t.tap(find.byKey(const ValueKey('csvMapSave')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey('csvEditConfirm')), findsNothing);
+      expect(wc.settings.csvMappings[id]!.name, 'Still the same reading');
+      expect(wc.settings.csvMappings[id]!.headerRow, 0);
+      expect(wc.txs.length, 3);
       await _settle(t);
     });
 
