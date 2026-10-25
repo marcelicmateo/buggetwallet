@@ -117,6 +117,7 @@ class _SearchPaneState extends State<SearchPane> {
             const TxHeaderRow(),
             for (final t in r.txs.take(searchTxLimit))
               TxTile(
+                  table: wc.categoryTable,
                   key: ValueKey('hit:${t.tx.id}'),
                   t: t,
                   currency: cur,
@@ -151,7 +152,7 @@ class _SearchPaneState extends State<SearchPane> {
                 tap(
                     p.title,
                     p.amount == null ? 'No amount' : moneyExact(p.amount!, cur),
-                    '${shortDateOrRaw(p.date)}${p.category == null ? '' : ' · ${p.category}'}${p.status == PlannedStatus.open ? '' : ' · ${p.status == PlannedStatus.paid ? 'Paid' : 'Skipped'}'}',
+                    '${shortDateOrRaw(p.date)}${p.category == null ? '' : ' · ${wc.categoryTable.label(p.category!)}'}${p.status == PlannedStatus.open ? '' : ' · ${p.status == PlannedStatus.paid ? 'Paid' : 'Skipped'}'}',
                     'planned',
                     () => p.isBill ? openBill(context, wc, p.sourceRef!) : openUpcoming(context, wc)),
             ]),

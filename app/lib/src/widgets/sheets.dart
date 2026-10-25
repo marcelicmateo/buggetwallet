@@ -9,6 +9,7 @@ import '../platform.dart';
 import '../screens/bill_sheet.dart';
 import '../screens/scan_bill.dart';
 import '../theme.dart';
+import 'category_picker.dart';
 import 'common.dart';
 
 /// Opens a bottom sheet on a phone, a dialog on windows [dialogMin] wide or more; logs `sheet.open` / `sheet.close` with
@@ -217,8 +218,8 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         key: const ValueKey('categoryField'),
         decoration: InputDecoration(labelText: cat == null ? 'Category (pick one)' : 'Category'),
         child: Wrap(spacing: 6, runSpacing: 6, children: [
-          for (final c in flexCategories.where((c) => c != 'Bank fees'))
-            ChoiceChip(label: Text(c), selected: c == cat, onSelected: (_) => setState(() => cat = c)),
+          ...categoryChips(widget.wc.categoryTable,
+              kinds: const {BudgetKind.flex}, selected: cat, except: const ['Bank fees'], onPick: (c) => setState(() => cat = c)),
         ]),
       ),
       const SizedBox(height: 14),
@@ -374,10 +375,11 @@ class _TxSheetState extends State<TxSheet> {
       ],
       const SizedBox(height: 14),
       DropdownButtonFormField<String>(
+        key: const ValueKey('txCategory'),
         isExpanded: true,
         initialValue: cat,
         decoration: const InputDecoration(labelText: 'Category'),
-        items: [for (final c in categories.keys) DropdownMenuItem(value: c, child: Text(c))],
+        items: categoryValueItems(widget.wc.categoryTable, current: cat),
         onChanged: (v) => setState(() => cat = v ?? cat),
       ),
       if (!manual)

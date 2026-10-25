@@ -138,7 +138,8 @@ class _SpendingScreenState extends State<SpendingScreen> {
             },
           ),
           CategoryBars(
-              values: selSum.byCategory,
+              values: v.byTopLevel,
+              table: wc.categoryTable,
               average: avg,
               currency: cur,
               budget: budgeted ? budget : null,
@@ -168,6 +169,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
               const TxHeaderRow(),
               for (final t in monthTxs)
                 TxTile(
+                    table: wc.categoryTable,
                     t: t,
                     currency: cur,
                     hasBill: wc.billForTx(t.tx.id) != null,

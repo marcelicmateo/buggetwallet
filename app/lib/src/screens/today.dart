@@ -181,8 +181,8 @@ class TodayScreen extends StatelessWidget {
                           : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace', textAlign: TextAlign.end),
                     ),
                   if (p.foreignByCurrency.isNotEmpty) ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote')),
-                  if (tight != null) _BudgetLine(tight, cur, openSpending),
-                  if (p.dueBills.isNotEmpty) _BillsLine(p.dueBills, p.reservedBills, wc.today(), cur, openBills),
+                  if (tight != null) _BudgetLine(tight, wc.categoryTable.label(tight.category), cur, openSpending),
+                  if (p.dueBills.isNotEmpty) _BillsLine(p.dueBills, p.reservedBills, wc.today(), cur, openBills, wc.categoryTable),
                   if (comingUp.count > 0 || suggestions > 0)
                     _InfoLine(
                         key: const ValueKey('comingUpLine'),
@@ -304,6 +304,7 @@ class TodayScreen extends StatelessWidget {
                       const TxHeaderRow(),
                       for (final t in recent)
                         TxTile(
+                            table: wc.categoryTable,
                             t: t,
                             currency: cur,
                             hasBill: wc.billForTx(t.tx.id) != null,
@@ -329,16 +330,15 @@ class TodayScreen extends StatelessWidget {
 /// Spending.
 class _BudgetLine extends StatelessWidget {
   final CategoryBudgetLine line;
-  final String currency;
+  final String name, currency;
   final VoidCallback? onTap;
-  const _BudgetLine(this.line, this.currency, this.onTap);
+  const _BudgetLine(this.line, this.name, this.currency, this.onTap);
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     final over = line.over;
-    final text = over
-        ? '${line.category}: ${leftText(line.remaining ?? 0, currency)}'
-        : '${line.category}: ${leftText(line.remaining ?? 0, currency)} this month';
+    final text =
+        over ? '$name: ${leftText(line.remaining ?? 0, currency)}' : '$name: ${leftText(line.remaining ?? 0, currency)} this month';
     final col = over ? c.bad : c.ink2;
     return InkWell(
       key: const ValueKey('budgetLine'),
@@ -366,11 +366,12 @@ class _BillsLine extends StatelessWidget {
   final int reserved;
   final String today, currency;
   final VoidCallback? onTap;
-  const _BillsLine(this.bills, this.reserved, this.today, this.currency, this.onTap);
+  final CategoryTable table;
+  const _BillsLine(this.bills, this.reserved, this.today, this.currency, this.onTap, this.table);
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final counted = bills.where((b) => !b.coveredByPlan).length;
+    final counted = bills.where((b) => !b.coveredByPlanIn(table)).length;
     final covered = bills.length - counted;
     final overdue = bills.where((b) => b.nextDue.compareTo(today) < 0).length;
     final text = 'Due by payday: ${[

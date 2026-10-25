@@ -121,7 +121,8 @@ extension BillsDb on WalletController {
                 ],
                 billsAll(),
                 today: today(),
-                currency: currency));
+                currency: currency,
+                table: categoryTable));
         final byId = {for (final c in txs) c.tx.id: c};
         return BillHistoryView(bill, months, {
           for (final m in months)
@@ -441,8 +442,9 @@ extension BillsDb on WalletController {
   bool billNeedsCategory(Bill b) => b.category == null && b.dueDate != null && b.dueDate!.compareTo(today()) >= 0;
 
   /// The category worth suggesting for [b] (earlier bills and payments of the same payee); null when nothing fits.
-  String? suggestedBillCategory(Bill b) =>
-      billCategorySuggester != null ? billCategorySuggester!(b) : suggestBillCategory(b, recurring: recurringBills(), txs: txs);
+  String? suggestedBillCategory(Bill b) => billCategorySuggester != null
+      ? billCategorySuggester!(b)
+      : suggestBillCategory(b, recurring: recurringBills(), txs: txs, table: categoryTable);
 
   /// The confirmed expected bill that already plans this slip (same payee, due about one cycle), or null. Such a bill's planned row is
   /// listed but not reserved (decided by core when read).

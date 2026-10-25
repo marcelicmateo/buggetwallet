@@ -175,7 +175,11 @@ class CategoryBars extends StatelessWidget {
 
   /// A tap on a category row (its detail); rows are not tappable without it.
   final ValueChanged<String>? onOpen;
-  const CategoryBars({super.key, required this.values, required this.average, required this.currency, this.budget, this.onOpen});
+
+  /// Where the row names come from (null: the built-in names).
+  final CategoryTable? table;
+  const CategoryBars(
+      {super.key, required this.values, required this.average, required this.currency, this.budget, this.onOpen, this.table});
 
   @override
   Widget build(BuildContext context) {
@@ -198,7 +202,14 @@ class CategoryBars extends StatelessWidget {
     return Column(children: [
       for (final k in cats)
         _CategoryRow(
-            name: k, value: values[k] ?? 0, average: average[k] ?? 0, maxV: maxV, line: lines[k], currency: currency, onOpen: onOpen),
+            id: k,
+            name: (table ?? CategoryTable.builtIn).label(k),
+            value: values[k] ?? 0,
+            average: average[k] ?? 0,
+            maxV: maxV,
+            line: lines[k],
+            currency: currency,
+            onOpen: onOpen),
       if (total != null && total.budgetedCount > 0 && total.remainingTotal != null)
         TotalRule(
           padding: const EdgeInsets.symmetric(vertical: 6),
@@ -246,12 +257,13 @@ class _LeftText extends StatelessWidget {
 }
 
 class _CategoryRow extends StatelessWidget {
-  final String name, currency;
+  final String id, name, currency;
   final int value, average, maxV;
   final CategoryBudgetLine? line;
   final ValueChanged<String>? onOpen;
   const _CategoryRow(
-      {required this.name,
+      {required this.id,
+      required this.name,
       required this.value,
       required this.average,
       required this.maxV,
@@ -343,7 +355,7 @@ class _CategoryRow extends StatelessWidget {
         ),
       ),
     );
-    return onOpen == null ? row : InkWell(key: ValueKey('categoryRow_$name'), onTap: () => onOpen!(name), child: row);
+    return onOpen == null ? row : InkWell(key: ValueKey('categoryRow_$id'), onTap: () => onOpen!(id), child: row);
   }
 }
 

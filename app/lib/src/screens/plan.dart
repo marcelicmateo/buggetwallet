@@ -14,6 +14,7 @@ import 'backup_panel.dart';
 import 'bills_panel.dart';
 import 'budgets.dart';
 import 'calendars_panel.dart';
+import 'categories_panel.dart';
 import 'diagnostics.dart';
 import 'export_panel.dart';
 import 'forget_browser.dart';
@@ -291,6 +292,7 @@ class _PlanScreenState extends State<PlanScreen> {
               KeyedSubtree(key: _accountsKey, child: AccountsPanel(wc: wc)),
               KeyedSubtree(key: _billsKey, child: ExpectedBillsPanel(wc: wc)),
               KeyedSubtree(key: _billsDbKey, child: BillsPanel(wc: wc, chooser: widget.chooser)),
+              CategoriesPanel(key: const ValueKey('categoriesPanel'), wc: wc),
               BudgetsPanel(key: const ValueKey('budgetsPanel'), wc: wc),
               CalendarsPanel(key: const ValueKey('calendarsPanel'), wc: wc, chooser: widget.chooser),
               Panel(children: [
@@ -398,7 +400,7 @@ class _PlanScreenState extends State<PlanScreen> {
     if (changes.containsKey('salary')) changes['salaryConfirmed'] = true;
     // Edited fields show the saved value (e.g. "1500.0" -> "1500", payday 31 -> 28) and are no longer "edited".
     for (final k in vals.keys) {
-      final t = _text(WalletSettings.fromMap({...now, ...changes}), k);
+      final t = _text(WalletSettings.fromMap({...now, ...changes}, table: widget.wc.categoryTable), k);
       f[k]!.text = t;
       _shown[k] = t;
     }

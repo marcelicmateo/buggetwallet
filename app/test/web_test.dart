@@ -440,7 +440,7 @@ void main() {
 
   group('Plan on the web', () {
     Future<void> pumpPlan(WidgetTester t, WalletController wc,
-            {FakeChooser? chooser, Size size = const Size(400, 8000), double scale = 1}) =>
+            {FakeChooser? chooser, Size size = const Size(400, 10500), double scale = 1}) =>
         pumpApp(t, Scaffold(body: PlanScreen(wc: wc, chooser: chooser ?? FakeChooser())), size: size, textScale: scale);
 
     webTest('Sync (relay) is there, Nudges are not; Backup, Export, Diagnostics and This browser stay', (t) async {

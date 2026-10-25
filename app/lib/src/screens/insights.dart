@@ -119,6 +119,7 @@ class InsightPanel extends StatelessWidget {
     return [
       ShareBars(
         share: share,
+        table: wc.categoryTable,
         currency: cur,
         onOpen: (cat) {
           logNav('insights.category', {'graph': id});
@@ -212,6 +213,7 @@ class InsightPanel extends StatelessWidget {
         const TxHeaderRow(),
         for (final t in rows)
           TxTile(
+              table: wc.categoryTable,
               t: t,
               currency: cur,
               hasBill: wc.billForTx(t.tx.id) != null,

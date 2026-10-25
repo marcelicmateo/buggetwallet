@@ -187,6 +187,35 @@ void main() {
     await Harness.checkLog();
   });
 
+  itest('Categories: add one and a subcategory, rename, hide, delete with Undo; the picker and Spending follow', (t) async {
+    final today = todayIso();
+    final wc = await Harness.start(t, batch: demoBatch(today), settings: {'salary': 100000, 'salaryConfirmed': true, 'paydayDay': 15});
+    final pets = await wc.addOwnCategory(name: 'Pets', kind: BudgetKind.flex);
+    final vet = await wc.addOwnCategory(name: 'Vet', kind: BudgetKind.flex, parent: pets);
+    await goTab(t, 'Plan');
+    await scrollTo(t, find.byKey(const ValueKey('categoryAdd')), PlanScreen);
+    expect(find.byKey(ValueKey('category:$pets')), findsOneWidget);
+    expect(find.byKey(ValueKey('category:$vet')), findsOneWidget);
+    await Harness.shot(t, 'plan-categories');
+    await tapVisible(t, find.byKey(ValueKey('categoryMenu:$vet')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(ValueKey('categoryRename:$vet')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const ValueKey('categoryName')), 'Vet visits');
+    await t.tap(find.byKey(const ValueKey('categorySave')));
+    await t.pumpAndSettle();
+    expect(wc.categoryTable.label(vet), 'Vet visits');
+    await tapVisible(t, find.byKey(ValueKey('categoryMenu:$vet')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(ValueKey('categoryDeleteItem:$vet')));
+    await t.pumpAndSettle();
+    expect(find.byKey(ValueKey('category:$vet')), findsNothing);
+    await tapVisible(t, find.byKey(const ValueKey('toastUndo')));
+    await t.pumpAndSettle();
+    expect(find.byKey(ValueKey('category:$vet')), findsOneWidget);
+    await Harness.checkLog();
+  });
+
   itest('Bill history: a confirmed bill lists its months; a month opens to its payment and bill', (t) async {
     final now = DateTime.now();
     String on(int back) {

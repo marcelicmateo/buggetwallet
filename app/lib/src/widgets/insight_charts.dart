@@ -184,19 +184,23 @@ class ShareBars extends StatelessWidget {
   final CategoryShare share;
   final String currency;
   final ValueChanged<String>? onOpen;
-  const ShareBars({super.key, required this.share, required this.currency, this.onOpen});
+
+  /// Where the names come from (null: the built-in names).
+  final CategoryTable? table;
+  const ShareBars({super.key, required this.share, required this.currency, this.onOpen, this.table});
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     final slices = share.slices;
+    final cats = table ?? CategoryTable.builtIn;
     if (slices.isEmpty) return const EmptyNote('No spending in this range.');
     final top = slices.first.spent.clamp(1, 1 << 60);
     return Column(children: [
       for (final s in slices)
         Semantics(
           button: onOpen != null,
-          label: '${s.category}: ${permilleText(s.permille)}, ${moneyExact(s.spent, currency)}',
+          label: '${cats.label(s.category)}: ${permilleText(s.permille)}, ${moneyExact(s.spent, currency)}',
           excludeSemantics: true,
           onTap: onOpen == null ? null : () => onOpen!(s.category),
           child: InkWell(
@@ -207,7 +211,8 @@ class ShareBars extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 SplitRow(
-                  start: Text(s.category, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: BwType.bodySize)),
+                  start: Text(cats.label(s.category),
+                      maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: BwType.bodySize)),
                   end: MoneyText(moneyExact(s.spent, currency),
                       textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w600)),
                 ),

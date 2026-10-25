@@ -26,7 +26,7 @@ Future<void> _pump(WidgetTester tester,
     {bool budgets = true,
     int groceriesBudget = 30000,
     int eatingOutBudget = 10000,
-    Size size = const Size(400, 6000),
+    Size size = const Size(400, 8500),
     double scale = 1}) async {
   _wc = budgetWallet(budgets: budgets, groceriesBudget: groceriesBudget, eatingOutBudget: eatingOutBudget);
   await pumpApp(tester, Scaffold(body: PlanScreen(wc: _wc)), size: size, textScale: scale);
@@ -190,7 +190,7 @@ void main() {
   });
 
   for (final (name, size, scale) in const [
-    ('320 dp at text 2.0', Size(320, 7000), 2.0),
+    ('320 dp at text 2.0', Size(320, 9500), 2.0),
     ('1280 wide', Size(1280, 3000), 1.0),
     ('360 dp', Size(360, 4000), 1.0)
   ]) {

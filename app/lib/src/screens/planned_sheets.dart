@@ -6,6 +6,7 @@ import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
+import '../widgets/category_picker.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 
@@ -119,10 +120,8 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
         isExpanded: true,
         initialValue: _category,
         decoration: const InputDecoration(labelText: 'Category', helperText: 'Used to find the payment later.'),
-        items: [
-          const DropdownMenuItem<String?>(value: null, child: Text('No category')),
-          for (final c in spendingCategories) DropdownMenuItem<String?>(value: c, child: Text(c)),
-        ],
+        items: categoryMenuItems(widget.wc.categoryTable,
+            kinds: const {BudgetKind.fixed, BudgetKind.flex}, current: _category, noneLabel: 'No category'),
         onChanged: (v) => setState(() => _category = v),
       ),
       if (_error != null) ...[const SizedBox(height: 10), StatusLabel(good: false, text: _error!)],
@@ -165,7 +164,7 @@ class _PlannedEntrySheetState extends State<PlannedEntrySheet> {
       const DoubleRule(),
       const SizedBox(height: 6),
       Muted(
-          '${longDateOrRaw(p.date)} · ${p.category ?? 'No category'} · ${p.source == PlannedSource.calendar ? 'From a calendar' : 'Added by you'}'),
+          '${longDateOrRaw(p.date)} · ${p.category == null ? 'No category' : wc.categoryTable.label(p.category!)} · ${p.source == PlannedSource.calendar ? 'From a calendar' : 'Added by you'}'),
       const SizedBox(height: 14),
       if (!_paying)
         Wrap(spacing: 8, runSpacing: 8, children: [

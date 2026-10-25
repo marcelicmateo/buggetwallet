@@ -137,6 +137,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                         for (final l in pace)
                           _PaceRow(
                             l: l,
+                            name: wc.categoryTable.label(l.category),
                             currency: cur,
                             onTap: () {
                               logNav('review.pace');
@@ -224,9 +225,9 @@ class _Step extends StatelessWidget {
 /// A budget line behind pace or over: name and state on the left, what is left on the right; a tap opens Spending.
 class _PaceRow extends StatelessWidget {
   final CategoryBudgetLine l;
-  final String currency;
+  final String name, currency;
   final VoidCallback onTap;
-  const _PaceRow({required this.l, required this.currency, required this.onTap});
+  const _PaceRow({required this.l, required this.name, required this.currency, required this.onTap});
   @override
   Widget build(BuildContext context) => HoverTint(
         child: InkWell(
@@ -237,7 +238,7 @@ class _PaceRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: SplitRow(
                 start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(l.category, style: const TextStyle(fontWeight: FontWeight.w500)),
+                  Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
                   Text(l.over ? 'over budget' : 'behind pace', style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
                 ]),
                 end: Text(budgetLeftText(l, currency),
@@ -266,7 +267,8 @@ class _CategoryRow extends StatelessWidget {
               end: Text(money(t.amount, wc.currency, decimals: 2, signed: true),
                   textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
           Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
-            Text('${t.category} · ${shortDateOrRaw(t.date)}', style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+            Text('${wc.categoryTable.label(t.category)} · ${shortDateOrRaw(t.date)}',
+                style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
             Wrap(spacing: 4, children: [
               TextButton(
                   onPressed: () async {

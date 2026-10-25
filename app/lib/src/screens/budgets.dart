@@ -19,8 +19,10 @@ class BudgetsPanel extends StatefulWidget {
 }
 
 class _BudgetsPanelState extends State<BudgetsPanel> {
-  final _cats = spendingCategories;
-  late final Map<String, TextEditingController> _f = {for (final k in _cats) k: TextEditingController()};
+  /// The main spending categories (own ones included; subcategories count in their parent's budget).
+  List<String> get _cats => widget.wc.categoryTable.spending;
+  final Map<String, TextEditingController> _f = {};
+  TextEditingController _ctl(String k) => _f.putIfAbsent(k, TextEditingController.new);
 
   /// The text each field last got from the saved budgets: a field whose text differs was edited.
   final Map<String, String> _shown = {};
@@ -50,7 +52,7 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
   void _fill() {
     final saved = widget.wc.categoryBudgets;
     for (final k in _cats) {
-      final t = saved[k] == null ? '' : centsToFieldText(saved[k]!), c = _f[k]!;
+      final t = saved[k] == null ? '' : centsToFieldText(saved[k]!), c = _ctl(k);
       if (c.text.trim() == (_shown[k] ?? '') && c.text != t) c.text = t;
       _shown[k] = t;
     }
@@ -66,28 +68,28 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
     final current = <String, int>{};
     final untouched = <String>{};
     for (final k in _cats) {
-      final text = _f[k]!.text.trim(), v = parseMoney(text);
+      final text = _ctl(k).text.trim(), v = parseMoney(text);
       if (text.isNotEmpty && v == null) untouched.add(k);
       if (v != null && v > 0) current[k] = v;
     }
     final proposals = [
       for (final p in budgetProposals(current, s))
-        if (_f.containsKey(p.category) && !untouched.contains(p.category)) p,
+        if (_cats.contains(p.category) && !untouched.contains(p.category)) p,
     ];
     var filled = 0, changed = 0;
     for (final p in proposals.where((p) => p.fillsEmpty)) {
-      _f[p.category]!.text = centsToFieldText(p.suggested);
+      _ctl(p.category).text = centsToFieldText(p.suggested);
       _errors.remove(p.category);
       filled++;
     }
     final existing = proposals.where((p) => !p.fillsEmpty).toList();
     if (existing.isNotEmpty) {
       logNav('budgets.suggestAsk', {'count': existing.length});
-      final picked =
-          await showDialog<Set<String>>(context: context, builder: (_) => SuggestBudgetsDialog(proposals: existing, currency: wc.currency));
+      final picked = await showDialog<Set<String>>(
+          context: context, builder: (_) => SuggestBudgetsDialog(proposals: existing, currency: wc.currency, table: wc.categoryTable));
       if (!mounted) return;
       for (final p in existing.where((p) => picked?.contains(p.category) ?? false)) {
-        _f[p.category]!.text = centsToFieldText(p.suggested);
+        _ctl(p.category).text = centsToFieldText(p.suggested);
         _errors.remove(p.category);
         changed++;
       }
@@ -111,7 +113,7 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
     final edits = <String, int?>{}; // null = cleared
     final errors = <String, String>{};
     for (final k in _cats) {
-      final text = _f[k]!.text.trim();
+      final text = _ctl(k).text.trim();
       if (text == _shown[k]) continue;
       if (text.isEmpty) {
         edits[k] = null;
@@ -149,7 +151,7 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
   void _resetShown() {
     _shown.clear();
     for (final k in _cats) {
-      _f[k]!.text = '';
+      _ctl(k).text = '';
     }
     _fill();
   }
@@ -170,14 +172,14 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
             child: SplitRow(
               maxEnd: 0.5,
               gap: 12,
-              start: Text(k, style: const TextStyle(fontSize: BwType.bodySize)),
+              start: Text(widget.wc.categoryTable.label(k), style: const TextStyle(fontSize: BwType.bodySize)),
               end: SizedBox(
                 width: 132,
                 child: Semantics(
-                  label: 'Monthly budget for $k',
+                  label: 'Monthly budget for ${widget.wc.categoryTable.label(k)}',
                   child: MoneyField(
                     fieldKey: ValueKey('budget:$k'),
-                    controller: _f[k]!,
+                    controller: _ctl(k),
                     onChanged: (_) {
                       if (_errors.containsKey(k)) setState(() => _errors.remove(k));
                     },

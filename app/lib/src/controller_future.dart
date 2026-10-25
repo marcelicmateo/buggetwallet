@@ -110,8 +110,9 @@ extension FutureSpending on WalletController {
     };
     final recurring = recurringBills();
     final xs = items.where((i) => switch (i.kind) {
-          UpcomingKind.bill => ahead(i) && !(i.bill?.coveredByPlan ?? false),
-          UpcomingKind.planned => ahead(i) && i.planned != null && plannedReserves(i.planned!, recurring, occurrences),
+          UpcomingKind.bill => ahead(i) && !(i.bill?.coveredByPlanIn(categoryTable) ?? false),
+          UpcomingKind.planned =>
+            ahead(i) && i.planned != null && plannedReserves(i.planned!, recurring, occurrences, table: categoryTable),
           _ => false,
         });
     return (count: xs.length, total: xs.fold<int>(0, (a, i) => a + i.amount!));

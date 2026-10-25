@@ -384,7 +384,7 @@ class _UpcomingRow extends StatelessWidget {
       Text(shortDateOrRaw(i.date), style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       Tag(sourceLabel(i)),
       if (past && !isSuggestion) Text('past', style: TextStyle(fontSize: BwType.metaSize, color: c.muted)),
-      if ((i.planned?.coveredByPlan ?? false) || (i.bill?.coveredByPlan ?? false))
+      if ((i.planned?.coveredByPlanIn(wc.categoryTable) ?? false) || (i.bill?.coveredByPlanIn(wc.categoryTable) ?? false))
         Text('covered by your plan', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       if (i.planned?.needsCategory ?? false) StatusLabel(key: ValueKey('needsCategory:${i.key}'), good: false, text: 'Needs a category'),
     ]);

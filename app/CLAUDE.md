@@ -88,6 +88,17 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   Budgets Suggest (`budgets.dart` + `suggest_budgets_dialog.dart`): core's `budgetProposals(fields as typed, suggested)`; empty fields are filled at once, fields with a number open a
   dialog (checkbox per row, Accept ticked / Accept all / Cancel); a field with text that is no number is left alone; only Save writes. Tests: `test/accounts_ui_test.dart`,
   `test/plan_suggestions_ui_test.dart`, `test/budgets_plan_test.dart`, `integration_test/onboarding_test.dart` + `plan_test.dart`; demo accounts: `seedDemoAccounts`.
+- Own categories (P1; spec `docs/context/P1_SPEC.md`): `wc.categoryTable` (`controller_categories.dart`, `extension CategoriesDb`; = `categorizer.table`, rebuilt on every `reload`) is passed as `table:` to every core
+  call that can meet a custom id (`computePeriod`/`plannedReserves` required; `effectiveSettings`, `averageByCategory`, `suggestBudgets`, `budgetVsActual`, `reviewState`, `monthlySummaryCsv`, `categoryShare(rollUp: true)`,
+  `budgetVsActualSeries`, `billHistory`, `suggestBillCategory`) and `coveredByPlanIn(table)` replaces the built-in `coveredByPlan` getter in widgets. Names are shown with `table.label(id)` (`TxTile(table:)`,
+  `CategoryBars(table:)`, `ShareBars(table:)`, `SuggestBudgetsDialog(table:)`). Actions: `addOwnCategory(name, kind, parent)`, `renameCategory`, `setCategoryHidden`, `moveCategory(id, ±1)` (hands the group's positions out
+  again, writes only changes), `deleteOwnCategory` / `undeleteOwnCategory`; an `ArgumentError` carries core's text. Logs `categories.*` (counts and enum words only). `SpendingView.byTopLevel` = `rollUp(byCategory)`
+  (the "Where it goes" rows). Insights API: `categoryTotal` (with children), `ownTotal`, `childTotals`, `ownRowsOf`, `rowsOf(cat, null)` (with children), `compareFor` (rolled up when it has children); merchants are the
+  category's own rows (core's `merchantsIn` is per id), so the drill-down shows "Subcategories" (`childRow_<id>`, `childOwn`) above "Where it went, not in a subcategory". Screens: `screens/categories_panel.dart`
+  (Plan › Categories: groups Spending fixed / flexible, Income, Transfers; a row per category with a `categoryMenu:<id>` popup: Rename, Hide/Show, Move up/down, Add subcategory, Delete (own only) with Undo toast;
+  `CategoryFormSheet` for add / subcategory / rename, core's message under the field; a sync duplicate row `categoryDuplicate:<id>` "same name as X, not offered" + Delete), `widgets/category_picker.dart`
+  (`pickerIds`, `categoryMenuItems` = dropdown items with a child indented (`pick:<id>`), `categoryChips` = add-expense chips with "↳" children (`cat:<id>`); the current value stays in the list even when hidden).
+  Budgets panel lists `table.spending` (main categories only). Search (`searchAll`) does not know custom labels yet (core). Tests: `test/p1_categories_ui_test.dart`, `integration_test/plan_test.dart` (Categories).
 - Theme (N1, softer Ledger): graphite ink, warmer paper, `lineStrong` is a mid grey (3:1 on bg: inputs, buttons, panel top rule, double rule), `line` is used for row separators,
   `SectionHead` underlines, `TotalRule`'s top line, header rules and the rail border; the double rule (1 px, 2 px gap) sits under totals only. Values: `docs/design/ledger-spec.md` §1.
 - Sync (R5): `controller.dart` keeps `relayUrl` (device-local `relayUrl` value; `setRelay(Uri?)` validates http/https + host, saves, syncs with trigger `relay`;

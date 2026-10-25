@@ -24,6 +24,7 @@ import 'platform.dart' show isWeb;
 import 'wallet_db.dart';
 
 part 'controller_accounts.dart';
+part 'controller_categories.dart';
 part 'controller_bills.dart';
 part 'controller_future.dart';
 
@@ -79,6 +80,10 @@ class SpendingView {
   final List<String> months;
   final MonthSummary summary;
 
+  /// The month's spending per main category: [MonthSummary.byCategory] with each subcategory added into its parent (`rollUp`).
+  /// The "Where it goes" rows; the detail screen lists the subcategories.
+  final Map<String, int> byTopLevel;
+
   /// Average per category over the 6 months before [month] (a month without spend counts as zero), from `averageByCategory`.
   final Map<String, int> average;
   final List<PeriodSummary> periods;
@@ -94,6 +99,7 @@ class SpendingView {
     required this.month,
     required this.months,
     required this.summary,
+    required this.byTopLevel,
     required this.average,
     required this.periods,
     required this.trend,
@@ -697,7 +703,7 @@ class WalletController extends ChangeNotifier {
   WalletSettings get effectiveSettings => _cached('effective', () {
         if (settings.periodStart != null) return settings;
         final m = settings.toMap()..['periodStart'] = _paydays.lastOrNull ?? today();
-        return WalletSettings.fromMap(m);
+        return WalletSettings.fromMap(m, table: categoryTable);
       });
 
   /// A payday more than 20 days after the current period start, not yet started as a new month.
@@ -706,7 +712,10 @@ class WalletController extends ChangeNotifier {
   /// The budget of the running pay period. Confirmed recurring bills are reserved in it (`reservedBills`, `dueBills`).
   PeriodBudget period() => _cached(
       'period',
-      () => timed('wc.period', () => computePeriod(txs, effectiveSettings, goals, today(), bills: recurringBills(), planned: plannedOpen()),
+      () => timed(
+          'wc.period',
+          () =>
+              computePeriod(txs, effectiveSettings, goals, today(), bills: recurringBills(), planned: plannedOpen(), table: categoryTable),
           warnMs: 50));
 
   /// Saved or lost per pay period (salary to salary), oldest first; the last one is still running.
@@ -727,7 +736,8 @@ class WalletController extends ChangeNotifier {
                       () => timed('wc.monthSummary', () => monthSummary(txs, m, currency: currency), fields: {'month': m}))
               ];
               final selSum = sums.firstWhere((s) => s.month == month);
-              final avg = averageByCategory(txs, month, currency: currency); // the same 6-month average the suggested budgets use
+              final avg = averageByCategory(txs, month,
+                  currency: currency, table: categoryTable); // the same 6-month average the suggested budgets use
               final periods = payPeriods(count: 12);
 
               final merch = <String, (int, int)>{};
@@ -746,6 +756,7 @@ class WalletController extends ChangeNotifier {
                 month: month,
                 months: months,
                 summary: selSum,
+                byTopLevel: rollUp(selSum.byCategory, categoryTable),
                 average: avg,
                 periods: periods,
                 trend: trendNet(periods),
@@ -759,12 +770,15 @@ class WalletController extends ChangeNotifier {
   /// Budget against spending per category for [month] (`YYYY-MM`). Cached per month until the data changes.
   BudgetVsActual budgetVsActual(String month) => _cached(
       'budget$month',
-      () => timed('wc.budgetVsActual', () => _computeBudget(txs, month, categoryBudgets, today: today(), currency: currency),
+      () => timed(
+          'wc.budgetVsActual', () => _computeBudget(txs, month, categoryBudgets, today: today(), currency: currency, table: categoryTable),
           fields: {'month': month, 'tx': txs.length}, warnMs: 50));
 
   /// Budgets worked out from the 6 months before [month], per category (cents, rounded up to 10).
-  Map<String, int> suggestedBudgets(String month) => _cached('suggest$month',
-      () => timed('wc.suggestBudgets', () => suggestBudgets(txs, month, currency: currency), fields: {'month': month}, warnMs: 50));
+  Map<String, int> suggestedBudgets(String month) => _cached(
+      'suggest$month',
+      () => timed('wc.suggestBudgets', () => suggestBudgets(txs, month, currency: currency, table: categoryTable),
+          fields: {'month': month}, warnMs: 50));
 
   /// The budgeted category with the least money left this month, or null when nothing is budgeted.
   CategoryBudgetLine? tightestBudget() => _cached('tightest', () {
@@ -814,7 +828,7 @@ class WalletController extends ChangeNotifier {
                 t.date.compareTo(from) > 0 &&
                 t.date.compareTo(to) <= 0 &&
                 (t.kind == BudgetKind.fixed || t.kind == BudgetKind.flex) &&
-                (t.tx.category == null || !categories.containsKey(t.tx.category)))
+                (t.tx.category == null || !categoryTable.isLive(t.tx.category!)))
               t
         ];
       });
@@ -846,7 +860,9 @@ class WalletController extends ChangeNotifier {
 
   /// Is the weekly review due, its steps with counts, and the streak. Cached per data version and day.
   ReviewState reviewState() => _cached(
-      'reviewState', () => reviewStateOf(txs, settings, wish, categoryBudgets, today: today(), nowMillis: _clock().millisecondsSinceEpoch));
+      'reviewState',
+      () => reviewStateOf(txs, settings, wish, categoryBudgets,
+          today: today(), nowMillis: _clock().millisecondsSinceEpoch, table: categoryTable));
 
   /// Finishes this week's review (writes the date; the streak grows by one).
   void markReviewDone() {
@@ -1578,7 +1594,7 @@ class WalletController extends ChangeNotifier {
 
   /// The spending summary per month and category over every transaction.
   ExportFile exportSummary() {
-    final csv = monthlySummaryCsv(txs, currency: currency);
+    final csv = monthlySummaryCsv(txs, currency: currency, table: categoryTable);
     final months = csv.split('\n').where((l) => l.isNotEmpty).length - 1; // data lines after the header
     logEvent(_log, Level.INFO, 'export.summary', {'rows': months});
     return ExportFile('bw-summary.csv', _csvBytes(csv), months);
@@ -1716,8 +1732,7 @@ class WalletController extends ChangeNotifier {
   // ---------- edits ----------
   /// The category of the last expense added on this device (device-local `lastExpenseCategory`), or null.
   String? get lastExpenseCategory {
-    final c = repo.localValue('lastExpenseCategory');
-    return c != null && flexCategories.contains(c) && c != 'Bank fees' ? c : null;
+    return lastExpensePick;
   }
 
   void addExpense({required int amount, required String category, required String note, required String date}) {

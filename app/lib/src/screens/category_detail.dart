@@ -30,6 +30,7 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
   String? merchant;
 
   WalletController get wc => widget.wc;
+  String get name => wc.categoryTable.label(widget.category);
   DateRange get range => widget.range;
 
   void _open(String? key) {
@@ -40,7 +41,7 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: DialogAppBar(title: widget.category),
+      appBar: DialogAppBar(title: wc.categoryTable.label(widget.category)),
       body: ListenableBuilder(
         listenable: wc,
         builder: (context, _) {
@@ -93,12 +94,14 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
   List<Widget> _categoryView(BuildContext context, String cur, List<MerchantTotal> merchants) {
     final total = wc.categoryTotal(widget.category, range);
     final cmp = wc.compareFor(widget.category, range);
+    final kids = wc.childTotals(widget.category, range);
+    final own = wc.ownTotal(widget.category, range);
     final month = wc.monthIn(range);
     return gapped([
       Panel(children: [
         Eyebrow(rangeLabel(range)),
         Heading(moneyExact(total, cur), key: const ValueKey('detailTotal')),
-        Muted('Spent on ${widget.category} in this range.'),
+        Muted('Spent on $name in this range.'),
       ]),
       Panel(children: [
         const Eyebrow('Compared'),
@@ -110,10 +113,26 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
       ]),
       Panel(children: [
         const Eyebrow('Per month'),
-        _bars(context, wc.categoryBars(widget.category, range), cur, '${widget.category} per month', 'category'),
+        _bars(context, wc.categoryBars(widget.category, range), cur, '$name per month', 'category'),
       ]),
+      if (kids.isNotEmpty)
+        Panel(key: const ValueKey('subcategories'), children: [
+          const Eyebrow('Subcategories'),
+          Rows(children: [
+            for (final (id, spent) in kids)
+              InkWell(
+                key: ValueKey('childRow_$id'),
+                onTap: () {
+                  logNav('insights.subcategory');
+                  openCategory(context, wc, id, range);
+                },
+                child: LineItem(wc.categoryTable.label(id), moneyExact(spent, cur)),
+              ),
+            if (own != 0 || merchants.isNotEmpty) LineItem('Not in a subcategory', moneyExact(own, cur), key: const ValueKey('childOwn')),
+          ]),
+        ]),
       Panel(children: [
-        const Eyebrow('Where it went'),
+        Eyebrow(kids.isEmpty ? 'Where it went' : 'Where it went, not in a subcategory'),
         if (merchants.isEmpty)
           const EmptyNote('Nothing spent in this range.')
         else
@@ -140,14 +159,14 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
             style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
             onPressed: () => _open(null),
             icon: const Icon(Icons.chevron_left),
-            label: Text('Back to ${widget.category}')),
+            label: Text('Back to $name')),
       ),
       ...gapped([
         Panel(children: [
           Eyebrow(rangeLabel(range)),
           Heading(m.label),
           Heading(moneyExact(m.spent, cur), key: const ValueKey('detailTotal'), size: BwType.amountMdSize),
-          Muted('${m.count} ${m.count == 1 ? 'payment' : 'payments'} in ${widget.category}.'),
+          Muted('${m.count} ${m.count == 1 ? 'payment' : 'payments'} in $name.'),
         ]),
         Panel(children: [
           const Eyebrow('Per month'),
@@ -160,6 +179,7 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
             const TxHeaderRow(),
             for (final t in rows)
               TxTile(
+                  table: wc.categoryTable,
                   t: t,
                   currency: cur,
                   hasBill: wc.billForTx(t.tx.id) != null,

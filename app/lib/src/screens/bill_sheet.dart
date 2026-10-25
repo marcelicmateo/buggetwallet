@@ -11,6 +11,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../theme.dart';
+import '../widgets/category_picker.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 
@@ -311,10 +312,7 @@ class _BillSheetState extends State<BillSheet> {
                 ? 'Suggested from your earlier bills. Check it.'
                 : (categoryNeeded && category == null ? "Pick the category so Budget Wallet doesn't count this bill twice." : null),
             helperMaxLines: 3),
-        items: [
-          const DropdownMenuItem<String?>(value: null, child: Text('None')),
-          for (final k in categories.keys) DropdownMenuItem<String?>(value: k, child: Text(k)),
-        ],
+        items: categoryMenuItems(widget.wc.categoryTable, current: category, noneLabel: 'None'),
         onChanged: (v) => setState(() {
           category = v;
           error = null;
@@ -459,6 +457,7 @@ class _CandidatesSheet extends StatelessWidget {
           const TxHeaderRow(),
           for (final t in list.take(30))
             TxTile(
+                table: wc.categoryTable,
                 key: ValueKey('cand:${t.tx.id}'),
                 t: t,
                 currency: wc.currency,
@@ -480,7 +479,10 @@ class _CashSheet extends StatefulWidget {
 }
 
 class _CashSheetState extends State<_CashSheet> {
-  late String cat = widget.bill.category != null && categories.containsKey(widget.bill.category) ? widget.bill.category! : 'Groceries';
+  late String cat =
+      widget.bill.category != null && widget.wc.categoryTable.pickable(kinds: const {BudgetKind.flex}).contains(widget.bill.category)
+          ? widget.bill.category!
+          : 'Groceries';
 
   @override
   Widget build(BuildContext context) {
@@ -496,8 +498,8 @@ class _CashSheetState extends State<_CashSheet> {
       const Muted('Category'),
       const SizedBox(height: 6),
       Wrap(spacing: 6, runSpacing: 6, children: [
-        for (final c in flexCategories.where((c) => c != 'Bank fees'))
-          ChoiceChip(label: Text(c), selected: c == cat, onSelected: (_) => setState(() => cat = c)),
+        ...categoryChips(widget.wc.categoryTable,
+            kinds: const {BudgetKind.flex}, selected: cat, except: const ['Bank fees'], onPick: (c) => setState(() => cat = c)),
       ]),
       const SizedBox(height: 14),
       FilledButton.icon(

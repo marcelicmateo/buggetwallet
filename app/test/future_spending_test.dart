@@ -684,7 +684,7 @@ void main() {
 
     tw('Plan lists Calendars and the heads-up switch next to Nudges', (tester) async {
       final wc = fw(nudges: FakeNudges());
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));
+      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 8500));
       expect(key('calImport'), findsOneWidget);
       expect(key('headsUpSwitch'), findsOneWidget);
       await tester.tap(key('headsUpSwitch'));

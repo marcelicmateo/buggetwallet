@@ -19,7 +19,7 @@ void main() {
         repo.setCategoryBudget(key, value);
       }
       final st = repo.settings();
-      final p = computePeriod(const [], st, const [], today);
+      final p = computePeriod(const [], st, const [], today, table: CategoryTable.builtIn);
       seedDemoPlanned(repo, today, p.end);
       seedDemoBills(repo, today);
       await seedDemoAccounts(repo, today);
@@ -38,7 +38,8 @@ void main() {
     repo.importBatch(demoBatch(today));
     repo.updateSettings({'salary': 140000, 'paydayDay': 10, 'periodStart': '2026-10-10'});
     seedDemoBills(repo, today);
-    final p = computePeriod(const [], repo.settings(), const [], today, bills: repo.recurringBills(), planned: repo.plannedCosts());
+    final p = computePeriod(const [], repo.settings(), const [], today,
+        bills: repo.recurringBills(), planned: repo.plannedCosts(), table: repo.categoryTable());
     expect(p.duePlanned.map((x) => (x.title, x.coveredByPlan)), [('Demo Gym Club', false), ('Demo Water Utility', true)]);
     expect(p.reservedPlanned, 2900);
   });

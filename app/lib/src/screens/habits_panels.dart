@@ -113,9 +113,10 @@ class ExpectedBillsPanel extends StatelessWidget {
                         start: Text(_name(b), style: const TextStyle(fontWeight: FontWeight.w500)),
                         end: Text(moneyExact(b.expectedAmount, cur),
                             textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
-                    Text('${b.category} · next ${shortDateOrRaw(b.nextDue)}',
+                    Text('${wc.categoryTable.label(b.category)} · next ${shortDateOrRaw(b.nextDue)}',
                         style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
-                    if (b.coveredByPlan) Text('Covered by your plan', style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+                    if (b.coveredByPlanIn(wc.categoryTable))
+                      Text('Covered by your plan', style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
                     if (b.nextDue.compareTo(today) < 0)
                       const StatusLabel(good: false, text: 'Overdue')
                     else if (wc.billPaidThisPeriod(b))

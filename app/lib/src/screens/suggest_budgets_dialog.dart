@@ -10,7 +10,10 @@ import '../widgets/common.dart';
 class SuggestBudgetsDialog extends StatefulWidget {
   final List<BudgetProposal> proposals;
   final String currency;
-  const SuggestBudgetsDialog({super.key, required this.proposals, required this.currency});
+
+  /// Where the names come from (null: the built-in names).
+  final CategoryTable? table;
+  const SuggestBudgetsDialog({super.key, required this.proposals, required this.currency, this.table});
   @override
   State<SuggestBudgetsDialog> createState() => _SuggestBudgetsDialogState();
 }
@@ -35,7 +38,7 @@ class _SuggestBudgetsDialogState extends State<SuggestBudgetsDialog> {
                 controlAffinity: ListTileControlAffinity.leading,
                 value: _on.contains(p.category),
                 onChanged: (v) => setState(() => v == true ? _on.add(p.category) : _on.remove(p.category)),
-                title: Text(p.category),
+                title: Text((widget.table ?? CategoryTable.builtIn).label(p.category)),
                 subtitle: Text('${moneyExact(p.current!, cur)} → ${moneyExact(p.suggested, cur)}', style: numStyle),
               ),
           ]),

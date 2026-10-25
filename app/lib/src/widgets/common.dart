@@ -399,7 +399,10 @@ class TxTile extends StatelessWidget {
 
   /// A bill is linked to this payment: a small receipt mark (tap the row for "Open bill").
   final bool hasBill;
-  const TxTile({super.key, required this.t, required this.currency, this.onTap, this.hasBill = false});
+
+  /// The categories the row label comes from (null: the built-in names).
+  final CategoryTable? table;
+  const TxTile({super.key, required this.t, required this.currency, this.onTap, this.hasBill = false, this.table});
 
   @override
   Widget build(BuildContext context) {
@@ -411,9 +414,10 @@ class TxTile extends StatelessWidget {
     final columns = _columnsFit(context);
     final name =
         Text(merchantName(t.tx), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500));
+    final catLabel = (table ?? CategoryTable.builtIn).label(t.category);
     final date = shortDateOrRaw(t.date);
     final sub = Wrap(spacing: 6, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
-      Text(columns ? t.category : '$date · ${t.category}',
+      Text(columns ? catLabel : '$date · $catLabel',
           maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       Tag(src),
       if (hasBill) Icon(Icons.receipt_long_outlined, key: const ValueKey('billMark'), size: 15, semanticLabel: 'Has a bill', color: c.ink2),
