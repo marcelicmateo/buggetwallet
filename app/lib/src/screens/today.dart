@@ -309,6 +309,8 @@ class TodayScreen extends StatelessWidget {
                             t: t,
                             currency: cur,
                             hasBill: wc.billForTx(t.tx.id) != null,
+                            splitCount: wc.splitCount(t.tx.id),
+                            splitBroken: wc.splitIsBroken(t.tx.id),
                             onTap: () async {
                               final r = await showSheet<String>(context, TxSheet(wc: wc, t: t));
                               if (context.mounted) txSheetToast(context, wc, r);

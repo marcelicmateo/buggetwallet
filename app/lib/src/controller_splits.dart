@@ -19,7 +19,12 @@ extension SplitsDb on WalletController {
 
   /// Splits [t] into [parts]. Throws `ArgumentError` (owner-readable text) when core refuses; nothing is written then.
   void saveSplit(Tx t, List<SplitPart> parts) {
-    repo.setSplit(t.id, parts);
+    try {
+      repo.setSplit(t.id, parts);
+    } on ArgumentError {
+      logEvent(_log, Level.INFO, 'split.refused', {'parts': parts.length}); // counts only; the caller shows core's text
+      rethrow;
+    }
     logEvent(_log, Level.INFO, 'split.save', {'parts': parts.length});
     _changed();
   }
@@ -40,6 +45,7 @@ extension SplitsDb on WalletController {
     try {
       repo.setSplit(t.id, parts);
     } on ArgumentError {
+      logEvent(_log, Level.INFO, 'split.restoreRefused', {'parts': parts.length});
       return false;
     }
     logEvent(_log, Level.INFO, 'split.restore', {'parts': parts.length});

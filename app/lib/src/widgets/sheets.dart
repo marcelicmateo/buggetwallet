@@ -83,7 +83,11 @@ void txSheetToast(BuildContext context, WalletController wc, String? result) {
   final id = wc.lastDeletedTx;
   final removed = wc.lastRemovedSplit;
   if (result == 'splitRemoved' && removed != null) {
-    toast(context, 'Split removed', actionLabel: 'Undo', onAction: () => wc.restoreSplitOf(removed.$1, removed.$2));
+    final messenger = ScaffoldMessenger.of(context);
+    final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
+    toast(context, 'Split removed', actionLabel: 'Undo', onAction: () {
+      if (!wc.restoreSplitOf(removed.$1, removed.$2)) toastOn(messenger, "Couldn't put the split back", wide: wide, accessible: accessible);
+    });
   } else if (result == 'split') {
     toast(context, 'Split saved');
   } else if (result == 'deleted' && id != null) {
@@ -350,7 +354,8 @@ class _TxSheetState extends State<TxSheet> {
   bool get canSplit => row.kind != BudgetKind.transfer && row.tx.transferTo == null && row.tx.amount != 0 && row.tx.live;
 
   Future<void> _openSplit() async {
-    final r = await showSheet<String>(context, SplitSheet(wc: widget.wc, row: row));
+    // The pick made on this sheet but not saved yet goes into the first part of a new split (the sheet's own Save is not used).
+    final r = await showSheet<String>(context, SplitSheet(wc: widget.wc, row: row, firstCategory: cat, firstTags: tagOn));
     if (r != null && mounted) Navigator.pop(context, r);
   }
 
@@ -372,7 +377,7 @@ class _TxSheetState extends State<TxSheet> {
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton(
-              key: ValueKey(broken ? 'splitFix' : 'splitOpen'),
+              key: const ValueKey('splitOpen'),
               style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
               onPressed: _openSplit,
               child: Text(broken ? 'Fix split' : (n > 0 ? 'Edit split' : 'Split…'))),

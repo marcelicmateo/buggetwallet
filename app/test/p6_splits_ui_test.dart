@@ -3,7 +3,9 @@
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/insights_api.dart';
 import 'package:budget_wallet/src/screens/category_detail.dart';
+import 'package:budget_wallet/src/screens/search.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
+import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:budget_wallet/src/widgets/split_sheet.dart';
@@ -262,7 +264,9 @@ void main() {
       expect(find.byType(PartTile), findsNothing); // counted whole
       await _tap(tester, _tile);
       expect(find.text("Split doesn't add up"), findsNWidgets(2)); // the tile and the sheet
-      await _tap(tester, find.byKey(const ValueKey('splitFix')));
+      expect(find.widgetWithText(TextButton, 'Fix split'), findsOneWidget);
+      expect(find.byKey(const ValueKey('splitFix')), findsNothing);
+      await _tap(tester, find.byKey(const ValueKey('splitOpen')));
       expect(find.byKey(const ValueKey('splitSheet')), findsOneWidget);
       expect(_left(tester), contains('10.00')); // 60 - (30 + 20)
       expect(_saveOn(tester), isFalse);
@@ -292,6 +296,138 @@ void main() {
       await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: TxSheet(wc: wc, t: row))), size: const Size(400, 2000));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('splitOpen')), findsOneWidget);
+      await _settle(tester);
+    });
+  });
+
+  group('review findings', () {
+    final threeParts = [
+      const SplitPart(amount: -2000, category: 'Groceries', tags: [], note: null),
+      const SplitPart(amount: -2000, category: 'Eating out', tags: [], note: 'Synthetic takeaway'),
+      const SplitPart(amount: -1000, category: 'Shopping', tags: [], note: null),
+    ];
+
+    test('search: one split payment in 3 parts is one result; a part-only hit names the part', () {
+      final (wc, id) = _wallet();
+      wc.repo.setSplit(id, threeParts);
+      wc.reload();
+      expect(wc.search('mart').txs.where((t) => t.tx.id == id), hasLength(1));
+      expect(wc.search('mart').txs.firstWhere((t) => t.tx.id == id).amount, -5000); // the whole amount
+      final r = wc.search('takeaway');
+      expect(r.txs.map((t) => t.tx.id), [id]);
+      expect(r.matchedPart[id], 1);
+    });
+
+    testWidgets('search results show a split payment once, with the part that matched', (tester) async {
+      final (wc, id) = _wallet();
+      wc.repo.setSplit(id, threeParts);
+      wc.reload();
+      await pumpApp(tester, Scaffold(body: SearchPane(wc: wc, onClose: () {}, onOpenTab: (_) {}, onOpenBills: () {})),
+          size: const Size(400, 1500));
+      await tester.enterText(find.byType(TextField).first, 'takeaway');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('hit:$id')), findsOneWidget);
+      expect(find.text('Part 2 matches'), findsOneWidget);
+      expect(find.text('Split · 3'), findsOneWidget);
+      await _settle(tester);
+    });
+
+    test('tag counts: a payment counts once per tag, however many parts carry it', () async {
+      final (wc, id) = _wallet();
+      final tag = await wc.addTag('Synthetic trip');
+      wc.repo.setSplit(id, [
+        SplitPart(amount: -3000, category: 'Groceries', tags: [tag], note: null),
+        SplitPart(amount: -2000, category: 'Eating out', tags: [tag], note: null),
+      ]);
+      wc.reload();
+      expect(wc.tagUseCounts()[tag], 1);
+    });
+
+    test('a refused save is logged without text and rethrown; a refused restore says false', () {
+      final (wc, id) = _wallet();
+      wc.repo.setSplit(id, threeParts);
+      wc.reload();
+      final tx = wc.wholeTxs.firstWhere((t) => t.tx.id == id).tx;
+      expect(() => wc.saveSplit(tx, [threeParts[0], threeParts[1]]), throwsArgumentError); // 40 of 50
+      final old = wc.removeSplitOf(tx)!;
+      wc.repo.applyRemote([
+        Op('tx', id, {'amount': -6000}, Hlc(DateTime.now().millisecondsSinceEpoch + 5000, 0, 'peer').toString())
+      ]);
+      wc.reload();
+      expect(wc.restoreSplitOf(wc.wholeTxs.firstWhere((t) => t.tx.id == id).tx, old), isFalse);
+      expect(wc.splitCount(id), 0);
+    });
+
+    testWidgets('Undo says so when the split cannot be put back', (tester) async {
+      final (wc, id) = _wallet();
+      wc.repo.setSplit(id, threeParts);
+      wc.reload();
+      await _spending(tester, wc);
+      await _openEditor(tester);
+      await _tap(tester, find.byKey(const ValueKey('splitRemove')));
+      wc.repo.applyRemote([
+        Op('tx', id, {'amount': -6000}, Hlc(DateTime.now().millisecondsSinceEpoch + 5000, 0, 'peer').toString())
+      ]);
+      await _tap(tester, find.text('Undo'));
+      expect(find.text("Couldn't put the split back"), findsOneWidget);
+      await _settle(tester);
+    });
+
+    testWidgets('Undo restores amounts, main tags, tags and notes exactly', (tester) async {
+      final (wc, id) = _wallet();
+      final tag = await tester.runAsync(() => wc.addTag('Synthetic trip'));
+      wc.repo.setSplit(id, [
+        SplitPart(amount: -3000, category: 'Groceries', tags: [tag!], note: 'Weekly'),
+        const SplitPart(amount: -2000, category: 'Eating out', tags: [], note: 'Takeaway'),
+      ]);
+      wc.reload();
+      List<List<Object?>> shape() => [
+            for (final p in wc.storedSplit(id)!) [p.amount, p.category, p.tags, p.note]
+          ];
+      final before = shape();
+      await _spending(tester, wc);
+      await _openEditor(tester);
+      await _tap(tester, find.byKey(const ValueKey('splitRemove')));
+      expect(wc.storedSplit(id), isNull);
+      await _tap(tester, find.text('Undo'));
+      expect(shape(), before);
+      await _settle(tester);
+    });
+
+    testWidgets('a comma amount ("12,50") is read', (tester) async {
+      final (wc, id) = _wallet();
+      await _spending(tester, wc);
+      await _openEditor(tester);
+      await _type(tester, 'splitAmount:0', '37,50');
+      await _type(tester, 'splitAmount:1', '12,50');
+      expect(_saveOn(tester), isTrue);
+      await _tap(tester, find.byKey(const ValueKey('splitSave')));
+      expect(wc.storedSplit(id)!.map((p) => p.amount), [-3750, -1250]);
+      await _settle(tester);
+    });
+
+    testWidgets('a main tag picked on the payment sheet and not saved starts the first part', (tester) async {
+      final (wc, id) = _wallet();
+      await _spending(tester, wc);
+      await _tap(tester, _tile);
+      await _tap(tester, find.byKey(const ValueKey('txCategory')));
+      await _tap(tester, find.byKey(const ValueKey('pick:Eating out')).last);
+      await _tap(tester, find.byKey(const ValueKey('splitOpen')));
+      for (final i in [0, 1]) {
+        expect(tester.widget<DropdownButton<String>>(find.byKey(ValueKey('splitCategory:$i'))).value, 'Eating out');
+      }
+      expect(wc.repo.splitOf(id), isNull);
+      await _settle(tester);
+    });
+
+    testWidgets('Today\'s recent rows carry the split mark', (tester) async {
+      final (wc, id) = _wallet();
+      wc.repo.setSplit(id, threeParts);
+      wc.reload();
+      await pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday)), size: const Size(400, 3000));
+      await tester.pumpAndSettle();
+      expect(find.text('Split · 3'), findsOneWidget);
       await _settle(tester);
     });
   });

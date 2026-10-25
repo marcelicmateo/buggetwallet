@@ -412,6 +412,9 @@ class TxTile extends StatelessWidget {
 
   /// The payment's stored split no longer adds up: "Split doesn't add up" under the tile.
   final bool splitBroken;
+
+  /// A search found this payment by one of its parts (0-based): "Part 2 matches".
+  final int? matchedPart;
   const TxTile(
       {super.key,
       required this.t,
@@ -421,7 +424,8 @@ class TxTile extends StatelessWidget {
       this.table,
       this.tagTable,
       this.splitCount = 0,
-      this.splitBroken = false});
+      this.splitBroken = false,
+      this.matchedPart});
 
   @override
   Widget build(BuildContext context) {
@@ -440,6 +444,7 @@ class TxTile extends StatelessWidget {
           maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       Tag(src),
       if (splitCount > 0) Tag('Split · $splitCount'),
+      if (matchedPart != null) Tag('Part ${matchedPart! + 1} matches'),
       if (t.isPart) Tag('part of ${money(t.tx.amount, currency, decimals: 2, signed: true)}'),
       if (splitBroken || t.splitBroken)
         Row(key: const ValueKey('splitBroken'), mainAxisSize: MainAxisSize.min, children: [

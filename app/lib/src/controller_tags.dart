@@ -54,10 +54,11 @@ extension TagsDb on WalletController {
   /// Live rows per tag (a duplicate's rows count for its original): the numbers in Plan › Tags. Cached per data version.
   Map<String, int> tagUseCounts() => memo('tags.use', () {
         final out = <String, int>{};
+        final seen = <String>{}; // a payment counts once per tag, however many of its parts carry it
         for (final t in txs) {
           if (!t.tx.live) continue;
           for (final g in t.tags) {
-            out[g] = (out[g] ?? 0) + 1;
+            if (seen.add('${t.tx.id}|$g')) out[g] = (out[g] ?? 0) + 1;
           }
         }
         return out;

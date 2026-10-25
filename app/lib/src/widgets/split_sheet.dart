@@ -34,7 +34,12 @@ class SplitSheet extends StatefulWidget {
 
   /// The payment as one row (its own main tag and tags pre-fill the first part).
   final CategorizedTx row;
-  const SplitSheet({super.key, required this.wc, required this.row});
+
+  /// The main tag and tags picked on the payment sheet and not saved: the first part of a new split starts with them
+  /// (null: the payment's own).
+  final String? firstCategory;
+  final Set<String>? firstTags;
+  const SplitSheet({super.key, required this.wc, required this.row, this.firstCategory, this.firstTags});
   @override
   State<SplitSheet> createState() => _SplitSheetState();
 }
@@ -60,9 +65,10 @@ class _SplitSheetState extends State<SplitSheet> {
     if (s != null && s.isNotEmpty) {
       return [for (final p in s) _PartDraft(cents: p.amount.abs(), category: p.category, tags: p.tags.toSet(), note: p.note)];
     }
+    final cat = widget.firstCategory ?? widget.row.category;
     return [
-      _PartDraft(cents: total, category: widget.row.category, tags: widget.row.tags.toSet()),
-      _PartDraft(cents: 0, category: widget.row.category),
+      _PartDraft(cents: total, category: cat, tags: widget.firstTags ?? widget.row.tags.toSet()),
+      _PartDraft(cents: 0, category: cat),
     ];
   }
 
@@ -180,7 +186,7 @@ class _SplitSheetState extends State<SplitSheet> {
               style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Add part'),
-              onPressed: () => setState(() => parts.add(_PartDraft(cents: 0, category: widget.row.category)))),
+              onPressed: () => setState(() => parts.add(_PartDraft(cents: 0, category: widget.firstCategory ?? widget.row.category)))),
         ),
       const SizedBox(height: 6),
       const DoubleRule(),
