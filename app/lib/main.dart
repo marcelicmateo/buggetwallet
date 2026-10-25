@@ -466,7 +466,8 @@ class _HomeShellState extends State<HomeShell> {
       message: 'This pay period',
       child: Container(
         key: const ValueKey('periodBadge'),
-        width: extended ? 188 : 72,
+        // The narrow rail grows with the text scale (like the rail itself), so large text still gets a box that fits it.
+        width: extended ? 188 : (72 * MediaQuery.textScalerOf(context).scale(1)).clamp(72.0, 152.0),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(border: Border.all(color: context.c.ink), borderRadius: BorderRadius.circular(2)),
         child: FittedBox(
@@ -524,7 +525,7 @@ class _HomeShellState extends State<HomeShell> {
                     _searchButton(),
                     const SizedBox(height: 4),
                     _periodBadge(context, extended),
-                    if (widget.wc.syncing) const _SyncSpinner(),
+                    _SyncSlot(active: widget.wc.syncing),
                   ]),
                 ),
                 destinations: [
@@ -652,10 +653,19 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-class _SyncSpinner extends StatelessWidget {
-  const _SyncSpinner();
+/// The rail's sync spinner. The 24 dp slot is always there, so the destinations below do not move when a sync starts or ends.
+class _SyncSlot extends StatelessWidget {
+  final bool active;
+  const _SyncSlot({required this.active});
   @override
-  Widget build(BuildContext context) => const Padding(
-      padding: EdgeInsets.only(top: 8),
-      child: Tooltip(message: 'Syncing', child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))));
+  Widget build(BuildContext context) => SizedBox(
+        key: const ValueKey('syncSlot'),
+        height: 24,
+        child: active
+            ? const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child:
+                    Tooltip(message: 'Syncing', child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))))
+            : null,
+      );
 }

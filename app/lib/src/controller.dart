@@ -1030,7 +1030,8 @@ class WalletController extends ChangeNotifier {
     }
   }
 
-  static String _plainKey(String s) => s.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
+  /// Upper case, spaces and dashes dropped, a typed 0 read as the letter O (the key has no zero), like `VaultKey.parse`.
+  static String _plainKey(String s) => s.toUpperCase().replaceAll(RegExp(r'[\s-]'), '').replaceAll('0', 'O');
 
   /// Do [typed] (spaces and dashes ignored, any case) equal the last 4 characters of the key? Only then it is confirmed.
   Future<bool> confirmKeyBackup(String typed) async {

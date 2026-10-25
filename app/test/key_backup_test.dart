@@ -361,6 +361,29 @@ void main() {
     });
   });
 
+  group('last 4 characters: a typed 0 is the letter O (N0)', () {
+    /// A synthetic key whose last 4 characters contain [letter] (found by trying fixed byte patterns).
+    Future<(WalletController, String)> keyEndingWith(String letter) async {
+      for (var i = 1; i < 5000; i++) {
+        final k = VaultKey(List<int>.generate(32, (j) => (i * 7 + j * 13 + (i >> 8) * 31) & 255));
+        final tail = (await k.toText()).replaceAll('-', '');
+        final last4 = tail.substring(tail.length - 4);
+        if (last4.contains(letter)) {
+          return (WalletController.forTest(WalletRepo.inMemory(), key: k, clock: () => day), last4);
+        }
+      }
+      throw StateError('no synthetic key ends with $letter');
+    }
+
+    test('0 confirms where the key has O; 1 does not confirm where it has I', () async {
+      final (wo, o4) = await keyEndingWith('O');
+      expect(await wo.confirmKeyBackup(o4.toLowerCase().replaceAll('o', '0')), isTrue, reason: 'O typed as zero');
+      final (wi, i4) = await keyEndingWith('I');
+      expect(await wi.confirmKeyBackup(i4.replaceAll('I', '1')), isFalse, reason: 'there is no digit 1 in the key');
+      expect(await wi.confirmKeyBackup(i4), isTrue);
+    });
+  });
+
   group('key text (owner note: 0 and O look alike)', () {
     const sample = 'OOILO2345JKLMNOPQRSTUVWXYZ'; // synthetic; the real alphabet is A-Z and 2-7
     for (final selectable in [false, true]) {

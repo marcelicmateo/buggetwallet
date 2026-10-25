@@ -309,6 +309,42 @@ void main() {
     });
   });
 
+  group('rail period badge and sync spinner (N0)', () {
+    Offset today(WidgetTester tester) => tester.getTopLeft(find.descendant(of: _rail, matching: find.text('Today')).first);
+
+    for (final w in [700.0, 1400.0]) {
+      testWidgets('width $w: the spinner shows while syncing and nothing below it moves', (tester) async {
+        final wc = demoWallet();
+        await _pumpShell(tester, wc, w: w, h: 800);
+        expect(find.byTooltip('Syncing'), findsNothing);
+        final idle = today(tester);
+        wc.syncing = true;
+        wc.reload();
+        await tester.pump();
+        expect(find.descendant(of: _rail, matching: find.byTooltip('Syncing')), findsOneWidget);
+        expect(today(tester), idle, reason: 'the slot is reserved, so the destinations stay put');
+        wc.syncing = false;
+        wc.reload();
+        await tester.pump();
+        expect(find.byTooltip('Syncing'), findsNothing);
+        expect(today(tester), idle);
+      });
+    }
+
+    testWidgets('narrow rail: the period badge and its text are taller at text scale 2.0 than at 1.0', (tester) async {
+      await _pumpShell(tester, demoWallet(), w: 700, h: 800);
+      final badge = find.byKey(const ValueKey('periodBadge'));
+      final small = tester.getSize(badge), smallText = tester.getSize(find.descendant(of: badge, matching: find.byType(Text)));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpShell(tester, demoWallet(), w: 700, h: 800, scale: 2.0);
+      final big = tester.getSize(badge), bigText = tester.getSize(find.descendant(of: badge, matching: find.byType(Text)));
+      expect(bigText.height, greaterThan(smallText.height));
+      expect(big.height, greaterThan(small.height));
+      expect(big.width, greaterThan(small.width), reason: 'the box grows with the text, up to 152 dp');
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('resizing', () {
     testWidgets('compact -> expanded -> compact with a sheet open: no crash, pop result delivered', (tester) async {
       Future<String?>? result;
