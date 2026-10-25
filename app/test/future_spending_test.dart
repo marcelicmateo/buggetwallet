@@ -17,7 +17,6 @@ import 'package:budget_wallet/src/screens/export_panel.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/upcoming.dart';
-import 'package:device_calendar_plus/device_calendar_plus.dart' show Event, EventAvailability, EventStatus;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -766,17 +765,8 @@ void main() {
   });
 
   group('F4b review fixes', () {
-    Event phoneEvent(String id, String title, EventStatus status) => Event(
-        eventId: id,
-        instanceId: '$id@1',
-        calendarId: 'c1',
-        title: title,
-        startDate: DateTime(2026, 10, 24, 10),
-        endDate: DateTime(2026, 10, 24, 11),
-        isAllDay: false,
-        availability: EventAvailability.busy,
-        status: status,
-        isRecurring: false);
+    Map<Object?, Object?> phoneEvent(String id, String title, int? status) =>
+        {'id': id, 'calendarId': 'c1', 'title': title, 'date': '2026-10-24', 'allDay': false, 'status': status};
 
     /// Runs [body] with a real HttpClient (flutter_test replaces it with one that always answers 400).
     Future<T> realHttp<T>(Future<T> Function() body) => HttpOverrides.runWithHttpOverrides(body, _RealHttp());
@@ -1004,10 +994,10 @@ void main() {
 
     test('cancelled phone events are not suggested; others are', () {
       final list = calendarEventsFrom([
-        phoneEvent('e1', 'Dinner', EventStatus.confirmed),
-        phoneEvent('e2', 'Called off', EventStatus.canceled),
-        phoneEvent('e3', 'Maybe', EventStatus.tentative),
-        phoneEvent('e4', 'No status', EventStatus.none),
+        phoneEvent('e1', 'Dinner', 1),
+        phoneEvent('e2', 'Called off', 2),
+        phoneEvent('e3', 'Maybe', 0),
+        phoneEvent('e4', 'No status', null),
       ]);
       expect(list.map((e) => e.title), ['Dinner', 'Maybe', 'No status']);
       expect(list.first.date, '2026-10-24');

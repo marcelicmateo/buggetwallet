@@ -8,6 +8,7 @@ import '../controller.dart';
 import '../file_chooser.dart';
 import '../logging.dart';
 import '../widgets/common.dart';
+import 'first_plan_sheet.dart';
 
 final _log = Logger('bw.app');
 
@@ -45,4 +46,6 @@ Future<void> pickAndImport(BuildContext context, WalletController wc, FileChoose
     'bytes': [for (final (_, b) in files) b.length],
   });
   await wc.importFiles(files);
+  // An import that added rows and leaves plan suggestions: "Looks right?" once per wallet.
+  if (context.mounted && wc.lastImport.any((l) => l.ok && l.added > 0)) await offerFirstPlan(context, wc);
 }

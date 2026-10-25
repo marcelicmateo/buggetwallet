@@ -5,11 +5,9 @@
          schedule them again after a reboot. Inexact alarms only: no exact-alarm permission. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <!-- Calendars (Plan > Calendars): asked only when the owner taps "Allow calendar access". The app only reads events. The
-         calendar plugin (device_calendar_plus) refuses to read unless both permissions of the calendar group are declared, so
-         WRITE_CALENDAR is declared too; no code path of the app creates, changes or deletes an event. -->
+    <!-- Calendars (Plan > Calendars): asked only when the owner taps "Allow calendar access". The app only reads events, through its own
+         channel (MainActivity.kt, CalendarContract); it needs the read permission and nothing else. -->
     <uses-permission android:name="android.permission.READ_CALENDAR"/>
-    <uses-permission android:name="android.permission.WRITE_CALENDAR"/>
     <!-- Scan bill (mobile_scanner) declares CAMERA itself (merged into this manifest); the app asks for it only when Scan bill is
          opened, and camera hardware is not required. -->
     <application
@@ -74,6 +72,14 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/bill_photo_paths"/>
         </provider>
+        <!-- Home-screen widget "Safe to spend today": shows the amount, a status word and a date the app gave it. The system's widget
+             broadcasts are all it receives; it is not exported for anything else. -->
+        <receiver android:name=".SafeTodayWidget" android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_safe_today_info"/>
+        </receiver>
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
             <intent-filter>
