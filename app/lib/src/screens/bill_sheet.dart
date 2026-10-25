@@ -86,8 +86,8 @@ class _BillSheetState extends State<BillSheet> {
       _first == null || _first.status != BillStatus.review || _first.category != null ? null : widget.wc.suggestedBillCategory(_first);
   late String? category = _first?.category ?? _suggested;
 
-  /// Whether the owner picked a category. A suggestion (or the automatic category of a deleted one) that was only shown is not
-  /// written by Save; Confirm bill accepts what is shown.
+  /// Whether the owner picked a category. Save writes only a pick. Confirm bill also accepts the suggestion that is shown, unless the
+  /// stored category is a deleted own category: the shown one is then only the automatic fallback, and nothing is written over it.
   bool _categoryPicked = false;
   String? error;
 
@@ -153,9 +153,10 @@ class _BillSheetState extends State<BillSheet> {
   }
 
   Future<void> _confirm(Bill b) async {
-    // The category shown is written only when the bill needs one (it still reserves money) or the owner picked it.
-    final needed = due != null && due!.compareTo(widget.wc.today()) >= 0;
-    if (!_save(b, acceptShown: needed)) return;
+    // Confirm accepts the category shown, but not over a stored one that was deleted (the shown one is the automatic fallback).
+    final stored = widget.wc.repo.bill(b.id)?.category;
+    final dead = stored != null && widget.wc.categoryTable.isDeadCustom(stored);
+    if (!_save(b, acceptShown: !dead)) return;
     final t = total.text.trim().isEmpty ? null : parseMoney(total.text);
     if (date == null || (t ?? 0) <= 0) {
       logNav('bill.invalid');
@@ -485,11 +486,21 @@ class _CashSheet extends StatefulWidget {
   State<_CashSheet> createState() => _CashSheetState();
 }
 
+/// The category a cash expense starts on when the bill has none to offer: Groceries, or the first offered flex category (never Bank fees)
+/// when Groceries is hidden.
+String _fallbackCategory(CategoryTable t) {
+  final flex = [
+    for (final c in t.pickable(kinds: const {BudgetKind.flex}))
+      if (c != 'Bank fees') c
+  ];
+  return flex.contains('Groceries') || flex.isEmpty ? 'Groceries' : flex.first;
+}
+
 class _CashSheetState extends State<_CashSheet> {
   late String cat =
       widget.bill.category != null && widget.wc.categoryTable.pickable(kinds: const {BudgetKind.flex}).contains(widget.bill.category)
           ? widget.bill.category!
-          : 'Groceries';
+          : _fallbackCategory(widget.wc.categoryTable);
 
   @override
   Widget build(BuildContext context) {

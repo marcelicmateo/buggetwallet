@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/insights_api.dart';
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
 import 'package:budget_wallet/src/screens/categories_panel.dart';
+import 'package:budget_wallet/src/screens/category_detail.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/plan_suggestions.dart';
 import 'package:budget_wallet/src/screens/planned_sheets.dart';
@@ -36,6 +37,17 @@ Future<void> _tapSheet(WidgetTester t, String k) async {
   await t.tap(_key(k));
   await t.pumpAndSettle();
 }
+
+Future<void> _openBill(WidgetTester t, WalletController wc, String id) async {
+  await pumpApp(t, Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => openBill(c, wc, id), child: const Text('open')))),
+      size: const Size(400, 3200));
+  await t.tap(find.text('open'));
+  await t.pumpAndSettle();
+}
+
+/// How many pending ops of [entity]/[id] carry a category field.
+int categoryOps(WalletController wc, String entity, String id) =>
+    wc.repo.pendingOps().where((o) => o.$2.entity == entity && o.$2.id == id && o.$2.fields.containsKey('category')).length;
 
 /// A wallet with a fixed category of its own (`Pet insurance`) and its id.
 Future<({WalletController wc, String id})> withFixed() async {
@@ -287,9 +299,6 @@ void main() {
   });
 
   group('edits that do not touch the category write no category', () {
-    int categoryOps(WalletController wc, String entity, String id) =>
-        wc.repo.pendingOps().where((o) => o.$2.entity == entity && o.$2.id == id && o.$2.fields.containsKey('category')).length;
-
     testWidgets('editing only the amount of a planned cost whose category was deleted', (t) async {
       final (:wc, :id) = await withFixed();
       wc.addPlannedCost(title: 'Cover plan', date: '2026-10-25', amount: 5000, category: id);
@@ -317,22 +326,56 @@ void main() {
       wc.dispose();
     }, timeout: _timeout);
 
-    testWidgets('confirming a past bill with only a suggestion shown does not write the suggestion', (t) async {
+    testWidgets('confirming a bill accepts the shown suggestion, also when it is past due', (t) async {
       final wc = billsWallet();
       wc.billCategorySuggester = (b) => 'Groceries';
-      final (id, _) = wc.repo.importBill(syntheticBill('dead-cat', due: '2000-01-01'));
+      final (id, _) = wc.repo.importBill(syntheticBill('past-cat', due: '2000-01-01'));
       wc.reload();
-      expect(wc.bill(id)!.category, isNull);
-      await pumpApp(t, Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => openBill(c, wc, id), child: const Text('open')))),
-          size: const Size(400, 3200));
-      await t.tap(find.text('open'));
-      await t.pumpAndSettle();
+      await _openBill(t, wc, id);
       expect(find.text('Suggested from your earlier bills. Check it.'), findsOneWidget);
       await _tapSheet(t, 'confirmBill');
-      await t.pump(const Duration(milliseconds: 500));
       wc.reload();
       expect(wc.bill(id)!.status, BillStatus.confirmed);
-      expect(categoryOps(wc, 'bill', id), 0, reason: 'nothing needed a category, and the owner did not pick one');
+      expect(wc.bill(id)!.category, 'Groceries');
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+
+    testWidgets('confirming a bill whose stored category is a deleted own one writes no category over it', (t) async {
+      final wc = billsWallet();
+      final cid = await wc.addOwnCategory(name: 'Pet shop', kind: BudgetKind.flex);
+      wc.billCategorySuggester = (b) => 'Groceries';
+      final (id, _) = wc.repo.importBill(syntheticBill('dead-cat', due: '2000-01-01'));
+      wc.repo.updateBill(id, category: cid);
+      await wc.deleteOwnCategory(cid);
+      final before = categoryOps(wc, 'bill', id);
+      expect(wc.repo.bill(id)!.category, cid, reason: 'the stored value is still the deleted id');
+      await _openBill(t, wc, id);
+      await _tapSheet(t, 'confirmBill');
+      wc.reload();
+      expect(wc.bill(id)!.status, BillStatus.confirmed);
+      expect(categoryOps(wc, 'bill', id), before);
+      expect(wc.repo.bill(id)!.category, cid);
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+
+    testWidgets('editing a bill whose stored category is a deleted own one writes no category', (t) async {
+      final wc = billsWallet();
+      final cid = await wc.addOwnCategory(name: 'Pet shop', kind: BudgetKind.flex);
+      final (id, _) = wc.repo.importBill(syntheticBill('dead-edit', due: '2000-01-01'));
+      wc.repo.updateBill(id, category: cid);
+      wc.confirmBill(id);
+      await wc.deleteOwnCategory(cid);
+      expect(wc.bill(id)!.status, BillStatus.confirmed);
+      final before = categoryOps(wc, 'bill', id);
+      await _openBill(t, wc, id);
+      await t.enterText(_key('billNote'), 'checked');
+      await _tapSheet(t, 'saveBill');
+      wc.reload();
+      expect(wc.bill(id)!.note, 'checked');
+      expect(categoryOps(wc, 'bill', id), before);
+      expect(wc.repo.bill(id)!.category, cid);
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);
@@ -342,10 +385,7 @@ void main() {
       wc.billCategorySuggester = (b) => 'Groceries';
       final (id, _) = wc.repo.importBill(syntheticBill('live-cat', due: '2026-10-28'));
       wc.reload();
-      await pumpApp(t, Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => openBill(c, wc, id), child: const Text('open')))),
-          size: const Size(400, 3200));
-      await t.tap(find.text('open'));
-      await t.pumpAndSettle();
+      await _openBill(t, wc, id);
       await _tapSheet(t, 'confirmBill');
       await t.pump(const Duration(milliseconds: 500));
       wc.reload();
@@ -395,6 +435,101 @@ void main() {
       await menuDelete(t, id);
       expect(_key('categoryDeleteConfirm'), findsNothing);
       expect(wc.categoryTable.isLive(id), isFalse);
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+  });
+
+  group('final review fixes', () {
+    testWidgets('Save untouched on a row whose category was deleted writes nothing; undelete brings the rows back', (t) async {
+      final wc = billsWallet();
+      final cid = await wc.addOwnCategory(name: 'Pet shop', kind: BudgetKind.flex);
+      CategorizedTx row() => wc.txs.firstWhere((x) => x.tx.description.contains('SYNTHSHOP'));
+      wc.setCategory(row().tx, cid, always: true);
+      expect(row().category, cid, reason: 'the payee rule points at the own category');
+      await wc.deleteOwnCategory(cid);
+      expect(row().category, isNot(cid), reason: 'a deleted category falls back when read');
+      final shown = row();
+      final ops = wc.repo.pendingOps().length;
+      await pumpApp(
+          t,
+          Scaffold(
+              body: Builder(
+                  builder: (c) => TextButton(onPressed: () => showSheet<String>(c, TxSheet(wc: wc, t: shown)), child: const Text('open')))),
+          size: const Size(400, 2600));
+      await t.tap(find.text('open'));
+      await t.pumpAndSettle();
+      await t.tap(find.widgetWithText(FilledButton, 'Save'));
+      await t.pumpAndSettle();
+      expect(wc.repo.pendingOps().length, ops, reason: 'no category or rule op');
+      await wc.undeleteOwnCategory(cid);
+      expect(row().category, cid, reason: 'the rule and the rows are back');
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+
+    testWidgets('Undo after deleting a category with a plan line brings the line back', (t) async {
+      final (:wc, :id) = await withFixed();
+      wc.savePlanLines({id: 12000});
+      await pumpApp(
+          t, ListenableBuilder(listenable: wc, builder: (_, __) => Scaffold(body: SingleChildScrollView(child: CategoriesPanel(wc: wc)))),
+          size: const Size(400, 2600));
+      await _tapKey(t, 'categoryMenu:$id');
+      await t.pump(const Duration(milliseconds: 400));
+      await _tapKey(t, 'categoryDeleteItem:$id');
+      await t.pump(const Duration(milliseconds: 400));
+      await _tapSheet(t, 'categoryDeleteGo');
+      expect(wc.settings.planLines.containsKey(id), isFalse, reason: 'no line while the category is gone');
+      await t.tap(_key('toastUndo'));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(wc.categoryTable.isLive(id), isTrue);
+      expect(wc.settings.planLines[id], 12000);
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+
+    testWidgets('"Not in a subcategory" shows only when the category has rows of its own', (t) async {
+      final wc = budgetWallet(budgets: false);
+      final pets = await wc.addOwnCategory(name: 'Pets', kind: BudgetKind.flex);
+      final vet = await wc.addOwnCategory(name: 'Vet', kind: BudgetKind.flex, parent: pets);
+      wc.repo.addTransaction(date: '2026-10-05', amount: 3000, category: vet, note: 'Checkup');
+      wc.reload();
+      final range = wc.monthRange('2026-10');
+      await pumpApp(t, CategoryDetailScreen(wc: wc, category: pets, range: range), size: const Size(400, 3000));
+      expect(_key('childRow_$vet'), findsOneWidget);
+      expect(_key('childOwn'), findsNothing, reason: 'every row is in the subcategory');
+      wc.repo.addTransaction(date: '2026-10-06', amount: 1000, category: pets, note: 'Toy');
+      wc.reload();
+      await t.pump();
+      expect(_key('childOwn'), findsOneWidget);
+      await settle(t);
+      wc.dispose();
+    }, timeout: _timeout);
+
+    test('a subcategory of Food delivery counts as a delivery', () async {
+      final wc = budgetWallet(budgets: false);
+      final kid = await wc.addOwnCategory(name: 'Courier', kind: wc.categoryTable.kindOf('Food delivery'), parent: 'Food delivery');
+      wc.repo.addTransaction(date: '2026-10-10', amount: 1800, category: kid, note: 'Dinner');
+      wc.repo.addTransaction(date: '2026-10-11', amount: 1200, category: 'Food delivery', note: 'Lunch');
+      wc.reload();
+      expect(wc.deliveries, (2, 3000));
+      expect(wc.deliveryOrders90, 2);
+      wc.dispose();
+    });
+
+    testWidgets('Paid in cash starts on the first offered flex category when Groceries is hidden', (t) async {
+      final wc = billsWallet();
+      await wc.setCategoryHidden('Groceries', true);
+      final first = wc.categoryTable.pickable(kinds: const {BudgetKind.flex}).firstWhere((c) => c != 'Bank fees');
+      expect(first, isNot('Groceries'));
+      final (id, _) = wc.repo.importBill(syntheticBill('cash-hidden', total: 2000));
+      wc.confirmBill(id);
+      wc.reload();
+      await _openBill(t, wc, id);
+      await _tapSheet(t, 'paidCash');
+      await _tapSheet(t, 'addCashExpense');
+      wc.reload();
+      expect(wc.txs.where((x) => x.amount == -2000 && x.category == first), hasLength(1));
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);

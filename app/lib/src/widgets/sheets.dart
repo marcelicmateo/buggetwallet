@@ -393,7 +393,9 @@ class _TxSheetState extends State<TxSheet> {
       Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, children: [
         FilledButton(
           onPressed: () {
-            widget.wc.setCategory(t, cat, always: always && !manual);
+            // Only an owner's pick is written: the category shown is the resolved one, so an untouched Save must not overwrite a
+            // deleted custom id (or the merchant rule that points at it).
+            if (cat != widget.t.category) widget.wc.setCategory(t, cat, always: always && !manual);
             Navigator.pop(context, 'saved');
           },
           child: const Text('Save'),

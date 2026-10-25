@@ -128,7 +128,8 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
                 },
                 child: LineItem(wc.categoryTable.label(id), moneyExact(spent, cur)),
               ),
-            if (own != 0 || merchants.isNotEmpty) LineItem('Not in a subcategory', moneyExact(own, cur), key: const ValueKey('childOwn')),
+            if (wc.ownRowsOf(widget.category, range).isNotEmpty)
+              LineItem('Not in a subcategory', moneyExact(own, cur), key: const ValueKey('childOwn')),
           ]),
         ]),
       Panel(children: [

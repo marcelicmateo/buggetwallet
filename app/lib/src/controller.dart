@@ -57,6 +57,9 @@ class ExportFile {
   const ExportFile(this.name, this.bytes, this.rows);
 }
 
+/// A category as a log field: a built-in name, `none`, or `custom` (an own category's id is never logged).
+String _logCategory(String? c) => c == null ? 'none' : (categories.containsKey(c) ? c : 'custom');
+
 /// Same for the review state: the controller has a method of the same name.
 const reviewStateOf = reviewState;
 
@@ -665,7 +668,8 @@ class WalletController extends ChangeNotifier {
   /// This month's Food delivery orders: how many, and the total spent (positive cents).
   (int, int) get deliveries => _cached('deliveries', () {
         final month = monthOf(today());
-        final xs = txs.where((t) => t.category == 'Food delivery' && t.tx.currency == currency && monthOf(t.date) == month && t.amount < 0);
+        final xs = txs.where((t) =>
+            categoryTable.topLevel(t.category) == 'Food delivery' && t.tx.currency == currency && monthOf(t.date) == month && t.amount < 0);
         return (xs.length, -xs.fold<int>(0, (a, t) => a + t.amount));
       });
 
@@ -674,7 +678,11 @@ class WalletController extends ChangeNotifier {
   int get deliveryOrders90 => _cached('deliveryOrders90', () {
         final from = addDays(today(), -89);
         return txs
-            .where((t) => t.category == 'Food delivery' && t.tx.currency == currency && t.amount < 0 && t.date.compareTo(from) >= 0)
+            .where((t) =>
+                categoryTable.topLevel(t.category) == 'Food delivery' &&
+                t.tx.currency == currency &&
+                t.amount < 0 &&
+                t.date.compareTo(from) >= 0)
             .length;
       });
 
@@ -838,7 +846,7 @@ class WalletController extends ChangeNotifier {
   void confirmCategory(Tx t) {
     final now = txs.where((x) => x.tx.id == t.id).firstOrNull ?? categorizer.categorize(t);
     final cat = now.category;
-    logEvent(_log, Level.INFO, 'category.confirm', {'category': cat, 'source': t.source}); // never the merchant
+    logEvent(_log, Level.INFO, 'category.confirm', {'category': _logCategory(cat), 'source': t.source}); // never the merchant
     if (t.source != 'manual') repo.setMerchantRule(merchantKey(t), cat);
     repo.setCategory(t.id, cat);
     _changed();
@@ -1746,14 +1754,14 @@ class WalletController extends ChangeNotifier {
     // The device-local default first: if the save then fails nothing is written, and a failure here never follows a saved expense.
     repo.setLocalValue('lastExpenseCategory', category);
     repo.addTransaction(date: date, amount: amount, category: category, note: note, currency: currency);
-    logEvent(_log, Level.INFO, 'expense.add', {'category': category}); // category only
+    logEvent(_log, Level.INFO, 'expense.add', {'category': _logCategory(category)}); // category only
     _changed();
   }
 
   void setCategory(Tx t, String category, {required bool always}) {
     // Built-in category names only; never the merchant.
-    logEvent(
-        _log, Level.INFO, 'category.change', {'from': categorizer.categoryOf(t), 'to': category, 'always': always, 'source': t.source});
+    logEvent(_log, Level.INFO, 'category.change',
+        {'from': _logCategory(categorizer.categoryOf(t)), 'to': _logCategory(category), 'always': always, 'source': t.source});
     if (always && t.source != 'manual') {
       repo.setMerchantRule(merchantKey(t), category);
       if (t.category != null) repo.setCategory(t.id, null);

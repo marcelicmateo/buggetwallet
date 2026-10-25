@@ -478,7 +478,7 @@ extension BillsDb on WalletController {
   /// "Paid in cash": a hand-added expense for the bill's total and date, linked to it.
   void addBillAsExpense(String id, {required String category}) {
     repo.addExpenseFromBill(id, category: category);
-    logEvent(_billLog, Level.INFO, 'bill.cashExpense', {'category': category});
+    logEvent(_billLog, Level.INFO, 'bill.cashExpense', {'category': _logCategory(category)});
     _changed();
   }
 

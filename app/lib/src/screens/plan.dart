@@ -416,7 +416,10 @@ class _PlanScreenState extends State<PlanScreen> {
       lines[id] = cents;
     }
     if (errors.isNotEmpty) {
-      logNav('plan.invalid', {'keys': errors.keys.join(',')}); // keys only
+      // Setting keys only; a plan line is `planLine` (its key holds an own category's id).
+      logNav('plan.invalid', {
+        'keys': {for (final k in errors.keys) k.startsWith('planLine_') ? 'planLine' : k}.join(',')
+      });
       setState(() => _errors
         ..clear()
         ..addAll(errors));
