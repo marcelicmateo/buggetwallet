@@ -155,7 +155,8 @@ bool _paysInOne(RecurringBill b, int cents) =>
 /// - **Single payment:** a row within ± [RecurringBill.tolerance] of `nextDue` whose outflow pays in one go
 ///   ([_paysInOne]); the closest to `nextDue` wins (then the earliest date, then the smallest id). A monthly bill
 ///   without a range matches exactly as before P4 (± [recurringDays], [recurringPercent] band).
-/// - **Parts** (when no single payment matches): the rows dated in `[nextDue − partsDays, nextDue + tolerance]`,
+/// - **Parts** (when no single payment matches): the rows dated in `[nextDue − partsDays, nextDue + tolerance]` for a
+///   manual bill or one with a range, `[nextDue − tolerance, nextDue + tolerance]` for a detected one without,
 ///   strictly after the `lastPaidTx` row's date (when that row is in [rows]), each with |amount| ≤ `reserveAmount`,
 ///   summed oldest first (then by id). At least two rows reaching [partsThreshold] pay the cycle: the row that reaches
 ///   it is the paying row ([RecurringPayments.paidBy] + `paidInParts`). Otherwise the counted rows are
@@ -195,7 +196,9 @@ RecurringPayments planRecurringPayments(List<RecurringBill> bills, List<Tx> rows
       paid[b.id] = best;
       continue;
     }
-    final from = addDays(b.nextDue, -partsDays(b)), to = addDays(b.nextDue, tol);
+    // The wide window only for the owner's own bills and ranged ones: on a detected bill without a range, ordinary
+    // purchases at the payee in the days before would otherwise add up to a payment (lead decision, P4 review).
+    final from = addDays(b.nextDue, -(b.manual || b.hasRange ? partsDays(b) : tol)), to = addDays(b.nextDue, tol);
     final after = b.lastPaidTx == null ? null : dateOf[b.lastPaidTx];
     final counted = [
       for (final t in mine)

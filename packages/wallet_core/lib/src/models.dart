@@ -245,6 +245,7 @@ class RecurringBill {
   final int? minAmount, maxAmount; // cents: the amount range, see [hasRange]
   final String? endsOn; // YYYY-MM-DD: the last due date (instalments)
   final bool manual; // added by hand: never touched by detection
+  final bool ownCategory; // the owner chose the category: refresh never recategorizes it
 
   const RecurringBill({
     required this.id,
@@ -260,6 +261,7 @@ class RecurringBill {
     this.maxAmount,
     this.endsOn,
     this.manual = false,
+    this.ownCategory = false,
   });
 
   /// The monthly interval, and what a stored `interval_days` outside [minIntervalDays]..[maxIntervalDays] reads as.
@@ -301,18 +303,42 @@ class RecurringBill {
   /// a pay period is a cycle of its own (`dueCycles`). A monthly bill has one cycle per period, as before P4.
   bool get isShort => intervalDays < defaultIntervalDays - toleranceFor(defaultIntervalDays);
 
-  /// The instalment plan is over: the next due date is after [endsOn]. Nothing is due or reserved any more.
-  bool get finished => endsOn != null && nextDue.compareTo(endsOn!) > 0;
+  /// The last date a cycle may be due: [endsOn] + [tolerance] (a `nextDue` moved on from the real payment's date drifts a
+  /// few days from the plan's calendar dates). Null without a valid [endsOn].
+  String? get endsBy => switch (endsOn) { final e? when isIsoDate(e) => addDays(e, tolerance), _ => null };
+
+  /// The instalment plan is over: the next due date is after [endsBy]. Nothing is due or reserved any more.
+  bool get finished => endsBy != null && nextDue.compareTo(endsBy!) > 0;
+
+  /// A monthly interval (27..31 days): instalment plans then run on calendar months ([lastDueFor]).
+  bool get _monthly => !isShort && !isLong;
 
   /// Days a payment may be from its due date ([toleranceFor] of [intervalDays]).
   int get tolerance => toleranceFor(intervalDays);
 
-  /// Cycles from [nextDue] to [endsOn] inclusive (0 once [finished]); null without [endsOn] or a due date.
+  /// Cycles from [nextDue] to [endsOn] inclusive (0 once [finished]); null without a valid [endsOn] or a due date.
+  /// Counted to the nearest whole step (an average calendar month for monthly bills, as [lastDueFor] builds their plan;
+  /// else [intervalDays]), so a `nextDue` a few days off the plan's dates counts the same; at least 1 until [finished].
   int? get instalmentsLeft {
     final e = endsOn;
     if (e == null || !isIsoDate(e) || !isIsoDate(nextDue)) return null;
-    if (nextDue.compareTo(e) > 0) return 0;
-    return daysBetween(nextDue, e) ~/ intervalDays + 1;
+    if (finished) return 0;
+    final n = (daysBetween(nextDue, e) / (_monthly ? 365.25 / 12 : intervalDays)).round() + 1;
+    return n < 1 ? 1 : n;
+  }
+
+  /// The last due date of an instalment plan of [instalments] (≥ 1) cycles from [firstDue]: for a monthly interval
+  /// (27..31 days) the same day of the month (instalments − 1) months on, clamped to that month's end (2027-01-31 + 1
+  /// month = 2027-02-28); else `firstDue + (instalments − 1) × intervalDays`.
+  static String lastDueFor(String firstDue, int intervalDays, int instalments) {
+    final n = instalments - 1;
+    if (intervalDays < defaultIntervalDays - toleranceFor(defaultIntervalDays) || intervalDays > 31) {
+      return addDays(firstDue, n * intervalDays);
+    }
+    final m = int.parse(firstDue.substring(0, 4)) * 12 + int.parse(firstDue.substring(5, 7)) - 1 + n;
+    final ym = '${(m ~/ 12).toString().padLeft(4, '0')}-${(m % 12 + 1).toString().padLeft(2, '0')}';
+    final day = dayOf(firstDue), last = daysInMonth(ym);
+    return '$ym-${(day < last ? day : last).toString().padLeft(2, '0')}';
   }
 
   /// A bill in a fixed category (Rent, Loan, Bills & subscriptions) is already planned through the fixed-cost
@@ -348,8 +374,9 @@ class RecurringBill {
       lastPaidTx: _str(r['last_paid_tx']),
       minAmount: lo,
       maxAmount: hi,
-      endsOn: _str(r['ends_on']),
+      endsOn: switch (_str(r['ends_on'])) { final e? when isIsoDate(e) => e, _ => null }, // a bad stored date = no end
       manual: _int(r['manual']) == 1,
+      ownCategory: _int(r['own_category']) == 1,
     );
   }
 
@@ -367,6 +394,7 @@ class RecurringBill {
         maxAmount: maxAmount,
         endsOn: endsOn,
         manual: manual,
+        ownCategory: ownCategory,
       );
 }
 

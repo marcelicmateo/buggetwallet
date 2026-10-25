@@ -130,6 +130,7 @@ const Map<String, EntityDef> entitySchema = {
     ColumnDef.integer('max_amount', nullable: true),
     ColumnDef('ends_on', nullable: true),
     ColumnDef.flag('manual'),
+    ColumnDef.flag('own_category'), // the owner chose the category (updateRecurring/addRecurring)
   ]),
   // Planned costs (v6, §4.3): hand-added, calendar events given an amount or dismissed (see `PlannedCost`).
   'planned': EntityDef('planned', [

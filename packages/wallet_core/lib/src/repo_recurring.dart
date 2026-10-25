@@ -13,8 +13,8 @@ extension WalletRepoRecurring on WalletRepo {
   /// [minAmount]/[maxAmount] an optional amount range that holds it (the highest is set aside); [intervalDays] 1..400
   /// (`RecurringPeriod.days` for the usual classes); [firstDue] the first due date. [payee] (a `merchantKey`, e.g. from
   /// the payees in history) lets bank rows pay it; without one the bill never matches a payment (never on amount
-  /// alone) and the owner marks each cycle paid (`skipRecurring`). [instalments] N ≥ 1 sets `ends_on` = [firstDue] +
-  /// (N − 1) × [intervalDays]. A payee another live (not deleted, not dismissed) bill already uses is refused: edit or
+  /// alone) and the owner marks each cycle paid (`skipRecurring`). [instalments] N ≥ 1 sets `ends_on` =
+  /// [RecurringBill.lastDueFor] (calendar months for a monthly interval, else (N − 1) × [intervalDays] days on). A payee another live (not deleted, not dismissed) bill already uses is refused: edit or
   /// confirm that bill instead.
   String addRecurring({
     required String label,
@@ -57,7 +57,8 @@ extension WalletRepoRecurring on WalletRepo {
           'deleted': 0,
           if (minAmount != null) 'min_amount': minAmount,
           if (maxAmount != null) 'max_amount': maxAmount,
-          if (instalments != null) 'ends_on': addDays(firstDue, (instalments - 1) * intervalDays),
+          'own_category': 1,
+          if (instalments != null) 'ends_on': RecurringBill.lastDueFor(firstDue, intervalDays, instalments),
         }
       )
     ]);
@@ -96,6 +97,8 @@ extension WalletRepoRecurring on WalletRepo {
     if (category != null) {
       _checkBillCategory(category);
       if (category != r['category']) fields['category'] = category;
+      // The owner's choice: refresh no longer moves it with the payee's rows.
+      if (!b.ownCategory) fields['own_category'] = 1;
     }
     if (intervalDays != null) {
       _checkInterval(intervalDays);
@@ -117,8 +120,11 @@ extension WalletRepoRecurring on WalletRepo {
       final hi = clearRange ? null : maxAmount ?? b.maxAmount;
       _checkBillAmounts(a, lo, hi);
       if (a != b.expectedAmount) fields['expected_amount'] = a;
-      if (lo != b.minAmount) fields['min_amount'] = lo;
-      if (hi != b.maxAmount) fields['max_amount'] = hi;
+      // Both ends together, so two devices editing the range never merge into a pair neither made.
+      if (lo != b.minAmount || hi != b.maxAmount) {
+        fields['min_amount'] = lo;
+        fields['max_amount'] = hi;
+      }
     }
     if (fields.isEmpty) return;
     _write([('recurring', id, fields)]);

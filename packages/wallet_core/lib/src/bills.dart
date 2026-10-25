@@ -8,7 +8,6 @@ import 'package:wallet_importer/wallet_importer.dart' show BillItem, BillSource;
 import 'categories.dart' show BudgetKind, CategoryTable, merchantKey;
 import 'dates.dart';
 import 'models.dart';
-import 'recurring.dart' show recurringDays;
 import 'search.dart' show foldText;
 
 /// review: read from a code, file or photo (or typed), every value a suggestion; confirmed: the owner checked it, so
@@ -333,8 +332,8 @@ String? _payeeKey(String? payee) {
 }
 
 /// The confirmed recurring bill that already plans [b]'s payment, or null: same payee key ([billPayeeKey] ==
-/// [RecurringBill.payee], exactly) and [b]'s due date within ± [recurringDays] of one of its cycles: `nextDue` + k ×
-/// `intervalDays` for k ≥ −1 (k = −1 is the cycle just paid, or skipped, before `nextDue`). Never by amount. Such a
+/// [RecurringBill.payee], exactly) and [b]'s due date within ± the bill's [RecurringBill.tolerance] (3 days for a
+/// monthly one) of one of its cycles: `nextDue` + k × `intervalDays` for k ≥ −1 (k = −1 is the cycle just paid, or skipped, before `nextDue`). Never by amount. Such a
 /// bill's planned row is not reserved where the recurring bill's occurrence already is ([plannedCoverage], decided when
 /// read, so the order of confirming the two never matters and nothing is written): the recurring bill reserves that
 /// payment, or the fixed plan holds it. The bill
@@ -382,12 +381,12 @@ bool plannedReserves(PlannedCost p, List<RecurringBill> recurring, Set<String> c
     final d = daysBetween(r.nextDue, due!);
     final i = r.intervalDays;
     if (i < 1) {
-      if (d.abs() <= recurringDays) return (bill: r, occurrence: r.nextDue);
+      if (d.abs() <= r.tolerance) return (bill: r, occurrence: r.nextDue);
       continue;
     }
     final k = (d / i).round();
     for (final c in [k - 1, k, k + 1]) {
-      if (c >= -1 && (d - c * i).abs() <= recurringDays) return (bill: r, occurrence: c < 0 ? null : addDays(r.nextDue, c * i));
+      if (c >= -1 && (d - c * i).abs() <= r.tolerance) return (bill: r, occurrence: c < 0 ? null : addDays(r.nextDue, c * i));
     }
   }
   return null;
