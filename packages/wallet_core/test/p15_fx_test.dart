@@ -366,12 +366,52 @@ void main() {
                 'fx:USD': {'rate': 1, 'date': '2026-03-01'}
               }),
           throwsArgumentError);
+      // Undo restores the exact entry: an older date may be given, never one after today.
+      r.setFxRate('USD', 910000, date: '2026-03-01');
+      expect(r.settings().fxRates['USD'], const FxRate(910000, '2026-03-01', home: 'EUR'));
+      for (final d in ['2026-03-26', '2026-02-30', '1 Mar']) {
+        expect(() => r.setFxRate('USD', 910000, date: d), throwsArgumentError, reason: d);
+      }
+      r.setFxRate('USD', 910000, date: '2026-03-25');
+      expect(r.settings().fxRates['USD']!.date, '2026-03-25');
       r.setFxRate('GBP', 1170000);
       r.removeFxRate('USD');
       expect(r.settings().fxRates.keys, ['GBP']);
       final after = r.pendingOps().length;
       r.removeFxRate('USD');
       expect(r.pendingOps().length, after);
+    });
+  });
+
+  group('paydays, plan suggestions and search on the converted list', () {
+    final st = _withRates(const WalletSettings(paydayDay: 10), {'USD': 500000});
+    const today = '2026-06-20';
+    final usdSalary = [
+      for (final m in ['01', '02', '03', '04', '05', '06']) fx('2026-$m-10', 400000, 'Salary', 'USD')
+    ];
+
+    test('a USD income row with a rate is no payday and suggests no salary or payday', () {
+      final conv = inHomeCurrency(usdSalary, st);
+      expect(conv.every((t) => t.tx.currency == 'EUR'), isTrue);
+      expect(salaryPaydays(conv, today, currency: 'EUR'), isEmpty);
+      expect(detectPaydays(conv, st, today), detectPaydays(usdSalary, st, today));
+      expect(periodSummaries(conv, st, today).length, periodSummaries(usdSalary, st, today).length);
+      final s = suggestPlan(conv, st, today);
+      expect((s.salary, s.paydayDay), (null, null));
+      // EUR salary rows still find paydays next to the converted ones.
+      final eur = [
+        for (final m in ['04', '05', '06']) ct('2026-$m-12', 300000, 'Salary')
+      ];
+      expect(salaryPaydays([...conv, ...eur], today, currency: 'EUR'), ['2026-04-12', '2026-05-12', '2026-06-12']);
+    });
+
+    test('an amount query finds a converted row by its converted and by its original amount', () {
+      final row = fx('2026-03-03', -10000, 'Eating out', 'USD');
+      final conv = inHomeCurrency([row], _withRates(const WalletSettings(), {'USD': 924000}));
+      SearchResult find(String q) => searchAll(q, txs: conv, goals: const [], wishlist: const [], bills: const []);
+      expect(find('92.40').txs.map((t) => t.tx.id), [row.tx.id]);
+      expect(find('100').txs.map((t) => t.tx.id), [row.tx.id]);
+      expect(find('99').txs, isEmpty);
     });
   });
 

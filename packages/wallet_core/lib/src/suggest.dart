@@ -70,7 +70,8 @@ PlanSuggestion suggestPlan(List<CategorizedTx> txs, WalletSettings st, String to
   requireIsoDate(today);
   final home = [
     for (final t in txs)
-      if (t.tx.live && t.tx.currency == st.currency && t.date.compareTo(today) <= 0) t
+      // P15: rows converted from another currency (`inHomeCurrency`) suggest nothing, as on the raw list.
+      if (t.tx.live && t.tx.currency == st.currency && t.originalCurrency == null && t.date.compareTo(today) <= 0) t
   ];
   final from = '${monthsEnding(monthOf(today), _windowMonths + 1).first}-01'; // the window's first day
   final groups = _salaryGroups(home, today, st.currency, from);
