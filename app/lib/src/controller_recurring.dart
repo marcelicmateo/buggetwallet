@@ -54,15 +54,20 @@ extension RecurringDb on WalletController {
     return id;
   }
 
-  /// The payees of the most recent incoming payments (newest first, one each), for the payee picker of an income. Once per data version.
+  /// The payees of the most recent incoming payments of kind extra (newest first, one each), for the payee picker of an income. Once per data version.
   List<RulePayee> incomePayees({int limit = 40}) => memo('recurring.incomePayees.$limit', () {
         final seen = <String>{};
         final out = <RulePayee>[];
         final rows = [...wholeTxs]..sort((a, b) => b.date.compareTo(a.date));
+        // Only a payee whose incoming rows are all kind extra: not a salary, a transfer or a refund from a shop.
+        final skip = {
+          for (final c in rows)
+            if (c.tx.live && c.amount > 0 && c.kind != BudgetKind.extra) tagPayee(c.tx) ?? '',
+        };
         for (final c in rows) {
           if (!c.tx.live || c.amount <= 0) continue;
           final k = tagPayee(c.tx);
-          if (k == null || !seen.add(k)) continue;
+          if (k == null || skip.contains(k) || !seen.add(k)) continue;
           out.add(RulePayee(k, k.replaceAll('_', ' ')));
           if (out.length >= limit) break;
         }
@@ -99,24 +104,16 @@ extension RecurringDb on WalletController {
     _changed();
   }
 
-  /// The Undo of removing an income: core has no undelete for a recurring row, so the income is added again with the same fields
-  /// (confirmed at once; a new id). A refusal (the payee is used meanwhile) is logged, not thrown.
-  void restoreRecurringIncome(RecurringBill b) {
+  /// The Undo of removing a bill or an income: the same row (same id) comes back. A refusal is logged, not thrown.
+  void undeleteRecurring(String id) {
     try {
-      addRecurringBill(
-          label: b.label,
-          category: b.category,
-          amount: b.hasRange ? b.maxAmount! : b.expectedAmount,
-          minAmount: b.minAmount,
-          maxAmount: b.maxAmount,
-          intervalDays: b.intervalDays,
-          firstDue: b.nextDue,
-          payee: b.payee,
-          direction: RecurringBill.directionIn);
-      logEvent(_habits, Level.INFO, 'recurring.incomeRestored');
+      repo.undeleteRecurring(id);
+      logEvent(_habits, Level.INFO, 'recurring.undeleted');
+      refreshRecurring();
     } on ArgumentError catch (e, st) {
-      logError(_habits, 'recurring.incomeRestoreFailed', e, st);
+      logError(_habits, 'recurring.undeleteFailed', e, st);
     }
+    _changed();
   }
 
   /// Puts a bill's due date back (the Undo of "Mark paid").

@@ -259,7 +259,7 @@ class ExpectedIncomePanel extends StatelessWidget {
   void _delete(BuildContext context, RecurringBill b) {
     logNav('income.delete');
     wc.deleteRecurring(b.id);
-    toast(context, 'Income removed', actionLabel: 'Undo', onAction: () => wc.restoreRecurringIncome(b));
+    toast(context, 'Income removed', actionLabel: 'Undo', onAction: () => wc.undeleteRecurring(b.id));
   }
 
   @override

@@ -3,6 +3,7 @@
 // extrasForGoals, and the layout at 360 dp / text scale 2.0. SYNTHETIC data (habitsWallet: Tuesday 20 Oct 2026, pay period from 1 Oct).
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
+import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/today.dart';
@@ -46,9 +47,15 @@ void tw(String name, Future<void> Function(WidgetTester tester) body) => testWid
 Future<void> plan(WidgetTester tester, WalletController wc, {Size size = const Size(400, 1400), double scale = 1}) =>
     pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: size, textScale: scale);
 
-Future<void> todayPage(WidgetTester tester, WalletController wc) => pumpApp(
-    tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser(), openBills: () {})),
-    size: const Size(400, 1600));
+Future<void> todayPage(WidgetTester tester, WalletController wc,
+        {Size size = const Size(400, 1600), double scale = 1, VoidCallback? openIncome}) =>
+    pumpApp(
+        tester,
+        Scaffold(
+            body: TodayScreen(
+                wc: wc, openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser(), openBills: () {}, openIncome: openIncome)),
+        size: size,
+        textScale: scale);
 
 Future<void> see(WidgetTester tester, Finder f) async {
   await tester.scrollUntilVisible(f, 300, scrollable: find.byType(Scrollable).first);
@@ -142,6 +149,7 @@ void main() {
       await tester.tap(find.text('Undo'));
       await settle(tester);
       final back = wc.expectedIncomes().single;
+      expect(back.id, id); // the same row comes back (core's undeleteRecurring)
       expect(back.confirmed, isTrue);
       expect(back.expectedAmount, 30000);
       expect(back.isIncome, isTrue);
@@ -232,6 +240,44 @@ void main() {
     });
   });
 
+  group('Edit income', () {
+    tw('Edit opens the income sheet (extra tags only, no instalments) and keeps it an income', (tester) async {
+      final wc = incomeWallet(confirm: true);
+      final id = wc.expectedIncomes().single.id;
+      await plan(tester, wc);
+      await tapKey(tester, 'incomeEdit:$id');
+      await settle(tester);
+      expect(find.byKey(const ValueKey('incomeSheet')), findsOneWidget);
+      expect(find.text('Change income'), findsOneWidget);
+      expect(find.byKey(const ValueKey('recurringEnds')), findsNothing);
+      await tapKey(tester, 'recurringCategory');
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const ValueKey('pick:Groceries')), findsNothing);
+      expect(find.byKey(const ValueKey('pick:Salary')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('pick:Extra income')).last);
+      await tester.pump(const Duration(milliseconds: 300));
+      await typeIn(tester, 'recurringAmount', '350');
+      await tapKey(tester, 'recurringSave');
+      await settle(tester);
+      expect(find.byKey(const ValueKey('incomeSheet')), findsNothing);
+      final b = wc.expectedIncomes().single;
+      expect(b.id, id);
+      expect(b.isIncome, isTrue);
+      expect(b.expectedAmount, 35000);
+      expect(wc.expectedBills().where((x) => x.id == id), isEmpty);
+    });
+
+    test('the payee picker offers only payees whose incoming rows are kind extra (not salary)', () {
+      final wc = incomeWallet();
+      wc.repo.importBatch(
+          ImportBatch(source: 'pbz', transactions: [syntheticTx('2026-10-10', 90000, 'Plaća/Mirovina', 'Neto plaća Synthco')]));
+      wc.reload();
+      final keys = wc.incomePayees().map((p) => p.key).toList();
+      expect(keys.where((k) => k.contains('quorvant')), hasLength(1));
+      expect(keys.where((k) => k.contains('synthco')), isEmpty);
+    });
+  });
+
   group('Payday plan ledger', () {
     tw('before it lands: the "Expected, not counted yet" line; after: "Extra income received" and no expected line', (tester) async {
       final wc = incomeWallet(confirm: true);
@@ -253,6 +299,22 @@ void main() {
       expect(find.textContaining('+300'), findsOneWidget);
       expect(find.byKey(const ValueKey('ledgerExpectedIncome')), findsNothing);
     });
+
+    tw('the ledger rows add up to Spending money after the income landed', (tester) async {
+      final wc = incomeWallet(landed: true, confirm: true);
+      final p = wc.period(), st = wc.settings, cur = wc.currency;
+      final goals = wc.goals.fold<int>(0, (a, g) => a + g.monthly);
+      final planLines = st.planLines.values.fold<int>(0, (a, v) => a + v);
+      expect(p.landedIncome, 30000);
+      expect(
+          p.income - st.rent - st.loan - st.subs - planLines - goals - p.reservedBills - p.reservedPlanned + p.landedIncome, p.flexBudget);
+      await plan(tester, wc);
+      await see(tester, find.byKey(const ValueKey('ledgerSpendingMoney')));
+      expect(find.descendant(of: find.byKey(const ValueKey('ledgerLandedIncome')), matching: find.text('+${moneyExact(30000, cur)}')),
+          findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('ledgerSpendingMoney')), matching: find.text(moneyExact(p.flexBudget, cur))),
+          findsOneWidget);
+    });
   });
 
   group('Today', () {
@@ -270,6 +332,36 @@ void main() {
       expect(find.byKey(const ValueKey('expectedIncomeLine')), findsNothing);
     });
 
+    tw('a tap on the line opens Plan at Expected income; without an action it has no chevron', (tester) async {
+      final wc = incomeWallet(confirm: true);
+      var opened = 0;
+      await todayPage(tester, wc, openIncome: () => opened++);
+      await tester.tap(find.byKey(const ValueKey('expectedIncomeLine')));
+      await tester.pump();
+      expect(opened, 1);
+      expect(find.descendant(of: find.byKey(const ValueKey('expectedIncomeLine')), matching: find.byIcon(Icons.chevron_right)),
+          findsOneWidget);
+      await todayPage(tester, wc);
+      expect(
+          find.descendant(of: find.byKey(const ValueKey('expectedIncomeLine')), matching: find.byIcon(Icons.chevron_right)), findsNothing);
+    });
+
+    tw('Plan scrolls to Expected income when asked (the notifier the line uses)', (tester) async {
+      final wc = incomeWallet(confirm: true);
+      final request = ValueNotifier<int>(0);
+      addTearDown(request.dispose);
+      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc, showIncome: request)), size: const Size(400, 700));
+      expect(find.byKey(const ValueKey('expectedIncomePanel')), findsNothing);
+      request.value++;
+      for (var i = 0; i < 40 && find.byKey(const ValueKey('expectedIncomePanel')).evaluate().isEmpty; i++) {
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+      await settle(tester);
+      final r = tester.getRect(find.byKey(const ValueKey('expectedIncomePanel')));
+      expect(r.top, lessThan(700));
+      expect(r.bottom, greaterThan(0));
+    });
+
     tw('no income, no line', (tester) async {
       final wc = habitsWallet();
       addTearDown(wc.dispose);
@@ -279,22 +371,33 @@ void main() {
   });
 
   group('Goals', () {
-    tw('income that landed is spending money, not "Extra money" for goals', (tester) async {
+    tw('income that landed is spending money; only other extras are "Extra money" for goals (exact text)', (tester) async {
       final wc = incomeWallet(landed: true, confirm: true);
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [syntheticTx('2026-10-06', 12000, 'Ostalo', 'Other One Off 2026')]));
+      wc.reload();
       final p = wc.period();
       expect(p.landedIncome, 30000);
-      expect(p.extrasForGoals, p.extras - 30000);
+      expect(p.extrasForGoals, 12000);
+      expect(p.extras, 42000);
       await pumpApp(tester, Scaffold(body: GoalsScreen(wc: wc)), size: const Size(400, 1600));
-      expect(find.textContaining('Other income: 300'), findsNothing);
-      if (p.extrasForGoals <= 0) expect(find.text('Extra money this month'), findsNothing);
+      expect(find.text('Extra money this month'), findsOneWidget);
+      expect(find.textContaining('Other income: ${money(12000, wc.currency, decimals: 0)}.'), findsOneWidget);
+      expect(find.textContaining('Other income: ${money(42000, wc.currency, decimals: 0)}'), findsNothing);
+    });
+
+    tw('only landed income and no other extras: no "Extra money" panel', (tester) async {
+      final wc = incomeWallet(landed: true, confirm: true);
+      expect(wc.period().extrasForGoals, 0);
+      await pumpApp(tester, Scaffold(body: GoalsScreen(wc: wc)), size: const Size(400, 1600));
+      expect(find.text('Extra money this month'), findsNothing);
     });
   });
 
   group('Layout', () {
     for (final (w, scale) in [(320.0, 2.0), (360.0, 2.0), (360.0, 1.0)]) {
-      tw('Expected income panel and the Add income sheet fit at ${w.round()} dp, text scale $scale', (tester) async {
-        final wc = incomeWallet();
-        wc.confirmRecurring(wc.expectedIncomes().single.id);
+      tw('Expected income panel, sheet, ledger income lines and Today line fit at ${w.round()} dp, text scale $scale', (tester) async {
+        // One income landed this period (ledger "received" line) and a weekly one still expected (ledger expected line, Today line).
+        final wc = incomeWallet(landed: true, confirm: true);
         wc.addRecurringBill(
             label: 'Long named side income',
             category: 'Extra income',
@@ -305,12 +408,29 @@ void main() {
             firstDue: '2026-10-27',
             payee: 'other_payee',
             direction: RecurringBill.directionIn);
-        await plan(tester, wc, size: Size(w, 1600), scale: scale);
+        expect(wc.period().expectedIncome, isNotEmpty);
+        expect(wc.period().landedIncome, greaterThan(0));
+        await plan(tester, wc, size: Size(w, 2400), scale: scale);
+        await see(tester, find.byKey(const ValueKey('ledgerSpendingMoney')));
+        expect(find.byKey(const ValueKey('ledgerLandedIncome')), findsOneWidget);
+        expect(find.byKey(const ValueKey('ledgerExpectedIncome')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        for (final k in const ['ledgerLandedIncome', 'ledgerExpectedIncome']) {
+          final r = tester.getRect(find.byKey(ValueKey(k)));
+          expect(r.left, greaterThanOrEqualTo(0), reason: k);
+          expect(r.right, lessThanOrEqualTo(w + 0.5), reason: k);
+        }
         await see(tester, find.byKey(const ValueKey('addIncome')));
         expect(tester.takeException(), isNull);
         await tapKey(tester, 'addIncome');
         await settle(tester);
         expect(find.byKey(const ValueKey('incomeSheet')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await todayPage(tester, wc, size: Size(w, 2400), scale: scale, openIncome: () {});
+        expect(find.byKey(const ValueKey('expectedIncomeLine')), findsOneWidget);
+        final r = tester.getRect(find.byKey(const ValueKey('expectedIncomeLine')));
+        expect(r.right, lessThanOrEqualTo(w + 0.5));
         expect(tester.takeException(), isNull);
       });
     }
