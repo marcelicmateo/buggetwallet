@@ -165,6 +165,24 @@ void main() {
       expect(() => shiftRange(r, RangeKind.payPeriod, 1, st, txs: txs, today: today), throwsArgumentError);
     });
 
+    test('forward then back is a round trip; shift 0 is the identity (review fix)', () {
+      final txs = [row('2026-08-10', 150000, 'Salary'), row('2026-09-10', 150000, 'Salary')];
+      const t = '2026-10-05';
+      final cur = rangeFor(RangeKind.payPeriod, t, st, txs: txs);
+      expect(cur, dr('2026-09-10', '2026-10-09'));
+      final next = shiftRange(cur, RangeKind.payPeriod, 1, st, txs: txs, today: t);
+      expect(next, dr('2026-10-10', '2026-11-09'));
+      expect(shiftRange(next, RangeKind.payPeriod, -1, st, txs: txs, today: t), cur);
+      expect(shiftRange(next, RangeKind.payPeriod, 0, st, txs: txs, today: t), next);
+      expect(shiftRange(cur, RangeKind.payPeriod, 0, st, txs: txs, today: t), cur);
+      expect(shiftRange(next, RangeKind.payPeriod, -2, st, txs: txs, today: t), dr('2026-08-10', '2026-09-09'));
+    });
+
+    test("custom: the end is clamped to the end of today's month (review decision)", () {
+      expect(shiftRange(dr('2026-10-16', '2026-10-25'), RangeKind.custom, 1, st, today: today), dr('2026-10-26', '2026-10-31'));
+      expect(() => shiftRange(dr('2026-10-22', '2026-10-31'), RangeKind.custom, 1, st, today: today), throwsArgumentError);
+    });
+
     test('a late salary: the next period starts after today', () {
       final txs = [row('2026-08-10', 150000, 'Salary'), row('2026-09-10', 150000, 'Salary')];
       final r = rangeFor(RangeKind.payPeriod, '2026-10-20', st, txs: txs);

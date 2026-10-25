@@ -261,6 +261,11 @@ class MonthSummary {
   int get net => income - out;
 }
 
+/// The one "Where it goes" rule for a row: live, in [currency], in a fixed or flex category (refunds count, negative).
+/// Shared by [monthSummary], [averageByCategory]/[suggestBudgets] and the N3 graphs (`insights.dart`).
+bool countsAsSpending(CategorizedTx t, String currency) =>
+    t.tx.live && t.tx.currency == currency && (t.kind == BudgetKind.fixed || t.kind == BudgetKind.flex);
+
 /// Money in and out of calendar [month] (`YYYY-MM`), counting only rows in [currency] (`WalletSettings.currency`);
 /// the others are in [MonthSummary.foreignByCurrency].
 MonthSummary monthSummary(List<CategorizedTx> txs, String month, {required String currency}) {
@@ -273,14 +278,11 @@ MonthSummary monthSummary(List<CategorizedTx> txs, String month, {required Strin
       if (t.kind != BudgetKind.transfer) foreign[t.tx.currency] = (foreign[t.tx.currency] ?? 0) + t.amount;
       continue;
     }
-    switch (t.kind) {
-      case BudgetKind.income || BudgetKind.extra:
-        income += t.amount;
-      case BudgetKind.fixed || BudgetKind.flex:
-        out -= t.amount;
-        byCat[t.category] = (byCat[t.category] ?? 0) - t.amount;
-      case BudgetKind.transfer:
-        break;
+    if (countsAsSpending(t, currency)) {
+      out -= t.amount;
+      byCat[t.category] = (byCat[t.category] ?? 0) - t.amount;
+    } else if (t.kind == BudgetKind.income || t.kind == BudgetKind.extra) {
+      income += t.amount;
     }
   }
   return MonthSummary(month, income, out, byCat, foreignByCurrency: foreign);
@@ -291,8 +293,7 @@ MonthSummary monthSummary(List<CategorizedTx> txs, String month, {required Strin
 Map<String, int> _outByCategory(List<CategorizedTx> txs, Set<String> months, String currency) {
   final out = <String, int>{};
   for (final t in txs) {
-    if (!t.tx.live || t.tx.currency != currency || !months.contains(monthOf(t.date))) continue;
-    if (t.kind == BudgetKind.fixed || t.kind == BudgetKind.flex) out[t.category] = (out[t.category] ?? 0) - t.amount;
+    if (countsAsSpending(t, currency) && months.contains(monthOf(t.date))) out[t.category] = (out[t.category] ?? 0) - t.amount;
   }
   return out;
 }

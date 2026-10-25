@@ -182,6 +182,17 @@ void main() {
       expect((b.budgeted, b.actual, b.over), (2000, 1600, 500));
     });
 
+    test('each bar counts its whole calendar month, days outside a pay-period range too (review decision)', () {
+      final budgets = {'Groceries': 1000};
+      final txs = [
+        row('2026-09-05', -800, 'Groceries'), // before the range, same month
+        row('2026-09-20', -400, 'Groceries'),
+        row('2026-10-12', -100, 'Groceries'), // after the range, current month
+      ];
+      final out = budgetVsActualSeries(txs, dr('2026-09-10', '2026-10-09'), budgets, today: today, currency: eur);
+      expect([for (final b in out) (b.month, b.budgeted, b.actual, b.over)], [('2026-09', 1000, 1200, 200), ('2026-10', 1000, 100, 0)]);
+    });
+
     test('no budgets: zeros for every month', () {
       final out = budgetVsActualSeries([row('2026-09-02', -1500, 'Groceries')], dr('2026-09-01', '2026-10-31'), const {},
           today: today, currency: eur);

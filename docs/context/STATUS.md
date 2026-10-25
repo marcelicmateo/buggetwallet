@@ -197,6 +197,27 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
     - Tests written independently from the spec found the sync-duplicate rule; the review found stale months, a partial first payday and the opening/date pair, all fixed.
   - **Stage run:** importer 335, core 1623, relay 206, app 1321 (1330 after the last join fixes), desktop 12 files, emulator screens.
   - **Still to build:** N2 UI (welcome balance, accounts overview, plan proposals, Suggest dialog).
+- 2026-10-25: **Stage N2 UI + N3 core.**
+  - **N2 UI:**
+    - Plan › Accounts:
+      - exact balance per account, "as of" its last row, one total per currency;
+      - Add (Cash / PBZ / Revolut, currency, opening balance, "Below zero", date up to today), Rename, Correct balance, Delete with Undo;
+      - a sync duplicate is marked "not counted", with Remove.
+    - Today: a "Held: …" line, one figure per currency.
+    - New wallet: an optional "How much cash do you have right now?" step after the save-key prompt (never when joining).
+    - Plan › Suggestions from your imports: current → suggested with the reason, Accept / Not now / Accept all, nothing written without a tap.
+    - Budgets Suggest: empty fields are filled at once; changes to existing numbers are asked per entry; only Save writes.
+    - Review fixes: 1 medium, 2 low. Undo errors always show; Budgets/Calendars keep typed text; joining never shows the cash step.
+  - **N3 core** (spec `N3_SPEC.md`, owner D11/D12):
+    - `ranges.dart`: this pay period / month / 3 / 6 / 12 months / custom; step back and forward; labels.
+    - `insights.dart`:
+      - spending per month, category share (permille sums to 1000), income vs spending, budget vs actual per month (whole calendar months, as budgets are monthly);
+      - drill-down: merchants in a category, the rows behind each total, merchant trend, this vs last month vs the 6-month average, biggest rows (outflows only).
+    - Spending is decided by one shared rule (`countsAsSpending`). Every function stays under 500 ms on 10k rows, about 100 ms.
+    - Independent spec tests: 112. One test mistake fixed (a 6-month window).
+    - Review: a pay-period step forward then back skipped the running period (fixed); custom ranges stop at the end of this month.
+  - **Stage run:** importer 335, core 1777, relay 206, app 1365, desktop 12 files, emulator screens.
+  - **In progress:** N3 UI (range control, four graphs, drill-down).
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -282,7 +303,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   photos are not in `.bwb` backups (they stay on the relay).
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
-  N0 done 2026-10-25. N1 and N2 core done 2026-10-25. Next: N2 UI, then N3 (core range maths + 4 graphs + drill-down). N4 ready (D10: slips + bank payments, one line per month).
+  N0, N1, N2 and N3 core done 2026-10-25. In progress: N3 UI (graphs, range control, drill-down). N4 ready (D10: slips + bank payments, one line per month).
+- Owner checks after N2 (phone):
+  - new wallet → Skip the cash question, then a second wallet with Add cash (Today shows "Held");
+  - Plan › Accounts: add PBZ with today's real balance, import, then check the balance and its "as of" date; Correct balance; Delete → Undo;
+  - after an import, Plan › Suggestions: Accept one, Not now another;
+  - Budgets › Suggest with some fields filled: you are asked before any number you typed changes.
 - Owner checks after N1 (phone + laptop):
   - The softer colours, in sun and in dark mode.
   - Plan › Payday plan: Edit, change a field, Save; Cancel.
