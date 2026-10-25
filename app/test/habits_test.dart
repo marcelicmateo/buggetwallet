@@ -412,8 +412,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(wc.recurringBills().single.nextDue, '2026-11-24');
       expect(wc.period().reservedBills, 0);
-      expect(find.textContaining('next 24 Nov'), findsOneWidget);
-      expect(find.textContaining('next 25 Oct'), findsNothing);
+      // The page keeps its scroll position and may now be shorter: the row can sit outside the built window.
+      expect(find.textContaining('next 24 Nov', skipOffstage: false), findsOneWidget);
+      expect(find.textContaining('next 25 Oct', skipOffstage: false), findsNothing);
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
       expect(find.textContaining('Due by payday'), findsNothing);
     });

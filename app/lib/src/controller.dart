@@ -932,6 +932,63 @@ class WalletController extends ChangeNotifier {
     await syncNow(trigger: 'join');
   }
 
+  /// Plan › "Join another wallet…": joins the wallet with [text] while this one is open. The key and relay are checked first (a typo
+  /// throws and nothing is touched). Then the open database is closed and moved aside (`wallet.db.unopened-<date>`, `db.setAside`,
+  /// never deleted) and the join goes on as on a first run. The old wallet's key is replaced in the key store, so the owner must
+  /// have saved it to open the set-aside copy again (the warning dialog says so). Not on the web (no set-aside path there).
+  Future<void> joinAnotherWallet(String text, {String? passphrase, Uri? relay}) async {
+    await VaultKey.parse(text);
+    if (relay != null && parseRelayAddress(relay.toString()) == null) throw const FormatException('Not a relay address');
+    if (!_dbPending) await _setAsideOpenWallet();
+    try {
+      await joinWallet(text, passphrase: passphrase, relay: relay);
+    } catch (e) {
+      // The old wallet is already set aside: show first-run onboarding, so nothing looks open that is not.
+      key = null;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Closes the open database and moves it aside; the controller then runs on the in-memory placeholder like before a first key.
+  /// If the move fails the database is opened again and the error is thrown.
+  Future<void> _setAsideOpenWallet() async {
+    _syncTimer?.cancel();
+    _dayTimer?.cancel();
+    _debounce?.cancel();
+    _persistTimer?.cancel();
+    await persistNow();
+    final old = repo, oldKey = key;
+    _db = null;
+    repo = WalletRepo.inMemory();
+    _dbPending = true;
+    old.close();
+    try {
+      await dbSetAside(isoDate(_clock()));
+    } catch (e, st) {
+      logError(_log, 'db.setAside.failed', e, st, level: Level.SEVERE);
+      try {
+        if (oldKey != null) await _openFileDb(oldKey, asideOnMismatch: false);
+      } catch (e2, st2) {
+        logError(_log, 'db.reopenFailed', e2, st2, level: Level.SEVERE);
+      }
+      _startAutoSync();
+      rethrow;
+    }
+    logEvent(_log, Level.WARNING, 'db.setAside', {'reason': 'join'});
+    hasUnopenedDb = false;
+    relayUrl = null;
+    lastSync = null;
+    syncError = null;
+    syncCaughtUp = false;
+    syncWaiting = const [];
+    syncBlobsWaiting = 0;
+    syncBlobsUnsupported = false;
+    syncDevices = const [];
+    lastImport = const [];
+    _startAutoSync();
+  }
+
   // ---------- key backup prompt (see app/CLAUDE.md, Sync) ----------
   // Device-local values (never synced): `keyBackupConfirmed` (date) and `keyBackupSnoozedUntil` (date). Logs say `key.backup`
   // with an action word only; never the key or any part of it, also not the characters typed to confirm.

@@ -7,23 +7,24 @@ margin line only on wide windows (≥ 600 dp), never on phones.
 ## 1. Tokens (`WalletColors`, plus new `lineStrong`)
 | Token | Light | Dark |
 |---|---|---|
-| bg (paper) | #f7f5ef | #14171f |
-| surface (dialogs, sheets, input fill) | #fffdf8 | #1a1e28 |
-| surface2 (tag, header band) | #efece2 | #1f2430 |
-| ink | #1d2433 | #e9e6da |
-| ink2 | #4a5163 | #b9bdc9 |
-| muted | #5a6070 | #9aa0b0 |
-| line (hairline, decorative) | #d8d3c4 | #343a4a |
-| lineStrong (inputs, header rule, thick rules; non-text ≥ 3:1) | #1d2433 | #6b7285 |
-| accent (ink-blue) | #1f3fa8 | #8fa6ff |
-| accentSoft | #e3e8f7 | #232b4d |
-| pos / bar | #1f3fa8 | #8fa6ff |
-| neg / bad | #b3261e | #ff8a80 |
-| good (income) | #2e6b2e | #7fcf8a |
-| warnBg | #fbefd0 | #33290f |
-| warnInk | #5c3d00 | #f0d58a |
+| bg (paper) | #f2eee4 | #1b1d23 |
+| surface (dialogs, sheets, input fill) | #f9f6ee | #21242b |
+| surface2 (tag, header band) | #eae5d9 | #272a32 |
+| ink (graphite, not black) | #2c313c | #dad7cd |
+| ink2 | #50566a | #afb3be |
+| muted | #5e6372 | #8f94a1 |
+| line (row separators, section underlines, decorative) | #dad4c5 | #343842 |
+| lineStrong (inputs, panel top rule, double rule; non-text ≥ 3:1, a mid grey now, not ink) | #87847c | #6b707d |
+| accent (calm ink-blue) | #3a559e | #9daee6 |
+| accentSoft | #e6e8f0 | #2a3050 |
+| pos / bar | #3a559e | #9daee6 |
+| neg / bad | #a93a32 | #ee9c94 |
+| good (income) | #3e6b3e | #88c791 |
+| warnBg | #f6ebcb | #2f2916 |
+| warnInk | #5c4210 | #e6cf92 |
+| margin line (`marginLineColor`, decorative) | #e9cbc5 | #674343 |
 
-The ratios worked out in planning: text pairs at least 4.5:1 (ink on bg is 14.2 light and 14.3 dark), `lineStrong` on bg 3.7 dark,
+The ratios worked out in planning: text pairs at least 4.5:1 (N1 softer values: ink on bg is 11.3 light and 11.7 dark, muted on bg 5.2 and 5.6), `lineStrong` on bg 3.2 light and 3.4 dark,
 `line` decorative only. The contrast test recomputes all of them (§4).
 `buildTheme`: keep `fromSeed().copyWith`, and also set `onPrimary`, `primaryContainer=accentSoft`, `outline=lineStrong`,
 `outlineVariant=line`, `surfaceContainer*`, `error`, `onSurfaceVariant=ink2` (otherwise M3 tints leak). `fontFamily: 'IBM Plex Sans'`,
@@ -39,9 +40,9 @@ in `app/assets/fonts/` (listed under `assets:`), `third_party/fonts/README.md` (
 Glyphs that must exist: €, U+2212, NBSP. Record the real APK size delta in STATUS.
 
 ## 3. Components
-- **Panel** → ruled section: no radius or fill, a top rule of 1 px `lineStrong` and a bottom hairline. The API is unchanged. `color:` gives a flat band plus
+- **Panel** → ruled section: no radius or fill, a top rule of 1 px `lineStrong` and a bottom hairline; `SectionHead` underlines, `TotalRule`'s top line, the header rule and the rail border use the lighter `line`; the double rule (1 px, 2 px gap, `lineStrong`) is only under totals. The API is unchanged. `color:` gives a flat band plus
   a 3 px left bar, still with its icon and word. Padding is vertical only; the page margin belongs to layout.dart. New `SectionHead(text, {trailing})`
-  (mono 11 px uppercase, `lineStrong` underline). `Eyebrow` is mono with letter-spacing 0.08 em. `Heading` is w600. `Tag` has a 2 px radius and a 1 px outline.
+  (mono 11 px uppercase, `line` underline). `Eyebrow` is mono with letter-spacing 0.08 em. `Heading` is w600. `Tag` has a 2 px radius and a 1 px outline.
 - **TxTile**: `Date(52, mono 12) | Particulars | Amount(104, right, mono 15 w500)`, with 1 px `line` dividers and a bottom hairline. Income
   is `good` with "+". Minimum height 44 px. Keep the InkWell. An optional `TxHeaderRow` sits on Today and Spending. `LineItem` gets a mono right-aligned value.
 - **Totals**: `TotalRule` = 1 px top plus a double bottom rule (two 1 px lines with a 1 px gap), under the Today hero, the Plan budget total and goal totals.
@@ -49,8 +50,8 @@ Glyphs that must exist: €, U+2212, NBSP. Record the real APK size delta in STA
   Text: accent, w600. Segmented: radius 2, selected = filled ink with a check. No pills.
 - **Chips**: radius 2, 1 px `lineStrong`, selected = accent with a check. The app-bar period chip is mono with a 1 px ink border.
 - **NavigationBar**: bg, a 1 px ink top border, a transparent indicator plus a 3 px accent top bar, an accent w600 label. Outlined icons, height 64.
-- **NavigationRail**: bg, a 1 px `lineStrong` right border, a 3 px accent bar on the left of the selected item, minimum width 80, items at least 44 px.
-- **Dialogs**: radius 3, surface, a 1 px `lineStrong` border, elevation 0. **Bottom sheets**: top radius 0, a 2 px ink top border, no handle.
+- **NavigationRail**: bg, a 1 px `line` right border, a 3 px accent bar on the left of the selected item, minimum width 80, items at least 44 px.
+- **Dialogs**: radius 3, surface, a 1 px `lineStrong` border, elevation 0. **Bottom sheets**: top radius 0, a 1 px `lineStrong` top border, no handle.
   Scrim at 0.4 alpha. A double rule under the amount on the AddExpense and Transaction sheets.
 - **Inputs**: filled surface, radius 2, a 1 px `lineStrong` border, focus 2 px accent, errors in `bad` with an icon. The suffix `' €'` is mono ink2.
   Amount fields are end-aligned and mono.
@@ -59,7 +60,7 @@ Glyphs that must exist: €, U+2212, NBSP. Record the real APK size delta in STA
   period at 0.45 alpha plus a dashed outline. The tooltip is an ink background with bg text, and axis text is mono 10–11 px muted. Progress bars are 10 px with a 1 px ink
   border and a flat fill. Over budget is `bad` plus a hatch and the "behind pace" label with an icon. A pace tick of 2 px.
 - **Screens**:
-  - Today: the hero with a double rule; the stats in a ruled three-column strip; square checkboxes; a 2 px header rule.
+  - Today: the hero with a double rule; the stats in a ruled three-column strip; square checkboxes; a 1 px header rule.
   - Spending: a ruled category table.
   - Wishlist and Goals: ruled rows and a total row.
   - Plan: `SectionHead` sections.

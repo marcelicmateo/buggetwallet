@@ -45,6 +45,16 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   bill; confirmed rows with Paid/Overdue/Covered and Remove) and Nudges (a device-local switch, `setNudges`). The "Due by payday" tap
   switches to Plan and scrolls to Expected bills (`PlanScreen.showBills`, a notifier owned by `HomeShell`).
   Controller log events (counts and enum words only): `review.done`, `review.day`, `recurring.confirm|dismiss|delete`, `nudges.enabled|scheduled`.
+- Plan (N1): one "Payday plan" section. It lists the ledger lines (`planHeading`, `ledgerSetAside`, `ledgerSpendingMoney`) with an **Edit** button (`planEdit`); Edit swaps in the number
+  fields (same `_keys`, same `_savePlan`) with **Save** (`planSave`, closes the editor on success or "Nothing to save", stays open on an error) and **Cancel** (`planCancel`, restores the
+  shown values and the currency). Tests tap Edit first: `openPlanEdit(tester)` in `test/support/wallet.dart`, `edit(t)` in `integration_test/plan_test.dart`; `test/plan_edit_test.dart`.
+  Plan › "Another wallet" › **Join another wallet…** (`joinAnother`, not on the web: no set-aside path there): `screens/join_another.dart` shows the warning sheet, then pushes
+  `OnboardingScreen(replaceCurrent: true)` (join step only; its "Cancel" pops and changes nothing). Only the join itself calls `wc.joinAnotherWallet(text, relay:)`: key and relay are
+  checked, then `_setAsideOpenWallet()` closes the database and `dbSetAside`s it (`wallet.db.unopened-<date>`, `db.setAside {reason: join}`, never deleted; a failing set-aside reopens the
+  old wallet), then the normal `joinWallet` runs (the key store gets the new key: the old wallet's key must be saved to open the copy). A failure after the set-aside sets `key = null`
+  (first-run onboarding). Tests: `test/join_another_test.dart`.
+- Theme (N1, softer Ledger): graphite ink, warmer paper, `lineStrong` is a mid grey (3:1 on bg: inputs, buttons, panel top rule, double rule), `line` is used for row separators,
+  `SectionHead` underlines, `TotalRule`'s top line, header rules and the rail border; the double rule (1 px, 2 px gap) sits under totals only. Values: `docs/design/ledger-spec.md` §1.
 - Sync (R5): `controller.dart` keeps `relayUrl` (device-local `relayUrl` value; `setRelay(Uri?)` validates http/https + host, saves, syncs with trigger `relay`;
   `parseRelayAddress(text)`), `syncRunner(Uri relay, key, repo)` (default: `SyncEngine` over `RelayTransport`; tests inject a fake or a `MemoryTransport` run),
   `healthCheck(Uri)` / `testRelay(Uri)` ("Test connection"), `syncNow`, and after each run `syncCaughtUp`, `syncWaiting`, `syncDevices`, `syncError`

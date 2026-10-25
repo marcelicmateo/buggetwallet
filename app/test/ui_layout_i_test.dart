@@ -60,6 +60,8 @@ void main() {
       await tapTab(tester, 'Plan');
       final seg = find.byKey(const ValueKey('themeMode'));
       await tester.scrollUntilVisible(seg, 400, scrollable: find.byType(Scrollable).hitTestable().first);
+      await Scrollable.ensureVisible(tester.element(seg), alignment: 0.5); // clear of the bottom bar
+      await tester.pump();
       await tester.tap(find.descendant(of: seg, matching: find.text('Dark')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));

@@ -487,7 +487,7 @@ class _HomeShellState extends State<HomeShell> {
     return DecoratedBox(
       key: const ValueKey('rail'),
       position: DecorationPosition.foreground,
-      decoration: BoxDecoration(border: Border(right: BorderSide(color: c.lineStrong))),
+      decoration: BoxDecoration(border: Border(right: BorderSide(color: c.line))),
       child: LayoutBuilder(
         builder: (context, box) => SingleChildScrollView(
           child: ConstrainedBox(
@@ -563,7 +563,7 @@ class _HomeShellState extends State<HomeShell> {
               surfaceTintColor: Colors.transparent,
               titleSpacing: 16,
               // A 2 px rule under the header.
-              bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: Container(height: 2, color: context.c.lineStrong)),
+              bottom: PreferredSize(preferredSize: const Size.fromHeight(1), child: Container(height: 1, color: context.c.line)),
               // With a rail, the logo and name sit in the rail.
               title: compact
                   ? Row(children: [

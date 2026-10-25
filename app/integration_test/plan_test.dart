@@ -15,7 +15,17 @@ import 'support/harness.dart';
 Finder inPlan(Finder f) => find.descendant(of: find.byType(PlanScreen), matching: f);
 String fieldText(WidgetTester t, String label) => t.widget<TextField>(inPlan(field(label))).controller!.text;
 
+/// Payday plan lists the ledger lines until Edit is tapped (then it has the fields); no-op when the fields are already showing.
+Future<void> edit(WidgetTester t) async {
+  await scrollTo(t, find.text('PAYDAY PLAN'), PlanScreen, delta: -250);
+  final button = inPlan(find.byKey(const ValueKey('planEdit')));
+  if (button.evaluate().isEmpty) return;
+  await tapVisible(t, button);
+  await t.pumpAndSettle();
+}
+
 Future<void> fill(WidgetTester t, Map<String, String> values) async {
+  await edit(t);
   for (final e in values.entries) {
     await scrollTo(t, inPlan(field(e.key)), PlanScreen);
     await t.enterText(inPlan(field(e.key)), e.value);
@@ -24,8 +34,8 @@ Future<void> fill(WidgetTester t, Map<String, String> values) async {
 }
 
 Future<void> save(WidgetTester t) async {
-  await scrollTo(t, find.text('Save numbers'), PlanScreen);
-  await tapVisible(t, find.text('Save numbers'));
+  await scrollTo(t, find.byKey(const ValueKey('planSave')), PlanScreen);
+  await tapVisible(t, find.byKey(const ValueKey('planSave')));
   await t.pumpAndSettle();
 }
 
@@ -66,7 +76,10 @@ void main() {
     final s = wc.settings;
     expect((s.salary, s.rent, s.loan, s.subs, s.impulse, s.coolHours), (250000, 60050, 25000, 4599, 8000, 48));
     expect(s.rentCashThreshold, 40000);
+    await edit(t);
     expect(fieldText(t, 'Latest payday'), '28', reason: 'the field shows what was saved');
+    await t.tap(inPlan(find.byKey(const ValueKey('planCancel'))));
+    await t.pumpAndSettle();
     expect(s.paydayDay, 28, reason: 'the payday is kept within 1-28');
     expect(s.salaryConfirmed, isTrue, reason: 'typing a salary confirms it');
     final p = wc.period();
@@ -92,6 +105,7 @@ void main() {
     expect(inPlan(find.text("Can't be negative")), findsNothing);
 
     // Currency.
+    await edit(t);
     await scrollTo(t, inPlan(find.byType(DropdownButtonFormField<String>)), PlanScreen);
     await pickDropdown(t, inPlan(find.byType(DropdownButtonFormField<String>)), 'USD');
     await save(t);
@@ -104,11 +118,12 @@ void main() {
     wc.updateSettings({'rent': 70000});
     await t.pumpAndSettle();
     await goTab(t, 'Plan');
+    await edit(t);
     await scrollTo(t, inPlan(field('Rent')), PlanScreen);
     expect(fieldText(t, 'Rent'), '700', reason: 'Plan fields follow changes made elsewhere');
     await save(t);
     expect(find.text('Nothing to save'), findsOneWidget);
-    expect(wc.settings.rent, 70000, reason: 'Save numbers keeps a change made elsewhere');
+    expect(wc.settings.rent, 70000, reason: 'Save keeps a change made elsewhere');
 
     // An edit in progress is kept when another setting changes elsewhere, and Save writes only the edited field.
     await fill(t, {'Loan': '300'});
