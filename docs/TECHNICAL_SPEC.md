@@ -33,14 +33,14 @@ Related files: `docs/setup.md` (install and run), `docs/architecture.md` (short 
 This is the review package for the Budget Wallet MVP. Six reviews run in parallel; each reviewer reads the shared
 sections 2–3, then their own section, and finishes with the checklist in section 13.
 
-| Review | Read first | Then |
-|---|---|---|
-| System design | 2, 3 | 4 (components, data flow), 11 |
-| UI/UX | 2, 3 | 7 (design system, flow, screens), 8 |
-| System architecture | 2 | 4, 5 (relay, encryption, sync), 11 |
-| Feature parity | 2, 3 | 8 (comparison), 12 |
-| Code architecture and extensibility | 2 | 6 (packages, rules, how to add a feature), 10 |
-| Security | 2 | 9 (threat model, key handling), 5 |
+| Review                              | Read first | Then                                          |
+| ----------------------------------- | ---------- | --------------------------------------------- |
+| System design                       | 2, 3       | 4 (components, data flow), 11                 |
+| UI/UX                               | 2, 3       | 7 (design system, flow, screens), 8           |
+| System architecture                 | 2          | 4, 5 (relay, encryption, sync), 11            |
+| Feature parity                      | 2, 3       | 8 (comparison), 12                            |
+| Code architecture and extensibility | 2          | 6 (packages, rules, how to add a feature), 10 |
+| Security                            | 2          | 9 (threat model, key handling), 5             |
 
 Facts come from the repository as it stands: the design decisions and status files under `docs/context/`, the
 per-package notes, the protocol specification and the test suites. Measured figures (test counts, APK size, frame
@@ -82,37 +82,37 @@ Three rules shape every number:
 
 ### Platforms
 
-| Platform | Status | Notes |
-|---|---|---|
-| Android (arm64) | Primary | Camera scan, OCR, share-to-app, notifications, calendar read |
-| Linux desktop | Full | Same wallet; `.ics` file/link import; file import of bills |
-| Web (localhost) | Full, local only | SQLite in WASM on IndexedDB, passphrase-wrapped key, no sync, no notifications |
-| iOS, Windows, macOS | Parked | Builds exist from an early release; not maintained by decision |
+| Platform            | Status           | Notes                                                                          |
+| ------------------- | ---------------- | ------------------------------------------------------------------------------ |
+| Android (arm64)     | Primary          | Camera scan, OCR, share-to-app, notifications, calendar read                   |
+| Linux desktop       | Full             | Same wallet; `.ics` file/link import; file import of bills                     |
+| Web (localhost)     | Full, local only | SQLite in WASM on IndexedDB, passphrase-wrapped key, no sync, no notifications |
+| iOS, Windows, macOS | Parked           | Builds exist from an early release; not maintained by decision                 |
 
 ## 3. Feature inventory
 
 Five tabs plus onboarding. Everything below is built and covered by automated tests; "owner test" means the feature
 still waits for the owner's live test on real devices (M6), the step after this review.
 
-| Area | Feature | Status |
-|---|---|---|
-| Onboarding | New wallet (key generated on device), join with key + relay address, "Save your wallet key" prompt (confirm by last 4 characters, clipboard cleared after 60 s), web unlock by passphrase | Built |
-| Today | Safe-to-spend hero, stats strip, payday checklist (pay yourself first), tightest budget line, weekly review card, "Due by payday", "Coming up" + heads-up lines, "N bills to review", recent rows, add expense | Built |
-| Spending | Per-category bars with monthly budget mark / left / over-by / behind pace, 6-month average tick, month view, transaction sheet (category, note, delete, open bill), search (text with accent folding or exact amount), receipt mark on rows with a bill | Built |
-| Wishlist | Items with 72 h cooling-off, affordability from safe-to-spend, buy / skip | Built |
-| Goals | Targets with deadlines, contributions as synced rows, paid once per period from the payday checklist | Built |
-| Plan › Payday plan | Income, fixed costs, goal contributions, period start ("Salary landed") | Built |
-| Plan › Budgets | Monthly budget per category, "Suggest from the last 6 months" | Built |
-| Plan › Expected bills | Recurring bills detected from bank history (3+ payments, 30 ± 3 days, within 10 % of median); Confirm / Not a bill / Paid / Overdue / Skip this cycle; confirmed flex bills reserved from safe-to-spend | Built |
-| Plan › Weekly review | Review day, 4-step review (import, confirm categories, pace, wishlist), streak | Built |
-| Plan › Calendars | Android calendars read-only (asked on tap), `.ics` file and link, heads-up threshold and days | Built; owner test |
-| Upcoming | Month grid of the pay period, planned costs, confirmed bills, calendar suggestions (Confirm / Change / No cost), Paid (pick payment) / Skip with Undo / Delete, warranty and return-by entries | Built |
-| Plan › Bills | Scan bill (receipt QR, HUB-3 slip barcode, photo OCR), import PDF / XML / image, share-to-app, To review / Unpaid / Paid, bill sheet with unsure marks, line items, photo/PDF on demand, Paid by… / Add as cash expense, warranty and return-by dates, reminder days | Built; owner test |
-| Plan › Sync | Relay address, test connection, sync now, status, devices, bill files waiting | Built |
-| Plan › Backup / Export | Encrypted `.bwb` backup through the save dialog, restore into an empty wallet; CSV (transactions, monthly summary), planned costs `.ics` | Built |
-| Plan › Nudges | Weekday 15:00 and Sunday 11:00 notifications, heads-ups at 09:00, bill reminders; text never carries amounts or names | Built; owner test |
-| Plan › Diagnostics | Log level, save all logs as one file (privacy-redacted) | Built |
-| Import | Bank files: PBZ `.xls`, Revolut `.xlsx` / `.csv`; deterministic ids, re-import never duplicates; own-transfer pairing by bank hint | Built |
+| Area                   | Feature                                                                                                                                                                                                                                                              | Status            |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| Onboarding             | New wallet (key generated on device), join with key + relay address, "Save your wallet key" prompt (confirm by last 4 characters, clipboard cleared after 60 s), web unlock by passphrase                                                                            | Built             |
+| Today                  | Safe-to-spend hero, stats strip, payday checklist (pay yourself first), tightest budget line, weekly review card, "Due by payday", "Coming up" + heads-up lines, "N bills to review", recent rows, add expense                                                       | Built             |
+| Spending               | Per-category bars with monthly budget mark / left / over-by / behind pace, 6-month average tick, month view, transaction sheet (category, note, delete, open bill), search (text with accent folding or exact amount), receipt mark on rows with a bill              | Built             |
+| Wishlist               | Items with 72 h cooling-off, affordability from safe-to-spend, buy / skip                                                                                                                                                                                            | Built             |
+| Goals                  | Targets with deadlines, contributions as synced rows, paid once per period from the payday checklist                                                                                                                                                                 | Built             |
+| Plan › Payday plan     | Income, fixed costs, goal contributions, period start ("Salary landed")                                                                                                                                                                                              | Built             |
+| Plan › Budgets         | Monthly budget per category, "Suggest from the last 6 months"                                                                                                                                                                                                        | Built             |
+| Plan › Expected bills  | Recurring bills detected from bank history (3+ payments, 30 ± 3 days, within 10 % of median); Confirm / Not a bill / Paid / Overdue / Skip this cycle; confirmed flex bills reserved from safe-to-spend                                                              | Built             |
+| Plan › Weekly review   | Review day, 4-step review (import, confirm categories, pace, wishlist), streak                                                                                                                                                                                       | Built             |
+| Plan › Calendars       | Android calendars read-only (asked on tap), `.ics` file and link, heads-up threshold and days                                                                                                                                                                        | Built; owner test |
+| Upcoming               | Month grid of the pay period, planned costs, confirmed bills, calendar suggestions (Confirm / Change / No cost), Paid (pick payment) / Skip with Undo / Delete, warranty and return-by entries                                                                       | Built             |
+| Plan › Bills           | Scan bill (receipt QR, HUB-3 slip barcode, photo OCR), import PDF / XML / image, share-to-app, To review / Unpaid / Paid, bill sheet with unsure marks, line items, photo/PDF on demand, Paid by… / Add as cash expense, warranty and return-by dates, reminder days | Built; owner test |
+| Plan › Sync            | Relay address, test connection, sync now, status, devices, bill files waiting                                                                                                                                                                                        | Built             |
+| Plan › Backup / Export | Encrypted `.bwb` backup through the save dialog, restore into an empty wallet; CSV (transactions, monthly summary), planned costs `.ics`                                                                                                                             | Built             |
+| Plan › Nudges          | Weekday 15:00 and Sunday 11:00 notifications, heads-ups at 09:00, bill reminders; text never carries amounts or names                                                                                                                                                | Built; owner test |
+| Plan › Diagnostics     | Log level, save all logs as one file (privacy-redacted)                                                                                                                                                                                                              | Built             |
+| Import                 | Bank files: PBZ `.xls`, Revolut `.xlsx` / `.csv`; deterministic ids, re-import never duplicates; own-transfer pairing by bank hint                                                                                                                                   | Built             |
 
 Dropped by decision: research projects and ongoing trackers (§4.4 of the design decisions). Not in scope: open-banking
 connections, multi-currency budgeting, shared wallets between people, iOS / Windows / macOS maintenance.
@@ -152,12 +152,12 @@ or forge anything.
 
 ### Components
 
-| Component | Responsibility | Runs on |
-|---|---|---|
-| `app` (Flutter) | Screens, `WalletController` (caches derived values per data version), platform glue (file dialogs, camera, calendar, notifications, key storage) | Android, Linux, web |
-| `wallet_importer` (pure Dart) | Bank export formats → `NormalizedTransaction`; bill readers (fiscal QR, HUB-3, UBL e-invoice, PDF text layer, free text) → `NormalizedBill`. The only code that knows file formats. | all, incl. web |
-| `wallet_core` (pure Dart) | SQLite repo with one write path, field-level change log with hybrid logical clocks, categorizer, budget engine, matching, planned costs, bills, `SyncEngine`, `BlobStore`, encryption | all, incl. web (WASM SQLite) |
-| `relay` (pure Dart server) | Stores sealed per-device files, snapshots and blobs; verifies Ed25519 signatures; prunes; enforces limits | home server (Podman image), LAN or VPN |
+| Component                     | Responsibility                                                                                                                                                                        | Runs on                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `app` (Flutter)               | Screens, `WalletController` (caches derived values per data version), platform glue (file dialogs, camera, calendar, notifications, key storage)                                      | Android, Linux, web                    |
+| `wallet_importer` (pure Dart) | Bank export formats → `NormalizedTransaction`; bill readers (fiscal QR, HUB-3, UBL e-invoice, PDF text layer, free text) → `NormalizedBill`. The only code that knows file formats.   | all, incl. web                         |
+| `wallet_core` (pure Dart)     | SQLite repo with one write path, field-level change log with hybrid logical clocks, categorizer, budget engine, matching, planned costs, bills, `SyncEngine`, `BlobStore`, encryption | all, incl. web (WASM SQLite)           |
+| `relay` (pure Dart server)    | Stores sealed per-device files, snapshots and blobs; verifies Ed25519 signatures; prunes; enforces limits                                                                             | home server (Podman image), LAN or VPN |
 
 ### Data flow
 
@@ -196,15 +196,15 @@ HKDF-SHA256 under distinct labels, so nothing needs to be stored or synchronised
 
 ### Keys and encryption
 
-| Use | Derivation | Algorithm |
-|---|---|---|
-| Sync files, snapshots, backups, blobs | wallet key directly | XChaCha20-Poly1305; file = `BWOP1` \| 24-byte nonce \| 16-byte tag \| ciphertext of gzip(JSON ops) |
-| Local database | HKDF(key, `bw-local-db-v1`) | SQLite3 Multiple Ciphers, raw 32-byte key, `PRAGMA key`; same on Android, Linux and web (WASM build) |
-| Relay wallet id (`wid`) | HKDF(key, `bw-relay-id-v1`, 16 bytes) | 32 hex chars; the relay never sees the key |
-| Relay signing | HKDF(key, `bw-relay-sign-v1`, 32 bytes) → Ed25519 seed | Public key stored by the relay on first use (TOFU) |
-| Web key at rest | PBKDF2-HMAC-SHA256, 310,000 iterations, per-browser salt | Wraps the wallet key under the owner's passphrase; session unlock |
-| Key at rest, phone | system keystore (`flutter_secure_storage`) | hardware-backed where available |
-| Key at rest, desktop | private file in the app support directory | file permissions only |
+| Use                                   | Derivation                                               | Algorithm                                                                                            |
+| ------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Sync files, snapshots, backups, blobs | wallet key directly                                      | XChaCha20-Poly1305; file = `BWOP1` \| 24-byte nonce \| 16-byte tag \| ciphertext of gzip(JSON ops)   |
+| Local database                        | HKDF(key, `bw-local-db-v1`)                              | SQLite3 Multiple Ciphers, raw 32-byte key, `PRAGMA key`; same on Android, Linux and web (WASM build) |
+| Relay wallet id (`wid`)               | HKDF(key, `bw-relay-id-v1`, 16 bytes)                    | 32 hex chars; the relay never sees the key                                                           |
+| Relay signing                         | HKDF(key, `bw-relay-sign-v1`, 32 bytes) → Ed25519 seed   | Public key stored by the relay on first use (TOFU)                                                   |
+| Web key at rest                       | PBKDF2-HMAC-SHA256, 310,000 iterations, per-browser salt | Wraps the wallet key under the owner's passphrase; session unlock                                    |
+| Key at rest, phone                    | system keystore (`flutter_secure_storage`)               | hardware-backed where available                                                                      |
+| Key at rest, desktop                  | private file in the app support directory                | file permissions only                                                                                |
 
 ### Local database
 
@@ -242,13 +242,13 @@ over `bw-relay-v3\n<METHOD>\n<host>\n<path>\n<X-BW-Covers>\n<sha256(body)>\n<X-B
 clock offset learned from the relay's `Date` header and capped at 24 h. `GET state` carries a random relay `instance`
 id per wallet; a new one means "first connect". Full specification: `docs/context/RELAY_PROTOCOL.md`.
 
-| Endpoint | Semantics |
-|---|---|
-| `GET state` | Per device: first and last seq, last seen, acks; current and previous snapshot; blob counts |
-| `PUT d/<stream>/<seq>` | Store a sealed file; never overwritten (same bytes 200, other bytes 409); no gaps (422); pruned (410); ≤ 16 MiB; the first file of a new wallet needs the creation token when the relay has one (403) |
-| `PUT ack/<device>` | What this device has applied of each peer; only grows |
-| `PUT snapshot/<id>` | Full-state snapshot with `X-BW-Covers`; must dominate the current one |
-| `PUT/GET/DELETE blob/<hash>` | Content-addressed sealed bill files; hash of body checked; counted toward the wallet byte limit |
+| Endpoint                     | Semantics                                                                                                                                                                                             |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET state`                  | Per device: first and last seq, last seen, acks; current and previous snapshot; blob counts                                                                                                           |
+| `PUT d/<stream>/<seq>`       | Store a sealed file; never overwritten (same bytes 200, other bytes 409); no gaps (422); pruned (410); ≤ 16 MiB; the first file of a new wallet needs the creation token when the relay has one (403) |
+| `PUT ack/<device>`           | What this device has applied of each peer; only grows                                                                                                                                                 |
+| `PUT snapshot/<id>`          | Full-state snapshot with `X-BW-Covers`; must dominate the current one                                                                                                                                 |
+| `PUT/GET/DELETE blob/<hash>` | Content-addressed sealed bill files; hash of body checked; counted toward the wallet byte limit                                                                                                       |
 
 Every mutating endpoint is idempotent or monotonic, so a replay inside the signature window changes nothing. Limits:
 16 wallets, 1 GiB per wallet, 20 req/s per address, 32 MiB in flight per address. Storage is plain files plus a
@@ -256,14 +256,14 @@ Every mutating endpoint is idempotent or monotonic, so a replay inside the signa
 
 **Version numbers that must agree** (one table, so a release note can say which ones moved):
 
-| Constant | Value | Where | Changes when | Who notices |
-|---|---|---|---|---|
-| Relay API | 3 | `apiVersion`, health and state `{"api":3}`, paths stay `/v2/` | endpoint or signature semantics change | client: `olderApi` / `newerApi` with a message; nothing uploaded or read |
-| Sealed-file magic | `BWOP2` (reads `BWOP1`) | `vault.dart` | the sealed layout or associated data changes | `unseal`: `newerFormat` → the file is quarantined until the app is updated |
-| Payload version | 1 | `backupVersion`, `"v"` in snapshots and backups | the JSON op envelope changes | backup restore refuses a newer one |
-| Sync reader version | 2 | `syncReaderVersion` | how a file's ops are read | part of the build string that retries a quarantined file once |
-| Schema version | 8 | `WalletRepo.schemaVersion` | an entity or synced field is added, or settings change shape | cursors cleared once on upgrade → replay; snapshot id tag decides "this schema or newer" |
-| App version | `pubspec.yaml` | `appVersion` | every release | in the build string only |
+| Constant            | Value                   | Where                                                         | Changes when                                                 | Who notices                                                                              |
+| ------------------- | ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Relay API           | 3                       | `apiVersion`, health and state `{"api":3}`, paths stay `/v2/` | endpoint or signature semantics change                       | client: `olderApi` / `newerApi` with a message; nothing uploaded or read                 |
+| Sealed-file magic   | `BWOP2` (reads `BWOP1`) | `vault.dart`                                                  | the sealed layout or associated data changes                 | `unseal`: `newerFormat` → the file is quarantined until the app is updated               |
+| Payload version     | 1                       | `backupVersion`, `"v"` in snapshots and backups               | the JSON op envelope changes                                 | backup restore refuses a newer one                                                       |
+| Sync reader version | 2                       | `syncReaderVersion`                                           | how a file's ops are read                                    | part of the build string that retries a quarantined file once                            |
+| Schema version      | 8                       | `WalletRepo.schemaVersion`                                    | an entity or synced field is added, or settings change shape | cursors cleared once on upgrade → replay; snapshot id tag decides "this schema or newer" |
+| App version         | `pubspec.yaml`          | `appVersion`                                                  | every release                                                | in the build string only                                                                 |
 
 Policy: update the relay and every device together when the relay API changes (an older app stops with "update the
 app" and syncs again once updated); otherwise update every device before the relay prunes a silent one (90 days). A
@@ -292,12 +292,12 @@ pure-Dart packages that cannot import Flutter, and the relay depends on neither.
 
 ### Packages and the dependency rule
 
-| Package | May import | May not import | Holds |
-|---|---|---|---|
-| `packages/wallet_importer` | `archive`, `xml`, `logging` | Flutter, `dart:io` in the barrel, `wallet_core` | bank profiles, bill readers, own BIFF8/XLSX/CSV/PDF readers |
-| `packages/wallet_core` | `wallet_importer`, `sqlite3/common`, `cryptography`, `http`, `archive` | Flutter; `dart:io`/`dart:ffi` only behind conditional exports (`*_io.dart` / `*_web.dart`) | repo, budget, matching, sync, blobs |
-| `relay` | `cryptography` | anything from the app or packages | the server, ~1,200 lines |
-| `app` | both packages, approved plugins | bank formats, money arithmetic | screens, controller, platform glue |
+| Package                    | May import                                                             | May not import                                                                             | Holds                                                       |
+| -------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| `packages/wallet_importer` | `archive`, `xml`, `logging`                                            | Flutter, `dart:io` in the barrel, `wallet_core`                                            | bank profiles, bill readers, own BIFF8/XLSX/CSV/PDF readers |
+| `packages/wallet_core`     | `wallet_importer`, `sqlite3/common`, `cryptography`, `http`, `archive` | Flutter; `dart:io`/`dart:ffi` only behind conditional exports (`*_io.dart` / `*_web.dart`) | repo, budget, matching, sync, blobs                         |
+| `relay`                    | `cryptography`                                                         | anything from the app or packages                                                          | the server, ~1,200 lines                                    |
+| `app`                      | both packages, approved plugins                                        | bank formats, money arithmetic                                                             | screens, controller, platform glue                          |
 
 The `wallet_core` barrel compiles with dart2js and dart2wasm; a compile check (`tool/web_smoke.dart`) runs whenever an
 import changes. This is what makes the web build a full client for free.
@@ -338,14 +338,14 @@ A typical new entity costs: one entry in the entity map, one `CREATE TABLE`, a m
 
 ### Extension points already in place
 
-| Want to add | Where | Effort |
-|---|---|---|
-| Another bank | `wallet_importer/lib/src/profiles/<bank>.dart` implementing `BankProfile` (detect, mapRow), registered in `bankProfiles`; new banks hash their profile id into transaction ids | small; golden tests prove existing ids unchanged |
-| Another bill source (supplier portal, other barcode) | A reader returning `NormalizedBill` in `wallet_importer/lib/src/bills/` | small |
-| Another sync backend | Implement `SyncTransport` (state, put, get, ack, snapshots, blobs); `MemoryTransport` is the reference | medium |
-| Another platform capability | Interface + `_native`/`_web` pair, picked in a `*_platform.dart` | small |
-| A new synced setting | Add to `WalletSettings` with validation; last writer wins | tiny |
-| iOS / desktop ports | Flutter targets exist; platform glue (keystore, notifications, camera) needs per-platform implementations behind the same interfaces | medium |
+| Want to add                                          | Where                                                                                                                                                                          | Effort                                           |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| Another bank                                         | `wallet_importer/lib/src/profiles/<bank>.dart` implementing `BankProfile` (detect, mapRow), registered in `bankProfiles`; new banks hash their profile id into transaction ids | small; golden tests prove existing ids unchanged |
+| Another bill source (supplier portal, other barcode) | A reader returning `NormalizedBill` in `wallet_importer/lib/src/bills/`                                                                                                        | small                                            |
+| Another sync backend                                 | Implement `SyncTransport` (state, put, get, ack, snapshots, blobs); `MemoryTransport` is the reference                                                                         | medium                                           |
+| Another platform capability                          | Interface + `_native`/`_web` pair, picked in a `*_platform.dart`                                                                                                               | small                                            |
+| A new synced setting                                 | Add to `WalletSettings` with validation; last writer wins                                                                                                                      | tiny                                             |
+| iOS / desktop ports                                  | Flutter targets exist; platform glue (keystore, notifications, camera) needs per-platform implementations behind the same interfaces                                           | medium                                           |
 
 ### Observability
 
@@ -371,15 +371,15 @@ ledger. The design system lives in `app/lib/src/theme.dart`; the spec is `docs/d
 
 ### Design system
 
-| Element | Decision |
-|---|---|
-| Type | IBM Plex Sans for text, IBM Plex Mono with tabular figures for every amount, weights 400/500/600 only; six unmodified font files (OFL, ~1 MB) |
-| Colour | Paper `#f7f5ef` / ink `#1d2433`; night ledger (navy) follows the system setting; ink-blue accent; red only for negative or over-budget; all text pairs ≥ 4.5:1, non-text ≥ 3:1, checked by a contrast test |
-| Money | `14 €`, `-23.40 €`, `+1,450.00 €`: sign in front, euro after a non-breaking space, mono, right-aligned, same right edge in a list |
-| Surfaces | No cards, no shadows, radius 0–3; sections are ruled (1 px strong top rule, hairline bottom); totals carry a double rule; dialogs have a 1 px border |
-| Buttons and inputs | Filled accent for the one primary action, outlined otherwise; inputs filled with a 1 px border, 2 px accent on focus, `€` suffix in mono |
-| Wide windows | A red double margin line at x ≈ 22 from 600 dp, never on phones |
-| Charts | Solid 1 px grid, bar radius 0, hatch for over budget, period in progress at 45 % with a dashed outline |
+| Element            | Decision                                                                                                                                                                                                   |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Type               | IBM Plex Sans for text, IBM Plex Mono with tabular figures for every amount, weights 400/500/600 only; six unmodified font files (OFL, ~1 MB)                                                              |
+| Colour             | Paper `#f7f5ef` / ink `#1d2433`; night ledger (navy) follows the system setting; ink-blue accent; red only for negative or over-budget; all text pairs ≥ 4.5:1, non-text ≥ 3:1, checked by a contrast test |
+| Money              | `14 €`, `-23.40 €`, `+1,450.00 €`: sign in front, euro after a non-breaking space, mono, right-aligned, same right edge in a list                                                                          |
+| Surfaces           | No cards, no shadows, radius 0–3; sections are ruled (1 px strong top rule, hairline bottom); totals carry a double rule; dialogs have a 1 px border                                                       |
+| Buttons and inputs | Filled accent for the one primary action, outlined otherwise; inputs filled with a 1 px border, 2 px accent on focus, `€` suffix in mono                                                                   |
+| Wide windows       | A red double margin line at x ≈ 22 from 600 dp, never on phones                                                                                                                                            |
+| Charts             | Solid 1 px grid, bar radius 0, hatch for over budget, period in progress at 45 % with a dashed outline                                                                                                     |
 
 ### Navigation and layout
 
@@ -420,18 +420,18 @@ Screenshots from the automated runs of 2026-10-22 on the Android emulator (1080 
 desktop (1280 × 720), with a synthetic demo wallet (`docs/spec/screens/`). The same frames land in `dist/screens/`
 after `tools/emulator.sh screens` and `tools/build.sh desktop-test screens`.
 
-| | |
-|---|---|
-| ![Today](spec/screens/today.png) | ![Today with the key prompt](spec/screens/today-key-prompt.png) |
+|                                                                                                                                         |                                                                                                                          |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| ![Today](spec/screens/today.png)                                                                                                        | ![Today with the key prompt](spec/screens/today-key-prompt.png)                                                          |
 | **Today.** The number first, then what will change it: coming-up costs, a review that is due, the payday checklist. One primary button. | **Key prompt.** Stays on Today until the owner confirms the key's last four characters; "Later" hides it for seven days. |
-| ![Upcoming](spec/screens/upcoming.png) | ![Spending](spec/screens/spending.png) |
-| **Upcoming.** The pay period as a grid, marks by kind, the list below. A calendar event with a suggested amount needs one tap to count. | **Spending.** Saved or lost per pay period, then where the month went against budgets and the six-month average. |
-| ![Search](spec/screens/search.png) | ![Wishlist](spec/screens/wishlist.png) |
-| **Search** replaces the page in place; the page keeps its scroll when search closes. | **Wishlist.** Anything over 50 € waits 72 hours; "saved by waiting" is the reward. |
-| ![Goals](spec/screens/goals.png) | ![Expected bills](spec/screens/plan-expected-bills.png) |
-| **Goals.** Ruled rows and a total; contributions are paid from the payday checklist. | **Plan › Expected bills.** Detected from bank history; nothing is reserved until the owner confirms it. |
-| ![Bills](spec/screens/plan-bills.png) | ![Weekly review](spec/screens/weekly-review.png) |
-| **Plan › Bills.** Three lists; a bill in review does not count anywhere yet. | **Weekly review.** "About five minutes. Nothing changes until you tap." Each row is one decision. |
+| ![Upcoming](spec/screens/upcoming.png)                                                                                                  | ![Spending](spec/screens/spending.png)                                                                                   |
+| **Upcoming.** The pay period as a grid, marks by kind, the list below. A calendar event with a suggested amount needs one tap to count. | **Spending.** Saved or lost per pay period, then where the month went against budgets and the six-month average.         |
+| ![Search](spec/screens/search.png)                                                                                                      | ![Wishlist](spec/screens/wishlist.png)                                                                                   |
+| **Search** replaces the page in place; the page keeps its scroll when search closes.                                                    | **Wishlist.** Anything over 50 € waits 72 hours; "saved by waiting" is the reward.                                       |
+| ![Goals](spec/screens/goals.png)                                                                                                        | ![Expected bills](spec/screens/plan-expected-bills.png)                                                                  |
+| **Goals.** Ruled rows and a total; contributions are paid from the payday checklist.                                                    | **Plan › Expected bills.** Detected from bank history; nothing is reserved until the owner confirms it.                  |
+| ![Bills](spec/screens/plan-bills.png)                                                                                                   | ![Weekly review](spec/screens/weekly-review.png)                                                                         |
+| **Plan › Bills.** Three lists; a bill in review does not count anywhere yet.                                                            | **Weekly review.** "About five minutes. Nothing changes until you tap." Each row is one decision.                        |
 
 ![Desktop Today](spec/screens/desktop-today.png)
 
@@ -456,13 +456,13 @@ carry an "Unsure" mark until checked.
 
 ### Try it hands-on
 
-| Way | Command or source | What you get |
-|---|---|---|
-| Linux window with demo data | `tools/live.sh start --demo` (Podman on a Linux host) | The real app in a window with a synthetic wallet: planned costs, bills, calendar suggestions; hot reload; `tools/live.sh shot` for screenshots |
-| Android emulator | `tools/emulator.sh screens` | Boots an emulator, runs every tab with the demo wallet, saves `dist/screens/*.png` |
-| Web in a browser | `tools/build.sh web && tools/web.sh serve` → `http://127.0.0.1:8080` | Onboarding, new wallet with a passphrase, import a synthetic export from `packages/wallet_importer/test/fixtures/` |
-| Phone | Signed APK from the `dev` GitHub release (built when the owner runs the `ci` workflow) | Full app incl. camera scan, OCR, share-to-app, notifications |
-| Desktop bundle | `tools/build.sh linux` → `dist/` | Release build without demo data |
+| Way                         | Command or source                                                                      | What you get                                                                                                                                   |
+| --------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linux window with demo data | `tools/live.sh start --demo` (Podman on a Linux host)                                  | The real app in a window with a synthetic wallet: planned costs, bills, calendar suggestions; hot reload; `tools/live.sh shot` for screenshots |
+| Android emulator            | `tools/emulator.sh screens`                                                            | Boots an emulator, runs every tab with the demo wallet, saves `dist/screens/*.png`                                                             |
+| Web in a browser            | `tools/build.sh web && tools/web.sh serve` → `http://127.0.0.1:8080`                   | Onboarding, new wallet with a passphrase, import a synthetic export from `packages/wallet_importer/test/fixtures/`                             |
+| Phone                       | Signed APK from the `dev` GitHub release (built when the owner runs the `ci` workflow) | Full app incl. camera scan, OCR, share-to-app, notifications                                                                                   |
+| Desktop bundle              | `tools/build.sh linux` → `dist/`                                                       | Release build without demo data                                                                                                                |
 
 ### Open UX questions for the reviewer
 
@@ -480,24 +480,24 @@ bills-with-documents layer none of them ship. It deliberately lacks bank connect
 comparison is from the products' public feature lists as known in mid-2026, corrected after the outside feature-parity
 review (`docs/review/FEATURE_PARITY_REVIEW.md` §2, October 2026, which has the fuller matrix); treat it as approximate.
 
-| Capability | Budget Wallet | YNAB | Actual Budget | Firefly III | Monarch | Bank app (typical) |
-|---|---|---|---|---|---|---|
-| Daily safe-to-spend from a payday plan | Yes, the core number | Age of money, category balances | Category balances | No | Cash-flow forecast | Sometimes a monthly view |
-| Bank data | File import (PBZ, Revolut), deterministic ids | Direct import (US/CA/UK, more European banks since 2025), file import | Direct (GoCardless, SimpleFIN, Pluggy), file | Direct (Nordigen/Salt Edge), file | Direct (Plaid) | Own accounts only |
-| Recurring bills detected and reserved | Monthly only (3+ payments, 30 ± 3 days, ± 10 %); owner confirms, reserved until paid | Scheduled transactions | Schedules | Bills with amount ranges, any frequency | Recurring detection | Standing orders |
-| Planned costs from calendar events | Yes, device calendars + `.ics`, suggested amounts | No | No | No | No | No |
-| Bills with documents (receipt QR, slip barcode, PDF, OCR) | Yes, line items, encrypted file storage, warranty/return reminders | No | No | Attachments on transactions | No | Some (e-bills) |
-| Multi-device sync | Self-hosted relay, E2E encrypted, offline-first | Cloud | Self-hosted server or cloud, E2E option | Self-hosted server | Cloud | Cloud |
-| Local data encryption | Encrypted SQLite, key derived from wallet key | Cloud, encrypted at rest server-side | Optional | Server-side | n/a | n/a |
-| Goals / sinking funds | Goals with deadlines, paid once per period | Targets | Goals (templates) | Piggy banks | Goals | Savings pots |
-| Wishlist with cooling-off | Yes, 72 h, affordability from safe-to-spend | No | No | No | No | No |
-| Weekly review habit | Guided 4-step review, streak | Reports | Reports | Reports | Review emails | No |
-| Budgets per category with pace | Monthly, 6-month average suggestions, pace vs. month elapsed | Core feature | Core feature | Budgets | Budgets | Spending caps |
-| Rules / categorisation | Importer hints + merchant rules learned on tap; never reclassified on amount alone (one named exception: a hand-added expense is matched to a bank row of equal amount within 3 days that the adding device had not seen) | Payee rules | Rules | Rules engine | Rules | Merchant category |
-| Platforms | Android, Linux, web (localhost) | iOS, Android, web | Web, desktop (Electron), mobile PWA | Web (self-hosted) | iOS, Android, web | iOS, Android |
-| Multi-currency | Single currency: rows in another currency are left out of every sum and shown as "not counted"; exchange rows are transfers | Yes | Yes | Yes | Yes | Yes |
-| Shared household users | One wallet per person, any number of their devices; a couple uses the two-wallet recipe below | Shared plans | Shared servers | Multi-user | Household | Joint accounts |
-| Price | Self-hosted, free | Subscription | Free, open source | Free, open source | Subscription | Free |
+| Capability                                                | Budget Wallet                                                                                                                                                                                                             | YNAB                                                                  | Actual Budget                                | Firefly III                             | Monarch             | Bank app (typical)       |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------- | --------------------------------------- | ------------------- | ------------------------ |
+| Daily safe-to-spend from a payday plan                    | Yes, the core number                                                                                                                                                                                                      | Age of money, category balances                                       | Category balances                            | No                                      | Cash-flow forecast  | Sometimes a monthly view |
+| Bank data                                                 | File import (PBZ, Revolut), deterministic ids                                                                                                                                                                             | Direct import (US/CA/UK, more European banks since 2025), file import | Direct (GoCardless, SimpleFIN, Pluggy), file | Direct (Nordigen/Salt Edge), file       | Direct (Plaid)      | Own accounts only        |
+| Recurring bills detected and reserved                     | Monthly only (3+ payments, 30 ± 3 days, ± 10 %); owner confirms, reserved until paid                                                                                                                                      | Scheduled transactions                                                | Schedules                                    | Bills with amount ranges, any frequency | Recurring detection | Standing orders          |
+| Planned costs from calendar events                        | Yes, device calendars + `.ics`, suggested amounts                                                                                                                                                                         | No                                                                    | No                                           | No                                      | No                  | No                       |
+| Bills with documents (receipt QR, slip barcode, PDF, OCR) | Yes, line items, encrypted file storage, warranty/return reminders                                                                                                                                                        | No                                                                    | No                                           | Attachments on transactions             | No                  | Some (e-bills)           |
+| Multi-device sync                                         | Self-hosted relay, E2E encrypted, offline-first                                                                                                                                                                           | Cloud                                                                 | Self-hosted server or cloud, E2E option      | Self-hosted server                      | Cloud               | Cloud                    |
+| Local data encryption                                     | Encrypted SQLite, key derived from wallet key                                                                                                                                                                             | Cloud, encrypted at rest server-side                                  | Optional                                     | Server-side                             | n/a                 | n/a                      |
+| Goals / sinking funds                                     | Goals with deadlines, paid once per period                                                                                                                                                                                | Targets                                                               | Goals (templates)                            | Piggy banks                             | Goals               | Savings pots             |
+| Wishlist with cooling-off                                 | Yes, 72 h, affordability from safe-to-spend                                                                                                                                                                               | No                                                                    | No                                           | No                                      | No                  | No                       |
+| Weekly review habit                                       | Guided 4-step review, streak                                                                                                                                                                                              | Reports                                                               | Reports                                      | Reports                                 | Review emails       | No                       |
+| Budgets per category with pace                            | Monthly, 6-month average suggestions, pace vs. month elapsed                                                                                                                                                              | Core feature                                                          | Core feature                                 | Budgets                                 | Budgets             | Spending caps            |
+| Rules / categorisation                                    | Importer hints + merchant rules learned on tap; never reclassified on amount alone (one named exception: a hand-added expense is matched to a bank row of equal amount within 3 days that the adding device had not seen) | Payee rules                                                           | Rules                                        | Rules engine                            | Rules               | Merchant category        |
+| Platforms                                                 | Android, Linux, web (localhost)                                                                                                                                                                                           | iOS, Android, web                                                     | Web, desktop (Electron), mobile PWA          | Web (self-hosted)                       | iOS, Android, web   | iOS, Android             |
+| Multi-currency                                            | Single currency: rows in another currency are left out of every sum and shown as "not counted"; exchange rows are transfers                                                                                               | Yes                                                                   | Yes                                          | Yes                                     | Yes                 | Yes                      |
+| Shared household users                                    | One wallet per person, any number of their devices; a couple uses the two-wallet recipe below                                                                                                                             | Shared plans                                                          | Shared servers                               | Multi-user                              | Household           | Joint accounts           |
+| Price                                                     | Self-hosted, free                                                                                                                                                                                                         | Subscription                                                          | Free, open source                            | Free, open source                       | Subscription        | Free                     |
 
 **Ahead:** the combination of a payday-based daily number, reserved future costs and the owner-confirms rule produces
 a single trustworthy figure; bill ingestion from Croatian fiscal receipts (JIR) and HUB-3 slips with line items and
@@ -522,18 +522,18 @@ designed to be safe to expose.
 
 ### Threat model
 
-| Adversary | Can see or do | Cannot |
-|---|---|---|
-| Network observer (TLS through the Caddy sidecar by default; plain `http://` only in dev/LAN mode) | With TLS: that a device talks to the relay host, when and how much. In plain-HTTP mode also wallet id, device ids, seqs, sizes, sealed bytes, and replaying a request unchanged within 5 min (idempotent, so no effect) | Read content, forge or alter files, ack, prune or delete anything, learn the key; replay a request against another relay (the host is in the signed text, `bw-relay-v3`) |
-| Someone who controls the relay or steals its disk | Everything above plus: drop, withhold, roll back or delete files and blobs; lie in the state; correlate the wallet's activity (see metadata below) | Read, forge or alter sealed content; serve one file, snapshot or backup in place of another (each is sealed with associated data naming what it is, `BWOP2`); sign requests to another relay; derive the key |
-| Someone who wipes the relay before the owner reconnects | Squat the wallet id only if they also hold the relay's creation token (devices then get 401: denial of service) | Read anything; create wallets without the token; the owner points devices at a fresh relay and they re-upload (a new relay instance id makes every device treat it as a first connect) |
-| Someone with the phone unlocked | Use the app | Export the key without seeing the "Show wallet key" screen; capture that screen in a screenshot or the recents thumbnail (`FLAG_SECURE` while it is open); read the database file from another app (sandbox + encryption); carry the database off by Android backup or device transfer (`allowBackup` off) |
-| Someone with a laptop image or a stolen disk | Read the key file in the app support directory (desktop: file permissions only) | — see known limits |
-| A malicious bill file or calendar file | Attempt parser abuse | Crash or hang the app: readers never throw, have size caps, inflate caps, step and op budgets; XML external entities and DOCTYPE are refused; PDF text runs off the UI isolate |
-| Repository reader (code is on GitHub) | Read all code, tests, synthetic fixtures | Learn any real figure: fixtures are generated; personal numbers live only in the owner's wallet |
-| A second install with the same device id (a copied app directory or database) | Write under that device id | Go unnoticed or split the data: the device id lives next to the key, per install, and on a 409 on its own sequence number (or more files in its stream than it sent) a device moves to a fresh stream, uploads its whole state again and says once "another install used this device id"; every device reads both streams |
-| A benign device with a wrong clock | Make its own edits sort as newer than they are, up to an hour | Push every device's clock into the future: files whose newest clock is over an hour ahead are held (`clockDrift`) until the clock is right, and a device whose wall clock is that far behind its stored clock refuses to write |
-| The owner's own lost device, still holding the key | Everything the key allows, on any relay | Be cut off at the relay without rotating the key (no per-device keys yet): see key rotation below |
+| Adversary                                                                                         | Can see or do                                                                                                                                                                                                           | Cannot                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Network observer (TLS through the Caddy sidecar by default; plain `http://` only in dev/LAN mode) | With TLS: that a device talks to the relay host, when and how much. In plain-HTTP mode also wallet id, device ids, seqs, sizes, sealed bytes, and replaying a request unchanged within 5 min (idempotent, so no effect) | Read content, forge or alter files, ack, prune or delete anything, learn the key; replay a request against another relay (the host is in the signed text, `bw-relay-v3`)                                                                                                                                                  |
+| Someone who controls the relay or steals its disk                                                 | Everything above plus: drop, withhold, roll back or delete files and blobs; lie in the state; correlate the wallet's activity (see metadata below)                                                                      | Read, forge or alter sealed content; serve one file, snapshot or backup in place of another (each is sealed with associated data naming what it is, `BWOP2`); sign requests to another relay; derive the key                                                                                                              |
+| Someone who wipes the relay before the owner reconnects                                           | Squat the wallet id only if they also hold the relay's creation token (devices then get 401: denial of service)                                                                                                         | Read anything; create wallets without the token; the owner points devices at a fresh relay and they re-upload (a new relay instance id makes every device treat it as a first connect)                                                                                                                                    |
+| Someone with the phone unlocked                                                                   | Use the app                                                                                                                                                                                                             | Export the key without seeing the "Show wallet key" screen; capture that screen in a screenshot or the recents thumbnail (`FLAG_SECURE` while it is open); read the database file from another app (sandbox + encryption); carry the database off by Android backup or device transfer (`allowBackup` off)                |
+| Someone with a laptop image or a stolen disk                                                      | Read the key file in the app support directory (desktop: file permissions only)                                                                                                                                         | — see known limits                                                                                                                                                                                                                                                                                                        |
+| A malicious bill file or calendar file                                                            | Attempt parser abuse                                                                                                                                                                                                    | Crash or hang the app: readers never throw, have size caps, inflate caps, step and op budgets; XML external entities and DOCTYPE are refused; PDF text runs off the UI isolate                                                                                                                                            |
+| Repository reader (code is on GitHub)                                                             | Read all code, tests, synthetic fixtures                                                                                                                                                                                | Learn any real figure: fixtures are generated; personal numbers live only in the owner's wallet                                                                                                                                                                                                                           |
+| A second install with the same device id (a copied app directory or database)                     | Write under that device id                                                                                                                                                                                              | Go unnoticed or split the data: the device id lives next to the key, per install, and on a 409 on its own sequence number (or more files in its stream than it sent) a device moves to a fresh stream, uploads its whole state again and says once "another install used this device id"; every device reads both streams |
+| A benign device with a wrong clock                                                                | Make its own edits sort as newer than they are, up to an hour                                                                                                                                                           | Push every device's clock into the future: files whose newest clock is over an hour ahead are held (`clockDrift`) until the clock is right, and a device whose wall clock is that far behind its stored clock refuses to write                                                                                            |
+| The owner's own lost device, still holding the key                                                | Everything the key allows, on any relay                                                                                                                                                                                 | Be cut off at the relay without rotating the key (no per-device keys yet): see key rotation below                                                                                                                                                                                                                         |
 
 ### Cryptography
 
@@ -568,15 +568,15 @@ reporting or update check.
 
 ### Permissions (Android)
 
-| Permission | Why | When asked |
-|---|---|---|
-| INTERNET | Relay (HTTPS on the owner's domain; `http://` accepted only for loopback, private ranges, `.local` and one-word home names: the app refuses it for public hosts), `.ics` links. Cleartext stays allowed app-wide in the network config (Android cannot express private ranges, and `.ics` links may be `http://`); the relay check is in the app | install |
-| (no backup) | `allowBackup="false"` and data-extraction rules exclude everything; only system CAs are trusted | — |
-| POST_NOTIFICATIONS | Nudges, heads-ups, bill reminders | when the owner turns nudges on |
-| RECEIVE_BOOT_COMPLETED | Re-schedule notifications after reboot | install |
-| READ_CALENDAR, WRITE_CALENDAR | Read device calendars; WRITE is declared because the plugin's permission request needs the whole group; the app never writes (reviewed and tested) | when the owner taps "Allow calendar access" |
-| CAMERA | Scan bill | when the owner opens Scan bill |
-| No storage permission | All files go through the system picker and save dialog | — |
+| Permission                    | Why                                                                                                                                                                                                                                                                                                                                              | When asked                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| INTERNET                      | Relay (HTTPS on the owner's domain; `http://` accepted only for loopback, private ranges, `.local` and one-word home names: the app refuses it for public hosts), `.ics` links. Cleartext stays allowed app-wide in the network config (Android cannot express private ranges, and `.ics` links may be `http://`); the relay check is in the app | install                                     |
+| (no backup)                   | `allowBackup="false"` and data-extraction rules exclude everything; only system CAs are trusted                                                                                                                                                                                                                                                  | —                                           |
+| POST_NOTIFICATIONS            | Nudges, heads-ups, bill reminders                                                                                                                                                                                                                                                                                                                | when the owner turns nudges on              |
+| RECEIVE_BOOT_COMPLETED        | Re-schedule notifications after reboot                                                                                                                                                                                                                                                                                                           | install                                     |
+| READ_CALENDAR, WRITE_CALENDAR | Read device calendars; WRITE is declared because the plugin's permission request needs the whole group; the app never writes (reviewed and tested)                                                                                                                                                                                               | when the owner taps "Allow calendar access" |
+| CAMERA                        | Scan bill                                                                                                                                                                                                                                                                                                                                        | when the owner opens Scan bill              |
+| No storage permission         | All files go through the system picker and save dialog                                                                                                                                                                                                                                                                                           | —                                           |
 
 ### Privacy in logs and fixtures
 
@@ -629,16 +629,16 @@ verification on the owner's laptop before a push; CI exists for the signed build
 
 ### Test counts (2026-10-22, local full run)
 
-| Suite | Tests | What it covers |
-|---|---|---|
-| `wallet_importer` | 296 | Bank profiles with golden outputs (ids unchanged since v1), BIFF8/XLSX/CSV edge cases, fuzzing, bill readers incl. 500 mutated PDFs/XMLs, log privacy |
-| `wallet_core` | 1,217 | Money maths, categorizer, matching and pairing, recurring detection, planned costs, bills, encryption, local DB conversion, sync engine over an in-memory relay, two-to-four-device random convergence, quarantine, snapshots, self-heal, backup round trip, relay client with hand-written signatures, end-to-end against the real relay |
-| `relay` | 138 | Every endpoint, signature and clock rules, replays, limits, pruning, restart recovery, blobs, CORS, logs; the binary as a process |
-| `app` (widget) | 955 | Every screen at 320 dp × 2.0 / 360 / 1280, light and dark, controller logic with fakes, theme contrast, log privacy, platform splits |
-| Desktop integration (Linux, Xvfb) | 11 files | Onboarding, flows, import, layout (5 shards), plan, relay sync against a real relay, screens, wishlist/goals, big wallet, perf, adaptive |
-| Android emulator | 1 file | Every tab with a synthetic wallet, screenshots, log scan |
-| Web | 9 + build | `flutter test --platform chrome` for the browser key store, DB and unlock; wasm build |
-| Perf (profile mode) | 2 actions | Spending scroll and tab switches on a 20,000-row wallet |
+| Suite                             | Tests     | What it covers                                                                                                                                                                                                                                                                                                                            |
+| --------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `wallet_importer`                 | 296       | Bank profiles with golden outputs (ids unchanged since v1), BIFF8/XLSX/CSV edge cases, fuzzing, bill readers incl. 500 mutated PDFs/XMLs, log privacy                                                                                                                                                                                     |
+| `wallet_core`                     | 1,217     | Money maths, categorizer, matching and pairing, recurring detection, planned costs, bills, encryption, local DB conversion, sync engine over an in-memory relay, two-to-four-device random convergence, quarantine, snapshots, self-heal, backup round trip, relay client with hand-written signatures, end-to-end against the real relay |
+| `relay`                           | 138       | Every endpoint, signature and clock rules, replays, limits, pruning, restart recovery, blobs, CORS, logs; the binary as a process                                                                                                                                                                                                         |
+| `app` (widget)                    | 955       | Every screen at 320 dp × 2.0 / 360 / 1280, light and dark, controller logic with fakes, theme contrast, log privacy, platform splits                                                                                                                                                                                                      |
+| Desktop integration (Linux, Xvfb) | 11 files  | Onboarding, flows, import, layout (5 shards), plan, relay sync against a real relay, screens, wishlist/goals, big wallet, perf, adaptive                                                                                                                                                                                                  |
+| Android emulator                  | 1 file    | Every tab with a synthetic wallet, screenshots, log scan                                                                                                                                                                                                                                                                                  |
+| Web                               | 9 + build | `flutter test --platform chrome` for the browser key store, DB and unlock; wasm build                                                                                                                                                                                                                                                     |
+| Perf (profile mode)               | 2 actions | Spending scroll and tab switches on a 20,000-row wallet                                                                                                                                                                                                                                                                                   |
 
 Spec tests are written by a separate agent from the API document before the implementation exists; the implementation
 then has to satisfy them. For the bills stage that was 150 tests; 7 were adjusted after discussion and listed with
@@ -651,15 +651,15 @@ never copied into a fixture). A bill reader change is tried against that folder 
 
 ### Performance budgets
 
-| Metric | Budget | Measured (software GL under Xvfb) |
-|---|---|---|
-| Frame build p90 | 8 ms | 1.2 ms |
-| Frame build max | 32 ms | 14.6 ms |
-| Raster p90 | 40 ms | 5.0 ms |
-| Missed build frames | ≤ 5 | 0 |
-| Startup with 20,000 rows | not budgeted | pages built once per data version; derived values cached |
-| Relay signature | — | ~1.8 ms per request on the VM |
-| `.ics` parse, hostile 2 MB file | < 10 s (test bound) | ~1 s |
+| Metric                          | Budget              | Measured (software GL under Xvfb)                        |
+| ------------------------------- | ------------------- | -------------------------------------------------------- |
+| Frame build p90                 | 8 ms                | 1.2 ms                                                   |
+| Frame build max                 | 32 ms               | 14.6 ms                                                  |
+| Raster p90                      | 40 ms               | 5.0 ms                                                   |
+| Missed build frames             | ≤ 5                 | 0                                                        |
+| Startup with 20,000 rows        | not budgeted        | pages built once per data version; derived values cached |
+| Relay signature                 | —                   | ~1.8 ms per request on the VM                            |
+| `.ics` parse, hostile 2 MB file | < 10 s (test bound) | ~1 s                                                     |
 
 ### Review process
 
@@ -729,17 +729,17 @@ Documented in `docs/context/STATUS.md` and the package notes; either accepted by
 The next step is fixed: the owner's live test (M6) on phone and laptop with the checklist in `docs/context/STATUS.md`.
 Everything after it depends on that test and on this review. Candidates, in the order they would be cheapest to add:
 
-| Candidate | Why | Fits where |
-|---|---|---|
-| More bank profiles | Each is one file with golden tests | `wallet_importer/profiles` |
-| Column mapping for unknown layouts | Lets the owner map a new export once, saved as a synced setting | importer + a Plan sheet |
-| TLS for the relay (built-in or documented reverse proxy) | Removes the plain-HTTP metadata and DoS exposure without a VPN | `relay` + `docs/setup.md` |
-| Desktop key in a keyring | Closes the biggest known security limit | `key_store_io.dart` |
-| Reports (net per month, category trends over a year) | Common parity gap; pure functions over existing rows | `wallet_core/budget.dart` + a screen |
-| Multi-currency amounts on rows | Revolut exchanges already carry a hint; budgeting would stay in EUR | importer hint + display |
-| Supplier portals for bills | Another reader returning `NormalizedBill` | `wallet_importer/bills` |
-| iOS | Flutter target exists; keystore, notifications, camera and share need iOS glue behind the same interfaces | `app` platform files |
-| Shared household wallet | Would need per-user identity in ops and a permission model; the largest change | not in the current design |
+| Candidate                                                | Why                                                                                                       | Fits where                           |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| More bank profiles                                       | Each is one file with golden tests                                                                        | `wallet_importer/profiles`           |
+| Column mapping for unknown layouts                       | Lets the owner map a new export once, saved as a synced setting                                           | importer + a Plan sheet              |
+| TLS for the relay (built-in or documented reverse proxy) | Removes the plain-HTTP metadata and DoS exposure without a VPN                                            | `relay` + `docs/setup.md`            |
+| Desktop key in a keyring                                 | Closes the biggest known security limit                                                                   | `key_store_io.dart`                  |
+| Reports (net per month, category trends over a year)     | Common parity gap; pure functions over existing rows                                                      | `wallet_core/budget.dart` + a screen |
+| Multi-currency amounts on rows                           | Revolut exchanges already carry a hint; budgeting would stay in EUR                                       | importer hint + display              |
+| Supplier portals for bills                               | Another reader returning `NormalizedBill`                                                                 | `wallet_importer/bills`              |
+| iOS                                                      | Flutter target exists; keystore, notifications, camera and share need iOS glue behind the same interfaces | `app` platform files                 |
+| Shared household wallet                                  | Would need per-user identity in ops and a permission model; the largest change                            | not in the current design            |
 
 Dropped by decision and kept only for reference: research projects and ongoing trackers.
 
@@ -792,23 +792,23 @@ against.
 
 ### Glossary
 
-| Term | Meaning |
-|---|---|
-| Wallet key | The 32-byte secret everything derives from; shown as `BW1-…` text or QR |
-| Pay period | From the day the salary lands to the day before the next one |
-| Safe to spend | Flexible money minus spent and reserved, divided by days left |
-| Reserved | Money set aside for confirmed bills and planned costs before payday |
+| Term                 | Meaning                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Wallet key           | The 32-byte secret everything derives from; shown as `BW1-…` text or QR                                         |
+| Pay period           | From the day the salary lands to the day before the next one                                                    |
+| Safe to spend        | Flexible money minus spent and reserved, divided by days left                                                   |
+| Reserved             | Money set aside for confirmed bills and planned costs before payday                                             |
 | Covered by your plan | A cost in a fixed category (rent, loan, subscriptions) already in the payday plan: listed, never reserved twice |
-| Op | One change: entity, id, fields, hybrid logical clock |
-| HLC | Hybrid logical clock: wall time, counter, device; orders ops across devices |
-| Sealed | Encrypted with XChaCha20-Poly1305 under the wallet key |
-| Relay | The owner's home server that stores sealed files and verifies signatures |
-| Snapshot | A sealed full-state file that lets a device skip history |
-| Caught up | A device has applied every peer's files through their last seq; only then does it match and pair |
-| Matching | Linking a hand-added expense to the bank row that is it (same amount, ± 3 days, bank row unseen when added) |
-| Pairing | Linking two own-account transfer rows (needs a bank hint on one side) |
-| Planned cost | A future expense with a date, reserved before payday once it has a confirmed amount |
-| Bill | A document (receipt, slip, invoice) with totals, line items, a sealed file and an optional due date |
-| Blob | A sealed bill file on the relay, addressed by the hash of its sealed bytes |
-| HUB-3 | The Croatian payment-slip 2D barcode (PDF417) carrying payee, IBAN, amount and reference |
-| JIR | The unique id on a Croatian fiscal receipt, found in its QR code |
+| Op                   | One change: entity, id, fields, hybrid logical clock                                                            |
+| HLC                  | Hybrid logical clock: wall time, counter, device; orders ops across devices                                     |
+| Sealed               | Encrypted with XChaCha20-Poly1305 under the wallet key                                                          |
+| Relay                | The owner's home server that stores sealed files and verifies signatures                                        |
+| Snapshot             | A sealed full-state file that lets a device skip history                                                        |
+| Caught up            | A device has applied every peer's files through their last seq; only then does it match and pair                |
+| Matching             | Linking a hand-added expense to the bank row that is it (same amount, ± 3 days, bank row unseen when added)     |
+| Pairing              | Linking two own-account transfer rows (needs a bank hint on one side)                                           |
+| Planned cost         | A future expense with a date, reserved before payday once it has a confirmed amount                             |
+| Bill                 | A document (receipt, slip, invoice) with totals, line items, a sealed file and an optional due date             |
+| Blob                 | A sealed bill file on the relay, addressed by the hash of its sealed bytes                                      |
+| HUB-3                | The Croatian payment-slip 2D barcode (PDF417) carrying payee, IBAN, amount and reference                        |
+| JIR                  | The unique id on a Croatian fiscal receipt, found in its QR code                                                |

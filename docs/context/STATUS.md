@@ -166,6 +166,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   core test that used the real date. Stage run: importer 335, core 1501, relay 206, app 1282, desktop 11 files, web, perf,
   emulator screens, dark frames read. Unlink of a matched expense waits for owner decision D2.
 - 2026-10-23: M6 build: `ci` on d33ca66 (started on the owner's request) green: signed APK, Linux bundle + smoke, `dev` release published.
+- 2026-10-25: **Stage N0: quick fixes** (`OWNER_NOTES_PLAN.md`). Wallet key: a typed `0` reads as the letter `O` (join and the "last 4"
+  check; `1` still refused), key text letter-spaced with a "no zero or one" hint. Wide windows (≥600 dp, incl. a phone in landscape): no app bar;
+  add, search (Ctrl+F), the period badge and the sync spinner sit in the rail (fixed slot, the rail never jumps; badge grows with text).
+  Chart: widths snapped to whole device pixels, opaque line/dots/bars (blur at 1.25/1.5 scale; the owner's exact grain was not reproduced
+  under software GL). Review: 2 medium, 2 low, three fixed with tests, landscape-phone app bar left to the owner. Custom-range date picker
+  moved to N3 (needs core range maths). Stage run: importer 335, core 1506, relay 206, app 1293, desktop 11 files / 29 tests.
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -250,6 +256,64 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   slip from being reserved twice); Upcoming's "Set aside" leaves out an overdue expected bill that Today still reserves;
   photos are not in `.bwb` backups (they stay on the relay).
 ## Next
+- **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
+  N0 done 2026-10-25; N1–N4 wait for owner decisions D8–D12.
+- Owner checks after N0 (laptop): Spending chart at your normal display scaling (still grainy = compositor scaling); the rail at 1280/1920
+  (search, period badge, no top bar); type a key with `0` for `O` on join and in "Save your wallet key"; phone in landscape now has no top bar: OK?
+- Owner notes (2026-10-25, later): tapping the date on a graph/range opens a date picker for a custom range; the Ledger theme is responsive and nice
+  but heavy and a little hard on the eyes (soften it, D8).
+- Owner note (2026-10-25): somewhere in the app, show how much is currently held in each bank and in cash (an accounts overview). Builds on the
+  welcome-screen balance note: one opening balance per account, then the balance = opening + the account's rows since. Design points: rows carry
+  `source` (bank profile) but the importer's `account` is never stored (it names the owner's account), so accounts would be owner-named labels
+  (e.g. "Cash", "Bank 1") mapped to sources; own transfers between accounts (`transfer_to`) move money without changing the total; foreign-currency
+  accounts shown in their own currency, never summed with home currency; bank balances can drift from the real ones (unimported rows), so show an
+  "as of last import" date and let the owner correct a balance. New synced entity (schema bump, `entitySchema`, `sim.dart`), exact cents.
+- Owner note (2026-10-25): a welcome screen on first run where the owner sets the current cash balance (the starting point). Open: does the app
+  have a balance concept at all today (it counts flows per pay period, not a running balance)? Decide with the owner whether this is an opening
+  balance row (cents, dated, synced like any entry, never mixed with imported bank rows) or a setting, and whether it feeds the plan defaults
+  above. Fits onboarding (new wallet / join with key): welcome → balance → import files → plan proposals. Exact cents, own currency.
+- Owner note (2026-10-25): the payday plan should set itself up with sensible defaults taken from what the imports show (salary and payday from
+  detected salary rows, rent and loan from the recurring fixed rows, bills and subscriptions from confirmed recurring bills, budgets from the
+  6-month averages). Shown as proposals the owner accepts or edits (like the Suggest note above), never saved silently over numbers already
+  entered. Core: pure functions over transactions (`detectPaydays`, `detectRecurring`, `suggestBudgets` exist; rent/loan/salary suggestions are
+  new). Each value from exact evidence (importer `kindHint`, recurring detection), never from an amount alone; foreign-currency rows left out.
+- Owner note (2026-10-25): Spending needs more detailed views and more categories, so more can be drawn from the data and concluded. Ideas to
+  confirm with the owner: drill from a category into its merchants and rows; per-merchant totals and trends; subcategories (finer than the
+  fixed/flex list); month vs month and average comparisons; biggest rows and recurring vs one-off. Categories live in `categories.dart`
+  (`spendingCategories`, built-in merchant patterns; the owner's own rules stay in the `merchantPatterns` setting, never in git). Adding a
+  category touches budgets, reports and CSV export: check each. Money rule: never reclassify on amount alone.
+- Owner note (2026-10-25): on the laptop the date and the search stay pinned at the top of the page and only waste space. Let them scroll away with
+  the content (or sit in the nav rail / one slim row on wide windows). Check Today and Spending headers (`SearchPane` pinned field, the header with
+  the date) at 1280 and 1920 wide with `tools/build.sh desktop-test adaptive` screenshots.
+- Owner note (2026-10-25): every graph should let the owner change the date range it shows (e.g. this pay period, a month, 3 / 6 / 12 months,
+  custom from–to, step back and forward). Applies to the existing charts and the new ones above; one shared range control in `widgets/charts.dart`,
+  range math in `wallet_core` (pure, tested), currency rule as everywhere (home-currency rows only).
+- Owner note (2026-10-25): (1) add more graphs (which ones: ask the owner; candidates from existing data: spending per month, category share,
+  income vs spending, budget vs actual, savings/goals over time; `widgets/charts.dart`, fl_chart). (2) The graph on the laptop looks grainy:
+  reproduce with `tools/live.sh shot` and the Linux bundle (check device pixel ratio / HiDPI scaling, stroke and dot sizes, antialiasing;
+  software GL under Xvfb is not the cause on the owner's real desktop). Bug: fix with a test or a screenshot check in the same stage.
+- Owner note (2026-10-25): rework Plan and the settings mode as a whole. Details not given yet; the notes above on Payday plan + Numbers,
+  Budget "Suggest", join-while-a-wallet-exists, the key display and Expected bills all touch the same screen, so design them together
+  (one mockup in the design-system artifact first) before building them one by one.
+- Owner note (2026-10-25): Plan's "Payday plan" (read-only ledger, `plan.dart` ~l.178) and "Numbers" (edit fields + "Save numbers", ~l.226) are two
+  sections and it is unclear what each does. Merge them into one "Payday plan" section: the ledger lines (salary, rent, loan, bills, set aside,
+  left to spend) with an **Edit** button that turns the lines into the fields and shows Save / Cancel. Same fields and validation as now
+  (`_keys`, `_savePlan`); no new screen. Keep the widget keys the tests use (or update those tests).
+- Owner note (2026-10-25): a monthly (recurring) bill should list all the bills that belong to it. Read as: Plan › Expected bills, per confirmed
+  recurring bill, show every stored bill (bills database) and the paying bank rows of that payee, one line per month. Not decided yet: whether
+  "bills" here means slips in the bills database, the bank payments, or both; ask the owner before building. Match by payee key (`billPayeeKey`) and
+  exact evidence only, never by amount alone.
+- Owner note (2026-10-25): Plan › Budgets per category "Suggest" (6-month average, `suggestBudgets`) should apply by itself to every empty
+  field. For a field that already has a number, ask per entry whether to overwrite (show old → suggested), with an "Accept all" choice.
+  Today it only fills empty fields (`BudgetsPanel`, `app/lib/src/screens/budgets.dart`). Nothing is saved until the owner accepts; only edited
+  fields are written, as now.
+- Owner note (2026-10-25): let the owner join an existing wallet (key + relay) even when this device already has a wallet. Today the app opens
+  straight into the local wallet and the join screen is not reachable, so I moved the data folder aside by hand to join. Needs an in-app path
+  (e.g. Plan: "Join another wallet…") that sets the current wallet aside first, never deletes it (see `setAsideWalletDb` in the app notes), and
+  warns that the old data stays only on this device.
+- Owner note (2026-10-25): the wallet key text is easy to misread (a letter O typed as 0 gave "characters that are not allowed" on join).
+  Make 0 and O clearly different in the key display (`key_backup.dart` `keyText`, now IBM Plex Mono) and/or let `VaultKey.parse` read `0` as `O`
+  (`0` is not in the base32 alphabet, so it is unambiguous; `1` could be I or L, leave it). Test in `vault` tests.
 - Owner installs Android APK + desktop build, creates wallet, imports bank files, sets up the relay (`docs/setup.md` §5; APKs before the signing
   fix used throwaway keys: uninstall that one once; later updates install in place). After testing: Plan › Diagnostics
   "Save logs…", send the file; summarise with `tools/log-summary.py`.
