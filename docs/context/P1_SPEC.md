@@ -1,5 +1,15 @@
 # Stage P1 spec: your own categories and subcategories (2026-10-25)
 
+**Owner decisions after the core review (2026-10-25):**
+- **Fixed categories anywhere, with their own plan lines.** Every live top-level custom category of kind fixed gets a plan line: a synced per-key setting `plan:<categoryId>`, cents per month (0..`maxAmount`), stored like `budget:<cat>`.
+  - `computePeriod` subtracts these lines with rent, loan and subs. `fixedPaid` is keyed by `topLevel`.
+  - A bill or planned cost in such a category (or in a child of any fixed category) is covered by that line, never reserved.
+  - Until a line is filled in, it is 0, so that money is not taken off the daily amount. The owner accepted this.
+  - Children of Rent, Loan or Bills & subscriptions count in that line.
+  - `suggestPlan` suggests every plan line from its tree's rows (`topLevel`).
+- **Custom income counts as salary**, as built now. It can start a pay period.
+- **A deleted custom category falls back automatically**, for bills, planned costs and recurring bills as for transactions. The category used is the automatic one from the payee or the rules, resolved when read; nothing is written. `refreshRecurring` never rewrites a bill whose stored category is a custom id that is not live.
+
 Owner notes:
 - Spending needs more categories, so more can be concluded from the data.
 - D12: drill-down first (done in N3), then subcategories.
