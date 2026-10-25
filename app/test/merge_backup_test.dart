@@ -224,8 +224,8 @@ void main() {
     await settle(t);
     await t.tap(find.byKey(const ValueKey('oldKeyCancel')));
     await settle(t);
-    expect(find.textContaining('does not open'), findsNothing, reason: 'no error after a cancel');
-    expect(find.textContaining('different wallet key'), findsNothing);
+    expect(find.textContaining("doesn't open"), findsNothing, reason: 'no error after a cancel');
+    expect(find.textContaining("doesn't open with this wallet's key"), findsNothing);
     expect(wc.wholeTxs.length, 1);
 
     await t.tap(_merge);
@@ -233,7 +233,7 @@ void main() {
     await t.enterText(find.byKey(const ValueKey('oldKeyField')), await VaultKey.generate().toText());
     await t.tap(find.byKey(const ValueKey('oldKeyRestore')));
     await settle(t, 6);
-    expect(find.textContaining('That key does not open this backup.', findRichText: true), findsOneWidget);
+    expect(find.textContaining("doesn't open this backup (or the file is damaged)", findRichText: true), findsOneWidget);
     expect(_preview, findsNothing);
     expect(_state(wc.repo), before);
   });
@@ -299,7 +299,7 @@ void main() {
     expect(_state(wc.repo), before);
   });
 
-  testWidgets('restore: a damaged file says damaged, not "different wallet key"; real core', (t) async {
+  testWidgets('restore: a damaged file says damaged, not the key text; real core', (t) async {
     final key = VaultKey.generate();
     final c = _Chooser();
     final wc = await pump(t, c, walletKey: key, data: false);
@@ -310,14 +310,15 @@ void main() {
       await t.tap(find.byKey(const ValueKey('restoreConfirm')));
       await settle(t, 6);
       expect(find.textContaining('This backup file is damaged.', findRichText: true), findsOneWidget, reason: e.key);
-      expect(find.textContaining('different wallet key', findRichText: true), findsNothing, reason: e.key);
+      expect(find.textContaining("doesn't open with this wallet's key", findRichText: true), findsNothing, reason: e.key);
     }
     c.picks = [_Picked(await cutOff(key))];
     await t.tap(find.byKey(const ValueKey('restoreBackup')));
     await settle(t);
     await t.tap(find.byKey(const ValueKey('restoreConfirm')));
     await settle(t, 6);
-    expect(find.textContaining('different wallet key', findRichText: true), findsOneWidget, reason: 'cut-off = seal check failed');
+    expect(find.textContaining("doesn't open with this wallet's key", findRichText: true), findsOneWidget,
+        reason: 'cut-off = seal check failed');
     expect(wc.walletIsEmpty, isTrue);
   });
 

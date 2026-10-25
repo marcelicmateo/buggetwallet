@@ -278,7 +278,7 @@ void main() {
       (
         'a different wallet key',
         const VaultException('bad key', failure: UnsealFailure.badKey),
-        'This backup was made with a different wallet key.'
+        "This backup doesn't open with this wallet's key. It was made with another key, or the file is damaged."
       ),
       ('an unreadable file', const BackupException(BackupFailure.unreadable, 'x'), "This backup file can't be read."),
       ('a damaged file', const BackupException(BackupFailure.damaged, 'x'), 'This backup file is damaged.'),

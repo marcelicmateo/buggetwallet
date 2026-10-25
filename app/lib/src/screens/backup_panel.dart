@@ -256,8 +256,11 @@ class _BackupPanelState extends State<BackupPanel> {
 
 String _keyErrorText(VaultException e, bool otherKey) => switch (e.failure) {
       // null: the typed text is not a key (its message says what is wrong with it).
-      null => otherKey ? e.message : 'This backup was made with a different wallet key.',
-      UnsealFailure.badKey => otherKey ? 'That key does not open this backup.' : 'This backup was made with a different wallet key.',
+      null =>
+        otherKey ? e.message : "This backup doesn't open with this wallet's key. It was made with another key, or the file is damaged.",
+      UnsealFailure.badKey => otherKey
+          ? "That key doesn't open this backup (or the file is damaged)."
+          : "This backup doesn't open with this wallet's key. It was made with another key, or the file is damaged.",
       UnsealFailure.damaged || UnsealFailure.tooLarge => 'This backup file is damaged.',
       UnsealFailure.newerFormat => 'Made by a newer app version. Update first.',
     };
