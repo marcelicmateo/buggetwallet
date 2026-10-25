@@ -95,3 +95,21 @@ Drill-down:
 - `Other`;
 - the compare averages;
 - `biggestRows` ordering.
+
+## Clarifications (core builder + lead, 2026-10-25)
+1. `today` is a required named parameter (`required String today`, never the system clock) on `shiftRange`, `spendingByMonth`,
+   `incomeVsSpending` and `merchantTrend` (the "past the month of today" check and `partial` need it).
+2. Month kinds (`month`, `months3/6/12`) cover whole calendar months: `end` is the last day of today's month, not today.
+3. `payPeriod`: `start` = the latest of `detectPaydays(txs, st, today)`; `end` = `nextPayday(start, paydayDay)` − 1 day, but never
+   before today (a late salary under 45 days keeps the running period open). No paydays at all: `start` = the latest expected
+   payday (`paydayDay`, clamped to the month) on or before today. `shiftRange` walks the same list; beyond its ends it uses the
+   expected payday of the month before, or the next expected payday after today.
+4. "Over 5 years": refused when `to` ≥ `from` + 5 years (2021-01-01..2025-12-31 is accepted, ..2026-01-01 is refused).
+5. `merchantsIn` "no merchant key" (`merchantKey` never returns ''): a hand-added row (`source == 'manual'`) without a note, or
+   a row whose `merchantKey` is `x` (nothing left after cleaning), is grouped under key `''`, label `Other`. `label` =
+   `merchantName` of the newest row (date, then larger id).
+6. `rangeLabel`: one day `14 Oct 2026`; across years `14 Dec 2025 – 13 Jan 2026`, `Nov 2025 – Jan 2026`.
+7. `DateRange` has `==`, `hashCode` and `toString`; its constructor checks `YYYY-MM-DD` and `start <= end` (`ArgumentError`).
+8. The core perf test uses its own generator (`test/support/n3.dart` `bigWalletRows`, ~10k rows, the shape of the app's
+   `integration_test/support/big_wallet.dart`, which core cannot import).
+- `biggestRows` lists outflows only (amount < 0) of spending rows; a refund is never a "biggest" row.

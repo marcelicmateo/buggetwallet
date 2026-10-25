@@ -72,6 +72,24 @@ export 'src/dates.dart'
 export 'src/export.dart' show centsToDecimal, csvField, monthlySummaryCsv, monthlySummaryCsvHeader, transactionsCsv, transactionsCsvHeader;
 export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
 export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, parseIcs, plannedIcs;
+export 'src/insights.dart'
+    show
+        BudgetMonth,
+        budgetVsActualSeries,
+        biggestRows,
+        CategoryCompare,
+        CategoryShare,
+        categoryShare,
+        CategorySlice,
+        compareCategory,
+        IncomeVsSpending,
+        incomeVsSpending,
+        MerchantTotal,
+        merchantsIn,
+        merchantTrend,
+        MonthBar,
+        rowsFor,
+        spendingByMonth;
 export 'src/local_db.dart' show localDbKey, localDbKeyInfo, openKeyed, WalletDbKeyException;
 export 'src/logs.dart'
     show
@@ -122,6 +140,7 @@ export 'src/planned.dart'
         upcoming,
         UpcomingItem,
         UpcomingKind;
+export 'src/ranges.dart' show DateRange, RangeKind, rangeFor, rangeLabel, shiftRange;
 export 'src/recurring.dart' show detectRecurring, medianCents, planRecurringPayments, RecurringPayments;
 export 'src/repo.dart'
     show
