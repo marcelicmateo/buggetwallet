@@ -157,16 +157,22 @@ void main() {
       expect((r2.blobsSent, r2.blobsWaiting), (1, 0));
     });
 
-    test('blobs and their queues are device-local: not in snapshots or backups', () async {
+    // Changed (P10 §2): a backup now carries the cached files of live bills (up to a cap); the queues stay device-local.
+    test('blob queues are device-local: not in snapshots; files in a backup only under its cap', () async {
       final ref = await BlobStore(a, key).add(bytes(300), 'jpg');
       a.importBill(bill, file: ref);
       final ops = a.snapshotOps();
       expect(ops.map((o) => o.entity).toSet(), {'bill'});
       final restored = mk();
-      await restoreBackupBytes(restored, await backupBytes(a, key), key);
+      await restoreBackupBytes(restored, await backupBytes(a, key, maxBlobBytes: 0), key);
       expect(restored.queuedBlobs(), isEmpty);
       expect(restored.blobDeletes(), isEmpty);
       expect(restored.cachedBlobBytes, 0);
+      final withFile = mk();
+      await restoreBackupBytes(withFile, await backupBytes(a, key), key);
+      expect(withFile.queuedBlobs(), [ref.hash], reason: 'queued for upload again (idempotent on the relay)');
+      expect(withFile.blobDeletes(), isEmpty);
+      expect(withFile.db.select('SELECT * FROM blob_own'), isEmpty);
     });
 
     test('logs carry no hash, size of a named file or key; enum words and counts only', () async {
