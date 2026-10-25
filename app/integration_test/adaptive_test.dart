@@ -3,6 +3,8 @@
 // screenshot). Run: tools/build.sh desktop-test adaptive -> dist/screens/linux/adaptive/<size>-<screen>.png
 import 'package:budget_wallet/src/layout.dart';
 import 'package:budget_wallet/src/platform.dart';
+import 'package:budget_wallet/src/screens/category_detail.dart';
+import 'package:budget_wallet/src/screens/insights.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
@@ -51,6 +53,22 @@ void main() {
       // Spending's transaction list is the right column on a wide window, below the charts otherwise.
       await goTab(t, 'Spending');
       expect(find.textContaining('All transactions in'), findsOneWidget);
+      // Insights: four graphs with their range controls, then a category's detail on top of it
+      await tapVisible(t, find.byKey(const ValueKey('insightsOpen')));
+      await Harness.shot(t, '$name-insights');
+      await tapVisible(t, find.byKey(const ValueKey('rangeChip_spending_months12')));
+      await Harness.shot(t, '$name-insights-12months');
+      await tapVisible(t, find.byKey(const ValueKey('rangeBack_spending')));
+      final shareRow =
+          find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('shareRow_')).first;
+      await tapVisible(t, shareRow);
+      expect(find.byType(CategoryDetailScreen), findsOneWidget);
+      await Harness.shot(t, '$name-category-detail');
+      await t.tap(find.byKey(const ValueKey('sheetClose')).last);
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('sheetClose')).last);
+      await t.pumpAndSettle();
+      expect(find.byType(InsightsScreen), findsNothing);
       await goTab(t, 'Today');
       await tapVisible(t, find.descendant(of: find.byType(TodayScreen), matching: find.text('Add expense')));
       expect(find.byType(Dialog), findsOneWidget);

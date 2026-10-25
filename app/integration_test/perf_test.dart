@@ -4,6 +4,7 @@
 // and the full trace per action and checks the budgets (test_driver/perf_budget.dart).
 // Run: tools/build.sh perf   (that is `flutter drive --profile`; a plain `flutter test` run has no timeline to trace)
 import 'package:budget_wallet/src/logging.dart';
+import 'package:budget_wallet/src/screens/insights.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -64,6 +65,29 @@ void main() {
         }
       }
     }, reportKey: '${perfPrefix}tab_switch');
+
+    // Insights: open it from Spending, switch the range of the first graph through every kind and step back and forward (each
+    // switch draws a new range from ~20k rows), scroll through the four graphs, close it
+    await goTab(t, 'Spending');
+    await binding.traceAction(() async {
+      await t.tap(find.byKey(const ValueKey('insightsOpen')));
+      await t.pumpAndSettle();
+      for (final k in ['months12', 'months3', 'payPeriod', 'month', 'months6']) {
+        await t.tap(find.byKey(ValueKey('rangeChip_spending_$k')));
+        await t.pumpAndSettle();
+      }
+      await t.tap(find.byKey(const ValueKey('rangeBack_spending')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('rangeForward_spending')));
+      await t.pumpAndSettle();
+      final insights = pageList(InsightsScreen);
+      await t.fling(insights, const Offset(0, -700), 3000);
+      await t.pumpAndSettle();
+      await t.fling(insights, const Offset(0, 700), 3000);
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('sheetClose')));
+      await t.pumpAndSettle();
+    }, reportKey: '${perfPrefix}insights');
 
     await Harness.checkLog();
   });

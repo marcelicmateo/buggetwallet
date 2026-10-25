@@ -45,6 +45,20 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   bill; confirmed rows with Paid/Overdue/Covered and Remove) and Nudges (a device-local switch, `setNudges`). The "Due by payday" tap
   switches to Plan and scrolls to Expected bills (`PlanScreen.showBills`, a notifier owned by `HomeShell`).
   Controller log events (counts and enum words only): `review.done`, `review.day`, `recurring.confirm|dismiss|delete`, `nudges.enabled|scheduled`.
+- Insights (N3): Spending's **Insights** button (`insightsOpen`) opens `screens/insights.dart` `InsightsScreen` (page on phones, 760 dp dialog from `dialogMin`): five
+  panels (`insightGraphs`: spending per month, category share, income vs spending, budget vs actual, biggest payments), each with its own **`RangeControl`**
+  (`widgets/charts.dart`: chips This pay period / Month / 3 / 6 / 12 months / Custom, ‹ › steps (forward off at the current range), the dates button opens
+  `showDateRangePicker` for a custom range, core's `ArgumentError` text shows inline as `rangeError_<id>`; arrow keys on the dates step; keys
+  `rangeChip_<id>_<kind>`, `rangeBack_|rangeLabel_|rangeForward_<id>`). Range state = `InsightRange` (`lib/src/insights_api.dart`, one per graph from
+  `wc.insightRange(id)`; kind remembered device-local as `insightRange:<id>`, the offset is not). The same file's `WalletInsights` extension holds the graph data
+  per range (`spendingBars`, `shareFor`, `incomeBars`, `budgetBars`, `merchantsFor`, `rowsOf`, `merchantBars`, `categoryBars`, `compareFor`, `biggestIn`), all memoized by
+  `wc.memo` per data version + day (key = range dates): never call wallet_core's insights functions from a widget. Drawing: `widgets/insight_charts.dart`
+  (`MonthlyBars` = fl_chart grouped bars, snapped strokes, a partial month faded + dashed; `ShareBars` = horizontal rows with permille percent; `Legend`).
+  Every graph has its exact amounts as rows under it and a spoken summary; `ForeignNote` (`foreign_<id>`) when core reports other currencies.
+  Budget bars are whole calendar months, the running one "so far". Drill-down: `screens/category_detail.dart` `openCategory(context, wc, category, range)` from a
+  share row or a "Where it goes" row on Spending (`categoryRow_<name>`, month range): compare (this/last month, 6-month average), per-month bars (the merchants'
+  trends added up), merchants (`merchantRow_<key>`) -> one merchant's rows (`TxTile`, editable) with `detailBack`. Tests: `test/insights_test.dart`;
+  perf action `insights` in `integration_test/perf_test.dart`.
 - Plan (N1): one "Payday plan" section. It lists the ledger lines (`planHeading`, `ledgerSetAside`, `ledgerSpendingMoney`) with an **Edit** button (`planEdit`); Edit swaps in the number
   fields (same `_keys`, same `_savePlan`) with **Save** (`planSave`, closes the editor on success or "Nothing to save", stays open on an error) and **Cancel** (`planCancel`, restores the
   shown values and the currency). Tests tap Edit first: `openPlanEdit(tester)` in `test/support/wallet.dart`, `edit(t)` in `integration_test/plan_test.dart`; `test/plan_edit_test.dart`.

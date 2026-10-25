@@ -1,8 +1,10 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../format.dart';
+import '../insights_api.dart';
 import '../layout.dart';
 import '../theme.dart';
 import 'common.dart';
@@ -170,7 +172,10 @@ class CategoryBars extends StatelessWidget {
   final Map<String, int> average;
   final String currency;
   final BudgetVsActual? budget;
-  const CategoryBars({super.key, required this.values, required this.average, required this.currency, this.budget});
+
+  /// A tap on a category row (its detail); rows are not tappable without it.
+  final ValueChanged<String>? onOpen;
+  const CategoryBars({super.key, required this.values, required this.average, required this.currency, this.budget, this.onOpen});
 
   @override
   Widget build(BuildContext context) {
@@ -192,7 +197,8 @@ class CategoryBars extends StatelessWidget {
     final total = budget;
     return Column(children: [
       for (final k in cats)
-        _CategoryRow(name: k, value: values[k] ?? 0, average: average[k] ?? 0, maxV: maxV, line: lines[k], currency: currency),
+        _CategoryRow(
+            name: k, value: values[k] ?? 0, average: average[k] ?? 0, maxV: maxV, line: lines[k], currency: currency, onOpen: onOpen),
       if (total != null && total.budgetedCount > 0 && total.remainingTotal != null)
         TotalRule(
           padding: const EdgeInsets.symmetric(vertical: 6),
@@ -243,8 +249,15 @@ class _CategoryRow extends StatelessWidget {
   final String name, currency;
   final int value, average, maxV;
   final CategoryBudgetLine? line;
+  final ValueChanged<String>? onOpen;
   const _CategoryRow(
-      {required this.name, required this.value, required this.average, required this.maxV, required this.line, required this.currency});
+      {required this.name,
+      required this.value,
+      required this.average,
+      required this.maxV,
+      required this.line,
+      required this.currency,
+      this.onOpen});
 
   @override
   Widget build(BuildContext context) {
@@ -253,8 +266,8 @@ class _CategoryRow extends StatelessWidget {
     final budget = l?.budget;
     final tip = '$name: ${money(value, currency, decimals: 0)} · average ${money(average, currency, decimals: 0)}'
         '${l == null ? '' : ' · budget ${moneyExact(budget!, currency)}, ${budgetLeftText(l, currency)}'}';
-    return RuledRow(
-      minHeight: l == null ? 36 : (behindPace(l) ? 58 : rowMin),
+    final row = RuledRow(
+      minHeight: l == null ? (onOpen == null ? 36 : rowMin) : (behindPace(l) ? 58 : rowMin),
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Tooltip(
         message: tip,
@@ -330,6 +343,7 @@ class _CategoryRow extends StatelessWidget {
         ),
       ),
     );
+    return onOpen == null ? row : InkWell(key: ValueKey('categoryRow_$name'), onTap: () => onOpen!(name), child: row);
   }
 }
 
@@ -456,6 +470,118 @@ class PaceBar extends StatelessWidget {
           ]),
         );
       }),
+    );
+  }
+}
+
+/// Opens the date range picker for [RangeControl]; tests give their own.
+typedef RangePicker = Future<DateTimeRange?> Function(BuildContext context, DateTimeRange initial, DateTime first, DateTime last);
+
+Future<DateTimeRange?> _systemPicker(BuildContext context, DateTimeRange initial, DateTime first, DateTime last) =>
+    showDateRangePicker(context: context, initialDateRange: initial, firstDate: first, lastDate: last, saveText: 'Use range');
+
+/// The range control every Insights graph has: chips for the kind (this pay period, month, 3 / 6 / 12 months, custom), a
+/// back / forward pair (forward is off at the current range), the shown dates (a tap opens the date range picker and sets a
+/// custom range) and, when core refuses a range, its message. Arrow keys on the dates or the arrows step. Keys end in the
+/// graph id: `rangeChip_<id>_<kind>`, `rangeBack_<id>`, `rangeLabel_<id>`, `rangeForward_<id>`, `rangeError_<id>`.
+class RangeControl extends StatelessWidget {
+  final InsightRange model;
+  final RangePicker picker;
+  const RangeControl({super.key, required this.model, this.picker = _systemPicker});
+
+  Future<void> _pick(BuildContext context) async {
+    final now = model.wc.now;
+    final first = DateTime(now.year - 5, now.month, 1), last = DateTime(now.year, now.month + 1, 0);
+    final shown = model.range;
+    DateTime clamp(String iso) {
+      final d = DateTime.parse(iso);
+      return d.isBefore(first) ? first : (d.isAfter(last) ? last : d);
+    }
+
+    final r = await picker(context, DateTimeRange(start: clamp(shown.start), end: clamp(shown.end)), first, last);
+    if (r != null) model.setCustom(isoDate(r.start), isoDate(r.end));
+  }
+
+  KeyEventResult _key(FocusNode _, KeyEvent e) {
+    if (e is KeyUpEvent) return KeyEventResult.ignored;
+    if (e.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      model.step(-1);
+      return KeyEventResult.handled;
+    }
+    if (e.logicalKey == LogicalKeyboardKey.arrowRight) {
+      if (model.canForward) model.step(1);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final id = model.id;
+    return ListenableBuilder(
+      listenable: model,
+      builder: (context, _) {
+        final range = model.range, text = rangeLabel(range), err = model.error;
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Wrap(spacing: 6, runSpacing: 0, children: [
+            for (final k in RangeKind.values)
+              ChoiceChip(
+                  key: ValueKey('rangeChip_${id}_${k.name}'),
+                  label: Text(rangeKindLabel(k)),
+                  selected: model.kind == k,
+                  onSelected: (_) => model.select(k)),
+          ]),
+          Focus(
+            canRequestFocus: false,
+            onKeyEvent: _key,
+            child: Row(children: [
+              IconButton(
+                  key: ValueKey('rangeBack_$id'),
+                  tooltip: 'Earlier',
+                  constraints: const BoxConstraints(minWidth: touchMin, minHeight: touchMin),
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: () => model.step(-1)),
+              Expanded(
+                child: Semantics(
+                  button: true,
+                  label: 'Dates $text. Opens the date picker.',
+                  excludeSemantics: true,
+                  child: TextButton(
+                    key: ValueKey('rangeLabel_$id'),
+                    style: TextButton.styleFrom(minimumSize: const Size(0, touchMin), foregroundColor: c.ink),
+                    onPressed: () => _pick(context),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+                      Flexible(child: Text(text, textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: BwType.bodySize))),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.calendar_today_outlined, size: 16),
+                    ]),
+                  ),
+                ),
+              ),
+              IconButton(
+                  key: ValueKey('rangeForward_$id'),
+                  tooltip: 'Later',
+                  constraints: const BoxConstraints(minWidth: touchMin, minHeight: touchMin),
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: model.canForward ? () => model.step(1) : null),
+            ]),
+          ),
+          if (err != null)
+            Padding(
+              key: ValueKey('rangeError_$id'),
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text.rich(
+                  TextSpan(children: [
+                    WidgetSpan(
+                        alignment: PlaceholderAlignment.middle,
+                        child: Padding(padding: const EdgeInsets.only(right: 5), child: Icon(Icons.error_outline, size: 16, color: c.bad))),
+                    TextSpan(text: err),
+                  ]),
+                  style: TextStyle(color: c.bad, fontSize: BwType.metaSize, fontWeight: FontWeight.w600)),
+            ),
+        ]);
+      },
     );
   }
 }

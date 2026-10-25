@@ -14,6 +14,7 @@ import 'calendar_platform.dart';
 import 'calendar_source.dart';
 import 'clock_notice.dart';
 import 'ics_fetch.dart';
+import 'insights_api.dart' show InsightRange;
 import 'key_store.dart';
 import 'logging.dart';
 import 'nudge_platform.dart';
@@ -632,6 +633,14 @@ class WalletController extends ChangeNotifier {
     notifyListeners();
     _headsUpsMayHaveChanged();
   }
+
+  /// [_cached] for extensions in other files (the insights API): the value is kept until the data or the day changes.
+  T memo<T>(String key, T Function() compute) => _cached(key, compute);
+
+  final Map<String, InsightRange> _insightRanges = {};
+
+  /// The range one Insights graph shows (kept for the session; its kind is remembered on this device).
+  InsightRange insightRange(String id) => _insightRanges.putIfAbsent(id, () => InsightRange(this, id));
 
   /// Derived values are computed once per [dataVersion] and day, however often a screen asks (every build, every tab).
   T _cached<T>(String key, T Function() compute) {
