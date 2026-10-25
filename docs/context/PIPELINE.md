@@ -34,10 +34,10 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
 | P6-0 | Context pack (Tx/CategorizedTx, override, tags, consumers, payment sheet, TxTile) | scout | – | – | done |
-| P6-C | Core: `split` entity, validation, `Categorizer.expand`, parts in money paths, whole rows in pickers, CSV/search | core-builder | p6-core | P6-0 | running |
-| P6-T | Spec tests (pure + repo + sync) | test-writer | p6-tests | P6-0 | running |
-| P6-U | App: split editor, Spending tile with parts, detail lists, broken split | ui-builder | p6-ui | P6-C | queued |
-| P6 | Merge, review, stage run, push, STATUS | lead | v2 | all | queued |
+| P6-C | Core: `split` entity, validation, `Categorizer.expand`, parts in money paths, whole rows in pickers, CSV/search | core-builder | p6-core | P6-0 | done 3d368b3 → review (2 med, 2 low) → 7921834 |
+| P6-T | Spec tests (pure + repo + sync) | test-writer | p6-tests | P6-0 | done 0fbf069 |
+| P6-U | App: split editor, Spending tile with parts, detail lists, broken split | ui-builder | p6-ui | P6-C | done d3d0e22 → review (1 med, 7 low) → 0806964 |
+| P6 | Merge, review, stage run, push, STATUS | lead | v2 | all | done 2026-10-25 (stage green incl. perf) |
 
 ## Stage P4: recurring beyond monthly (2026-10-25, spec `P4_SPEC.md`; schema 12)
 | # | Item | Agent | Branch | Depends on | Status |

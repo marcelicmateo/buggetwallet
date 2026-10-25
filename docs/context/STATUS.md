@@ -303,6 +303,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Reviews:** core 2 high (a lone early part left a cycle open with no reserve later; monthly instalments ended early), 3 medium, 4 low; re-review 1 medium (late payment still ended a plan early), 1 low; UI 1 high (Edit rewrote the instalment end in 30-day steps), 1 medium, 3 low. All fixed with tests.
   - **Known limits:** the payee of a bill can't be changed after it is created; instalments are edited as "payments left"; `suggestPlan` still counts a weekly subscription as one monthly amount.
   - **Stage run:** importer 335, core 2272, relay 206, app 1555, desktop 13 files, web-test, emulator screens. Perf: spending_scroll over budget again (5 missed build frames) — the known host slowdown, not P4.
+- 2026-10-25: **Stage P6: split transactions** (spec `P6_SPEC.md`, schema 13).
+  - **Owner decisions:** parts must add up exactly before Save; each part has amount, main tag, tags, note; Spending shows one row per payment with the parts underneath; bank and hand-added payments can be split, transfers can't.
+  - **Core:** synced `split` entity (id = the payment's id, all parts in one field, so two devices never mix parts); `Categorizer.expand` gives one row per part at read time; every total, budget, safe-to-spend, insight, CSV (one line per part) and search uses parts; matching, recurring, bills, balances, rule hits and pickers use whole payments. A split that no longer adds up is ignored ("Split doesn't add up"); a part whose main tag was deleted takes the payment's main tag. A bank row reads the split of the hand-added entry matched to it.
+  - **App:** Split… on the payment sheet (editor with "Left to split", Save off until 0.00, Remove with Undo); Spending, Today and search show "Split · N"; category/tag/insight lists show parts ("part of …"); demo wallet has a split supermarket payment.
+  - **Reviews:** core 2 medium (a part could fall back to a transfer and vanish from spending; a split made on another device after matching was lost), 2 low; UI 1 medium (search listed a split payment once per part), 7 low. All fixed with tests.
+  - **Stage run:** importer 335, core 2367, relay 206, app 1577, desktop 13 files, web-test, emulator screens, perf ok (0 over budget).
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -389,6 +395,11 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
   N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
+- Owner checks after P6 (phone):
+  - Open a supermarket payment › Split…: enter two parts, watch "Left to split"; Save stays off until it is 0.00.
+  - Spending shows the payment once with its parts under it; the category view shows each part.
+  - Remove split, then Undo: the parts come back with their tags and notes.
+  - The split editor with 5+ parts at large text size.
 - Owner checks after P4 (phone):
   - Plan › Expected bills › Add bill: a yearly bill (e.g. insurance) → Today shows "… held until paid" and safe-to-spend drops by the full amount.
   - Add a bill with "The amount changes" (from–to): it sets aside the top of the range.
