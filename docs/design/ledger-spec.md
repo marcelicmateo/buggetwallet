@@ -45,11 +45,11 @@ Glyphs that must exist: €, U+2212, NBSP. Record the real APK size delta in STA
   (mono 11 px uppercase, `line` underline). `Eyebrow` is mono with letter-spacing 0.08 em. `Heading` is w600. `Tag` has a 2 px radius and a 1 px outline.
 - **TxTile**: `Date(52, mono 12) | Particulars | Amount(104, right, mono 15 w500)`, with 1 px `line` dividers and a bottom hairline. Income
   is `good` with "+". Minimum height 44 px. Keep the InkWell. An optional `TxHeaderRow` sits on Today and Spending. `LineItem` gets a mono right-aligned value.
-- **Totals**: `TotalRule` = 1 px top plus a double bottom rule (two 1 px lines with a 1 px gap), under the Today hero, the Plan budget total and goal totals.
+- **Totals**: `TotalRule` = a light 1 px `line` on top plus a double bottom rule (two 1 px `lineStrong` lines with a 2 px gap), under the Today hero, the Plan budget total and goal totals.
 - **Buttons**: radius 3. Filled: accent, w600 16 px, height 52 (primary) or 44. Outlined: 1 px `lineStrong`. Tonal becomes accent-outlined.
   Text: accent, w600. Segmented: radius 2, selected = filled ink with a check. No pills.
 - **Chips**: radius 2, 1 px `lineStrong`, selected = accent with a check. The app-bar period chip is mono with a 1 px ink border.
-- **NavigationBar**: bg, a 1 px ink top border, a transparent indicator plus a 3 px accent top bar, an accent w600 label. Outlined icons, height 64.
+- **NavigationBar**: bg, a 1 px `lineStrong` top border, a transparent indicator plus a 3 px accent top bar, an accent w600 label. Outlined icons, height 64.
 - **NavigationRail**: bg, a 1 px `line` right border, a 3 px accent bar on the left of the selected item, minimum width 80, items at least 44 px.
 - **Dialogs**: radius 3, surface, a 1 px `lineStrong` border, elevation 0. **Bottom sheets**: top radius 0, a 1 px `lineStrong` top border, no handle.
   Scrim at 0.4 alpha. A double rule under the amount on the AddExpense and Transaction sheets.

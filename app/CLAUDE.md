@@ -49,10 +49,12 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   fields (same `_keys`, same `_savePlan`) with **Save** (`planSave`, closes the editor on success or "Nothing to save", stays open on an error) and **Cancel** (`planCancel`, restores the
   shown values and the currency). Tests tap Edit first: `openPlanEdit(tester)` in `test/support/wallet.dart`, `edit(t)` in `integration_test/plan_test.dart`; `test/plan_edit_test.dart`.
   Plan › "Another wallet" › **Join another wallet…** (`joinAnother`, not on the web: no set-aside path there): `screens/join_another.dart` shows the warning sheet, then pushes
-  `OnboardingScreen(replaceCurrent: true)` (join step only; its "Cancel" pops and changes nothing). Only the join itself calls `wc.joinAnotherWallet(text, relay:)`: key and relay are
-  checked, then `_setAsideOpenWallet()` closes the database and `dbSetAside`s it (`wallet.db.unopened-<date>`, `db.setAside {reason: join}`, never deleted; a failing set-aside reopens the
-  old wallet), then the normal `joinWallet` runs (the key store gets the new key: the old wallet's key must be saved to open the copy). A failure after the set-aside sets `key = null`
-  (first-run onboarding). Tests: `test/join_another_test.dart`.
+  `OnboardingScreen(replaceCurrent: true)` (join step only; its "Cancel" pops and changes nothing). Continue is offered only after this wallet's own key was saved (`keyBackupConfirmed`; the sheet sends the owner through the last-four `openKeyBackup` first; the controller throws `KeyNotSaved` too).
+  Only the join itself calls `wc.joinAnotherWallet(text, relay:)`: key, relay, `KeyNotSaved` and `WalletAlreadyOpen` (same key) are checked, then `_setAsideOpenWallet`: wait for a running sync (`_syncRun`) and push pending
+  changes once, `keyAsideWriter` stores the old key in a second slot (`KeyStore.writeAside(stamp, key)` → `wallet.key.aside.<stamp>[-n]` / secure-storage `budget_wallet_key_aside.<stamp>`; never read yet, kept by `forget`),
+  the new key is written, then the database is closed and `dbSetAside`d (`wallet.db.unopened-<date>`, `db.setAside {reason: join}`, never deleted), sync status is reset, then `joinWallet(keyWritten: true)`.
+  A failed key write drops the slot; a failed set-aside writes the old key back, drops the slot and reopens the old wallet (if that fails too: `key = null`, onboarding). A crash after the key write: the next start finds a key that
+  does not open `wallet.db` and takes the key-mismatch path (`hasUnopenedDb`). A failure after the set-aside sets `key = null`. Tests: `test/join_another_test.dart`, `test/key_store_file_test.dart`.
 - Theme (N1, softer Ledger): graphite ink, warmer paper, `lineStrong` is a mid grey (3:1 on bg: inputs, buttons, panel top rule, double rule), `line` is used for row separators,
   `SectionHead` underlines, `TotalRule`'s top line, header rules and the rail border; the double rule (1 px, 2 px gap) sits under totals only. Values: `docs/design/ledger-spec.md` §1.
 - Sync (R5): `controller.dart` keeps `relayUrl` (device-local `relayUrl` value; `setRelay(Uri?)` validates http/https + host, saves, syncs with trigger `relay`;

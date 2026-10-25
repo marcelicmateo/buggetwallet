@@ -32,6 +32,11 @@ class KeyStore {
   /// Wraps and stores [key]; the web needs a [passphrase] (at least [minPassphraseLength] characters).
   static Future<void> write(VaultKey key, {String? passphrase}) => _vault.write(key, passphrase: passphrase);
 
+  /// Joining another wallet while one is open is not offered in the browser.
+  static Future<String> writeAside(String stamp, VaultKey key) => throw UnsupportedError('No set-aside key in the browser.');
+
+  static Future<void> removeAside(String slot) async {}
+
   static const _idName = 'bw.deviceId';
 
   /// This browser's device id (H6), next to the wrapped key; not secret, so plain in localStorage. Never logged.

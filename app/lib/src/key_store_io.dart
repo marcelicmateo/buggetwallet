@@ -75,6 +75,35 @@ class KeyStore {
     t.done({'store': _store});
   }
 
+  /// Keeps the key of a wallet that is being set aside under its own slot, `<name>.aside.<stamp>` (`-2`, `-3`… when taken, like the
+  /// database copy), and returns the slot. The slot is never read by the app yet (reopening a set-aside wallet is not built).
+  static Future<String> writeAside(String stamp, VaultKey key) async {
+    final text = await key.toText();
+    var slot = 'aside.$stamp';
+    for (var n = 2; await _asideExists(slot); n++) {
+      slot = 'aside.$stamp-$n';
+    }
+    if (isMobile) {
+      await const FlutterSecureStorage().write(key: '${_name}_$slot', value: text);
+    } else {
+      await _writePrivate(await _file('wallet.key.$slot'), text);
+    }
+    return slot;
+  }
+
+  static Future<bool> _asideExists(String slot) async =>
+      isMobile ? await const FlutterSecureStorage().containsKey(key: '${_name}_$slot') : await (await _file('wallet.key.$slot')).exists();
+
+  /// Takes back a slot made by [writeAside] whose set-aside did not happen.
+  static Future<void> removeAside(String slot) async {
+    if (isMobile) {
+      await const FlutterSecureStorage().delete(key: '${_name}_$slot');
+    } else {
+      final f = await _file('wallet.key.$slot');
+      if (await f.exists()) await f.delete();
+    }
+  }
+
   /// The folder is private (0700); the text goes into a temp file there that is 0600 before any byte is written, then renamed
   /// over [f], so it is never readable by others and a crash never leaves half a file.
   static Future<void> _writePrivate(File f, String text) async {

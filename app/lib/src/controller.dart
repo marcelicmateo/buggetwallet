@@ -175,6 +175,13 @@ class WalletController extends ChangeNotifier {
   @visibleForTesting
   Future<void> Function() keyForgetter = KeyStore.forget;
 
+  /// The old wallet's key, kept under a second slot named after the set-aside stamp (returns the slot); and its removal when the
+  /// set-aside did not happen.
+  @visibleForTesting
+  Future<String> Function(String stamp, VaultKey key) keyAsideWriter = KeyStore.writeAside;
+  @visibleForTesting
+  Future<void> Function(String slot) keyAsideRemover = KeyStore.removeAside;
+
   /// Database work; tests replace them. [dbOpener] opens (or creates) the keyed wallet database with `localDbKey(key)`.
   @visibleForTesting
   Future<WalletDb> Function(Uint8List dbKey, {String? deviceId}) dbOpener = openWalletDb;
@@ -269,6 +276,9 @@ class WalletController extends ChangeNotifier {
   }
 
   bool syncing = false;
+
+  /// Completes when the running sync ends (set while [syncing]); [joinAnotherWallet] waits for it before closing the database.
+  Completer<void>? _syncRun;
   List<ImportLine> lastImport = const [];
 
   Timer? _syncTimer;
@@ -912,14 +922,15 @@ class WalletController extends ChangeNotifier {
   }
 
   /// Joins with the wallet [text] key. [relay] (optional, can be set later in Plan) is the relay address; the first sync follows.
-  Future<void> joinWallet(String text, {String? passphrase, Uri? relay}) async {
+  /// [keyWritten]: the key is already in the key store ([joinAnotherWallet] wrote it before setting the old database aside).
+  Future<void> joinWallet(String text, {String? passphrase, Uri? relay, bool keyWritten = false}) async {
     final k = await VaultKey.parse(text); // errors are logged by the caller (never the text)
     final r = relay == null ? null : parseRelayAddress(relay.toString());
     if (relay != null && r == null) throw const FormatException('Not a relay address');
     // No key was stored but an unkeyed (plaintext) file exists: it belongs to no wallet we can name, and opening it with this key
     // would convert it and merge its data into the joined wallet. Set it aside (before the key is written, as in create).
     if (_dbPending && hasUnopenedDb && await dbIsPlaintext()) await _setAsideUnopened();
-    await keyWriter(k, passphrase: passphrase);
+    if (!keyWritten) await keyWriter(k, passphrase: passphrase);
     if (_dbPending) await _openFileDb(k, freshId: true);
     key = k;
     repo.setLocalValue('keyBackupConfirmed', today()); // they typed the key in, so they have it
@@ -932,16 +943,22 @@ class WalletController extends ChangeNotifier {
     await syncNow(trigger: 'join');
   }
 
-  /// Plan › "Join another wallet…": joins the wallet with [text] while this one is open. The key and relay are checked first (a typo
-  /// throws and nothing is touched). Then the open database is closed and moved aside (`wallet.db.unopened-<date>`, `db.setAside`,
-  /// never deleted) and the join goes on as on a first run. The old wallet's key is replaced in the key store, so the owner must
-  /// have saved it to open the set-aside copy again (the warning dialog says so). Not on the web (no set-aside path there).
+  /// Plan › "Join another wallet…": joins the wallet with [text] while this one is open. Checked first, nothing touched on a
+  /// failure: the key parses, the relay is an address, this wallet's own key was saved ([KeyNotSaved]) and [text] is not this wallet's
+  /// key ([WalletAlreadyOpen]). Then, in this order: a last sync of pending changes; the old key is stored in a second slot
+  /// (`KeyStore.writeAside`); the new key is written; the database is closed and moved aside (`wallet.db.unopened-<date>`,
+  /// `db.setAside`, never deleted); the join goes on as on a first run. A crash after the key write finds a key that does not open
+  /// `wallet.db`: the next start takes the key-mismatch path (the file stays, `hasUnopenedDb`). Not on the web (no set-aside path).
   Future<void> joinAnotherWallet(String text, {String? passphrase, Uri? relay}) async {
-    await VaultKey.parse(text);
+    final k = await VaultKey.parse(text);
     if (relay != null && parseRelayAddress(relay.toString()) == null) throw const FormatException('Not a relay address');
-    if (!_dbPending) await _setAsideOpenWallet();
+    final current = key;
+    if (current != null && await current.toText() == await k.toText()) throw const WalletAlreadyOpen();
+    if (!_dbPending && !keyBackupConfirmed) throw const KeyNotSaved();
+    final written = !_dbPending;
+    if (written) await _setAsideOpenWallet(k, passphrase);
     try {
-      await joinWallet(text, passphrase: passphrase, relay: relay);
+      await joinWallet(text, passphrase: passphrase, relay: relay, keyWritten: written);
     } catch (e) {
       // The old wallet is already set aside: show first-run onboarding, so nothing looks open that is not.
       key = null;
@@ -950,33 +967,67 @@ class WalletController extends ChangeNotifier {
     }
   }
 
-  /// Closes the open database and moves it aside; the controller then runs on the in-memory placeholder like before a first key.
-  /// If the move fails the database is opened again and the error is thrown.
-  Future<void> _setAsideOpenWallet() async {
+  /// Ends the running sync and sends what is still pending, then stores the old key aside, writes [newKey], closes the open database
+  /// and moves it aside; the controller then runs on the in-memory placeholder like before a first key. A failure puts the old key
+  /// back and opens the old database again, then throws.
+  Future<void> _setAsideOpenWallet(VaultKey newKey, String? passphrase) async {
     _syncTimer?.cancel();
     _dayTimer?.cancel();
     _debounce?.cancel();
     _persistTimer?.cancel();
+    await _syncRun?.future;
+    if (relayUrl != null && repo.pendingOps().isNotEmpty) await syncNow(quiet: true, trigger: 'beforeJoin');
     await persistNow();
-    final old = repo, oldKey = key;
+    final stamp = isoDate(_clock());
+    final oldKey = key!;
+    String? slot;
+    try {
+      slot = await keyAsideWriter(stamp, oldKey);
+      await keyWriter(newKey, passphrase: passphrase);
+    } catch (e, st) {
+      logError(_log, 'db.setAside.keyFailed', e, st, level: Level.SEVERE);
+      if (slot != null) await _removeAsideKey(slot);
+      _startAutoSync();
+      rethrow;
+    }
+    final old = repo;
     _db = null;
     repo = WalletRepo.inMemory();
     _dbPending = true;
     old.close();
     try {
-      await dbSetAside(isoDate(_clock()));
+      await dbSetAside(stamp);
     } catch (e, st) {
       logError(_log, 'db.setAside.failed', e, st, level: Level.SEVERE);
       try {
-        if (oldKey != null) await _openFileDb(oldKey, asideOnMismatch: false);
+        await keyWriter(oldKey);
+        await _removeAsideKey(slot);
+        await _openFileDb(oldKey, asideOnMismatch: false);
       } catch (e2, st2) {
         logError(_log, 'db.reopenFailed', e2, st2, level: Level.SEVERE);
+        key = null; // nothing is open: first-run onboarding, the old file is still on disk
+        notifyListeners();
       }
       _startAutoSync();
       rethrow;
     }
     logEvent(_log, Level.WARNING, 'db.setAside', {'reason': 'join'});
     hasUnopenedDb = false;
+    _resetSyncStatus();
+    lastImport = const [];
+    _startAutoSync();
+  }
+
+  Future<void> _removeAsideKey(String slot) async {
+    try {
+      await keyAsideRemover(slot);
+    } catch (e, st) {
+      logError(_log, 'db.setAside.slotFailed', e, st);
+    }
+  }
+
+  /// Nothing of the old wallet's sync status, devices or errors may show for the next wallet (also when it uses the same relay).
+  void _resetSyncStatus() {
     relayUrl = null;
     lastSync = null;
     syncError = null;
@@ -985,8 +1036,12 @@ class WalletController extends ChangeNotifier {
     syncBlobsWaiting = 0;
     syncBlobsUnsupported = false;
     syncDevices = const [];
-    lastImport = const [];
-    _startAutoSync();
+    syncBadFiles = 0;
+    syncRelayInstance = null;
+    syncRelayBytes = null;
+    syncRelayMaxBytes = null;
+    syncProblems = const [];
+    _relayFollowUp = false;
   }
 
   // ---------- key backup prompt (see app/CLAUDE.md, Sync) ----------
@@ -1272,6 +1327,7 @@ class WalletController extends ChangeNotifier {
       return;
     }
     syncing = true;
+    final run = _syncRun = Completer<void>();
     if (!quiet) notifyListeners();
     final dataBefore = _dataMark();
     try {
@@ -1317,6 +1373,8 @@ class WalletController extends ChangeNotifier {
       if (_dataMark() != dataBefore) reload();
     } finally {
       syncing = false;
+      run.complete();
+      if (identical(_syncRun, run)) _syncRun = null;
       final followUp = _relayFollowUp && relayUrl != null;
       _relayFollowUp = false;
       notifyListeners();
@@ -1663,4 +1721,18 @@ class WalletController extends ChangeNotifier {
     logEvent(_log, Level.INFO, 'wish.decide', {'status': status});
     _changed();
   }
+}
+
+/// Joining the wallet that is already open.
+class WalletAlreadyOpen implements Exception {
+  const WalletAlreadyOpen();
+  @override
+  String toString() => 'This wallet is already open.';
+}
+
+/// The open wallet's own key was never saved: setting it aside would leave no way to reopen it.
+class KeyNotSaved implements Exception {
+  const KeyNotSaved();
+  @override
+  String toString() => "Save this wallet's key first.";
 }

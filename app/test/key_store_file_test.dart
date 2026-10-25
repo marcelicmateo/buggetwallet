@@ -39,6 +39,30 @@ void main() {
     expect((await KeyStore.read())!.bytes, key.bytes);
   }, skip: posix);
 
+  test('writeAside keeps a set-aside wallet\'s key in its own private slot next to the active key (never over it)', () async {
+    final active = VaultKey.generate();
+    final old = VaultKey.generate();
+    await KeyStore.write(active);
+    final slot = await KeyStore.writeAside('2026-10-25', old);
+    expect(slot, 'aside.2026-10-25');
+    final file = File('${keyDir.path}/wallet.key.$slot');
+    expect(file.existsSync(), isTrue);
+    expect(mode(file.path), '600');
+    expect((await VaultKey.parse(file.readAsStringSync())).bytes, old.bytes);
+    expect((await KeyStore.read())!.bytes, active.bytes, reason: 'the active key is untouched');
+    // The same day again: a new slot, the first one is never overwritten.
+    final other = VaultKey.generate();
+    expect(await KeyStore.writeAside('2026-10-25', other), 'aside.2026-10-25-2');
+    expect((await VaultKey.parse(file.readAsStringSync())).bytes, old.bytes);
+    // Only a slot made for a set-aside that did not happen is taken back.
+    await KeyStore.removeAside('aside.2026-10-25-2');
+    expect(File('${keyDir.path}/wallet.key.aside.2026-10-25-2').existsSync(), isFalse);
+    expect(file.existsSync(), isTrue);
+    // forget() (the web "Forget this browser" path and tests) leaves aside keys alone.
+    await KeyStore.forget();
+    expect(file.existsSync(), isTrue);
+  }, skip: posix);
+
   test('a folder that already exists with open permissions is made private', () async {
     await keyDir.create();
     await Process.run('chmod', ['755', keyDir.path]);
