@@ -92,7 +92,35 @@ NormalizedBill? _fromCode(ScannedCode c) {
 
 String _hex(List<int> bytes) => bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
+/// A confirmed recurring bill's month-by-month history (Plan › Expected bills › History): the core months and, for each
+/// payment, the categorized row the transaction sheet needs.
+class BillHistoryView {
+  final RecurringBill bill;
+  final List<BillMonth> months;
+  final Map<String, CategorizedTx> rows;
+  const BillHistoryView(this.bill, this.months, this.rows);
+}
+
 extension BillsDb on WalletController {
+  /// The history of the confirmed recurring bill [billId] (12 months, home currency), or null when it is not a confirmed
+  /// bill (any more). Computed once per data version and day, and only for a bill whose History is open (never per list row).
+  BillHistoryView? billHistoryFor(String billId) => _cached<BillHistoryView?>('billHistory:$billId', () {
+        RecurringBill? found;
+        for (final b in recurringBills()) {
+          if (b.id == billId && b.status == 'confirmed') found = b;
+        }
+        final bill = found;
+        if (bill == null) return null;
+        final months =
+            timed('wc.billHistory', () => billHistory(bill, [for (final c in txs) c.tx], billsAll(), today: today(), currency: currency));
+        final byId = {for (final c in txs) c.tx.id: c};
+        return BillHistoryView(bill, months, {
+          for (final m in months)
+            for (final p in m.payments)
+              if (byId[p.id] != null) p.id: byId[p.id]!,
+        });
+      });
+
   // ---------- lists ----------
 
   /// Every live bill (cached per data version).

@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart';
 
 import 'demo_data.dart';
 import 'support/harness.dart';
@@ -183,6 +184,52 @@ void main() {
     await goTab(t, 'Today');
     expect(find.byKey(const ValueKey('heldLine')), findsOneWidget);
     await Harness.shot(t, 'today-held');
+    await Harness.checkLog();
+  });
+
+  itest('Bill history: a confirmed bill lists its months; a month opens to its payment and bill', (t) async {
+    final now = DateTime.now();
+    String on(int back) {
+      final d = DateTime(now.year, now.month - back, 15);
+      return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-15';
+    }
+
+    NormalizedTransaction gym(int back) {
+      final date = on(back);
+      return NormalizedTransaction(
+          id: transactionId(date, -2999, 'POS SYNTHGYM ZAGREB', 0),
+          source: 'pbz',
+          date: date,
+          amountMinor: -2999,
+          currency: 'EUR',
+          bankType: 'POS plaćanje',
+          description: 'POS SYNTHGYM ZAGREB');
+    }
+
+    final wc = await Harness.start(t,
+        batch: ImportBatch(source: 'pbz', transactions: [
+          for (final b in [1, 2, 3]) gym(b)
+        ]),
+        settings: {'salary': 150000, 'salaryConfirmed': true});
+    wc.refreshRecurring();
+    final bill = wc.recurringBills().firstWhere((b) => b.payee.contains('synthgym'));
+    wc.confirmRecurring(bill.id);
+    wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [gym(5)]));
+    wc.repo.importBill(
+        NormalizedBill(source: BillSource.manual, externalId: 'gym-slip', date: on(2), total: 3050, payee: 'POS SYNTHGYM ZAGREB'));
+    wc.reload();
+    await goTab(t, 'Plan');
+    await scrollTo(t, find.byKey(ValueKey('billHistory_${bill.id}')), PlanScreen);
+    await Harness.shot(t, 'plan-bill-row');
+    await tapVisible(t, find.byKey(ValueKey('billHistory_${bill.id}')));
+    await t.pumpAndSettle();
+    expect(find.byKey(ValueKey('historyMonth_${on(0).substring(0, 7)}')), findsOneWidget);
+    expect(find.text('Coming up'), findsOneWidget);
+    expect(find.text('Missing (no payment or bill found)'), findsOneWidget);
+    await Harness.shot(t, 'bill-history');
+    await tapVisible(t, find.byKey(ValueKey('historyToggle_${on(2).substring(0, 7)}')));
+    await t.pumpAndSettle();
+    await Harness.shot(t, 'bill-history-open');
     await Harness.checkLog();
   });
 
