@@ -53,6 +53,9 @@ const entityTables = {
   ),
   'account': ('accounts', ['name', 'source', 'currency', 'opening', 'opening_date', 'deleted']),
   'category': ('categories', ['name', 'kind', 'parent', 'position', 'hidden', 'deleted']),
+  'tag': ('tags', ['name', 'position', 'hidden', 'deleted']),
+  'txtag': ('tx_tags', ['tx', 'tag', 'state']),
+  'ruletag': ('rule_tags', ['payee', 'tag', 'deleted']),
 };
 
 const dataTables = [
@@ -66,7 +69,10 @@ const dataTables = [
   'planned',
   'bills',
   'accounts',
-  'categories'
+  'categories',
+  'tags',
+  'tx_tags',
+  'rule_tags'
 ];
 
 /// Every row of the data tables (and the field clocks), in a stable order, as plain maps.

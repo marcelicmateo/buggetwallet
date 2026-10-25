@@ -101,7 +101,10 @@ class CategorizedTx {
   final Tx tx;
   final String category;
   final BudgetKind kind;
-  const CategorizedTx(this.tx, this.category, this.kind);
+
+  /// The row's extra tags (T1, `tagsOf`): resolved tag ids in table order; empty when none. Unmodifiable.
+  final List<String> tags;
+  const CategorizedTx(this.tx, this.category, this.kind, {this.tags = const []});
   String get date => tx.date;
   int get amount => tx.amount;
 }

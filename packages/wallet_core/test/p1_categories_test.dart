@@ -1,4 +1,4 @@
-// Stage P1 (core builder): custom categories and subcategories (schema 10), CategoryTable, rollUp, the callers that
+// Stage P1 (core builder): custom categories (schema 10; subcategories replaced by tags in T1), CategoryTable, rollUp, the callers that
 // switched to the table, two devices and backup. All data is SYNTHETIC.
 library;
 
@@ -96,23 +96,23 @@ void main() {
   });
 
   group('the table', () {
-    test('a child takes its parent\'s kind, rolls up, and is listed after its parent', () {
+    test('T1: a stored parent is ignored: every row is top-level with its own kind, rollUp is the identity', () {
       final t = CategoryTable.from(const [
         CategoryRow(id: 'kaaaaaaaaaaaa', name: 'Pet food', kind: BudgetKind.income, parent: 'Groceries', position: 0),
         CategoryRow(id: 'kbbbbbbbbbbbb', name: 'Pets', kind: BudgetKind.flex, position: 30),
-        CategoryRow(id: 'kcccccccccccc', name: 'Vet', kind: BudgetKind.flex, parent: 'kbbbbbbbbbbbb', position: 1),
-        CategoryRow(id: 'kdddddddddddd', name: 'Toys', kind: BudgetKind.flex, parent: 'kbbbbbbbbbbbb', position: 0),
+        CategoryRow(id: 'kcccccccccccc', name: 'Vet', kind: BudgetKind.flex, parent: 'kbbbbbbbbbbbb', position: 32),
+        CategoryRow(id: 'kdddddddddddd', name: 'Toys', kind: BudgetKind.flex, parent: 'kbbbbbbbbbbbb', position: 31),
       ]);
-      expect(t.kindOf('kaaaaaaaaaaaa'), BudgetKind.flex, reason: 'the kind is read from the parent');
-      expect(t.topLevel('kcccccccccccc'), 'kbbbbbbbbbbbb');
-      expect(t.childrenOf('kbbbbbbbbbbbb'), ['kdddddddddddd', 'kcccccccccccc']);
+      expect(t.kindOf('kaaaaaaaaaaaa'), BudgetKind.income, reason: 'its own kind');
+      expect(t.topLevel('kcccccccccccc'), 'kcccccccccccc');
+      expect(t.parentOf('kcccccccccccc'), isNull);
+      expect(t.childrenOf('kbbbbbbbbbbbb'), isEmpty);
       final p = t.pickable();
-      expect(p.indexOf('kaaaaaaaaaaaa'), p.indexOf('Groceries') + 1);
+      expect(p.first, 'kaaaaaaaaaaaa', reason: 'position 0');
       expect(p.sublist(p.length - 3), ['kbbbbbbbbbbbb', 'kdddddddddddd', 'kcccccccccccc']);
-      expect(t.spending, [...spendingCategories, 'kbbbbbbbbbbbb']);
-      expect(t.isSpending('kcccccccccccc'), isTrue);
-      final sums = rollUp({'kcccccccccccc': 101, 'kbbbbbbbbbbbb': 7, 'kdddddddddddd': -3, 'Groceries': 50, 'kaaaaaaaaaaaa': 1}, t);
-      expect(sums, {'kbbbbbbbbbbbb': 105, 'Groceries': 51});
+      expect(t.spending, [...spendingCategories, 'kbbbbbbbbbbbb', 'kdddddddddddd', 'kcccccccccccc']);
+      final sums = {'kcccccccccccc': 101, 'kbbbbbbbbbbbb': 7, 'kdddddddddddd': -3, 'Groceries': 50, 'kaaaaaaaaaaaa': 1};
+      expect(rollUp(sums, t), sums);
     });
 
     test('relabel and hide a built-in: the id stays, the kind is fixed by the built-in', () {
@@ -127,21 +127,7 @@ void main() {
       expect(t.spending, contains('Groceries'));
     });
 
-    test('one level only: a chain or a cycle from a sync race leaves the inner rows top-level', () {
-      final t = CategoryTable.from(const [
-        CategoryRow(id: 'k000000000001', name: 'A', parent: 'k000000000002'),
-        CategoryRow(id: 'k000000000002', name: 'B', parent: 'k000000000003'),
-        CategoryRow(id: 'k000000000003', name: 'C'),
-        CategoryRow(id: 'k000000000004', name: 'D', parent: 'k000000000005'),
-        CategoryRow(id: 'k000000000005', name: 'E', parent: 'k000000000004'),
-      ]);
-      expect(t.parentOf('k000000000002'), 'k000000000003');
-      expect(t.parentOf('k000000000001'), isNull);
-      expect(t.parentOf('k000000000004'), isNull);
-      expect(t.parentOf('k000000000005'), isNull);
-    });
-
-    test('duplicates: a built-in label wins, then the smallest id; siblings only among siblings', () {
+    test('duplicates: a built-in label wins, then the smallest id; stored parents do not matter', () {
       final t = CategoryTable.from(const [
         CategoryRow(id: 'k000000000009', name: 'groceries'),
         CategoryRow(id: 'k000000000002', name: 'Kućni ljubimci'),
@@ -154,7 +140,7 @@ void main() {
       expect(t.duplicateOf('k000000000002'), 'k000000000001');
       expect(t.duplicateOf('k000000000001'), isNull);
       expect(t.duplicateOf('k000000000004'), 'k000000000003');
-      expect(t.duplicateOf('k000000000005'), isNull);
+      expect(t.duplicateOf('k000000000005'), 'k000000000003');
       expect(t.pickable(), isNot(anyOf(contains('k000000000009'), contains('k000000000002'), contains('k000000000004'))));
     });
   });
@@ -164,48 +150,37 @@ void main() {
     setUp(() => r = WalletRepo.inMemory());
     tearDown(() => r.close());
 
-    test('add, relabel, hide, move and delete; ids are k + 12 hex', () async {
+    test('add, relabel, hide and delete; ids are k + 12 hex; a parent is refused', () async {
       final pets = await r.addCategory(name: '  Pets ', kind: BudgetKind.flex);
       expect(pets, matches(RegExp(r'^k[0-9a-f]{12}$')));
-      final vet = await r.addCategory(name: 'Vet', kind: BudgetKind.flex, parent: pets);
+      await expectLater(r.addCategory(name: 'Vet', kind: BudgetKind.flex, parent: pets), throwsArgumentError);
+      final vet = await r.addCategory(name: 'Vet', kind: BudgetKind.flex);
       final t = r.categoryTable();
       expect(t.label(pets), 'Pets');
-      expect(t.childrenOf(pets), [vet]);
+      expect(t.childrenOf(pets), isEmpty);
       expect(t.pickable().last, vet);
       await r.updateCategory('Groceries', name: 'Food', hidden: true);
       expect(r.categoryTable().label('Groceries'), 'Food');
       expect(r.categoryTable().pickable(), isNot(contains('Groceries')));
       await r.updateCategory(vet, clearParent: true);
-      expect(r.categoryTable().parentOf(vet), isNull);
-      await r.updateCategory(vet, parent: pets);
-      expect(r.categoryTable().parentOf(vet), pets);
-      await expectLater(r.deleteCategory(pets), throwsArgumentError, reason: 'it has a live child');
-      await r.deleteCategory(vet);
+      await expectLater(r.updateCategory(vet, parent: pets), throwsArgumentError);
       await r.deleteCategory(pets);
+      await r.deleteCategory(vet);
       expect(r.categoryRows().map((x) => x.id), ['Groceries']);
       expect(r.categoryRows(includeDeleted: true), hasLength(3));
       await expectLater(r.deleteCategory('Groceries'), throwsArgumentError);
     }, timeout: _t);
 
-    test('rules: name length, one level, kind, built-in parent, uniqueness with case and accents', () async {
+    test('rules: name length, parent refused, uniqueness with case and accents', () async {
       await expectLater(r.addCategory(name: '  ', kind: BudgetKind.flex), throwsArgumentError);
       await expectLater(r.addCategory(name: 'x' * 41, kind: BudgetKind.flex), throwsArgumentError);
       final a = await r.addCategory(name: 'x' * 40, kind: BudgetKind.flex);
-      await expectLater(r.addCategory(name: 'Child', kind: BudgetKind.fixed, parent: 'Groceries'), throwsArgumentError);
-      final c = await r.addCategory(name: 'Child', kind: BudgetKind.fixed, parent: 'Rent');
-      await expectLater(r.addCategory(name: 'Grandchild', kind: BudgetKind.fixed, parent: c), throwsArgumentError);
+      await expectLater(r.addCategory(name: 'Child', kind: BudgetKind.fixed, parent: 'Rent'), throwsArgumentError);
       await expectLater(r.addCategory(name: 'GROCERIES', kind: BudgetKind.flex), throwsArgumentError);
       await r.addCategory(name: 'Kućni', kind: BudgetKind.flex);
       await expectLater(r.addCategory(name: 'kucni', kind: BudgetKind.flex), throwsArgumentError);
-      await expectLater(r.addCategory(name: 'child', kind: BudgetKind.fixed, parent: 'Rent'), throwsArgumentError);
-      await r.addCategory(name: 'child', kind: BudgetKind.fixed, parent: 'Loan');
       await expectLater(r.updateCategory('Groceries', parent: 'Rent'), throwsArgumentError);
       await expectLater(r.updateCategory('Rent', parent: a), throwsArgumentError);
-      final b = await r.addCategory(name: 'B', kind: BudgetKind.fixed);
-      await expectLater(r.updateCategory(b, parent: c), throwsArgumentError, reason: 'the parent is a child');
-      await r.addCategory(name: 'B child', kind: BudgetKind.fixed, parent: b);
-      await expectLater(r.updateCategory(b, parent: 'Rent'), throwsArgumentError, reason: 'b has children');
-      await expectLater(r.updateCategory(a, parent: 'Rent'), throwsArgumentError, reason: 'flex under fixed');
       await expectLater(r.updateCategory('Rent', name: 'groceries'), throwsArgumentError);
       await expectLater(r.updateCategory(a, position: -1), throwsArgumentError);
       await expectLater(r.updateCategory('k000000000000', name: 'Z'), throwsArgumentError);
@@ -255,48 +230,47 @@ void main() {
       expect(r.categorizer().categorize(fee).category, food);
     }, timeout: _t);
 
-    test('budgets: top-level custom yes, a child is refused, children roll up into the parent', () async {
+    test('budgets: custom spending categories yes, income no; an old child row has its own line', () async {
       final pets = await r.addCategory(name: 'Pets', kind: BudgetKind.flex);
-      final vet = await r.addCategory(name: 'Vet', kind: BudgetKind.flex, parent: pets);
+      final vet = await r.addCategory(name: 'Vet', kind: BudgetKind.flex);
+      r.applyRemote([
+        Op('category', vet, {'parent': pets}, const Hlc(9999999999999, 0, 'z').toString())
+      ]);
       final income = await r.addCategory(name: 'Side job', kind: BudgetKind.income);
       r.setCategoryBudget(pets, 10000);
       expect(r.settings().categoryBudgets[pets], 10000);
-      expect(() => r.setCategoryBudget(vet, 500), throwsArgumentError);
       expect(() => r.setCategoryBudget(income, 500), throwsArgumentError);
       final t = r.categoryTable();
       final rows = [_c('x1', '2026-09-03', -2000, vet, t), _c('x2', '2026-09-04', -1500, pets, t), _c('x3', '2026-09-05', -999, vet, t)];
       final b = budgetVsActual(rows, '2026-09', r.settings().categoryBudgets, today: '2026-09-30', currency: 'EUR', table: t);
-      expect([for (final l in b.lines) (l.category, l.budget, l.actual)], [(pets, 10000, 4499)]);
-      expect(monthSummary(rows, '2026-09', currency: 'EUR').byCategory, {vet: 2999, pets: 1500}, reason: 'per row id for drill-down');
+      expect([for (final l in b.lines) (l.category, l.budget, l.actual)], containsAll([(pets, 10000, 1500)]));
+      expect(monthSummary(rows, '2026-09', currency: 'EUR').byCategory, {vet: 2999, pets: 1500});
       expect(
           categoryShare(rows, DateRange(start: '2026-09-01', end: '2026-09-30'), currency: 'EUR', rollUp: true, table: t)
               .slices
-              .single
-              .spent,
-          4499);
-      await r.deleteCategory(vet);
+              .map((s) => (s.category, s.spent)),
+          [(vet, 2999), (pets, 1500)]);
       await r.deleteCategory(pets);
       expect(r.settings().categoryBudgets.containsKey(pets), isFalse, reason: 'a deleted category has no budget');
       await r.undeleteCategory(pets);
       expect(r.settings().categoryBudgets[pets], 10000, reason: 'the stored row was kept');
     }, timeout: _t);
 
-    test('CSV header and columns with custom top-level categories', () async {
+    test('CSV header and columns with custom categories', () async {
       final pets = await r.addCategory(name: 'Pets, cats', kind: BudgetKind.flex);
-      final vet = await r.addCategory(name: 'Vet', kind: BudgetKind.flex, parent: pets);
+      final vet = await r.addCategory(name: 'Vet', kind: BudgetKind.flex);
       await r.addCategory(name: 'Side job', kind: BudgetKind.income);
       final t = r.categoryTable();
-      expect(monthlySummaryCsvHeaderFor(t), 'month,${spendingCategories.join(',')},"Pets, cats",total');
+      expect(monthlySummaryCsvHeaderFor(t), 'month,${spendingCategories.join(',')},"Pets, cats",Vet,total');
       final csv =
           monthlySummaryCsv([_c('x1', '2026-09-03', -2000, vet, t), _c('x2', '2026-09-04', -1, pets, t)], currency: 'EUR', table: t);
       final line = csv.split('\n')[1].split(',');
       expect(line.first, '2026-09');
-      expect(line[line.length - 2], '20.01');
-      expect(line.last, '20.01');
+      expect(line.sublist(line.length - 3), ['0.01', '20.00', '20.01']);
     }, timeout: _t);
 
     test('a custom fixed category is covered by the plan and never reserved again', () async {
-      final parking = await r.addCategory(name: 'Parking', kind: BudgetKind.fixed, parent: 'Rent');
+      final parking = await r.addCategory(name: 'Parking', kind: BudgetKind.fixed);
       final t = r.categoryTable();
       const p = PlannedCost(id: 'p1', title: 'Synthetic', date: '2026-10-12', amount: 4000, category: 'kffffffffffff');
       final q = PlannedCost(id: 'p2', title: 'Synthetic', date: '2026-10-12', amount: 4000, category: parking);
@@ -344,32 +318,12 @@ void main() {
       expect(b.repo.categoryTable().duplicateOf(dup), keep);
     }, timeout: _t);
 
-    test('a parent deleted on A while B adds a child: the child is top-level with its own kind', () async {
-      final a = Device('A', null, key, () => clock), b = Device('B', null, key, () => clock);
-      addTearDown(a.close);
-      addTearDown(b.close);
-      final pets = await a.repo.addCategory(name: 'Pets', kind: BudgetKind.fixed);
-      await settle([a, b]);
-      await a.repo.deleteCategory(pets);
-      final vet = await b.repo.addCategory(name: 'Vet', kind: BudgetKind.fixed, parent: pets);
-      await settle([a, b]);
-      for (final d in [a, b]) {
-        final t = d.repo.categoryTable();
-        expect(t.isLive(pets), isFalse);
-        expect(t.parentOf(vet), isNull);
-        expect(t.topLevel(vet), vet);
-        expect(t.kindOf(vet), BudgetKind.fixed);
-        expect(t.spending, contains(vet));
-        expect(rollUp({vet: 5}, t), {vet: 5});
-      }
-      expect(dump(a.repo)['categories'], dump(b.repo)['categories']);
-    }, timeout: _t);
-
     test('backup round trip keeps custom rows and overrides', () async {
       final a = Device('A', null, key, () => clock);
       addTearDown(a.close);
       final pets = await a.repo.addCategory(name: 'Pets', kind: BudgetKind.flex);
-      await a.repo.addCategory(name: 'Vet', kind: BudgetKind.flex, parent: pets);
+      await a.repo.addCategory(name: 'Vet', kind: BudgetKind.flex);
+      expect(pets, isNotEmpty);
       await a.repo.updateCategory('Cash', hidden: true, name: 'Pocket money', position: 3);
       final file = await backupBytes(a.repo, key);
       final fresh = WalletRepo.inMemory();
@@ -391,7 +345,7 @@ void main() {
       r.close();
       r = WalletRepo.open(path);
       addTearDown(r.close);
-      expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '10');
+      expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '${WalletRepo.schemaVersion}');
       expect(r.categoryRows(includeDeleted: true), isEmpty);
       expect(r.transactions(), isNotEmpty);
       await r.addCategory(name: 'Pets', kind: BudgetKind.flex);

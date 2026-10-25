@@ -57,7 +57,7 @@ void main() {
     const st = WalletSettings(salary: 200000, periodStart: '2026-02-15', paydayDay: 15, planLines: {_fixed: 30000});
     const today = '2026-02-25';
 
-    test('computePeriod: the line is a fixed cost, children are covered, fixedPaid is per top-level', () {
+    test('computePeriod: the line is a fixed cost, old child rows are fixed categories of their own, fixedPaid per category', () {
       final bills = [_bill('a', _fixed, 4000), _bill('b', _fixedChild, 3000), _bill('c', _rentChild, 2000), _bill('d', _flex, 1000)];
       final txs = [
         _c('2026-02-16', -1000, _fixedChild, _table),
@@ -68,7 +68,7 @@ void main() {
       expect(p.fixedPlan, 30000);
       expect(p.reservedBills, 1000, reason: 'only the flex bill; the others are in the plan');
       expect(p.dueBills, hasLength(4));
-      expect(p.fixedPaid, {_fixed: 1500, 'Rent': 700});
+      expect(p.fixedPaid, {_fixedChild: 1000, _fixed: 500, _rentChild: 700});
       expect(p.flexBudget, 200000 - 30000 - 1000);
       for (final c in [_fixed, _fixedChild, _rentChild, 'Rent', 'Bills & subscriptions']) {
         expect(_table.coveredByPlan(c), isTrue, reason: c);
@@ -92,11 +92,11 @@ void main() {
       final r = WalletRepo.inMemory();
       addTearDown(r.close);
       final k = await r.addCategory(name: 'Kindergarten', kind: BudgetKind.fixed);
-      final child = await r.addCategory(name: 'Lunches', kind: BudgetKind.fixed, parent: k);
+      await expectLater(r.addCategory(name: 'Lunches', kind: BudgetKind.fixed, parent: k), throwsArgumentError);
       final flex = await r.addCategory(name: 'Pets', kind: BudgetKind.flex);
       r.setPlanLine(k, 25000);
       expect(r.settings().planLines, {k: 25000});
-      for (final bad in [child, flex, 'Rent', 'k000000000000']) {
+      for (final bad in [flex, 'Rent', 'k000000000000']) {
         expect(() => r.setPlanLine(bad, 100), throwsArgumentError, reason: bad);
       }
       expect(() => r.setPlanLine(k, -1), throwsArgumentError);
@@ -110,7 +110,6 @@ void main() {
         for (final e in m1.entries)
           if (e.value is! Map && e.value is! List && m2[e.key] != e.value) e.key
       ], isEmpty, reason: 'two reads compare equal key by key (the app diffs toMap)');
-      await r.deleteCategory(child);
       await r.deleteCategory(k);
       expect(r.settings().planLines, isEmpty);
       await r.undeleteCategory(k);
@@ -119,7 +118,7 @@ void main() {
       expect(r.settings().planLines, isEmpty);
     }, timeout: _t);
 
-    test('suggestPlan: children count in Rent and in the plan line; planProposals key plan:<id>', () {
+    test('suggestPlan: an old child row is its own plan line (T1); planProposals key plan:<id>', () {
       final txs = [
         for (final m in ['2026-07', '2026-08', '2026-09']) ...[
           _c('$m-03', -50000, 'Rent', _table),
@@ -129,15 +128,15 @@ void main() {
         ],
       ];
       final s = suggestPlan(txs, const WalletSettings(), '2026-10-10', table: _table);
-      expect(s.rent?.value, 54000);
-      expect(s.planLines.keys, [_fixed]);
-      expect(s.planLines[_fixed]!.value, 25000);
+      expect(s.rent?.value, 50000);
+      expect(s.planLines.keys, [_fixed, _fixedChild, _rentChild]);
+      expect([for (final v in s.planLines.values) v.value], [20000, 5000, 4000]);
       expect(suggestPlan(txs, const WalletSettings(), '2026-10-10').rent?.value, 50000, reason: 'built-ins only');
       final subs = suggestPlan(const [], const WalletSettings(), '2026-10-10',
           confirmed: [_bill('x', 'Bills & subscriptions', 1000), _bill('y', 'k0000000000aa', 7)], table: _table);
       expect(subs.subs?.value, 1000);
       final props = planProposals(s, const WalletSettings(planLines: {_fixed: 1}));
-      expect(props.map((p) => (p.key, p.suggested)), contains(('plan:$_fixed', 25000)));
+      expect(props.map((p) => (p.key, p.suggested)), contains(('plan:$_fixed', 20000)));
     });
   });
 
@@ -305,22 +304,22 @@ void main() {
       expect(lines[1].split(',').reversed.take(2).toList(), ['3.50', '3.50']);
     });
 
-    test('drill-down: a parent matches its whole tree and sums exactly; a child only itself', () {
+    test('drill-down (T1: every category is top-level): an old child row matches only itself', () {
       final r = DateRange(start: '2026-09-01', end: '2026-09-30');
       final rows = [
         _c('2026-09-03', -1000, _fixed, _table, desc: 'SYNTHETIC SCHOOL'),
         _c('2026-09-04', -333, _fixedChild, _table, desc: 'SYNTHETIC CANTEEN'),
         _c('2026-09-05', -1, _fixedChild, _table, desc: 'SYNTHETIC CANTEEN'),
       ];
-      final share = categoryShare(rows, r, currency: 'EUR', rollUp: true, table: _table).slices.single.spent;
-      expect(merchantsIn(_fixed, rows, r, currency: 'EUR', table: _table).fold<int>(0, (s, m) => s + m.spent), share);
-      expect(rowsFor(_fixed, null, rows, r, currency: 'EUR', table: _table), hasLength(3));
-      expect(rowsFor(_fixed, null, rows, r, currency: 'EUR'), hasLength(1), reason: 'without a table: the id only');
+      final share = categoryShare(rows, r, currency: 'EUR', rollUp: true, table: _table).slices;
+      expect([for (final s in share) (s.category, s.spent)], [(_fixed, 1000), (_fixedChild, 334)]);
+      expect(merchantsIn(_fixed, rows, r, currency: 'EUR', table: _table).fold<int>(0, (s, m) => s + m.spent), 1000);
+      expect(rowsFor(_fixed, null, rows, r, currency: 'EUR', table: _table), hasLength(1));
+      expect(rowsFor(_fixed, null, rows, r, currency: 'EUR'), hasLength(1));
       expect(rowsFor(_fixedChild, null, rows, r, currency: 'EUR', table: _table), hasLength(2));
       final canteen = merchantKey(rows[1].tx);
-      expect(merchantTrend(_fixed, canteen, rows, r, currency: 'EUR', today: '2026-10-10', table: _table).single.spent, 334);
-      final cmp = compareCategory(_fixed, rows, '2026-09', currency: 'EUR', table: _table);
-      expect(cmp.thisMonth, 1334);
+      expect(merchantTrend(_fixedChild, canteen, rows, r, currency: 'EUR', today: '2026-10-10', table: _table).single.spent, 334);
+      expect(compareCategory(_fixed, rows, '2026-09', currency: 'EUR', table: _table).thisMonth, 1000);
     });
 
     test('searchAll matches a category by its label', () {
@@ -395,33 +394,18 @@ void main() {
       expect(CategoryTable.from(const [CategoryRow(id: 'k000000000009', kind: null)]).isLive('k000000000009'), isFalse);
     });
 
-    test('addCategory refuses a parent whose stored parent is live (the table would not attach the child)', () async {
-      final key = VaultKey.generate();
-      final net = Net();
-      var clock = _noon;
-      final a = Device('A', null, key, () => clock, net: net), b = Device('B', null, key, () => clock, net: net);
-      addTearDown(a.close);
-      addTearDown(b.close);
-      Future<void> settle() async {
-        for (var i = 0; i < 3; i++) {
-          for (final d in [a, b]) {
-            clock += 1000;
-            await d.run();
-          }
-        }
-      }
-
-      final q = await a.repo.addCategory(name: 'Q', kind: BudgetKind.flex);
-      final rr = await a.repo.addCategory(name: 'R', kind: BudgetKind.flex);
-      await settle();
-      final p = await b.repo.addCategory(name: 'P', kind: BudgetKind.flex, parent: q);
-      await a.repo.updateCategory(q, parent: rr);
-      await settle();
-      final t = a.repo.categoryTable();
-      expect(t.parentOf(q), rr);
-      expect(t.parentOf(p), isNull, reason: 'its parent is a child now');
-      expect(t.hasLiveStoredParent(p), isTrue);
-      await expectLater(a.repo.addCategory(name: 'Child', kind: BudgetKind.flex, parent: p), throwsArgumentError);
+    test('T1: addCategory refuses any parent; an old stored parent leaves the row top-level', () async {
+      final r = WalletRepo.inMemory();
+      addTearDown(r.close);
+      final q = await r.addCategory(name: 'Q', kind: BudgetKind.flex);
+      final p = await r.addCategory(name: 'P', kind: BudgetKind.flex);
+      r.applyRemote([
+        Op('category', p, {'parent': q}, const Hlc(9999999999999, 0, 'z').toString())
+      ]);
+      final t = r.categoryTable();
+      expect(t.parentOf(p), isNull);
+      expect(t.hasLiveStoredParent(p), isTrue, reason: 'the stored field is kept, unused');
+      await expectLater(r.addCategory(name: 'Child', kind: BudgetKind.flex, parent: q), throwsArgumentError);
     }, timeout: _t);
   });
 }

@@ -186,6 +186,24 @@ const Map<String, EntityDef> entitySchema = {
     ColumnDef.flag('hidden'),
     ColumnDef.flag('deleted'),
   ]),
+  // Tags (v11, T1): the owner's extra tags (see `TagRow`), per-row links (`<txId>|<tagId>`, state on/off) and
+  // per-payee rule tags (`<payee>|<tagId>`).
+  'tag': EntityDef('tags', [
+    ColumnDef('name', searchable: true),
+    ColumnDef.integer('position', nullable: true),
+    ColumnDef.flag('hidden'),
+    ColumnDef.flag('deleted'),
+  ]),
+  'txtag': EntityDef('tx_tags', [
+    ColumnDef('tx'),
+    ColumnDef('tag'),
+    ColumnDef('state'),
+  ]),
+  'ruletag': EntityDef('rule_tags', [
+    ColumnDef('payee'),
+    ColumnDef('tag'),
+    ColumnDef.flag('deleted'),
+  ]),
 };
 
 /// The device-local tables: never synced or backed up.

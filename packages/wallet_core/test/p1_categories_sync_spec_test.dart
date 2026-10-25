@@ -52,14 +52,15 @@ void main() {
   });
 
   group('two devices', () {
-    test('a category and a subcategory added on A reach B with the same rows and clocks', () async {
+    test('a category added on A reaches B with the same rows and clocks; a parent is refused', () async {
       final a = device('a'), b = device('b');
       final p = await a.repo.addCategory(name: 'Pets', kind: BudgetKind.flex);
-      final c = await a.repo.addCategory(name: 'Food', kind: BudgetKind.flex, parent: p);
+      await expectLater(a.repo.addCategory(name: 'Food', kind: BudgetKind.flex, parent: p), throwsArgumentError);
+      final c = await a.repo.addCategory(name: 'Food', kind: BudgetKind.flex);
       await syncAll([a, b]);
       final t = b.repo.categoryTable();
-      expect((t.label(p), t.kindOf(p), t.parentOf(c), t.label(c)), ('Pets', BudgetKind.flex, p, 'Food'));
-      expect(t.childrenOf(p), [c]);
+      expect((t.label(p), t.kindOf(p), t.parentOf(c), t.label(c)), ('Pets', BudgetKind.flex, null, 'Food'));
+      expect(t.childrenOf(p), isEmpty);
       expect(rows(a.repo), rows(b.repo));
     }, timeout: _t);
 
@@ -157,67 +158,39 @@ void main() {
       }
     }, timeout: _t);
 
-    test('a parent deleted on A while B adds a child: the child is top-level with its own kind, nothing rolls up', () async {
+    test('T1: an old P1 child row (a stored parent) is top-level with its own kind on every device', () async {
       final a = device('a'), b = device('b');
-      final p = await a.repo.addCategory(name: 'Garage', kind: BudgetKind.fixed);
+      final p = await a.repo.addCategory(name: 'Garage', kind: BudgetKind.flex);
+      final c = await b.repo.addCategory(name: 'Tyres', kind: BudgetKind.fixed);
       await syncAll([a, b]);
+      // An earlier build's write of the parent field.
+      b.repo.applyRemote([
+        Op('category', c, {'parent': p}, const Hlc(9999999999999, 0, 'z').toString())
+      ]);
       now += 1000;
       await a.repo.deleteCategory(p);
-      final c = await b.repo.addCategory(name: 'Tyres', kind: BudgetKind.fixed, parent: p);
       await syncAll([a, b]);
       for (final d in [a, b]) {
         final t = d.repo.categoryTable();
         expect(t.isLive(p), isFalse, reason: d.name);
-        expect(t.isLive(c), isTrue, reason: d.name);
         expect(t.kindOf(c), BudgetKind.fixed, reason: d.name);
         expect(t.topLevel(c), c, reason: d.name);
-        expect(t.childrenOf(p), isEmpty, reason: d.name);
         expect(t.pickable(), contains(c), reason: d.name);
         expect(t.spending, contains(c), reason: d.name);
         expect(rollUp({c: 500}, t), {c: 500}, reason: d.name);
       }
-      // fixing it: the owner may undelete the parent, and the child follows it again
       now += 1000;
       await a.repo.undeleteCategory(p);
       await syncAll([a, b]);
-      expect(b.repo.categoryTable().topLevel(c), p);
-      expect(rollUp({c: 500}, b.repo.categoryTable()), {p: 500});
-    }, timeout: _t);
-
-    test('a parent deleted on A while B adds a child gives the same totals on both devices in any order', () async {
-      final a = device('a'), b = device('b'), c3 = device('c');
-      final p = await a.repo.addCategory(name: 'Garage', kind: BudgetKind.flex);
-      await syncAll([a, b, c3]);
-      now += 1000;
-      await a.repo.deleteCategory(p);
-      final c = await b.repo.addCategory(name: 'Tyres', kind: BudgetKind.flex, parent: p);
-      await syncAll([c3, b, a]);
-      await syncAll([a, b, c3]);
-      expect(rows(a.repo), rows(b.repo));
-      expect(rows(a.repo), rows(c3.repo));
-      expect(c3.repo.categoryTable().topLevel(c), c);
-    }, timeout: _t);
-
-    test('parent kind changed on one device while a child is added on another: the child follows the parent', () async {
-      final a = device('a'), b = device('b');
-      final p = await a.repo.addCategory(name: 'Garage', kind: BudgetKind.flex);
-      await syncAll([a, b]);
-      final c = await b.repo.addCategory(name: 'Tyres', kind: BudgetKind.flex, parent: p);
-      a.repo.applyRemote([
-        Op('category', p, {'kind': 'fixed'}, const Hlc(9999999999999, 0, 'z').toString())
-      ]);
-      await syncAll([a, b]);
-      for (final d in [a, b]) {
-        final t = d.repo.categoryTable();
-        expect(t.kindOf(p), t.kindOf(c), reason: d.name);
-      }
+      expect(b.repo.categoryTable().topLevel(c), c, reason: 'the undeleted parent does not take it back');
     }, timeout: _t);
 
     test('a late third device gets every category row', () async {
       final a = device('a'), b = device('b');
       final p = await a.repo.addCategory(name: 'Pets', kind: BudgetKind.flex);
       await b.repo.addCategory(name: 'Garden', kind: BudgetKind.flex);
-      await a.repo.addCategory(name: 'Food', kind: BudgetKind.flex, parent: p);
+      await a.repo.addCategory(name: 'Food', kind: BudgetKind.flex);
+      expect(p, isNotEmpty);
       await a.repo.updateCategory('Groceries', hidden: true);
       await syncAll([a, b]);
       final c = device('c');
@@ -231,7 +204,7 @@ void main() {
     test('a round trip keeps custom rows, children, overrides and deleted rows with their clocks', () async {
       final a = device('a');
       final p = await a.repo.addCategory(name: 'Pets', kind: BudgetKind.flex);
-      final c = await a.repo.addCategory(name: 'Food', kind: BudgetKind.flex, parent: p);
+      final c = await a.repo.addCategory(name: 'Food', kind: BudgetKind.flex);
       final gone = await a.repo.addCategory(name: 'Old', kind: BudgetKind.fixed);
       now += 1000;
       await a.repo.updateCategory('Groceries', name: 'Food shop');
@@ -245,7 +218,7 @@ void main() {
       expect(count, a.repo.snapshotOps().length);
       expect(rows(fresh), rows(a.repo));
       final t = fresh.categoryTable();
-      expect((t.label(p), t.parentOf(c), t.label('Groceries')), ('Pets', p, 'Food shop'));
+      expect((t.label(p), t.label(c), t.label('Groceries')), ('Pets', 'Food', 'Food shop'));
       expect(t.pickable(), isNot(contains('Shopping')));
       expect(t.isLive(gone), isFalse);
       expect(fresh.categoryRows(includeDeleted: true).firstWhere((r) => r.id == gone).deleted, isTrue);
@@ -284,7 +257,7 @@ void main() {
       return out;
     }
 
-    test('schemaVersion is 10', () => expect(WalletRepo.schemaVersion, 10));
+    test('schemaVersion is at least 10', () => expect(WalletRepo.schemaVersion, greaterThanOrEqualTo(10)));
 
     for (final keyed in [false, true]) {
       final file = 'schema7_${keyed ? 'keyed' : 'plain'}.db';
@@ -292,7 +265,7 @@ void main() {
         final path = copy(file);
         final r = WalletRepo.open(path, dbKey: keyed ? await localDbKey(fixKey) : null);
         addTearDown(r.close);
-        expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '10');
+        expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '${WalletRepo.schemaVersion}');
         expect(r.categoryRows(includeDeleted: true), isEmpty);
         expect(r.categoryTable().pickable(), CategoryTable.builtIn.pickable());
         expect(r.transactions(includeHidden: true), isNotEmpty);

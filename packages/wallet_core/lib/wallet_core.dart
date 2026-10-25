@@ -90,7 +90,8 @@ export 'src/export.dart'
         monthlySummaryCsvHeader,
         monthlySummaryCsvHeaderFor,
         transactionsCsv,
-        transactionsCsvHeader;
+        transactionsCsvHeader,
+        transactionsCsvTagsHeader;
 export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
 export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, parseIcs, plannedIcs;
 export 'src/insights.dart'
@@ -110,7 +111,12 @@ export 'src/insights.dart'
         merchantTrend,
         MonthBar,
         rowsFor,
-        spendingByMonth;
+        rowsForTag,
+        spendingByMonth,
+        TagShare,
+        tagShare,
+        TagSlice,
+        tagTrend;
 export 'src/local_db.dart' show localDbKey, localDbKeyInfo, openKeyed, WalletDbKeyException;
 export 'src/logs.dart'
     show
@@ -174,7 +180,8 @@ export 'src/repo.dart'
         WalletRepoBills,
         WalletRepoBlobs,
         WalletRepoPlanned,
-        WalletRepoSettings;
+        WalletRepoSettings,
+        WalletRepoTags;
 export 'src/search.dart' show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchTxLimit;
 export 'src/suggest.dart' show PlanSuggestion, planProposals, SettingProposal, Suggested, suggestPlan;
 export 'src/sync.dart'
@@ -191,6 +198,7 @@ export 'src/sync_engine.dart'
         SyncTransport,
         TransportException,
         TransportFailure;
+export 'src/tags.dart' show recommendedMainTags, recommendedTags, suggestTags, TagContext, tagPayee, TagRow, tagsOf, TagTable;
 export 'src/transfers.dart' show openTransfers, planTransfers, transferDays, TransferPlan;
 export 'src/vault.dart'
     show

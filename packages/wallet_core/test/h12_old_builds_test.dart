@@ -79,6 +79,12 @@ void main() {
           expect(r.categoryRows(includeDeleted: true), isEmpty);
           final k = await r.addCategory(name: 'Pets', kind: BudgetKind.flex);
           expect(r.categoryTable().isLive(k), isTrue);
+          // T1 (schema 11): it gains the tag tables, empty, and takes tags.
+          expect(WalletRepo.schemaVersion, greaterThanOrEqualTo(11));
+          expect(r.tags(includeDeleted: true), isEmpty);
+          expect(r.ruleTags(), isEmpty);
+          final g = await r.addTag('Trip');
+          expect(r.tagTable().isLive(g), isTrue);
         }, timeout: _t);
 
         test('$file: a second open changes nothing and queues no new ops', () async {

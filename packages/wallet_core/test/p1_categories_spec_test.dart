@@ -1,4 +1,4 @@
-// Stage P1 (docs/context/P1_SPEC.md): custom categories and subcategories. Written from the spec, not the code.
+// Stage P1 (docs/context/P1_SPEC.md): custom categories (subcategories replaced by tags in T1). Written from the spec, not the code.
 // Money in cents, an expense is a POSITIVE amount for `addTransaction`. All data is SYNTHETIC.
 import 'package:test/test.dart';
 import 'package:wallet_core/src/categories.dart' show isSpendingCategory;
@@ -303,33 +303,6 @@ void main() {
       await expectLater(repo.updateCategory('Groceries', name: 'Shopping'), throwsArgumentError);
       expect(table().label('Groceries'), 'Groceries');
     }, timeout: _t);
-
-    test('a child label is unique among its siblings only', () async {
-      final p1 = await add('Pets');
-      final p2 = await add('Garden');
-      await add('Food', parent: p1);
-      await expectLater(add('food', parent: p1), throwsArgumentError);
-      await expectLater(add('FOOD', parent: p1), throwsArgumentError);
-      await add('Food', parent: p2); // other parent: fine
-      await add('Shopping', parent: p1); // same as a built-in top-level: fine for a child
-      expect(table().childrenOf(p1), hasLength(2));
-    }, timeout: _t);
-
-    test('moving a child under a parent that holds the same label is refused', () async {
-      final p1 = await add('Pets');
-      final p2 = await add('Garden');
-      await add('Food', parent: p1);
-      final other = await add('Food', parent: p2);
-      await expectLater(repo.updateCategory(other, parent: p1), throwsArgumentError);
-      expect(table().parentOf(other), p2);
-    }, timeout: _t);
-
-    test('clearing a parent makes the child top-level, so its label must be unique there', () async {
-      final p = await add('Pets');
-      final c = await add('Groceries', parent: p); // fine as a child
-      await expectLater(repo.updateCategory(c, clearParent: true), throwsArgumentError);
-      expect(table().parentOf(c), p);
-    }, timeout: _t);
   });
 
   group('the 200 limit', () {
@@ -343,137 +316,18 @@ void main() {
       expect(repo.categoryRows(), hasLength(200));
       expect(repo.pendingOps().length, before);
     }, timeout: const Timeout(Duration(minutes: 3)));
-
-    test('children count against the limit too', () async {
-      final parent = await add('Parent');
-      for (var i = 0; i < 199; i++) {
-        await add('Child ${i.toString().padLeft(3, '0')}', parent: parent);
-      }
-      await expectLater(add('Child over', parent: parent), throwsArgumentError);
-      await expectLater(add('Top over'), throwsArgumentError);
-    }, timeout: const Timeout(Duration(minutes: 3)));
   });
 
-  group('subcategories', () {
-    test('a child takes its kind from the parent; a different kind is refused', () async {
-      final fixed = await add('Garage', kind: BudgetKind.fixed);
-      final child = await add('Insurance', kind: BudgetKind.fixed, parent: fixed);
-      expect(table().kindOf(child), BudgetKind.fixed);
-      await expectLater(add('Wrong', kind: BudgetKind.flex, parent: fixed), throwsArgumentError);
-      await expectLater(add('Wrong', kind: BudgetKind.income, parent: fixed), throwsArgumentError);
-      expect(table().childrenOf(fixed), [child]);
-    }, timeout: _t);
-
-    test('a child of a built-in parent has the built-in kind', () async {
-      final c = await add('Takeaway', kind: BudgetKind.flex, parent: 'Eating out');
-      await expectLater(add('Bad', kind: BudgetKind.fixed, parent: 'Eating out'), throwsArgumentError);
-      final t = table();
-      expect(t.kindOf(c), BudgetKind.flex);
-      expect(t.parentOf(c), 'Eating out');
-      expect(t.topLevel(c), 'Eating out');
-      expect(t.childrenOf('Eating out'), [c]);
-      expect(t.label(c), 'Takeaway');
-      final inc = await add('Tips', kind: BudgetKind.income, parent: 'Salary');
-      expect(table().kindOf(inc), BudgetKind.income);
-    }, timeout: _t);
-
-    test('the effective kind is read from the parent: a synced parent kind change moves the child', () async {
-      final p = await add('Garage', kind: BudgetKind.flex);
-      final c = await add('Tyres', parent: p);
-      repo.applyRemote([
-        Op('category', p, {'kind': 'fixed'}, const Hlc(9999999999999, 0, 'z').toString()),
-      ]);
-      final t = table();
-      expect(t.kindOf(p), BudgetKind.fixed);
-      expect(t.kindOf(c), BudgetKind.fixed, reason: 'never split from the parent');
-    });
-
-    test('a stored child kind that disagrees with the parent never wins', () async {
-      final p = await add('Garage', kind: BudgetKind.flex);
-      final c = await add('Tyres', parent: p);
-      repo.applyRemote([
-        Op('category', c, {'kind': 'income'}, const Hlc(9999999999999, 0, 'z').toString()),
-      ]);
-      expect(table().kindOf(c), BudgetKind.flex);
-    });
-
-    test('one level only: a child cannot be a parent', () async {
-      final top = await add('Pets');
-      final child = await add('Food', parent: top);
-      await expectLater(add('Brand', parent: child), throwsArgumentError);
-      final other = await add('Toys');
-      await expectLater(repo.updateCategory(other, parent: child), throwsArgumentError);
-      expect(table().parentOf(other), isNull);
-      expect(table().childrenOf(child), isEmpty);
-    }, timeout: _t);
-
-    test('the parent must exist and be live', () async {
-      await expectLater(add('Orphan', parent: 'kdeadbeef0000'), throwsArgumentError);
+  group('subcategories replaced by tags (T1 §6)', () {
+    test('addCategory and updateCategory refuse a parent, built-in or custom', () async {
       final p = await add('Pets');
-      await repo.deleteCategory(p);
-      await expectLater(add('Late', parent: p), throwsArgumentError);
-    }, timeout: _t);
-
-    test('a category with live children cannot get a parent', () async {
-      final p = await add('Pets');
+      await expectLater(add('Food', parent: p), throwsA(isA<ArgumentError>().having((e) => e.message, 'message', 'Use a tag for this.')));
+      await expectLater(add('Takeaway', parent: 'Eating out'), throwsArgumentError);
       final q = await add('Garden');
-      await add('Food', parent: p);
-      await expectLater(repo.updateCategory(p, parent: q), throwsArgumentError);
-      expect(table().parentOf(p), isNull);
-      expect(table().childrenOf(q), isEmpty);
-    }, timeout: _t);
-
-    test('a category whose children are all deleted can get a parent again', () async {
-      final p = await add('Pets');
-      final q = await add('Garden');
-      final c = await add('Food', parent: p);
-      await repo.deleteCategory(c);
-      await repo.updateCategory(p, parent: q);
-      expect(table().parentOf(p), q);
-      expect(table().childrenOf(q), [p]);
-    }, timeout: _t);
-
-    test('a category cannot be its own parent; the new parent must share its kind', () async {
-      final p = await add('Pets');
-      await expectLater(repo.updateCategory(p, parent: p), throwsArgumentError);
-      final fixed = await add('Garage', kind: BudgetKind.fixed);
-      await expectLater(repo.updateCategory(p, parent: fixed), throwsArgumentError);
-      await expectLater(repo.updateCategory(p, parent: 'Salary'), throwsArgumentError);
-      await repo.updateCategory(p, parent: 'Groceries');
-      expect(table().parentOf(p), 'Groceries');
-    }, timeout: _t);
-
-    test('moving a child between parents and clearing the parent', () async {
-      final a = await add('Pets');
-      final b = await add('Garden');
-      final c = await add('Food', parent: a);
-      await repo.updateCategory(c, parent: b);
-      expect(table().childrenOf(a), isEmpty);
-      expect(table().childrenOf(b), [c]);
-      await repo.updateCategory(c, clearParent: true);
-      final t = table();
-      expect(t.parentOf(c), isNull);
-      expect(t.topLevel(c), c);
-      expect(t.kindOf(c), BudgetKind.flex, reason: 'keeps the kind it had as a child');
-      expect(t.childrenOf(b), isEmpty);
-      expect(t.pickable(), contains(c));
-    }, timeout: _t);
-
-    test('childrenOf is by position, then label; deleted children are left out', () async {
-      final p = await add('Pets');
-      final c = await add('Charlie', parent: p);
-      final a = await add('Alpha', parent: p);
-      final b = await add('Bravo', parent: p);
-      await repo.updateCategory(c, position: 0);
-      await repo.updateCategory(a, position: 0);
-      await repo.updateCategory(b, position: 0);
-      expect(table().childrenOf(p), [a, b, c], reason: 'same position: by label');
-      await repo.updateCategory(a, position: 5);
-      await repo.updateCategory(b, position: 2);
-      await repo.updateCategory(c, position: 3);
-      expect(table().childrenOf(p), [b, c, a]);
-      await repo.deleteCategory(c);
-      expect(table().childrenOf(p), [b, a]);
+      await expectLater(repo.updateCategory(q, parent: p), throwsArgumentError);
+      await expectLater(repo.updateCategory('Groceries', parent: p), throwsArgumentError);
+      expect(table().childrenOf(p), isEmpty);
+      expect(repo.categoryRows().map((r) => r.parent), everyElement(isNull));
     }, timeout: _t);
 
     test('a negative position is refused', () async {
@@ -482,66 +336,17 @@ void main() {
       await repo.updateCategory(p, position: 0);
     }, timeout: _t);
 
-    test('pickable lists each parent followed by its children, leaves out hidden and deleted ones', () async {
+    test('a hidden category is still live', () async {
       final p = await add('Pets');
-      final c1 = await add('Food', parent: p);
-      final c2 = await add('Toys', parent: p);
-      final c3 = await add('Vet', parent: p);
-      await repo.updateCategory(c1, position: 1);
-      await repo.updateCategory(c2, position: 2);
-      await repo.updateCategory(c3, position: 3);
-      var list = table().pickable();
-      final at = list.indexOf(p);
-      expect(at, greaterThanOrEqualTo(0));
-      expect(list.sublist(at, at + 4), [p, c1, c2, c3]);
-      await repo.updateCategory(c2, hidden: true);
-      await repo.deleteCategory(c3);
-      list = table().pickable();
-      expect(list, isNot(contains(c2)));
-      expect(list, isNot(contains(c3)));
-      expect(list.sublist(list.indexOf(p), list.indexOf(p) + 2), [p, c1]);
-      // the kind filter applies to children through the parent
-      expect(table().pickable(kinds: {BudgetKind.fixed}), isNot(contains(c1)));
-      expect(table().pickable(kinds: {BudgetKind.flex}), contains(c1));
-    }, timeout: _t);
-
-    test('spending lists top-level ids only; children roll up into them', () async {
-      final p = await add('Pets');
-      final c = await add('Food', parent: p);
-      final t = table();
-      expect(t.spending, contains(p));
-      expect(t.spending, isNot(contains(c)));
-      expect(t.topLevel(c), p);
-    }, timeout: _t);
-
-    test('a hidden parent keeps its children live; a hidden child is still live', () async {
-      final p = await add('Pets');
-      final c = await add('Food', parent: p);
-      await repo.updateCategory(c, hidden: true);
-      expect(table().isLive(c), isTrue);
-      expect(table().label(c), 'Food');
-      expect(table().childrenOf(p), [c], reason: 'live children, hidden or not');
+      await repo.updateCategory(p, hidden: true);
+      expect(table().isLive(p), isTrue);
+      expect(table().pickable(), isNot(contains(p)));
+      expect(table().spending, contains(p));
     }, timeout: _t);
   });
 
   group('clarified order and visibility', () {
-    test('hiding a parent removes its children from pickable but not from spending, which keeps hidden live ids', () async {
-      final p = await add('Pets');
-      final c = await add('Food', parent: p);
-      await repo.updateCategory(p, hidden: true);
-      final t = table();
-      expect(t.pickable(), isNot(contains(p)));
-      expect(t.pickable(), isNot(contains(c)));
-      expect(t.spending, contains(p));
-      expect(t.isLive(c), isTrue);
-    }, timeout: _t);
-
-    test('a new category gets the largest sibling position + 1 (siblings list in creation order)', () async {
-      final p = await add('Pets');
-      final a = await add('Zulu', parent: p);
-      final b = await add('Alpha', parent: p);
-      final c = await add('Mike', parent: p);
-      expect(table().childrenOf(p), [a, b, c]);
+    test('a new category gets the largest position + 1 (listed in creation order, after the built-ins)', () async {
       final t1 = await add('Zeta');
       final t2 = await add('Alfa');
       final list = table().pickable();
@@ -556,19 +361,20 @@ void main() {
       expect(list.indexOf('Shopping'), lessThan(list.indexOf('Groceries')));
     }, timeout: _t);
 
-    test('an orphan whose parent is not top-level acts as top-level with its own kind', () async {
+    test('T1: a stored parent (an old P1 row) is ignored: the row is top-level with its own kind', () async {
       final p = await add('Pets');
-      final c = await add('Food', parent: p);
-      final g = await add('Brand', parent: p);
+      final g = await add('Brand', kind: BudgetKind.fixed);
       repo.applyRemote([
-        Op('category', g, {'parent': c}, const Hlc(9999999999999, 0, 'z').toString())
+        Op('category', g, {'parent': p}, const Hlc(9999999999999, 0, 'z').toString())
       ]);
       final t = table();
+      expect(t.parentOf(g), isNull);
       expect(t.topLevel(g), g);
-      expect(t.kindOf(g), BudgetKind.flex);
-      expect(t.childrenOf(c), isEmpty);
+      expect(t.kindOf(g), BudgetKind.fixed);
+      expect(t.childrenOf(p), isEmpty);
       expect(t.pickable(), contains(g));
-      expect(rollUp({g: 5}, t), {g: 5});
+      expect(t.spending, containsAll([p, g]));
+      expect(rollUp({g: 5, p: 7}, t), {g: 5, p: 7});
     }, timeout: _t);
 
     test('Categorizer takes the table directly', () async {
@@ -580,19 +386,6 @@ void main() {
   });
 
   group('delete and undelete', () {
-    test('delete is refused while a live child exists, allowed after the child goes', () async {
-      final p = await add('Pets');
-      final c = await add('Food', parent: p);
-      await expectLater(repo.deleteCategory(p), throwsArgumentError);
-      expect(table().isLive(p), isTrue);
-      await repo.deleteCategory(c);
-      await repo.deleteCategory(p);
-      expect(table().isLive(p), isFalse);
-      expect(table().isLive(c), isFalse);
-      expect(table().pickable(), isNot(contains(p)));
-      expect(table().spending, isNot(contains(p)));
-    }, timeout: _t);
-
     test('categoryRows hides deleted rows unless asked', () async {
       final a = await add('Alpha');
       final b = await add('Bravo');
@@ -669,14 +462,6 @@ void main() {
       expect(resolved(id), pets);
     }, timeout: _t);
 
-    test('a child row stays a child (category is the row\'s own id)', () async {
-      final p = await add('Pets');
-      final c = await add('Food', parent: p);
-      final id = repo.addTransaction(date: '2026-10-02', amount: 700, category: c);
-      final cz = repo.categorizer().categorize(repo.transactions().firstWhere((t) => t.id == id));
-      expect((cz.category, cz.kind), (c, BudgetKind.flex));
-    }, timeout: _t);
-
     test('a merchant rule to a custom id applies while live and is ignored when deleted', () async {
       repo.importBatch(january);
       final lidl = repo.transactions().firstWhere((t) => t.description.contains('LIDL'));
@@ -732,15 +517,6 @@ void main() {
       expect(repo.settings().categoryBudgets.containsKey(pets), isFalse);
     }, timeout: _t);
 
-    test('a budget on a child is refused, also under a built-in parent', () async {
-      final p = await add('Pets');
-      final c = await add('Food', parent: p);
-      final c2 = await add('Takeaway', parent: 'Eating out');
-      expect(() => repo.setCategoryBudget(c, 5000), throwsArgumentError);
-      expect(() => repo.setCategoryBudget(c2, 5000), throwsArgumentError);
-      expect(repo.settings().categoryBudgets, isEmpty);
-    }, timeout: _t);
-
     test('a budget on a non-spending custom category, an unknown id or a deleted one is refused', () async {
       final inc = await add('Gifts received', kind: BudgetKind.income);
       final tr = await add('Own move', kind: BudgetKind.transfer);
@@ -773,54 +549,17 @@ void main() {
     }, timeout: _t);
   });
 
-  group('rollUp', () {
-    test('children sum into their top-level; own rows are kept; exact', () async {
+  group('rollUp (T1: every category is top-level)', () {
+    test('an old child row counts as its own main tag: rollUp is the identity and totals never change', () async {
       final pets = await add('Pets');
-      final food = await add('Food', parent: pets);
-      final vet = await add('Vet', parent: pets);
-      final t = table();
-      final out = rollUp({pets: 1000, food: 250, vet: 333, 'Groceries': 7}, t);
-      expect(out, {pets: 1583, 'Groceries': 7});
-    }, timeout: _t);
-
-    test('a parent with no own rows gets the children; refunds subtract', () async {
-      final pets = await add('Pets');
-      final food = await add('Food', parent: pets);
-      final vet = await add('Vet', parent: pets);
-      final t = table();
-      expect(rollUp({food: 250}, t), {pets: 250});
-      expect(rollUp({food: 250, vet: -100}, t), {pets: 150});
-      expect(rollUp({pets: 300, vet: -100}, t), {pets: 200});
-      expect(rollUp({food: 100, vet: -100}, t), {pets: 0}, reason: 'a zero total stays visible');
-    }, timeout: _t);
-
-    test('built-in parents of custom children', () async {
-      final c = await add('Takeaway', parent: 'Eating out');
-      final out = rollUp({'Eating out': 4000, c: 1250, 'Groceries': 99}, table());
-      expect(out, {'Eating out': 5250, 'Groceries': 99});
-    }, timeout: _t);
-
-    test('the grand total never changes', () async {
-      final pets = await add('Pets');
-      final a = await add('Food', parent: pets);
-      final b = await add('Vet', parent: pets);
-      final garden = await add('Garden');
-      final g = await add('Seeds', parent: garden);
-      final input = {pets: 11, a: 22, b: 33, garden: 44, g: 55, 'Rent': 66, 'unknown-id': 77};
-      final out = rollUp(input, table());
-      expect(out.values.fold<int>(0, (s, v) => s + v), input.values.fold<int>(0, (s, v) => s + v));
-      expect(out[pets], 66);
-      expect(out[garden], 99);
-      expect(out['Rent'], 66);
-      expect(out['unknown-id'], 77, reason: 'an unknown id is its own top-level');
-      expect(out.keys.toSet(), {pets, garden, 'Rent', 'unknown-id'});
-    }, timeout: _t);
-
-    test('large sums stay exact', () async {
-      final pets = await add('Pets');
-      final a = await add('Food', parent: pets);
+      final food = await add('Food');
+      repo.applyRemote([
+        Op('category', food, {'parent': pets}, const Hlc(9999999999999, 0, 'z').toString())
+      ]);
+      final input = {pets: 11, food: 22, 'Rent': 66, 'unknown-id': 77};
+      expect(rollUp(input, table()), input);
       const big = 4000000000000; // beyond 32 bits
-      expect(rollUp({pets: big, a: big + 1}, table()), {pets: 2 * big + 1});
+      expect(rollUp({pets: big, food: big + 1}, table()), {pets: big, food: big + 1});
     }, timeout: _t);
 
     test('empty input, and the built-in table is the identity', () {
@@ -829,35 +568,26 @@ void main() {
       expect(rollUp(m, CategoryTable.builtIn), m);
     });
 
-    test('does not change its input', () async {
+    test('month totals per row id stay as monthSummary gives them', () async {
       final pets = await add('Pets');
-      final a = await add('Food', parent: pets);
-      final input = {pets: 1, a: 2};
-      rollUp(input, table());
-      expect(input, {pets: 1, a: 2});
-    }, timeout: _t);
-
-    test('month totals per row id stay as monthSummary gives them, and roll up on top', () async {
-      final pets = await add('Pets');
-      final food = await add('Food', parent: pets);
+      final food = await add('Food');
+      repo.applyRemote([
+        Op('category', food, {'parent': pets}, const Hlc(9999999999999, 0, 'z').toString())
+      ]);
       repo.addTransaction(date: '2026-10-01', amount: 1000, category: pets);
       repo.addTransaction(date: '2026-10-03', amount: 250, category: food);
-      repo.addTransaction(date: '2026-10-04', amount: 333, category: food);
       repo.addTransaction(date: '2026-10-05', amount: 777, category: 'Groceries');
       final cz = repo.categorizer();
       final txs = repo.transactions().map(cz.categorize).toList();
       final s = monthSummary(txs, '2026-10', currency: 'EUR');
-      expect(s.byCategory, {pets: 1000, food: 583, 'Groceries': 777});
-      expect(s.out, 2360);
-      final rolled = rollUp(s.byCategory, table());
-      expect(rolled, {pets: 1583, 'Groceries': 777});
-      expect(rolled.values.fold<int>(0, (a, b) => a + b), s.out);
+      expect(s.byCategory, {pets: 1000, food: 250, 'Groceries': 777});
+      expect(rollUp(s.byCategory, table()), s.byCategory);
     }, timeout: _t);
   });
 
   group('CategoryRow and schema', () {
-    test('the repo schema is 10 and the category entity is declared', () {
-      expect(WalletRepo.schemaVersion, 10);
+    test('the repo schema is at least 10 and the category entity is declared', () {
+      expect(WalletRepo.schemaVersion, greaterThanOrEqualTo(10));
       final e = entitySchema['category'];
       expect(e, isNotNull);
       expect(e!.table, 'categories');
@@ -869,8 +599,8 @@ void main() {
       expect(e.column('deleted')!.type, ColumnType.flag);
     });
 
-    test('the table exists in a new wallet and meta says 10', () {
-      expect(repo.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '10');
+    test('the table exists in a new wallet and meta says the current schema', () {
+      expect(repo.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '${WalletRepo.schemaVersion}');
       expect(repo.db.select('SELECT * FROM categories'), isEmpty);
     });
 

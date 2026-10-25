@@ -116,10 +116,9 @@ Map<String, List<CategorizedTx>> _byMonth(List<CategorizedTx> txs, DateRange r) 
 bool _partial(String month, DateRange r, String today) =>
     month == monthOf(today) || r.start.compareTo('$month-01') > 0 || r.end.compareTo('$month-${daysInMonth(month)}') < 0;
 
-/// Whether a row in [rowCategory] belongs to [category]: the same id, or with [table] also a child of it (a
-/// category's whole tree, one level), so a parent's drill-down sums exactly what its rolled-up total shows.
-bool _inTree(String rowCategory, String category, CategoryTable? table) =>
-    rowCategory == category || (table != null && table.parentOf(rowCategory) == category);
+/// Whether a row in [rowCategory] belongs to [category]: the same id (since T1 every category is top-level, so a
+/// category's tree is itself; [table] is kept for callers written for P1).
+bool _inTree(String rowCategory, String category, CategoryTable? table) => rowCategory == category;
 
 /// Spending rows of [category] (its tree with [table], [_inTree]) inside [r], newest first (date, then id descending).
 List<CategorizedTx> _categoryRows(String category, List<CategorizedTx> txs, DateRange r, String currency, [CategoryTable? table]) => [
@@ -273,7 +272,7 @@ CategoryCompare compareCategory(String category, List<CategorizedTx> txs, String
       ? txs
       : [
           for (final t in txs)
-            if (_inTree(t.category, category, table)) CategorizedTx(t.tx, category, t.kind)
+            if (_inTree(t.category, category, table)) CategorizedTx(t.tx, category, t.kind, tags: t.tags)
         ];
   final before = monthsEnding(month, 2).first;
   return CategoryCompare(
@@ -296,4 +295,65 @@ List<CategorizedTx> biggestRows(List<CategorizedTx> txs, DateRange r, {int limit
       return d != 0 ? d : a.tx.id.compareTo(b.tx.id);
     });
   return rows.length > limit ? rows.sublist(0, limit) : rows;
+}
+
+/// One extra tag's spending over a range ([tagShare]): [spent] counted like "Where it goes" (refunds subtracted),
+/// [count] its rows. Tags overlap, so slices never add up to a total.
+class TagSlice {
+  final String tag;
+  final int spent;
+  final int count;
+  const TagSlice({required this.tag, required this.spent, required this.count});
+
+  @override
+  String toString() => 'TagSlice($tag, $spent, $count)';
+}
+
+/// Spending per extra tag over a range. A row with several tags counts in each, so the slices overlap: there is no
+/// total and no permille. [untaggedSpent] is the spending of the rows with no extra tag.
+class TagShare {
+  /// Tags with net spending > 0, spent desc, then tag id.
+  final List<TagSlice> slices;
+  final int untaggedSpent;
+  const TagShare({required this.slices, required this.untaggedSpent});
+}
+
+/// Spending per extra tag ([CategorizedTx.tags]) over [r], counted as "Where it goes" ([countsAsSpending]): live rows
+/// in [currency], fixed and flex, refunds subtracted; income, transfers and other currencies never count.
+TagShare tagShare(List<CategorizedTx> txs, DateRange r, {required String currency}) {
+  final spent = <String, int>{};
+  final count = <String, int>{};
+  var untagged = 0;
+  for (final t in txs) {
+    if (!r.contains(t.date) || !countsAsSpending(t, currency)) continue;
+    if (t.tags.isEmpty) untagged -= t.amount;
+    for (final g in t.tags.toSet()) {
+      spent[g] = (spent[g] ?? 0) - t.amount;
+      count[g] = (count[g] ?? 0) + 1;
+    }
+  }
+  final slices = [
+    for (final MapEntry(key: g, value: s) in spent.entries)
+      if (s > 0) TagSlice(tag: g, spent: s, count: count[g]!)
+  ]..sort((a, b) {
+      final d = b.spent.compareTo(a.spent);
+      return d != 0 ? d : a.tag.compareTo(b.tag);
+    });
+  return TagShare(slices: slices, untaggedSpent: untagged);
+}
+
+/// The rows behind [tag]'s [TagSlice] in [r], newest first (date, then id descending); their amounts sum to exactly
+/// −spent.
+List<CategorizedTx> rowsForTag(String tag, List<CategorizedTx> txs, DateRange r, {required String currency}) => [
+      for (final t in txs)
+        if (t.tags.contains(tag) && r.contains(t.date) && countsAsSpending(t, currency)) t
+    ]..sort(_newestFirst);
+
+/// [tag]'s spending per calendar month overlapping [r], shaped like [spendingByMonth].
+List<MonthBar> tagTrend(String tag, List<CategorizedTx> txs, DateRange r, {required String today, required String currency}) {
+  final spent = {for (final m in _monthsOf(r)) m: 0};
+  for (final t in rowsForTag(tag, txs, r, currency: currency)) {
+    spent[monthOf(t.date)] = spent[monthOf(t.date)]! - t.amount;
+  }
+  return [for (final e in spent.entries) MonthBar(month: e.key, spent: e.value, partial: _partial(e.key, r, today))];
 }

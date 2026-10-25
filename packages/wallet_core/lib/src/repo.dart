@@ -15,6 +15,7 @@ import 'recurring.dart';
 import 'schema.dart';
 import 'search.dart' show foldText;
 import 'sqlite_io.dart' if (dart.library.js_interop) 'sqlite_web.dart' as sqlite;
+import 'tags.dart';
 import 'transfers.dart';
 
 part 'repo_accounts.dart';
@@ -23,6 +24,7 @@ part 'repo_categories.dart';
 part 'repo_blobs.dart';
 part 'repo_planned.dart';
 part 'repo_settings.dart';
+part 'repo_tags.dart';
 
 /// One field-level change. This is what syncs between devices.
 class Op {
@@ -136,8 +138,9 @@ class WalletRepo {
   /// the `recurring` entity, version 6 the `planned` entity, version 7 the `bill` entity, version 8 one settings row
   /// per category budget and merchant pattern (`budget:<category>`, `pattern:<id>`; the maps are migrated once),
   /// version 9: accounts (the `account` entity; no data migration), version 10: categories (the `category` entity:
-  /// custom categories, subcategories and built-in overrides; no data migration).
-  static const schemaVersion = 10;
+  /// custom categories, subcategories and built-in overrides; no data migration), version 11: tags (the `tag`,
+  /// `txtag` and `ruletag` entities; no data migration).
+  static const schemaVersion = 11;
 
   /// The folder sync's bookkeeping (`peer_files`: which files of the shared folder were read) means nothing on a relay,
   /// whose sequence numbers start over (every device's first relay file is its whole state), so it is dropped once.
@@ -463,7 +466,8 @@ class WalletRepo {
   }
 
   /// Whether nothing has been put into this wallet yet: no transactions, goals, goal contributions, wishes, recurring
-  /// bills, planned costs, bills (receipts, slips), accounts, categories (overrides included), merchant rules (deleted rows count: they were data once) and no synced settings. Only such a wallet may
+  /// bills, planned costs, bills (receipts, slips), accounts, categories (overrides included), tags, tag links, rule
+  /// tags, merchant rules (deleted rows count: they were data once) and no synced settings. Only such a wallet may
   /// take a restore from a backup; anything else merges through the sync folder.
   bool get isEmpty {
     for (final e in entitySchema.values) {
@@ -527,7 +531,7 @@ class WalletRepo {
         if (written[b.id] case final String at when seen.unseen(at)) bank[b.id] = b;
       }
     }
-    final cz = categorizer();
+    final cz = categorizer(withTags: false);
     final plan = planMatches(manual, [...bank.values], (b) {
       final k = cz.table.kindOf(cz.autoCategory(b));
       return k == BudgetKind.flex || k == BudgetKind.fixed;
@@ -773,7 +777,7 @@ class WalletRepo {
     final table = categoryTable();
     bool dead(Map<String, Object?> r) => r['category'] is String && table.isDeadCustom(r['category'] as String);
     if (!rows.any(dead)) return [for (final r in rows) make(r)];
-    final cz = categorizer();
+    final cz = categorizer(withTags: false);
     return [
       for (final r in rows) dead(r) ? make({...r, 'category': resolve(cz, r)}) : make(r),
     ];
@@ -801,11 +805,17 @@ class WalletRepo {
   /// Built-ins plus the stored category rows ([categoryRows], deleted ones included: a row pointing at one falls back).
   CategoryTable categoryTable() => CategoryTable.from(categoryRows(includeDeleted: true));
 
-  Categorizer categorizer() {
+  /// The categorizer for the current settings, rules and categories. With [withTags] (the default) it also holds one
+  /// read of the tag tables ([WalletRepoTags.tagContext]), so [Categorizer.categorize] fills [CategorizedTx.tags].
+  Categorizer categorizer({bool withTags = true}) {
     final table = categoryTable();
     final st = _readSettings(db, table: table);
     return Categorizer(
-        merchantRules: merchantRules(), patterns: st.merchantPatterns, rentCashThreshold: st.rentCashThreshold, table: table);
+        merchantRules: merchantRules(),
+        patterns: st.merchantPatterns,
+        rentCashThreshold: st.rentCashThreshold,
+        table: table,
+        tagContext: withTags ? tagContext() : null);
   }
 
   // ---------- writes ----------
@@ -1187,7 +1197,7 @@ class WalletRepo {
     }
     final existing = {for (final r in db.select('SELECT * FROM recurring')) r['id'] as String: RecurringBill.fromRow(r)};
     final deleted = {for (final r in db.select('SELECT id FROM recurring WHERE deleted = 1')) r['id'] as String};
-    final cz = categorizer();
+    final cz = categorizer(withTags: false);
     final currency = settings().currency; // only rows in the wallet's currency make or pay a bill
     final categorized = [for (final r in rows) cz.categorize(r)];
     final detected = detectRecurring(categorized, today: today, currency: currency);

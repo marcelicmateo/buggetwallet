@@ -3,6 +3,7 @@ import 'package:wallet_importer/wallet_importer.dart' show TxKind;
 import 'logs.dart';
 import 'models.dart';
 import 'search.dart' show foldText;
+import 'tags.dart' show TagContext;
 
 final _log = Logger('bw.categories');
 
@@ -51,7 +52,8 @@ BudgetKind kindOf(String category) => categories[category] ?? BudgetKind.flex;
 
 /// One row of the synced `category` entity (P1, schema 10; table `categories`). A row whose [id] is a built-in name
 /// ([categories]) is an *override* of that built-in: only [name] (the label; empty = the built-in name), [hidden] and
-/// [position] count. Any other id (`k` + 12 hex) is a custom category of [kind], a child of [parent] when set.
+/// [position] count. Any other id (`k` + 12 hex) is a custom category of [kind]. [parent] is read but unused: P1's
+/// subcategories were replaced by tags (T1), so every row is top-level and new writes refuse a parent.
 class CategoryRow {
   final String id;
   final String name;
@@ -101,19 +103,16 @@ class CategoryRow {
 /// The built-in categories plus the owner's own ones and overrides ([CategoryRow]), resolved once. Pure; with no rows
 /// ([builtIn]) every answer is the built-in globals' ([categories], [kindOf], [spendingCategories]).
 ///
-/// Subcategories are one level deep: a custom row's parent counts only while it is live, is not the row itself and
-/// has no live parent of its own; otherwise the row is top-level with its own kind (an orphan after a sync race
-/// stays visible until the owner fixes it). A child's kind is always its parent's. Of two live top-level categories
-/// with the same folded label ([foldText]), or two siblings, one is the original and the other [duplicateOf] it: a
-/// built-in first, then the smallest id (the same answer on every device).
+/// Every category is top-level (T1: subcategories were replaced by tags): a stored `parent` is ignored, so an old
+/// child counts as its own main tag with its own kind. [parentOf] is always null, [topLevel] the id itself and
+/// [childrenOf] empty. Of two live categories with the same folded label ([foldText]), one is the original and the
+/// other [duplicateOf] it: a built-in first, then the smallest id (the same answer on every device).
 class CategoryTable {
   /// The rows it was built from, as given.
   final List<CategoryRow> rows;
   final Map<String, CategoryRow> _custom = {};
   final Map<String, CategoryRow> _override = {};
-  final Map<String, String> _parent = {};
   final List<String> _top = [];
-  final Map<String, List<String>> _children = {};
   final Map<String, String> _dup = {};
 
   /// Only the built-in categories, unchanged.
@@ -126,10 +125,6 @@ class CategoryTable {
     for (final r in rows) {
       (r.isOverride ? _override : _custom)[r.id] = r;
     }
-    for (final r in _custom.values) {
-      final p = r.parent;
-      if (p != null && p != r.id && isLive(p) && !hasLiveStoredParent(p)) _parent[r.id] = p;
-    }
     int order(String a, String b) {
       var d = position(a).compareTo(position(b));
       if (d == 0) d = foldText(label(a)).compareTo(foldText(label(b)));
@@ -139,20 +134,10 @@ class CategoryTable {
     _top.addAll([
       ..._builtInOrder,
       for (final r in _custom.values)
-        if (r.isLiveCustom && !_parent.containsKey(r.id)) r.id
+        if (r.isLiveCustom) r.id
     ]);
     _top.sort(order);
-    for (final r in _custom.values) {
-      if (!r.isLiveCustom) continue;
-      if (_parent[r.id] case final p?) (_children[p] ??= []).add(r.id);
-    }
-    for (final c in _children.values) {
-      c.sort(order);
-    }
     _markDuplicates(_top);
-    for (final c in _children.values) {
-      _markDuplicates(c);
-    }
   }
 
   /// Within one sibling list: each folded label's original is a built-in (lowest index) or else the smallest id.
@@ -181,27 +166,22 @@ class CategoryTable {
     return n.isEmpty ? id : n;
   }
 
-  /// The built-in kind, a custom top-level row's own kind, or its parent's for a child. Unknown: flex.
-  BudgetKind kindOf(String id) {
-    if (categories[id] case final k?) return k;
-    if (_parent[id] case final p?) return kindOf(p);
-    return _custom[id]?.kind ?? BudgetKind.flex;
-  }
+  /// The built-in kind or a custom row's own kind. Unknown: flex.
+  BudgetKind kindOf(String id) => categories[id] ?? _custom[id]?.kind ?? BudgetKind.flex;
 
-  /// The parent of a child; null for a top-level, unknown or orphaned id.
-  String? parentOf(String id) => _parent[id];
+  /// Always null: every category is top-level (T1).
+  String? parentOf(String id) => null;
 
-  /// [id]'s parent, or [id] itself when it is top-level.
-  String topLevel(String id) => _parent[id] ?? id;
+  /// [id] itself: every category is top-level (T1).
+  String topLevel(String id) => id;
 
-  /// The live children of [id], by position, then label.
-  List<String> childrenOf(String id) => List.unmodifiable(_children[id] ?? const <String>[]);
+  /// Always empty: every category is top-level (T1).
+  List<String> childrenOf(String id) => const <String>[];
 
   /// A built-in, or a custom row that is not deleted.
   bool isLive(String id) => categories.containsKey(id) || (_custom[id]?.isLiveCustom ?? false);
 
-  /// Whether [id]'s stored parent (a custom row's `parent`) is a live category other than itself. Such a row cannot be
-  /// a parent ([parentOf] of its children is null): the one rule the table and `addCategory`/`updateCategory` share.
+  /// Whether [id]'s stored parent (an old P1 row's `parent`, ignored since T1) is a live category other than itself.
   bool hasLiveStoredParent(String id) {
     final p = _custom[id]?.parent;
     return p != null && p != id && isLive(p);
@@ -213,7 +193,7 @@ class CategoryTable {
   static final _customId = RegExp(r'^k[0-9a-f]{12}$');
 
   /// A live top-level custom category of kind fixed: it has a plan line (`WalletSettings.planLines`, `plan:<id>`).
-  bool hasPlanLine(String id) => isCustom(id) && isLive(id) && _parent[id] == null && kindOf(id) == BudgetKind.fixed;
+  bool hasPlanLine(String id) => isCustom(id) && isLive(id) && kindOf(id) == BudgetKind.fixed;
 
   /// The ids with a plan line ([hasPlanLine]), in order.
   List<String> get planLineIds => [
@@ -221,11 +201,11 @@ class CategoryTable {
           if (hasPlanLine(t)) t
       ];
 
-  /// Whether a bill or planned cost in [id] is already in the payday plan: [id] is live and its top-level category is
-  /// fixed (Rent, Loan, Bills & subscriptions, or a custom fixed category with its plan line).
-  bool coveredByPlan(String id) => isLive(id) && kindOf(topLevel(id)) == BudgetKind.fixed;
+  /// Whether a bill or planned cost in [id] is already in the payday plan: [id] is live and fixed (Rent, Loan, Bills &
+  /// subscriptions, or a custom fixed category with its plan line).
+  bool coveredByPlan(String id) => isLive(id) && kindOf(id) == BudgetKind.fixed;
 
-  /// The sort position among siblings: a stored one, else a built-in's index in [categories]; a custom row without
+  /// The sort position: a stored one, else a built-in's index in [categories]; a custom row without
   /// one sorts last (a large value).
   int position(String id) =>
       categories.containsKey(id) ? (_override[id]?.position ?? _builtInOrder.indexOf(id)) : (_custom[id]?.position ?? _noPosition);
@@ -236,21 +216,16 @@ class CategoryTable {
   /// Whether [id] is a custom id (deleted or not).
   bool isCustom(String id) => _custom.containsKey(id);
 
-  /// The original of a sync duplicate (same folded label among live siblings), or null.
+  /// The original of a sync duplicate (same folded label among live categories), or null.
   String? duplicateOf(String id) => _dup[id];
 
   /// The live top-level ids in order (hidden and duplicate ones included).
   List<String> get topLevelIds => List.unmodifiable(_top);
 
-  /// What a picker offers: live, not hidden, not a duplicate, of one of [kinds] (all when null); each top-level id
-  /// followed by its children. A hidden parent hides its children too.
+  /// What a picker offers: live, not hidden, not a duplicate, of one of [kinds] (all when null), in order.
   List<String> pickable({Set<BudgetKind>? kinds}) => [
         for (final t in _top)
-          if (!isHidden(t) && !_dup.containsKey(t) && (kinds == null || kinds.contains(kindOf(t)))) ...[
-            t,
-            for (final c in _children[t] ?? const <String>[])
-              if (!isHidden(c) && !_dup.containsKey(c)) c,
-          ],
+          if (!isHidden(t) && !_dup.containsKey(t) && (kinds == null || kinds.contains(kindOf(t)))) t
       ];
 
   /// The live fixed and flex top-level ids, in order: the categories a budget can be set for and the CSV columns.
@@ -259,14 +234,14 @@ class CategoryTable {
           if (_spendingKind(kindOf(t))) t
       ];
 
-  /// A live category money goes out through (fixed or flex), children included.
+  /// A live category money goes out through (fixed or flex).
   bool isSpending(String id) => isLive(id) && _spendingKind(kindOf(id));
 
   static bool _spendingKind(BudgetKind k) => k == BudgetKind.fixed || k == BudgetKind.flex;
 }
 
-/// [byCategory] with each child's sum added into its top-level category ([CategoryTable.topLevel]); exact cents. Keys
-/// keep their first-seen order; with [CategoryTable.builtIn] the result equals the input.
+/// [byCategory] with each id's sum under [CategoryTable.topLevel]: since T1 every category is top-level, so the result
+/// equals the input (kept for callers written for P1's subcategories).
 Map<String, int> rollUp(Map<String, int> byCategory, CategoryTable t) {
   final out = <String, int>{};
   for (final MapEntry(:key, :value) in byCategory.entries) {
@@ -317,11 +292,15 @@ class Categorizer {
   /// or unknown custom category) is ignored, so the row falls back as if it had none (P1 §3; nothing is rewritten).
   final CategoryTable table;
 
+  /// The tag tables [categorize] fills [CategorizedTx.tags] from (T1; `WalletRepo.tagContext`, read once). Null: no tags.
+  final TagContext? tagContext;
+
   Categorizer(
       {this.merchantRules = const {},
       List<List<String>> patterns = const [],
       this.rentCashThreshold = defaultRentCashThreshold,
-      CategoryTable? table})
+      CategoryTable? table,
+      this.tagContext})
       : table = table ?? CategoryTable.builtIn,
         userPatterns = [
           for (final p in patterns)
@@ -439,7 +418,7 @@ class Categorizer {
 
   CategorizedTx categorize(Tx t) {
     final c = categoryOf(t);
-    return CategorizedTx(t, c, table.kindOf(c));
+    return CategorizedTx(t, c, table.kindOf(c), tags: tagContext?.of(t) ?? const []);
   }
 }
 

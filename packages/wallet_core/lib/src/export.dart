@@ -5,6 +5,7 @@ library;
 import 'categories.dart';
 import 'dates.dart';
 import 'models.dart';
+import 'tags.dart' show TagTable;
 
 /// [cents] as a decimal with a dot and two fractional digits: `-1234.56`, `0.01`, `1000000.00`. Exact for every int;
 /// zero is `0.00` (never `-0.00`).
@@ -25,11 +26,16 @@ String _record(Iterable<String> fields) => '${fields.map(csvField).join(',')}\n'
 /// Header of [transactionsCsv].
 const transactionsCsvHeader = 'date,amount,category,description,source,note';
 
+/// Header of [transactionsCsv] with its `tags` argument (T1): a `tags` column after `category`.
+const transactionsCsvTagsHeader = 'date,amount,category,tags,description,source,note';
+
 /// The live rows of [txs] (deleted ones and hand-added entries replaced by a bank row are left out), one record each,
 /// sorted by date then id: `date,amount,category,description,source,note`. `amount` is the stored signed amount
 /// (outflows negative) as an exact decimal, `category` the resolved one (its label in [table] when given, so a
 /// custom category reads as its name; built-ins keep their names unless relabelled), `note` empty when there is none.
-String transactionsCsv(List<CategorizedTx> txs, {CategoryTable? table}) {
+/// With [tags], a `tags` column follows `category` ([transactionsCsvTagsHeader]): the labels of the row's extra tags
+/// ([CategorizedTx.tags], in their order) joined with `; `, empty when it has none. `category` stays the main tag.
+String transactionsCsv(List<CategorizedTx> txs, {CategoryTable? table, TagTable? tags}) {
   final rows = [
     for (final t in txs)
       if (t.tx.live) t
@@ -37,10 +43,18 @@ String transactionsCsv(List<CategorizedTx> txs, {CategoryTable? table}) {
       final c = a.date.compareTo(b.date);
       return c != 0 ? c : a.tx.id.compareTo(b.tx.id);
     });
-  final sb = StringBuffer('$transactionsCsvHeader\n');
+  final sb = StringBuffer('${tags == null ? transactionsCsvHeader : transactionsCsvTagsHeader}\n');
   for (final t in rows) {
     final c = table == null ? t.category : table.label(t.category);
-    sb.write(_record([t.date, centsToDecimal(t.amount), c, t.tx.description, t.tx.source, t.tx.note ?? '']));
+    sb.write(_record([
+      t.date,
+      centsToDecimal(t.amount),
+      c,
+      if (tags != null) t.tags.map(tags.label).join('; '),
+      t.tx.description,
+      t.tx.source,
+      t.tx.note ?? '',
+    ]));
   }
   return sb.toString();
 }
@@ -72,8 +86,8 @@ String monthlySummaryCsvHeaderFor(CategoryTable t) =>
 /// decimal (refunds, positive rows in the category, reduce it; `0.00` without spending), `total` the sum of the cells.
 /// Income, transfers, deleted rows and replaced entries are not spending and never appear; neither do rows in another
 /// currency than [currency] (`WalletSettings.currency`): the cells are sums in one currency. With [table], the
-/// columns are its [CategoryTable.spending] (labels in the header, [monthlySummaryCsvHeaderFor]) and each child's
-/// rows count in its parent's column ([rollUp]); a duplicate's rows in its original's.
+/// columns are its [CategoryTable.spending] (labels in the header, [monthlySummaryCsvHeaderFor]); a duplicate's rows
+/// count in its original's column.
 String monthlySummaryCsv(List<CategorizedTx> txs, {required String currency, CategoryTable? table}) {
   final t0 = table ?? CategoryTable.builtIn;
   final cats = _csvColumns(t0);

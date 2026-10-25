@@ -5,6 +5,7 @@ import 'bills.dart';
 import 'categories.dart' show CategoryTable;
 import 'models.dart';
 import 'schema.dart';
+import 'tags.dart' show TagTable;
 
 /// Newest transactions a result holds at most.
 const searchTxLimit = 200;
@@ -130,7 +131,9 @@ List<Map<String, Object?>> searchRows(String entity, String query, Iterable<Map<
 /// replaced transactions are never found. Blank query → [SearchResult.empty]. Transactions come newest first (date,
 /// then id, descending), capped at [searchTxLimit]; the other lists keep their input order. [rows] (entity → raw rows)
 /// are searched on the entity's searchable columns ([searchRows]) into [SearchResult.rows]. With [table], a
-/// category also matches by its label ([CategoryTable.label], folded), so a custom category is found by its name.
+/// category also matches by its label ([CategoryTable.label], folded), so a custom category is found by its name. With
+/// [tags], a transaction also matches when the label of one of its extra tags ([CategorizedTx.tags],
+/// [TagTable.label]) holds the query.
 SearchResult searchAll(
   String query, {
   required List<CategorizedTx> txs,
@@ -141,6 +144,7 @@ SearchResult searchAll(
   List<Bill> billsDb = const [],
   Map<String, Iterable<Map<String, Object?>>> rows = const {},
   CategoryTable? table,
+  TagTable? tags,
 }) {
   final q = foldText(query.trim());
   if (q.isEmpty) return SearchResult.empty;
@@ -148,10 +152,11 @@ SearchResult searchAll(
   bool text(String? s) => s != null && foldText(s).contains(q);
   bool amount(int v) => cents != null && v.abs() == cents;
   bool category(String? c) => text(c) || (c != null && table != null && text(table.label(c)));
+  bool tagged(CategorizedTx t) => tags != null && t.tags.any((g) => text(tags.label(g)));
 
   final hits = [
     for (final t in txs)
-      if (t.tx.live && (amount(t.amount) || text(t.tx.description) || text(t.tx.note) || category(t.category))) t
+      if (t.tx.live && (amount(t.amount) || text(t.tx.description) || text(t.tx.note) || category(t.category) || tagged(t))) t
   ]..sort((a, b) {
       final c = b.date.compareTo(a.date);
       return c != 0 ? c : b.tx.id.compareTo(a.tx.id);

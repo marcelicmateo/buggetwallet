@@ -135,9 +135,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `account` from the importer is never stored (it names the owner's account).
   **Own categories (P1, schema 10, spec `docs/context/P1_SPEC.md` incl. Clarifications):** `CategoryTable.from(rows)`
   resolves built-ins + `CategoryRow`s (entity `category`, table `categories`; id `k` + 12 hex, or a built-in name =
-  override of label/hidden/position only). One level of subcategories; a child's kind is its parent's; an orphan
-  (parent deleted/not top-level) is top-level; `duplicateOf` = built-in first, then smallest id. `rollUp` sums
-  children into `topLevel`. **Code that can meet a custom id uses the table, never the globals** (`categories`,
+  override of label/hidden/position only). **T1: subcategories were replaced by tags**: a stored `parent` is ignored
+  (every row is top-level with its own kind; `parentOf` null, `topLevel` = id, `childrenOf` empty, `rollUp` the
+  identity) and `addCategory`/`updateCategory` refuse `parent` ("Use a tag for this."); `duplicateOf` = built-in
+  first, then smallest id. **Code that can meet a custom id uses the table, never the globals** (`categories`,
   `kindOf`, `spendingCategories`, `isSpendingCategory`, `coveredByPlan` getters stay built-in only): `Categorizer(table:)`
   (an override/rule/pattern to a deleted or unknown id is ignored, nothing rewritten), settings budget parse,
   `setCategoryBudget` (top-level only), `setMerchantPattern`, CSV, budget-vs-actual, review, bill suggestion/history.
@@ -155,8 +156,20 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   payee key, then patterns and built-in rules on label/title/payee; recurring: else Shopping), never written;
   `refreshRecurring` never rewrites such a stored category and ignores rows whose own category is one when it picks
   the payee's latest row. Drill-down (`merchantsIn`, `rowsFor`, `merchantTrend`, `compareCategory`) and `searchAll`
-  take an optional `table` (whole tree; label search). `transactionsCsv(table:)` writes labels; the monthly CSV puts
+  take an optional `table` (label search). `transactionsCsv(table:)` writes labels; the monthly CSV puts
   a sync duplicate into its original's column.
+- `tags.dart` + `repo_tags.dart` — tags (T1, schema 11, spec `docs/context/T1_SPEC.md`). The main tag is the row's
+  category; extra tags are entity `tag` (table `tags`, id `t` + 12 hex, `TagRow`, `TagTable`: order by position, label,
+  id; same folded label = sync duplicate of the smallest id, `resolve` maps it), links `txtag` (table `tx_tags`, id
+  `<txId>|<tagId>`, `state` on/off, never deleted; no `deleted` column) and rule tags `ruletag` (table `rule_tags`,
+  id `<payee>|<tagId>`, payee = `merchantKey`). `tagsOf` = live rule tags of `tagPayee(t)` + `on` links − `off`
+  links, resolved, table order; nothing is written on import. `repo.categorizer()` holds one `tagContext()` read
+  (three tables) and fills `CategorizedTx.tags`; internal callers pass `withTags: false`. `suggestTags` (≥ 2 other
+  rows of the payee, `off:` the row's off links), `recommendedMainTags`/`recommendedTags` (payee count, overall
+  count, table order). Totals: `tagShare`/`rowsForTag`/`tagTrend` in `insights.dart` (overlapping, no permille;
+  `untaggedSpent`). `searchAll(tags:)`, `transactionsCsv(tags:)` (`tags` column after `category`, labels joined
+  `; `). Name rules (1–40 chars, unique folded among live tags, not a live category label, ≤ 500 live) are checked on
+  local writes only. Logs: counts only. Tests: `test/t1_tags_impl_test.dart`.
 - `transfers.dart` — `planTransfers`: own transfers between accounts. Only a row the bank itself marks as one
   (`kindHint == ownTransfer`: Revolut `Topup`, PBZ card payments to Revolut; not `exchange`, a conversion inside one bank) may pair: with the equal,
   opposite-sign row of the same currency in another source within `transferDays` (3, inclusive, either way in time),

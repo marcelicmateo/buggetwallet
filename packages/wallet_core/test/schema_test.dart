@@ -46,6 +46,11 @@ CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY, name TEXT NOT NULL DEFA
   opening INTEGER NOT NULL DEFAULT 0, opening_date TEXT NOT NULL DEFAULT '', deleted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS categories(id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT '', parent TEXT,
   position INTEGER, hidden INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS tags(id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', position INTEGER, hidden INTEGER NOT NULL DEFAULT 0,
+  deleted INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS tx_tags(id TEXT PRIMARY KEY, tx TEXT NOT NULL DEFAULT '', tag TEXT NOT NULL DEFAULT '', state TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS rule_tags(id TEXT PRIMARY KEY, payee TEXT NOT NULL DEFAULT '', tag TEXT NOT NULL DEFAULT '',
+  deleted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS blob_cache(hash TEXT PRIMARY KEY, sealed BLOB NOT NULL, used_at INTEGER NOT NULL, bytes INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS blob_outbox(hash TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS blob_delete(hash TEXT PRIMARY KEY);
@@ -77,9 +82,15 @@ void main() {
       }
     });
 
-    test('every synced table has id TEXT PRIMARY KEY, a deleted flag and no column twice', () {
+    test('every synced table has id TEXT PRIMARY KEY, a deleted flag (a tag link: its state) and no column twice', () {
       for (final e in entitySchema.values) {
-        expect(e.column('deleted')?.type, ColumnType.flag, reason: e.table);
+        if (e.table == 'tx_tags') {
+          // T1: a link is never deleted; removing it writes state `off`.
+          expect(e.column('deleted'), isNull);
+          expect(e.column('state')?.type, ColumnType.text);
+        } else {
+          expect(e.column('deleted')?.type, ColumnType.flag, reason: e.table);
+        }
         expect(e.column('id'), isNull, reason: '${e.table}: id is implicit');
         expect(e.columnNames.toSet().length, e.columns.length, reason: e.table);
         expect(e.createSql, startsWith('CREATE TABLE IF NOT EXISTS ${e.table}(id TEXT PRIMARY KEY, '));
@@ -171,7 +182,8 @@ void main() {
       for (final e in entitySchema.entries) {
         final r = WalletRepo.inMemory();
         expect(r.isEmpty, isTrue);
-        r.db.execute("INSERT INTO ${e.value.table}(id, deleted) VALUES('x', 1)");
+        final gone = e.value.column('deleted') == null ? "state) VALUES('x', 'off')" : "deleted) VALUES('x', 1)";
+        r.db.execute('INSERT INTO ${e.value.table}(id, $gone');
         expect(r.isEmpty, isFalse, reason: e.key);
         r.close();
       }

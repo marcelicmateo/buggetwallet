@@ -32,9 +32,12 @@ void main() {
       expect(monthlySummaryCsv(txs, currency: 'EUR').split('\n').first, monthlySummaryCsvHeader);
     });
 
-    test('the header lists the table\'s top-level spending labels, children excluded; cells roll children up', () async {
+    test('the header lists every spending label; an old child row is its own column (T1)', () async {
       final pets = await repo.addCategory(name: 'Pets', kind: BudgetKind.flex);
-      final food = await repo.addCategory(name: 'Food', kind: BudgetKind.flex, parent: pets);
+      final food = await repo.addCategory(name: 'Food', kind: BudgetKind.flex);
+      repo.applyRemote([
+        Op('category', food, {'parent': pets}, const Hlc(9999999999999, 0, 'z').toString())
+      ]);
       final gifts = await repo.addCategory(name: 'Gifts received', kind: BudgetKind.income);
       repo.addTransaction(date: '2026-09-01', amount: 1000, category: pets);
       repo.addTransaction(date: '2026-09-02', amount: 250, category: food);
@@ -44,20 +47,21 @@ void main() {
       final csv = monthlySummaryCsv(categorized(), currency: 'EUR', table: t).split('\n');
       expect(csv.first, monthlySummaryCsvHeaderFor(t));
       expect(csv.first, 'month,${t.spending.map(t.label).join(',')},total');
-      expect(csv.first.split(','), contains('Pets'));
-      expect(csv.first.split(','), isNot(contains('Food')));
+      expect(csv.first.split(','), containsAll(['Pets', 'Food']));
       expect(csv.first.split(','), isNot(contains('Gifts received')));
-      expect((food, gifts).toString(), isNotEmpty);
+      expect(gifts, isNotEmpty);
       final cols = csv.first.split(',');
       List<String> cells(String line) => line.split(',');
       final sep = cells(csv[1]);
       expect(sep.first, '2026-09');
-      expect(sep[cols.indexOf('Pets')], '12.50');
+      expect(sep[cols.indexOf('Pets')], '10.00');
+      expect(sep[cols.indexOf('Food')], '2.50');
       expect(sep[cols.indexOf('Groceries')], '3.00');
       expect(sep.last, '15.50');
       final oct = cells(csv[2]);
       expect(oct.first, '2026-10');
-      expect(oct[cols.indexOf('Pets')], '1.11');
+      expect(oct[cols.indexOf('Pets')], '0.00');
+      expect(oct[cols.indexOf('Food')], '1.11');
       expect(oct.last, '1.11');
     }, timeout: _t);
 
@@ -72,9 +76,12 @@ void main() {
   group('categoryShare with rollUp', () {
     final range = DateRange(start: '2026-10-01', end: '2026-10-31');
 
-    test('rollUp: true sums children into the parent slice; without it they stay separate', () async {
+    test('T1: rollUp: true changes nothing for an old child row (every category is top-level)', () async {
       final pets = await repo.addCategory(name: 'Pets', kind: BudgetKind.flex);
-      final food = await repo.addCategory(name: 'Food', kind: BudgetKind.flex, parent: pets);
+      final food = await repo.addCategory(name: 'Food', kind: BudgetKind.flex);
+      repo.applyRemote([
+        Op('category', food, {'parent': pets}, const Hlc(9999999999999, 0, 'z').toString())
+      ]);
       repo.addTransaction(date: '2026-10-01', amount: 1000, category: pets);
       repo.addTransaction(date: '2026-10-02', amount: 250, category: food);
       repo.addTransaction(date: '2026-10-03', amount: 750, category: 'Groceries');
@@ -83,7 +90,7 @@ void main() {
       final plain = categoryShare(txs, range, currency: 'EUR');
       expect({for (final s in plain.slices) s.category: s.spent}, {pets: 1000, food: 250, 'Groceries': 750});
       final rolled = categoryShare(txs, range, currency: 'EUR', rollUp: true, table: t);
-      expect({for (final s in rolled.slices) s.category: s.spent}, {pets: 1250, 'Groceries': 750});
+      expect({for (final s in rolled.slices) s.category: s.spent}, {pets: 1000, food: 250, 'Groceries': 750});
       expect(rolled.total, plain.total);
       expect(rolled.slices.fold<int>(0, (s, x) => s + x.permille), 1000);
     }, timeout: _t);
