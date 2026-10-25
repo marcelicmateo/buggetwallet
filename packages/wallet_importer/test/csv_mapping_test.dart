@@ -114,7 +114,7 @@ void main() {
       expect(() => csvShape(_b('$wide\n$wide\n')), throwsA(isA<ImportException>().having((e) => e.message, 'm', tooManyColumnsMessage)));
       final ok = List.generate(maxCsvColumns, (i) => 'Col$i').join(';');
       expect(csvShape(_b('$ok\n$ok\n')).headers, hasLength(maxCsvColumns));
-      for (final bad in ['', 'just one line\n', '1;2;3\n4;5;6\n', 'Hello, prose.\nMore prose.\n']) {
+      for (final bad in ['', 'just one line\n', '1;2;3\n', 'Hello, prose.\nMore prose.\n']) {
         expect(() => csvShape(_b(bad)), throwsA(isA<ImportException>().having((e) => e.message, 'm', unknownLayoutMessage)), reason: bad);
       }
       expect(() => csvShape(Uint8List.fromList([0xFF, 0xFE, 0x44, 0, 0x3B, 0])), throwsA(isA<ImportException>()));
@@ -184,17 +184,20 @@ void main() {
       expect(b.invalidRows, [6]);
     });
 
-    test('debit/credit: both filled is invalid, a signed debit is still money out, both empty is invalid', () {
+    test('debit/credit: credit − debit exactly as written; both filled or both empty is invalid', () {
       final bytes = _b('Datum;Opis;Duguje;Potražuje\n'
           '01.01.2026;a;1,00;2,00\n'
           '02.01.2026;b;-4,00;\n'
           '03.01.2026;c;;\n'
-          '04.01.2026;d;0,00;5,00\n');
+          '04.01.2026;d;0,00;5,00\n'
+          '05.01.2026;e;;-50,00\n'
+          '06.01.2026;f;12,30;\n');
       const m = CsvMapping(name: 'x', headerRow: 0, dateCol: 0, dateFormat: CsvDateFormat.dmyDot, debitCol: 2, creditCol: 3);
       final b = parseMappedCsv(bytes, m);
-      expect(b.transactions.map((t) => t.amountMinor), [-400, 500]);
+      // A debit of −4,00 is a reversal (money in), a credit of −50,00 is money out: never abs().
+      expect(b.transactions.map((t) => t.amountMinor), [400, 500, -5000, -1230]);
       expect(b.invalidRows, [1, 3]);
-      expect(mappingProblems(csvShape(bytes), m), ['Row 2: both a debit and a credit', 'Row 4: no amount']);
+      expect(mappingProblems(csvShape(bytes), m), ['Row 2: both debit and credit', 'Row 4: no amount']);
     });
 
     test('negate, point style with thousands commas, skip column, dd/mm/yyyy, tab', () {
@@ -355,6 +358,8 @@ void main() {
       for (final bad in <Object?>[
         null,
         'x',
+        {...good, 'v': 2},
+        {...good}..remove('v'),
         {...good, 'date': null},
         {
           ...good,
@@ -426,6 +431,73 @@ void main() {
       expect(matchCsvMapping(bytes, auto, saved), moved.shapeId);
       expect(matchCsvMapping(bytes, moved, saved), moved.shapeId);
       expect(matchCsvMapping(_fx('en_comma.csv'), csvShape(_fx('en_comma.csv')), saved), isNull);
+    });
+  });
+
+  group('review fixes', () {
+    test('a header candidate with a date- or amount-like cell is data, not the header', () {
+      final s = csvShape(_b('Stanje na dan;01.01.2026;Iznos\nDatum;Opis;Iznos\n02.01.2026;a;-1,00\n'));
+      expect(s.headerRow, 1);
+      expect(s.headers, ['Datum', 'Opis', 'Iznos']);
+      final t = csvShape(_b('Saldo;Opis;100,00\nDatum;Opis;Iznos\n02.01.2026;a;-1,00\n'));
+      expect(t.headerRow, 1);
+    });
+
+    test('a file without a header row: headerRow -1, Column names, an id from the column count', () {
+      final bytes = _b('01.01.2026;Shop a;-1,00\n02.01.2026;Shop b;-2,00\n');
+      final s = csvShape(bytes);
+      expect(s.headerRow, csvNoHeader);
+      expect(s.headers, ['Column 1', 'Column 2', 'Column 3']);
+      expect(s.samples, hasLength(2));
+      expect(s.sampleRows, [0, 1]);
+      expect(s.shapeId, csvNoHeaderId(3));
+      expect(s.shapeId, isNot(csvShapeId(['Column 1', 'Column 2', 'Column 3'])));
+      expect(csvNoHeaderId(3), isNot(csvNoHeaderId(4)));
+      final m = CsvMapping(
+          name: 'No header',
+          headerRow: csvNoHeader,
+          dateCol: 0,
+          dateFormat: CsvDateFormat.dmyDot,
+          amountCol: 2,
+          descriptionCols: const [1],
+          headers: s.headers);
+      expect(csvLayoutId(m), s.shapeId);
+      expect(mappingProblems(s, m), isEmpty);
+      final b = parseMappedCsv(bytes, m);
+      expect(b.source, 'csv:${s.shapeId}');
+      expect(b.transactions.map((t) => t.amountMinor), [-100, -200]);
+      expect(matchCsvLayout(bytes, s, {s.shapeId: m})?.headerRow, csvNoHeader);
+      // The owner can also read a file with a header as headerless: the header line is then an invalid row.
+      final withHeader = _file(['01.01.2026;a;-1,00']);
+      final none = csvShape(withHeader, headerRow: csvNoHeader);
+      expect(none.headers, hasLength(4));
+      expect(parseMappedCsv(withHeader, _simple().copyWith(headerRow: csvNoHeader, headers: none.headers)).invalidRows, [0]);
+      expect(() => csvShape(withHeader, headerRow: -2), throwsRangeError);
+    });
+
+    test('a saved layout still imports a file with one title line more', () {
+      final first = _file(['01.01.2026;Shop a;-1,00']);
+      final layout = guessMapping(csvShape(first))!;
+      expect(layout.headerRow, 0);
+      final later = _b('Izvod;Račun x\nDatum;Opis;Iznos;Valuta\n02.01.2026;Shop b;-2,00;EUR\n');
+      final shape = csvShape(later);
+      final match = matchCsvLayout(later, shape, {csvLayoutId(layout): layout})!;
+      expect(match.shapeId, csvLayoutId(layout));
+      expect(match.headerRow, 1);
+      expect(matchCsvMapping(later, shape, {csvLayoutId(layout): layout}), csvLayoutId(layout));
+      final b = parseMappedCsv(later, layout);
+      expect(b.source, 'csv:${csvLayoutId(layout)}');
+      expect(b.transactions.single.amountMinor, -200);
+      expect(parseMappedCsv(later, layout.copyWith(headerRow: match.headerRow)).transactions, hasLength(1));
+    });
+
+    test('structure: at most 200 header names, each at most 200 characters', () {
+      final ok = _simple(headers: List.generate(maxCsvColumns, (i) => 'C$i'));
+      expect(ok.structureProblems(), isEmpty);
+      expect(_simple(headers: List.generate(maxCsvColumns + 1, (i) => 'C$i')).structureProblems(), isNotEmpty);
+      expect(_simple(headers: ['Datum', 'Opis', 'x' * (maxCsvHeaderChars + 1), 'Valuta']).structureProblems(), isNotEmpty);
+      expect(_simple(headers: ['Datum', 'Opis', 'x' * maxCsvHeaderChars, 'Valuta']).structureProblems(), isEmpty);
+      expect(_simple().copyWith(headerRow: -2).structureProblems(), isNotEmpty);
     });
   });
 

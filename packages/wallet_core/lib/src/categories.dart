@@ -1,4 +1,4 @@
-import 'package:wallet_importer/wallet_importer.dart' show TxKind;
+import 'package:wallet_importer/wallet_importer.dart' show TxKind, csvSourcePrefix;
 
 import 'logs.dart';
 import 'models.dart';
@@ -444,6 +444,11 @@ class Categorizer {
         if (t.amount > 0) return ('Extra income', null);
         if (type == 'POS plaćanje') return _matchText(d, t.amount) ?? ('Shopping', null);
         return ('Bills & one-offs', null);
+      case final s when s.startsWith(csvSourcePrefix):
+        // A mapped CSV (P12) says nothing about the row's kind: money in is extra income (like PBZ's unknown inflows,
+        // never a refund that lowers spending), money out goes by the owner's patterns and the built-in rules.
+        if (t.amount > 0) return ('Extra income', null);
+        return _matchText(d, t.amount) ?? ('Shopping', null);
       default:
         // Hand-added and unknown-source rows: their stored category if it is a live one, else Shopping.
         final c = t.category;

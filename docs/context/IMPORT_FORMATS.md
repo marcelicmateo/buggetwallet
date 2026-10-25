@@ -47,11 +47,13 @@ when the export does not say) and `account` (the account the file names). Nothin
 ## Any other CSV: column mapping (P12, `csv_generic.dart`, `csv_mapping.dart`)
 - A CSV no profile recognises throws `NeedsMapping(shape)` (an `ImportException`; message "This file isn't one I know
   yet. Map its columns once and it's remembered."). An .xls/.xlsx no profile knows keeps `unknownLayoutMessage`; so do a
-  CSV without a header row of 2+ columns, a NUL byte in the first 4 KB (UTF-16, binary) and prose with a comma.
+  CSV with fewer than 2 columns, a NUL byte in the first 4 KB (UTF-16, binary) and prose with a comma.
 - `csvShape(bytes, {headerRow})`: encoding UTF-8, else Windows-1250 (pure-Dart table, `text_codec.dart`); delimiter
   `;`, tab or `,` = the most consistent field count (≥ 2) over the first 15 rows (tie: wider rows, then that order);
-  header row = the first of those rows with ≥ 2 (and half the usual count of) filled cells, most of them text, followed
-  by a row with ≥ 2 filled cells. Rows are 0-based indexes into the rows `readCsv` returns (blank lines are not rows);
+  header row = the first of those rows with ≥ 2 (and half the usual count of) filled cells, all of them text (a
+  date- or amount-like cell = data), followed by a row with ≥ 2 filled cells; none, but ≥ 2 rows share a width of 2+
+  = no header row (`headerRow` −1 = `csvNoHeader`, headers `Column 1…`, shape id `csvNoHeaderId(columns)` from the
+  column count and a fixed tag; the owner can pick −1 too). Rows are 0-based indexes into the rows `readCsv` returns (blank lines are not rows);
   texts say `Row ${i + 1}`. Shape id = first 16 hex of SHA-256 over the header names (trimmed, lower case, spaces
   collapsed) joined with `|`. Caps: `maxImportBytes`, more than 200 columns refused (`tooManyColumnsMessage`).
 - `CsvMapping` JSON (setting `csvmap:<shapeId>`): `{"v":1, "name", "headerRow", "date": {"col", "format"},
@@ -61,12 +63,17 @@ when the export does not say) and `account` (the account the file names). Nothin
   space or `T` is ignored; years 1900–2199.
 - Amounts: exact (no doubles), at most 2 decimals (a third is invalid, never rounded), thousands marks of the other kind
   in groups of three, spaces, a leading `+`, `-` or `−`. Comma style: `1.234,56`, `1.234` = 1234.00, `12.30` invalid;
-  point style: `1,234.56`, `12,30` invalid. Debit/credit: exactly one non-zero (both = invalid, both empty = invalid);
-  a debit is money out and a credit money in whatever sign is written. `negate` flips the result. Currency column: ISO
+  point style: `1,234.56`, `12,30` invalid. Debit/credit: amount = credit − debit exactly as written (debit `12,30` →
+  −12.30, debit `−12,30` → +12.30 reversal, credit `−50,00` → −50.00; never abs); both non-zero or both empty =
+  invalid. `negate` flips the result. Currency column: ISO
   code (any case) or `€`; empty or other = invalid; no column = the fixed code, else the wallet's currency.
 - Rows: all cells empty = not counted; an empty `skipIfEmpty` cell = skipped; anything that fails = invalid (counted,
   index in `ImportBatch.invalidRows`). Source `csv:<shapeId>`, ids `sourceTransactionId(source, …)` with the occurrence
-  counter, `bankType` empty, no `kindHint`. A layout whose `headers` differ from the file's = `layoutMismatchMessage`.
+  counter, `bankType` empty, no `kindHint`. A layout's `headers` found on another of the first 15 rows (a title line
+  more or less) = read from that row (`parseMappedCsv`; `matchCsvLayout` returns that row); not found =
+  `layoutMismatchMessage`. Core categorises `csv:` rows: money in = Extra income, money out = the owner's patterns and
+  the built-in rules, else Shopping. Core refuses a change to how a used layout reads rows (`setCsvMapping` without
+  `force`; with it the rows are deleted first, each undo-able).
 - `guessMapping(shape)` reads header names (Croatian and English; balance columns never the amount) and the samples
   (date format, decimal style); `mappingProblems` / `previewMapping` check the 5 sample rows. Logs: counts, encoding,
   delimiter word and `mapped: true` only; repo logs say `source: csv` (`sourceLogKey`).

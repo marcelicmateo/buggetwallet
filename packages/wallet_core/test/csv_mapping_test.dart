@@ -171,6 +171,65 @@ void main() {
     });
   });
 
+  group('review fixes', () {
+    test('mapped rows: money in is Extra income, money out goes by the owner patterns, else Shopping', () {
+      final file = _csv('Datum;Opis;Iznos;Valuta\n'
+          '05.01.2026;SYNTH EMPLOYER;1.500,00;EUR\n'
+          '06.01.2026;SYNTH GROCER 12;-20,00;EUR\n'
+          '07.01.2026;SYNTH THING;-5,00;EUR\n');
+      final m = guessMapping(csvShape(file))!;
+      repo.setMerchantPattern('Groceries', 'synth grocer');
+      repo.importBatch(parseMappedCsv(file, m));
+      final cz = repo.categorizer();
+      final by = {for (final t in repo.transactions()) t.description: cz.categoryOf(t)};
+      expect(by, {'SYNTH EMPLOYER': 'Extra income', 'SYNTH GROCER 12': 'Groceries', 'SYNTH THING': 'Shopping'});
+    });
+
+    test('a layout for another file is refused', () {
+      expect(() => repo.setCsvMapping(shape.shapeId, mapping.copyWith(headers: ['A', 'B', 'C', 'D'])),
+          throwsA(isA<ArgumentError>().having((e) => e.message, 'message', 'This layout was made for another file.')));
+      expect(() => repo.setCsvMapping('0123456789abcdef', mapping), throwsArgumentError);
+    });
+
+    test('once used, a change to how rows are read is refused unless forced; forced, the rows go (undo-able)', () {
+      repo.setCsvMapping(shape.shapeId, mapping);
+      repo.importBatch(parseMappedCsv(_file, mapping));
+      expect(repo.csvRowsFor(shape.shapeId), 2);
+      // Free: name, currency, skip column.
+      expect(repo.setCsvMapping(shape.shapeId, mapping.copyWith(name: 'New name')), isEmpty);
+      expect(repo.setCsvMapping(shape.shapeId, mapping.copyWith(name: 'New name', currencyCol: null, currencyCode: 'EUR')), isEmpty);
+      expect(repo.setCsvMapping(shape.shapeId, mapping.copyWith(name: 'New name', skipIfEmptyCol: 1)), isEmpty);
+      final base = repo.settings().csvMappings[shape.shapeId]!;
+      for (final changed in [
+        base.copyWith(negate: true),
+        base.copyWith(decimal: CsvDecimal.point),
+        base.copyWith(descriptionCols: [1, 3]),
+        base.copyWith(dateFormat: CsvDateFormat.dmyDotShort),
+        base.copyWith(amountCol: null, debitCol: 2, creditCol: 3),
+      ]) {
+        expect(() => repo.setCsvMapping(shape.shapeId, changed),
+            throwsA(isA<ArgumentError>().having((e) => e.message, 'message', startsWith('This layout was used for 2 payments'))));
+      }
+      expect(repo.settings().csvMappings[shape.shapeId], base);
+      // Removed and set again with another reading: still refused (the removed layout is remembered).
+      repo.removeCsvMapping(shape.shapeId);
+      expect(() => repo.setCsvMapping(shape.shapeId, base.copyWith(negate: true)), throwsArgumentError);
+      expect(repo.setCsvMapping(shape.shapeId, base), isEmpty, reason: 'the Undo of a removal goes through');
+
+      final deleted = repo.setCsvMapping(shape.shapeId, base.copyWith(negate: true), force: true);
+      expect(deleted, hasLength(2));
+      expect(repo.csvRowsFor(shape.shapeId), 0);
+      expect(repo.transactions(), isEmpty);
+      // The re-import with the new reading adds the rows once (positive now), never doubled.
+      final s = repo.importBatch(parseMappedCsv(_file, repo.settings().csvMappings[shape.shapeId]!));
+      expect(s.added, 2);
+      expect(repo.transactions().map((t) => t.amount).toList()..sort(), [350, 1230]);
+      // Each deleted row can come back.
+      repo.undeleteTransaction(deleted.first);
+      expect(repo.transactions(), hasLength(3));
+    });
+  });
+
   group('two devices', () {
     late Directory tmp;
     late VaultKey key;
