@@ -32,6 +32,11 @@ extension FxDb on WalletController {
         return [for (final c in codes) FxCurrency(c, settings.fxRates[c], seen[c] ?? 0, stale: settings.fxStale[c])];
       });
 
+  /// The payment behind [t] as the owner's row: from the raw whole payments by id, so a converted row (home currency, converted amount)
+  /// never reaches a sheet that edits or splits it (a split is checked against the bank's amount). A part gives its payment.
+  CategorizedTx rawRow(CategorizedTx t) =>
+      wholeTxs.where((w) => w.tx.id == t.tx.id).firstOrNull ?? (t.isPart ? categorizer.categorize(t.tx) : t);
+
   /// Opens Plan at Currencies (from a "not counted" note).
   void openCurrencies() {
     logEvent(_fxLog, Level.INFO, 'fx.open');
@@ -39,9 +44,9 @@ extension FxDb on WalletController {
     currenciesRequest.value++;
   }
 
-  /// Sets the rate of [code] ([rate] = wallet minor units per 1,000,000 minor units). An [ArgumentError] carries core's text.
-  void setFxRate(String code, int rate) {
-    repo.setFxRate(code, rate);
+  /// Sets the rate of [code] ([rate] = wallet minor units per 1,000,000 minor units), dated today or [date] (an Undo). An [ArgumentError] carries core's text.
+  void setFxRate(String code, int rate, {String? date}) {
+    repo.setFxRate(code, rate, date: date);
     logEvent(_fxLog, Level.INFO, 'fx.set');
     _changed();
   }

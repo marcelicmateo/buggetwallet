@@ -362,7 +362,7 @@ class _BillSheetState extends State<BillSheet> {
               padding: const EdgeInsets.only(top: 6),
               child: SplitRow(
                   start: Text('${merchantName(tx.tx)} · ${shortDateOrRaw(tx.date)}', style: const TextStyle(fontSize: BwType.bodySize)),
-                  end: Text(money(tx.amount, cur, decimals: 2, signed: true), textAlign: TextAlign.end, style: numStyle)),
+                  end: Text(money(tx.amount, tx.tx.currency, decimals: 2, signed: true), textAlign: TextAlign.end, style: numStyle)),
             )
           else
             const Padding(padding: EdgeInsets.only(top: 6), child: Muted('The payment has not arrived on this device yet.')),

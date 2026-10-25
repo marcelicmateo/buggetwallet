@@ -105,7 +105,7 @@ Future<void> removeFxWithUndo(BuildContext context, WalletController wc, String 
   }
   say('Rate removed. $code is not counted.', label: 'Undo', action: () {
     try {
-      wc.setFxRate(code, old.rate);
+      wc.setFxRate(code, old.rate, date: old.date); // the rate comes back with its own date
     } catch (e, st) {
       logError(Logger('bw.fx'), 'fx.undo.failed', e, st);
       say(_problem(e));

@@ -264,10 +264,15 @@ class _CategoryRow extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SplitRow(
               start: Text(merchantName(t.tx), style: const TextStyle(fontWeight: FontWeight.w500)),
-              end: Text(money(t.amount, wc.currency, decimals: 2, signed: true),
+              end: Text(money(t.amount, t.tx.currency, decimals: 2, signed: true),
                   textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
           Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
-            Text('${wc.categoryTable.label(t.category)} · ${shortDateOrRaw(t.date)}',
+            Text(
+                [
+                  wc.categoryTable.label(t.category),
+                  shortDateOrRaw(t.date),
+                  if (originalNote(t, wc.settings.fxRates) case final o?) o,
+                ].join(' · '),
                 style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
             Wrap(spacing: 4, children: [
               TextButton(
