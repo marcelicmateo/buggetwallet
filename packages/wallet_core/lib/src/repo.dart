@@ -16,6 +16,7 @@ import 'schema.dart';
 import 'sqlite_io.dart' if (dart.library.js_interop) 'sqlite_web.dart' as sqlite;
 import 'transfers.dart';
 
+part 'repo_accounts.dart';
 part 'repo_bills.dart';
 part 'repo_blobs.dart';
 part 'repo_planned.dart';
@@ -131,8 +132,9 @@ class WalletRepo {
   /// `tx.transfer_to` (an older build dropped those fields from the ops it read, so they are replayed once), version 4
   /// the `exchange` hint (Revolut Exchange rows imported by version 3 as `ownTransfer` are rewritten once), version 5
   /// the `recurring` entity, version 6 the `planned` entity, version 7 the `bill` entity, version 8 one settings row
-  /// per category budget and merchant pattern (`budget:<category>`, `pattern:<id>`; the maps are migrated once).
-  static const schemaVersion = 8;
+  /// per category budget and merchant pattern (`budget:<category>`, `pattern:<id>`; the maps are migrated once),
+  /// version 9: accounts (the `account` entity; no data migration).
+  static const schemaVersion = 9;
 
   /// The folder sync's bookkeeping (`peer_files`: which files of the shared folder were read) means nothing on a relay,
   /// whose sequence numbers start over (every device's first relay file is its whole state), so it is dropped once.
@@ -458,7 +460,7 @@ class WalletRepo {
   }
 
   /// Whether nothing has been put into this wallet yet: no transactions, goals, goal contributions, wishes, recurring
-  /// bills, planned costs, bills (receipts, slips), merchant rules (deleted rows count: they were data once) and no synced settings. Only such a wallet may
+  /// bills, planned costs, bills (receipts, slips), accounts, merchant rules (deleted rows count: they were data once) and no synced settings. Only such a wallet may
   /// take a restore from a backup; anything else merges through the sync folder.
   bool get isEmpty {
     for (final e in entitySchema.values) {

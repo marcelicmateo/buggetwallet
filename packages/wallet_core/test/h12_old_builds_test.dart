@@ -68,6 +68,12 @@ void main() {
           ]);
           expect(r.transactions().where((t) => t.note == 'synthetic'), hasLength(1));
           expect(r.bills().single.confirmed, isTrue);
+          // N2 (schema 9): the old database is migrated to the current version and gains the accounts table.
+          expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '${WalletRepo.schemaVersion}');
+          expect(WalletRepo.schemaVersion, greaterThanOrEqualTo(9));
+          expect(r.accounts(includeDeleted: true), isEmpty);
+          await r.addAccount(name: 'Cash', currency: 'EUR', opening: 1000, openingDate: '2026-01-01');
+          expect(r.accounts().single.isCash, isTrue);
         }, timeout: _t);
 
         test('$file: a second open changes nothing and queues no new ops', () async {

@@ -38,7 +38,7 @@ List<String> captureLogs() {
 }
 
 void main() {
-  test('schema version 8', () => expect(WalletRepo.schemaVersion, 8));
+  test('schema version 8 or later (9: accounts)', () => expect(WalletRepo.schemaVersion, greaterThanOrEqualTo(8)));
 
   group('category budgets', () {
     late WalletRepo r;
@@ -217,7 +217,7 @@ void main() {
       final lines = captureLogs();
       final r = WalletRepo.open(path);
       addTearDown(r.close);
-      expect(lines.join('\n'), contains('"from":7,"to":8'));
+      expect(lines.join('\n'), contains('"from":7,"to":${WalletRepo.schemaVersion}'));
       expect(lines.join('\n'), contains('"perKeySettings":4'));
       expect(row(r, 'budget:Groceries'), {'value': '30000', 'deleted': 0});
       expect(row(r, 'budget:Nope'), isNull, reason: 'invalid entries are not migrated');

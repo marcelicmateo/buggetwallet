@@ -168,6 +168,15 @@ const Map<String, EntityDef> entitySchema = {
     'bills_date': 'date',
     'bills_linked': 'linked_tx'
   }),
+  // Accounts (v9, N2): the owner's bank and cash accounts with an opening balance (see `Account`).
+  'account': EntityDef('accounts', [
+    ColumnDef('name', searchable: true),
+    ColumnDef('source', nullable: true),
+    ColumnDef('currency', defaultSql: "'EUR'"),
+    ColumnDef.integer('opening'),
+    ColumnDef('opening_date'),
+    ColumnDef.flag('deleted'),
+  ]),
 };
 
 /// The device-local tables: never synced or backed up.

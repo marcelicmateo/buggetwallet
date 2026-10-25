@@ -10,6 +10,7 @@ library;
 
 export 'package:wallet_importer/wallet_importer.dart' show BillItem, BillSource, NormalizedBill, TxKind;
 
+export 'src/accounts.dart' show AccountBalance, accountBalances, balanceTotals;
 export 'src/backup.dart' show backupBytes, BackupException, BackupFailure, backupFileName, backupPayload, backupVersion, restoreBackupBytes;
 export 'src/bills.dart'
     show
@@ -37,6 +38,8 @@ export 'src/budget.dart'
         affordability,
         averageByCategory,
         BudgetVsActual,
+        BudgetProposal,
+        budgetProposals,
         budgetVsActual,
         CategoryBudgetLine,
         computePeriod,
@@ -91,6 +94,7 @@ export 'src/logs_io.dart' if (dart.library.js_interop) 'src/logs_web.dart' show 
 export 'src/matching.dart' show MatchPlan, openEntries, planMatches, SeenBank;
 export 'src/models.dart'
     show
+        Account,
         CategorizedTx,
         Goal,
         GoalContribution,
@@ -120,8 +124,18 @@ export 'src/planned.dart'
         UpcomingKind;
 export 'src/recurring.dart' show detectRecurring, medianCents, planRecurringPayments, RecurringPayments;
 export 'src/repo.dart'
-    show ImportSummary, merchantPatternId, Op, WalletRepo, WalletRepoBills, WalletRepoBlobs, WalletRepoPlanned, WalletRepoSettings;
+    show
+        ImportSummary,
+        merchantPatternId,
+        Op,
+        WalletRepo,
+        WalletRepoAccounts,
+        WalletRepoBills,
+        WalletRepoBlobs,
+        WalletRepoPlanned,
+        WalletRepoSettings;
 export 'src/search.dart' show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchTxLimit;
+export 'src/suggest.dart' show PlanSuggestion, planProposals, SettingProposal, Suggested, suggestPlan;
 export 'src/sync.dart'
     show relayFingerprint, SyncDevice, SyncException, SyncProblem, SyncProblemReason, syncReaderVersion, SyncReport, SyncWaiting;
 export 'src/sync_engine.dart'

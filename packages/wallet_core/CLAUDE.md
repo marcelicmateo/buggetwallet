@@ -183,7 +183,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   device migrating the same map writes identical ops); an entry whose id already has a row, live or removed (another
   device's per-key write that arrived first), is skipped, as the read fallback does, so a stale map with a newer clock
   never revives or undoes a per-key change; new patterns get orders after the largest live one; a clock-less legacy row
-  goes through `_write`; the map rows are left in place for older builds; `repo.migrate` logs `perKeySettings` (count)). Opening an existing database with an older version
+  goes through `_write`; the map rows are left in place for older builds; `repo.migrate` logs `perKeySettings` (count);
+  9 = the `account` entity, no data migration). Opening an existing database with an older version
   clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
   written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
 - `local_db.dart` — encrypted local database (§4.9, SQLite3MultipleCiphers, web-safe): `localDbKey(VaultKey)` = HKDF
@@ -255,6 +256,15 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   one record per month with a live row in a spending category, ascending; a cell = Σ −amount of that category (refunds
   reduce it, a net refund prints negative, `0.00` without spending), `total` = Σ cells; income, transfers, deleted and
   replaced rows never count.
+- Accounts and plan suggestions (N2, spec `docs/context/N2_SPEC.md`). `repo_accounts.dart` (`WalletRepoAccounts`):
+  `addAccount`/`updateAccount`/`correctBalance`/`deleteAccount`/`undeleteAccount`/`accounts()`; one live account per
+  (source, currency), cash = `source` null; dates not after the repo clock's today. `accounts.dart` (pure):
+  `accountBalances` = opening + rows after `openingDate` (bank: its source's imported rows, every kind; cash: hand-added
+  rows not matched or pending; ATM never adds to cash); a sync duplicate (same key, larger id) gets `duplicateOf`, its
+  opening only, and `balanceTotals` (per currency) skips it. `suggest.dart` (pure): `suggestPlan(txs, st, today,
+  confirmed:)` reads salary/paydayDay (payday groups), rent/loan (categoriser's Rent/Loan rows, never the amount) and
+  subs (confirmed Bills & subscriptions bills) in the home currency; `planProposals` lists the differing ones (never
+  writes). `budgetProposals` (budget.dart) is the Suggest diff (empty fields first).
 - `planned.dart` + `ics.dart` — future spending (§4.3, API and decisions in `docs/context/FUTURE_SPENDING_API.md`), pure
   and web-safe. `PlannedCost` (`models.dart`): synced entity `planned` (schema 6: `title`, `date`, `amount` nullable
   cents > 0, `category`, `source` manual|calendar|bill, `source_ref` = `CalendarEvent.ref` = `calendarEventRef`
