@@ -211,13 +211,16 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `; `). Name rules (1–40 chars, unique folded among live tags, not a live category label, ≤ 500 live) are checked on
   local writes only. Logs: counts only. Tests: `test/t1_tags_impl_test.dart`.
 - `fx.dart` — other currencies by an owner-set rate (P15, spec `docs/context/P15_SPEC.md`). Settings rows `fx:<CODE>`
-  = `{rate, date}` (`FxRate`: home minor units per 1,000,000; 1..10^9; bad rows dropped, `settings.invalid` key `fx`;
-  the wallet currency's own row left out), `WalletSettings.fxRates`, repo `setFxRate(code, rate)` (dated today) /
-  `removeFxRate(code)`. `convertMinor` (half away from zero, exact up to `maxAmount` × max rate, also on the web),
-  `homeAmount(t, st)` (own → amount; `Tx.homeAmount` hook (bank amount, unused yet); rate; else null),
-  `inHomeCurrency(expanded, st)` = the money list (rows with a rate as wallet-currency copies with
-  `CategorizedTx.originalAmount/originalCurrency`; parts converted one by one, remainder to the last; no rates → the
-  same list). Whole-payment paths keep raw rows. Tests: `test/p15_fx_test.dart`.
+  = `{rate, date, home}` (`FxRate`: home minor units per 1,000,000; 1..10^8; `home` = the wallet currency it was set
+  against, required; bad rows dropped, `settings.invalid` key `fx`; the wallet currency's own row left out),
+  `WalletSettings.fxRates` (home = the wallet currency) / `fxStale` (set against another home: counts nowhere), repo
+  `setFxRate(code, rate)` (dated today, home = wallet currency) / `removeFxRate(code)` (stale too). `convertMinor`
+  (half away from zero, exact, also on the web), `homeAmount(t, st)` (own → amount; `Tx.homeAmount` hook (bank
+  amount, unused yet); rate; null without one or beyond `maxAmount`), `inHomeCurrency(expanded, st)` = the money list
+  (rows with a home amount as wallet-currency copies with `CategorizedTx.originalAmount/originalCurrency`; parts
+  converted one by one (rate, or the bank amount's proportional share), remainder to the last only when all earlier
+  parts are in the list; no rates → the same list). Whole-payment paths keep raw rows: `computePeriod(matchRows:)`
+  matches bills and incomes on the raw list. Tests: `test/p15_fx_test.dart`.
 - `splits.dart` + `repo_splits.dart` — split transactions (P6, schema 13, spec `docs/context/P6_SPEC.md`). Entity
   `split` (table `tx_splits`, id = the tx id, `parts` = one JSON field `[{a, c, t, n?}]`, so LWW keeps a whole split).
   `setSplit`/`removeSplit`/`splitOf`/`splits`; rules (2–20 parts, payment's sign, exact sum, live non-transfer main

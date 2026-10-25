@@ -129,13 +129,14 @@ extension WalletRepoSettings on WalletRepo {
   }
 
   /// Sets the owner's exchange rate for [code] (P15, [WalletSettings.fxRates], row `fx:<CODE>`): [rate] wallet-currency
-  /// minor units per 1,000,000 minor units of [code], dated today. Throws [ArgumentError] for a code that is not three
+  /// minor units per 1,000,000 minor units of [code], dated today and recorded against the wallet currency
+  /// ([FxRate.home]; a rate left from another wallet currency, [WalletSettings.fxStale], is replaced). Throws [ArgumentError] for a code that is not three
   /// capital letters (ISO 4217), the wallet currency itself, or a rate outside [FxRate.minRate]..[FxRate.maxRate].
   /// Writes nothing when the same rate was already set today.
   void setFxRate(String code, int rate) {
     final st = _checkFxCode(code);
     if (rate < FxRate.minRate || rate > FxRate.maxRate) throw ArgumentError.value(rate, 'rate', 'out of range');
-    final next = FxRate(rate, _today());
+    final next = FxRate(rate, _today(), home: st.currency);
     if (st.fxRates[code] == next) return;
     _write([
       ('setting', '${WalletSettings.fxPrefix}$code', {'value': jsonEncode(next.toJson()), 'deleted': 0})
@@ -143,11 +144,12 @@ extension WalletRepoSettings on WalletRepo {
     logEvent(_log, Level.INFO, 'settings.fx', {'set': true});
   }
 
-  /// Removes the rate of [code] (its rows then stay out of every sum again). Throws [ArgumentError] like [setFxRate]
-  /// for a bad code or the wallet currency. Writes nothing when [code] has no rate.
+  /// Removes the rate of [code] (its rows then stay out of every sum again), also one set against another wallet
+  /// currency ([WalletSettings.fxStale]). Throws [ArgumentError] like [setFxRate] for a bad code or the wallet
+  /// currency. Writes nothing when [code] has no rate.
   void removeFxRate(String code) {
     final st = _checkFxCode(code);
-    if (!st.fxRates.containsKey(code)) return;
+    if (!st.fxRates.containsKey(code) && !st.fxStale.containsKey(code)) return;
     _write([
       ('setting', '${WalletSettings.fxPrefix}$code', {'value': null, 'deleted': 1})
     ]);
