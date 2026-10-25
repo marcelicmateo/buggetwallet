@@ -374,10 +374,10 @@ void main() {
   });
 
   group('I8 honest states', () {
-    testWidgets('the backup says bill files are not in it', (t) async {
+    testWidgets('the backup says which bill files go into it', (t) async {
       final wc = wallet();
       await pumpApp(t, Scaffold(body: SingleChildScrollView(child: BackupPanel(wc: wc))), size: const Size(400, 1200));
-      expect(find.textContaining('not in the backup; they stay on your relay'), findsOneWidget);
+      expect(find.textContaining('Files only on your relay do not'), findsOneWidget);
       expect(key('backupNoFiles'), findsOneWidget);
     });
 

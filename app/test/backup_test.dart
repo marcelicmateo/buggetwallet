@@ -96,7 +96,7 @@ void main() {
     final wc = wallet(full: true);
     final c = FakeChooser();
     final sealed = Uint8List.fromList([1, 2, 3, 4]);
-    wc.backupBytesWriter = (repo, key) async => sealed;
+    wc.backupBytesWriter = (repo, key) async => fakeBackup(sealed);
     await pumpPanel(t, wc, c);
     await t.tap(backupBtn);
     await t.pump();
@@ -113,7 +113,7 @@ void main() {
 
   testWidgets('cancelling the save dialog shows neither a toast nor an error', (t) async {
     final wc = wallet(full: true);
-    wc.backupBytesWriter = (repo, key) async => Uint8List(3);
+    wc.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(3));
     await pumpPanel(t, wc, FakeChooser()..cancelSave = true);
     await t.tap(backupBtn);
     await t.pump();
@@ -125,7 +125,7 @@ void main() {
 
   testWidgets('a failing save shows a message, keeps the button usable and logs the type only', (t) async {
     final wc = wallet(full: true);
-    wc.backupBytesWriter = (repo, key) async => Uint8List(3);
+    wc.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(3));
     await pumpPanel(t, wc, FakeChooser()..saveError = DiskTrouble());
     await t.tap(backupBtn);
     await t.pump();
