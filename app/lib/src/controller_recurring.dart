@@ -12,7 +12,7 @@ extension RecurringDb on WalletController {
             for (final b in recurringBills())
               if (b.confirmed) b
           ], [
-            for (final c in txs) c.tx
+            for (final c in wholeTxs) c.tx
           ], currency: currency));
 
   /// Σ of the parts already paid towards [b]'s open cycle (0 without parts).

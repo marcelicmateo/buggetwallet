@@ -44,14 +44,14 @@ extension RulesDb on WalletController {
   /// How many live payments in the wallet's currency each rule decided the main tag of (rule id -> count), once per data version.
   Map<String, int> ruleUseCounts() => memo(
       'rules.hits',
-      () => timed('rules.hits', () => ruleHits([for (final t in txs) t.tx], categorizer, currency: currency),
-          fields: {'tx': txs.length}, warnMs: 50));
+      () => timed('rules.hits', () => ruleHits([for (final t in wholeTxs) t.tx], categorizer, currency: currency),
+          fields: {'tx': wholeTxs.length}, warnMs: 50));
 
   /// The payees of the most recent payments (newest first, one each), for the payee picker. Once per data version.
   List<RulePayee> recentPayees({int limit = 40}) => memo('rules.payees.$limit', () {
         final seen = <String>{};
         final out = <RulePayee>[];
-        final rows = [...txs]..sort((a, b) => b.date.compareTo(a.date));
+        final rows = [...wholeTxs]..sort((a, b) => b.date.compareTo(a.date));
         for (final c in rows) {
           if (!c.tx.live) continue;
           final k = tagPayee(c.tx);
@@ -100,13 +100,13 @@ extension RulesDb on WalletController {
         Categorizer(merchantRules: rules, patternRules: patterns, rentCashThreshold: categorizer.rentCashThreshold, table: categoryTable);
     return timed('rules.preview', () {
       var n = 0;
-      for (final c in txs) {
+      for (final c in wholeTxs) {
         final t = c.tx;
         if (!t.live || t.currency != currency) continue;
         if (categorizer.categoryOf(t) != after.categoryOf(t)) n++;
       }
       return n;
-    }, fields: {'tx': txs.length}, warnMs: 100);
+    }, fields: {'tx': wholeTxs.length}, warnMs: 100);
   }
 
   /// Saves the rule in [d] (a new one, or the edit of [RuleDraft.editId]); [tags] are the payee's tags (payee rules only).

@@ -183,7 +183,7 @@ extension FutureSpending on WalletController {
   }
 
   /// "Paid by this?" candidates for [p]: same category within 3 days, never by amount alone.
-  List<CategorizedTx> paidCandidatesFor(PlannedCost p) => paidCandidates(p, txs, plannedEverything());
+  List<CategorizedTx> paidCandidatesFor(PlannedCost p) => paidCandidates(p, wholeTxs, plannedEverything());
 
   // ---------- heads-up ----------
 

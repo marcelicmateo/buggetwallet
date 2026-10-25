@@ -12,7 +12,7 @@ extension AccountsDb on WalletController {
 
   /// A balance per live account (opening + the rows after it), a sync duplicate marked `duplicateOf`. Cached per data version.
   List<AccountBalance> accountBalanceList() =>
-      _cached('accountBalances', () => accountBalances(accountsAll(), [for (final t in txs) t.tx]));
+      _cached('accountBalances', () => accountBalances(accountsAll(), [for (final t in wholeTxs) t.tx]));
 
   /// What is held, per currency (never mixed; sync duplicates left out). Empty when there are no accounts.
   Map<String, int> heldTotals() => _cached('heldTotals', () => balanceTotals(accountBalanceList()));

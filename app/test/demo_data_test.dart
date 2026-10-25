@@ -24,6 +24,8 @@ void main() {
       seedDemoBills(repo, today);
       await seedDemoAccounts(repo, today);
       expect(repo.accounts(), hasLength(3));
+      seedDemoSplit(repo);
+      expect(repo.splits(), hasLength(1));
       final bills = repo.bills();
       expect(bills, hasLength(4));
       expect(bills.where((b) => b.dueDate != null).every((b) => b.category != null), isTrue);

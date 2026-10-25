@@ -252,7 +252,7 @@ class _BillSheetState extends State<BillSheet> {
       );
     }
 
-    final tx = b.linkedTx == null ? null : wc.txs.where((t) => t.tx.id == b.linkedTx).firstOrNull;
+    final tx = b.linkedTx == null ? null : wc.wholeTxs.where((t) => t.tx.id == b.linkedTx).firstOrNull;
     final fileType = b.blobType;
 
     final content = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

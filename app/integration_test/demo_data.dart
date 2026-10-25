@@ -30,6 +30,7 @@ ImportBatch demoBatch(String today) {
       if (rnd.nextInt(3) == 0) rows.add((day(d), -(900 + rnd.nextInt(2500)), 'POS plaćanje', 'POS MCDONALDS ZAGREB'));
       if (rnd.nextInt(4) == 0) rows.add((day(d), -(1500 + rnd.nextInt(2000)), 'POS plaćanje', 'POS WOLT ZAGREB'));
     }
+    if (back == 0) rows.add((isoDate(end.subtract(const Duration(days: 1))), -6000, 'POS plaćanje', 'POS SPAR ZAGREB')); // seedDemoSplit
     if (back == 3) rows.add((day(20), -48000, 'POS plaćanje', 'POS IKEA ZAGREB'));
     if (back == 5) rows.add((day(22), 25000, 'Ostalo', 'POVRAT POREZA'));
   }
@@ -150,4 +151,13 @@ String demoIcs(String today) {
       'BEGIN:VEVENT\r\nUID:demo-1\r\nDTSTART;VALUE=DATE:${d(3)}\r\nSUMMARY:Birthday dinner 60 €\r\nEND:VEVENT\r\n'
       'BEGIN:VEVENT\r\nUID:demo-2\r\nDTSTART;VALUE=DATE:${d(5)}\r\nSUMMARY:Concert tickets\r\nEND:VEVENT\r\n'
       'END:VCALENDAR\r\n';
+}
+
+/// One split supermarket payment (P6): yesterday's 60.00 at the supermarket, 42.00 Groceries and 18.00 Shopping. Call after the import.
+void seedDemoSplit(WalletRepo repo) {
+  final tx = repo.transactions().firstWhere((t) => t.description == 'POS SPAR ZAGREB');
+  repo.setSplit(tx.id, const [
+    SplitPart(amount: -4200, category: 'Groceries', tags: [], note: null),
+    SplitPart(amount: -1800, category: 'Shopping', tags: [], note: 'Household'),
+  ]);
 }

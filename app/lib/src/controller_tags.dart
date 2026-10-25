@@ -36,18 +36,20 @@ extension TagsDb on WalletController {
   /// (core's ordering reads every row, so never call it per row or per keystroke).
   List<String> recommendedMainFor(Tx? t, {Set<BudgetKind>? kinds}) => memo(
       'tags.main.${t?.id}.${kinds?.map((k) => k.name).join(',')}',
-      () => timed('tags.recommendedMain', () => recommendedMainTags(t ?? _placeholderTx, txs, categoryTable, kinds: kinds),
-          fields: {'tx': txs.length}, warnMs: 50));
+      () => timed('tags.recommendedMain', () => recommendedMainTags(t ?? _placeholderTx, wholeTxs, categoryTable, kinds: kinds),
+          fields: {'tx': wholeTxs.length}, warnMs: 50));
 
   /// The extra tags to offer for [t] (null: a new expense), payee first, then by use, then the table order. Cached per data version.
-  List<String> recommendedTagsFor(Tx? t) => memo('tags.recommended.${t?.id}',
-      () => timed('tags.recommended', () => recommendedTags(t ?? _placeholderTx, txs, tagTable), fields: {'tx': txs.length}, warnMs: 50));
+  List<String> recommendedTagsFor(Tx? t) => memo(
+      'tags.recommended.${t?.id}',
+      () => timed('tags.recommended', () => recommendedTags(t ?? _placeholderTx, wholeTxs, tagTable),
+          fields: {'tx': wholeTxs.length}, warnMs: 50));
 
   /// The tags suggested for [t] from what the same payee had before (never applied). Cached per data version.
   List<String> suggestedTagsFor(Tx t) => memo(
       'tags.suggest.${t.id}',
-      () => timed('tags.suggest', () => suggestTags(t, txs, tagTable, limit: 5, off: tagContext.offTags(t)),
-          fields: {'tx': txs.length}, warnMs: 50));
+      () => timed('tags.suggest', () => suggestTags(t, wholeTxs, tagTable, limit: 5, off: tagContext.offTags(t)),
+          fields: {'tx': wholeTxs.length}, warnMs: 50));
 
   /// Live rows per tag (a duplicate's rows count for its original): the numbers in Plan › Tags. Cached per data version.
   Map<String, int> tagUseCounts() => memo('tags.use', () {

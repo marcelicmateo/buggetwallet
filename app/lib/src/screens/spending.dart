@@ -54,6 +54,11 @@ class _SpendingScreenState extends State<SpendingScreen> {
     super.dispose();
   }
 
+  Future<void> _openTx(CategorizedTx t) async {
+    final r = await showSheet<String>(context, TxSheet(wc: widget.wc, t: t));
+    if (mounted) txSheetToast(context, widget.wc, r);
+  }
+
   void _openSearch() {
     if (mounted && !searching) setState(() => searching = true);
   }
@@ -167,17 +172,19 @@ class _SpendingScreenState extends State<SpendingScreen> {
           else
             Column(children: [
               const TxHeaderRow(),
-              for (final t in monthTxs)
+              for (final t in monthTxs) ...[
                 TxTile(
                     table: wc.categoryTable,
                     tagTable: wc.tagTable,
                     t: t,
                     currency: cur,
                     hasBill: wc.billForTx(t.tx.id) != null,
-                    onTap: () async {
-                      final r = await showSheet<String>(context, TxSheet(wc: wc, t: t));
-                      if (context.mounted) txSheetToast(context, wc, r);
-                    }),
+                    splitCount: wc.splitCount(t.tx.id),
+                    splitBroken: wc.splitIsBroken(t.tx.id),
+                    onTap: () => _openTx(t)),
+                for (final p in wc.partsOf(t.tx.id))
+                  PartTile(part: p, currency: cur, table: wc.categoryTable, tagTable: wc.tagTable, onTap: () => _openTx(t)),
+              ],
             ]),
         ]),
       ]),

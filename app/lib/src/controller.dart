@@ -30,6 +30,7 @@ part 'controller_rules.dart';
 part 'controller_bills.dart';
 part 'controller_recurring.dart';
 part 'controller_future.dart';
+part 'controller_splits.dart';
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');
@@ -140,7 +141,20 @@ class WalletController extends ChangeNotifier {
 
   /// Tag writes of the last save that could not be made ([takeTagFailures]).
   int _tagFailures = 0;
+
+  /// Every row the money is counted by (P6): a split payment is one row per part (`Categorizer.expandAll`), the rest one row each.
+  /// Sums, insights, budgets, periods, CSV and search read this list.
   List<CategorizedTx> txs = const [];
+
+  /// One row per payment, whatever its split (`Categorizer.categorize`): for picking and detecting payments (matching, bills,
+  /// planned costs, recurring, rule hits, tag suggestions, balances, paydays) and for lists that show a payment once.
+  List<CategorizedTx> wholeTxs = const [];
+
+  /// The part rows of each split payment (tx id -> parts, stored order); a payment without a valid split is missing.
+  Map<String, List<CategorizedTx>> splitParts = const {};
+
+  /// Ids of payments whose stored split no longer adds up (counted whole; the sheet says so and offers Fix).
+  Set<String> splitBrokenIds = const {};
   List<Goal> goals = const [];
   List<WishItem> wish = const [];
 
@@ -484,7 +498,7 @@ class WalletController extends ChangeNotifier {
     c.dbIsPlaintext = isPlaintext;
     c.reload();
     logEvent(_log, Level.INFO, 'app.start',
-        {'phase': 'reload', 'ms': sw.elapsedMilliseconds, 'tx': c.txs.length, 'relay': c.relayUrl != null, 'logLevel': c.logLevel});
+        {'phase': 'reload', 'ms': sw.elapsedMilliseconds, 'tx': c.wholeTxs.length, 'relay': c.relayUrl != null, 'logLevel': c.logLevel});
     c._startAutoSync();
     c.refreshRecurring();
     scheduleMicrotask(c.rescheduleNudges);
@@ -637,14 +651,33 @@ class WalletController extends ChangeNotifier {
     settings = repo.settings();
     categorizer = repo.categorizer();
     final raw = repo.transactions(); // logs repo.transactions
-    txs = timed('wc.categorize', () => raw.map(categorizer.categorize).toList(), fields: {'tx': raw.length});
+    final whole = <CategorizedTx>[];
+    final expanded = <CategorizedTx>[];
+    timed('wc.categorize', () {
+      for (final t in raw) {
+        final rows = categorizer.expand(t);
+        expanded.addAll(rows);
+        // An unsplit payment is its own row; a split one is categorized whole again.
+        whole.add(rows.length == 1 && !rows.first.isPart ? rows.first : categorizer.categorize(t));
+      }
+    }, fields: {'tx': raw.length});
+    wholeTxs = whole;
+    txs = expanded;
+    final parts = <String, List<CategorizedTx>>{};
+    final broken = <String>{};
+    for (final c in txs) {
+      if (c.isPart) (parts[c.tx.id] ??= []).add(c);
+      if (c.splitBroken) broken.add(c.tx.id);
+    }
+    splitParts = parts;
+    splitBrokenIds = broken;
     final (g, w) = timed('wc.goalsWish', () => (repo.goals(), repo.wishlist()));
     goals = g;
     wish = w;
     dataVersion++;
     _memo.clear();
     _seenDay = _memoDay = today();
-    t.done({'tx': txs.length, 'goals': goals.length, 'wish': wish.length});
+    t.done({'tx': wholeTxs.length, 'goals': goals.length, 'wish': wish.length});
     notifyListeners();
     _headsUpsMayHaveChanged();
   }
@@ -676,7 +709,7 @@ class WalletController extends ChangeNotifier {
         final month = monthOf(today());
         final xs = txs.where((t) =>
             categoryTable.topLevel(t.category) == 'Food delivery' && t.tx.currency == currency && monthOf(t.date) == month && t.amount < 0);
-        return (xs.length, -xs.fold<int>(0, (a, t) => a + t.amount));
+        return (xs.map((t) => t.tx.id).toSet().length, -xs.fold<int>(0, (a, t) => a + t.amount)); // orders, not parts
       });
 
   /// How many Food delivery orders the last 90 days hold (today and the 89 days before it; the wallet's currency only). Today shows its delivery-hour panel only when this is
@@ -689,6 +722,8 @@ class WalletController extends ChangeNotifier {
                 t.tx.currency == currency &&
                 t.amount < 0 &&
                 t.date.compareTo(from) >= 0)
+            .map((t) => t.tx.id)
+            .toSet()
             .length;
       });
 
@@ -704,14 +739,14 @@ class WalletController extends ChangeNotifier {
   /// The date of the newest transaction per bank source (`pbz`, `revolut`); a source without rows is missing.
   Map<String, String> get latestBySource => _cached('latestBySource', () {
         final out = <String, String>{};
-        for (final t in txs) {
+        for (final t in wholeTxs) {
           out.putIfAbsent(t.tx.source, () => t.date); // txs are newest first
           if (out.containsKey('pbz') && out.containsKey('revolut')) break;
         }
         return out;
       });
 
-  List<String> get _paydays => _cached('paydays', () => salaryPaydays(txs, today(), currency: currency));
+  List<String> get _paydays => _cached('paydays', () => salaryPaydays(wholeTxs, today(), currency: currency));
 
   /// The period start: saved value, or the latest payday (its first salary payment), or today.
   WalletSettings get effectiveSettings => _cached('effective', () {
@@ -755,14 +790,18 @@ class WalletController extends ChangeNotifier {
               final periods = payPeriods(count: 12);
 
               final merch = <String, (int, int)>{};
-              final monthTxs = <CategorizedTx>[];
+              // The list shows each payment once (its parts hang under it, `splitParts`); the places add up the parts.
+              final monthTxs = [
+                for (final t in wholeTxs)
+                  if (monthOf(t.date) == month && t.kind != BudgetKind.transfer) t
+              ];
+              final merchSeen = <String>{};
               for (final t in txs) {
                 if (monthOf(t.date) != month) continue;
-                if (t.kind != BudgetKind.transfer) monthTxs.add(t);
                 if (t.kind == BudgetKind.flex && t.amount < 0) {
                   final k = merchantName(t.tx);
                   final (n, v) = merch[k] ?? (0, 0);
-                  merch[k] = (n + 1, v - t.amount);
+                  merch[k] = (merchSeen.add('${t.tx.id}|$k') ? n + 1 : n, v - t.amount); // orders, not parts
                 }
               }
               final top = merch.entries.toList()..sort((a, b) => b.value.$2.compareTo(a.value.$2));
@@ -837,7 +876,7 @@ class WalletController extends ChangeNotifier {
   List<CategorizedTx> reviewRows() => _cached('reviewRows', () {
         final to = today(), from = addDays(to, -7);
         return [
-          for (final t in txs)
+          for (final t in wholeTxs)
             if (t.tx.live &&
                 t.date.compareTo(from) > 0 &&
                 t.date.compareTo(to) <= 0 &&
@@ -850,7 +889,7 @@ class WalletController extends ChangeNotifier {
   /// "Looks right" / after the category sheet: the row keeps the category it has now as the owner's choice, and the bank
   /// merchant learns it (as the category sheet does), so the row leaves the review list.
   void confirmCategory(Tx t) {
-    final now = txs.where((x) => x.tx.id == t.id).firstOrNull ?? categorizer.categorize(t);
+    final now = wholeTxs.where((x) => x.tx.id == t.id).firstOrNull ?? categorizer.categorize(t);
     final cat = now.category;
     logEvent(_log, Level.INFO, 'category.confirm', {'category': _logCategory(cat), 'source': t.source}); // never the merchant
     if (t.source != 'manual') repo.setMerchantRule(merchantKey(t), cat);
@@ -914,7 +953,7 @@ class WalletController extends ChangeNotifier {
   bool billPaidThisPeriod(RecurringBill b) {
     final id = b.lastPaidTx;
     if (id == null) return false;
-    final paid = txs.where((t) => t.tx.id == id).firstOrNull;
+    final paid = wholeTxs.where((t) => t.tx.id == id).firstOrNull;
     return paid != null && paid.date.compareTo(period().start) >= 0;
   }
 
@@ -1559,7 +1598,7 @@ class WalletController extends ChangeNotifier {
     try {
       final bytes = await backupBytesWriter(repo, k);
       logEvent(_backupLog, Level.INFO, 'backup.done',
-          {'ms': sw.elapsedMilliseconds, 'tx': txs.length, 'goals': goals.length, 'wish': wish.length, 'bytes': bytes.length});
+          {'ms': sw.elapsedMilliseconds, 'tx': wholeTxs.length, 'goals': goals.length, 'wish': wish.length, 'bytes': bytes.length});
       return (name: backupFileName(today()), bytes: bytes);
     } catch (e, st) {
       logError(_backupLog, 'backup.failed', e, st);
@@ -1792,6 +1831,9 @@ class WalletController extends ChangeNotifier {
 
   /// The ids last deleted in this session: the toast's Undo restores them.
   String? lastDeletedTx, lastDeletedGoal;
+
+  /// The split removed last (payment and its parts): the toast's Undo puts it back (`restoreSplitOf`).
+  (Tx, List<SplitPart>)? lastRemovedSplit;
 
   void deleteTransaction(Tx t) {
     lastDeletedTx = t.id;

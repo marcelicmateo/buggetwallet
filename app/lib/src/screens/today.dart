@@ -105,7 +105,7 @@ class TodayScreen extends StatelessWidget {
       openUpcoming(context, wc);
     }
 
-    final recent = wc.txs.where((t) => t.kind != BudgetKind.transfer).take(12).toList();
+    final recent = wc.wholeTxs.where((t) => t.kind != BudgetKind.transfer).take(12).toList();
 
     return MarginLine(
         child: ListView(

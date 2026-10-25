@@ -12,6 +12,7 @@ import '../screens/scan_bill.dart';
 import '../theme.dart';
 import 'category_picker.dart';
 import 'common.dart';
+import 'split_sheet.dart';
 import 'tag_picker.dart';
 
 /// Opens a bottom sheet on a phone, a dialog on windows [dialogMin] wide or more; logs `sheet.open` / `sheet.close` with
@@ -80,7 +81,12 @@ Future<T?> showSheet<T>(BuildContext context, Widget child, {bool scrolls = true
 void txSheetToast(BuildContext context, WalletController wc, String? result) {
   if (result == null) return;
   final id = wc.lastDeletedTx;
-  if (result == 'deleted' && id != null) {
+  final removed = wc.lastRemovedSplit;
+  if (result == 'splitRemoved' && removed != null) {
+    toast(context, 'Split removed', actionLabel: 'Undo', onAction: () => wc.restoreSplitOf(removed.$1, removed.$2));
+  } else if (result == 'split') {
+    toast(context, 'Split saved');
+  } else if (result == 'deleted' && id != null) {
     toast(context, 'Deleted', actionLabel: 'Undo', onAction: () => wc.undeleteTransaction(id));
   } else {
     toast(context, result == 'deleted' ? 'Deleted' : (tagFailureText(wc.takeTagFailures()) ?? 'Saved'));
@@ -322,11 +328,13 @@ class TxSheet extends StatefulWidget {
 }
 
 class _TxSheetState extends State<TxSheet> {
-  late String cat = widget.t.category;
+  /// The payment as one row: a part tapped in a list opens its payment's sheet (P6).
+  late final CategorizedTx row = widget.t.isPart ? widget.wc.categorizer.categorize(widget.t.tx) : widget.t;
+  late String cat = row.category;
   bool always = true;
 
   /// The main tags in recommended order for this payment (the payee's first), read once.
-  late final List<String> mainIds = widget.wc.recommendedMainFor(widget.t.tx);
+  late final List<String> mainIds = widget.wc.recommendedMainFor(row.tx);
 
   /// The tag draft the editor reports (null: untouched). Save writes it; closing writes nothing.
   Set<String>? tagOn, tagRule;
@@ -334,14 +342,48 @@ class _TxSheetState extends State<TxSheet> {
 
   /// The bank row that replaced this hand-added expense, or the expense a bank row replaced (read once: it scans the rows).
   /// Read-only: there is no unlink yet.
-  late final Tx? matchedBank = widget.t.tx.manual && widget.t.tx.matchedTo != null && !widget.t.tx.matchPending
-      ? widget.wc.repo.transaction(widget.t.tx.matchedTo!)
-      : null;
-  late final Tx? matchedEntry = widget.t.tx.manual ? null : widget.wc.entryMatchedTo(widget.t.tx.id);
+  late final Tx? matchedBank =
+      row.tx.manual && row.tx.matchedTo != null && !row.tx.matchPending ? widget.wc.repo.transaction(row.tx.matchedTo!) : null;
+  late final Tx? matchedEntry = row.tx.manual ? null : widget.wc.entryMatchedTo(row.tx.id);
+
+  /// Bank and hand-added payments can be split, transfers cannot (P6).
+  bool get canSplit => row.kind != BudgetKind.transfer && row.tx.transferTo == null && row.tx.amount != 0 && row.tx.live;
+
+  Future<void> _openSplit() async {
+    final r = await showSheet<String>(context, SplitSheet(wc: widget.wc, row: row));
+    if (r != null && mounted) Navigator.pop(context, r);
+  }
+
+  Widget _splitSection(BuildContext context) {
+    final id = row.tx.id;
+    final n = widget.wc.splitCount(id);
+    final broken = widget.wc.splitIsBroken(id);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (broken)
+          Row(key: const ValueKey('splitBroken'), children: [
+            Icon(Icons.warning_amber_outlined, size: 16, color: context.c.bad),
+            const SizedBox(width: 6),
+            Expanded(child: Text("Split doesn't add up", style: TextStyle(fontSize: BwType.metaSize, color: context.c.bad))),
+          ])
+        else if (n > 0)
+          Muted('Split in $n parts', key: const ValueKey('splitInfo')),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+              key: ValueKey(broken ? 'splitFix' : 'splitOpen'),
+              style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+              onPressed: _openSplit,
+              child: Text(broken ? 'Fix split' : (n > 0 ? 'Edit split' : 'Split…'))),
+        ),
+      ]),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final t = widget.t.tx;
+    final t = row.tx;
     final manual = t.source == 'manual';
     final bill = widget.wc.billForTx(t.id);
     final src = switch (t.source) { 'pbz' => 'PBZ', 'revolut' => 'Revolut', _ => 'Added by you' };
@@ -417,12 +459,13 @@ class _TxSheetState extends State<TxSheet> {
       const SizedBox(height: 8),
       ExtraTagsEditor(
           wc: widget.wc,
-          tx: widget.t,
+          tx: row,
           payeeRule: !manual && tagPayee(t) != null,
           onChanged: (on, rule) {
             tagOn = on;
             tagRule = rule;
           }),
+      if (canSplit) _splitSection(context),
       const SizedBox(height: 8),
       Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, children: [
         FilledButton(
@@ -432,9 +475,9 @@ class _TxSheetState extends State<TxSheet> {
                   saving = true;
                   // Only an owner's pick is written: the category shown is the resolved one, so an untouched Save must not overwrite a
                   // deleted custom id (or the merchant rule that points at it).
-                  if (cat != widget.t.category) widget.wc.setCategory(t, cat, always: always && !manual);
+                  if (cat != row.category) widget.wc.setCategory(t, cat, always: always && !manual);
                   // The tag draft: only what differs is written; a tag deleted meanwhile is counted and the toast says so.
-                  if (tagOn != null) await widget.wc.saveTagChanges(widget.t, on: tagOn!, rule: tagRule ?? const {});
+                  if (tagOn != null) await widget.wc.saveTagChanges(row, on: tagOn!, rule: tagRule ?? const {});
                   if (context.mounted) Navigator.pop(context, 'saved');
                 },
           child: const Text('Save'),

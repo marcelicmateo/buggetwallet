@@ -406,7 +406,22 @@ class TxTile extends StatelessWidget {
 
   /// The tags the row's `#tag` chips come from (null: no chips).
   final TagTable? tagTable;
-  const TxTile({super.key, required this.t, required this.currency, this.onTap, this.hasBill = false, this.table, this.tagTable});
+
+  /// The payment is split into this many parts (P6): a "Split · N" mark. Spending lists the parts under the tile ([PartTile]).
+  final int splitCount;
+
+  /// The payment's stored split no longer adds up: "Split doesn't add up" under the tile.
+  final bool splitBroken;
+  const TxTile(
+      {super.key,
+      required this.t,
+      required this.currency,
+      this.onTap,
+      this.hasBill = false,
+      this.table,
+      this.tagTable,
+      this.splitCount = 0,
+      this.splitBroken = false});
 
   @override
   Widget build(BuildContext context) {
@@ -424,6 +439,14 @@ class TxTile extends StatelessWidget {
       Text(columns ? catLabel : '$date · $catLabel',
           maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       Tag(src),
+      if (splitCount > 0) Tag('Split · $splitCount'),
+      if (t.isPart) Tag('part of ${money(t.tx.amount, currency, decimals: 2, signed: true)}'),
+      if (splitBroken || t.splitBroken)
+        Row(key: const ValueKey('splitBroken'), mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.warning_amber_outlined, size: 14, color: c.bad),
+          const SizedBox(width: 4),
+          Flexible(child: Text("Split doesn't add up", style: TextStyle(fontSize: BwType.metaSize, color: c.bad))),
+        ]),
       if (tagTable != null) ...rowTagChips(tagTable!, t.tags),
       if (hasBill) Icon(Icons.receipt_long_outlined, key: const ValueKey('billMark'), size: 15, semanticLabel: 'Has a bill', color: c.ink2),
     ]);
@@ -469,6 +492,55 @@ class TxTile extends StatelessWidget {
         focusColor: c.accentSoft,
         mouseCursor: onTap == null ? null : SystemMouseCursors.click,
         child: RuledRow(child: body),
+      ),
+    );
+  }
+}
+
+/// One part of a split payment, indented under the payment's [TxTile] on Spending (P6): amount, main tag, tags and note.
+/// Tapping it opens the payment (the caller's [onTap]).
+class PartTile extends StatelessWidget {
+  final CategorizedTx part;
+  final String currency;
+  final VoidCallback? onTap;
+  final CategoryTable? table;
+  final TagTable? tagTable;
+  const PartTile({super.key, required this.part, required this.currency, this.onTap, this.table, this.tagTable});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final amount = money(part.amount, currency, decimals: 2, signed: true);
+    final label = (table ?? CategoryTable.builtIn).label(part.category);
+    final note = part.partNote;
+    return MergeSemantics(
+      child: InkWell(
+        onTap: onTap,
+        hoverColor: c.surface2,
+        focusColor: c.accentSoft,
+        mouseCursor: onTap == null ? null : SystemMouseCursors.click,
+        child: RuledRow(
+          minHeight: 40,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 6, 0, 6),
+            child: SplitRow(
+              gap: 12,
+              start: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(Icons.subdirectory_arrow_right, size: 16, color: c.muted),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Wrap(spacing: 6, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                    Text(label, style: const TextStyle(fontSize: BwType.metaSize)),
+                    if (tagTable != null) ...rowTagChips(tagTable!, part.tags),
+                    if (note != null) Text(note, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+                  ]),
+                ),
+              ]),
+              end: Text(amount,
+                  textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: BwType.metaSize, color: part.amount > 0 ? c.good : c.ink)),
+            ),
+          ),
+        ),
       ),
     );
   }

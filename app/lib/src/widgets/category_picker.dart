@@ -66,6 +66,9 @@ class MainTagPicker extends StatefulWidget {
 
   /// The field label of the dropdown form.
   final String label;
+
+  /// The key of the dropdown itself (several pickers on one sheet: the split editor).
+  final Key fieldKey;
   const MainTagPicker(
       {super.key,
       required this.table,
@@ -73,7 +76,8 @@ class MainTagPicker extends StatefulWidget {
       required this.selected,
       required this.onPick,
       this.dropdown = false,
-      this.label = 'Main tag'});
+      this.label = 'Main tag',
+      this.fieldKey = const ValueKey('txCategory')});
   @override
   State<MainTagPicker> createState() => _MainTagPickerState();
 }
@@ -98,7 +102,7 @@ class _MainTagPickerState extends State<MainTagPicker> {
         decoration: InputDecoration(labelText: widget.label),
         child: DropdownButtonHideUnderline(
           child: DropdownButton<String>(
-            key: const ValueKey('txCategory'),
+            key: widget.fieldKey,
             isExpanded: true,
             isDense: true,
             value: widget.selected,

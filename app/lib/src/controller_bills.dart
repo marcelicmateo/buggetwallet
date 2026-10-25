@@ -116,14 +116,14 @@ extension BillsDb on WalletController {
             () => billHistory(
                 bill,
                 [
-                  for (final c in txs)
+                  for (final c in wholeTxs)
                     if (c.kind != BudgetKind.transfer) c.tx
                 ],
                 billsAll(),
                 today: today(),
                 currency: currency,
                 table: categoryTable));
-        final byId = {for (final c in txs) c.tx.id: c};
+        final byId = {for (final c in wholeTxs) c.tx.id: c};
         return BillHistoryView(bill, months, {
           for (final m in months)
             for (final p in m.payments)
@@ -165,7 +165,7 @@ extension BillsDb on WalletController {
           })[txId];
 
   /// "Paid by this?" candidates for [b]: payee-word matches first.
-  List<CategorizedTx> billCandidatesFor(Bill b) => billCandidates(b, txs, billsAll());
+  List<CategorizedTx> billCandidatesFor(Bill b) => billCandidates(b, wholeTxs, billsAll());
 
   /// Bills matching [query] (payee, description, item names, exact total); the bills part of [search].
   List<Bill> searchBills(String query) => search(query).billsDb;
@@ -444,7 +444,7 @@ extension BillsDb on WalletController {
   /// The category worth suggesting for [b] (earlier bills and payments of the same payee); null when nothing fits.
   String? suggestedBillCategory(Bill b) => billCategorySuggester != null
       ? billCategorySuggester!(b)
-      : suggestBillCategory(b, recurring: recurringBills(), txs: txs, table: categoryTable);
+      : suggestBillCategory(b, recurring: recurringBills(), txs: wholeTxs, table: categoryTable);
 
   /// The confirmed expected bill that already plans this slip (same payee, due about one cycle), or null. Such a bill's planned row is
   /// listed but not reserved (decided by core when read).
