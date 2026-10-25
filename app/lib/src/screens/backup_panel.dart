@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart' show PlatformFile;
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import '../backup_texts.dart';
 import '../bill_inputs.dart' show ScannedCode;
 import '../controller.dart';
 import '../file_chooser.dart';
@@ -40,10 +41,14 @@ class _BackupPanelState extends State<BackupPanel> {
     });
     String? error;
     String? saved;
+    var files = 0;
     try {
       final b = await widget.wc.backupDownload();
       final uri = await widget.chooser.saveBackup(fileName: b.name, bytes: b.bytes, title: 'Save backup');
-      if (uri != null) saved = b.name;
+      if (uri != null) {
+        saved = b.name;
+        files = b.blobs;
+      }
       logEvent(_log, Level.INFO, 'backup.saveDialog', {'saved': uri != null, 'bytes': b.bytes.length});
     } catch (e, st) {
       logError(_log, 'backup.saveFailed', e, st, fields: {'type': e.runtimeType.toString()});
@@ -54,7 +59,7 @@ class _BackupPanelState extends State<BackupPanel> {
       _busy = false;
       _error = error;
     });
-    if (saved != null) toast(context, 'Saved $saved');
+    if (saved != null) toast(context, files > 0 ? 'Backup saved with ${billFilesText(files)}' : 'Saved $saved');
   }
 
   /// Pick a `.bwb` file, confirm, restore. With [otherKey] the file was made with another wallet key: ask for it, then restore.
@@ -116,17 +121,9 @@ class _BackupPanelState extends State<BackupPanel> {
     } on StateError {
       error = 'The wallet is not empty, so nothing was restored.';
     } on VaultException catch (e) {
-      // `failure` null: the typed text is not a key (its message says what is wrong with it); else the file did not open.
-      error = e.failure == null && otherKey
-          ? e.message
-          : (otherKey ? 'That key does not open this backup.' : 'This backup was made with a different wallet key.');
+      error = _keyErrorText(e, otherKey);
     } on BackupException catch (e) {
-      error = switch (e.reason) {
-        BackupFailure.unreadable => "This backup file can't be read.",
-        BackupFailure.damaged => 'This backup file is damaged.',
-        BackupFailure.newerVersion => 'Made by a newer app version. Update first.',
-        BackupFailure.clockAhead => "This backup has changes dated later than this device's clock. Check the date and time.",
-      };
+      error = _backupErrorText(e);
     } catch (e, st) {
       logError(_log, 'restore.unexpected', e, st);
       error = "Couldn't restore the backup.";
@@ -139,14 +136,102 @@ class _BackupPanelState extends State<BackupPanel> {
     if (error == null) toast(context, rows == 1 ? 'Restored 1 row' : 'Restored $rows rows');
   }
 
+  /// Pick a `.bwb` file and merge it into this wallet: a dry run, a preview with the counts, then the merge. A file made with
+  /// another key asks for that key first (used once, kept only in this call).
+  Future<void> _mergeFile() async {
+    logNav('merge.pressed');
+    final List<PlatformFile> picked;
+    try {
+      picked = await widget.chooser.pickBackupFile();
+    } catch (e, st) {
+      logError(_log, 'merge.pickerFailed', e, st, fields: {'type': e.runtimeType.toString()});
+      if (mounted) toast(context, chooserFailedMessage);
+      return;
+    }
+    if (picked.isEmpty || !mounted) return;
+    final Uint8List bytes;
+    try {
+      bytes = await picked.first.readAsBytes();
+    } catch (e, st) {
+      logError(_log, 'merge.openFailed', e, st, fields: {'type': e.runtimeType.toString()});
+      if (mounted) setState(() => _error = "This backup file can't be read.");
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    String? error;
+    String? done;
+    String? otherKey;
+    try {
+      MergeResult preview;
+      try {
+        preview = await widget.wc.mergeBackupFile(bytes, dryRun: true);
+      } on VaultException catch (e) {
+        // Only a key that does not open it means "another key"; a damaged or newer file has its own text.
+        if (e.failure != UnsealFailure.badKey) rethrow;
+        // Not this wallet's key: ask for the one the backup was made with.
+        if (!mounted) return;
+        setState(() => _busy = false);
+        otherKey = await askOldKey(context, widget.wc, action: 'Continue');
+        if (otherKey == null || !mounted) return;
+        setState(() => _busy = true);
+        preview = await widget.wc.mergeBackupFile(bytes, otherKey: otherKey, dryRun: true);
+      }
+      if (!mounted) return;
+      if (preview.changed == 0 && preview.blobs == 0) {
+        done = 'Nothing new in this backup';
+      } else {
+        setState(() => _busy = false);
+        final go = await _confirmMerge(preview);
+        if (!go || !mounted) return;
+        setState(() => _busy = true);
+        final r = await widget.wc.mergeBackupFile(bytes, otherKey: otherKey);
+        done = r.changed == 0 && r.blobs == 0 ? 'Nothing new in this backup' : mergedToastText(r);
+      }
+    } on VaultException catch (e) {
+      error = _keyErrorText(e, otherKey != null);
+    } on BackupException catch (e) {
+      error = _backupErrorText(e);
+    } catch (e, st) {
+      logError(_log, 'merge.unexpected', e, st);
+      error = "Couldn't merge the backup.";
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = error;
+    });
+    if (done != null) toast(context, done);
+  }
+
+  Future<bool> _confirmMerge(MergeResult preview) async {
+    logNav('dialog.open', {'dialog': 'mergePreview'});
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        key: const ValueKey('mergePreview'),
+        title: const Text('Merge this backup?'),
+        content: SingleChildScrollView(child: Text(mergePreviewText(preview), key: const ValueKey('mergePreviewText'))),
+        actions: [
+          TextButton(key: const ValueKey('mergeCancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(key: const ValueKey('mergeConfirm'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Merge')),
+        ],
+      ),
+    );
+    return ok == true && mounted;
+  }
+
   @override
   Widget build(BuildContext context) {
     final wc = widget.wc;
     return Panel(children: [
       const SectionHead('Backup'),
       Explainer(wc, 'backup', 'An encrypted copy of your wallet as a file. Only your wallet key opens it. Keep the file somewhere safe.'),
-      const Muted('Photos and PDFs of bills are not in the backup; they stay on your relay.',
-          key: ValueKey('backupNoFiles'), size: BwType.metaSize),
+      Muted('Bill files on this device go into the backup (up to ${backupBlobBytesDefault >> 20} MB). Files only on your relay do not.',
+          key: const ValueKey('backupNoFiles'), size: BwType.metaSize),
       Wrap(spacing: 8, runSpacing: 8, children: [
         OutlinedButton(
             key: const ValueKey('backupNow'),
@@ -156,6 +241,8 @@ class _BackupPanelState extends State<BackupPanel> {
         if (wc.walletIsEmpty)
           OutlinedButton(
               key: const ValueKey('restoreBackup'), onPressed: _busy ? null : _restoreFile, child: const Text('Restore from backup…')),
+        if (!wc.walletIsEmpty)
+          OutlinedButton(key: const ValueKey('mergeBackup'), onPressed: _busy ? null : _mergeFile, child: const Text('Merge a backup…')),
       ]),
       if (wc.walletIsEmpty)
         TextButton(
@@ -167,16 +254,35 @@ class _BackupPanelState extends State<BackupPanel> {
   }
 }
 
+String _keyErrorText(VaultException e, bool otherKey) => switch (e.failure) {
+      // null: the typed text is not a key (its message says what is wrong with it).
+      null =>
+        otherKey ? e.message : "This backup doesn't open with this wallet's key. It was made with another key, or the file is damaged.",
+      UnsealFailure.badKey => otherKey
+          ? "That key doesn't open this backup (or the file is damaged)."
+          : "This backup doesn't open with this wallet's key. It was made with another key, or the file is damaged.",
+      UnsealFailure.damaged || UnsealFailure.tooLarge => 'This backup file is damaged.',
+      UnsealFailure.newerFormat => 'Made by a newer app version. Update first.',
+    };
+
+String _backupErrorText(BackupException e) => switch (e.reason) {
+      BackupFailure.unreadable => "This backup file can't be read.",
+      BackupFailure.damaged => 'This backup file is damaged.',
+      BackupFailure.newerVersion => 'Made by a newer app version. Update first.',
+      BackupFailure.clockAhead => "This backup has changes dated later than this device's clock. Check the date and time.",
+    };
+
 /// Asks for the key an old backup was made with: typed, pasted or scanned from its QR code (where the camera works). Returns the
 /// text (not yet checked) or null when cancelled. The text lives in this dialog only: it is never stored or logged.
-Future<String?> askOldKey(BuildContext context, WalletController wc) {
+Future<String?> askOldKey(BuildContext context, WalletController wc, {String action = 'Restore'}) {
   logNav('dialog.open', {'dialog': 'oldKey'});
-  return showDialog<String>(context: context, builder: (ctx) => _OldKeyDialog(wc: wc));
+  return showDialog<String>(context: context, builder: (ctx) => _OldKeyDialog(wc: wc, action: action));
 }
 
 class _OldKeyDialog extends StatefulWidget {
   final WalletController wc;
-  const _OldKeyDialog({required this.wc});
+  final String action;
+  const _OldKeyDialog({required this.wc, required this.action});
   @override
   State<_OldKeyDialog> createState() => _OldKeyDialogState();
 }
@@ -228,7 +334,7 @@ class _OldKeyDialogState extends State<_OldKeyDialog> {
       actions: [
         TextButton(key: const ValueKey('oldKeyCancel'), onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(
-            key: const ValueKey('oldKeyRestore'), onPressed: () => Navigator.pop(context, _text.text.trim()), child: const Text('Restore')),
+            key: const ValueKey('oldKeyRestore'), onPressed: () => Navigator.pop(context, _text.text.trim()), child: Text(widget.action)),
       ],
     ));
   }

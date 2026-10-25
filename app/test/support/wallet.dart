@@ -1,5 +1,6 @@
 // SYNTHETIC wallets for widget tests. Made-up amounts; merchants are well-known chains or generic names.
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:budget_wallet/src/calendar_source.dart';
 import 'package:budget_wallet/src/controller.dart';
@@ -299,3 +300,6 @@ WalletController futureWallet({FakeNudges? nudges, FakeCalendars? calendars}) {
   wc.reload();
   return wc;
 }
+
+/// What the core's `backupBytesWithInfo` returns, for tests that replace `backupBytesWriter` ([blobs] bill files inside).
+BackupResult fakeBackup(Uint8List bytes, {int blobs = 0}) => BackupResult(bytes, ops: 0, blobs: blobs, blobBytes: 0, blobsSkipped: 0);

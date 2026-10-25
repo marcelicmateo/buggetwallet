@@ -11,7 +11,20 @@ library;
 export 'package:wallet_importer/wallet_importer.dart' show BillItem, BillSource, NormalizedBill, TxKind;
 
 export 'src/accounts.dart' show AccountBalance, accountBalances, balanceTotals;
-export 'src/backup.dart' show backupBytes, BackupException, BackupFailure, backupFileName, backupPayload, backupVersion, restoreBackupBytes;
+export 'src/backup.dart'
+    show
+        backupBlobBytesDefault,
+        backupBytes,
+        backupBytesWithInfo,
+        BackupException,
+        BackupFailure,
+        backupFileName,
+        backupPayload,
+        BackupResult,
+        backupVersion,
+        mergeBackupBytes,
+        MergeResult,
+        restoreBackupBytes;
 export 'src/bill_history.dart' show BillMonth, BillMonthState, billHistory;
 export 'src/bills.dart'
     show

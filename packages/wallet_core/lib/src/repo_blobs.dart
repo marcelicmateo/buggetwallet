@@ -37,6 +37,18 @@ extension WalletRepoBlobs on WalletRepo {
     return n;
   }
 
+  /// The cached files a live bill points to, as (hash, sealed bytes), newest bill first (by its date, then the most
+  /// recently used file): what a backup carries ([backupBytes]).
+  List<(String, int)> backupBlobCandidates() => [
+        for (final r in db.select('SELECT c.hash AS hash, c.bytes AS bytes FROM blob_cache c JOIN '
+            "(SELECT blob, MAX(COALESCE(date, '')) AS d FROM bills WHERE deleted = 0 AND blob IS NOT NULL GROUP BY blob) b "
+            'ON b.blob = c.hash ORDER BY b.d DESC, c.used_at DESC, c.hash'))
+          (r['hash'] as String, r['bytes'] as int),
+      ];
+
+  /// Whether a live bill points to [hash].
+  bool blobInUse(String hash) => db.select('SELECT 1 FROM bills WHERE deleted = 0 AND blob = ?', [hash]).isNotEmpty;
+
   /// Sealed bytes in the cache.
   int get cachedBlobBytes => db.select('SELECT COALESCE(SUM(bytes), 0) AS s FROM blob_cache').first['s'] as int;
 

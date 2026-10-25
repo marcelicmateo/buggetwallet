@@ -175,7 +175,7 @@ void main() {
       VaultKey? usedKey;
       w.wc.backupBytesWriter = (repo, key) async {
         usedKey = key;
-        return sealed;
+        return fakeBackup(sealed);
       };
       await pumpPanel(t, w.wc, c);
       await t.tap(backupBtn);
@@ -194,7 +194,7 @@ void main() {
     webTest('a failed download shows one short text and the button works again', (t) async {
       final w = webWallet(full: true);
       final c = FakeChooser()..saveError = StateError('browser said no');
-      w.wc.backupBytesWriter = (repo, key) async => Uint8List(3);
+      w.wc.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(3));
       await pumpPanel(t, w.wc, c);
       await t.tap(backupBtn);
       await t.pump();
@@ -278,7 +278,7 @@ void main() {
       (
         'a different wallet key',
         const VaultException('bad key', failure: UnsealFailure.badKey),
-        'This backup was made with a different wallet key.'
+        "This backup doesn't open with this wallet's key. It was made with another key, or the file is damaged."
       ),
       ('an unreadable file', const BackupException(BackupFailure.unreadable, 'x'), "This backup file can't be read."),
       ('a damaged file', const BackupException(BackupFailure.damaged, 'x'), 'This backup file is damaged.'),

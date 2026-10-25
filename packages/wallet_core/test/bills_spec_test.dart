@@ -804,7 +804,7 @@ void main() {
   });
 
   group('backup', () {
-    test('bills round-trip; blob cache and queues are device-local and not in the backup', () async {
+    test('bills round-trip; the file comes along in the backup, the delete queue and ownership do not', () async {
       final key = VaultKey.generate();
       final store = BlobStore(repo, key);
       // Changed (B1b): the local was `ref`, which hid the top-level reference string compared below.
@@ -826,10 +826,11 @@ void main() {
       expect((b.blob, b.blobType, b.blobBytes), (file.hash, 'jpg', 2000));
       expect(billRows(fresh, id), hasLength(1), reason: 'the planned row comes along');
 
-      for (final t in ['blob_cache', 'blob_outbox', 'blob_delete']) {
-        expect(fresh.db.select('SELECT COUNT(*) AS c FROM $t').first['c'], 0, reason: t);
+      // Changed (P10 §2): the file itself now comes along in the backup (cached, queued for upload, not owned).
+      for (final (t, n) in [('blob_cache', 1), ('blob_outbox', 1), ('blob_delete', 0), ('blob_own', 0)]) {
+        expect(fresh.db.select('SELECT COUNT(*) AS c FROM $t').first['c'], n, reason: t);
       }
-      expect(await BlobStore(fresh, key).read(file.hash), isNull, reason: 'the file itself is not in the backup');
+      expect(await BlobStore(fresh, key).read(file.hash), hasLength(2000));
     });
   });
 
