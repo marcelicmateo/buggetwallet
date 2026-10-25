@@ -3,7 +3,7 @@ import 'categories.dart';
 import 'dates.dart';
 import 'logs.dart';
 import 'models.dart';
-import 'recurring.dart' show planRecurringPayments, RecurringPayments;
+import 'recurring.dart' show incomeFits, planRecurringPayments, RecurringPayments;
 
 final _log = Logger('bw.budget');
 
@@ -71,9 +71,11 @@ class PeriodBudget {
   /// Shown only: never added to any money here (owner: income counts only once it lands).
   final List<IncomeCycle> expectedIncome;
 
-  /// P9: Σ of the period's live rows in the wallet's currency (dated from [start] to today, or to the day before [end]
-  /// once [paydayPassed]) of kind extra with a positive amount whose payee (`merchantKey`) is the payee of a confirmed
-  /// recurring income: the money that landed, at its actual amount. Added to [flexBudget]. 0 without a confirmed income.
+  /// P9: the money of confirmed recurring incomes that landed this period, at its actual amount, added to [flexBudget]:
+  /// the period's live rows in the wallet's currency (dated from [start] to today, or to the day before [end] once
+  /// [paydayPassed]) of kind extra whose payee (`merchantKey`) is a confirmed income's: positive ones whose payment fits
+  /// that income's band or range ([incomeFits]; a one-off of the same payee stays an extra, for the goals), plus the
+  /// negative ones (a refund of it), floored at 0. A split payment counts its extra parts only. 0 without one.
   final int landedIncome;
 
   const PeriodBudget({
@@ -111,7 +113,8 @@ class PeriodBudget {
 
   /// The extra income the goals flow offers ("put it into a goal"): [extras] without the rows already counted in
   /// [landedIncome] (those are spending money now), so nothing is counted twice.
-  int get extrasForGoals => extras - landedIncome;
+  /// Never negative.
+  int get extrasForGoals => extras - landedIncome < 0 ? 0 : extras - landedIncome;
 
   /// Positive = under budget so far, negative = over.
   int get aheadOfPace => (flexBudget * elapsed).round() - spent;
@@ -166,9 +169,10 @@ class IncomeCycle {
 }
 
 /// The cycles of the confirmed incomes of [bills] ([RecurringBill.isIncome]; bills are skipped) due in [start] ..
-/// [end] (exclusive) that have not landed: from `nextDue` (or, when a row in [txs] lands that cycle but the refresh has
-/// not recorded it yet, [RecurringPayments.paidBy], the cycle after it) on by `intervalDays`, those dated from [start]
-/// to before [end]. By due date, then label, then id. [txs]: the expanded or whole list; matching uses whole payments.
+/// [end] (exclusive) that have not landed: from `nextDue` on by `intervalDays`, those dated from [start] to before
+/// [end], except a cycle with a landing payment in [txs]: a live positive payment of the payee in [currency] (not a
+/// transfer) whose amount fits ([incomeFits]), dated from `due − intervalDays ~/ 2` to `due + tolerance` (an early
+/// landing hides it too). By due date, then label, then id. [txs]: the expanded or whole list (whole payments are used).
 List<IncomeCycle> expectedIncomeCycles(List<RecurringBill> bills, List<CategorizedTx> txs, String start, String end,
     {required String currency}) {
   final live = [
@@ -176,13 +180,32 @@ List<IncomeCycle> expectedIncomeCycles(List<RecurringBill> bills, List<Categoriz
       if (b.isIncome && b.confirmed && isIsoDate(b.nextDue) && b.expectedAmount > 0) b
   ];
   if (live.isEmpty) return const [];
-  final pay = planRecurringPayments(live, wholePayments(txs), currency: currency);
+  final payees = {for (final b in live) b.payee};
+  final landings = <String, List<String>>{}; // payee -> dates of positive payments (amount checked per income below)
+  final amounts = <String, List<int>>{};
+  final seen = <String>{}; // one entry per payment (the parts of a split share it)
+  for (final t in txs) {
+    if (!t.tx.live || t.tx.currency != currency || t.tx.amount <= 0 || t.kind == BudgetKind.transfer) continue;
+    final key = merchantKey(t.tx);
+    if (!payees.contains(key) || !seen.add(t.tx.id)) continue;
+    (landings[key] ??= []).add(t.date);
+    (amounts[key] ??= []).add(t.tx.amount);
+  }
   final out = <IncomeCycle>[];
   for (final b in live) {
     final amount = b.hasRange ? b.minAmount! : b.expectedAmount;
-    var d = switch (pay.paidBy[b.id]) { final Tx row => addDays(row.date, b.intervalDays), _ => b.nextDue };
+    final dates = landings[b.payee] ?? const <String>[], cents = amounts[b.payee] ?? const <int>[];
+    bool landed(String due) {
+      final from = addDays(due, -(b.intervalDays ~/ 2)), to = addDays(due, b.tolerance);
+      for (var i = 0; i < dates.length; i++) {
+        if (dates[i].compareTo(from) >= 0 && dates[i].compareTo(to) <= 0 && incomeFits(b, cents[i])) return true;
+      }
+      return false;
+    }
+
+    var d = b.nextDue;
     for (var n = 0; n < _maxCycles && d.compareTo(end) < 0; n++) {
-      if (d.compareTo(start) >= 0) out.add(IncomeCycle(bill: b, due: d, amount: amount));
+      if (d.compareTo(start) >= 0 && !landed(d)) out.add(IncomeCycle(bill: b, due: d, amount: amount));
       d = addDays(d, b.intervalDays);
     }
   }
@@ -350,13 +373,21 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   ];
   final reservedPlanned = reservedRows.fold<int>(0, (s, p) => s + p.amount!);
   // P9: only the payees of confirmed incomes; the actual landed amounts (never the expected ones).
-  final incomePayees = {
-    for (final b in incomes)
-      if (b.confirmed && b.payee.isNotEmpty) b.payee
-  };
-  final landedIncome = incomePayees.isEmpty
-      ? 0
-      : _sum(inPeriod.where((t) => t.kind == BudgetKind.extra && t.amount > 0 && incomePayees.contains(merchantKey(t.tx))));
+  final byPayee = <String, List<RecurringBill>>{};
+  for (final b in incomes) {
+    if (b.confirmed && b.payee.isNotEmpty) (byPayee[b.payee] ??= []).add(b);
+  }
+  var landedIncome = 0;
+  if (byPayee.isNotEmpty) {
+    for (final t in inPeriod) {
+      if (t.kind != BudgetKind.extra || t.amount == 0) continue;
+      final mine = byPayee[merchantKey(t.tx)];
+      if (mine == null) continue;
+      // The payment (whole, not the part) must fit one of the payee's incomes; a refund always counts against it.
+      if (t.amount < 0 || mine.any((b) => incomeFits(b, t.tx.amount))) landedIncome += t.amount;
+    }
+    if (landedIncome < 0) landedIncome = 0;
+  }
   final expected = expectedIncomeCycles(incomes, txs, start, end, currency: st.currency);
   final flexBudget = income - fixedPlan - goalMonthly - reservedBills - reservedPlanned + landedIncome;
   final flex = inPeriod.where((t) => t.kind == BudgetKind.flex);

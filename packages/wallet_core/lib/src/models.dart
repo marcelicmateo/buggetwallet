@@ -331,6 +331,17 @@ class RecurringBill {
 
   static const statuses = {'candidate', 'confirmed', 'dismissed'};
 
+  /// Prefix of an income's stored `status` (P9 review): `in:candidate`, `in:confirmed`, `in:dismissed`. A build before
+  /// P9 (which drops `direction`) never treats such a row as a candidate or a confirmed bill, so it never lists,
+  /// reserves, recategorizes or pays it. [fromRow] maps it back: [status] is always one of [statuses].
+  static const incomeStatusPrefix = 'in:';
+
+  /// The stored `status` for [status] (one of [statuses]) of an income ([income]) or a bill.
+  static String storedStatus(String status, {required bool income}) => income ? '$incomeStatusPrefix$status' : status;
+
+  /// The stored values of a dismissed row (bill or income), for SQL filters.
+  static const dismissedStored = "'dismissed', 'in:dismissed'";
+
   /// The id of the bill for a payee key, the same on every device.
   static String idFor(String payee) => 'rec:$payee';
 
@@ -458,14 +469,19 @@ class RecurringBill {
       expectedAmount: _int(r['expected_amount']) ?? 0,
       intervalDays: interval == null || interval < minIntervalDays || interval > maxIntervalDays ? defaultIntervalDays : interval,
       nextDue: _str(r['next_due']) ?? '',
-      status: _str(r['status']) ?? 'candidate',
+      status: switch (_str(r['status'])) {
+        null => 'candidate',
+        final s when s.startsWith(incomeStatusPrefix) => s.substring(incomeStatusPrefix.length),
+        final s => s,
+      },
       lastPaidTx: _str(r['last_paid_tx']),
       minAmount: lo,
       maxAmount: hi,
       endsOn: switch (_str(r['ends_on'])) { final e? when isIsoDate(e) => e, _ => null }, // a bad stored date = no end
       manual: _int(r['manual']) == 1,
       ownCategory: _int(r['own_category']) == 1,
-      direction: _str(r['direction']),
+      // An `in:` status marks an income even where `direction` was lost (a snapshot written by an older build).
+      direction: _str(r['direction']) ?? ((_str(r['status']) ?? '').startsWith(incomeStatusPrefix) ? directionIn : null),
     );
   }
 

@@ -367,10 +367,11 @@ void main() {
       final other = landed('2026-02-25', 5000, desc: 'Some Gift', id: 'gift');
       final p = period([income('2026-04-09', 30000, lastPaidTx: 'land')],
           txs: [landed('2026-02-20', 30000), landed('2026-03-01', 1500, id: 'l2'), other]);
-      expect(p.landedIncome, 31500);
-      expect(p.flexBudget, base.flexBudget + 31500);
+      // Lead decision (P9 review): only rows that fit the income's band land it; the 1500 row is a one-off for the goals.
+      expect(p.landedIncome, 30000);
+      expect(p.flexBudget, base.flexBudget + 30000);
       expect(p.extras, 36500, reason: 'extras still lists every extra row, the goals path subtracts landedIncome');
-      expect(p.extras - p.landedIncome, 5000, reason: 'what goes into goals is only the one-off');
+      expect(p.extras - p.landedIncome, 6500, reason: 'what goes into goals is only the one-offs');
     });
 
     test('flexBudget is raised once: by the landed amount, not by landed plus extras', () {

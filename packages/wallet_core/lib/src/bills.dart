@@ -403,7 +403,7 @@ String? suggestBillCategory(Bill b, {required List<RecurringBill> recurring, req
   final key = billPayeeKey(b);
   if (key != null) {
     for (final r in recurring) {
-      if (r.confirmed && r.payee == key && r.category.isNotEmpty && cats.isLive(r.category)) return r.category;
+      if (r.confirmed && !r.isIncome && r.payee == key && r.category.isNotEmpty && cats.isLive(r.category)) return r.category;
     }
   }
   final words = _billPayeeWords(b);

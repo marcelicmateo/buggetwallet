@@ -51,8 +51,8 @@ extension WalletRepoRecurring on WalletRepo {
     // A bill and an income of one payee may live side by side (P9): only the same direction clashes.
     if (key.isNotEmpty &&
         db.select(
-            "SELECT 1 FROM recurring WHERE payee = ? AND deleted = 0 AND status != 'dismissed' "
-            "AND ${income ? "direction = 'in'" : "(direction IS NULL OR direction != 'in')"}",
+            'SELECT 1 FROM recurring WHERE payee = ? AND deleted = 0 AND status NOT IN (${RecurringBill.dismissedStored}) '
+            "AND ${income ? "(direction = 'in' OR status LIKE 'in:%')" : "(COALESCE(direction, '') != 'in' AND status NOT LIKE 'in:%')"}",
             [key]).isNotEmpty) {
       throw ArgumentError(income ? 'Another income already uses this payee.' : 'Another bill already uses this payee.');
     }
@@ -68,7 +68,7 @@ extension WalletRepoRecurring on WalletRepo {
           'expected_amount': amount,
           'interval_days': intervalDays,
           'next_due': firstDue,
-          'status': 'confirmed',
+          'status': RecurringBill.storedStatus('confirmed', income: income),
           'manual': 1,
           'deleted': 0,
           if (minAmount != null) 'min_amount': minAmount,
