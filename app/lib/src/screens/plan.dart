@@ -15,6 +15,7 @@ import 'bills_panel.dart';
 import 'budgets.dart';
 import 'calendars_panel.dart';
 import 'categories_panel.dart';
+import 'currencies_panel.dart';
 import 'diagnostics.dart';
 import 'export_panel.dart';
 import 'forget_browser.dart';
@@ -78,6 +79,7 @@ class _PlanScreenState extends State<PlanScreen> {
   final _billsKey = GlobalKey();
   final _billsDbKey = GlobalKey();
   final _accountsKey = GlobalKey();
+  final _currenciesKey = GlobalKey();
   final _incomeKey = GlobalKey();
   final _scroll = ScrollController();
 
@@ -98,6 +100,7 @@ class _PlanScreenState extends State<PlanScreen> {
     widget.showBillsDb?.addListener(_scrollToBillsDb);
     widget.showAccounts?.addListener(_scrollToAccounts);
     widget.showIncome?.addListener(_scrollToIncome);
+    widget.wc.currenciesRequest.addListener(_scrollToCurrencies);
   }
 
   /// Scrolls to Expected bills. A ListView builds only the rows near the window, so when the panel is not built yet the page
@@ -107,6 +110,8 @@ class _PlanScreenState extends State<PlanScreen> {
   Future<void> _scrollToBillsDb() => _scrollTo(_billsDbKey);
 
   Future<void> _scrollToAccounts() => _scrollTo(_accountsKey);
+
+  Future<void> _scrollToCurrencies() => _scrollTo(_currenciesKey);
 
   Future<void> _scrollToIncome() => _scrollTo(_incomeKey);
 
@@ -156,6 +161,7 @@ class _PlanScreenState extends State<PlanScreen> {
     widget.showBillsDb?.removeListener(_scrollToBillsDb);
     widget.showAccounts?.removeListener(_scrollToAccounts);
     widget.showIncome?.removeListener(_scrollToIncome);
+    widget.wc.currenciesRequest.removeListener(_scrollToCurrencies);
     _scroll.dispose();
     for (final c in f.values) {
       c.dispose();
@@ -351,6 +357,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 ]),
               PlanSuggestionsPanel(wc: wc),
               KeyedSubtree(key: _accountsKey, child: AccountsPanel(wc: wc)),
+              KeyedSubtree(key: _currenciesKey, child: CurrenciesPanel(wc: wc)),
               KeyedSubtree(key: _billsKey, child: ExpectedBillsPanel(wc: wc)),
               KeyedSubtree(key: _incomeKey, child: ExpectedIncomePanel(wc: wc)),
               KeyedSubtree(key: _billsDbKey, child: BillsPanel(wc: wc, chooser: widget.chooser)),

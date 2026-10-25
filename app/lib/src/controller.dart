@@ -32,6 +32,7 @@ part 'controller_bills.dart';
 part 'controller_recurring.dart';
 part 'controller_future.dart';
 part 'controller_splits.dart';
+part 'controller_fx.dart';
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');
@@ -146,7 +147,17 @@ class WalletController extends ChangeNotifier {
 
   /// Every row the money is counted by (P6): a split payment is one row per part (`Categorizer.expandAll`), the rest one row each.
   /// Sums, insights, budgets, periods, CSV and search read this list.
+  /// P15: rows with an owner-set rate are in the wallet currency here (originals in `originalAmount`/`originalCurrency`).
   List<CategorizedTx> txs = const [];
+
+  /// The same rows before conversion (every part, own currency): what core's `matchRows` takes once it lands.
+  List<CategorizedTx> rawExpanded = const [];
+
+  /// [wholeTxs] rows with a rate, converted, by payment id: what the lists show ([shown]).
+  Map<String, CategorizedTx> _shown = const {};
+
+  /// [t] (a whole-payment row) as the lists show it: in the wallet currency with its original amount when its currency has a rate.
+  CategorizedTx shown(CategorizedTx t) => _shown[t.tx.id] ?? t;
 
   /// One row per payment, whatever its split (`Categorizer.categorize`): for picking and detecting payments (matching, bills,
   /// planned costs, recurring, rule hits, tag suggestions, balances, paydays) and for lists that show a payment once.
@@ -671,7 +682,15 @@ class WalletController extends ChangeNotifier {
       }
     }, fields: {'tx': raw.length});
     wholeTxs = whole;
-    txs = expanded;
+    rawExpanded = expanded;
+    final shownWhole = inHomeCurrency(whole, settings);
+    _shown = identical(shownWhole, whole)
+        ? const {}
+        : {
+            for (final t in shownWhole)
+              if (t.originalAmount != null) t.tx.id: t
+          };
+    txs = inHomeCurrency(expanded, settings); // P15: rows with an owner-set rate count in the wallet currency
     final parts = <String, List<CategorizedTx>>{};
     final broken = <String>{};
     for (final c in txs) {
@@ -1983,6 +2002,9 @@ class WalletController extends ChangeNotifier {
   /// Set by the home shell: switches to tab 0..4 (Today, Spending, Wishlist, Goals, Plan). Null outside the shell (tests of a
   /// single screen), where [openTab] does nothing.
   void Function(int tab, String via)? tabHook;
+
+  /// Counts the taps on a "Set a rate in Plan › Currencies" note; Plan scrolls to its Currencies panel on each.
+  final ValueNotifier<int> currenciesRequest = ValueNotifier<int>(0);
 
   /// The wish the Wishlist tab shows highlighted after a toast's "Open" (cleared by the screen once it scrolled there).
   final ValueNotifier<String?> highlightWish = ValueNotifier<String?>(null);

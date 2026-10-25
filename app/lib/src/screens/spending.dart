@@ -130,7 +130,8 @@ class _SpendingScreenState extends State<SpendingScreen> {
           const Eyebrow('Where it goes'),
           Heading('${monthLong(sel)}: ${money(selSum.out, cur, decimals: 0)} out'),
           if (budgeted) BudgetSummary(budget, cur),
-          if (selSum.foreignByCurrency.isNotEmpty) ForeignNote(selSum.foreignByCurrency, key: const ValueKey('foreignNote')),
+          if (selSum.foreignByCurrency.isNotEmpty)
+            ForeignNote(selSum.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: wc.openCurrencies),
           Muted('Income ${money(selSum.income, cur, decimals: 0)}. Spending and bills by main tag; '
               '${budgeted ? 'the solid mark is the budget, the dark tick' : 'the dark tick'} is your average of the 6 months before.'),
           _MonthChips(
@@ -176,14 +177,21 @@ class _SpendingScreenState extends State<SpendingScreen> {
                 TxTile(
                     table: wc.categoryTable,
                     tagTable: wc.tagTable,
-                    t: t,
+                    t: wc.shown(t),
                     currency: cur,
+                    fxRates: wc.settings.fxRates,
                     hasBill: wc.billForTx(t.tx.id) != null,
                     splitCount: wc.splitCount(t.tx.id),
                     splitBroken: wc.splitIsBroken(t.tx.id),
                     onTap: () => _openTx(t)),
                 for (final p in wc.partsOf(t.tx.id))
-                  PartTile(part: p, currency: cur, table: wc.categoryTable, tagTable: wc.tagTable, onTap: () => _openTx(t)),
+                  PartTile(
+                      part: p,
+                      currency: cur,
+                      fxRates: wc.settings.fxRates,
+                      table: wc.categoryTable,
+                      tagTable: wc.tagTable,
+                      onTap: () => _openTx(t)),
               ],
             ]),
         ]),

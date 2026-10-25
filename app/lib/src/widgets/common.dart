@@ -175,10 +175,12 @@ class _ExplainerState extends State<Explainer> {
 }
 
 /// One muted line "Other currencies, not counted: 12 $ spent" for rows in a currency other than the wallet's (they are in no total).
-/// Nothing when [byCurrency] is empty. Signed cents by currency code, never rounded.
+/// Nothing when [byCurrency] is empty. Signed cents by currency code, never rounded. Core lists only the currencies without
+/// an owner-set rate (P15); with [onSetRate] a second line "Set a rate in Plan › Currencies" (`foreignSetRate`) is a tap.
 class ForeignNote extends StatelessWidget {
   final Map<String, int> byCurrency;
-  const ForeignNote(this.byCurrency, {super.key});
+  final VoidCallback? onSetRate;
+  const ForeignNote(this.byCurrency, {super.key, this.onSetRate});
   @override
   Widget build(BuildContext context) {
     if (byCurrency.isEmpty) return const SizedBox.shrink();
@@ -186,8 +188,34 @@ class ForeignNote extends StatelessWidget {
     final parts = [
       for (final k in codes) '${moneyExact(byCurrency[k]!.abs(), k)} ${byCurrency[k]! < 0 ? 'spent' : 'received'}',
     ];
-    return Muted('Other currencies, not counted: ${parts.join(', ')}', size: BwType.metaSize);
+    final note = Muted('Other currencies, not counted: ${parts.join(', ')}', size: BwType.metaSize);
+    if (onSetRate == null) return note;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      note,
+      InkWell(
+        key: const ValueKey('foreignSetRate'),
+        onTap: onSetRate,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Set a rate in Plan › Currencies',
+                style: TextStyle(fontSize: BwType.metaSize, color: context.c.accent, decoration: TextDecoration.underline)),
+          ),
+        ),
+      ),
+    ]);
   }
+}
+
+/// "100.00 $ at 0.9240": the original amount of a payment counted at an owner-set rate (P15), or null when it was not converted.
+/// [rates] = the wallet's rates (the rate shown is the current one for that currency).
+String? originalNote(CategorizedTx t, Map<String, FxRate>? rates) {
+  final amount = t.originalAmount, cur = t.originalCurrency;
+  if (amount == null || cur == null) return null;
+  final rate = rates?[cur];
+  final base = money(amount, cur, decimals: 2, signed: true);
+  return rate == null ? base : '$base at ${rateText(rate.rate)}';
 }
 
 /// Status pill with icon + label, so state is never colour alone. The label wraps (the icon stays on the first
@@ -415,10 +443,14 @@ class TxTile extends StatelessWidget {
 
   /// A search found this payment by one of its parts (0-based): "Part 2 matches".
   final int? matchedPart;
+
+  /// The wallet's rates (`settings.fxRates`): a converted payment shows its original amount "100.00 $ at 0.9240" under the amount.
+  final Map<String, FxRate>? fxRates;
   const TxTile(
       {super.key,
       required this.t,
       required this.currency,
+      this.fxRates,
       this.onTap,
       this.hasBill = false,
       this.table,
@@ -435,6 +467,16 @@ class TxTile extends StatelessWidget {
     final amount = money(t.amount, currency, decimals: 2, signed: true);
     final amountStyle = numStyle.copyWith(fontSize: BwType.amountSize, fontWeight: FontWeight.w500, color: inc ? c.good : c.ink);
     final columns = _columnsFit(context);
+    final original = originalNote(t, fxRates);
+    final originalText = original == null
+        ? const SizedBox.shrink()
+        : FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Text(original,
+                key: const ValueKey('txOriginal'),
+                textAlign: TextAlign.end,
+                style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.ink2)));
     final name =
         Text(merchantName(t.tx), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500));
     final catLabel = (table ?? CategoryTable.builtIn).label(t.category);
@@ -475,8 +517,13 @@ class TxTile extends StatelessWidget {
           width: _amountCol,
           child: Padding(
             padding: const EdgeInsets.only(top: 10),
-            child: FittedBox(
-                fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: Text(amount, textAlign: TextAlign.end, style: amountStyle)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(amount, textAlign: TextAlign.end, style: amountStyle)),
+              if (original != null) originalText,
+            ]),
           ),
         ),
       ]);
@@ -486,7 +533,10 @@ class TxTile extends StatelessWidget {
         child: SplitRow(
           gap: 12,
           start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [name, const SizedBox(height: 2), sub]),
-          end: Text(amount, textAlign: TextAlign.end, style: amountStyle),
+          end: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(amount, textAlign: TextAlign.end, style: amountStyle),
+            if (original != null) originalText,
+          ]),
         ),
       );
     }
@@ -510,7 +560,8 @@ class PartTile extends StatelessWidget {
   final VoidCallback? onTap;
   final CategoryTable? table;
   final TagTable? tagTable;
-  const PartTile({super.key, required this.part, required this.currency, this.onTap, this.table, this.tagTable});
+  final Map<String, FxRate>? fxRates;
+  const PartTile({super.key, required this.part, required this.currency, this.fxRates, this.onTap, this.table, this.tagTable});
 
   @override
   Widget build(BuildContext context) {
@@ -541,8 +592,15 @@ class PartTile extends StatelessWidget {
                   ]),
                 ),
               ]),
-              end: Text(amount,
-                  textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: BwType.metaSize, color: part.amount > 0 ? c.good : c.ink)),
+              end: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text(amount,
+                    textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: BwType.metaSize, color: part.amount > 0 ? c.good : c.ink)),
+                if (originalNote(part, fxRates) case final o?)
+                  Text(o,
+                      key: const ValueKey('partOriginal'),
+                      textAlign: TextAlign.end,
+                      style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.ink2)),
+              ]),
             ),
           ),
         ),
