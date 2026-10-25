@@ -65,8 +65,8 @@ class BackupResult {
 /// What [mergeBackupBytes] brought in (with `dryRun`: would bring in). [ops] = ops in the file; [changed] = ops with at
 /// least one field whose clock won here (may include equal values: a newer write of the same value counts; the app
 /// calls them "updates"), per entity (`tx`, `tag`, `setting`, ... as in `entitySchema`; entities with none left out) in
-/// [changedByEntity]. [blobs] = bill files put into this device's cache (dry run: the files that pass the
-/// hash check and are not cached yet).
+/// [changedByEntity]. [blobs] = bill files put into this device's cache (dry run: the files the real merge would put,
+/// counted against the merged state inside the rolled-back transaction).
 class MergeResult {
   final int ops, changed, blobs;
   final Map<String, int> changedByEntity;
@@ -108,7 +108,7 @@ Future<BackupResult> backupBytesWithInfo(WalletRepo repo, VaultKey key, {int max
 /// ([WalletRepo.isEmpty]; else [StateError] before anything is read: a wallet with data uses [mergeBackupBytes]). The
 /// ops are applied through [WalletRepo.applyRemote] with `resend`, so matching, pairing and bill detection run once and
 /// the restored state goes out to the other devices on the next sync like this device's own writes. The bill files in
-/// it go into the cache, queued for upload ([_putBlobs]). Returns the number of ops in the file.
+/// it go into the cache, queued for upload ([_takeBlobs]). Returns the number of ops in the file.
 ///
 /// Content that is not a backup or is of a newer format is a [BackupException]; a wrong key or a damaged seal is
 /// the [VaultException] from [unseal]. Nothing is applied unless the whole file parses. [key] opens the file; when it
@@ -117,8 +117,9 @@ Future<int> restoreBackupBytes(WalletRepo repo, List<int> bytes, VaultKey key, {
   if (!repo.isEmpty) throw StateError('A backup can only be restored into an empty wallet.');
   final t = PerfTimer('backup.restore', warnMs: 5000);
   final (ops, blobs) = await _open(repo, bytes, key, 'backup.restore.failed');
+  final valid = _checkBlobs(blobs, sameKey: _sameKey(key, walletKey));
   final changed = repo.applyRemote(ops, resend: true);
-  final files = _putBlobs(repo, blobs, store: true, sameKey: _sameKey(key, walletKey));
+  final files = _takeBlobs(repo, valid, store: true);
   t.done({'ops': ops.length, 'changed': changed, 'bytes': bytes.length, 'blobs': files});
   return ops.length;
 }
@@ -135,8 +136,13 @@ Future<int> restoreBackupBytes(WalletRepo repo, List<int> bytes, VaultKey key, {
 Future<MergeResult> mergeBackupBytes(WalletRepo repo, List<int> bytes, VaultKey key, {bool dryRun = false, VaultKey? walletKey}) async {
   final t = PerfTimer('backup.merge', warnMs: 5000);
   final (ops, blobs) = await _open(repo, bytes, key, 'backup.merge.failed');
-  final byEntity = repo.applyRemoteByEntity(ops, resendChanged: true, dryRun: dryRun);
-  final files = _putBlobs(repo, blobs, store: !dryRun, sameKey: _sameKey(key, walletKey));
+  final valid = _checkBlobs(blobs, sameKey: _sameKey(key, walletKey));
+  var files = 0;
+  // A dry run counts the files inside its rolled-back transaction, so a bill deleted here (or brought in) counts as
+  // in the real merge.
+  final byEntity = repo.applyRemoteByEntity(ops,
+      resendChanged: true, dryRun: dryRun, beforeRollback: dryRun ? () => files = _takeBlobs(repo, valid, store: false) : null);
+  if (!dryRun) files = _takeBlobs(repo, valid, store: true);
   final changed = byEntity.values.fold(0, (a, b) => a + b);
   t.done({'ops': ops.length, 'changed': changed, 'dryRun': dryRun, 'bytes': bytes.length, 'blobs': files});
   return MergeResult(ops: ops.length, changed: changed, changedByEntity: byEntity, blobs: files);
@@ -173,15 +179,11 @@ Future<(List<Op>, Map<Object?, Object?>)> _open(WalletRepo repo, List<int> bytes
   return (ops, blobs);
 }
 
-/// Puts a backup's bill files into the cache, queued for upload (the relay keeps a hash once, so uploading one it
-/// already has changes nothing); `blob_own` is not set (the file was attached elsewhere). A file is taken when the
-/// SHA-256 of its sealed bytes is its hash (else counted and logged as `backup.blobBad`), it is not cached yet and a
-/// live bill points to it; with [sameKey] false (sealed with another wallet's key) none is taken. With [store] false
-/// (a dry run) nothing is written, and the files that pass the hash check and are not cached are counted. Returns the
-/// files taken. Logs counts and byte totals only.
-int _putBlobs(WalletRepo repo, Map<Object?, Object?> blobs, {required bool store, required bool sameKey}) {
-  if (blobs.isEmpty) return 0;
-  var bad = 0, taken = 0, bytes = 0;
+/// The bill files of a backup whose SHA-256 of the sealed bytes is their hash, as (hash, sealed); the others are
+/// counted and logged as `backup.blobBad`. None with [sameKey] false (sealed with another wallet's key).
+List<(String, List<int>)> _checkBlobs(Map<Object?, Object?> blobs, {required bool sameKey}) {
+  final out = <(String, List<int>)>[];
+  var bad = 0;
   for (final MapEntry(:key, :value) in blobs.entries) {
     List<int>? sealed;
     if (key is String && isBlobHash(key) && value is String) {
@@ -195,18 +197,27 @@ int _putBlobs(WalletRepo repo, Map<Object?, Object?> blobs, {required bool store
       bad++;
       continue;
     }
-    final hash = key as String;
-    if (!sameKey || repo.cachedBlob(hash, touch: false) != null) continue;
-    if (store) {
-      if (!repo.blobInUse(hash)) continue;
-      repo.putCachedBlob(hash, sealed, queue: true);
-    }
+    if (sameKey) out.add((key as String, sealed));
+  }
+  if (bad > 0) logEvent(_log, Level.WARNING, 'backup.blobBad', {'files': bad});
+  if (blobs.isNotEmpty && !sameKey) logEvent(_log, Level.INFO, 'backup.blobs', {'files': 0, 'inFile': blobs.length, 'otherKey': true});
+  return out;
+}
+
+/// Puts the checked bill files ([_checkBlobs]) that a live bill points to and that are not cached yet into the cache,
+/// queued for upload (the relay keeps a hash once, so uploading one it already has changes nothing); `blob_own` is
+/// not set (the file was attached elsewhere). With [store] false (a dry run, called inside its transaction) nothing is
+/// written and the same files are counted. Returns the files taken. Logs counts and byte totals only.
+int _takeBlobs(WalletRepo repo, List<(String, List<int>)> valid, {required bool store}) {
+  if (valid.isEmpty) return 0;
+  var taken = 0, bytes = 0;
+  for (final (hash, sealed) in valid) {
+    if (repo.cachedBlob(hash, touch: false) != null || !repo.blobInUse(hash)) continue;
+    if (store) repo.putCachedBlob(hash, sealed, queue: true);
     taken++;
     bytes += sealed.length;
   }
-  if (bad > 0) logEvent(_log, Level.WARNING, 'backup.blobBad', {'files': bad});
-  logEvent(
-      _log, Level.INFO, 'backup.blobs', {'files': taken, 'bytes': bytes, 'inFile': blobs.length, 'otherKey': !sameKey, 'dryRun': !store});
+  logEvent(_log, Level.INFO, 'backup.blobs', {'files': taken, 'bytes': bytes, 'checked': valid.length, 'dryRun': !store});
   return taken;
 }
 
@@ -223,7 +234,7 @@ Uint8List backupPayload(List<Op> ops, {Map<String, List<int>> blobs = const {}})
 List<Op> backupPayloadOps(List<int> clear, {String event = 'backup.parse.failed'}) => _parse(clear, clear.length, event: event).$1;
 
 /// The ops and the raw `blobs` map (empty when absent) of an unsealed backup, or a [BackupException] (logged with the
-/// reason only). A `blobs` value that is not a map makes the file damaged; its entries are checked by [_putBlobs].
+/// reason only). A `blobs` value that is not a map makes the file damaged; its entries are checked by [_checkBlobs].
 (List<Op>, Map<Object?, Object?>) _parse(List<int> clear, int sealedBytes, {String event = 'backup.restore.failed'}) {
   Never refuse(BackupFailure reason, Object error, StackTrace st, String message) {
     logError(_log, event, error, st, fields: {'reason': reason.name, 'bytes': sealedBytes});
