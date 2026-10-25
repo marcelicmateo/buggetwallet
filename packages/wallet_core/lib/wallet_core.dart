@@ -45,6 +45,8 @@ export 'src/budget.dart'
         CategoryBudgetLine,
         computePeriod,
         dueBills,
+        DueCycle,
+        dueCycles,
         duePlanned,
         monthsToGoal,
         MonthSummary,
@@ -144,10 +146,12 @@ export 'src/models.dart'
         Goal,
         GoalContribution,
         goalTotal,
+        instalmentsLeft,
         PlannedCost,
         PlannedSource,
         PlannedStatus,
         RecurringBill,
+        RecurringPeriod,
         resetInvalidSettingLog,
         ReviewState,
         ReviewStep,
@@ -168,7 +172,7 @@ export 'src/planned.dart'
         UpcomingItem,
         UpcomingKind;
 export 'src/ranges.dart' show DateRange, RangeKind, rangeFor, rangeLabel, shiftRange;
-export 'src/recurring.dart' show detectRecurring, medianCents, planRecurringPayments, RecurringPayments;
+export 'src/recurring.dart' show detectRecurring, medianCents, partsDays, partsThreshold, planRecurringPayments, RecurringPayments;
 export 'src/repo.dart'
     show
         ImportSummary,
@@ -179,6 +183,7 @@ export 'src/repo.dart'
         WalletRepoBills,
         WalletRepoBlobs,
         WalletRepoPlanned,
+        WalletRepoRecurring,
         WalletRepoSettings,
         WalletRepoTags;
 export 'src/rules.dart' show merchantPatternId, MerchantPattern, MerchantRule, MoveDirection, RuleKind, ruleHits, rulesView, RuleView;

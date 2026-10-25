@@ -125,6 +125,11 @@ const Map<String, EntityDef> entitySchema = {
     ColumnDef('status', defaultSql: "'candidate'"),
     ColumnDef('last_paid_tx', nullable: true),
     ColumnDef.flag('deleted'),
+    // P4 (v12): amount range (cents), last due date of an instalment plan, added by hand.
+    ColumnDef.integer('min_amount', nullable: true),
+    ColumnDef.integer('max_amount', nullable: true),
+    ColumnDef('ends_on', nullable: true),
+    ColumnDef.flag('manual'),
   ]),
   // Planned costs (v6, §4.3): hand-added, calendar events given an amount or dismissed (see `PlannedCost`).
   'planned': EntityDef('planned', [

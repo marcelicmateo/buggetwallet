@@ -117,7 +117,21 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   row keeps its category: a bill is information, never a reclassification. `recurringBills(includeDismissed:)`,
   `confirmRecurring`, `dismissRecurring`, `deleteRecurring` (unknown id → `ArgumentError`), `skipRecurring` (async;
   `next_due` += `interval_days` from its current value, no row needed, `last_paid_tx` untouched; no due date yet →
-  `StateError`). Settings `reviewDay` (1..7, default 7), `lastReview` (date),
+  `StateError`).
+  **P4 (schema 12, spec + clarifications `docs/context/P4_SPEC.md`):** `recurring` gains `min_amount`/`max_amount`
+  (range, `hasRange`, `reserveAmount` = max), `ends_on` (instalments, `finished`, `instalmentsLeft`), `manual`.
+  `RecurringPeriod` (weekly 7, biweekly 14, monthly 30, quarterly 91, yearly 365; `of` within the class's
+  `RecurringBill.toleranceFor`: ≤7→1, ≤14→2, ≤31→3, ≤92→7, else 10). Detection tries the classes in that order
+  (`_classes`: lookback + min rows); monthly is the old rule exactly. `planRecurringPayments` → `paidBy` (single
+  payment ± tolerance in band/range) + `parts` (rows in `[nextDue − partsDays, nextDue + tolerance]` after the
+  `lastPaidTx` date, each ≤ reserve; ≥ 2 rows reaching `partsThreshold` pay, `paidInParts`, next due = nextDue +
+  interval). `dueCycles` (budget.dart): monthly = one cycle as before; `isShort` (< 27 days) = every occurrence from
+  the period start before payday (an overdue `nextDue` once); `isLong` (> 31) = the next cycle whatever its date, no
+  paid-this-period drop, never covered by a plan line. `computePeriod` computes parts itself. `repo_recurring.dart`
+  (`WalletRepoRecurring`): `addRecurring` (`rec:m` + 12 hex, confirmed, never detected or recategorized; no payee =
+  never matches), `updateRecurring`, `instalmentsLeft`. Bill history per cycle for non-monthly bills (`BillMonth.due`).
+  Tests: `test/p4_recurring_test.dart` (+ `p4_recurring_spec_test.dart`, `p4_recurring_repo_spec_test.dart`).
+  Settings `reviewDay` (1..7, default 7), `lastReview` (date),
   `reviewStreak` (0..`maxStreak`) are validated like the others.
 - `bill_history.dart` — N4 bill history (spec + clarifications `docs/context/N4_SPEC.md`), pure and web-safe.
   `billHistory(bill, rows, slips, today:, months: 12, currency:)` → `List<BillMonth>` (`month`, `payments`, `slips`,
@@ -243,7 +257,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   device's per-key write that arrived first), is skipped, as the read fallback does, so a stale map with a newer clock
   never revives or undoes a per-key change; new patterns get orders after the largest live one; a clock-less legacy row
   goes through `_write`; the map rows are left in place for older builds; `repo.migrate` logs `perKeySettings` (count);
-  9 = the `account` entity, no data migration; 10 = the `category` entity (P1), no data migration). Opening an existing database with an older version
+  9 = the `account` entity, no data migration; 10 = the `category` entity (P1), no data migration; 11 = tags (T1); 12 = P4
+  recurring columns, no data migration). Opening an existing database with an older version
   clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
   written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
 - `local_db.dart` — encrypted local database (§4.9, SQLite3MultipleCiphers, web-safe): `localDbKey(VaultKey)` = HKDF

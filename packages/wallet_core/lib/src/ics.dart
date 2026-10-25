@@ -584,7 +584,7 @@ String plannedIcs(List<PlannedCost> planned, List<RecurringBill> bills, {require
     for (final b in bills) {
       if (!b.confirmed) continue;
       for (final d in billOccurrences(b, from, to)) {
-        rows.add(('bill-${b.id}-${_compact(d)}@budget-wallet', d, b.label, b.expectedAmount));
+        rows.add(('bill-${b.id}-${_compact(d)}@budget-wallet', d, b.label, b.reserveAmount));
       }
     }
   }
