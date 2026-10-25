@@ -67,7 +67,7 @@ void main() {
     }, reportKey: '${perfPrefix}tab_switch');
 
     // Insights: open it from Spending, switch the range of the first graph through every kind and step back and forward (each
-    // switch draws a new range from ~20k rows), scroll through the four graphs, close it
+    // switch draws a new range from ~20k rows), scroll through the graphs, open a category, close both
     await goTab(t, 'Spending');
     await binding.traceAction(() async {
       await t.tap(find.byKey(const ValueKey('insightsOpen')));
@@ -84,6 +84,13 @@ void main() {
       await t.fling(insights, const Offset(0, -700), 3000);
       await t.pumpAndSettle();
       await t.fling(insights, const Offset(0, 700), 3000);
+      await t.pumpAndSettle();
+      // open the largest category (its trend and merchants come from ~20k rows), then close it and Insights
+      await scrollTo(t, find.byKey(const ValueKey('insightPanel_share')), InsightsScreen);
+      final shareRow =
+          find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('shareRow_'));
+      await tapVisible(t, shareRow.first);
+      await t.tap(find.byKey(const ValueKey('sheetClose')).last);
       await t.pumpAndSettle();
       await t.tap(find.byKey(const ValueKey('sheetClose')));
       await t.pumpAndSettle();

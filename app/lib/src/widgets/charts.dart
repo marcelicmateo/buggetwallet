@@ -547,6 +547,7 @@ class RangeControl extends StatelessWidget {
                   button: true,
                   label: 'Dates $text. Opens the date picker.',
                   excludeSemantics: true,
+                  onTap: () => _pick(context),
                   child: TextButton(
                     key: ValueKey('rangeLabel_$id'),
                     style: TextButton.styleFrom(minimumSize: const Size(0, touchMin), foregroundColor: c.ink),

@@ -56,6 +56,9 @@ String money(int cents, String currency, {int? decimals, bool signed = false}) {
 /// [money] that never rounds: whole units when the amount is whole ("48 €"), otherwise with cents ("47.50 €", "0.49 €").
 String moneyExact(int cents, String currency) => money(cents, currency, decimals: cents % 100 == 0 ? 0 : 2);
 
+/// [moneyExact] with a plus sign on a positive amount ("+1,234.56 €", "−40 €").
+String moneyExactSigned(int cents, String currency) => money(cents, currency, decimals: cents % 100 == 0 ? 0 : 2, signed: true);
+
 /// Wishlist countdown: whole hours rounded up (so "0h" never shows while time is left), then days.
 /// 71.9 -> "3d left", 47.2 -> "2d left", 46.5 -> "1d 23h left", 5.1 -> "6h left". Hours are always 1-23.
 String timeLeft(double hours) {

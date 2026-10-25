@@ -198,6 +198,7 @@ class ShareBars extends StatelessWidget {
           button: onOpen != null,
           label: '${s.category}: ${permilleText(s.permille)}, ${moneyExact(s.spent, currency)}',
           excludeSemantics: true,
+          onTap: onOpen == null ? null : () => onOpen!(s.category),
           child: InkWell(
             key: ValueKey('shareRow_${s.category}'),
             onTap: onOpen == null ? null : () => onOpen!(s.category),

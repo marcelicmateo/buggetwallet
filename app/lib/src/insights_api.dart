@@ -101,7 +101,9 @@ class InsightRange extends ChangeNotifier {
     final shown = range;
     if (k == RangeKind.custom) {
       _from = shown.start;
-      _to = shown.end;
+      // A pay period can run into next month; a custom range may not go past the end of this month.
+      final lastDay = wc.monthRange(monthOf(wc.today())).end;
+      _to = shown.end.compareTo(lastDay) > 0 ? lastDay : shown.end;
       try {
         wc.resolveRange(k, from: _from, to: _to);
       } on ArgumentError catch (e) {
@@ -188,8 +190,8 @@ extension WalletInsights on WalletController {
   CategoryShare shareFor(DateRange r) =>
       memo(_k('share', r), () => timed('insights.share', () => categoryShare(txs, r, currency: currency), fields: _f(r), warnMs: 50));
 
-  /// Spending of [category] over [r] (0 when it is not in the share).
-  int categoryTotal(String category, DateRange r) => shareFor(r).slices.where((s) => s.category == category).firstOrNull?.spent ?? 0;
+  /// Spending of [category] over [r]: the rows' sum, so a refund-only category shows its negative total (the share drops it).
+  int categoryTotal(String category, DateRange r) => -rowsOf(category, null, r).fold<int>(0, (s, t) => s + t.amount);
 
   List<IncomeVsSpending> incomeBars(DateRange r) => memo(_k('income', r),
       () => timed('insights.income', () => incomeVsSpending(txs, r, currency: currency, today: today()), fields: _f(r), warnMs: 50));
@@ -211,14 +213,13 @@ extension WalletInsights on WalletController {
       () => timed('insights.merchantTrend', () => merchantTrend(category, merchantKey, txs, r, currency: currency, today: today()),
           fields: _f(r), warnMs: 50));
 
-  /// The category's spending per month over [r]: the merchants' trends added up (the same rows as [merchantsFor]).
+  /// The category's spending per month over [r]: its rows added up per calendar month (the same rows as [categoryTotal]).
   List<MonthBar> categoryBars(String category, DateRange r) => memo('${_k('ctrend', r)}.$category', () {
-        final parts = [for (final m in merchantsFor(category, r)) merchantBars(category, m.key, r)];
-        if (parts.isEmpty) return spendingBars(r).map((b) => MonthBar(month: b.month, spent: 0, partial: b.partial)).toList();
-        return [
-          for (var i = 0; i < parts.first.length; i++)
-            MonthBar(month: parts.first[i].month, spent: parts.fold<int>(0, (s, p) => s + p[i].spent), partial: parts.first[i].partial),
-        ];
+        final spent = <String, int>{};
+        for (final t in rowsOf(category, null, r)) {
+          spent[monthOf(t.date)] = (spent[monthOf(t.date)] ?? 0) - t.amount;
+        }
+        return [for (final b in spendingBars(r)) MonthBar(month: b.month, spent: spent[b.month] ?? 0, partial: b.partial)];
       });
 
   CategoryCompare compareFor(String category, DateRange r) =>

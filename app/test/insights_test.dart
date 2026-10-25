@@ -228,7 +228,7 @@ void main() {
       expect(find.byKey(const ValueKey('insightBars_income')), findsOneWidget);
       for (final b in bars) {
         final row = find.byKey(ValueKey('barRow_income_${b.month}'));
-        expect(find.descendant(of: row, matching: find.text('Net ${money(b.net, 'EUR', signed: true)}')), findsOneWidget, reason: b.month);
+        expect(find.descendant(of: row, matching: find.text('Net ${moneyExactSigned(b.net, 'EUR')}')), findsOneWidget, reason: b.month);
       }
       expect(bars.last.income, 150000);
       expect(bars.last.net, 150000 - bars.last.spent);
@@ -448,6 +448,109 @@ void main() {
         expect(s.height, greaterThanOrEqualTo(47.9), reason: k);
       }
       expect(tester.getSize(find.byKey(const ValueKey('rangeBack_spending'))).width, greaterThanOrEqualTo(47.9));
+    });
+  });
+  group('review fixes', () {
+    testWidgets('a refund-only category opens with its negative total, equal to its rows', (tester) async {
+      final wc = insightsWallet();
+      wc.repo.setCategoryBudget('Sport & fitness', 10000);
+      wc.repo.addTransaction(date: '2026-10-07', amount: -500, category: 'Sport & fitness', note: 'Refund');
+      wc.reload();
+      final r = wc.monthRange('2026-10');
+      final rows = wc.rowsOf('Sport & fitness', null, r);
+      expect(rows.fold<int>(0, (a, t) => a + t.amount), 500);
+      expect(wc.categoryTotal('Sport & fitness', r), -500);
+      await pump(tester, CategoryDetailScreen(wc: wc, category: 'Sport & fitness', range: r), size: const Size(400, 3000));
+      expect(find.descendant(of: find.byKey(const ValueKey('detailTotal')), matching: find.text(moneyExact(-500, 'EUR'))), findsOneWidget);
+    });
+
+    test('the category bars and total equal the month summaries, per month', () {
+      final wc = insightsWallet();
+      final r = wc.resolveRange(RangeKind.months6);
+      for (final cat in ['Groceries', 'Eating out', 'Shopping']) {
+        final bars = wc.categoryBars(cat, r);
+        for (final b in bars) {
+          expect(b.spent, wc.txs.isEmpty ? 0 : (monthSummary(wc.txs, b.month, currency: 'EUR').byCategory[cat] ?? 0),
+              reason: '$cat ${b.month}');
+        }
+        expect(bars.fold<int>(0, (a, b) => a + b.spent), wc.categoryTotal(cat, r), reason: cat);
+      }
+    });
+
+    test('moneyExactSigned keeps the cents', () {
+      expect(moneyExactSigned(123456, 'EUR'), '+1,234.56\u00A0€');
+      expect(moneyExactSigned(-4000, 'EUR'), '−40\u00A0€');
+      expect(moneyExactSigned(150000, 'EUR'), '+1,500\u00A0€');
+    });
+
+    testWidgets('Income vs spending shows the net with its cents in the row, the tip and the spoken text', (tester) async {
+      final wc = insightsWallet();
+      wc.repo.addTransaction(date: '2026-10-11', amount: 99, category: 'Shopping', note: 'Kiosk');
+      wc.reload();
+      await pump(tester, InsightsScreen(wc: wc), size: const Size(400, 6000));
+      final bar = wc.incomeBars(wc.insightRange('income').range).firstWhere((b) => b.month == '2026-10');
+      expect(bar.net % 100, isNot(0));
+      final exact = moneyExactSigned(bar.net, 'EUR');
+      final row = find.byKey(const ValueKey('barRow_income_2026-10'));
+      await tester.ensureVisible(row);
+      expect(find.descendant(of: row, matching: find.text('Net $exact')), findsOneWidget);
+      final g = tester.widget<MonthlyBars>(find.byKey(const ValueKey('insightBars_income'))).groups.firstWhere((g) => g.month == '2026-10');
+      expect(g.tip, contains('Net $exact'));
+      expect(g.spoken, contains('net $exact'));
+    });
+
+    testWidgets('a share row and the dates label keep their tap action for a screen reader', (tester) async {
+      final handle = tester.ensureSemantics();
+      final wc = insightsWallet();
+      var picked = 0;
+      await pump(
+          tester,
+          InsightsScreen(
+              wc: wc,
+              picker: (context, initial, first, last) async {
+                picked++;
+                return null;
+              }),
+          size: const Size(400, 3000));
+      tester.semantics.tap(find.semantics.byLabel(RegExp('^Dates .*Opens the date picker')).first);
+      await tester.pump();
+      expect(picked, 1);
+      tester.semantics.tap(find.semantics.byLabel(RegExp('^Groceries: ')).first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(CategoryDetailScreen), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('Custom from a pay period that runs into next month is clamped to the end of this month', (tester) async {
+      final wc = insightsWallet();
+      await pump(tester, InsightsScreen(wc: wc));
+      await tapKey(tester, 'rangeChip_spending_payPeriod');
+      expect(wc.insightRange('spending').range.end.compareTo('2026-10-31'), greaterThan(0));
+      await tapKey(tester, 'rangeChip_spending_custom');
+      final m = wc.insightRange('spending');
+      expect(m.error, isNull);
+      expect(m.kind, RangeKind.custom);
+      expect(m.range.start, '2026-10-10');
+      expect(m.range.end, '2026-10-31');
+    });
+
+    testWidgets('an edit that removes the shown merchant returns to the category, and Back leaves', (tester) async {
+      final wc = insightsWallet();
+      final r = wc.monthRange('2026-10');
+      await pump(tester, CategoryDetailScreen(wc: wc, category: 'Eating out', range: r), size: const Size(400, 3000));
+      final pizzeria = wc.merchantsFor('Eating out', r).firstWhere((m) => m.label == 'Pizzeria');
+      await tapKey(tester, 'merchantRow_${pizzeria.key}');
+      expect(find.byKey(const ValueKey('merchantRows')), findsOneWidget);
+      PopScope scope() => tester
+          .widget<PopScope>(find.descendant(of: find.byType(CategoryDetailScreen), matching: find.byWidgetPredicate((w) => w is PopScope)));
+      expect(scope().canPop, isFalse);
+      wc.repo.setCategory(wc.rowsOf('Eating out', pizzeria.key, r).first.tx.id, 'Shopping');
+      wc.reload();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('merchantRows')), findsNothing);
+      expect(find.byKey(const ValueKey('compareThis')), findsOneWidget);
+      expect(scope().canPop, isTrue);
     });
   });
 }

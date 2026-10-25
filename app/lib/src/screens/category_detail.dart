@@ -39,24 +39,26 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: merchant == null,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _open(null);
-      },
-      child: Scaffold(
-        appBar: DialogAppBar(title: widget.category),
-        body: ListenableBuilder(
-          listenable: wc,
-          builder: (context, _) {
-            final cur = wc.currency;
-            final merchants = wc.merchantsFor(widget.category, range);
-            final shown = merchant == null ? null : merchants.where((m) => m.key == merchant).firstOrNull;
-            return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 88), children: [
+    return Scaffold(
+      appBar: DialogAppBar(title: widget.category),
+      body: ListenableBuilder(
+        listenable: wc,
+        builder: (context, _) {
+          final cur = wc.currency;
+          final merchants = wc.merchantsFor(widget.category, range);
+          final shown = merchant == null ? null : merchants.where((m) => m.key == merchant).firstOrNull;
+          // An edit removed the merchant being shown: show the category again, so Back leaves the screen.
+          if (merchant != null && shown == null) merchant = null;
+          return PopScope(
+            canPop: merchant == null,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) _open(null);
+            },
+            child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 88), children: [
               if (shown == null) ..._categoryView(context, cur, merchants) else ..._merchantView(context, cur, shown),
-            ]);
-          },
-        ),
+            ]),
+          );
+        },
       ),
     );
   }

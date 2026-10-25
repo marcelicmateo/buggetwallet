@@ -142,9 +142,9 @@ class InsightPanel extends StatelessWidget {
               partial: b.partial,
               rods: [BarRod(b.income + b.extra, c.pos), BarRod(b.spent, c.neg)],
               tip: '${_name(b.month, b.partial)}\nIn ${moneyExact(b.income + b.extra, cur)}\nOut ${moneyExact(b.spent, cur)}\n'
-                  'Net ${money(b.net, cur, signed: true)}',
+                  'Net ${moneyExactSigned(b.net, cur)}',
               spoken: '${_name(b.month, b.partial)}: in ${moneyExact(b.income + b.extra, cur)}, out ${moneyExact(b.spent, cur)}, '
-                  'net ${money(b.net, cur, signed: true)}',
+                  'net ${moneyExactSigned(b.net, cur)}',
             ),
         ],
       ),
@@ -155,7 +155,7 @@ class InsightPanel extends StatelessWidget {
       ]),
       Rows(children: [
         for (final b in bars)
-          LineItem(_name(b.month, b.partial), 'Net ${money(b.net, cur, signed: true)}',
+          LineItem(_name(b.month, b.partial), 'Net ${moneyExactSigned(b.net, cur)}',
               key: ValueKey('barRow_${id}_${b.month}'),
               valueColor: b.net < 0 ? c.bad : null,
               sub: 'In ${moneyExact(b.income + b.extra, cur)}${b.extra > 0 ? ' (${moneyExact(b.extra, cur)} extra)' : ''}'
