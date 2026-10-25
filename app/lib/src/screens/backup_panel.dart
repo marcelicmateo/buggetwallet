@@ -170,7 +170,8 @@ class _BackupPanelState extends State<BackupPanel> {
       try {
         preview = await widget.wc.mergeBackupFile(bytes, dryRun: true);
       } on VaultException catch (e) {
-        if (e.failure == null) rethrow;
+        // Only a key that does not open it means "another key"; a damaged or newer file has its own text.
+        if (e.failure != UnsealFailure.badKey) rethrow;
         // Not this wallet's key: ask for the one the backup was made with.
         if (!mounted) return;
         setState(() => _busy = false);
@@ -188,7 +189,7 @@ class _BackupPanelState extends State<BackupPanel> {
         if (!go || !mounted) return;
         setState(() => _busy = true);
         final r = await widget.wc.mergeBackupFile(bytes, otherKey: otherKey);
-        done = mergedToastText(r);
+        done = r.changed == 0 && r.blobs == 0 ? 'Nothing new in this backup' : mergedToastText(r);
       }
     } on VaultException catch (e) {
       error = _keyErrorText(e, otherKey != null);
@@ -253,11 +254,13 @@ class _BackupPanelState extends State<BackupPanel> {
   }
 }
 
-String _keyErrorText(VaultException e, bool otherKey) =>
-    // `failure` null: the typed text is not a key (its message says what is wrong with it); else the file did not open.
-    e.failure == null && otherKey
-        ? e.message
-        : (otherKey ? 'That key does not open this backup.' : 'This backup was made with a different wallet key.');
+String _keyErrorText(VaultException e, bool otherKey) => switch (e.failure) {
+      // null: the typed text is not a key (its message says what is wrong with it).
+      null => otherKey ? e.message : 'This backup was made with a different wallet key.',
+      UnsealFailure.badKey => otherKey ? 'That key does not open this backup.' : 'This backup was made with a different wallet key.',
+      UnsealFailure.damaged || UnsealFailure.tooLarge => 'This backup file is damaged.',
+      UnsealFailure.newerFormat => 'Made by a newer app version. Update first.',
+    };
 
 String _backupErrorText(BackupException e) => switch (e.reason) {
       BackupFailure.unreadable => "This backup file can't be read.",

@@ -264,6 +264,78 @@ void main() {
     expect(log(), isNot(contains('core text')));
   });
 
+  /// Files the real core calls damaged: 3 bytes and 200 pseudo-random bytes.
+  Map<String, Uint8List> garbage() => {
+        'three bytes': Uint8List.fromList([1, 2, 3]),
+        '200 random bytes': Uint8List.fromList([for (var i = 0; i < 200; i++) (i * 73 + 41) % 256]),
+      };
+
+  /// A real backup cut in half: the seal's check fails, which the core cannot tell from another key (`badKey`).
+  Future<Uint8List> cutOff(VaultKey key) async {
+    final real = await _otherBackup(key);
+    return Uint8List.sublistView(real, 0, real.length ~/ 2);
+  }
+
+  testWidgets('merge: a damaged file says damaged (no key dialog) and changes nothing; real core', (t) async {
+    final key = VaultKey.generate();
+    final c = _Chooser();
+    final wc = await pump(t, c, walletKey: key);
+    final before = _state(wc.repo);
+    for (final e in garbage().entries) {
+      c.picks = [_Picked(e.value)];
+      await t.tap(_merge);
+      await settle(t, 6);
+      expect(find.byKey(const ValueKey('oldKeyDialog')), findsNothing, reason: e.key);
+      expect(_preview, findsNothing, reason: e.key);
+      expect(find.textContaining('This backup file is damaged.', findRichText: true), findsOneWidget, reason: e.key);
+    }
+    // A cut-off real backup fails the seal check like another key: the key dialog opens; cancelling changes nothing.
+    c.picks = [_Picked(await cutOff(key))];
+    await t.tap(_merge);
+    await settle(t, 6);
+    expect(find.byKey(const ValueKey('oldKeyDialog')), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('oldKeyCancel')));
+    await settle(t);
+    expect(_state(wc.repo), before);
+  });
+
+  testWidgets('restore: a damaged file says damaged, not "different wallet key"; real core', (t) async {
+    final key = VaultKey.generate();
+    final c = _Chooser();
+    final wc = await pump(t, c, walletKey: key, data: false);
+    for (final e in garbage().entries) {
+      c.picks = [_Picked(e.value)];
+      await t.tap(find.byKey(const ValueKey('restoreBackup')));
+      await settle(t);
+      await t.tap(find.byKey(const ValueKey('restoreConfirm')));
+      await settle(t, 6);
+      expect(find.textContaining('This backup file is damaged.', findRichText: true), findsOneWidget, reason: e.key);
+      expect(find.textContaining('different wallet key', findRichText: true), findsNothing, reason: e.key);
+    }
+    c.picks = [_Picked(await cutOff(key))];
+    await t.tap(find.byKey(const ValueKey('restoreBackup')));
+    await settle(t);
+    await t.tap(find.byKey(const ValueKey('restoreConfirm')));
+    await settle(t, 6);
+    expect(find.textContaining('different wallet key', findRichText: true), findsOneWidget, reason: 'cut-off = seal check failed');
+    expect(wc.walletIsEmpty, isTrue);
+  });
+
+  testWidgets('a real merge that brings in nothing says "Nothing new", not "Merged 0"', (t) async {
+    final c = _Chooser()..picks = [_Picked(Uint8List(4))];
+    final wc = await pump(t, c);
+    wc.backupMerger = (repo, bytes, k, {dryRun = false, walletKey}) async => dryRun
+        ? const MergeResult(ops: 2, changed: 2, changedByEntity: {'tx': 2})
+        : const MergeResult(ops: 2, changed: 0, changedByEntity: {});
+    await t.tap(_merge);
+    await settle(t);
+    await t.tap(_confirm);
+    await settle(t);
+    expect(find.text('Nothing new in this backup'), findsOneWidget);
+    expect(find.textContaining('Merged 0'), findsNothing);
+    await t.pump(const Duration(seconds: 5));
+  });
+
   testWidgets('Back up now says how many bill files went in; no files, the old toast', (t) async {
     final c = _Chooser();
     final wc = await pump(t, c);
