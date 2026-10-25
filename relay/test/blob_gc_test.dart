@@ -159,4 +159,30 @@ void main() {
     expect((await h.state(w1))['api'], 4);
     expect(jsonDecode((await h.get('/v2/health')).body), {'api': 4});
   });
+
+  test('no GC while the latest snapshot does not cover every device\'s last (a newer file may reference more)', () async {
+    await twoSnapshots();
+    expect((await h.putData(w1, 'dev2', 1, 'g1')).statusCode, 201);
+    expect(await putSet('s1', []), 201);
+    expect(await putSet('s2', []), 201);
+    expect(await has(hb), isTrue, reason: 's2 covers dev1 only; dev2 wrote a file since');
+    expect(h.logs.where((l) => l.startsWith('relay gc ')), isEmpty);
+    expect((await h.putSnapshot(w1, 's3', {'dev1': 1, 'dev2': 1}, 'snap3')).statusCode, 201);
+    expect(await putSet('s3', []), 201);
+    expect(await has(hb), isFalse, reason: 'the writer of s3 had seen every file');
+  });
+
+  test('a stored time that cannot be set: the file is written again (new time), never left with the old one', () async {
+    expect(await put(b), 201);
+    final file = File('${h.dir.path}/$w1/blobs/$hb');
+    final before = file.lastModifiedSync();
+    h.hooks = RelayTestHooks(touchBlob: (f, t) => throw const FileSystemException('refused'));
+    await h.restart();
+    h.advance(const Duration(days: 31));
+    expect(await put(b), 200);
+    expect(file.lastModifiedSync().isAfter(before), isTrue);
+    expect((await h.get(bp(w1, hb), key: keyA)).bodyBytes, b);
+    expect(await put(c), 201, reason: 'a new one too');
+    expect((await h.state(w1))['blobs'], {'count': 2, 'bytes': b.length + c.length});
+  });
 }

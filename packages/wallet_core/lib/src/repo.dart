@@ -153,6 +153,10 @@ class WalletRepo {
   /// blob sets).
   static const schemaVersion = 15;
 
+  /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
+  /// a live bill points to again (api-3 builds deleted files on the relay), cleared once all of them were stored.
+  static const blobReuploadKey = 'blobReupload';
+
   /// The folder sync's bookkeeping (`peer_files`: which files of the shared folder were read) means nothing on a relay,
   /// whose sequence numbers start over (every device's first relay file is its whole state), so it is dropped once.
   void _dropFolderSync() {

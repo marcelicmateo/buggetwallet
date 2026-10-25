@@ -17,14 +17,21 @@ Uint8List bytesOf(int n, [int seed = 1]) {
 NormalizedBill nb(String ext) =>
     NormalizedBill(source: BillSource.pdf, externalId: 'jir:synthetic-$ext', date: '2026-02-25', total: 1000, payee: 'Test Shop');
 
-/// A relay in memory whose blob PUTs can fail; records the order of uploads.
+/// A relay in memory whose blob PUTs can fail (all, or some hashes with a chosen failure) and whose next file PUT can
+/// fail once; records the order of uploads.
 class FlakyRelay extends MemoryTransport {
   FlakyRelay({super.now});
   bool failBlobs = false;
+  final failHashes = <String, TransportFailure>{};
+  bool failNextPut = false;
   final order = <String>[];
   @override
   Future<void> put(String device, int seq, List<int> bytes) {
     order.add('put');
+    if (failNextPut) {
+      failNextPut = false;
+      throw const TransportException(TransportFailure.unreachable, 'down');
+    }
     return super.put(device, seq, bytes);
   }
 
@@ -32,6 +39,7 @@ class FlakyRelay extends MemoryTransport {
   Future<void> putBlob(String hash, List<int> bytes) {
     order.add('putBlob');
     if (failBlobs) throw const TransportException(TransportFailure.unreachable, 'down');
+    if (failHashes[hash] case final f?) throw TransportException(f, 'refused');
     return super.putBlob(hash, bytes);
   }
 }
@@ -130,17 +138,63 @@ void main() {
       expect(b.bill(id)!.blob, ref.hash);
     });
 
-    test('a file a pending op references is PUT again before that op (refreshing its stored time)', () async {
+    test('a run cut off after the file but before its op: the next run PUTs the file again before the op', () async {
       final a = mk();
+      bump(a);
+      await run(a);
       final ref = await BlobStore(a, key).add(bytesOf(300, 3), 'jpg');
-      final (id, _) = a.importBill(nb('again'), file: ref);
-      await run(a);
-      a.deleteBill(id);
-      await run(a);
-      a.importBill(nb('again'), file: BlobRef(hash: ref.hash, type: 'jpg', bytes: 300)); // revived with its file
+      a.importBill(nb('again'), file: ref);
+      relay.failNextPut = true;
+      await expectLater(run(a), throwsA(isA<SyncException>()));
+      expect(a.queuedBlobs(), isEmpty, reason: 'the file itself is on the relay');
       relay.order.clear();
       await run(a);
-      expect(relay.order, ['putBlob', 'put']);
+      expect(relay.order, ['putBlob', 'put'], reason: 'again (200): its stored time is fresh when the op lands');
+      expect(a.pendingOps(), isEmpty);
+    });
+
+    test('an op overtaken by another device\'s file for the same bill neither waits nor holds back snapshots', () async {
+      final a = mk();
+      final b = WalletRepo.inMemory(now: () => DateTime.now().millisecondsSinceEpoch + 5000)..also(repos.add); // later clock
+      bump(a);
+      await run(a);
+      final fa = await BlobStore(a, key).add(bytesOf(300, 40), 'jpg');
+      final (id, _) = a.importBill(nb('race'), file: fa);
+      relay.failHashes[fa.hash] = TransportFailure.unreachable; // a's file never gets through
+      await run(a);
+      expect(a.pendingBlobRefs(), {fa.hash});
+      final fb = await BlobStore(b, key).add(bytesOf(300, 41), 'jpg');
+      b.importBill(nb('race'), file: fb);
+      await run(b);
+      now = now.add(const Duration(days: 8));
+      bump(a);
+      await run(a);
+      expect(a.bill(id)!.blob, fb.hash, reason: 'b\'s newer file wins');
+      expect(a.pendingBlobRefs(), isEmpty, reason: 'the overtaken op references nothing now');
+      expect(relay.calls['putSnapshot'], 1, reason: 'not held back by a\'s failing file');
+      expect(relay.declared.values.single, [fb.hash]);
+    });
+
+    test('a file the relay is too full for (507) does not block snapshots; it and its op stay queued', () async {
+      final a = mk();
+      bump(a);
+      await run(a);
+      final big = await BlobStore(a, key).add(bytesOf(300, 42), 'pdf');
+      final (id, _) = a.importBill(nb('full'), file: big);
+      relay.failHashes[big.hash] = TransportFailure.full;
+      now = now.add(const Duration(days: 8));
+      await run(a);
+      expect(relay.calls['putSnapshot'], 1, reason: 'the snapshot is what frees room');
+      expect(relay.declared.values.single, [big.hash], reason: 'declared anyway, so GC keeps it once it lands');
+      expect(a.queuedBlobs(), [big.hash]);
+      expect(a.pendingBlobRefs(), {big.hash}, reason: 'its file fields still wait');
+      expect(a.evictBlobs(0), 0, reason: 'pinned');
+      relay.failHashes.clear();
+      await run(a);
+      expect(a.pendingOps(), isEmpty);
+      final c = mk();
+      await run(c);
+      expect(c.bill(id)!.blob, big.hash);
     });
 
     test('a new (wiped) relay gets every cached file a live bill points to again', () async {
@@ -212,58 +266,60 @@ void main() {
   });
 
   group('relay GC and two devices', () {
-    test('A deletes a bill, B undeletes it before GC: the file is still there after GC runs', () async {
+    // Bills have no undelete: a deleted bill comes back through a re-import (the real revive path), which brings the
+    // file that import reads, sealed anew (a new hash), or none.
+    test('A deletes a bill, B brings it back (re-import with the photo) before GC: its file is there after GC runs', () async {
       final a = mk(), b = mk();
       final f = await BlobStore(a, key).add(bytesOf(500, 20), 'jpg');
       final (id, _) = a.importBill(nb('undo'), file: f);
       await run(a);
       await run(b);
-      expect(await BlobStore(b, key).read(f.hash, transport: relay), isNotNull); // b holds it now
       a.deleteBill(id);
       await run(a);
       await run(b);
       expect(b.bill(id)!.deleted, isTrue);
       now = now.add(const Duration(days: 20));
-      b.importBill(nb('undo'), file: BlobRef(hash: f.hash, type: 'jpg', bytes: 500)); // B brings it back
+      final again = await BlobStore(b, key).add(bytesOf(500, 20), 'jpg'); // the same photo, read again
+      final (revived, _) = b.importBill(nb('undo'), file: again);
+      expect(revived, id);
+      relay.order.clear();
       await run(b);
+      expect(relay.order.take(2), ['putBlob', 'put'], reason: 'the file before the op that brings the bill back');
       await run(a);
-      expect(a.bill(id)!.deleted, isFalse);
-      // Later snapshots (both declared) and well past the grace: GC runs, the file stays.
+      expect((a.bill(id)!.deleted, a.bill(id)!.blob), (false, again.hash));
+      // Later snapshots (both declared) and well past the grace: GC runs, the live file stays, the old one goes.
       await snapshotBy(a, [b]);
       await snapshotBy(b, [a]);
       now = now.add(const Duration(days: 40));
       await snapshotBy(a, [b]);
       await snapshotBy(b, [a]);
       expect(relay.gcRuns, greaterThan(0));
-      expect(relay.blobs.keys, [f.hash]);
+      expect(relay.blobs.keys, [again.hash]);
       final c = mk();
       await run(c);
-      expect(await BlobStore(c, key).read(f.hash, transport: relay), bytesOf(500, 20));
+      expect(await BlobStore(c, key).read(again.hash, transport: relay), bytesOf(500, 20));
     });
 
-    test('a file no live bill points to goes after the grace; a device that brings its bill back uploads it again', () async {
+    test('a file no live bill points to goes after the grace; one a live bill points to never does', () async {
       final a = mk(), b = mk();
-      final f = await BlobStore(a, key).add(bytesOf(500, 21), 'jpg');
+      final f = await BlobStore(a, key).add(bytesOf(500, 21), 'jpg'), keep = await BlobStore(a, key).add(bytesOf(500, 22), 'jpg');
       final (id, _) = a.importBill(nb('gc'), file: f);
+      final (live, _) = a.importBill(nb('live'), file: keep);
       await run(a);
       await run(b);
-      await BlobStore(b, key).read(f.hash, transport: relay);
       a.deleteBill(id);
       await run(a);
       await snapshotBy(a, [b]);
       await snapshotBy(b, [a]);
-      expect(relay.blobs.keys, [f.hash], reason: 'within the 30 days');
+      expect(relay.blobs.keys.toSet(), {f.hash, keep.hash}, reason: 'within the 30 days');
       now = now.add(const Duration(days: 31));
       await snapshotBy(a, [b]);
-      expect(relay.blobs, isEmpty, reason: 'undeclared by both kept snapshots and older than the grace');
-      // B still has it cached: reviving the bill with it PUTs it again before the op.
-      b.importBill(nb('gc'), file: BlobRef(hash: f.hash, type: 'jpg', bytes: 500));
-      await run(b);
-      expect(relay.blobs.keys, [f.hash]);
+      expect(relay.blobs.keys, [keep.hash], reason: 'undeclared by both kept snapshots and older than the grace');
+      expect(a.cachedBlob(f.hash, touch: false), isNotNull, reason: 'still in the cache until evicted');
       final c = mk();
       await run(c);
-      expect(c.bill(id)!.blob, f.hash);
-      expect(await BlobStore(c, key).read(f.hash, transport: relay), bytesOf(500, 21));
+      expect(c.bill(live)!.blob, keep.hash);
+      expect(await BlobStore(c, key).read(keep.hash, transport: relay), bytesOf(500, 22));
     });
   });
 
@@ -302,10 +358,34 @@ void main() {
       expect(up.evictBlobs(0), 1, reason: 'the uploaded one only');
       expect(up.queuedBlobs(), [h1]);
       expect(up.syncCursors(), isEmpty, reason: 'a schema bump replays the relay once');
+      expect(up.localValue(WalletRepo.blobReuploadKey), '1', reason: 'the next sync puts the live bills\' files again');
       up.close();
       final again = WalletRepo.open(path);
       addTearDown(again.close);
       expect(again.queuedBlobs(), [h1], reason: 'the migration runs once');
+    });
+
+    test('after the upgrade, the first sync puts every cached file of a live bill again (repairs api-3 deletes)', () async {
+      final a = mk();
+      final f = await BlobStore(a, key).add(bytesOf(400, 50), 'jpg'), g = await BlobStore(a, key).add(bytesOf(400, 51), 'jpg');
+      a.importBill(nb('lost'), file: f);
+      final (gone, _) = a.importBill(nb('dead'), file: g);
+      await run(a);
+      a.deleteBill(gone);
+      await run(a);
+      relay.loseBlob(f.hash); // an api-3 build deleted it while this bill still pointed at it
+      relay.loseBlob(g.hash);
+      a.setLocalValue(WalletRepo.blobReuploadKey, '1'); // as the 14 -> 15 migration leaves it
+      relay.failHashes[f.hash] = TransportFailure.unreachable;
+      await run(a);
+      expect(a.localValue(WalletRepo.blobReuploadKey), '1', reason: 'kept until every live file got through');
+      relay.failHashes.clear();
+      await run(a);
+      expect(relay.blobs.keys, [f.hash], reason: 'live bills only');
+      expect(a.localValue(WalletRepo.blobReuploadKey), isNull);
+      relay.order.clear();
+      await run(a);
+      expect(relay.order, isNot(contains('putBlob')), reason: 'once');
     });
   });
 
@@ -323,6 +403,39 @@ void main() {
     tearDown(() async {
       await server.close();
       dir.deleteSync(recursive: true);
+    });
+
+    test('a near-full relay: a file over the limit (507) does not stop the snapshot that frees room', () async {
+      final small = Directory.systemTemp.createTempSync('bw-p14-full-');
+      final slogs = <String>[];
+      final full = Relay(data: small, log: slogs.add, maxBytes: 16000);
+      final sbase = Uri.parse('http://127.0.0.1:${(await full.serve(port: 0)).port}');
+      addTearDown(() async {
+        await full.close();
+        small.deleteSync(recursive: true);
+      });
+      final t = RelayTransport(sbase, key);
+      addTearDown(t.close);
+      final a = mk();
+      Future<SyncReport> go() => SyncEngine(t, key, now: () => now).run(a);
+      for (var i = 0; i < 10; i++) {
+        bump(a);
+        await go();
+      }
+      final big = await BlobStore(a, key).add(bytesOf(20000, 52), 'pdf'); // never fits
+      a.importBill(nb('huge'), file: big);
+      final before = (await t.state()).bytes!;
+      now = now.add(const Duration(days: 8));
+      final r = await go();
+      expect(slogs.where((l) => l.startsWith('relay put-blob 507')), isNotEmpty);
+      expect(slogs.where((l) => l.startsWith('relay put-snap 201')), hasLength(1));
+      expect(slogs.where((l) => l.startsWith('relay put-set 201')), hasLength(1));
+      expect(r.blobsWaiting, 1);
+      expect(a.pendingBlobRefs(), {big.hash}, reason: 'its op waits, pinned');
+      final (wid, _) = await t.ids;
+      final set = File('${small.path}/$wid/sets/${Directory('${small.path}/$wid/sets').listSync().single.uri.pathSegments.last}');
+      expect(set.readAsStringSync(), contains(big.hash));
+      expect((await t.state()).bytes!, lessThan(before), reason: 'the snapshot let the relay prune the sync files');
     });
 
     test('deleting a bill, a re-import and a restore send no DELETE', () async {

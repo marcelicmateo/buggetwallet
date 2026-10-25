@@ -118,7 +118,9 @@ Sealed files that rows point to by hash (a bill's photo or PDF). Content-address
 - Storage: `blobs/<hash>` in the wallet's folder (temp + rename). The wallet's byte count (`--max-bytes`) = files + kept
   snapshots + blobs; a blob PUT counts everything + the new blob.
 - Stored time (api 4): the blob file's modification time, set to the relay clock by every accepted PUT: the 201 that
-  stores it and the 200 for a hash already stored (a re-upload refreshes it, which only ever delays GC).
+  stores it and the 200 for a hash already stored (a re-upload refreshes it, which only ever delays GC). If the time
+  cannot be set, the relay writes the file again (temp + rename, a new modification time); if that fails too it answers
+  500, so the client's ops wait. A success never leaves an old stored time behind.
 - State JSON gains `"blobs": {"count": n, "bytes": b}` (clients ignore it; older clients ignore unknown keys).
 - Since api 4 only the relay's GC deletes a blob, so a replayed DELETE changes nothing. Relays from before blobs
   answer 404 on `blob/…` for a wallet they know: clients report "this relay can't keep bill photos yet" and keep the blob
@@ -126,13 +128,17 @@ Sealed files that rows point to by hash (a bill's photo or PDF). Content-address
 
 ### Client rules for blobs (api 4)
 1. **Clients never delete blobs.** No DELETE is sent, whatever happens to a bill (delete, re-import, restore). A bill's
-   file stays in the device cache until LRU eviction; undeleting the bill brings the reference back.
+   file stays in the device cache until LRU eviction.
 2. **Upload before ops.** A bill op that references a blob (sets `blob` to it, or makes the bill live again with
    `deleted` 0) goes up only after that blob was PUT (201/200) in the same run, when the device holds it; a blob a pending
    op references is PUT again even if it was uploaded before (200, refreshing its stored time). If the PUT fails, only
    the referencing fields (`blob`, `blob_type`, `blob_bytes`, `deleted`) of those ops wait in the outbox; the rest of the
-   op and of the outbox goes on. A first connect (new or changed relay) PUTs every cached blob a live bill references.
-   A client writes no snapshot while such an op waits (the snapshot would carry the reference before the file).
+   op and of the outbox goes on. A first connect (new or changed relay) PUTs every cached blob a live bill references,
+   and so does the first sync after a device upgrades to api 4 (repairs files an api-3 build deleted). An op field this
+   device already holds with a newer clock (the op was overtaken) references nothing. A client writes no snapshot while
+   such an op waits (the snapshot would carry the reference before the file), except when every waiting file's last
+   PUT got 507 (relay full): the snapshot is what frees room, so it goes; those ops and files stay queued (never
+   evicted) and the snapshot's set declares the files anyway (they are in the device's state).
 3. **Declared sets.** Right after an accepted snapshot PUT, a client that saw api ≥ 4 in the state sends
    `PUT snapshot/<id>/blobs` with the hashes of the live bills in that snapshot (sorted). A failure is logged and not
    retried: that snapshot then has no set, which only holds GC back.
@@ -147,14 +153,21 @@ Sealed files that rows point to by hash (a bill's photo or PDF). Content-address
   snapshot the meta does not keep is deleted, an unreadable one counts as none). Not counted in `bytes` (bounded: two
   sets of at most 7 MiB).
 - **GC** runs after a set PUT is accepted (201), and only when **both** kept snapshots (latest and `previous`) carry a
-  set. Every blob that is in neither set and whose stored time is more than 30 days (`GC_GRACE`) before the relay clock
+  set **and** the latest snapshot's `covers` reach every device's `last` (its writer had applied every sync file on the
+  relay, so no stored file references a blob it did not see). Every blob that is in neither set and whose stored time is more than 30 days (`GC_GRACE`) before the relay clock
   is deleted; the blob count and bytes go down. A wallet with one kept snapshot, or with a kept snapshot without a set
   (an api-3 app's, or one whose set PUT failed), collects nothing. Logged as kind `gc` with counts only
   (`kept`, `deleted`, `bytes`).
-- Why a referenced file survives: a blob is PUT (refreshing its stored time) right before the sync file whose ops
-  reference it; a snapshot is written only by a caught-up device, so every snapshot written after that file declares
-  the blob while its bill is live, and the 30 days cover snapshots written before (or concurrently). A bill deleted and
-  then undeleted on another device brings its file back with rule 2 (re-PUT from that device's cache).
+- Why a referenced file survives: a blob is PUT right before the sync file whose ops reference it (rule 2). GC runs
+  only when the latest snapshot covers every stored sync file, and a snapshot is written by a caught-up device from its
+  own state, so a file that a live bill references in any stored sync file is in the latest set. The previous set adds
+  the state one snapshot back. The 30 days cover a file stored before its op file landed (an upload cut off between the
+  two: the next run PUTs it again before the op, refreshing its time) and sets that fail to arrive in time.
+- What is collected: files of deleted bills, files a bill lost to another device's file for the same bill, and files
+  added but never attached. Bills have no undelete: a deleted bill comes back only through a re-import, which writes
+  the file that import brings (sealed anew: a new hash, uploaded before the op) or none. A collected file stays in
+  device caches until evicted and in backups (P10); an op that makes a bill live (`deleted` 0) references its current
+  file and PUTs it again from the cache when the device still has it.
 
 ## State JSON
 ```json

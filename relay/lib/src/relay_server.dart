@@ -742,24 +742,37 @@ class Relay {
       final file = w.blobFile(hash);
       if (await file.exists()) {
         // A re-upload refreshes the stored time, which only ever delays GC (a client re-PUTs before ops that reference it).
-        await _touch(file);
+        await _touch(file, body);
         return _Out.json(200, {'hash': hash});
       }
       if (w.totalBytes + body.length > maxBytes) throw _HttpError(507, 'wallet full');
       await writeAtomic(file, body);
-      await _touch(file);
       w.blobCount++;
       w.blobBytes += body.length;
+      await _touch(file, body);
       return _Out.json(201, {'hash': hash});
     });
   }
 
-  /// Sets a blob's stored time (its modification time) to the relay clock.
-  Future<void> _touch(File f) async {
+  /// Sets a blob's stored time (its modification time) to the relay clock. If that fails, the file is written again
+  /// (temp + rename: a new modification time, the file's own clock); if that fails too, 500, so the client's ops wait
+  /// for a later PUT. Never an old stored time behind a success answer (GC would see the file as older than it is).
+  Future<void> _touch(File f, List<int> body) async {
     try {
-      await f.setLastModified(_now());
+      final hook = hooks?.touchBlob;
+      if (hook != null) {
+        await hook(f, _now());
+      } else {
+        await f.setLastModified(_now());
+      }
+      return;
     } on FileSystemException {
-      // the time stays the write time: never older than now on a real clock
+      // rewritten below
+    }
+    try {
+      await writeAtomic(f, body);
+    } on FileSystemException {
+      throw _HttpError(500, 'storage');
     }
   }
 

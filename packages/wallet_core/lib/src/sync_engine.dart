@@ -508,9 +508,12 @@ class SyncEngine {
     final sentMarker = int.tryParse(repo.localValue(sentKey) ?? '');
     // Also a relay that holds fewer of this stream's files than were sent (wiped, or restored from an older copy).
     final firstConnect = relayChanged || sentMarker == null || (state.devices[_streamOf(repo)]?.last ?? 0) < sentMarker;
+    // The schema-15 migration asks once for every live bill's file again: api-3 builds deleted files on the relay.
+    final reupload = firstConnect || repo.localValue(WalletRepo.blobReuploadKey) != null;
     final blobsStored = <String>{};
+    final blobFailures = <String, TransportFailure>{};
     var (blobsSent, blobMissing) =
-        await _uploadBlobs(repo, {...repo.pendingBlobRefs(), if (firstConnect) ...repo.liveBlobHashes()}, blobsStored);
+        await _uploadBlobs(repo, {...repo.pendingBlobRefs(), if (reupload) ...repo.liveBlobHashes()}, blobsStored, blobFailures);
     final walletKnown = (state.devices[_streamOf(repo)]?.last ?? 0) > 0;
     // 404 on a bill file of a wallet the relay knows: an older relay without blob storage. Its ops then go without
     // their files (they could never be stored there); the files stay queued.
@@ -575,7 +578,8 @@ class SyncEngine {
       // A relay creates a wallet only with this device's first file: the files it refused before that go now, and
       // then the ops that waited for them (with a fresh state only, so the upload continues this stream's seqs).
       final before = blobsStored.length;
-      final (more, missingAgain) = await _uploadBlobs(repo, repo.pendingBlobRefs(), blobsStored);
+      final (more, missingAgain) =
+          await _uploadBlobs(repo, {...repo.pendingBlobRefs(), if (reupload) ...repo.liveBlobHashes()}, blobsStored, blobFailures);
       blobsSent += more;
       blobsUnsupported = missingAgain;
       if (refreshed && (blobsStored.length > before || missingAgain) && repo.pendingOps().isNotEmpty) {
@@ -583,6 +587,10 @@ class SyncEngine {
         sent += n;
         myLast = last;
       }
+    }
+    if (repo.localValue(WalletRepo.blobReuploadKey) != null && repo.cachedOf(repo.liveBlobHashes()).every(blobsStored.contains)) {
+      repo.setLocalValue(WalletRepo.blobReuploadKey, null);
+      logEvent(_log, Level.INFO, 'sync.blobs.reuploaded');
     }
 
     // 2. + 3. Apply the other devices' files.
@@ -786,7 +794,13 @@ class SyncEngine {
         // pending (match_pending) for the next run.
         logError(_log, 'sync.match.clockBehind', e, st);
       }
-      await _maybeSnapshot(repo, state, cursors, myLast, now, heal: heal);
+      // Ops still waiting for a file that could be stored later (anything but a relay too full for it, 507) keep the
+      // snapshot back: it would carry their file references first. Read after applying the peers' files (an op
+      // overtaken by one references nothing). A file that does not fit never blocks it (the snapshot is what frees
+      // room); its ops and file stay queued, and the snapshot declares it anyway (it is in this device's state).
+      final heldBlobs =
+          repo.pendingBlobRefs().any((h) => repo.hasCachedBlob(h) && !blobsStored.contains(h) && blobFailures[h] != TransportFailure.full);
+      await _maybeSnapshot(repo, state, cursors, myLast, now, heal: heal, heldBlobs: heldBlobs);
     } else {
       logEvent(_log, Level.INFO, 'sync.match.waiting', {'waiting': waiting.length, 'bad': problems.length});
     }
@@ -838,9 +852,9 @@ class SyncEngine {
   /// Uploads the bill files waiting for upload plus the cached ones in [refs] (files the ops about to go up reference:
   /// PUT again even when uploaded before, which refreshes their stored time on the relay, P14), skipping those already
   /// in [stored] this run. Each one stored goes into [stored]. A refused or failed one stays queued and the run goes on
-  /// with the others. Returns (uploaded, whether one was refused as missing: a wallet the relay does not know yet, or an
-  /// older relay without blobs).
-  Future<(int, bool)> _uploadBlobs(WalletRepo repo, Set<String> refs, Set<String> stored) async {
+  /// with the others; its last failure goes into [failures]. Returns (uploaded, whether one was refused as missing: a
+  /// wallet the relay does not know yet, or an older relay without blobs).
+  Future<(int, bool)> _uploadBlobs(WalletRepo repo, Set<String> refs, Set<String> stored, Map<String, TransportFailure> failures) async {
     final queue = {...repo.queuedBlobs(), ...repo.cachedOf(refs)}.where((h) => !stored.contains(h)).toList()..sort();
     if (queue.isEmpty) return (0, false);
     var sent = 0, failed = 0;
@@ -852,9 +866,11 @@ class SyncEngine {
         await transport.putBlob(hash, sealed);
         repo.markBlobUploaded(hash);
         stored.add(hash);
+        failures.remove(hash);
         sent++;
       } on TransportException catch (e) {
         failed++;
+        failures[hash] = e.failure;
         if (e.failure == TransportFailure.missing) missing = true;
         logEvent(_log, Level.WARNING, 'sync.blob.failed', {'failure': e.failure.name});
       }
@@ -1129,7 +1145,7 @@ class SyncEngine {
   /// [heal] ([_trackStuck]) (called only when caught up). Failures are logged: another device may simply have written a
   /// newer one.
   Future<void> _maybeSnapshot(WalletRepo repo, RelayState state, Map<String, int> cursors, int myLast, DateTime now,
-      {bool heal = false}) async {
+      {bool heal = false, bool heldBlobs = false}) async {
     final me = _streamOf(repo);
     final current = state.snapshot;
     final old = current?.covers ?? const <String, int>{};
@@ -1155,9 +1171,10 @@ class SyncEngine {
         return;
       }
     }
-    // A snapshot holds the whole state, file references included: none while an op still waits for its file (P14
-    // upload before ops), or a device starting from it could point at a file the relay does not have yet.
-    if (repo.pendingBlobRefs().isNotEmpty) {
+    // A snapshot holds the whole state, file references included: none while an op still waits for a file that can be
+    // stored later (P14 upload before ops; [heldBlobs], see `_run`), or a device starting from it could point at a file
+    // the relay does not have yet. A file the relay is too full for does not hold it back: the snapshot frees room.
+    if (heldBlobs) {
       logEvent(_log, Level.INFO, 'sync.snapshot.skipped', {'reason': 'heldBlobs'});
       return;
     }

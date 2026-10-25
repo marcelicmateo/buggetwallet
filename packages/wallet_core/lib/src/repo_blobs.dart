@@ -88,18 +88,29 @@ extension WalletRepoBlobs on WalletRepo {
   /// The blob [op] references (RELAY_PROTOCOL.md "Client rules for blobs"): for a bill op, the hash it sets `blob` to
   /// while the bill is live here (or the op makes it live), or, when it makes the bill live (`deleted` 0) without
   /// setting `blob`, the bill's current file here. An op of a bill deleted here (an old op in a whole-state upload)
-  /// references nothing: no device needs that file unless the bill comes back, and that op references it again.
+  /// references nothing: no device needs that file unless the bill comes back, and that op references it again. A
+  /// field this device already holds with a newer clock (the op was overtaken, e.g. by another device's file for the
+  /// same bill) references nothing either: it would change nothing anywhere, so it neither waits nor pins the cache.
   String? blobRefOf(Op op) {
     if (op.entity != 'bill') return null;
     final f = op.fields;
     if (f['deleted'] == 1) return null;
+    final clocks = {
+      for (final r in db.select("SELECT field, hlc FROM clocks WHERE entity = 'bill' AND id = ? AND field IN ('blob', 'deleted')", [op.id]))
+        r['field'] as String: r['hlc'] as String,
+    };
+    bool overtaken(String field) => switch (clocks[field]) {
+          final String h => Hlc.compareStrings(h, op.hlc) > 0,
+          null => false,
+        };
     final rs = db.select('SELECT blob, deleted FROM bills WHERE id = ?', [op.id]);
-    final live = rs.isEmpty || rs.first['deleted'] == 0 || f['deleted'] == 0;
-    if (f.containsKey('blob')) {
+    final undeletes = f['deleted'] == 0 && !overtaken('deleted');
+    final live = rs.isEmpty || rs.first['deleted'] == 0 || undeletes;
+    if (f.containsKey('blob') && !overtaken('blob')) {
       final h = f['blob'];
       return live && h is String && isBlobHash(h) ? h : null;
     }
-    if (f['deleted'] != 0) return null;
+    if (!undeletes) return null;
     final h = rs.isEmpty ? null : rs.first['blob'];
     return h is String && isBlobHash(h) ? h : null;
   }
@@ -156,6 +167,9 @@ extension WalletRepoBlobs on WalletRepo {
       }
       db.execute('DROP TABLE IF EXISTS blob_delete');
       db.execute('DROP TABLE IF EXISTS blob_own');
+      // Builds before P14 deleted files on the relay (a bill deleted, a losing file): the next sync puts every cached
+      // file of a live bill again, which repairs one deleted while a device still pointed at it.
+      setLocalValue(WalletRepo.blobReuploadKey, '1');
       db.execute('COMMIT');
     } on Object {
       db.execute('ROLLBACK');

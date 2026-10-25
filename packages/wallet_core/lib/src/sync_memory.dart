@@ -129,6 +129,12 @@ class MemoryTransport implements SyncTransport {
   /// Read-only view of the stored blobs by hash.
   Map<String, Uint8List> get blobs => UnmodifiableMapView(_blobs);
 
+  /// Test hook: the stored blob [hash] is gone (an api-3 client's DELETE, or a hostile relay).
+  void loseBlob(String hash) {
+    _blobs.remove(hash);
+    _blobAt.remove(hash);
+  }
+
   /// Flips one byte of a stored blob (a damaged disk or a hostile relay): its hash no longer matches.
   void tamperBlob(String hash) {
     final b = _blobs[hash];

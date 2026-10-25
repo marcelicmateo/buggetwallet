@@ -39,7 +39,10 @@ List<int> encodeBlobSet(Set<String> set) => utf8.encode(jsonEncode(set.toList().
 /// Test seams for fault injection (tests only; production passes none), `Relay(hooks: ...)`. A throw from a callback
 /// acts like a crash or a full disk at that point: the request fails with 500 and what was already written stays.
 class RelayTestHooks {
-  const RelayTestHooks({this.afterFileWrite, this.beforeMetaSave});
+  const RelayTestHooks({this.afterFileWrite, this.beforeMetaSave, this.touchBlob});
+
+  /// Replaces setting a blob's stored time (`File.setLastModified(time)`); a throw = a file system that refuses it.
+  final FutureOr<void> Function(File blob, DateTime time)? touchBlob;
 
   /// After sync file [seq] of [device] in wallet [wid] was written, before the meta is saved.
   final FutureOr<void> Function(String wid, String device, int seq)? afterFileWrite;
@@ -172,9 +175,15 @@ class Wallet {
   /// Blob GC (RELAY_PROTOCOL.md "Blob garbage collection"): when both kept snapshots carry a declared set, deletes every
   /// blob in neither set whose stored time (file modification time) is more than [gcGrace] before [now]. Returns
   /// (kept, deleted, bytes deleted); null when it did not run.
+  /// Runs only while the latest snapshot covers every device's `last`: its writer had applied every file stored now,
+  /// so a file a live bill in any of them references is in its set (a newer file could reference one it does not know).
   Future<(int, int, int)?> collectBlobs(DateTime now) async {
-    final a = snapshot?.blobSet, b = previous?.blobSet;
-    if (a == null || b == null) return null;
+    final latest = snapshot;
+    final a = latest?.blobSet, b = previous?.blobSet;
+    if (latest == null || a == null || b == null) return null;
+    for (final MapEntry(key: d, value: st) in devices.entries) {
+      if ((latest.covers[d] ?? 0) < st.last) return null;
+    }
     final dBlobs = Directory('${dir.path}/blobs');
     if (!await dBlobs.exists()) return (0, 0, 0);
     final cutoff = now.subtract(gcGrace);

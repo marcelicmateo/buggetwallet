@@ -37,7 +37,8 @@ Never put a signature, public key, body, full id or client address in a log line
   `<wid>/snap/<id>`, `<wid>/blobs/<sha256 hex>` (bill photos/PDFs, `PUT/GET/DELETE …/blob/<hash>` (DELETE = 204 no-op since api 4): content-addressed, hash of
   the body checked, 16 MiB, stored time = mtime set to `now` by every accepted PUT (200 too), never pruned, only collected by
   `Wallet.collectBlobs` (after a new declared set `PUT snapshot/<id>/blobs` → `<wid>/sets/<id>` = `Snap.blobSet`, loaded on
-  start, deleted with its snapshot; GC only when both kept snapshots have a set, never a declared or < 30-day-old blob;
+  start, deleted with its snapshot; GC only when both kept snapshots have a set and the latest covers every device’s
+  `last`, never a declared or < 30-day-old blob; a stored time that cannot be set = the file rewritten, else 500, hook `touchBlob`;
   log `relay gc kept= deleted= bytes=`), no lastSeen change; counted in `Wallet.blobCount/blobBytes`, rebuilt from the folder on
   load; `--max-bytes` = `Wallet.totalBytes` = files + kept snapshots + blobs, checked by PUT d, snapshot PUT and blob PUT; state JSON `blobs`, and `bytes` (= `totalBytes`) + `maxBytes` (Stage I:
   `Wallet.stateJson(maxBytes:)`, passed by `relay_server.dart`; additive, api stays 3)). `first` is not stored: it is the lowest seq on disk, or `last + 1` when all were pruned. `last` = max of
