@@ -28,6 +28,11 @@ Future<({WalletController wc, String id, List<String?> clip})> slipWallet() asyn
   wc.clipboardWrite = (t) async => clip[0] = t;
   wc.clipboardRead = () async => clip[0];
   final r = await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
+  // Pay is offered for a confirmed bill only; the slip has no date, so give it one and confirm (no due date: no category needed).
+  // The total moves off 45.60 so confirming does not link the wallet's 45.60 bank row (that would make the bill paid).
+  wc.repo.updateBill(r.billId!, date: '2026-10-18', total: 4570);
+  wc.reload();
+  expect(wc.confirmBill(r.billId!), isTrue);
   return (wc: wc, id: r.billId!, clip: clip);
 }
 
@@ -83,20 +88,33 @@ void main() {
       expect(key('billPay'), findsNothing);
     });
 
-    tw('not shown without an amount', (tester) async {
+    tw('not shown while the bill is still to review (its fields may be unsure)', (tester) async {
+      final wc = billsWallet();
+      addTearDown(wc.dispose);
+      final (id, _) = wc.repo.importBill(syntheticBill('pdf', source: BillSource.pdf));
+      wc.repo.updateBill(id, iban: 'HR1210010051863000160');
+      wc.reload();
+      expect(wc.bill(id)!.unsure, greaterThan(0));
+      expect(wc.bill(id)!.status, BillStatus.review);
+      await openSheet(tester, wc, id);
+      expect(find.textContaining('Unsure'), findsWidgets);
+      expect(key('billPay'), findsNothing);
+    });
+
+    tw('not shown without an amount, or with a typed total of 0', (tester) async {
       final s = await slipWallet();
-      // The total can be cleared by a remote edit only; here the bill is made without one.
-      final (id, _) = s.wc.repo.importBill(syntheticBill('nototal', total: null));
-      s.wc.repo.updateBill(id, iban: 'HR1210010051863000160');
-      s.wc.reload();
-      await openSheet(tester, s.wc, id);
+      await openSheet(tester, s.wc, s.id);
+      expect(key('billPay'), findsOneWidget);
+      await tester.enterText(key('billTotal'), '0');
+      await tester.pump();
+      expect(key('billPay'), findsNothing);
+      await tester.enterText(key('billTotal'), '');
+      await tester.pump();
       expect(key('billPay'), findsNothing);
     });
 
     tw('not shown once the bill is paid', (tester) async {
       final s = await slipWallet();
-      s.wc.repo.updateBill(s.id, date: '2026-10-18');
-      s.wc.reload();
       s.wc.addBillAsExpense(s.id, category: 'Groceries');
       expect(s.wc.bill(s.id)!.paid, isTrue);
       await openSheet(tester, s.wc, s.id);
@@ -114,7 +132,7 @@ void main() {
       Finder inSheet(String t) => find.descendant(of: key('paySheet'), matching: find.text(t));
       expect(inSheet('Synthetic Water'), findsOneWidget);
       expect(inSheet('HR12 1001 0051 8630 0016 0'), findsOneWidget);
-      expect(inSheet('45,60'), findsOneWidget);
+      expect(inSheet('45,70'), findsOneWidget);
       expect(inSheet(s.wc.bill(s.id)!.reference!), findsOneWidget);
       expect(inSheet('Water bill'), findsOneWidget);
       for (final f in ['payee', 'iban', 'amount', 'reference', 'description']) {
@@ -131,7 +149,7 @@ void main() {
       final expected = {
         'payee': b.payee,
         'iban': 'HR1210010051863000160',
-        'amount': '45,60',
+        'amount': '45,70',
         'reference': b.reference,
         'description': b.description,
       };
@@ -150,7 +168,7 @@ void main() {
       await openPay(tester);
       await tester.tap(key('payCopyAll'));
       await tester.pump();
-      expect(s.clip[0], [b.payee, 'HR1210010051863000160', '45,60', b.reference, b.description].join('\n'));
+      expect(s.clip[0], [b.payee, 'HR1210010051863000160', '45,70', b.reference, b.description].join('\n'));
     });
 
     tw('the clipboard is emptied after 60 s, but only while it still holds our text', (tester) async {
@@ -169,6 +187,36 @@ void main() {
       s.clip[0] = 'something else the owner copied';
       await tester.pump(const Duration(seconds: 61));
       expect(s.clip[0], 'something else the owner copied');
+    });
+
+    tw('an IBAN edited but not saved is saved first and is what Pay shows and copies', (tester) async {
+      final s = await slipWallet();
+      await openSheet(tester, s.wc, s.id);
+      await tester.enterText(key('billIban'), 'GB82WEST12345698765432');
+      await tester.enterText(key('billTotal'), '12,50');
+      await tester.pump();
+      await openPay(tester);
+      expect(key('paySheet'), findsOneWidget);
+      expect(s.wc.bill(s.id)!.iban, 'GB82WEST12345698765432');
+      expect(s.wc.bill(s.id)!.total, 1250);
+      expect(find.descendant(of: key('paySheet'), matching: find.text('GB82 WEST 1234 5698 7654 32')), findsOneWidget);
+      await tester.tap(key('payCopy:iban'));
+      await tester.pump();
+      expect(s.clip[0], 'GB82WEST12345698765432');
+      await tester.tap(key('payCopy:amount'));
+      await tester.pump();
+      expect(s.clip[0], '12,50');
+    });
+
+    tw('a typed IBAN that does not look right stops Pay with the Save message', (tester) async {
+      final s = await slipWallet();
+      await openSheet(tester, s.wc, s.id);
+      await tester.enterText(key('billIban'), 'HR0000000000000000000');
+      await tester.pump();
+      await openPay(tester);
+      expect(key('paySheet'), findsNothing);
+      expect(find.textContaining('IBAN: check the number'), findsOneWidget);
+      expect(s.wc.bill(s.id)!.iban, 'HR1210010051863000160');
     });
 
     tw('copying does not mark the bill paid or change it', (tester) async {
