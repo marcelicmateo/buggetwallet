@@ -309,6 +309,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **App:** Split… on the payment sheet (editor with "Left to split", Save off until 0.00, Remove with Undo); Spending, Today and search show "Split · N"; category/tag/insight lists show parts ("part of …"); demo wallet has a split supermarket payment.
   - **Reviews:** core 2 medium (a part could fall back to a transfer and vanish from spending; a split made on another device after matching was lost), 2 low; UI 1 medium (search listed a split payment once per part), 7 low. All fixed with tests.
   - **Stage run:** importer 335, core 2367, relay 206, app 1577, desktop 13 files, web-test, emulator screens, perf ok (0 over budget).
+- 2026-10-25: **Stage P8: reports** (spec `P8_SPEC.md`, no schema change).
+  - **Insights › Per pay period:** income, fixed, flexible and net for each of the last 6/12 pay periods (newest first, running period "so far", total line); the same numbers as Spending's pay-period chart.
+  - **Insights › Main tag vs budget:** pick a spending main tag; one bar per pay period against its monthly budget, "over by …" rows, "No budget set".
+  - **Review Done screen:** finishing the weekly review shows the streak and "Saved by waiting" (wishes skipped after their cooling-off) for this pay period and all time.
+  - **Review:** 2 low (the panels used other settings than Spending's periods; saved figures recomputed on every redraw), fixed. A flaky desktop onboarding test (it checked the new wallet before the key write and database open finished) fixed to wait for it.
+  - **Stage run:** importer 335, core 2489, relay 206, app 1646, desktop 13 files (onboarding rerun after the fix), web-test, emulator screens; perf: the known host tail (3 missed build frames).
 - 2026-10-25: **Stages P9 + P10 + P11** (specs `P9_SPEC.md`, `P10_SPEC.md`, `P11_SPEC.md`; owner answers `NEXT_DECISIONS.md`; schema 14; built in parallel, verified together).
   - **P9 recurring income:** expected extra income (side job etc.) is detected from history (kind extra inflows) or added by hand (payee required, extra-kind main tag; a salary tag is refused), shown as "Expected, not counted yet" in the payday plan and on Today, and counts toward spending money **only once it lands**, and only payments that fit its usual amount (a one-off bonus from the same payer still goes to goals; refunds at the payer are taken off). Goals use `extrasForGoals`, so nothing counts twice. Incomes are stored with statuses older builds never act on.
   - **P10 merge from backup:** Plan › Backup › "Merge a backup…" (with data in the wallet): a preview ("This brings in 42 updates: 30 payments, …"), the newer change wins field by field, nothing doubled; merging the same file twice says "Nothing new". Bill files on this device go into backups (up to 16 MB, newest first) and come back on restore/merge. A damaged file says so instead of asking for a key. Backup format stays v1 (older builds ignore the files).
@@ -402,6 +408,9 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
   N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
+- Owner checks after P8 (phone):
+  - Spending › Insights, last two panels: per pay period numbers and a main tag against its budget.
+  - Finish a weekly review: the Done screen shows the streak and what waiting saved.
 - Owner checks after P9-P11 (phone):
   - Plan › Expected income: confirm a suggested side income, or Add income; before it lands Today says "Expected income … (counts when it lands)" and safe-to-spend doesn't move; after the import the payday plan shows "Extra income received".
   - Plan › Backup › Merge a backup…: read the preview, Cancel changes nothing; merge, then merge the same file again ("Nothing new").

@@ -26,6 +26,8 @@ void main() {
     await Harness.shot(t, 'onboarding');
 
     await t.tap(find.text('Start a new wallet'));
+    // Creating writes the key and opens the database (real I/O), which pumpAndSettle does not wait for.
+    await waitFor(t, () => wc.hasWallet, what: 'wallet created');
     await t.pumpAndSettle();
     expect(wc.hasWallet, isTrue);
     expect(find.byType(OnboardingScreen), findsNothing);
@@ -85,6 +87,7 @@ void main() {
   itest('Start a new wallet: the cash step can be skipped and added later in Plan', (t) async {
     final wc = await Harness.start(t, wallet: false);
     await t.tap(find.text('Start a new wallet'));
+    await waitFor(t, () => wc.hasWallet, what: 'wallet created');
     await t.pumpAndSettle();
     Harness.rememberKey(await wc.keyText());
     await t.tap(find.byKey(const ValueKey('keyLater')));
