@@ -165,8 +165,14 @@ extension RulesDb on WalletController {
     _changed();
   }
 
-  /// Removes the pattern [view]; [restoreRule] puts it back.
+  /// Removes the pattern or payee rule [view]; [restoreRule] puts it back.
   void deleteRule(RuleView view) {
+    if (view.kind == RuleKind.payee) {
+      repo.removeMerchantRule(view.id.substring('payee:'.length));
+      logEvent(_ruleLog, Level.INFO, 'rules.delete', {'match': 'payee'});
+      _changed();
+      return;
+    }
     repo.removeMerchantPattern(view.text);
     logEvent(_ruleLog, Level.INFO, 'rules.delete', {'match': view.match});
     _changed();
@@ -174,6 +180,12 @@ extension RulesDb on WalletController {
 
   /// Undo of [deleteRule]: the same text, main tag, match and range. The place in the order may come back last.
   void restoreRule(RuleView view) {
+    if (view.kind == RuleKind.payee) {
+      repo.setMerchantRule(view.id.substring('payee:'.length), view.category!);
+      logEvent(_ruleLog, Level.INFO, 'rules.undelete', {'match': 'payee'});
+      _changed();
+      return;
+    }
     repo.setMerchantPattern(view.category!, view.text, match: view.match, minCents: view.minCents, maxCents: view.maxCents);
     logEvent(_ruleLog, Level.INFO, 'rules.undelete', {'match': view.match});
     _changed();

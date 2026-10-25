@@ -1098,6 +1098,15 @@ class WalletRepo {
         ('rule', key, {'category': category, 'deleted': 0})
       ]);
 
+  /// Removes the payee rule [key] (a tombstone; the category stays stored, so `setMerchantRule` brings it back).
+  /// Nothing is written when there is no live rule.
+  void removeMerchantRule(String key) {
+    if (db.select('SELECT 1 FROM merchant_rules WHERE id = ? AND deleted = 0', [key]).isEmpty) return;
+    _write([
+      ('rule', key, {'deleted': 1})
+    ]);
+  }
+
   /// Creates or edits a goal. [saved] is the total the user sees: a new goal stores it as its base (the `saved`
   /// column); for an existing goal it is never written back. A different total becomes ONE contribution of the
   /// difference, so an add made meanwhile on another device still counts (A +50 and B +30 offline: both). An

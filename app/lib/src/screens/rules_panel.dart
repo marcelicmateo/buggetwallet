@@ -160,8 +160,9 @@ class _RuleRow extends StatelessWidget {
               if (rule.kind == RuleKind.pattern) ...[
                 PopupMenuItem(key: ValueKey('ruleUp:$id'), value: _Act.up, enabled: !first, child: const Text('Move up')),
                 PopupMenuItem(key: ValueKey('ruleDown:$id'), value: _Act.down, enabled: !last, child: const Text('Move down')),
-                PopupMenuItem(key: ValueKey('ruleDelete:$id'), value: _Act.delete, child: const Text('Delete')),
               ],
+              if (rule.kind == RuleKind.pattern || rule.kind == RuleKind.payee)
+                PopupMenuItem(key: ValueKey('ruleDelete:$id'), value: _Act.delete, child: const Text('Delete')),
             ],
           ),
       ]),

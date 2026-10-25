@@ -346,6 +346,23 @@ void main() {
       wc.dispose();
     });
 
+    testWidgets('a payee rule can be deleted, and Undo brings it back', (t) async {
+      final wc = rulesWallet();
+      wc.repo.setMerchantRule('konzum_test', 'Groceries');
+      wc.reload();
+      const id = 'payee:konzum_test';
+      await pumpApp(t, rulesPanel(wc), size: const Size(400, 2000));
+      await tapKey(t, 'ruleMenu:$id');
+      await tapKey(t, 'ruleDelete:$id');
+      expect(wc.repo.merchantRules().containsKey('konzum_test'), isFalse);
+      expect(find.text('Rule removed'), findsOneWidget);
+      await t.tap(k('toastUndo'));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(wc.repo.merchantRules()['konzum_test'], 'Groceries');
+      await settle(t);
+      wc.dispose();
+    });
+
     testWidgets('move up and down change the order; the ends are off', (t) async {
       final wc = rulesWallet();
       wc.repo.setMerchantPattern('Shopping', 'aaa', match: 'contains');

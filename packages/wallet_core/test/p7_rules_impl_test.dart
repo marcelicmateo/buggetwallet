@@ -446,4 +446,23 @@ void main() {
       expect(() => r.updateMerchantPattern(merchantPatternId('fresh'), pattern: 'oldtext'), throwsArgumentError);
     });
   });
+
+  group('payee rule removal', () {
+    test('removeMerchantRule tombstones the rule; setMerchantRule brings it back; no rule = nothing written', () {
+      final r = WalletRepo.inMemory();
+      addTearDown(r.close);
+      r.setMerchantRule('konzum', 'Shopping');
+      expect(r.payeeRules().map((m) => m.key), ['konzum']);
+      final before = _outbox(r);
+      r.removeMerchantRule('konzum');
+      expect(r.payeeRules(), isEmpty);
+      expect(r.merchantRules().containsKey('konzum'), isFalse);
+      expect(_outbox(r), before + 1);
+      r.removeMerchantRule('konzum');
+      r.removeMerchantRule('never_there');
+      expect(_outbox(r), before + 1, reason: 'nothing to remove writes nothing');
+      r.setMerchantRule('konzum', 'Shopping');
+      expect(r.payeeRules().single.category, 'Shopping');
+    });
+  });
 }
