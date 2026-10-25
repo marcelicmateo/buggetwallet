@@ -582,7 +582,7 @@ String plannedIcs(List<PlannedCost> planned, List<RecurringBill> bills, {require
       rows.add(('planned-${p.id}@budget-wallet', p.date, p.title, p.amount!));
     }
     for (final b in bills) {
-      if (!b.confirmed) continue;
+      if (!b.confirmed || b.isIncome) continue; // an income (P9) is not a cost
       for (final d in billOccurrences(b, from, to)) {
         rows.add(('bill-${b.id}-${_compact(d)}@budget-wallet', d, b.label, b.reserveAmount));
       }

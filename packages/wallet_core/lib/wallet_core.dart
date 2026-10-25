@@ -48,6 +48,8 @@ export 'src/budget.dart'
         DueCycle,
         dueCycles,
         duePlanned,
+        expectedIncomeCycles,
+        IncomeCycle,
         monthsToGoal,
         MonthSummary,
         monthSummary,

@@ -490,7 +490,7 @@ void main() {
 
   group('schema 13', () {
     test('schema version is 13 and the split entity is declared', () {
-      expect(WalletRepo.schemaVersion, 13);
+      expect(WalletRepo.schemaVersion, greaterThanOrEqualTo(13)); // P9 made it 14
       final e = entitySchema['split']!;
       expect(e.table, 'tx_splits');
       expect(e.columnNames, containsAll(['parts', 'deleted']));
@@ -512,7 +512,7 @@ void main() {
       db.close();
       final o = WalletRepo.open(path, now: () => now);
       addTearDown(o.close);
-      expect(o.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '13');
+      expect(o.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '${WalletRepo.schemaVersion}');
       expect(o.db.select('SELECT COUNT(*) AS c FROM tx_splits').first['c'], 0);
       expect(o.transactions().single.id, id);
       o.setSplit(id, [_p(-2000), _p(-2200, 'Shopping')]);

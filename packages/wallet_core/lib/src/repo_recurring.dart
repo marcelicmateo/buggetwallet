@@ -16,6 +16,11 @@ extension WalletRepoRecurring on WalletRepo {
   /// alone) and the owner marks each cycle paid (`skipRecurring`). [instalments] N ≥ 1 sets `ends_on` =
   /// [RecurringBill.lastDueFor] (calendar months for a monthly interval, else (N − 1) × [intervalDays] days on). A payee another live (not deleted, not dismissed) bill already uses is refused: edit or
   /// confirm that bill instead.
+  ///
+  /// P9: [direction] `in` adds a recurring **income** (`out`, the default, a bill; anything else is refused): [payee]
+  /// is required (it is what matches the landed money, never the amount alone), [category] must be live and of kind
+  /// extra (a salary-kind one already counts as salary), no [instalments]. A bill and an income may share a payee; two
+  /// live incomes may not.
   String addRecurring({
     required String label,
     required String category,
@@ -26,9 +31,14 @@ extension WalletRepoRecurring on WalletRepo {
     required String firstDue,
     String? payee,
     int? instalments,
+    String direction = RecurringBill.directionOut,
   }) {
+    if (direction != RecurringBill.directionOut && direction != RecurringBill.directionIn) {
+      throw ArgumentError('Pick a bill or an income.');
+    }
+    final income = direction == RecurringBill.directionIn;
     final name = _checkBillLabel(label);
-    _checkBillCategory(category);
+    _checkBillCategory(category, income: income);
     _checkBillAmounts(amount, minAmount, maxAmount);
     _checkInterval(intervalDays);
     if (!isIsoDate(firstDue)) throw ArgumentError('Give the first due date.');
@@ -36,9 +46,15 @@ extension WalletRepoRecurring on WalletRepo {
       throw ArgumentError('Instalments must be between 1 and $maxInstalments.');
     }
     final key = payee?.trim() ?? '';
+    if (income && instalments != null) throw ArgumentError('An income has no instalments.');
+    if (income && key.isEmpty) throw ArgumentError('Pick the payee the income comes from.');
+    // A bill and an income of one payee may live side by side (P9): only the same direction clashes.
     if (key.isNotEmpty &&
-        db.select("SELECT 1 FROM recurring WHERE payee = ? AND deleted = 0 AND status != 'dismissed'", [key]).isNotEmpty) {
-      throw ArgumentError('Another bill already uses this payee.');
+        db.select(
+            "SELECT 1 FROM recurring WHERE payee = ? AND deleted = 0 AND status != 'dismissed' "
+            "AND ${income ? "direction = 'in'" : "(direction IS NULL OR direction != 'in')"}",
+            [key]).isNotEmpty) {
+      throw ArgumentError(income ? 'Another income already uses this payee.' : 'Another bill already uses this payee.');
     }
     final id = _newRecurringId();
     _write([
@@ -59,11 +75,17 @@ extension WalletRepoRecurring on WalletRepo {
           if (maxAmount != null) 'max_amount': maxAmount,
           'own_category': 1,
           if (instalments != null) 'ends_on': RecurringBill.lastDueFor(firstDue, intervalDays, instalments),
+          if (income) 'direction': RecurringBill.directionIn,
         }
       )
     ]);
-    logEvent(_log, Level.INFO, 'recurring.add',
-        {'intervalDays': intervalDays, 'range': minAmount != null, 'payee': key.isNotEmpty, 'instalments': instalments ?? 0});
+    logEvent(_log, Level.INFO, 'recurring.add', {
+      'intervalDays': intervalDays,
+      'range': minAmount != null,
+      'payee': key.isNotEmpty,
+      'instalments': instalments ?? 0,
+      'income': income,
+    });
     return id;
   }
 
@@ -71,7 +93,8 @@ extension WalletRepoRecurring on WalletRepo {
   /// stored ones) are written. [clearRange] removes the amount range, [clearEnd] the last due date (they win over
   /// [minAmount]/[maxAmount] and [endsOn]). The range after the edit must hold the amount after the edit. Editing a
   /// candidate does not confirm it (detection keeps a candidate's label, amount, interval and due date at its latest
-  /// result). Unknown id: [ArgumentError].
+  /// result). Unknown id: [ArgumentError]. The direction (bill or income, P9) is never changed; an income's category
+  /// must stay of kind extra and it takes no last due date ([endsOn]).
   void updateRecurring(
     String id, {
     String? label,
@@ -95,7 +118,7 @@ extension WalletRepoRecurring on WalletRepo {
       if (name != b.label) fields['label'] = name;
     }
     if (category != null) {
-      _checkBillCategory(category);
+      _checkBillCategory(category, income: b.isIncome);
       if (category != r['category']) fields['category'] = category;
       // The owner's choice: refresh no longer moves it with the payee's rows.
       if (!b.ownCategory) fields['own_category'] = 1;
@@ -111,6 +134,7 @@ extension WalletRepoRecurring on WalletRepo {
     if (clearEnd) {
       if (b.endsOn != null) fields['ends_on'] = null;
     } else if (endsOn != null) {
+      if (b.isIncome) throw ArgumentError('An income has no instalments.');
       if (!isIsoDate(endsOn)) throw ArgumentError('Give the last due date.');
       if (endsOn != b.endsOn) fields['ends_on'] = endsOn;
     }
@@ -142,8 +166,14 @@ extension WalletRepoRecurring on WalletRepo {
     return n;
   }
 
-  void _checkBillCategory(String category) {
-    if (!categoryTable().isLive(category)) throw ArgumentError('Pick a main tag for the bill.');
+  /// A live category; for an income (P9) one of kind extra, never a salary-kind one.
+  void _checkBillCategory(String category, {bool income = false}) {
+    final t = categoryTable();
+    if (!t.isLive(category)) throw ArgumentError(income ? 'Pick a main tag for the income.' : 'Pick a main tag for the bill.');
+    if (!income) return;
+    final kind = t.kindOf(category);
+    if (kind == BudgetKind.income) throw ArgumentError('This tag already counts as salary.');
+    if (kind != BudgetKind.extra) throw ArgumentError('Pick an extra income tag for the income.');
   }
 
   static void _checkInterval(int days) {

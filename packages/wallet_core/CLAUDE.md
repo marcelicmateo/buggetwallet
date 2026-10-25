@@ -131,6 +131,12 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (`WalletRepoRecurring`): `addRecurring` (`rec:m` + 12 hex, confirmed, never detected or recategorized; no payee =
   never matches), `updateRecurring`, `instalmentsLeft`. Bill history per cycle for non-monthly bills (`BillMonth.due`).
   Tests: `test/p4_recurring_test.dart` (+ `p4_recurring_spec_test.dart`, `p4_recurring_repo_spec_test.dart`).
+  **P9 recurring income** (schema 14, `recurring.direction`: null/`out` bill, `in` income, `isIncome`): detected on
+  inflows of kind extra (id `recin:<payee>`), landed by a positive payee row (no parts); `recurringBills()` lists both,
+  so bill paths skip `isIncome` (dueCycles, upcoming, plannedIcs, bill coverage). `computePeriod`: `expectedIncome`
+  (`IncomeCycle`, shown, never added), `landedIncome` (payee rows of confirmed incomes, added to `flexBudget`),
+  `extrasForGoals` = extras − landedIncome. `addRecurring(direction: 'in')`: payee required, kind extra, no instalments.
+  Tests: `test/p9_income_test.dart` (+ `p9_income_spec_test.dart`, `p9_income_repo_spec_test.dart`).
   Settings `reviewDay` (1..7, default 7), `lastReview` (date),
   `reviewStreak` (0..`maxStreak`) are validated like the others.
 - `bill_history.dart` — N4 bill history (spec + clarifications `docs/context/N4_SPEC.md`), pure and web-safe.
