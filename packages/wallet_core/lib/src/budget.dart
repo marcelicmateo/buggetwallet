@@ -319,8 +319,16 @@ List<PlannedCost> duePlanned(List<PlannedCost> planned, String today, String end
 /// period and not landed are listed ([PeriodBudget.expectedIncome], never added); the rows of a confirmed income's
 /// payee that landed ([PeriodBudget.landedIncome], kind extra, positive) are added to the flexible money. Without a
 /// confirmed income every number is as before.
+///
+/// P15: [txs] may be the converted list (`inHomeCurrency`); then [matchRows] is the raw expanded list. Bills and incomes
+/// are matched on [matchRows] (default [txs]), so a payment in another currency never pays or lands a recurring cycle by
+/// its converted amount; the sums use [txs].
 PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today,
-    {List<RecurringBill> bills = const [], List<PlannedCost> planned = const [], required CategoryTable table}) {
+    {List<RecurringBill> bills = const [],
+    List<PlannedCost> planned = const [],
+    required CategoryTable table,
+    List<CategorizedTx>? matchRows}) {
+  final raw = matchRows ?? txs;
   final incomes = [
     for (final b in bills)
       if (b.isIncome) b
@@ -358,7 +366,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final goalMonthly = goals.fold<int>(0, (s, g) => s + g.monthly);
   // Plan lines of custom fixed categories (P1) count with rent, loan and subs; only lines the table still allows.
   final fixedPlan = st.rent + st.loan + st.subs + st.planLines.entries.fold<int>(0, (s, e) => table.hasPlanLine(e.key) ? s + e.value : s);
-  final cycles = dueCycles(outBills, txs, start, end, currency: st.currency);
+  final cycles = dueCycles(outBills, raw, start, end, currency: st.currency);
   final seenBills = <String>{};
   final due = [
     for (final c in cycles)
@@ -380,7 +388,8 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   var landedIncome = 0;
   if (byPayee.isNotEmpty) {
     for (final t in inPeriod) {
-      if (t.kind != BudgetKind.extra || t.amount == 0) continue;
+      // A converted row (P15) is a payment in another currency: it never matches an income, as on the raw list.
+      if (t.kind != BudgetKind.extra || t.amount == 0 || t.originalCurrency != null) continue;
       final mine = byPayee[merchantKey(t.tx)];
       if (mine == null) continue;
       // The payment (whole, not the part) must fit one of the payee's incomes; a refund always counts against it.
@@ -388,7 +397,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     }
     if (landedIncome < 0) landedIncome = 0;
   }
-  final expected = expectedIncomeCycles(incomes, txs, start, end, currency: st.currency);
+  final expected = expectedIncomeCycles(incomes, raw, start, end, currency: st.currency);
   final flexBudget = income - fixedPlan - goalMonthly - reservedBills - reservedPlanned + landedIncome;
   final flex = inPeriod.where((t) => t.kind == BudgetKind.flex);
   final spent = -_sum(flex);

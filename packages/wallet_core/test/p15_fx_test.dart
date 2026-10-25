@@ -43,7 +43,7 @@ List<String> _logs(void Function() body) {
 
 WalletSettings _withRates(WalletSettings st, Map<String, int> rates) => WalletSettings.fromMap({
       ...st.toMap(),
-      for (final MapEntry(:key, :value) in rates.entries) 'fx:$key': {'rate': value, 'date': '2026-03-01'},
+      for (final MapEntry(:key, :value) in rates.entries) 'fx:$key': {'rate': value, 'date': '2026-03-01', 'home': st.currency},
     });
 
 void main() {
@@ -70,14 +70,14 @@ void main() {
     test('one minor unit at the smallest and largest rate', () {
       expect(convertMinor(1, FxRate.minRate), 0);
       expect(convertMinor(-1, FxRate.minRate), 0);
-      expect(convertMinor(1, FxRate.maxRate), 1000);
-      expect(convertMinor(-1, FxRate.maxRate), -1000);
+      expect(convertMinor(1, FxRate.maxRate), 100);
+      expect(convertMinor(-1, FxRate.maxRate), -100);
     });
 
     test('the largest amount at the largest rate is exact (no 64-bit or 2^53 overflow)', () {
       const max = WalletSettings.maxAmount;
       expect(convertMinor(max, FxRate.maxRate), _ref(max, FxRate.maxRate));
-      expect(convertMinor(-max, FxRate.maxRate), -max * 1000);
+      expect(convertMinor(-max, FxRate.maxRate), -max * 100);
       expect(convertMinor(max - 1, FxRate.maxRate - 1), _ref(max - 1, FxRate.maxRate - 1));
     });
 
@@ -105,7 +105,7 @@ void main() {
           -9300);
       expect(homeAmount(const Tx(id: 'e', source: 'pbz', date: '2026-03-01', amount: -500, homeAmount: -1), st), -500);
       final eurRate = WalletSettings.fromMap({
-        'fx:EUR': {'rate': 2000000, 'date': '2026-03-01'}
+        'fx:EUR': {'rate': 2000000, 'date': '2026-03-01', 'home': 'USD'}
       });
       expect(eurRate.fxRates, isEmpty);
       expect(homeAmount(const Tx(id: 'f', source: 'pbz', date: '2026-03-01', amount: -500), eurRate), -500);
@@ -171,17 +171,63 @@ void main() {
       expect(out2[0].amount, convertMinor(-3333, 924321));
     });
 
-    test('a split payment with a bank home amount keeps its parts foreign; its whole row converts', () {
+    test('a split payment with a bank home amount shares it across the parts (remainder to the last)', () {
       const t = Tx(id: 'split-3', source: 'revolut', date: '2026-03-05', amount: -300, currency: 'USD', homeAmount: -280);
       final cz = Categorizer(splits: {
-        t.id: const [SplitPart(amount: -100, category: 'Groceries'), SplitPart(amount: -200, category: 'Shopping')],
+        t.id: const [
+          SplitPart(amount: -100, category: 'Groceries'),
+          SplitPart(amount: -100, category: 'Shopping'),
+          SplitPart(amount: -100, category: 'Eating out'),
+        ],
       });
-      final st = _withRates(const WalletSettings(), {'USD': 500000});
-      final parts = cz.expand(t);
-      final out = inHomeCurrency(parts, st);
-      expect(out.every((p) => p.tx.currency == 'USD' && p.originalAmount == null), isTrue);
+      final st = _withRates(const WalletSettings(), {'USD': 500000}); // the bank amount wins over the rate
+      final out = inHomeCurrency(cz.expand(t), st);
+      expect([for (final p in out) p.amount], [-93, -93, -94]); // -93.33 each, the last takes the rest
+      expect(out.every((p) => p.tx.currency == 'EUR' && p.originalAmount == -100), isTrue);
+      expect(out.first.whole!.amount, -280);
+      // Only the last part in the list: its own share, never the remainder.
+      expect(inHomeCurrency([cz.expand(t).last], st).single.amount, -93);
       final whole = inHomeCurrency([cz.categorize(t)], st).single;
       expect((whole.amount, whole.originalAmount), (-280, -300));
+    });
+
+    test('a list without the earlier parts converts each part on its own (no remainder from the whole)', () {
+      const t = Tx(id: 'split-4', source: 'revolut', date: '2026-03-05', amount: -3, currency: 'USD');
+      final parts = Categorizer(splits: {
+        t.id: const [
+          SplitPart(amount: -1, category: 'Groceries'),
+          SplitPart(amount: -1, category: 'Eating out'),
+          SplitPart(amount: -1, category: 'Shopping'),
+        ],
+      }).expand(t);
+      final st = _withRates(const WalletSettings(), {'USD': 500000});
+      expect(inHomeCurrency([parts.last], st).single.amount, -1);
+      expect([
+        for (final p in inHomeCurrency([parts[1], parts[2]], st)) p.amount
+      ], [
+        -1,
+        -1
+      ]);
+      // The same part twice does not count as two earlier parts.
+      expect([
+        for (final p in inHomeCurrency([parts[0], parts[0], parts[2]], st)) p.amount
+      ], [
+        -1,
+        -1,
+        -1
+      ]);
+      expect([for (final p in inHomeCurrency(parts, st)) p.amount], [-1, -1, 0]);
+    });
+
+    test('a converted amount beyond maxAmount leaves the row foreign', () {
+      final st = _withRates(const WalletSettings(), {'USD': 2000000});
+      const big = Tx(id: 'big', source: 'revolut', date: '2026-03-05', amount: -WalletSettings.maxAmount, currency: 'USD');
+      const ok = Tx(id: 'ok', source: 'revolut', date: '2026-03-05', amount: -WalletSettings.maxAmount ~/ 2, currency: 'USD');
+      expect(homeAmount(big, st), isNull);
+      expect(homeAmount(ok, st), -WalletSettings.maxAmount);
+      final row = CategorizedTx(big, 'Groceries', kindOf('Groceries'));
+      expect(identical(inHomeCurrency([row], st).single, row), isTrue);
+      expect(monthSummary([row], '2026-03', currency: 'EUR').foreignByCurrency, {'USD': -WalletSettings.maxAmount});
     });
   });
 
@@ -264,22 +310,25 @@ void main() {
     test('fromMap reads valid rows and drops bad ones under the key fx; toMap round trips', () {
       late WalletSettings s;
       final logs = _logs(() => s = WalletSettings.fromMap({
-            'fx:USD': {'rate': 924000, 'date': '2026-03-01'},
-            'fx:GBP': {'rate': 1170000.0, 'date': '2026-03-02'},
-            'fx:JPY': {'rate': FxRate.maxRate, 'date': '2026-03-02'},
-            'fx:CHF': {'rate': 0, 'date': '2026-03-01'},
-            'fx:SEK': {'rate': FxRate.maxRate + 1, 'date': '2026-03-01'},
-            'fx:NOK': {'rate': 1.5, 'date': '2026-03-01'},
+            'fx:USD': {'rate': 924000, 'date': '2026-03-01', 'home': 'EUR'},
+            'fx:GBP': {'rate': 1170000.0, 'date': '2026-03-02', 'home': 'EUR'},
+            'fx:JPY': {'rate': FxRate.maxRate, 'date': '2026-03-02', 'home': 'EUR'},
+            'fx:CHF': {'rate': 0, 'date': '2026-03-01', 'home': 'EUR'},
+            'fx:SEK': {'rate': FxRate.maxRate + 1, 'date': '2026-03-01', 'home': 'EUR'},
+            'fx:NOK': {'rate': 1.5, 'date': '2026-03-01', 'home': 'EUR'},
             'fx:DKK': {'rate': 100000},
-            'fx:PLN': {'rate': 100000, 'date': '2026-02-30'},
-            'fx:usd': {'rate': 100000, 'date': '2026-03-01'},
+            'fx:PLN': {'rate': 100000, 'date': '2026-02-30', 'home': 'EUR'},
+            'fx:usd': {'rate': 100000, 'date': '2026-03-01', 'home': 'EUR'},
             'fx:HUF': 'x',
+            'fx:HKD': {'rate': 100000, 'date': '2026-03-01'}, // no home: invalid
+            'fx:CZK': {'rate': 100000, 'date': '2026-03-01', 'home': 'CZK'},
+            'fx:CAD': {'rate': 680000, 'date': '2026-03-01', 'home': 'CHF'}, // set before a switch CHF -> EUR
             'salary': 100000,
           }));
       expect(s.fxRates, {
-        'USD': const FxRate(924000, '2026-03-01'),
-        'GBP': const FxRate(1170000, '2026-03-02'),
-        'JPY': const FxRate(FxRate.maxRate, '2026-03-02')
+        'USD': const FxRate(924000, '2026-03-01', home: 'EUR'),
+        'GBP': const FxRate(1170000, '2026-03-02', home: 'EUR'),
+        'JPY': const FxRate(FxRate.maxRate, '2026-03-02', home: 'EUR')
       });
       expect(s.salary, 100000);
       final warn = logs.where((l) => l.contains('settings.invalid')).toList();
@@ -289,9 +338,11 @@ void main() {
         expect(l, isNot(contains('924000')));
       }
       expect(WalletSettings.fromMap(s.toMap()).fxRates, s.fxRates);
+      expect(s.fxStale, {'CAD': const FxRate(680000, '2026-03-01', home: 'CHF')});
+      expect(WalletSettings.fromMap(s.toMap()).fxStale, s.fxStale);
       expect(
           _logs(() => WalletSettings.fromMap({
-                'fx:EUR': {'rate': 1000000, 'date': '2026-03-01'}
+                'fx:EUR': {'rate': 1000000, 'date': '2026-03-01', 'home': 'USD'}
               })).where((l) => l.contains('settings.invalid')),
           isEmpty);
     });
@@ -301,11 +352,11 @@ void main() {
       final r = WalletRepo.inMemory(now: () => now);
       addTearDown(r.close);
       r.setFxRate('USD', 924000);
-      expect(r.settings().fxRates, {'USD': const FxRate(924000, '2026-03-25')});
+      expect(r.settings().fxRates, {'USD': const FxRate(924000, '2026-03-25', home: 'EUR')});
       final ops = r.pendingOps().length;
       r.setFxRate('USD', 924000);
       expect(r.pendingOps().length, ops);
-      for (final (code, rate) in const [('EUR', 1000000), ('usd', 1000000), ('US', 1000000), ('USD', 0), ('USD', 1000000001)]) {
+      for (final (code, rate) in const [('EUR', 1000000), ('usd', 1000000), ('US', 1000000), ('USD', 0), ('USD', FxRate.maxRate + 1)]) {
         expect(() => r.setFxRate(code, rate), throwsArgumentError, reason: '$code $rate');
       }
       expect(() => r.removeFxRate('EUR'), throwsArgumentError);
@@ -321,6 +372,79 @@ void main() {
       final after = r.pendingOps().length;
       r.removeFxRate('USD');
       expect(r.pendingOps().length, after);
+    });
+  });
+
+  group('a rate belongs to the wallet currency it was set against', () {
+    test('after a switch EUR -> CHF a rate set against EUR counts nowhere and is listed as stale', () {
+      final now = DateTime.utc(2026, 3, 25, 12).millisecondsSinceEpoch;
+      final r = WalletRepo.inMemory(now: () => now);
+      addTearDown(r.close);
+      const usd = Tx(id: 'u', source: 'revolut', date: '2026-03-05', amount: -10000, currency: 'USD');
+      r.setFxRate('USD', 924000);
+      expect(homeAmount(usd, r.settings()), -9240);
+      r.updateSettings({'currency': 'CHF'});
+      final chf = r.settings();
+      expect(chf.fxRates, isEmpty);
+      expect(chf.fxStale, {'USD': const FxRate(924000, '2026-03-25', home: 'EUR')});
+      expect(homeAmount(usd, chf), isNull);
+      r.setFxRate('USD', 1010000);
+      expect(r.settings().fxRates['USD'], const FxRate(1010000, '2026-03-25', home: 'CHF'));
+      expect(r.settings().fxStale, isEmpty);
+      r.updateSettings({'currency': 'EUR'});
+      expect(r.settings().fxRates, isEmpty);
+      expect(r.settings().fxStale.keys, ['USD']);
+      r.removeFxRate('USD');
+      expect(r.settings().fxStale, isEmpty);
+    });
+  });
+
+  group('computePeriod matches bills on the raw rows', () {
+    // Payday on the 1st: the period 2026-10-01 .. 2026-10-31, today 2026-10-28.
+    final st = _withRates(const WalletSettings(salary: 100000, paydayDay: 1, periodStart: '2026-10-01'), {'USD': 500000});
+    const day = '2026-10-28';
+    const paid = Tx(id: 'pw', source: 'revolut', date: '2026-10-28', amount: -6000, currency: 'USD', description: 'SYNTH POWER');
+    final bill = RecurringBill(
+        id: 'rec:synth_power',
+        payee: merchantKey(paid),
+        label: 'SYNTH POWER',
+        category: 'Bills & one-offs',
+        expectedAmount: 3000,
+        intervalDays: 365, // a yearly bill: held until a matching row pays it (RecurringPayments.paidBy)
+        nextDue: '2026-10-30',
+        status: 'confirmed');
+    final raw = [CategorizedTx(paid, 'Bills & one-offs', kindOf('Bills & one-offs'))];
+
+    test('a USD row worth the EUR bill after conversion never pays it: reserve as without conversion', () {
+      final conv = inHomeCurrency(raw, st);
+      expect(conv.single.tx.amount, -3000);
+      final before = computePeriod(raw, st, const [], day, bills: [bill], table: CategoryTable.builtIn);
+      final after = computePeriod(conv, st, const [], day, bills: [bill], table: CategoryTable.builtIn, matchRows: raw);
+      expect(after.reservedBills, before.reservedBills);
+      expect(after.dueBills.map((b) => b.id), before.dueBills.map((b) => b.id));
+      expect(after.spent, 3000); // the money still counts at the converted amount
+      // Matching on the converted list would take the USD row for the EUR bill.
+      final wrong = computePeriod(conv, st, const [], day, bills: [bill], table: CategoryTable.builtIn);
+      expect(wrong.reservedBills, isNot(before.reservedBills));
+    });
+
+    test('a converted income row never lands a confirmed income', () {
+      const inc = Tx(id: 'in', source: 'revolut', date: '2026-10-10', amount: 6000, currency: 'USD', description: 'SYNTH CLIENT');
+      final income = RecurringBill(
+          id: 'rec:synth_client',
+          payee: merchantKey(inc),
+          label: 'SYNTH CLIENT',
+          category: 'Extra income',
+          expectedAmount: 3000,
+          nextDue: '2026-10-25',
+          status: 'confirmed',
+          direction: RecurringBill.directionIn);
+      final rows = [CategorizedTx(inc, 'Extra income', kindOf('Extra income'))];
+      final before = computePeriod(rows, st, const [], day, bills: [income], table: CategoryTable.builtIn);
+      final after =
+          computePeriod(inHomeCurrency(rows, st), st, const [], day, bills: [income], table: CategoryTable.builtIn, matchRows: rows);
+      expect(after.landedIncome, before.landedIncome);
+      expect(after.expectedIncome.length, before.expectedIncome.length);
     });
   });
 
