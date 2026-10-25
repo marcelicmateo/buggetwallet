@@ -92,6 +92,8 @@ Future<WalletController> loadWith(
   Object? keyError,
   Future<void> Function()? claim,
   bool autoDispose = true,
+  String? joinMarker,
+  void Function()? markerCleared,
 }) async {
   final wc = await WalletController.load(
     opener: w.open,
@@ -101,6 +103,8 @@ Future<WalletController> loadWith(
     setAside: w.setAside,
     isPlaintext: w.isPlaintext,
     claim: claim ?? () async {},
+    joinMarkerReader: () async => joinMarker,
+    joinMarkerClearer: () async => markerCleared?.call(),
     keyReader: () async => keyError != null ? Error.throwWithStackTrace(keyError, StackTrace.current) : key,
     isLocked: () => locked,
     clock: () => DateTime(2026, 10, 22, 12),

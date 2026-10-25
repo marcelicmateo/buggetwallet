@@ -39,11 +39,31 @@ Future<void> setAsideWalletDb(String stamp) async {
   for (var n = 2; await File(target).exists(); n++) {
     target = '$path.unopened-$stamp-$n';
   }
-  final main = File(path);
-  if (await main.exists()) await main.rename(target);
-  for (final s in _sideSuffixes) {
-    final f = File('$path$s');
-    if (await f.exists()) await f.rename('$target$s');
+  // Every rename is remembered: if one fails, the ones already done are renamed back, so wallet.db and its side files stay together
+  // (a new wallet.db must never be opened next to stale side files of the old one). Nothing is deleted either way.
+  final moved = <(String, String)>[];
+  try {
+    final main = File(path);
+    if (await main.exists()) {
+      await main.rename(target);
+      moved.add((path, target));
+    }
+    for (final s in _sideSuffixes) {
+      final f = File('$path$s');
+      if (await f.exists()) {
+        await f.rename('$target$s');
+        moved.add(('$path$s', '$target$s'));
+      }
+    }
+  } on Object {
+    for (final (from, to) in moved.reversed) {
+      try {
+        await File(to).rename(from);
+      } on Object {
+        // left where it is: the caller finds wallet.db missing and does not build a new one next to the remains
+      }
+    }
+    rethrow;
   }
 }
 

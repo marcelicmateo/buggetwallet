@@ -1,6 +1,7 @@
 // Plan › Join another wallet…: the warning, the join page over the open wallet, and what the controller does (set the old
 // database aside before joining, never delete). All data is SYNTHETIC; the database, key store and set-aside are fakes.
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/platform.dart' as plat;
@@ -15,6 +16,12 @@ import 'package:wallet_core/wallet_core.dart';
 import 'db_open_test.dart' show World, loadWith;
 import 'support/wallet.dart';
 
+/// What the fake key store holds for the join-pending marker.
+class _Markers {
+  String? text, last;
+  int cleared = 0;
+}
+
 Finder _key(String k) => find.byKey(ValueKey(k));
 
 /// A wallet whose database, key store and set-aside are fakes that write what they do into [events].
@@ -22,6 +29,9 @@ WalletController _wallet(List<String> events, {bool keySaved = true, Map<String,
   final wc = demoWallet();
   if (keySaved) wc.repo.setLocalValue('keyBackupConfirmed', '2026-10-20');
   wc.dbSetAside = (stamp) async => events.add('aside');
+  wc.dbExists = () async => true;
+  wc.joinMarkerWriter = (t) async {};
+  wc.joinMarkerClearer = () async {};
   wc.keyWriter = (k, {passphrase}) async {
     events.add('key');
     written?.add(await k.toText());
@@ -179,8 +189,16 @@ void main() {
   });
 
   group('controller', () {
+    late _Markers markers;
+    setUp(() => markers = _Markers());
+
     WalletController wallet(List<String> events, {Map<String, String>? aside, List<String>? written}) {
       final wc = _wallet(events, asideKeys: aside, written: written);
+      wc.joinMarkerWriter = (t) async => markers.text = markers.last = t;
+      wc.joinMarkerClearer = () async {
+        markers.cleared++;
+        markers.text = null;
+      };
       addTearDown(wc.dispose);
       return wc;
     }
@@ -230,20 +248,41 @@ void main() {
       expect(events, ['keyAside', 'key', 'aside', 'open']);
     });
 
-    test('the new key is written before the file is set aside; a failed key write touches nothing and drops the slot', () async {
+    test('a failed key write puts the old key back first, then drops the slot and the marker; nothing else is touched', () async {
       final events = <String>[];
       final aside = <String, String>{};
-      final wc = wallet(events, aside: aside);
+      final written = <String>[];
+      final wc = wallet(events, aside: aside, written: written);
       final repo = wc.repo;
-      wc.keyWriter = (k, {passphrase}) async => throw StateError('disk full');
+      final oldText = await wc.keyText();
+      var calls = 0;
+      wc.keyWriter = (k, {passphrase}) async {
+        events.add('key');
+        if (++calls == 1) throw StateError('disk full');
+        written.add(await k.toText());
+      };
       await expectLater(wc.joinAnotherWallet(await VaultKey.generate().toText()), throwsA(isA<StateError>()));
-      expect(events, ['keyAside', 'asideRemoved']);
+      expect(written, [oldText], reason: 'the old key is written back before the slot is given up');
+      expect(events, ['keyAside', 'key', 'key', 'asideRemoved']);
       expect(aside, isEmpty);
+      expect(markers.cleared, 1);
       expect(identical(wc.repo, repo), isTrue, reason: 'the old wallet is still open');
       expect(wc.hasWallet, isTrue);
     });
 
-    test('a failing set-aside puts the old key back, drops the slot and opens the old wallet again', () async {
+    test('a failed key write whose restore also fails keeps the slot and the marker', () async {
+      final events = <String>[];
+      final aside = <String, String>{};
+      final wc = wallet(events, aside: aside);
+      wc.keyWriter = (k, {passphrase}) async => throw StateError('disk full');
+      await expectLater(wc.joinAnotherWallet(await VaultKey.generate().toText()), throwsA(isA<StateError>()));
+      expect(events, ['keyAside']);
+      expect(aside, hasLength(1), reason: 'the old key stays in its slot: the key store may hold either key');
+      expect(markers.cleared, 0);
+      expect(markers.text, isNotNull);
+    });
+
+    test('a failing set-aside puts the old key back, reopens the old wallet, and only then drops the slot', () async {
       final events = <String>[];
       final aside = <String, String>{};
       final written = <String>[];
@@ -253,14 +292,18 @@ void main() {
       wc.dbSetAside = (s) async => throw StateError('rename failed');
       await expectLater(wc.joinAnotherWallet(newText), throwsA(isA<StateError>()));
       expect(written, [newText, oldText], reason: 'the old key is written back');
-      expect(events, ['keyAside', 'key', 'key', 'asideRemoved', 'open']);
+      expect(events, ['keyAside', 'key', 'key', 'open', 'asideRemoved'], reason: 'the slot goes after the reopen worked');
       expect(aside, isEmpty);
+      expect(markers.cleared, 1);
       expect(wc.hasWallet, isTrue);
     });
 
-    test('a failing set-aside whose reopen also fails leaves no wallet open (onboarding)', () async {
+    test('a failing set-aside whose reopen also fails: onboarding with the notice, the slot stays, a later create still finds it',
+        () async {
       final events = <String>[];
-      final wc = wallet(events);
+      final aside = <String, String>{};
+      final wc = wallet(events, aside: aside);
+      final oldText = await wc.keyText();
       var notified = 0;
       wc.addListener(() => notified++);
       wc.dbSetAside = (s) async => throw StateError('rename failed');
@@ -272,32 +315,132 @@ void main() {
       await expectLater(wc.joinAnotherWallet(await VaultKey.generate().toText()), throwsA(isA<StateError>()));
       expect(opens, 1);
       expect(wc.hasWallet, isFalse, reason: 'nothing is open: the app shows onboarding, not an empty wallet');
+      expect(wc.hasUnopenedDb, isTrue, reason: 'onboarding says an older wallet is on this device');
       expect(notified, greaterThan(0), reason: 'listeners hear it');
+      expect(aside.values.single, oldText, reason: 'the old key is still in its slot');
+      expect(events, isNot(contains('asideRemoved')));
+      // The owner then starts a new wallet: the older file is set aside, and the old key is still in the slot.
+      wc.dbSetAside = (s) async => events.add('aside');
+      wc.dbOpener = (k, {deviceId}) async => WalletDb(WalletRepo.inMemory(deviceId: deviceId));
+      await wc.createWallet();
+      expect(events, contains('aside'));
+      expect(aside.values.single, oldText, reason: 'create did not touch the slot');
     });
 
-    test('a crash after the key write (set-aside and key restore both fail): the next start takes the key-mismatch path', () async {
-      final oldKey = VaultKey.generate();
-      final w = World(hasFile: true, fileKey: await localDbKey(oldKey));
-      final wc = await loadWith(w, key: oldKey);
-      wc.repo.setLocalValue('keyBackupConfirmed', '2026-10-20');
-      var stored = await oldKey.toText(); // what the key store holds
-      var writes = 0;
-      wc.keyWriter = (k, {passphrase}) async {
-        if (++writes > 1) throw StateError('crashed');
-        stored = await k.toText();
-      };
-      wc.keyAsideWriter = (stamp, k) async => 'aside.$stamp';
-      wc.keyAsideRemover = (slot) async {};
-      wc.dbSetAside = (s) async => throw StateError('crashed');
+    test('a partial set-aside (wallet.db gone) is not reopened as a new empty wallet: onboarding, slot kept', () async {
+      final events = <String>[];
+      final aside = <String, String>{};
+      final wc = wallet(events, aside: aside);
+      final oldText = await wc.keyText();
+      wc.dbSetAside = (s) async => throw StateError('side file rename failed');
+      wc.dbExists = () async => false; // the main file was moved, a side file was not and could not be moved back
       await expectLater(wc.joinAnotherWallet(await VaultKey.generate().toText()), throwsA(isA<StateError>()));
-      expect(stored, isNot(await oldKey.toText()), reason: 'the new key was written first');
-      expect(w.aside, isEmpty, reason: 'the old file was never moved');
-      expect(w.hasFile, isTrue);
-      // Restart: the stored (new) key does not open the old file.
-      final again = await loadWith(w, key: await VaultKey.parse(stored));
-      expect(again.hasUnopenedDb, isTrue);
-      expect(w.aside, isEmpty, reason: 'start-up leaves the file untouched');
-      expect(w.hasFile, isTrue, reason: 'nothing deleted');
+      expect(events, isNot(contains('open')), reason: 'no new wallet.db next to the remains');
+      expect(wc.hasWallet, isFalse);
+      expect(wc.hasUnopenedDb, isTrue);
+      expect(aside.values.single, oldText);
+      expect(markers.cleared, 1, reason: 'the next start does not build a new wallet on the remains');
+    });
+
+    test('while the old wallet is being set aside no sync starts (a resume or a follow-up skips)', () async {
+      final events = <String>[];
+      final wc = wallet(events);
+      wc.relayUrl = Uri.parse('http://homeserver:8787');
+      var runs = 0;
+      wc.syncRunner = (relay, k, r) async {
+        runs++;
+        return const SyncReport(0, 0, 0, caughtUp: true);
+      };
+      final gate = Completer<void>();
+      wc.keyAsideWriter = (stamp, k) async {
+        events.add('keyAside');
+        await gate.future;
+        return 'aside.$stamp';
+      };
+      final join = wc.joinAnotherWallet(await VaultKey.generate().toText());
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(events, ['keyAside'], reason: 'the set-aside is under way');
+      final before = runs;
+      await wc.syncNow(trigger: 'resume');
+      await wc.syncNow(quiet: true, trigger: 'relay');
+      expect(runs, before, reason: 'skipped while joining');
+      gate.complete();
+      await join;
+      expect(wc.hasWallet, isTrue);
+    });
+
+    test('the join marker is written before the new key and cleared when the join is done', () async {
+      final events = <String>[];
+      final wc = wallet(events);
+      final relay = Uri.parse('http://homeserver:8787');
+      wc.syncRunner = (r, k, repo) async => const SyncReport(0, 0, 0);
+      final order = <String>[];
+      wc.joinMarkerWriter = (t) async {
+        order.add('marker');
+        markers.text = markers.last = t;
+      };
+      wc.keyWriter = (k, {passphrase}) async => order.add('key');
+      await wc.joinAnotherWallet(await VaultKey.generate().toText(), relay: relay);
+      expect(order, ['marker', 'key']);
+      final m = jsonDecode(markers.last!) as Map<String, Object?>;
+      expect(m['relay'], relay.toString());
+      expect(m['id'], isA<String>());
+      expect(m.containsKey('key'), isFalse, reason: 'no key in the marker');
+      expect(markers.cleared, 1, reason: 'the join completed');
+    });
+
+    group('a start after a crash finishes the join from the marker', () {
+      final marker = jsonEncode({'v': 1, 'relay': 'http://homeserver:8787', 'id': 'abc123marker'});
+
+      test(
+          'the new key was written but the old file never moved: it is set aside now and the new wallet opens with the fresh id and the relay',
+          () async {
+        final oldKey = VaultKey.generate();
+        final w = World(hasFile: true, fileKey: await localDbKey(oldKey));
+        final newKey = VaultKey.generate();
+        var cleared = 0;
+        final wc = await loadWith(w, key: newKey, joinMarker: marker, markerCleared: () => cleared++);
+        expect(wc.hasWallet, isTrue);
+        expect(wc.hasUnopenedDb, isFalse);
+        expect(w.aside.values.single!.goals().single.name, 'Old goal', reason: 'the old wallet is set aside, whole');
+        expect(w.ids.last, 'abc123marker', reason: 'the fresh device id from the marker');
+        expect(wc.relayUrl.toString(), 'http://homeserver:8787');
+        expect(cleared, 1);
+        expect(wc.goals, isEmpty, reason: 'a new empty wallet, ready to sync');
+      });
+
+      test('the old file was moved but the join never opened: the new wallet opens with the fresh id and the relay', () async {
+        final oldKey = VaultKey.generate();
+        final w = World(hasFile: true, fileKey: await localDbKey(oldKey));
+        await w.setAside('2026-10-25');
+        var cleared = 0;
+        final wc = await loadWith(w, key: VaultKey.generate(), joinMarker: marker, markerCleared: () => cleared++);
+        expect(wc.hasWallet, isTrue);
+        expect(w.ids.single, 'abc123marker', reason: 'not the old install id');
+        expect(wc.relayUrl.toString(), 'http://homeserver:8787');
+        expect(w.aside, hasLength(1), reason: 'nothing more was moved');
+        expect(cleared, 1);
+      });
+
+      test('a start without the marker is unchanged: a key that opens nothing leaves the file alone (onboarding notice)', () async {
+        final w = World(hasFile: true, fileKey: await localDbKey(VaultKey.generate()));
+        final wc = await loadWith(w, key: VaultKey.generate());
+        expect(wc.hasWallet, isFalse);
+        expect(wc.hasUnopenedDb, isTrue);
+        expect(w.aside, isEmpty);
+      });
+
+      test('the join had finished but the marker was not cleared: the marker is cleared, the relay filled in if missing, nothing moved',
+          () async {
+        final key = VaultKey.generate();
+        final w = World(hasFile: true, fileKey: await localDbKey(key));
+        var cleared = 0;
+        final wc = await loadWith(w, key: key, joinMarker: marker, markerCleared: () => cleared++);
+        expect(wc.hasWallet, isTrue);
+        expect(w.aside, isEmpty);
+        expect(cleared, 1);
+        expect(wc.relayUrl.toString(), 'http://homeserver:8787');
+      });
     });
 
     group('sync around the set-aside', () {

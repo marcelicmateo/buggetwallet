@@ -27,6 +27,7 @@ void main() {
       deviceIdReader: () async => storedId,
       deviceIdWriter: (id) async => storedId = id,
       keyReader: () async => key,
+      joinMarkerReader: () async => null,
       isLocked: () => false,
       clock: () => DateTime(2026, 10, 22, 12),
     );
@@ -91,6 +92,20 @@ void main() {
     await setAsideWalletDb('2026-10-22');
     expect(names(), ['wallet.db.unopened-2026-10-22', 'wallet.db.unopened-2026-10-22-2']);
     expect(File('$path.unopened-2026-10-22-2').readAsStringSync(), 'b');
+  });
+
+  test('a set-aside that fails half way puts the files it moved back: wallet.db and its side files stay together', () async {
+    File(path).writeAsStringSync('main');
+    File('$path-wal').writeAsStringSync('wal');
+    File('$path-shm').writeAsStringSync('shm');
+    // The target of the -shm file is taken by a folder, so that rename fails after wallet.db and -wal were moved.
+    Directory('$path.unopened-2026-10-22-shm').createSync();
+    await expectLater(setAsideWalletDb('2026-10-22'), throwsA(anything));
+    expect(File(path).readAsStringSync(), 'main', reason: 'wallet.db is back');
+    expect(File('$path-wal').readAsStringSync(), 'wal');
+    expect(File('$path-shm').readAsStringSync(), 'shm');
+    expect(File('$path.unopened-2026-10-22').existsSync(), isFalse, reason: 'nothing is left half moved');
+    expect(File('$path.unopened-2026-10-22-wal').existsSync(), isFalse);
   });
 
   test('a stored key that does not open the file leaves it alone', () async {

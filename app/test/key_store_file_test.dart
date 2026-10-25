@@ -63,6 +63,17 @@ void main() {
     expect(file.existsSync(), isTrue);
   }, skip: posix);
 
+  test('the join-pending marker is a private side file: written, read back, cleared', () async {
+    expect(await KeyStore.readJoinMarker(), isNull);
+    await KeyStore.writeJoinMarker('{"v":1}');
+    final f = File('${keyDir.path}/join.pending');
+    expect(mode(f.path), '600');
+    expect(await KeyStore.readJoinMarker(), '{"v":1}');
+    await KeyStore.clearJoinMarker();
+    expect(f.existsSync(), isFalse);
+    expect(await KeyStore.readJoinMarker(), isNull);
+  }, skip: posix);
+
   test('a folder that already exists with open permissions is made private', () async {
     await keyDir.create();
     await Process.run('chmod', ['755', keyDir.path]);

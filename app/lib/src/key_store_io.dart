@@ -94,6 +94,31 @@ class KeyStore {
   static Future<bool> _asideExists(String slot) async =>
       isMobile ? await const FlutterSecureStorage().containsKey(key: '${_name}_$slot') : await (await _file('wallet.key.$slot')).exists();
 
+  /// The "join pending" marker of Join another wallet (relay address and a fresh device id, no key): a private side file / secure
+  /// storage entry next to the key, never in the database, so a start after a crash can finish the join.
+  static Future<void> writeJoinMarker(String text) async {
+    if (isMobile) {
+      await const FlutterSecureStorage().write(key: '${_name}_join_pending', value: text);
+    } else {
+      await _writePrivate(await _file('join.pending'), text);
+    }
+  }
+
+  static Future<String?> readJoinMarker() async {
+    if (isMobile) return const FlutterSecureStorage().read(key: '${_name}_join_pending');
+    final f = await _file('join.pending');
+    return await f.exists() ? (await f.readAsString()).trim() : null;
+  }
+
+  static Future<void> clearJoinMarker() async {
+    if (isMobile) {
+      await const FlutterSecureStorage().delete(key: '${_name}_join_pending');
+    } else {
+      final f = await _file('join.pending');
+      if (await f.exists()) await f.delete();
+    }
+  }
+
   /// Takes back a slot made by [writeAside] whose set-aside did not happen.
   static Future<void> removeAside(String slot) async {
     if (isMobile) {
@@ -153,8 +178,9 @@ class KeyStore {
     if (isMobile) {
       await const FlutterSecureStorage().delete(key: _name);
       await const FlutterSecureStorage().delete(key: _idName);
+      await const FlutterSecureStorage().delete(key: '${_name}_join_pending');
     } else {
-      for (final n in ['wallet.key', 'device.id']) {
+      for (final n in ['wallet.key', 'device.id', 'join.pending']) {
         final f = await _file(n);
         if (await f.exists()) await f.delete();
       }

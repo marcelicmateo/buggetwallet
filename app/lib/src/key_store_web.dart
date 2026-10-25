@@ -37,6 +37,12 @@ class KeyStore {
 
   static Future<void> removeAside(String slot) async {}
 
+  static Future<void> writeJoinMarker(String text) async {}
+
+  static Future<String?> readJoinMarker() async => null;
+
+  static Future<void> clearJoinMarker() async {}
+
   static const _idName = 'bw.deviceId';
 
   /// This browser's device id (H6), next to the wrapped key; not secret, so plain in localStorage. Never logged.
