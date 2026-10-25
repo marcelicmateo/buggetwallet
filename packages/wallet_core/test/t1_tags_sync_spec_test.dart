@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/n2.dart';
-import 'support/sim.dart';
+import 'support/sim.dart' hide dump;
 import 'support/t1.dart';
 
 const _t = Timeout(Duration(seconds: 60));
@@ -130,22 +130,22 @@ void main() {
       final tag = await a.repo.addTag('Trip');
       final tx = expense(a, 'Hotel');
       await syncAll([a, b]);
-      now += 1000;
       await a.repo.setTxTag(tx, tag, true);
-      now += 1000;
-      await b.repo.setTxTag(tx, tag, false); // later
       await syncAll([a, b]);
-      expect(effective(a.repo, tx), isEmpty);
-      expect(effective(b.repo, tx), isEmpty);
       now += 1000;
-      await a.repo.setTxTag(tx, tag, true); // later still
+      await a.repo.setTxTag(tx, tag, false); // earlier
       now += 1000;
       await b.repo.setTxTag(tx, tag, false);
       now += 1000;
-      await a.repo.setTxTag(tx, tag, true); // latest
+      await b.repo.setTxTag(tx, tag, true); // later
       await syncAll([a, b]);
       expect(effective(a.repo, tx), [tag]);
       expect(effective(b.repo, tx), [tag]);
+      now += 1000;
+      await a.repo.setTxTag(tx, tag, false); // latest
+      await syncAll([a, b]);
+      expect(effective(a.repo, tx), isEmpty);
+      expect(effective(b.repo, tx), isEmpty);
       sameTables(a.repo, b.repo);
       expect(a.repo.db.select('SELECT id FROM tx_tags'), hasLength(1), reason: 'one row per link, id <tx>|<tag>');
     }, timeout: _t);
@@ -157,6 +157,7 @@ void main() {
       final r2 = expense(a, 'Lidl', '2026-10-06');
       await syncAll([a, b]);
       now += 1000;
+      await b.repo.setTxTag(r1, tag, true);
       await b.repo.setTxTag(r1, tag, false);
       now += 1000;
       await a.repo.setRuleTag(payee(a, r1), tag, true);
@@ -315,7 +316,8 @@ void main() {
         expect(dump(fresh, t), dump(a.repo, t), reason: t);
       }
       expect(effective(fresh, tx1), isEmpty);
-      expect(effective(fresh, tx2), [trip]);
+      expect(effective(fresh, tx2), effective(a.repo, tx2));
+      expect(effective(fresh, tx2), unorderedEquals([trip, gift]), reason: 'trip by link, gift by the Lidl rule');
       expect(fresh.tagTable().isLive(gone), isFalse);
       expect(fresh.tags(includeDeleted: true), hasLength(3));
     }, timeout: _t);

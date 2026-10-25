@@ -146,7 +146,8 @@ void main() {
     test('off written before the rule exists still wins', () async {
       final tag = await repo.addTag('Weekly shop');
       final a = expense('Lidl');
-      await repo.setTxTag(a, tag, false);
+      await repo.setTxTag(a, tag, true);
+      await repo.setTxTag(a, tag, false); // off with no rule yet: the link exists because it was on
       await repo.setRuleTag(payeeOf(a), tag, true);
       expect(effective(repo, a), isEmpty);
     }, timeout: _t);
@@ -187,6 +188,7 @@ void main() {
       final b = expense('Lidl', date: '2026-10-06');
       final c = expense('Lidl', date: '2026-10-07');
       await repo.setRuleTag(payeeOf(a), tag, true);
+      await repo.setTxTag(a, tag, false); // off then on: the on link is written (the rule alone would make it a no-op)
       await repo.setTxTag(a, tag, true);
       await repo.setTxTag(c, tag, false);
       await repo.setRuleTag(payeeOf(a), tag, false);
@@ -264,8 +266,7 @@ void main() {
       expect(tagsOf(tx, tags: repo.tagTable(), ruleTags: const {}, links: const {}), isEmpty);
       final c = tagged(tx, 'Groceries');
       expect(c.tags, isEmpty);
-      final d = tagged(tx, 'Groceries', ['x']);
-      expect(() => d.tags.add('y'), throwsUnsupportedError);
+      expect(() => c.tags.add('y'), throwsUnsupportedError);
     });
   });
 
@@ -487,9 +488,11 @@ void main() {
 
     test('nothing tagged, nothing at all, and everything tagged', () {
       final none = tagShare(const [], _oct, currency: 'EUR');
-      expect((none.slices, none.untaggedSpent), (isEmpty, 0));
+      expect(none.slices, isEmpty);
+      expect(none.untaggedSpent, 0);
       final untagged = tagShare([tagged(plain('u', '2026-10-03', -100, 'A'), 'Groceries')], _oct, currency: 'EUR');
-      expect((untagged.slices, untagged.untaggedSpent), (isEmpty, 100));
+      expect(untagged.slices, isEmpty);
+      expect(untagged.untaggedSpent, 100);
       final all = tagShare([
         tagged(plain('u', '2026-10-03', -100, 'A'), 'Groceries', [a])
       ], _oct, currency: 'EUR');
