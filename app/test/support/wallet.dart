@@ -83,6 +83,15 @@ Future<void> pumpApp(WidgetTester tester, Widget child, {Size size = const Size(
   await tester.pump();
 }
 
+/// Plan › Payday plan: taps Edit so the number fields show (the section lists the ledger lines until then).
+Future<void> openPlanEdit(WidgetTester tester) async {
+  final edit = find.byKey(const ValueKey('planEdit'));
+  await Scrollable.ensureVisible(tester.element(edit), alignment: 0.5);
+  await tester.pump();
+  await tester.tap(edit);
+  await tester.pump();
+}
+
 /// The day [budgetWallet] lives on (day 20 of 31, so a monthly budget is about two thirds through its month).
 final budgetToday = DateTime(2026, 10, 20, 12);
 

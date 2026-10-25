@@ -134,7 +134,7 @@ class DialogAppBar extends StatelessWidget implements PreferredSizeWidget {
         leading: IconButton(
             key: const ValueKey('sheetClose'), icon: const Icon(Icons.close), tooltip: 'Close', onPressed: () => Navigator.pop(context)),
         actions: actions,
-        bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: Container(height: 2, color: context.c.lineStrong)),
+        bottom: PreferredSize(preferredSize: const Size.fromHeight(1), child: Container(height: 1, color: context.c.line)),
       );
 }
 

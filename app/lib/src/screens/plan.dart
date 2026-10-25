@@ -18,6 +18,7 @@ import 'export_panel.dart';
 import 'forget_browser.dart';
 import 'habits_panels.dart';
 import 'import_flow.dart';
+import 'join_another.dart';
 import 'key_backup.dart';
 import 'look_panel.dart';
 import 'sync_panel.dart';
@@ -49,6 +50,9 @@ class _PlanScreenState extends State<PlanScreen> {
   String currency = 'EUR';
   String _shownCurrency = 'EUR';
   bool importing = false;
+
+  /// Payday plan shows the ledger lines; Edit turns them into the fields (Save / Cancel go back).
+  bool _editing = false;
   final _billsKey = GlobalKey();
   final _billsDbKey = GlobalKey();
   final _scroll = ScrollController();
@@ -174,91 +178,101 @@ class _PlanScreenState extends State<PlanScreen> {
             controller: _scroll,
             padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
             children: gapped([
-              Panel(children: [
-                const SectionHead('Payday plan'),
-                Heading(
-                    p.flexBudget < 0
-                        ? 'Nothing to spend: the plan is ${moneyExact(-p.flexBudget, cur)} over'
-                        : p.flexBudget == 0
-                            ? 'Nothing to spend: the plan leaves no spending money'
-                            : '${moneyExact(p.flexBudget, cur)} to spend · ${moneyExact(p.planDaily, cur)}/day',
-                    key: const ValueKey('planHeading')),
-                const Muted('Salary minus bills minus savings. Whatever is left is your spending money until the next payday.'),
-                Rows(children: [
-                  LineItem(
-                      'Salary ${s.incomeMode == 'received' && p.received > 0 ? '(received)' : '(planned)'}', moneyExact(p.income, cur)),
-                  LineItem('Rent', moneyExact(-s.rent, cur), sub: 'Paid since payday: ${moneyExact(p.fixedPaid['Rent'] ?? 0, cur)}'),
-                  LineItem('Loan', moneyExact(-s.loan, cur),
-                      sub:
-                          'Paid since payday: ${moneyExact(p.fixedPaid['Loan'] ?? 0, cur)}${s.loanEnd != null ? ' · ends ${monthLong(s.loanEnd!)}' : ''}'),
-                  LineItem('Bills & subscriptions', moneyExact(-s.subs, cur),
-                      sub: 'Paid since payday: ${moneyExact(p.fixedPaid['Bills & subscriptions'] ?? 0, cur)}'),
-                  for (final g in wc.goals) LineItem(g.name, moneyExact(-g.monthly, cur), sub: 'savings goal'),
-                  // Bills and planned costs due before payday come off the spending money too: the rows add up to the total.
-                  if (p.reservedBills + p.reservedPlanned > 0)
-                    LineItem('Set aside for coming costs', moneyExact(-(p.reservedBills + p.reservedPlanned), cur),
-                        key: const ValueKey('ledgerSetAside'), sub: 'Bills and planned costs due before payday'),
-                ]),
-                TotalRule(
-                    padding: EdgeInsets.zero,
-                    child: LineItem(
-                        'Spending money', p.flexBudget < 0 ? 'Over by ${moneyExact(-p.flexBudget, cur)}' : moneyExact(p.flexBudget, cur),
-                        key: const ValueKey('ledgerSpendingMoney'),
-                        valueColor: p.flexBudget < 0 ? context.c.bad : null,
-                        bold: true,
-                        sub: '${p.length} days, ${shortDate(p.start)} to ${shortDate(addDays(p.end, -1))}')),
-                if (lowIncome)
-                  Panel(color: context.c.warnBg, children: [
-                    Text(
-                        'Salary received so far is ${money(p.received, cur, decimals: 0)}, below your planned ${money(s.salary, cur, decimals: 0)}.',
-                        style: TextStyle(color: context.c.warnInk)),
-                    SegmentedButton<String>(
-                      segments: [
-                        ButtonSegment(value: 'planned', label: Text('Plan on ${money(s.salary, cur, decimals: 0)}')),
-                        ButtonSegment(value: 'received', label: Text('Plan on ${money(p.received, cur, decimals: 0)}')),
-                      ],
-                      selected: {s.incomeMode},
-                      onSelectionChanged: (v) => wc.updateSettings({'incomeMode': v.first}),
+              if (_editing)
+                Panel(children: [
+                  const SectionHead('Payday plan'),
+                  Row(children: [
+                    Expanded(child: field('salary', 'Salary per month')),
+                    const SizedBox(width: 10),
+                    Expanded(child: field('rent', 'Rent'))
+                  ]),
+                  Row(children: [
+                    Expanded(child: field('loan', 'Loan')),
+                    const SizedBox(width: 10),
+                    Expanded(child: field('subs', 'Bills & subs'))
+                  ]),
+                  Row(children: [
+                    Expanded(child: field('impulse', 'Wishlist above')),
+                    const SizedBox(width: 10),
+                    Expanded(child: field('coolHours', 'Wait (hours)', money: false))
+                  ]),
+                  Row(children: [
+                    Expanded(child: field('paydayDay', 'Latest payday', money: false)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey(currency),
+                        isExpanded: true,
+                        initialValue: currency,
+                        decoration: const InputDecoration(labelText: 'Currency'),
+                        items: [
+                          for (final c in const ['EUR', 'USD', 'GBP', 'CHF']) DropdownMenuItem(value: c, child: Text(c))
+                        ],
+                        onChanged: (v) => setState(() => currency = v ?? currency),
+                      ),
                     ),
                   ]),
-              ]),
-              Panel(children: [
-                const SectionHead('Numbers'),
-                Row(children: [
-                  Expanded(child: field('salary', 'Salary per month')),
-                  const SizedBox(width: 10),
-                  Expanded(child: field('rent', 'Rent'))
+                  field('rentCashThreshold', 'Cash withdrawal counts as rent from'),
+                  const Muted('ATM withdrawals this big or bigger count as rent. 0 turns it off.', size: BwType.metaSize),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    FilledButton(key: const ValueKey('planSave'), onPressed: _savePlan, child: const Text('Save')),
+                    OutlinedButton(key: const ValueKey('planCancel'), onPressed: _cancelEdit, child: const Text('Cancel')),
+                  ]),
+                ])
+              else
+                Panel(children: [
+                  SectionHead('Payday plan',
+                      trailing: TextButton.icon(
+                          key: const ValueKey('planEdit'),
+                          icon: const Icon(Icons.edit_outlined, size: 18),
+                          label: const Text('Edit'),
+                          onPressed: _startEdit)),
+                  Heading(
+                      p.flexBudget < 0
+                          ? 'Nothing to spend: the plan is ${moneyExact(-p.flexBudget, cur)} over'
+                          : p.flexBudget == 0
+                              ? 'Nothing to spend: the plan leaves no spending money'
+                              : '${moneyExact(p.flexBudget, cur)} to spend · ${moneyExact(p.planDaily, cur)}/day',
+                      key: const ValueKey('planHeading')),
+                  const Muted('Salary minus bills minus savings. Whatever is left is your spending money until the next payday.'),
+                  Rows(children: [
+                    LineItem(
+                        'Salary ${s.incomeMode == 'received' && p.received > 0 ? '(received)' : '(planned)'}', moneyExact(p.income, cur)),
+                    LineItem('Rent', moneyExact(-s.rent, cur), sub: 'Paid since payday: ${moneyExact(p.fixedPaid['Rent'] ?? 0, cur)}'),
+                    LineItem('Loan', moneyExact(-s.loan, cur),
+                        sub:
+                            'Paid since payday: ${moneyExact(p.fixedPaid['Loan'] ?? 0, cur)}${s.loanEnd != null ? ' · ends ${monthLong(s.loanEnd!)}' : ''}'),
+                    LineItem('Bills & subscriptions', moneyExact(-s.subs, cur),
+                        sub: 'Paid since payday: ${moneyExact(p.fixedPaid['Bills & subscriptions'] ?? 0, cur)}'),
+                    for (final g in wc.goals) LineItem(g.name, moneyExact(-g.monthly, cur), sub: 'savings goal'),
+                    // Bills and planned costs due before payday come off the spending money too: the rows add up to the total.
+                    if (p.reservedBills + p.reservedPlanned > 0)
+                      LineItem('Set aside for coming costs', moneyExact(-(p.reservedBills + p.reservedPlanned), cur),
+                          key: const ValueKey('ledgerSetAside'), sub: 'Bills and planned costs due before payday'),
+                  ]),
+                  TotalRule(
+                      padding: EdgeInsets.zero,
+                      child: LineItem(
+                          'Spending money', p.flexBudget < 0 ? 'Over by ${moneyExact(-p.flexBudget, cur)}' : moneyExact(p.flexBudget, cur),
+                          key: const ValueKey('ledgerSpendingMoney'),
+                          valueColor: p.flexBudget < 0 ? context.c.bad : null,
+                          bold: true,
+                          sub: '${p.length} days, ${shortDate(p.start)} to ${shortDate(addDays(p.end, -1))}')),
+                  if (lowIncome)
+                    Panel(color: context.c.warnBg, children: [
+                      Text(
+                          'Salary received so far is ${money(p.received, cur, decimals: 0)}, below your planned ${money(s.salary, cur, decimals: 0)}.',
+                          style: TextStyle(color: context.c.warnInk)),
+                      SegmentedButton<String>(
+                        segments: [
+                          ButtonSegment(value: 'planned', label: Text('Plan on ${money(s.salary, cur, decimals: 0)}')),
+                          ButtonSegment(value: 'received', label: Text('Plan on ${money(p.received, cur, decimals: 0)}')),
+                        ],
+                        selected: {s.incomeMode},
+                        onSelectionChanged: (v) => wc.updateSettings({'incomeMode': v.first}),
+                      ),
+                    ]),
                 ]),
-                Row(children: [
-                  Expanded(child: field('loan', 'Loan')),
-                  const SizedBox(width: 10),
-                  Expanded(child: field('subs', 'Bills & subs'))
-                ]),
-                Row(children: [
-                  Expanded(child: field('impulse', 'Wishlist above')),
-                  const SizedBox(width: 10),
-                  Expanded(child: field('coolHours', 'Wait (hours)', money: false))
-                ]),
-                Row(children: [
-                  Expanded(child: field('paydayDay', 'Latest payday', money: false)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      key: ValueKey(currency),
-                      isExpanded: true,
-                      initialValue: currency,
-                      decoration: const InputDecoration(labelText: 'Currency'),
-                      items: [
-                        for (final c in const ['EUR', 'USD', 'GBP', 'CHF']) DropdownMenuItem(value: c, child: Text(c))
-                      ],
-                      onChanged: (v) => setState(() => currency = v ?? currency),
-                    ),
-                  ),
-                ]),
-                field('rentCashThreshold', 'Cash withdrawal counts as rent from'),
-                const Muted('ATM withdrawals this big or bigger count as rent. 0 turns it off.', size: BwType.metaSize),
-                FilledButton(onPressed: _savePlan, child: const Text('Save numbers')),
-              ]),
               KeyedSubtree(key: _billsKey, child: ExpectedBillsPanel(wc: wc)),
               KeyedSubtree(key: _billsDbKey, child: BillsPanel(wc: wc, chooser: widget.chooser)),
               BudgetsPanel(wc: wc),
@@ -298,12 +312,38 @@ class _PlanScreenState extends State<PlanScreen> {
               ]),
               if (!isWeb) NudgesPanel(wc: wc),
               SyncPanel(wc: wc, onShowKey: () => _showKey(context)),
+              if (!isWeb)
+                Panel(children: [
+                  const SectionHead('Another wallet'),
+                  const Muted('Have a wallet on another device? Join it here. This wallet is set aside on this device first, not deleted.'),
+                  OutlinedButton.icon(
+                    key: const ValueKey('joinAnother'),
+                    icon: const Icon(Icons.login),
+                    label: const Text('Join another wallet…'),
+                    onPressed: () => joinAnotherWallet(context, wc),
+                  ),
+                ]),
               BackupPanel(wc: wc, chooser: widget.chooser),
               ExportPanel(wc: wc, chooser: widget.chooser),
               LookPanel(wc: wc),
               DiagnosticsPanel(wc: wc, chooser: widget.chooser),
               if (isWeb) _browserPanel(context),
             ])));
+  }
+
+  void _startEdit() {
+    logNav('plan.edit');
+    setState(() => _editing = true);
+  }
+
+  /// Back to the ledger lines; the fields show the saved values again.
+  void _cancelEdit() {
+    logNav('plan.cancel');
+    setState(() {
+      _errors.clear();
+      _fill(widget.wc.settings, force: true);
+      _editing = false;
+    });
   }
 
   /// Saves only the fields the user edited, on top of the latest settings, so changes made elsewhere
@@ -347,10 +387,12 @@ class _PlanScreenState extends State<PlanScreen> {
       _shown[k] = t;
     }
     if (changes.isEmpty) {
+      setState(() => _editing = false);
       toast(context, 'Nothing to save');
       return;
     }
     widget.wc.updateSettings(changes);
+    setState(() => _editing = false);
     toast(context, 'Plan saved');
   }
 

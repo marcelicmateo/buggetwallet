@@ -54,7 +54,7 @@ class SectionHead extends StatelessWidget {
     final label = Eyebrow(text);
     return Container(
       padding: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: context.c.lineStrong))),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: context.c.line))),
       child: trailing == null ? label : SplitRow(start: label, end: trailing!),
     );
   }
@@ -329,24 +329,24 @@ class MoneyText extends StatelessWidget {
   }
 }
 
-/// Two 1 px rules with a 1 px gap: the line under a total.
+/// Two 1 px rules with a 2 px gap: the line under a total (the only double rule in the app).
 class DoubleRule extends StatelessWidget {
   const DoubleRule({super.key});
   @override
   Widget build(BuildContext context) {
     final line = Container(height: 1, color: context.c.lineStrong);
-    return Column(mainAxisSize: MainAxisSize.min, children: [line, const SizedBox(height: 1), line]);
+    return Column(mainAxisSize: MainAxisSize.min, children: [line, const SizedBox(height: 2), line]);
   }
 }
 
-/// A total: a 1 px rule above [child] and a double rule below it.
+/// A total: a light 1 px rule above [child] and a double rule below it.
 class TotalRule extends StatelessWidget {
   final Widget? child;
   final EdgeInsets padding;
   const TotalRule({super.key, this.child, this.padding = const EdgeInsets.symmetric(vertical: 8)});
   @override
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Container(height: 1, color: context.c.lineStrong),
+        Container(height: 1, color: context.c.line),
         if (child != null) Padding(padding: padding, child: child) else SizedBox(height: padding.vertical),
         const DoubleRule(),
       ]);
@@ -647,7 +647,7 @@ class NavBarFrame extends StatelessWidget {
     final c = context.c;
     return Stack(children: [
       child,
-      Positioned(left: 0, right: 0, top: 0, height: 1, child: IgnorePointer(child: ColoredBox(color: c.ink))),
+      Positioned(left: 0, right: 0, top: 0, height: 1, child: IgnorePointer(child: ColoredBox(color: c.lineStrong))),
       Positioned.fill(
         child: IgnorePointer(
           child: LayoutBuilder(builder: (context, box) {

@@ -14,9 +14,13 @@ final _log = Logger('bw.app');
 
 /// First run: create a new wallet (new key) or join an existing one with its key. In a browser a passphrase step follows:
 /// the key is stored in this browser wrapped with it.
+///
+/// With [replaceCurrent] (Plan › Join another wallet…, pushed over the open wallet) it is the join step only: "Cancel" closes it
+/// and leaves the open wallet alone; joining sets the open wallet aside first and then closes this page.
 class OnboardingScreen extends StatefulWidget {
   final WalletController wc;
-  const OnboardingScreen({super.key, required this.wc});
+  final bool replaceCurrent;
+  const OnboardingScreen({super.key, required this.wc, this.replaceCurrent = false});
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
@@ -26,7 +30,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final relayText = TextEditingController();
   final _pass = TextEditingController();
   final _pass2 = TextEditingController();
-  bool joining = false;
+  late bool joining = widget.replaceCurrent;
 
   /// Web: choosing the passphrase for a new wallet (`create`) or for the key just typed (`join`); null = not on that step.
   String? _passphraseFor;
@@ -37,7 +41,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void initState() {
     super.initState();
     AppLog.setScreen('onboarding');
-    logNav('onboarding.show');
+    logNav('onboarding.show', {'replace': widget.replaceCurrent});
   }
 
   @override
@@ -83,6 +87,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: Text(isWeb ? 'Use my wallet key' : 'Join my wallet from another device'),
         ),
       ] else ...[
+        if (widget.replaceCurrent)
+          const Muted('Your current wallet is set aside on this device when you join.', key: ValueKey('replaceNote')),
         Muted(isWeb
             ? 'On a device that already has your wallet, open Plan › Show wallet key, then type or paste the key here. You can then restore a backup file in Plan.'
             : 'On a device that already has your wallet, open Plan › Show wallet key, then type or paste the key here.'),
@@ -105,7 +111,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           onPressed: busy ? null : (isWeb ? _checkKeyThenAsk : _join),
           child: const Text('Join wallet', style: TextStyle(fontSize: BwType.headingSize)),
         ),
-        TextButton(key: const ValueKey('joinBack'), onPressed: () => setState(() => joining = false), child: const Text('Back')),
+        TextButton(
+            key: const ValueKey('joinBack'),
+            onPressed: busy
+                ? null
+                : widget.replaceCurrent
+                    ? () => Navigator.of(context).pop()
+                    : () => setState(() => joining = false),
+            child: Text(widget.replaceCurrent ? 'Cancel' : 'Back')),
       ],
     ]);
   }
@@ -227,7 +240,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       error = null;
     });
     try {
-      await widget.wc.joinWallet(keyText.text, passphrase: passphrase, relay: _relay());
+      if (widget.replaceCurrent) {
+        await widget.wc.joinAnotherWallet(keyText.text, passphrase: passphrase, relay: _relay());
+        if (mounted) {
+          toast(context, 'Joined. Your old wallet is set aside on this device.');
+          Navigator.of(context).pop();
+        }
+      } else {
+        await widget.wc.joinWallet(keyText.text, passphrase: passphrase, relay: _relay());
+      }
     } catch (e, st) {
       // Key errors are fixed texts (typo, too short, …); the typed key is never logged.
       logError(_log, 'wallet.join.failed', e, st, fields: {'chars': keyText.text.length});

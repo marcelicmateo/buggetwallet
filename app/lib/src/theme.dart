@@ -28,44 +28,44 @@ class WalletColors extends ThemeExtension<WalletColors> {
 
   /// Paper and ink.
   static const light = WalletColors(
-    bg: Color(0xFFF7F5EF),
-    surface: Color(0xFFFFFDF8),
-    surface2: Color(0xFFEFECE2),
-    ink: Color(0xFF1D2433),
-    ink2: Color(0xFF4A5163),
-    muted: Color(0xFF5A6070),
-    line: Color(0xFFD8D3C4),
-    lineStrong: Color(0xFF1D2433),
-    accent: Color(0xFF1F3FA8),
-    accentSoft: Color(0xFFE3E8F7),
-    pos: Color(0xFF1F3FA8),
-    neg: Color(0xFFB3261E),
-    good: Color(0xFF2E6B2E),
-    bad: Color(0xFFB3261E),
-    warnBg: Color(0xFFFBEFD0),
-    warnInk: Color(0xFF5C3D00),
-    bar: Color(0xFF1F3FA8),
+    bg: Color(0xFFF2EEE4),
+    surface: Color(0xFFF9F6EE),
+    surface2: Color(0xFFEAE5D9),
+    ink: Color(0xFF2C313C),
+    ink2: Color(0xFF50566A),
+    muted: Color(0xFF5E6372),
+    line: Color(0xFFDAD4C5),
+    lineStrong: Color(0xFF87847C),
+    accent: Color(0xFF3A559E),
+    accentSoft: Color(0xFFE6E8F0),
+    pos: Color(0xFF3A559E),
+    neg: Color(0xFFA93A32),
+    good: Color(0xFF3E6B3E),
+    bad: Color(0xFFA93A32),
+    warnBg: Color(0xFFF6EBCB),
+    warnInk: Color(0xFF5C4210),
+    bar: Color(0xFF3A559E),
   );
 
   /// Night ledger.
   static const dark = WalletColors(
-    bg: Color(0xFF14171F),
-    surface: Color(0xFF1A1E28),
-    surface2: Color(0xFF1F2430),
-    ink: Color(0xFFE9E6DA),
-    ink2: Color(0xFFB9BDC9),
-    muted: Color(0xFF9AA0B0),
-    line: Color(0xFF343A4A),
-    lineStrong: Color(0xFF6B7285),
-    accent: Color(0xFF8FA6FF),
-    accentSoft: Color(0xFF232B4D),
-    pos: Color(0xFF8FA6FF),
-    neg: Color(0xFFFF8A80),
-    good: Color(0xFF7FCF8A),
-    bad: Color(0xFFFF8A80),
-    warnBg: Color(0xFF33290F),
-    warnInk: Color(0xFFF0D58A),
-    bar: Color(0xFF8FA6FF),
+    bg: Color(0xFF1B1D23),
+    surface: Color(0xFF21242B),
+    surface2: Color(0xFF272A32),
+    ink: Color(0xFFDAD7CD),
+    ink2: Color(0xFFAFB3BE),
+    muted: Color(0xFF8F94A1),
+    line: Color(0xFF343842),
+    lineStrong: Color(0xFF6B707D),
+    accent: Color(0xFF9DAEE6),
+    accentSoft: Color(0xFF2A3050),
+    pos: Color(0xFF9DAEE6),
+    neg: Color(0xFFEE9C94),
+    good: Color(0xFF88C791),
+    bad: Color(0xFFEE9C94),
+    warnBg: Color(0xFF2F2916),
+    warnInk: Color(0xFFE6CF92),
+    bar: Color(0xFF9DAEE6),
   );
 
   @override
@@ -152,7 +152,7 @@ class BwType {
 }
 
 /// Notebook-style red double rule colour (the margin line on wide windows).
-Color marginLineColor(Brightness b) => b == Brightness.light ? const Color(0xFFE3B1AA) : const Color(0xFF7A3F3F);
+Color marginLineColor(Brightness b) => b == Brightness.light ? const Color(0xFFE9CBC5) : const Color(0xFF674343);
 
 /// Rectangle with a rule along the top edge only (bottom sheets).
 class _TopRuleBorder extends ShapeBorder {
@@ -384,7 +384,7 @@ ThemeData buildTheme(Brightness b) {
       modalElevation: 0,
       elevation: 0,
       showDragHandle: false,
-      shape: _TopRuleBorder(color: w.ink),
+      shape: _TopRuleBorder(color: w.lineStrong, width: 1),
       modalBarrierColor: Colors.black.withValues(alpha: 0.4),
     ),
     snackBarTheme: SnackBarThemeData(

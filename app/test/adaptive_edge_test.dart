@@ -402,6 +402,7 @@ void main() {
     testWidgets('typed text and focus in a Plan field survive compact -> expanded -> compact', (tester) async {
       await _pumpShell(tester, emptyWallet(), w: 400, h: 800);
       await _goTab(tester, 4);
+      await openPlanEdit(tester);
       final field = find.widgetWithText(TextField, 'Salary per month');
       await tester.ensureVisible(field);
       await tester.tap(field);
@@ -504,6 +505,7 @@ void main() {
     testWidgets('plain digits and letters in a focused text field do not switch tabs or open sheets', (tester) async {
       await _pumpShell(tester, emptyWallet(), w: 1300, h: 800);
       await _goTab(tester, 4);
+      await openPlanEdit(tester);
       final field = find.widgetWithText(TextField, 'Salary per month');
       await tester.ensureVisible(field);
       await tester.tap(field);
