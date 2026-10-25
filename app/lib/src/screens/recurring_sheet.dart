@@ -31,7 +31,7 @@ String billPeriodChip(RecurringPeriod p) => switch (p) {
 
 /// "40–70 €" for a range of whole units, else "40.50 € to 70 €".
 String billRangeShort(int lo, int hi, String cur) =>
-    lo % 100 == 0 && hi % 100 == 0 ? '${lo ~/ 100}–${moneyExact(hi, cur)}' : '${moneyExact(lo, cur)} to ${moneyExact(hi, cur)}';
+    lo % 100 == 0 && hi % 100 == 0 ? '${unitsText(lo)}–${moneyExact(hi, cur)}' : '${moneyExact(lo, cur)} to ${moneyExact(hi, cur)}';
 
 /// "40–70 €, sets aside 70 €" for a bill with an amount range, else null.
 String? billRangeText(RecurringBill b, String cur) =>
@@ -204,20 +204,20 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
         MoneyField(
           fieldKey: const ValueKey('recurringMin'),
           controller: _min,
-          decoration: InputDecoration(labelText: 'From', suffixText: currencySymbol(cur), hintText: '0.00'),
+          decoration: InputDecoration(labelText: 'From', suffixText: currencySymbol(cur), hintText: amountHint),
         ),
         const SizedBox(height: 12),
         MoneyField(
           fieldKey: const ValueKey('recurringMax'),
           controller: _max,
-          decoration: InputDecoration(labelText: 'To', suffixText: currencySymbol(cur), hintText: '0.00'),
+          decoration: InputDecoration(labelText: 'To', suffixText: currencySymbol(cur), hintText: amountHint),
         ),
       ] else
         MoneyField(
           fieldKey: const ValueKey('recurringAmount'),
           controller: _amount,
           style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500),
-          decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur), hintText: '0.00'),
+          decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur), hintText: amountHint),
         ),
       const SizedBox(height: 12),
       const Eyebrow('How often'),

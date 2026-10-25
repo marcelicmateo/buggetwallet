@@ -65,7 +65,7 @@ class _WelcomeBalanceSheetState extends State<WelcomeBalanceSheet> {
         },
         style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500),
         decoration:
-            InputDecoration(labelText: 'Cash', suffixText: currencySymbol(cur), hintText: '0.00', errorText: _error, errorMaxLines: 3),
+            InputDecoration(labelText: 'Cash', suffixText: currencySymbol(cur), hintText: amountHint, errorText: _error, errorMaxLines: 3),
       ),
       const SizedBox(height: 14),
       FilledButton(

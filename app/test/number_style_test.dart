@@ -2,6 +2,7 @@
 // cents. SYNTHETIC data only.
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
+import 'package:budget_wallet/src/screens/recurring_sheet.dart' show billRangeShort;
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -96,5 +97,18 @@ void main() {
     final wc = emptyWallet()..setNumberStyle('comma');
     await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: AddExpenseSheet(wc: wc, amount: 1250))), size: const Size(400, 1600));
     expect(find.text('12,50'), findsOneWidget);
+  });
+
+  test('a whole-unit range is grouped in the style', () {
+    expect(billRangeShort(4000, 150000, 'EUR'), '40–1,500\u00A0€');
+    numberStyle = NumberStyle.comma;
+    expect(billRangeShort(150000, 250000, 'EUR'), '1.500–2.500\u00A0€');
+    expect(billRangeShort(4050, 7000, 'EUR'), '40,50\u00A0€ to 70\u00A0€');
+  });
+
+  testWidgets('the empty amount field hints in the style', (tester) async {
+    final wc = emptyWallet()..setNumberStyle('comma');
+    await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: AddExpenseSheet(wc: wc))), size: const Size(400, 1600));
+    expect(find.text('0,00'), findsOneWidget);
   });
 }

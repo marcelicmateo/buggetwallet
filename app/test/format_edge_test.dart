@@ -109,10 +109,11 @@ void main() {
       expect(parseMoney('0.07'), 7);
       expect(parseMoney('8.2'), 820);
     });
-    test('more than two decimals round to the nearest cent, never throw', () {
-      expect(parseMoney('1.004'), 100);
-      expect(parseMoney('1.006'), 101);
-      expect(parseMoney('0.001'), 0);
+    test('more than two decimals are refused, never rounded away, never throw', () {
+      expect(parseMoney('1.004'), isNull);
+      expect(parseMoney('1.006'), isNull);
+      expect(parseMoney('0.001'), isNull);
+      expect(parseMoney('12.505'), isNull);
     });
     test('every cent value 0..20000 survives a print-and-parse round trip', () {
       for (var c = 0; c <= 20000; c++) {
@@ -451,6 +452,67 @@ void main() {
           expect(parseMoney(money(c, 'EUR', decimals: 2).replaceAll(' €', '')), c, reason: '$st shown $c');
         }
       }
+    });
+
+    test('comma style: a dot group is thousands, never decimals', () {
+      numberStyle = NumberStyle.comma;
+      expect(parseMoney('1.500'), 150000);
+      expect(parseMoney('1.234'), 123400);
+      expect(parseMoney('1.234.567'), 123456700);
+      expect(parseMoney('1.234.567,89'), 123456789);
+      expect(parseMoney('1.234,5'), 123450);
+      expect(parseMoney('12,50'), 1250);
+      expect(parseMoney('12.50'), 1250);
+      expect(parseMoney('1.5'), 150);
+      expect(parseMoney('1,234.56'), 123456);
+      expect(parseMoney('1,234'), isNull, reason: 'a third decimal is refused, not rounded');
+      expect(parseMoney('12,505'), isNull);
+      expect(parseMoney('0,005'), isNull);
+      expect(parseMoney('1.2345'), isNull);
+      expect(parseMoney('12.3456'), isNull);
+      expect(parseMoney('1.23.456'), isNull);
+    });
+
+    test('point style: a comma group is thousands, a dot with three digits is refused', () {
+      numberStyle = NumberStyle.point;
+      expect(parseMoney('1,234'), 123400);
+      expect(parseMoney('1,234,567'), 123456700);
+      expect(parseMoney('1,234.56'), 123456);
+      expect(parseMoney('1.234,56'), 123456);
+      expect(parseMoney('12,50'), 1250);
+      expect(parseMoney('12.50'), 1250);
+      expect(parseMoney('1.500'), isNull);
+      expect(parseMoney('1.234'), isNull, reason: 'a third decimal is refused, not rounded');
+      expect(parseMoney('0.005'), isNull);
+      expect(parseMoney('12.3456'), isNull);
+      expect(parseMoney('1.234.567'), isNull);
+      expect(parseMoney('1,23,456'), isNull);
+    });
+
+    test('text shown by the app reads back in both styles (grouped, with cents)', () {
+      for (final st in NumberStyle.values) {
+        numberStyle = st;
+        for (final c in [0, 5, 50, 150000, 123400, 123456, 1234567, 123456789, maxAmountCents]) {
+          expect(parseMoney(money(c, 'EUR', decimals: 2).replaceAll(' €', '')), c, reason: '$st $c');
+          expect(parseMoney(moneyExact(c, 'EUR').replaceAll(' €', '')), c, reason: '$st exact $c');
+        }
+      }
+    });
+
+    test('centsToFieldText keeps the sign in front of the whole amount', () {
+      expect(centsToFieldText(-1255), '-12.55');
+      expect(centsToFieldText(-1500), '-15');
+      expect(centsToFieldText(-5), '-0.05');
+      numberStyle = NumberStyle.comma;
+      expect(centsToFieldText(-1255), '-12,55');
+    });
+
+    test('hint, example and units follow the style', () {
+      expect((amountHint, amountExample(), unitsText(150000)), ('0.00', '12.50', '1,500'));
+      expect(invalidAmountMessage, 'Enter an amount, like 12.50.');
+      numberStyle = NumberStyle.comma;
+      expect((amountHint, amountExample(), unitsText(150000)), ('0,00', '12,50', '1.500'));
+      expect(invalidAmountMessage, 'Enter an amount, like 12,50.');
     });
 
     test('fromName: anything but comma is the default', () {

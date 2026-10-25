@@ -229,7 +229,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         autofocus: true,
         onChanged: (_) => setState(() {}),
         style: numStyle.copyWith(fontSize: BwType.entrySize, fontWeight: FontWeight.w500),
-        decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur), hintText: '0.00'),
+        decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur), hintText: amountHint),
       ),
       const SizedBox(height: 6),
       const DoubleRule(),

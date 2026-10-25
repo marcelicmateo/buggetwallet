@@ -296,7 +296,7 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
         },
         style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500),
         decoration: InputDecoration(
-            labelText: 'Balance', suffixText: currencySymbol(_currency), hintText: '0.00', errorText: _amountError, errorMaxLines: 3),
+            labelText: 'Balance', suffixText: currencySymbol(_currency), hintText: amountHint, errorText: _amountError, errorMaxLines: 3),
       ),
       _BelowZero(value: _negative, onChanged: (v) => setState(() => _negative = v)),
       DateField(
