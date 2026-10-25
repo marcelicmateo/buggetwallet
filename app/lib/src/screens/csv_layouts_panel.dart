@@ -72,6 +72,25 @@ class CsvLayoutsPanel extends StatelessWidget {
   }
 }
 
+/// The question before a layout that imported [n] payments is read another way: they are removed (Undo is offered after).
+Future<bool> confirmRemovePayments(BuildContext context, int n) async =>
+    await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              key: const ValueKey('csvEditConfirm'),
+              title: const Text('Remove its payments?'),
+              content: Text("This layout was used for $n ${n == 1 ? 'payment' : 'payments'}. They'll be removed; "
+                  'import the file again to read them the new way.'),
+              actions: [
+                TextButton(key: const ValueKey('csvEditCancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                FilledButton(
+                    key: const ValueKey('csvEditConfirmYes'),
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Remove and save')),
+              ],
+            )) ==
+    true;
+
 /// Changes how a saved layout reads: pick a file of the same shape, adjust the columns in the Map columns sheet, save. When payments
 /// were imported with the layout and the change affects reading, ask first: they are removed (Undo brings them back) and the file is
 /// imported again to read them the new way.
@@ -124,21 +143,7 @@ Future<void> editCsvLayout(BuildContext context, WalletController wc, FileChoose
       return;
     }
     if (!context.mounted) return;
-    final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-              key: const ValueKey('csvEditConfirm'),
-              title: const Text('Remove its payments?'),
-              content: Text("This layout was used for $n ${n == 1 ? 'payment' : 'payments'}. They'll be removed; "
-                  'import the file again to read them the new way.'),
-              actions: [
-                TextButton(key: const ValueKey('csvEditCancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                FilledButton(
-                    key: const ValueKey('csvEditConfirmYes'),
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text('Remove and save')),
-              ],
-            ));
+    final ok = await confirmRemovePayments(context, n);
     if (ok != true) return;
     try {
       removed = wc.saveCsvLayout(id, choice.mapping, force: true);

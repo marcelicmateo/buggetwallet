@@ -205,6 +205,82 @@ void main() {
     expect(wc.csvReviveIds(id), isEmpty);
   });
 
+  group('a removed layout read another way', () {
+    Future<(WalletController, String)> removedLayout() async {
+      final wc = emptyWallet();
+      await wc.importFiles([('a.csv', _bytes(_csvA))], askMapping: (_, bytes) async => _choiceFor(bytes));
+      final id = wc.csvLayouts().single.key;
+      wc.deleteCsvLayout(id);
+      return (wc, id);
+    }
+
+    CsvChoice negated(Uint8List bytes) {
+      final c = _choiceFor(bytes);
+      return CsvChoice(c.shapeId, c.mapping.copyWith(negate: true));
+    }
+
+    test('confirmed: the earlier payments are removed, the file is read the new way, Undo puts it all back', () async {
+      final (wc, id) = await removedLayout();
+      var asked = 0;
+      final lines = await wc.importFiles([('a.csv', _bytes(_csvA))],
+          askMapping: (_, bytes) async => negated(bytes),
+          confirmRemoval: (n) async {
+            asked = n;
+            return true;
+          });
+      expect(asked, 3);
+      expect(lines.single.ok, isTrue, reason: lines.single.message);
+      expect(lines.single.message, contains('3 earlier payments read again'));
+      expect(wc.txs.map((t) => t.tx.amount), unorderedEquals([350, -1200, 123456]));
+      expect(wc.csvReviveIds(id), isEmpty);
+      lines.single.undo!();
+      expect(wc.txs.map((t) => t.tx.amount), unorderedEquals([-350, 1200, -123456]));
+      expect(wc.csvLayouts(), isEmpty);
+    });
+
+    test('declined: nothing changes', () async {
+      final (wc, id) = await removedLayout();
+      final lines = await wc
+          .importFiles([('a.csv', _bytes(_csvA))], askMapping: (_, bytes) async => negated(bytes), confirmRemoval: (_) async => false);
+      expect(lines.single.ok, isFalse);
+      expect(wc.txs.map((t) => t.tx.amount), unorderedEquals([-350, 1200, -123456]));
+      expect(wc.csvLayouts(), isEmpty);
+      expect(wc.csvReviveIds(id), isEmpty);
+    });
+
+    test('without a way to confirm the file is refused with core\'s text', () async {
+      final (wc, _) = await removedLayout();
+      final lines = await wc.importFiles([('a.csv', _bytes(_csvA))], askMapping: (_, bytes) async => negated(bytes));
+      expect(lines.single.ok, isFalse);
+      expect(lines.single.message, contains('used for 3 payments'));
+      expect(wc.txs.length, 3);
+    });
+
+    testWidgets('through the import button: Map columns, the question, then a toast with Undo', (t) async {
+      final (wc, _) = await removedLayout();
+      await _openImportButton(t, wc, _Chooser([_pf('statement.csv', _csvA)]));
+      await _scrollTo(t, 'csvMap:negate');
+      await t.tap(find.byKey(const ValueKey('csvMap:negate')));
+      await t.pump();
+      await _scrollTo(t, 'csvMapSave');
+      await t.tap(find.byKey(const ValueKey('csvMapSave')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey('csvEditConfirm')), findsOneWidget);
+      expect(find.textContaining('used for 3 payments'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('csvEditConfirmYes')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(wc.txs.map((x) => x.tx.amount), unorderedEquals([350, -1200, 123456]));
+      await t.tap(find.text('Undo'));
+      await t.pump();
+      expect(wc.txs.map((x) => x.tx.amount), unorderedEquals([-350, 1200, -123456]));
+      await _settle(t);
+    });
+  });
+
   group('Map columns sheet', () {
     testWidgets('opens for an unknown CSV, shows a signed preview, Save & import writes the layout and the rows', (t) async {
       final wc = emptyWallet();

@@ -8,6 +8,7 @@ import '../controller.dart';
 import '../file_chooser.dart';
 import '../logging.dart';
 import '../widgets/common.dart';
+import 'csv_layouts_panel.dart';
 import 'csv_map_sheet.dart';
 
 final _log = Logger('bw.app');
@@ -45,8 +46,14 @@ Future<void> pickAndImport(BuildContext context, WalletController wc, FileChoose
     'exts': [for (final (n, _) in files) fileExt(n)],
     'bytes': [for (final (_, b) in files) b.length],
   });
-  await wc.importFiles(files, askMapping: (need, bytes) async {
-    if (!context.mounted) return null;
-    return openMapColumns(context, wc, need.shape, bytes);
-  });
+  final lines = await wc.importFiles(files,
+      askMapping: (need, bytes) async {
+        if (!context.mounted) return null;
+        return openMapColumns(context, wc, need.shape, bytes);
+      },
+      confirmRemoval: (n) async => context.mounted && await confirmRemovePayments(context, n));
+  // A saved layout that read the file another way replaced its earlier payments: Undo puts them back.
+  final undo = lines.map((l) => l.undo).whereType<VoidCallback>().firstOrNull;
+  if (undo != null && context.mounted)
+    toast(context, 'Earlier payments of that layout were read again.', actionLabel: 'Undo', onAction: undo);
 }
