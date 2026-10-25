@@ -104,14 +104,14 @@ void main() {
   });
 
   group('amount range', () {
-    setUp(() => repo.setMerchantPattern('Eating out', 'kafic', match: 'contains', minCents: 1000, maxCents: 3000));
+    setUp(() => repo.setMerchantPattern('Eating out', 'zorblex', match: 'contains', minCents: 1000, maxCents: 3000));
 
     test('is inclusive at both ends and compares the absolute amount', () {
-      expect(catOf(repo, pos('kafic a', -1000)), 'Eating out', reason: 'at min');
-      expect(catOf(repo, pos('kafic a', -3000)), 'Eating out', reason: 'at max');
-      expect(catOf(repo, pos('kafic a', -2000)), 'Eating out');
-      expect(catOf(repo, pos('kafic a', -999)), 'Shopping', reason: 'one cent under');
-      expect(catOf(repo, pos('kafic a', -3001)), 'Shopping', reason: 'one cent over');
+      expect(catOf(repo, pos('zorblex a', -1000)), 'Eating out', reason: 'at min');
+      expect(catOf(repo, pos('zorblex a', -3000)), 'Eating out', reason: 'at max');
+      expect(catOf(repo, pos('zorblex a', -2000)), 'Eating out');
+      expect(catOf(repo, pos('zorblex a', -999)), 'Shopping', reason: 'one cent under');
+      expect(catOf(repo, pos('zorblex a', -3001)), 'Shopping', reason: 'one cent over');
     });
 
     test('only a minimum, or only a maximum, is an open range', () {
@@ -157,7 +157,7 @@ void main() {
       expect(() => repo.setMerchantPattern('Eating out', 'q3', match: 'contains', maxCents: -1), throwsArgumentError);
       expect(() => repo.setMerchantPattern('Eating out', 'q4', match: 'contains', maxCents: WalletSettings.maxAmount + 1),
           throwsArgumentError);
-      expect(texts(repo), ['kafic']);
+      expect(texts(repo), ['zorblex']);
     });
 
     test('0 and maxAmount are valid bounds', () {
@@ -168,7 +168,7 @@ void main() {
 
   group('stored ranges are validated by fromMap', () {
     Map<String, Object?> row(Map<String, Object?> extra) => {
-          'pattern:aaaaaaaaaaaaaaaa': {'category': 'Eating out', 'pattern': 'kafic', 'order': 0, 'match': 'contains', ...extra},
+          'pattern:aaaaaaaaaaaaaaaa': {'category': 'Eating out', 'pattern': 'zorblex', 'order': 0, 'match': 'contains', ...extra},
         };
 
     List<RuleView> read(Map<String, Object?> m) => [
@@ -180,7 +180,7 @@ void main() {
       resetInvalidSettingLog();
       late List<RuleView> v;
       final lines = logs(() => v = read(row({'minCents': 5000, 'maxCents': 100})));
-      expect(v.single.text, 'kafic');
+      expect(v.single.text, 'zorblex');
       expect((v.single.minCents, v.single.maxCents), (null, null));
       expect(v.single.category, 'Eating out');
       final warn = lines.where((l) => l.contains('settings.invalid')).toList();
@@ -281,9 +281,9 @@ void main() {
 
   group('old rows and the built-in identity', () {
     test('a regex pattern set without the new arguments works as before', () {
-      repo.setMerchantPattern('Eating out', r'^caf+e\b');
-      expect(catOf(repo, pos('caffe bar', -500)), 'Eating out');
-      expect(catOf(repo, pos('xcafe bar', -500)), 'Shopping');
+      repo.setMerchantPattern('Eating out', r'^zorb+o\b');
+      expect(catOf(repo, pos('zorbbo shop', -500)), 'Eating out');
+      expect(catOf(repo, pos('xzorbo shop', -500)), 'Shopping');
       final v = patternsOf(repo).single;
       expect((v.match, v.minCents, v.maxCents), ('regex', null, null));
     });
@@ -302,10 +302,10 @@ void main() {
       expect(cz.categoryOf(pos('unknown thing', -1000)), 'Shopping');
       expect(cz.merchantCategory('Google '), 'Bills & subscriptions');
       final withOld = Categorizer(patterns: const [
-        ['Eating out', 'kafic'],
+        ['Eating out', 'zorblex'],
       ]);
-      expect(withOld.categoryOf(pos('kafic x', -1000)), 'Eating out');
-      expect(withOld.categoryOf(pos('kafic x', -999999)), 'Eating out', reason: 'no range: any amount');
+      expect(withOld.categoryOf(pos('zorblex x', -1000)), 'Eating out');
+      expect(withOld.categoryOf(pos('zorblex x', -999999)), 'Eating out', reason: 'no range: any amount');
     });
   });
 
@@ -545,18 +545,18 @@ void main() {
 
     test('a contains pattern with a range reaches the other device unchanged', () async {
       final a = device('a'), b = device('b');
-      a.repo.setMerchantPattern('Eating out', 'kafic', match: 'contains', minCents: 100, maxCents: 900);
+      a.repo.setMerchantPattern('Eating out', 'zorblex', match: 'contains', minCents: 100, maxCents: 900);
       await syncAll([a, b]);
       final v = patternsOf(b.repo).single;
-      expect((v.text, v.match, v.minCents, v.maxCents, v.category), ('kafic', 'contains', 100, 900, 'Eating out'));
+      expect((v.text, v.match, v.minCents, v.maxCents, v.category), ('zorblex', 'contains', 100, 900, 'Eating out'));
       expect(dump(a.repo, 'settings'), dump(b.repo, 'settings'));
-      expect(catOf(b.repo, pos('kafic', -500)), 'Eating out');
-      expect(catOf(b.repo, pos('kafic', -5000)), 'Shopping');
+      expect(catOf(b.repo, pos('zorblex', -500)), 'Eating out');
+      expect(catOf(b.repo, pos('zorblex', -5000)), 'Shopping');
     }, timeout: _t);
 
     test('both edit the same pattern offline: the later write wins the whole row and both converge', () async {
       final a = device('a'), b = device('b');
-      a.repo.setMerchantPattern('Eating out', 'kafic', match: 'contains');
+      a.repo.setMerchantPattern('Eating out', 'zorblex', match: 'contains');
       await syncAll([a, b]);
       final id = patternsOf(a.repo).single.id;
       now += 1000;
@@ -573,7 +573,7 @@ void main() {
 
     test('one edits the text, the other the category: both devices converge identically', () async {
       final a = device('a'), b = device('b');
-      a.repo.setMerchantPattern('Eating out', 'kafic', match: 'contains');
+      a.repo.setMerchantPattern('Eating out', 'zorblex', match: 'contains');
       await syncAll([a, b]);
       final id = patternsOf(a.repo).single.id;
       now += 1000;
