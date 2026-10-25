@@ -913,18 +913,31 @@ class WalletRepo {
   /// Then own-account transfers are paired across sources ([planTransfers]) and hand-added expenses with the same
   /// amount within 3 days are matched to a bank row their device did not hold when they were added, which keeps their
   /// category ([planMatches]).
-  ImportSummary importBatch(ImportBatch batch) {
+  ///
+  /// [revive] (P12): ids of rows `setCsvMapping(force: true)` deleted. A deleted row whose id is in it and in the batch
+  /// (same amount and description) is undeleted through [_write] and counted as added, so a forced layout change that
+  /// reads some rows to the same ids never leaves them deleted. Only those ids: a row deleted for any other reason stays.
+  ImportSummary importBatch(ImportBatch batch, {Set<String> revive = const {}}) {
     final t = PerfTimer('repo.importBatch', warnMs: 500);
-    final known = <String, (Object?, Object?)>{
-      for (final r in db.select('SELECT id, amount, description FROM tx')) r['id'] as String: (r['amount'], r['description'])
-    };
+    final known = <String, (Object?, Object?)>{};
+    final deleted = <String>{};
+    for (final r in db.select('SELECT id, amount, description, deleted FROM tx')) {
+      final id = r['id'] as String;
+      known[id] = (r['amount'], r['description']);
+      if (r['deleted'] != 0) deleted.add(id);
+    }
     // In batch order: a stored id, or one an earlier row of this batch took, is a duplicate (the first row wins and is
     // never overwritten); with another amount or description it is also a collision.
     final fresh = <NormalizedTransaction>[];
+    final revived = <String>[];
     var collisions = 0;
     for (final n in batch.transactions) {
       if (known[n.id] case (final amount, final description)) {
-        if (amount != n.amountMinor || description != n.description) collisions++;
+        if (amount != n.amountMinor || description != n.description) {
+          collisions++;
+        } else if (revive.contains(n.id) && deleted.remove(n.id)) {
+          revived.add(n.id);
+        }
         continue;
       }
       known[n.id] = (n.amountMinor, n.description);
@@ -953,15 +966,19 @@ class WalletRepo {
         }
       ));
     }
+    for (final id in revived) {
+      changes.add(('tx', id, {'deleted': 0}));
+    }
     _write(changes);
     final (transfers, matched) = _reconcileLocal();
     refreshRecurring(_today());
-    final s = ImportSummary(fresh.length, batch.transactions.length - fresh.length, matched, batch.skipped,
-        transfers: transfers, collisions: collisions);
+    final added = fresh.length + revived.length;
+    final s = ImportSummary(added, batch.transactions.length - added, matched, batch.skipped, transfers: transfers, collisions: collisions);
     t.done({
       'source': sourceLogKey(batch.source), // `csv` for a mapped CSV: the shape id is a hash of header names
       'rows': batch.transactions.length,
       'added': s.added,
+      if (revived.isNotEmpty) 'revived': revived.length,
       'dupes': s.duplicates,
       'matched': s.matched,
       'transfers': s.transfers,
