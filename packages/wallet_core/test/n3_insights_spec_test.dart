@@ -654,7 +654,7 @@ void main() {
     test('every function over a 10k-row wallet and months12 stays far under the loose bound', () {
       final cats = ['Groceries', 'Eating out', 'Shopping', 'Cash', 'Rent', 'Car & transport', 'Health & care', 'Salary'];
       final txs = <CategorizedTx>[];
-      var d = DateTime.utc(2025, 11, 1);
+      final d = DateTime.utc(2025, 11, 1);
       for (var i = 0; i < 10000; i++) {
         final day = d.add(Duration(days: i % 365));
         final date = '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';

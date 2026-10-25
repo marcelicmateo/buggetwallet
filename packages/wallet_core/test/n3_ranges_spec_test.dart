@@ -137,8 +137,8 @@ void main() {
     });
 
     test('a salary in another currency does not set a payday', () {
-      final foreign = CategorizedTx(
-          const Tx(id: 'usd-1', source: 'pbz', date: '2026-10-20', amount: 150000, currency: 'USD'), 'Salary', BudgetKind.income);
+      const foreign =
+          CategorizedTx(Tx(id: 'usd-1', source: 'pbz', date: '2026-10-20', amount: 150000, currency: 'USD'), 'Salary', BudgetKind.income);
       final txs = [
         ...salaries(['2026-09-15', '2026-10-15']),
         foreign
