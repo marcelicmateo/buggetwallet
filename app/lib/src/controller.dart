@@ -46,7 +46,8 @@ final _searchLog = Logger('bw.search');
 const _computeBudget = budgetVsActual;
 
 /// The core backup functions; the controller methods of similar names would hide them inside the class.
-const _backupBytesFn = backupBytes;
+const _backupBytesFn = backupBytesWithInfo;
+const _mergeBackupBytesFn = mergeBackupBytes;
 const _restoreBackupBytesFn = restoreBackupBytes;
 
 /// Which transactions Plan › Export writes.
@@ -195,9 +196,13 @@ class WalletController extends ChangeNotifier {
   /// Backup work: a backup is the bytes of an encrypted file (saved through the system save dialog) and a restore reads
   /// picked bytes. Tests replace them.
   @visibleForTesting
-  Future<Uint8List> Function(WalletRepo repo, VaultKey key) backupBytesWriter = _backupBytesFn;
+  Future<BackupResult> Function(WalletRepo repo, VaultKey key) backupBytesWriter = _backupBytesFn;
   @visibleForTesting
-  Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey key) backupBytesReader = _restoreBackupBytesFn;
+  late Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey key) backupBytesReader =
+      (repo, bytes, opener) => _restoreBackupBytesFn(repo, bytes, opener, walletKey: key); // always the wallet's own key too
+  @visibleForTesting
+  Future<MergeResult> Function(WalletRepo repo, Uint8List bytes, VaultKey key, {bool dryRun, VaultKey? walletKey}) backupMerger =
+      _mergeBackupBytesFn;
 
   /// Key work; tests replace them (the real ones use the system keystore, a file, or the browser's storage).
   @visibleForTesting
@@ -1591,7 +1596,8 @@ class WalletController extends ChangeNotifier {
   bool get walletIsEmpty => _cached('walletIsEmpty', () => repo.isEmpty);
 
   /// A backup of the wallet as bytes for the save dialog, with its file name (never log it). Throws [StateError] without a key.
-  Future<({String name, Uint8List bytes})> backupDownload() async {
+  /// [blobs] = the bill files inside it (for the toast).
+  Future<({String name, Uint8List bytes, int blobs})> backupDownload() async {
     final k = key;
     if (k == null) {
       logEvent(_backupLog, Level.INFO, 'backup.skip', {'reason': 'noKey'});
@@ -1599,10 +1605,17 @@ class WalletController extends ChangeNotifier {
     }
     final sw = Stopwatch()..start();
     try {
-      final bytes = await backupBytesWriter(repo, k);
-      logEvent(_backupLog, Level.INFO, 'backup.done',
-          {'ms': sw.elapsedMilliseconds, 'tx': wholeTxs.length, 'goals': goals.length, 'wish': wish.length, 'bytes': bytes.length});
-      return (name: backupFileName(today()), bytes: bytes);
+      final made = await backupBytesWriter(repo, k);
+      logEvent(_backupLog, Level.INFO, 'backup.done', {
+        'ms': sw.elapsedMilliseconds,
+        'tx': wholeTxs.length,
+        'goals': goals.length,
+        'wish': wish.length,
+        'bytes': made.bytes.length,
+        'blobs': made.blobs,
+        'blobsSkipped': made.blobsSkipped
+      });
+      return (name: backupFileName(today()), bytes: made.bytes, blobs: made.blobs);
     } catch (e, st) {
       logError(_backupLog, 'backup.failed', e, st);
       rethrow;
@@ -1627,6 +1640,35 @@ class WalletController extends ChangeNotifier {
       return rows;
     } catch (e, st) {
       logError(_backupLog, 'backup.restoreFailed', e, st, fields: {'type': e.runtimeType.toString(), 'otherKey': otherKey != null});
+      rethrow;
+    }
+  }
+
+  /// Merges a picked backup file ([bytes]) into this wallet: the newer change wins, field by field, nothing is doubled. With
+  /// [dryRun] nothing is written and the result says what a merge would bring in. [otherKey] (typed or scanned text of the key the
+  /// file was made with) opens the file instead of this wallet's key; it is used once and never stored or logged. Throws
+  /// [VaultException] (wrong key; `failure` null when [otherKey] is not a key at all) and [BackupException] (bad file).
+  Future<MergeResult> mergeBackupFile(Uint8List bytes, {String? otherKey, bool dryRun = false}) async {
+    final k = key;
+    if (k == null) throw const BackupException(BackupFailure.unreadable, 'No wallet key on this device.');
+    final sw = Stopwatch()..start();
+    try {
+      final opener = otherKey == null ? k : await VaultKey.parse(otherKey);
+      final r = await backupMerger(repo, bytes, opener, dryRun: dryRun, walletKey: k);
+      logEvent(_backupLog, Level.INFO, dryRun ? 'backup.mergePreview' : 'backup.merged', {
+        'ms': sw.elapsedMilliseconds,
+        'ops': r.ops,
+        'changed': r.changed,
+        'blobs': r.blobs,
+        'entities': r.changedByEntity.length,
+        'bytes': bytes.length,
+        'otherKey': otherKey != null
+      });
+      if (!dryRun && (r.changed > 0 || r.blobs > 0)) _changed();
+      return r;
+    } catch (e, st) {
+      logError(_backupLog, 'backup.mergeFailed', e, st,
+          fields: {'type': e.runtimeType.toString(), 'dryRun': dryRun, 'otherKey': otherKey != null});
       rethrow;
     }
   }

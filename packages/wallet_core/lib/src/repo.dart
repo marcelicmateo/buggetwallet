@@ -263,9 +263,11 @@ class WalletRepo {
   /// op) is ignored and logged as `repo.badField` with the entity and field name only, and its clock is not recorded,
   /// so a later valid write still wins. The decision depends only on the op, so every device makes the same one. The
   /// row is created only when at least one field applies: an op with no usable field leaves nothing behind.
-  bool _apply(Op op) {
+  ///
+  /// Returns the fields that applied (their stored values), or null when none did.
+  Map<String, Object?>? _apply(Op op) {
     final def = entitySchema[op.entity];
-    if (def == null) return false;
+    if (def == null) return null;
     final table = def.table;
     final accepted = <String, Object?>{};
     Map<String, String>? stored; // field -> hlc, read once per (entity, id)
@@ -285,14 +287,14 @@ class WalletRepo {
       if (have != null && Hlc.compareStrings(have, op.hlc) >= 0) continue;
       accepted[e.key] = v;
     }
-    if (accepted.isEmpty) return false;
+    if (accepted.isEmpty) return null;
     db.execute('INSERT OR IGNORE INTO $table(id) VALUES(?)', [op.id]);
     for (final k in accepted.keys) {
       db.execute('INSERT OR REPLACE INTO clocks(entity, id, field, hlc) VALUES(?, ?, ?, ?)', [op.entity, op.id, k, op.hlc]);
     }
     final sets = accepted.keys.map((k) => '$k = ?').join(', ');
     db.execute('UPDATE $table SET $sets WHERE id = ?', [...accepted.values, op.id]);
-    return true;
+    return accepted;
   }
 
   static const _bad = Object();
@@ -421,21 +423,60 @@ class WalletRepo {
   /// With [resend] the ops are also queued in the outbox, clocks unchanged, so this device's next sync carries them
   /// to the other devices like its own writes (a restore from a backup, see `restoreBackup`). Devices that already
   /// hold those fields with the same clocks change nothing when they read them (a clock is only accepted when newer).
-  int applyRemote(List<Op> ops, {bool match = true, bool resend = false}) {
+  ///
+  /// With [resendChanged] (a merge from a backup) only the fields that changed something here are queued, each op cut
+  /// to those fields with its clock unchanged; ops this wallet already held (or held newer) are not re-sent.
+  int applyRemote(List<Op> ops, {bool match = true, bool resend = false, bool resendChanged = false}) =>
+      applyRemoteByEntity(ops, match: match, resend: resend, resendChanged: resendChanged).values.fold(0, (a, b) => a + b);
+
+  /// [applyRemote], returning how many ops changed a field, per entity (entities with none left out).
+  ///
+  /// With [dryRun] the ops are applied in a transaction that is rolled back: the counts are those a real apply would
+  /// give, and tables, clocks, outbox, the HLC (in memory and stored) and the match flag stay exactly as they were;
+  /// nothing is queued and matching does not run. [beforeRollback] runs inside that transaction after the ops, so it
+  /// reads the merged state (the backup's bill-file count).
+  Map<String, int> applyRemoteByEntity(List<Op> ops,
+      {bool match = true, bool resend = false, bool resendChanged = false, bool dryRun = false, void Function()? beforeRollback}) {
     final t = PerfTimer('repo.applyRemote');
+    final byEntity = <String, int>{};
     var changed = 0;
+    if (dryRun) {
+      // No clock.receive: _apply decides on the stored clocks only, and the in-memory HLC is not rolled back by SQLite.
+      db.execute('BEGIN');
+      try {
+        for (final op in ops) {
+          if (_apply(op) != null) {
+            byEntity[op.entity] = (byEntity[op.entity] ?? 0) + 1;
+            changed++;
+          }
+        }
+        beforeRollback?.call();
+      } finally {
+        if (!db.autocommit) db.execute('ROLLBACK');
+      }
+      t.done({'ops': ops.length, 'changed': changed, 'dryRun': true});
+      return byEntity;
+    }
     _tx(() {
       for (final op in ops) {
         clock.receive(Hlc.parse(op.hlc));
-        if (_apply(op)) changed++;
-        if (resend) db.execute('INSERT INTO outbox(op) VALUES(?)', [jsonEncode(op.toJson())]);
+        final accepted = _apply(op);
+        if (accepted != null) {
+          byEntity[op.entity] = (byEntity[op.entity] ?? 0) + 1;
+          changed++;
+        }
+        if (resend) {
+          db.execute('INSERT INTO outbox(op) VALUES(?)', [jsonEncode(op.toJson())]);
+        } else if (resendChanged && accepted != null) {
+          db.execute('INSERT INTO outbox(op) VALUES(?)', [jsonEncode(Op(op.entity, op.id, accepted, op.hlc).toJson())]);
+        }
       }
       _setMeta('hlc', clock.last.toString());
       if (changed > 0) _setMeta('match_pending', '1');
     });
-    t.done({'ops': ops.length, 'changed': changed, 'resend': resend});
+    t.done({'ops': ops.length, 'changed': changed, 'resend': resend, 'resendChanged': resendChanged});
     if (match && syncCaughtUp) runPendingMatch();
-    return changed;
+    return byEntity;
   }
 
   /// The whole wallet as ops: for every row of every synced entity (deleted rows included, so a restore reproduces

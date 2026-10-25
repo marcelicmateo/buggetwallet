@@ -331,6 +331,14 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (devices already holding those fields at the same clocks change nothing: a clock is only accepted when newer; a
   restore into a wallet whose relay still has every device's files converges either way, the resend covers pruned files
   or a new relay). Returns the op count.
+  **P10 (spec `docs/context/P10_SPEC.md`):** `mergeBackupBytes(repo, bytes, key, {dryRun, walletKey})` → `MergeResult {ops, changed,
+  changedByEntity, blobs}`: same unseal/parse/clockAhead checks (shared `_open`), then `applyRemoteByEntity(resendChanged: true)`
+  = field-level LWW, only the fields that changed are queued (op cut to them, clock kept); `dryRun` applies in a rolled-back
+  transaction without `clock.receive` (same counts; tables, clocks, outbox, HLC untouched). Bill files: `backupBytesWithInfo(repo,
+  key, {maxBlobBytes = 16 MiB, base64 size})` → `BackupResult {bytes, ops, blobs, blobBytes, blobsSkipped}` adds `"blobs": {hash: base64 sealed}`
+  (cached files of live bills, newest bill date first, one that would pass the cap skipped); still `v: 1` (every parser reads only
+  `v`/`ops`). Restore/merge cache each file whose SHA-256 of the sealed bytes is its hash and that a live bill uses, queued for upload,
+  never `blob_own` (bad ones: `backup.blobBad {files}`); `walletKey` ≠ `key` (old-key restore) skips the files.
 - `export.dart` — CSV (M5, pure, the app saves the text through the system dialog; unencrypted, the app warns once).
   `transactionsCsv(List<CategorizedTx>)`: `date,amount,category,description,source,note`, live rows only (`Tx.live`:
   no deleted rows, no hand-added entries replaced by a bank row that is here), sorted date then id, `amount` the
@@ -524,7 +532,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   another account within a few days is never enough on its own. The same goes for any future "looks like" rule.
 - Keep `vault.dart` / `sync.dart` file formats backward compatible (`BWOP1`, `BW1-` keys), and the backup payload
   (`{"v":1,"ops":[...]}`): a new shape bumps `backupVersion`, and older builds refuse it as `newerVersion`.
-- Backups: never restore into a wallet with data (the relay is the merge path); `snapshotOps` must keep each
+- Backups: restore only into an empty wallet; a wallet with data merges (`mergeBackupBytes`, newer field wins); `snapshotOps` must keep each
   field's own clock (grouping fields by clock), never one fresh clock per row, or a restored device would overrule
   edits other devices made in between.
 - Logging: loggers `bw.<area>`; every catch block logs (`logError`). Log counts, durations, sizes, dates, built-in

@@ -90,7 +90,7 @@ void main() {
     await t.tap(find.byKey(const ValueKey('restoreConfirm')));
     await t.pump();
     await t.pump();
-    expect(find.textContaining('This backup was made with a different wallet key.', findRichText: true), findsOneWidget);
+    expect(find.textContaining("doesn't open with this wallet's key", findRichText: true), findsOneWidget);
     expect(wc.walletIsEmpty, isTrue);
 
     await t.tap(_other);
@@ -109,7 +109,7 @@ void main() {
     expect(wc.txs.map((x) => x.amount.abs()).toSet(), {1250, 4000});
     expect(wc.goals.single.name, 'Synthetic goal');
     expect(wc.key!.bytes, keyB.bytes, reason: 'the wallet keeps its own key');
-    expect(find.textContaining('That key does not open this backup.', findRichText: true), findsNothing);
+    expect(find.textContaining("doesn't open this backup (or the file is damaged)", findRichText: true), findsNothing);
 
     // The old key was used once: not stored, not logged, not in the wallet's device-local values.
     final plain = textA.replaceAll('-', '');
@@ -134,7 +134,7 @@ void main() {
     await t.tap(_go);
     await t.pump();
     await t.pump();
-    expect(find.textContaining('That key does not open this backup.', findRichText: true), findsOneWidget);
+    expect(find.textContaining("doesn't open this backup (or the file is damaged)", findRichText: true), findsOneWidget);
     expect(wc.walletIsEmpty, isTrue);
     expect(log(), isNot(contains(wrong)));
     expect(log(), contains('backup.restoreFailed'));
@@ -160,7 +160,7 @@ void main() {
     await t.pump();
     await t.pump();
     expect(wc.walletIsEmpty, isFalse);
-    expect(find.textContaining('does not open'), findsNothing);
+    expect(find.textContaining("doesn't open"), findsNothing);
     await t.pump(const Duration(seconds: 5));
   });
 
