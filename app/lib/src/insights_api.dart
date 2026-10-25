@@ -236,6 +236,28 @@ extension WalletInsights on WalletController {
   List<CategorizedTx> biggestIn(DateRange r) =>
       memo(_k('biggest', r), () => timed('insights.biggest', () => biggestRows(txs, r, currency: currency), fields: _f(r), warnMs: 50));
 
+  /// Income, fixed and flexible spending and the net of the last [count] pay periods, oldest first (the last one is running).
+  List<PeriodReport> periodReportsFor({int count = 12}) => memo(
+      'rep.periods.$count',
+      () => timed('reports.periods', () => periodReports(txs, effectiveSettings, today(), table: categoryTable, count: count),
+          fields: {'count': count, 'tx': txs.length}, warnMs: 50));
+
+  /// What [category] spent in each of the last [count] pay periods against its budget, oldest first.
+  List<CategoryPeriod> categoryByPeriodFor(String category, {int count = 12}) => memo(
+      'rep.catPeriods.$category.$count',
+      () => timed(
+          'reports.categoryPeriods', () => categoryByPeriod(category, txs, effectiveSettings, today(), table: categoryTable, count: count),
+          fields: {'count': count, 'tx': txs.length}, warnMs: 50));
+
+  /// Wishes skipped since the current pay period started (its first day to now).
+  SavedByWaiting savedThisPeriod() {
+    final from = DateTime.parse(period().start).millisecondsSinceEpoch;
+    return savedByWaiting(wish, fromMillis: from, toMillis: now.millisecondsSinceEpoch + 1);
+  }
+
+  /// Every skipped wish, all time.
+  SavedByWaiting savedAllTime() => savedByWaitingAll(wish);
+
   /// The month `YYYY-MM` as a range (first to last day).
   DateRange monthRange(String month) => DateRange(start: '$month-01', end: '$month-${daysInMonth(month).toString().padLeft(2, '0')}');
 

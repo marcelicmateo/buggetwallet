@@ -447,14 +447,17 @@ class PaceBar extends StatelessWidget {
   final double used;
   final double elapsed;
   final bool over;
-  const PaceBar({super.key, required this.used, required this.elapsed, required this.over});
+
+  /// What a screen reader says (default: the pace wording).
+  final String? label;
+  const PaceBar({super.key, required this.used, required this.elapsed, required this.over, this.label});
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     final u = used.clamp(0.0, 1.0), e = elapsed.clamp(0.0, 1.0);
     return Semantics(
-      label: '${(used * 100).round()}% of spending money used, ${(elapsed * 100).round()}% of the month gone',
+      label: label ?? '${(used * 100).round()}% of spending money used, ${(elapsed * 100).round()}% of the month gone',
       child: LayoutBuilder(builder: (ctx, box) {
         final w = box.maxWidth;
         final solid = over ? (u < e ? u : e) : u;
