@@ -204,6 +204,8 @@ export 'src/repo.dart'
         WalletRepoSettings,
         WalletRepoSplits,
         WalletRepoTags;
+export 'src/reports.dart'
+    show CategoryPeriod, categoryByPeriod, PeriodReport, periodReports, SavedByWaiting, savedByWaiting, savedByWaitingAll;
 export 'src/rules.dart' show merchantPatternId, MerchantPattern, MerchantRule, MoveDirection, RuleKind, ruleHits, rulesView, RuleView;
 export 'src/search.dart' show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchTxLimit;
 export 'src/splits.dart' show decodeSplitParts, encodeSplitParts, SplitPart, splitFits;
