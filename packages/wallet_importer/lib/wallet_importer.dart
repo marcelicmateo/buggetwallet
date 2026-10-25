@@ -13,9 +13,14 @@ export 'src/bills/read_result.dart' show ReadFailure, ReadResult;
 export 'src/bills/text_bill.dart' show billFromText, billFromTextResult, maxBillTextChars;
 export 'src/csv_generic.dart'
     show
+        CsvLayoutMatch,
         CsvShape,
         CsvPreviewRow,
         NeedsMapping,
+        csvColumnNames,
+        csvLayoutId,
+        csvNoHeader,
+        csvNoHeaderId,
         csvShape,
         csvShapeId,
         csvSampleRows,
@@ -23,8 +28,8 @@ export 'src/csv_generic.dart'
         guessMapping,
         layoutMismatchMessage,
         mappingProblems,
+        matchCsvLayout,
         matchCsvMapping,
-        maxCsvColumns,
         needsMappingMessage,
         parseCsvCents,
         parseCsvDate,
@@ -32,7 +37,7 @@ export 'src/csv_generic.dart'
         previewMapping,
         sourceLogKey,
         tooManyColumnsMessage;
-export 'src/csv_mapping.dart' show CsvMapping, CsvDateFormat, CsvDecimal;
+export 'src/csv_mapping.dart' show CsvMapping, CsvDateFormat, CsvDecimal, maxCsvColumns, maxCsvHeaderChars;
 export 'src/ids.dart' show transactionId, sourceTransactionId;
 export 'src/importer.dart' show importBankFile, parseRows, ImportException, unknownLayoutMessage;
 export 'src/limits.dart' show maxImportBytes, maxXlsxUnpackedBytes, passwordProtectedMessage, tooLargeMessage;

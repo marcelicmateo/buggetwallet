@@ -2,6 +2,12 @@
 // 0-based indexes into the header row; rows are 0-based indexes into the file's rows as `readCsv` reads them (blank
 // lines are not rows).
 
+/// Most columns a mapped CSV may have; more is refused (`tooManyColumnsMessage`).
+const maxCsvColumns = 200;
+
+/// Longest header name a stored layout may keep.
+const maxCsvHeaderChars = 200;
+
 /// The date layouts a mapped date column can have. A trailing time (`… 14:22`, `…T14:22:00`) is ignored.
 enum CsvDateFormat {
   dmyDot('dd.mm.yyyy'),
@@ -40,7 +46,8 @@ class CsvMapping {
   /// The owner's label for the layout (1–[maxName] characters), shown on import results and accounts.
   final String name;
 
-  /// The header row (0-based); transactions are the rows after it.
+  /// The header row (0-based); transactions are the rows after it. -1 (`csvNoHeader`) = the file has no header row:
+  /// every row is a transaction and [headers] are `Column 1`, `Column 2`, …
   final int headerRow;
   final int dateCol;
   final CsvDateFormat dateFormat;
@@ -130,7 +137,11 @@ class CsvMapping {
     final n = name.trim();
     if (n.isEmpty) out.add('Give the layout a name.');
     if (n.runes.length > maxName) out.add('The name is limited to $maxName characters.');
-    if (headerRow < 0) out.add('Pick the header row.');
+    // -1 = the file has no header row (csvNoHeader).
+    if (headerRow < -1) out.add('Pick the header row.');
+    if (headers.length > maxCsvColumns || headers.any((h) => h.length > maxCsvHeaderChars)) {
+      out.add('This layout has too many or too long column names.');
+    }
     final width = columns ?? (headers.isEmpty ? null : headers.length);
     bool bad(int? c) => c != null && (c < 0 || (width != null && c >= width));
     if (bad(dateCol)) out.add('Pick the date column.');
@@ -171,7 +182,7 @@ class CsvMapping {
   /// checked by [structureProblems], not here.
   static CsvMapping fromJson(Object? json) {
     Never fail() => throw const FormatException('Not a CSV layout');
-    if (json is! Map) fail();
+    if (json is! Map || json['v'] != 1) fail();
     int col(Object? v) => v is int ? v : fail();
     int? optCol(Object? v) => v == null ? null : col(v);
     final date = json['date'];

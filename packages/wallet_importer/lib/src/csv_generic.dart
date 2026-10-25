@@ -19,9 +19,6 @@ import 'text_codec.dart';
 
 final _log = Logger('bw.importer');
 
-/// Most columns a mapped CSV may have; more is refused with [tooManyColumnsMessage].
-const maxCsvColumns = 200;
-
 /// How many rows from the top the delimiter and the header row are judged from.
 const _sniffRows = 15;
 
@@ -108,6 +105,30 @@ String _foldHeader(String h) => h.trim().toLowerCase().replaceAll(RegExp(r'\s+')
 /// The shape id of a header row: first 16 hex characters of SHA-256 over the folded names joined with `|`.
 String csvShapeId(List<String> headers) => sha256Hex(utf8.encode(headers.map(_foldHeader).join('|'))).substring(0, 16);
 
+/// [CsvShape.headerRow] / [CsvMapping.headerRow] of a file without a header row: columns are named [csvColumnNames].
+const csvNoHeader = -1;
+
+/// The shape id of a file without a header row: from its column count and a fixed tag (never a header row's id).
+String csvNoHeaderId(int columns) => sha256Hex(utf8.encode('bw-csv-noheader|$columns')).substring(0, 16);
+
+/// The column names of a file without a header row: `Column 1`, `Column 2`, …
+List<String> csvColumnNames(int columns) => [for (var i = 1; i <= columns; i++) 'Column $i'];
+
+/// The shape id a layout belongs to: [csvShapeId] of its headers, or [csvNoHeaderId] for a layout without a header row.
+String csvLayoutId(CsvMapping m) => m.headerRow == csvNoHeader ? csvNoHeaderId(m.headers.length) : csvShapeId(m.headers);
+
+/// The header names of row [i] of [rows] without trailing empty cells, or null when fewer than two are left.
+List<String>? _headersAt(List<List<String>> rows, int i) {
+  final h = List<String>.of(rows[i]);
+  while (h.isNotEmpty && h.last.isEmpty) {
+    h.removeLast();
+  }
+  return h.length < 2 ? null : h;
+}
+
+/// The widest of the first rows: a file without a header row has this many columns.
+int _headWidth(List<List<String>> rows) => rows.take(_sniffRows).fold(0, (w, r) => r.length > w ? r.length : w);
+
 /// The decoded rows of a CSV file, its encoding and delimiter. Refuses a file over [maxImportBytes] and a damaged one.
 (List<List<String>> rows, String encoding, String sep) _load(Uint8List bytes) {
   if (bytes.length > maxImportBytes) {
@@ -170,35 +191,40 @@ final _dateLike = RegExp(r'^\d{1,4}[./-]\d{1,2}[./-]\d{1,4}');
 
 bool _isText(String c) => !_numeric.hasMatch(c) && !_dateLike.hasMatch(c);
 
-/// The first row of the head with at least two (and half the usual number of) filled cells, most of them text, and
-/// a later row with two or more filled cells (a line of prose with a comma in it is no header).
+int _filled(List<String> r) => r.where((c) => c.isNotEmpty).length;
+
+/// The first row of the head with at least two (and half the usual number of) filled cells, all of them text (a cell
+/// shaped like a date or an amount is data, never a header name), and a later row with two or more filled cells (a
+/// line of prose with a comma in it is no header).
 int? _findHeader(List<List<String>> rows) {
   final head = rows.take(_sniffRows).toList();
   final (width, _) = _mode(head);
   final need = width < 4 ? 2 : (width + 1) ~/ 2;
-  int filledOf(List<String> r) => r.where((c) => c.isNotEmpty).length;
   for (var i = 0; i < head.length; i++) {
     final filled = head[i].where((c) => c.isNotEmpty).toList();
-    if (filled.length < need) continue;
-    if (filled.where(_isText).length * 2 <= filled.length) continue;
-    return rows.skip(i + 1).any((r) => filledOf(r) >= 2) ? i : null;
+    if (filled.length < need || !filled.every(_isText)) continue;
+    return rows.skip(i + 1).any((r) => _filled(r) >= 2) ? i : null;
   }
   return null;
 }
 
+/// Whether the file reads as rows of data without a header: at least two of the first rows share a field count of
+/// two or more.
+bool _dataOnly(List<List<String>> rows) {
+  final (width, count) = _mode(rows.take(_sniffRows).toList());
+  return width >= 2 && count >= 2;
+}
+
 CsvShape _shapeOf(List<List<String>> rows, String encoding, String sep, int? headerRow) {
-  final h = headerRow ?? _findHeader(rows);
+  final h = headerRow ?? _findHeader(rows) ?? (_dataOnly(rows) ? csvNoHeader : null);
   if (h == null) {
     logImporter(
         _log, Level.INFO, 'importer.shape', {'encoding': encoding, 'delimiter': _sepName(sep), 'rows': rows.length, 'header': false});
     throw ImportException(unknownLayoutMessage);
   }
-  if (h < 0 || h >= rows.length) throw RangeError.range(h, 0, rows.length - 1, 'headerRow');
-  final headers = List<String>.of(rows[h]);
-  while (headers.isNotEmpty && headers.last.isEmpty) {
-    headers.removeLast();
-  }
-  if (headers.length < 2) throw ImportException(unknownLayoutMessage);
+  if (h < csvNoHeader || h >= rows.length) throw RangeError.range(h, csvNoHeader, rows.length - 1, 'headerRow');
+  final headers = h == csvNoHeader ? csvColumnNames(_headWidth(rows)) : _headersAt(rows, h);
+  if (headers == null || headers.length < 2) throw ImportException(unknownLayoutMessage);
   final samples = <List<String>>[], sampleRows = <int>[];
   for (var i = h + 1; i < rows.length && samples.length < csvSampleRows; i++) {
     if (rows[i].every((c) => c.isEmpty)) continue;
@@ -214,7 +240,7 @@ CsvShape _shapeOf(List<List<String>> rows, String encoding, String sep, int? hea
     sampleRows: List.unmodifiable(sampleRows),
     rowCount: rows.length,
     head: List.unmodifiable(rows.take(_sniffRows).map(List<String>.unmodifiable)),
-    shapeId: csvShapeId(headers),
+    shapeId: h == csvNoHeader ? csvNoHeaderId(headers.length) : csvShapeId(headers),
   );
 }
 
@@ -236,20 +262,37 @@ CsvShape csvShape(Uint8List bytes, {int? headerRow}) {
   return shape;
 }
 
-/// The key in [saved] (shape id → layout) whose layout fits [bytes], or null: [shape]'s own id first, then a layout
-/// made from another header row (the owner moved it), checked by reading the file from that row.
-String? matchCsvMapping(Uint8List bytes, CsvShape shape, Map<String, CsvMapping> saved) {
-  if (saved.containsKey(shape.shapeId)) return shape.shapeId;
-  for (final MapEntry(:key, value: m) in saved.entries) {
-    if (m.headerRow == shape.headerRow || m.headerRow >= shape.rowCount) continue;
-    try {
-      if (csvShape(bytes, headerRow: m.headerRow).shapeId == key) return key;
-    } on ImportException {
-      continue;
-    }
-  }
-  return null;
+/// A saved layout that fits a file ([matchCsvLayout]): its key and the row of this file its header names are on.
+class CsvLayoutMatch {
+  final String shapeId;
+
+  /// The header row in this file (0-based, or [csvNoHeader]); it can differ from the layout's own `headerRow` (an
+  /// extra title line, or the owner moved it): import with `m.copyWith(headerRow: headerRow)`.
+  final int headerRow;
+  const CsvLayoutMatch(this.shapeId, this.headerRow);
+
+  @override
+  String toString() => 'CsvLayoutMatch(headerRow: $headerRow)';
 }
+
+/// The saved layout (in [saved]: shape id → layout) that fits the file [shape] was read from, or null: [shape]'s own
+/// id first, then any of its first 15 rows as the header row (a title line more or less, a header row the owner
+/// moved), then the file read without a header row. [bytes] is the file (kept for callers; the rows come from
+/// [CsvShape.head]).
+CsvLayoutMatch? matchCsvLayout(Uint8List bytes, CsvShape shape, Map<String, CsvMapping> saved) {
+  if (saved.containsKey(shape.shapeId)) return CsvLayoutMatch(shape.shapeId, shape.headerRow);
+  for (var i = 0; i < shape.head.length; i++) {
+    final h = _headersAt(shape.head, i);
+    if (h == null) continue;
+    final id = csvShapeId(h);
+    if (saved.containsKey(id)) return CsvLayoutMatch(id, i);
+  }
+  final none = csvNoHeaderId(_headWidth(shape.head));
+  return saved[none]?.headerRow == csvNoHeader ? CsvLayoutMatch(none, csvNoHeader) : null;
+}
+
+/// The key of [matchCsvLayout]'s match, or null.
+String? matchCsvMapping(Uint8List bytes, CsvShape shape, Map<String, CsvMapping> saved) => matchCsvLayout(bytes, shape, saved)?.shapeId;
 
 /// One row as a mapping reads it ([previewMapping]).
 class CsvPreviewRow {
@@ -366,9 +409,9 @@ CsvPreviewRow _mapRow(List<String> cells, int row, CsvMapping m, String walletCu
     if (de != null) return bad(_amountProblem(row, 'debit', debitCell, de));
     final (c, ce) = creditCell.isEmpty ? (0, null) : _cents(creditCell, m.decimal);
     if (ce != null) return bad(_amountProblem(row, 'credit', creditCell, ce));
-    if (d != 0 && c != 0) return bad('Row ${row + 1}: both a debit and a credit');
-    // A debit is money out and a credit money in, whichever sign the export writes them with.
-    cents = d != 0 ? -d!.abs() : c!.abs();
+    if (d != 0 && c != 0) return bad('Row ${row + 1}: both debit and credit');
+    // Exactly as written: credit − debit (a debit of −12,30 is a reversal, money in; a credit of −50,00 is money out).
+    cents = c! - d!;
   }
   if (m.negate) cents = -cents;
   String currency;
@@ -395,27 +438,47 @@ List<String> mappingProblems(CsvShape shape, CsvMapping m) {
   if (m.headerRow != shape.headerRow) return const ['The header row changed. Read the file again from that row.'];
   final own = m.structureProblems(columns: shape.headers.length);
   if (own.isNotEmpty) return own;
-  if (m.headers.isNotEmpty && csvShapeId(m.headers) != shape.shapeId) return const [layoutMismatchMessage];
+  if (m.headers.isNotEmpty && csvLayoutId(m) != shape.shapeId) return const [layoutMismatchMessage];
   return [
     for (final r in previewMapping(shape, m))
       if (r.problem != null) r.problem!
   ];
 }
 
-/// Reads a CSV with the owner's mapping [m]. The batch's source is `csv:<shapeId>` (the shape at [m]'s header row);
-/// ids are [sourceTransactionId]s with the occurrence counter, so the same file gives the same ids. A row that fails
+/// Reads a CSV with the owner's mapping [m]. The batch's source is `csv:<shapeId>` (the shape at [m]'s header row; when
+/// [m] carries its header names and they are on another of the first 15 rows of this file, e.g. one title line more,
+/// that row is the header row); ids are [sourceTransactionId]s with the occurrence counter, so the same file gives the same ids. A row that fails
 /// is counted in [ImportBatch.invalid] and its index in [ImportBatch.invalidRows], never guessed; an empty
 /// [CsvMapping.skipIfEmptyCol] cell counts as skipped; a blank row is not counted. [walletCurrency] is the currency
 /// when [m] names none. [fileName] is never logged or stored. Throws [ImportException] for everything [csvShape]
 /// refuses, a mapping with a problem of its own, or another file's columns ([layoutMismatchMessage]).
-ImportBatch parseMappedCsv(Uint8List bytes, CsvMapping m, {String? fileName, String walletCurrency = 'EUR'}) {
+ImportBatch parseMappedCsv(Uint8List bytes, CsvMapping layout, {String? fileName, String walletCurrency = 'EUR'}) {
   final sw = Stopwatch()..start();
   final (rows, encoding, sep) = _load(bytes);
-  if (m.headerRow < 0 || m.headerRow >= rows.length) throw const ImportException(layoutMismatchMessage);
+  var m = layout;
+  if (m.headers.isNotEmpty && m.headerRow != csvNoHeader) {
+    // The layout's header names on another row of this file (a title line more or less): read from there.
+    final want = csvLayoutId(m);
+    bool at(int i) {
+      if (i < 0 || i >= rows.length) return false;
+      final h = _headersAt(rows, i);
+      return h != null && csvShapeId(h) == want;
+    }
+
+    if (!at(m.headerRow)) {
+      for (var i = 0; i < rows.length && i < _sniffRows; i++) {
+        if (at(i)) {
+          m = m.copyWith(headerRow: i);
+          break;
+        }
+      }
+    }
+  }
+  if (m.headerRow < csvNoHeader || m.headerRow >= rows.length) throw const ImportException(layoutMismatchMessage);
   final shape = _shapeOf(rows, encoding, sep, m.headerRow);
   final own = m.structureProblems(columns: shape.headers.length);
   if (own.isNotEmpty) throw ImportException(own.first);
-  if (m.headers.isNotEmpty && csvShapeId(m.headers) != shape.shapeId) throw const ImportException(layoutMismatchMessage);
+  if (m.headers.isNotEmpty && csvLayoutId(m) != shape.shapeId) throw const ImportException(layoutMismatchMessage);
   final source = '$csvSourcePrefix${shape.shapeId}';
   final ctx = ImportContext(head: const [], format: 'csv', fileName: fileName);
   final out = <NormalizedTransaction>[];
