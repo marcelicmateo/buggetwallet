@@ -13,6 +13,7 @@ import 'bill_platform.dart';
 import 'calendar_platform.dart';
 import 'calendar_source.dart';
 import 'clock_notice.dart';
+import 'format.dart' show NumberStyle, numberStyle;
 import 'ics_fetch.dart';
 import 'insights_api.dart' show InsightRange;
 import 'key_store.dart';
@@ -375,6 +376,7 @@ class WalletController extends ChangeNotifier {
         calendarSource = calendars ?? const NoCalendars(),
         billInputs = billInputs ?? const BillInputs.none() {
     relayUrl = _parseRelay(repo.localValue('relayUrl'));
+    _applyNumberStyle();
   }
 
   /// Reads the key, opens the keyed database (only when the key is known) and loads everything. Before a key exists
@@ -628,6 +630,7 @@ class WalletController extends ChangeNotifier {
   /// to storage within a second.
   @override
   void notifyListeners() {
+    _applyNumberStyle(); // before the screens rebuild, and after a repo switch
     super.notifyListeners();
     final db = _db;
     if (db == null || !db.persists || (_persistTimer?.isActive ?? false)) return;
@@ -1695,6 +1698,19 @@ class WalletController extends ChangeNotifier {
     if (mode == from) return;
     repo.setLocalValue('themeMode', mode);
     logEvent(_log, Level.INFO, 'theme.mode', {'from': from, 'to': mode});
+    notifyListeners();
+  }
+
+  /// Number style: 'point' (1,234.50, default) or 'comma' (1.234,50). Device-local, never synced.
+  String get numberStyleName => NumberStyle.fromName(repo.localValue('numberStyle')).name;
+
+  void _applyNumberStyle() => numberStyle = NumberStyle.fromName(repo.localValue('numberStyle'));
+
+  void setNumberStyle(String style) {
+    if (style != 'point' && style != 'comma') return;
+    if (style == numberStyleName) return;
+    repo.setLocalValue('numberStyle', style);
+    logEvent(_log, Level.INFO, 'number.style', {'style': style});
     notifyListeners();
   }
 

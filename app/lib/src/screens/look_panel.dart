@@ -5,7 +5,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../widgets/common.dart';
 
-/// Plan › Look: follow the system, or force the light or the dark ledger. Kept on this device only.
+/// Plan › Look: follow the system, or force the light or the dark ledger; how amounts are written. Kept on this device only.
 class LookPanel extends StatelessWidget {
   final WalletController wc;
   const LookPanel({super.key, required this.wc});
@@ -27,6 +27,18 @@ class LookPanel extends StatelessWidget {
             logNav('theme.mode', {'mode': s.first});
             wc.setThemeMode(s.first);
           },
+        ),
+        const SizedBox(height: 12),
+        SegmentedButton<String>(
+          key: const ValueKey('numberStyle'),
+          showSelectedIcon: false,
+          style: SegmentedButton.styleFrom(minimumSize: const Size(0, touchMin)),
+          segments: const [
+            ButtonSegment(value: 'point', label: Text('1,234.50')),
+            ButtonSegment(value: 'comma', label: Text('1.234,50')),
+          ],
+          selected: {wc.numberStyleName},
+          onSelectionChanged: (s) => wc.setNumberStyle(s.first),
         ),
         const Muted('Only this device. Your other devices keep their own look.'),
       ]);

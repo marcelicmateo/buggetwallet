@@ -375,4 +375,89 @@ void main() {
       }
     });
   });
+
+  group('number style', () {
+    tearDown(() => numberStyle = NumberStyle.point);
+
+    // cents, currency, point style, comma style
+    const cases = <(int, String, String, String)>[
+      (0, 'EUR', '0.00 €', '0,00 €'),
+      (5, 'EUR', '0.05 €', '0,05 €'),
+      (1250, 'EUR', '12.50 €', '12,50 €'),
+      (123450, 'EUR', '1,235 €', '1.235 €'),
+      (123456789, 'EUR', '1,234,568 €', '1.234.568 €'),
+      (-1250, 'EUR', '−12.50 €', '−12,50 €'),
+      (-123450, 'EUR', '−1,235 €', '−1.235 €'),
+      (1250, 'USD', '12.50 \$', '12,50 \$'),
+      (1250, 'GBP', '12.50 £', '12,50 £'),
+      (1250, 'CHF', '12.50 CHF', '12,50 CHF'),
+      (9999, 'CHF', '99.99 CHF', '99,99 CHF'),
+    ];
+    for (final (cents, cur, point, comma) in cases) {
+      test('money($cents, $cur)', () {
+        numberStyle = NumberStyle.point;
+        expect(money(cents, cur), point);
+        numberStyle = NumberStyle.comma;
+        expect(money(cents, cur), comma);
+      });
+    }
+
+    test('moneyExact, moneyExactSigned and fixed decimals', () {
+      numberStyle = NumberStyle.point;
+      expect(moneyExact(123456, 'EUR'), '1,234.56 €');
+      expect(moneyExact(123400, 'EUR'), '1,234 €');
+      expect(moneyExactSigned(123456, 'EUR'), '+1,234.56 €');
+      expect(moneyExactSigned(-4000, 'EUR'), '−40 €');
+      expect(money(123456789, 'EUR', decimals: 2), '1,234,567.89 €');
+      expect(money(5, 'EUR', decimals: 2, signed: true), '+0.05 €');
+      numberStyle = NumberStyle.comma;
+      expect(moneyExact(123456, 'EUR'), '1.234,56 €');
+      expect(moneyExact(123400, 'EUR'), '1.234 €');
+      expect(moneyExactSigned(123456, 'EUR'), '+1.234,56 €');
+      expect(moneyExactSigned(-4000, 'EUR'), '−40 €');
+      expect(money(123456789, 'EUR', decimals: 2), '1.234.567,89 €');
+      expect(money(5, 'EUR', decimals: 2, signed: true), '+0,05 €');
+    });
+
+    test('whole-unit rounding is the same in both styles, and a tiny negative stays unsigned', () {
+      for (final st in NumberStyle.values) {
+        numberStyle = st;
+        expect(money(49, 'EUR', decimals: 0), '0 €');
+        expect(money(-49, 'EUR', decimals: 0), '0 €');
+        expect(money(150, 'EUR', decimals: 0), '2 €');
+        expect(money(99999, 'EUR'), st == NumberStyle.point ? '1,000 €' : '1.000 €');
+      }
+    });
+
+    test('currencySymbol: CHF is pinned', () {
+      expect(currencySymbol('CHF'), 'CHF');
+      expect(currencySymbol('SEK'), 'SEK');
+    });
+
+    test('centsToFieldText writes the style separator, no grouping', () {
+      numberStyle = NumberStyle.comma;
+      expect(centsToFieldText(1250), '12,50');
+      expect(centsToFieldText(5), '0,05');
+      expect(centsToFieldText(123456789), '1234567,89');
+      expect(centsToFieldText(150000), '1500');
+      expect(centsToFieldText(0, blankZero: true), '');
+    });
+
+    test('field text and displayed money parse back to the same cents in both styles', () {
+      for (final st in NumberStyle.values) {
+        numberStyle = st;
+        for (final c in [0, 5, 50, 1234567, maxAmountCents]) {
+          expect(parseMoney(centsToFieldText(c)), c, reason: '$st field $c');
+          expect(parseMoney(money(c, 'EUR', decimals: 2).replaceAll(' €', '')), c, reason: '$st shown $c');
+        }
+      }
+    });
+
+    test('fromName: anything but comma is the default', () {
+      expect(NumberStyle.fromName('comma'), NumberStyle.comma);
+      expect(NumberStyle.fromName('point'), NumberStyle.point);
+      expect(NumberStyle.fromName(null), NumberStyle.point);
+      expect(NumberStyle.fromName('x'), NumberStyle.point);
+    });
+  });
 }

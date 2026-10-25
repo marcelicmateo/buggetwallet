@@ -46,7 +46,7 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
 
   String _initialAmount() {
     final a = widget.edit?.amount ?? widget.suggestion?.suggested;
-    return a == null ? '' : (a / 100).toStringAsFixed(2);
+    return a == null ? '' : centsToFieldText(a);
   }
 
   @override

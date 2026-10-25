@@ -176,8 +176,7 @@ class AddExpenseSheet extends StatefulWidget {
 }
 
 class _AddExpenseSheetState extends State<AddExpenseSheet> {
-  late final TextEditingController amount =
-      TextEditingController(text: widget.amount == null ? '' : (widget.amount! / 100).toStringAsFixed(2));
+  late final TextEditingController amount = TextEditingController(text: widget.amount == null ? '' : centsToFieldText(widget.amount!));
   late final TextEditingController note = TextEditingController(text: widget.note ?? '');
 
   /// The last category used on this device; none on a fresh device (the CTA waits for a pick).

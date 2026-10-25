@@ -17,11 +17,32 @@ const _monthsLong = [
 ];
 const _weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+/// How amounts are written: `point` = 1,234.50 (default), `comma` = 1.234,50. Device-local (Plan › Look); the controller sets
+/// [numberStyle] from the stored choice whenever it loads or changes, and the formatters below read it.
+enum NumberStyle {
+  point(',', '.'),
+  comma('.', ',');
+
+  /// Between thousands.
+  final String group;
+
+  /// Between units and cents.
+  final String decimal;
+  const NumberStyle(this.group, this.decimal);
+
+  /// The stored name (`point` or `comma`); anything else reads as the default.
+  static NumberStyle fromName(String? name) => name == 'comma' ? comma : point;
+}
+
+/// The style every formatter in this file uses. Set by the controller; tests that change it reset it afterwards.
+NumberStyle numberStyle = NumberStyle.point;
+
 /// Symbol (or the code itself when there is no symbol). Always written after the amount.
 String currencySymbol(String code) => switch (code) {
       'EUR' => '€',
       'USD' => r'$',
       'GBP' => '£',
+      'CHF' => 'CHF',
       _ => code,
     };
 
@@ -29,7 +50,7 @@ String _group(int n) {
   final s = n.toString();
   final b = StringBuffer();
   for (var i = 0; i < s.length; i++) {
-    if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
+    if (i > 0 && (s.length - i) % 3 == 0) b.write(numberStyle.group);
     b.write(s[i]);
   }
   return b.toString();
@@ -45,7 +66,7 @@ String money(int cents, String currency, {int? decimals, bool signed = false}) {
   if (d == 0) {
     body = _group((abs / 100).round());
   } else {
-    body = '${_group(abs ~/ 100)}.${(abs % 100).toString().padLeft(2, '0')}';
+    body = '${_group(abs ~/ 100)}${numberStyle.decimal}${(abs % 100).toString().padLeft(2, '0')}';
   }
   // A negative amount that rounds to zero is shown as zero, not "−0 €".
   final isZero = d == 0 ? (abs / 100).round() == 0 : abs == 0;
@@ -72,11 +93,13 @@ String timeLeft(double hours) {
 /// The one sentence for an amount that does not parse (sheets, planned costs, budgets, Plan).
 const invalidAmountMessage = 'Enter an amount, like 12.50.';
 
-/// A cents amount as the text of a money field: `1500` -> "15", `1550` -> "15.50" (parseMoney reads it back). With [blankZero] a
+/// A cents amount as the text of a money field: `1500` -> "15", `1550` -> "15.50", or "15,50" in the comma style (parseMoney
+/// reads both back). With [blankZero] a
 /// zero is empty, so the field shows its hint.
 String centsToFieldText(int cents, {bool blankZero = false}) {
   if (blankZero && cents == 0) return '';
-  return cents % 100 == 0 ? '${cents ~/ 100}' : (cents / 100).toStringAsFixed(2);
+  if (cents % 100 == 0) return '${cents ~/ 100}';
+  return '${cents ~/ 100}${numberStyle.decimal}${(cents % 100).toString().padLeft(2, '0')}';
 }
 
 /// Parses "12", "12.5", "12,50", "1.234,56" into cents: core's [parseMoneyCents] (null if not a number, negative,
