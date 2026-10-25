@@ -777,7 +777,8 @@ class WalletRepo {
     Map<String, Tx>? latest; // payee -> latest live bank outflow, read only when a bill needs it
     return _resolved([
       for (final r in db.select(
-          "SELECT * FROM recurring WHERE deleted = 0 ${includeDismissed ? '' : "AND status != 'dismissed'"} ORDER BY next_due, label, id"))
+          "SELECT * FROM recurring WHERE deleted = 0 ${includeDismissed ? '' : 'AND status NOT IN (${RecurringBill.dismissedStored})'} "
+          'ORDER BY next_due, label, id'))
         r,
     ], (cz, r) {
       final paid = r['last_paid_tx'] is String ? transaction(r['last_paid_tx'] as String) : null;
@@ -1300,7 +1301,10 @@ class WalletRepo {
           : d;
       if (have == null) {
         added++;
-        changes.add(('recurring', c.id, _candidateFields(c)));
+        // An income's creation op carries its status (`in:candidate`) so a build before P9 never takes it for a bill
+        // candidate (P9 review); a bill's carries none (the column default applies).
+        changes.add(
+            ('recurring', c.id, {..._candidateFields(c), if (c.isIncome) 'status': RecurringBill.storedStatus('candidate', income: true)}));
       } else if ((have.status == 'candidate' || have.payee.isEmpty) && !deleted.contains(c.id)) {
         final want = _candidateFields(c), has = _candidateFields(have);
         final diff = {
@@ -1361,6 +1365,18 @@ class WalletRepo {
       ];
       paid += plan.paidBy.length;
     }
+    // P9: an income whose cycle passed (due + tolerance before today) with no landing moves on, cycle by cycle, so a
+    // missed income is not expected for ever (its later money, if any, still counts when it lands).
+    var missed = 0;
+    for (var i = 0; i < bills.length; i++) {
+      var x = bills[i];
+      if (!x.isIncome) continue;
+      for (var n = 0; n < 400 && isIsoDate(x.nextDue) && addDays(x.nextDue, x.tolerance).compareTo(today) < 0; n++) {
+        x = x.copyWith(nextDue: addDays(x.nextDue, x.intervalDays));
+        missed++;
+      }
+      bills[i] = x;
+    }
     for (final b in bills) {
       final was = current[b.id]!;
       if (b.nextDue != was.nextDue || b.lastPaidTx != was.lastPaidTx) {
@@ -1376,6 +1392,7 @@ class WalletRepo {
       'updated': updated,
       'recategorized': recategorized,
       'paid': paid,
+      'missedIncome': missed,
     });
   }
 
@@ -1395,14 +1412,38 @@ class WalletRepo {
     _write([('recurring', id, fields)]);
   }
 
-  /// The owner says this candidate is a bill: from now on it is reserved in the period budget until paid.
-  void confirmRecurring(String id) => _setRecurring(id, {'status': 'confirmed'});
+  /// [status] as stored for row [id]: an income's carries the `in:` prefix ([RecurringBill.storedStatus]).
+  void _setRecurringStatus(String id, String status) {
+    final r = db.select('SELECT * FROM recurring WHERE id = ?', [id]);
+    if (r.isEmpty) throw ArgumentError('No such bill.');
+    _write([
+      ('recurring', id, {'status': RecurringBill.storedStatus(status, income: RecurringBill.fromRow(r.first).isIncome)})
+    ]);
+  }
+
+  /// The owner says this candidate is a bill: from now on it is reserved in the period budget until paid. For an
+  /// income (P9): it counts once its money lands.
+  void confirmRecurring(String id) => _setRecurringStatus(id, 'confirmed');
 
   /// The owner says this is not a bill: hidden from [recurringBills] (unless asked for) and never detected again.
-  void dismissRecurring(String id) => _setRecurring(id, {'status': 'dismissed'});
+  void dismissRecurring(String id) => _setRecurringStatus(id, 'dismissed');
 
   /// Removes a bill; its payee is never detected again (the row stays, deleted).
   void deleteRecurring(String id) => _setRecurring(id, {'deleted': 1});
+
+  /// Undo of [deleteRecurring] (bill or income): writes `deleted: 0` (synced; the later of it and a delete by HLC wins).
+  /// The row comes back with its other fields as they were (status, due date, last payment). An unknown id is an
+  /// [ArgumentError]; a live row writes nothing. A deleted row is never re-created or updated by detection meanwhile
+  /// ([refreshRecurring] keeps every existing id, deleted included).
+  void undeleteRecurring(String id) {
+    final r = db.select('SELECT * FROM recurring WHERE id = ?', [id]);
+    if (r.isEmpty) throw ArgumentError('No such bill.');
+    if (r.first['deleted'] != 1) return;
+    _write([
+      ('recurring', id, {'deleted': 0})
+    ]);
+    logEvent(_log, Level.INFO, 'recurring.undelete', {'income': RecurringBill.fromRow(r.first).isIncome});
+  }
 
   /// The owner skips the bill's current cycle (no payment is coming, or it was paid in a way the match cannot see):
   /// `nextDue` moves one `intervalDays` on from its current value (a monthly instalment plan: one calendar month,

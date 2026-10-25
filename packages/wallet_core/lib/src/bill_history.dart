@@ -94,7 +94,7 @@ List<BillMonth> billHistory(
 
   final payments = <String, Tx>{};
   for (final t in rows) {
-    if (!_isPayment(t, currency, cats)) continue;
+    if (!_isPayment(t, currency, cats, income: bill.isIncome)) continue;
     if (t.id == bill.lastPaidTx || merchantKey(t) == bill.payee) payments[t.id] = t;
   }
 
@@ -150,7 +150,7 @@ List<BillMonth> billHistory(
       month: ym,
       payments: List.unmodifiable(pays),
       slips: List.unmodifiable(bills),
-      paid: pays.fold(0, (a, t) => a - t.amount),
+      paid: pays.fold(0, (a, t) => a + _cents(bill, t)),
       billed: totals.isEmpty ? null : totals.fold<int>(0, (a, b) => a + b),
       state: pays.isNotEmpty
           ? BillMonthState.paid
@@ -220,7 +220,7 @@ List<BillMonth> _cycleHistory(RecurringBill bill, Map<String, Tx> payments, List
       for (final s in bills)
         if (s.total case final total?) total
     ];
-    final paid = pays.fold(0, (a, t) => a - t.amount);
+    final paid = pays.fold(0, (a, t) => a + _cents(bill, t));
     out.add(BillMonth(
       month: monthOf(due),
       due: due,
@@ -266,11 +266,15 @@ Map<int, String> _paidNearby(List<int> empty, Map<String, List<Tx>> payByMonth) 
   return out;
 }
 
-/// A row that may pay a recurring bill: the rows `planRecurringPayments` accepts, minus own transfers.
-bool _isPayment(Tx t, String currency, CategoryTable cats) =>
+/// The cents [t] pays [bill]: −amount for a bill, amount for an income (P9: the landed money).
+int _cents(RecurringBill bill, Tx t) => bill.isIncome ? t.amount : -t.amount;
+
+/// A row that may pay a recurring bill: the rows `planRecurringPayments` accepts, minus own transfers. For an income
+/// (P9, [income]) the inflows that may land it.
+bool _isPayment(Tx t, String currency, CategoryTable cats, {bool income = false}) =>
     t.live &&
     !t.manual &&
-    t.amount < 0 &&
+    (income ? t.amount > 0 : t.amount < 0) &&
     isIsoDate(t.date) &&
     t.currency == currency &&
     t.transferTo == null &&

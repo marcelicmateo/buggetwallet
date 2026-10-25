@@ -166,6 +166,11 @@ int partsDays(RecurringBill b) {
 /// [recurringPercent] band, `expectedAmount − expectedAmount ~/ 10`.
 int partsThreshold(RecurringBill b) => b.hasRange ? b.minAmount! : b.expectedAmount - b.expectedAmount ~/ 10;
 
+/// Whether [cents] (an inflow, positive) is an amount that lands income [b] (P9): the rule of a single payment
+/// ([_paysInOne]), within the range or the [recurringPercent] band. A payment of the payee that does not fit is a
+/// one-off extra, not the income.
+bool incomeFits(RecurringBill b, int cents) => _paysInOne(b, cents);
+
 /// Whether [cents] (an outflow, positive) is an amount that pays [b] in one go: within the range ([hasRange], inclusive),
 /// else within [recurringPercent] of `expectedAmount`.
 bool _paysInOne(RecurringBill b, int cents) =>

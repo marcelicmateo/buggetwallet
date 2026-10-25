@@ -175,7 +175,7 @@ void main() {
       final id = addIn();
       final op = r.pendingOps().map((o) => o.$2).lastWhere((o) => o.entity == 'recurring' && o.id == id);
       expect(op.fields['direction'], 'in');
-      expect(op.fields['status'], 'confirmed');
+      expect(op.fields['status'], 'in:confirmed'); // lead decision (P9 review): stored with the in: prefix for old builds
     });
 
     test('updateRecurring keeps the direction', () {
