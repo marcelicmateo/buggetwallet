@@ -7,7 +7,7 @@ import 'dart:math';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
-import 'package:wallet_importer/wallet_importer.dart' show ImportBatch;
+import 'package:wallet_importer/wallet_importer.dart' show ImportBatch, NormalizedTransaction;
 
 import 'support/sim.dart';
 import 'support/synthetic.dart';
@@ -329,6 +329,59 @@ void main() {
       expect(s(null).txs, isEmpty);
       expect(s(_table).txs, hasLength(1));
     });
+  });
+
+  group('round 2', () {
+    test('a standing-order bill in a deleted fixed category reads Loan like its rows: flexBudget never drops twice', () async {
+      final r = WalletRepo.inMemory(now: () => _noon);
+      addTearDown(r.close);
+      NormalizedTransaction rate(String d) => n(d, -30000, 'Trajni nalog', 'SYNTHETIC LENDER RATA');
+      r.importBatch(ImportBatch(source: 'pbz', transactions: [rate('2026-07-06'), rate('2026-08-05'), rate('2026-09-04')]));
+      final km = await r.addCategory(name: 'Mortgage', kind: BudgetKind.fixed);
+      final bill = r.recurringBills().single;
+      r.setMerchantRule(bill.payee, km);
+      r.confirmRecurring(bill.id);
+      r.importBatch(ImportBatch(source: 'pbz', transactions: [rate('2026-10-04')]));
+      r.updateSettings({'salary': 200000, 'loan': 30000, 'periodStart': '2026-10-15', 'paydayDay': 15});
+      expect(r.recurringBills().single.lastPaidTx, isNotNull);
+      expect(r.recurringBills().single.category, km);
+      PeriodBudget period() =>
+          computePeriod(const [], r.settings(), const [], '2026-10-20', bills: r.recurringBills(), table: r.categoryTable());
+      final before = period();
+      expect((before.reservedBills, before.dueBills.length), (0, 1));
+      await r.deleteCategory(km);
+      final cz = r.categorizer();
+      expect({for (final t in r.transactions()) cz.categoryOf(t)}, {'Loan'});
+      expect(r.recurringBills().single.category, 'Loan', reason: 'the category of its own paying row');
+      final after = period();
+      expect(after.reservedBills, 0, reason: 'covered by the loan setting, not reserved on top of it');
+      expect(after.flexBudget, before.flexBudget);
+      expect(after.flexBudget, 200000 - 30000);
+    }, timeout: _t);
+
+    test('monthly CSV: a duplicate of a non-spending original keeps its own column and its spending', () async {
+      final key = VaultKey.generate();
+      final net = Net();
+      var clock = _noon;
+      final a = Device('A', null, key, () => clock, net: net), b = Device('B', null, key, () => clock, net: net);
+      addTearDown(a.close);
+      addTearDown(b.close);
+      await a.repo.updateCategory('Extra income', name: 'Side');
+      final side = await b.repo.addCategory(name: 'Side', kind: BudgetKind.flex);
+      for (var i = 0; i < 3; i++) {
+        for (final d in [a, b]) {
+          clock += 1000;
+          await d.run();
+        }
+      }
+      final t = b.repo.categoryTable();
+      expect(t.duplicateOf(side), 'Extra income');
+      final csv = monthlySummaryCsv([_c('2026-09-01', -500, side, t), _c('2026-09-02', -100, 'Groceries', t)], currency: 'EUR', table: t);
+      final lines = csv.trim().split('\n');
+      expect(lines.first, 'month,${spendingCategories.join(',')},Side,total');
+      final cells = lines[1].split(',');
+      expect((cells[cells.length - 2], cells.last), ('5.00', '6.00'));
+    }, timeout: _t);
   });
 
   group('table rules', () {

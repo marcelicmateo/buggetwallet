@@ -735,14 +735,36 @@ class WalletRepo {
 
   /// Recurring bills that are not deleted: candidates and confirmed ones, plus dismissed ones with [includeDismissed].
   /// Ordered by `nextDue`, then label, then id.
-  /// A bill in a deleted custom category reads with its automatic one ([Categorizer.resolveStored]: the payee's
-  /// merchant rule, patterns and built-in rules on its label, else Shopping); the stored row is unchanged.
-  List<RecurringBill> recurringBills({bool includeDismissed = false}) => _resolved([
-        for (final r in db.select(
-            "SELECT * FROM recurring WHERE deleted = 0 ${includeDismissed ? '' : "AND status != 'dismissed'"} ORDER BY next_due, label, id"))
-          r,
-      ], (cz, r) => cz.resolveStored(r['category'] as String?, key: r['payee'] as String?, text: '${r['label'] ?? ''}', orElse: 'Shopping'),
-          RecurringBill.fromRow);
+  /// A bill in a deleted custom category reads with the category its own payment gets now: the categorizer's answer
+  /// for its `lastPaidTx` row (so a PBZ standing order reads Loan, like the row itself, and is never reserved on top of
+  /// the fixed plan); without one (a bill not paid since it was confirmed), the payee's latest live bank outflow.
+  /// Without any row: [Categorizer.resolveStored] (the payee's merchant rule, patterns and built-in rules on its
+  /// label, else Shopping). The stored row is unchanged.
+  List<RecurringBill> recurringBills({bool includeDismissed = false}) {
+    Map<String, Tx>? latest; // payee -> latest live bank outflow, read only when a bill needs it
+    return _resolved([
+      for (final r in db.select(
+          "SELECT * FROM recurring WHERE deleted = 0 ${includeDismissed ? '' : "AND status != 'dismissed'"} ORDER BY next_due, label, id"))
+        r,
+    ], (cz, r) {
+      final paid = r['last_paid_tx'] is String ? transaction(r['last_paid_tx'] as String) : null;
+      final row = paid ?? (latest ??= _latestOutflowByPayee())[r['payee']];
+      if (row != null) return cz.categoryOf(row);
+      return cz.resolveStored(r['category'] as String?, key: r['payee'] as String?, text: '${r['label'] ?? ''}', orElse: 'Shopping');
+    }, RecurringBill.fromRow);
+  }
+
+  /// Per payee key ([merchantKey]) its latest live bank outflow (date, then id).
+  Map<String, Tx> _latestOutflowByPayee() {
+    final out = <String, Tx>{};
+    for (final t in transactions()) {
+      if (!t.live || t.manual || t.amount >= 0) continue;
+      final k = merchantKey(t);
+      final have = out[k];
+      if (have == null || t.date.compareTo(have.date) > 0 || (t.date == have.date && t.id.compareTo(have.id) > 0)) out[k] = t;
+    }
+    return out;
+  }
 
   /// [rows] as [make] builds them, each `category` that is a deleted or unknown custom id replaced by [resolve]'s
   /// answer first (P1: resolved when read, never written). The categorizer is built only when some row needs it.

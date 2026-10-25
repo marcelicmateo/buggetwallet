@@ -45,11 +45,18 @@ String transactionsCsv(List<CategorizedTx> txs, {CategoryTable? table}) {
   return sb.toString();
 }
 
-/// The monthly CSV's columns for [t]: its [CategoryTable.spending] without sync duplicates ([CategoryTable.duplicateOf]),
-/// whose rows go into their original's column, so no label appears twice.
+/// The column a sync duplicate's rows go into: its original ([CategoryTable.duplicateOf]) when that is a spending
+/// category too, else null (the duplicate keeps its own column, so its spending stays in the total).
+String? _csvOriginal(CategoryTable t, String c) {
+  final d = t.duplicateOf(c);
+  return d != null && t.isSpending(d) ? d : null;
+}
+
+/// The monthly CSV's columns for [t]: its [CategoryTable.spending] without the sync duplicates that fold into their
+/// original's column ([_csvOriginal]), so no spending label appears twice.
 List<String> _csvColumns(CategoryTable t) => [
       for (final c in t.spending)
-        if (t.duplicateOf(c) == null) c
+        if (_csvOriginal(t, c) == null) c
     ];
 
 /// Header of [monthlySummaryCsv] over the built-in categories: `month,<each spending category>,total`.
@@ -76,7 +83,7 @@ String monthlySummaryCsv(List<CategorizedTx> txs, {required String currency, Cat
 
     final m = byMonth[monthOf(t.date)] ??= {};
     final top = t0.topLevel(t.category);
-    final c = t0.duplicateOf(top) ?? top; // a sync duplicate counts in its original's column
+    final c = _csvOriginal(t0, top) ?? top; // a sync duplicate counts in its original's column
     m[c] = (m[c] ?? 0) - t.amount;
   }
   final months = byMonth.keys.toList()..sort();
