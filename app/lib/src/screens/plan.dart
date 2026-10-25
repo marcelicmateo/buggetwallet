@@ -393,7 +393,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 ),
                 for (final l in wc.lastImport) StatusLabel(good: l.ok, text: '${l.file}: ${l.message}'),
               ]),
-              CsvLayoutsPanel(wc: wc),
+              CsvLayoutsPanel(wc: wc, chooser: widget.chooser),
               if (!isWeb) NudgesPanel(wc: wc),
               SyncPanel(wc: wc, onShowKey: () => _showKey(context)),
               if (!isWeb)

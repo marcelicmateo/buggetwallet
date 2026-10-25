@@ -20,6 +20,11 @@ import 'package:wallet_importer/wallet_importer.dart';
 import 'support/layout.dart';
 import 'support/wallet.dart';
 
+/// No header row at all.
+const _csvNoHeader = '03.10.2026;Synthetic coffee;-3,50\n'
+    '04.10.2026;Synthetic refund;12,00\n'
+    '05.10.2026;Synthetic bakery;-9,99\n';
+
 const _t = Timeout(Duration(seconds: 90));
 
 Uint8List _bytes(String s) => Uint8List.fromList(utf8.encode(s));
@@ -168,6 +173,38 @@ void main() {
     });
   });
 
+  test('a forced edit then the same file again: every row back exactly once; Undo of the edit restores the old rows', () async {
+    final wc = emptyWallet();
+    await wc.importFiles([('a.csv', _bytes(_csvA))], askMapping: (_, bytes) async => _choiceFor(bytes));
+    final id = wc.csvLayouts().single.key;
+    final old = wc.settings.csvMappings[id]!;
+    expect(() => wc.saveCsvLayout(id, old.copyWith(negate: true)), throwsArgumentError);
+    final removed = wc.saveCsvLayout(id, old.copyWith(negate: true), force: true);
+    expect(removed.length, 3);
+    expect(wc.txs, isEmpty);
+    expect(wc.csvReviveIds(id).length, 3);
+    final lines = await wc.importFiles([('a.csv', _bytes(_csvA))]);
+    expect(lines.single.message, startsWith('Erste (CSV): 3 new'));
+    expect(wc.txs.map((t) => t.tx.amount), unorderedEquals([350, -1200, 123456]));
+    expect(wc.csvReviveIds(id), isEmpty);
+    // Again: nothing doubled.
+    final again = await wc.importFiles([('a.csv', _bytes(_csvA))]);
+    expect(again.single.message, startsWith('Erste (CSV): 0 new, 3 already here'));
+    expect(wc.txs.length, 3);
+  });
+
+  test('Undo of a forced edit puts the old layout and its rows back', () async {
+    final wc = emptyWallet();
+    await wc.importFiles([('a.csv', _bytes(_csvA))], askMapping: (_, bytes) async => _choiceFor(bytes));
+    final id = wc.csvLayouts().single.key;
+    final old = wc.settings.csvMappings[id]!;
+    final removed = wc.saveCsvLayout(id, old.copyWith(negate: true), force: true);
+    wc.undoCsvLayoutEdit(id, old, removed);
+    expect(wc.settings.csvMappings[id]!.negate, isFalse);
+    expect(wc.txs.map((t) => t.tx.amount), unorderedEquals([-350, 1200, -123456]));
+    expect(wc.csvReviveIds(id), isEmpty);
+  });
+
   group('Map columns sheet', () {
     testWidgets('opens for an unknown CSV, shows a signed preview, Save & import writes the layout and the rows', (t) async {
       final wc = emptyWallet();
@@ -307,6 +344,41 @@ void main() {
       await _settle(t);
     });
 
+    testWidgets('a file with no header row starts blank, columns are numbered, and imports once mapped', (t) async {
+      final wc = emptyWallet();
+      await _openImportButton(t, wc, _Chooser([_pf('plain.csv', _csvNoHeader)]));
+      expect(find.byKey(const ValueKey('csvMapSheet')), findsOneWidget);
+      await _scrollTo(t, 'csvMapPreviewEmpty');
+      await _scrollTo(t, 'csvMapSave');
+      expect(t.widget<FilledButton>(find.byKey(const ValueKey('csvMapSave'))).onPressed, isNull);
+      await _pick(t, 'csvMap:date', '1. Column 1');
+      await _pick(t, 'csvMap:amount', '3. Column 3');
+      await _scrollTo(t, 'csvMapPreview:0');
+      expect(_previewAmount(t, 0), moneyExactSigned(-350, 'EUR'));
+      await _scrollTo(t, 'csvMapSave');
+      await t.tap(find.byKey(const ValueKey('csvMapSave')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      expect(wc.txs.map((x) => x.tx.amount), unorderedEquals([-350, 1200, -999]));
+      expect(wc.csvLayouts().single.value.headerRow, -1);
+      await _settle(t);
+    });
+
+    testWidgets('the header row picker offers "No header row" and numbers the columns', (t) async {
+      final wc = emptyWallet();
+      await _openImportButton(t, wc, _Chooser([_pf('statement.csv', _csvA)]));
+      await _pick(t, 'csvMap:headerRow', 'No header row (columns are numbered)');
+      await _scrollTo(t, 'csvMap:date');
+      expect(find.byKey(const ValueKey('csvMapPreviewEmpty')), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('csvMap:date')));
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.text('1. Column 1'), findsWidgets);
+      expect(find.text('1. Datum'), findsNothing);
+      await t.tap(find.text('1. Column 1').last);
+      await t.pump(const Duration(milliseconds: 300));
+      await _settle(t);
+    });
+
     for (final (w, scale) in [(320.0, 2.0), (360.0, 2.0), (360.0, 1.0), (1280.0, 1.0)]) {
       testWidgets('layout at $w dp, text scale $scale', (t) async {
         final errors = Errors();
@@ -397,6 +469,98 @@ void main() {
       await t.tap(find.text('Undo'));
       await t.pump();
       expect(wc.csvLayouts().single.value.name, 'Erste (CSV)');
+      await _settle(t);
+    });
+
+    Future<void> openEdit(WidgetTester t, WalletController wc, String id) async {
+      await pumpApp(
+          t,
+          Scaffold(
+              body: SingleChildScrollView(
+                  child: AnimatedBuilder(
+                      animation: wc, builder: (_, __) => CsvLayoutsPanel(wc: wc, chooser: _Chooser([_pf('again.csv', _csvA)]))))),
+          size: const Size(400, 2400));
+      await t.tap(find.byKey(ValueKey('csvLayoutEdit:$id')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey('csvMapSheet')), findsOneWidget);
+    }
+
+    testWidgets('Change: a name-only edit needs no confirmation', (t) async {
+      final wc = await layoutWallet();
+      final id = wc.csvLayouts().single.key;
+      await openEdit(t, wc, id);
+      await t.enterText(find.byKey(const ValueKey('csvMap:name')), 'Renamed in sheet');
+      await t.pump();
+      await _scrollTo(t, 'csvMapSave');
+      await t.tap(find.byKey(const ValueKey('csvMapSave')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey('csvEditConfirm')), findsNothing);
+      expect(wc.settings.csvMappings[id]!.name, 'Renamed in sheet');
+      expect(wc.txs.length, 3);
+      await _settle(t);
+    });
+
+    testWidgets('Change: a different reading asks first, removes the payments, and Undo brings them back', (t) async {
+      final wc = await layoutWallet();
+      final id = wc.csvLayouts().single.key;
+      await openEdit(t, wc, id);
+      await _scrollTo(t, 'csvMap:negate');
+      await t.tap(find.byKey(const ValueKey('csvMap:negate')));
+      await t.pump();
+      await _scrollTo(t, 'csvMapSave');
+      await t.tap(find.byKey(const ValueKey('csvMapSave')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey('csvEditConfirm')), findsOneWidget);
+      expect(find.textContaining('used for 3 payments'), findsOneWidget);
+      // Cancel changes nothing.
+      await t.tap(find.byKey(const ValueKey('csvEditCancel')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      expect(wc.txs.length, 3);
+      expect(wc.settings.csvMappings[id]!.negate, isFalse);
+      // Again, and confirm.
+      await t.tap(find.byKey(ValueKey('csvLayoutEdit:$id')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 400));
+      await _scrollTo(t, 'csvMap:negate');
+      await t.tap(find.byKey(const ValueKey('csvMap:negate')));
+      await t.pump();
+      await _scrollTo(t, 'csvMapSave');
+      await t.tap(find.byKey(const ValueKey('csvMapSave')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 400));
+      await t.tap(find.byKey(const ValueKey('csvEditConfirmYes')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      expect(wc.txs, isEmpty);
+      expect(wc.settings.csvMappings[id]!.negate, isTrue);
+      expect(wc.csvReviveIds(id).length, 3);
+      await t.tap(find.text('Undo'));
+      await t.pump();
+      expect(wc.txs.length, 3);
+      expect(wc.settings.csvMappings[id]!.negate, isFalse);
+      expect(wc.csvReviveIds(id), isEmpty);
+      await _settle(t);
+    });
+
+    testWidgets('Change: a file of another shape is refused', (t) async {
+      final wc = await layoutWallet();
+      final id = wc.csvLayouts().single.key;
+      await pumpApp(
+          t, Scaffold(body: SingleChildScrollView(child: CsvLayoutsPanel(wc: wc, chooser: _Chooser([_pf('other.csv', _csvSplit)])))),
+          size: const Size(400, 2400));
+      await t.tap(find.byKey(ValueKey('csvLayoutEdit:$id')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey('csvMapSheet')), findsNothing);
+      expect(find.text(layoutMismatchMessage), findsOneWidget);
       await _settle(t);
     });
 

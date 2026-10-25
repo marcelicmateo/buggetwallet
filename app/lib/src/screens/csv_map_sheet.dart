@@ -13,9 +13,9 @@ import '../widgets/sheets.dart';
 
 /// Opens the Map columns sheet for a CSV no bank profile and no saved layout fits (P12). Returns the owner's choice, or null
 /// on Cancel / close (nothing is imported then). Logs `csvmap.open` and the result word only, never headers or cells.
-Future<CsvChoice?> openMapColumns(BuildContext context, WalletController wc, CsvShape shape, Uint8List bytes) {
-  logNav('csvmap.open', {'cols': shape.headers.length, 'rows': shape.rowCount});
-  return showSheet<CsvChoice>(context, MapColumnsSheet(wc: wc, shape: shape, bytes: bytes));
+Future<CsvChoice?> openMapColumns(BuildContext context, WalletController wc, CsvShape shape, Uint8List bytes, {CsvMapping? editing}) {
+  logNav('csvmap.open', {'cols': shape.headers.length, 'rows': shape.rowCount, 'edit': editing != null});
+  return showSheet<CsvChoice>(context, MapColumnsSheet(wc: wc, shape: shape, bytes: bytes, editing: editing));
 }
 
 const _dateFormatNames = {
@@ -30,12 +30,14 @@ const _dateFormatNames = {
 const _fixedCurrencies = ['EUR', 'USD', 'GBP', 'CHF'];
 
 /// The Map columns sheet: pick what each column means, see the first rows read that way (signed amounts in the wallet's number
-/// style), and Save & import once there is no problem. Pops a [CsvChoice].
+/// style), and Save & import once there is no problem. Pops a [CsvChoice]. With [editing] (a saved layout, read again from a file of
+/// the same shape) the pickers start from that layout, the header row stays as it is and the button says Save.
 class MapColumnsSheet extends StatefulWidget {
   final WalletController wc;
   final CsvShape shape;
   final Uint8List bytes;
-  const MapColumnsSheet({super.key, required this.wc, required this.shape, required this.bytes});
+  final CsvMapping? editing;
+  const MapColumnsSheet({super.key, required this.wc, required this.shape, required this.bytes, this.editing});
   @override
   State<MapColumnsSheet> createState() => _MapColumnsSheetState();
 }
@@ -56,8 +58,9 @@ class _MapColumnsSheetState extends State<MapColumnsSheet> {
   @override
   void initState() {
     super.initState();
-    _load(guessMapping(_shape));
-    _name.text = guessMapping(_shape)?.name ?? 'CSV file';
+    final start = widget.editing ?? guessMapping(_shape);
+    _load(start);
+    _name.text = start?.name ?? 'CSV file';
   }
 
   @override
@@ -81,37 +84,26 @@ class _MapColumnsSheetState extends State<MapColumnsSheet> {
     _skipCol = g?.skipIfEmptyCol;
   }
 
-  /// The mapping as it stands, or null while a required column is not chosen.
-  CsvMapping? get _mapping {
-    if (_dateCol == null) return null;
-    if (_split ? (_debitCol == null || _creditCol == null) : _amountCol == null) return null;
-    return CsvMapping(
-      name: _name.text.trim(),
-      headerRow: _shape.headerRow,
-      dateCol: _dateCol!,
-      dateFormat: _dateFormat,
-      amountCol: _split ? null : _amountCol,
-      debitCol: _split ? _debitCol : null,
-      creditCol: _split ? _creditCol : null,
-      decimal: _decimal,
-      negate: _negate,
-      descriptionCols: _desc,
-      currencyCol: _currencyCol,
-      currencyCode: _currencyCol == null ? _currencyCode : null,
-      skipIfEmptyCol: _skipCol,
-      headers: _shape.headers,
-    );
-  }
+  /// The mapping as it stands; a column not chosen yet is -1 or null, which core's own checks name ([CsvMapping.structureProblems]).
+  CsvMapping get _mapping => CsvMapping(
+        name: _name.text.trim(),
+        headerRow: _shape.headerRow,
+        dateCol: _dateCol ?? -1,
+        dateFormat: _dateFormat,
+        amountCol: _split ? null : _amountCol,
+        debitCol: _split ? _debitCol : null,
+        creditCol: _split ? _creditCol : null,
+        decimal: _decimal,
+        negate: _negate,
+        descriptionCols: _desc,
+        currencyCol: _currencyCol,
+        currencyCode: _currencyCol == null ? _currencyCode : null,
+        skipIfEmptyCol: _skipCol,
+        headers: _shape.headers,
+      );
 
-  List<String> _problems(CsvMapping? m) {
-    if (m != null) return mappingProblems(_shape, m);
-    return [
-      if (_name.text.trim().isEmpty) 'Give the layout a name.',
-      if (_dateCol == null) 'Pick the date column.',
-      if (_split ? (_debitCol == null || _creditCol == null) : _amountCol == null)
-        _split ? 'Pick both the debit and the credit column.' : 'Pick the amount column.',
-    ];
-  }
+  /// Core's problems for the mapping on this file: its own first, then those of the first rows (texts may quote a cell: never logged).
+  List<String> _problems(CsvMapping m) => mappingProblems(_shape, m);
 
   void _readFromRow(int row) {
     try {
@@ -155,7 +147,7 @@ class _MapColumnsSheetState extends State<MapColumnsSheet> {
 
   void _save() {
     final m = _mapping;
-    if (m == null || _problems(m).isNotEmpty) return;
+    if (_problems(m).isNotEmpty) return;
     logNav('csvmap.save', {'split': _split, 'negate': _negate, 'desc': _desc.length});
     Navigator.pop(context, CsvChoice(_shape.shapeId, m));
   }
@@ -165,14 +157,18 @@ class _MapColumnsSheetState extends State<MapColumnsSheet> {
     final wc = widget.wc;
     final m = _mapping;
     final problems = _problems(m);
-    final preview = m == null ? const <CsvPreviewRow>[] : previewMapping(_shape, m, walletCurrency: wc.currency);
+    final ready = m.structureProblems(columns: _shape.headers.length).isEmpty;
+    final preview = ready ? previewMapping(_shape, m, walletCurrency: wc.currency) : const <CsvPreviewRow>[];
+    final editing = widget.editing != null;
     final c = context.c;
     return KeyedSubtree(
       key: ValueKey('csvMapSheet:$_gen'),
       child: Column(key: const ValueKey('csvMapSheet'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Heading('Map columns'),
+        Heading(editing ? 'Change columns' : 'Map columns'),
         const SizedBox(height: 6),
-        const Muted("This file isn't one I know yet. Say what each column is once; it's remembered for files that look the same."),
+        Muted(editing
+            ? 'Say what each column is. Files that look like this one are read this way.'
+            : "This file isn't one I know yet. Say what each column is once; it's remembered for files that look the same."),
         const SizedBox(height: 4),
         Muted('${_shape.encoding}, ${_shape.delimiterName}, ${_shape.rowCount} rows.'),
         _gap(),
@@ -182,12 +178,15 @@ class _MapColumnsSheetState extends State<MapColumnsSheet> {
           initialValue: _shape.headerRow,
           decoration: const InputDecoration(labelText: 'Header row (the column names)'),
           items: [
+            const DropdownMenuItem<int>(value: csvNoHeader, child: Text('No header row (columns are numbered)')),
             for (var i = 0; i < _shape.head.length; i++)
               DropdownMenuItem<int>(value: i, child: Text('Row ${i + 1}: ${_shape.head[i].join(' · ')}', overflow: TextOverflow.ellipsis)),
           ],
-          onChanged: (v) {
-            if (v != null && v != _shape.headerRow) _readFromRow(v);
-          },
+          onChanged: editing
+              ? null
+              : (v) {
+                  if (v != null && v != _shape.headerRow) _readFromRow(v);
+                },
         ),
         if (_headerError != null) ...[
           const SizedBox(height: 6),
@@ -296,7 +295,7 @@ class _MapColumnsSheetState extends State<MapColumnsSheet> {
         const SizedBox(height: 16),
         const Eyebrow('First rows, as they would be read'),
         const SizedBox(height: 6),
-        if (preview.isEmpty)
+        if (!ready)
           const Muted('Pick the date and the amount to see the rows.', key: ValueKey('csvMapPreviewEmpty'))
         else
           Column(key: const ValueKey('csvMapPreview'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -315,8 +314,8 @@ class _MapColumnsSheetState extends State<MapColumnsSheet> {
         FilledButton(
             key: const ValueKey('csvMapSave'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
-            onPressed: problems.isEmpty && m != null ? _save : null,
-            child: const Text('Save & import')),
+            onPressed: problems.isEmpty ? _save : null,
+            child: Text(editing ? 'Save' : 'Save & import')),
         const SizedBox(height: 8),
         TextButton(
             key: const ValueKey('csvMapCancel'),

@@ -1854,7 +1854,11 @@ class WalletController extends ChangeNotifier {
         }
         final (batch, usedMapping) = read;
         final mapped = usedMapping != null;
-        final s = repo.importBatch(batch); // logs repo.importBatch
+        // Payments a forced layout edit removed come back exactly once when the same file is read the new way (`csvRevive:<shape id>`).
+        final reviveKey = batch.source.startsWith(csvSourcePrefix) ? batch.source.substring(csvSourcePrefix.length) : null;
+        final revive = reviveKey == null ? const <String>[] : csvReviveIds(reviveKey);
+        final s = repo.importBatch(batch, revive: revive.toSet()); // logs repo.importBatch
+        if (revive.isNotEmpty) repo.setLocalValue('csvRevive:$reviveKey', null);
         t.done({
           ...f,
           'source': sourceLogKey(batch.source),
@@ -1938,6 +1942,42 @@ class WalletController extends ChangeNotifier {
     logEvent(_import, Level.INFO, 'csvLayout.delete');
     _changed();
     return m;
+  }
+
+  /// How many payments layout [id] has imported (not deleted).
+  int csvRowsFor(String id) => repo.csvRowsFor(id);
+
+  /// Saves a changed layout [m] for [id]. Changing how it reads (columns, formats, sign) when it has imported payments throws core's
+  /// [ArgumentError] unless [force]; with [force] those payments are deleted and their ids returned (the toast's Undo is
+  /// [undoCsvLayoutEdit]). The ids are kept device-local as `csvRevive:<id>` for the next import of that shape.
+  List<String> saveCsvLayout(String id, CsvMapping m, {bool force = false}) {
+    final removed = repo.setCsvMapping(id, m, force: force);
+    if (removed.isNotEmpty) repo.setLocalValue('csvRevive:$id', jsonEncode(removed));
+    logEvent(_import, Level.INFO, 'csvLayout.edit', {'removed': removed.length, 'force': force});
+    _changed();
+    return removed;
+  }
+
+  /// The payment ids a forced edit of layout [id] removed and the next import of its shape may bring back (see [saveCsvLayout]).
+  List<String> csvReviveIds(String id) {
+    final v = repo.localValue('csvRevive:$id');
+    if (v == null) return const [];
+    try {
+      return [for (final x in jsonDecode(v) as List) x as String];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Undo of a forced [saveCsvLayout]: the old layout is back and its removed payments with it.
+  void undoCsvLayoutEdit(String id, CsvMapping old, List<String> removed) {
+    repo.setCsvMapping(id, old, force: true);
+    for (final r in removed) {
+      repo.undeleteTransaction(r);
+    }
+    repo.setLocalValue('csvRevive:$id', null);
+    logEvent(_import, Level.INFO, 'csvLayout.editUndone', {'restored': removed.length});
+    _changed();
   }
 
   void restoreCsvLayout(String id, CsvMapping m) {

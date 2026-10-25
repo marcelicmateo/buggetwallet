@@ -1,18 +1,26 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:wallet_importer/wallet_importer.dart' show CsvDecimal, CsvMapping;
+import 'package:wallet_core/wallet_core.dart' show Logger, logError;
+import 'package:wallet_importer/wallet_importer.dart'
+    show CsvDecimal, CsvMapping, CsvShape, ImportException, csvShape, layoutMismatchMessage, matchCsvLayout;
 
 import '../controller.dart';
+import '../file_chooser.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
+import 'csv_map_sheet.dart';
 
 /// Plan › Import › Saved file layouts: the CSV column maps remembered from Map columns (P12). Rename, see the columns, delete with Undo.
 /// Not shown while there is none.
 class CsvLayoutsPanel extends StatelessWidget {
   final WalletController wc;
-  const CsvLayoutsPanel({super.key, required this.wc});
+  final FileChooser chooser;
+  const CsvLayoutsPanel({super.key, required this.wc, this.chooser = const FileChooser()});
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +44,10 @@ class CsvLayoutsPanel extends StatelessWidget {
                   onPressed: () => showSheet<void>(context, CsvLayoutColumnsSheet(mapping: e.value)),
                   child: const Text('Columns')),
               TextButton(
+                  key: ValueKey('csvLayoutEdit:${e.key}'),
+                  onPressed: () => editCsvLayout(context, wc, chooser, e.key),
+                  child: const Text('Change')),
+              TextButton(
                   key: ValueKey('csvLayoutRename:${e.key}'),
                   onPressed: () => showSheet<bool>(context, RenameLayoutSheet(wc: wc, id: e.key, name: e.value.name)),
                   child: const Text('Rename')),
@@ -58,6 +70,95 @@ class CsvLayoutsPanel extends StatelessWidget {
       }
     });
   }
+}
+
+/// Changes how a saved layout reads: pick a file of the same shape, adjust the columns in the Map columns sheet, save. When payments
+/// were imported with the layout and the change affects reading, ask first: they are removed (Undo brings them back) and the file is
+/// imported again to read them the new way.
+Future<void> editCsvLayout(BuildContext context, WalletController wc, FileChooser chooser, String id) async {
+  logNav('csvLayout.editOpen');
+  final old = wc.settings.csvMappings[id];
+  if (old == null) return;
+  final messenger = ScaffoldMessenger.of(context);
+  final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
+  void say(String m, {String? label, VoidCallback? action}) =>
+      toastOn(messenger, m, wide: wide, accessible: accessible, actionLabel: label, onAction: action);
+  final List<PlatformFile> picked;
+  try {
+    picked = await chooser.pickBankFiles();
+  } catch (e, st) {
+    logError(Logger('bw.import'), 'csvLayout.pickFailed', e, st, fields: {'type': e.runtimeType.toString()});
+    say(chooserFailedMessage);
+    return;
+  }
+  if (picked.isEmpty) return;
+  final Uint8List bytes;
+  final CsvShape shape;
+  try {
+    bytes = await picked.first.readAsBytes();
+    final first = csvShape(bytes);
+    final match = matchCsvLayout(bytes, first, {id: old});
+    if (match == null) {
+      say(layoutMismatchMessage);
+      return;
+    }
+    shape = csvShape(bytes, headerRow: match.headerRow);
+  } on ImportException catch (e) {
+    say(e.message);
+    return;
+  } catch (e, st) {
+    logError(Logger('bw.import'), 'csvLayout.openFailed', e, st, fields: {'type': e.runtimeType.toString()});
+    say("Couldn't open that file.");
+    return;
+  }
+  if (!context.mounted) return;
+  final choice = await openMapColumns(context, wc, shape, bytes, editing: old);
+  if (choice == null) return;
+  var removed = const <String>[];
+  try {
+    removed = wc.saveCsvLayout(id, choice.mapping);
+  } on ArgumentError catch (e) {
+    final n = wc.csvRowsFor(id);
+    if (n == 0) {
+      say(e.message.toString());
+      return;
+    }
+    if (!context.mounted) return;
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              key: const ValueKey('csvEditConfirm'),
+              title: const Text('Remove its payments?'),
+              content: Text("This layout was used for $n ${n == 1 ? 'payment' : 'payments'}. They'll be removed; "
+                  'import the file again to read them the new way.'),
+              actions: [
+                TextButton(key: const ValueKey('csvEditCancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                FilledButton(
+                    key: const ValueKey('csvEditConfirmYes'),
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Remove and save')),
+              ],
+            ));
+    if (ok != true) return;
+    try {
+      removed = wc.saveCsvLayout(id, choice.mapping, force: true);
+    } on ArgumentError catch (e2) {
+      say(e2.message.toString());
+      return;
+    }
+  }
+  if (removed.isEmpty) {
+    say('Layout saved');
+    return;
+  }
+  final count = removed.length;
+  say('Layout saved. $count ${count == 1 ? 'payment' : 'payments'} removed: import the file again.', label: 'Undo', action: () {
+    try {
+      wc.undoCsvLayoutEdit(id, old, removed);
+    } on ArgumentError catch (e) {
+      say(e.message.toString());
+    }
+  });
 }
 
 /// What a layout reads from which column.
