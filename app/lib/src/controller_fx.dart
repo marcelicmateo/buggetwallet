@@ -13,9 +13,12 @@ class FxCurrency {
   /// The owner's rate; null = rows in this currency are not counted.
   final FxRate? rate;
 
+  /// A rate left from another wallet currency (core's `fxStale`): not used; [FxRate.home] says which.
+  final FxRate? stale;
+
   /// How many payments are in this currency.
   final int rows;
-  const FxCurrency(this.code, this.rate, this.rows);
+  const FxCurrency(this.code, this.rate, this.rows, {this.stale});
 }
 
 extension FxDb on WalletController {
@@ -25,8 +28,8 @@ extension FxDb on WalletController {
         for (final t in wholeTxs) {
           if (t.tx.currency != currency) seen[t.tx.currency] = (seen[t.tx.currency] ?? 0) + 1;
         }
-        final codes = {...seen.keys, ...settings.fxRates.keys}.toList()..sort();
-        return [for (final c in codes) FxCurrency(c, settings.fxRates[c], seen[c] ?? 0)];
+        final codes = {...seen.keys, ...settings.fxRates.keys, ...settings.fxStale.keys}.toList()..sort();
+        return [for (final c in codes) FxCurrency(c, settings.fxRates[c], seen[c] ?? 0, stale: settings.fxStale[c])];
       });
 
   /// Opens Plan at Currencies (from a "not counted" note).

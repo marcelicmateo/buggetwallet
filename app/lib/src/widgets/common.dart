@@ -464,7 +464,7 @@ class TxTile extends StatelessWidget {
     final c = context.c;
     final inc = t.amount > 0;
     final src = switch (t.tx.source) { 'manual' => 'added', 'revolut' => 'Revolut', 'pbz' => 'PBZ', final s => s };
-    final amount = money(t.amount, currency, decimals: 2, signed: true);
+    final amount = money(t.amount, t.tx.currency, decimals: 2, signed: true); // a row without a rate keeps its own currency
     final amountStyle = numStyle.copyWith(fontSize: BwType.amountSize, fontWeight: FontWeight.w500, color: inc ? c.good : c.ink);
     final columns = _columnsFit(context);
     final original = originalNote(t, fxRates);
@@ -487,7 +487,7 @@ class TxTile extends StatelessWidget {
       Tag(src),
       if (splitCount > 0) Tag('Split · $splitCount'),
       if (matchedPart != null) Tag('Part ${matchedPart! + 1} matches'),
-      if (t.isPart) Tag('part of ${money(t.tx.amount, currency, decimals: 2, signed: true)}'),
+      if (t.isPart) Tag('part of ${money(t.tx.amount, t.tx.currency, decimals: 2, signed: true)}'),
       if (splitBroken || t.splitBroken)
         Row(key: const ValueKey('splitBroken'), mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.warning_amber_outlined, size: 14, color: c.bad),
@@ -566,7 +566,7 @@ class PartTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final amount = money(part.amount, currency, decimals: 2, signed: true);
+    final amount = money(part.amount, part.tx.currency, decimals: 2, signed: true);
     final label = (table ?? CategoryTable.builtIn).label(part.category);
     final note = part.partNote;
     return MergeSemantics(

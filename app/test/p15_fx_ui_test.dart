@@ -9,6 +9,7 @@ import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallet_core/wallet_core.dart' show merchantKey;
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/wallet.dart';
@@ -236,6 +237,66 @@ void main() {
       await pumpApp(t, const Scaffold(body: ForeignNote({'USD': -500})));
       expect(find.byKey(const ValueKey('foreignSetRate')), findsNothing);
       expect(find.text('Other currencies, not counted: ${moneyExact(500, 'USD')} spent'), findsOneWidget);
+    });
+  });
+
+  group('review fixes', () {
+    testWidgets('a rate set against another wallet currency is listed as stale and setFxRate replaces it', (t) async {
+      final wc = fxWallet();
+      wc.setFxRate('USD', 924000);
+      wc.repo.updateSettings({'currency': 'CHF'});
+      wc.reload();
+      expect(wc.settings.fxRates, isEmpty);
+      expect(wc.settings.fxStale.keys, ['USD']);
+      await pumpApp(t, panel(wc), size: const Size(400, 1200));
+      expect(find.text('USD — Not counted'), findsOneWidget);
+      expect(find.byKey(const ValueKey('fxStale:USD')), findsOneWidget);
+      expect(find.text('Rate was set for EUR (set it again)'), findsOneWidget);
+      expect(find.byKey(const ValueKey('fxSet:USD')), findsOneWidget);
+      expect(find.byKey(const ValueKey('fxEdit:USD')), findsNothing);
+      await tapKey(t, 'fxSet:USD');
+      await t.enterText(find.byKey(const ValueKey('fxRateField')), '1.01');
+      await tapKey(t, 'fxSave');
+      await settle(t);
+      expect(wc.settings.fxRates['USD']!.rate, 1010000);
+      expect(wc.settings.fxStale, isEmpty);
+      expect(find.byKey(const ValueKey('fxStale:USD')), findsNothing);
+      expect(find.byKey(const ValueKey('fxEdit:USD')), findsOneWidget);
+    });
+
+    testWidgets('an unrated foreign row shows its own symbol, never the wallet\'s', (t) async {
+      final wc = fxWallet();
+      await pumpApp(t, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(400, 4000));
+      final tile = find.byWidgetPredicate((w) => w is TxTile && w.t.tx.currency == 'USD');
+      expect(tile, findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.text(money(-1200, 'USD', decimals: 2, signed: true))), findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.textContaining('€')), findsNothing);
+      await settle(t);
+    });
+
+    test('a converted payment never pays a bill: the period matches on the raw rows', () {
+      final wc = budgetWallet(budgets: false);
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        NormalizedTransaction(
+            id: transactionId('2026-10-18', -6000, 'SYNTH POWER', 0),
+            source: 'pbz',
+            date: '2026-10-18',
+            amountMinor: -6000,
+            currency: 'USD',
+            bankType: 'POS plaćanje',
+            description: 'SYNTH POWER'),
+      ]));
+      wc.reload();
+      final payee = merchantKey(wc.wholeTxs.firstWhere((c) => c.tx.currency == 'USD').tx);
+      wc.addRecurringBill(
+          label: 'Synth power', category: 'Bills & one-offs', amount: 3000, intervalDays: 365, firstDue: '2026-10-30', payee: payee);
+      final before = wc.period();
+      wc.setFxRate('USD', 500000); // 60.00 USD -> 30.00 EUR: the bill's amount
+      final after = wc.period();
+      expect(after.spent, before.spent + 3000, reason: 'the money counts at the converted amount');
+      expect(after.reservedBills, before.reservedBills, reason: 'the USD row does not pay the EUR bill');
+      expect(after.dueBills.map((b) => b.id), before.dueBills.map((b) => b.id));
+      expect(before.dueBills, isNotEmpty);
     });
   });
 

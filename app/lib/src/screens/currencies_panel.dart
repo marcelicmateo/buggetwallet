@@ -64,6 +64,9 @@ class _CurrencyRow extends StatelessWidget {
             const SizedBox(width: 6),
             Expanded(child: Text('$code — Not counted', style: const TextStyle(fontWeight: FontWeight.w500))),
           ]),
+          if (row.stale?.home case final h?)
+            Text('Rate was set for $h (set it again)',
+                key: ValueKey('fxStale:$code'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
           Text(rows, style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
         ],
         const SizedBox(height: 4),
