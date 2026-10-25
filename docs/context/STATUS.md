@@ -218,6 +218,24 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
     - Review: a pay-period step forward then back skipped the running period (fixed); custom ranges stop at the end of this month.
   - **Stage run:** importer 335, core 1777, relay 206, app 1365, desktop 12 files, emulator screens.
   - **In progress:** N3 UI (range control, four graphs, drill-down).
+- 2026-10-25: **Stage N3 UI + N4.**
+  - **N3 UI:**
+    - Spending › Insights (page on phones, dialog from 600 dp): spending per month, category share, income vs spending, budget vs actual (whole calendar months), and biggest payments.
+    - Each graph has the shared range control: this pay period, month, 3/6/12 months, custom (tap the dates), ‹ ›; the kind is remembered on the device.
+    - Drill-down from a "Where it goes" row or a share row: this month vs last month vs the 6-month average, per-month bars, merchants, then the rows (editable).
+    - Results are memoized per data version and day.
+    - Review fixes: 3 medium, 3 low. A refund-only category total now matches its rows; the net shows exact cents; TalkBack taps work on share rows and dates; Custom from a pay period that runs into next month works; category bars are computed in one pass; Back works after an edit.
+  - **N4** (D10, spec `N4_SPEC.md`):
+    - Plan › Expected bills › History for each confirmed bill: one line per month, newest first, with Paid / Bill only / Bill paid (not from the bank) / Missing / Coming up / Paid in <month>.
+    - Each month shows the exact paid amount and billed when known; slips still in review are marked "(to check)".
+    - A month expands to its payments and slips.
+    - Matching is by payee key and dates, never by amount.
+    - Review fixes:
+      - core: the window is counted from today, so a far-future slip can't hide the past; "paid nearby" for payments booked a few days into the next month; invalid dates are skipped;
+      - UI: cash-paid slips, (to check) marks, transfers left out.
+  - **Stage run:**
+    - importer 335, core 1810, relay 206, app 1412 (1418 after the N4 fixes), desktop 12 files, emulator screens.
+    - **perf fails:** `spending_scroll` misses 3 frames against a limit of 2; build p90 went from 1.1 ms to 2.2–2.7 ms. The regression came between bfb7388 and e774b2d (N0–N2). It is being bisected and fixed in this stage.
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -303,7 +321,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   photos are not in `.bwb` backups (they stay on the relay).
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
-  N0, N1, N2 and N3 core done 2026-10-25. In progress: N3 UI (graphs, range control, drill-down). N4 ready (D10: slips + bank payments, one line per month).
+  N0–N4 built 2026-10-25. Open: the Spending scroll perf regression (being fixed). N4 ready (D10: slips + bank payments, one line per month).
 - Owner checks after N2 (phone):
   - new wallet → Skip the cash question, then a second wallet with Add cash (Today shows "Held");
   - Plan › Accounts: add PBZ with today's real balance, import, then check the balance and its "as of" date; Correct balance; Delete → Undo;
