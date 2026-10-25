@@ -630,7 +630,7 @@ class WalletController extends ChangeNotifier {
   /// to storage within a second.
   @override
   void notifyListeners() {
-    _applyNumberStyle(); // before the screens rebuild, and after a repo switch
+    numberStyle = _numberStyle; // before the screens rebuild; read from the repo only on load, reload and change
     super.notifyListeners();
     final db = _db;
     if (db == null || !db.persists || (_persistTimer?.isActive ?? false)) return;
@@ -651,6 +651,7 @@ class WalletController extends ChangeNotifier {
 
   void reload() {
     final t = PerfTimer('wc.reload');
+    _applyNumberStyle(); // the repo may have been switched
     settings = repo.settings();
     categorizer = repo.categorizer();
     final raw = repo.transactions(); // logs repo.transactions
@@ -1702,14 +1703,18 @@ class WalletController extends ChangeNotifier {
   }
 
   /// Number style: 'point' (1,234.50, default) or 'comma' (1.234,50). Device-local, never synced.
-  String get numberStyleName => NumberStyle.fromName(repo.localValue('numberStyle')).name;
+  String get numberStyleName => _numberStyle.name;
 
-  void _applyNumberStyle() => numberStyle = NumberStyle.fromName(repo.localValue('numberStyle'));
+  /// Kept in memory: screens and every notify read it, so it never costs a database read per frame.
+  NumberStyle _numberStyle = NumberStyle.point;
+
+  void _applyNumberStyle() => numberStyle = _numberStyle = NumberStyle.fromName(repo.localValue('numberStyle'));
 
   void setNumberStyle(String style) {
     if (style != 'point' && style != 'comma') return;
     if (style == numberStyleName) return;
     repo.setLocalValue('numberStyle', style);
+    _numberStyle = NumberStyle.fromName(style);
     logEvent(_log, Level.INFO, 'number.style', {'style': style});
     notifyListeners();
   }
