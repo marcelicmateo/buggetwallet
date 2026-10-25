@@ -158,6 +158,18 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   the payee's latest row. Drill-down (`merchantsIn`, `rowsFor`, `merchantTrend`, `compareCategory`) and `searchAll`
   take an optional `table` (label search). `transactionsCsv(table:)` writes labels; the monthly CSV puts
   a sync duplicate into its original's column.
+- `rules.dart` — rules (P7, spec + Clarifications `docs/context/P7_SPEC.md`), pure and web-safe: `merchantPatternId`,
+  `MerchantPattern` (row value `{category, pattern, order}` + optional `match: contains` (folded substring, 1–60 chars,
+  stored trimmed; missing = regex) and `minCents`/`maxCents` (absolute amount, inclusive, 0..`maxAmount`, min ≤ max; only
+  narrow a text match, never alone: owner rule); `MerchantPattern.read` drops an unknown `match` row, a bad range only
+  drops the range), `WalletSettings.patternRules` (match order; `merchantPatterns` = the same as text pairs; `toMap`
+  writes 5-element entries for rules with match/range so `fromMap(toMap())` keeps them), `MerchantRule` +
+  `repo.payeeRules()`, `rulesView` (`RuleView`, `RuleKind`), `ruleHits(rows, cz, currency:)` over
+  `Categorizer.ruleFor` (`payee:<key>`, pattern row id, `builtIn:<n>`, null). Writes in `repo_settings.dart`:
+  `setMerchantPattern(category, pattern, {match, minCents, maxCents})` (sets the whole rule, keeps order),
+  `updateMerchantPattern(id, {…, clearRange})` (text change = new id, same order, old row tombstoned, one write),
+  `movePattern(id, MoveDirection)` (swap orders; ties renumbered). Logs `settings.pattern {op, match, range}`.
+  Tests: `test/p7_rules_impl_test.dart`.
 - `tags.dart` + `repo_tags.dart` — tags (T1, schema 11, spec `docs/context/T1_SPEC.md`). The main tag is the row's
   category; extra tags are entity `tag` (table `tags`, id `t` + 12 hex, `TagRow`, `TagTable`: order by position, label,
   id; same folded label = sync duplicate of the smallest id, `resolve` maps it), links `txtag` (table `tx_tags`, id
@@ -585,6 +597,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   A slip is matched to a confirmed recurring bill by exact payee key only (slip payee vs bank text may differ; then only
   its category keeps it from being reserved on top of the fixed plan). Files attached before B5a are not in `blob_own`,
   so an orphan among them stays on the relay. Two devices adding an `asNew` copy before syncing make one bill.
+- Rules (P7, no schema bump): a build before P7 reads a `contains` pattern as a regex and ignores its amount range, so
+  it can categorize differently (text only) until it upgrades. A deleted pattern's tombstone keeps no order: Undo
+  (set again) puts it last.
 - Legacy settings maps after schema 8: a `categoryBudgets`/`merchantPatterns` map row (an older build's write, or an
   old `.bwb` restored) fills in only entries that have no per-key row at all, live or removed. So an older build's
   change or removal of an entry that already has a row is ignored by upgraded devices (make it again on an upgraded

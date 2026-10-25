@@ -5,6 +5,7 @@ import 'package:wallet_importer/wallet_importer.dart' show TxKind;
 import 'categories.dart';
 import 'dates.dart';
 import 'logs.dart';
+import 'rules.dart' show MerchantPattern, merchantPatternId;
 
 final _log = Logger('bw.settings');
 
@@ -436,7 +437,11 @@ class WalletSettings {
   final String incomeMode; // planned | received
   final String? savedFor; // periodStart for which the payday savings were confirmed
   final bool salaryConfirmed;
-  final List<List<String>> merchantPatterns; // [[category, regex], ...] in match order (first match wins)
+  final List<List<String>> merchantPatterns; // [[category, pattern], ...] in match order (text only: see patternRules)
+
+  /// The merchant patterns with their match kind, amount range, id and order (P7), in match order (first match wins).
+  /// [merchantPatterns] lists the same patterns as `[category, pattern]` pairs.
+  final List<MerchantPattern> patternRules;
   final int rentCashThreshold; // ATM withdrawals this big or bigger are rent; 0 = never
   final Map<String, int> categoryBudgets; // spending category -> cents per calendar month; no entry = no budget
 
@@ -467,6 +472,7 @@ class WalletSettings {
     this.savedFor,
     this.salaryConfirmed = false,
     this.merchantPatterns = const [],
+    this.patternRules = const [],
     this.rentCashThreshold = defaultRentCashThreshold,
     this.categoryBudgets = const {},
     this.planLines = const {},
@@ -548,26 +554,36 @@ class WalletSettings {
     // Per-key rows (schema 8): `budget:<category>` and `pattern:<id>`.
     final budgetRows = <Object?, Object?>{};
     final planRows = <Object?, Object?>{};
-    final patternRows = <(int, String, String, String)>[]; // (order, id, category, pattern)
-    var badPatternRow = false;
+    final patternRows = <MerchantPattern>[];
+    var badPatternRow = false, badRange = false;
     for (final MapEntry(:key, :value) in m.entries) {
       if (key.startsWith(budgetPrefix)) {
         budgetRows[key.substring(budgetPrefix.length)] = value;
       } else if (key.startsWith(planPrefix)) {
         planRows[key.substring(planPrefix.length)] = value;
       } else if (key.startsWith(patternPrefix)) {
-        if (value case {'category': final String c, 'pattern': final String p, 'order': final int o} when o >= 0) {
-          patternRows.add((o, key, c, p));
+        final (row, rangeDropped) = MerchantPattern.read(key, value);
+        if (row != null) {
+          patternRows.add(row);
+          if (rangeDropped) badRange = true;
         } else {
           badPatternRow = true;
         }
       }
     }
     if (badPatternRow) logInvalidSetting('merchantPatterns', 'row');
+    if (badRange) logInvalidSetting('merchantPatterns', 'range');
     patternRows.sort((a, b) {
-      final d = a.$1.compareTo(b.$1);
-      return d != 0 ? d : a.$2.compareTo(b.$2);
+      final d = a.order.compareTo(b.order);
+      return d != 0 ? d : a.id.compareTo(b.id);
     });
+    // A legacy `merchantPatterns` list (and [toMap]'s copy of the rules) comes first, in its own order.
+    final legacyPatterns = switch (patterns) {
+      null => const <MerchantPattern>[],
+      final List<Object?> l => _legacyPatterns(l),
+      _ => bad('merchantPatterns', const <MerchantPattern>[]),
+    };
+    final allPatterns = [...legacyPatterns, ...patternRows];
     return WalletSettings(
       salary: i('salary', 0),
       rent: i('rent', 0),
@@ -583,16 +599,9 @@ class WalletSettings {
       savedFor: str('savedFor', isIsoDate),
       salaryConfirmed: confirmed == null || confirmed is bool ? confirmed == true : bad('salaryConfirmed', false),
       merchantPatterns: [
-        ...switch (patterns) {
-          null => const <List<String>>[],
-          final List<Object?> l => [
-              for (final p in l)
-                if (p is List && p.length == 2) [p[0].toString(), p[1].toString()],
-            ],
-          _ => bad('merchantPatterns', const <List<String>>[]),
-        },
-        for (final (_, _, c, p) in patternRows) [c, p],
+        for (final p in allPatterns) [p.category, p.pattern]
       ],
+      patternRules: allPatterns,
       rentCashThreshold: i('rentCashThreshold', defaultRentCashThreshold),
       categoryBudgets: switch (budgets) {
         null => budgetRows.isEmpty ? const {} : _budgets(budgetRows, cats),
@@ -655,6 +664,29 @@ class WalletSettings {
     return out.isEmpty ? const {} : out;
   }
 
+  /// The entries of a `merchantPatterns` list: `[category, regex]` (stored by builds before schema 8), or [toMap]'s
+  /// `[category, pattern, match, minCents, maxCents]`. Ids from the pattern, orders by position. A range that is not
+  /// valid is dropped (logged under `merchantPatterns`); other entries are skipped.
+  static List<MerchantPattern> _legacyPatterns(List<Object?> l) {
+    final out = <MerchantPattern>[];
+    var badRange = false;
+    for (final p in l) {
+      if (p is! List || (p.length != 2 && p.length != 5)) continue;
+      final text = p[1].toString();
+      final (row, dropped) = MerchantPattern.read(merchantPatternId(text), {
+        'category': p[0].toString(),
+        'pattern': text,
+        'order': out.length,
+        if (p.length == 5) ...{'match': p[2], 'minCents': p[3], 'maxCents': p[4]},
+      });
+      if (row == null) continue;
+      if (dropped) badRange = true;
+      out.add(row);
+    }
+    if (badRange) logInvalidSetting('merchantPatterns', 'range');
+    return out;
+  }
+
   static bool _isMonth(String v) => RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(v);
 
   Map<String, Object?> toMap() => {
@@ -671,7 +703,17 @@ class WalletSettings {
         'incomeMode': incomeMode,
         'savedFor': savedFor,
         'salaryConfirmed': salaryConfirmed,
-        'merchantPatterns': merchantPatterns,
+        // Plain regex rules as `[category, regex]` pairs (as before P7); a rule with a match kind or range as
+        // `[category, pattern, match, minCents, maxCents]`, so [fromMap] reads every rule back.
+        'merchantPatterns': [
+          for (final p in patternRules.isEmpty
+              ? [for (final m in merchantPatterns) MerchantPattern(id: '', category: m[0], pattern: m[1])]
+              : patternRules)
+            if (p.match == MerchantPattern.regex && !p.hasRange)
+              [p.category, p.pattern]
+            else
+              [p.category, p.pattern, p.match, p.minCents, p.maxCents],
+        ],
         'rentCashThreshold': rentCashThreshold,
         'categoryBudgets': categoryBudgets,
         // One int per line under its row id (`plan:<id>`), as stored: [fromMap] reads it back, and a diff of two

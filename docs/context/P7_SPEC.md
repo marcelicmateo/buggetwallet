@@ -61,3 +61,16 @@ Do not change how these are stored. Only add the new optional fields described b
 - `ruleFor` / `ruleHits` counts, and the preview count.
 - Two devices editing the same pattern offline: last writer wins on the per-key row.
 - CSV and categorize results are unchanged when there are no new fields: the built-in identity test still passes.
+
+## Clarifications (core, 2026-10-25, approved by the lead)
+- Types: `enum RuleKind { payee, pattern, builtIn, payeeTags }`, `enum MoveDirection { up, down }`, `movePattern(String id, MoveDirection direction)` (nothing at the ends; swaps the two orders = 2 writes; rows that share an order are renumbered, writing only changed rows).
+- `class MerchantRule { key, category }` (new) and `List<MerchantRule> WalletRepo.payeeRules()` (by key).
+- `class MerchantPattern { id /* row id pattern:<16 hex> */, category, pattern, match /* regex|contains */, minCents?, maxCents?, order }`; `WalletSettings.patternRules` in match order. `WalletSettings.merchantPatterns` stays `[[category, pattern]]` (text only). Stored JSON adds `match` only for `contains` and `minCents`/`maxCents` only when set, so a plain regex row is written exactly as before. `toMap` writes `[category, pattern, match, minCents, maxCents]` for a rule with a match kind or range (plain ones stay pairs), so `fromMap(toMap())` keeps them.
+- Rule ids: `payee:<key>`, the pattern row id itself (`pattern:<16 hex>`; also what `updateMerchantPattern`/`movePattern` take), `builtIn:<index in builtInMerchantRules>`, `payeeTags:<key>`.
+- `RuleView`: `category` = id plus `categoryLabel` (table label); `match` = `payee` for payee/payeeTags, `regex` for built-ins; payee `text` = key with `_` as spaces; `tags` = live resolved rule-tag ids in tag table order; a payee with a rule and tags is ONE payee view with the tags, `payeeTags` views only for payees with tags and no rule (`category` null); `order` = stored order (patterns), index (built-ins), else 0; `editable` false only for built-ins.
+- `ruleHits(rows, cz, {required String currency})`.
+- `String updateMerchantPattern(String id, {String? category, String? pattern, String? match, int? minCents, int? maxCents, bool clearRange = false})` returns the row id after the edit; new min = `clearRange ? minCents : (minCents ?? old)`, same for max; `ArgumentError` for an unknown/removed id and for a new text another live pattern already has; nothing written when unchanged.
+- `setMerchantPattern(category, pattern, {match, minCents, maxCents})` sets the whole rule (an existing pattern's match and range are replaced, its order kept). `contains` text is stored trimmed (id = hash of the trimmed text).
+- `Categorizer(patternRules:)` (`patterns:` still works as regex without range); `merchantCategory(text, {int? amount})`: a ranged pattern never matches without an amount (`resolveStored` passes none).
+- `fromMap`: an unknown `match` drops that row (logged under `merchantPatterns`); a bad range drops only the range (`settings.invalid`, key `merchantPatterns`).
+- Older builds read a `contains` row as a regex and ignore its range (no schema bump, by design).

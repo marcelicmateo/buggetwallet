@@ -2,6 +2,7 @@ import 'package:wallet_importer/wallet_importer.dart' show TxKind;
 
 import 'logs.dart';
 import 'models.dart';
+import 'rules.dart' show MerchantPattern, merchantPatternId;
 import 'search.dart' show foldText;
 import 'tags.dart' show TagContext;
 
@@ -280,10 +281,21 @@ const int defaultRentCashThreshold = 50000;
 /// `WalletRepo._migrate` (schema 4 rewrites the earlier build's `ownTransfer` hint on these rows to `exchange`).
 const revolutExchangeType = 'Exchange';
 
+/// A user pattern ready to match: its regex, or its folded `contains` text.
+class _UserPattern {
+  final MerchantPattern rule;
+  final RegExp? re;
+  final String? folded;
+  const _UserPattern(this.rule, this.re, this.folded);
+}
+
 /// Resolves categories. Built once per settings/rules change.
 class Categorizer {
   final Map<String, String> merchantRules; // merchantKey -> category
-  final List<(String, RegExp)> userPatterns;
+
+  /// The personal patterns in use (live category, valid text), in match order: (category, rule).
+  final List<(String, MerchantPattern)> userPatterns;
+  final List<_UserPattern> _patterns;
 
   /// ATM withdrawals of at least this much (minor units, positive) count as rent (setting `rentCashThreshold`).
   final int rentCashThreshold;
@@ -295,32 +307,51 @@ class Categorizer {
   /// The tag tables [categorize] fills [CategorizedTx.tags] from (T1; `WalletRepo.tagContext`, read once). Null: no tags.
   final TagContext? tagContext;
 
-  Categorizer(
-      {this.merchantRules = const {},
+  /// [patternRules] (P7, [WalletSettings.patternRules]) are the personal patterns with their match kind and range; when
+  /// null, [patterns] (`[category, regex]` pairs, [WalletSettings.merchantPatterns]) are used as regex patterns.
+  factory Categorizer(
+      {Map<String, String> merchantRules = const {},
       List<List<String>> patterns = const [],
-      this.rentCashThreshold = defaultRentCashThreshold,
+      List<MerchantPattern>? patternRules,
+      int rentCashThreshold = defaultRentCashThreshold,
       CategoryTable? table,
-      this.tagContext})
-      : table = table ?? CategoryTable.builtIn,
-        userPatterns = [
-          for (final p in patterns)
-            if ((table ?? CategoryTable.builtIn).isLive(p[0]))
-              if (_tryRegex(p[1]) case final re?) (p[0], re),
-        ] {
+      TagContext? tagContext}) {
+    final t = table ?? CategoryTable.builtIn;
+    final rules = patternRules ??
+        [
+          for (final (i, p) in patterns.indexed) MerchantPattern(id: merchantPatternId(p[1]), category: p[0], pattern: p[1], order: i),
+        ];
+    final used = <_UserPattern>[
+      for (final r in rules)
+        if (t.isLive(r.category))
+          if (_compile(r) case final u?) u,
+    ];
     // Counts only: merchant rules and patterns are personal.
-    logEvent(_log, Level.FINE, 'categories.build',
-        {'rules': merchantRules.length, 'patterns': patterns.length, 'patternsUsed': userPatterns.length});
+    logEvent(_log, Level.FINE, 'categories.build', {'rules': merchantRules.length, 'patterns': rules.length, 'patternsUsed': used.length});
+    return Categorizer._(merchantRules, used, rentCashThreshold, t, tagContext);
   }
 
-  /// A pattern as a case-insensitive RegExp, or null (logged as `categories.badPattern`) if it does not compile or is
-  /// empty (only spaces included): an empty pattern would match every merchant.
-  static RegExp? _tryRegex(String s) {
+  Categorizer._(this.merchantRules, this._patterns, this.rentCashThreshold, this.table, this.tagContext)
+      : userPatterns = List.unmodifiable([for (final p in _patterns) (p.rule.category, p.rule)]);
+
+  /// A pattern ready to match, or null (logged as `categories.badPattern`) when its text is empty (only spaces
+  /// included: an empty pattern would match every merchant), a regex does not compile, or `contains` is too long.
+  static _UserPattern? _compile(MerchantPattern r) {
+    final s = r.pattern;
     if (s.trim().isEmpty) {
       logEvent(_log, Level.WARNING, 'categories.badPattern', {'empty': true, 'length': s.length});
       return null;
     }
+    if (r.match == MerchantPattern.contains) {
+      final f = foldText(s.trim());
+      if (f.isEmpty || s.trim().length > MerchantPattern.maxContainsLength) {
+        logEvent(_log, Level.WARNING, 'categories.badPattern', {'match': r.match, 'length': s.length});
+        return null;
+      }
+      return _UserPattern(r, null, f);
+    }
     try {
-      return RegExp(s, caseSensitive: false);
+      return _UserPattern(r, RegExp(s, caseSensitive: false), null);
     } on FormatException catch (e) {
       // Not the error text: a RegExp error can quote the pattern, which names personal merchants.
       logEvent(_log, Level.WARNING, 'categories.badPattern', {'offset': e.offset, 'length': s.length});
@@ -329,14 +360,22 @@ class Categorizer {
   }
 
   /// The category for merchant text, from personal patterns then built-in rules; null if none matches. The text is
-  /// lower-cased and trimmed first, so `'Google '` matches `^google$`.
-  String? merchantCategory(String description) {
+  /// lower-cased and trimmed first, so `'Google '` matches `^google$`; a `contains` pattern looks in the folded text
+  /// ([foldText]). A pattern with an amount range matches only when [amount] is given and in range.
+  String? merchantCategory(String description, {int? amount}) => _matchText(description, amount)?.$1;
+
+  /// [merchantCategory] with the id of the rule that matched: the pattern row id, or `builtIn:<index>`.
+  (String, String)? _matchText(String description, int? amount) {
     final s = description.toLowerCase().trim();
-    for (final (c, re) in userPatterns) {
-      if (re.hasMatch(s)) return c;
+    String? folded;
+    for (final p in _patterns) {
+      final r = p.rule;
+      if (r.hasRange && (amount == null || !r.inRange(amount))) continue;
+      final hit = p.re?.hasMatch(s) ?? (folded ??= foldText(s)).contains(p.folded!);
+      if (hit) return (r.category, r.id);
     }
-    for (final (c, re) in builtInMerchantRules) {
-      if (re.hasMatch(s)) return c;
+    for (final (i, (c, re)) in builtInMerchantRules.indexed) {
+      if (re.hasMatch(s)) return (c, 'builtIn:$i');
     }
     return null;
   }
@@ -348,17 +387,20 @@ class Categorizer {
   /// [rentCashThreshold], else Cash, `fee` → Bank fees, `ownTransfer` and `exchange` → Internal transfer. `standingOrder` says how the
   /// bank paid, not what for, and `card`, `other` and no hint fall through to the per-source rules below (built-in
   /// merchant patterns and the `merchantPatterns` setting through [merchantCategory]).
-  String autoCategory(Tx t) {
-    if (t.transferTo != null) return 'Internal transfer';
+  String autoCategory(Tx t) => _auto(t).$1;
+
+  /// [autoCategory] with the id of the pattern or built-in rule that decided it, if one did.
+  (String, String?) _auto(Tx t) {
+    if (t.transferTo != null) return ('Internal transfer', null);
     switch (t.kindHint) {
       case TxKind.salary:
-        return 'Salary';
+        return ('Salary', null);
       case TxKind.atm:
-        return rentCashThreshold > 0 && t.amount <= -rentCashThreshold ? 'Rent' : 'Cash';
+        return (rentCashThreshold > 0 && t.amount <= -rentCashThreshold ? 'Rent' : 'Cash', null);
       case TxKind.fee:
-        return 'Bank fees';
+        return ('Bank fees', null);
       case TxKind.ownTransfer || TxKind.exchange:
-        return 'Internal transfer';
+        return ('Internal transfer', null);
       case TxKind.standingOrder || TxKind.card || TxKind.other || null:
         break;
     }
@@ -366,41 +408,49 @@ class Categorizer {
     final type = t.bankType;
     switch (t.source) {
       case 'revolut':
-        if (type == 'Topup' || type == revolutExchangeType) return 'Internal transfer';
-        if (type == 'Transfer') return 'To people';
-        return merchantCategory(d) ?? 'Shopping';
+        if (type == 'Topup' || type == revolutExchangeType) return ('Internal transfer', null);
+        if (type == 'Transfer') return ('To people', null);
+        return _matchText(d, t.amount) ?? ('Shopping', null);
       case 'pbz':
-        if (d.contains('revolut')) return 'Internal transfer';
-        if (d.contains('isplata kredita')) return 'Loan received';
-        if (type == 'Isplata u poslovnici') return 'Cash';
-        if (type == 'Isplata ATM') return rentCashThreshold > 0 && t.amount <= -rentCashThreshold ? 'Rent' : 'Cash';
+        if (d.contains('revolut')) return ('Internal transfer', null);
+        if (d.contains('isplata kredita')) return ('Loan received', null);
+        if (type == 'Isplata u poslovnici') return ('Cash', null);
+        if (type == 'Isplata ATM') return (rentCashThreshold > 0 && t.amount <= -rentCashThreshold ? 'Rent' : 'Cash', null);
         if (type == 'Naplaćene naknade' ||
             type == 'Povrat naknade' ||
             type == 'Pripisane kamate' ||
             d.contains('naknad') ||
             d.contains('članarin')) {
-          return 'Bank fees';
+          return ('Bank fees', null);
         }
-        if (type == 'Trajni nalog' || RegExp(r'naplata kredita|rate kredita|kreditni račun').hasMatch(d)) return 'Loan';
-        if (type == 'Plaća/Mirovina' || d.contains('krive uplate')) return 'Salary';
-        if (t.amount > 0) return 'Extra income';
-        if (type == 'POS plaćanje') return merchantCategory(d) ?? 'Shopping';
-        return 'Bills & one-offs';
+        if (type == 'Trajni nalog' || RegExp(r'naplata kredita|rate kredita|kreditni račun').hasMatch(d)) return ('Loan', null);
+        if (type == 'Plaća/Mirovina' || d.contains('krive uplate')) return ('Salary', null);
+        if (t.amount > 0) return ('Extra income', null);
+        if (type == 'POS plaćanje') return _matchText(d, t.amount) ?? ('Shopping', null);
+        return ('Bills & one-offs', null);
       default:
         // Hand-added and unknown-source rows: their stored category if it is a live one, else Shopping.
         final c = t.category;
-        return c != null && table.isLive(c) ? c : 'Shopping';
+        return (c != null && table.isLive(c) ? c : 'Shopping', null);
     }
   }
 
-  String categoryOf(Tx t) {
+  String categoryOf(Tx t) => _decide(t).$1;
+
+  /// The id of the rule that decided [t]'s main tag ([categoryOf]): `payee:<merchantKey>` for a payee rule, the
+  /// pattern row id `pattern:<16 hex>`, `builtIn:<index in builtInMerchantRules>`; null when no rule did (an item
+  /// override, a transfer or kind hint, a bank rule, a hand-added row's own category, the fallback).
+  String? ruleFor(Tx t) => _decide(t).$2;
+
+  (String, String?) _decide(Tx t) {
     final o = t.category;
-    if (o != null && table.isLive(o)) return o;
-    final auto = autoCategory(t);
-    final k = table.kindOf(auto);
+    if (o != null && table.isLive(o)) return (o, null);
+    final auto = _auto(t);
+    final k = table.kindOf(auto.$1);
     if (t.source != 'manual' && (k == BudgetKind.flex || k == BudgetKind.fixed)) {
-      final r = merchantRules[merchantKey(t)];
-      if (r != null && table.isLive(r)) return r;
+      final key = merchantKey(t);
+      final r = merchantRules[key];
+      if (r != null && table.isLive(r)) return (r, 'payee:$key');
     }
     return auto;
   }

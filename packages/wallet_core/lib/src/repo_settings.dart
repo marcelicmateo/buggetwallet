@@ -1,11 +1,5 @@
 part of 'repo.dart';
 
-/// The settings row id of merchant [pattern] (schema 8): `pattern:` + the first 16 hex characters of the SHA-256 of
-/// its UTF-8 bytes. The same pattern added on two devices is one row, and the id does not show the pattern. It is not
-/// safe in a log: an unsalted hash of a short pattern is reversed with a word list, so problems with these rows are
-/// logged under the key `merchantPatterns` (budget rows under `categoryBudgets`).
-String merchantPatternId(String pattern) => '${WalletSettings.patternPrefix}${sha256Hex(utf8.encode(pattern)).substring(0, 16)}';
-
 /// The settings row id of [category]'s monthly budget (schema 8).
 String _budgetId(String category) => '${WalletSettings.budgetPrefix}$category';
 
@@ -128,49 +122,82 @@ extension WalletRepoSettings on WalletRepo {
     logEvent(_log, Level.INFO, 'settings.planLine', {'set': cents != null});
   }
 
-  /// Adds merchant [pattern] (a case-insensitive regex matched against the lower-cased description) for [category],
-  /// or moves an existing one to [category]. A new pattern is matched after every other one (`order` = the largest
-  /// live order + 1); an existing one keeps its place. Throws [ArgumentError] for an unknown or deleted category ([CategoryTable.isLive]), an empty
-  /// pattern or one that does not compile (the message never quotes the pattern). Writes nothing when unchanged.
-  void setMerchantPattern(String category, String pattern) {
-    if (!categoryTable().isLive(category)) throw ArgumentError.value(category, 'category', 'unknown category');
-    if (pattern.trim().isEmpty) throw ArgumentError('empty pattern');
-    try {
-      RegExp(pattern, caseSensitive: false);
-    } on FormatException catch (e) {
-      logEvent(_log, Level.INFO, 'settings.badPattern', {'offset': e.offset, 'length': pattern.length});
-      throw ArgumentError('pattern does not compile');
-    }
-    final id = merchantPatternId(pattern);
-    int? order;
-    var next = 0;
-    for (final r in db.select('SELECT id, value FROM settings WHERE deleted = 0 AND id LIKE ?', ['${WalletSettings.patternPrefix}%'])) {
-      final v = r['value'];
-      final Object? row;
-      try {
-        row = v is String ? jsonDecode(v) : null;
-      } on FormatException {
-        logInvalidSetting('merchantPatterns', 'json:$v'); // the key only, once per value
-        continue;
-      }
-      if (row case {'category': final String c, 'order': final int o}) {
-        if (o >= next) next = o + 1;
-        if (r['id'] == id) {
-          if (c == category) return;
-          order = o;
-        }
-      }
-    }
+  /// Adds merchant [pattern] for [category], or sets an existing one (same text) to exactly this rule: [category],
+  /// [match] and the amount range. [match] is `regex` (a case-insensitive regex matched against the lower-cased
+  /// description; the default) or `contains` (a case- and accent-folded substring, 1–60 characters, stored trimmed).
+  /// [minCents] / [maxCents] (optional, inclusive, against the absolute amount, 0..[WalletSettings.maxAmount], min ≤ max)
+  /// only narrow the text match (P7). A new pattern is matched after every other one (`order` = the largest live order
+  /// + 1); an existing one keeps its place. Throws [ArgumentError] for an unknown or deleted category
+  /// ([CategoryTable.isLive]), an empty pattern, a regex that does not compile, a `contains` text over 60 characters,
+  /// an unknown [match] or a bad range (the message never quotes the pattern). Writes nothing when unchanged.
+  void setMerchantPattern(String category, String pattern, {String match = MerchantPattern.regex, int? minCents, int? maxCents}) {
+    final text = _checkPattern(category, pattern, match, minCents, maxCents);
+    final id = merchantPatternId(text);
+    final rows = _patternRows();
+    final old = rows[id];
+    final next = MerchantPattern(
+        id: id,
+        category: category,
+        pattern: text,
+        match: match,
+        minCents: minCents,
+        maxCents: maxCents,
+        order: old?.order ?? _nextOrder(rows));
+    if (old != null && _samePattern(old, next)) return;
+    _write([_patternWrite(next)]);
+    logEvent(_log, Level.INFO, 'settings.pattern', {'op': old == null ? 'add' : 'set', 'match': match, 'range': next.hasRange});
+  }
+
+  /// Edits the pattern row [id] (`pattern:<16 hex>`): only the given fields change. The range becomes
+  /// `clearRange ? minCents : (minCents ?? old)` and the same for max. A category, match or range change keeps the
+  /// row id; a text change is a new id (ids are a hash of the text), so the old row is removed and the new row takes
+  /// the same `order`, in one write. Returns the row id after the edit. Throws [ArgumentError] for an unknown or
+  /// removed id, a new text another live pattern already has, and everything [setMerchantPattern] refuses. Writes
+  /// nothing when unchanged.
+  String updateMerchantPattern(String id,
+      {String? category, String? pattern, String? match, int? minCents, int? maxCents, bool clearRange = false}) {
+    final rows = _patternRows();
+    // A legacy-map entry without a row of its own (an older build's add) is edited like a row.
+    final old = rows[id] ?? _readSettings(db, table: categoryTable()).patternRules.where((p) => p.id == id).firstOrNull;
+    if (old == null) throw ArgumentError.value(id, 'id', 'no such rule');
+    final c = category ?? old.category, m = match ?? old.match;
+    final lo = clearRange ? minCents : (minCents ?? old.minCents), hi = clearRange ? maxCents : (maxCents ?? old.maxCents);
+    final text = _checkPattern(c, pattern ?? old.pattern, m, lo, hi);
+    final newId = merchantPatternId(text);
+    if (newId != id && rows.containsKey(newId)) throw ArgumentError('a rule with this text already exists');
+    final next = MerchantPattern(id: newId, category: c, pattern: text, match: m, minCents: lo, maxCents: hi, order: old.order);
+    if (_samePattern(old, next)) return id;
     _write([
-      (
-        'setting',
-        id,
-        {
-          'value': jsonEncode({'category': category, 'pattern': pattern, 'order': order ?? next}),
-          'deleted': 0
-        }
-      )
+      _patternWrite(next),
+      if (newId != id) ('setting', id, {'value': null, 'deleted': 1}),
     ]);
+    logEvent(_log, Level.INFO, 'settings.pattern', {'op': 'update', 'match': m, 'range': next.hasRange, 'newId': newId != id});
+    return newId;
+  }
+
+  /// Moves pattern [id] one place up or down in the match order ([WalletSettings.patternRules]): it swaps `order`
+  /// with its neighbour (two writes). Patterns that share an order (a sync of two adds) are numbered again in the new
+  /// sequence, writing only the rows whose order changes. Nothing at the ends. [ArgumentError] for an unknown id.
+  void movePattern(String id, MoveDirection direction) {
+    final list = [..._readSettings(db, table: categoryTable()).patternRules];
+    final i = list.indexWhere((p) => p.id == id);
+    if (i < 0) throw ArgumentError.value(id, 'id', 'no such rule');
+    final j = direction == MoveDirection.up ? i - 1 : i + 1;
+    if (j < 0 || j >= list.length) return;
+    final a = list[i], b = list[j];
+    final List<MerchantPattern> changed;
+    if (a.order != b.order) {
+      changed = [_withOrder(a, b.order), _withOrder(b, a.order)];
+    } else {
+      list[i] = b;
+      list[j] = a;
+      changed = [
+        for (final (k, p) in list.indexed)
+          if (p.order != k) _withOrder(p, k)
+      ];
+    }
+    _write([for (final p in changed) _patternWrite(p)]);
+    logEvent(_log, Level.INFO, 'settings.pattern', {'op': 'move', 'writes': changed.length});
   }
 
   /// Removes merchant [pattern] (whatever its category). Writes nothing when it is not set.
@@ -180,6 +207,62 @@ extension WalletRepoSettings on WalletRepo {
       ('setting', merchantPatternId(pattern), {'value': null, 'deleted': 1})
     ]);
   }
+
+  /// The checked text of a pattern write ([setMerchantPattern]): trimmed for `contains`, as given for a regex.
+  String _checkPattern(String category, String pattern, String match, int? minCents, int? maxCents) {
+    if (!categoryTable().isLive(category)) throw ArgumentError.value(category, 'category', 'unknown category');
+    if (match != MerchantPattern.regex && match != MerchantPattern.contains) throw ArgumentError.value(match, 'match', 'regex or contains');
+    if (MerchantPattern.rangeError(minCents, maxCents) case final e?) throw ArgumentError(e);
+    // Never a rule without text: a range alone would classify on the amount (owner rule).
+    if (pattern.trim().isEmpty) throw ArgumentError('empty pattern');
+    if (match == MerchantPattern.contains) {
+      final t = pattern.trim();
+      if (t.length > MerchantPattern.maxContainsLength) throw ArgumentError('text over ${MerchantPattern.maxContainsLength} characters');
+      return t;
+    }
+    try {
+      RegExp(pattern, caseSensitive: false);
+    } on FormatException catch (e) {
+      logEvent(_log, Level.INFO, 'settings.badPattern', {'offset': e.offset, 'length': pattern.length});
+      throw ArgumentError('pattern does not compile');
+    }
+    return pattern;
+  }
+
+  /// The live pattern rows by id, as stored (no legacy-map entries). A damaged value is skipped (logged by key).
+  Map<String, MerchantPattern> _patternRows() {
+    final out = <String, MerchantPattern>{};
+    for (final r in db.select('SELECT id, value FROM settings WHERE deleted = 0 AND id LIKE ?', ['${WalletSettings.patternPrefix}%'])) {
+      final v = r['value'];
+      final Object? row;
+      try {
+        row = v is String ? jsonDecode(v) : null;
+      } on FormatException {
+        logInvalidSetting('merchantPatterns', 'json:$v'); // the key only, once per value
+        continue;
+      }
+      final id = r['id'] as String;
+      if (MerchantPattern.read(id, row).$1 case final p?) out[id] = p;
+    }
+    return out;
+  }
+
+  static int _nextOrder(Map<String, MerchantPattern> rows) => rows.values.fold(0, (n, p) => p.order >= n ? p.order + 1 : n);
+
+  static bool _samePattern(MerchantPattern a, MerchantPattern b) =>
+      a.id == b.id &&
+      a.category == b.category &&
+      a.pattern == b.pattern &&
+      a.match == b.match &&
+      a.minCents == b.minCents &&
+      a.maxCents == b.maxCents &&
+      a.order == b.order;
+
+  static MerchantPattern _withOrder(MerchantPattern p, int order) => MerchantPattern(
+      id: p.id, category: p.category, pattern: p.pattern, match: p.match, minCents: p.minCents, maxCents: p.maxCents, order: order);
+
+  static (String, String, Map<String, Object?>) _patternWrite(MerchantPattern p) =>
+      ('setting', p.id, {'value': jsonEncode(p.toJson()), 'deleted': 0});
 
   /// Schema 8 (H3): the legacy `categoryBudgets` / `merchantPatterns` maps become one row per entry. An entry whose id
   /// already has a settings row, live or removed (another device's per-key write that arrived first), is skipped: the

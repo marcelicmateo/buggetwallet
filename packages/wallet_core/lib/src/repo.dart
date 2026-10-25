@@ -12,6 +12,7 @@ import 'logs.dart';
 import 'matching.dart';
 import 'models.dart';
 import 'recurring.dart';
+import 'rules.dart';
 import 'schema.dart';
 import 'search.dart' show foldText;
 import 'sqlite_io.dart' if (dart.library.js_interop) 'sqlite_web.dart' as sqlite;
@@ -815,6 +816,12 @@ class WalletRepo {
           r,
       ], (cz, r) => cz.resolveStored(r['category'] as String?, text: '${r['title'] ?? ''}'), PlannedCost.fromRow);
 
+  /// The live payee rules ([merchantRules]) as [MerchantRule]s, by key (for `rulesView`).
+  List<MerchantRule> payeeRules() => [
+        for (final MapEntry(:key, :value) in (merchantRules().entries.toList()..sort((a, b) => a.key.compareTo(b.key))))
+          MerchantRule(key, value)
+      ];
+
   Map<String, String> merchantRules() => {
         for (final r in db.select('SELECT id, category FROM merchant_rules WHERE deleted = 0 AND category IS NOT NULL'))
           if ((r['id'], r['category']) case (final String id, final String c)) id: c,
@@ -833,7 +840,7 @@ class WalletRepo {
     final st = _readSettings(db, table: table);
     return Categorizer(
         merchantRules: merchantRules(),
-        patterns: st.merchantPatterns,
+        patternRules: st.patternRules,
         rentCashThreshold: st.rentCashThreshold,
         table: table,
         tagContext: withTags ? tagContext() : null);

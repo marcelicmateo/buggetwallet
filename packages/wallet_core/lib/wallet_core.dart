@@ -172,7 +172,6 @@ export 'src/recurring.dart' show detectRecurring, medianCents, planRecurringPaym
 export 'src/repo.dart'
     show
         ImportSummary,
-        merchantPatternId,
         Op,
         WalletRepo,
         WalletRepoAccounts,
@@ -182,6 +181,7 @@ export 'src/repo.dart'
         WalletRepoPlanned,
         WalletRepoSettings,
         WalletRepoTags;
+export 'src/rules.dart' show merchantPatternId, MerchantPattern, MerchantRule, MoveDirection, RuleKind, ruleHits, rulesView, RuleView;
 export 'src/search.dart' show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchTxLimit;
 export 'src/suggest.dart' show PlanSuggestion, planProposals, SettingProposal, Suggested, suggestPlan;
 export 'src/sync.dart'
