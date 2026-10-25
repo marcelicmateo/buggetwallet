@@ -62,7 +62,7 @@ extension AccountsDb on WalletController {
           for (final b in recurringBills())
             if (b.confirmed) b
         ];
-        return suggestPlan(txs, settings, today(), confirmed: confirmed);
+        return suggestPlan(txs, settings, today(), confirmed: confirmed, table: categoryTable);
       });
 
   /// The suggestions that differ from the plan and were not put off with "Not now" at their current value.
@@ -75,16 +75,24 @@ extension AccountsDb on WalletController {
   /// confirms the salary, as saving the plan does). Returns how many were written.
   int acceptPlanProposals({Set<String>? only}) {
     final changes = <String, Object?>{};
+    final lines = <String, int?>{}; // `plan:<id>` proposals go to setPlanLine, updateSettings refuses them
     var n = 0;
     for (final p in planProposalList()) {
       if (only != null && !only.contains(p.key)) continue;
-      changes[p.key] = p.suggested;
+      if (p.key.startsWith(WalletSettings.planPrefix)) {
+        lines[p.key.substring(WalletSettings.planPrefix.length)] = p.suggested;
+      } else {
+        changes[p.key] = p.suggested;
+      }
       n++;
       if (p.key == 'salary') changes['salaryConfirmed'] = true;
     }
     if (n == 0) return 0;
-    logEvent(_accLog, Level.INFO, 'plan.suggestion.accept', {'keys': changes.keys.where((k) => k != 'salaryConfirmed').join(',')});
-    updateSettings(changes);
+    logEvent(_accLog, Level.INFO, 'plan.suggestion.accept', {
+      'keys': [...changes.keys.where((k) => k != 'salaryConfirmed'), if (lines.isNotEmpty) 'planLines:${lines.length}'].join(',')
+    });
+    if (lines.isNotEmpty) savePlanLines(lines);
+    if (changes.isNotEmpty) updateSettings(changes);
     return n;
   }
 
@@ -93,7 +101,7 @@ extension AccountsDb on WalletController {
     final p = planProposalList().where((x) => x.key == key).firstOrNull;
     if (p == null) return;
     repo.setLocalValue('planNotNow:$key', '${p.suggested}');
-    logEvent(_accLog, Level.INFO, 'plan.suggestion.later', {'key': key});
+    logEvent(_accLog, Level.INFO, 'plan.suggestion.later', {'key': key.startsWith(WalletSettings.planPrefix) ? 'planLine' : key});
     _refreshView();
   }
 }

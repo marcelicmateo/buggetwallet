@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
+import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
@@ -176,6 +177,23 @@ const double categoryRowIndent = 24;
 /// instead. A sync duplicate ([duplicate]) is only removed (it was never offered).
 Future<void> deleteCategoryWithUndo(BuildContext context, WalletController wc, String id, {bool duplicate = false}) async {
   logNav('categories.delete');
+  // A category with a plan line: say what goes with it before it is deleted.
+  final line = wc.settings.planLines[id] ?? 0;
+  if (line > 0) {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        key: const ValueKey('categoryDeleteConfirm'),
+        title: const Text('Delete this category?'),
+        content: Text('Its plan line (${moneyExact(line, wc.currency)}) goes too. Its bills then count under the automatic category.'),
+        actions: [
+          TextButton(key: const ValueKey('categoryDeleteCancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(key: const ValueKey('categoryDeleteGo'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+  }
   final messenger = ScaffoldMessenger.of(context);
   final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
   void say(String m, {String? label, VoidCallback? action}) =>

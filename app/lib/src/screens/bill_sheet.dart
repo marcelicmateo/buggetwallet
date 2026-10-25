@@ -85,6 +85,10 @@ class _BillSheetState extends State<BillSheet> {
   late final String? _suggested =
       _first == null || _first.status != BillStatus.review || _first.category != null ? null : widget.wc.suggestedBillCategory(_first);
   late String? category = _first?.category ?? _suggested;
+
+  /// Whether the owner picked a category. A suggestion (or the automatic category of a deleted one) that was only shown is not
+  /// written by Save; Confirm bill accepts what is shown.
+  bool _categoryPicked = false;
   String? error;
 
   @override
@@ -96,7 +100,7 @@ class _BillSheetState extends State<BillSheet> {
   }
 
   /// The fields the owner changed, saved on top of the bill. Returns false (and says why) when the total is not an amount.
-  bool _save(Bill b) {
+  bool _save(Bill b, {bool acceptShown = false}) {
     final t = total.text.trim().isEmpty ? null : parseMoney(total.text);
     if (total.text.trim().isNotEmpty && (t == null || t <= 0)) {
       setState(() => error = 'Total: enter an amount, like 12.50.');
@@ -120,7 +124,7 @@ class _BillSheetState extends State<BillSheet> {
         iban: typedIban.isEmpty || typedIban == (b.iban ?? '') ? null : typedIban,
         reference: changed(reference, b.reference),
         description: changed(description, b.description),
-        category: category != b.category ? category : null,
+        category: category != b.category && (_categoryPicked || acceptShown) ? category : null,
         note: changed(note, b.note),
         clearDueDate: due == null && b.dueDate != null,
         clearCategory: category == null && b.category != null);
@@ -149,7 +153,9 @@ class _BillSheetState extends State<BillSheet> {
   }
 
   Future<void> _confirm(Bill b) async {
-    if (!_save(b)) return;
+    // The category shown is written only when the bill needs one (it still reserves money) or the owner picked it.
+    final needed = due != null && due!.compareTo(widget.wc.today()) >= 0;
+    if (!_save(b, acceptShown: needed)) return;
     final t = total.text.trim().isEmpty ? null : parseMoney(total.text);
     if (date == null || (t ?? 0) <= 0) {
       logNav('bill.invalid');
@@ -315,6 +321,7 @@ class _BillSheetState extends State<BillSheet> {
         items: categoryMenuItems(widget.wc.categoryTable, current: category, noneLabel: 'None'),
         onChanged: (v) => setState(() {
           category = v;
+          _categoryPicked = true;
           error = null;
         }),
       ),

@@ -8,12 +8,14 @@ import '../theme.dart';
 import '../widgets/common.dart';
 
 /// The name of a plan setting as the Payday plan shows it.
-String proposalLabel(String key) => switch (key) {
+String proposalLabel(String key, [CategoryTable? table]) => switch (key) {
       'salary' => 'Salary per month',
       'paydayDay' => 'Latest payday',
       'rent' => 'Rent',
       'loan' => 'Loan',
       'subs' => 'Bills & subs',
+      _ when key.startsWith(WalletSettings.planPrefix) =>
+        table?.label(key.substring(WalletSettings.planPrefix.length)) ?? key.substring(WalletSettings.planPrefix.length),
       _ => key,
     };
 
@@ -24,6 +26,7 @@ String proposalBasis(String basis) => switch (basis) {
       'rentRows' => 'From your rent payments.',
       'loanRows' => 'From your loan payments.',
       'confirmedBills' => 'From your confirmed bills.',
+      'planRows' => 'From your payments in this category.',
       _ => 'From your imports.',
     };
 
@@ -54,7 +57,7 @@ class PlanSuggestionsPanel extends StatelessWidget {
             key: ValueKey('proposal:${p.key}'),
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text(proposalLabel(p.key), style: const TextStyle(fontWeight: FontWeight.w500)),
+              Text(proposalLabel(p.key, wc.categoryTable), style: const TextStyle(fontWeight: FontWeight.w500)),
               const SizedBox(height: 2),
               Text('${proposalValue(p, p.current, cur)} → ${proposalValue(p, p.suggested, cur)}',
                   key: ValueKey('proposalValue:${p.key}'), style: numStyle.copyWith(fontWeight: FontWeight.w500)),
@@ -69,7 +72,7 @@ class PlanSuggestionsPanel extends StatelessWidget {
                 TextButton(
                     key: ValueKey('proposalLater:${p.key}'),
                     onPressed: () {
-                      logNav('plan.suggestion.later', {'key': p.key});
+                      logNav('plan.suggestion.later', {'key': p.key.startsWith(WalletSettings.planPrefix) ? 'planLine' : p.key});
                       wc.putOffPlanProposal(p.key);
                     },
                     child: const Text('Not now')),
