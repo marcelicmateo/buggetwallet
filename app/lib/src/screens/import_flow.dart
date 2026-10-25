@@ -54,6 +54,7 @@ Future<void> pickAndImport(BuildContext context, WalletController wc, FileChoose
       confirmRemoval: (n) async => context.mounted && await confirmRemovePayments(context, n));
   // A saved layout that read the file another way replaced its earlier payments: Undo puts them back.
   final undo = lines.map((l) => l.undo).whereType<VoidCallback>().firstOrNull;
-  if (undo != null && context.mounted)
+  if (undo != null && context.mounted) {
     toast(context, 'Earlier payments of that layout were read again.', actionLabel: 'Undo', onAction: undo);
+  }
 }
