@@ -2,6 +2,7 @@
 library;
 
 import 'bills.dart';
+import 'categories.dart' show CategoryTable;
 import 'models.dart';
 import 'schema.dart';
 
@@ -128,7 +129,8 @@ List<Map<String, Object?>> searchRows(String entity, String query, Iterable<Map<
 /// exact total. A query that is both matches either way. Deleted and
 /// replaced transactions are never found. Blank query → [SearchResult.empty]. Transactions come newest first (date,
 /// then id, descending), capped at [searchTxLimit]; the other lists keep their input order. [rows] (entity → raw rows)
-/// are searched on the entity's searchable columns ([searchRows]) into [SearchResult.rows].
+/// are searched on the entity's searchable columns ([searchRows]) into [SearchResult.rows]. With [table], a
+/// category also matches by its label ([CategoryTable.label], folded), so a custom category is found by its name.
 SearchResult searchAll(
   String query, {
   required List<CategorizedTx> txs,
@@ -138,16 +140,18 @@ SearchResult searchAll(
   List<PlannedCost> planned = const [],
   List<Bill> billsDb = const [],
   Map<String, Iterable<Map<String, Object?>>> rows = const {},
+  CategoryTable? table,
 }) {
   final q = foldText(query.trim());
   if (q.isEmpty) return SearchResult.empty;
   final cents = parseAmountQuery(query)?.abs();
   bool text(String? s) => s != null && foldText(s).contains(q);
   bool amount(int v) => cents != null && v.abs() == cents;
+  bool category(String? c) => text(c) || (c != null && table != null && text(table.label(c)));
 
   final hits = [
     for (final t in txs)
-      if (t.tx.live && (amount(t.amount) || text(t.tx.description) || text(t.tx.note) || text(t.category))) t
+      if (t.tx.live && (amount(t.amount) || text(t.tx.description) || text(t.tx.note) || category(t.category))) t
   ]..sort((a, b) {
       final c = b.date.compareTo(a.date);
       return c != 0 ? c : b.tx.id.compareTo(a.tx.id);
@@ -164,11 +168,11 @@ SearchResult searchAll(
     ],
     bills: [
       for (final b in bills)
-        if (text(b.label) || text(b.category) || amount(b.expectedAmount)) b
+        if (text(b.label) || category(b.category) || amount(b.expectedAmount)) b
     ],
     planned: [
       for (final p in planned)
-        if (!p.deleted && (text(p.title) || text(p.category) || (p.amount != null && amount(p.amount!)))) p
+        if (!p.deleted && (text(p.title) || category(p.category) || (p.amount != null && amount(p.amount!)))) p
     ],
     billsDb: [
       for (final b in billsDb)

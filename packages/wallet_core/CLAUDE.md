@@ -144,6 +144,19 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `computePeriod` and `plannedReserves` take `table` as **required** (a custom fixed category must never be reserved as
   flex). `repo_categories.dart` (`WalletRepoCategories`): add/update/delete/undeleteCategory, `categoryRows`;
   `WalletRepo.categoryTable()`. Logs: counts and kinds only, never labels. Tests: `test/p1_categories_test.dart`.
+  Owner decisions after review (P1 review fixes, `test/p1_review_test.dart`): **plan lines** — every live top-level
+  custom fixed category (`CategoryTable.hasPlanLine`) has a per-key setting `plan:<id>` (cents 0..`maxAmount`,
+  `setPlanLine`, `WalletSettings.planLines`, refused by `updateSettings`), summed into `computePeriod`'s `fixedPlan`;
+  `fixedPaid` and `CategoryTable.coveredByPlan` (= `coveredByPlanIn`) go by `topLevel`, so a bill or planned cost in a
+  child of any fixed category is covered, never reserved; `suggestPlan(table:)` matches rent/loan/subs/plan lines by
+  `topLevel` (`planProposals` keys `plan:<id>`). Custom income counts as salary. A **deleted custom category**
+  (`isDeadCustom`: not live, a custom row or a `k`+12-hex id; a row with no known `kind` is not live) falls back when
+  read: `recurringBills`/`plannedCosts`/`bills` resolve it with `Categorizer.resolveStored` (merchant rule for the
+  payee key, then patterns and built-in rules on label/title/payee; recurring: else Shopping), never written;
+  `refreshRecurring` never rewrites such a stored category and ignores rows whose own category is one when it picks
+  the payee's latest row. Drill-down (`merchantsIn`, `rowsFor`, `merchantTrend`, `compareCategory`) and `searchAll`
+  take an optional `table` (whole tree; label search). `transactionsCsv(table:)` writes labels; the monthly CSV puts
+  a sync duplicate into its original's column.
 - `transfers.dart` — `planTransfers`: own transfers between accounts. Only a row the bank itself marks as one
   (`kindHint == ownTransfer`: Revolut `Topup`, PBZ card payments to Revolut; not `exchange`, a conversion inside one bank) may pair: with the equal,
   opposite-sign row of the same currency in another source within `transferDays` (3, inclusive, either way in time),
@@ -203,7 +216,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   device's per-key write that arrived first), is skipped, as the read fallback does, so a stale map with a newer clock
   never revives or undoes a per-key change; new patterns get orders after the largest live one; a clock-less legacy row
   goes through `_write`; the map rows are left in place for older builds; `repo.migrate` logs `perKeySettings` (count);
-  9 = the `account` entity, no data migration). Opening an existing database with an older version
+  9 = the `account` entity, no data migration; 10 = the `category` entity (P1), no data migration). Opening an existing database with an older version
   clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
   written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
 - `local_db.dart` — encrypted local database (§4.9, SQLite3MultipleCiphers, web-safe): `localDbKey(VaultKey)` = HKDF

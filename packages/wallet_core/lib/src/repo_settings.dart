@@ -12,11 +12,13 @@ String _budgetId(String category) => '${WalletSettings.budgetPrefix}$category';
 /// The key a settings problem is logged under: a per-key row by its map's name, never its id.
 String _logKey(String key) => key.startsWith(WalletSettings.patternPrefix)
     ? 'merchantPatterns'
-    : (key.startsWith(WalletSettings.budgetPrefix) ? 'categoryBudgets' : key);
+    : (key.startsWith(WalletSettings.budgetPrefix) ? 'categoryBudgets' : (key.startsWith(WalletSettings.planPrefix) ? 'planLines' : key));
 
 bool _perKeySetting(String key) =>
     key == 'categoryBudgets' ||
     key == 'merchantPatterns' ||
+    key == 'planLines' ||
+    key.startsWith(WalletSettings.planPrefix) ||
     key.startsWith(WalletSettings.budgetPrefix) ||
     key.startsWith(WalletSettings.patternPrefix);
 
@@ -103,6 +105,27 @@ extension WalletRepoSettings on WalletRepo {
     _write([
       ('setting', _budgetId(category), cents == null ? {'value': null, 'deleted': 1} : {'value': jsonEncode(cents), 'deleted': 0})
     ]);
+  }
+
+  /// Sets the plan line of custom fixed category [categoryId] (P1, [WalletSettings.planLines]) to [cents] a month, or
+  /// removes it when null. Throws [ArgumentError] when the category has no plan line ([CategoryTable.hasPlanLine]: a
+  /// live top-level custom category of kind fixed) or cents outside 0..[WalletSettings.maxAmount]. Writes nothing when
+  /// the line already has that value.
+  void setPlanLine(String categoryId, int? cents) {
+    final table = categoryTable();
+    if (!table.hasPlanLine(categoryId)) {
+      throw ArgumentError.value(categoryId, 'categoryId', 'only an own main category of kind fixed has a plan line');
+    }
+    if (cents != null && (cents < 0 || cents > WalletSettings.maxAmount)) throw ArgumentError('plan line out of range');
+    if (_readSettings(db, table: table).planLines[categoryId] == cents) return;
+    _write([
+      (
+        'setting',
+        '${WalletSettings.planPrefix}$categoryId',
+        cents == null ? {'value': null, 'deleted': 1} : {'value': jsonEncode(cents), 'deleted': 0}
+      )
+    ]);
+    logEvent(_log, Level.INFO, 'settings.planLine', {'set': cents != null});
   }
 
   /// Adds merchant [pattern] (a case-insensitive regex matched against the lower-cased description) for [category],

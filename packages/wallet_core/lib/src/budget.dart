@@ -178,7 +178,8 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final income = st.incomeMode == 'received' && received > 0 ? (partsArriving && st.salary > received ? st.salary : received) : st.salary;
   final lowIncome = received > 0 && received * 10 < st.salary * 9 && age >= 4 && !partsArriving;
   final goalMonthly = goals.fold<int>(0, (s, g) => s + g.monthly);
-  final fixedPlan = st.rent + st.loan + st.subs;
+  // Plan lines of custom fixed categories (P1) count with rent, loan and subs; only lines the table still allows.
+  final fixedPlan = st.rent + st.loan + st.subs + st.planLines.entries.fold<int>(0, (s, e) => table.hasPlanLine(e.key) ? s + e.value : s);
   final due = dueBills(bills, txs, start, end);
   final reservedBills = due.fold<int>(0, (s, b) => s + (b.coveredByPlanIn(table) ? 0 : b.expectedAmount));
   final duePl = duePlanned(planned, today, end);
@@ -199,7 +200,8 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final elapsed = ((daysBetween(start, today) + 1) / length).clamp(0.0, 1.0);
   final fixedPaid = <String, int>{};
   for (final t in inPeriod.where((t) => t.kind == BudgetKind.fixed)) {
-    fixedPaid[t.category] = (fixedPaid[t.category] ?? 0) - t.amount;
+    final c = table.topLevel(t.category); // a child counts in its plan line
+    fixedPaid[c] = (fixedPaid[c] ?? 0) - t.amount;
   }
   // Dates and counts only, never amounts.
   if (_log.isLoggable(Level.FINER)) {

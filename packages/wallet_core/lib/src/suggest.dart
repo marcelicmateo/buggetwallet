@@ -22,7 +22,11 @@ class Suggested {
 /// Payday plan values read from the imports ([suggestPlan]); null = not enough evidence.
 class PlanSuggestion {
   final Suggested? salary, paydayDay, rent, loan, subs;
-  const PlanSuggestion({this.salary, this.paydayDay, this.rent, this.loan, this.subs});
+
+  /// Custom fixed category id ([CategoryTable.planLineIds]) -> its suggested plan line (basis `planRows`); only the
+  /// lines with enough evidence.
+  final Map<String, Suggested> planLines;
+  const PlanSuggestion({this.salary, this.paydayDay, this.rent, this.loan, this.subs, this.planLines = const {}});
 }
 
 /// A plan setting the owner may accept ([planProposals]): [key] is the `WalletSettings` key; [current] is null when
@@ -57,7 +61,11 @@ const _windowMonths = 6;
 ///   never the amount) over the last 3 complete calendar months that have such rows. Needs 2 months.
 /// - **subs**: the sum of the expected (median) amounts of the [confirmed] recurring bills in Bills & subscriptions;
 ///   candidates and dismissed bills never count.
-PlanSuggestion suggestPlan(List<CategorizedTx> txs, WalletSettings st, String today, {List<RecurringBill> confirmed = const []}) {
+/// - **plan lines** (P1): each custom fixed category of [table] with a plan line, like rent from its rows.
+/// Rent, loan, subs and plan lines each count their whole tree ([CategoryTable.topLevel]): a child of Rent is rent.
+PlanSuggestion suggestPlan(List<CategorizedTx> txs, WalletSettings st, String today,
+    {List<RecurringBill> confirmed = const [], CategoryTable? table}) {
+  final cats = table ?? CategoryTable.builtIn;
   requireIsoDate(today);
   final home = [
     for (final t in txs)
@@ -68,9 +76,13 @@ PlanSuggestion suggestPlan(List<CategorizedTx> txs, WalletSettings st, String to
   final s = PlanSuggestion(
     salary: _salary(groups),
     paydayDay: _paydayDay(groups),
-    rent: _fixedMonthly(home, today, from, 'Rent', 'rentRows'),
-    loan: _fixedMonthly(home, today, from, 'Loan', 'loanRows'),
-    subs: _subs(confirmed),
+    rent: _fixedMonthly(home, today, from, 'Rent', 'rentRows', cats),
+    loan: _fixedMonthly(home, today, from, 'Loan', 'loanRows', cats),
+    subs: _subs(confirmed, cats),
+    planLines: {
+      for (final id in cats.planLineIds)
+        if (_fixedMonthly(home, today, from, id, 'planRows', cats) case final x?) id: x,
+    },
   );
   logEvent(_log, Level.FINE, 'budget.suggestPlan', {
     'salary': s.salary != null,
@@ -78,6 +90,7 @@ PlanSuggestion suggestPlan(List<CategorizedTx> txs, WalletSettings st, String to
     'rent': s.rent != null,
     'loan': s.loan != null,
     'subs': s.subs != null,
+    'planLines': s.planLines.length,
   });
   return s;
 }
@@ -145,12 +158,12 @@ Suggested? _paydayDay(List<List<CategorizedTx>> groups) {
   return Suggested(value: best, basis: 'paydayDates', evidence: [for (final g in groups) g.first.tx.id]);
 }
 
-Suggested? _fixedMonthly(List<CategorizedTx> home, String today, String from, String category, String basis) {
+Suggested? _fixedMonthly(List<CategorizedTx> home, String today, String from, String category, String basis, CategoryTable cats) {
   final thisMonth = monthOf(today);
   final byMonth = <String, List<CategorizedTx>>{};
   for (final t in home) {
     final m = monthOf(t.date);
-    if (t.category == category && m.compareTo(thisMonth) < 0 && t.date.compareTo(from) >= 0) (byMonth[m] ??= []).add(t);
+    if (cats.topLevel(t.category) == category && m.compareTo(thisMonth) < 0 && t.date.compareTo(from) >= 0) (byMonth[m] ??= []).add(t);
   }
   final months = byMonth.keys.toList()..sort();
   final used = months.sublist(months.length > _lookBack ? months.length - _lookBack : 0);
@@ -166,11 +179,11 @@ Suggested? _fixedMonthly(List<CategorizedTx> home, String today, String from, St
 /// The fixed category subscriptions are planned in.
 const _subsCategory = 'Bills & subscriptions';
 
-Suggested? _subs(List<RecurringBill> bills) {
+Suggested? _subs(List<RecurringBill> bills, CategoryTable t) {
   final seen = <String>{};
   final used = [
     for (final b in bills)
-      if (b.confirmed && b.category == _subsCategory && b.expectedAmount > 0 && seen.add(b.id)) b
+      if (b.confirmed && t.isLive(b.category) && t.topLevel(b.category) == _subsCategory && b.expectedAmount > 0 && seen.add(b.id)) b
   ];
   if (used.isEmpty) return null;
   final total = used.fold<int>(0, (s, b) => s + b.expectedAmount);
@@ -178,7 +191,9 @@ Suggested? _subs(List<RecurringBill> bills) {
   return Suggested(value: total, basis: 'confirmedBills', evidence: [for (final b in used) b.id]);
 }
 
-/// The suggestions in [s] that differ from the current settings, in the order salary, paydayDay, rent, loan, subs.
+/// The suggestions in [s] that differ from the current settings, in the order salary, paydayDay, rent, loan, subs,
+/// then the plan lines (key `plan:<id>`, in [PlanSuggestion.planLines] order; applied with `setPlanLine`, not
+/// `updateSettings`).
 /// `current` is null for a money setting that is 0 (unset); `paydayDay` always has one (`WalletSettings` cannot tell
 /// unset from its default). Nothing is written: the app applies the accepted ones through `updateSettings`.
 List<SettingProposal> planProposals(PlanSuggestion s, WalletSettings st) {
@@ -193,5 +208,6 @@ List<SettingProposal> planProposals(PlanSuggestion s, WalletSettings st) {
     one('rent', s.rent, st.rent),
     one('loan', s.loan, st.loan),
     one('subs', s.subs, st.subs),
+    for (final MapEntry(key: id, value: x) in s.planLines.entries) one('${WalletSettings.planPrefix}$id', x, st.planLines[id] ?? 0),
   ].whereType<SettingProposal>().toList();
 }

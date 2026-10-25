@@ -27,8 +27,9 @@ const transactionsCsvHeader = 'date,amount,category,description,source,note';
 
 /// The live rows of [txs] (deleted ones and hand-added entries replaced by a bank row are left out), one record each,
 /// sorted by date then id: `date,amount,category,description,source,note`. `amount` is the stored signed amount
-/// (outflows negative) as an exact decimal, `category` the resolved one, `note` empty when there is none.
-String transactionsCsv(List<CategorizedTx> txs) {
+/// (outflows negative) as an exact decimal, `category` the resolved one (its label in [table] when given, so a
+/// custom category reads as its name; built-ins keep their names unless relabelled), `note` empty when there is none.
+String transactionsCsv(List<CategorizedTx> txs, {CategoryTable? table}) {
   final rows = [
     for (final t in txs)
       if (t.tx.live) t
@@ -38,17 +39,26 @@ String transactionsCsv(List<CategorizedTx> txs) {
     });
   final sb = StringBuffer('$transactionsCsvHeader\n');
   for (final t in rows) {
-    sb.write(_record([t.date, centsToDecimal(t.amount), t.category, t.tx.description, t.tx.source, t.tx.note ?? '']));
+    final c = table == null ? t.category : table.label(t.category);
+    sb.write(_record([t.date, centsToDecimal(t.amount), c, t.tx.description, t.tx.source, t.tx.note ?? '']));
   }
   return sb.toString();
 }
+
+/// The monthly CSV's columns for [t]: its [CategoryTable.spending] without sync duplicates ([CategoryTable.duplicateOf]),
+/// whose rows go into their original's column, so no label appears twice.
+List<String> _csvColumns(CategoryTable t) => [
+      for (final c in t.spending)
+        if (t.duplicateOf(c) == null) c
+    ];
 
 /// Header of [monthlySummaryCsv] over the built-in categories: `month,<each spending category>,total`.
 String get monthlySummaryCsvHeader => monthlySummaryCsvHeaderFor(CategoryTable.builtIn);
 
 /// Header of [monthlySummaryCsv] for [t]: `month,<each label of [CategoryTable.spending]>,total` (fields quoted as
 /// needed, so a label with a comma stays one column).
-String monthlySummaryCsvHeaderFor(CategoryTable t) => ['month', for (final c in t.spending) t.label(c), 'total'].map(csvField).join(',');
+String monthlySummaryCsvHeaderFor(CategoryTable t) =>
+    ['month', for (final c in _csvColumns(t)) t.label(c), 'total'].map(csvField).join(',');
 
 /// Spending per calendar month and category: `month,<each category in [spendingCategories] order>,total`, one record
 /// per month with a live row in a spending category, ascending. A cell is that category's outflow as a positive
@@ -56,16 +66,17 @@ String monthlySummaryCsvHeaderFor(CategoryTable t) => ['month', for (final c in 
 /// Income, transfers, deleted rows and replaced entries are not spending and never appear; neither do rows in another
 /// currency than [currency] (`WalletSettings.currency`): the cells are sums in one currency. With [table], the
 /// columns are its [CategoryTable.spending] (labels in the header, [monthlySummaryCsvHeaderFor]) and each child's
-/// rows count in its parent's column ([rollUp]).
+/// rows count in its parent's column ([rollUp]); a duplicate's rows in its original's.
 String monthlySummaryCsv(List<CategorizedTx> txs, {required String currency, CategoryTable? table}) {
   final t0 = table ?? CategoryTable.builtIn;
-  final cats = t0.spending;
+  final cats = _csvColumns(t0);
   final byMonth = <String, Map<String, int>>{};
   for (final t in txs) {
     if (!t.tx.live || t.tx.currency != currency || !t0.isSpending(t.category) || t.date.length < 7) continue;
 
     final m = byMonth[monthOf(t.date)] ??= {};
-    final c = t0.topLevel(t.category);
+    final top = t0.topLevel(t.category);
+    final c = t0.duplicateOf(top) ?? top; // a sync duplicate counts in its original's column
     m[c] = (m[c] ?? 0) - t.amount;
   }
   final months = byMonth.keys.toList()..sort();

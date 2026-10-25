@@ -116,10 +116,15 @@ Map<String, List<CategorizedTx>> _byMonth(List<CategorizedTx> txs, DateRange r) 
 bool _partial(String month, DateRange r, String today) =>
     month == monthOf(today) || r.start.compareTo('$month-01') > 0 || r.end.compareTo('$month-${daysInMonth(month)}') < 0;
 
-/// Spending rows of [category] inside [r], newest first (date, then id descending).
-List<CategorizedTx> _categoryRows(String category, List<CategorizedTx> txs, DateRange r, String currency) => [
+/// Whether a row in [rowCategory] belongs to [category]: the same id, or with [table] also a child of it (a
+/// category's whole tree, one level), so a parent's drill-down sums exactly what its rolled-up total shows.
+bool _inTree(String rowCategory, String category, CategoryTable? table) =>
+    rowCategory == category || (table != null && table.parentOf(rowCategory) == category);
+
+/// Spending rows of [category] (its tree with [table], [_inTree]) inside [r], newest first (date, then id descending).
+List<CategorizedTx> _categoryRows(String category, List<CategorizedTx> txs, DateRange r, String currency, [CategoryTable? table]) => [
       for (final t in txs)
-        if (t.category == category && r.contains(t.date) && countsAsSpending(t, currency)) t
+        if (_inTree(t.category, category, table) && r.contains(t.date) && countsAsSpending(t, currency)) t
     ]..sort(_newestFirst);
 
 int _newestFirst(CategorizedTx a, CategorizedTx b) {
@@ -214,10 +219,11 @@ List<BudgetMonth> budgetVsActualSeries(List<CategorizedTx> txs, DateRange r, Map
   return out;
 }
 
-/// The payees behind [category]'s spending in [r], spent desc, then label (then key).
-List<MerchantTotal> merchantsIn(String category, List<CategorizedTx> txs, DateRange r, {required String currency}) {
+/// The payees behind [category]'s spending in [r], spent desc, then label (then key). With [table], the rows of its
+/// children count too.
+List<MerchantTotal> merchantsIn(String category, List<CategorizedTx> txs, DateRange r, {required String currency, CategoryTable? table}) {
   final groups = <String, List<CategorizedTx>>{};
-  for (final t in _categoryRows(category, txs, r, currency)) {
+  for (final t in _categoryRows(category, txs, r, currency, table)) {
     (groups[_merchantOf(t.tx)] ??= []).add(t);
   }
   final out = [
@@ -238,9 +244,10 @@ List<MerchantTotal> merchantsIn(String category, List<CategorizedTx> txs, DateRa
 }
 
 /// The live rows behind a [merchantsIn] total ([merchantKey] null: the whole category), newest first; their amounts
-/// sum to exactly −spent.
-List<CategorizedTx> rowsFor(String category, String? merchantKey, List<CategorizedTx> txs, DateRange r, {required String currency}) {
-  final rows = _categoryRows(category, txs, r, currency);
+/// sum to exactly −spent. With [table], the rows of its children count too.
+List<CategorizedTx> rowsFor(String category, String? merchantKey, List<CategorizedTx> txs, DateRange r,
+    {required String currency, CategoryTable? table}) {
+  final rows = _categoryRows(category, txs, r, currency, table);
   return merchantKey == null
       ? rows
       : [
@@ -249,23 +256,30 @@ List<CategorizedTx> rowsFor(String category, String? merchantKey, List<Categoriz
         ];
 }
 
-/// One payee's spending per calendar month overlapping [r], shaped like [spendingByMonth].
+/// One payee's spending per calendar month overlapping [r], shaped like [spendingByMonth]. [table]: as in [rowsFor].
 List<MonthBar> merchantTrend(String category, String merchantKey, List<CategorizedTx> txs, DateRange r,
-    {required String currency, required String today}) {
+    {required String currency, required String today, CategoryTable? table}) {
   final spent = {for (final m in _monthsOf(r)) m: 0};
-  for (final t in rowsFor(category, merchantKey, txs, r, currency: currency)) {
+  for (final t in rowsFor(category, merchantKey, txs, r, currency: currency, table: table)) {
     spent[monthOf(t.date)] = spent[monthOf(t.date)]! - t.amount;
   }
   return [for (final e in spent.entries) MonthBar(month: e.key, spent: e.value, partial: _partial(e.key, r, today))];
 }
 
-/// [category] in calendar [month] (`YYYY-MM`) against the month before and the 6-month average.
-CategoryCompare compareCategory(String category, List<CategorizedTx> txs, String month, {required String currency}) {
+/// [category] in calendar [month] (`YYYY-MM`) against the month before and the 6-month average. With [table], its
+/// whole tree counts: the tree's rows are summed as one category before averaging, so the numbers are exact.
+CategoryCompare compareCategory(String category, List<CategorizedTx> txs, String month, {required String currency, CategoryTable? table}) {
+  final rows = table == null
+      ? txs
+      : [
+          for (final t in txs)
+            if (_inTree(t.category, category, table)) CategorizedTx(t.tx, category, t.kind)
+        ];
   final before = monthsEnding(month, 2).first;
   return CategoryCompare(
-    thisMonth: monthSummary(txs, month, currency: currency).byCategory[category] ?? 0,
-    lastMonth: monthSummary(txs, before, currency: currency).byCategory[category] ?? 0,
-    average6: averageByCategory(txs, month, currency: currency)[category] ?? 0,
+    thisMonth: monthSummary(rows, month, currency: currency).byCategory[category] ?? 0,
+    lastMonth: monthSummary(rows, before, currency: currency).byCategory[category] ?? 0,
+    average6: averageByCategory(rows, month, currency: currency)[category] ?? 0,
   );
 }
 

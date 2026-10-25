@@ -235,8 +235,9 @@ class RecurringBill {
   /// [coveredByPlanIn].
   bool get coveredByPlan => kindOf(category) == BudgetKind.fixed;
 
-  /// [coveredByPlan] against [t]: a live category of kind fixed (a child of a fixed category included).
-  bool coveredByPlanIn(CategoryTable t) => t.isLive(category) && t.kindOf(category) == BudgetKind.fixed;
+  /// [coveredByPlan] against [t] ([CategoryTable.coveredByPlan]): a live category whose top-level category is fixed
+  /// (Rent, Loan, Bills & subscriptions or a custom fixed one with its plan line). A deleted or unknown custom id is not.
+  bool coveredByPlanIn(CategoryTable t) => t.coveredByPlan(category);
 
   static RecurringBill fromRow(Map<String, Object?> r) => RecurringBill(
         id: r['id'] as String,
@@ -357,10 +358,10 @@ class PlannedCost {
   /// Built-in categories only; code that can meet a custom category uses [coveredByPlanIn].
   bool get coveredByPlan => category != null && kindOf(category!) == BudgetKind.fixed;
 
-  /// [coveredByPlan] against [t]: a live category of kind fixed. A deleted or unknown custom id counts as none.
+  /// [coveredByPlan] against [t] ([CategoryTable.coveredByPlan]). A deleted or unknown custom id is not covered.
   bool coveredByPlanIn(CategoryTable t) {
     final c = category;
-    return c != null && t.isLive(c) && t.kindOf(c) == BudgetKind.fixed;
+    return c != null && t.coveredByPlan(c);
   }
 
   /// A bill's row without a category (a bill confirmed before categories were asked for, or reopened after its cash expense was deleted):
@@ -435,6 +436,10 @@ class WalletSettings {
   final List<List<String>> merchantPatterns; // [[category, regex], ...] in match order (first match wins)
   final int rentCashThreshold; // ATM withdrawals this big or bigger are rent; 0 = never
   final Map<String, int> categoryBudgets; // spending category -> cents per calendar month; no entry = no budget
+
+  /// Plan lines (P1): a live top-level custom fixed category ([CategoryTable.hasPlanLine]) -> cents per month, taken
+  /// off the flexible money with rent, loan and subs (`computePeriod`). No entry = 0. Row `plan:<id>` ([planPrefix]).
+  final Map<String, int> planLines;
   final int reviewDay; // weekly review day, 1 = Monday .. 7 = Sunday
   final String? lastReview; // YYYY-MM-DD of the last completed weekly review
   final int reviewStreak; // weekly reviews done in a row
@@ -461,6 +466,7 @@ class WalletSettings {
     this.merchantPatterns = const [],
     this.rentCashThreshold = defaultRentCashThreshold,
     this.categoryBudgets = const {},
+    this.planLines = const {},
     this.reviewDay = DateTime.sunday,
     this.lastReview,
     this.reviewStreak = 0,
@@ -491,7 +497,8 @@ class WalletSettings {
   /// `{"category": <category>, "pattern": <regex>, "order": <int ≥ 0>}`; patterns are matched by `order` ascending,
   /// then by row id. A removed entry is a tombstone (`deleted` 1, value null). [fromMap] reads these keys, after the
   /// legacy `categoryBudgets` / `merchantPatterns` maps (a row's entry replaces a legacy one).
-  static const budgetPrefix = 'budget:', patternPrefix = 'pattern:';
+  /// Plan line rows (P1, [planLines]): `plan:<custom category id>`, value = whole cents (JSON int, 0..[maxAmount]).
+  static const budgetPrefix = 'budget:', patternPrefix = 'pattern:', planPrefix = 'plan:';
 
   /// Heads-up defaults (owner, 2026-10-22: 3 days before a planned cost of 100 € or more) and their ranges.
   static const defaultHeadsUpCents = 10000, maxHeadsUpCents = 10000000, defaultHeadsUpDays = 3, maxHeadsUpDays = 14;
@@ -537,11 +544,14 @@ class WalletSettings {
     final budgets = m['categoryBudgets'];
     // Per-key rows (schema 8): `budget:<category>` and `pattern:<id>`.
     final budgetRows = <Object?, Object?>{};
+    final planRows = <Object?, Object?>{};
     final patternRows = <(int, String, String, String)>[]; // (order, id, category, pattern)
     var badPatternRow = false;
     for (final MapEntry(:key, :value) in m.entries) {
       if (key.startsWith(budgetPrefix)) {
         budgetRows[key.substring(budgetPrefix.length)] = value;
+      } else if (key.startsWith(planPrefix)) {
+        planRows[key.substring(planPrefix.length)] = value;
       } else if (key.startsWith(patternPrefix)) {
         if (value case {'category': final String c, 'pattern': final String p, 'order': final int o} when o >= 0) {
           patternRows.add((o, key, c, p));
@@ -586,6 +596,7 @@ class WalletSettings {
         final Map<Object?, Object?> b => _budgets({...b, ...budgetRows}, cats),
         _ => bad('categoryBudgets', budgetRows.isEmpty ? const <String, int>{} : _budgets(budgetRows, cats)),
       },
+      planLines: _planLines(planRows, cats),
       reviewDay: i('reviewDay', DateTime.sunday, min: DateTime.monday, max: DateTime.sunday),
       lastReview: str('lastReview', isIsoDate),
       reviewStreak: i('reviewStreak', 0, max: maxStreak),
@@ -619,6 +630,28 @@ class WalletSettings {
     return out;
   }
 
+  /// The valid plan lines: a category with a plan line in [t] ([CategoryTable.hasPlanLine]) -> whole cents
+  /// 0..[maxAmount]. Others are dropped from the result only (the stored row stays, so an undelete brings it back);
+  /// a bad value is logged once as `settings.invalid` under `planLines`, a category that has no line here is not.
+  static Map<String, int> _planLines(Map<Object?, Object?> raw, CategoryTable t) {
+    final out = <String, int>{};
+    var bad = false;
+    for (final MapEntry(:key, :value) in raw.entries) {
+      final cents = switch (value) {
+        final int v => v,
+        final double v when v.isFinite && v == v.roundToDouble() => v.toInt(),
+        _ => null,
+      };
+      if (cents == null || cents < 0 || cents > maxAmount) {
+        bad = true;
+      } else if (key is String && t.hasPlanLine(key)) {
+        out[key] = cents;
+      }
+    }
+    if (bad) logInvalidSetting('planLines', 'row');
+    return out.isEmpty ? const {} : out;
+  }
+
   static bool _isMonth(String v) => RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(v);
 
   Map<String, Object?> toMap() => {
@@ -638,6 +671,9 @@ class WalletSettings {
         'merchantPatterns': merchantPatterns,
         'rentCashThreshold': rentCashThreshold,
         'categoryBudgets': categoryBudgets,
+        // One int per line under its row id (`plan:<id>`), as stored: [fromMap] reads it back, and a diff of two
+        // maps compares the values, not map identities.
+        for (final MapEntry(:key, :value) in planLines.entries) '$planPrefix$key': value,
         'reviewDay': reviewDay,
         'lastReview': lastReview,
         'reviewStreak': reviewStreak,

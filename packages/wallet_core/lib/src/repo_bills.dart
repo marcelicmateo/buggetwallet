@@ -3,11 +3,13 @@ part of 'repo.dart';
 /// Bills (receipts, slips, e-invoices; `docs/context/BILLS_API.md` §2): import, review, confirm, link to payments.
 extension WalletRepoBills on WalletRepo {
   /// Live bills (deleted ones too with [includeDeleted]), newest first: by date (or due date), then id.
-  List<Bill> bills({bool includeDeleted = false}) => [
+  /// A bill in a deleted custom category reads with its automatic one ([Categorizer.resolveStored] on its payee), or
+  /// none; the stored row is unchanged ([bill] reads it as stored).
+  List<Bill> bills({bool includeDeleted = false}) => _resolved([
         for (final r in db.select('SELECT * FROM bills ${includeDeleted ? '' : 'WHERE deleted = 0'} '
             "ORDER BY COALESCE(date, due_date, '') DESC, id"))
-          Bill.fromRow(r),
-      ];
+          r,
+      ], (cz, r) => cz.resolveStored(r['category'] as String?, text: '${r['payee'] ?? ''}'), Bill.fromRow);
 
   /// One bill by id (deleted ones included), or null.
   Bill? bill(String id) {

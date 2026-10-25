@@ -55,7 +55,10 @@ BudgetKind kindOf(String category) => categories[category] ?? BudgetKind.flex;
 class CategoryRow {
   final String id;
   final String name;
-  final BudgetKind kind;
+
+  /// Null when the stored kind is empty or unknown (a row whose `kind` field has not arrived yet, or an override):
+  /// such a custom row is not live until its kind is known.
+  final BudgetKind? kind;
   final String? parent;
 
   /// Sort order among siblings (≥ 0); null = the default (a built-in's index in [categories], a custom one last).
@@ -75,16 +78,19 @@ class CategoryRow {
   /// Longest label (characters, after trimming).
   static const maxName = 40;
 
-  /// Most custom rows (deleted ones included) a wallet may hold.
+  /// Most live custom categories a wallet may hold (deleted rows do not count; `undeleteCategory` checks it too).
   static const maxCustom = 200;
 
   /// Whether this row overrides a built-in category.
   bool get isOverride => categories.containsKey(id);
 
+  /// A custom row that counts: not deleted and with a known [kind].
+  bool get isLiveCustom => !isOverride && !deleted && kind != null;
+
   static CategoryRow fromRow(Map<String, Object?> r) => CategoryRow(
         id: r['id'] as String,
         name: r['name'] is String ? r['name'] as String : '',
-        kind: BudgetKind.values.asNameMap()[r['kind']] ?? BudgetKind.flex,
+        kind: BudgetKind.values.asNameMap()[r['kind']],
         parent: r['parent'] is String && (r['parent'] as String).isNotEmpty ? r['parent'] as String : null,
         position: r['position'] is int ? r['position'] as int : null,
         hidden: r['hidden'] == 1,
@@ -120,16 +126,9 @@ class CategoryTable {
     for (final r in rows) {
       (r.isOverride ? _override : _custom)[r.id] = r;
     }
-    bool live(String id) => categories.containsKey(id) || (_custom[id]?.deleted == false);
-    String? rawParent(String id) => _custom[id]?.parent;
-    bool hasLiveParent(String id) {
-      final p = rawParent(id);
-      return p != null && p != id && live(p);
-    }
-
     for (final r in _custom.values) {
       final p = r.parent;
-      if (p != null && p != r.id && live(p) && !hasLiveParent(p)) _parent[r.id] = p;
+      if (p != null && p != r.id && isLive(p) && !hasLiveStoredParent(p)) _parent[r.id] = p;
     }
     int order(String a, String b) {
       var d = position(a).compareTo(position(b));
@@ -140,11 +139,11 @@ class CategoryTable {
     _top.addAll([
       ..._builtInOrder,
       for (final r in _custom.values)
-        if (!r.deleted && !_parent.containsKey(r.id)) r.id
+        if (r.isLiveCustom && !_parent.containsKey(r.id)) r.id
     ]);
     _top.sort(order);
     for (final r in _custom.values) {
-      if (r.deleted) continue;
+      if (!r.isLiveCustom) continue;
       if (_parent[r.id] case final p?) (_children[p] ??= []).add(r.id);
     }
     for (final c in _children.values) {
@@ -199,7 +198,32 @@ class CategoryTable {
   List<String> childrenOf(String id) => List.unmodifiable(_children[id] ?? const <String>[]);
 
   /// A built-in, or a custom row that is not deleted.
-  bool isLive(String id) => categories.containsKey(id) || (_custom[id]?.deleted == false);
+  bool isLive(String id) => categories.containsKey(id) || (_custom[id]?.isLiveCustom ?? false);
+
+  /// Whether [id]'s stored parent (a custom row's `parent`) is a live category other than itself. Such a row cannot be
+  /// a parent ([parentOf] of its children is null): the one rule the table and `addCategory`/`updateCategory` share.
+  bool hasLiveStoredParent(String id) {
+    final p = _custom[id]?.parent;
+    return p != null && p != id && isLive(p);
+  }
+
+  /// A custom id that is not live here: deleted, half-arrived, or not synced yet (a `k` + 12 hex id with no row).
+  /// Rows, bills and planned costs pointing at one fall back when read; nothing is written for it.
+  bool isDeadCustom(String id) => !isLive(id) && (isCustom(id) || _customId.hasMatch(id));
+  static final _customId = RegExp(r'^k[0-9a-f]{12}$');
+
+  /// A live top-level custom category of kind fixed: it has a plan line (`WalletSettings.planLines`, `plan:<id>`).
+  bool hasPlanLine(String id) => isCustom(id) && isLive(id) && _parent[id] == null && kindOf(id) == BudgetKind.fixed;
+
+  /// The ids with a plan line ([hasPlanLine]), in order.
+  List<String> get planLineIds => [
+        for (final t in _top)
+          if (hasPlanLine(t)) t
+      ];
+
+  /// Whether a bill or planned cost in [id] is already in the payday plan: [id] is live and its top-level category is
+  /// fixed (Rent, Loan, Bills & subscriptions, or a custom fixed category with its plan line).
+  bool coveredByPlan(String id) => isLive(id) && kindOf(topLevel(id)) == BudgetKind.fixed;
 
   /// The sort position among siblings: a stored one, else a built-in's index in [categories]; a custom row without
   /// one sorts last (a large value).
@@ -400,6 +424,17 @@ class Categorizer {
       if (r != null && table.isLive(r)) return r;
     }
     return auto;
+  }
+
+  /// The category a bill, planned cost or recurring bill uses now for its stored [category] (P1 owner decision):
+  /// itself, unless it is a deleted or unknown custom id ([CategoryTable.isDeadCustom]); then the automatic one: the
+  /// per-merchant rule for [key] (a `merchantKey`), else the personal patterns and built-in rules on [text]
+  /// ([merchantCategory]), else [orElse]. Resolved when read; nothing is written, so an undelete brings it back.
+  String? resolveStored(String? category, {String? key, String text = '', String? orElse}) {
+    if (category == null || !table.isDeadCustom(category)) return category;
+    final r = key == null ? null : merchantRules[key];
+    if (r != null && table.isLive(r)) return r;
+    return merchantCategory(text) ?? orElse;
   }
 
   CategorizedTx categorize(Tx t) {

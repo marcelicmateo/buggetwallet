@@ -24,11 +24,14 @@ extension WalletRepoCategories on WalletRepo {
     }
   }
 
-  /// [parent] must be a live top-level category (not [self]) of [kind].
+  /// [parent] must be a live top-level category (not [self]) of [kind]: one whose own stored parent is not live
+  /// ([CategoryTable.hasLiveStoredParent], the table's rule), so the new child is attached on every device.
   static void _checkParent(CategoryTable t, String parent, BudgetKind kind, {String? self}) {
     if (parent == self) throw ArgumentError('A category cannot be its own parent.');
     if (!t.isLive(parent)) throw ArgumentError('The parent category does not exist.');
-    if (t.parentOf(parent) != null) throw ArgumentError('Subcategories go one level deep: pick a main category as the parent.');
+    if (t.parentOf(parent) != null || t.hasLiveStoredParent(parent)) {
+      throw ArgumentError('Subcategories go one level deep: pick a main category as the parent.');
+    }
     if (t.kindOf(parent) != kind) throw ArgumentError('A subcategory has the same kind as its parent.');
   }
 
@@ -42,7 +45,7 @@ extension WalletRepoCategories on WalletRepo {
     return next;
   }
 
-  int _liveCustomCount(CategoryTable t) => t.rows.where((r) => !r.isOverride && !r.deleted).length;
+  int _liveCustomCount(CategoryTable t) => t.rows.where((r) => r.isLiveCustom).length;
 
   /// Adds a custom category and returns its id (`k` + 12 hex). With [parent] it is a subcategory: the parent must be a
   /// live top-level category of the same [kind]. A bad name, a label already used among its siblings, a bad parent or

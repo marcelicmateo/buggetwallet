@@ -735,20 +735,38 @@ class WalletRepo {
 
   /// Recurring bills that are not deleted: candidates and confirmed ones, plus dismissed ones with [includeDismissed].
   /// Ordered by `nextDue`, then label, then id.
-  List<RecurringBill> recurringBills({bool includeDismissed = false}) => [
+  /// A bill in a deleted custom category reads with its automatic one ([Categorizer.resolveStored]: the payee's
+  /// merchant rule, patterns and built-in rules on its label, else Shopping); the stored row is unchanged.
+  List<RecurringBill> recurringBills({bool includeDismissed = false}) => _resolved([
         for (final r in db.select(
             "SELECT * FROM recurring WHERE deleted = 0 ${includeDismissed ? '' : "AND status != 'dismissed'"} ORDER BY next_due, label, id"))
-          RecurringBill.fromRow(r),
-      ];
+          r,
+      ], (cz, r) => cz.resolveStored(r['category'] as String?, key: r['payee'] as String?, text: '${r['label'] ?? ''}', orElse: 'Shopping'),
+          RecurringBill.fromRow);
+
+  /// [rows] as [make] builds them, each `category` that is a deleted or unknown custom id replaced by [resolve]'s
+  /// answer first (P1: resolved when read, never written). The categorizer is built only when some row needs it.
+  List<T> _resolved<T>(
+      List<Map<String, Object?>> rows, String? Function(Categorizer, Map<String, Object?>) resolve, T Function(Map<String, Object?>) make) {
+    final table = categoryTable();
+    bool dead(Map<String, Object?> r) => r['category'] is String && table.isDeadCustom(r['category'] as String);
+    if (!rows.any(dead)) return [for (final r in rows) make(r)];
+    final cz = categorizer();
+    return [
+      for (final r in rows) dead(r) ? make({...r, 'category': resolve(cz, r)}) : make(r),
+    ];
+  }
 
   /// Planned costs (§4.3), ordered by date, then title, then id: the open ones with a date, or with [includeClosed]
   /// every row, paid, skipped (dismissed calendar events included) and deleted ones too ([PlannedCost.deleted]). Pass
   /// `includeClosed: true` to [upcoming] so a calendar event with any row is never suggested again.
-  List<PlannedCost> plannedCosts({bool includeClosed = false}) => [
+  /// One in a deleted custom category reads with its automatic one ([Categorizer.resolveStored] on its title), or
+  /// none; the stored row is unchanged.
+  List<PlannedCost> plannedCosts({bool includeClosed = false}) => _resolved([
         for (final r in db.select(
             "SELECT * FROM planned ${includeClosed ? '' : "WHERE deleted = 0 AND status = 'open' AND date != ''"} ORDER BY date, title, id"))
-          PlannedCost.fromRow(r),
-      ];
+          r,
+      ], (cz, r) => cz.resolveStored(r['category'] as String?, text: '${r['title'] ?? ''}'), PlannedCost.fromRow);
 
   Map<String, String> merchantRules() => {
         for (final r in db.select('SELECT id, category FROM merchant_rules WHERE deleted = 0 AND category IS NOT NULL'))
@@ -1151,22 +1169,32 @@ class WalletRepo {
     final currency = settings().currency; // only rows in the wallet's currency make or pay a bill
     final categorized = [for (final r in rows) cz.categorize(r)];
     final detected = detectRecurring(categorized, today: today, currency: currency);
-    // The latest live bank outflow per payee: its category is the payee's current one.
+    // The latest live bank outflow per payee: its category is the payee's current one. A row whose own category is a
+    // deleted or unknown custom id ([CategoryTable.isDeadCustom]) only falls back on this device's table, so it never
+    // decides a stored category (P1: nothing is written for a fallback; two devices with different tables never loop).
     final latest = <String, CategorizedTx>{};
+    final deadLast = <String>{}; // payees whose latest row (any) is such a row
+    final latestAny = <String, CategorizedTx>{};
+    bool newer(CategorizedTx t, CategorizedTx? have) =>
+        have == null || t.date.compareTo(have.date) > 0 || (t.date == have.date && t.tx.id.compareTo(have.tx.id) > 0);
     for (final t in categorized) {
       if (!t.tx.live || t.tx.manual || t.amount >= 0 || t.kind == BudgetKind.transfer || t.tx.currency != currency) continue;
       final key = merchantKey(t.tx);
-      final have = latest[key];
-      if (have == null || t.date.compareTo(have.date) > 0 || (t.date == have.date && t.tx.id.compareTo(have.tx.id) > 0)) {
-        latest[key] = t;
-      }
+      if (newer(t, latestAny[key])) latestAny[key] = t;
+      if (t.tx.category case final c? when cz.table.isDeadCustom(c)) continue;
+      if (newer(t, latest[key])) latest[key] = t;
+    }
+    for (final MapEntry(:key, :value) in latestAny.entries) {
+      if (value.tx.category case final c? when cz.table.isDeadCustom(c)) deadLast.add(key);
     }
     final changes = <(String, String, Map<String, Object?>)>[];
     // The bills as they stand after the detection updates below (before payments).
     final current = {for (final e in existing.entries) e.key: e.value};
     var added = 0, updated = 0;
-    for (final c in detected) {
-      final have = existing[c.id];
+    for (final d in detected) {
+      final have = existing[d.id];
+      // A candidate whose latest row falls back takes the payee's latest other row's category (or keeps its own).
+      final c = deadLast.contains(d.payee) ? d.copyWith(category: latest[d.payee]?.category ?? have?.category ?? d.category) : d;
       if (have == null) {
         added++;
         changes.add(('recurring', c.id, _candidateFields(c)));
@@ -1174,12 +1202,15 @@ class WalletRepo {
         final want = _candidateFields(c), has = _candidateFields(have);
         final diff = {
           for (final e in want.entries)
-            if (has[e.key] != e.value) e.key: e.value
+            if (has[e.key] != e.value && !(e.key == 'category' && cz.table.isDeadCustom(have.category))) e.key: e.value
         };
         if (diff.isNotEmpty) {
           updated++;
           changes.add(('recurring', c.id, diff));
-          current[c.id] = c.copyWith(status: have.status, lastPaidTx: have.lastPaidTx);
+          current[c.id] = c.copyWith(
+              status: have.status,
+              lastPaidTx: have.lastPaidTx,
+              category: cz.table.isDeadCustom(have.category) ? have.category : c.category);
         }
       }
     }
@@ -1188,7 +1219,8 @@ class WalletRepo {
     for (final b in current.values) {
       if (!b.confirmed || deleted.contains(b.id) || b.payee.isEmpty) continue;
       final category = latest[b.payee]?.category;
-      if (category != null && category != b.category) {
+      // Never over a stored deleted custom category: it is resolved when read, and an undelete brings it back.
+      if (category != null && category != b.category && !cz.table.isDeadCustom(b.category)) {
         recategorized++;
         changes.add(('recurring', b.id, {'category': category}));
         current[b.id] = b.copyWith(category: category);
