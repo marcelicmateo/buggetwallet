@@ -315,6 +315,15 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `status` and `paid_tx` together whenever either changes; `skipPlanned` clears `paid_tx`. Delete vs edit per entity:
   `docs/context/DESIGN_DECISIONS.md` §4.10. Logs: `bills.*`, `blob.*`,
   `sync.blob*` with counts, sources and enum words only.
+- `ranges.dart` + `insights.dart` — graph ranges, graph data and the Spending drill-down (N3, spec + clarifications in
+  `docs/context/N3_SPEC.md`), pure and web-safe. `DateRange` (inclusive `YYYY-MM-DD`, checked), `rangeFor` (pay period from
+  `detectPaydays`, whole calendar months, custom ≤ 5 years and not past today's month), `shiftRange` (needs `today:`), `rangeLabel`.
+  `insights.dart` never counts on its own: per month it clips the rows to the range and calls `monthSummary` (spending,
+  income; extra = `monthSummary` of the extra rows), `budgetVsActual` (`budgetVsActualSeries`) and `averageByCategory`
+  (`compareCategory`); the row lists (`merchantsIn`, `rowsFor`, `merchantTrend`, `biggestRows`) use `_isSpending`, the same
+  rule row by row, so `rowsFor` sums equal their totals. Group key `''` (`Other`) = manual row without a note or `merchantKey`
+  `x`. Tests: `test/n3_ranges_test.dart`, `test/n3_insights_test.dart` (incl. a loose 500 ms perf test on ~10k rows from
+  `test/support/n3.dart` `bigWalletRows`).
 - `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:, planned:)` → `SearchResult` (`txs` newest first capped at
   `searchTxLimit` 200, `goals`, `wishlist`, `bills`, `planned`, `billsDb` (stored bills: payee, description, item
   names, exact total), `isEmpty`; blank query → `SearchResult.empty`). Text: `foldText`
