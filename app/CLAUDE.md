@@ -5,7 +5,8 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
 
 ## Files
 - `lib/main.dart` — app shell (`HomeShell`): bottom bar on compact windows, `NavigationRail` from 600 dp, one shared destinations
-  list, Ctrl shortcuts (Ctrl+1..5 tabs, Ctrl+N add expense, Ctrl+R/F5 sync, Ctrl+, Plan; logged as `nav.key`).
+  list (the app bar with search icon, sync spinner and pay-period chip exists on compact windows only; from 600 dp the rail holds the add button, `appBarSearch`, `periodBadge`
+  and the spinner, so nothing stays pinned above the page), Ctrl shortcuts (Ctrl+1..5 tabs, Ctrl+N add expense, Ctrl+R/F5 sync, Ctrl+, Plan; logged as `nav.key`).
   The pages are built once (see below) and the body keeps the same widget shape at every size (keyed `Expanded`), so a
   resize keeps every page's State: never build pages in `build()` or a `LayoutBuilder`.
 - `lib/src/layout.dart` — `LayoutSize` (compact < 600, medium 600–1023, expanded ≥ 1024) and `sizeFor(width)`; decide on the
@@ -136,7 +137,7 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   button), `marginLineColor`. Fonts: six unmodified IBM Plex TTFs in `assets/fonts/` + `OFL.txt` (licence registered in `main()`;
   source and version in `third_party/fonts/README.md`). No `Card`, no pills, no shadows: ruled lines instead.
 - `lib/src/screens/*.dart` — one file per tab; `budgets.dart` is Plan's "Budgets per category" panel (`BudgetsPanel`: one field per fixed/flex
-  category, empty = no budget, "Suggest" fills only empty fields, only edited fields are saved, nothing written when nothing changed). `lib/src/widgets/` — `charts.dart` (fl_chart charts, `CategoryBars`, `RuledBar`, `PaceBar`),
+  category, empty = no budget, "Suggest" fills only empty fields, only edited fields are saved, nothing written when nothing changed). `lib/src/widgets/` — `charts.dart` (fl_chart charts; strokes, bars and dashes snap to whole device pixels with `snapPx(logical, dpr)` and the net chart's line/dots/running bar are opaque: no grain at 1.25/1.5 dpr, `test/chart_crisp_test.dart`; `CategoryBars`, `RuledBar`, `PaceBar`),
   `common.dart` (`Panel` = ruled section, `SectionHead`, `Eyebrow`, `Heading`, `TotalRule`/`DoubleRule`, `TxTile` + `TxHeaderRow`
   (Date | Particulars | Amount columns, stacked above text scale 1.15), `LineItem`, `Rows`, `SplitRow`, `HeadingRow`, `Tag`, `LedgerLogo`,
   `NavBarFrame` (bar top rule + accent mark), `MarginLine` (red margin rule, wide windows only), `toast`),
@@ -144,7 +145,7 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
 - `lib/src/format.dart` — money/date formatting and parsing (unit-tested in `test/widget_test.dart`).
 - `key_store.dart` — wallet key: `key_store_io.dart` = system keystore (phones) or a private file (desktop); `key_store_web.dart` = the
   browser (see Web build). Same members everywhere: `read`, `write(key, {passphrase})`, `forget`, `isLocked`, `unlock`, `readDeviceId`, `writeDeviceId` (see Device id).
-- Key screens (H10, `screens/key_backup.dart`): `KeyDisplay` = the key as a QR code first, the text only after "Show as text" (`keyShowText`; `keyQr`, `keyText`);
+- Key screens (H10, `screens/key_backup.dart`): the key text has letter spacing and the hint `keyHint` (`keyAlphabetHint`: A–Z and 2–7, no zero or one) under it; `KeyDisplay` = the key as a QR code first, the text only after "Show as text" (`keyShowText`; `keyQr`, `keyText`);
   used by the save-key sheet and by Plan › Show wallet key (`showWalletKey`, a dialog; `plan.dart` just calls it). `secure_window.dart` `SecureWindow` wraps both: on Android it
   calls `MethodChannel('bw/secure').invokeMethod('setSecure', true)` when the view is built and `false` when it is removed (close, back, dispose; counted, so two open views
   keep the flag until the last closes); other platforms never touch the channel; a channel error is logged (`secure.failed`, no values). `MainActivity.kt` sets FLAG_SECURE.
