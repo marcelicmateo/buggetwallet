@@ -1,6 +1,7 @@
 // Stage P1 (docs/context/P1_SPEC.md): custom categories and subcategories. Written from the spec, not the code.
 // Money in cents, an expense is a POSITIVE amount for `addTransaction`. All data is SYNTHETIC.
 import 'package:test/test.dart';
+import 'package:wallet_core/src/categories.dart' show isSpendingCategory;
 import 'package:wallet_core/src/schema.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -94,7 +95,8 @@ void main() {
       final b = repo.transactions(includeHidden: true).map(cz.categorize).toList();
       final sa = monthSummary(a, '2026-01', currency: 'EUR');
       final sb = monthSummary(b, '2026-01', currency: 'EUR');
-      expect((sb.income, sb.out, sb.byCategory), (sa.income, sa.out, sa.byCategory));
+      expect((sb.income, sb.out), (sa.income, sa.out));
+      expect(sb.byCategory, sa.byCategory);
       expect(monthlySummaryCsv(b, currency: 'EUR'), monthlySummaryCsv(a, currency: 'EUR'));
       final budgets = {'Groceries': 20000, 'Loan': 25000};
       final ba = budgetVsActual(a, '2026-01', budgets, today: '2026-01-20', currency: 'EUR');

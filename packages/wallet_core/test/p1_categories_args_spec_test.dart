@@ -32,7 +32,7 @@ void main() {
       expect(monthlySummaryCsv(txs, currency: 'EUR').split('\n').first, monthlySummaryCsvHeader);
     });
 
-    test('the header lists the table\'s top-level spending ids, children excluded; cells roll children up', () async {
+    test('the header lists the table\'s top-level spending labels, children excluded; cells roll children up', () async {
       final pets = await repo.addCategory(name: 'Pets', kind: BudgetKind.flex);
       final food = await repo.addCategory(name: 'Food', kind: BudgetKind.flex, parent: pets);
       final gifts = await repo.addCategory(name: 'Gifts received', kind: BudgetKind.income);
@@ -43,20 +43,21 @@ void main() {
       final t = repo.categoryTable();
       final csv = monthlySummaryCsv(categorized(), currency: 'EUR', table: t).split('\n');
       expect(csv.first, monthlySummaryCsvHeaderFor(t));
-      expect(csv.first, 'month,${t.spending.join(',')},total');
-      expect(csv.first, contains(pets));
-      expect(csv.first, isNot(contains(food)));
-      expect(csv.first, isNot(contains(gifts)));
+      expect(csv.first, 'month,${t.spending.map(t.label).join(',')},total');
+      expect(csv.first.split(','), contains('Pets'));
+      expect(csv.first.split(','), isNot(contains('Food')));
+      expect(csv.first.split(','), isNot(contains('Gifts received')));
+      expect((food, gifts).toString(), isNotEmpty);
       final cols = csv.first.split(',');
       List<String> cells(String line) => line.split(',');
       final sep = cells(csv[1]);
       expect(sep.first, '2026-09');
-      expect(sep[cols.indexOf(pets)], '12.50');
+      expect(sep[cols.indexOf('Pets')], '12.50');
       expect(sep[cols.indexOf('Groceries')], '3.00');
       expect(sep.last, '15.50');
       final oct = cells(csv[2]);
       expect(oct.first, '2026-10');
-      expect(oct[cols.indexOf(pets)], '1.11');
+      expect(oct[cols.indexOf('Pets')], '1.11');
       expect(oct.last, '1.11');
     }, timeout: _t);
 
@@ -150,8 +151,8 @@ void main() {
 
     test('a custom label equal to a built-in label: the built-in wins, the custom one is duplicateOf it', () async {
       final a = device('a'), b = device('b');
+      // Offline on both: A adds "Pets" while B relabels Shopping to "Pets" (each is unique where it is made).
       final id = await a.repo.addCategory(name: 'Pets', kind: BudgetKind.flex);
-      await syncAll([a, b]);
       await b.repo.updateCategory('Shopping', name: 'Pets');
       await syncAll([a, b]);
       for (final d in [a, b]) {
