@@ -375,8 +375,8 @@ void main() {
       await pumpApp(t, Scaffold(body: SingleChildScrollView(child: TxSheet(wc: wc, t: row))), size: const Size(400, 3200));
       await tapKey(t, 'makeRule');
       expect(find.text('Add rule'), findsOneWidget);
-      expect((t.widget<DropdownButton<String>>(k('rulePayee'))).value, konzum);
-      expect((t.widget<DropdownButton<String>>(find.byKey(const ValueKey('txCategory')).last)).value, 'Groceries');
+      expect(t.widget<DropdownButton<String>>(k('rulePayee')).value, konzum);
+      expect(t.widget<DropdownButton<String>>(find.byKey(const ValueKey('txCategory')).last).value, 'Groceries');
       expect(k('ruleMode:payee'), findsOneWidget);
       await pickMain(t, 'Eating out');
       await tapKey(t, 'ruleSave');

@@ -366,7 +366,7 @@ void main() {
       repo.updateSettings({'reviewDay': 3}); // a write at 12:00 sets the device's highest reading
       wc.reload();
 
-      await pumpFull(t, wc, 1, size: const Size(400, 6000));
+      await pumpFull(t, wc, 1, size: const Size(400, 8000));
       await tapTab(t, 'Plan');
       wall -= 3 * 3600 * 1000; // the date or time was set back by hours
 

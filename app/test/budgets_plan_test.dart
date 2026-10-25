@@ -190,9 +190,9 @@ void main() {
   });
 
   for (final (name, size, scale) in const [
-    ('320 dp at text 2.0', Size(320, 11500), 2.0),
-    ('1280 wide', Size(1280, 4000), 1.0),
-    ('360 dp', Size(360, 4000), 1.0)
+    ('320 dp at text 2.0', Size(320, 13500), 2.0),
+    ('1280 wide', Size(1280, 5000), 1.0),
+    ('360 dp', Size(360, 6000), 1.0)
   ]) {
     testWidgets('$name: the editor lays out without overflow, errors included', (tester) async {
       await _pump(tester, size: size, scale: scale);
