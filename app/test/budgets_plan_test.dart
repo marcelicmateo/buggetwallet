@@ -1,5 +1,6 @@
 // Plan › Budgets per category. All data is SYNTHETIC (budgetWallet: fixed clock, made-up amounts).
 import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,8 +22,13 @@ Future<void> _tapButton(WidgetTester tester, String key) async {
 
 late WalletController _wc; // the wallet of the running test
 
-Future<void> _pump(WidgetTester tester, {bool budgets = true, Size size = const Size(400, 6000), double scale = 1}) async {
-  _wc = budgetWallet(budgets: budgets);
+Future<void> _pump(WidgetTester tester,
+    {bool budgets = true,
+    int groceriesBudget = 30000,
+    int eatingOutBudget = 10000,
+    Size size = const Size(400, 6000),
+    double scale = 1}) async {
+  _wc = budgetWallet(budgets: budgets, groceriesBudget: groceriesBudget, eatingOutBudget: eatingOutBudget);
   await pumpApp(tester, Scaffold(body: PlanScreen(wc: _wc)), size: size, textScale: scale);
 }
 
@@ -44,19 +50,89 @@ void main() {
     await tester.ensureVisible(_field('Groceries'));
     await tester.enterText(_field('Groceries'), '150');
     await _tapButton(tester, 'budgetsSuggest');
-    expect(_text(tester, 'Groceries'), '150', reason: 'a typed value is kept');
     expect(_text(tester, 'Eating out'), '90', reason: '85 rounded up to the nearest 10');
+    expect(find.byKey(const ValueKey('suggestPick:Groceries')), findsOneWidget, reason: 'the typed 150 is asked about, not replaced');
+    await tester.tap(find.byKey(const ValueKey('suggestCancel')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(_text(tester, 'Groceries'), '150', reason: 'a typed value is kept');
     expect(_text(tester, 'Shopping'), '', reason: 'no history, no suggestion');
     expect(_wc.dataVersion, before, reason: 'nothing saved yet');
     expect(_wc.categoryBudgets, isEmpty);
   });
 
-  testWidgets('Suggest does not touch a field that already has a value', (tester) async {
+  testWidgets('Suggest asks before changing a field that already has a value; Cancel changes nothing', (tester) async {
     await _pump(tester);
+    final before = _wc.dataVersion;
     await _tapButton(tester, 'budgetsSuggest');
+    expect(find.text('Change your budgets?'), findsOneWidget);
+    // Old -> suggested, one row each: Groceries saved 300 (history 290), Eating out saved 100 (history 90).
+    expect(find.byKey(const ValueKey('suggestPick:Groceries')), findsOneWidget);
+    expect(find.byKey(const ValueKey('suggestPick:Eating out')), findsOneWidget);
+    expect(find.text('${moneyExact(30000, 'EUR')} → ${moneyExact(29000, 'EUR')}'), findsOneWidget);
+    expect(find.text('${moneyExact(10000, 'EUR')} → ${moneyExact(9000, 'EUR')}'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('suggestCancel')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Change your budgets?'), findsNothing);
     expect(_text(tester, 'Groceries'), '300');
-    expect(_text(tester, 'Eating out'), '100', reason: 'saved 100, suggestion would be 90');
-    expect(find.text('Nothing new to suggest.'), findsOneWidget, reason: 'the only categories with history already have a budget');
+    expect(_text(tester, 'Eating out'), '100');
+    expect(_wc.dataVersion, before);
+    expect(_wc.categoryBudgets, {'Groceries': 30000, 'Eating out': 10000});
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('Suggest: ticked rows go into the fields, nothing is saved until Save, and only those fields are written', (tester) async {
+    await _pump(tester);
+    final before = _wc.dataVersion;
+    await _tapButton(tester, 'budgetsSuggest');
+    expect(tester.widget<FilledButton>(find.byKey(const ValueKey('suggestAccept'))).onPressed, isNull, reason: 'nothing ticked yet');
+    await tester.tap(find.byKey(const ValueKey('suggestPick:Eating out')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('suggestAccept')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(_text(tester, 'Eating out'), '90');
+    expect(_text(tester, 'Groceries'), '300', reason: 'not ticked');
+    expect(_wc.dataVersion, before, reason: 'nothing saved yet');
+    expect(_wc.categoryBudgets['Eating out'], 10000);
+    await _tapButton(tester, 'budgetsSave');
+    expect(_wc.categoryBudgets, {'Groceries': 30000, 'Eating out': 9000});
+    expect(_wc.dataVersion, before + 1);
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('Suggest: an empty field is filled at once, Accept all fills the asked ones, Save is still needed', (tester) async {
+    await _pump(tester);
+    await tester.ensureVisible(_field('Groceries'));
+    await tester.enterText(_field('Groceries'), '');
+    await _tapButton(tester, 'budgetsSuggest');
+    expect(_text(tester, 'Groceries'), '290', reason: 'an empty field is filled without asking');
+    expect(find.byKey(const ValueKey('suggestPick:Groceries')), findsNothing);
+    expect(find.byKey(const ValueKey('suggestPick:Eating out')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('suggestAcceptAll')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(_text(tester, 'Eating out'), '90');
+    expect(_wc.categoryBudgets, {'Groceries': 30000, 'Eating out': 10000}, reason: 'still the saved ones');
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('Suggest leaves a field with text that is no number alone', (tester) async {
+    await _pump(tester, budgets: false);
+    await tester.ensureVisible(_field('Eating out'));
+    await tester.enterText(_field('Eating out'), 'abc');
+    await _tapButton(tester, 'budgetsSuggest');
+    expect(find.byKey(const ValueKey('suggestPick:Eating out')), findsNothing);
+    expect(_text(tester, 'Eating out'), 'abc');
+    expect(_text(tester, 'Groceries'), '290');
+  });
+
+  testWidgets('Suggest: values equal to the suggestion are not asked about', (tester) async {
+    await _pump(tester, groceriesBudget: 29000, eatingOutBudget: 9000);
+    await _tapButton(tester, 'budgetsSuggest');
+    expect(find.text('Change your budgets?'), findsNothing);
+    expect(find.text('Nothing new to suggest.'), findsOneWidget);
   });
 
   testWidgets('Save writes once, with the edited fields on top of the saved budgets', (tester) async {

@@ -4,6 +4,7 @@
 import 'dart:math';
 
 import 'package:budget_wallet/src/platform.dart';
+import 'package:budget_wallet/src/screens/accounts_panel.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
@@ -98,7 +99,9 @@ void main() {
         wc.takeKeyBackupPrompt(); // shot below through Today's row
         Harness.rememberKey(await wc.keyText());
         wc.repo.importBatch(demoBatch(wc.today()));
-        wc.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'paydayDay': 10});
+        wc.updateSettings({'salary': 140000, 'rent': 55000, 'loan': 20000, 'subs': 1299, 'paydayDay': 10}); // loan: the imports suggest 250
+        await seedDemoAccounts(wc.repo, wc.today()); // Accounts, and Today's Held line
+        wc.reload();
         wc.saveCategoryBudgets(demoBudgets); // budgeted and over-budget rows on Spending, the line on Today, the editor on Plan
         wc.saveGoal(name: longGoal, target: 98765 * 10, saved: 98765, monthly: 9876);
         wc.addWish(longWish, 98765);
@@ -154,6 +157,14 @@ void main() {
         await tapVisible(t, find.text(longGoal));
         await Harness.shot(t, '$name-sheet-goal');
         await closeSheet(t, GoalSheet);
+
+        where = 'account-sheet';
+        debugPrint('layout $name: $where');
+        await goTab(t, 'Plan');
+        await scrollTo(t, find.byKey(const ValueKey('accountAdd')), PlanScreen);
+        await tapVisible(t, find.byKey(const ValueKey('accountAdd')));
+        await Harness.shot(t, '$name-sheet-account');
+        await closeSheet(t, AccountFormSheet);
 
         where = 'key-sheet';
         debugPrint('layout $name: $where');

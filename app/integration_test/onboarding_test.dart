@@ -1,10 +1,13 @@
 // First run through the UI: start a new wallet, the salary banner, joining with a wrong and a right key.
 // Run: tools/emulator.sh test onboarding
 import 'package:budget_wallet/main.dart';
+import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/key_store.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
+import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/welcome_balance.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,6 +46,18 @@ void main() {
     expect(find.byType(KeyBackupSheet), findsNothing);
     expect(wc.keyBackupConfirmed, isTrue);
     expect(find.byKey(const ValueKey('keyBackupRow')), findsNothing);
+
+    // Then the one optional step: cash on hand. It makes a Cash account in the wallet currency dated today.
+    expect(find.byType(WelcomeBalanceSheet), findsOneWidget);
+    expect(find.text('How much cash do you have right now?'), findsOneWidget);
+    await Harness.shot(t, 'onboarding-welcome-cash');
+    await t.enterText(find.byKey(const ValueKey('welcomeCash')), '250');
+    await t.tap(find.byKey(const ValueKey('welcomeAdd')));
+    await t.pumpAndSettle();
+    expect(find.byType(WelcomeBalanceSheet), findsNothing);
+    final cash = wc.accountsAll().single;
+    expect((cash.name, cash.source, cash.currency, cash.opening, cash.openingDate), ('Cash', null, wc.currency, 25000, wc.today()));
+    expect(find.byKey(const ValueKey('heldLine')), findsOneWidget);
     expect(key, startsWith('BW1-'));
     final stored = await KeyStore.read();
     expect(stored, isNotNull, reason: 'the key is kept on the device');
@@ -64,6 +79,32 @@ void main() {
 
     await scrollTo(t, find.textContaining('No transactions yet'), TodayScreen);
     expect(find.text('PBZ none · Revolut none'), findsOneWidget);
+    await Harness.checkLog();
+  });
+
+  itest('Start a new wallet: the cash step can be skipped and added later in Plan', (t) async {
+    final wc = await Harness.start(t, wallet: false);
+    await t.tap(find.text('Start a new wallet'));
+    await t.pumpAndSettle();
+    Harness.rememberKey(await wc.keyText());
+    await t.tap(find.byKey(const ValueKey('keyLater')));
+    await t.pumpAndSettle();
+    expect(find.byType(WelcomeBalanceSheet), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('welcomeSkip')));
+    await t.pumpAndSettle();
+    expect(find.byType(WelcomeBalanceSheet), findsNothing);
+    expect(wc.accountsAll(), isEmpty);
+    expect(find.byKey(const ValueKey('heldLine')), findsNothing);
+
+    // Plan › Accounts adds it any time.
+    await goTab(t, 'Plan');
+    await scrollTo(t, find.byKey(const ValueKey('accountAdd')), PlanScreen);
+    await t.tap(find.byKey(const ValueKey('accountAdd')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const ValueKey('accountOpening')), '40');
+    await t.tap(find.byKey(const ValueKey('accountSave')));
+    await t.pumpAndSettle();
+    expect(wc.accountsAll().single.opening, 4000);
     await Harness.checkLog();
   });
 

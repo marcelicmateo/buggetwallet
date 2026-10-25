@@ -20,6 +20,7 @@ import 'src/screens/plan.dart';
 import 'src/screens/spending.dart';
 import 'src/screens/today.dart';
 import 'src/screens/unlock.dart';
+import 'src/screens/welcome_balance.dart';
 import 'src/screens/wishlist.dart';
 import 'src/theme.dart';
 import 'src/widgets/common.dart';
@@ -249,6 +250,7 @@ class _HomeShellState extends State<HomeShell> {
 
   /// Counts the taps on Today's "N bills to review" line; Plan scrolls to Bills on each.
   final _billsDbRequest = ValueNotifier<int>(0);
+  final _accountsRequest = ValueNotifier<int>(0);
   StreamSubscription<BillImport>? _sharedSub;
 
   /// Counts the Ctrl+F presses; Spending opens its search view on each.
@@ -282,6 +284,10 @@ class _HomeShellState extends State<HomeShell> {
             openBillsReview: () {
               _go(4, 'today');
               _billsDbRequest.value++; // Plan scrolls to Bills
+            },
+            openAccounts: () {
+              _go(4, 'today');
+              _accountsRequest.value++; // Plan scrolls to Accounts
             }),
         1 => SpendingScreen(
             wc: widget.wc,
@@ -293,7 +299,7 @@ class _HomeShellState extends State<HomeShell> {
             }),
         2 => WishlistScreen(wc: widget.wc),
         3 => GoalsScreen(wc: widget.wc),
-        _ => PlanScreen(wc: widget.wc, showBills: _billsRequest, showBillsDb: _billsDbRequest),
+        _ => PlanScreen(wc: widget.wc, showBills: _billsRequest, showBillsDb: _billsDbRequest, showAccounts: _accountsRequest),
       };
 
   @override
@@ -324,8 +330,11 @@ class _HomeShellState extends State<HomeShell> {
     });
     // A wallet just created: ask the owner to save the key before the first Today.
     if (widget.wc.takeKeyBackupPrompt()) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(openKeyBackup(context, widget.wc));
+      // Then one optional step: how much cash there is (Skip or close it and nothing is added).
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await openKeyBackup(context, widget.wc);
+        if (mounted) await openWelcomeBalance(context, widget.wc);
       });
     }
   }
@@ -393,6 +402,7 @@ class _HomeShellState extends State<HomeShell> {
     _focus.dispose();
     _billsRequest.dispose();
     _billsDbRequest.dispose();
+    _accountsRequest.dispose();
     _sharedSub?.cancel();
     _searchRequest.dispose();
     super.dispose();

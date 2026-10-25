@@ -51,6 +51,14 @@ ImportBatch demoBatch(String today) {
   return ImportBatch(source: 'pbz', transactions: txs);
 }
 
+/// SYNTHETIC accounts for the demo: the PBZ account, cash and a Revolut account in USD, each opened 30 days ago.
+Future<void> seedDemoAccounts(WalletRepo repo, String today) async {
+  final opened = addDays(today, -30);
+  await repo.addAccount(name: 'PBZ current', source: 'pbz', currency: 'EUR', opening: 184250, openingDate: opened);
+  await repo.addAccount(name: 'Cash', currency: 'EUR', opening: 6000, openingDate: opened);
+  await repo.addAccount(name: 'Revolut travel', source: 'revolut', currency: 'USD', opening: 8000, openingDate: opened);
+}
+
 /// Monthly budgets for the demo wallet (cents): Groceries is usually under, Eating out and Food delivery often over.
 const demoBudgets = {'Groceries': 40000, 'Eating out': 6000, 'Food delivery': 4000};
 
