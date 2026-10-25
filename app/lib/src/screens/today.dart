@@ -182,7 +182,7 @@ class TodayScreen extends StatelessWidget {
                     ),
                   if (p.foreignByCurrency.isNotEmpty) ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote')),
                   if (tight != null) _BudgetLine(tight, wc.categoryTable.label(tight.category), cur, openSpending),
-                  if (p.dueBills.isNotEmpty) _BillsLine(p.dueBills, p.reservedBills, wc.today(), cur, openBills, wc.categoryTable),
+                  if (p.dueCycles.isNotEmpty) _BillsLine(p.dueCycles, p.end, wc.today(), cur, openBills, wc.categoryTable),
                   if (comingUp.count > 0 || suggestions > 0)
                     _InfoLine(
                         key: const ValueKey('comingUpLine'),
@@ -361,24 +361,46 @@ class _BudgetLine extends StatelessWidget {
 
 /// "Due by payday: 3 bills, 182.40 €": confirmed bills expected before the next payday; a tap opens Plan › Expected bills.
 /// Bills the plan already counts (rent, loan, subscriptions) are named apart and are not in the sum; an unpaid bill past its
-/// date says "overdue" (it stays reserved).
+/// date says "overdue" (it stays reserved). A weekly bill counts each payment of the period ("1 bill (4 payments)"). A bill that
+/// comes less often than monthly and is due after payday is held in full: "Car insurance 600 € held until paid".
 class _BillsLine extends StatelessWidget {
-  final List<RecurringBill> bills;
-  final int reserved;
-  final String today, currency;
+  final List<DueCycle> cycles;
+  final String end, today, currency;
   final VoidCallback? onTap;
   final CategoryTable table;
-  const _BillsLine(this.bills, this.reserved, this.today, this.currency, this.onTap, this.table);
+  const _BillsLine(this.cycles, this.end, this.today, this.currency, this.onTap, this.table);
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final counted = bills.where((b) => !b.coveredByPlanIn(table)).length;
-    final covered = bills.length - counted;
-    final overdue = bills.where((b) => b.nextDue.compareTo(today) < 0).length;
-    final text = 'Due by payday: ${[
-      if (counted > 0) '$counted ${counted == 1 ? 'bill' : 'bills'}, ${moneyExact(reserved, currency)}',
-      if (covered > 0) '$covered covered by your plan',
-    ].join(' · ')}';
+    bool held(DueCycle x) => x.bill.isLong && x.due.compareTo(end) >= 0;
+    final soon = [
+      for (final x in cycles)
+        if (!held(x)) x
+    ];
+    final heldCycles = [
+      for (final x in cycles)
+        if (held(x)) x
+    ];
+    final counted = [
+      for (final x in soon)
+        if (!x.coveredIn(table)) x
+    ];
+    final countedBills = {for (final x in counted) x.bill.id}.length;
+    final coveredBills = {
+      for (final x in soon)
+        if (x.coveredIn(table)) x.bill.id
+    }.length;
+    final reserved = counted.fold<int>(0, (s, x) => s + x.reserve);
+    final overdue = {
+      for (final x in cycles)
+        if (x.due.compareTo(today) < 0) x.bill.id
+    }.length;
+    final payments = counted.length > countedBills ? ' (${counted.length} payments)' : '';
+    final text = [
+      if (countedBills > 0) '$countedBills ${countedBills == 1 ? 'bill' : 'bills'}$payments, ${moneyExact(reserved, currency)}',
+      if (coveredBills > 0) '$coveredBills covered by your plan',
+    ].join(' · ');
+    final style = TextStyle(fontSize: BwType.bodySize, color: c.ink2);
     return InkWell(
       key: const ValueKey('billsLine'),
       onTap: onTap,
@@ -389,7 +411,10 @@ class _BillsLine extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(text, style: TextStyle(fontSize: BwType.bodySize, color: c.ink2)),
+            if (text.isNotEmpty) Text('Due by payday: $text', style: style),
+            for (final x in heldCycles)
+              Text('${x.bill.label.isNotEmpty ? x.bill.label : x.bill.payee} ${moneyExact(x.reserve, currency)} held until paid',
+                  key: ValueKey('billHeld:${x.bill.id}'), style: style),
             if (overdue > 0) StatusLabel(key: const ValueKey('billsOverdue'), good: false, text: '$overdue overdue'),
           ])),
           if (onTap != null) Icon(Icons.chevron_right, size: 20, color: c.muted),

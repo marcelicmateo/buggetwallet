@@ -113,6 +113,21 @@ void seedDemoBills(WalletRepo repo, String today) {
       description: 'Gym fee'));
   repo.updateBill(gym, category: 'Bills & one-offs');
   repo.confirmBill(gym);
+  // P4: a yearly bill (held in full until paid) and a weekly one with a range, both added by hand without a payee.
+  repo.addRecurring(
+      label: 'Demo Domain Renewal',
+      category: 'Bills & one-offs',
+      amount: 3600,
+      intervalDays: RecurringPeriod.yearly.days,
+      firstDue: addDays(today, 120));
+  repo.addRecurring(
+      label: 'Demo Market Box',
+      category: 'Groceries',
+      amount: 1200,
+      minAmount: 900,
+      maxAmount: 1200,
+      intervalDays: RecurringPeriod.weekly.days,
+      firstDue: addDays(today, 2));
   final spent = repo.transactions().where((t) => t.live && t.amount < 0 && !t.description.toUpperCase().contains('ATM')).firstOrNull;
   if (spent == null) return;
   final (receipt, _) = repo.importBill(NormalizedBill(
