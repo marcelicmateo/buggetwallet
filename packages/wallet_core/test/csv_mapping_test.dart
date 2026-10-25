@@ -228,6 +228,45 @@ void main() {
       repo.undeleteTransaction(deleted.first);
       expect(repo.transactions(), hasLength(3));
     });
+
+    test('a forced change that reads the same ids: the re-import with revive restores each row once, never an owner delete', () {
+      // Whole amounts: comma and point style read them the same, so the ids do not change.
+      final file = _csv('Datum;Opis;Iznos;Valuta\n05.01.2026;SYNTH A;-12;EUR\n06.01.2026;SYNTH B;-3;EUR\n07.01.2026;SYNTH C;-7;EUR\n');
+      final s = csvShape(file);
+      final m = guessMapping(s)!.copyWith(name: 'Whole');
+      repo.setCsvMapping(s.shapeId, m);
+      repo.importBatch(parseMappedCsv(file, m));
+      final c = repo.transactions().firstWhere((t) => t.description == 'SYNTH C');
+      repo.deleteTransaction(c.id); // the owner's own delete
+      final point = m.copyWith(decimal: m.decimal == CsvDecimal.comma ? CsvDecimal.point : CsvDecimal.comma);
+      final deleted = repo.setCsvMapping(s.shapeId, point, force: true);
+      expect(deleted, hasLength(2));
+      expect(repo.transactions(), isEmpty);
+      final batch = parseMappedCsv(file, repo.settings().csvMappings[s.shapeId]!);
+      expect(batch.transactions.map((t) => t.id).toSet().containsAll(deleted), isTrue, reason: 'same ids');
+
+      final first = repo.importBatch(batch, revive: deleted.toSet());
+      expect((first.added, first.duplicates), (2, 1));
+      expect(repo.transactions().map((t) => t.description).toList()..sort(), ['SYNTH A', 'SYNTH B']);
+      expect(repo.transactions().map((t) => t.amount).toList()..sort(), [-1200, -300]);
+      // Again with the same set: nothing more, nothing doubled; the owner's delete stays.
+      final again = repo.importBatch(batch, revive: deleted.toSet());
+      expect((again.added, again.duplicates), (0, 3));
+      expect(repo.transactions(), hasLength(2));
+      expect(repo.transactions().any((t) => t.id == c.id), isFalse);
+    });
+
+    test('without revive a deleted row stays deleted (the old rule)', () {
+      final file = _csv('Datum;Opis;Iznos;Valuta\n05.01.2026;SYNTH A;-12;EUR\n');
+      final m = guessMapping(csvShape(file))!;
+      repo.importBatch(parseMappedCsv(file, m));
+      final id = repo.transactions().single.id;
+      repo.deleteTransaction(id);
+      expect(repo.importBatch(parseMappedCsv(file, m)).added, 0);
+      expect(repo.transactions(), isEmpty);
+      expect(repo.importBatch(parseMappedCsv(file, m), revive: {'other'}).added, 0);
+      expect(repo.transactions(), isEmpty);
+    });
   });
 
   group('two devices', () {
