@@ -300,10 +300,13 @@ void main() {
       await tester.ensureVisible(find.byKey(const ValueKey('reviewDone')));
       await tester.tap(find.byKey(const ValueKey('reviewDone')));
       await tester.pumpAndSettle();
-      expect(find.byType(ReviewScreen), findsNothing);
+      expect(find.byKey(const ValueKey('reviewDoneScreen')), findsOneWidget);
       expect(wc.reviewState().due, isFalse);
       expect(wc.reviewState().streak, 1);
-      expect(find.text('Review done · 1 week in a row'), findsOneWidget);
+      expect(find.textContaining('1 week in a row', findRichText: true), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('reviewClose')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ReviewScreen), findsNothing);
     });
 
     tw('a pace row closes the review and asks for Spending', (tester) async {

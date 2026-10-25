@@ -4,6 +4,7 @@ import 'package:wallet_core/wallet_core.dart';
 import '../controller.dart';
 import '../file_chooser.dart';
 import '../format.dart';
+import '../insights_api.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
@@ -50,6 +51,9 @@ class ReviewScreen extends StatefulWidget {
 class _ReviewScreenState extends State<ReviewScreen> {
   bool _importing = false, _imported = false, _paceSeen = false;
 
+  /// Set when Done was tapped: the page then shows [ReviewDoneView] instead of the steps.
+  bool _finished = false;
+
   Future<void> _import() async {
     setState(() => _importing = true);
     try {
@@ -64,8 +68,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
     final wc = widget.wc;
     logNav('review.done');
     wc.markReviewDone();
-    toast(context, 'Review done · ${streakText(wc.reviewState().streak)}');
-    Navigator.pop(context, 'done');
+    setState(() => _finished = true);
   }
 
   @override
@@ -73,6 +76,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
       listenable: widget.wc,
       builder: (context, _) {
         final wc = widget.wc;
+        if (_finished) return ReviewDoneView(wc: wc);
         final cur = wc.currency;
         final r = wc.reviewState();
         final rows = wc.reviewRows();
@@ -293,4 +297,58 @@ class _CategoryRow extends StatelessWidget {
           ]),
         ]),
       ));
+}
+
+/// What Done shows (`reviewDoneScreen`): the streak and what waiting saved this pay period and all time. Close pops the review with
+/// 'done'. The figures come from the controller ([WalletInsights.savedThisPeriod], [WalletInsights.savedAllTime]).
+class ReviewDoneView extends StatelessWidget {
+  final WalletController wc;
+  const ReviewDoneView({super.key, required this.wc});
+
+  @override
+  Widget build(BuildContext context) {
+    final cur = wc.currency, streak = wc.reviewState().streak;
+    final period = wc.savedThisPeriod(), all = wc.savedAllTime();
+    String wishes(int n) => '$n ${n == 1 ? 'wish' : 'wishes'}';
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) Navigator.pop(context, 'done');
+      },
+      child: Scaffold(
+        key: const ValueKey('reviewDoneScreen'),
+        appBar: const DialogAppBar(title: 'Review done'),
+        body: ListView(
+            padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, 24),
+            children: gapped([
+              Panel(children: [
+                const Eyebrow('Review done'),
+                StatusLabel(key: const ValueKey('reviewStreak'), good: true, text: streak > 0 ? streakText(streak) : 'Reviewed this week'),
+              ]),
+              Panel(children: [
+                const Eyebrow('Saved by waiting'),
+                if (all.count == 0)
+                  const Muted('Nothing saved by waiting yet. A wish you skip after the wait counts here.', key: ValueKey('reviewSaved'))
+                else ...[
+                  Semantics(
+                    container: true,
+                    child: Text(
+                        period.count == 0
+                            ? 'Saved by waiting this period: nothing yet'
+                            : 'Saved by waiting this period: ${moneyExact(period.cents, cur)} (${wishes(period.count)})',
+                        key: const ValueKey('reviewSaved')),
+                  ),
+                  Text('All time: ${moneyExact(all.cents, cur)} (${wishes(all.count)})', key: const ValueKey('reviewSavedAll')),
+                ],
+              ]),
+              FilledButton(
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
+                key: const ValueKey('reviewClose'),
+                onPressed: () => Navigator.pop(context, 'done'),
+                child: const Text('Close', style: TextStyle(fontSize: BwType.headingSize)),
+              ),
+            ])),
+      ),
+    );
+  }
 }

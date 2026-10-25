@@ -14,6 +14,7 @@ import '../widgets/common.dart';
 import '../widgets/insight_charts.dart';
 import '../widgets/sheets.dart';
 import 'category_detail.dart';
+import 'period_reports.dart';
 import 'tag_detail.dart';
 
 /// Opens Insights. [picker] replaces the system date range picker (tests).
@@ -33,6 +34,10 @@ class InsightsScreen extends StatelessWidget {
             InsightPanel(key: ValueKey('insightPanel_$id'), wc: wc, id: id, picker: picker),
             const SizedBox(height: 16),
           ],
+          PeriodsPanel(key: const ValueKey('insightPanel_periods'), wc: wc),
+          const SizedBox(height: 16),
+          CategoryBudgetPanel(key: const ValueKey('insightPanel_categoryBudget'), wc: wc),
+          const SizedBox(height: 16),
         ]),
       );
 }

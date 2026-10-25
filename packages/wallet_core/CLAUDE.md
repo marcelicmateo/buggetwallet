@@ -428,6 +428,13 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   rule row by row, so `rowsFor` sums equal their totals. Group key `''` (`Other`) = manual row without a note or `merchantKey`
   `x`. Tests: `test/n3_ranges_test.dart`, `test/n3_insights_test.dart` (incl. a loose 500 ms perf test on ~10k rows from
   `test/support/n3.dart` `bigWalletRows`).
+- `reports.dart` — reports (P8, spec `docs/context/P8_SPEC.md`), pure and web-safe, nothing written. `periodReports(txs, st, today,
+  table:, count:)` → `PeriodReport {start, end, running, income, fixed, flex}` (+ `out`, `net`) on the periods of
+  `periodSummaries` (same income/out/net; `fixed` = Σ `byCategory` of tags whose `table.kindOf` is fixed, `flex` = out −
+  fixed); `categoryByPeriod(category, txs, st, today, table:, count:)` → `CategoryPeriod {start, end, running, spent,
+  budget}` (+ `overBy`, `over`; spent = `rollUp(byCategory)[category]`, budget = `st.categoryBudgets[category]` per pay
+  period); `savedByWaiting(wishes, fromMillis:, toMillis:)` / `savedByWaitingAll` → `SavedByWaiting {count, cents}`
+  (skipped wishes, `decided` in [from, to)). txs = the expanded list (P6). Tests: `test/p8_reports_test.dart`.
 - `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:, planned:)` → `SearchResult` (`txs` newest first capped at
   `searchTxLimit` 200, `goals`, `wishlist`, `bills`, `planned`, `billsDb` (stored bills: payee, description, item
   names, exact total), `isEmpty`; blank query → `SearchResult.empty`). Text: `foldText`
