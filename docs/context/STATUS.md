@@ -172,6 +172,31 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   Chart: widths snapped to whole device pixels, opaque line/dots/bars (blur at 1.25/1.5 scale; the owner's exact grain was not reproduced
   under software GL). Review: 2 medium, 2 low, three fixed with tests, landscape-phone app bar left to the owner. Custom-range date picker
   moved to N3 (needs core range maths). Stage run: importer 335, core 1506, relay 206, app 1293, desktop 11 files / 29 tests.
+- 2026-10-25: **Stage N1 + N2 core.**
+  - **N1 (app):**
+    - Softer Ledger theme (owner D8): warmer off-white paper, graphite ink, mid-grey `lineStrong`, calmer accent, softer dark. Section and total rules are lighter; the double rule appears only under totals. Contrast test unchanged and green.
+    - Plan: "Payday plan" and "Numbers" are one section with Edit / Save / Cancel. Same fields and validation; only edited fields are written.
+    - Plan › "Join another wallet…" (not on web):
+      - It needs the open wallet's key to be confirmed saved first.
+      - The old key is kept in a second key-store slot, and the new key is written before the old `wallet.db` is set aside (never deleted).
+      - The app waits for any sync in progress and pushes pending changes before setting the wallet aside; no sync runs while joining.
+      - Joining the wallet that is already open is refused.
+      - A "join pending" marker finishes an interrupted join at start-up.
+      - Every failure path rolls back with the old key kept. Two review rounds: 1 high, 3 medium, 7 low, all fixed with tests.
+  - **N2 core (schema 9, spec `N2_SPEC.md`, owner D9):**
+    - Synced `account` entity: owner-named, a bank source or cash, own currency, opening cents plus an as-of date.
+    - `correctBalance`; the opening and its date are always written together.
+    - `accountBalances` and `balanceTotals`:
+      - a bank account counts its source's imported rows; cash counts hand-added rows that are not matched or pending; ATM never adds to cash;
+      - the total is kept per currency;
+      - a duplicate created through sync is counted once.
+    - `suggestPlan` / `planProposals`:
+      - salary and payday day from complete payday groups; rent and loan from categorised rows; subs from confirmed bills;
+      - last 6 complete months only; never written by itself.
+    - `budgetProposals` (the Suggest diff).
+    - Tests written independently from the spec found the sync-duplicate rule; the review found stale months, a partial first payday and the opening/date pair, all fixed.
+  - **Stage run:** importer 335, core 1623, relay 206, app 1321 (1330 after the last join fixes), desktop 12 files, emulator screens.
+  - **Still to build:** N2 UI (welcome balance, accounts overview, plan proposals, Suggest dialog).
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -257,7 +282,14 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   photos are not in `.bwb` backups (they stay on the relay).
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
-  N0 done 2026-10-25; N1–N4 wait for owner decisions D8–D12.
+  N0 done 2026-10-25. N1 and N2 core done 2026-10-25. Next: N2 UI, then N3 (core range maths + 4 graphs + drill-down). N4 waits on D10.
+- Owner checks after N1 (phone + laptop):
+  - The softer colours, in sun and in dark mode.
+  - Plan › Payday plan: Edit, change a field, Save; Cancel.
+  - Plan › Join another wallet…:
+    - with the key not yet confirmed, it asks you to confirm it first;
+    - Cancel at each step;
+    - a real join, after which the old wallet is set aside (it cannot be reopened in the app yet).
 - Owner checks after N0 (laptop): Spending chart at your normal display scaling (still grainy = compositor scaling); the rail at 1280/1920
   (search, period badge, no top bar); type a key with `0` for `O` on join and in "Save your wallet key"; phone in landscape now has no top bar: OK?
 - Owner notes (2026-10-25, later): tapping the date on a graph/range opens a date picker for a custom range; the Ledger theme is responsive and nice
