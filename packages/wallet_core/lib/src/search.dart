@@ -163,8 +163,10 @@ SearchResult searchAll(
   bool category(String? c) => text(c) || (c != null && table != null && text(table.label(c)));
   bool tagged(CategorizedTx t) => tags != null && t.tags.any((g) => text(tags.label(g)));
 
-  bool payment(CategorizedTx w) => amount(w.amount) || text(w.tx.description) || text(w.tx.note) || category(w.category) || tagged(w);
-  bool part(CategorizedTx t) => amount(t.amount) || text(t.partNote) || category(t.category) || tagged(t);
+  // P15: a converted row (`inHomeCurrency`) is also found by the bank's own figure ([CategorizedTx.originalAmount]).
+  bool amounts(CategorizedTx t) => amount(t.amount) || (t.originalAmount != null && amount(t.originalAmount!));
+  bool payment(CategorizedTx w) => amounts(w) || text(w.tx.description) || text(w.tx.note) || category(w.category) || tagged(w);
+  bool part(CategorizedTx t) => amounts(t) || text(t.partNote) || category(t.category) || tagged(t);
   final found = <String, CategorizedTx>{};
   final matchedPart = <String, int>{};
   final paymentHit = <String, bool>{};

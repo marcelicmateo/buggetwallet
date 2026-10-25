@@ -129,14 +129,17 @@ extension WalletRepoSettings on WalletRepo {
   }
 
   /// Sets the owner's exchange rate for [code] (P15, [WalletSettings.fxRates], row `fx:<CODE>`): [rate] wallet-currency
-  /// minor units per 1,000,000 minor units of [code], dated today and recorded against the wallet currency
+  /// minor units per 1,000,000 minor units of [code], dated [date] (default today; an Undo passes the old entry's date)
+  /// and recorded against the wallet currency
   /// ([FxRate.home]; a rate left from another wallet currency, [WalletSettings.fxStale], is replaced). Throws [ArgumentError] for a code that is not three
-  /// capital letters (ISO 4217), the wallet currency itself, or a rate outside [FxRate.minRate]..[FxRate.maxRate].
-  /// Writes nothing when the same rate was already set today.
-  void setFxRate(String code, int rate) {
+  /// capital letters (ISO 4217), the wallet currency itself, a rate outside [FxRate.minRate]..[FxRate.maxRate], or a
+  /// [date] that is not `YYYY-MM-DD` or is after today. Writes nothing when the same entry is already set.
+  void setFxRate(String code, int rate, {String? date}) {
     final st = _checkFxCode(code);
     if (rate < FxRate.minRate || rate > FxRate.maxRate) throw ArgumentError.value(rate, 'rate', 'out of range');
-    final next = FxRate(rate, _today(), home: st.currency);
+    final today = _today();
+    if (date != null && (!isIsoDate(date) || date.compareTo(today) > 0)) throw ArgumentError.value(date, 'date', 'not a date up to today');
+    final next = FxRate(rate, date ?? today, home: st.currency);
     if (st.fxRates[code] == next) return;
     _write([
       ('setting', '${WalletSettings.fxPrefix}$code', {'value': jsonEncode(next.toJson()), 'deleted': 0})

@@ -36,9 +36,17 @@ const _missingSalaryDays = 45;
 /// first payment of each payday. Salary parts within 20 days of a payday's first payment belong to that payday.
 /// P6: whole payments (`Categorizer.categorize`) or the expanded list ([periodSummaries], the ranges): only the dates
 /// of income rows count, so a split salary payment gives its date once either way (unless no part of it is income).
+/// P15: a row converted from another currency (`inHomeCurrency`, [CategorizedTx.originalCurrency]) is never a payday,
+/// as on the raw list.
 List<String> salaryPaydays(List<CategorizedTx> txs, String today, {required String currency}) {
   final salary = txs
-      .where((t) => t.tx.live && t.kind == BudgetKind.income && t.amount > 0 && t.tx.currency == currency && t.date.compareTo(today) <= 0)
+      .where((t) =>
+          t.tx.live &&
+          t.kind == BudgetKind.income &&
+          t.amount > 0 &&
+          t.tx.currency == currency &&
+          t.originalCurrency == null &&
+          t.date.compareTo(today) <= 0)
       .map((t) => t.date)
       .toList()
     ..sort();

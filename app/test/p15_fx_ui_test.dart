@@ -4,12 +4,14 @@
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/currencies_panel.dart';
+import 'package:budget_wallet/src/screens/search.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
+import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wallet_core/wallet_core.dart' show merchantKey;
+import 'package:wallet_core/wallet_core.dart' show CategorizedTx, merchantKey;
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/wallet.dart';
@@ -137,7 +139,7 @@ void main() {
     testWidgets('Remove stops counting and Undo brings the rate back', (t) async {
       final wc = fxWallet();
       final before = wc.period().spent;
-      wc.setFxRate('USD', 924000);
+      wc.setFxRate('USD', 924000, date: '2026-10-10');
       await pumpApp(t, panel(wc), size: const Size(400, 1200));
       expect(wc.period().spent, before + 1109);
       await tapKey(t, 'fxRemove:USD');
@@ -149,6 +151,7 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 400));
       expect(wc.settings.fxRates['USD']!.rate, 924000);
+      expect(wc.settings.fxRates['USD']!.date, '2026-10-10', reason: 'Undo keeps the date the rate was set');
       expect(wc.period().spent, before + 1109);
       await settle(t);
     });
@@ -179,10 +182,10 @@ void main() {
       expect(wc.settings.fxRates, isEmpty);
     });
 
-    testWidgets('empty, a 7th decimal, zero and above 1000', (t) async {
+    testWidgets('empty, a 7th decimal, zero and above 100 are refused; 100 itself is accepted', (t) async {
       final wc = fxWallet();
       await pumpApp(t, sheet(wc, 'USD'));
-      for (final text in ['', 'abc', '0.1234567', '0', '1000.01', '5000']) {
+      for (final text in ['', 'abc', '0.1234567', '0', '100.000001', '5000']) {
         await t.enterText(find.byKey(const ValueKey('fxRateField')), text);
         await t.tap(find.byKey(const ValueKey('fxSave')));
         await t.pump();
@@ -190,12 +193,12 @@ void main() {
         expect(wc.settings.fxRates, isEmpty, reason: '"$text"');
       }
       // Typing clears the message; a good value saves.
-      await t.enterText(find.byKey(const ValueKey('fxRateField')), '0.9');
+      await t.enterText(find.byKey(const ValueKey('fxRateField')), '100');
       await t.pump();
       expect(find.byKey(const ValueKey('fxError')), findsNothing);
       await t.tap(find.byKey(const ValueKey('fxSave')));
       await t.pump();
-      expect(wc.settings.fxRates['USD']!.rate, 900000);
+      expect(wc.settings.fxRates['USD']!.rate, 100000000, reason: 'the largest rate, 100 per unit');
       await settle(t);
     });
   });
@@ -297,6 +300,70 @@ void main() {
       expect(after.reservedBills, before.reservedBills, reason: 'the USD row does not pay the EUR bill');
       expect(after.dueBills.map((b) => b.id), before.dueBills.map((b) => b.id));
       expect(before.dueBills, isNotEmpty);
+    });
+  });
+
+  group('sheets work from the raw payment', () {
+    Widget opener(WalletController wc, CategorizedTx t) => Scaffold(
+        body: Builder(
+            builder: (context) => TextButton(
+                key: const ValueKey('openTx'),
+                onPressed: () => showSheet<String>(context, TxSheet(wc: wc, t: t)),
+                child: const Text('open'))));
+
+    testWidgets('Split from a converted row offers the bank amount and saves against it', (t) async {
+      final wc = budgetWallet(budgets: false);
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [usd('2026-10-12', -10000)]));
+      wc.reload();
+      wc.setFxRate('USD', 924000);
+      final converted = wc.txs.firstWhere((c) => c.originalAmount != null);
+      expect(converted.amount, -9240, reason: 'the list row is the converted one');
+      await pumpApp(t, opener(wc, converted), size: const Size(400, 2400));
+      await tapKey(t, 'openTx');
+      expect(find.text(money(-10000, 'USD', decimals: 2, signed: true)), findsOneWidget, reason: 'the header shows the bank amount, in \$');
+      expect(find.byKey(const ValueKey('txCounted')), findsOneWidget);
+      expect(find.text('Counts as ${money(-9240, 'EUR', decimals: 2, signed: true)} at 0.9240'), findsOneWidget);
+      await tapKey(t, 'splitOpen');
+      expect(t.widget<TextField>(find.byKey(const ValueKey('splitAmount:0'))).controller!.text, '100',
+          reason: 'the bank amount, not 92.40');
+      await t.enterText(find.byKey(const ValueKey('splitAmount:0')), '40');
+      await t.enterText(find.byKey(const ValueKey('splitAmount:1')), '60');
+      await t.pump();
+      expect(t.widget<FilledButton>(find.byKey(const ValueKey('splitSave'))).onPressed, isNotNull);
+      await t.ensureVisible(find.byKey(const ValueKey('splitSave')));
+      await t.tap(find.byKey(const ValueKey('splitSave')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      final id = converted.tx.id;
+      expect(wc.splitCount(id), 2);
+      expect(wc.splitIsBroken(id), isFalse);
+      expect(wc.storedSplit(id)!.fold<int>(0, (a, p) => a + p.amount), -10000);
+      // The money counts the parts at the rate, adding up to the converted whole.
+      expect(wc.partsOf(id).fold<int>(0, (a, p) => a + p.amount), -9240);
+      await settle(t);
+    });
+
+    testWidgets('search shows a converted hit with its original line, an unrated one in its own currency', (t) async {
+      final wc = fxWallet();
+      Future<void> search() async {
+        await pumpApp(t, Scaffold(body: SearchPane(wc: wc, onClose: () {}, onOpenTab: (_) {}, onOpenBills: () {})),
+            size: const Size(400, 1500));
+        await t.enterText(find.byType(TextField).first, 'SYNTHETIC USD');
+        await t.pump(const Duration(milliseconds: 400));
+        await t.pumpAndSettle();
+      }
+
+      await search();
+      var hit = find.byWidgetPredicate((w) => w is TxTile && w.t.tx.description.contains('SYNTHETIC USD'));
+      expect(hit, findsOneWidget);
+      expect(find.descendant(of: hit, matching: find.text(money(-1200, 'USD', decimals: 2, signed: true))), findsOneWidget);
+      expect(find.byKey(const ValueKey('txOriginal')), findsNothing);
+      wc.setFxRate('USD', 924000);
+      await search();
+      hit = find.byWidgetPredicate((w) => w is TxTile && w.t.tx.description.contains('SYNTHETIC USD'));
+      expect(find.descendant(of: hit, matching: find.text(money(-1109, 'EUR', decimals: 2, signed: true))), findsOneWidget);
+      expect(find.text('${money(-1200, 'USD', decimals: 2, signed: true)} at 0.9240'), findsOneWidget);
+      await settle(t);
     });
   });
 

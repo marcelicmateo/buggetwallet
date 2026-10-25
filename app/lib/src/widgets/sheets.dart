@@ -332,7 +332,7 @@ class TxSheet extends StatefulWidget {
 
 class _TxSheetState extends State<TxSheet> {
   /// The payment as one row: a part tapped in a list opens its payment's sheet (P6).
-  late final CategorizedTx row = widget.t.isPart ? widget.wc.categorizer.categorize(widget.t.tx) : widget.t;
+  late final CategorizedTx row = widget.wc.rawRow(widget.t); // never the converted row (P15)
   late String cat = row.category;
   bool always = true;
 
@@ -394,8 +394,17 @@ class _TxSheetState extends State<TxSheet> {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(merchantName(t)),
       const SizedBox(height: 6),
-      Text(money(t.amount, widget.wc.currency, decimals: 2, signed: true),
+      Text(money(t.amount, t.currency, decimals: 2, signed: true),
           textAlign: TextAlign.end, style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500)),
+      if (widget.wc.shown(row) case final c when c.originalAmount != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text(
+              'Counts as ${money(c.amount, c.tx.currency, decimals: 2, signed: true)} at ${rateText(widget.wc.settings.fxRates[t.currency]!.rate)}',
+              key: const ValueKey('txCounted'),
+              textAlign: TextAlign.end,
+              style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+        ),
       const SizedBox(height: 6),
       const DoubleRule(),
       const SizedBox(height: 6),
