@@ -282,7 +282,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   photos are not in `.bwb` backups (they stay on the relay).
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
-  N0 done 2026-10-25. N1 and N2 core done 2026-10-25. Next: N2 UI, then N3 (core range maths + 4 graphs + drill-down). N4 waits on D10.
+  N0 done 2026-10-25. N1 and N2 core done 2026-10-25. Next: N2 UI, then N3 (core range maths + 4 graphs + drill-down). N4 ready (D10: slips + bank payments, one line per month).
 - Owner checks after N1 (phone + laptop):
   - The softer colours, in sun and in dark mode.
   - Plan › Payday plan: Edit, change a field, Save; Cancel.

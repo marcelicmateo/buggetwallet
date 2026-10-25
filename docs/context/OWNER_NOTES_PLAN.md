@@ -15,7 +15,7 @@ one Haiku full run and one reviewer pass per stage). Nothing here is started.
 
 **Owner answers (2026-10-25):** D8 = softer colours + thinner lines (mono stays, dark not singled out); D9 = accounts as proposed
 (owner-named, opening cents + as-of date, balance = opening + rows since, correctable); D11 = all four graphs (spending per month,
-category share, income vs spending, budget vs actual); D12 = drill-down first. D10 still open (ask before N4).
+category share, income vs spending, budget vs actual); D12 = drill-down first. D10 = both: a confirmed recurring bill lists its stored slips and its paying bank rows, one line per month (matched by payee key and exact evidence only, never by amount alone).
 
 ## Notes → stages
 | Stage | Notes it covers | Touches |
