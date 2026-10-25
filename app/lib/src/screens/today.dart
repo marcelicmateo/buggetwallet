@@ -184,7 +184,8 @@ class TodayScreen extends StatelessWidget {
                               textAlign: TextAlign.end, style: const TextStyle(fontSize: BwType.metaSize))
                           : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace', textAlign: TextAlign.end),
                     ),
-                  if (p.foreignByCurrency.isNotEmpty) ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote')),
+                  if (p.foreignByCurrency.isNotEmpty)
+                    ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: wc.openCurrencies),
                   if (tight != null) _BudgetLine(tight, wc.categoryTable.label(tight.category), cur, openSpending),
                   if (p.expectedIncome.isNotEmpty)
                     _InfoLine(
@@ -317,8 +318,9 @@ class TodayScreen extends StatelessWidget {
                         TxTile(
                             table: wc.categoryTable,
                             tagTable: wc.tagTable,
-                            t: t,
+                            t: wc.shown(t),
                             currency: cur,
+                            fxRates: wc.settings.fxRates,
                             hasBill: wc.billForTx(t.tx.id) != null,
                             splitCount: wc.splitCount(t.tx.id),
                             splitBroken: wc.splitIsBroken(t.tx.id),

@@ -109,6 +109,7 @@ export 'src/export.dart'
         transactionsCsv,
         transactionsCsvHeader,
         transactionsCsvTagsHeader;
+export 'src/fx.dart' show convertMinor, homeAmount, inHomeCurrency;
 export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
 export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, parseIcs, plannedIcs;
 export 'src/insights.dart'
@@ -159,6 +160,7 @@ export 'src/models.dart'
         Account,
         CategorizedTx,
         comparePart,
+        FxRate,
         Goal,
         GoalContribution,
         goalTotal,

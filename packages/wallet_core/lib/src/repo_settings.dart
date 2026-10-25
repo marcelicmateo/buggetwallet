@@ -4,15 +4,21 @@ part of 'repo.dart';
 String _budgetId(String category) => '${WalletSettings.budgetPrefix}$category';
 
 /// The key a settings problem is logged under: a per-key row by its map's name, never its id.
-String _logKey(String key) => key.startsWith(WalletSettings.patternPrefix)
-    ? 'merchantPatterns'
-    : (key.startsWith(WalletSettings.budgetPrefix) ? 'categoryBudgets' : (key.startsWith(WalletSettings.planPrefix) ? 'planLines' : key));
+String _logKey(String key) => switch (key) {
+      _ when key.startsWith(WalletSettings.patternPrefix) => 'merchantPatterns',
+      _ when key.startsWith(WalletSettings.budgetPrefix) => 'categoryBudgets',
+      _ when key.startsWith(WalletSettings.planPrefix) => 'planLines',
+      _ when key.startsWith(WalletSettings.fxPrefix) => 'fx',
+      _ => key,
+    };
 
 bool _perKeySetting(String key) =>
     key == 'categoryBudgets' ||
     key == 'merchantPatterns' ||
     key == 'planLines' ||
+    key == 'fxRates' ||
     key.startsWith(WalletSettings.planPrefix) ||
+    key.startsWith(WalletSettings.fxPrefix) ||
     key.startsWith(WalletSettings.budgetPrefix) ||
     key.startsWith(WalletSettings.patternPrefix);
 
@@ -120,6 +126,41 @@ extension WalletRepoSettings on WalletRepo {
       )
     ]);
     logEvent(_log, Level.INFO, 'settings.planLine', {'set': cents != null});
+  }
+
+  /// Sets the owner's exchange rate for [code] (P15, [WalletSettings.fxRates], row `fx:<CODE>`): [rate] wallet-currency
+  /// minor units per 1,000,000 minor units of [code], dated today and recorded against the wallet currency
+  /// ([FxRate.home]; a rate left from another wallet currency, [WalletSettings.fxStale], is replaced). Throws [ArgumentError] for a code that is not three
+  /// capital letters (ISO 4217), the wallet currency itself, or a rate outside [FxRate.minRate]..[FxRate.maxRate].
+  /// Writes nothing when the same rate was already set today.
+  void setFxRate(String code, int rate) {
+    final st = _checkFxCode(code);
+    if (rate < FxRate.minRate || rate > FxRate.maxRate) throw ArgumentError.value(rate, 'rate', 'out of range');
+    final next = FxRate(rate, _today(), home: st.currency);
+    if (st.fxRates[code] == next) return;
+    _write([
+      ('setting', '${WalletSettings.fxPrefix}$code', {'value': jsonEncode(next.toJson()), 'deleted': 0})
+    ]);
+    logEvent(_log, Level.INFO, 'settings.fx', {'set': true});
+  }
+
+  /// Removes the rate of [code] (its rows then stay out of every sum again), also one set against another wallet
+  /// currency ([WalletSettings.fxStale]). Throws [ArgumentError] like [setFxRate] for a bad code or the wallet
+  /// currency. Writes nothing when [code] has no rate.
+  void removeFxRate(String code) {
+    final st = _checkFxCode(code);
+    if (!st.fxRates.containsKey(code) && !st.fxStale.containsKey(code)) return;
+    _write([
+      ('setting', '${WalletSettings.fxPrefix}$code', {'value': null, 'deleted': 1})
+    ]);
+    logEvent(_log, Level.INFO, 'settings.fx', {'set': false});
+  }
+
+  WalletSettings _checkFxCode(String code) {
+    if (!WalletSettings.currencyCode.hasMatch(code)) throw ArgumentError.value(code, 'code', 'not a currency code');
+    final st = _readSettings(db, table: categoryTable());
+    if (code == st.currency) throw ArgumentError.value(code, 'code', 'the wallet currency needs no rate');
+    return st;
   }
 
   /// Adds merchant [pattern] for [category], or sets an existing one (same text) to exactly this rule: [category],

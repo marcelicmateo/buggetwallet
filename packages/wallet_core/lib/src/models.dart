@@ -59,6 +59,10 @@ class Tx {
   /// still counts, so the expense counts once until the row arrives. Set by `WalletRepo` reads, never stored.
   final bool matchPending;
 
+  /// P15 hook: the bank's own amount in the wallet currency for a row in another currency, when the export carries one
+  /// (no export the importer reads does yet). Not stored; always null for now. `homeAmount` prefers it over a rate.
+  final int? homeAmount;
+
   const Tx({
     required this.id,
     required this.source,
@@ -75,7 +79,27 @@ class Tx {
     this.kindHint,
     this.transferTo,
     this.matchPending = false,
+    this.homeAmount,
   });
+
+  /// This row in [currency] with [amount] (P15 `inHomeCurrency`); id and every other field kept, [homeAmount] dropped.
+  Tx inCurrency(String currency, int amount) => Tx(
+        id: id,
+        source: source,
+        date: date,
+        amount: amount,
+        currency: currency,
+        bankType: bankType,
+        description: description,
+        category: category,
+        note: note,
+        manual: manual,
+        matchedTo: matchedTo,
+        deleted: deleted,
+        kindHint: kindHint,
+        transferTo: transferTo,
+        matchPending: matchPending,
+      );
 
   /// Counts toward totals: not deleted and not replaced by a bank row that is here (see [matchPending]).
   bool get live => !deleted && (matchedTo == null || matchPending);
@@ -130,8 +154,21 @@ class CategorizedTx {
   /// For a part: the whole payment's row (`Categorizer.categorize`: its own main tag, tags and amount); null otherwise.
   final CategorizedTx? whole;
 
+  /// P15: for a row converted to the wallet currency (`inHomeCurrency`), this row's own amount (the part's for a part)
+  /// and currency as the bank gave them; null for a row that was not converted.
+  final int? originalAmount;
+  final String? originalCurrency;
+
   const CategorizedTx(this.tx, this.category, this.kind,
-      {this.tags = const [], int? amount, this.part, this.parts = 0, this.partNote, this.splitBroken = false, this.whole})
+      {this.tags = const [],
+      int? amount,
+      this.part,
+      this.parts = 0,
+      this.partNote,
+      this.splitBroken = false,
+      this.whole,
+      this.originalAmount,
+      this.originalCurrency})
       : _amount = amount;
   String get date => tx.date;
 
@@ -143,7 +180,28 @@ class CategorizedTx {
 
   /// This row with another [category] and/or [kind]; everything else (part fields included) kept.
   CategorizedTx withCategory(String category, [BudgetKind? kind]) => CategorizedTx(tx, category, kind ?? this.kind,
-      tags: tags, amount: _amount, part: part, parts: parts, partNote: partNote, splitBroken: splitBroken, whole: whole);
+      tags: tags,
+      amount: _amount,
+      part: part,
+      parts: parts,
+      partNote: partNote,
+      splitBroken: splitBroken,
+      whole: whole,
+      originalAmount: originalAmount,
+      originalCurrency: originalCurrency);
+
+  /// This row converted (P15): [tx] in the wallet currency, [amount] the part's converted amount (null for a whole
+  /// payment), [whole] the converted whole; the original amount and currency kept. Category, kind, tags and part fields kept.
+  CategorizedTx converted(Tx tx, {int? amount, CategorizedTx? whole}) => CategorizedTx(tx, category, kind,
+      tags: tags,
+      amount: amount,
+      part: part,
+      parts: parts,
+      partNote: partNote,
+      splitBroken: splitBroken,
+      whole: whole,
+      originalAmount: this.amount,
+      originalCurrency: this.tx.currency);
 }
 
 /// The distinct payments of [rows] ([CategorizedTx.tx], first appearance order): an expanded list
@@ -663,6 +721,44 @@ class ReviewState {
   }
 }
 
+/// An owner-set exchange rate (P15, setting row `fx:<CODE>`): [rate] = wallet-currency minor units per [scale]
+/// (1,000,000) minor units of the other currency, set on [date] (`YYYY-MM-DD`) against the wallet currency [home].
+class FxRate {
+  final int rate;
+  final String date;
+
+  /// The wallet currency the rate was set against (ISO 4217). Every stored row has one; null only in a value built by
+  /// hand (then it is taken to be the wallet currency it is used with).
+  final String? home;
+  const FxRate(this.rate, this.date, {this.home});
+
+  /// The divisor of [rate] and the accepted range of a rate (at most 100 home units per foreign unit).
+  static const scale = 1000000, minRate = 1, maxRate = 100000000;
+
+  /// A stored value `{"rate": int, "date": "YYYY-MM-DD", "home": "EUR"}`, or null when it is not a valid one (a row
+  /// without `home` included).
+  static FxRate? read(Object? v) {
+    if (v is! Map) return null;
+    final r = v['rate'], d = v['date'], h = v['home'];
+    if (h is! String || !WalletSettings.currencyCode.hasMatch(h)) return null;
+    final rate = switch (r) {
+      final int x => x,
+      final double x when x.isFinite && x == x.roundToDouble() && x.abs() <= maxRate => x.toInt(),
+      _ => null,
+    };
+    if (rate == null || rate < minRate || rate > maxRate || d is! String || !isIsoDate(d)) return null;
+    return FxRate(rate, d, home: h);
+  }
+
+  Map<String, Object> toJson() => {'rate': rate, 'date': date, if (home != null) 'home': home!};
+
+  @override
+  bool operator ==(Object other) => other is FxRate && other.rate == rate && other.date == date && other.home == home;
+
+  @override
+  int get hashCode => Object.hash(rate, date, home);
+}
+
 /// User settings. Money in minor units. Each field syncs on its own.
 class WalletSettings {
   final int salary;
@@ -689,6 +785,14 @@ class WalletSettings {
   /// Plan lines (P1): a live top-level custom fixed category ([CategoryTable.hasPlanLine]) -> cents per month, taken
   /// off the flexible money with rent, loan and subs (`computePeriod`). No entry = 0. Row `plan:<id>` ([planPrefix]).
   final Map<String, int> planLines;
+
+  /// Owner-set exchange rates (P15): ISO 4217 code (never [currency]) -> its rate. Row `fx:<CODE>` ([fxPrefix]).
+  /// A currency without an entry stays out of every sum.
+  final Map<String, FxRate> fxRates;
+
+  /// Rates set against another wallet currency ([FxRate.home] ≠ [currency]: the currency was changed since). They
+  /// count nowhere (the code is "not counted" again until a new rate is set); the app can say "Rate was set for EUR".
+  final Map<String, FxRate> fxStale;
   final int reviewDay; // weekly review day, 1 = Monday .. 7 = Sunday
   final String? lastReview; // YYYY-MM-DD of the last completed weekly review
   final int reviewStreak; // weekly reviews done in a row
@@ -717,6 +821,8 @@ class WalletSettings {
     this.rentCashThreshold = defaultRentCashThreshold,
     this.categoryBudgets = const {},
     this.planLines = const {},
+    this.fxRates = const {},
+    this.fxStale = const {},
     this.reviewDay = DateTime.sunday,
     this.lastReview,
     this.reviewStreak = 0,
@@ -748,7 +854,12 @@ class WalletSettings {
   /// then by row id. A removed entry is a tombstone (`deleted` 1, value null). [fromMap] reads these keys, after the
   /// legacy `categoryBudgets` / `merchantPatterns` maps (a row's entry replaces a legacy one).
   /// Plan line rows (P1, [planLines]): `plan:<custom category id>`, value = whole cents (JSON int, 0..[maxAmount]).
-  static const budgetPrefix = 'budget:', patternPrefix = 'pattern:', planPrefix = 'plan:';
+  /// Exchange rate rows (P15, [fxRates]): `fx:<CODE>`, value = JSON `{"rate": int, "date": "YYYY-MM-DD", "home": "EUR"}`
+  /// ([FxRate]).
+  static const budgetPrefix = 'budget:', patternPrefix = 'pattern:', planPrefix = 'plan:', fxPrefix = 'fx:';
+
+  /// An ISO 4217 code as the wallet currency and the rate rows use it.
+  static final currencyCode = RegExp(r'^[A-Z]{3}$');
 
   /// Heads-up defaults (owner, 2026-10-22: 3 days before a planned cost of 100 € or more) and their ranges.
   static const defaultHeadsUpCents = 10000, maxHeadsUpCents = 10000000, defaultHeadsUpDays = 3, maxHeadsUpDays = 14;
@@ -795,6 +906,7 @@ class WalletSettings {
     // Per-key rows (schema 8): `budget:<category>` and `pattern:<id>`.
     final budgetRows = <Object?, Object?>{};
     final planRows = <Object?, Object?>{};
+    final fxRows = <String, Object?>{};
     final patternRows = <MerchantPattern>[];
     var badPatternRow = false, badRange = false;
     for (final MapEntry(:key, :value) in m.entries) {
@@ -802,6 +914,8 @@ class WalletSettings {
         budgetRows[key.substring(budgetPrefix.length)] = value;
       } else if (key.startsWith(planPrefix)) {
         planRows[key.substring(planPrefix.length)] = value;
+      } else if (key.startsWith(fxPrefix)) {
+        fxRows[key.substring(fxPrefix.length)] = value;
       } else if (key.startsWith(patternPrefix)) {
         final (row, rangeDropped) = MerchantPattern.read(key, value);
         if (row != null) {
@@ -825,6 +939,8 @@ class WalletSettings {
       _ => bad('merchantPatterns', const <MerchantPattern>[]),
     };
     final allPatterns = [...legacyPatterns, ...patternRows];
+    final currency = str('currency', currencyCode.hasMatch) ?? 'EUR';
+    final fx = _fxRates(fxRows, currency);
     return WalletSettings(
       salary: i('salary', 0),
       rent: i('rent', 0),
@@ -835,7 +951,7 @@ class WalletSettings {
       coolHours: i('coolHours', 72, max: maxCoolHours),
       paydayDay: min(i('paydayDay', 15, min: 1, max: 31), maxPaydayDay),
       periodStart: str('periodStart', isIsoDate),
-      currency: str('currency', (v) => RegExp(r'^[A-Z]{3}$').hasMatch(v)) ?? 'EUR',
+      currency: currency,
       incomeMode: one('incomeMode', 'planned', const {'planned', 'received'}),
       savedFor: str('savedFor', isIsoDate),
       salaryConfirmed: confirmed == null || confirmed is bool ? confirmed == true : bad('salaryConfirmed', false),
@@ -850,6 +966,8 @@ class WalletSettings {
         _ => bad('categoryBudgets', budgetRows.isEmpty ? const <String, int>{} : _budgets(budgetRows, cats)),
       },
       planLines: _planLines(planRows, cats),
+      fxRates: fx.$1,
+      fxStale: fx.$2,
       reviewDay: i('reviewDay', DateTime.sunday, min: DateTime.monday, max: DateTime.sunday),
       lastReview: str('lastReview', isIsoDate),
       reviewStreak: i('reviewStreak', 0, max: maxStreak),
@@ -903,6 +1021,25 @@ class WalletSettings {
     }
     if (bad) logInvalidSetting('planLines', 'row');
     return out.isEmpty ? const {} : out;
+  }
+
+  /// The valid exchange rates: (code -> rate set against [currency], code -> rate set against another home). A bad
+  /// code or value (a row without `home`, a rate whose home is its own code) is dropped, logged once as
+  /// `settings.invalid` under `fx`; a rate for the wallet [currency] itself is left out without a warning (the currency
+  /// was changed after it was set; the row comes back if the currency changes back).
+  static (Map<String, FxRate>, Map<String, FxRate>) _fxRates(Map<String, Object?> raw, String currency) {
+    final out = <String, FxRate>{}, stale = <String, FxRate>{};
+    var bad = false;
+    for (final MapEntry(:key, :value) in raw.entries) {
+      final r = FxRate.read(value);
+      if (r == null || !currencyCode.hasMatch(key) || r.home == key) {
+        bad = true;
+      } else if (key != currency) {
+        (r.home == currency ? out : stale)[key] = r;
+      }
+    }
+    if (bad) logInvalidSetting('fx', 'row');
+    return (out.isEmpty ? const {} : out, stale.isEmpty ? const {} : stale);
   }
 
   /// The entries of a `merchantPatterns` list: `[category, regex]` (stored by builds before schema 8), or [toMap]'s
@@ -960,6 +1097,9 @@ class WalletSettings {
         // One int per line under its row id (`plan:<id>`), as stored: [fromMap] reads it back, and a diff of two
         // maps compares the values, not map identities.
         for (final MapEntry(:key, :value) in planLines.entries) '$planPrefix$key': value,
+        for (final MapEntry(:key, :value) in fxStale.entries) '$fxPrefix$key': value.toJson(),
+        for (final MapEntry(:key, :value) in fxRates.entries)
+          '$fxPrefix$key': FxRate(value.rate, value.date, home: value.home ?? currency).toJson(),
         'reviewDay': reviewDay,
         'lastReview': lastReview,
         'reviewStreak': reviewStreak,

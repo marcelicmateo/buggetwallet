@@ -80,7 +80,11 @@ class InsightPanel extends StatelessWidget {
           Muted(note),
           control,
           ...body,
-          if (foreign.isNotEmpty) ForeignNote(foreign, key: ValueKey('foreign_$id')),
+          if (foreign.isNotEmpty)
+            ForeignNote(foreign, key: ValueKey('foreign_$id'), onSetRate: () {
+              Navigator.of(context).popUntil((r) => r.isFirst); // close Insights, then Plan opens at Currencies
+              wc.openCurrencies();
+            }),
         ]);
       },
     );
@@ -243,6 +247,7 @@ class InsightPanel extends StatelessWidget {
               tagTable: wc.tagTable,
               t: t,
               currency: cur,
+              fxRates: wc.settings.fxRates,
               hasBill: wc.billForTx(t.tx.id) != null,
               onTap: () async {
                 final res = await showSheet<String>(context, TxSheet(wc: wc, t: t));

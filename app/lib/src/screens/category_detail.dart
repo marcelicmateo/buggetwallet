@@ -165,6 +165,7 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
                   tagTable: wc.tagTable,
                   t: t,
                   currency: cur,
+                  fxRates: wc.settings.fxRates,
                   hasBill: wc.billForTx(t.tx.id) != null,
                   onTap: () async {
                     final res = await showSheet<String>(context, TxSheet(wc: wc, t: t));

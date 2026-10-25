@@ -136,6 +136,35 @@ int? parseMoney(String input) {
   return null;
 }
 
+/// An exchange rate (home minor units per 1,000,000 foreign minor units) as text: "0.9240" or "0,9240" in the comma style. At least
+/// four decimals, up to six, trailing zeros beyond the fourth dropped.
+String rateText(int rate) {
+  var frac = (rate % 1000000).toString().padLeft(6, '0');
+  while (frac.length > 4 && frac.endsWith('0')) {
+    frac = frac.substring(0, frac.length - 1);
+  }
+  return '${rate ~/ 1000000}${numberStyle.decimal}$frac';
+}
+
+/// Parses a typed rate ("0.9240", "0,924", "1.08") into the integer rate `round(value × 1,000,000)`, exactly from the digits (no
+/// floating point). Both separators are read as the decimal mark; with both present the last one is. Null when it is not a plain
+/// number or has more than six decimals (nothing is rounded away). The range is core's to check.
+int? parseFxRate(String input) {
+  final t = input.trim().replaceAll(RegExp(r'\s'), '');
+  if (t.isEmpty) return null;
+  final last = t.lastIndexOf(RegExp(r'[.,]'));
+  var whole = t, frac = '';
+  if (last >= 0) {
+    whole = t.substring(0, last).replaceAll(RegExp(r'[.,]'), '');
+    frac = t.substring(last + 1);
+  }
+  final digits = RegExp(r'^\d+$');
+  if (whole.isEmpty) whole = '0';
+  if (!digits.hasMatch(whole) || (frac.isNotEmpty && !digits.hasMatch(frac))) return null;
+  if (frac.length > 6 || whole.length > 9) return null;
+  return int.parse(whole) * 1000000 + int.parse(frac.padRight(6, '0'));
+}
+
 List<int> _ymd(String iso) => iso.split('-').map(int.parse).toList();
 
 String shortDate(String iso) {
