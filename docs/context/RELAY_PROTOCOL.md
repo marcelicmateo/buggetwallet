@@ -134,11 +134,13 @@ Sealed files that rows point to by hash (a bill's photo or PDF). Content-address
    op references is PUT again even if it was uploaded before (200, refreshing its stored time). If the PUT fails, only
    the referencing fields (`blob`, `blob_type`, `blob_bytes`, `deleted`) of those ops wait in the outbox; the rest of the
    op and of the outbox goes on. A first connect (new or changed relay) PUTs every cached blob a live bill references,
-   and so does the first sync after a device upgrades to api 4 (repairs files an api-3 build deleted). An op field this
+   and so do the syncs after a device upgrades to api 4 (repairs files an api-3 build deleted; the list keeps only the
+   files not yet confirmed and ends on a relay without blob storage). An op field this
    device already holds with a newer clock (the op was overtaken) references nothing. A client writes no snapshot while
    such an op waits (the snapshot would carry the reference before the file), except when every waiting file's last
    PUT got 507 (relay full): the snapshot is what frees room, so it goes; those ops and files stay queued (never
-   evicted) and the snapshot's set declares the files anyway (they are in the device's state).
+   evicted), and that snapshot gets no declared set (the device's state names a file the relay lacks, where other
+   devices may still name another one), so GC waits until the file lands and a later snapshot declares a set.
 3. **Declared sets.** Right after an accepted snapshot PUT, a client that saw api ≥ 4 in the state sends
    `PUT snapshot/<id>/blobs` with the hashes of the live bills in that snapshot (sorted). A failure is logged and not
    retried: that snapshot then has no set, which only holds GC back.

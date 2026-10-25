@@ -169,7 +169,9 @@ extension WalletRepoBlobs on WalletRepo {
       db.execute('DROP TABLE IF EXISTS blob_own');
       // Builds before P14 deleted files on the relay (a bill deleted, a losing file): the next sync puts every cached
       // file of a live bill again, which repairs one deleted while a device still pointed at it.
-      setLocalValue(WalletRepo.blobReuploadKey, '1');
+      // The list is kept to the files not confirmed yet (SyncEngine), so one that keeps failing costs one PUT a run.
+      final again = cachedOf(liveBlobHashes());
+      if (again.isNotEmpty) setLocalValue(WalletRepo.blobReuploadKey, jsonEncode(again));
       db.execute('COMMIT');
     } on Object {
       db.execute('ROLLBACK');

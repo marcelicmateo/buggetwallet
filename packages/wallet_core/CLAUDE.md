@@ -417,7 +417,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `blobRefOf(op)` / `pendingBlobRefs` (a bill op references a file when it sets `blob` on a bill live here or makes the
   bill live; `deleted` 1 never; a field this device holds with a newer clock never), `markExportedHolding` (outbox rows up to a seq go, held ops go back in, one
   transaction); a re-import whose bill keeps its own file forgets the new un-uploaded one (`_forgetUnusedBlob`); the
-  migration sets `WalletRepo.blobReuploadKey` (local): the next runs PUT every cached live file again until all got through. H9 field pairs (`_repairFieldPairs`, in `_reconcile` before
+  migration sets `WalletRepo.blobReuploadKey` (local): a JSON list of the cached live files; each run PUTs those still listed and keeps only the unconfirmed ones (cleared on a relay
+  without blob storage). H9 field pairs (`_repairFieldPairs`, in `_reconcile` before
   `_autoLinkBills`, through `_write`): a live planned row keeps `paid_tx` only while `status == paid`; a payment row pays
   at most one live bill (earliest `linked_tx` clock stays, then smallest id; the others unlinked via `_billWrites`); every
   bill's planned row `bill:<id>` is set to what `_billWrites` wants for the bill as it is. `_billWrites` writes
@@ -469,7 +470,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   in a second upload of the same run; a relay without blob routes holds nothing. Failures stay queued and never stop
   the run. After an accepted snapshot PUT on a relay whose state said api ≥ 4: `putSnapshotBlobs(id, liveBlobHashes)`
   (failure logged, not retried). No snapshot while a held op waits for a file whose PUT failed this run with anything
-  but `full` (507: the snapshot frees room; that file stays queued and is declared anyway). `SyncReport.blobsSent`/`blobsWaiting`/`blobsUnsupported` (404 on an upload for a wallet
+  but `full` (507: the snapshot frees room; that file stays queued and pinned, and that snapshot's set is skipped). `SyncReport.blobsSent`/`blobsWaiting`/`blobsUnsupported` (404 on an upload for a wallet
   the relay knows = older relay), `relayApi`/`relayCollectsBlobs`; `RelayState.api`; failures are `TransportException(TransportFailure)`),
   `RelayState`/`RelayDevice`/`RelaySnapshot` (+ `fromJson`), implemented by `MemoryTransport` (`sync_memory.dart`: the
   relay's rules in memory — no gaps, never overwritten, acks grow, snapshot 422 before 409, two kept snapshots, pruning
