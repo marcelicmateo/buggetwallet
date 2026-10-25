@@ -145,8 +145,9 @@ class WalletRepo {
   /// custom categories, subcategories and built-in overrides; no data migration), version 11: tags (the `tag`,
   /// `txtag` and `ruletag` entities; no data migration), version 12: recurring bills beyond monthly (P4: `recurring`
   /// gains `min_amount`, `max_amount`, `ends_on`, `manual`; no data migration), version 13: split transactions (P6:
-  /// the `split` entity; no data migration).
-  static const schemaVersion = 13;
+  /// the `split` entity; no data migration), version 14: recurring income (P9: `recurring` gains `direction`; no data
+  /// migration).
+  static const schemaVersion = 14;
 
   /// The folder sync's bookkeeping (`peer_files`: which files of the shared folder were read) means nothing on a relay,
   /// whose sequence numbers start over (every device's first relay file is its whole state), so it is dropped once.
@@ -765,7 +766,8 @@ class WalletRepo {
   List<WishItem> wishlist() => [for (final r in db.select('SELECT * FROM wish WHERE deleted = 0 ORDER BY added')) WishItem.fromRow(r)];
 
   /// Recurring bills that are not deleted: candidates and confirmed ones, plus dismissed ones with [includeDismissed].
-  /// Ordered by `nextDue`, then label, then id.
+  /// Ordered by `nextDue`, then label, then id. P9: recurring incomes are in this list too ([RecurringBill.isIncome]);
+  /// a list of bills filters them out (`computePeriod`, `upcoming`, `plannedIcs` and bill coverage ignore them).
   /// A bill in a deleted custom category reads with the category its own payment gets now: the categorizer's answer
   /// for its `lastPaidTx` row (so a PBZ standing order reads Loan, like the row itself, and is never reserved on top of
   /// the fixed plan); without one (a bill not paid since it was confirmed), the payee's latest live bank outflow.
@@ -775,14 +777,18 @@ class WalletRepo {
     Map<String, Tx>? latest; // payee -> latest live bank outflow, read only when a bill needs it
     return _resolved([
       for (final r in db.select(
-          "SELECT * FROM recurring WHERE deleted = 0 ${includeDismissed ? '' : "AND status != 'dismissed'"} ORDER BY next_due, label, id"))
+          "SELECT * FROM recurring WHERE deleted = 0 ${includeDismissed ? '' : 'AND status NOT IN (${RecurringBill.dismissedStored})'} "
+          'ORDER BY next_due, label, id'))
         r,
     ], (cz, r) {
       final paid = r['last_paid_tx'] is String ? transaction(r['last_paid_tx'] as String) : null;
       final payee = r['payee'] is String && (r['payee'] as String).isNotEmpty ? r['payee'] as String : null; // '' = manual, no payee
-      final row = paid ?? (payee == null ? null : (latest ??= _latestOutflowByPayee())[payee]);
+      // An income (P9) never takes a bill's outflow category: its landed row, else the stored one or Extra income.
+      final income = r['direction'] == RecurringBill.directionIn;
+      final row = paid ?? (payee == null || income ? null : (latest ??= _latestOutflowByPayee())[payee]);
       if (row != null) return cz.categoryOf(row);
-      return cz.resolveStored(r['category'] as String?, key: payee, text: '${r['label'] ?? ''}', orElse: 'Shopping');
+      return cz.resolveStored(r['category'] as String?,
+          key: income ? null : payee, text: income ? '' : '${r['label'] ?? ''}', orElse: income ? 'Extra income' : 'Shopping');
     }, RecurringBill.fromRow);
   }
 
@@ -1246,33 +1252,43 @@ class WalletRepo {
     final cz = categorizer(withTags: false);
     final currency = settings().currency; // only rows in the wallet's currency make or pay a bill
     final categorized = [for (final r in rows) cz.categorize(r)];
-    // A payee a live manual bill uses is never detected (P4: no duplicate of the owner's own bill).
+    // A payee a live manual bill uses is never detected (P4: no duplicate of the owner's own bill); per direction, so
+    // a manual income does not hide the payee's bill, nor a manual bill its income (P9).
+    String dirKey(RecurringBill b) => '${b.isIncome ? 'in' : 'out'}:${b.payee}';
     final manualPayees = {
       for (final b in existing.values)
-        if (b.manual && b.payee.isNotEmpty && !deleted.contains(b.id)) b.payee
+        if (b.manual && b.payee.isNotEmpty && !deleted.contains(b.id)) dirKey(b)
     };
     final detected = [
       for (final d in detectRecurring(categorized, today: today, currency: currency))
-        if (!manualPayees.contains(d.payee)) d
+        if (!manualPayees.contains(dirKey(d))) d
     ];
     // The latest live bank outflow per payee: its category is the payee's current one. A row whose own category is a
     // deleted or unknown custom id ([CategoryTable.isDeadCustom]) only falls back on this device's table, so it never
     // decides a stored category (P1: nothing is written for a fallback; two devices with different tables never loop).
-    final latest = <String, CategorizedTx>{};
-    final deadLast = <String>{}; // payees whose latest row (any) is such a row
-    final latestAny = <String, CategorizedTx>{};
+    // P9: an income's category follows the payee's latest live bank inflow of kind extra, the same way.
     bool newer(CategorizedTx t, CategorizedTx? have) =>
         have == null || t.date.compareTo(have.date) > 0 || (t.date == have.date && t.tx.id.compareTo(have.tx.id) > 0);
-    for (final t in categorized) {
-      if (!t.tx.live || t.tx.manual || t.amount >= 0 || t.kind == BudgetKind.transfer || t.tx.currency != currency) continue;
-      final key = merchantKey(t.tx);
-      if (newer(t, latestAny[key])) latestAny[key] = t;
-      if (t.tx.category case final c? when cz.table.isDeadCustom(c)) continue;
-      if (newer(t, latest[key])) latest[key] = t;
+    ({Map<String, CategorizedTx> latest, Set<String> deadLast}) latestBy(bool Function(CategorizedTx) rowOf) {
+      final latest = <String, CategorizedTx>{};
+      final deadLast = <String>{}; // payees whose latest row (any) is such a row
+      final latestAny = <String, CategorizedTx>{};
+      for (final t in categorized) {
+        if (!t.tx.live || t.tx.manual || t.kind == BudgetKind.transfer || t.tx.currency != currency || !rowOf(t)) continue;
+        final key = merchantKey(t.tx);
+        if (newer(t, latestAny[key])) latestAny[key] = t;
+        if (t.tx.category case final c? when cz.table.isDeadCustom(c)) continue;
+        if (newer(t, latest[key])) latest[key] = t;
+      }
+      for (final MapEntry(:key, :value) in latestAny.entries) {
+        if (value.tx.category case final c? when cz.table.isDeadCustom(c)) deadLast.add(key);
+      }
+      return (latest: latest, deadLast: deadLast);
     }
-    for (final MapEntry(:key, :value) in latestAny.entries) {
-      if (value.tx.category case final c? when cz.table.isDeadCustom(c)) deadLast.add(key);
-    }
+
+    final outflows = latestBy((t) => t.amount < 0);
+    final inflows = latestBy((t) => t.amount > 0 && t.kind == BudgetKind.extra);
+    Map<String, CategorizedTx> latestFor(RecurringBill b) => b.isIncome ? inflows.latest : outflows.latest;
     final changes = <(String, String, Map<String, Object?>)>[];
     // The bills as they stand after the detection updates below (before payments).
     final current = {for (final e in existing.entries) e.key: e.value};
@@ -1280,10 +1296,15 @@ class WalletRepo {
     for (final d in detected) {
       final have = existing[d.id];
       // A candidate whose latest row falls back takes the payee's latest other row's category (or keeps its own).
-      final c = deadLast.contains(d.payee) ? d.copyWith(category: latest[d.payee]?.category ?? have?.category ?? d.category) : d;
+      final c = (d.isIncome ? inflows : outflows).deadLast.contains(d.payee)
+          ? d.copyWith(category: latestFor(d)[d.payee]?.category ?? have?.category ?? d.category)
+          : d;
       if (have == null) {
         added++;
-        changes.add(('recurring', c.id, _candidateFields(c)));
+        // An income's creation op carries its status (`in:candidate`) so a build before P9 never takes it for a bill
+        // candidate (P9 review); a bill's carries none (the column default applies).
+        changes.add(
+            ('recurring', c.id, {..._candidateFields(c), if (c.isIncome) 'status': RecurringBill.storedStatus('candidate', income: true)}));
       } else if ((have.status == 'candidate' || have.payee.isEmpty) && !deleted.contains(c.id)) {
         final want = _candidateFields(c), has = _candidateFields(have);
         final diff = {
@@ -1309,7 +1330,8 @@ class WalletRepo {
               maxAmount: have.maxAmount,
               endsOn: have.endsOn,
               manual: have.manual,
-              ownCategory: have.ownCategory);
+              ownCategory: have.ownCategory,
+              direction: c.direction);
         }
       }
     }
@@ -1317,7 +1339,7 @@ class WalletRepo {
     var bills = <RecurringBill>[];
     for (final b in current.values) {
       if (!b.confirmed || deleted.contains(b.id) || b.payee.isEmpty || b.finished) continue;
-      final category = latest[b.payee]?.category;
+      final category = latestFor(b)[b.payee]?.category;
       // Never over a stored deleted custom category: it is resolved when read, and an undelete brings it back. A
       // manual bill keeps the category the owner gave it.
       if (!b.manual && !b.ownCategory && category != null && category != b.category && !cz.table.isDeadCustom(b.category)) {
@@ -1343,6 +1365,18 @@ class WalletRepo {
       ];
       paid += plan.paidBy.length;
     }
+    // P9: an income whose cycle passed (due + tolerance before today) with no landing moves on, cycle by cycle, so a
+    // missed income is not expected for ever (its later money, if any, still counts when it lands).
+    var missed = 0;
+    for (var i = 0; i < bills.length; i++) {
+      var x = bills[i];
+      if (!x.isIncome) continue;
+      for (var n = 0; n < 400 && isIsoDate(x.nextDue) && addDays(x.nextDue, x.tolerance).compareTo(today) < 0; n++) {
+        x = x.copyWith(nextDue: addDays(x.nextDue, x.intervalDays));
+        missed++;
+      }
+      bills[i] = x;
+    }
     for (final b in bills) {
       final was = current[b.id]!;
       if (b.nextDue != was.nextDue || b.lastPaidTx != was.lastPaidTx) {
@@ -1358,6 +1392,7 @@ class WalletRepo {
       'updated': updated,
       'recategorized': recategorized,
       'paid': paid,
+      'missedIncome': missed,
     });
   }
 
@@ -1369,6 +1404,7 @@ class WalletRepo {
         'expected_amount': c.expectedAmount,
         'interval_days': c.intervalDays,
         'next_due': c.nextDue,
+        if (c.isIncome) 'direction': RecurringBill.directionIn,
       };
 
   void _setRecurring(String id, Map<String, Object?> fields) {
@@ -1376,14 +1412,38 @@ class WalletRepo {
     _write([('recurring', id, fields)]);
   }
 
-  /// The owner says this candidate is a bill: from now on it is reserved in the period budget until paid.
-  void confirmRecurring(String id) => _setRecurring(id, {'status': 'confirmed'});
+  /// [status] as stored for row [id]: an income's carries the `in:` prefix ([RecurringBill.storedStatus]).
+  void _setRecurringStatus(String id, String status) {
+    final r = db.select('SELECT * FROM recurring WHERE id = ?', [id]);
+    if (r.isEmpty) throw ArgumentError('No such bill.');
+    _write([
+      ('recurring', id, {'status': RecurringBill.storedStatus(status, income: RecurringBill.fromRow(r.first).isIncome)})
+    ]);
+  }
+
+  /// The owner says this candidate is a bill: from now on it is reserved in the period budget until paid. For an
+  /// income (P9): it counts once its money lands.
+  void confirmRecurring(String id) => _setRecurringStatus(id, 'confirmed');
 
   /// The owner says this is not a bill: hidden from [recurringBills] (unless asked for) and never detected again.
-  void dismissRecurring(String id) => _setRecurring(id, {'status': 'dismissed'});
+  void dismissRecurring(String id) => _setRecurringStatus(id, 'dismissed');
 
   /// Removes a bill; its payee is never detected again (the row stays, deleted).
   void deleteRecurring(String id) => _setRecurring(id, {'deleted': 1});
+
+  /// Undo of [deleteRecurring] (bill or income): writes `deleted: 0` (synced; the later of it and a delete by HLC wins).
+  /// The row comes back with its other fields as they were (status, due date, last payment). An unknown id is an
+  /// [ArgumentError]; a live row writes nothing. A deleted row is never re-created or updated by detection meanwhile
+  /// ([refreshRecurring] keeps every existing id, deleted included).
+  void undeleteRecurring(String id) {
+    final r = db.select('SELECT * FROM recurring WHERE id = ?', [id]);
+    if (r.isEmpty) throw ArgumentError('No such bill.');
+    if (r.first['deleted'] != 1) return;
+    _write([
+      ('recurring', id, {'deleted': 0})
+    ]);
+    logEvent(_log, Level.INFO, 'recurring.undelete', {'income': RecurringBill.fromRow(r.first).isIncome});
+  }
 
   /// The owner skips the bill's current cycle (no payment is coming, or it was paid in a way the match cannot see):
   /// `nextDue` moves one `intervalDays` on from its current value (a monthly instalment plan: one calendar month,

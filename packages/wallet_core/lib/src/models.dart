@@ -278,6 +278,13 @@ var _invalidRangeLogged = false;
 /// cents (an outflow); [minAmount]/[maxAmount] an optional amount range ([hasRange]: the highest is set aside,
 /// [reserveAmount]); [endsOn] the last due date of an instalment plan. A confirmed bill is reserved in `computePeriod`
 /// until a bank row (or parts adding up) pays its cycle ([lastPaidTx], then [nextDue] moves on by [intervalDays]).
+///
+/// P9: with [direction] `in` ([isIncome]) the row is a recurring **income** (side job, rent received): [expectedAmount]
+/// is the positive cents expected in, a range only narrows matching, there are no instalments, parts or reserves. A
+/// detected income's id is `recin:<payee>` ([incomeIdFor]), so one payee can have both a bill and an income. Its
+/// cycle lands when a positive row of the payee comes in (`planRecurringPayments`); `computePeriod` shows a cycle not
+/// landed yet as expected ([PeriodBudget.expectedIncome]) and adds the payee's landed rows to the spending money only
+/// once they are here ([PeriodBudget.landedIncome]).
 class RecurringBill {
   final String id;
   final String payee; // merchantKey of the bank rows; '' for a manual bill without payee (never matches a row)
@@ -292,6 +299,7 @@ class RecurringBill {
   final String? endsOn; // YYYY-MM-DD: the last due date (instalments)
   final bool manual; // added by hand: never touched by detection
   final bool ownCategory; // the owner chose the category: refresh never recategorizes it
+  final String? direction; // null or 'out' = a bill, 'in' = an income (P9)
 
   const RecurringBill({
     required this.id,
@@ -308,7 +316,14 @@ class RecurringBill {
     this.endsOn,
     this.manual = false,
     this.ownCategory = false,
+    this.direction,
   });
+
+  /// [direction] values: a bill (also null) and an income.
+  static const directionOut = 'out', directionIn = 'in';
+
+  /// A recurring income (P9): [direction] `in`. Everything else (null, `out`, an unknown value) is a bill.
+  bool get isIncome => direction == directionIn;
 
   /// The monthly interval, and what a stored `interval_days` outside [minIntervalDays]..[maxIntervalDays] reads as.
   static const defaultIntervalDays = 30;
@@ -316,8 +331,22 @@ class RecurringBill {
 
   static const statuses = {'candidate', 'confirmed', 'dismissed'};
 
+  /// Prefix of an income's stored `status` (P9 review): `in:candidate`, `in:confirmed`, `in:dismissed`. A build before
+  /// P9 (which drops `direction`) never treats such a row as a candidate or a confirmed bill, so it never lists,
+  /// reserves, recategorizes or pays it. [fromRow] maps it back: [status] is always one of [statuses].
+  static const incomeStatusPrefix = 'in:';
+
+  /// The stored `status` for [status] (one of [statuses]) of an income ([income]) or a bill.
+  static String storedStatus(String status, {required bool income}) => income ? '$incomeStatusPrefix$status' : status;
+
+  /// The stored values of a dismissed row (bill or income), for SQL filters.
+  static const dismissedStored = "'dismissed', 'in:dismissed'";
+
   /// The id of the bill for a payee key, the same on every device.
   static String idFor(String payee) => 'rec:$payee';
+
+  /// The id of the detected income for a payee key (P9), the same on every device; never equal to [idFor]'s.
+  static String incomeIdFor(String payee) => 'recin:$payee';
 
   /// Days a payment may be from its due date (and a detected gap from the class's days) for a bill repeating every
   /// [days]: ≤ 7 → 1, ≤ 14 → 2, ≤ 31 → 3 (`recurringDays`), ≤ 92 → 7, else 10.
@@ -342,8 +371,9 @@ class RecurringBill {
   /// What a cycle sets aside: the top of the range ([hasRange], owner: the highest amount), else [expectedAmount].
   int get reserveAmount => hasRange ? maxAmount! : expectedAmount;
 
-  /// A bill that repeats less often than monthly (quarterly, yearly): held in full until paid (owner, P4).
-  bool get isLong => intervalDays > 31;
+  /// A bill that repeats less often than monthly (quarterly, yearly): held in full until paid (owner, P4). Never an
+  /// income (nothing is reserved for one).
+  bool get isLong => !isIncome && intervalDays > 31;
 
   /// A bill shorter than any month (weekly, every 2 weeks, a custom interval under 27 days): each of its occurrences in
   /// a pay period is a cycle of its own (`dueCycles`). A monthly bill has one cycle per period, as before P4.
@@ -439,13 +469,19 @@ class RecurringBill {
       expectedAmount: _int(r['expected_amount']) ?? 0,
       intervalDays: interval == null || interval < minIntervalDays || interval > maxIntervalDays ? defaultIntervalDays : interval,
       nextDue: _str(r['next_due']) ?? '',
-      status: _str(r['status']) ?? 'candidate',
+      status: switch (_str(r['status'])) {
+        null => 'candidate',
+        final s when s.startsWith(incomeStatusPrefix) => s.substring(incomeStatusPrefix.length),
+        final s => s,
+      },
       lastPaidTx: _str(r['last_paid_tx']),
       minAmount: lo,
       maxAmount: hi,
       endsOn: switch (_str(r['ends_on'])) { final e? when isIsoDate(e) => e, _ => null }, // a bad stored date = no end
       manual: _int(r['manual']) == 1,
       ownCategory: _int(r['own_category']) == 1,
+      // An `in:` status marks an income even where `direction` was lost (a snapshot written by an older build).
+      direction: _str(r['direction']) ?? ((_str(r['status']) ?? '').startsWith(incomeStatusPrefix) ? directionIn : null),
     );
   }
 
@@ -464,6 +500,7 @@ class RecurringBill {
         endsOn: endsOn,
         manual: manual,
         ownCategory: ownCategory,
+        direction: direction,
       );
 }
 

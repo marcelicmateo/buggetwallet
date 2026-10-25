@@ -52,65 +52,86 @@ int medianCents(List<int> xs) {
 /// (`WalletSettings.currency`) count: a bill paid in another currency is never a candidate, so it is never reserved
 /// from the flexible money, and a foreign row at the same payee neither breaks nor joins the chain.
 /// P6: expects whole payments (`Categorizer.categorize`, one row per payment), never the expanded list (`Categorizer.expand`).
+///
+/// P9: recurring **incomes** are found the same way (classes, lookbacks, row minimums, band) on inflows: live bank rows
+/// (not hand-added) with `amount > 0` in a category of kind [BudgetKind.extra], in [currency]. Salary-kind rows (already
+/// the salary) and transfers never make one. An income candidate has `direction: 'in'` and id
+/// [RecurringBill.incomeIdFor], so a payee can have both a bill and an income. The list holds bills and incomes,
+/// ordered together by label, then id.
 List<RecurringBill> detectRecurring(List<CategorizedTx> txs, {required String today, required String currency}) {
   final starts = [for (final c in _classes) _lookbackStart(today, c.weeks, c.months)];
   final from = starts.reduce((a, b) => a.compareTo(b) <= 0 ? a : b);
   final byPayee = <String, List<CategorizedTx>>{};
+  final inByPayee = <String, List<CategorizedTx>>{};
   for (final t in txs) {
-    if (!t.tx.live || t.tx.manual || t.amount >= 0 || t.kind == BudgetKind.transfer || t.tx.currency != currency) continue;
+    if (!t.tx.live || t.tx.manual || t.amount == 0 || t.kind == BudgetKind.transfer || t.tx.currency != currency) continue;
     if (t.date.compareTo(from) < 0 || t.date.compareTo(today) > 0) continue;
-    (byPayee[merchantKey(t.tx)] ??= []).add(t);
+    if (t.amount < 0) {
+      (byPayee[merchantKey(t.tx)] ??= []).add(t);
+    } else if (t.kind == BudgetKind.extra) {
+      (inByPayee[merchantKey(t.tx)] ??= []).add(t);
+    }
   }
   final out = <RecurringBill>[];
   final perClass = <String, int>{};
-  for (final e in byPayee.entries) {
-    final all = e.value
-      ..sort((a, b) {
-        final d = a.date.compareTo(b.date);
-        return d != 0 ? d : a.tx.id.compareTo(b.tx.id);
-      });
-    for (var c = 0; c < _classes.length; c++) {
-      final cls = _classes[c];
-      final rows = [
-        for (final r in all)
-          if (r.date.compareTo(starts[c]) >= 0) r
-      ];
-      final bill = _fits(e.key, rows, cls.period.days, cls.rows);
-      if (bill == null) continue;
-      out.add(bill);
-      perClass[cls.period.name] = (perClass[cls.period.name] ?? 0) + 1;
-      break;
+  var incomes = 0;
+  void scan(Map<String, List<CategorizedTx>> groups, {required bool income}) {
+    for (final e in groups.entries) {
+      final all = e.value
+        ..sort((a, b) {
+          final d = a.date.compareTo(b.date);
+          return d != 0 ? d : a.tx.id.compareTo(b.tx.id);
+        });
+      for (var c = 0; c < _classes.length; c++) {
+        final cls = _classes[c];
+        final rows = [
+          for (final r in all)
+            if (r.date.compareTo(starts[c]) >= 0) r
+        ];
+        final bill = _fits(e.key, rows, cls.period.days, cls.rows, income: income);
+        if (bill == null) continue;
+        out.add(bill);
+        perClass[cls.period.name] = (perClass[cls.period.name] ?? 0) + 1;
+        if (income) incomes++;
+        break;
+      }
     }
   }
+
+  scan(byPayee, income: false);
+  scan(inByPayee, income: true);
   out.sort((a, b) {
     final d = a.label.compareTo(b.label);
     return d != 0 ? d : a.id.compareTo(b.id);
   });
   // Counts only: payees are personal.
-  logEvent(_log, Level.FINE, 'recurring.detect', {'payees': byPayee.length, 'candidates': out.length, ...perClass});
+  logEvent(_log, Level.FINE, 'recurring.detect',
+      {'payees': byPayee.length, 'candidates': out.length, 'incomePayees': inByPayee.length, 'incomes': incomes, ...perClass});
   return out;
 }
 
 /// The candidate for [payee] when its [rows] (sorted, oldest first) make a bill repeating every [days]: at least
 /// [minRows], every gap within [RecurringBill.toleranceFor] of [days], every amount within the band of the median.
-RecurringBill? _fits(String payee, List<CategorizedTx> rows, int days, int minRows) {
+/// [income]: inflows (an income candidate, P9), else outflows (a bill).
+RecurringBill? _fits(String payee, List<CategorizedTx> rows, int days, int minRows, {bool income = false}) {
   if (rows.length < minRows) return null;
   final tol = RecurringBill.toleranceFor(days);
   for (var i = 1; i < rows.length; i++) {
     if ((daysBetween(rows[i - 1].date, rows[i].date) - days).abs() > tol) return null;
   }
-  final amounts = [for (final r in rows) -r.amount];
+  final amounts = [for (final r in rows) income ? r.amount : -r.amount];
   final median = medianCents(amounts);
   if (median <= 0 || amounts.any((a) => !_withinBand(a, median))) return null;
   final last = rows.last;
   return RecurringBill(
-    id: RecurringBill.idFor(payee),
+    id: income ? RecurringBill.incomeIdFor(payee) : RecurringBill.idFor(payee),
     payee: payee,
     label: merchantName(last.tx),
     category: last.category,
     expectedAmount: median,
     intervalDays: days,
     nextDue: addDays(last.date, days),
+    direction: income ? RecurringBill.directionIn : null,
   );
 }
 
@@ -145,6 +166,11 @@ int partsDays(RecurringBill b) {
 /// [recurringPercent] band, `expectedAmount − expectedAmount ~/ 10`.
 int partsThreshold(RecurringBill b) => b.hasRange ? b.minAmount! : b.expectedAmount - b.expectedAmount ~/ 10;
 
+/// Whether [cents] (an inflow, positive) is an amount that lands income [b] (P9): the rule of a single payment
+/// ([_paysInOne]), within the range or the [recurringPercent] band. A payment of the payee that does not fit is a
+/// one-off extra, not the income.
+bool incomeFits(RecurringBill b, int cents) => _paysInOne(b, cents);
+
 /// Whether [cents] (an outflow, positive) is an amount that pays [b] in one go: within the range ([hasRange], inclusive),
 /// else within [recurringPercent] of `expectedAmount`.
 bool _paysInOne(RecurringBill b, int cents) =>
@@ -164,26 +190,32 @@ bool _paysInOne(RecurringBill b, int cents) =>
 ///   [RecurringPayments.parts]: one row alone never pays a cycle (that is the single-payment rule), but it counts.
 /// Finished bills (`endsOn` passed) are left out. Deterministic, so every device marks the same cycle paid with the
 /// same row; rows are never changed (a bill never reclassifies).
+///
+/// P9: for an income ([RecurringBill.isIncome]) the sign flips: a positive row of the payee within ± tolerance of
+/// `nextDue` whose amount is in the range (or band) lands the cycle, by the same closest-first rule. Incomes have no
+/// parts: nothing is ever counted towards one.
 RecurringPayments planRecurringPayments(List<RecurringBill> bills, List<Tx> rows, {required String currency}) {
   final byPayee = <String, List<Tx>>{};
+  final inByPayee = <String, List<Tx>>{};
   final dateOf = <String, String>{};
   for (final t in rows) {
     dateOf[t.id] = t.date;
-    if (!t.live || t.manual || t.amount >= 0 || t.date.length != 10 || t.currency != currency) continue;
-    (byPayee[merchantKey(t)] ??= []).add(t);
+    if (!t.live || t.manual || t.amount == 0 || t.date.length != 10 || t.currency != currency) continue;
+    ((t.amount < 0 ? byPayee : inByPayee)[merchantKey(t)] ??= []).add(t);
   }
   final paid = <String, Tx>{};
   final parts = <String, List<Tx>>{};
   final inParts = <String>{};
   for (final b in bills) {
     if (!b.confirmed || b.payee.isEmpty || b.nextDue.length != 10 || b.expectedAmount <= 0 || b.finished) continue;
-    final mine = byPayee[b.payee];
+    final income = b.isIncome;
+    final mine = (income ? inByPayee : byPayee)[b.payee];
     if (mine == null) continue;
     final tol = b.tolerance;
     Tx? best;
     var bestDays = 0;
     for (final t in mine) {
-      if (t.id == b.lastPaidTx || !_paysInOne(b, -t.amount)) continue;
+      if (t.id == b.lastPaidTx || !_paysInOne(b, income ? t.amount : -t.amount)) continue;
       final days = daysBetween(b.nextDue, t.date).abs();
       if (days > tol) continue;
       if (best == null ||
@@ -197,6 +229,7 @@ RecurringPayments planRecurringPayments(List<RecurringBill> bills, List<Tx> rows
       paid[b.id] = best;
       continue;
     }
+    if (income) continue; // no parts for an income
     // The wide window only for the owner's own bills and ranged ones: on a detected bill without a range, ordinary
     // purchases at the payee in the days before would otherwise add up to a payment (lead decision, P4 review).
     final from = addDays(b.nextDue, -(b.manual || b.hasRange ? partsDays(b) : tol)), to = addDays(b.nextDue, tol);

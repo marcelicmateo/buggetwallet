@@ -42,7 +42,17 @@ class PlanScreen extends StatefulWidget {
 
   /// Fires when Today's "Held" line is tapped: the page then scrolls to Accounts.
   final Listenable? showAccounts;
-  const PlanScreen({super.key, required this.wc, this.chooser = const FileChooser(), this.showBills, this.showBillsDb, this.showAccounts});
+
+  /// Scrolls to Expected income (Today's expected-income line).
+  final Listenable? showIncome;
+  const PlanScreen(
+      {super.key,
+      required this.wc,
+      this.chooser = const FileChooser(),
+      this.showBills,
+      this.showBillsDb,
+      this.showAccounts,
+      this.showIncome});
   @override
   State<PlanScreen> createState() => _PlanScreenState();
 }
@@ -68,6 +78,7 @@ class _PlanScreenState extends State<PlanScreen> {
   final _billsKey = GlobalKey();
   final _billsDbKey = GlobalKey();
   final _accountsKey = GlobalKey();
+  final _incomeKey = GlobalKey();
   final _scroll = ScrollController();
 
   /// Field errors from the last Save, by key (shown under the field until it is edited).
@@ -86,6 +97,7 @@ class _PlanScreenState extends State<PlanScreen> {
     widget.showBills?.addListener(_scrollToBills);
     widget.showBillsDb?.addListener(_scrollToBillsDb);
     widget.showAccounts?.addListener(_scrollToAccounts);
+    widget.showIncome?.addListener(_scrollToIncome);
   }
 
   /// Scrolls to Expected bills. A ListView builds only the rows near the window, so when the panel is not built yet the page
@@ -95,6 +107,8 @@ class _PlanScreenState extends State<PlanScreen> {
   Future<void> _scrollToBillsDb() => _scrollTo(_billsDbKey);
 
   Future<void> _scrollToAccounts() => _scrollTo(_accountsKey);
+
+  Future<void> _scrollToIncome() => _scrollTo(_incomeKey);
 
   Future<void> _scrollTo(GlobalKey key) async {
     for (var i = 0; i < 12 && mounted; i++) {
@@ -129,6 +143,10 @@ class _PlanScreenState extends State<PlanScreen> {
       old.showAccounts?.removeListener(_scrollToAccounts);
       widget.showAccounts?.addListener(_scrollToAccounts);
     }
+    if (old.showIncome != widget.showIncome) {
+      old.showIncome?.removeListener(_scrollToIncome);
+      widget.showIncome?.addListener(_scrollToIncome);
+    }
   }
 
   @override
@@ -137,6 +155,7 @@ class _PlanScreenState extends State<PlanScreen> {
     widget.showBills?.removeListener(_scrollToBills);
     widget.showBillsDb?.removeListener(_scrollToBillsDb);
     widget.showAccounts?.removeListener(_scrollToAccounts);
+    widget.showIncome?.removeListener(_scrollToIncome);
     _scroll.dispose();
     for (final c in f.values) {
       c.dispose();
@@ -286,6 +305,22 @@ class _PlanScreenState extends State<PlanScreen> {
                           sub: 'Paid since payday: ${moneyExact(p.fixedPaid[id] ?? 0, cur)}'
                               '${(s.planLines[id] ?? 0) > 0 ? '' : '\nNot taken off your daily money until you fill this in.'}'),
                     for (final g in wc.goals) LineItem(g.name, moneyExact(-g.monthly, cur), sub: 'savings goal'),
+                    // P9: money from a confirmed recurring income that has landed is spending money; one not landed yet is only listed.
+                    if (p.landedIncome > 0)
+                      LineItem('Extra income received', '+${moneyExact(p.landedIncome, cur)}',
+                          key: const ValueKey('ledgerLandedIncome'), sub: 'Regular income that is in; it is spending money now'),
+                    if (p.expectedIncome.isNotEmpty)
+                      Padding(
+                        key: const ValueKey('ledgerExpectedIncome'),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          for (final x in p.expectedIncome)
+                            Text(
+                                'Expected, not counted yet: ${x.bill.label.isNotEmpty ? x.bill.label : x.bill.payee.replaceAll('_', ' ')} '
+                                '${moneyExact(x.amount, cur)} on ${shortDateOrRaw(x.due)}',
+                                style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+                        ]),
+                      ),
                     // Bills and planned costs due before payday come off the spending money too: the rows add up to the total.
                     if (p.reservedBills + p.reservedPlanned > 0)
                       LineItem('Set aside for coming costs', moneyExact(-(p.reservedBills + p.reservedPlanned), cur),
@@ -317,6 +352,7 @@ class _PlanScreenState extends State<PlanScreen> {
               PlanSuggestionsPanel(wc: wc),
               KeyedSubtree(key: _accountsKey, child: AccountsPanel(wc: wc)),
               KeyedSubtree(key: _billsKey, child: ExpectedBillsPanel(wc: wc)),
+              KeyedSubtree(key: _incomeKey, child: ExpectedIncomePanel(wc: wc)),
               KeyedSubtree(key: _billsDbKey, child: BillsPanel(wc: wc, chooser: widget.chooser)),
               CategoriesPanel(key: const ValueKey('categoriesPanel'), wc: wc),
               TagsPanel(key: const ValueKey('tagsPanel'), wc: wc),

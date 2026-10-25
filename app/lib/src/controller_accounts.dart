@@ -59,7 +59,7 @@ extension AccountsDb on WalletController {
   /// Plan values read from the imports and the confirmed bills (home currency only). Cached per data version and day.
   PlanSuggestion planSuggestion() => _cached('planSuggestion', () {
         final confirmed = [
-          for (final b in recurringBills())
+          for (final b in expectedBills())
             if (b.confirmed) b
         ];
         return suggestPlan(txs, settings, today(), confirmed: confirmed, table: categoryTable);

@@ -57,12 +57,12 @@ class GoalsScreen extends StatelessWidget {
         child: ListView(
             padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
             children: gapped([
-              if (p.extras > 0 || extraAbove > 0)
+              if (p.extrasForGoals > 0 || extraAbove > 0)
                 Panel(color: c.accentSoft, children: [
                   const Heading('Extra money this month', size: BwType.headingSize),
                   Text(
                     '${extraAbove > 0 ? 'Salary came in ${money(extraAbove, cur, decimals: 0)} above plan. ' : ''}'
-                    '${p.extras > 0 ? 'Other income: ${money(p.extras, cur, decimals: 0)}. ' : ''}'
+                    '${p.extrasForGoals > 0 ? 'Other income: ${money(p.extrasForGoals, cur, decimals: 0)}. ' : ''}'
                     "Put it straight into a goal so it doesn't leak into daily spending.",
                     style: const TextStyle(fontSize: BwType.bodySize),
                   ),

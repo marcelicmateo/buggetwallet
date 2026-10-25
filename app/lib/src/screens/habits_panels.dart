@@ -84,7 +84,7 @@ class ExpectedBillsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final cur = wc.currency;
     final today = wc.today();
-    final bills = wc.recurringBills();
+    final bills = wc.expectedBills(); // never an income (P9): those are in ExpectedIncomePanel
     final candidates = bills.where((b) => b.status == 'candidate').toList();
     final confirmed = bills.where((b) => b.status == 'confirmed').toList();
     final allMonthly = candidates.every((b) => RecurringPeriod.of(b.intervalDays) == RecurringPeriod.monthly);
@@ -234,6 +234,143 @@ class ExpectedBillsPanel extends StatelessWidget {
             wc.deleteRecurring(b.id);
             toast(context, 'Bill removed');
           },
+        ),
+      ]),
+    );
+  }
+}
+
+/// Plan › Expected income (P9): regular money in besides the salary (a side job, rent received), found in the imports or added by
+/// hand. Candidates first (Confirm / Not regular), then confirmed incomes (how often, amount or range, next date, Edit, Delete with
+/// Undo). It is shown as expected; it counts toward the spending money only once it lands (Payday plan lines).
+class ExpectedIncomePanel extends StatelessWidget {
+  final WalletController wc;
+  const ExpectedIncomePanel({super.key, required this.wc});
+
+  static String _name(RecurringBill b) => b.label.isNotEmpty ? b.label : b.payee.replaceAll('_', ' ');
+
+  static String _period(RecurringBill b) {
+    final t = billPeriodText(b.intervalDays);
+    return '${t[0].toUpperCase()}${t.substring(1)}';
+  }
+
+  static int _shown(RecurringBill b) => b.hasRange ? b.minAmount! : b.expectedAmount;
+
+  void _delete(BuildContext context, RecurringBill b) {
+    logNav('income.delete');
+    wc.deleteRecurring(b.id);
+    toast(context, 'Income removed', actionLabel: 'Undo', onAction: () => wc.undeleteRecurring(b.id));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cur = wc.currency;
+    final today = wc.today();
+    final incomes = wc.expectedIncomes();
+    final candidates = incomes.where((b) => b.status == 'candidate').toList();
+    final confirmed = incomes.where((b) => b.status == 'confirmed').toList();
+    return Panel(key: const ValueKey('expectedIncomePanel'), children: [
+      const SectionHead('Expected income'),
+      Explainer(wc, 'expectedIncome',
+          'Regular money that comes in besides your salary. It is shown as expected. It counts toward your spending money only once it lands.'),
+      if (candidates.isEmpty && confirmed.isEmpty)
+        const EmptyNote('No regular income found yet. Add one, or it shows up after a few months of imports.'),
+      if (candidates.isNotEmpty) ...[
+        const Heading('Looks like regular income', size: BwType.headingSize),
+        Rows(children: [
+          for (final b in candidates)
+            Padding(
+              key: ValueKey('incomeCandidate:${b.id}'),
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                SplitRow(
+                    start: Text(_name(b), style: const TextStyle(fontWeight: FontWeight.w500)),
+                    end: Text(moneyExact(b.expectedAmount, cur),
+                        textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
+                Text('${_period(b)} · next about ${shortDateOrRaw(b.nextDue)}',
+                    style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+                const SizedBox(height: 4),
+                Wrap(spacing: 8, runSpacing: 4, children: [
+                  OutlinedButton(
+                      key: ValueKey('incomeConfirm:${b.id}'),
+                      style: accentOutlined(context),
+                      onPressed: () {
+                        logNav('income.confirm');
+                        wc.confirmRecurring(b.id);
+                      },
+                      child: const Text('Confirm')),
+                  TextButton(
+                      key: ValueKey('incomeDismiss:${b.id}'),
+                      onPressed: () {
+                        logNav('income.dismiss');
+                        wc.dismissRecurring(b.id);
+                      },
+                      child: const Text('Not regular')),
+                  TextButton(
+                      key: ValueKey('incomeEdit:${b.id}'),
+                      onPressed: () => openRecurringForm(context, wc, edit: b),
+                      child: const Text('Edit')),
+                ]),
+              ]),
+            ),
+        ]),
+      ],
+      if (confirmed.isNotEmpty) ...[
+        const Heading('Confirmed', size: BwType.headingSize),
+        Rows(children: [
+          for (final b in confirmed) _confirmedRow(context, b, cur, today),
+        ]),
+      ],
+      const SizedBox(height: 8),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: OutlinedButton.icon(
+          key: const ValueKey('addIncome'),
+          style: accentOutlined(context),
+          onPressed: () => openRecurringForm(context, wc, income: true),
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Add income'),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _confirmedRow(BuildContext context, RecurringBill b, String cur, String today) {
+    final monthly = RecurringPeriod.of(b.intervalDays) == RecurringPeriod.monthly;
+    final meta = TextStyle(fontSize: BwType.metaSize, color: context.c.ink2);
+    return Container(
+      key: ValueKey('income:${b.id}'),
+      constraints: const BoxConstraints(minHeight: touchMin),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SplitRow(
+                start: Text(_name(b), style: const TextStyle(fontWeight: FontWeight.w500)),
+                end: Text(moneyExact(_shown(b), cur), textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
+            Text(
+                [wc.categoryTable.label(b.category), if (!monthly) billPeriodText(b.intervalDays), 'next ${shortDateOrRaw(b.nextDue)}']
+                    .join(' · '),
+                style: meta),
+            if (b.hasRange)
+              Text('${billRangeShort(b.minAmount!, b.maxAmount!, cur)}, counted at ${moneyExact(b.minAmount!, cur)}',
+                  key: ValueKey('incomeRange:${b.id}'), style: meta),
+            if (b.nextDue.compareTo(today) < 0) const StatusLabel(good: false, text: 'Not received yet'),
+            Wrap(spacing: 4, children: [
+              TextButton(
+                key: ValueKey('incomeEdit:${b.id}'),
+                style: ExpectedBillsPanel._tight,
+                onPressed: () => openRecurringForm(context, wc, edit: b),
+                child: const Text('Edit'),
+              ),
+            ]),
+          ]),
+        ),
+        IconButton(
+          key: ValueKey('incomeDelete:${b.id}'),
+          tooltip: 'Remove income',
+          icon: const Icon(Icons.delete_outline),
+          onPressed: () => _delete(context, b),
         ),
       ]),
     );
