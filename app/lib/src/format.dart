@@ -207,3 +207,18 @@ String percent(double? share) {
 
 /// "12 Oct – 11 Nov" for a period with an exclusive end date.
 String dateRange(String start, String endExclusive) => '${shortDate(start)} – ${shortDate(addDays(endExclusive, -1))}';
+
+/// An amount as a bank app wants it typed: comma decimals, no grouping, no symbol ("12,50"), whatever the look setting says.
+String bankAmountText(int cents) {
+  final a = cents.abs();
+  return '${cents < 0 ? '-' : ''}${a ~/ 100},${(a % 100).toString().padLeft(2, '0')}';
+}
+
+/// An IBAN without spaces, upper case.
+String plainIban(String iban) => iban.replaceAll(RegExp(r'\s'), '').toUpperCase();
+
+/// An IBAN in groups of four for reading; copy it with [plainIban].
+String groupedIban(String iban) {
+  final p = plainIban(iban);
+  return [for (var i = 0; i < p.length; i += 4) p.substring(i, i + 4 > p.length ? p.length : i + 4)].join(' ');
+}

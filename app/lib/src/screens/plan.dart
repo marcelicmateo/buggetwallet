@@ -199,6 +199,7 @@ class _PlanScreenState extends State<PlanScreen> {
     final s = wc.settings;
     final cur = wc.currency;
     final p = wc.period();
+    final loanLeft = wc.loanLeftNow();
     final lowIncome = p.lowIncome;
     final planIds = wc.categoryTable.planLineIds;
 
@@ -300,9 +301,21 @@ class _PlanScreenState extends State<PlanScreen> {
                     LineItem(
                         'Salary ${s.incomeMode == 'received' && p.received > 0 ? '(received)' : '(planned)'}', moneyExact(p.income, cur)),
                     LineItem('Rent', moneyExact(-s.rent, cur), sub: 'Paid since payday: ${moneyExact(p.fixedPaid['Rent'] ?? 0, cur)}'),
-                    LineItem('Loan', moneyExact(-s.loan, cur),
-                        sub:
-                            'Paid since payday: ${moneyExact(p.fixedPaid['Loan'] ?? 0, cur)}${s.loanEnd != null ? ' · ends ${monthLong(s.loanEnd!)}' : ''}'),
+                    Column(children: [
+                      LineItem('Loan', moneyExact(-s.loan, cur),
+                          sub:
+                              'Paid since payday: ${moneyExact(p.fixedPaid['Loan'] ?? 0, cur)}${s.loanEnd != null ? ' · ends ${monthLong(s.loanEnd!)}' : ''}'),
+                      if (loanLeft != null)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Muted(
+                                key: const ValueKey('ledgerLoanLeft'),
+                                '${loanLeft.payments} payment${loanLeft.payments == 1 ? '' : 's'} left · ${moneyExact(loanLeft.cents, cur)} at this rate'),
+                          ),
+                        ),
+                    ]),
                     LineItem('Bills & subscriptions', moneyExact(-s.subs, cur),
                         sub: 'Paid since payday: ${moneyExact(p.fixedPaid['Bills & subscriptions'] ?? 0, cur)}'),
                     for (final id in planIds)

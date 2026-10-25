@@ -306,6 +306,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   main/-wal/-shm/-journal replaced by it and converted again; a failed rekey or check restores it at once. Test hook
   `step:` (`copied`, `rekeyed`, `verified`). The app (R6b) passes the key on native and wraps the web VFS
   (`multipleciphers-<fs>`) itself.
+- `loan.dart` — `loanLeft(settings, today)` → `LoanLeft {payments, cents, endMonth}` or null (no loan, no `loanEnd`, none left): counts the months from today's month to `loanEnd` inclusive whose payday (`paydayDay`, clamped to the month's last day) is today or later; `cents = payments × loan` (no interest data). Tests: `test/loan_left_test.dart`.
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart` (H7 bounded HLC: `maxClockDrift` 1 h; an owner write (the
   public write API) throws `ClockBehindException` (nothing written, message without clock values) while this device's
   wall clock is more than that behind the highest reading it wrote with (device-local meta `wall_high`, raised by every

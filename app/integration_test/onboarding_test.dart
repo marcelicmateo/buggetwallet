@@ -134,6 +134,8 @@ void main() {
     await t.pumpAndSettle();
     await t.enterText(field('Wallet key'), other);
     await t.tap(find.text('Join wallet'));
+    // Joining writes the key and opens the database (real I/O), which pumpAndSettle does not wait for.
+    await waitFor(t, () => wc.hasWallet, what: 'wallet joined');
     await t.pumpAndSettle();
     expect(wc.hasWallet, isTrue);
     expect(await wc.keyText(), other);

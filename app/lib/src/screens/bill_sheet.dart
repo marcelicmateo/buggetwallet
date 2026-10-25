@@ -14,6 +14,7 @@ import '../theme.dart';
 import '../widgets/category_picker.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
+import 'pay_sheet.dart';
 
 /// Opens one bill (the sheet with its fields) and shows the toast for its result. [chooser] saves the original file where it cannot
 /// be shown.
@@ -171,6 +172,16 @@ class _BillSheetState extends State<BillSheet> {
     if (widget.wc.confirmBill(b.id) && mounted) Navigator.pop(context, 'confirmed');
   }
 
+  /// Pay copies what the sheet shows: unsaved edits are saved first (a refusal stays on the sheet, as with Save), and the Pay sheet
+  /// is built from the saved bill. Offered for a confirmed bill only, so no "Unsure" field is left.
+  void _pay(Bill b) {
+    if (!_save(b)) return;
+    final saved = widget.wc.bill(b.id);
+    if (saved == null) return;
+    logNav('bill.pay');
+    showSheet<void>(context, PaySheet(key: const ValueKey('paySheet'), wc: widget.wc, bill: saved));
+  }
+
   Future<void> _paidBy(Bill b) async {
     logNav('bill.paidBy');
     final txId = await showSheet<String>(context, _CandidatesSheet(wc: widget.wc, bill: b));
@@ -299,7 +310,11 @@ class _BillSheetState extends State<BillSheet> {
       const SizedBox(height: 10),
       TextField(key: const ValueKey('billPayee'), controller: payee, decoration: deco('Payee', filled: payee.text.isNotEmpty)),
       const SizedBox(height: 10),
-      TextField(key: const ValueKey('billIban'), controller: iban, decoration: deco('IBAN', filled: iban.text.isNotEmpty)),
+      TextField(
+          key: const ValueKey('billIban'),
+          controller: iban,
+          onChanged: (_) => setState(() => error = null),
+          decoration: deco('IBAN', filled: iban.text.isNotEmpty)),
       const SizedBox(height: 10),
       TextField(
           key: const ValueKey('billReference'), controller: reference, decoration: deco('Reference', filled: reference.text.isNotEmpty)),
@@ -334,6 +349,19 @@ class _BillSheetState extends State<BillSheet> {
         Rows(children: [
           for (final i in b.items) LineItem(i.name, moneyExact(i.amount, cur), sub: i.quantity == null ? null : 'Quantity ${i.quantity}'),
         ]),
+      ],
+      if (b.status == BillStatus.confirmed && !b.paid && iban.text.trim().isNotEmpty && (parseMoney(total.text) ?? 0) > 0) ...[
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            key: const ValueKey('billPay'),
+            style: accentOutlined(context),
+            icon: const Icon(Icons.payments_outlined, size: 18),
+            label: const Text('Pay'),
+            onPressed: () => _pay(b),
+          ),
+        ),
       ],
       if (fileType != null) ...[
         const SizedBox(height: 12),
