@@ -13,7 +13,7 @@ import 'bill_platform.dart';
 import 'calendar_platform.dart';
 import 'calendar_source.dart';
 import 'clock_notice.dart';
-import 'format.dart' show NumberStyle, money, moneyExact, numberStyle;
+import 'format.dart' show NumberStyle, money, numberStyle;
 import 'home_widget.dart';
 import 'ics_fetch.dart';
 import 'insights_api.dart' show InsightRange;
@@ -80,7 +80,10 @@ class ImportLine {
   final String file;
   final String message;
   final bool ok;
-  const ImportLine(this.file, this.message, this.ok);
+
+  /// How many rows the file added to the wallet (0 for a file that failed or held nothing new).
+  final int added;
+  const ImportLine(this.file, this.message, this.ok, {this.added = 0});
 }
 
 /// Everything the Spending tab shows for one month, worked out in [WalletController.spending].
@@ -1136,6 +1139,7 @@ class WalletController extends ChangeNotifier {
     if (written) {
       await clearHomeWidget(); // the old wallet's number must not stay on the home screen
       await _setAsideOpenWallet(k, passphrase, relay);
+      await clearHomeWidget(); // a reload on the way may have given it again
     }
     try {
       await joinWallet(text, passphrase: passphrase, relay: relay, keyWritten: written);
@@ -1144,6 +1148,7 @@ class WalletController extends ChangeNotifier {
       // next start finishes the join.
       key = null;
       notifyListeners();
+      await clearHomeWidget();
       rethrow;
     }
     await _clearJoinMarker();
@@ -1875,7 +1880,8 @@ class WalletController extends ChangeNotifier {
             name,
             '$bank: ${s.added} new, ${s.duplicates} already here${s.matched > 0 ? ', ${s.matched} matched to expenses you added' : ''}'
             '${batch.invalid > 0 ? ', ${batch.invalid} unreadable ${batch.invalid == 1 ? 'row' : 'rows'} left out' : ''}.',
-            true));
+            true,
+            added: s.added));
       } on ClockBehindException catch (e) {
         noticeClockBehind(e); // nothing of this file was written; say why instead of "couldn't read"
         lines.add(ImportLine(name, clockBehindText, false));

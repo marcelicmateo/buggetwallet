@@ -39,8 +39,6 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Long-press shortcut "Add expense" (res/xml/shortcuts.xml). -->
-            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts"/>
             <!-- Share to app (receive_sharing_intent): a PDF or a photo of a bill sent from another app lands in Plan > Bills > To
                  review. Singletask so a share while the app runs reaches the running app. No storage permission: the plugin reads
                  the shared content through the sender's grant. -->

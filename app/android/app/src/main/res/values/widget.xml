@@ -15,7 +15,8 @@
     <string name="widget_over_today">Over today</string>
     <string name="widget_over_plan">Over the plan</string>
     <string name="widget_ended">Payday passed</string>
-    <string name="widget_updated">Updated %1$s</string>
+    <string name="widget_to">to %1$s</string>
+    <string name="widget_today">Today</string>
     <string name="shortcut_add_short">Add</string>
     <string name="shortcut_add_long">Add expense</string>
 </resources>

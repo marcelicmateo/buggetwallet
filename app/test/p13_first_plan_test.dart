@@ -111,7 +111,7 @@ void main() {
     await t.pump(const Duration(seconds: 4));
   });
 
-  testWidgets('Not now writes nothing and the sheet is not shown again; Plan › Suggestions still lists the rows', (t) async {
+  testWidgets('Not now writes nothing, hides the same rows as the Not now in Plan › Suggestions and is not shown again', (t) async {
     final wc = proposalWallet();
     await _pumpImportButton(t, wc, _Chooser(_csv));
     await _import(t);
@@ -119,9 +119,22 @@ void main() {
     expect(find.byKey(const ValueKey('firstPlanHeading')), findsNothing);
     expect(wc.settings.salary, 150000);
     expect(wc.repo.localValue('planSuggestShown'), '1');
-    expect(wc.planProposalList(), isNotEmpty, reason: 'Not now here is not Not now there');
+    expect(wc.repo.localValue('planNotNow:salary'), '120000');
+    expect(wc.repo.localValue('planNotNow:rent'), '60000');
+    expect(wc.planProposalList(), isEmpty, reason: 'the same as Not now in Plan › Suggestions');
     await _import(t);
     expect(find.byKey(const ValueKey('firstPlanHeading')), findsNothing, reason: 'once per wallet');
+    await t.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('an import that added no rows (all already here) shows no sheet and does not use it up', (t) async {
+    final wc = proposalWallet();
+    await _pumpImportButton(t, wc, _Chooser(_csv));
+    await t.runAsync(() => wc.importFiles([('synthetic.csv', Uint8List.fromList(utf8.encode(_csv)))])); // the row is in already
+    await _import(t);
+    expect(wc.lastImport.single.added, 0);
+    expect(find.byKey(const ValueKey('firstPlanHeading')), findsNothing);
+    expect(wc.shouldOfferFirstPlan(), isTrue);
     await t.pump(const Duration(seconds: 4));
   });
 

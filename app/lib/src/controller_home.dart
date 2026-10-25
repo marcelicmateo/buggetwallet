@@ -1,7 +1,7 @@
 // The home-screen widget and the launcher shortcut in the controller (P13, spec docs/context/P13_SPEC.md §1 and §2). A `part` of
 // controller.dart. Android only: everywhere else [NoHomeWidget] does nothing.
 //
-// Privacy: the widget gets three words only (the already formatted amount of "Safe to spend today", a status word and the day it was
+// Privacy: the widget gets a few words only (the already formatted amount of "Safe to spend today", a status word and the day it was
 // computed). Logs carry flags only (`widget.update {changed}`, `shortcut.used {action}`), never the amount.
 part of 'controller.dart';
 
@@ -23,9 +23,9 @@ extension HomeIntegration on WalletController {
             : p.overBudget
                 ? WidgetStatus.overBudget
                 : WidgetStatus.ok;
-    final cents = status == WidgetStatus.ok ? p.safeToday : 0;
-    final amount = cents > 0 && cents < 10000 ? moneyExact(cents, cur) : money(cents, cur, decimals: 0);
-    return HomeWidgetState(amount: amount, status: status, date: today());
+    // The same text as Today's hero (`safeToSpend`) when it shows the safe amount; the other states give 0 and say why in the status.
+    final amount = money(status == WidgetStatus.ok ? p.safeToday : 0, cur, decimals: 0);
+    return HomeWidgetState(amount: amount, status: status, date: today(), until: status == WidgetStatus.ok ? p.end : null);
   }
 
   /// Called after every reload and day change: one update per burst, and only when the words changed.

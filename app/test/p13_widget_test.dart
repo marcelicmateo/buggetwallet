@@ -6,6 +6,8 @@ import 'dart:async';
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/home_widget.dart';
+import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/widgets/common.dart' show MoneyText;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -67,7 +69,7 @@ void main() {
   });
 
   group('widget updates', () {
-    test('a reload gives the widget amount, status and date; nothing else', () async {
+    test('a reload gives the widget amount, status, date and payday; nothing else', () async {
       final w = FakeHomeWidget();
       final wc = wallet(w);
       await flush();
@@ -76,10 +78,33 @@ void main() {
       expect(s.status, WidgetStatus.ok);
       expect(s.date, '2026-10-20');
       expect(s.amount, matches(RegExp(r'\d')));
-      expect(s.toMap().keys.toSet(), {'amount', 'status', 'date'});
+      expect(s.toMap().keys.toSet(), {'amount', 'status', 'date', 'until'});
+      expect(s.until, wc.period().end, reason: 'the payday the line "to 10 Nov" shows');
       expect(s.toMap().values.join(' '), isNot(contains('SecretShopNote')));
       expect(lines.join('\n'), isNot(contains(s.amount)), reason: 'the amount is never logged');
       expect(lines.where((l) => l.contains('widget.update')), isNotEmpty);
+      wc.dispose();
+    });
+
+    testWidgets('the widget\'s ok amount is the text Today shows as "Safe to spend today"', (t) async {
+      final w = FakeHomeWidget();
+      final wc = wallet(w);
+      await t.runAsync(flush);
+      await pumpApp(t, Scaffold(body: TodayScreen(wc: wc, openPlan: () {})), size: const Size(400, 3000));
+      final shown = t.widget<MoneyText>(find.byKey(const ValueKey('safeToSpend'))).text;
+      expect(w.updates.last.status, WidgetStatus.ok);
+      expect(w.updates.last.amount, shown);
+      await t.pump(const Duration(seconds: 4));
+    });
+
+    test('a non-ok state sends no payday', () async {
+      final w = FakeHomeWidget();
+      final wc = wallet(w);
+      wc.repo.addTransaction(date: '2026-10-20', amount: 900000, category: 'Shopping');
+      wc.reload();
+      await flush();
+      expect(w.updates.last.status, isNot(WidgetStatus.ok));
+      expect(w.updates.last.toMap().containsKey('until'), isFalse);
       wc.dispose();
     });
 
@@ -158,6 +183,18 @@ void main() {
       wc.dispose();
     });
 
+    test('joining another wallet clears the widget again after the old one was set aside', () async {
+      final w = FakeHomeWidget();
+      final wc = wallet(w);
+      await flush();
+      wc.repo.setLocalValue('keyBackupConfirmed', wc.today());
+      final before = w.clears;
+      await wc.joinAnotherWallet(await VaultKey.generate().toText()).then((_) {}, onError: (_) {});
+      await flush();
+      expect(w.clears, greaterThan(before), reason: 'cleared at least once whatever the join did here');
+      wc.dispose();
+    });
+
     test('where there is no widget (desktop, web) nothing is called', () async {
       final w = FakeHomeWidget(on: false);
       final wc = wallet(w);
@@ -200,12 +237,12 @@ void main() {
       });
     });
 
-    test('update and clear: exactly three words, then nothing', () async {
+    test('update and clear: exactly the four words, then nothing', () async {
       final w = AndroidHomeWidget();
-      await w.update(const HomeWidgetState(amount: '12 €', status: 'ok', date: '2026-10-20'));
+      await w.update(const HomeWidgetState(amount: '12 €', status: 'ok', date: '2026-10-20', until: '2026-11-10'));
       await w.clear();
       expect(calls.map((c) => c.method), ['update', 'clear']);
-      expect(calls.first.arguments, {'amount': '12 €', 'status': 'ok', 'date': '2026-10-20'});
+      expect(calls.first.arguments, {'amount': '12 €', 'status': 'ok', 'date': '2026-10-20', 'until': '2026-11-10'});
       expect(calls.last.arguments, isNull);
     });
 

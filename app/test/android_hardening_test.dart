@@ -136,14 +136,16 @@ void main() {
       expect(File('pubspec.yaml').readAsStringSync(), isNot(contains('device_calendar')));
     });
 
-    test('the launcher shortcut: meta-data on the launcher activity and one static shortcut that sends bw.action=addExpense', () {
-      expect(manifest, contains('android:name="android.app.shortcuts"'));
-      expect(manifest, contains('android:resource="@xml/shortcuts"'));
-      final xml = _read('src/main/res/xml/shortcuts.xml');
-      expect(RegExp('<shortcut\\b').allMatches(xml), hasLength(1));
-      expect(xml, contains('android.intent.action.VIEW'));
-      expect(xml, contains('android:name="bw.action" android:value="addExpense"'));
-      expect(xml, contains('hr.marcelic.budget_wallet.MainActivity'));
+    test('the launcher shortcut is a dynamic one with our own action: no static shortcuts, no VIEW intent for the share plugin', () {
+      expect(manifest, isNot(contains('android.app.shortcuts')),
+          reason: 'a static shortcut starts NEW_TASK + CLEAR_TASK and kills the running app');
+      expect(File('$_root/src/main/res/xml/shortcuts.xml').existsSync(), isFalse);
+      expect(activity, contains('dynamicShortcuts'));
+      expect(activity, contains('"hr.marcelic.budget_wallet.ADD_EXPENSE"'));
+      expect(activity, contains('FLAG_ACTIVITY_SINGLE_TOP'));
+      expect(activity, isNot(contains('ACTION_CLEAR_TASK')));
+      expect(activity, isNot(contains('Intent.ACTION_VIEW')), reason: 'receive_sharing_intent treats VIEW without data as a shared item');
+      expect(activity, contains('intent.action != ACTION_ADD_EXPENSE'), reason: 'takeAction answers our action only');
       expect(File('$_root/src/main/res/drawable/ic_shortcut_add.xml').existsSync(), isTrue);
       expect(activity, contains('onNewIntent'));
       expect(activity, contains('"getInitialAction"'));
@@ -162,10 +164,11 @@ void main() {
       expect(File('$_root/src/main/res/layout/widget_safe_today.xml').existsSync(), isTrue);
     });
 
-    test('the widget keeps three words in app-private preferences and shows nothing else', () {
+    test('the widget keeps a few words in app-private preferences, shows only today\'s, and nothing else', () {
       expect(widget, contains('MODE_PRIVATE'));
       expect(widget, isNot(contains('MODE_WORLD')));
-      expect(RegExp(r'putString\("(\w+)"').allMatches(widget).map((x) => x.group(1)).toSet(), {'amount', 'status', 'date'});
+      expect(RegExp(r'putString\("(\w+)"').allMatches(widget).map((x) => x.group(1)).toSet(), {'amount', 'status', 'date', 'until'});
+      expect(widget, contains('day != LocalDate.now()'), reason: 'a stored day other than today shows no amount');
       expect(activity, contains('"budget_wallet/widget"'));
       final layout = _read('src/main/res/layout/widget_safe_today.xml');
       expect(RegExp(r'<TextView').allMatches(layout), hasLength(3), reason: 'eyebrow, amount, one muted line');

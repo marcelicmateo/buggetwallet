@@ -1,6 +1,6 @@
 // Android only (P13): the home-screen widget "Safe to spend today" and the launcher shortcut "Add expense".
 //
-// Widget: `budget_wallet/widget` `update({amount, status, date})` and `clear()` (MainActivity.kt keeps the three words in the app-private
+// Widget: `budget_wallet/widget` `update({amount, status, date, until?})` and `clear()` (MainActivity.kt keeps the three words in the app-private
 // SharedPreferences file `bw_widget` and redraws SafeTodayWidget). Nothing else crosses: no payments, names, merchants, balances or key.
 // Shortcut: `budget_wallet/shortcut` `getInitialAction()` once at start (the action of the intent that started the app, or null), and
 // the native side calls `action` with the same words when the running app gets a new intent. Only the word `addExpense` exists.
@@ -10,15 +10,18 @@ import 'package:flutter/services.dart';
 
 import 'platform.dart';
 
-/// What the widget shows. [status] is one of [WidgetStatus]; [date] the day the amount was computed (`YYYY-MM-DD`).
+/// What the widget shows. [status] is one of [WidgetStatus]; [date] the day the amount was computed (`YYYY-MM-DD`); [until] (only with
+/// [WidgetStatus.ok]) the expected payday the amount runs to (`YYYY-MM-DD`), for the line "to 10 Nov".
 class HomeWidgetState {
   final String amount, status, date;
-  const HomeWidgetState({required this.amount, required this.status, required this.date});
-  Map<String, String> toMap() => {'amount': amount, 'status': status, 'date': date};
+  final String? until;
+  const HomeWidgetState({required this.amount, required this.status, required this.date, this.until});
+  Map<String, String> toMap() => {'amount': amount, 'status': status, 'date': date, if (until != null) 'until': until!};
   @override
-  bool operator ==(Object other) => other is HomeWidgetState && other.amount == amount && other.status == status && other.date == date;
+  bool operator ==(Object other) =>
+      other is HomeWidgetState && other.amount == amount && other.status == status && other.date == date && other.until == until;
   @override
-  int get hashCode => Object.hash(amount, status, date);
+  int get hashCode => Object.hash(amount, status, date, until);
 }
 
 /// The status words the widget understands (its muted line).

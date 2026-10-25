@@ -11,6 +11,10 @@ import android.graphics.Matrix
 import android.graphics.pdf.PdfRenderer
 import android.media.ExifInterface
 import android.net.Uri
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.drawable.Icon
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -56,14 +60,43 @@ class MainActivity : FlutterActivity() {
         if (savedInstanceState == null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) takeAction(intent)
         // A picture left behind when Android killed the app while the camera app was open (its path was lost with it).
         clearBillPhotos()
+        publishShortcut()
+    }
+
+    /**
+     * The launcher shortcut "Add expense", published as a dynamic one (API 25+) so its intent keeps our flags: a static shortcut starts
+     * with NEW_TASK + CLEAR_TASK and would kill a running app. With SINGLE_TOP (and singleTask) a running app gets [onNewIntent].
+     * The intent has its own action, so the share plugin never sees it as a shared item.
+     */
+    private fun publishShortcut() {
+        if (Build.VERSION.SDK_INT < 25) return
+        try {
+            val manager = getSystemService(ShortcutManager::class.java) ?: return
+            val intent = Intent(this, MainActivity::class.java).apply {
+                action = ACTION_ADD_EXPENSE
+                putExtra(ACTION_EXTRA, "addExpense")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            val info = ShortcutInfo.Builder(this, "add_expense")
+                .setShortLabel(getString(R.string.shortcut_add_short))
+                .setLongLabel(getString(R.string.shortcut_add_long))
+                .setIcon(Icon.createWithResource(this, R.drawable.ic_shortcut_add))
+                .setIntent(intent)
+                .build()
+            manager.dynamicShortcuts = listOf(info)
+        } catch (e: Throwable) {
+            // A launcher without shortcut support: the app works without it.
+        }
     }
 
     /** Moves the shortcut action out of [intent] (so a later re-delivery of the same intent does not repeat it). */
     private fun takeAction(intent: Intent?): String? {
-        val action = intent?.getStringExtra(ACTION_EXTRA) ?: return null
+        // Only our own action counts; any other intent (the share plugin's SEND and VIEW ones included) is left as it is.
+        if (intent == null || intent.action != ACTION_ADD_EXPENSE || intent.getStringExtra(ACTION_EXTRA) != "addExpense") return null
         intent.removeExtra(ACTION_EXTRA)
-        if (action == "addExpense") initialAction = action
-        return action
+        intent.action = null
+        initialAction = "addExpense"
+        return initialAction
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -138,11 +171,12 @@ class MainActivity : FlutterActivity() {
                     val amount = call.argument<String>("amount")
                     val status = call.argument<String>("status")
                     val date = call.argument<String>("date")
+                    val until = call.argument<String>("until")
                     if (amount == null || status == null || date == null) {
                         result.error("args", "update needs amount, status and date", null)
                     } else {
                         try {
-                            SafeTodayWidget.update(applicationContext, amount, status, date)
+                            SafeTodayWidget.update(applicationContext, amount, status, date, until)
                             result.success(null)
                         } catch (e: Throwable) {
                             result.error("failed", e.javaClass.simpleName, null)
@@ -277,6 +311,7 @@ class MainActivity : FlutterActivity() {
         private const val REQUEST_PERMISSION = 7302
         private const val REQUEST_CALENDAR = 7303
         private const val ACTION_EXTRA = "bw.action"
+        private const val ACTION_ADD_EXPENSE = "hr.marcelic.budget_wallet.ADD_EXPENSE"
 
         /** The Julian day number the calendar provider uses for `Instances.START_DAY` (1 Jan 1970 = 2440588). */
         private const val JULIAN_EPOCH = 2440588L

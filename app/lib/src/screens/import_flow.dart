@@ -46,6 +46,6 @@ Future<void> pickAndImport(BuildContext context, WalletController wc, FileChoose
     'bytes': [for (final (_, b) in files) b.length],
   });
   await wc.importFiles(files);
-  // The first import that leaves plan suggestions: "Looks right?" once per wallet.
-  if (context.mounted && wc.lastImport.any((l) => l.ok)) await offerFirstPlan(context, wc);
+  // An import that added rows and leaves plan suggestions: "Looks right?" once per wallet.
+  if (context.mounted && wc.lastImport.any((l) => l.ok && l.added > 0)) await offerFirstPlan(context, wc);
 }

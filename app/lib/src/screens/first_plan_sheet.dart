@@ -10,7 +10,7 @@ import 'plan_suggestions.dart';
 
 /// After the first import that leaves plan suggestions (P13 §4): "Looks right?" with what the imports point to (salary, payday, rent,
 /// loan, subscriptions, plan lines), a sentence for each, and Accept all / Choose… / Not now: the same actions as Plan › Suggestions.
-/// Shown once per wallet (the controller marks it); Plan › Suggestions stays. Returns after the sheet closed.
+/// Shown once per wallet (the controller marks it); Plan › Suggestions stays ("Not now" here hides the same rows there). Returns after the sheet closed.
 Future<void> offerFirstPlan(BuildContext context, WalletController wc) async {
   if (!wc.shouldOfferFirstPlan()) return;
   wc.markFirstPlanShown();
@@ -97,6 +97,10 @@ class _FirstPlanSheetState extends State<FirstPlanSheet> {
           style: TextButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
           onPressed: () {
             logNav('plan.firstSheet.later');
+            // The same as "Not now" in Plan › Suggestions: each row stays hidden until its suggested value changes.
+            for (final p in _proposals) {
+              widget.wc.putOffPlanProposal(p.key);
+            }
             Navigator.pop(context);
           },
           child: const Text('Not now')),
