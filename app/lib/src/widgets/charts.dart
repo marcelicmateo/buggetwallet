@@ -7,6 +7,16 @@ import '../layout.dart';
 import '../theme.dart';
 import 'common.dart';
 
+/// [logical] dp rounded to a whole number of device pixels (at least one), so a line or bar edge covers whole pixels and does
+/// not blur or look grainy at 1.25 or 1.5 device pixels per dp.
+double snapPx(double logical, double dpr) {
+  if (dpr <= 0) return logical;
+  return (logical * dpr).round().clamp(1, 1 << 20) / dpr;
+}
+
+/// [c] over [ground] as one opaque colour: strokes and fills drawn on top of each other then never mix alpha at their edges.
+Color solidOver(Color c, Color ground) => Color.alphaBlend(c, ground);
+
 /// Saved (above the line) or lost (below) per pay period, with the rolling average as a line.
 /// The running period is faded.
 class PeriodNetChart extends StatelessWidget {
@@ -20,6 +30,8 @@ class PeriodNetChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    double px(double logical) => snapPx(logical, dpr);
     final vals = periods.map((p) => p.net / 100).toList();
     final all = [
       ...vals,
@@ -60,7 +72,7 @@ class PeriodNetChart extends StatelessWidget {
               show: true,
               drawVerticalLine: false,
               // Solid hairlines; the zero line is the axis, drawn strong.
-              getDrawingHorizontalLine: (v) => FlLine(color: v == 0 ? c.lineStrong : c.line, strokeWidth: 1),
+              getDrawingHorizontalLine: (v) => FlLine(color: v == 0 ? c.lineStrong : c.line, strokeWidth: px(1)),
             ),
             titlesData: FlTitlesData(leftTitles: hidden, rightTitles: hidden, topTitles: hidden, bottomTitles: bottom),
             barTouchData: BarTouchData(
@@ -85,11 +97,13 @@ class PeriodNetChart extends StatelessWidget {
                 BarChartGroupData(x: i, barRods: [
                   BarChartRodData(
                     toY: vals[i],
-                    width: 14,
-                    color: (vals[i] >= 0 ? c.pos : c.neg).withValues(alpha: periods[i].running ? 0.45 : 1),
+                    width: px(14),
+                    // The running period: faded (an opaque tint, so the outline does not mix with it), with a dashed outline.
+                    color: periods[i].running
+                        ? solidOver((vals[i] >= 0 ? c.pos : c.neg).withValues(alpha: 0.45), c.bg)
+                        : (vals[i] >= 0 ? c.pos : c.neg),
                     borderRadius: BorderRadius.zero,
-                    // The running period: faded, with a dashed outline.
-                    borderSide: periods[i].running ? BorderSide(color: vals[i] >= 0 ? c.pos : c.neg) : BorderSide.none,
+                    borderSide: periods[i].running ? BorderSide(color: vals[i] >= 0 ? c.pos : c.neg, width: px(1)) : BorderSide.none,
                     borderDashArray: periods[i].running ? const [3, 3] : null,
                   ),
                 ]),
@@ -118,10 +132,15 @@ class PeriodNetChart extends StatelessWidget {
                 lineBarsData: [
                   LineChartBarData(
                     spots: spots,
-                    color: c.ink.withValues(alpha: 0.7),
-                    barWidth: 2,
+                    // Opaque, so it stays crisp where it crosses the bars; straight segments (a curve would overshoot the data).
+                    color: solidOver(c.ink.withValues(alpha: 0.7), c.bg),
+                    barWidth: px(2),
+                    isCurved: false,
+                    isStrokeCapRound: true,
+                    isStrokeJoinRound: true,
                     dotData: FlDotData(
-                      getDotPainter: (s, p, b, i) => FlDotCirclePainter(radius: 2.5, color: c.ink.withValues(alpha: 0.8), strokeWidth: 0),
+                      getDotPainter: (s, p, b, i) =>
+                          FlDotCirclePainter(radius: px(2.5), color: solidOver(c.ink.withValues(alpha: 0.8), c.bg), strokeWidth: 0),
                     ),
                   ),
                 ],

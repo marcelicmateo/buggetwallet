@@ -11,6 +11,9 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 
+/// Under the key text: the alphabet is A–Z and 2–7, so a round character is always the letter O.
+const keyAlphabetHint = 'Letters and the digits 2 to 7 only. There is no zero or one: a round character is the letter O.';
+
 /// The key as a QR code first (what another device scans); the text sits behind "Show as text" so it is not on screen
 /// by default. Keys: `keyQr`, `keyShowText` (button), `keyText` (the text, only while shown).
 class KeyDisplay extends StatefulWidget {
@@ -26,6 +29,9 @@ class KeyDisplay extends StatefulWidget {
 
 class _KeyDisplayState extends State<KeyDisplay> {
   bool _text = false;
+
+  /// Plex Mono with a little letter spacing, so O, I and L stay apart.
+  TextStyle _keyStyle(BuildContext context) => numStyle.copyWith(fontSize: BwType.bodySize, letterSpacing: 1, color: context.c.ink);
 
   @override
   Widget build(BuildContext context) {
@@ -44,16 +50,14 @@ class _KeyDisplayState extends State<KeyDisplay> {
           setState(() => _text = !_text);
         },
       ),
-      if (_text && widget.selectable)
-        SelectableText(widget.text,
-            key: const ValueKey('keyText'),
-            textAlign: TextAlign.center,
-            style: numStyle.copyWith(fontSize: BwType.bodySize, color: context.c.ink))
-      else if (_text)
-        Text(widget.text,
-            key: const ValueKey('keyText'),
-            textAlign: TextAlign.center,
-            style: numStyle.copyWith(fontSize: BwType.bodySize, color: context.c.ink)),
+      if (_text) ...[
+        if (widget.selectable)
+          SelectableText(widget.text, key: const ValueKey('keyText'), textAlign: TextAlign.center, style: _keyStyle(context))
+        else
+          Text(widget.text, key: const ValueKey('keyText'), textAlign: TextAlign.center, style: _keyStyle(context)),
+        const SizedBox(height: 6),
+        const Muted(keyAlphabetHint, key: ValueKey('keyHint'), align: TextAlign.center),
+      ],
     ]);
   }
 }

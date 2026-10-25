@@ -5,6 +5,8 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/theme.dart';
+import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -357,5 +359,57 @@ void main() {
         expect(log, isNot(contains(plain.substring(i, i + 6))));
       }
     });
+  });
+
+  group('last 4 characters: a typed 0 is the letter O (N0)', () {
+    /// A synthetic key whose last 4 characters contain [letter] (found by trying fixed byte patterns).
+    Future<(WalletController, String)> keyEndingWith(String letter) async {
+      for (var i = 1; i < 5000; i++) {
+        final k = VaultKey(List<int>.generate(32, (j) => (i * 7 + j * 13 + (i >> 8) * 31) & 255));
+        final tail = (await k.toText()).replaceAll('-', '');
+        final last4 = tail.substring(tail.length - 4);
+        if (last4.contains(letter)) {
+          return (WalletController.forTest(WalletRepo.inMemory(), key: k, clock: () => day), last4);
+        }
+      }
+      throw StateError('no synthetic key ends with $letter');
+    }
+
+    test('0 confirms where the key has O; 1 does not confirm where it has I', () async {
+      final (wo, o4) = await keyEndingWith('O');
+      expect(await wo.confirmKeyBackup(o4.toLowerCase().replaceAll('o', '0')), isTrue, reason: 'O typed as zero');
+      final (wi, i4) = await keyEndingWith('I');
+      expect(await wi.confirmKeyBackup(i4.replaceAll('I', '1')), isFalse, reason: 'there is no digit 1 in the key');
+      expect(await wi.confirmKeyBackup(i4), isTrue);
+    });
+  });
+
+  group('key text (owner note: 0 and O look alike)', () {
+    const sample = 'OOILO2345JKLMNOPQRSTUVWXYZ'; // synthetic; the real alphabet is A-Z and 2-7
+    for (final selectable in [false, true]) {
+      testWidgets('shows a mono key and says there is no zero or one (selectable: $selectable)', (t) async {
+        t.view.physicalSize = const Size(320, 900);
+        t.view.devicePixelRatio = 1;
+        addTearDown(t.view.reset);
+        await t.pumpWidget(MaterialApp(
+          theme: buildTheme(Brightness.light),
+          builder: (c, child) => MediaQuery(data: MediaQuery.of(c).copyWith(textScaler: const TextScaler.linear(2)), child: child!),
+          home: Scaffold(body: SingleChildScrollView(child: KeyDisplay(text: sample, selectable: selectable))),
+        ));
+        expect(find.byKey(const ValueKey('keyHint')), findsNothing, reason: 'nothing while the text is hidden');
+        await t.tap(find.byKey(const ValueKey('keyShowText')));
+        await t.pump();
+        final style = selectable
+            ? (t.widget(find.byKey(const ValueKey('keyText'))) as SelectableText).style!
+            : (t.widget(find.byKey(const ValueKey('keyText'))) as Text).style!;
+        expect(style.fontFamily, monoFamily);
+        expect(style.letterSpacing, greaterThan(0));
+        final hint = (t.widget(find.byKey(const ValueKey('keyHint'))) as Muted).text;
+        expect(hint, keyAlphabetHint);
+        expect(hint, contains('no zero or one'));
+        expect(hint, contains('letter O'));
+        expect(t.takeException(), isNull);
+      });
+    }
   });
 }
