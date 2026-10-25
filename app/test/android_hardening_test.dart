@@ -113,6 +113,65 @@ void main() {
     });
   });
 
+  group('P13: calendar read only, widget, shortcut', () {
+    final activity = _read('src/main/kotlin/hr/marcelic/budget_wallet/MainActivity.kt');
+    final widget = _read('src/main/kotlin/hr/marcelic/budget_wallet/SafeTodayWidget.kt');
+
+    test('READ_CALENDAR only: WRITE_CALENDAR is gone from the manifest and nothing in Kotlin writes the calendar', () {
+      expect(manifest, contains('android.permission.READ_CALENDAR'));
+      expect(manifest, isNot(contains('WRITE_CALENDAR')));
+      expect(activity, isNot(contains('WRITE_CALENDAR')));
+      for (final w in [
+        'contentResolver.insert',
+        'contentResolver.update',
+        'contentResolver.delete',
+        'bulkInsert',
+        'applyBatch',
+        'ACTION_INSERT',
+        'ACTION_EDIT'
+      ]) {
+        expect(activity, isNot(contains(w)), reason: 'MainActivity must not call $w');
+      }
+      expect(activity, contains('"budget_wallet/calendar"'));
+      expect(File('pubspec.yaml').readAsStringSync(), isNot(contains('device_calendar')));
+    });
+
+    test('the launcher shortcut: meta-data on the launcher activity and one static shortcut that sends bw.action=addExpense', () {
+      expect(manifest, contains('android:name="android.app.shortcuts"'));
+      expect(manifest, contains('android:resource="@xml/shortcuts"'));
+      final xml = _read('src/main/res/xml/shortcuts.xml');
+      expect(RegExp('<shortcut\\b').allMatches(xml), hasLength(1));
+      expect(xml, contains('android.intent.action.VIEW'));
+      expect(xml, contains('android:name="bw.action" android:value="addExpense"'));
+      expect(xml, contains('hr.marcelic.budget_wallet.MainActivity'));
+      expect(File('$_root/src/main/res/drawable/ic_shortcut_add.xml').existsSync(), isTrue);
+      expect(activity, contains('onNewIntent'));
+      expect(activity, contains('"getInitialAction"'));
+    });
+
+    test('the widget receiver is not exported, listens to APPWIDGET_UPDATE only and points at the provider info', () {
+      final m = RegExp(r'<receiver\b[^>]*SafeTodayWidget[^>]*>(.*?)</receiver>', dotAll: true).firstMatch(manifest);
+      expect(m, isNotNull);
+      expect(m!.group(0), contains('android:exported="false"'));
+      expect(RegExp('<action android:name="([^"]+)"').allMatches(m.group(1)!).map((x) => x.group(1)),
+          ['android.appwidget.action.APPWIDGET_UPDATE']);
+      expect(m.group(1), contains('android:resource="@xml/widget_safe_today_info"'));
+      final info = _read('src/main/res/xml/widget_safe_today_info.xml');
+      expect(info, contains('android:initialLayout="@layout/widget_safe_today"'));
+      expect(info, contains('android:resizeMode="horizontal"'));
+      expect(File('$_root/src/main/res/layout/widget_safe_today.xml').existsSync(), isTrue);
+    });
+
+    test('the widget keeps three words in app-private preferences and shows nothing else', () {
+      expect(widget, contains('MODE_PRIVATE'));
+      expect(widget, isNot(contains('MODE_WORLD')));
+      expect(RegExp(r'putString\("(\w+)"').allMatches(widget).map((x) => x.group(1)).toSet(), {'amount', 'status', 'date'});
+      expect(activity, contains('"budget_wallet/widget"'));
+      final layout = _read('src/main/res/layout/widget_safe_today.xml');
+      expect(RegExp(r'<TextView').allMatches(layout), hasLength(3), reason: 'eyebrow, amount, one muted line');
+    });
+  });
+
   group('key sheet', () {
     final activity = _read('src/main/kotlin/hr/marcelic/budget_wallet/MainActivity.kt');
     test('MainActivity exposes MethodChannel bw/secure with setSecure(bool) that sets and clears FLAG_SECURE', () {

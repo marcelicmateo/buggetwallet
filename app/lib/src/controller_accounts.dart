@@ -104,4 +104,17 @@ extension AccountsDb on WalletController {
     logEvent(_accLog, Level.INFO, 'plan.suggestion.later', {'key': key.startsWith(WalletSettings.planPrefix) ? 'planLine' : key});
     _refreshView();
   }
+
+  // ---------- first import (P13 §4) ----------
+
+  /// True when the "Looks right?" sheet should show after an import: the wallet has proposals and has never been offered them
+  /// (device-local `planSuggestShown`). Nothing is written here.
+  bool shouldOfferFirstPlan() => repo.localValue('planSuggestShown') != '1' && planProposalList().isNotEmpty;
+
+  /// Marks the first-import sheet as shown (once per wallet on this device, whatever the owner answers).
+  void markFirstPlanShown() {
+    if (repo.localValue('planSuggestShown') == '1') return;
+    repo.setLocalValue('planSuggestShown', '1');
+    logEvent(_accLog, Level.INFO, 'plan.suggestion.firstShown', {'count': planProposalList().length});
+  }
 }

@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.provider.CalendarContract
 import android.provider.MediaStore
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
@@ -26,10 +27,12 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.time.LocalDate
 import kotlin.concurrent.thread
 
 /**
- * Three tiny channels: `bw/secure` (FLAG_SECURE while the wallet key is shown), the time zone name (for reminders), and the bills helpers (no PDF package): `renderPdf` draws the pages of a
+ * Small channels: `budget_wallet/calendar` (read-only calendar access, READ_CALENDAR only), `budget_wallet/widget` (the home-screen widget's
+ * three words), `budget_wallet/shortcut` (the launcher shortcut's action), and `bw/secure` (FLAG_SECURE while the wallet key is shown), the time zone name (for reminders), and the bills helpers (no PDF package): `renderPdf` draws the pages of a
  * PDF with the platform's PdfRenderer, `toJpeg` sizes a picture down (both on a background thread) and `takePhoto` lets the
  * phone's own camera app take one full-size picture into the app's cache (returns its path; null when cancelled).
  */
@@ -40,10 +43,41 @@ class MainActivity : FlutterActivity() {
     private var photoResult: MethodChannel.Result? = null
     private var photoFile: File? = null
 
+    /** The `requestPermission` call of the calendar channel that is waiting for the system dialog. */
+    private var calendarResult: MethodChannel.Result? = null
+
+    /** The launcher shortcut's action (`bw.action` extra) that started or reached the app and was not handed to Dart yet. */
+    private var initialAction: String? = null
+    private var shortcutChannel: MethodChannel? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Not again after the system re-created the activity or brought it back from the recent-apps list.
+        if (savedInstanceState == null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) takeAction(intent)
         // A picture left behind when Android killed the app while the camera app was open (its path was lost with it).
         clearBillPhotos()
+    }
+
+    /** Moves the shortcut action out of [intent] (so a later re-delivery of the same intent does not repeat it). */
+    private fun takeAction(intent: Intent?): String? {
+        val action = intent?.getStringExtra(ACTION_EXTRA) ?: return null
+        intent.removeExtra(ACTION_EXTRA)
+        if (action == "addExpense") initialAction = action
+        return action
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // The app is already running (singleTask): tell Dart at once; it is kept for getInitialAction when Dart is not listening yet.
+        if (takeAction(intent) != null) {
+            val action = initialAction
+            val channel = shortcutChannel
+            if (action != null && channel != null) {
+                initialAction = null
+                channel.invokeMethod("action", action)
+            }
+        }
     }
 
     /** Deletes every file in `cache/bill_photos` (only the camera writes there; Dart reads and deletes each picture at once). */
@@ -77,6 +111,66 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 else -> result.notImplemented()
+            }
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "budget_wallet/calendar").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "hasPermission" -> result.success(hasCalendarPermission())
+                "requestPermission" -> requestCalendarPermission(result)
+                "calendars" -> background(result) { calendars() }
+                "events" -> {
+                    val ids = call.argument<List<String>>("ids")
+                    val from = call.argument<String>("from")
+                    val to = call.argument<String>("to")
+                    if (ids == null || from == null || to == null) {
+                        result.error("args", "events needs ids, from and to", null)
+                    } else {
+                        background(result) { events(ids, from, to) }
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        // `update({amount, status, date})` and `clear()`: the home-screen widget. Three words, nothing else.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "budget_wallet/widget").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "update" -> {
+                    val amount = call.argument<String>("amount")
+                    val status = call.argument<String>("status")
+                    val date = call.argument<String>("date")
+                    if (amount == null || status == null || date == null) {
+                        result.error("args", "update needs amount, status and date", null)
+                    } else {
+                        try {
+                            SafeTodayWidget.update(applicationContext, amount, status, date)
+                            result.success(null)
+                        } catch (e: Throwable) {
+                            result.error("failed", e.javaClass.simpleName, null)
+                        }
+                    }
+                }
+                "clear" -> {
+                    try {
+                        SafeTodayWidget.clear(applicationContext)
+                        result.success(null)
+                    } catch (e: Throwable) {
+                        result.error("failed", e.javaClass.simpleName, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        // `getInitialAction()`: the launcher shortcut that started the app (once); later ones arrive as an `action` call to Dart.
+        shortcutChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "budget_wallet/shortcut").also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "getInitialAction" -> {
+                        val action = initialAction
+                        initialAction = null
+                        result.success(action)
+                    }
+                    else -> result.notImplemented()
+                }
             }
         }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "budget_wallet/bills").setMethodCallHandler { call, result ->
@@ -165,6 +259,12 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        if (requestCode == REQUEST_CALENDAR) {
+            val waiting = calendarResult
+            calendarResult = null
+            waiting?.success(grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED)
+            return
+        }
         if (requestCode == REQUEST_PERMISSION && photoResult != null) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) launchCamera() else finishPhoto(null, "permission")
             return
@@ -175,6 +275,89 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val REQUEST_PHOTO = 7301
         private const val REQUEST_PERMISSION = 7302
+        private const val REQUEST_CALENDAR = 7303
+        private const val ACTION_EXTRA = "bw.action"
+
+        /** The Julian day number the calendar provider uses for `Instances.START_DAY` (1 Jan 1970 = 2440588). */
+        private const val JULIAN_EPOCH = 2440588L
+    }
+
+    private fun hasCalendarPermission() =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
+
+    /** Asks for READ_CALENDAR only (the app never writes events); true when allowed. */
+    private fun requestCalendarPermission(result: MethodChannel.Result) {
+        if (hasCalendarPermission()) {
+            result.success(true)
+            return
+        }
+        if (calendarResult != null) {
+            result.error("busy", "permission already asked", null)
+            return
+        }
+        calendarResult = result
+        ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_CALENDAR), REQUEST_CALENDAR)
+    }
+
+    /** The visible calendars of the phone: id, name, account and colour. Read only. */
+    private fun calendars(): List<Map<String, Any?>> {
+        val out = ArrayList<Map<String, Any?>>()
+        val projection = arrayOf(
+            CalendarContract.Calendars._ID,
+            CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
+            CalendarContract.Calendars.ACCOUNT_NAME,
+            CalendarContract.Calendars.CALENDAR_COLOR,
+            CalendarContract.Calendars.VISIBLE
+        )
+        contentResolver.query(CalendarContract.Calendars.CONTENT_URI, projection, null, null, CalendarContract.Calendars.CALENDAR_DISPLAY_NAME)
+            ?.use { c ->
+                while (c.moveToNext()) {
+                    if (c.getInt(4) == 0) continue
+                    out.add(mapOf("id" to c.getLong(0).toString(), "name" to (c.getString(1) ?: ""), "account" to c.getString(2), "color" to c.getInt(3)))
+                }
+            }
+        return out
+    }
+
+    /**
+     * Every occurrence that starts on a day from [from] to [to] (inclusive `YYYY-MM-DD`) in the calendars [ids]. Instances.CONTENT_BY_DAY_URI
+     * expands recurring events and gives each occurrence's start day as a Julian day (all-day events by their own date, not shifted by
+     * the time zone). `date` is that day; `status` is the provider's (2 = cancelled). At most 5000 rows.
+     */
+    private fun events(ids: List<String>, from: String, to: String): List<Map<String, Any?>> {
+        val out = ArrayList<Map<String, Any?>>()
+        if (ids.isEmpty()) return out
+        val startDay = LocalDate.parse(from).toEpochDay() + JULIAN_EPOCH
+        val endDay = LocalDate.parse(to).toEpochDay() + JULIAN_EPOCH
+        val uri = CalendarContract.Instances.CONTENT_BY_DAY_URI.buildUpon().appendPath(startDay.toString()).appendPath(endDay.toString()).build()
+        val projection = arrayOf(
+            CalendarContract.Instances.EVENT_ID,
+            CalendarContract.Instances.CALENDAR_ID,
+            CalendarContract.Instances.TITLE,
+            CalendarContract.Instances.DESCRIPTION,
+            CalendarContract.Instances.ALL_DAY,
+            CalendarContract.Instances.STATUS,
+            CalendarContract.Instances.START_DAY
+        )
+        val selection = "${CalendarContract.Instances.CALENDAR_ID} IN (${ids.joinToString(",") { "?" }})"
+        contentResolver.query(uri, projection, selection, ids.toTypedArray(), CalendarContract.Instances.BEGIN)?.use { c ->
+            while (c.moveToNext() && out.size < 5000) {
+                val day = c.getLong(6)
+                if (day < startDay || day > endDay) continue
+                out.add(
+                    mapOf(
+                        "id" to c.getLong(0).toString(),
+                        "calendarId" to c.getLong(1).toString(),
+                        "title" to (c.getString(2) ?: ""),
+                        "notes" to c.getString(3),
+                        "allDay" to (c.getInt(4) == 1),
+                        "status" to c.getInt(5),
+                        "date" to LocalDate.ofEpochDay(day - JULIAN_EPOCH).toString()
+                    )
+                )
+            }
+        }
+        return out
     }
 
     /** Runs [work] off the main thread and answers on it; any failure becomes an error with the exception type only. */

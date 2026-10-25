@@ -253,6 +253,7 @@ class _HomeShellState extends State<HomeShell> {
   final _accountsRequest = ValueNotifier<int>(0);
   final _incomeRequest = ValueNotifier<int>(0);
   StreamSubscription<BillImport>? _sharedSub;
+  StreamSubscription<void>? _shortcutSub;
 
   /// Counts the Ctrl+F presses; Spending opens its search view on each.
   final _searchRequest = ValueNotifier<int>(0);
@@ -321,6 +322,7 @@ class _HomeShellState extends State<HomeShell> {
     _life = AppLifecycleListener(
       onResume: () {
         widget.wc.checkDay(); // a new day also shows without a relay
+        unawaited(widget.wc.updateHomeWidget()); // the home-screen widget (Android) shows today's number
         widget.wc.rescheduleNudges(); // reminders are scheduled for 4 weeks at a time (and the heads-ups after them)
         widget.wc.readCalendars(trigger: 'resume'); // calendars and .ics links are read again
         widget.wc.syncNow(quiet: true, trigger: 'resume');
@@ -338,6 +340,9 @@ class _HomeShellState extends State<HomeShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(widget.wc.startSharing());
     });
+    // The launcher shortcut "Add expense" (Android): a request made before this shell existed waits in the controller.
+    _shortcutSub = widget.wc.shortcutAdds.listen((_) => _shortcutAdd());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _shortcutAdd());
     // A wallet just created: ask the owner to save the key before the first Today.
     if (widget.wc.takeKeyBackupPrompt()) {
       // Then one optional step: how much cash there is (Skip or close it and nothing is added).
@@ -358,6 +363,14 @@ class _HomeShellState extends State<HomeShell> {
     // The data they use is cached in the controller, so this is cheap.
     if (i == 0 || i == 2) _pages[i] = _page(i);
     setState(() => tab = i);
+  }
+
+  /// Opens the Add expense sheet for a launcher shortcut (once per request; nothing when there is none).
+  void _shortcutAdd() {
+    if (mounted && widget.wc.takeShortcutAdd()) {
+      logNav('nav.shortcut', {'action': 'addExpense'});
+      _addExpense();
+    }
   }
 
   /// Add expense, from the Today button or Ctrl+N. One sheet at a time.
@@ -415,6 +428,7 @@ class _HomeShellState extends State<HomeShell> {
     _accountsRequest.dispose();
     _incomeRequest.dispose();
     _sharedSub?.cancel();
+    _shortcutSub?.cancel();
     _searchRequest.dispose();
     super.dispose();
   }

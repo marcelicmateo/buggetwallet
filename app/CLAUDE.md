@@ -164,8 +164,8 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   `paidCandidatesFor`), heads-ups (`headsUpLines()`, synced `headsUpCents/headsUpDays` via `saveHeadsUp`, device-local `headsUpNotify`, `rescheduleHeadsUps()`
   after every reload, nudge reschedule and resume; `NudgePlatform.scheduleHeadsUps/cancelHeadsUps`: channel `headsup`, ids 1000..1019, 09:00 local on
   date - days, text `headsUpBody` has no title or amount; `AndroidNudges.cancelAll` also removes them, so `rescheduleNudges` always ends with `rescheduleHeadsUps`),
-  calendars (`CalendarSource` interface in `calendar_source.dart`, `calendar_platform.dart` picks `AndroidCalendars` (plugin `device_calendar_plus`, read calls only; its
-  full permission request needs READ and WRITE_CALENDAR declared, the app never writes) or `NoCalendars` on the web/desktop; `.ics` files (`importIcsFile`, 2 MB cap) and
+  calendars (`CalendarSource` interface in `calendar_source.dart`, `calendar_platform.dart` picks `AndroidCalendars` (P13: the app's own channel `budget_wallet/calendar`, `calendar_source_io.dart`; MainActivity.kt
+  reads `CalendarContract.Calendars` and `Instances.CONTENT_BY_DAY_URI`, READ_CALENDAR only, no WRITE_CALENDAR, no plugin) or `NoCalendars` on the web/desktop; `.ics` files (`importIcsFile`, 2 MB cap) and
   links (`addIcsLink`, `ics_fetch.dart`, not on the web) are kept as device-local values `icsSources` / `icsText:<id>`, device calendars chosen in `calendarsOn`; `readCalendars`
   reads [today, today+90] at start, resume, choose, import and "Read now", links are fetched again first and a failure keeps the saved copy and shows a message on the entry).
   Screens: `screens/upcoming.dart` (`openUpcoming` page/dialog, `_PeriodGrid` month grids with a mark per kind, ruled list with Confirm / Change / No cost, "Set aside" total),
@@ -176,6 +176,15 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   run one after another; `headsUpSlots` moves a passed slot to the next 09:00 on or before the cost; Android events with status canceled are dropped (`calendarEventsFrom`).
   Logs (counts only): `planned.add|edit|dismiss|paid|skip|reopen|delete`, `calendar.read {calendars, events, unsupported, trigger}`, `calendar.import {ok, kind, reason}`,
   `calendar.access|choose|remove`, `headsup.enabled|scheduled`. Tests: `test/future_spending_test.dart` (`futureWallet`, `FakeCalendars`, `fakeIcs`, `FakeNudges.headsUps` in `test/support/wallet.dart`).
+- Android widget and shortcut (P13; spec `docs/context/P13_SPEC.md`): `home_widget.dart` (`HomeWidget`, `NoHomeWidget`, `AndroidHomeWidget`, `WidgetState {amount, status, date}`, `WidgetStatus`
+  ok|overToday|overBudget|ended, `addExpenseAction`) and `controller_home.dart` (`extension HomeIntegration`): `widgetState()` (the Today hero's amount, never negative), `updateHomeWidget()` (after
+  every `reload()` / day change / resume, one microtask per burst, only when the three words differ from the last sent; cleared when no wallet is open; failures logged `widget.updateFailed`),
+  `clearHomeWidget()` (before another wallet is joined), `startHomeIntegration()` / `onShortcut(action)` / `takeShortcutAdd()` / `shortcutAdds` (HomeShell opens the Add expense sheet once; ignored in
+  onboarding or locked). Channels (MainActivity.kt): `budget_wallet/widget` `update|clear` -> `SafeTodayWidget.kt` (prefs file `bw_widget`: amount, status, date; muted line from the status, "Open the app to
+  update" when the date is over a day old; tap opens the app), `budget_wallet/shortcut` `getInitialAction` + native `action` call (`onNewIntent`; extra `bw.action`, `res/xml/shortcuts.xml`).
+  First-import sheet: `screens/first_plan_sheet.dart` `offerFirstPlan` ("Looks right?": Accept all / Choose… / Not now) is called by `pickAndImport` after an import that read a file, when
+  `shouldOfferFirstPlan()` (device-local `planSuggestShown` not set, proposals exist); `markFirstPlanShown()` sets it. Tests: `test/p13_widget_test.dart`, `test/calendar_channel_test.dart`,
+  `test/p13_first_plan_test.dart`, `test/android_hardening_test.dart` (P13 group).
 - Bills database (B4; core API in `docs/context/BILLS_API.md`): `controller_bills.dart` (a `part`: `extension BillsDb`) = lists (`billsAll`, `billLists()` To review / Unpaid / Paid,
   `billsToReview`, `billForTx`, `billCandidatesFor`, `searchBills`), adding (`importBillFile(bytes, ext, trigger:)` = pdf → text + on Android page render + code scan, xml → e-invoice,
   jpg/png → Android codes then OCR / elsewhere kept unread; the original goes to `BlobStore.add` (pictures sized to JPEG 2560 px first); no code or text in the file → `externalId`

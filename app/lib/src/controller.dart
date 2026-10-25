@@ -13,7 +13,8 @@ import 'bill_platform.dart';
 import 'calendar_platform.dart';
 import 'calendar_source.dart';
 import 'clock_notice.dart';
-import 'format.dart' show NumberStyle, numberStyle;
+import 'format.dart' show NumberStyle, money, moneyExact, numberStyle;
+import 'home_widget.dart';
 import 'ics_fetch.dart';
 import 'insights_api.dart' show InsightRange;
 import 'key_store.dart';
@@ -31,6 +32,7 @@ part 'controller_rules.dart';
 part 'controller_bills.dart';
 part 'controller_recurring.dart';
 part 'controller_future.dart';
+part 'controller_home.dart';
 part 'controller_splits.dart';
 
 final _log = Logger('bw.app');
@@ -344,6 +346,9 @@ class WalletController extends ChangeNotifier {
   /// The phone's calendars (Plan › Calendars); [NoCalendars] in tests and on desktop and web.
   final CalendarSource calendarSource;
 
+  /// The Android home-screen widget and launcher shortcut (P13); [NoHomeWidget] in tests, on desktop and on the web. See controller_home.dart.
+  final HomeWidget homeWidget;
+
   /// Downloads the text of an `.ics` link; tests replace it.
   @visibleForTesting
   Future<String> Function(Uri url) icsFetcher = fetchIcs;
@@ -362,6 +367,12 @@ class WalletController extends ChangeNotifier {
   @visibleForTesting
   String? Function(Bill b)? billCategorySuggester;
   StreamSubscription<List<SharedFile>>? _shareSub;
+
+  // Home-screen widget and shortcut (P13); the methods are in controller_home.dart.
+  StreamSubscription<String>? _actionSub;
+  HomeWidgetState? _widgetSent;
+  bool _widgetQueued = false, _shortcutAddPending = false;
+  final StreamController<void> _shortcutAdds = StreamController<void>.broadcast();
   final StreamController<BillImport> _shareResults = StreamController<BillImport>.broadcast();
 
   /// True after the system refused the notification permission when the switch was turned on (Plan says how to allow it).
@@ -371,6 +382,7 @@ class WalletController extends ChangeNotifier {
       {DateTime Function()? clock,
       NudgePlatform? nudges,
       CalendarSource? calendars,
+      HomeWidget? homeWidget,
       BillInputs? billInputs,
       WalletDb? db,
       this.locked = false,
@@ -379,6 +391,7 @@ class WalletController extends ChangeNotifier {
         _clock = clock ?? DateTime.now,
         nudges = nudges ?? const NoNudges(),
         calendarSource = calendars ?? const NoCalendars(),
+        homeWidget = homeWidget ?? const NoHomeWidget(),
         billInputs = billInputs ?? const BillInputs.none() {
     relayUrl = _parseRelay(repo.localValue('relayUrl'));
     _applyNumberStyle();
@@ -478,6 +491,7 @@ class WalletController extends ChangeNotifier {
         clock: clock,
         nudges: defaultNudgePlatform(),
         calendars: defaultCalendarSource(),
+        homeWidget: defaultHomeWidget(),
         billInputs: defaultBillInputs(),
         db: db,
         locked: locked);
@@ -510,6 +524,7 @@ class WalletController extends ChangeNotifier {
     c.refreshRecurring();
     scheduleMicrotask(c.rescheduleNudges);
     scheduleMicrotask(() => c.readCalendars(trigger: 'start'));
+    c.startHomeIntegration();
     return c;
   }
 
@@ -604,10 +619,12 @@ class WalletController extends ChangeNotifier {
           DateTime Function()? clock,
           NudgePlatform? nudges,
           CalendarSource? calendars,
+          HomeWidget? homeWidget,
           BillInputs? billInputs,
           WalletDb? db,
           bool locked = false}) =>
-      WalletController._(repo, key, clock: clock, nudges: nudges, calendars: calendars, billInputs: billInputs, db: db, locked: locked)
+      WalletController._(repo, key,
+          clock: clock, nudges: nudges, calendars: calendars, homeWidget: homeWidget, billInputs: billInputs, db: db, locked: locked)
         ..reload();
 
   /// The saved monthly budgets per category (cents).
@@ -629,6 +646,7 @@ class WalletController extends ChangeNotifier {
     logEvent(_log, Level.INFO, 'day.changed', {'from': _seenDay, 'to': d});
     _seenDay = d;
     notifyListeners();
+    _widgetMayHaveChanged();
   }
 
   /// Every change reaches the screens through here; where the database lives in memory first (the browser) it is also written
@@ -689,6 +707,7 @@ class WalletController extends ChangeNotifier {
     t.done({'tx': wholeTxs.length, 'goals': goals.length, 'wish': wish.length});
     notifyListeners();
     _headsUpsMayHaveChanged();
+    _widgetMayHaveChanged();
   }
 
   /// [_cached] for extensions in other files (the insights API): the value is kept until the data or the day changes.
@@ -1114,7 +1133,10 @@ class WalletController extends ChangeNotifier {
     if (current != null && await current.toText() == await k.toText()) throw const WalletAlreadyOpen();
     if (!_dbPending && !keyBackupConfirmed) throw const KeyNotSaved();
     final written = !_dbPending;
-    if (written) await _setAsideOpenWallet(k, passphrase, relay);
+    if (written) {
+      await clearHomeWidget(); // the old wallet's number must not stay on the home screen
+      await _setAsideOpenWallet(k, passphrase, relay);
+    }
     try {
       await joinWallet(text, passphrase: passphrase, relay: relay, keyWritten: written);
     } catch (e) {
@@ -1820,7 +1842,9 @@ class WalletController extends ChangeNotifier {
     _resumeClear = null;
     _clearClipboardKey();
     _shareSub?.cancel();
+    _actionSub?.cancel();
     _shareResults.close();
+    _shortcutAdds.close();
     repo.close();
     super.dispose();
   }

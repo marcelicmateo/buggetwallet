@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Night ledger colours for the widget (follows the system dark mode). -->
+<resources>
+    <color name="bw_widget_bg">#1B1D23</color>
+    <color name="bw_widget_line">#6B707D</color>
+    <color name="bw_widget_ink">#DAD7CD</color>
+    <color name="bw_widget_muted">#8F94A1</color>
+    <color name="bw_widget_bad">#EE9C94</color>
+</resources>
