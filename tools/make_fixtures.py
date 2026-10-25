@@ -3,7 +3,9 @@
 PBZ-style .xls (BIFF8) with enough distinct strings to force SST CONTINUE records,
 Revolut-style .xlsx with date cells and mojibake text, and a Revolut-style CSV.
 Bills (`<out>/bills/`, no extra modules needed: `... fixtures bills`): fiscal QR and HUB-3 payloads, UBL e-invoices, small PDFs.
-Usage: python3 tools/make_fixtures.py packages/wallet_importer/test/fixtures [all|banks|bills]
+Generic CSVs (`<out>/generic/`, no extra modules: `... fixtures generic`): shapes no bank profile knows, for the
+column-mapping import (P12).
+Usage: python3 tools/make_fixtures.py packages/wallet_importer/test/fixtures [all|banks|bills|generic]
 """
 import sys, os, datetime, random, json, uuid, zlib
 
@@ -296,6 +298,62 @@ def write_bills(d):
 if what in ("all", "bills"):
     write_bills(os.path.join(out, "bills"))
 if what == "bills":
+    print("ok")
+    sys.exit(0)
+
+
+# ---------- generic CSVs (P12: import by a column mapping; all SYNTHETIC, made-up shops and amounts) ----------
+def write_generic(d):
+    """CSV shapes no bank profile knows: encodings, delimiters, header rows and amount styles for the mapping tests."""
+    os.makedirs(d, exist_ok=True)
+
+    def put(name, text, encoding="utf-8", bom=False):
+        data = text.encode(encoding)
+        with open(os.path.join(d, name), "wb") as f:
+            f.write((b"\xef\xbb\xbf" if bom else b"") + data)
+
+    # UTF-8 with a BOM, `;`, header on row 1, one signed amount column with decimal comma and thousands dots,
+    # a quoted field with the delimiter inside.
+    put("bom_semicolon.csv", "\r\n".join([
+        "Datum;Opis;Iznos;Valuta",
+        '05.01.2026;"Kupnja; SYNTH DUCAN";-12,30;EUR',
+        "06.01.2026;Uplata SYNTH;1.234,56;EUR",
+        "07.01.2026;SYNTH KAVANA;-3,5;EUR",
+        "08.01.2026;SYNTH KAVANA;-3,50;EUR",
+    ]) + "\r\n", bom=True)
+
+    # Windows-1250, `;`, two title lines (header on row 3), debit/credit columns, č ć š ž đ, a ragged last row.
+    put("hr_cp1250.csv", "\r\n".join([
+        "Izvod po računu;;;;;",
+        "Račun: HR00 0000 0000 0000 0000 0;;;;;",
+        "Datum knjiženja;Opis plaćanja;Primatelj;Duguje;Potražuje;Valuta",
+        "10.01.2026.;Kupnja čokolade;SYNTH ĆEVAPI ŠĐŽ d.o.o.;12,30;;EUR",
+        "11.01.2026.;Uplata plaće;SYNTH POSLODAVAC;;1.500,00;EUR",
+        "12.01.2026.;Naknada;;0,33;0,00;EUR",
+        "13.01.2026.;Kupnja",
+    ]) + "\r\n", encoding="cp1250")
+
+    # UTF-8, `,`, ISO dates with a time, point decimals, quoted commas, twin rows (the occurrence counter).
+    put("en_comma.csv", "\n".join([
+        "Date,Description,Amount,Currency",
+        '2026-02-01 10:00:00,"Shop, with comma",-12.30,EUR',
+        "2026-02-01 11:00:00,Synth Coffee,-2.50,EUR",
+        "2026-02-01 11:00:00,Synth Coffee,-2.50,EUR",
+        '2026-02-02T09:00:00,Synth Salary,"2,500.00",EUR',
+    ]) + "\n")
+
+    # Tab, dd/mm/yyyy, spending shown as positive (negate), point style with thousands commas, a skip column.
+    put("positive_tab.csv", "\n".join([
+        "Booking date\tPayee\tDetails\tAmount\tStatus",
+        "03/03/2026\tSynth Market\tCard\t1,234.56\tBOOKED",
+        "04/03/2026\tSynth Refund\tCard\t-20.00\tBOOKED",
+        "05/03/2026\tSynth Pending\tCard\t9.99\t",
+    ]) + "\n")
+
+
+if what in ("all", "generic"):
+    write_generic(os.path.join(out, "generic"))
+if what == "generic":
     print("ok")
     sys.exit(0)
 

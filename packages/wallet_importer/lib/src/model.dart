@@ -34,7 +34,7 @@ class NormalizedTransaction {
   /// Deterministic id: re-importing the same row always yields the same id.
   final String id;
 
-  /// Where it came from: the bank profile's id, `pbz` or `revolut`.
+  /// Where it came from: the bank profile's id, `pbz` or `revolut`, or `csv:<shapeId>` for a mapped CSV.
   final String source;
 
   /// Booking date, `YYYY-MM-DD`.
@@ -90,7 +90,7 @@ class NormalizedTransaction {
 
 /// The result of reading one bank file.
 class ImportBatch {
-  /// The bank profile's id (`pbz`, `revolut`).
+  /// The bank profile's id (`pbz`, `revolut`), or `csv:<shapeId>` for a mapped CSV.
   final String source;
   final List<NormalizedTransaction> transactions;
 
@@ -102,5 +102,9 @@ class ImportBatch {
   /// The rest of the file still imports; the app tells the user how many rows were left out.
   final int invalid;
 
-  const ImportBatch({required this.source, required this.transactions, this.skipped = 0, this.invalid = 0});
+  /// The 0-based file rows of the [invalid] ones, when the reader keeps them (a mapped CSV, `parseMappedCsv`); empty
+  /// otherwise. The app says `Row ${r + 1}`.
+  final List<int> invalidRows;
+
+  const ImportBatch({required this.source, required this.transactions, this.skipped = 0, this.invalid = 0, this.invalidRows = const []});
 }

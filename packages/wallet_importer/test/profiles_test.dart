@@ -116,7 +116,10 @@ void main() {
       for (final p in bankProfiles) {
         expect(unknownLayoutMessage, contains(p.label));
       }
+      // P12: an unknown CSV now asks for a column mapping (still an ImportException for old callers).
       expect(() => importBankFile(Uint8List.fromList('hello,world\n1,2\n'.codeUnits)),
+          throwsA(isA<NeedsMapping>().having((e) => e.message, 'message', needsMappingMessage)));
+      expect(() => importBankFile(Uint8List.fromList('hello\n'.codeUnits)),
           throwsA(isA<ImportException>().having((e) => e.message, 'message', unknownLayoutMessage)));
     });
   });

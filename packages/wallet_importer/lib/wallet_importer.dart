@@ -11,6 +11,28 @@ export 'src/bills/model.dart';
 export 'src/bills/pdf_text.dart' show pdfText, pdfTextResult, maxPdfBytes, pdfOpBudget;
 export 'src/bills/read_result.dart' show ReadFailure, ReadResult;
 export 'src/bills/text_bill.dart' show billFromText, billFromTextResult, maxBillTextChars;
+export 'src/csv_generic.dart'
+    show
+        CsvShape,
+        CsvPreviewRow,
+        NeedsMapping,
+        csvShape,
+        csvShapeId,
+        csvSampleRows,
+        csvSourcePrefix,
+        guessMapping,
+        layoutMismatchMessage,
+        mappingProblems,
+        matchCsvMapping,
+        maxCsvColumns,
+        needsMappingMessage,
+        parseCsvCents,
+        parseCsvDate,
+        parseMappedCsv,
+        previewMapping,
+        sourceLogKey,
+        tooManyColumnsMessage;
+export 'src/csv_mapping.dart' show CsvMapping, CsvDateFormat, CsvDecimal;
 export 'src/ids.dart' show transactionId, sourceTransactionId;
 export 'src/importer.dart' show importBankFile, parseRows, ImportException, unknownLayoutMessage;
 export 'src/limits.dart' show maxImportBytes, maxXlsxUnpackedBytes, passwordProtectedMessage, tooLargeMessage;

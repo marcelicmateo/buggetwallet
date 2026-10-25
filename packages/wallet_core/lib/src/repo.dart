@@ -932,7 +932,7 @@ class WalletRepo {
     }
 
     // The count only: never the ids, amounts or descriptions.
-    if (collisions > 0) logEvent(_log, Level.WARNING, 'repo.idCollision', {'source': batch.source, 'count': collisions});
+    if (collisions > 0) logEvent(_log, Level.WARNING, 'repo.idCollision', {'source': sourceLogKey(batch.source), 'count': collisions});
     final changes = <(String, String, Map<String, Object?>)>[];
     for (final n in fresh) {
       changes.add((
@@ -959,7 +959,7 @@ class WalletRepo {
     final s = ImportSummary(fresh.length, batch.transactions.length - fresh.length, matched, batch.skipped,
         transfers: transfers, collisions: collisions);
     t.done({
-      'source': batch.source,
+      'source': sourceLogKey(batch.source), // `csv` for a mapped CSV: the shape id is a hash of header names
       'rows': batch.transactions.length,
       'added': s.added,
       'dupes': s.duplicates,

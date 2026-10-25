@@ -43,3 +43,30 @@ when the export does not say) and `account` (the account the file names). Nothin
 - CSV ids vs v1: SheetJS (v1) converts descriptions that look like values (`TRUE` → "true", `00123` → "123",
   `1e3` → "1000", `12/01/2026` → a serial) and keeps `"Shop"X` as is; v2 keeps the text as written (and reads
   `"Shop"X` as `ShopX`). Such rows get different ids across v1 and v2. Not seen in real Revolut descriptions.
+
+## Any other CSV: column mapping (P12, `csv_generic.dart`, `csv_mapping.dart`)
+- A CSV no profile recognises throws `NeedsMapping(shape)` (an `ImportException`; message "This file isn't one I know
+  yet. Map its columns once and it's remembered."). An .xls/.xlsx no profile knows keeps `unknownLayoutMessage`; so do a
+  CSV without a header row of 2+ columns, a NUL byte in the first 4 KB (UTF-16, binary) and prose with a comma.
+- `csvShape(bytes, {headerRow})`: encoding UTF-8, else Windows-1250 (pure-Dart table, `text_codec.dart`); delimiter
+  `;`, tab or `,` = the most consistent field count (≥ 2) over the first 15 rows (tie: wider rows, then that order);
+  header row = the first of those rows with ≥ 2 (and half the usual count of) filled cells, most of them text, followed
+  by a row with ≥ 2 filled cells. Rows are 0-based indexes into the rows `readCsv` returns (blank lines are not rows);
+  texts say `Row ${i + 1}`. Shape id = first 16 hex of SHA-256 over the header names (trimmed, lower case, spaces
+  collapsed) joined with `|`. Caps: `maxImportBytes`, more than 200 columns refused (`tooManyColumnsMessage`).
+- `CsvMapping` JSON (setting `csvmap:<shapeId>`): `{"v":1, "name", "headerRow", "date": {"col", "format"},
+  "amount": {"col"} | {"debit", "credit"}, "decimal": "comma"|"point", "negate", "description": [cols],
+  "currency"?: {"col"} | {"code"}, "skipIfEmpty"?: col, "headers": [names]}`. Date formats `dd.mm.yyyy` (a trailing dot
+  allowed), `d.m.yyyy`, `yyyy-mm-dd`, `dd/mm/yyyy` and `mm/dd/yyyy` (1–2 digit day/month), `dd-mm-yyyy`; a time after a
+  space or `T` is ignored; years 1900–2199.
+- Amounts: exact (no doubles), at most 2 decimals (a third is invalid, never rounded), thousands marks of the other kind
+  in groups of three, spaces, a leading `+`, `-` or `−`. Comma style: `1.234,56`, `1.234` = 1234.00, `12.30` invalid;
+  point style: `1,234.56`, `12,30` invalid. Debit/credit: exactly one non-zero (both = invalid, both empty = invalid);
+  a debit is money out and a credit money in whatever sign is written. `negate` flips the result. Currency column: ISO
+  code (any case) or `€`; empty or other = invalid; no column = the fixed code, else the wallet's currency.
+- Rows: all cells empty = not counted; an empty `skipIfEmpty` cell = skipped; anything that fails = invalid (counted,
+  index in `ImportBatch.invalidRows`). Source `csv:<shapeId>`, ids `sourceTransactionId(source, …)` with the occurrence
+  counter, `bankType` empty, no `kindHint`. A layout whose `headers` differ from the file's = `layoutMismatchMessage`.
+- `guessMapping(shape)` reads header names (Croatian and English; balance columns never the amount) and the samples
+  (date format, decimal style); `mappingProblems` / `previewMapping` check the 5 sample rows. Logs: counts, encoding,
+  delimiter word and `mapped: true` only; repo logs say `source: csv` (`sourceLogKey`).

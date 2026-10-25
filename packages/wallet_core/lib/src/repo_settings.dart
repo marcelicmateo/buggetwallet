@@ -6,12 +6,16 @@ String _budgetId(String category) => '${WalletSettings.budgetPrefix}$category';
 /// The key a settings problem is logged under: a per-key row by its map's name, never its id.
 String _logKey(String key) => key.startsWith(WalletSettings.patternPrefix)
     ? 'merchantPatterns'
-    : (key.startsWith(WalletSettings.budgetPrefix) ? 'categoryBudgets' : (key.startsWith(WalletSettings.planPrefix) ? 'planLines' : key));
+    : (key.startsWith(WalletSettings.budgetPrefix)
+        ? 'categoryBudgets'
+        : (key.startsWith(WalletSettings.planPrefix) ? 'planLines' : (key.startsWith(WalletSettings.csvMapPrefix) ? 'csvmap' : key)));
 
 bool _perKeySetting(String key) =>
     key == 'categoryBudgets' ||
     key == 'merchantPatterns' ||
     key == 'planLines' ||
+    key == 'csvMappings' ||
+    key.startsWith(WalletSettings.csvMapPrefix) ||
     key.startsWith(WalletSettings.planPrefix) ||
     key.startsWith(WalletSettings.budgetPrefix) ||
     key.startsWith(WalletSettings.patternPrefix);
@@ -120,6 +124,47 @@ extension WalletRepoSettings on WalletRepo {
       )
     ]);
     logEvent(_log, Level.INFO, 'settings.planLine', {'set': cents != null});
+  }
+
+  /// Saves the owner's column mapping for CSV shape [shapeId] (P12, [WalletSettings.csvMappings]): the synced row
+  /// `csvmap:<shapeId>` holds [mapping]'s JSON, so every device imports that shape the same way. Adding and changing
+  /// (a rename, another column) are the same call; the Undo of a removal sets it again. Throws [ArgumentError] for a
+  /// shape id that is not 16 lower-case hex characters or a mapping with a problem of its own (the first
+  /// [CsvMapping.structureProblems] text, owner-readable). Writes nothing when the stored layout is already that.
+  /// Logs `settings.csvMapping {op}` only: never the name or the columns.
+  void setCsvMapping(String shapeId, CsvMapping mapping) {
+    if (!WalletSettings.csvShapeIdPattern.hasMatch(shapeId)) throw ArgumentError.value(shapeId, 'shapeId', 'not a CSV shape id');
+    final problems = mapping.structureProblems();
+    if (problems.isNotEmpty) throw ArgumentError(problems.first);
+    final old = _storedCsvMapping(shapeId);
+    final next = mapping.copyWith(name: mapping.name.trim());
+    if (old == next) return;
+    _write([
+      ('setting', '${WalletSettings.csvMapPrefix}$shapeId', {'value': jsonEncode(next.toJson()), 'deleted': 0})
+    ]);
+    logEvent(_log, Level.INFO, 'settings.csvMapping', {'op': old == null ? 'add' : 'set'});
+  }
+
+  /// Removes the saved layout of [shapeId] (a tombstone, synced). Rows already imported with it keep their source.
+  /// Nothing is written when there is no live layout for it.
+  void removeCsvMapping(String shapeId) {
+    if (_storedCsvMapping(shapeId) == null) return;
+    _write([
+      ('setting', '${WalletSettings.csvMapPrefix}$shapeId', {'value': null, 'deleted': 1})
+    ]);
+    logEvent(_log, Level.INFO, 'settings.csvMapping', {'op': 'remove'});
+  }
+
+  /// The live, valid layout stored for [shapeId] (one row read, as [WalletSettings.csvMappings] reads it), or null.
+  CsvMapping? _storedCsvMapping(String shapeId) {
+    final key = '${WalletSettings.csvMapPrefix}$shapeId';
+    final v = db.select('SELECT value FROM settings WHERE id = ? AND deleted = 0', [key]).firstOrNull?['value'];
+    if (v is! String) return null;
+    try {
+      return WalletSettings.fromMap({key: jsonDecode(v)}).csvMappings[shapeId];
+    } on FormatException {
+      return null;
+    }
   }
 
   /// Adds merchant [pattern] for [category], or sets an existing one (same text) to exactly this rule: [category],
