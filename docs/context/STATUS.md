@@ -284,6 +284,18 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
     - UI: 5 findings (1 medium, about Save versus close), all fixed.
     - The 68 independent spec tests turned up no core bug.
   - **Stage run:** importer 335, core 2029, relay 206, app 1494 (1499 after the last fixes), desktop 13 files (tags and plan rerun after the last fixes), emulator screens.
+- 2026-10-25: **Stage P7: Rules screen** (spec + Clarifications `P7_SPEC.md`, no schema bump).
+  - **Plan › Rules** lists, per rule, its text, main tag, `#tags`, range and "used by N":
+    - payee rules (Delete with Undo is new: `removeMerchantRule`);
+    - "description contains" rules (new: case- and accent-folded);
+    - advanced regex patterns;
+    - payee tag rules;
+    - built-in rules (read-only, collapsed).
+  - **Editing:** Add / Edit / Delete with Undo / move. An edit shows a Preview ("This changes the main tag of N payments"). The payment sheet has "Make a rule…".
+  - **Owner rule (never by amount alone):** an amount range is allowed only on "description contains" rules, and only narrows the text match. A regex that matches every text (`.*`, `^`, empty) is refused when written and ignored when synced in.
+  - **Review:** 1 high (catch-all regex + range = amount alone), 1 medium (a move after offline ties jumped two places), 2 low. All fixed.
+  - **Known limit:** builds before P7 read a contains rule as a regex and ignore its range (text only).
+  - **Stage run:** importer 335, core 2104, relay 206, app 1520, desktop 13 files, emulator screens.
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -370,6 +382,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
   N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
+- Owner checks after P7 (phone):
+  - Plan › Rules: add a "description contains" rule with a range, then Preview and Save.
+  - Try a range with no text: it is refused.
+  - Edit a rule and check the Preview count.
+  - Delete a payee rule, then Undo.
+  - "Make a rule…" from a bank payment.
 - Owner checks after T1 (phone):
   - Open a bank payment:
     - pick a main tag and add two extra tags, tap a suggestion, and create a new tag;
