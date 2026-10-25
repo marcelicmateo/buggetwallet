@@ -10,7 +10,7 @@ library;
 
 export 'package:wallet_importer/wallet_importer.dart' show BillItem, BillSource, NormalizedBill, TxKind;
 
-export 'src/accounts.dart' show AccountBalance, accountBalances, balanceTotals;
+export 'src/accounts.dart' show AccountBalance, accountBalances, accountSourceLabel, balanceTotals;
 export 'src/backup.dart'
     show
         backupBlobBytesDefault,

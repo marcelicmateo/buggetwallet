@@ -148,8 +148,8 @@ void main() {
 
     test('headers are matched exactly: lower case or translated headers are not a Revolut export', () {
       expect(() => _imp('type,started date,description,amount\ncard,2026-02-01,Shop,-1\n'), throwsA(isA<ImportException>()));
-      expect(() => _imp('Vrsta,Datum početka,Opis,Iznos\nKartica,2026-02-01,Shop,-1\n'),
-          throwsA(isA<ImportException>().having((e) => e.message, 'message', contains('I recognise'))));
+      // P12: not Revolut, so it asks for a column mapping.
+      expect(() => _imp('Vrsta,Datum početka,Opis,Iznos\nKartica,2026-02-01,Shop,-1\n'), throwsA(isA<NeedsMapping>()));
     });
 
     test('the header may sit up to row 15 (index 14) and not below', () {
@@ -448,11 +448,13 @@ void main() {
         'only whitespace': _b('  \n\t\n'),
         'empty': Uint8List(0),
         'one byte': Uint8List.fromList([0x50]),
-        'a csv with another bank layout': _b('Date,Payee,Debit,Credit\n2026-02-01,Shop,1.00,\n'),
       };
       for (final e in samples.entries) {
         expect(() => importBankFile(e.value), unknown, reason: e.key);
       }
+      // P12: a CSV with another bank's layout is not refused any more: it asks for a column mapping.
+      expect(() => importBankFile(_b('Date,Payee,Debit,Credit\n2026-02-01,Shop,1.00,\n')),
+          throwsA(isA<NeedsMapping>().having((e) => e.shape.headers, 'headers', ['Date', 'Payee', 'Debit', 'Credit'])));
     });
 
     test('UTF-16 text (Excel "Unicode text" export) is refused cleanly', () {

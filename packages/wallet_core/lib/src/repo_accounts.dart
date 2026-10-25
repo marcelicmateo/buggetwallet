@@ -32,14 +32,15 @@ extension WalletRepoAccounts on WalletRepo {
     }
   }
 
-  /// Adds an account and returns its id (`a…`). [source] is a bank profile id ([bankProfiles]) or null for cash;
-  /// [opening] is the balance (signed cents) at the end of [openingDate]. A bad name, currency, source, date or
-  /// amount, or a second live account with the same (source, currency), is an [ArgumentError].
+  /// Adds an account and returns its id (`a…`). [source] is a bank profile id ([bankProfiles]), `csv:<shapeId>` with
+  /// a live saved CSV layout (P12, [WalletSettings.csvMappings]; labelled with its name, [accountSourceLabel]) or null
+  /// for cash; [opening] is the balance (signed cents) at the end of [openingDate]. A bad name, currency, source, date
+  /// or amount, or a second live account with the same (source, currency), is an [ArgumentError].
   Future<String> addAccount(
       {required String name, String? source, required String currency, required int opening, required String openingDate}) async {
     final n = _checkName(name);
     if (!_currency.hasMatch(currency)) throw ArgumentError('Bad currency (three capital letters, like EUR).');
-    if (source != null && !bankProfiles.any((p) => p.id == source)) throw ArgumentError('Unknown bank.');
+    if (source != null && !bankProfiles.any((p) => p.id == source) && !_liveCsvSource(source)) throw ArgumentError('Unknown bank.');
     _checkAmount(opening);
     _checkDate(openingDate);
     _checkUnique(source, currency);
@@ -50,6 +51,10 @@ extension WalletRepoAccounts on WalletRepo {
     logEvent(_log, Level.INFO, 'account.add', {'cash': source == null});
     return id;
   }
+
+  /// `csv:<shapeId>` whose shape has a live saved layout.
+  bool _liveCsvSource(String source) =>
+      source.startsWith(csvSourcePrefix) && _storedCsvMapping(source.substring(csvSourcePrefix.length)) != null;
 
   Map<String, Object?> _accountRow(String id) {
     final rs = db.select('SELECT * FROM accounts WHERE id = ?', [id]);

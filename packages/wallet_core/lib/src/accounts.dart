@@ -1,4 +1,18 @@
+import 'package:wallet_importer/wallet_importer.dart' show CsvMapping, bankProfiles, csvSourcePrefix;
+
 import 'models.dart';
+
+/// What an account or import `source` is called: `Cash` for null, a bank profile's label, a saved CSV layout's name
+/// for `csv:<shapeId>` (P12, from [csvMappings] = [WalletSettings.csvMappings]; `CSV file` once the layout is
+/// removed), else the source as it is.
+String accountSourceLabel(String? source, {Map<String, CsvMapping> csvMappings = const {}}) {
+  if (source == null) return 'Cash';
+  for (final p in bankProfiles) {
+    if (p.id == source) return p.label;
+  }
+  if (source.startsWith(csvSourcePrefix)) return csvMappings[source.substring(csvSourcePrefix.length)]?.name ?? 'CSV file';
+  return source;
+}
 
 /// One account's balance from its opening and the rows after it ([accountBalances]).
 class AccountBalance {
