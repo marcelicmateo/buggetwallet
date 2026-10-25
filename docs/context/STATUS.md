@@ -309,6 +309,13 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **App:** Split… on the payment sheet (editor with "Left to split", Save off until 0.00, Remove with Undo); Spending, Today and search show "Split · N"; category/tag/insight lists show parts ("part of …"); demo wallet has a split supermarket payment.
   - **Reviews:** core 2 medium (a part could fall back to a transfer and vanish from spending; a split made on another device after matching was lost), 2 low; UI 1 medium (search listed a split payment once per part), 7 low. All fixed with tests.
   - **Stage run:** importer 335, core 2367, relay 206, app 1577, desktop 13 files, web-test, emulator screens, perf ok (0 over budget).
+- 2026-10-25: **Stage P15: other currencies in the budget** (spec `P15_SPEC.md`, owner rates; no schema change, settings `fx:<CODE>`).
+  - **Plan › Currencies:** one row per foreign currency seen in payments: set "1 USD = 0.9240 EUR" (both decimal styles, up to 6 decimals, max 100 per unit), edit, remove with Undo (keeps the original date). Payments in that currency then count in every total, budget, insight and CSV at the converted amount (rounded half away from zero, once per payment; split parts add up exactly); rows show the home amount with "100.00 $ at 0.9240" under it. A currency without a rate stays "not counted" as before (ForeignNote taps to Plan › Currencies).
+  - **Kept raw on purpose:** matching, transfers (Revolut exchanges stay transfers), accounts, recurring bills/income matching (`matchRows`), paydays and plan suggestions, the payment sheet and the split editor (they work in the bank's amount and currency).
+  - **A rate remembers its home currency:** after switching the wallet currency, old rates stop counting and show "Rate was set for EUR (set it again)".
+  - **Bank EUR amount:** not in any export the importer reads; waits for the owner's Revolut header line (hook `Tx.homeAmount` ready).
+  - **Reviews:** core 3 medium (split remainder with a partial list, rates not tied to the home currency, bill matching on converted rows), 2 low; round 2: 2 medium (converted rows set paydays, split editor used the converted amount), 4 low. All fixed with tests.
+  - **Stage run:** importer 335, core 2515, relay 206, app 1669, desktop 13 files, web-test, emulator screens, perf ok (0 missed frames).
 - 2026-10-25: **Stage P8: reports** (spec `P8_SPEC.md`, no schema change).
   - **Insights › Per pay period:** income, fixed, flexible and net for each of the last 6/12 pay periods (newest first, running period "so far", total line); the same numbers as Spending's pay-period chart.
   - **Insights › Main tag vs budget:** pick a spending main tag; one bar per pay period against its monthly budget, "over by …" rows, "No budget set".
@@ -408,6 +415,8 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
   N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
+- Owner checks after P15 (phone):
+  - Plan › Currencies: set a rate for a currency you paid in (e.g. 0,9240); Today and Spending totals change, the "not counted" line goes away; the payment shows both amounts; Remove, then Undo.
 - Owner checks after P8 (phone):
   - Spending › Insights, last two panels: per pay period numbers and a main tag against its budget.
   - Finish a weekly review: the Done screen shows the streak and what waiting saved.
