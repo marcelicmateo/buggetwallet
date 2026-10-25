@@ -13,6 +13,10 @@ one Haiku full run and one reviewer pass per stage). Nothing here is started.
 | D11 | Which graphs first | N3 | Spending per month, category share, income vs spending, budget vs actual |
 | D12 | Spending: finer categories or drill-down first | N3 | Drill-down first (no new categories), then subcategories |
 
+**Owner answers (2026-10-25):** D8 = softer colours + thinner lines (mono stays, dark not singled out); D9 = accounts as proposed
+(owner-named, opening cents + as-of date, balance = opening + rows since, correctable); D11 = all four graphs (spending per month,
+category share, income vs spending, budget vs actual); D12 = drill-down first. D10 still open (ask before N4).
+
 ## Notes → stages
 | Stage | Notes it covers | Touches |
 |---|---|---|
