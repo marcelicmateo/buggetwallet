@@ -112,3 +112,5 @@ List<DueCycle> dueCycles(List<RecurringBill> bills, List<CategorizedTx> txs, Str
 - `addRecurring` refuses a payee used by another bill that is not deleted or dismissed (candidates count).
 - `updateRecurring` writes `min_amount` and `max_amount` together. `dueCycles(currency:)` is required. Slip coverage uses the bill's `tolerance`.
 - History for non-monthly bills always shows `months` cycles; no `paidNearby` for cycles.
+- Re-review (lead, 2026-10-25): `endsBy` = `endsOn + intervalDays ~/ 2` (a late payment never finishes a plan early); `skipRecurring` on a 27–31-day bill with an end steps calendar months on the end date's day (`RecurringBill.stepFrom`); monthly bills without an end still step 30 days.
+- App: Edit sends only the fields the owner changed (`endsOn` via `lastDueFor` only when count, due or interval changed; an untouched blank count keeps the stored end); "Paid" shows for monthly bills only; Mark paid's Undo writes the old `next_due` back.
