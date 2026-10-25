@@ -19,7 +19,11 @@ void logInvalidSetting(String key, Object? value) {
 }
 
 /// Forgets which bad settings were logged, so tests can expect the warning again.
-void resetInvalidSettingLog() => _invalidLogged.clear();
+/// Also forgets the once-per-process `recurring.invalid` warning ([RecurringBill.fromRow]).
+void resetInvalidSettingLog() {
+  _invalidLogged.clear();
+  _invalidRangeLogged = false;
+}
 
 /// A stored column read as text or a whole number; any other type (a damaged value) reads as null.
 String? _str(Object? v) => v is String ? v : null;
@@ -195,13 +199,42 @@ class WishItem {
   double hoursLeft(int coolHours, int nowMillis) => (added + coolHours * 3600000 - nowMillis) / 3600000;
 }
 
-/// A bill that comes back every month: detected from bank rows (`detectRecurring`, status `candidate`), then
-/// confirmed or dismissed by the owner. Synced entity `recurring`; the id is `rec:<payee>` so every device derives the
-/// same row for the same merchant. [expectedAmount] is positive cents (an outflow). A confirmed bill is reserved in
-/// `computePeriod` until a bank row pays its cycle ([lastPaidTx], then [nextDue] moves on by [intervalDays]).
+/// How often a recurring bill repeats (P4): the period classes `detectRecurring` finds and the add-bill sheet offers.
+/// [days] is the class's `intervalDays`.
+enum RecurringPeriod {
+  weekly(7),
+  biweekly(14),
+  monthly(30),
+  quarterly(91),
+  yearly(365);
+
+  const RecurringPeriod(this.days);
+  final int days;
+
+  /// The class whose [days] are nearest to [days], when within that class's [RecurringBill.toleranceFor]; null for a
+  /// custom interval (e.g. 60 days).
+  static RecurringPeriod? of(int days) {
+    var best = values.first;
+    for (final p in values) {
+      if ((p.days - days).abs() < (best.days - days).abs()) best = p;
+    }
+    return (best.days - days).abs() <= RecurringBill.toleranceFor(best.days) ? best : null;
+  }
+}
+
+/// Whether `recurring.invalid` was logged in this process (once, field name only; see [RecurringBill.fromRow]).
+var _invalidRangeLogged = false;
+
+/// A bill that comes back on a fixed interval ([intervalDays]: weekly … yearly, P4): detected from bank rows
+/// (`detectRecurring`, status `candidate`), then confirmed or dismissed by the owner, or added by hand ([manual],
+/// `addRecurring`, confirmed at once). Synced entity `recurring`; a detected bill's id is `rec:<payee>` so every device
+/// derives the same row for the same merchant, a manual one's `rec:m` + 12 random hex. [expectedAmount] is positive
+/// cents (an outflow); [minAmount]/[maxAmount] an optional amount range ([hasRange]: the highest is set aside,
+/// [reserveAmount]); [endsOn] the last due date of an instalment plan. A confirmed bill is reserved in `computePeriod`
+/// until a bank row (or parts adding up) pays its cycle ([lastPaidTx], then [nextDue] moves on by [intervalDays]).
 class RecurringBill {
   final String id;
-  final String payee; // merchantKey of the bank rows
+  final String payee; // merchantKey of the bank rows; '' for a manual bill without payee (never matches a row)
   final String label; // merchantName, for display
   final String category;
   final int expectedAmount; // cents, > 0
@@ -209,6 +242,9 @@ class RecurringBill {
   final String nextDue; // YYYY-MM-DD
   final String status; // candidate | confirmed | dismissed
   final String? lastPaidTx; // the bank row that paid the last cycle
+  final int? minAmount, maxAmount; // cents: the amount range, see [hasRange]
+  final String? endsOn; // YYYY-MM-DD: the last due date (instalments)
+  final bool manual; // added by hand: never touched by detection
 
   const RecurringBill({
     required this.id,
@@ -220,17 +256,64 @@ class RecurringBill {
     required this.nextDue,
     this.status = 'candidate',
     this.lastPaidTx,
+    this.minAmount,
+    this.maxAmount,
+    this.endsOn,
+    this.manual = false,
   });
 
-  /// The one interval detected for now: monthly.
+  /// The monthly interval, and what a stored `interval_days` outside [minIntervalDays]..[maxIntervalDays] reads as.
   static const defaultIntervalDays = 30;
+  static const minIntervalDays = 1, maxIntervalDays = 400;
 
   static const statuses = {'candidate', 'confirmed', 'dismissed'};
 
   /// The id of the bill for a payee key, the same on every device.
   static String idFor(String payee) => 'rec:$payee';
 
+  /// Days a payment may be from its due date (and a detected gap from the class's days) for a bill repeating every
+  /// [days]: ≤ 7 → 1, ≤ 14 → 2, ≤ 31 → 3 (`recurringDays`), ≤ 92 → 7, else 10.
+  static int toleranceFor(int days) => days <= 7
+      ? 1
+      : days <= 14
+          ? 2
+          : days <= 31
+              ? 3
+              : days <= 92
+                  ? 7
+                  : 10;
+
   bool get confirmed => status == 'confirmed';
+
+  /// Both ends of the amount range are set and valid: `0 < minAmount ≤ maxAmount ≤ WalletSettings.maxAmount`.
+  bool get hasRange => validRange(minAmount, maxAmount);
+
+  /// [hasRange]'s rule for a pair of cents.
+  static bool validRange(int? lo, int? hi) => lo != null && hi != null && lo > 0 && lo <= hi && hi <= WalletSettings.maxAmount;
+
+  /// What a cycle sets aside: the top of the range ([hasRange], owner: the highest amount), else [expectedAmount].
+  int get reserveAmount => hasRange ? maxAmount! : expectedAmount;
+
+  /// A bill that repeats less often than monthly (quarterly, yearly): held in full until paid (owner, P4).
+  bool get isLong => intervalDays > 31;
+
+  /// A bill shorter than any month (weekly, every 2 weeks, a custom interval under 27 days): each of its occurrences in
+  /// a pay period is a cycle of its own (`dueCycles`). A monthly bill has one cycle per period, as before P4.
+  bool get isShort => intervalDays < defaultIntervalDays - toleranceFor(defaultIntervalDays);
+
+  /// The instalment plan is over: the next due date is after [endsOn]. Nothing is due or reserved any more.
+  bool get finished => endsOn != null && nextDue.compareTo(endsOn!) > 0;
+
+  /// Days a payment may be from its due date ([toleranceFor] of [intervalDays]).
+  int get tolerance => toleranceFor(intervalDays);
+
+  /// Cycles from [nextDue] to [endsOn] inclusive (0 once [finished]); null without [endsOn] or a due date.
+  int? get instalmentsLeft {
+    final e = endsOn;
+    if (e == null || !isIsoDate(e) || !isIsoDate(nextDue)) return null;
+    if (nextDue.compareTo(e) > 0) return 0;
+    return daysBetween(nextDue, e) ~/ intervalDays + 1;
+  }
 
   /// A bill in a fixed category (Rent, Loan, Bills & subscriptions) is already planned through the fixed-cost
   /// settings, so `computePeriod` lists it as due but does not reserve it a second time (owner rule: exact). A
@@ -243,17 +326,32 @@ class RecurringBill {
   /// (Rent, Loan, Bills & subscriptions or a custom fixed one with its plan line). A deleted or unknown custom id is not.
   bool coveredByPlanIn(CategoryTable t) => t.coveredByPlan(category);
 
-  static RecurringBill fromRow(Map<String, Object?> r) => RecurringBill(
-        id: r['id'] as String,
-        payee: _str(r['payee']) ?? '',
-        label: _str(r['label']) ?? '',
-        category: _str(r['category']) ?? '',
-        expectedAmount: _int(r['expected_amount']) ?? 0,
-        intervalDays: _int(r['interval_days']) ?? defaultIntervalDays,
-        nextDue: _str(r['next_due']) ?? '',
-        status: _str(r['status']) ?? 'candidate',
-        lastPaidTx: _str(r['last_paid_tx']),
-      );
+  /// A stored `interval_days` outside [minIntervalDays]..[maxIntervalDays] reads as [defaultIntervalDays]; an
+  /// invalid stored range is kept as stored but reads as no range ([hasRange] false; logged once per process as
+  /// `recurring.invalid`, field name only).
+  static RecurringBill fromRow(Map<String, Object?> r) {
+    final interval = _int(r['interval_days']);
+    final lo = _int(r['min_amount']), hi = _int(r['max_amount']);
+    if ((lo != null || hi != null) && !validRange(lo, hi) && !_invalidRangeLogged) {
+      _invalidRangeLogged = true;
+      logEvent(_recurringLog, Level.WARNING, 'recurring.invalid', {'field': 'amount_range'});
+    }
+    return RecurringBill(
+      id: r['id'] as String,
+      payee: _str(r['payee']) ?? '',
+      label: _str(r['label']) ?? '',
+      category: _str(r['category']) ?? '',
+      expectedAmount: _int(r['expected_amount']) ?? 0,
+      intervalDays: interval == null || interval < minIntervalDays || interval > maxIntervalDays ? defaultIntervalDays : interval,
+      nextDue: _str(r['next_due']) ?? '',
+      status: _str(r['status']) ?? 'candidate',
+      lastPaidTx: _str(r['last_paid_tx']),
+      minAmount: lo,
+      maxAmount: hi,
+      endsOn: _str(r['ends_on']),
+      manual: _int(r['manual']) == 1,
+    );
+  }
 
   RecurringBill copyWith({String? nextDue, String? status, String? lastPaidTx, int? expectedAmount, String? category}) => RecurringBill(
         id: id,
@@ -265,8 +363,17 @@ class RecurringBill {
         nextDue: nextDue ?? this.nextDue,
         status: status ?? this.status,
         lastPaidTx: lastPaidTx ?? this.lastPaidTx,
+        minAmount: minAmount,
+        maxAmount: maxAmount,
+        endsOn: endsOn,
+        manual: manual,
       );
 }
+
+final _recurringLog = Logger('bw.recurring');
+
+/// [RecurringBill.instalmentsLeft] as a function.
+int? instalmentsLeft(RecurringBill b) => b.instalmentsLeft;
 
 /// One of the owner's accounts (N2, synced entity `account`, table `accounts`): a bank account ([source] = a bank
 /// profile id, `pbz` / `revolut`) or cash ([source] null). [opening] (signed cents) is the balance at the end of

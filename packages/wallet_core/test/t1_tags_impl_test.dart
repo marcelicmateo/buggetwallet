@@ -324,8 +324,8 @@ void main() {
     r.close();
     r = WalletRepo.open(path);
     addTearDown(r.close);
-    expect(WalletRepo.schemaVersion, 11);
-    expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '11');
+    expect(WalletRepo.schemaVersion, greaterThanOrEqualTo(11)); // P4 made it 12
+    expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '${WalletRepo.schemaVersion}');
     expect(r.tags(includeDeleted: true), isEmpty);
     expect(r.ruleTags(), isEmpty);
     expect(r.tagLinks(), isEmpty);

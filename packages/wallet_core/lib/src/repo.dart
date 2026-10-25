@@ -24,6 +24,7 @@ part 'repo_bills.dart';
 part 'repo_categories.dart';
 part 'repo_blobs.dart';
 part 'repo_planned.dart';
+part 'repo_recurring.dart';
 part 'repo_settings.dart';
 part 'repo_tags.dart';
 
@@ -140,8 +141,9 @@ class WalletRepo {
   /// per category budget and merchant pattern (`budget:<category>`, `pattern:<id>`; the maps are migrated once),
   /// version 9: accounts (the `account` entity; no data migration), version 10: categories (the `category` entity:
   /// custom categories, subcategories and built-in overrides; no data migration), version 11: tags (the `tag`,
-  /// `txtag` and `ruletag` entities; no data migration).
-  static const schemaVersion = 11;
+  /// `txtag` and `ruletag` entities; no data migration), version 12: recurring bills beyond monthly (P4: `recurring`
+  /// gains `min_amount`, `max_amount`, `ends_on`, `manual`; no data migration).
+  static const schemaVersion = 12;
 
   /// The folder sync's bookkeeping (`peer_files`: which files of the shared folder were read) means nothing on a relay,
   /// whose sequence numbers start over (every device's first relay file is its whole state), so it is dropped once.
@@ -774,9 +776,10 @@ class WalletRepo {
         r,
     ], (cz, r) {
       final paid = r['last_paid_tx'] is String ? transaction(r['last_paid_tx'] as String) : null;
-      final row = paid ?? (latest ??= _latestOutflowByPayee())[r['payee']];
+      final payee = r['payee'] is String && (r['payee'] as String).isNotEmpty ? r['payee'] as String : null; // '' = manual, no payee
+      final row = paid ?? (payee == null ? null : (latest ??= _latestOutflowByPayee())[payee]);
       if (row != null) return cz.categoryOf(row);
-      return cz.resolveStored(r['category'] as String?, key: r['payee'] as String?, text: '${r['label'] ?? ''}', orElse: 'Shopping');
+      return cz.resolveStored(r['category'] as String?, key: payee, text: '${r['label'] ?? ''}', orElse: 'Shopping');
     }, RecurringBill.fromRow);
   }
 
@@ -1237,7 +1240,15 @@ class WalletRepo {
     final cz = categorizer(withTags: false);
     final currency = settings().currency; // only rows in the wallet's currency make or pay a bill
     final categorized = [for (final r in rows) cz.categorize(r)];
-    final detected = detectRecurring(categorized, today: today, currency: currency);
+    // A payee a live manual bill uses is never detected (P4: no duplicate of the owner's own bill).
+    final manualPayees = {
+      for (final b in existing.values)
+        if (b.manual && b.payee.isNotEmpty && !deleted.contains(b.id)) b.payee
+    };
+    final detected = [
+      for (final d in detectRecurring(categorized, today: today, currency: currency))
+        if (!manualPayees.contains(d.payee)) d
+    ];
     // The latest live bank outflow per payee: its category is the payee's current one. A row whose own category is a
     // deleted or unknown custom id ([CategoryTable.isDeadCustom]) only falls back on this device's table, so it never
     // decides a stored category (P1: nothing is written for a fallback; two devices with different tables never loop).
@@ -1286,10 +1297,11 @@ class WalletRepo {
     var recategorized = 0;
     var bills = <RecurringBill>[];
     for (final b in current.values) {
-      if (!b.confirmed || deleted.contains(b.id) || b.payee.isEmpty) continue;
+      if (!b.confirmed || deleted.contains(b.id) || b.payee.isEmpty || b.finished) continue;
       final category = latest[b.payee]?.category;
-      // Never over a stored deleted custom category: it is resolved when read, and an undelete brings it back.
-      if (category != null && category != b.category && !cz.table.isDeadCustom(b.category)) {
+      // Never over a stored deleted custom category: it is resolved when read, and an undelete brings it back. A
+      // manual bill keeps the category the owner gave it.
+      if (!b.manual && category != null && category != b.category && !cz.table.isDeadCustom(b.category)) {
         recategorized++;
         changes.add(('recurring', b.id, {'category': category}));
         current[b.id] = b.copyWith(category: category);
@@ -1302,9 +1314,13 @@ class WalletRepo {
       final plan = planRecurringPayments(bills, rows, currency: currency);
 
       if (plan.isEmpty) break;
+      // A single payment anchors the next cycle on its own date; parts adding up on the cycle's due date.
       bills = [
         for (final b in bills)
-          if (plan.paidBy[b.id] case final Tx row) b.copyWith(lastPaidTx: row.id, nextDue: addDays(row.date, b.intervalDays)) else b
+          if (plan.paidBy[b.id] case final Tx row)
+            b.copyWith(lastPaidTx: row.id, nextDue: addDays(plan.paidInParts.contains(b.id) ? b.nextDue : row.date, b.intervalDays))
+          else
+            b
       ];
       paid += plan.paidBy.length;
     }

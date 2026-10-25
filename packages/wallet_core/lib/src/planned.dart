@@ -150,10 +150,11 @@ class UpcomingItem {
 /// Most occurrences of one bill listed or exported.
 const _maxOccurrences = 1000;
 
-/// The dates of [b] in [from, to] (inclusive): `nextDue`, then every `intervalDays` after it (an interval below 1
-/// gives `nextDue` only). Occurrences before [from] are skipped, so an overdue bill shows from its next date on. No
-/// check of `status`: the callers take confirmed bills only.
-List<String> billOccurrences(RecurringBill b, String from, String to) {
+/// The dates of [b] in [from, until] (inclusive): `nextDue`, then every `intervalDays` after it (an interval below 1
+/// gives `nextDue` only). Occurrences before [from] are skipped, so an overdue bill shows from its next date on; none
+/// after `endsOn` (an instalment plan's last due date, P4). No check of `status`: the callers take confirmed bills only.
+List<String> billOccurrences(RecurringBill b, String from, String until) {
+  final to = switch (b.endsOn) { final e? when isIsoDate(e) && e.compareTo(until) < 0 => e, _ => until };
   if (!isIsoDate(b.nextDue) || !isIsoDate(from) || !isIsoDate(to) || from.compareTo(to) > 0) return const [];
   final step = b.intervalDays;
   var d = b.nextDue;
@@ -207,7 +208,7 @@ List<UpcomingItem> upcoming({
     if (!b.confirmed) continue;
     for (final d in billOccurrences(b, from, to)) {
       out.add(UpcomingItem(
-          kind: UpcomingKind.bill, key: 'b:${b.id}@$d', date: d, title: b.label, amount: b.expectedAmount, category: b.category, bill: b));
+          kind: UpcomingKind.bill, key: 'b:${b.id}@$d', date: d, title: b.label, amount: b.reserveAmount, category: b.category, bill: b));
     }
   }
   for (final b in billsDb) {

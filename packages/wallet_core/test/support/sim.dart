@@ -41,7 +41,10 @@ const entityTables = {
   'goal_contrib': ('goal_contrib', ['goal_id', 'amount', 'date', 'deleted']),
   'recurring': (
     'recurring',
-    ['payee', 'label', 'category', 'expected_amount', 'interval_days', 'next_due', 'status', 'last_paid_tx', 'deleted']
+    [
+      'payee', 'label', 'category', 'expected_amount', 'interval_days', 'next_due', 'status', 'last_paid_tx', 'deleted', //
+      'min_amount', 'max_amount', 'ends_on', 'manual',
+    ]
   ),
   'planned': ('planned', ['title', 'date', 'amount', 'category', 'source', 'source_ref', 'status', 'paid_tx', 'deleted']),
   'bill': (

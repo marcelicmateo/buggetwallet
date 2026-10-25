@@ -3,6 +3,7 @@ import 'categories.dart';
 import 'dates.dart';
 import 'logs.dart';
 import 'models.dart';
+import 'recurring.dart' show planRecurringPayments, RecurringPayments;
 
 final _log = Logger('bw.budget');
 
@@ -44,11 +45,16 @@ class PeriodBudget {
   final double elapsed;
   final Map<String, int> fixedPaid;
 
-  /// Σ `expectedAmount` of the confirmed recurring bills due before the next payday and not paid yet ([dueBills]) in
-  /// flex categories: taken off the flexible money like the planned fixed costs (owner decision 2026-10-20). A due bill
-  /// in a fixed category ([RecurringBill.coveredByPlan]) is already in `fixedPlan`, so it is listed but not added.
+  /// Σ `reserve` of [dueCycles] not covered by a plan line ([DueCycle.coveredIn]): taken off the flexible money like
+  /// the planned fixed costs (owner decision 2026-10-20). A due monthly (or shorter) bill in a fixed category
+  /// ([RecurringBill.coveredByPlan]) is already in `fixedPlan`, so it is listed but not added; a long bill never is.
   final int reservedBills;
+
+  /// The distinct bills of [dueCycles], ordered by `nextDue`, then label, then id ([dueBills]).
   final List<RecurringBill> dueBills;
+
+  /// The cycles of confirmed bills this period holds money for ([dueCycles]), by due date.
+  final List<DueCycle> dueCycles;
 
   /// Σ `amount` of [duePlanned] (open planned costs with an amount dated from today to the day before payday) outside
   /// fixed categories, taken off the flexible money with [reservedBills] (§4.3). One in a fixed category
@@ -86,6 +92,7 @@ class PeriodBudget {
     required this.fixedPaid,
     this.reservedBills = 0,
     this.dueBills = const [],
+    this.dueCycles = const [],
     this.reservedPlanned = 0,
     this.duePlanned = const [],
     this.reservedPlannedRows = const [],
@@ -107,24 +114,93 @@ class PeriodBudget {
 
 int _sum(Iterable<CategorizedTx> xs) => xs.fold(0, (s, x) => s + x.amount);
 
-/// The confirmed bills of [bills] that still need paying out of this period's money: `nextDue` before [end] (the next
-/// payday, exclusive: a bill due on payday comes out of the next salary) and not paid in this period yet (no
-/// `lastPaidTx` row in [txs] dated on or after [start]; a payment moves `nextDue` on, so normally the date alone
-/// decides). Ordered by `nextDue`, then label, then id.
+/// The confirmed bills of [bills] that still need paying out of this period's money: the distinct bills of
+/// [dueCycles] (a monthly bill: `nextDue` before [end], the next payday, exclusive, and not paid in this period yet,
+/// i.e. no `lastPaidTx` row in [txs] dated on or after [start]; a long bill until paid; a short one per occurrence).
+/// Ordered by `nextDue`, then label, then id.
 List<RecurringBill> dueBills(List<RecurringBill> bills, List<CategorizedTx> txs, String start, String end) {
-  final paidOn = <String, String>{for (final t in txs) t.tx.id: t.date};
+  final seen = <String>{};
   return [
+    for (final c in dueCycles(bills, txs, start, end, payments: const RecurringPayments({})))
+      if (seen.add(c.bill.id)) c.bill
+  ];
+}
+
+/// One cycle of a confirmed recurring bill that a pay period holds money for ([dueCycles]): [due] its due date,
+/// [paid] the cents already paid of it (parts, [RecurringPayments.partsPaid]), [reserve] what is still set aside,
+/// `max(0, reserveAmount − paid)`.
+class DueCycle {
+  final RecurringBill bill;
+  final String due;
+  final int reserve;
+  final int paid;
+  const DueCycle({required this.bill, required this.due, required this.reserve, required this.paid});
+
+  /// Covered by a monthly plan line, so listed but not added to `reservedBills`: a monthly (or shorter) bill in a fixed
+  /// category of [t] ([RecurringBill.coveredByPlanIn]). A long bill is never covered (owner: the money must be there).
+  bool coveredIn(CategoryTable t) => !bill.isLong && bill.coveredByPlanIn(t);
+}
+
+/// Most cycles of one short bill a period lists (a guard; a pay period holds about five weekly ones).
+const _maxCycles = 100;
+
+/// The cycles of [bills] that the pay period [start] .. [end] (exclusive, the next payday) holds money for, by due
+/// date, then label, then id (P4 §4). Confirmed bills only; a [RecurringBill.finished] one has none.
+/// - **Monthly** (27..31 days): its `nextDue` cycle when before [end] (overdue included) and not paid in this period
+///   (no `lastPaidTx` row in [txs] dated on or after [start]), as before P4.
+/// - **Short** ([RecurringBill.isShort]): `nextDue` (overdue included) and every `nextDue + k × intervalDays` (k ≥ 1)
+///   from [start] up to before [end], not past `endsOn`: a weekly bill reserves each week in the period. Only the first
+///   cycle can hold parts.
+/// - **Long** ([RecurringBill.isLong]): the `nextDue` cycle only, whatever its date (also after [end]), until paid or
+///   skipped: held in full from confirmation (owner). The paid-in-this-period rule does not apply: once a payment moves
+///   `nextDue` on, the next cycle is held at once. A cycle whose paying row is here but not yet recorded
+///   ([RecurringPayments.paidBy]) reserves 0.
+/// The first cycle's [DueCycle.paid] = [RecurringPayments.partsPaid]; [payments] defaults to [planRecurringPayments] over
+/// [txs] in [currency] (default EUR, the wallet default; `computePeriod` passes the wallet's).
+List<DueCycle> dueCycles(List<RecurringBill> bills, List<CategorizedTx> txs, String start, String end,
+    {RecurringPayments? payments, String? currency}) {
+  final live = [
     for (final b in bills)
-      if (b.confirmed &&
-          b.nextDue.length == 10 &&
-          b.nextDue.compareTo(end) < 0 &&
-          !(b.lastPaidTx != null && (paidOn[b.lastPaidTx]?.compareTo(start) ?? -1) >= 0))
-        b,
-  ]..sort((a, b) {
-      var d = a.nextDue.compareTo(b.nextDue);
-      if (d == 0) d = a.label.compareTo(b.label);
-      return d != 0 ? d : a.id.compareTo(b.id);
-    });
+      if (b.confirmed && isIsoDate(b.nextDue) && !b.finished) b
+  ];
+  if (live.isEmpty) return const [];
+  final pay = payments ?? planRecurringPayments(live, [for (final t in txs) t.tx], currency: currency ?? 'EUR');
+  final paidOn = <String, String>{for (final t in txs) t.tx.id: t.date};
+  final out = <DueCycle>[];
+  DueCycle first(RecurringBill b) {
+    final paid = pay.partsPaid(b.id);
+    final r = b.reserveAmount - paid;
+    return DueCycle(bill: b, due: b.nextDue, reserve: r < 0 ? 0 : r, paid: paid);
+  }
+
+  for (final b in live) {
+    if (b.isLong) {
+      if (pay.paidBy[b.id] case final Tx row) {
+        out.add(DueCycle(bill: b, due: b.nextDue, reserve: 0, paid: -row.amount));
+      } else {
+        out.add(first(b));
+      }
+      continue;
+    }
+    if (b.nextDue.compareTo(end) >= 0) continue;
+    if (!b.isShort) {
+      if (!(b.lastPaidTx != null && (paidOn[b.lastPaidTx]?.compareTo(start) ?? -1) >= 0)) out.add(first(b));
+      continue;
+    }
+    out.add(first(b));
+    var d = addDays(b.nextDue, b.intervalDays);
+    for (var n = 1; n < _maxCycles && d.compareTo(end) < 0 && (b.endsOn == null || d.compareTo(b.endsOn!) <= 0); n++) {
+      if (d.compareTo(start) >= 0) out.add(DueCycle(bill: b, due: d, reserve: b.reserveAmount, paid: 0));
+      d = addDays(d, b.intervalDays);
+    }
+  }
+  out.sort((a, b) {
+    var d = a.due.compareTo(b.due);
+    if (d == 0) d = a.bill.label.compareTo(b.bill.label);
+    if (d == 0) d = a.bill.id.compareTo(b.bill.id);
+    return d;
+  });
+  return out;
 }
 
 /// The planned costs of [planned] that still reserve money in the period ending at [end] (the next payday,
@@ -180,10 +256,15 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final goalMonthly = goals.fold<int>(0, (s, g) => s + g.monthly);
   // Plan lines of custom fixed categories (P1) count with rent, loan and subs; only lines the table still allows.
   final fixedPlan = st.rent + st.loan + st.subs + st.planLines.entries.fold<int>(0, (s, e) => table.hasPlanLine(e.key) ? s + e.value : s);
-  final due = dueBills(bills, txs, start, end);
-  final reservedBills = due.fold<int>(0, (s, b) => s + (b.coveredByPlanIn(table) ? 0 : b.expectedAmount));
+  final cycles = dueCycles(bills, txs, start, end, currency: st.currency);
+  final seenBills = <String>{};
+  final due = [
+    for (final c in cycles)
+      if (seenBills.add(c.bill.id)) c.bill
+  ];
+  final reservedBills = cycles.fold<int>(0, (s, c) => s + (c.coveredIn(table) ? 0 : c.reserve));
   final duePl = duePlanned(planned, today, end);
-  final counted = {for (final b in due) occurrenceKey(b.id, b.nextDue)};
+  final counted = {for (final c in cycles) occurrenceKey(c.bill.id, c.due)};
   final reservedRows = [
     for (final p in duePl)
       if (plannedReserves(p, bills, counted, table: table)) p
@@ -218,6 +299,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
       'goals': goals.length,
       'bills': bills.length,
       'dueBills': due.length,
+      'dueCycles': cycles.length,
       'planned': planned.length,
       'duePlanned': duePl.length,
     });
@@ -247,6 +329,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     fixedPaid: fixedPaid,
     reservedBills: reservedBills,
     dueBills: due,
+    dueCycles: cycles,
     reservedPlanned: reservedPlanned,
     duePlanned: duePl,
     reservedPlannedRows: reservedRows,

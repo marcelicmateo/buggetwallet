@@ -351,7 +351,7 @@ void main() {
     test('the schema is 11 and the three tables exist and are empty on a new wallet', () {
       final r = WalletRepo.inMemory();
       addTearDown(r.close);
-      expect(WalletRepo.schemaVersion, 11);
+      expect(WalletRepo.schemaVersion, greaterThanOrEqualTo(11)); // P4 made it 12
       for (final t in _tables) {
         expect(r.db.select('SELECT * FROM $t'), isEmpty, reason: t);
       }
@@ -366,7 +366,7 @@ void main() {
       File('test/fixtures/old_builds/schema7_plain.db').copySync(path);
       final r = WalletRepo.open(path, now: () => now);
       addTearDown(r.close);
-      expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '11');
+      expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '${WalletRepo.schemaVersion}');
       expect(r.transactions(includeHidden: true), isNotEmpty);
       for (final t in _tables) {
         expect(r.db.select('SELECT * FROM $t'), isEmpty, reason: t);
@@ -390,7 +390,7 @@ void main() {
       first.close();
 
       final again = WalletRepo.open(path, now: () => now);
-      expect(again.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '11');
+      expect(again.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'].toString(), '${WalletRepo.schemaVersion}');
       for (final t in _tables) {
         expect(again.db.select('SELECT * FROM $t'), isEmpty, reason: t);
       }

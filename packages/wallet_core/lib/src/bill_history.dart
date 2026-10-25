@@ -7,7 +7,7 @@ import 'categories.dart' show BudgetKind, CategoryTable, merchantKey;
 import 'dates.dart' show addDays, daysBetween, isIsoDate, monthOf;
 import 'logs.dart';
 import 'models.dart';
-import 'recurring.dart' show recurringDays;
+import 'recurring.dart' show partsThreshold, recurringDays;
 
 /// Months after today's month that [billHistory] still shows (only when they hold a slip or payment).
 const historyMonthsAhead = 2;
@@ -42,6 +42,10 @@ class BillMonth {
   /// For [BillMonthState.paidNearby]: the neighbouring month (`YYYY-MM`) whose extra payment covers this one; else null.
   final String? paidIn;
 
+  /// For a bill that is not monthly (P4: one line per cycle): the cycle's due date; [month] is its `YYYY-MM`. Null on
+  /// monthly lines.
+  final String? due;
+
   const BillMonth({
     required this.month,
     required this.payments,
@@ -50,7 +54,14 @@ class BillMonth {
     required this.billed,
     required this.state,
     this.paidIn,
+    this.due,
   });
+
+  /// Σ −amount over [payments] (= [paid]): for a cycle paid in parts, the parts so far.
+  int get paidCents => paid;
+
+  /// The ids of [payments] (a cycle's parts), in their order.
+  List<String> get txIds => [for (final t in payments) t.id];
 }
 
 /// The months of [bill]'s history, newest first.
@@ -86,6 +97,8 @@ List<BillMonth> billHistory(
     if (!_isPayment(t, currency, cats)) continue;
     if (t.id == bill.lastPaidTx || merchantKey(t) == bill.payee) payments[t.id] = t;
   }
+
+  if ((bill.isShort || bill.isLong) && isIsoDate(bill.nextDue)) return _cycleHistory(bill, payments, slips, months, currency);
 
   final payByMonth = <String, List<Tx>>{};
   for (final t in payments.values) {
@@ -153,6 +166,79 @@ List<BillMonth> billHistory(
   }
   // Counts only: payees and amounts are personal.
   logEvent(_log, Level.FINE, 'recurring.history', {'months': out.length, 'payments': payments.length, 'slips': seenSlips.length});
+  return out;
+}
+
+/// [billHistory] for a bill that is not monthly (P4 §5): one line per cycle, newest first. Cycle k has the due date
+/// `nextDue − k × intervalDays`: k = 0 is the open cycle, k = 1 .. [months] − 1 the ones before it (always [months]
+/// lines), k = −1 .. −[historyMonthsAhead] only when they hold something. Each payment and slip (by its linked
+/// payment's date, else its own date) goes to the cycle whose due date is nearest (dates only, never amounts); anything
+/// nearer to a cycle outside that span is left out. States: [BillMonthState.paid] when the cycle's rows reach
+/// [partsThreshold], or a past cycle (k ≥ 1) holds one payment (as for months); else [BillMonthState.slipOnly] (no
+/// payment, a slip), [BillMonthState.upcoming] (k ≤ 0, parts so far in [BillMonth.paidCents]) or
+/// [BillMonthState.missing] (a past cycle with nothing, or with parts that never added up). No `paidNearby` for cycles.
+List<BillMonth> _cycleHistory(RecurringBill bill, Map<String, Tx> payments, List<Bill> slips, int months, String currency) {
+  final step = bill.intervalDays;
+  int? cycleOf(String date) {
+    final k = (daysBetween(date, bill.nextDue) / step).round();
+    return k < -historyMonthsAhead || k > months - 1 ? null : k;
+  }
+
+  final payBy = <int, List<Tx>>{};
+  for (final t in payments.values) {
+    if (cycleOf(t.date) case final k?) (payBy[k] ??= []).add(t);
+  }
+  final slipBy = <int, List<Bill>>{};
+  final seenSlips = <String>{};
+  for (final s in slips) {
+    if (s.deleted || s.currency != currency || !seenSlips.add(s.id) || billPayeeKey(s) != bill.payee) continue;
+    final date = payments[s.linkedTx]?.date ?? _slipDate(s);
+    if (date == null) continue;
+    if (cycleOf(date) case final k?) (slipBy[k] ??= []).add(s);
+  }
+  final held = {...payBy.keys, ...slipBy.keys};
+  final shown = [
+    for (var k = -historyMonthsAhead; k < 0; k++)
+      if (held.contains(k)) k,
+    for (var k = 0; k < months; k++) k,
+  ];
+  final threshold = partsThreshold(bill);
+  final out = <BillMonth>[];
+  for (final k in shown) {
+    final due = addDays(bill.nextDue, -k * step);
+    final pays = (payBy[k] ?? <Tx>[])
+      ..sort((a, b) {
+        final d = a.date.compareTo(b.date);
+        return d != 0 ? d : a.id.compareTo(b.id);
+      });
+    final bills = (slipBy[k] ?? <Bill>[])
+      ..sort((a, b) {
+        final d = _slipSortDate(a, payments).compareTo(_slipSortDate(b, payments));
+        return d != 0 ? d : a.id.compareTo(b.id);
+      });
+    final totals = [
+      for (final s in bills)
+        if (s.total case final total?) total
+    ];
+    final paid = pays.fold(0, (a, t) => a - t.amount);
+    out.add(BillMonth(
+      month: monthOf(due),
+      due: due,
+      payments: List.unmodifiable(pays),
+      slips: List.unmodifiable(bills),
+      paid: paid,
+      billed: totals.isEmpty ? null : totals.fold<int>(0, (a, b) => a + b),
+      state: pays.isNotEmpty && (paid >= threshold || (k >= 1 && pays.length == 1))
+          ? BillMonthState.paid
+          : pays.isEmpty && bills.isNotEmpty
+              ? BillMonthState.slipOnly
+              : k <= 0
+                  ? BillMonthState.upcoming
+                  : BillMonthState.missing,
+    ));
+  }
+  logEvent(_log, Level.FINE, 'recurring.history',
+      {'cycles': out.length, 'intervalDays': step, 'payments': payments.length, 'slips': seenSlips.length});
   return out;
 }
 
