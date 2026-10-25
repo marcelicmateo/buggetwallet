@@ -7,6 +7,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../screens/bill_sheet.dart';
+import '../screens/rules_panel.dart';
 import '../screens/scan_bill.dart';
 import '../theme.dart';
 import 'category_picker.dart';
@@ -403,6 +404,15 @@ class _TxSheetState extends State<TxSheet> {
           value: always,
           onChanged: (v) => setState(() => always = v),
           title: Text('Always use this main tag for ${merchantName(t)}', style: const TextStyle(fontSize: BwType.bodySize)),
+        ),
+      if (tagPayee(t) != null)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+              key: const ValueKey('makeRule'),
+              style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+              onPressed: () => openRuleForm(context, widget.wc, payee: tagPayee(t), category: cat, from: t),
+              child: const Text('Make a rule…')),
         ),
       const SizedBox(height: 8),
       ExtraTagsEditor(

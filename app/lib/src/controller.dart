@@ -26,6 +26,7 @@ import 'wallet_db.dart';
 part 'controller_accounts.dart';
 part 'controller_categories.dart';
 part 'controller_tags.dart';
+part 'controller_rules.dart';
 part 'controller_bills.dart';
 part 'controller_future.dart';
 

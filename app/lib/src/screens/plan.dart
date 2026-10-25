@@ -24,6 +24,7 @@ import 'join_another.dart';
 import 'key_backup.dart';
 import 'look_panel.dart';
 import 'plan_suggestions.dart';
+import 'rules_panel.dart';
 import 'sync_panel.dart';
 import 'tags_panel.dart';
 
@@ -319,6 +320,7 @@ class _PlanScreenState extends State<PlanScreen> {
               KeyedSubtree(key: _billsDbKey, child: BillsPanel(wc: wc, chooser: widget.chooser)),
               CategoriesPanel(key: const ValueKey('categoriesPanel'), wc: wc),
               TagsPanel(key: const ValueKey('tagsPanel'), wc: wc),
+              RulesPanel(key: const ValueKey('rulesPanel'), wc: wc),
               BudgetsPanel(key: const ValueKey('budgetsPanel'), wc: wc),
               CalendarsPanel(key: const ValueKey('calendarsPanel'), wc: wc, chooser: widget.chooser),
               Panel(children: [

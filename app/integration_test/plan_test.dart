@@ -229,6 +229,40 @@ void main() {
     await Harness.checkLog();
   });
 
+  itest('Rules: the list, Add rule with a range, delete with Undo', (t) async {
+    final today = todayIso();
+    final wc = await Harness.start(t, batch: demoBatch(today), settings: {'salary': 100000, 'salaryConfirmed': true, 'paydayDay': 15});
+    wc.repo.setMerchantPattern('Shopping', 'webshop', match: 'contains', minCents: 1200, maxCents: 3000);
+    wc.repo.setMerchantPattern('Cash', r'^atm\b');
+    wc.reload();
+    await goTab(t, 'Plan');
+    await scrollTo(t, find.byKey(const ValueKey('rulesAdd')), PlanScreen);
+    final id = wc.settings.patternRules.first.id;
+    expect(find.byKey(ValueKey('rule:$id')), findsOneWidget);
+    await Harness.shot(t, 'plan-rules');
+    await tapVisible(t, find.byKey(const ValueKey('rulesAdd')));
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const ValueKey('ruleText')), 'bakery');
+    await t.enterText(find.byKey(const ValueKey('ruleMin')), '5');
+    await Harness.shot(t, 'plan-rules-add');
+    await t.tap(find.byKey(const ValueKey('txCategory')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('pick:Groceries')).last);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('ruleSave')));
+    await t.pumpAndSettle();
+    expect(wc.settings.patternRules.map((p) => p.pattern), contains('bakery'));
+    await tapVisible(t, find.byKey(ValueKey('ruleMenu:$id')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(ValueKey('ruleDelete:$id')));
+    await t.pumpAndSettle();
+    expect(find.byKey(ValueKey('rule:$id')), findsNothing);
+    await tapVisible(t, find.byKey(const ValueKey('toastUndo')));
+    await t.pumpAndSettle();
+    expect(find.byKey(ValueKey('rule:$id')), findsOneWidget);
+    await Harness.checkLog();
+  });
+
   itest('Bill history: a confirmed bill lists its months; a month opens to its payment and bill', (t) async {
     final now = DateTime.now();
     String on(int back) {
