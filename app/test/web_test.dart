@@ -515,7 +515,9 @@ void main() {
     webTest('fits 320 dp at text scale 2.0', (t) async {
       final w = webWallet(full: true);
       await pumpPlan(t, w.wc, size: const Size(320, 900), scale: 2);
-      await t.scrollUntilVisible(find.byKey(const ValueKey('forgetBrowser')), 500, scrollable: find.byType(Scrollable).first);
+      // The page's own vertical list: rows with sideways chips are Scrollables too and come and go while scrolling.
+      final page = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down).first;
+      await t.scrollUntilVisible(find.byKey(const ValueKey('forgetBrowser')), 500, scrollable: page, maxScrolls: 400);
       await t.pump();
       expect(t.takeException(), isNull); // an overflow would show up here
       expect(find.byKey(const ValueKey('forgetBrowser')), findsOneWidget);
