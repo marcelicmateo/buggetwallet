@@ -584,7 +584,7 @@ void main() {
       final c = compareCategory('Cash', txs, '2026-01', currency: eur);
       expect(c.thisMonth, 700);
       expect(c.lastMonth, 300);
-      expect(c.average6, 50); // Aug 2025 is 5 months before Jan 2026? (Jul..Dec 2025) 300 / 6
+      expect(c.average6, 1550); // the 6 months before Jan 2026 are Jul..Dec 2025: (9000 + 300) / 6
     });
 
     test('an unknown or unused category is all zero', () {
