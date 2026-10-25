@@ -229,8 +229,8 @@ class _BackupPanelState extends State<BackupPanel> {
     return Panel(children: [
       const SectionHead('Backup'),
       Explainer(wc, 'backup', 'An encrypted copy of your wallet as a file. Only your wallet key opens it. Keep the file somewhere safe.'),
-      const Muted('Bill files on this device go into the backup (up to 32 MB). Files only on your relay do not.',
-          key: ValueKey('backupNoFiles'), size: BwType.metaSize),
+      Muted('Bill files on this device go into the backup (up to ${backupBlobBytesDefault >> 20} MB). Files only on your relay do not.',
+          key: const ValueKey('backupNoFiles'), size: BwType.metaSize),
       Wrap(spacing: 8, runSpacing: 8, children: [
         OutlinedButton(
             key: const ValueKey('backupNow'),

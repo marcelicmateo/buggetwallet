@@ -378,6 +378,8 @@ void main() {
       final wc = wallet();
       await pumpApp(t, Scaffold(body: SingleChildScrollView(child: BackupPanel(wc: wc))), size: const Size(400, 1200));
       expect(find.textContaining('Files only on your relay do not'), findsOneWidget);
+      expect(find.textContaining('up to ${backupBlobBytesDefault >> 20} MB'), findsOneWidget);
+      expect(find.textContaining('up to 16 MB'), findsOneWidget, reason: 'the cap comes from core');
       expect(key('backupNoFiles'), findsOneWidget);
     });
 
