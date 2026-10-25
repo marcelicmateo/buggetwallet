@@ -62,8 +62,13 @@ class SearchResult {
 
   /// Matches among the raw rows passed as [searchAll]'s `rows` (entity → matching rows, input order; see [searchRows]).
   final Map<String, List<Map<String, Object?>>> rows;
+
+  /// P6: tx id → the 0-based part of a split payment in [txs] that matched, when only a part did (its note, main tag,
+  /// tags or amount); absent when the payment itself matched.
+  final Map<String, int> matchedPart;
   const SearchResult(
       {this.txs = const [],
+      this.matchedPart = const {},
       this.goals = const [],
       this.wishlist = const [],
       this.bills = const [],
@@ -136,8 +141,8 @@ List<Map<String, Object?>> searchRows(String entity, String query, Iterable<Map<
 /// [TagTable.label]) holds the query.
 ///
 /// P6: [txs] is the expanded list (`Categorizer.expand`). A part also matches by its own note, main tag, tags and
-/// amount (and by the payment's whole amount); a payment is found once, as its first matching row (so the result
-/// names the part that matched, [CategorizedTx.part]).
+/// amount; a payment is found once, as its whole row ([CategorizedTx.whole]: whole amount and main tag). When only a
+/// part matched (not the payment's own text, note, amount, main tag or tags), [SearchResult.matchedPart] names it.
 SearchResult searchAll(
   String query, {
   required List<CategorizedTx> txs,
@@ -158,26 +163,38 @@ SearchResult searchAll(
   bool category(String? c) => text(c) || (c != null && table != null && text(table.label(c)));
   bool tagged(CategorizedTx t) => tags != null && t.tags.any((g) => text(tags.label(g)));
 
-  final seen = <String>{};
-  final hits = [
-    for (final t in txs)
-      if (t.tx.live &&
-          !seen.contains(t.tx.id) &&
-          (amount(t.amount) ||
-              (t.isPart && amount(t.tx.amount)) ||
-              text(t.tx.description) ||
-              text(t.tx.note) ||
-              text(t.partNote) ||
-              category(t.category) ||
-              tagged(t)) &&
-          seen.add(t.tx.id))
-        t
-  ]..sort((a, b) {
+  bool payment(CategorizedTx w) => amount(w.amount) || text(w.tx.description) || text(w.tx.note) || category(w.category) || tagged(w);
+  bool part(CategorizedTx t) => amount(t.amount) || text(t.partNote) || category(t.category) || tagged(t);
+  final found = <String, CategorizedTx>{};
+  final matchedPart = <String, int>{};
+  final paymentHit = <String, bool>{};
+  for (final t in txs) {
+    final id = t.tx.id;
+    if (!t.tx.live) continue;
+    if (!t.isPart) {
+      if (payment(t)) found[id] = t;
+      continue;
+    }
+    final w = t.whole ?? CategorizedTx(t.tx, t.category, t.kind, tags: t.tags);
+    if (paymentHit[id] ??= payment(w)) {
+      found[id] ??= w;
+    } else if (!matchedPart.containsKey(id) && part(t)) {
+      found[id] = w;
+      matchedPart[id] = t.part!;
+    }
+  }
+  final hits = [...found.values]..sort((a, b) {
       final c = b.date.compareTo(a.date);
       return c != 0 ? c : b.tx.id.compareTo(a.tx.id);
     });
   return SearchResult(
     txs: hits.length > searchTxLimit ? hits.sublist(0, searchTxLimit) : hits,
+    matchedPart: matchedPart.isEmpty
+        ? const {}
+        : {
+            for (final h in hits.take(searchTxLimit))
+              if (matchedPart[h.tx.id] case final p?) h.tx.id: p
+          },
     goals: [
       for (final g in goals)
         if (text(g.name) || amount(g.target) || amount(g.saved)) g

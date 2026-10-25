@@ -234,7 +234,7 @@ List<MerchantTotal> merchantsIn(String category, List<CategorizedTx> txs, DateRa
         key: k,
         label: k.isEmpty ? _otherLabel : merchantName(rows.first.tx), // rows are newest first
         spent: -rows.fold<int>(0, (s, t) => s + t.amount),
-        count: rows.length,
+        count: {for (final t in rows) t.tx.id}.length, // payments, not parts (P6)
         lastDate: rows.first.date,
       ),
   ]..sort((a, b) {
@@ -326,19 +326,19 @@ class TagShare {
 /// in [currency], fixed and flex, refunds subtracted; income, transfers and other currencies never count.
 TagShare tagShare(List<CategorizedTx> txs, DateRange r, {required String currency}) {
   final spent = <String, int>{};
-  final count = <String, int>{};
+  final payments = <String, Set<String>>{}; // tag → tx ids: a payment counts once however many parts carry it (P6)
   var untagged = 0;
   for (final t in txs) {
     if (!r.contains(t.date) || !countsAsSpending(t, currency)) continue;
     if (t.tags.isEmpty) untagged -= t.amount;
     for (final g in t.tags.toSet()) {
       spent[g] = (spent[g] ?? 0) - t.amount;
-      count[g] = (count[g] ?? 0) + 1;
+      (payments[g] ??= {}).add(t.tx.id);
     }
   }
   final slices = [
     for (final MapEntry(key: g, value: s) in spent.entries)
-      if (s > 0) TagSlice(tag: g, spent: s, count: count[g]!)
+      if (s > 0) TagSlice(tag: g, spent: s, count: payments[g]!.length)
   ]..sort((a, b) {
       final d = b.spent.compareTo(a.spent);
       return d != 0 ? d : a.tag.compareTo(b.tag);

@@ -204,8 +204,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   tag, live resolved tags ≤ 20, note ≤ 200; no transfers) on local writes only. Read time: `Categorizer.expand(t)` /
   `expandAll` = one `CategorizedTx` per part (`amount`, `part`, `parts`, `partNote`; `tx` stays the payment), or the
   payment whole (`splitBroken` when the stored split no longer fits, `splitFits`). Money by category/tag/kind takes the
-  expanded list; pickers and detection take whole payments (`categorize`, `wholePayments`). Matching copies an entry's
-  split onto its bank row (like T1 tag links). Tests: `test/p6_split_impl_test.dart`.
+  expanded list; pickers and detection take whole payments (`categorize`, `wholePayments`). A bank row without a split
+  row reads its matched entry's live split (`splitOf`/`splits`, never copied; a removed own split stops it). A dead part
+  category falls back to the payment's main tag. `searchAll` returns whole rows (`CategorizedTx.whole`) +
+  `matchedPart`; merchant/tag counts are per payment. Tests: `test/p6_split_impl_test.dart`, `p6_split_review_test.dart`.
 - `transfers.dart` — `planTransfers`: own transfers between accounts. Only a row the bank itself marks as one
   (`kindHint == ownTransfer`: Revolut `Topup`, PBZ card payments to Revolut; not `exchange`, a conversion inside one bank) may pair: with the equal,
   opposite-sign row of the same currency in another source within `transferDays` (3, inclusive, either way in time),

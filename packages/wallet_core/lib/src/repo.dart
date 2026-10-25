@@ -566,7 +566,6 @@ class WalletRepo {
       for (final e in plan.matchedTo.entries) ('tx', e.key, {'matched_to': e.value}),
       for (final e in plan.bankCategory.entries) ('tx', e.key, {'category': e.value}),
       ..._matchedTagLinks(plan.matchedTo),
-      ...WalletRepoSplits(this)._matchedSplits(plan.matchedTo),
     ]);
     _clearMatchPending();
     t.done({
