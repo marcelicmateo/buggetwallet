@@ -422,7 +422,9 @@ void main() {
       expect(dump(a.repo, clocks: false)['planned'], dump(b.repo, clocks: false)['planned']);
     });
 
-    test('5. B5a bug: the same bill with a file on both devices: the losing file is deleted on the relay', () async {
+    // P14 changed these (spec docs/context/P14_SPEC.md: clients never delete blobs; the relay collects files no kept
+    // snapshot declares): the B5a "delete the losing / orphaned file on the relay" behaviour is gone.
+    test('5. the same bill with a file on both devices: the losing file stays on the relay, never deleted (P14)', () async {
       final a = device('a'), b = device('b');
       final fa = await BlobStore(a.repo, key).add(bytes(3000, 1), 'jpg');
       final (id, _) = a.repo.importBill(slip(), file: fa);
@@ -434,14 +436,15 @@ void main() {
       }
       final winner = a.repo.bill(id)!.blob;
       expect(b.repo.bill(id)!.blob, winner);
-      expect(net.relay.blobs.keys, [winner], reason: 'the other file is not left on the relay');
+      expect(net.relay.blobs.keys.toSet(), {fa.hash, fb.hash}, reason: 'left for the relay GC');
+      expect(net.relay.calls['deleteBlob'], isNull);
       for (final d in [a, b]) {
         expect(d.repo.queuedBlobs(), isEmpty);
-        expect(d.repo.blobDeletes(), isEmpty);
+        expect(d.repo.liveBlobHashes(), [winner], reason: 'what its snapshots declare');
       }
     });
 
-    test('5. B5a bug: a bill deleted elsewhere before it knew the file: the file goes from the relay', () async {
+    test('5. a bill deleted elsewhere before it knew the file: the file stays on the relay and in the cache (P14)', () async {
       final a = device('a'), b = device('b');
       b.repo.importBill(slip());
       await round();
@@ -453,12 +456,13 @@ void main() {
         await round();
       }
       expect(a.repo.bill(id)!.deleted, isTrue);
-      expect(net.relay.blobs, isEmpty);
+      expect(net.relay.blobs.keys, [ref.hash]);
       expect(a.repo.queuedBlobs(), isEmpty);
-      expect(a.repo.cachedBlob(ref.hash), isNull);
+      expect(a.repo.cachedBlob(ref.hash), isNotNull, reason: 'kept until evicted, so an undelete finds it');
+      expect(a.repo.liveBlobHashes(), isEmpty);
     });
 
-    test('5. a queued upload whose bill was deleted elsewhere is never sent', () async {
+    test('5. a queued upload whose bill was deleted elsewhere still goes up once the relay takes it (P14)', () async {
       final a = device('a'), b = device('b');
       b.repo.importBill(slip());
       await round();
@@ -468,23 +472,22 @@ void main() {
       b.repo.deleteBill(id);
       await round();
       await round();
+      expect(a.repo.queuedBlobs(), [ref.hash], reason: 'never forgotten while it waits');
       net.relay.blobRoutes = true;
-      expect(a.repo.queuedBlobs(), isEmpty, reason: 'dropped once the delete arrived');
       await round();
-      expect(net.relay.blobs, isEmpty);
-      expect(a.repo.blobDeletes(), isEmpty);
+      expect(net.relay.blobs.keys, [ref.hash]);
+      expect(a.repo.queuedBlobs(), isEmpty);
     });
 
     test('5. a file added but not yet attached to a bill is never dropped', () async {
       final a = device('a');
       a.repo.addTransaction(date: today, amount: 100, category: 'Groceries'); // the relay keeps files of a known wallet only
       final ref = await BlobStore(a.repo, key).add(bytes(2000, 5), 'jpg');
-      expect(a.repo.dropOrphanBlobs(), 0);
       expect(a.repo.queuedBlobs(), [ref.hash]);
       await round();
       expect(net.relay.blobs.keys, [ref.hash]);
-      expect(a.repo.dropOrphanBlobs(), 0);
-      expect(a.repo.blobDeletes(), isEmpty);
+      expect(a.repo.queuedBlobs(), isEmpty);
+      expect(a.repo.cachedBlob(ref.hash), isNotNull);
     });
   });
 }

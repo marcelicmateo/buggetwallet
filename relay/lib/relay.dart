@@ -2,5 +2,5 @@
 library;
 
 export 'src/rate_limit.dart' show RateLimiter;
-export 'src/relay_server.dart' show Relay, defaultMaxInFlightBytes, defaultOrigins, maxFileBytes, maxSnapshotBytes;
-export 'src/wallet.dart' show apiVersion, RelayTestHooks;
+export 'src/relay_server.dart' show Relay, defaultMaxInFlightBytes, defaultOrigins, maxBlobSetBytes, maxFileBytes, maxSnapshotBytes;
+export 'src/wallet.dart' show apiVersion, gcGrace, maxDeclaredBlobs, RelayTestHooks;

@@ -7,8 +7,34 @@ import 'dart:typed_data';
 import 'signing.dart';
 
 /// The protocol version this relay speaks (`api` in health and state). 3: requests sign the host (`bw-relay-v3`), state
-/// carries `instance`.
-const int apiVersion = 3;
+/// carries `instance`. 4: `bw-relay-v4` (v3 still accepted), blob DELETE is a no-op, declared sets and blob GC.
+const int apiVersion = 4;
+
+/// A blob stored (or re-uploaded) more recently than this is never collected.
+const Duration gcGrace = Duration(days: 30);
+
+/// Most hashes one declared set may hold.
+const int maxDeclaredBlobs = 100000;
+
+/// A declared set ([Snap.blobSet]) from its stored or sent JSON: a list of distinct blob hashes, at most
+/// [maxDeclaredBlobs]; null when it is not one.
+Set<String>? parseBlobSet(List<int> bytes) {
+  final Object? v;
+  try {
+    v = jsonDecode(utf8.decode(bytes));
+  } on FormatException {
+    return null;
+  }
+  if (v is! List || v.length > maxDeclaredBlobs) return null;
+  final out = <String>{};
+  for (final h in v) {
+    if (h is! String || !blobHashPattern.hasMatch(h) || !out.add(h)) return null;
+  }
+  return out;
+}
+
+/// The stored form of a declared set: sorted JSON array.
+List<int> encodeBlobSet(Set<String> set) => utf8.encode(jsonEncode(set.toList()..sort()));
 
 /// Test seams for fault injection (tests only; production passes none), `Relay(hooks: ...)`. A throw from a callback
 /// acts like a crash or a full disk at that point: the request fails with 500 and what was already written stays.
@@ -97,6 +123,10 @@ class Snap {
   final Map<String, int> covers;
   final int size;
 
+  /// The blob hashes this snapshot's live bills reference (`PUT snapshot/<id>/blobs`, stored in `sets/<id>`); null
+  /// until declared (an api-3 app never declares one), which holds blob GC back.
+  Set<String>? blobSet;
+
   Map<String, Object?> toJson() => {'id': id, 'covers': covers};
 }
 
@@ -137,12 +167,46 @@ class Wallet {
   File dataFile(String device, int seq) => File('${dir.path}/d/$device/$seq');
   File snapFile(String id) => File('${dir.path}/snap/$id');
   File blobFile(String hash) => File('${dir.path}/blobs/$hash');
+  File setFile(String id) => File('${dir.path}/sets/$id');
+
+  /// Blob GC (RELAY_PROTOCOL.md "Blob garbage collection"): when both kept snapshots carry a declared set, deletes every
+  /// blob in neither set whose stored time (file modification time) is more than [gcGrace] before [now]. Returns
+  /// (kept, deleted, bytes deleted); null when it did not run.
+  Future<(int, int, int)?> collectBlobs(DateTime now) async {
+    final a = snapshot?.blobSet, b = previous?.blobSet;
+    if (a == null || b == null) return null;
+    final dBlobs = Directory('${dir.path}/blobs');
+    if (!await dBlobs.exists()) return (0, 0, 0);
+    final cutoff = now.subtract(gcGrace);
+    var kept = 0, deleted = 0, freed = 0;
+    await for (final f in dBlobs.list(followLinks: false)) {
+      if (f is! File) continue;
+      final hash = f.uri.pathSegments.last;
+      if (!blobHashPattern.hasMatch(hash)) continue;
+      try {
+        if (a.contains(hash) || b.contains(hash) || !(await f.lastModified()).isBefore(cutoff)) {
+          kept++;
+          continue;
+        }
+        final size = await f.length();
+        await f.delete();
+        blobCount--;
+        blobBytes -= size;
+        deleted++;
+        freed += size;
+      } on FileSystemException {
+        // gone meanwhile: counted when the folder is read again
+      }
+    }
+    return (kept, deleted, freed);
+  }
 
   /// The state JSON (RELAY_PROTOCOL.md "State JSON"); [maxBytes] is the relay's `--max-bytes`, reported with [totalBytes].
-  Map<String, Object?> stateJson({required int maxBytes}) {
+  /// [api] is 3 for a request signed with the api-3 text.
+  Map<String, Object?> stateJson({required int maxBytes, int api = apiVersion}) {
     final names = devices.keys.toList()..sort();
     return {
-      'api': apiVersion,
+      'api': api,
       'instance': instance,
       'devices': {
         for (final n in names)
@@ -301,6 +365,23 @@ class Wallet {
 
     w.snapshot = await snap(meta['snapshot']);
     w.previous = await snap(meta['previous']);
+    // Declared sets of the kept snapshots; any other set file (a dropped snapshot's, a temp file) goes.
+    final dSets = Directory('${dir.path}/sets');
+    if (await dSets.exists()) {
+      await for (final f in dSets.list(followLinks: false)) {
+        if (f is! File) continue;
+        final s = [w.snapshot, w.previous].whereType<Snap>().where((s) => s.id == f.uri.pathSegments.last).firstOrNull;
+        if (s == null) {
+          await f.delete();
+          continue;
+        }
+        try {
+          s.blobSet = parseBlobSet(await f.readAsBytes()); // unreadable = no set: GC waits
+        } on FileSystemException {
+          s.blobSet = null;
+        }
+      }
+    }
     // Temp files of an interrupted meta save ([writeAtomic] next to `meta.json`).
     await for (final f in dir.list(followLinks: false)) {
       if (f is File && f.uri.pathSegments.last.startsWith('.tmp-')) await f.delete();

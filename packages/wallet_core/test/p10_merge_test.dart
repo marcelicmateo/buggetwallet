@@ -48,7 +48,7 @@ void main() {
         'outbox': [for (final row in r.db.select('SELECT * FROM outbox ORDER BY seq')) Map<String, Object?>.from(row)],
         'meta': [for (final row in r.db.select('SELECT * FROM meta ORDER BY key')) Map<String, Object?>.from(row)],
         'hlc': r.clock.last.toString(),
-        for (final t in ['blob_cache', 'blob_outbox', 'blob_own', 'blob_delete'])
+        for (final t in ['blob_cache'])
           t: [for (final row in r.db.select('SELECT * FROM $t ORDER BY hash')) Map<String, Object?>.from(row)],
       };
 
@@ -332,7 +332,6 @@ void main() {
         expect(b.cachedBlob(x, touch: false), a.cachedBlob(x, touch: false));
       }
       expect(b.queuedBlobs(), (h.toList()..sort()));
-      expect(b.db.select('SELECT * FROM blob_own'), isEmpty);
       expect(await BlobStore(b, key).read(h[0]), _bytes(2500, 2));
 
       final c = repo();
@@ -381,7 +380,6 @@ void main() {
       final (a, h) = await billWallet();
       final b = await copyOf(a);
       b.db.execute('DELETE FROM blob_cache');
-      b.db.execute('DELETE FROM blob_outbox');
       now += 1000;
       b.deleteBill(b.bills().firstWhere((x) => x.blob == h[0]).id);
       final file = await backupBytes(a, key);
@@ -398,7 +396,6 @@ void main() {
       final file = await backupBytes(a, key);
       final b = await copyOf(a);
       b.db.execute('DELETE FROM blob_cache');
-      b.db.execute('DELETE FROM blob_outbox');
       now += 1000;
       b.deleteBill(id);
       final dry = await mergeBackupBytes(b, file, key, dryRun: true);

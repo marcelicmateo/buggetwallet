@@ -826,10 +826,9 @@ void main() {
       expect((b.blob, b.blobType, b.blobBytes), (file.hash, 'jpg', 2000));
       expect(billRows(fresh, id), hasLength(1), reason: 'the planned row comes along');
 
-      // Changed (P10 §2): the file itself now comes along in the backup (cached, queued for upload, not owned).
-      for (final (t, n) in [('blob_cache', 1), ('blob_outbox', 1), ('blob_delete', 0), ('blob_own', 0)]) {
-        expect(fresh.db.select('SELECT COUNT(*) AS c FROM $t').first['c'], n, reason: t);
-      }
+      // Changed (P10 §2): the file itself now comes along in the backup (cached, queued for upload; P14: one table).
+      expect(fresh.db.select('SELECT COUNT(*) AS c FROM blob_cache').first['c'], 1);
+      expect(fresh.queuedBlobs(), [file.hash]);
       expect(await BlobStore(fresh, key).read(file.hash), hasLength(2000));
     });
   });

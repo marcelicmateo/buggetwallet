@@ -17,6 +17,9 @@ const int maxSnapshotBytes = 64 * _mib;
 
 const int _maxJsonBytes = 64 * 1024;
 
+/// Largest declared blob set body (`PUT snapshot/<id>/blobs`): 100,000 hashes as a JSON array fit.
+const int maxBlobSetBytes = 7 * _mib;
+
 /// Default for [Relay.maxInFlightBytes]: request body bytes one client address may have buffered at once.
 const int defaultMaxInFlightBytes = 32 * _mib;
 
@@ -74,7 +77,11 @@ class _Sig {
   /// The `X-BW-Covers` value, or empty.
   final String covers;
 
-  String text(String method, List<int> body) => signedText(method, host, path, covers, sha256OfBytes(body), time);
+  /// Which text verified ([Relay._verify]): 4, or 3 for an api-3 app (`bw-relay-v3`).
+  int version = 4;
+
+  String text(String method, List<int> body, {bool v3 = false}) =>
+      signedText(method, host, path, covers, sha256OfBytes(body), time, v3: v3);
 }
 
 /// What a request log line may say: kind, byte count, short wallet and device ids.
@@ -289,6 +296,11 @@ class Relay {
         }
         info.kind = 'put-snap';
         return _putSnapshot(req, wid, id, info, sig);
+      case ('snapshot', 6) when seg[5] == 'blobs':
+        final id = _name(seg[4], 'bad snapshot id');
+        _method(req, ['PUT']);
+        info.kind = 'put-set';
+        return _putBlobSet(req, wid, id, info, _signature(req, path));
       case ('blob', 5):
         final hash = seg[4];
         if (!blobHashPattern.hasMatch(hash)) throw _HttpError(400, 'bad blob hash');
@@ -357,9 +369,17 @@ class Relay {
     return _Sig(req.method, host, path, time, bytes, _header(req, 'x-bw-covers', 'X-BW-Covers') ?? '');
   }
 
-  /// 401 unless [sig] signs this request ([method], [body]) for [pub].
+  /// 401 unless [sig] signs this request ([method], [body]) for [pub]: the v4 text, else the v3 text of an api-3 app
+  /// ([_Sig.version] says which).
   static Future<void> _verify(Uint8List pub, _Sig sig, String method, List<int> body) async {
-    if (!await verifySignature(pub, sig.sig, sig.text(method, body))) throw _HttpError(401, 'bad signature');
+    if (!await _verified(pub, sig, method, body)) throw _HttpError(401, 'bad signature');
+  }
+
+  static Future<bool> _verified(Uint8List pub, _Sig sig, String method, List<int> body) async {
+    if (await verifySignature(pub, sig.sig, sig.text(method, body))) return true;
+    if (!await verifySignature(pub, sig.sig, sig.text(method, body, v3: true))) return false;
+    sig.version = 3;
+    return true;
   }
 
   /// A known wallet: 404 when the relay does not hold [wid].
@@ -465,14 +485,15 @@ class Relay {
 
   Future<_Out> _getState(String wid, _Sig sig) async {
     final w = _known(wid);
-    if (!await verifySignature(w.pubBytes, sig.sig, sig.text(sig.method, const []))) {
-      // An api-2 app (its `bw-relay-v2` text, no host) gets only `{"api":3}`, which it reads as "update the app"
+    if (!await _verified(w.pubBytes, sig, sig.method, const [])) {
+      // An api-2 app (its `bw-relay-v2` text, no host) gets only `{"api":4}`, which it reads as "update the app"
       // instead of "this relay refused the wallet". Nothing else is in the answer.
       final legacy = signedTextV2(sig.method, sig.path, sig.covers, sha256OfBytes(const []), sig.time);
       if (await verifySignature(w.pubBytes, sig.sig, legacy)) return _Out.json(200, {'api': apiVersion});
       throw _HttpError(401, 'bad signature');
     }
-    return _locked(wid, () async => _Out.json(200, w.stateJson(maxBytes: maxBytes)));
+    // An api-3 app (v3 text) is told api 3, so it syncs on as before (RELAY_PROTOCOL.md "Versions").
+    return _locked(wid, () async => _Out.json(200, w.stateJson(maxBytes: maxBytes, api: sig.version)));
   }
 
   Future<_Out> _getData(String wid, String device, int seq, _LogInfo info, _Sig sig) async {
@@ -645,13 +666,41 @@ class Relay {
       await w.saveMeta();
       if (dropped != null) {
         w.bytes -= dropped.size;
-        try {
-          await w.snapFile(dropped.id).delete();
-        } on FileSystemException {
-          // already gone
+        for (final f in [w.snapFile(dropped.id), w.setFile(dropped.id)]) {
+          try {
+            await f.delete();
+          } on FileSystemException {
+            // already gone (or never declared)
+          }
         }
       }
       await w.prune(_now());
+      return _Out.json(201, {'id': id});
+    });
+  }
+
+  /// `PUT snapshot/<id>/blobs`: the declared set of a kept snapshot (RELAY_PROTOCOL.md "Blob garbage collection"),
+  /// stored once; a new one runs the blob GC.
+  Future<_Out> _putBlobSet(HttpRequest req, String wid, String id, _LogInfo info, _Sig sig) async {
+    final known = _known(wid);
+    final body = await _readBody(req, maxBlobSetBytes, info);
+    await _verify(known.pubBytes, sig, 'PUT', body);
+    final set = parseBlobSet(body);
+    if (set == null) throw _HttpError(400, 'bad blob set');
+    return _locked(wid, () async {
+      final w = _known(wid);
+      final snap = w.snapshot?.id == id ? w.snapshot : (w.previous?.id == id ? w.previous : null);
+      if (snap == null) throw _HttpError(404, 'no such snapshot');
+      if (snap.blobSet case final had?) {
+        if (had.length == set.length && had.containsAll(set)) return _Out.json(200, {'id': id});
+        throw _HttpError(409, 'blob set already declared');
+      }
+      await writeAtomic(w.setFile(id), encodeBlobSet(set));
+      snap.blobSet = set;
+      final gc = await w.collectBlobs(_now());
+      if (gc case (final kept, final deleted, final freed)) {
+        _log('relay gc kept=$kept deleted=$deleted bytes=$freed w=${info.wid}');
+      }
       return _Out.json(201, {'id': id});
     });
   }
@@ -691,33 +740,37 @@ class Relay {
     return _locked(wid, () async {
       final w = _known(wid);
       final file = w.blobFile(hash);
-      if (await file.exists()) return _Out.json(200, {'hash': hash});
+      if (await file.exists()) {
+        // A re-upload refreshes the stored time, which only ever delays GC (a client re-PUTs before ops that reference it).
+        await _touch(file);
+        return _Out.json(200, {'hash': hash});
+      }
       if (w.totalBytes + body.length > maxBytes) throw _HttpError(507, 'wallet full');
       await writeAtomic(file, body);
+      await _touch(file);
       w.blobCount++;
       w.blobBytes += body.length;
       return _Out.json(201, {'hash': hash});
     });
   }
 
+  /// Sets a blob's stored time (its modification time) to the relay clock.
+  Future<void> _touch(File f) async {
+    try {
+      await f.setLastModified(_now());
+    } on FileSystemException {
+      // the time stays the write time: never older than now on a real clock
+    }
+  }
+
+  /// api 4: clients never delete blobs (only [Wallet.collectBlobs] does), so a DELETE (an api-3 app's) is answered 204
+  /// and changes nothing.
   Future<_Out> _deleteBlob(HttpRequest req, String wid, String hash, _LogInfo info, _Sig sig) async {
     final known = _known(wid);
     final body = await _readBody(req, _maxJsonBytes, info);
     if (body.isNotEmpty) throw _HttpError(400, 'body not allowed');
     await _verify(known.pubBytes, sig, 'DELETE', body);
-    return _locked(wid, () async {
-      final w = _known(wid);
-      final file = w.blobFile(hash);
-      try {
-        final size = await file.length();
-        await file.delete();
-        w.blobCount--;
-        w.blobBytes -= size;
-      } on PathNotFoundException {
-        // never stored or already deleted
-      }
-      return _Out.empty(204);
-    });
+    return _Out.empty(204);
   }
 
   static Map<String, int> _parseCovers(String? header) {

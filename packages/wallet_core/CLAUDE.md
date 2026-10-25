@@ -280,7 +280,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   never revives or undoes a per-key change; new patterns get orders after the largest live one; a clock-less legacy row
   goes through `_write`; the map rows are left in place for older builds; `repo.migrate` logs `perKeySettings` (count);
   9 = the `account` entity, no data migration; 10 = the `category` entity (P1), no data migration; 11 = tags (T1); 12 = P4
-  recurring columns, no data migration). Opening an existing database with an older version
+  recurring columns, no data migration; 13 = splits; 14 = recurring income; 15 = P14 local blob tables, no synced change). Opening an existing database with an older version
   clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
   written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
 - `local_db.dart` — encrypted local database (§4.9, SQLite3MultipleCiphers, web-safe): `localDbKey(VaultKey)` = HKDF
@@ -301,7 +301,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   write, owner or internal; never a peer's clock, so a database holding a far-future HLC from before Stage H still accepts owner
   writes); `repo.clockBehind` logs minutes only. Internal write paths skip the guard:
   `WalletRepo._writeInternal(changes)` and `_asInternal(body)` (the open-time migration, `_reconcile` = pairing,
-  matching, H9 repairs, bill links, `refreshRecurring`, `runPendingMatch`, `dropOrphanBlobs`); `tick` stays monotonic.
+  matching, H9 repairs, bill links, `refreshRecurring`, `runPendingMatch`); `tick` stays monotonic.
   `SyncEngine.run` catches a `ClockBehindException` from `runPendingMatch` (logged, matching stays pending).
   `restoreBackupBytes` refuses a backup whose newest clock is more than `maxClockDrift` ahead of the wall clock:
   `BackupException(BackupFailure.clockAhead)`, nothing applied), `vault.dart` (key + encryption; `VaultKey.parse` ignores case, spaces and dashes and reads a digit 0 as O (Base32 has
@@ -350,7 +350,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   key, {maxBlobBytes = 16 MiB, base64 size})` → `BackupResult {bytes, ops, blobs, blobBytes, blobsSkipped}` adds `"blobs": {hash: base64 sealed}`
   (cached files of live bills, newest bill date first, one that would pass the cap skipped); still `v: 1` (every parser reads only
   `v`/`ops`). Restore/merge cache each file whose SHA-256 of the sealed bytes is its hash and that a live bill uses, queued for upload,
-  never `blob_own` (bad ones: `backup.blobBad {files}`); `walletKey` ≠ `key` (old-key restore) skips the files.
+  (bad ones: `backup.blobBad {files}`); `walletKey` ≠ `key` (old-key restore) skips the files.
 - `export.dart` — CSV (M5, pure, the app saves the text through the system dialog; unencrypted, the app warns once).
   `transactionsCsv(List<CategorizedTx>)`: `date,amount,category,description,source,note`, live rows only (`Tx.live`:
   no deleted rows, no hand-added entries replaced by a bank row that is here), sorted date then id, `amount` the
@@ -407,12 +407,16 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   paying tx unlinks at once; other devices unlink a bill whose payment row arrives deleted in `_autoLinkBills` (caught
   up). `billCandidates` (no own transfers), `upcoming(billsDb:)` (`UpcomingKind.warranty`/`returnBy`),
   settings `returnReminderDays` (3, 0..30) / `warrantyReminderDays` (14, 0..90). `BlobStore(repo, key, maxCacheBytes:)`:
-  `add` (async: seal, hash = SHA-256 of the sealed bytes, cache + `blob_outbox`), `read(hash, transport:)` (cache, else
-  fetch, hash checked, unsealed, cached). Device-local tables `blob_cache` (LRU by a use counter, never evicts a queued
-  hash), `blob_outbox`, `blob_delete`, `blob_own` (files this device attached to a bill; not in `_entities`, snapshots
-  or backups); repo helpers `putCachedBlob`, `cachedBlob`, `evictBlobs`, `queuedBlobs`, `markBlobUploaded`, `blobDeletes`,
-  `markBlobDeleted`, `dropOrphanBlobs` (own files no live bill points to: a queued one forgotten, an uploaded one queued
-  for deletion; after a caught-up run and before uploads). H9 field pairs (`_repairFieldPairs`, in `_reconcile` before
+  `add` (async: seal, hash = SHA-256 of the sealed bytes, cached with `uploaded` 0), `read(hash, transport:)` (cache, else
+  fetch, hash checked, unsealed, cached as uploaded). **P14 (schema 15, `docs/context/P14_SPEC.md`):** one device-local
+  table `blob_cache` (`uploaded` 0/1; LRU by a use counter, never evicts an un-uploaded file nor one a pending outbox op
+  references); `blob_outbox`/`blob_delete`/`blob_own` are migrated away at open (`_migrateBlobTables`: queued rows →
+  `uploaded` 0). **Clients never delete blobs**: `deleteBill` keeps the file cached (until evicted) and on the relay; the
+  relay's GC collects files no kept snapshot declares. Repo helpers `putCachedBlob`, `cachedBlob`, `hasCachedBlob`,
+  `evictBlobs`, `queuedBlobs` (= `uploaded` 0), `markBlobUploaded`, `liveBlobHashes` (a snapshot's declared set),
+  `blobRefOf(op)` / `pendingBlobRefs` (a bill op references a file when it sets `blob` on a bill live here or makes the
+  bill live; `deleted` 1 never), `markExportedHolding` (outbox rows up to a seq go, held ops go back in, one
+  transaction); a re-import whose bill keeps its own file forgets the new un-uploaded one (`_forgetUnusedBlob`). H9 field pairs (`_repairFieldPairs`, in `_reconcile` before
   `_autoLinkBills`, through `_write`): a live planned row keeps `paid_tx` only while `status == paid`; a payment row pays
   at most one live bill (earliest `linked_tx` clock stays, then smallest id; the others unlinked via `_billWrites`); every
   bill's planned row `bill:<id>` is set to what `_billWrites` wants for the bill as it is. `_billWrites` writes
@@ -455,27 +459,35 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   so the file is not refused for good. The quarantine is separate from the cursors: a schema upgrade reads every
   peer file again, an unchanged badKey/corrupt file stays skipped, unknownVersion/applyFailed are tried once more.
 - `sync_engine.dart` — relay sync (§4.9, wire protocol `docs/context/RELAY_PROTOCOL.md`), web-safe. `SyncTransport`
-  (`state`, `put`, `get`, `ack`, `putSnapshot`, `getSnapshot`, `putBlob`/`getBlob` (null on 404)/`deleteBlob`, whose
-  defaults act like an older relay: 404; `run` uploads `blob_outbox` before the ops (a 404 before this device's first
-  file is retried once after it: the relay creates a wallet only then), sends `blob_delete` after the ack, failures stay
-  queued and never stop the run, `SyncReport.blobsSent`/`blobsWaiting`/`blobsUnsupported` (404 on an upload for a wallet the relay knows = older relay); failures are `TransportException(TransportFailure)`),
+  (`state`, `put`, `get`, `ack`, `putSnapshot`, `getSnapshot`, `putBlob`/`getBlob` (null on 404)/`putSnapshotBlobs`
+  (api 4 declared set; there is no delete call), whose defaults act like an older relay: 404; `run` uploads the
+  un-uploaded files plus every cached file a pending op references (a first connect: every live bill's) before the ops,
+  and **holds** the file fields (`blob`, `blob_type`, `blob_bytes`, `deleted`) of an op whose cached file was not stored
+  in this run (`_holdForBlobs`: the rest of the op and outbox goes; held parts back in the outbox, same clock); a 404
+  before this device's first file is retried once after it (the relay creates a wallet only then) and the held ops go
+  in a second upload of the same run; a relay without blob routes holds nothing. Failures stay queued and never stop
+  the run. After an accepted snapshot PUT on a relay whose state said api ≥ 4: `putSnapshotBlobs(id, liveBlobHashes)`
+  (failure logged, not retried). `SyncReport.blobsSent`/`blobsWaiting`/`blobsUnsupported` (404 on an upload for a wallet
+  the relay knows = older relay), `relayApi`/`relayCollectsBlobs`; `RelayState.api`; failures are `TransportException(TransportFailure)`),
   `RelayState`/`RelayDevice`/`RelaySnapshot` (+ `fromJson`), implemented by `MemoryTransport` (`sync_memory.dart`: the
   relay's rules in memory — no gaps, never overwritten, acks grow, snapshot 422 before 409, two kept snapshots, pruning
-  incl. the 90-day rule driven by `now`; no signature check; blobs: hash checked, 404 for an unknown wallet, hooks `blobs`, `blobRoutes`, `tamperBlob`; test hooks `offline`, `corrupt`, `failGet`, `replace`, `files`,
+  incl. the 90-day rule driven by `now`; no signature check; blobs: hash checked, 404 for an unknown wallet, hooks `blobs`, `blobRoutes`, `tamperBlob`,
+  `api` (4; 3 = no declared sets), `declared`, `gcRuns` (GC as the relay: both kept sets, 30-day grace from the last PUT); test hooks `offline`, `corrupt`, `failGet`, `replace`, `files`,
   `calls`, `instance` (random per transport, sent once the wallet exists; null = an api-2 relay), `maxBytes` (reported
   with `storedBytes` in state once the wallet exists, not enforced; null = an older relay), `wipe()` (empty, new
   instance), `copy()`/`restore(copy)` (a relay restored from an older copy of its data folder, same instance)) and
-  `RelayTransport` (`sync_relay.dart`, `package:http` + `cryptography`, api 3 (`relayApi`), paths under `/v2/`: `wid` and the Ed25519
+  `RelayTransport` (`sync_relay.dart`, `package:http` + `cryptography`, api 4 (`relayApi`; api-3 relays too, `relayMinApi`), paths under `/v2/`: `wid` and the Ed25519
   key pair from `deriveKey` (`relayIdInfo`, `relaySignInfo`; `ids` = (wid, public key)); every request carries
-  `X-BW-Time` (device clock + `clockOffsetMs`) and `X-BW-Sig` over `signedText` (`bw-relay-v3`: method, `signedHost`
+  `X-BW-Time` (device clock + `clockOffsetMs`) and `X-BW-Sig` over `signedText` (`bw-relay-v4`, or `bw-relay-v3` once
+  `signApi` fell back to 3: after a 401 that is not `clock`, health says 3, the request is sent again; method, `signedHost`
   of the URL (lower case, port only when not the default), path from `/v2/` even behind a base path, `X-BW-Covers`,
   body SHA-256, time); `PUT d/<device>/1` also sends `X-BW-Pub` and, with `createToken:` set, `X-BW-Create-Token`
   (403 `createToken` → `TransportFailure.createToken`, fatal for the run). `clockOffsetMs` lives in the transport
   (never persisted; the app builds a new transport per run, so a device whose clock is off pays one 401 `clock` retry
   per run). 401 `clock` → offset from the
   `Date` header (`parseHttpDate`, no dart:io) and one retry, never more (a second `clock` = `other`); status → failure,
-  `api` above 3 → `newerApi`, below → `olderApi`; a 401 that is not `clock` asks `health` once (api 2 → `olderApi`,
-  above 3 → `newerApi`, else `refused`); 404 state = empty relay, 30 s timeout; `health(base)` asks
+  `api` above 4 → `newerApi`, below 3 → `olderApi`; a 401 that is not `clock` asks `health` once (api 2 → `olderApi`,
+  above 4 → `newerApi`, 3 → v3 text and one retry, else `refused`); 404 state = empty relay, 30 s timeout; `health(base)` (returns the api) asks
   `/v2/health`, on 404 `/v1/health` to tell an older relay apart; `now:` for tests). About 1.8 ms per signature on the VM.
   Stage H (H5–H9) in the engine: `SyncEngine.run` while a run of the same engine is in progress returns that run's
   future (`sync.run.joined`); relay usage (Stage I: `RelayState.bytes`/`maxBytes`, null from an older relay or for a
@@ -651,11 +663,13 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   an edit made on the other device in between (status and deleted never: the creation op carries neither). An auto link
   is never re-planned: rows imported one by one link to the first candidate even if a second one comes later. A bill
   linked to a hand-added expense stays paid when matching later replaces that entry with its bank row. A deleted bill's
-  file stays in other devices' caches until their next caught-up run. A blob added before this device ever stored a
+  file stays in the caches until evicted and on the relay until its GC (P14: 30 days after its last upload, once no kept
+  snapshot declares it; a blob an op references is uploaded again before that op). A blob added before this device ever stored a
   file waits for one (the relay creates the wallet only then). Older builds ignore the `bill` entity (replayed once).
   A slip is matched to a confirmed recurring bill by exact payee key only (slip payee vs bank text may differ; then only
-  its category keeps it from being reserved on top of the fixed plan). Files attached before B5a are not in `blob_own`,
-  so an orphan among them stays on the relay. Two devices adding an `asNew` copy before syncing make one bill.
+  its category keeps it from being reserved on top of the fixed plan). An unattached file (added, bill not saved) is
+  uploaded and later collected by the relay GC. A key holder declaring empty sets twice lets GC drop files older than
+  30 days (recoverable from caches and backups). Two devices adding an `asNew` copy before syncing make one bill.
 - Rules (P7, no schema bump): a build before P7 reads a `contains` pattern as a regex and ignores its amount range, so
   it can categorize differently (text only) until it upgrades. A deleted pattern's tombstone keeps no order: Undo
   (set again) puts it last. A text rename (new row + tombstone of the old one) on one device and an edit of the same
@@ -689,7 +703,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   incl. two devices `calendar_ref_test.dart`, parseIcs cost bounds + dismiss title `future_spending_fixes_test.dart`), CSV: `test/export_test.dart`, search: `test/search_test.dart`,
   web-safe core (`fromDatabase`, `backupBytes`/`restoreBackupBytes`, `MemoryLogSink`, gzip compatibility): `test/web_core_test.dart`,
   encrypted local database (new/convert/wrong key/WAL/interrupted conversion/perf numbers): `test/local_db_test.dart`
-  (sqlite3mc proof tests: `test/encrypted_db_test.dart`), sync self-heal: `test/sync_self_heal_test.dart`;
+  (sqlite3mc proof tests: `test/encrypted_db_test.dart`), sync self-heal: `test/sync_self_heal_test.dart`, bill-file invariants incl. two devices, GC and the 14 → 15 migration (P14): `test/p14_blob_invariants_test.dart`;
   `<feature>_edge_test.dart` and `<feature>_spec_test.dart` are spec-written tests). Multi-device sim in `test/support/sim.dart` (lists entities on its own): `Net` (one
   `MemoryTransport`; a `Device` uses the latest `Net` made unless given `net:`), `Device` (own database; `run()` uploads
   and applies, `deliver(net, r, p:)` makes the next run's GETs fail with probability 1 − p, `upload` is a no-op kept for

@@ -1,4 +1,4 @@
-// HTTP client for the relay (docs/context/RELAY_PROTOCOL.md, api 3: requests signed with the host, paths under /v2/). `package:http` and
+// HTTP client for the relay (docs/context/RELAY_PROTOCOL.md, api 4 (api 3 relays too): requests signed with the host, paths under /v2/). `package:http` and
 // `package:cryptography` only, so it runs on the VM and the web.
 import 'dart:async';
 import 'dart:convert';
@@ -14,7 +14,11 @@ import 'vault.dart';
 final _log = Logger('bw.relay');
 
 /// The relay API version this build speaks (`api` in health and state). The URL paths stay under `/v2/`.
-const relayApi = 3;
+const relayApi = 4;
+
+/// The oldest relay API this build still syncs with: an api-3 relay (signed text `bw-relay-v3`, no declared blob sets,
+/// RELAY_PROTOCOL.md "Versions").
+const relayMinApi = 3;
 
 /// HKDF info of the wallet id and of the Ed25519 signing seed (RELAY_PROTOCOL.md "Identity").
 const relayIdInfo = 'bw-relay-id-v1';
@@ -48,6 +52,10 @@ class RelayTransport implements SyncTransport {
   /// answers 403 `createToken` ([TransportFailure.createToken]).
   final String? createToken;
 
+  /// The api whose signed text this transport uses: [relayApi], or 3 once an api-3 relay was found (a 401 that is not
+  /// `clock`, then `/v2/health` says 3). In memory, per transport.
+  int signApi = relayApi;
+
   RelayTransport(this.base, this.key,
       {http.Client? client, this.timeout = const Duration(seconds: 30), DateTime Function()? now, this.clockOffsetMs = 0, this.createToken})
       : _client = client ?? http.Client(),
@@ -79,10 +87,10 @@ class RelayTransport implements SyncTransport {
     return base.replace(path: '$prefix/$path', query: null, fragment: null);
   }
 
-  /// Checks that a relay answers at [base] and speaks this build's API (`GET /v2/health`, not signed). A 404 there is
-  /// asked again at `/v1/health` to tell an older relay apart ([TransportFailure.olderApi]). Throws
-  /// [TransportException].
-  static Future<void> health(Uri base, {http.Client? client, Duration timeout = const Duration(seconds: 10)}) async {
+  /// Checks that a relay answers at [base] and speaks an API this build syncs with ([relayMinApi] .. [relayApi], `GET
+  /// /v2/health`, not signed) and returns it. A 404 there is asked again at `/v1/health` to tell an older relay apart
+  /// ([TransportFailure.olderApi]). Throws [TransportException].
+  static Future<int> health(Uri base, {http.Client? client, Duration timeout = const Duration(seconds: 10)}) async {
     final c = client ?? http.Client();
     try {
       final r = await _send(() => c.get(_url(base, 'v2/health')), timeout, 'health');
@@ -91,7 +99,7 @@ class RelayTransport implements SyncTransport {
         if (old.statusCode == 200) _api(old.body, 'health');
       }
       _check(r, 'health');
-      _api(r.body, 'health');
+      return _api(r.body, 'health')['api'] as int;
     } finally {
       if (client == null) c.close();
     }
@@ -145,7 +153,7 @@ class RelayTransport implements SyncTransport {
     }
   }
 
-  /// The JSON object in [body]; an `api` above [relayApi] is [TransportFailure.newerApi], below it
+  /// The JSON object in [body]; an `api` above [relayApi] is [TransportFailure.newerApi], below [relayMinApi]
   /// [TransportFailure.olderApi].
   static Map<String, Object?> _api(String body, String kind) {
     final Object? j;
@@ -162,16 +170,17 @@ class RelayTransport implements SyncTransport {
       logEvent(_log, Level.WARNING, 'relay.newerApi', {'api': api});
       throw const TransportException(TransportFailure.newerApi, 'newer api');
     }
-    if (api < relayApi) {
+    if (api < relayMinApi) {
       logEvent(_log, Level.WARNING, 'relay.olderApi', {'api': api});
       throw const TransportException(TransportFailure.olderApi, 'older api');
     }
     return Map<String, Object?>.from(j);
   }
 
-  /// The string a v3 request signs (RELAY_PROTOCOL.md "Signed requests"): [host] is [signedHost] of the URL.
-  static String signedText(String method, String host, String path, String covers, String bodyHash, String time) =>
-      'bw-relay-v3\n$method\n$host\n$path\n$covers\n$bodyHash\n$time';
+  /// The string a request signs (RELAY_PROTOCOL.md "Signed requests"): `bw-relay-v4`, or with [api] 3 the api-3 text
+  /// (`bw-relay-v3`); [host] is [signedHost] of the URL.
+  static String signedText(String method, String host, String path, String covers, String bodyHash, String time, {int api = relayApi}) =>
+      'bw-relay-v${api == 3 ? 3 : 4}\n$method\n$host\n$path\n$covers\n$bodyHash\n$time';
 
   /// The host a request to [url] names, as its `Host` header carries it: lower case, `:port` only when it is not the
   /// scheme's default, an IPv6 address in brackets.
@@ -194,7 +203,8 @@ class RelayTransport implements SyncTransport {
     final hash = (await Sha256().hash(body)).bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     Future<http.Response> attempt() async {
       final time = '${_now().millisecondsSinceEpoch + clockOffsetMs}';
-      final sig = await _ed25519.sign(utf8.encode(signedText(method, host, signedPath, headers['X-BW-Covers'] ?? '', hash, time)),
+      final sig = await _ed25519.sign(
+          utf8.encode(signedText(method, host, signedPath, headers['X-BW-Covers'] ?? '', hash, time, api: signApi)),
           keyPair: id.keyPair);
       final req = http.Request(method, url)
         ..headers.addAll({...headers, 'X-BW-Time': time, 'X-BW-Sig': _b64(sig.bytes), if (withPub) 'X-BW-Pub': id.pub});
@@ -223,7 +233,13 @@ class RelayTransport implements SyncTransport {
       // A relay of another api version refuses this build's signatures (the signed text names its version): ask its
       // health once, so mixed versions read as "update the app / the relay", and `refused` stays for a real key clash.
       try {
-        await health(base, client: _client, timeout: timeout);
+        final api = await health(base, client: _client, timeout: timeout);
+        if (api < signApi) {
+          // An api-3 relay: sign its text from now on and send this request again (RELAY_PROTOCOL.md "Versions").
+          signApi = api;
+          logEvent(_log, Level.INFO, 'relay.signApi', {'api': api});
+          r = await attempt();
+        }
       } on TransportException catch (e) {
         if (e.failure == TransportFailure.olderApi || e.failure == TransportFailure.newerApi) rethrow;
         logEvent(_log, Level.FINE, 'relay.health.after401', {'failure': e.failure.name});
@@ -295,10 +311,11 @@ class RelayTransport implements SyncTransport {
     }
   }
 
-  /// Signed like every request (`DELETE` in the signed text), empty body.
+  /// `PUT snapshot/<id>/blobs`, body = the sorted JSON array of [hashes] (api 4; signed like every body).
   @override
-  Future<void> deleteBlob(String hash) async {
-    await _req('DELETE', 'blob/$hash', 'deleteBlob');
+  Future<void> putSnapshotBlobs(String id, List<String> hashes) async {
+    await _req('PUT', 'snapshot/$id/blobs', 'putSnapshotBlobs',
+        body: utf8.encode(jsonEncode([...hashes]..sort())), headers: {'Content-Type': 'application/json'});
   }
 
   /// Closes the HTTP client.

@@ -28,7 +28,7 @@ void main() {
       (await h.send('PUT', bp(wallet, await hashOf(b)), key: key ?? keyA, body: b)).statusCode;
 
   group('happy paths', () {
-    test('PUT 201, again 200, GET returns the bytes, DELETE 204 then GET 404', () async {
+    test('PUT 201, again 200, GET returns the bytes, DELETE 204 and the blob stays (api 4)', () async {
       expect(await put(data), 201);
       expect(await put(data), 200);
       final g = await h.get(bp(w1, hash), key: keyA);
@@ -36,19 +36,22 @@ void main() {
       expect(g.headers['content-type'], 'application/octet-stream');
       expect(g.bodyBytes, data);
       expect((await h.send('DELETE', bp(w1, hash), key: keyA)).statusCode, 204);
-      expect((await h.get(bp(w1, hash), key: keyA)).statusCode, 404);
+      expect((await h.get(bp(w1, hash), key: keyA)).bodyBytes, data);
     });
 
     test('GET of a never stored blob is 404', () async {
       expect((await h.get(bp(w1, hash), key: keyA)).statusCode, 404);
     });
 
-    test('DELETE is idempotent', () async {
+    test('DELETE is a no-op (v4 and an api-3 app\'s v3 signature alike)', () async {
       expect((await h.send('DELETE', bp(w1, hash), key: keyA)).statusCode, 204);
       expect(await put(data), 201);
       expect((await h.send('DELETE', bp(w1, hash), key: keyA)).statusCode, 204);
+      h.v3 = true;
       expect((await h.send('DELETE', bp(w1, hash), key: keyA)).statusCode, 204);
-      expect((await h.state(w1))['blobs'], {'count': 0, 'bytes': 0});
+      h.v3 = false;
+      expect((await h.state(w1))['blobs'], {'count': 1, 'bytes': data.length});
+      expect(File('${h.dir.path}/$w1/blobs/$hash').existsSync(), isTrue);
     });
 
     test('an empty blob is allowed', () async {
@@ -163,9 +166,9 @@ void main() {
       // A snapshot likewise: blobs 60 + snapshot 41 > 100.
       expect((await small.putSnapshot(w1, 's2', {'dev1': 1}, 'q' * 41)).statusCode, 507);
       expect((await small.putSnapshot(w1, 's2', {'dev1': 1}, 'q' * 40)).statusCode, 201);
-      // Deleting the blob frees the room.
+      // A DELETE frees nothing (api 4: only GC deletes blobs).
       expect((await small.send('DELETE', bp(w1, await hashOf(Uint8List(60))), key: keyA)).statusCode, 204);
-      expect(await sput(Uint8List(55)), 201);
+      expect(await sput(Uint8List(55)), 507);
     });
 
     test('a refused blob leaves nothing behind', () async {
@@ -194,7 +197,7 @@ void main() {
       await small.restart();
       expect((await small.state(w1))['bytes'], 90, reason: 'rebuilt from the folder');
       expect((await small.send('DELETE', bp(w1, await hashOf(Uint8List(60))), key: keyA)).statusCode, 204);
-      expect((await small.state(w1))['bytes'], 30);
+      expect((await small.state(w1))['bytes'], 90, reason: 'a DELETE changes nothing');
     });
   });
 
@@ -226,8 +229,8 @@ void main() {
       expect(await put(data), 200);
       expect((await h.send('DELETE', bp(w1, hash), key: keyA)).statusCode, 204);
       await h.restart();
-      expect((await h.get(bp(w1, hash), key: keyA)).statusCode, 404);
-      expect((await h.state(w1))['blobs'], {'count': 0, 'bytes': 0});
+      expect((await h.get(bp(w1, hash), key: keyA)).bodyBytes, data, reason: 'snapshots without declared sets: no GC');
+      expect((await h.state(w1))['blobs'], {'count': 1, 'bytes': data.length});
     });
 
     test('restart counts blobs toward --max-bytes and removes temp files', () async {

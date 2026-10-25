@@ -1,7 +1,7 @@
-# Relay protocol, api 3 (sync redesign, DESIGN_DECISIONS §4.9; signed requests, decision 2026-10-22; Stage H)
+# Relay protocol, api 4 (sync redesign, DESIGN_DECISIONS §4.9; signed requests, decision 2026-10-22; Stage H; blob GC, P14)
 
 The relay stores sealed files it cannot read. Server: `relay/`. Client: `RelayTransport` in `wallet_core`.
-Both sides follow this file exactly; change it here first. Paths are `/v2/…`; health and state say `"api": 3`.
+Both sides follow this file exactly; change it here first. Paths are `/v2/…`; health says `"api": 4`, state says `"api": 4` (`3` to an api-3 app, below).
 
 ## Versions
 | api | Change | Mixed versions |
@@ -9,6 +9,7 @@ Both sides follow this file exactly; change it here first. Paths are `/v2/…`; 
 | 1 | Bearer token (never deployed). | Paths `/v1/…`: a v2+ client's health check tells it apart (`olderApi`). |
 | 2 | Ed25519-signed requests (`bw-relay-v2`), blobs. | — |
 | 3 (Stage H, 2026-10-23) | The signed text names the host (`bw-relay-v3`, H8); state carries the relay `instance` id (H5); per-device streams `<device>-<n><tag>` (H5b); optional `--create-token` (H11); a missing file of a known device is 404 `missing`. | An api-2 app on an api-3 relay: its `GET state` (v2 signature, which the relay still checks for this one request) is answered with only `{"api":3}`, so it stops with `newerApi` ("The relay runs a newer version. Update the app."); a new wallet created by an api-2 app on an api-3 relay is refused (401, shown as "refused"). An api-3 app on an api-2 relay: the relay answers 401 to its v3 signature; on any 401 that is not `clock` the client asks `/v2/health` once and stops with `olderApi` ("Update the relay") for api 2, `newerApi` above 3, and keeps `refused` only for api 3. Nothing is uploaded or read either way, so no device diverges: each syncs again once both sides run Stage H. Otherwise a v3 relay accepts only v3 signatures. |
+| 4 (P14, 2026-10-25) | Clients never delete bill files: `DELETE blob/…` is a no-op (204). After a snapshot PUT the client declares the snapshot's set of referenced blob hashes (`PUT snapshot/<id>/blobs`, signed like any body); the relay deletes a blob only when neither kept snapshot declares it and it was stored more than 30 days ago (blob GC, below). A blob PUT of a stored hash refreshes its stored time. Signed text `bw-relay-v4`. | **An api-3 app on an api-4 relay:** the relay still accepts its `bw-relay-v3` signatures and answers its `GET state` with `"api": 3`, so it syncs as before; its DELETEs change nothing, and its snapshots declare no set, so no GC runs while one of the two kept snapshots is its own. (Only its health check after a 401 that is not `clock`, i.e. a real key clash, now reads `newerApi`.) **An api-4 app on an api-3 relay:** the relay answers 401 to the v4 signature; the client asks `/v2/health` once, sees api 3 and signs `bw-relay-v3` from then on (in memory, per transport). It never sends DELETE and sends no declared sets there (the state says api 3), so nothing is ever deleted and blob PUT/GET work as before. |
 
 ## Identity (client side only)
 - `wid` = lowercase hex of HKDF-SHA256(ikm = wallet key bytes, salt = empty, info = `bw-relay-id-v1`, length 16) → 32 hex chars.
@@ -21,8 +22,12 @@ Every request under `/v2/w/<wid>/` (GETs too: the state is metadata) carries:
 - `X-BW-Sig`: base64url without padding (86 chars) of the Ed25519 signature over the UTF-8 string
 
   ```
-  bw-relay-v3\n<METHOD>\n<host>\n<path>\n<covers>\n<body hash>\n<time>
+  bw-relay-v4\n<METHOD>\n<host>\n<path>\n<covers>\n<body hash>\n<time>
   ```
+  api 4 changed only the first line (`bw-relay-v3` before). An api-4 relay verifies the v4 text and, failing that, the same
+  fields under `bw-relay-v3` (an api-3 app); every endpoint behaves the same for both, except that `GET state` answers a v3
+  request with `"api": 3`. An api-4 client signs v4 and falls back to v3 for the rest of its session when, after a 401 that
+  is not `clock`, `/v2/health` says api 3.
   `<METHOD>` = `GET`, `HEAD`, `PUT` or `DELETE` (blobs only); `<host>` = the host the client addressed as its `Host` header
   carries it: lower case, `:<port>` only when the port is not the scheme's default (80/443), an IPv6 address in
   brackets (`relay.example.org`, `192.168.1.5:8787`). The relay compares it with its `--public-host` when set (behind a
@@ -83,12 +88,13 @@ dominates (same covers: same genuine content, nothing more pruned) or is refused
 ## Endpoints
 | Request | Result |
 |---|---|
-| `GET /v2/health` (not signed) | 200 `{"api":3}` |
+| `GET /v2/health` (not signed) | 200 `{"api":4}` |
 | `GET /v2/w/<wid>/state` | 200 state JSON (below) |
 | `PUT /v2/w/<wid>/d/<device>/<seq>` body = sealed bytes (≤ 16 MiB) | 201 stored; 200 same bytes already stored; 409 other bytes already stored for that seq (never overwritten); 422 `seq > last + 1` (no gaps on the relay); 410 `seq < first` (pruned); 413 too big |
 | `GET /v2/w/<wid>/d/<device>/<seq>` | 200 bytes; 410 pruned (`seq < first`); 404 never stored; 404 `{"error":"missing"}` when the relay's own state says the file exists but it is gone from disk (damaged or restored data folder; never 500) |
 | `PUT /v2/w/<wid>/ack/<device>` body `{"<peer>": seq, …}` | 204. Each ack only ever grows (max with the stored one); an ack above the peer's `last` → 422 |
 | `PUT /v2/w/<wid>/snapshot/<id>` header `X-BW-Covers: {"<device>": seq, …}`, body = sealed bytes (≤ 64 MiB) | 201 when `covers` ≥ the current snapshot's covers for every device in it (a device missing from `covers` counts as 0), and ≤ each device's `last`; checked in that order: 422 beyond `last` (unknown device = `last` 0), then 409 does not dominate; same id with the same bytes and covers again = 200, same id with other content = 409; missing/invalid `X-BW-Covers` = 400 |
+| `PUT /v2/w/<wid>/snapshot/<id>/blobs` body = JSON array of blob hashes (api 4) | The snapshot's declared set (see "Blob garbage collection"): 201 stored; 200 the same set again; 409 another set already stored for that id; 404 `<id>` is not a kept snapshot (or unknown wallet); 400 not a JSON array of distinct `[0-9a-f]{64}` strings, or more than 100,000; 413 over 7 MiB |
 | `GET /v2/w/<wid>/snapshot/<id>` | 200 bytes; 404 (also `{"error":"missing"}` when a kept snapshot's file is gone from disk) |
 | `HEAD` on `/v2/health` and on every `GET` endpoint | Same status and headers (including `Content-Length`) as the `GET`, no body. On wallet paths it is signed with `<METHOD>` = `HEAD` (a GET signature does not authorize a HEAD and the other way round) |
 | any `OPTIONS` | CORS preflight, 204 |
@@ -105,22 +111,55 @@ Sealed files that rows point to by hash (a bill's photo or PDF). Content-address
 |---|---|
 | `PUT /v2/w/<wid>/blob/<hash>` body = sealed bytes (≤ 16 MiB) | `<hash>` = lowercase hex SHA-256 of the body (64 chars, else 400); body hash ≠ `<hash>` → 400 `hash`; 201 stored; 200 already stored (same hash = same bytes); 404 unknown wallet (a wallet is created only by `PUT d/<device>/1`); 413 too big; 507 wallet over `--max-bytes` (blobs count) |
 | `GET /v2/w/<wid>/blob/<hash>` | 200 bytes; 404 never stored or deleted (`{"error":"missing"}`) |
-| `DELETE /v2/w/<wid>/blob/<hash>` (empty body) | 204, also when absent (idempotent) |
+| `DELETE /v2/w/<wid>/blob/<hash>` (empty body) | 204 and nothing is deleted (api 4: kept so api-3 apps, which still send it, get the answer they expect); a body → 400 |
 
 - Signed like every wallet request; `<METHOD>` in the signed text may now also be `DELETE`. CORS allowed methods become
   `GET, PUT, DELETE, OPTIONS`. A blob PUT/DELETE does not change `lastSeen`.
 - Storage: `blobs/<hash>` in the wallet's folder (temp + rename). The wallet's byte count (`--max-bytes`) = files + kept
   snapshots + blobs; a blob PUT counts everything + the new blob.
+- Stored time (api 4): the blob file's modification time, set to the relay clock by every accepted PUT: the 201 that
+  stores it and the 200 for a hash already stored (a re-upload refreshes it, which only ever delays GC).
 - State JSON gains `"blobs": {"count": n, "bytes": b}` (clients ignore it; older clients ignore unknown keys).
-- A replayed DELETE inside the 5-minute window deletes a blob that the owner re-uploaded with the very same sealed bytes
-  in those minutes; clients never re-upload a deleted blob's bytes (a new photo is sealed again with a fresh nonce),
-  so this cannot happen in practice. `api` stays 2: older relays answer 404 on `blob/…`, which clients report as
-  "this relay can't keep bill photos yet" and keep the blob queued.
+- Since api 4 only the relay's GC deletes a blob, so a replayed DELETE changes nothing. Relays from before blobs
+  answer 404 on `blob/…` for a wallet they know: clients report "this relay can't keep bill photos yet" and keep the blob
+  waiting (never evicted from their cache), and their bill ops go without waiting for it (it could never be stored).
+
+### Client rules for blobs (api 4)
+1. **Clients never delete blobs.** No DELETE is sent, whatever happens to a bill (delete, re-import, restore). A bill's
+   file stays in the device cache until LRU eviction; undeleting the bill brings the reference back.
+2. **Upload before ops.** A bill op that references a blob (sets `blob` to it, or makes the bill live again with
+   `deleted` 0) goes up only after that blob was PUT (201/200) in the same run, when the device holds it; a blob a pending
+   op references is PUT again even if it was uploaded before (200, refreshing its stored time). If the PUT fails, only
+   the referencing fields (`blob`, `blob_type`, `blob_bytes`, `deleted`) of those ops wait in the outbox; the rest of the
+   op and of the outbox goes on. A first connect (new or changed relay) PUTs every cached blob a live bill references.
+   A client writes no snapshot while such an op waits (the snapshot would carry the reference before the file).
+3. **Declared sets.** Right after an accepted snapshot PUT, a client that saw api ≥ 4 in the state sends
+   `PUT snapshot/<id>/blobs` with the hashes of the live bills in that snapshot (sorted). A failure is logged and not
+   retried: that snapshot then has no set, which only holds GC back.
+
+### Blob garbage collection (api 4)
+- Body of `PUT /v2/w/<wid>/snapshot/<id>/blobs`: a JSON array of distinct blob hashes (`["<64 hex>", …]`, at most
+  100,000; ≤ 7 MiB). It is covered by the request signature like any body (the path names the snapshot id, the body hash
+  the set), so a set that does not verify is refused (401) and a captured one cannot be moved to another snapshot. Order
+  does not matter: the same set again is 200, another set for the same id 409 (a replay inside the window is harmless).
+  `<id>` must be the latest or `previous` kept snapshot. It does not change `lastSeen`.
+- Storage: `sets/<id>` in the wallet's folder (temp + rename), deleted with its snapshot; loaded on start (a set of a
+  snapshot the meta does not keep is deleted, an unreadable one counts as none). Not counted in `bytes` (bounded: two
+  sets of at most 7 MiB).
+- **GC** runs after a set PUT is accepted (201), and only when **both** kept snapshots (latest and `previous`) carry a
+  set. Every blob that is in neither set and whose stored time is more than 30 days (`GC_GRACE`) before the relay clock
+  is deleted; the blob count and bytes go down. A wallet with one kept snapshot, or with a kept snapshot without a set
+  (an api-3 app's, or one whose set PUT failed), collects nothing. Logged as kind `gc` with counts only
+  (`kept`, `deleted`, `bytes`).
+- Why a referenced file survives: a blob is PUT (refreshing its stored time) right before the sync file whose ops
+  reference it; a snapshot is written only by a caught-up device, so every snapshot written after that file declares
+  the blob while its bill is live, and the 30 days cover snapshots written before (or concurrently). A bill deleted and
+  then undeleted on another device brings its file back with rule 2 (re-PUT from that device's cache).
 
 ## State JSON
 ```json
 {
-  "api": 3,
+  "api": 4,
   "instance": "<32 hex>",
   "devices": {
     "<device>": {"first": 1, "last": 12, "lastSeen": "2026-10-22T10:00:00Z", "acks": {"<peer>": 5}}
@@ -132,6 +171,8 @@ Sealed files that rows point to by hash (a bill's photo or PDF). Content-address
   "maxBytes": 1073741824
 }
 ```
+`api` is 4, or 3 when the request was signed with the api-3 text (`bw-relay-v3`). An api-4 client accepts 3 and 4
+(`olderApi` below 3, `newerApi` above 4; the same for health).
 `first` = lowest seq still stored, or `last + 1` when all were pruned. `snapshot`/`previous` are `null` when absent. A
 device appears once it has stored a file or sent an ack.
 
@@ -200,6 +241,7 @@ equal (the first one applied wins on each device).
   `previous` and deletes the older one.
 - File `seq` of device `D` is deleted when every kept snapshot (only those that exist) covers it (`covers[D] ≥ seq`) **and** every other device
   whose `lastSeen` is within 90 days has `acks[D] ≥ seq`. Checked after each accepted PUT and ack.
+- Blobs are never pruned by these rules; only the blob GC above deletes them.
 - A client whose next needed file is below `first` (pruned) starts from the latest snapshot (falling back to `previous`
   if the latest cannot be read), then fetches the files after its `covers`.
 
@@ -246,4 +288,8 @@ Assumes the wallet key stays on the devices (only `wid`, `pub` and signatures de
 - **Stolen relay disk**: sealed files plus `meta.json` (public key, seqs, acks, times). Nothing in it can sign or decrypt.
 - **Malicious relay** (or someone controlling it): can drop, withhold, roll back or delete files and snapshots, lie in
   the state, refuse requests or replay its stored bytes to clients; it cannot read, forge or alter sealed content
-  (devices reject what does not unseal with the wallet key) and cannot sign requests to another relay.
+  (devices reject what does not unseal with the wallet key) and cannot sign requests to another relay. It can delete
+  any blob at any time, GC or not.
+- **A client with the wallet key** could declare an empty set for two snapshots in a row; GC would then delete every
+  blob stored more than 30 days ago. Recoverable: the file of a live bill stays in the owner's device caches until
+  evicted and in backups (P10), and a device re-PUTs it when it sends an op that references it again.

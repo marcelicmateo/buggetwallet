@@ -51,7 +51,11 @@ class RelayState {
   /// snapshots + bill files) and that limit. Null from an older relay, and each alone when its value is not a
   /// non-negative integer (shown as "unknown"; usage never fails a sync).
   final int? bytes, maxBytes;
-  const RelayState({this.devices = const {}, this.snapshot, this.previous, this.instance, this.bytes, this.maxBytes});
+
+  /// The relay's api version as the state names it (3 or 4 from a relay; null when unknown). From 4 on the engine
+  /// declares each snapshot's blob set ([SyncTransport.putSnapshotBlobs]) and the relay collects old bill files.
+  final int? api;
+  const RelayState({this.devices = const {}, this.snapshot, this.previous, this.instance, this.bytes, this.maxBytes, this.api});
 
   /// A relay that never heard of this wallet.
   static const empty = RelayState();
@@ -95,6 +99,7 @@ class RelayState {
     }
     int? usage(Object? v) => v is int && v >= 0 ? v : null;
     return RelayState(
+      api: j['api'] is int ? j['api'] as int : null,
       instance: instance as String?,
       bytes: usage(j['bytes']),
       maxBytes: usage(j['maxBytes']),
@@ -105,7 +110,7 @@ class RelayState {
   }
 
   Map<String, Object?> toJson() => {
-        'api': 1,
+        'api': api ?? 1,
         'devices': {for (final e in devices.entries) e.key: e.value.toJson()},
         'snapshot': snapshot?.toJson(),
         'previous': previous?.toJson(),
@@ -179,8 +184,11 @@ abstract class SyncTransport {
   /// The sealed file stored under [hash], or null when the relay does not have it (404).
   Future<List<int>?> getBlob(String hash) async => null;
 
-  /// Deletes the file stored under [hash] (also fine when absent).
-  Future<void> deleteBlob(String hash) async => throw const TransportException(TransportFailure.missing, 'no blobs');
+  /// Declares the blob hashes the live bills of snapshot [id] reference (api 4, RELAY_PROTOCOL.md "Blob garbage
+  /// collection"): sent right after that snapshot's PUT. Clients never delete blobs; there is no delete call. The
+  /// default is a relay without declared sets (404).
+  Future<void> putSnapshotBlobs(String id, List<String> hashes) async =>
+      throw const TransportException(TransportFailure.missing, 'no declared sets');
 }
 
 /// SQLite result codes that are about this device's database, not about the file being applied (busy, locked, out of
@@ -494,12 +502,22 @@ class SyncEngine {
       logEvent(_log, Level.WARNING, 'sync.relay.changed', {'cursors': reset.length});
     }
 
-    // 1. Upload: bill files first (a peer that reads a bill row can then fetch its file), then the ops.
-    var (blobsSent, blobMissing) = await _uploadBlobs(repo);
+    // 1. Upload: bill files first, then the ops (P14 "upload before ops": a bill op that references a file this device
+    // holds goes up only once that file was stored in this run; RELAY_PROTOCOL.md "Client rules for blobs"). A first
+    // connect (new or changed relay) re-uploads every cached file a live bill points to.
+    final sentMarker = int.tryParse(repo.localValue(sentKey) ?? '');
+    // Also a relay that holds fewer of this stream's files than were sent (wiped, or restored from an older copy).
+    final firstConnect = relayChanged || sentMarker == null || (state.devices[_streamOf(repo)]?.last ?? 0) < sentMarker;
+    final blobsStored = <String>{};
+    var (blobsSent, blobMissing) =
+        await _uploadBlobs(repo, {...repo.pendingBlobRefs(), if (firstConnect) ...repo.liveBlobHashes()}, blobsStored);
     final walletKnown = (state.devices[_streamOf(repo)]?.last ?? 0) > 0;
-    // 404 on a bill file of a wallet the relay knows: an older relay without blob storage.
+    // 404 on a bill file of a wallet the relay knows: an older relay without blob storage. Its ops then go without
+    // their files (they could never be stored there); the files stay queued.
     var blobsUnsupported = blobMissing && walletKnown;
-    final (sent, myLast, inUseUpload) = await _upload(repo, state, relayChanged: relayChanged);
+    var (sent, myLast, inUseUpload) =
+        await _upload(repo, state, relayChanged: relayChanged, stored: blobsStored, holdNone: blobsUnsupported);
+    var refreshed = false;
     if (state.devices.isEmpty && myLast > 0) {
       // The relay did not know this wallet (new, or wiped) and this upload created it: its instance id exists only now.
       // Asked once more, so this run reports and keeps it (a wiped relay is then `relayChanged` here too).
@@ -510,6 +528,7 @@ class SyncEngine {
           logEvent(_log, Level.WARNING, 'sync.relay.changed', {'cursors': 0});
         }
         _keepInstance(repo, state);
+        refreshed = true;
       } on TransportException catch (e) {
         logEvent(_log, Level.WARNING, 'sync.state.again', {'failure': e.failure.name});
       }
@@ -553,10 +572,17 @@ class SyncEngine {
     final inUse =
         inUseUpload ?? (sighted.isNotEmpty || grown.isNotEmpty ? SyncProblem(_short(me), SyncProblemReason.deviceIdInUse, bytes: 0) : null);
     if (blobMissing && !walletKnown && myLast > 0) {
-      // A relay creates a wallet only with this device's first file: the files it refused before that go now.
-      final (more, missingAgain) = await _uploadBlobs(repo);
+      // A relay creates a wallet only with this device's first file: the files it refused before that go now, and
+      // then the ops that waited for them (with a fresh state only, so the upload continues this stream's seqs).
+      final before = blobsStored.length;
+      final (more, missingAgain) = await _uploadBlobs(repo, repo.pendingBlobRefs(), blobsStored);
       blobsSent += more;
       blobsUnsupported = missingAgain;
+      if (refreshed && (blobsStored.length > before || missingAgain) && repo.pendingOps().isNotEmpty) {
+        final (n, last, _) = await _upload(repo, state, relayChanged: false, stored: blobsStored, holdNone: missingAgain);
+        sent += n;
+        myLast = last;
+      }
     }
 
     // 2. + 3. Apply the other devices' files.
@@ -741,9 +767,6 @@ class SyncEngine {
     }
     _setMap(repo, ackedKey, stored);
 
-    // 4b. Bill files deleted here go from the relay too (a failure keeps them queued).
-    final blobsDeleted = await _deleteBlobs(repo);
-
     // 5. Caught up: match, and maybe write a snapshot.
     final heal = _trackStuck(repo, state, cursors, myLast, now, stream, {...ownOld, stream});
     // deviceIdInUse is information about this install's own stream (already handled), not a file left unread.
@@ -791,7 +814,6 @@ class SyncEngine {
       'waiting': waiting.length,
       'caughtUp': caughtUp,
       'blobsSent': blobsSent,
-      'blobsDeleted': blobsDeleted,
       'blobsWaiting': repo.queuedBlobs().length,
       'blobsUnsupported': blobsUnsupported,
     });
@@ -806,33 +828,30 @@ class SyncEngine {
         relayChanged: relayChanged,
         relayBytes: state.bytes,
         relayMaxBytes: state.maxBytes,
+        relayApi: state.api,
         devices: [
           for (final d in ids)
             SyncDevice(_short(d), lastSeen: d == me ? (acked || sent > 0 ? now : seenById[d]) : seenById[d], isThis: d == me),
         ]);
   }
 
-  /// Uploads the queued bill files (`blob_outbox`). A refused or failed one stays queued and the run goes on with the
-  /// others. Returns (uploaded, whether one was refused as missing: a
-  /// wallet the relay does not know yet, or an older relay without blobs).
-  Future<(int, bool)> _uploadBlobs(WalletRepo repo) async {
-    // A queued file whose bill was deleted (or took another device's file) since it was added is never sent.
-    repo.dropOrphanBlobs();
-    final queued = repo.queuedBlobs();
-    if (queued.isEmpty) return (0, false);
+  /// Uploads the bill files waiting for upload plus the cached ones in [refs] (files the ops about to go up reference:
+  /// PUT again even when uploaded before, which refreshes their stored time on the relay, P14), skipping those already
+  /// in [stored] this run. Each one stored goes into [stored]. A refused or failed one stays queued and the run goes on
+  /// with the others. Returns (uploaded, whether one was refused as missing: a wallet the relay does not know yet, or an
+  /// older relay without blobs).
+  Future<(int, bool)> _uploadBlobs(WalletRepo repo, Set<String> refs, Set<String> stored) async {
+    final queue = {...repo.queuedBlobs(), ...repo.cachedOf(refs)}.where((h) => !stored.contains(h)).toList()..sort();
+    if (queue.isEmpty) return (0, false);
     var sent = 0, failed = 0;
     var missing = false;
-    for (final hash in queued) {
+    for (final hash in queue) {
       final sealed = repo.cachedBlob(hash, touch: false);
-      if (sealed == null) {
-        // Cannot happen (queued files are never evicted); nothing to send, so it is dropped from the queue.
-        repo.markBlobUploaded(hash);
-        logEvent(_log, Level.WARNING, 'sync.blob.lost');
-        continue;
-      }
+      if (sealed == null) continue; // evicted meanwhile (only an uploaded one can be)
       try {
         await transport.putBlob(hash, sealed);
         repo.markBlobUploaded(hash);
+        stored.add(hash);
         sent++;
       } on TransportException catch (e) {
         failed++;
@@ -840,32 +859,46 @@ class SyncEngine {
         logEvent(_log, Level.WARNING, 'sync.blob.failed', {'failure': e.failure.name});
       }
     }
-    logEvent(_log, Level.INFO, 'sync.blobs', {'sent': sent, 'failed': failed, 'queued': queued.length});
+    logEvent(_log, Level.INFO, 'sync.blobs', {'sent': sent, 'failed': failed, 'queued': queue.length});
     return (sent, missing);
   }
 
-  /// Sends the queued deletions of bill files (`blob_delete`); a failed one stays queued. Returns how many were sent.
-  Future<int> _deleteBlobs(WalletRepo repo) async {
-    final queued = repo.blobDeletes();
-    var n = 0;
-    for (final hash in queued) {
-      try {
-        await transport.deleteBlob(hash);
-        repo.markBlobDeleted(hash);
-        n++;
-      } on TransportException catch (e) {
-        logEvent(_log, Level.WARNING, 'sync.blob.deleteFailed', {'failure': e.failure.name});
+  /// The bill fields that reference a file (RELAY_PROTOCOL.md "Client rules for blobs"): they wait for it.
+  static const _blobFields = {'blob', 'blob_type', 'blob_bytes', 'deleted'};
+
+  /// Splits [ops] into (to send, held back): an op that references a file this device holds and that was not stored on
+  /// the relay in this run ([stored]) keeps its file fields ([_blobFields]) back, same clock; its other fields go.
+  /// [holdNone] (a relay without blob storage) holds nothing.
+  static (List<Op>, List<Op>) _holdForBlobs(WalletRepo repo, List<Op> ops, Set<String> stored, {required bool holdNone}) {
+    if (holdNone) return (ops, const []);
+    final send = <Op>[], held = <Op>[];
+    for (final op in ops) {
+      final ref = repo.blobRefOf(op);
+      if (ref == null || stored.contains(ref) || !repo.hasCachedBlob(ref)) {
+        send.add(op);
+        continue;
       }
+      final keep = {
+        for (final e in op.fields.entries)
+          if (_blobFields.contains(e.key)) e.key: e.value
+      };
+      final rest = {
+        for (final e in op.fields.entries)
+          if (!_blobFields.contains(e.key)) e.key: e.value
+      };
+      held.add(Op(op.entity, op.id, keep, op.hlc));
+      if (rest.isNotEmpty) send.add(Op(op.entity, op.id, rest, op.hlc));
     }
-    if (queued.isNotEmpty) logEvent(_log, Level.INFO, 'sync.blobs.deleted', {'sent': n, 'queued': queued.length});
-    return n;
+    return (send, held);
   }
 
   /// Uploads this device's next file (several when over [partBytes]) to its stream, after moving to a fresh stream
   /// when the current one may not be this install's alone ([streamKey], [_move]). Returns (ops sent, this stream's last
   /// seq on the relay after it, the [SyncProblemReason.deviceIdInUse] problem when it moved because another install
   /// writes with this id: informational, the run goes on and the problem heals itself).
-  Future<(int, int, SyncProblem?)> _upload(WalletRepo repo, RelayState state, {required bool relayChanged, bool moved = false}) async {
+  /// Ops that reference a file not stored in this run wait in the outbox ([_holdForBlobs]; [stored], [holdNone]).
+  Future<(int, int, SyncProblem?)> _upload(WalletRepo repo, RelayState state,
+      {required bool relayChanged, required Set<String> stored, required bool holdNone, bool moved = false}) async {
     SyncProblem? inUse;
     SyncProblem foreign(int bytes) => SyncProblem(_short(repo.deviceId), SyncProblemReason.deviceIdInUse, bytes: bytes);
     var me = _streamOf(repo);
@@ -889,12 +922,13 @@ class SyncEngine {
     marker = int.tryParse(repo.localValue(sentKey) ?? '');
     final first = marker == null || relayChanged;
     final pending = repo.pendingOps();
-    final ops = first ? repo.snapshotOps() : [for (final (_, op) in pending) op];
+    final (ops, held) = _holdForBlobs(repo, first ? repo.snapshotOps() : [for (final (_, op) in pending) op], stored, holdNone: holdNone);
+    if (held.isNotEmpty) logEvent(_log, Level.INFO, 'sync.export.held', {'ops': held.length});
     if (ops.isEmpty) {
       if (first) {
         repo.setLocalValue(sentKey, '$relayLast');
         repo.setLocalValue(sinceKey, repo.localValue(sinceKey) ?? '${_now().millisecondsSinceEpoch}');
-        if (pending.isNotEmpty) repo.markExported(pending.last.$1);
+        repo.markExportedHolding(pending.isEmpty ? null : pending.last.$1, held);
         logEvent(_log, Level.INFO, 'sync.connect', {'ops': 0, 'relayLast': relayLast});
       } else {
         logEvent(_log, Level.FINE, 'sync.export.none');
@@ -931,7 +965,7 @@ class SyncEngine {
           repo.setLocalValue(sendingKey, null);
           if (moved) return (0, seq, foreign(sealed.length));
           _move(repo, state, shared: true, reason: 'conflict');
-          final (n, last, _) = await _upload(repo, state, relayChanged: relayChanged, moved: true);
+          final (n, last, _) = await _upload(repo, state, relayChanged: relayChanged, stored: stored, holdNone: holdNone, moved: true);
           return (n, last, foreign(sealed.length));
         }
         if (e.failure == TransportFailure.rejected) {
@@ -948,7 +982,7 @@ class SyncEngine {
       jsonBytes += payload.length;
       bytes += sealed.length;
     }
-    if (pending.isNotEmpty) repo.markExported(pending.last.$1);
+    repo.markExportedHolding(pending.isEmpty ? null : pending.last.$1, held);
     repo.setLocalValue(sentKey, '$seq');
     repo.setLocalValue(sendingKey, null);
     if (first) {
@@ -1121,8 +1155,16 @@ class SyncEngine {
         return;
       }
     }
+    // A snapshot holds the whole state, file references included: none while an op still waits for its file (P14
+    // upload before ops), or a device starting from it could point at a file the relay does not have yet.
+    if (repo.pendingBlobRefs().isNotEmpty) {
+      logEvent(_log, Level.INFO, 'sync.snapshot.skipped', {'reason': 'heldBlobs'});
+      return;
+    }
     final t = PerfTimer('sync.snapshot.write', warnMs: 2000);
     final ops = repo.snapshotOps();
+    // The files this snapshot's live bills point to, read with the same database state as [ops] (P14).
+    final declared = repo.liveBlobHashes();
     final id = _snapshotId(now);
     final sealed = await seal(backupPayload(ops), key, aad: aadSnapshot(id));
     try {
@@ -1130,6 +1172,15 @@ class SyncEngine {
     } on TransportException catch (e) {
       logEvent(_log, Level.WARNING, 'sync.snapshot.refused', {'failure': e.failure.name});
       return;
+    }
+    if ((state.api ?? 0) >= 4) {
+      // Not retried: a snapshot without a set only holds the relay's blob GC back.
+      try {
+        await transport.putSnapshotBlobs(id, declared);
+        logEvent(_log, Level.INFO, 'sync.snapshot.blobs', {'files': declared.length});
+      } on TransportException catch (e) {
+        logEvent(_log, Level.WARNING, 'sync.snapshot.blobsFailed', {'failure': e.failure.name});
+      }
     }
     repo.forgetSyncFiles(covers);
     if (heal) repo.setLocalValue(healKey, '${now.millisecondsSinceEpoch}');

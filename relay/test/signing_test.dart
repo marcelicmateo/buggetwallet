@@ -284,7 +284,7 @@ void main() {
       final h = await freshHarness();
       final r = await h.get('/v2/health');
       expect(r.statusCode, 200);
-      expect(jsonDecode(r.body), {'api': 3});
+      expect(jsonDecode(r.body), {'api': 4});
     });
 
     test('two concurrent creations with different keys: one wins, the other is 401', () async {

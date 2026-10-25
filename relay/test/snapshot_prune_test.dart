@@ -302,7 +302,7 @@ void main() {
       final st = await h.state(w1);
       expect(st['instance'], matches(RegExp(r'^[0-9a-f]{32}$')));
       expect(st, {
-        'api': 3,
+        'api': 4,
         'instance': st['instance'],
         'devices': {
           'dev1': {

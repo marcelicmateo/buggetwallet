@@ -16,7 +16,7 @@ void main() {
     final h = await freshHarness(maxBytes: 4096);
     expect((await h.putData(w1, 'dev1', 1, 'hello world')).statusCode, 201);
     final s = await h.state(w1);
-    expect(s['api'], 3);
+    expect(s['api'], 4);
     expect(s['maxBytes'], 4096);
     expect(s['bytes'], 11);
   }, skip: _skip);
@@ -50,7 +50,7 @@ void main() {
     final h = await freshHarness();
     expect((await h.putData(w1, 'dev1', 1, 'hello world')).statusCode, 201);
     final s = await h.state(w1);
-    expect(s['api'], 3);
+    expect(s['api'], 4);
     expect((s['devices'] as Map).keys, ['dev1']);
   });
 }
