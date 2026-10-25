@@ -119,11 +119,11 @@ void main() {
     expect(h.single.state, BillMonthState.upcoming);
   });
 
-  test('a slip dated next month (due ahead) adds that month; the empty months up to it are upcoming', () {
+  test('a slip due up to two months ahead adds only its own month; empty future months are not listed', () {
     final h = history([pay('t5', '2026-05-14', -4500)], [slip('s8', date: '2026-08-01', total: 4500)]);
-    expect(h.map((m) => m.month), ['2026-08', '2026-07', '2026-06', '2026-05']);
+    expect(h.map((m) => m.month), ['2026-08', '2026-06', '2026-05']);
     expect(monthIn(h, '2026-08').state, BillMonthState.slipOnly);
-    expect(monthIn(h, '2026-07').state, BillMonthState.upcoming);
+    expect(history([], [slip('s9', due: '2026-09-01', total: 1)]).map((m) => m.month), ['2026-06'], reason: 'today + 3 months');
   });
 
   test('a slip linked to a payment in another month is listed in the payment\'s month', () {
@@ -252,5 +252,101 @@ void main() {
         .map((m) => '${m.month}:${m.state.name}:${m.paid}:${m.billed}:${m.payments.map((t) => t.id)}:${m.slips.map((s) => s.id)}')
         .join('|');
     expect(flat(history(rows.reversed.toList(), slips.reversed.toList())), flat(history(rows, slips)));
+  });
+
+  group('review fixes', () {
+    test('window: a slip due 11 months ahead does not hide the past 11 payments', () {
+      final rows = [
+        for (var k = 0; k < 11; k++) pay('p$k', '${k < 6 ? 2025 : 2026}-${((k + 6) % 12 + 1).toString().padLeft(2, '0')}-14', -4500),
+      ];
+      final h = history(rows, [slip('far', due: '2027-05-01', total: 4500)]);
+      expect(h.length, 12);
+      expect(h.first.month, '2026-06');
+      expect(h.last.month, '2025-07');
+      expect(h.expand((m) => m.payments).length, 11);
+      expect(h.expand((m) => m.slips), isEmpty);
+    });
+
+    test('paidNearby: an early payment at the end of the month before covers the empty month', () {
+      // 2026-02-01 is a Sunday: February's payment landed on 01-30.
+      final h = history([pay('a', '2026-01-02', -4500), pay('b', '2026-01-30', -4500), pay('c', '2026-03-02', -4500)], []);
+      final feb = monthIn(h, '2026-02');
+      expect(feb.state, BillMonthState.paidNearby);
+      expect(feb.paidIn, '2026-01');
+      expect(feb.payments, isEmpty);
+      expect(feb.paid, 0);
+      expect(monthIn(h, '2026-01').state, BillMonthState.paid);
+      expect(monthIn(h, '2026-01').paidIn, isNull);
+      expect(monthIn(h, '2026-04').state, BillMonthState.missing, reason: 'March holds one payment only');
+      expect(monthIn(h, '2026-04').paidIn, isNull);
+    });
+
+    test('paidNearby: two payments mid-January leave February missing', () {
+      final h = history([pay('a', '2026-01-14', -4500), pay('b', '2026-01-16', -4500), pay('c', '2026-03-14', -4500)], []);
+      expect(monthIn(h, '2026-02').state, BillMonthState.missing);
+      expect(monthIn(h, '2026-02').paidIn, isNull);
+    });
+
+    test('paidNearby: a late payment early in the next month covers it; one extra payment covers one month only', () {
+      final h = history([
+        pay('d', '2025-12-14', -4500),
+        pay('e', '2026-02-01', -4500),
+        pay('f', '2026-02-27', -4500),
+        pay('g', '2026-04-14', -4500),
+      ], []);
+      expect(monthIn(h, '2026-01').state, BillMonthState.paidNearby);
+      expect(monthIn(h, '2026-01').paidIn, '2026-02');
+      expect(monthIn(h, '2026-03').state, BillMonthState.missing, reason: "February's one extra payment is used");
+    });
+
+    test('paidNearby: 4 days from the month is too far', () {
+      final h = history([pay('a', '2026-01-02', -4500), pay('b', '2026-01-28', -4500), pay('c', '2026-03-14', -4500)], []);
+      expect(monthIn(h, '2026-02').state, BillMonthState.missing);
+    });
+
+    test('invalid dates on rows, slip date and due date are skipped, never thrown on', () {
+      final h = history([
+        pay('x1', '05.10.2026', -4500),
+        pay('x2', '2026-13-01', -4500)
+      ], [
+        slip('s1', date: '05.10.2026', total: 1),
+        slip('s2', due: '2026-13-01', total: 1),
+        slip('s3', date: '2026-13-01', due: '2026-04-02', total: 7),
+      ]);
+      expect(h.map((m) => m.month), ['2026-06', '2026-05', '2026-04']);
+      expect(h.expand((m) => m.payments), isEmpty);
+      expect(monthIn(h, '2026-04').slips.map((s) => s.id), ['s3'], reason: 'a bad issue date falls back to the due date');
+    });
+
+    test('a current-month slip with no payment is slipOnly', () {
+      final h = history([], [slip('s6', date: '2026-06-02', total: 4500)]);
+      expect(h.single.month, '2026-06');
+      expect(h.single.state, BillMonthState.slipOnly);
+      expect(h.single.billed, 4500);
+    });
+
+    test('a slip linked to a foreign-currency row keeps its own date', () {
+      final h = history([pay('f4', '2026-04-14', -4500, currency: 'USD')], [slip('s3', date: '2026-03-28', total: 4500, linked: 'f4')]);
+      expect(monthIn(h, '2026-03').slips.map((s) => s.id), ['s3']);
+      expect(h.where((m) => m.month == '2026-04').expand((m) => m.payments), isEmpty);
+    });
+
+    test('a slip linked to a payment outside the window is dropped', () {
+      final h = history([
+        pay('old', '2025-05-14', -4500),
+        pay('t5', '2026-05-14', -4500)
+      ], [
+        slip('s', date: '2026-02-01', total: 4500, linked: 'old'),
+      ]);
+      expect(h.expand((m) => m.slips), isEmpty);
+      expect(h.last.month, '2025-07');
+    });
+
+    test('billed sums the totals there are when one slip has none', () {
+      final h = history([pay('t5', '2026-05-14', -4500)], [slip('a', date: '2026-05-01', total: 4000), slip('b', date: '2026-05-02')]);
+      final may = monthIn(h, '2026-05');
+      expect(may.slips.length, 2);
+      expect(may.billed, 4000);
+    });
   });
 }

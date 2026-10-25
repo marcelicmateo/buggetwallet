@@ -121,7 +121,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `reviewStreak` (0..`maxStreak`) are validated like the others.
 - `bill_history.dart` — N4 bill history (spec + clarifications `docs/context/N4_SPEC.md`), pure and web-safe.
   `billHistory(bill, rows, slips, today:, months: 12, currency:)` → `List<BillMonth>` (`month`, `payments`, `slips`,
-  `paid` = Σ −amount, `billed` = Σ slip totals or null, `BillMonthState` paid|slipOnly|missing|upcoming), newest first.
+  `paid` = Σ −amount, `billed` = Σ slip totals or null, `BillMonthState` paid|slipOnly|missing|paidNearby|upcoming, `paidIn`), newest first;
+  window = `months` months ending today's month, plus today + 1..2 only when they hold something; `paidNearby` = an
+  empty past month next to a month with an extra payment within 3 days of it (dates only); bad dates skipped.
   Payments: live bank outflows in the home currency, no own transfers, `merchantKey == bill.payee` (or the
   `lastPaidTx` row); slips: live, home currency, `billPayeeKey == bill.payee`, in their linked payment's month, else
   `date ?? dueDate`. Never by amount. Tests: `test/n4_bill_history_test.dart`.

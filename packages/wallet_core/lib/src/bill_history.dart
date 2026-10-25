@@ -4,15 +4,21 @@ import 'package:wallet_importer/wallet_importer.dart' show TxKind;
 
 import 'bills.dart';
 import 'categories.dart' show BudgetKind, categories, merchantKey;
-import 'dates.dart' show monthOf;
+import 'dates.dart' show addDays, daysBetween, isIsoDate, monthOf;
 import 'logs.dart';
 import 'models.dart';
+import 'recurring.dart' show recurringDays;
+
+/// Months after today's month that [billHistory] still shows (only when they hold a slip or payment).
+const historyMonthsAhead = 2;
 
 final _log = Logger('bw.recurring');
 
 /// What a [BillMonth] shows: [paid] = a payment landed; [slipOnly] = a slip, no payment; [missing] = neither, in a
-/// month before the current one; [upcoming] = neither, in the current month (or a later one) with no payment yet.
-enum BillMonthState { paid, slipOnly, missing, upcoming }
+/// month before the current one; [paidNearby] = neither, but a neighbouring month holds an extra payment dated within
+/// [recurringDays] of this month ([BillMonth.paidIn]; dates only, never amounts); [upcoming] = neither, in the current
+/// month with no payment yet.
+enum BillMonthState { paid, slipOnly, missing, paidNearby, upcoming }
 
 /// One calendar month of a recurring bill's history ([billHistory]).
 class BillMonth {
@@ -33,6 +39,9 @@ class BillMonth {
 
   final BillMonthState state;
 
+  /// For [BillMonthState.paidNearby]: the neighbouring month (`YYYY-MM`) whose extra payment covers this one; else null.
+  final String? paidIn;
+
   const BillMonth({
     required this.month,
     required this.payments,
@@ -40,6 +49,7 @@ class BillMonth {
     required this.paid,
     required this.billed,
     required this.state,
+    this.paidIn,
   });
 }
 
@@ -51,11 +61,12 @@ class BillMonth {
 /// with `billPayeeKey(slip) == bill.payee`; a slip linked (`Bill.linkedTx`) to a listed payment is in that payment's
 /// month, any other in the month of its `date` (else `dueDate`; neither = not listed).
 ///
-/// Months: the [months] calendar months ending with the later of today's month and the newest month holding a payment
-/// or slip; inside that window, every month from the oldest one holding something (or today's month, if earlier;
-/// the window's first month when that is older) up to its end, so empty months show as gaps. Empty months before today's month are [BillMonthState.missing] (the bill
-/// stores no confirmation date: the app opens History only for confirmed bills), the others
-/// [BillMonthState.upcoming]. [today] is `YYYY-MM-DD`; [months] ≥ 1, else an [ArgumentError].
+/// Months: the [months] calendar months ending with today's month, from the oldest one holding a payment or slip (the
+/// window's first month when that is older) up to today's month, so empty months show as gaps; above them the next
+/// [historyMonthsAhead] months, each only when it holds something (anything dated later is left out). Empty months
+/// before today's month are [BillMonthState.missing] (the bill stores no confirmation date: the app opens History only
+/// for confirmed bills) or [BillMonthState.paidNearby]; an empty today's month is [BillMonthState.upcoming]. Dates
+/// that are not real `YYYY-MM-DD` values are skipped. [today] is `YYYY-MM-DD`; [months] ≥ 1, else an [ArgumentError].
 List<BillMonth> billHistory(
   RecurringBill bill,
   List<Tx> rows,
@@ -65,7 +76,7 @@ List<BillMonth> billHistory(
   required String currency,
 }) {
   if (months < 1) throw ArgumentError.value(months, 'months', 'must be at least 1');
-  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(today)) throw ArgumentError.value(today, 'today', 'must be YYYY-MM-DD');
+  if (!isIsoDate(today)) throw ArgumentError.value(today, 'today', 'must be YYYY-MM-DD');
 
   final payments = <String, Tx>{};
   for (final t in rows) {
@@ -88,14 +99,22 @@ List<BillMonth> billHistory(
   }
 
   final current = _index(monthOf(today));
-  final held = {...payByMonth.keys, ...slipByMonth.keys}.map(_index);
-  final end = held.fold(current, (a, b) => b > a ? b : a);
+  final held = {...payByMonth.keys, ...slipByMonth.keys}.map(_index).toSet();
   final oldest = held.fold(current, (a, b) => b < a ? b : a);
-  final windowStart = end - months + 1;
+  final windowStart = current - months + 1;
   final start = oldest < windowStart ? windowStart : oldest;
+  final shown = [
+    for (var m = current + historyMonthsAhead; m > current; m--)
+      if (held.contains(m)) m,
+    for (var m = current; m >= start; m--) m,
+  ];
+  final nearby = _paidNearby([
+    for (final m in shown)
+      if (m < current && !held.contains(m)) m
+  ], payByMonth);
 
   final out = <BillMonth>[];
-  for (var m = end; m >= start; m--) {
+  for (final m in shown) {
     final ym = _month(m);
     final pays = (payByMonth[ym] ?? <Tx>[])
       ..sort((a, b) {
@@ -121,13 +140,40 @@ List<BillMonth> billHistory(
           ? BillMonthState.paid
           : bills.isNotEmpty
               ? BillMonthState.slipOnly
-              : m < current
-                  ? BillMonthState.missing
-                  : BillMonthState.upcoming,
+              : m >= current
+                  ? BillMonthState.upcoming
+                  : nearby.containsKey(m)
+                      ? BillMonthState.paidNearby
+                      : BillMonthState.missing,
+      paidIn: nearby[m],
     ));
   }
   // Counts only: payees and amounts are personal.
   logEvent(_log, Level.FINE, 'recurring.history', {'months': out.length, 'payments': payments.length, 'slips': seenSlips.length});
+  return out;
+}
+
+/// For the empty past months [empty] (newest first, as shown): which ones a neighbouring month paid, month index →
+/// that neighbour's `YYYY-MM`. A neighbour (the month before, else the month after) qualifies when it holds more than
+/// one payment and one of them is dated within [recurringDays] of the empty month (before its first day or after its
+/// last); each payment beyond the first covers one empty month. By dates only, never by amount. Oldest empty month
+/// first, so the result does not depend on the order shown.
+Map<int, String> _paidNearby(List<int> empty, Map<String, List<Tx>> payByMonth) {
+  final spare = {for (final e in payByMonth.entries) _index(e.key): e.value.length - 1};
+  final out = <int, String>{};
+  for (final m in empty.reversed) {
+    final first = '${_month(m)}-01';
+    final last = addDays('${_month(m + 1)}-01', -1);
+    for (final (n, near) in [
+      (m - 1, (Tx t) => daysBetween(t.date, first) <= recurringDays),
+      (m + 1, (Tx t) => daysBetween(last, t.date) <= recurringDays),
+    ]) {
+      if ((spare[n] ?? 0) < 1 || !(payByMonth[_month(n)] ?? const <Tx>[]).any(near)) continue;
+      spare[n] = spare[n]! - 1;
+      out[m] = _month(n);
+      break;
+    }
+  }
   return out;
 }
 
@@ -136,14 +182,15 @@ bool _isPayment(Tx t, String currency) =>
     t.live &&
     !t.manual &&
     t.amount < 0 &&
-    t.date.length == 10 &&
+    isIsoDate(t.date) &&
     t.currency == currency &&
     t.transferTo == null &&
     t.kindHint != TxKind.ownTransfer &&
     t.kindHint != TxKind.exchange &&
     categories[t.category] != BudgetKind.transfer;
 
-String? _slipDate(Bill s) => [s.date, s.dueDate].firstWhere((d) => d != null && d.length == 10, orElse: () => null);
+/// A slip's own date: its issue date, else its due date; a value that is not a real `YYYY-MM-DD` counts as absent.
+String? _slipDate(Bill s) => [s.date, s.dueDate].firstWhere((d) => d != null && isIsoDate(d), orElse: () => null);
 
 /// The date a slip sorts by inside its month: its own date, or its payment's when it has none.
 String _slipSortDate(Bill s, Map<String, Tx> payments) => _slipDate(s) ?? payments[s.linkedTx]?.date ?? '';

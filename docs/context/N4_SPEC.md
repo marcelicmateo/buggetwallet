@@ -55,10 +55,18 @@ Use synthetic data:
 - Slips in another currency than the home one are left out (billed stays home-currency cents). A slip linked to a row
   that is not a listed payment (a hand-added expense, a foreign row) goes in its own date's month. A slip with neither
   date nor due date and no listed payment is not shown.
-- Months: the window is `months` months ending with the later of today's month and the newest month holding something
-  (a slip due next month adds that month). Inside it, months run from the oldest one holding something (or today's
-  month, if earlier; the window's first month when the oldest is before the window) to the end. No data at all = today's month alone, `upcoming`.
+- Months (review fix 1): the window is the `months` months ending with today's month. Inside it, months run from the
+  oldest one holding a payment or slip (the window's first month when the oldest is older) to today's month, every one
+  listed. Above it come today's month + 1 and + 2 (`historyMonthsAhead`), each only when it holds a slip or payment.
+  Anything dated later is left out of History, so a slip due far ahead never pushes past payments out. No data at all
+  = today's month alone, `upcoming`.
 - `missing`: a `RecurringBill` stores no confirmation date, so every empty month before today's month in that range is
-  `missing` (History is shown for confirmed bills only). An empty month after today's month is `upcoming`.
+  `missing` (History is shown for confirmed bills only), unless it is `paidNearby`.
+- `paidNearby` (review fix 2): an empty past month whose neighbour (the month before first, then the month after) holds
+  more than one payment, one of them dated within `recurringDays` (3) of the empty month (at most 3 days before its first
+  day, or after its last). `BillMonth.paidIn` = that neighbour's `YYYY-MM` (null otherwise). Dates only, never amounts.
+  Each payment beyond the first in a month covers one empty month; empty months are taken oldest first.
+- Dates (review fix 3): row dates, slip `date` and `dueDate` must pass `isIsoDate`; anything else is skipped (a slip
+  with a bad `date` and a valid `dueDate` uses the due date). Nothing throws and no month is made from a bad date.
 - State order: payment → `paid`; else slip → `slipOnly` (also in the current month); else `missing` / `upcoming`.
 - Slips sort by their own date (else their payment's date), then id. Duplicate ids in the inputs are listed once.
