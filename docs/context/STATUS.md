@@ -240,6 +240,26 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
       - The same old commits (d99db16, bfb7388) that measured 1.1 ms / 0 missed on 10-22 and 10-23 measure 2.4–2.8 ms / 3–5 missed today. No app commit stands out; the whole perf step is ~14 % slower on the same image.
       - Host changes since 10-23 include a 55-package `dnf install`, Steam, and kernel split-lock / iwlwifi warnings.
       - Next: after a reboot, rerun `tools/build.sh perf` on bfb7388. The budget is not loosened.
+- 2026-10-25: **Stage P1: your own categories** (PATH_FORWARD P1, spec + owner decisions in `P1_SPEC.md`, schema 10).
+  - **What's built:**
+    - The 20 built-in categories stay as ids. They can be renamed, hidden and reordered, never deleted.
+    - Your own categories: a synced `category` entity, one level of subcategories. A subcategory has its parent's kind and rolls up into it in Spending, budgets (top-level only) and the monthly CSV; the drill-down shows the subcategories.
+    - Plan › Categories: add, add subcategory, rename, hide, move, delete with Undo. A sync duplicate is "not offered".
+    - Pickers use the table, with subcategories indented. CSV and search use labels.
+  - **Owner decisions:**
+    - Your own fixed categories get their own payday plan line (`plan:<id>`, Plan › Edit). Until a line is filled in, that money is not taken off the daily amount.
+    - Your own income categories count like salary.
+    - A deleted category falls back automatically, and nothing is rewritten:
+      - a bill reads its paying row's category, else the payee's latest bank row, else the rules;
+      - deleting a category that has a plan line asks first ("its bills then count under the automatic category").
+    - Money limit, by owner choice: a bill that was in a deleted plan line and falls back to Bills & subscriptions is neither set aside nor subtracted unless the subs figure includes it.
+  - **Built and checked:**
+    - Core builder and independent test-writer from one spec: 117 spec tests; 4 test-setup mistakes fixed.
+    - Three review rounds: 2 high, 6 medium, about 12 low.
+      - High: Rent/Loan/subs matched by exact name, so children and custom fixed were missed; a deleted-category bill fell back differently from its own rows (counted twice).
+      - Medium: an untouched Save could write a fallback over the stored id.
+      - All fixed, with tests.
+  - **Stage run:** importer 335, core 1965, relay 206, app 1461 (1468 after the last fixes), desktop 12 files (plan and layout rerun after the last fixes), emulator screens.
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -326,6 +346,13 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
   N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
+- Owner checks after P1 (phone):
+  - Plan › Categories:
+    - add a category, then a subcategory under Groceries; add an expense in it;
+    - check the subcategory is indented in the picker and rolled up in Spending › Where it goes, and that the drill-down lists it.
+  - Rename and hide a built-in category.
+  - Add your own fixed category, fill its line in Plan › Edit, and check today's amount drops; then delete it and read the warning.
+  - Search by your category's name.
 - Owner checks after N2 (phone):
   - new wallet → Skip the cash question, then a second wallet with Add cash (Today shows "Held");
   - Plan › Accounts: add PBZ with today's real balance, import, then check the balance and its "as of" date; Correct balance; Delete → Undo;
