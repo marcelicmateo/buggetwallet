@@ -21,7 +21,7 @@ void main() {
       expect((await h.putData(w1, 'dev1', 1, 'one')).statusCode, 201);
       h.signHost = '127.0.0.1';
       expect((await h.get('/v2/w/$w1/state', key: keyA)).statusCode, 401, reason: 'the port is part of the host');
-      expect(apiVersion, 3);
+      expect(apiVersion, 4);
     });
 
     test('behind a proxy: --public-host is the host checked, whatever Host the proxy sends', () async {
@@ -46,7 +46,7 @@ void main() {
       final v2 = {'x-bw-time': t, 'x-bw-sig': await keyA.sign('bw-relay-v2\nGET\n$path\n\n$empty\n$t')};
       final r = await h.get(path, headers: v2);
       expect(r.statusCode, 200);
-      expect(jsonDecode(r.body), {'api': 3});
+      expect(jsonDecode(r.body), {'api': 4});
       final d = await h.get('/v2/w/$w1/d/dev1/1', headers: {
         'x-bw-time': t,
         'x-bw-sig': await keyA.sign('bw-relay-v2\nGET\n/v2/w/$w1/d/dev1/1\n\n$empty\n$t'),

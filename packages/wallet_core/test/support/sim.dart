@@ -132,7 +132,7 @@ class _Flaky implements SyncTransport {
   @override
   Future<List<int>?> getBlob(String hash) => inner.getBlob(hash);
   @override
-  Future<void> deleteBlob(String hash) => inner.deleteBlob(hash);
+  Future<void> putSnapshotBlobs(String id, List<String> hashes) => inner.putSnapshotBlobs(id, hashes);
 }
 
 /// One simulated device: its own database and a skewed wall clock, syncing through a [Net]. With [dbPath] the

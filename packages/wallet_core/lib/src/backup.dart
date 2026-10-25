@@ -205,8 +205,8 @@ List<(String, List<int>)> _checkBlobs(Map<Object?, Object?> blobs, {required boo
 }
 
 /// Puts the checked bill files ([_checkBlobs]) that a live bill points to and that are not cached yet into the cache,
-/// queued for upload (the relay keeps a hash once, so uploading one it already has changes nothing); `blob_own` is
-/// not set (the file was attached elsewhere). With [store] false (a dry run, called inside its transaction) nothing is
+/// queued for upload (the relay keeps a hash once, so uploading one it already has only refreshes its stored time).
+/// With [store] false (a dry run, called inside its transaction) nothing is
 /// written and the same files are counted. Returns the files taken. Logs counts and byte totals only.
 int _takeBlobs(WalletRepo repo, List<(String, List<int>)> valid, {required bool store}) {
   if (valid.isEmpty) return 0;

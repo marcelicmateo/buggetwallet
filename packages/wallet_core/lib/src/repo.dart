@@ -5,6 +5,7 @@ import 'package:sqlite3/common.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'bills.dart';
+import 'blob_store.dart' show isBlobHash;
 import 'categories.dart';
 import 'dates.dart';
 import 'hlc.dart';
@@ -132,6 +133,7 @@ class WalletRepo {
     // `wall_high`, raised by every write (an open changes nothing in the file).
     _wallHigh = int.tryParse(_meta('wall_high') ?? '') ?? 0;
     _dropFolderSync();
+    _migrateBlobTables();
     _asInternal(_migrate);
     _purgeUndo();
   }
@@ -146,8 +148,14 @@ class WalletRepo {
   /// `txtag` and `ruletag` entities; no data migration), version 12: recurring bills beyond monthly (P4: `recurring`
   /// gains `min_amount`, `max_amount`, `ends_on`, `manual`; no data migration), version 13: split transactions (P6:
   /// the `split` entity; no data migration), version 14: recurring income (P9: `recurring` gains `direction`; no data
-  /// migration).
-  static const schemaVersion = 14;
+  /// migration), version 15: bill-file invariants (P14: no synced change; the local `blob_outbox`, `blob_delete` and
+  /// `blob_own` tables become `blob_cache.uploaded`, [_migrateBlobTables]; snapshots of this schema carry declared
+  /// blob sets).
+  static const schemaVersion = 15;
+
+  /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
+  /// a live bill points to again (api-3 builds deleted files on the relay), cleared once all of them were stored.
+  static const blobReuploadKey = 'blobReupload';
 
   /// The folder sync's bookkeeping (`peer_files`: which files of the shared folder were read) means nothing on a relay,
   /// whose sequence numbers start over (every device's first relay file is its whole state), so it is dropped once.
@@ -703,8 +711,6 @@ class WalletRepo {
     _asInternal(() {
       _reconcile();
       refreshRecurring(_today());
-      dropOrphanBlobs();
-      _purgeBlobCache();
     });
   }
 

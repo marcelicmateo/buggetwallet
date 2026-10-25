@@ -117,8 +117,7 @@ extension WalletRepoBills on WalletRepo {
       _write([if (fill.isNotEmpty) ('bill', id, fill)]);
       event = 'bills.reimport';
     }
-    if (file != null && !fileUsed) _dropBlob(file.hash);
-    if (file != null && fileUsed) db.execute('INSERT OR IGNORE INTO blob_own(hash) VALUES(?)', [file.hash]);
+    if (file != null && !fileUsed) _forgetUnusedBlob(file.hash);
     logEvent(_log, Level.INFO, event, {'source': b.source.name, 'file': fileUsed, 'items': items.length, if (asNew) 'asNew': true});
     return (id, isNew);
   }
@@ -216,12 +215,11 @@ extension WalletRepoBills on WalletRepo {
   }
 
   /// Deletes the bill (the row stays, deleted; the same code read again brings it back as new) and its planned row;
-  /// its file is dropped from this device and deleted on the relay at the next sync, unless another live bill points
-  /// to it. Unknown bill: [ArgumentError].
+  /// its file stays in this device's cache until evicted and is never deleted on the relay (P14: the relay's GC drops
+  /// it once no kept snapshot declares it), so an undelete finds it again. Unknown bill: [ArgumentError].
   void deleteBill(String id) {
     final b = _liveBill(id);
     _write(_billWrites(b, {'deleted': 1}, _today()));
-    if (b.blob case final h?) _dropBlob(h);
     logEvent(_log, Level.INFO, 'bills.delete', {'file': b.blob != null});
   }
 

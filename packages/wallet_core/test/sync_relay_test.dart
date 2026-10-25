@@ -48,14 +48,14 @@ class _BadSignature extends http.BaseClient {
   }
 }
 
-/// Whether [r] carries a v3 signature by [pub] over [path] (from `/v2/` on), written from the protocol text.
+/// Whether [r] carries a v4 signature by [pub] over [path] (from `/v2/` on), written from the protocol text.
 Future<bool> _signedBy(http.Request r, String pub, {String? path}) async {
   final hash = _hex((await Sha256().hash(r.bodyBytes)).bytes);
-  // v3 (RELAY_PROTOCOL.md): the host the client addressed, lower case, the port only when not the scheme's default.
+  // v4 (RELAY_PROTOCOL.md): the host the client addressed, lower case, the port only when not the scheme's default.
   final u = r.url, def = u.scheme == 'https' ? 443 : 80;
   final host = u.hasPort && u.port != def ? '${u.host.toLowerCase()}:${u.port}' : u.host.toLowerCase();
   final text =
-      'bw-relay-v3\n${r.method}\n$host\n${path ?? r.url.path}\n${r.headers['X-BW-Covers'] ?? ''}\n$hash\n${r.headers['X-BW-Time']}';
+      'bw-relay-v4\n${r.method}\n$host\n${path ?? r.url.path}\n${r.headers['X-BW-Covers'] ?? ''}\n$hash\n${r.headers['X-BW-Time']}';
   return Ed25519().verify(utf8.encode(text),
       signature: Signature(_unb64(r.headers['X-BW-Sig']!), publicKey: SimplePublicKey(_unb64(pub), type: KeyPairType.ed25519)));
 }
@@ -227,7 +227,8 @@ void main() {
           client: MockClient((r) => Future.delayed(const Duration(seconds: 2), () => http.Response('{}', 200))));
       await expectLater(slow.get('d', 1), throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.unreachable)));
       for (final (body, failure) in [
-        ('{"api":4,"devices":{}}', TransportFailure.newerApi),
+        ('{"api":5,"devices":{}}', TransportFailure.newerApi),
+        ('{"api":2,"devices":{}}', TransportFailure.olderApi),
         ('{"api":1,"devices":{}}', TransportFailure.olderApi),
         ('not json', TransportFailure.other),
         ('[1]', TransportFailure.other),
@@ -246,10 +247,13 @@ void main() {
             requests.add(r);
             return http.Response(body, 200);
           });
-      await RelayTransport.health(Uri.parse('http://relay.test:8787'), client: answering('{"api":3}'));
+      expect(await RelayTransport.health(Uri.parse('http://relay.test:8787'), client: answering('{"api":3}')), 3,
+          reason: 'an api-3 relay is still fine (P14)');
       expect(requests.single.url.toString(), 'http://relay.test:8787/v2/health');
+      expect(await RelayTransport.health(Uri.parse('http://relay.test'), client: answering('{"api":4}')), 4);
+      requests.removeLast();
       expect(requests.single.headers.keys.where((h) => h.startsWith('X-BW') || h == 'Authorization'), isEmpty);
-      await expectLater(RelayTransport.health(Uri.parse('http://relay.test'), client: answering('{"api":4}')),
+      await expectLater(RelayTransport.health(Uri.parse('http://relay.test'), client: answering('{"api":5}')),
           throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.newerApi)));
       // A v1 relay: /v2/health is an unknown path there, /v1/health says api 1.
       final v1 = MockClient(
@@ -269,7 +273,7 @@ void main() {
       final repo = WalletRepo.inMemory();
       addTearDown(repo.close);
       repo.updateSettings({'salary': 1});
-      final t = client((r) => http.Response('{"api":4,"devices":{}}', 200));
+      final t = client((r) => http.Response('{"api":5,"devices":{}}', 200));
       await expectLater(SyncEngine(t, key).run(repo), throwsA(isA<SyncException>()));
       expect(repo.pendingOps(), hasLength(1));
       final old = client((r) => http.Response('{"api":1,"devices":{}}', 200));
@@ -506,7 +510,8 @@ void main() {
       dir.deleteSync(recursive: true);
     });
 
-    test('a bill file goes up with the run, the other device fetches it, a delete removes it (blob PUT/GET/DELETE)', () async {
+    // Changed (P14): a deleted bill's file stays on the relay (no client DELETE); the snapshot declares its live files.
+    test('a bill file goes up with the run, the other device fetches it, a delete never removes it', () async {
       final k = VaultKey.generate();
       final a = WalletRepo.inMemory(), b = WalletRepo.inMemory();
       addTearDown(a.close);
@@ -527,9 +532,38 @@ void main() {
       expect(await tb.getBlob('0' * 64), isNull);
       a.deleteBill(id);
       await SyncEngine(ta, k).run(a);
-      expect(a.blobDeletes(), isEmpty);
-      expect(await tb.getBlob(ref.hash), isNull);
-      await tb.deleteBlob(ref.hash); // absent: still fine
+      await SyncEngine(tb, k).run(b);
+      expect(b.bills().where((x) => !x.deleted), isEmpty);
+      expect(await tb.getBlob(ref.hash), isNotNull);
+      expect(logs.where((l) => l.contains('delete-blob')), isEmpty, reason: 'no DELETE ever reaches the relay');
+      expect(logs.where((l) => l.contains('put-blob 201')), hasLength(1));
+      expect(ta.signApi, 4);
+    });
+
+    test('snapshots declare the live bills\' files to the real relay (api 4); an api-3 app\'s signature still works', () async {
+      final k = VaultKey.generate();
+      var now = DateTime.utc(2026, 10, 1);
+      final a = WalletRepo.inMemory();
+      addTearDown(a.close);
+      final ta = RelayTransport(base, k);
+      addTearDown(ta.close);
+      final ref = await BlobStore(a, k).add(Uint8List.fromList(List.generate(800, (i) => i & 0xff)), 'jpg');
+      a.importBill(const NormalizedBill(source: BillSource.pdf, externalId: 'jir:synthetic-set', date: '2026-02-25', total: 100),
+          file: ref);
+      // The snapshot rule writes one once the newest is older than 7 days.
+      await SyncEngine(ta, k, now: () => now).run(a);
+      now = now.add(const Duration(days: 8));
+      await SyncEngine(ta, k, now: () => now).run(a);
+      expect(logs.where((l) => l.startsWith('relay put-snap 201')), hasLength(1));
+      expect(logs.where((l) => l.startsWith('relay put-set 201')), hasLength(1));
+      final (wid, _) = await ta.ids;
+      final sets = Directory('${dir.path}/$wid/sets').listSync().whereType<File>().toList();
+      expect(jsonDecode(sets.single.readAsStringSync()), [ref.hash]);
+      // The same transport signing as an api-3 app: the relay answers its state with api 3.
+      ta.signApi = 3;
+      expect((await ta.state()).api, 3);
+      ta.signApi = 4;
+      expect((await ta.state()).api, 4);
     });
 
     test('two devices sync through the relay: first connect, edits both ways, caught up, acks, devices listed', () async {

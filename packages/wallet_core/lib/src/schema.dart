@@ -222,10 +222,7 @@ const Map<String, EntityDef> entitySchema = {
 
 /// The device-local tables: never synced or backed up.
 const localTablesSql = '''
-CREATE TABLE IF NOT EXISTS blob_cache(hash TEXT PRIMARY KEY, sealed BLOB NOT NULL, used_at INTEGER NOT NULL, bytes INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS blob_outbox(hash TEXT PRIMARY KEY);
-CREATE TABLE IF NOT EXISTS blob_delete(hash TEXT PRIMARY KEY);
-CREATE TABLE IF NOT EXISTS blob_own(hash TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS blob_cache(hash TEXT PRIMARY KEY, sealed BLOB NOT NULL, used_at INTEGER NOT NULL, bytes INTEGER NOT NULL, uploaded INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS clocks(entity TEXT NOT NULL, id TEXT NOT NULL, field TEXT NOT NULL, hlc TEXT NOT NULL, PRIMARY KEY(entity, id, field));
 CREATE TABLE IF NOT EXISTS outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sync_cursor(device TEXT PRIMARY KEY, seq INTEGER NOT NULL);

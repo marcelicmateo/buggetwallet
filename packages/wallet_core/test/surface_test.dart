@@ -91,7 +91,7 @@ void main() {
       expect(UpcomingKind.values, isNotEmpty);
     });
 
-    test('blob queue verbs: markBlobUploaded / markBlobDeleted', () {
+    test('blob queue verbs: markBlobUploaded (P14: no delete verbs)', () {
       final r = WalletRepo.inMemory();
       addTearDown(r.close);
       final hash = 'a' * 64;
@@ -99,10 +99,9 @@ void main() {
       expect(r.queuedBlobs(), [hash]);
       r.markBlobUploaded(hash);
       expect(r.queuedBlobs(), isEmpty);
-      r.db.execute('INSERT INTO blob_delete(hash) VALUES(?)', [hash]); // device-local queue, never synced
-      expect(r.blobDeletes(), [hash]);
-      r.markBlobDeleted(hash);
-      expect(r.blobDeletes(), isEmpty);
+      expect(r.hasCachedBlob(hash), isTrue);
+      r.putCachedBlob(hash, [1, 2, 3]); // cached again (a fetch): stays uploaded
+      expect(r.queuedBlobs(), isEmpty);
     });
   });
 }

@@ -18,7 +18,6 @@ Future<String> sha256Hex(List<int> b) async => [for (final x in (await Sha256().
 class SpyTransport extends MemoryTransport {
   final order = <String>[];
   TransportException? blobPutError;
-  TransportException? blobDeleteError;
   @override
   Future<void> put(String device, int seq, List<int> bytes) {
     order.add('put');
@@ -30,13 +29,6 @@ class SpyTransport extends MemoryTransport {
     order.add('putBlob');
     if (blobPutError != null) throw blobPutError!;
     return super.putBlob(hash, bytes);
-  }
-
-  @override
-  Future<void> deleteBlob(String hash) {
-    order.add('deleteBlob');
-    if (blobDeleteError != null) throw blobDeleteError!;
-    return super.deleteBlob(hash);
   }
 }
 
@@ -70,7 +62,9 @@ void main() {
   });
 
   Future<SyncReport> run(WalletRepo r, {SyncTransport? via}) => SyncEngine(via ?? relay, key).run(r);
-  List<String> table(WalletRepo r, String t) => [for (final x in r.db.select('SELECT hash FROM $t')) x['hash'] as String];
+  // Changed (P14): the upload queue is `blob_cache.uploaded = 0` now (`queuedBlobs`), no table of its own.
+  List<String> table(WalletRepo r, String t) =>
+      t == 'blob_outbox' ? r.queuedBlobs() : [for (final x in r.db.select('SELECT hash FROM $t')) x['hash'] as String];
 
   group('add', () {
     test('the ref: 64 lowercase hex hash, type, plain size', () async {
@@ -228,7 +222,6 @@ void main() {
     test('an older relay (every blob route 404) keeps blobs queued and the run still syncs', () async {
       const notFound = TransportException(TransportFailure.missing, '404');
       relay.blobPutError = notFound;
-      relay.blobDeleteError = notFound;
       final ref = await BlobStore(repo, key).add(bytesOf(200), 'jpg');
       final (id, _) = repo.importBill(nb('x'), file: ref);
       final r = await run(repo);
@@ -266,93 +259,59 @@ void main() {
     });
   });
 
-  group('deleteBill and the relay', () {
+  // Changed (P14, docs/context/P14_SPEC.md): clients never delete blobs on the relay; its GC collects files that no kept
+  // snapshot declares. The B-stage "delete queues the blob" tests now pin that no DELETE is ever sent.
+  group('deleteBill and the relay (P14: never deleted by clients)', () {
     Future<(String, BlobRef)> billWithFile(WalletRepo r, String ext, {BlobRef? ref}) async {
       final f = ref ?? await BlobStore(r, key).add(bytesOf(300, ext.hashCode & 0xff), 'jpg');
       final (id, _) = r.importBill(nb(ext), file: f);
       return (id, f);
     }
 
-    test('delete queues the blob; the next run deletes it on the relay', () async {
+    test('deleting a bill keeps its file on the relay and in the cache; no DELETE is sent', () async {
       final (id, ref) = await billWithFile(repo, 'a');
       await run(repo);
+      repo.deleteBill(id);
+      await run(repo);
       expect(await relay.getBlob(ref.hash), isNotNull);
-      repo.deleteBill(id);
-      expect(table(repo, 'blob_delete'), [ref.hash]);
-      expect(await relay.getBlob(ref.hash), isNotNull, reason: 'only the run sends it');
-      await run(repo);
-      expect(await relay.getBlob(ref.hash), isNull);
-      expect(table(repo, 'blob_delete'), isEmpty);
+      expect(repo.cachedBlob(ref.hash, touch: false), isNotNull);
+      expect(relay.order, isNot(contains('deleteBlob')));
+      expect(relay.calls['deleteBlob'], isNull);
     });
 
-    test('uploads go before deletes in a run', () async {
-      final (id, _) = await billWithFile(repo, 'a');
-      await run(repo);
-      repo.deleteBill(id);
-      await BlobStore(repo, key).add(bytesOf(50, 77), 'jpg');
-      relay.order.clear();
-      await run(repo);
-      expect(relay.order.indexOf('putBlob'), lessThan(relay.order.indexOf('deleteBlob')));
-    });
-
-    test('a blob still used by another live bill is not deleted', () async {
+    test('a blob shared by two bills stays after both are deleted', () async {
       final (a, ref) = await billWithFile(repo, 'a');
       final (b, _) = await billWithFile(repo, 'b', ref: ref);
       await run(repo);
       repo.deleteBill(a);
-      expect(table(repo, 'blob_delete'), isEmpty);
+      repo.deleteBill(b);
       await run(repo);
       expect(await relay.getBlob(ref.hash), isNotNull);
-      repo.deleteBill(b);
-      expect(table(repo, 'blob_delete'), [ref.hash]);
-      await run(repo);
-      expect(await relay.getBlob(ref.hash), isNull);
+      expect(repo.liveBlobHashes(), isEmpty);
     });
 
-    test('a deleted bill does not keep its blob alive for another bill', () async {
-      final (a, ref) = await billWithFile(repo, 'a');
-      final (b, _) = await billWithFile(repo, 'b', ref: ref);
-      repo.deleteBill(b);
-      repo.deleteBill(a);
-      await run(repo);
-      expect(await relay.getBlob(ref.hash), isNull);
-    });
-
-    test('deleting a bill whose file was never uploaded leaves nothing on the relay', () async {
+    test('deleting a bill whose file was never uploaded: it still goes up (the relay GC decides)', () async {
       final (id, ref) = await billWithFile(repo, 'a');
       repo.deleteBill(id);
       await run(repo);
-      await run(repo);
-      expect(await relay.getBlob(ref.hash), isNull);
+      expect(await relay.getBlob(ref.hash), isNotNull);
       expect(table(repo, 'blob_outbox'), isEmpty);
     });
 
-    test('a bill without a file queues nothing', () async {
-      final (id, _) = repo.importBill(nb('plain'));
-      repo.deleteBill(id);
-      expect(table(repo, 'blob_delete'), isEmpty);
-    });
-
-    test('a delete that fails stays queued for the next run', () async {
+    test('a re-import and a restore send no DELETE either', () async {
       final (id, ref) = await billWithFile(repo, 'a');
       await run(repo);
+      final other = await BlobStore(repo, key).add(bytesOf(300, 9), 'jpg');
+      repo.importBill(nb('a'), file: other); // the bill keeps its file; the new one is forgotten locally
       repo.deleteBill(id);
-      relay.blobDeleteError = const TransportException(TransportFailure.unreachable, 'down');
+      repo.importBill(nb('a')); // re-imported: revived
       await run(repo);
-      expect(table(repo, 'blob_delete'), [ref.hash]);
-      relay.blobDeleteError = null;
+      final restored = mk();
+      await restoreBackupBytes(restored, await backupBytes(repo, key), key);
+      await run(restored);
       await run(repo);
-      expect(await relay.getBlob(ref.hash), isNull);
-      expect(table(repo, 'blob_delete'), isEmpty);
-    });
-
-    test('deleting an already absent blob is harmless', () async {
-      final (id, ref) = await billWithFile(repo, 'a');
-      await run(repo);
-      await relay.deleteBlob(ref.hash);
-      repo.deleteBill(id);
-      await run(repo);
-      expect(table(repo, 'blob_delete'), isEmpty);
+      expect(relay.calls['deleteBlob'], isNull);
+      expect(await relay.getBlob(ref.hash), isNotNull);
     });
   });
 
@@ -420,5 +379,5 @@ class _FailOne extends MemoryTransport {
   @override
   Future<List<int>?> getBlob(String h) => base.getBlob(h);
   @override
-  Future<void> deleteBlob(String h) => base.deleteBlob(h);
+  Future<void> putSnapshotBlobs(String id, List<String> hashes) => base.putSnapshotBlobs(id, hashes);
 }

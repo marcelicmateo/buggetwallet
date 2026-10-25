@@ -445,7 +445,7 @@ void main() {
       old.setSyncCursor('dev', 3);
       old.db.execute("UPDATE meta SET value = '6' WHERE key = 'schema'");
       for (final t in ['bills', 'blob_cache', 'blob_outbox', 'blob_delete']) {
-        old.db.execute('DROP TABLE $t');
+        old.db.execute('DROP TABLE IF EXISTS $t');
       }
       old.close();
       final up = WalletRepo.open(path);

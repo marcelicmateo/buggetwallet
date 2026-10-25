@@ -85,6 +85,13 @@ class SyncReport {
   /// again after an upload that created the wallet), so this run's own upload may not be in [relayBytes] yet.
   final int? relayBytes, relayMaxBytes;
 
+  /// The relay's api as this run's state named it (`RelayState.api`; null when unknown). From 4 on the relay cleans
+  /// up bill files no kept snapshot declares (P14), so the app can say "Old bill files are cleaned up on the relay."
+  final int? relayApi;
+
+  /// Whether the relay collects old bill files ([relayApi] ≥ 4).
+  bool get relayCollectsBlobs => (relayApi ?? 0) >= 4;
+
   const SyncReport(this.sent, this.received, this.filesRead,
       {this.problems = const [],
       this.caughtUp = false,
@@ -96,7 +103,8 @@ class SyncReport {
       this.relayInstance,
       this.relayChanged = false,
       this.relayBytes,
-      this.relayMaxBytes});
+      this.relayMaxBytes,
+      this.relayApi});
 
   /// How many files were not applied ([problems]).
   int get badFiles => problems.length;

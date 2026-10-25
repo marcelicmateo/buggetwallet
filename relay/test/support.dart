@@ -37,12 +37,12 @@ class TestKey {
   /// base64url signature over [text].
   Future<String> sign(String text) async => _b64((await Ed25519().sign(utf8.encode(text), keyPair: await _pair)).bytes);
 
-  /// The v3 signature headers for one request to [host] (what the client addressed: lower case, `:port` unless the
-  /// default). [covers] is the `X-BW-Covers` value ('' when none).
+  /// The v4 signature headers (with [v3] the api-3 text of an older app) for one request to [host] (what the client
+  /// addressed: lower case, `:port` unless the default). [covers] is the `X-BW-Covers` value ('' when none).
   Future<Map<String, String>> headers(String method, String path, List<int> body,
-      {required int timeMs, required String host, String covers = '', bool withPub = true}) async {
+      {required int timeMs, required String host, String covers = '', bool withPub = true, bool v3 = false}) async {
     final hash = _hex((await Sha256().hash(body)).bytes);
-    final text = 'bw-relay-v3\n$method\n$host\n$path\n$covers\n$hash\n$timeMs';
+    final text = '${v3 ? 'bw-relay-v3' : 'bw-relay-v4'}\n$method\n$host\n$path\n$covers\n$hash\n$timeMs';
     return {
       'x-bw-time': '$timeMs',
       'x-bw-sig': await sign(text),
@@ -106,6 +106,9 @@ class Harness {
   /// relay).
   String? signHost;
 
+  /// Sign as an api-3 app (`bw-relay-v3`).
+  bool v3 = false;
+
   Future<void> _boot() async {
     relay = Relay(
       data: dir,
@@ -141,7 +144,7 @@ class Harness {
   /// The signature headers [key] would send now for this request ([path] from `/v2/` on).
   Future<Map<String, String>> sign(TestKey key, String method, String path, List<int> body, {String covers = '', bool withPub = true}) =>
       key.headers(method, path, body,
-          timeMs: clock.add(skew).millisecondsSinceEpoch, host: signHost ?? base.authority, covers: covers, withPub: withPub);
+          timeMs: clock.add(skew).millisecondsSinceEpoch, host: signHost ?? base.authority, covers: covers, withPub: withPub, v3: v3);
 
   /// Sends a request signed with [key] (unsigned when null); [headers] are added after the signature headers, so a
   /// test can override them.

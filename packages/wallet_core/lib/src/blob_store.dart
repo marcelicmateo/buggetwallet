@@ -20,8 +20,8 @@ const blobCacheBytesNative = 200 << 20, blobCacheBytesWeb = 50 << 20;
 bool isBlobHash(String s) => RegExp(r'^[0-9a-f]{64}$').hasMatch(s);
 
 /// Seals bill files, keeps them in the device-local cache (`blob_cache`, least recently used dropped past
-/// [maxCacheBytes], never one still waiting for upload) and queues them for the relay (`blob_outbox`, uploaded by
-/// `SyncEngine.run`). Neither the cache nor the queues sync or go into backups: rows point to files by hash.
+/// [maxCacheBytes], never one still waiting for upload) and queues them for the relay (`blob_cache.uploaded` 0,
+/// uploaded by `SyncEngine.run`). The cache never syncs or goes into backups: rows point to files by hash.
 class BlobStore {
   final WalletRepo repo;
   final VaultKey key;

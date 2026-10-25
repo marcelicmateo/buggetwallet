@@ -538,9 +538,12 @@ void main() {
       }
     }
 
-    test('api 2 relay → olderApi, api 4 → newerApi, the same api → refused (a key clash)', () async {
+    // Changed (P14): this build speaks api 4 and falls back to the api-3 text once health says 3 (retried once, then
+    // the 401 stands: refused).
+    test('api 2 relay → olderApi, api 5 → newerApi, api 4 or 3 → refused (a key clash)', () async {
       expect(await failureFor('{"api":2}'), TransportFailure.olderApi);
-      expect(await failureFor('{"api":4}'), TransportFailure.newerApi);
+      expect(await failureFor('{"api":5}'), TransportFailure.newerApi);
+      expect(await failureFor('{"api":4}'), TransportFailure.refused);
       expect(await failureFor('{"api":3}'), TransportFailure.refused);
       expect(await failureFor('not json'), TransportFailure.refused, reason: 'health unusable: as before');
     });
@@ -863,7 +866,7 @@ class _RacingTransport implements SyncTransport {
   @override
   Future<List<int>?> getBlob(String hash) => inner.getBlob(hash);
   @override
-  Future<void> deleteBlob(String hash) => inner.deleteBlob(hash);
+  Future<void> putSnapshotBlobs(String id, List<String> hashes) => inner.putSnapshotBlobs(id, hashes);
 }
 
 /// Forwards to [inner]; the first PUT fails as unreachable, after storing the file when [stored] (an answer lost on the

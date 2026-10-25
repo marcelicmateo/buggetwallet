@@ -97,22 +97,22 @@ void main() {
       expect(await BlobStore(c, VaultKey.generate()).read('0' * 64, transport: relay), isNull);
     });
 
-    test('deleteBill: an uploaded file is deleted on the relay at the next run; a queued one never leaves', () async {
+    // Changed (P14): clients never delete blobs; a deleted bill's file stays cached (until evicted) and on the relay.
+    test('deleteBill: the file stays cached and on the relay; a queued one still goes up; no DELETE is ever sent', () async {
       final store = BlobStore(a, key);
       final up = await store.add(bytes(100, 1), 'pdf');
       final (id, _) = a.importBill(bill, file: up);
       await SyncEngine(relay, key).run(a);
       a.deleteBill(id);
-      expect(a.blobDeletes(), [up.hash]);
-      expect(a.cachedBlob(up.hash), isNull);
+      expect(a.cachedBlob(up.hash), isNotNull);
       final queued = await store.add(bytes(100, 2), 'pdf');
       final (id2, _) = a.importBill(const NormalizedBill(source: BillSource.pdf, externalId: 'jir:synthetic-2'), file: queued);
       a.deleteBill(id2);
-      expect(a.queuedBlobs(), isEmpty);
-      expect(a.blobDeletes(), [up.hash]);
+      expect(a.queuedBlobs(), [queued.hash]);
       await SyncEngine(relay, key).run(a);
-      expect(relay.blobs, isEmpty);
-      expect(a.blobDeletes(), isEmpty);
+      expect(relay.blobs.keys.toSet(), {up.hash, queued.hash});
+      expect(relay.calls['deleteBlob'], isNull);
+      expect(a.queuedBlobs(), isEmpty);
     });
 
     test('a re-import whose file the bill does not take drops that file again', () async {
@@ -124,7 +124,8 @@ void main() {
       expect(a.queuedBlobs(), [f1.hash]);
     });
 
-    test('a bill deleted on another device: its cached file is purged here at the next caught-up run', () async {
+    // Changed (P14): kept until LRU eviction, so an undelete finds the file again.
+    test('a bill deleted on another device: its cached file stays here until evicted', () async {
       final ref = await BlobStore(a, key).add(bytes(300), 'jpg');
       final (id, _) = a.importBill(bill, file: ref);
       await SyncEngine(relay, key).run(a);
@@ -135,7 +136,9 @@ void main() {
       a.deleteBill(id);
       await SyncEngine(relay, key).run(a);
       await SyncEngine(relay, key).run(b);
-      expect(b.cachedBlob(ref.hash, touch: false), isNull);
+      expect(b.bills().where((x) => !x.deleted), isEmpty);
+      expect(b.cachedBlob(ref.hash, touch: false), isNotNull);
+      expect(b.evictBlobs(0), 1, reason: 'uploaded and no pending op: evictable');
     });
 
     test('a new relay: the first run creates the wallet with the ops, then uploads the waiting file', () async {
@@ -166,13 +169,10 @@ void main() {
       final restored = mk();
       await restoreBackupBytes(restored, await backupBytes(a, key, maxBlobBytes: 0), key);
       expect(restored.queuedBlobs(), isEmpty);
-      expect(restored.blobDeletes(), isEmpty);
       expect(restored.cachedBlobBytes, 0);
       final withFile = mk();
       await restoreBackupBytes(withFile, await backupBytes(a, key), key);
       expect(withFile.queuedBlobs(), [ref.hash], reason: 'queued for upload again (idempotent on the relay)');
-      expect(withFile.blobDeletes(), isEmpty);
-      expect(withFile.db.select('SELECT * FROM blob_own'), isEmpty);
     });
 
     test('logs carry no hash, size of a named file or key; enum words and counts only', () async {
@@ -209,44 +209,51 @@ void main() {
 
     Future<bool> signedBy(http.Request r) async {
       final hash = [for (final b in (await Sha256().hash(r.bodyBytes)).bytes) b.toRadixString(16).padLeft(2, '0')].join();
-      // v3 (RELAY_PROTOCOL.md): the host the client addressed, lower case, the port only when not the scheme's default.
+      // v4 (RELAY_PROTOCOL.md): the host the client addressed, lower case, the port only when not the scheme's default.
       final u = r.url, def = u.scheme == 'https' ? 443 : 80;
       final host = u.hasPort && u.port != def ? '${u.host.toLowerCase()}:${u.port}' : u.host.toLowerCase();
-      final text = 'bw-relay-v3\n${r.method}\n$host\n${r.url.path}\n${r.headers['X-BW-Covers'] ?? ''}\n$hash\n${r.headers['X-BW-Time']}';
+      final text = 'bw-relay-v4\n${r.method}\n$host\n${r.url.path}\n${r.headers['X-BW-Covers'] ?? ''}\n$hash\n${r.headers['X-BW-Time']}';
       return Ed25519().verify(utf8.encode(text),
           signature: Signature(_unb64(r.headers['X-BW-Sig']!), publicKey: SimplePublicKey(_unb64(pub), type: KeyPairType.ed25519)));
     }
 
-    test('PUT, GET and a signed DELETE with an empty body, at /v2/w/<wid>/blob/<hash>', () async {
-      final h = 'ab' * 32;
+    // Changed (P14): no DELETE any more; the declared set of a snapshot goes as a signed JSON body.
+    test('PUT and GET at /v2/w/<wid>/blob/<hash>, the declared set at snapshot/<id>/blobs, all signed', () async {
+      final h = 'ab' * 32, h2 = '01' * 32;
       final t = client((r) => switch (r.method) {
             'PUT' => http.Response('', 201),
-            'GET' => http.Response.bytes([1, 2, 3], 200),
-            _ => http.Response('', 204),
+            _ => http.Response.bytes([1, 2, 3], 200),
           });
       await t.putBlob(h, [9, 9]);
       expect(await t.getBlob(h), [1, 2, 3]);
-      await t.deleteBlob(h);
-      expect([for (final r in seen) r.method], ['PUT', 'GET', 'DELETE']);
-      for (final r in seen) {
+      await t.putSnapshotBlobs('s15-1-ab', [h, h2]);
+      expect([for (final r in seen) r.method], ['PUT', 'GET', 'PUT']);
+      for (final r in seen.take(2)) {
         expect(r.url.toString(), 'http://relay.test:8787/v2/w/$wid/blob/$h');
+      }
+      expect(seen[2].url.toString(), 'http://relay.test:8787/v2/w/$wid/snapshot/s15-1-ab/blobs');
+      for (final r in seen) {
         expect(await signedBy(r), isTrue, reason: r.method);
       }
       expect(seen[0].bodyBytes, [9, 9]);
       expect(seen[0].headers['Content-Type'], startsWith('application/octet-stream'));
-      expect(seen[2].bodyBytes, isEmpty);
-      expect(RelayTransport.signedText('DELETE', 'relay.test:8787', '/v2/w/x/blob/$h', '', 'e3b0', '1'),
-          'bw-relay-v3\nDELETE\nrelay.test:8787\n/v2/w/x/blob/$h\n\ne3b0\n1');
+      expect(jsonDecode(utf8.decode(seen[2].bodyBytes)), [h2, h], reason: 'sorted');
+      expect(seen[2].headers['Content-Type'], startsWith('application/json'));
+      expect(RelayTransport.signedText('PUT', 'relay.test:8787', '/v2/w/x/blob/$h', '', 'e3b0', '1'),
+          'bw-relay-v4\nPUT\nrelay.test:8787\n/v2/w/x/blob/$h\n\ne3b0\n1');
+      expect(RelayTransport.signedText('PUT', 'relay.test:8787', '/v2/w/x/blob/$h', '', 'e3b0', '1', api: 3),
+          'bw-relay-v3\nPUT\nrelay.test:8787\n/v2/w/x/blob/$h\n\ne3b0\n1');
     });
 
-    test('404: GET is null, PUT and DELETE are missing; 507 is full; 400 hash is rejected', () async {
+    test('404: GET is null, PUT and the declared set are missing; 507 is full; 400 hash is rejected', () async {
       var status = 404;
       final t = client((r) => http.Response('{"error":"x"}', status));
       final h = 'cd' * 32;
       expect(await t.getBlob(h), isNull);
       await expectLater(
           t.putBlob(h, [1]), throwsA(isA<TransportException>().having((e) => e.failure, 'failure', TransportFailure.missing)));
-      await expectLater(t.deleteBlob(h), throwsA(isA<TransportException>().having((e) => e.failure, 'failure', TransportFailure.missing)));
+      await expectLater(
+          t.putSnapshotBlobs('s1', [h]), throwsA(isA<TransportException>().having((e) => e.failure, 'failure', TransportFailure.missing)));
       status = 507;
       await expectLater(t.putBlob(h, [1]), throwsA(isA<TransportException>().having((e) => e.failure, 'failure', TransportFailure.full)));
       status = 400;
@@ -258,7 +265,7 @@ void main() {
   });
 
   group('MemoryTransport blob rules', () {
-    test('hash checked, unknown wallet 404, idempotent delete, absent GET null', () async {
+    test('hash checked, unknown wallet 404, idempotent PUT, absent GET null; no delete call exists', () async {
       final body = [1, 2, 3];
       final h = sha256Hex(body);
       await expectLater(relay.putBlob(h, body), throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.missing)));
@@ -270,9 +277,7 @@ void main() {
       await relay.putBlob(h, body);
       await relay.putBlob(h, body);
       expect(await relay.getBlob(h), body);
-      await relay.deleteBlob(h);
-      await relay.deleteBlob(h);
-      expect(await relay.getBlob(h), isNull);
+      expect(await relay.getBlob('9' * 64), isNull);
     });
   });
 }

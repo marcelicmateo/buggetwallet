@@ -17,6 +17,9 @@ class _Snap {
   final String id;
   final Map<String, int> covers;
   final Uint8List bytes;
+
+  /// The declared blob set (api 4), null until declared.
+  Set<String>? blobSet;
   _Snap(this.id, this.covers, this.bytes);
 }
 
@@ -28,10 +31,12 @@ class _Snap {
 ///
 /// Blobs (bill files) as the relay keeps them: PUT checks the hash (64 lowercase hex = SHA-256 of the body, else
 /// `rejected`), needs a known wallet (a stored file, else `missing`) and 16 MiB at most; GET of an absent one is null;
-/// DELETE is idempotent.
+/// clients never delete them (api 4). [api] 4: each kept snapshot may get a declared set
+/// ([putSnapshotBlobs]); with both kept snapshots declared, a blob in neither set stored more than [gcGrace] ago is
+/// collected, as the relay does. [api] 3: no declared sets (404), no GC.
 ///
 /// Test hooks: [offline], [corrupt], [failGet], [failGetSnapshot], [replace], [files], [maxFileBytes], [blobs],
-/// [blobRoutes], [tamperBlob].
+/// [blobRoutes], [tamperBlob], [api], [declared], [gcRuns].
 class MemoryTransport implements SyncTransport {
   MemoryTransport({DateTime Function()? now}) : _now = now ?? DateTime.now;
   final DateTime Function() _now;
@@ -52,6 +57,7 @@ class MemoryTransport implements SyncTransport {
     _devs.clear();
     _snap = _prev = null;
     _blobs.clear();
+    _blobAt.clear();
     instance = newInstanceId();
   }
 
@@ -100,12 +106,34 @@ class MemoryTransport implements SyncTransport {
   final Map<(String, int), int> _failGets = {};
   final Map<String, int> _failSnapshotGets = {};
   final Map<String, Uint8List> _blobs = {};
+  final Map<String, DateTime> _blobAt = {};
+
+  /// The api version `GET state` names: 4 (declared sets, GC) or 3 (an api-3 relay: blobs, never deleted, no sets).
+  int api = 4;
+
+  /// Blob GC grace, as the relay's `GC_GRACE`.
+  static const gcGrace = Duration(days: 30);
+
+  /// Declared sets of the kept snapshots, by snapshot id (sorted hashes), for tests.
+  Map<String, List<String>> get declared => {
+        for (final s in [_snap, _prev].nonNulls)
+          if (s.blobSet case final b?) s.id: b.toList()..sort(),
+      };
+
+  /// How many times the GC ran (both kept snapshots declared), for tests.
+  int gcRuns = 0;
 
   /// False = an older relay without blobs: every blob call answers 404 ([TransportFailure.missing]).
   bool blobRoutes = true;
 
   /// Read-only view of the stored blobs by hash.
   Map<String, Uint8List> get blobs => UnmodifiableMapView(_blobs);
+
+  /// Test hook: the stored blob [hash] is gone (an api-3 client's DELETE, or a hostile relay).
+  void loseBlob(String hash) {
+    _blobs.remove(hash);
+    _blobAt.remove(hash);
+  }
 
   /// Flips one byte of a stored blob (a damaged disk or a hostile relay): its hash no longer matches.
   void tamperBlob(String hash) {
@@ -201,6 +229,7 @@ class MemoryTransport implements SyncTransport {
       instance: _devs.isEmpty ? null : instance,
       bytes: _devs.isEmpty || maxBytes == null ? null : storedBytes,
       maxBytes: _devs.isEmpty ? null : maxBytes,
+      api: _devs.isEmpty ? null : api,
     );
   }
 
@@ -313,6 +342,7 @@ class MemoryTransport implements SyncTransport {
     if (bytes.length > maxFile) throw const TransportException(TransportFailure.full, 'too big');
     if (sha256Hex(bytes) != hash) throw const TransportException(TransportFailure.rejected, 'hash');
     _blobs[hash] ??= Uint8List.fromList(bytes);
+    _blobAt[hash] = _now(); // a re-upload refreshes the stored time
   }
 
   @override
@@ -323,9 +353,29 @@ class MemoryTransport implements SyncTransport {
   }
 
   @override
-  Future<void> deleteBlob(String hash) async {
-    _blobCall('deleteBlob', hash);
-    _blobs.remove(hash);
+  Future<void> putSnapshotBlobs(String id, List<String> hashes) async {
+    _call('putSnapshotBlobs');
+    if (api < 4) throw const TransportException(TransportFailure.missing, 'no declared sets');
+    final set = hashes.toSet();
+    if (set.length != hashes.length || hashes.length > 100000 || !hashes.every(_hash.hasMatch)) {
+      throw const TransportException(TransportFailure.rejected, 'bad blob set');
+    }
+    final s = [_snap, _prev].nonNulls.where((s) => s.id == id).firstOrNull;
+    if (s == null) throw const TransportException(TransportFailure.missing, 'no such snapshot');
+    if (s.blobSet case final had?) {
+      if (had.length == set.length && had.containsAll(set)) return;
+      throw const TransportException(TransportFailure.conflict, 'blob set already declared');
+    }
+    s.blobSet = set;
+    final a = _snap?.blobSet, b = _prev?.blobSet;
+    if (a == null || b == null) return;
+    gcRuns++;
+    final cutoff = _now().subtract(gcGrace);
+    for (final h in _blobs.keys.toList()) {
+      if (a.contains(h) || b.contains(h) || !(_blobAt[h] ?? _now()).isBefore(cutoff)) continue;
+      _blobs.remove(h);
+      _blobAt.remove(h);
+    }
   }
 
   /// Deletes every file that every kept snapshot covers and every other device seen within [activeFor] acked.
