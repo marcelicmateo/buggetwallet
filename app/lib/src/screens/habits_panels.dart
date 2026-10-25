@@ -7,6 +7,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'bill_history.dart';
 
 const _dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -119,20 +120,31 @@ class ExpectedBillsPanel extends StatelessWidget {
                       const StatusLabel(good: false, text: 'Overdue')
                     else if (wc.billPaidThisPeriod(b))
                       const StatusLabel(good: true, text: 'Paid'),
-                    TextButton(
-                      key: ValueKey('skip:${b.id}'),
-                      style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          minimumSize: const Size(48, touchMin),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          alignment: Alignment.centerLeft),
-                      onPressed: () {
-                        logNav('bill.skip');
-                        wc.skipRecurring(b.id);
-                        toast(context, 'Skipped to the next cycle');
-                      },
-                      child: const Text('Skip this cycle'),
-                    ),
+                    Wrap(spacing: 4, children: [
+                      TextButton(
+                        key: ValueKey('skip:${b.id}'),
+                        style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            minimumSize: const Size(48, touchMin),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            alignment: Alignment.centerLeft),
+                        onPressed: () {
+                          logNav('bill.skip');
+                          wc.skipRecurring(b.id);
+                          toast(context, 'Skipped to the next cycle');
+                        },
+                        child: const Text('Skip this cycle'),
+                      ),
+                      TextButton(
+                        key: ValueKey('billHistory_${b.id}'),
+                        style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            minimumSize: const Size(48, touchMin),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                        onPressed: () => openBillHistory(context, wc, b.id),
+                        child: const Text('History'),
+                      ),
+                    ]),
                   ]),
                 ),
                 IconButton(
