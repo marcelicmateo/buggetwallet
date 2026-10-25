@@ -61,6 +61,7 @@ void main() {
       await tapVisible(t, find.byKey(const ValueKey('rangeBack_spending')));
       final shareRow =
           find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('shareRow_')).first;
+      await scrollTo(t, find.byKey(const ValueKey('insightPanel_share')), InsightsScreen);
       await tapVisible(t, shareRow);
       expect(find.byType(CategoryDetailScreen), findsOneWidget);
       await Harness.shot(t, '$name-category-detail');

@@ -155,6 +155,8 @@ void main() {
         where = 'insights';
         debugPrint('layout $name: $where');
         await goTab(t, 'Spending');
+        // Spending is still scrolled down from the transaction sheet step: back up to the Insights button
+        await scrollTo(t, find.byKey(const ValueKey('insightsOpen')), SpendingScreen, delta: -400);
         await tapVisible(t, find.byKey(const ValueKey('insightsOpen')));
         await scrollThrough(t, InsightsScreen, '$name-insights', shots: 6);
         await scrollTo(t, find.byKey(const ValueKey('rangeChip_spending_months12')), InsightsScreen);
@@ -163,7 +165,7 @@ void main() {
         await Harness.shot(t, '$name-insights-custom');
         final shareRow =
             find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('shareRow_')).first;
-        await scrollTo(t, shareRow, InsightsScreen);
+        await scrollTo(t, find.byKey(const ValueKey('insightPanel_share')), InsightsScreen);
         await tapVisible(t, shareRow);
         expect(find.byType(CategoryDetailScreen), findsOneWidget);
         await scrollThrough(t, CategoryDetailScreen, '$name-category-detail', shots: 4);

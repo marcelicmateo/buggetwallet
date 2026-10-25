@@ -87,17 +87,21 @@ class _SpendingScreenState extends State<SpendingScreen> {
 
     return ListView(padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad), children: [
       Row(children: [
-        TextButton.icon(
-          key: const ValueKey('insightsOpen'),
-          style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
-          icon: const Icon(Icons.insights_outlined),
-          label: const Text('Insights'),
-          onPressed: () {
-            logNav('spending.insights');
-            openInsights(context, wc);
-          },
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const ValueKey('insightsOpen'),
+              style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+              icon: const Icon(Icons.insights_outlined),
+              label: const Text('Insights', maxLines: 1, overflow: TextOverflow.ellipsis),
+              onPressed: () {
+                logNav('spending.insights');
+                openInsights(context, wc);
+              },
+            ),
+          ),
         ),
-        const Spacer(),
         IconButton(
           key: const ValueKey('searchOpen'),
           tooltip: hasKeyboard ? 'Search (Ctrl+F)' : 'Search',
