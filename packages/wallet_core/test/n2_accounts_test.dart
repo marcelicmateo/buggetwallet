@@ -1,6 +1,7 @@
 // Stage N2 (spec §1, §5, §6): accounts as a synced entity. Validation boundaries, the one-live-account-per-(source,
 // currency) rule, correctBalance, delete/undelete, ordering. Written from docs/context/N2_SPEC.md. All data SYNTHETIC.
 import 'package:test/test.dart';
+import 'package:wallet_core/src/schema.dart' show entitySchema;
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/n2.dart';

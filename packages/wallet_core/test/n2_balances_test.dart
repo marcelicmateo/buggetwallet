@@ -127,8 +127,8 @@ void main() {
     test('through the repo: a hand entry replaced by its bank row counts once, in the bank account', () async {
       final bank = await add('Bank', 'pbz', opening: 100000, date: '2026-09-30');
       final cash = await add('Cash', null, opening: 5000, date: '2026-09-30');
-      final loose = repo.addTransaction(date: '2026-10-05', amount: -1200, category: 'Groceries');
-      final matched = repo.addTransaction(date: '2026-10-05', amount: -2500, category: 'Groceries');
+      final loose = repo.addTransaction(date: '2026-10-05', amount: 1200, category: 'Groceries');
+      final matched = repo.addTransaction(date: '2026-10-05', amount: 2500, category: 'Groceries');
       repo.importBatch(ImportBatch(source: 'pbz', transactions: [n('2026-10-06', -2500, 'POS plaćanje', 'PBZ POS SYNTHETIC SHOP ZAGREB')]));
       expect(repo.transaction(matched)!.matchedTo, isNotNull, reason: 'setup: the import matched the hand entry');
       expect(repo.transaction(loose)!.matchedTo, isNull);
