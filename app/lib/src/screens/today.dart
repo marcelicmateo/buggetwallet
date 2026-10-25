@@ -379,7 +379,7 @@ class _BillsLine extends StatelessWidget {
     ];
     final heldCycles = [
       for (final x in cycles)
-        if (held(x)) x
+        if (held(x) && x.reserve > 0) x
     ];
     final counted = [
       for (final x in soon)
@@ -400,6 +400,7 @@ class _BillsLine extends StatelessWidget {
       if (countedBills > 0) '$countedBills ${countedBills == 1 ? 'bill' : 'bills'}$payments, ${moneyExact(reserved, currency)}',
       if (coveredBills > 0) '$coveredBills covered by your plan',
     ].join(' · ');
+    if (text.isEmpty && heldCycles.isEmpty && overdue == 0) return const SizedBox.shrink();
     final style = TextStyle(fontSize: BwType.bodySize, color: c.ink2);
     return InkWell(
       key: const ValueKey('billsLine'),

@@ -1,11 +1,13 @@
 // P4 app half: recurring bills beyond monthly in Plan › Expected bills (Add bill, Edit, Mark paid with Undo, the period / range /
 // parts / instalments / held labels), Today's bills line with a held yearly bill, and bill history per cycle.
 // All data is SYNTHETIC (habitsWallet: Tuesday 20 Oct 2026; payee "zorblex").
+import 'package:budget_wallet/src/clock_notice.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/bill_history.dart';
 import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:budget_wallet/src/screens/recurring_sheet.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -431,6 +433,131 @@ void main() {
       await pumpApp(tester, BillHistoryScreen(wc: wc, billId: id), size: const Size(400, 3000));
       expect(find.byKey(ValueKey('historyMonth_${months.first.month}')), findsOneWidget);
       expect(find.textContaining('a month at a time'), findsOneWidget);
+    });
+  });
+
+  group('review fixes', () {
+    tw('renaming a 36-payment monthly plan from 31 Jan keeps its last due date', (tester) async {
+      final wc = hw();
+      final id = wc.addRecurringBill(
+          label: 'Zorblex loan', category: 'Groceries', amount: 3000, intervalDays: 30, firstDue: '2027-01-31', instalments: 36);
+      final end = wc.recurringBills().firstWhere((b) => b.id == id).endsOn;
+      expect(end, '2029-12-31');
+      await plan(tester, wc);
+      await see(tester, find.byKey(ValueKey('recurringEdit:$id')));
+      await tester.tap(find.byKey(ValueKey('recurringEdit:$id')));
+      await settle(tester);
+      await typeIn(tester, 'recurringName', 'Zorblex loan 2');
+      await save(tester);
+      final b = wc.recurringBills().firstWhere((b) => b.id == id);
+      expect((b.label, b.endsOn), ('Zorblex loan 2', end));
+    });
+
+    tw('changing the count of a monthly plan uses calendar months', (tester) async {
+      final wc = hw();
+      final id = wc.addRecurringBill(
+          label: 'Zorblex loan', category: 'Groceries', amount: 3000, intervalDays: 30, firstDue: '2027-01-31', instalments: 6);
+      await plan(tester, wc);
+      await see(tester, find.byKey(ValueKey('recurringEdit:$id')));
+      await tester.tap(find.byKey(ValueKey('recurringEdit:$id')));
+      await settle(tester);
+      await typeIn(tester, 'recurringCount', '3');
+      await save(tester);
+      expect(wc.recurringBills().firstWhere((b) => b.id == id).endsOn, '2027-03-31');
+    });
+
+    tw('a finished plan opens with a blank count and a save keeps its end', (tester) async {
+      final wc = hw();
+      final id = wc.addRecurringBill(
+          label: 'Zorblex done', category: 'Groceries', amount: 3000, intervalDays: 30, firstDue: '2026-08-01', instalments: 1);
+      wc.repo.updateRecurring(id, nextDue: '2026-12-01');
+      wc.reload();
+      final end = wc.recurringBills().firstWhere((b) => b.id == id).endsOn;
+      expect(wc.recurringBills().firstWhere((b) => b.id == id).finished, isTrue);
+      await plan(tester, wc);
+      await see(tester, find.byKey(ValueKey('recurringEdit:$id')));
+      await tester.tap(find.byKey(ValueKey('recurringEdit:$id')));
+      await settle(tester);
+      expect(tester.widget<SwitchListTile>(find.byKey(const ValueKey('recurringEnds'))).value, isTrue);
+      await typeIn(tester, 'recurringName', 'Zorblex done 2');
+      await save(tester);
+      expect(find.byKey(const ValueKey('recurringSheet')), findsNothing);
+      final b = wc.recurringBills().firstWhere((b) => b.id == id);
+      expect((b.label, b.endsOn, b.finished), ('Zorblex done 2', end, true));
+    });
+
+    tw('Paid shows for a monthly bill only, not a weekly or yearly one', (tester) async {
+      final wc = hw();
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        syntheticTx('2026-10-14', -2000, 'POS plaćanje', 'POS ZORBLEXW ZAGREB'),
+        syntheticTx('2026-10-14', -3000, 'POS plaćanje', 'POS ZORBLEXM ZAGREB'),
+      ]));
+      wc.reload();
+      String key(String s) => wc.recentPayees().firstWhere((p) => p.key.toLowerCase().contains(s)).key;
+      final weekly = wc.addRecurringBill(
+          label: 'Zorblex weekly', category: 'Groceries', amount: 2000, intervalDays: 7, firstDue: '2026-10-14', payee: key('zorblexw'));
+      final monthly = wc.addRecurringBill(
+          label: 'Zorblex monthly', category: 'Groceries', amount: 3000, intervalDays: 30, firstDue: '2026-10-14', payee: key('zorblexm'));
+      expect(wc.recurringBills().firstWhere((b) => b.id == weekly).lastPaidTx, isNotNull);
+      expect(wc.recurringBills().firstWhere((b) => b.id == monthly).lastPaidTx, isNotNull);
+      await plan(tester, wc);
+      await see(tester, find.byKey(ValueKey('bill:$monthly')));
+      expect(find.descendant(of: find.byKey(ValueKey('bill:$monthly')), matching: find.textContaining('Paid')), findsOneWidget);
+      await see(tester, find.byKey(ValueKey('bill:$weekly')));
+      expect(find.descendant(of: find.byKey(ValueKey('bill:$weekly')), matching: find.textContaining('Paid')), findsNothing);
+    });
+
+    tw('a detected candidate can be edited and stays a candidate', (tester) async {
+      final wc = hw();
+      final id = wc.recurringBills().single.id;
+      await plan(tester, wc);
+      await see(tester, find.byKey(ValueKey('recurringEdit:$id')));
+      await tester.tap(find.byKey(ValueKey('recurringEdit:$id')));
+      await settle(tester);
+      expect(find.text('Change bill'), findsOneWidget);
+      await typeIn(tester, 'recurringAmount', '31');
+      await save(tester);
+      expect(find.text('Bill saved'), findsOneWidget);
+      expect(wc.recurringBills().firstWhere((b) => b.id == id).status, 'candidate');
+    });
+
+    tw('Mark paid refused by a clock that is behind: no "Marked paid" toast, the due date stays', (tester) async {
+      var wall = DateTime(2026, 10, 20, 12).millisecondsSinceEpoch;
+      final wc = WalletController.forTest(WalletRepo.inMemory(now: () => wall), key: VaultKey.generate(), clock: () => budgetToday);
+      addTearDown(wc.dispose);
+      final id = wc.addRecurringBill(label: 'Zorblex rent', category: 'Groceries', amount: 3000, intervalDays: 30, firstDue: '2026-10-28');
+      final before = clockBehindNotice.value;
+      await plan(tester, wc);
+      wall -= 3 * 3600 * 1000;
+      await see(tester, find.byKey(ValueKey('recurringMarkPaid:$id')));
+      await tester.tap(find.byKey(ValueKey('recurringMarkPaid:$id')));
+      await settle(tester);
+      expect(clockBehindNotice.value, before + 1);
+      expect(find.text('Marked paid'), findsNothing);
+      expect(wc.recurringBills().single.nextDue, '2026-10-28');
+    });
+
+    tw('a long bill paid by a row not yet recorded holds nothing: no held line', (tester) async {
+      final wc = hw();
+      wc.repo.updateSettings({'paydayDay': 21});
+      wc.repo.importBatch(
+          ImportBatch(source: 'pbz', transactions: [syntheticTx('2026-10-19', -60000, 'POS plaćanje', 'POS ZORBLEXY ZAGREB')]));
+      wc.reload();
+      final payee = wc.recentPayees().firstWhere((p) => p.key.toLowerCase().contains('zorblexy')).key;
+      wc.repo.addRecurring(
+          label: 'Zorblex cover', category: 'Car & transport', amount: 60000, intervalDays: 365, firstDue: '2026-10-25', payee: payee);
+      wc.reload();
+      final c = wc.period().dueCycles.firstWhere((c) => c.bill.label == 'Zorblex cover');
+      expect(c.reserve, 0);
+      await pumpApp(tester,
+          Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser(), openBills: () {})),
+          size: const Size(400, 3000));
+      expect(find.textContaining('held until paid'), findsNothing);
+    });
+
+    test('billPaidText writes both numbers in the money format', () {
+      expect(billPaidText(6000, 10000, 'EUR'), '60 of 100 € paid');
+      expect(billPaidText(123456, 200000, 'EUR'), '1,234.56 of 2,000 € paid');
     });
   });
 

@@ -74,6 +74,8 @@ class ExpectedBillsPanel extends StatelessWidget {
     final old = b.nextDue;
     logNav('bill.markPaid');
     await wc.skipRecurring(b.id);
+    // Refused (the clock is behind): the due date did not move, so there is nothing to undo.
+    if (wc.recurringBills().where((x) => x.id == b.id).firstOrNull?.nextDue == old) return;
     toastOn(messenger, 'Marked paid',
         wide: wide, accessible: accessible, actionLabel: 'Undo', onAction: () => wc.restoreRecurringDue(b.id, old));
   }
@@ -126,6 +128,10 @@ class ExpectedBillsPanel extends StatelessWidget {
                         wc.dismissRecurring(b.id);
                       },
                       child: const Text('Not a bill')),
+                  TextButton(
+                      key: ValueKey('recurringEdit:${b.id}'),
+                      onPressed: () => openRecurringForm(context, wc, edit: b),
+                      child: const Text('Edit')),
                 ]),
               ]),
             ),
@@ -176,8 +182,7 @@ class ExpectedBillsPanel extends StatelessWidget {
             if (range != null) _meta(context, range, key: ValueKey('billRange:${b.id}')),
             if (instalments != null) _meta(context, instalments, key: ValueKey('billInstalments:${b.id}')),
             if (parts > 0)
-              _meta(context, '${centsToFieldText(parts)} of ${moneyExact(b.reserveAmount, cur)} paid',
-                  icon: Icons.timelapse, key: ValueKey('billParts:${b.id}')),
+              _meta(context, billPaidText(parts, b.reserveAmount, cur), icon: Icons.timelapse, key: ValueKey('billParts:${b.id}')),
             if (b.isLong && !b.finished)
               _meta(context, 'Held in full until paid', icon: Icons.lock_outline, key: ValueKey('billHeld:${b.id}')),
             if (b.coveredByPlanIn(wc.categoryTable) && !b.isLong) _meta(context, 'Covered by your plan'),
@@ -185,7 +190,7 @@ class ExpectedBillsPanel extends StatelessWidget {
               const StatusLabel(good: true, text: 'All payments made')
             else if (b.nextDue.compareTo(today) < 0)
               const StatusLabel(good: false, text: 'Overdue')
-            else if (wc.billPaidThisPeriod(b))
+            else if (!b.isShort && !b.isLong && wc.billPaidThisPeriod(b))
               const StatusLabel(good: true, text: 'Paid'),
             Wrap(spacing: 4, children: [
               if (markPaid)

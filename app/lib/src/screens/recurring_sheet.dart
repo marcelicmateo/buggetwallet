@@ -37,6 +37,12 @@ String billRangeShort(int lo, int hi, String cur) =>
 String? billRangeText(RecurringBill b, String cur) =>
     b.hasRange ? '${billRangeShort(b.minAmount!, b.maxAmount!, cur)}, sets aside ${moneyExact(b.maxAmount!, cur)}' : null;
 
+/// "60 of 100 € paid": both numbers in the money format, the symbol once.
+String billPaidText(int paid, int total, String cur) {
+  final p = moneyExact(paid, cur), sym = '\u00A0${currencySymbol(cur)}';
+  return '${p.endsWith(sym) ? p.substring(0, p.length - sym.length) : p} of ${moneyExact(total, cur)} paid';
+}
+
 /// "3 of 12 left" for a bill with a last due date, else null. [total] is not stored, so the words are "3 payments left".
 String? billInstalmentText(RecurringBill b) {
   final n = b.instalmentsLeft;
@@ -80,6 +86,8 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
   String? _payee;
   String? _error;
 
+  late final String _openCount = _countText();
+
   String _countText() {
     final n = _b?.instalmentsLeft;
     return n == null || n < 1 ? '' : '$n';
@@ -111,15 +119,17 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
       if (a == null) return _fail(invalidAmountMessage);
       amount = a;
     }
+    final b = _b;
+    // Editing: a plan whose count was blank when the sheet opened (finished, or an end that does not read) and is still blank keeps its stored end.
+    final keepEnd = b != null && b.endsOn != null && _ends && _count.text.trim().isEmpty && _openCount.isEmpty;
     int? count;
-    if (_ends) {
+    if (_ends && !keepEnd) {
       count = int.tryParse(_count.text.trim());
       if (count == null) return _fail('Enter how many payments, like 12.');
     }
     final category = _category;
     if (category == null) return _fail('Pick a main tag for the bill.');
     try {
-      final b = _b;
       if (b == null) {
         wc.addRecurringBill(
             label: _name.text,
@@ -132,9 +142,12 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
             payee: _payee,
             instalments: count);
       } else {
-        final newEnd = count == null ? null : addDays(_due, (count - 1) * _days);
+        // The last due date is worked out (calendar months for a monthly bill) only when the count, the due date or the interval changed.
+        final endChanged =
+            count != null && (_count.text.trim() != _openCount || _due != b.nextDue || _days != b.intervalDays || b.endsOn == null);
+        final newEnd = endChanged ? RecurringBill.lastDueFor(_due, _days, count) : null;
         wc.updateRecurringBill(b.id,
-            label: _name.text,
+            label: _name.text.trim() != b.label ? _name.text : null,
             category: category != b.category ? category : null,
             amount: amount,
             minAmount: lo,

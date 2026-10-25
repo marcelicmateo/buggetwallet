@@ -9,6 +9,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 import 'bill_sheet.dart';
+import 'recurring_sheet.dart';
 
 /// Opens the History of the confirmed recurring bill [billId]: a page on a phone, a dialog from [dialogMin] wide.
 Future<void> openBillHistory(BuildContext context, WalletController wc, String billId) {
@@ -110,7 +111,7 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
                 Flexible(child: Text(stateText, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: BwType.metaSize))),
               ]),
               if (unfinished)
-                Text('${centsToFieldText(m.paid)} of ${moneyExact(h.bill.reserveAmount, cur)} paid',
+                Text(billPaidText(m.paid, h.bill.reserveAmount, cur),
                     key: ValueKey('historyParts_${_id(m)}'), style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
             ]),
             end: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [

@@ -86,6 +86,8 @@ extension RecurringDb on WalletController {
     try {
       repo.updateRecurring(id, nextDue: nextDue);
       logEvent(_habits, Level.INFO, 'recurring.markPaidUndone');
+    } on ClockBehindException catch (e) {
+      noticeClockBehind(e);
     } catch (e, st) {
       logError(_habits, 'recurring.undoFailed', e, st);
     }
