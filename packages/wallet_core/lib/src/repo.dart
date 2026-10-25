@@ -433,9 +433,10 @@ class WalletRepo {
   ///
   /// With [dryRun] the ops are applied in a transaction that is rolled back: the counts are those a real apply would
   /// give, and tables, clocks, outbox, the HLC (in memory and stored) and the match flag stay exactly as they were;
-  /// nothing is queued and matching does not run.
+  /// nothing is queued and matching does not run. [beforeRollback] runs inside that transaction after the ops, so it
+  /// reads the merged state (the backup's bill-file count).
   Map<String, int> applyRemoteByEntity(List<Op> ops,
-      {bool match = true, bool resend = false, bool resendChanged = false, bool dryRun = false}) {
+      {bool match = true, bool resend = false, bool resendChanged = false, bool dryRun = false, void Function()? beforeRollback}) {
     final t = PerfTimer('repo.applyRemote');
     final byEntity = <String, int>{};
     var changed = 0;
@@ -449,6 +450,7 @@ class WalletRepo {
             changed++;
           }
         }
+        beforeRollback?.call();
       } finally {
         if (!db.autocommit) db.execute('ROLLBACK');
       }

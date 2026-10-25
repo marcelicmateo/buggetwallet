@@ -352,7 +352,7 @@ void main() {
       expect(dry.blobs, 3);
       expect(state(b), before);
       final real = await mergeBackupBytes(b, file, key);
-      expect(real.blobs, 3);
+      expect(real.blobs, dry.blobs);
       expect(real.changedByEntity['bill'], 3);
       expect(b.queuedBlobs(), (h.toList()..sort()));
       final again = await mergeBackupBytes(b, file, key);
@@ -377,16 +377,47 @@ void main() {
       expect(backupPayloadOps(utf8.encode(jsonEncode(payload))), hasLength(a.snapshotOps().length));
     });
 
-    test('a file whose bill is deleted here by a newer delete is not taken', () async {
+    test('a file whose bill is deleted here by a newer delete is not taken; the dry run says the same', () async {
       final (a, h) = await billWallet();
       final b = await copyOf(a);
       b.db.execute('DELETE FROM blob_cache');
       b.db.execute('DELETE FROM blob_outbox');
       now += 1000;
       b.deleteBill(b.bills().firstWhere((x) => x.blob == h[0]).id);
-      final r = await mergeBackupBytes(b, await backupBytes(a, key), key);
-      expect(r.blobs, 2);
+      final file = await backupBytes(a, key);
+      final dry = await mergeBackupBytes(b, file, key, dryRun: true);
+      final r = await mergeBackupBytes(b, file, key);
+      expect((dry.blobs, r.blobs), (2, 2));
       expect(b.cachedBlob(h[0], touch: false), isNull);
+    });
+
+    test('one bill with a file, deleted later on this device: dry run 0 files == real merge 0', () async {
+      final a = repo();
+      final ref = await BlobStore(a, key).add(_bytes(1500, 9), 'jpg');
+      final (id, _) = a.importBill(_slip('hub3:SYNTH:one', '2026-02-15'), file: ref);
+      final file = await backupBytes(a, key);
+      final b = await copyOf(a);
+      b.db.execute('DELETE FROM blob_cache');
+      b.db.execute('DELETE FROM blob_outbox');
+      now += 1000;
+      b.deleteBill(id);
+      final dry = await mergeBackupBytes(b, file, key, dryRun: true);
+      final r = await mergeBackupBytes(b, file, key);
+      expect((dry.blobs, r.blobs), (0, 0));
+      expect(b.cachedBlobBytes, 0);
+    });
+
+    test('a bill only in the backup: the dry run counts its file as the merge brings it in', () async {
+      final a = repo();
+      final ref = await BlobStore(a, key).add(_bytes(1500, 8), 'jpg');
+      a.importBill(_slip('hub3:SYNTH:new', '2026-02-15'), file: ref);
+      final b = repo();
+      b.addTransaction(date: '2026-02-20', amount: 1234, category: 'Groceries');
+      final file = await backupBytes(a, key);
+      final dry = await mergeBackupBytes(b, file, key, dryRun: true);
+      expect(b.bills(), isEmpty);
+      final r = await mergeBackupBytes(b, file, key);
+      expect((dry.blobs, r.blobs), (1, 1));
     });
   });
 }
