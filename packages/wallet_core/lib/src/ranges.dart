@@ -71,7 +71,8 @@ DateRange rangeFor(RangeKind kind, String today, WalletSettings st, {List<Catego
 
 /// [r] moved by [steps] ranges of [kind] (negative = back). Pay periods walk the real payday list (extended with
 /// expected paydays beyond its ends), month kinds move by whole groups of their month count, custom ranges by their
-/// own length in days. A result starting after [today]'s month is refused ([ArgumentError]).
+/// own length in days (the end clamped to the end of [today]'s month). A result starting after [today]'s month is
+/// refused ([ArgumentError]).
 DateRange shiftRange(DateRange r, RangeKind kind, int steps, WalletSettings st,
     {List<CategorizedTx> txs = const [], required String today}) {
   requireIsoDate(today);
@@ -80,8 +81,13 @@ DateRange shiftRange(DateRange r, RangeKind kind, int steps, WalletSettings st,
     final first = _shiftMonth(monthOf(r.start), n * steps);
     out = _months(_shiftMonth(first, n - 1), n);
   } else if (kind == RangeKind.custom) {
+    // Like rangeFor(custom): the end is clamped to the end of today's month; a start past it is refused.
     final by = steps * r.days;
-    out = DateRange(start: addDays(r.start, by), end: addDays(r.end, by));
+    final start = addDays(r.start, by), monthEnd = _monthEnd(monthOf(today));
+    var end = addDays(r.end, by);
+    if (end.compareTo(monthEnd) > 0) end = monthEnd;
+    if (start.compareTo(end) > 0) throw ArgumentError('The range would start after this month.');
+    out = DateRange(start: start, end: end);
   } else {
     out = _shiftPeriod(r, steps, st, txs, today);
   }
@@ -97,6 +103,10 @@ DateRange _shiftPeriod(DateRange r, int steps, WalletSettings st, List<Categoriz
     days.insert(0, _prevPayday(days.first, pd));
     running++;
   }
+  // A future period (from an earlier forward step) starts on an expected payday after today: list those first.
+  while (days.last.compareTo(r.start) < 0) {
+    _addExpected(days, pd, today);
+  }
   var target = days.lastIndexWhere((d) => d.compareTo(r.start) <= 0) + steps;
   while (target < 0) {
     days.insert(0, _prevPayday(days.first, pd));
@@ -104,14 +114,19 @@ DateRange _shiftPeriod(DateRange r, int steps, WalletSettings st, List<Categoriz
     target++;
   }
   while (target >= days.length) {
-    // Expected paydays on or before today have not come (the running period stays open), so the next is after today.
-    var next = nextPayday(days.last, pd);
-    while (next.compareTo(today) <= 0) {
-      next = nextPayday(next, pd);
-    }
-    days.add(next);
+    _addExpected(days, pd, today);
   }
   return _periodAt(days, target, running, pd, today);
+}
+
+/// Appends the next expected payday after [today]: expected paydays on or before today have not come (the running
+/// period stays open), so the next one is after today.
+void _addExpected(List<String> days, int paydayDay, String today) {
+  var next = nextPayday(days.last, paydayDay);
+  while (next.compareTo(today) <= 0) {
+    next = nextPayday(next, paydayDay);
+  }
+  days.add(next);
 }
 
 /// The pay period starting at `days[i]`; the [running] one never ends before [today].

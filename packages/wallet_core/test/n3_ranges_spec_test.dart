@@ -277,6 +277,8 @@ void main() {
 
     test('custom forward: start may stay in the month of today, not leave it', () {
       expect(shiftRange(r('2026-10-11', '2026-10-20'), RangeKind.custom, 1, st, today: today).start, '2026-10-21');
+      // Review decision: the end is clamped to the end of today's month, as rangeFor(custom) requires.
+      expect(se(shiftRange(r('2026-10-16', '2026-10-25'), RangeKind.custom, 1, st, today: today)), ('2026-10-26', '2026-10-31'));
       expect(() => shiftRange(r('2026-10-26', '2026-10-31'), RangeKind.custom, 1, st, today: today), throwsArgumentError);
     });
   });

@@ -113,3 +113,11 @@ Drill-down:
 8. The core perf test uses its own generator (`test/support/n3.dart` `bigWalletRows`, ~10k rows, the shape of the app's
    `integration_test/support/big_wallet.dart`, which core cannot import).
 - `biggestRows` lists outflows only (amount < 0) of spending rows; a refund is never a "biggest" row.
+- (Review) `shiftRange(payPeriod)` first lists the expected paydays after today up to `r.start`, so a future period from a
+  forward step shifts back to where it came from; a shift of 0 is the identity.
+- (Review, decision) `budgetVsActualSeries`: budgets are monthly (owner decision 2026-10-20), so each bar counts its WHOLE
+  calendar month, also days outside `r`; the current month counts its spending so far.
+- (Review, decision) `shiftRange(custom)` clamps `end` to the end of today's month, like `rangeFor(custom)`; a `start` past
+  that end is refused (`ArgumentError`).
+- (Review) One shared rule `countsAsSpending(t, currency)` (budget.dart: live, home currency, fixed or flex) is used by
+  `monthSummary`, `_outByCategory` (averages, suggested budgets) and `insights.dart`.

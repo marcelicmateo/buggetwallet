@@ -1,7 +1,7 @@
 // Graph data and the Spending drill-down (stage N3, docs/context/N3_SPEC.md §2–3). Pure functions over a
 // [DateRange]. Spending is counted exactly as "Where it goes" (`monthSummary(...).byCategory`): live rows in the home
 // currency, fixed + flex, refunds subtracted, transfers and income left out. Nothing is reclassified.
-import 'budget.dart' show averageByCategory, budgetVsActual, monthSummary;
+import 'budget.dart' show averageByCategory, budgetVsActual, countsAsSpending, monthSummary;
 import 'categories.dart' show BudgetKind, merchantKey, merchantName;
 import 'dates.dart';
 import 'models.dart';
@@ -116,14 +116,10 @@ Map<String, List<CategorizedTx>> _byMonth(List<CategorizedTx> txs, DateRange r) 
 bool _partial(String month, DateRange r, String today) =>
     month == monthOf(today) || r.start.compareTo('$month-01') > 0 || r.end.compareTo('$month-${daysInMonth(month)}') < 0;
 
-/// A row "Where it goes" counts as spending of its category (the rule of `monthSummary`, row by row).
-bool _isSpending(CategorizedTx t, String currency) =>
-    t.tx.live && t.tx.currency == currency && (t.kind == BudgetKind.fixed || t.kind == BudgetKind.flex);
-
 /// Spending rows of [category] inside [r], newest first (date, then id descending).
 List<CategorizedTx> _categoryRows(String category, List<CategorizedTx> txs, DateRange r, String currency) => [
       for (final t in txs)
-        if (t.category == category && r.contains(t.date) && _isSpending(t, currency)) t
+        if (t.category == category && r.contains(t.date) && countsAsSpending(t, currency)) t
     ]..sort(_newestFirst);
 
 int _newestFirst(CategorizedTx a, CategorizedTx b) {
@@ -193,12 +189,14 @@ IncomeVsSpending _incomeVsSpending(String month, List<CategorizedTx> rows, Strin
   return IncomeVsSpending(month: month, income: income, extra: extra, spent: all.out, net: income + extra - all.out, partial: partial);
 }
 
-/// Budgets against actual spending per calendar month overlapping [r] (the current month: spending so far), from
-/// `budgetVsActual` over the month's days inside [r].
+/// Budgets against actual spending per calendar month overlapping [r], from `budgetVsActual`. Budgets are monthly
+/// (owner decision 2026-10-20), so each bar counts its WHOLE calendar month, also the days outside [r]; the current
+/// month counts its spending so far.
 List<BudgetMonth> budgetVsActualSeries(List<CategorizedTx> txs, DateRange r, Map<String, int> budgets,
     {required String today, required String currency}) {
+  final whole = DateRange(start: '${monthOf(r.start)}-01', end: '${monthOf(r.end)}-${daysInMonth(monthOf(r.end))}');
   final out = <BudgetMonth>[];
-  for (final MapEntry(key: m, value: rows) in _byMonth(txs, r).entries) {
+  for (final MapEntry(key: m, value: rows) in _byMonth(txs, whole).entries) {
     var budgeted = 0, actual = 0, over = 0;
     for (final l in budgetVsActual(rows, m, budgets, today: today, currency: currency).lines) {
       if (l.budget case final b?) {
@@ -273,7 +271,7 @@ List<CategorizedTx> biggestRows(List<CategorizedTx> txs, DateRange r, {int limit
   if (limit <= 0) return const [];
   final rows = [
     for (final t in txs)
-      if (t.amount < 0 && r.contains(t.date) && _isSpending(t, currency)) t
+      if (t.amount < 0 && r.contains(t.date) && countsAsSpending(t, currency)) t
   ]..sort((a, b) {
       var d = a.amount.compareTo(b.amount); // most negative first
       if (d == 0) d = b.date.compareTo(a.date);
