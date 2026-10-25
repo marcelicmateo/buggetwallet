@@ -82,6 +82,21 @@ Only home-currency rows (`st.currency`) count. A value is null when there is not
   - the schema-7 old-build fixtures still open and migrate to 9.
 - Search: accounts are searchable by name if `searchAll` gets an `accounts:` parameter. Optional; skip it if it is more than a few lines.
 
+## Clarifications (builder, 2026-10-25)
+- `suggestPlan(txs, st, today, {List<RecurringBill> confirmed = const []})`. It keeps only `b.confirmed && b.category == 'Bills & subscriptions'`; `subs` evidence is the bill ids.
+- The SQL column is `opening_date` (snake_case); the model field is `Account.openingDate`.
+- `WalletSettings` cannot tell an unset `paydayDay` from the default 15, so `planProposals` always uses `current = st.paydayDay` for `paydayDay`.
+
+- Duplicates after sync:
+  - Two offline devices can each add the same `(source, currency)`. `accountBalances` counts only the live account with the smallest id.
+  - Each other live account with that key gets `duplicateOf` (the counted account's id), `balance = opening`, `rowsCounted = 0` and `lastRowDate = null`.
+  - `balanceTotals` leaves duplicates out.
+- `undeleteAccount` throws `ArgumentError` when a live account holds the same key.
+- Types and values:
+  - `Suggested` and `PlanSuggestion` take named arguments, and `const PlanSuggestion()` has every field null.
+  - Rent and loan come out as positive cents.
+  - A budget of 0 counts as empty.
+
 ## 6. Tests the spec requires (test-writer writes these independently)
 Use synthetic data only.
 
