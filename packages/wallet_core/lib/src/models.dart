@@ -127,8 +127,11 @@ class CategorizedTx {
   /// The payment has a stored split that no longer adds up or cannot be read ([splitFits]): it counts whole.
   final bool splitBroken;
 
+  /// For a part: the whole payment's row (`Categorizer.categorize`: its own main tag, tags and amount); null otherwise.
+  final CategorizedTx? whole;
+
   const CategorizedTx(this.tx, this.category, this.kind,
-      {this.tags = const [], int? amount, this.part, this.parts = 0, this.partNote, this.splitBroken = false})
+      {this.tags = const [], int? amount, this.part, this.parts = 0, this.partNote, this.splitBroken = false, this.whole})
       : _amount = amount;
   String get date => tx.date;
 
@@ -140,7 +143,7 @@ class CategorizedTx {
 
   /// This row with another [category] and/or [kind]; everything else (part fields included) kept.
   CategorizedTx withCategory(String category, [BudgetKind? kind]) => CategorizedTx(tx, category, kind ?? this.kind,
-      tags: tags, amount: _amount, part: part, parts: parts, partNote: partNote, splitBroken: splitBroken);
+      tags: tags, amount: _amount, part: part, parts: parts, partNote: partNote, splitBroken: splitBroken, whole: whole);
 }
 
 /// The distinct payments of [rows] ([CategorizedTx.tx], first appearance order): an expanded list

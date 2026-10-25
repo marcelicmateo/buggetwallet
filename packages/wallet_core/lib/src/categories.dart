@@ -458,9 +458,9 @@ class Categorizer {
   /// override, a transfer or kind hint, a bank rule, a hand-added row's own category, the fallback).
   String? ruleFor(Tx t) => _decide(t).$2;
 
-  (String, String?) _decide(Tx t, {bool override = true}) {
+  (String, String?) _decide(Tx t) {
     final o = t.category;
-    if (override && o != null && table.isLive(o)) return (o, null);
+    if (o != null && table.isLive(o)) return (o, null);
     final auto = _auto(t);
     final k = table.kindOf(auto.$1);
     if (t.source != 'manual' && (k == BudgetKind.flex || k == BudgetKind.fixed)) {
@@ -495,32 +495,35 @@ class Categorizer {
   /// longer fits the payment ([splitFits]: its amount was edited, a synced split arrived for a changed row, or it is
   /// unreadable) is ignored: the payment counts whole and is marked [CategorizedTx.splitBroken]. A split on a payment
   /// that is now a transfer (paired as an own transfer, or its main tag is a transfer) is ignored without the mark:
-  /// a transfer is never split. A part whose main tag is not live falls back to the payment's own automatic one
-  /// ([categoryOf] without its override; P1 §3); dead tags are dropped ([TagTable.resolveAll]; no [tagContext]: no
-  /// tags). Pure: nothing is written.
+  /// a transfer is never split. A part whose main tag is not live falls back to the payment's own main tag
+  /// ([categoryOf], its override included: never a transfer here, P1 §3); if that is not live or is a transfer, the
+  /// split is ignored as broken. Dead tags are dropped ([TagTable.resolveAll]; no [tagContext]: no tags). Each part
+  /// holds the whole payment's row ([CategorizedTx.whole]). Pure: nothing is written.
   List<CategorizedTx> expand(Tx t) {
     final stored = splits[t.id];
     if (stored == null || !t.live) return [categorize(t)];
     final whole = categorize(t);
     if (t.transferTo != null || whole.kind == BudgetKind.transfer) return [whole];
-    if (!splitFits(t.amount, stored)) {
+    final fallbackOk = table.isLive(whole.category) && whole.kind != BudgetKind.transfer;
+    if (!splitFits(t.amount, stored) || (!fallbackOk && stored.any((p) => !table.isLive(p.category)))) {
       return [CategorizedTx(t, whole.category, whole.kind, tags: whole.tags, splitBroken: true)];
     }
-    String? fallback;
     final tags = tagContext?.tags;
     return [
       for (final (i, p) in stored.indexed)
-        if (table.isLive(p.category) ? p.category : (fallback ??= _automatic(t)) case final c)
+        if (table.isLive(p.category) ? p.category : whole.category case final c)
           CategorizedTx(t, c, table.kindOf(c),
-              tags: tags == null ? const [] : tags.resolveAll(p.tags), amount: p.amount, part: i, parts: stored.length, partNote: p.note),
+              tags: tags == null ? const [] : tags.resolveAll(p.tags),
+              amount: p.amount,
+              part: i,
+              parts: stored.length,
+              partNote: p.note,
+              whole: whole),
     ];
   }
 
   /// [expand] over [txs], in order.
   List<CategorizedTx> expandAll(Iterable<Tx> txs) => [for (final t in txs) ...expand(t)];
-
-  /// [t]'s main tag without its own override: a payee rule, else the automatic one ([autoCategory]).
-  String _automatic(Tx t) => _decide(t, override: false).$1;
 }
 
 /// Display name for a merchant, with bank prefixes removed.

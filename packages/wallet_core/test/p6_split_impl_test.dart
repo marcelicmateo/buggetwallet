@@ -84,15 +84,15 @@ void main() {
       expect(rows.map((x) => x.tags), [isEmpty, isEmpty]);
     });
 
-    test('a part with a category that is not live falls back to the automatic one, ignoring the payment override', () {
+    test('a part with a category that is not live falls back to the payment main tag (its override included)', () {
       final t = _bank('p', -3000, category: 'Eating out'); // owner override on the payment
       final cz = _cz({
         'p': const [SplitPart(amount: -1000, category: 'cDeadCustom'), SplitPart(amount: -2000, category: 'Rent')]
       });
       expect(cz.categorize(t).category, 'Eating out');
       final rows = cz.expand(t);
-      expect(rows[0].category, cz.autoCategory(t), reason: 'automatic, not the override');
-      expect(rows[0].kind, kindOf(cz.autoCategory(t)));
+      expect((rows[0].category, rows[0].kind), ('Eating out', BudgetKind.flex), reason: 'review decision: the payment main tag');
+      expect(rows[0].whole?.amount, -3000);
       expect((rows[1].category, rows[1].kind), ('Rent', BudgetKind.fixed));
     });
 
@@ -175,13 +175,16 @@ void main() {
       ]);
     });
 
-    test('searchAll finds the payment once, as the part that matched; the whole amount finds it too', () {
+    test('searchAll finds the payment once, whole, naming the part that matched; the whole amount finds it too', () {
       SearchResult s(String q) => searchAll(q, txs: rows, goals: const [], wishlist: const [], bills: const [], tags: TagTable.from(_tags));
-      expect(s('quorvant').txs.map((x) => (x.tx.id, x.part)), [('p', 1)]);
-      expect(s('trip').txs.map((x) => (x.tx.id, x.part)), [('p', 1)]);
-      expect(s('100.00').txs.map((x) => x.tx.id), ['p']);
-      expect(s('50').txs.map((x) => (x.tx.id, x.part)), [('p', 0)]);
-      expect(s('zorblex').txs, hasLength(1));
+      for (final (q, part) in [('quorvant', 1), ('trip', 1), ('50', 0)]) {
+        expect(s(q).txs.map((x) => (x.tx.id, x.isPart, x.amount)), [('p', false, -10000)], reason: q);
+        expect(s(q).matchedPart, {'p': part}, reason: q);
+      }
+      for (final q in ['100.00', 'zorblex']) {
+        expect(s(q).txs.map((x) => x.tx.id), ['p'], reason: q);
+        expect(s(q).matchedPart, isEmpty, reason: q);
+      }
     });
 
     test('rowsFor and biggestRows keep equal parts in part order', () {

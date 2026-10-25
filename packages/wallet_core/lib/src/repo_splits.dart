@@ -52,44 +52,59 @@ extension WalletRepoSplits on WalletRepo {
     logEvent(_log, Level.INFO, 'split.set', {'parts': clean.length});
   }
 
-  /// Removes payment [txId]'s split (`deleted: 1`): it counts whole again. No live split: nothing is written.
+  /// Removes payment [txId]'s split (`deleted: 1`): it counts whole again. A bank row that only reads its hand-added
+  /// entry's split ([splitOf]) gets a removed split of its own, which stops the read-through. No split: nothing is
+  /// written.
   void removeSplit(String txId) {
-    if (db.select('SELECT 1 FROM tx_splits WHERE id = ? AND deleted = 0', [txId]).isEmpty) return;
+    final own = db.select('SELECT deleted FROM tx_splits WHERE id = ?', [txId]);
+    if (own.isNotEmpty ? own.first['deleted'] == 1 : _entrySplit(txId) == null) return;
     _write([
       ('split', txId, {'deleted': 1})
     ]);
     logEvent(_log, Level.INFO, 'split.remove', {'splits': 1});
   }
 
-  /// Payment [txId]'s live split, whether it still fits the payment or not ([splitFits]); null when it has none. An
-  /// unreadable stored split reads as an empty list (the payment counts whole, `CategorizedTx.splitBroken`).
+  /// Payment [txId]'s split as it counts, whether it still fits the payment or not ([splitFits]); null when it has
+  /// none. Its own when it has a split row (a removed one: none); else, for a bank row that replaced a hand-added entry
+  /// (`matched_to`), the entry's live split, read through the match, so a split made on the entry on any device, before
+  /// or after the match, follows it (like T1's tags, but never copied). An unreadable stored split reads as an empty
+  /// list (the payment counts whole, `CategorizedTx.splitBroken`).
   List<SplitPart>? splitOf(String txId) {
-    final rs = db.select('SELECT parts FROM tx_splits WHERE id = ? AND deleted = 0', [txId]);
+    final rs = db.select('SELECT parts, deleted FROM tx_splits WHERE id = ?', [txId]);
+    if (rs.isNotEmpty) return rs.first['deleted'] == 1 ? null : decodeSplitParts(rs.first['parts']);
+    return _entrySplit(txId);
+  }
+
+  /// The live split of the live hand-added entry matched to bank row [bankId] (the smallest entry id if several).
+  List<SplitPart>? _entrySplit(String bankId) {
+    final rs = db.select(
+        'SELECT s.parts FROM tx t JOIN tx_splits s ON s.id = t.id '
+        'WHERE t.manual = 1 AND t.deleted = 0 AND t.matched_to = ? AND s.deleted = 0 ORDER BY t.id LIMIT 1',
+        [bankId]);
     return rs.isEmpty ? null : decodeSplitParts(rs.first['parts']);
   }
 
-  /// Every live split (tx id → parts, as [splitOf]), in one read: for [WalletRepo.categorizer].
+  /// Every split as it counts (tx id → parts, as [splitOf]: own live splits, plus entries' splits read through their
+  /// match onto bank rows without a split row), in two reads: for [WalletRepo.categorizer].
   Map<String, List<SplitPart>> splits() {
     final t = PerfTimer('repo.splits');
-    final out = <String, List<SplitPart>>{
-      for (final r in db.select('SELECT id, parts FROM tx_splits WHERE deleted = 0')) r['id'] as String: decodeSplitParts(r['parts'])
-    };
-    t.done({'splits': out.length});
-    return out;
-  }
-
-  /// The live split of each hand-added entry in [matchedTo] (entry id → bank row id; null = reopened, skipped), copied
-  /// to its bank row (same amount, [planMatches]) when that row has none, so the row that replaces the entry keeps the
-  /// split the owner made (as T1 copies tag links). Written with the match; a later reopen leaves it.
-  List<(String, String, Map<String, Object?>)> _matchedSplits(Map<String, String?> matchedTo) {
-    if (matchedTo.isEmpty) return const [];
-    final out = <(String, String, Map<String, Object?>)>[];
-    for (final MapEntry(key: entry, value: bank) in matchedTo.entries) {
-      if (bank == null) continue;
-      final rs = db.select('SELECT parts FROM tx_splits WHERE id = ? AND deleted = 0', [entry]);
-      if (rs.isEmpty || db.select('SELECT 1 FROM tx_splits WHERE id = ? AND deleted = 0', [bank]).isNotEmpty) continue;
-      out.add(('split', bank, {'parts': rs.first['parts'], 'deleted': 0}));
+    final out = <String, List<SplitPart>>{};
+    final rows = <String>{};
+    for (final r in db.select('SELECT id, parts, deleted FROM tx_splits')) {
+      final id = r['id'] as String;
+      rows.add(id);
+      if (r['deleted'] != 1) out[id] = decodeSplitParts(r['parts']);
     }
+    var through = 0;
+    for (final r in db.select('SELECT t.matched_to AS bank, s.parts FROM tx t JOIN tx_splits s ON s.id = t.id '
+        'WHERE t.manual = 1 AND t.deleted = 0 AND t.matched_to IS NOT NULL AND s.deleted = 0 ORDER BY t.id')) {
+      final bank = r['bank'] as String;
+      if (rows.add(bank)) {
+        out[bank] = decodeSplitParts(r['parts']);
+        through++;
+      }
+    }
+    t.done({'splits': out.length, 'through': through});
     return out;
   }
 }
