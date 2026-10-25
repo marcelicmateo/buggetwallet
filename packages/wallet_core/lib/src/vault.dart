@@ -103,7 +103,8 @@ class VaultKey {
   static Future<VaultKey> parse(String text) async {
     var s = text.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
     if (!s.startsWith('BW1')) throw const VaultException('This is not a Budget Wallet key (it should start with BW1).');
-    s = s.substring(3);
+    // Base32 has no digit 0, so a typed 0 can only mean the letter O. 1 stays refused (I or L).
+    s = s.substring(3).replaceAll('0', 'O');
     final raw = _unbase32(s);
     if (raw.length < 34) throw const VaultException('The key is too short. Check that you copied all of it.');
     final key = raw.sublist(0, 32), sum = raw.sublist(32, 34);

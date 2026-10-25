@@ -207,7 +207,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   matching, H9 repairs, bill links, `refreshRecurring`, `runPendingMatch`, `dropOrphanBlobs`); `tick` stays monotonic.
   `SyncEngine.run` catches a `ClockBehindException` from `runPendingMatch` (logged, matching stays pending).
   `restoreBackupBytes` refuses a backup whose newest clock is more than `maxClockDrift` ahead of the wall clock:
-  `BackupException(BackupFailure.clockAhead)`, nothing applied), `vault.dart` (key + encryption; `UnsealFailure` says why a
+  `BackupException(BackupFailure.clockAhead)`, nothing applied), `vault.dart` (key + encryption; `VaultKey.parse` ignores case, spaces and dashes and reads a digit 0 as O (Base32 has
+  no 0; 1 stays refused); `UnsealFailure` says why a
   file was refused, `tooLarge` past the inflate cap; `deriveKey` = HKDF-SHA256, empty salt), `sync.dart` (`SyncException`,
   `SyncReport`, `SyncWaiting`, `SyncDevice`, `relayFingerprint(instance)` = first 8 hex as `xxxx-xxxx`; web-safe) +
   `sync_engine.dart` (below).

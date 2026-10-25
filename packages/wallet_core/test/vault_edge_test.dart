@@ -96,7 +96,8 @@ void main() {
 
     test('characters outside the alphabet are refused, not skipped', () async {
       final body = good.substring(4);
-      const bad = ['0', '1', '8', '9', '=', '_', '.', '/', 'Š', '€', '🙂', '\u0000', 'Ｂ', '２', '٣'];
+      // No '0' here: it is read as the letter O (see 'key text accepted').
+      const bad = ['1', '8', '9', '!', '=', '_', '.', '/', 'Š', '€', '🙂', '\u0000', 'Ｂ', '２', '٣'];
       for (final c in bad) {
         await expectLater(VaultKey.parse('BW1-$c$body'), _refused, reason: 'inserted ${c.codeUnits}');
         await expectLater(VaultKey.parse('BW1-${body.replaceRange(0, 1, c)}'), _refused, reason: 'replaced by ${c.codeUnits}');
@@ -214,6 +215,75 @@ void main() {
       final last = _alphabet.indexOf(t[t.length - 1]);
       final other = _alphabet[last ^ 1];
       expect((await VaultKey.parse(t.substring(0, t.length - 1) + other)).bytes, _fixed().bytes);
+    });
+
+    group('digit 0 is read as the letter O', () {
+      /// Deterministic synthetic keys whose text holds at least one O.
+      Future<List<(VaultKey, String)>> withO() async {
+        final r = Random(42);
+        final out = <(VaultKey, String)>[];
+        for (var i = 0; i < 40; i++) {
+          final k = VaultKey(List<int>.generate(32, (_) => r.nextInt(256)));
+          final t = await k.toText();
+          if (t.contains('O')) out.add((k, t));
+        }
+        expect(out, isNotEmpty);
+        return out;
+      }
+
+      test('every O written as 0 parses to the same key', () async {
+        for (final (k, t) in await withO()) {
+          final typed = t.replaceAll('O', '0');
+          expect((await VaultKey.parse(typed)).bytes, k.bytes, reason: typed);
+        }
+      });
+
+      test('a mix of 0 and O, and lowercase o, parse to the same key', () async {
+        for (final (k, t) in await withO()) {
+          final first = t.indexOf('O');
+          final mixed = t.replaceRange(first, first + 1, '0');
+          expect((await VaultKey.parse(mixed)).bytes, k.bytes, reason: mixed);
+          expect((await VaultKey.parse(t.toLowerCase())).bytes, k.bytes);
+          expect((await VaultKey.parse(t.toLowerCase().replaceAll('o', '0'))).bytes, k.bytes);
+        }
+      });
+
+      test('the BW1 prefix is not affected: BW0 is still not a key', () async {
+        final body = (await _fixed().toText()).substring(4);
+        for (final p in ['BW0-', 'bw0-', 'BWO-']) {
+          await expectLater(VaultKey.parse('$p$body'), _refused, reason: p);
+        }
+      });
+
+      test('1, 8 and 9 are still refused as not allowed', () async {
+        final body = (await _fixed().toText()).substring(4);
+        for (final c in ['1', '8', '9']) {
+          await expectLater(
+            VaultKey.parse('BW1-${body.replaceRange(0, 1, c)}'),
+            throwsA(isA<VaultException>().having((e) => e.message, 'message', contains('not allowed'))),
+            reason: c,
+          );
+        }
+      });
+
+      test('a 0 typed for a letter other than O is a typo the checksum catches, never another key', () async {
+        final k = _fixed();
+        final plain = (await k.toText()).replaceAll('-', '').substring(3);
+        var refused = 0, tried = 0;
+        for (var i = 0; i < plain.length; i++) {
+          if (plain[i] == 'O') continue;
+          tried++;
+          final s = 'BW1${plain.replaceRange(i, i + 1, '0')}';
+          try {
+            expect((await VaultKey.parse(s)).bytes, k.bytes, reason: 'position $i parsed to another key');
+          } on VaultException catch (e) {
+            expect(e.message, contains('typo'), reason: 'position $i');
+            refused++;
+          }
+        }
+        // Only the last character's padding bits can change without changing the key.
+        expect(refused, greaterThanOrEqualTo(tried - 1));
+      });
     });
 
     test('the text is deterministic for a key', () async {
