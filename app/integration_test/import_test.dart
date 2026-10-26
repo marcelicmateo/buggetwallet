@@ -43,7 +43,8 @@ void main() {
       ('pbz_synthetic.xls', 'PBZ: 408 new, 0 already here.', true),
       ('revolut_synthetic.xlsx', 'Revolut: 6 new, 0 already here.', true),
       ('revolut_synthetic.csv', 'Revolut: 2 new, 0 already here.', true),
-      ('notes-file.csv', 'This is not a PBZ or Revolut export I recognise.', false),
+      // P12: an unknown CSV asks for its columns; with nobody to ask (no askMapping) it is not imported.
+      ('notes-file.csv', needsMappingMessage, false),
     ]);
     expect(wc.txs, hasLength(416));
     expect(wc.repo.transactions(), hasLength(416));

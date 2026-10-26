@@ -1989,8 +1989,9 @@ class WalletController extends ChangeNotifier {
   /// the layout replaced the payments of a removed one that read differently, [remap] says which (and the old layout).
   Future<(ImportBatch, CsvMapping?)?> _readImportFile(
       String name, Uint8List bytes, AskMapping? ask, ConfirmRemoval? confirm, _Remap remap) async {
+    final f = <String, Object?>{'ext': fileExt(name), 'bytes': bytes.length};
     try {
-      return (importBankFile(bytes), null);
+      return (timed('import.parse', () => importBankFile(bytes), fields: f, warnMs: 1000), null);
     } on NeedsMapping catch (need) {
       final saved = settings.csvMappings;
       final key = matchCsvMapping(bytes, need.shape, saved);
@@ -2023,7 +2024,11 @@ class WalletController extends ChangeNotifier {
         logEvent(_import, Level.INFO, 'import.layoutSaved', {'columns': need.shape.headers.length, 'removed': removed.length});
         m = choice.mapping;
       }
-      return (parseMappedCsv(bytes, m, fileName: name, walletCurrency: currency), m);
+      return (
+        timed('import.parse', () => parseMappedCsv(bytes, m, fileName: name, walletCurrency: currency),
+            fields: {...f, 'mapped': true}, warnMs: 1000),
+        m
+      );
     }
   }
 
