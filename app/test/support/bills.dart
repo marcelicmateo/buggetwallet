@@ -168,7 +168,7 @@ Future<PdfParse> inlinePdfParser(Uint8List pdf) async {
 
 /// A wallet on 20 Oct 2026 for the bills tests: two bank rows (one could have paid a slip), a salary period, and the fakes.
 WalletController billsWallet({FakeBillInputs? inputs, FakeNudges? nudges}) {
-  final wc = WalletController.forTest(WalletRepo.inMemory(),
+  final wc = WalletController.forTest(WalletRepo.inMemory(now: () => budgetToday.millisecondsSinceEpoch),
       key: VaultKey.generate(), clock: () => budgetToday, nudges: nudges, billInputs: (inputs ?? FakeBillInputs()).inputs);
   // Widget tests run in fake time, where a real isolate never answers: PDFs are read inline unless a test asks for the isolate path.
   wc.pdfParser = inlinePdfParser;
