@@ -31,6 +31,12 @@ class BlobRef {
 /// File types a bill may keep.
 const blobTypes = {'jpg', 'png', 'pdf', 'xml'};
 
+/// File types an attachment (P16b) may have: photos and PDFs (an e-invoice `xml` belongs to a bill).
+const attachmentTypes = {'jpg', 'png', 'pdf'};
+
+/// At most this many live attachments ([BillSource.attachment], P16b) per payment.
+const maxAttachmentsPerTx = 5;
+
 /// Limits of a bill's item list (stored as JSON text in `bills.items`).
 const maxBillItems = 500, maxBillItemName = 200;
 
@@ -49,8 +55,12 @@ class Bill {
   /// Fields the reader guessed from free text (PDF text, OCR): the UI marks the bill as unsure while > 0.
   final int unsure;
 
-  /// The payment: a bank row or a hand-added expense ([WalletRepo.linkBill], [WalletRepo.addExpenseFromBill]).
+  /// The payment: a bank row or a hand-added expense ([WalletRepo.linkBill], [WalletRepo.addExpenseFromBill]). Null
+  /// for an attachment (its payment is [attachedTx]).
   final String? linkedTx;
+
+  /// The payment an attachment (P16b, [isAttachment]) belongs to; null for every other bill.
+  final String? attachedTx;
   final String? warrantyUntil, returnBy;
 
   /// The bill's file on the relay ([BlobRef.hash]), its type and plain size.
@@ -76,6 +86,7 @@ class Bill {
     this.items = const [],
     this.unsure = 0,
     this.linkedTx,
+    this.attachedTx,
     this.warrantyUntil,
     this.returnBy,
     this.blob,
@@ -84,8 +95,12 @@ class Bill {
     this.deleted = false,
   });
 
-  bool get paid => linkedTx != null;
+  /// Linked to its payment; an attachment always (it is a record of its payment, [attachedTx]).
+  bool get paid => linkedTx != null || isAttachment;
   bool get confirmed => status == BillStatus.confirmed;
+
+  /// A file attached to its payment ([linkedTx]; P16b): never a bill to review, pay, reserve, match or remind of.
+  bool get isAttachment => source == BillSource.attachment;
 
   /// The file as a [BlobRef], or null without one.
   BlobRef? get file => blob != null && blobType != null ? BlobRef(hash: blob!, type: blobType!, bytes: blobBytes ?? 0) : null;
@@ -115,6 +130,7 @@ class Bill {
         items: decodeBillItems(r['items']) ?? const [],
         unsure: _i(r['unsure']) ?? 0,
         linkedTx: _s(r['linked_tx']),
+        attachedTx: _s(r['attached_tx']),
         warrantyUntil: _s(r['warranty_until']),
         returnBy: _s(r['return_by']),
         blob: _s(r['blob']),
@@ -230,16 +246,17 @@ bool _validDate(String? s) => s != null && isIsoDate(s);
 /// bank expense (not hand-added, not an own transfer, same currency) whose description holds one of its
 /// [billLinkTokens] **and** whose −amount equals the total exactly, dated in [_billLinkWindow]. Rows already linked to
 /// another bill in [bills] never count. A bill with several such rows, or a row that would serve several bills, links
-/// nothing (left for the owner). Never by amount alone: a bill without tokens never links.
+/// nothing (left for the owner). Never by amount alone: a bill without tokens never links. Attachments
+/// ([Bill.isAttachment]) neither link nor take a row.
 Map<String, String> planBillLinks(List<Bill> bills, List<Tx> rows) {
   final taken = {
     for (final b in bills)
-      if (!b.deleted && b.linkedTx != null) b.linkedTx!
+      if (!b.deleted && !b.isAttachment && b.linkedTx != null) b.linkedTx!
   };
   final proposals = <String, String>{};
   final byTx = <String, int>{};
   for (final b in bills) {
-    if (b.deleted || !b.confirmed || b.paid || b.total == null || b.total! <= 0) continue;
+    if (b.deleted || b.isAttachment || !b.confirmed || b.paid || b.total == null || b.total! <= 0) continue;
     final tokens = billLinkTokens(b);
     final window = _billLinkWindow(b);
     if (tokens.isEmpty || window == null) continue;
@@ -282,12 +299,13 @@ bool _named(List<String> words, CategorizedTx t) {
 /// the closest to the bill's date or due date, then the amount closest to the total, then date, then id. Never filtered
 /// by amount. A bill without a date has none.
 /// P6: expects whole payments (`Categorizer.categorize`, one row per payment), never the expanded list (`Categorizer.expand`).
+/// An attachment ([Bill.isAttachment]) has none and never takes a row.
 List<CategorizedTx> billCandidates(Bill b, List<CategorizedTx> txs, List<Bill> all) {
-  final window = _billLinkWindow(b, after: _billCandidateDaysAfter);
+  final window = b.isAttachment ? null : _billLinkWindow(b, after: _billCandidateDaysAfter);
   if (window == null) return const [];
   final taken = {
     for (final o in all)
-      if (o.id != b.id && !o.deleted && o.linkedTx != null) o.linkedTx!
+      if (o.id != b.id && !o.deleted && !o.isAttachment && o.linkedTx != null) o.linkedTx!
   };
   final words = _billPayeeWords(b);
   final out = [

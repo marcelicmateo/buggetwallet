@@ -107,7 +107,7 @@ List<BillMonth> billHistory(
   final slipByMonth = <String, List<Bill>>{};
   final seenSlips = <String>{};
   for (final s in slips) {
-    if (s.deleted || s.currency != currency || !seenSlips.add(s.id) || billPayeeKey(s) != bill.payee) continue;
+    if (s.deleted || s.isAttachment || s.currency != currency || !seenSlips.add(s.id) || billPayeeKey(s) != bill.payee) continue;
     final linked = payments[s.linkedTx];
     final date = linked?.date ?? _slipDate(s);
     if (date == null) continue;
@@ -191,7 +191,7 @@ List<BillMonth> _cycleHistory(RecurringBill bill, Map<String, Tx> payments, List
   final slipBy = <int, List<Bill>>{};
   final seenSlips = <String>{};
   for (final s in slips) {
-    if (s.deleted || s.currency != currency || !seenSlips.add(s.id) || billPayeeKey(s) != bill.payee) continue;
+    if (s.deleted || s.isAttachment || s.currency != currency || !seenSlips.add(s.id) || billPayeeKey(s) != bill.payee) continue;
     final date = payments[s.linkedTx]?.date ?? _slipDate(s);
     if (date == null) continue;
     if (cycleOf(date) case final k?) (slipBy[k] ??= []).add(s);

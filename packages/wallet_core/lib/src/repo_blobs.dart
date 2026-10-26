@@ -47,11 +47,17 @@ extension WalletRepoBlobs on WalletRepo {
     return n;
   }
 
+  /// Bills whose file is kept ([backupBlobCandidates], [liveBlobHashes]): live, with a file, and for an attachment
+  /// (P16b) only while its payment is a live row here (a deleted payment's attachments stay stored but are neither
+  /// declared nor backed up; an undelete of the payment brings them back).
+  static const _keptFiles = 'deleted = 0 AND blob IS NOT NULL AND '
+      "(source != 'attachment' OR attached_tx IN (SELECT id FROM tx WHERE deleted = 0))";
+
   /// The cached files a live bill points to, as (hash, sealed bytes), newest bill first (by its date, then the most
   /// recently used file): what a backup carries ([backupBytes]).
   List<(String, int)> backupBlobCandidates() => [
         for (final r in db.select('SELECT c.hash AS hash, c.bytes AS bytes FROM blob_cache c JOIN '
-            "(SELECT blob, MAX(COALESCE(date, '')) AS d FROM bills WHERE deleted = 0 AND blob IS NOT NULL GROUP BY blob) b "
+            "(SELECT blob, MAX(COALESCE(date, '')) AS d FROM bills WHERE $_keptFiles GROUP BY blob) b "
             'ON b.blob = c.hash ORDER BY b.d DESC, c.used_at DESC, c.hash'))
           (r['hash'] as String, r['bytes'] as int),
       ];
@@ -61,7 +67,7 @@ extension WalletRepoBlobs on WalletRepo {
 
   /// The hashes live bills point to, sorted: a snapshot's declared set (RELAY_PROTOCOL.md "Blob garbage collection").
   List<String> liveBlobHashes() => [
-        for (final r in db.select('SELECT DISTINCT blob FROM bills WHERE deleted = 0 AND blob IS NOT NULL ORDER BY blob'))
+        for (final r in db.select('SELECT DISTINCT blob FROM bills WHERE $_keptFiles ORDER BY blob'))
           if (r['blob'] case final String h when isBlobHash(h)) h,
       ];
 

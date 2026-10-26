@@ -212,7 +212,7 @@ List<UpcomingItem> upcoming({
     }
   }
   for (final b in billsDb) {
-    if (b.deleted || !b.confirmed) continue;
+    if (b.deleted || !b.confirmed || b.isAttachment) continue;
     final title = b.payee ?? b.description ?? '';
     if (b.warrantyUntil case final d? when isIsoDate(d) && inRange(d)) {
       out.add(UpcomingItem(kind: UpcomingKind.warranty, key: 'w:${b.id}', date: d, title: title, category: b.category, billDb: b));

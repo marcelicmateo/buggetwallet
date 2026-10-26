@@ -52,6 +52,7 @@ const entityTables = {
     [
       'source', 'status', 'external_id', 'date', 'due_date', 'payee', 'iban', 'reference', 'description', 'category', 'note', //
       'total', 'currency', 'items', 'unsure', 'linked_tx', 'warranty_until', 'return_by', 'blob', 'blob_type', 'blob_bytes', 'deleted',
+      'attached_tx',
     ]
   ),
   'account': ('accounts', ['name', 'source', 'currency', 'opening', 'opening_date', 'deleted']),

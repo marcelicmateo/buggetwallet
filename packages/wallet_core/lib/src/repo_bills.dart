@@ -4,9 +4,11 @@ part of 'repo.dart';
 extension WalletRepoBills on WalletRepo {
   /// Live bills (deleted ones too with [includeDeleted]), newest first: by date (or due date), then id.
   /// A bill in a deleted custom category reads with its automatic one ([Categorizer.resolveStored] on its payee), or
-  /// none; the stored row is unchanged ([bill] reads it as stored).
-  List<Bill> bills({bool includeDeleted = false}) => _resolved([
-        for (final r in db.select('SELECT * FROM bills ${includeDeleted ? '' : 'WHERE deleted = 0'} '
+  /// none; the stored row is unchanged ([bill] reads it as stored). Attachments (P16b, [attachments]) only with
+  /// [includeAttachments].
+  List<Bill> bills({bool includeDeleted = false, bool includeAttachments = false}) => _resolved([
+        for (final r in db.select('SELECT * FROM bills WHERE ${includeDeleted ? '1' : 'deleted = 0'}'
+            '${includeAttachments ? '' : " AND source != 'attachment'"} '
             "ORDER BY COALESCE(date, due_date, '') DESC, id"))
           r,
       ], (cz, r) => cz.resolveStored(r['category'] as String?, text: '${r['payee'] ?? ''}'), Bill.fromRow);
@@ -17,9 +19,10 @@ extension WalletRepoBills on WalletRepo {
     return rs.isEmpty ? null : Bill.fromRow(rs.first);
   }
 
+  /// A live bill that is not an attachment (those have their own calls: [addAttachment] …), else [ArgumentError].
   Bill _liveBill(String id) {
     final b = bill(id);
-    if (b == null || b.deleted) throw ArgumentError('No such bill.');
+    if (b == null || b.deleted || b.isAttachment) throw ArgumentError('No such bill.');
     return b;
   }
 
@@ -173,6 +176,107 @@ extension WalletRepoBills on WalletRepo {
     logEvent(_log, Level.INFO, 'bills.update', {'fields': fields.length});
   }
 
+  /// P16b: attaches [file] (a photo or PDF, one of [attachmentTypes]) to payment [txId] and returns the new attachment's id.
+  /// An attachment is a bill row with source [BillSource.attachment], `attached_tx` = the payment (`linked_tx` stays
+  /// null, so builds before P16b never take it for the bill that paid the row), `total` = |amount|, the payment's date
+  /// and currency, confirmed ([Bill.paid] is true for it), in one [_write] (its file is uploaded before the op like a bill's,
+  /// declared by snapshots and carried by backups). It is listed only by [attachments]: never by [bills], matching,
+  /// candidates, planned rows, search or reminders. An unknown or deleted payment, or a file type outside [attachmentTypes]:
+  /// [ArgumentError]; a payment that already holds [maxAttachmentsPerTx] live attachments: [StateError].
+  String addAttachment(String txId, BlobRef file) {
+    if (!attachmentTypes.contains(file.type) || !isBlobHash(file.hash)) throw ArgumentError('Unknown file type.');
+    final t = transaction(txId);
+    if (t == null || t.deleted) throw ArgumentError('No such transaction.');
+    if (_attachmentCount(txId) >= maxAttachmentsPerTx) throw StateError('A payment holds at most $maxAttachmentsPerTx attachments.');
+    final id = _newId('b');
+    _write([
+      (
+        'bill',
+        id,
+        {
+          'source': BillSource.attachment.name,
+          'status': BillStatus.confirmed.name,
+          'date': t.date,
+          'total': t.amount.abs(),
+          'currency': t.currency,
+          'attached_tx': txId,
+          'blob': file.hash,
+          'blob_type': file.type,
+          'blob_bytes': file.bytes,
+          'deleted': 0,
+        }
+      )
+    ]);
+    logEvent(_log, Level.INFO, 'bills.attach', {'type': file.type});
+    return id;
+  }
+
+  /// The live attachments of payment [txId], oldest first (by the clock that created them, then id: the same order
+  /// on every device; a restore keeps the place).
+  List<Bill> attachments(String txId) {
+    final rs = db.select('''
+      SELECT b.*, c.hlc AS made_clock FROM bills b LEFT JOIN clocks c ON c.entity = 'bill' AND c.id = b.id AND c.field = 'source'
+      WHERE b.deleted = 0 AND b.source = 'attachment' AND b.attached_tx = ?''', [txId]);
+    final list = [for (final r in rs) (r['made_clock'] as String? ?? '', Bill.fromRow(r))];
+    list.sort((x, y) {
+      final c = x.$1.isEmpty || y.$1.isEmpty ? x.$1.compareTo(y.$1) : Hlc.compareStrings(x.$1, y.$1);
+      return c != 0 ? c : x.$2.id.compareTo(y.$2.id);
+    });
+    return [for (final (_, b) in list) b];
+  }
+
+  /// P16b: a hand-added entry that matching replaced with its bank row ([planMatches]: `matched_to` = a live bank row
+  /// here, not an own transfer) hands its live attachments to that row (`attached_tx` through [_write]; the cap is not
+  /// checked: nothing is ever dropped). Rule: they stay on the bank row from then on; a reopened match (bank row
+  /// deleted or paired) does not move them back, and an undelete of the row shows them there again. The same rows give
+  /// the same writes on every device. Runs in [_reconcile] after matching (caught up only).
+  void _moveMatchedAttachments() {
+    final moves = [
+      for (final r in db.select('''
+        SELECT b.id AS id, e.matched_to AS bank FROM bills b JOIN tx e ON e.id = b.attached_tx JOIN tx k ON k.id = e.matched_to
+        WHERE b.deleted = 0 AND b.source = 'attachment' AND e.manual = 1 AND e.deleted = 0
+          AND k.manual = 0 AND k.deleted = 0 AND k.transfer_to IS NULL ORDER BY b.id'''))
+        ('bill', r['id'] as String, <String, Object?>{'attached_tx': r['bank']}),
+    ];
+    if (moves.isEmpty) return;
+    _write(moves);
+    logEvent(_log, Level.INFO, 'bills.attachMoved', {'attachments': moves.length});
+  }
+
+  int _attachmentCount(String txId) =>
+      db.select("SELECT COUNT(*) AS n FROM bills WHERE deleted = 0 AND source = 'attachment' AND attached_tx = ?", [txId]).first['n']
+          as int;
+
+  Bill _attachment(String id) {
+    final b = bill(id);
+    if (b == null || !b.isAttachment) throw ArgumentError('No such attachment.');
+    return b;
+  }
+
+  /// Removes attachment [id] (soft delete, so [restoreAttachment] can undo it; the file stays cached and on the relay
+  /// like a deleted bill's, P14). Unknown id or not an attachment: [ArgumentError]; already removed: nothing written.
+  void removeAttachment(String id) {
+    if (_attachment(id).deleted) return;
+    _write([
+      ('bill', id, {'deleted': 1})
+    ]);
+    logEvent(_log, Level.INFO, 'bills.detach');
+  }
+
+  /// Brings removed attachment [id] back on its payment (Undo). Unknown id or not an attachment: [ArgumentError];
+  /// live already: nothing written; its payment already holds [maxAttachmentsPerTx] live attachments: [StateError].
+  void restoreAttachment(String id) {
+    final b = _attachment(id);
+    if (!b.deleted) return;
+    if (b.attachedTx != null && _attachmentCount(b.attachedTx!) >= maxAttachmentsPerTx) {
+      throw StateError('A payment holds at most $maxAttachmentsPerTx attachments.');
+    }
+    _write([
+      ('bill', id, {'deleted': 0})
+    ]);
+    logEvent(_log, Level.INFO, 'bills.reattach');
+  }
+
   /// The owner checked the bill: review → confirmed. Needs a date and a total > 0, else [ArgumentError]. A due date
   /// from today on gives it a planned row (reserved until paid), so an unpaid bill due from today on also needs a
   /// category (set it with [updateBill] first; [suggestBillCategory] offers one), else [ArgumentError]: a slip in a
@@ -199,7 +303,8 @@ extension WalletRepoBills on WalletRepo {
     final b = _liveBill(id);
     final t = transaction(txId);
     if (t == null || t.deleted) throw ArgumentError('No such transaction.');
-    if (db.select('SELECT 1 FROM bills WHERE deleted = 0 AND linked_tx = ? AND id != ?', [txId, id]).isNotEmpty) {
+    if (db
+        .select("SELECT 1 FROM bills WHERE deleted = 0 AND source != 'attachment' AND linked_tx = ? AND id != ?", [txId, id]).isNotEmpty) {
       throw ArgumentError('That payment belongs to another bill.');
     }
     _write(_billWrites(b, {'linked_tx': txId}, _today()));
@@ -278,7 +383,7 @@ extension WalletRepoBills on WalletRepo {
       ...db.select('SELECT * FROM bills WHERE id = ?', [b.id]).first,
       ...fields
     });
-    final reserves = !n.deleted && n.confirmed && !n.paid && _okTotal(n.total) && _okDate(n.dueDate);
+    final reserves = !n.deleted && !n.isAttachment && n.confirmed && !n.paid && _okTotal(n.total) && _okDate(n.dueDate);
     if (needCategory && reserves && n.dueDate!.compareTo(today) >= 0 && (n.category == null || n.category!.trim().isEmpty)) {
       throw ArgumentError('The bill needs a category.');
     }
@@ -286,7 +391,7 @@ extension WalletRepoBills on WalletRepo {
     final rs = db.select('SELECT * FROM planned WHERE id = ?', [pid]);
     final p = rs.isEmpty ? null : PlannedCost.fromRow(rs.first);
     Map<String, Object?> want;
-    if (n.deleted || !n.confirmed || !_okTotal(n.total) || !_okDate(n.dueDate)) {
+    if (n.deleted || n.isAttachment || !n.confirmed || !_okTotal(n.total) || !_okDate(n.dueDate)) {
       want = p == null || p.deleted ? const {} : {'deleted': 1};
     } else if (n.paid) {
       want = p == null || p.deleted ? const {} : {'status': PlannedStatus.paid.name, 'paid_tx': n.linkedTx};
@@ -336,8 +441,8 @@ extension WalletRepoBills on WalletRepo {
     ];
     final dupes = db.select('''
       SELECT b.*, c.hlc AS link_clock FROM bills b LEFT JOIN clocks c ON c.entity = 'bill' AND c.id = b.id AND c.field = 'linked_tx'
-      WHERE b.deleted = 0 AND b.linked_tx IN (SELECT linked_tx FROM bills WHERE deleted = 0 AND linked_tx IS NOT NULL
-        GROUP BY linked_tx HAVING COUNT(*) > 1)''');
+      WHERE b.deleted = 0 AND b.source != 'attachment' AND b.linked_tx IN (SELECT linked_tx FROM bills
+        WHERE deleted = 0 AND source != 'attachment' AND linked_tx IS NOT NULL GROUP BY linked_tx HAVING COUNT(*) > 1)''');
     final byTx = <String, List<(String, Bill)>>{};
     for (final r in dupes) {
       final b = Bill.fromRow(r);
@@ -375,8 +480,10 @@ extension WalletRepoBills on WalletRepo {
   void _autoLinkBills() {
     // A payment deleted on any device: its bill is unpaid again here too (planned row reopened if still due). The
     // deleting device did it at once (deleteTransaction); every other device does it on its next caught-up run.
+    // Attachments stay on their payment (an undelete of the row shows them again).
     final gone = [
-      for (final r in db.select('SELECT b.* FROM bills b JOIN tx t ON t.id = b.linked_tx WHERE b.deleted = 0 AND t.deleted = 1'))
+      for (final r in db.select(
+          "SELECT b.* FROM bills b JOIN tx t ON t.id = b.linked_tx WHERE b.deleted = 0 AND b.source != 'attachment' AND t.deleted = 1"))
         Bill.fromRow(r)
     ];
     if (gone.isNotEmpty) {
@@ -387,7 +494,8 @@ extension WalletRepoBills on WalletRepo {
       logEvent(_log, Level.INFO, 'bills.unlinkDeleted', {'bills': gone.length});
     }
     final open = [
-      for (final r in db.select("SELECT * FROM bills WHERE deleted = 0 AND status = 'confirmed' AND linked_tx IS NULL AND total > 0"))
+      for (final r in db.select(
+          "SELECT * FROM bills WHERE deleted = 0 AND source != 'attachment' AND status = 'confirmed' AND linked_tx IS NULL AND total > 0"))
         Bill.fromRow(r)
     ];
     if (open.isEmpty) return;
@@ -399,7 +507,8 @@ extension WalletRepoBills on WalletRepo {
         Tx.fromRow(r)
     ];
     final linked = [
-      for (final r in db.select('SELECT * FROM bills WHERE deleted = 0 AND linked_tx IS NOT NULL')) Bill.fromRow(r),
+      for (final r in db.select("SELECT * FROM bills WHERE deleted = 0 AND source != 'attachment' AND linked_tx IS NOT NULL"))
+        Bill.fromRow(r),
     ];
     final plan = planBillLinks([...open, ...linked], rows);
     final today = _today();

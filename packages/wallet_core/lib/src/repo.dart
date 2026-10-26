@@ -150,8 +150,8 @@ class WalletRepo {
   /// the `split` entity; no data migration), version 14: recurring income (P9: `recurring` gains `direction`; no data
   /// migration), version 15: bill-file invariants (P14: no synced change; the local `blob_outbox`, `blob_delete` and
   /// `blob_own` tables become `blob_cache.uploaded`, [_migrateBlobTables]; snapshots of this schema carry declared
-  /// blob sets).
-  static const schemaVersion = 15;
+  /// blob sets), version 16: attachments (P16b: `bills` gains `attached_tx`; no data migration).
+  static const schemaVersion = 16;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
   /// a live bill points to again (api-3 builds deleted files on the relay), cleared once all of them were stored.
@@ -681,6 +681,7 @@ class WalletRepo {
   (int, int) _reconcile() => _asInternal(() {
         final pairs = _pairTransfers();
         final matches = _matchManual();
+        _moveMatchedAttachments();
         _repairFieldPairs();
         _autoLinkBills();
         return (pairs, matches);
@@ -1068,7 +1069,8 @@ class WalletRepo {
     // A bill paid by this row is unpaid again at once (its planned row reopens and reserves): exact money.
     final today = _today();
     final paid = [
-      for (final r in db.select('SELECT * FROM bills WHERE deleted = 0 AND linked_tx = ?', [txId])) Bill.fromRow(r)
+      for (final r in db.select("SELECT * FROM bills WHERE deleted = 0 AND source != 'attachment' AND linked_tx = ?", [txId]))
+        Bill.fromRow(r)
     ];
     _write([
       for (final b in paid) ..._billWrites(b, {'linked_tx': null}, today),
@@ -1141,7 +1143,7 @@ class WalletRepo {
     final relink = <Bill>[];
     final rematch = <String>[], repair = <String>[];
     if (_undoRecord(_meta('$_undoKey$txId')) case final u?) {
-      final held = db.select('SELECT 1 FROM bills WHERE deleted = 0 AND linked_tx = ?', [txId]).isNotEmpty;
+      final held = db.select("SELECT 1 FROM bills WHERE deleted = 0 AND source != 'attachment' AND linked_tx = ?", [txId]).isNotEmpty;
       for (final id in u.bills) {
         final b = db.select('SELECT * FROM bills WHERE id = ? AND deleted = 0 AND linked_tx IS NULL', [id]);
         if (!held && b.isNotEmpty) relink.add(Bill.fromRow(b.first));
