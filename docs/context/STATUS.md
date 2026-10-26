@@ -337,6 +337,13 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Reviews:** P9 core 3 medium (one-off bonus counted as income, refunds ignored, old builds would reserve a synced income), 3 low; P9 UI 1 medium (Undo re-added with a new id), 2 low; P10 core 1 medium test gap, memory cap lowered to 16 MB; P10 UI 1 medium (damaged file asked for a key), 1 low; P11 1 money bug ("1.500" saved 1.50 € in the comma style), 3 low. All fixed with tests.
   - **Known limits:** two devices that detect the same income in separate imports before syncing can put it back to "suggested" (not counted until confirmed again); a backup cut in half reads like one made with another key; update every device together (schema 14).
   - **Stage run:** importer 335, core 2474, relay 206, app 1638, desktop 13 files, web-test, emulator screens. Perf: spending_scroll 3-5 missed build frames on this laptop for every branch tail (same commit varies 2-5 between runs; p90 identical at ~2.5 ms) = the known host slowdown; rerun after a reboot.
+- 2026-10-26: **Stages P12 + P14 + P16a** (specs `P12_SPEC.md`, `P14_SPEC.md`, `P16_SPEC.md`; schema 15, relay api 4; built in parallel, verified together).
+  - **P12 any CSV:** a CSV the app doesn't know opens **Map columns** (date, amount or debit/credit, description, currency, date format, decimal style, "spending shown as positive", header row, name) with the problems and a preview of 5 rows; Save & import only with no problems. The layout is remembered per file shape (synced setting `csvmap:<shape>`), Plan › Import › Saved file layouts (rename, change with confirm + Undo, delete with Undo). UTF-8 or Windows-1250, `;` `,` or tab, exact cents (a third decimal is refused). PBZ/Revolut ids unchanged.
+  - **P14 bill files on the relay:** clients never delete files; a bill's changes go up only after its file is stored; each snapshot declares the files its live bills use (signed) and the relay deletes a file only when neither kept snapshot uses it and it is older than 30 days. Old clients/relays keep working (no GC with an old side). Local tables only (schema 15).
+  - **P16a Pay + loan:** bill sheet **Pay** (confirmed bill with IBAN and a total above 0): payee, IBAN, amount "12,50", reference and description, each with Copy, plus Copy all; clipboard cleared after 60 s; nothing is sent. Payday plan: "12 payments left · 3,600 € at this rate" under the loan.
+  - **Test fixes:** bills tests and the number-style test depended on the real date (went red on 26 Oct); now pinned / robust.
+  - **Stage run:** importer 374, core 2549, relay 216, app 1758, desktop 13 files, web-test, emulator screens, perf ok.
+  - **Update every device and the relay together** (schema 15, relay api 4).
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -423,6 +430,10 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
   N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
+- Owner checks after P12/P14/P16a (phone + relay):
+  - Import a CSV from another bank or app: Map columns, fix a problem it shows, Save & import; import the same file again → nothing new; Settings › Import › Saved file layouts: rename, delete + Undo.
+  - Update the relay to api 4 with the phones; scan a bill with a photo, sync, delete the bill → the file still opens on the other device until it syncs; Undo the delete → the photo is there.
+  - A bill with an IBAN: Pay → copy the IBAN and amount into the bank app; Copy all. Payday plan shows the loan payments left.
 - Owner checks after P13 (phone):
   - Add the "Safe to spend today" widget; it matches Today; tap opens the app; after midnight it says "Open the app to update" until you open the app.
   - Long-press the app icon → Add expense, with the app closed and with it open (it must not restart).
