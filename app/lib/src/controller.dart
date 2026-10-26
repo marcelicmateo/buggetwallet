@@ -1046,12 +1046,20 @@ class WalletController extends ChangeNotifier {
     }
   }
 
-  /// Was the bill's last payment made in the running pay period (the "Paid" mark in Plan)?
+  /// Was the bill's last payment made in the running pay period (the "Paid" mark on Bills)?
   bool billPaidThisPeriod(RecurringBill b) {
     final id = b.lastPaidTx;
     if (id == null) return false;
-    final paid = wholeTxs.where((t) => t.tx.id == id).firstOrNull;
-    return paid != null && paid.date.compareTo(period().start) >= 0;
+    // One id -> date map per data version: the Bills tab asks once per bill on every build.
+    final dates = memo<Map<String, String>>('bills.txDates', () {
+      final m = <String, String>{};
+      for (final t in wholeTxs) {
+        m.putIfAbsent(t.tx.id, () => t.date);
+      }
+      return m;
+    });
+    final date = dates[id];
+    return date != null && date.compareTo(period().start) >= 0;
   }
 
   void confirmRecurring(String id) {

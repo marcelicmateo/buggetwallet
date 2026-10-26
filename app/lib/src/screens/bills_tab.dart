@@ -9,6 +9,7 @@ import '../logging.dart';
 import '../tabs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/rebuild_when_shown.dart';
 import 'bills_panel.dart';
 import 'habits_panels.dart';
 import 'recurring_sheet.dart';
@@ -63,9 +64,10 @@ class _BillsScreenState extends State<BillsScreen> {
     await Scrollable.ensureVisible(c, duration: const Duration(milliseconds: 250));
   }
 
-  // Rebuilds on every change of the controller, like the Plan tab did: the panels read the wallet in build().
+  // Rebuilds on every change of the controller while shown, like the Plan tab did (the panels read the wallet in build(); a
+  // device-local switch changes no data version). Hidden, it waits until it is shown or the shell gives it new data.
   @override
-  Widget build(BuildContext context) => ListenableBuilder(listenable: widget.wc, builder: (context, _) => _page(context));
+  Widget build(BuildContext context) => RebuildWhenShown(listenable: widget.wc, builder: _page);
 
   Widget _page(BuildContext context) {
     final wc = widget.wc;
@@ -158,6 +160,7 @@ class ComingUpPanel extends StatelessWidget {
     ];
     final billCount = {for (final x in counted) x.bill.id}.length;
     final reserved = counted.fold<int>(0, (s, x) => s + x.reserve);
+    final heldTotal = heldCycles.fold<int>(0, (s, x) => s + x.reserve);
     final payments = counted.length > billCount ? ' (${counted.length} payments)' : '';
     final shown = [...soon]..sort((a, b) => a.due.compareTo(b.due));
     return Panel(key: const ValueKey('comingUpPanel'), children: [
@@ -168,7 +171,9 @@ class ComingUpPanel extends StatelessWidget {
         Heading(
             billCount > 0
                 ? '$billCount ${billCount == 1 ? 'bill' : 'bills'}$payments before payday: ${moneyExact(reserved, cur)}'
-                : 'Nothing to set aside before payday',
+                : heldCycles.isNotEmpty
+                    ? 'Held until paid: ${moneyExact(heldTotal, cur)}'
+                    : 'Nothing to set aside before payday',
             key: const ValueKey('comingUpHeading')),
         const Muted('These come off your daily money until they are paid.'),
         if (shown.isNotEmpty)
