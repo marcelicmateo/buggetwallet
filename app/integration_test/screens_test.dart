@@ -7,10 +7,12 @@ import 'package:budget_wallet/src/bill_inputs.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
+import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/review.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,7 +20,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'demo_data.dart';
-import 'support/harness.dart' show navTab;
+import 'support/harness.dart' show navTab, pageList, settingsSection;
 
 /// Distinctive texts of the synthetic data: none of them may reach the log.
 const _private = [
@@ -79,26 +81,29 @@ void main() {
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
 
-    for (final (i, tab) in ['Spending', 'Wishlist', 'Goals', 'Plan'].indexed) {
+    for (final (i, tab) in ['Budget', 'Bills', 'Save', 'Settings'].indexed) {
       await tester.tap(navTab(tab));
       await tester.pumpAndSettle();
       await binding.takeScreenshot('${i + 2}-${tab.toLowerCase()}');
     }
 
-    final plan = find.descendant(of: find.byType(PlanScreen), matching: find.byType(Scrollable)).first;
-    // Plan › Bills (B4): To review, Unpaid and Paid, then the bill sheet of the one waiting for review.
-    await tester.scrollUntilVisible(find.text('Import bill file'), 300, scrollable: plan);
+    // Bills tab (B4, P5): Coming up, To review, Expected bills, then the bills database: To review, Unpaid and Paid, and the sheet of the
+    // one waiting for review.
+    await tester.tap(navTab('Bills'));
     await tester.pumpAndSettle();
-    await binding.takeScreenshot('5-plan-bills');
+    final bills = find.descendant(of: find.byType(BillsScreen), matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.text('Import bill file'), 300, scrollable: bills);
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('3-bills-slips');
     final review = wc.billLists().review.first;
     final reviewRow = find.byKey(ValueKey('bill:${review.id}'));
-    await tester.scrollUntilVisible(reviewRow, 300, scrollable: plan);
+    await tester.scrollUntilVisible(reviewRow, 300, scrollable: bills, duration: const Duration(milliseconds: 50));
     await tester.pumpAndSettle();
     // The "To review" heading must be in the shot: put it near the top, the rows are right under it.
-    await Scrollable.ensureVisible(tester.element(find.textContaining('To review')), alignment: 0.1);
+    await Scrollable.ensureVisible(tester.element(find.text('TO REVIEW')), alignment: 0.1);
     await tester.pumpAndSettle();
-    expect(find.textContaining('To review'), findsOneWidget);
-    await binding.takeScreenshot('5-plan-bills-rows');
+    expect(find.text('TO REVIEW'), findsOneWidget);
+    await binding.takeScreenshot('3-bills-rows');
     // The row must be on screen before the tap (Android's taller bars hid it once), then wait (bounded) until the sheet is up.
     await tester.ensureVisible(reviewRow);
     await tester.pumpAndSettle();
@@ -108,65 +113,66 @@ void main() {
     }
     await tester.pumpAndSettle();
     expect(find.text('Bill to review'), findsOneWidget);
-    await binding.takeScreenshot('5-bill-sheet');
+    await binding.takeScreenshot('3-bill-sheet');
     Navigator.of(tester.element(find.byType(BillSheet))).pop();
     await tester.pumpAndSettle();
 
-    // Plan › Budgets per category (new in E1): the editor with the saved budgets.
-    await tester.scrollUntilVisible(find.text('Suggest from the last 6 months'), 300, scrollable: plan);
+    // Settings (P5): one page on a phone, two panes on a wide window (a section is then picked in the list). The page that holds
+    // the panels is looked up again each time: it is another list after a section is picked.
+    await tester.tap(navTab('Settings'));
     await tester.pumpAndSettle();
-    await binding.takeScreenshot('5-plan-budgets');
+    Future<void> settings(SettingsSection section, Finder target, String shot) async {
+      await settingsSection(tester, section);
+      await tester.scrollUntilVisible(target, 300, scrollable: pageList(SettingsScreen));
+      await tester.pumpAndSettle();
+      await binding.takeScreenshot(shot);
+    }
 
-    // Plan › Calendars (F3).
-    await tester.scrollUntilVisible(find.text('Import .ics file'), 300, scrollable: plan);
-    await tester.pumpAndSettle();
-    await binding.takeScreenshot('5-plan-calendars');
+    // Settings › Budgets per category (new in E1): the editor with the saved budgets.
+    await settings(SettingsSection.budgets, find.text('Suggest from the last 6 months'), '5-settings-budgets');
 
-    // Plan › Weekly review day, Expected bills and Nudges (M4).
-    await tester.scrollUntilVisible(find.text('Review day'), 300, scrollable: plan);
-    await tester.pumpAndSettle();
-    await binding.takeScreenshot('5-plan-habits');
-    await tester.scrollUntilVisible(find.textContaining('Remind me at'), 300, scrollable: plan);
-    await tester.pumpAndSettle();
-    await binding.takeScreenshot('5-plan-nudges');
+    // Settings › Calendars (F3).
+    await settings(SettingsSection.calendars, find.text('Import .ics file'), '5-settings-calendars');
 
-    // Plan › Sync (relay address, status, devices), then Backup and Export (M5). The relay is a fake run: no network.
+    // Settings › Weekly review day and Nudges (M4; Expected bills is on the Bills tab).
+    await tester.scrollUntilVisible(find.text('Review day'), 300, scrollable: pageList(SettingsScreen));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-settings-habits');
+    await tester.scrollUntilVisible(find.textContaining('Remind me at'), 300, scrollable: pageList(SettingsScreen));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-settings-nudges');
+
+    // Settings › Sync (relay address, status, devices), then Backup and Export (M5). The relay is a fake run: no network.
     wc.syncRunner = (relay, key, repo) async => SyncReport(0, 0, 0, caughtUp: true, devices: [
           SyncDevice('ab12f3', lastSeen: DateTime.now().subtract(const Duration(minutes: 5)), isThis: true),
           SyncDevice('c9d8e7', lastSeen: DateTime.now().subtract(const Duration(hours: 3))),
         ]);
     await wc.setRelay(Uri.parse('http://homeserver:8787'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Test connection'), 300, scrollable: plan);
-    await tester.pumpAndSettle();
-    await binding.takeScreenshot('5-plan-sync');
-    await tester.scrollUntilVisible(find.text('Back up now'), 300, scrollable: plan);
-    await tester.pumpAndSettle();
-    await binding.takeScreenshot('5-plan-backup');
+    await settings(SettingsSection.sync, find.text('Test connection'), '5-settings-sync');
+    await settings(SettingsSection.backup, find.text('Back up now'), '5-settings-backup');
     // "Back up now" opens the system save dialog (no portal or activity to drive here), so run the part before it: it logs backup.done.
     await wc.backupDownload();
-    await tester.scrollUntilVisible(find.text('Plain files, not encrypted.'), 300, scrollable: plan);
+    await tester.scrollUntilVisible(find.text('Plain files, not encrypted.'), 300, scrollable: pageList(SettingsScreen));
     await tester.pumpAndSettle();
-    await binding.takeScreenshot('5-plan-export');
+    await binding.takeScreenshot('5-settings-export');
 
-    // Plan › Diagnostics at the bottom of the Plan tab; switch the level there and back.
-    await tester.scrollUntilVisible(find.text('Clear logs'), 400, scrollable: plan);
-    await tester.pumpAndSettle();
-    await binding.takeScreenshot('6-plan-diagnostics');
+    // Settings › Diagnostics; switch the level there and back.
+    await settings(SettingsSection.diagnostics, find.text('Clear logs'), '6-settings-diagnostics');
     await tester.tap(find.text('Info'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Debug'));
     await tester.pumpAndSettle();
 
-    // Search (M5): the icon on Spending, a query, the ruled results, Esc closes.
-    await tester.tap(navTab('Spending'));
+    // Search (M5): the icon on Budget, a query, the ruled results, Esc closes.
+    await tester.tap(navTab('Budget'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('searchOpen')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('searchField')), 'lidl');
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
-    await binding.takeScreenshot('2-spending-search');
+    await binding.takeScreenshot('2-budget-search');
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('searchField')), findsNothing);

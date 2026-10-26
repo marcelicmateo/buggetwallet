@@ -154,7 +154,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                   ),
                   if (shown.isEmpty)
                     EmptyNote(_day == null
-                        ? 'Nothing planned in this period. Add a planned cost, or connect a calendar in Plan.'
+                        ? 'Nothing planned in this period. Add a planned cost, or connect a calendar in Settings.'
                         : 'Nothing on this day.')
                   else
                     Rows(children: [for (final i in shown) _UpcomingRow(wc: wc, item: i, today: today, onOpen: _open, onChange: _change)]),

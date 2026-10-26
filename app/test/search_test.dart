@@ -1,6 +1,7 @@
 // Search in the Spending tab: icon, field, ruled result sections, jumps, Esc, Ctrl+F, narrow layout. SYNTHETIC data only.
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
@@ -144,7 +145,7 @@ void main() {
       final bill = find.textContaining('Confirmed');
       await t.ensureVisible(bill);
       await t.tap(bill);
-      expect(tabs, [3, 2]);
+      expect(tabs, [Tabs.save, Tabs.save]);
       expect(bills, 1);
       final tx = find.byType(TxTile).first;
       await t.ensureVisible(tx);
@@ -179,7 +180,7 @@ void main() {
       wc.reload();
       final errors = Errors();
       await pumpFull(t, wc, 2.0);
-      await t.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Spending')));
+      await t.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Budget')));
       await t.pump();
       await t.pump(const Duration(milliseconds: 500));
       await t.tap(find.byKey(const ValueKey('searchOpen')));

@@ -2,7 +2,6 @@
 // the Wishlist verdict. SYNTHETIC wallets on the fixed clock of `budgetWallet` (Tuesday 20 Oct 2026).
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/wishlist.dart';
@@ -13,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 /// A wallet whose pay period (1 Sep to 1 Oct) ended 19 days ago with money left.
@@ -283,14 +283,14 @@ void main() {
     testWidgets('after the 7-day window the warning shows (core says lowIncome)', (tester) async {
       final wc = wallet('2026-10-01', '2026-10-02');
       expect(wc.period().lowIncome, isTrue);
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 4000));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
       expect(find.textContaining('Salary received so far'), findsOneWidget);
     });
 
     testWidgets('inside the window (parts still arriving) no warning', (tester) async {
       final wc = wallet('2026-10-15', '2026-10-16');
       expect(wc.period().lowIncome, isFalse);
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 4000));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
       expect(find.textContaining('Salary received so far'), findsNothing);
     });
   });
@@ -302,7 +302,7 @@ void main() {
       wc.reload();
       final p = wc.period();
       expect(p.planDaily, lessThanOrEqualTo(0));
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 4000));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
       final heading = tester.widget<Heading>(find.byKey(const ValueKey('planHeading'))).text;
       expect(heading, 'Nothing to spend: the plan is ${moneyExact(-p.flexBudget, 'EUR')} over');
       expect(heading.contains('−'), isFalse);
@@ -310,7 +310,7 @@ void main() {
 
     testWidgets('a normal plan keeps "to spend"', (tester) async {
       final wc = budgetWallet(budgets: false);
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 4000));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
       expect(tester.widget<Heading>(find.byKey(const ValueKey('planHeading'))).text, contains('to spend'));
     });
   });
@@ -318,7 +318,7 @@ void main() {
   group('Plan: payday 31', () {
     testWidgets('saved as 28 by core and shown as 28', (tester) async {
       final wc = budgetWallet(budgets: false);
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 4000));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
       await openPlanEdit(tester);
       final f = find.widgetWithText(TextField, 'Latest payday');
       await tester.ensureVisible(f);

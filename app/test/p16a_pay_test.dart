@@ -4,12 +4,12 @@ import 'package:budget_wallet/src/bill_inputs.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/bills.dart';
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 Finder key(String k) => find.byKey(ValueKey(k));
@@ -255,7 +255,7 @@ void main() {
       final wc = await loanWallet({'loanEnd': '2027-03'});
       // 20 Oct, payday the 15th: this month's has passed, so Nov..Mar = 5.
       expect(wc.loanLeftNow()!.payments, 5);
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 1600));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 1600));
       final line = key('ledgerLoanLeft');
       await tester.ensureVisible(line);
       expect(find.descendant(of: line, matching: find.textContaining('5 payments left')), findsOneWidget);
@@ -264,7 +264,7 @@ void main() {
 
     tw('one payment left says "payment"', (tester) async {
       final wc = await loanWallet({'loanEnd': '2026-11'});
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 1600));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 1600));
       await tester.ensureVisible(key('ledgerLoanLeft'));
       expect(find.textContaining('1 payment left'), findsOneWidget);
     });
@@ -277,7 +277,7 @@ void main() {
       ]) {
         final wc = await loanWallet(s);
         expect(wc.loanLeftNow(), isNull, reason: '$s');
-        await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 1600));
+        await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 1600));
         expect(key('ledgerLoanLeft'), findsNothing, reason: '$s');
       }
     });

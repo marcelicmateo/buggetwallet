@@ -3,7 +3,6 @@
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/bill_history.dart';
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +11,7 @@ import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/bills.dart';
 import 'support/layout.dart';
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 const _gym = 'POS SYNTHGYM ZAGREB';
@@ -53,7 +53,7 @@ void tw(String name, Future<void> Function(WidgetTester tester) body) => testWid
     }, timeout: const Timeout(Duration(minutes: 2)));
 
 Future<void> openHistory(WidgetTester tester, WalletController wc, {Size size = const Size(400, 6000), double scale = 1}) async {
-  await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: size, textScale: scale);
+  await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
   final id = wc.recurringBills().firstWhere((b) => b.status == 'confirmed').id;
   final button = find.byKey(ValueKey('billHistory_$id'));
   await tester.scrollUntilVisible(button, 300, scrollable: find.byType(Scrollable).first);
@@ -83,7 +83,7 @@ void main() {
   group('History sheet', () {
     tw('only a confirmed bill has the action', (tester) async {
       final wc = historyWallet(confirm: false);
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
       expect(find.byKey(ValueKey('confirm:${wc.recurringBills().single.id}')), findsOneWidget);
       expect(find.text('History'), findsNothing);
       wc.confirmRecurring(wc.recurringBills().single.id);

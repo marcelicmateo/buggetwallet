@@ -23,6 +23,7 @@ import 'nudge_platform.dart';
 import 'nudges.dart';
 import 'pdf_parse.dart';
 import 'platform.dart' show isWeb;
+import 'tabs.dart';
 import 'wallet_db.dart';
 
 part 'controller_accounts.dart';
@@ -2230,12 +2231,12 @@ class WalletController extends ChangeNotifier {
     return id;
   }
 
-  /// Set by the home shell: switches to tab 0..4 (Today, Spending, Wishlist, Goals, Plan). Null outside the shell (tests of a
-  /// single screen), where [openTab] does nothing.
+  /// Set by the home shell: switches to tab 0..4 (Today, Budget, Bills, Save, Settings; see `Tabs`). Null outside the shell
+  /// (tests of a single screen), where [openTab] does nothing.
   void Function(int tab, String via)? tabHook;
 
-  /// Counts the taps on a "Set a rate in Plan › Currencies" note; Plan scrolls to its Currencies panel on each.
-  final ValueNotifier<int> currenciesRequest = ValueNotifier<int>(0);
+  /// The Settings place a link wants shown (a section, or Currencies inside Accounts); the Settings tab selects or scrolls to it.
+  final JumpRequest<SettingsSection> settingsRequest = JumpRequest<SettingsSection>();
 
   /// The wish the Wishlist tab shows highlighted after a toast's "Open" (cleared by the screen once it scrolled there).
   final ValueNotifier<String?> highlightWish = ValueNotifier<String?>(null);
@@ -2243,10 +2244,16 @@ class WalletController extends ChangeNotifier {
   /// Opens a tab from anywhere (a toast action, a row).
   void openTab(int tab, {String via = 'toast'}) => tabHook?.call(tab, via);
 
-  /// Opens the Wishlist tab on [wishId].
+  /// Opens a place in Settings (the tab, then the section).
+  void openSettings(SettingsSection section, {String via = 'link'}) {
+    openTab(Tabs.settings, via: via);
+    settingsRequest.request(section);
+  }
+
+  /// Opens the Save tab on the wish [wishId].
   void openWish(String wishId) {
     highlightWish.value = wishId;
-    openTab(2);
+    openTab(Tabs.save);
   }
 
   void decideWish(String id, String status) {

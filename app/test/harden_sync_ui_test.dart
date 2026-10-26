@@ -367,7 +367,7 @@ void main() {
       wc.reload();
 
       await pumpFull(t, wc, 1, size: const Size(400, 8000));
-      await tapTab(t, 'Plan');
+      await tapTab(t, 'Settings');
       wall -= 3 * 3600 * 1000; // the date or time was set back by hours
 
       final chip = find.byKey(const ValueKey('reviewDay:5'));

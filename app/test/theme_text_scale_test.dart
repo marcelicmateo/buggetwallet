@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/layout.dart';
 import 'support/wallet.dart';
 
-const _tabs = ['Today', 'Spending', 'Wishlist', 'Goals', 'Plan'];
+const _tabs = ['Today', 'Budget', 'Bills', 'Save', 'Settings'];
 const _dir = 'assets/fonts';
 
 Future<ByteData> _bytes(String f) async => ByteData.sublistView(await File('$_dir/$f').readAsBytes());

@@ -1,0 +1,423 @@
+// P5: the five tabs (Today, Budget, Bills, Save, Settings): what each one holds, the links that open them, Settings on one page and in
+// two panes. The panels themselves are tested where they were (they moved unchanged). All data is SYNTHETIC.
+import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/screens/bills_tab.dart';
+import 'package:budget_wallet/src/screens/goals.dart';
+import 'package:budget_wallet/src/screens/save.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
+import 'package:budget_wallet/src/screens/spending.dart';
+import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/wishlist.dart';
+import 'package:budget_wallet/src/tabs.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:wallet_core/wallet_core.dart';
+
+import 'support/layout.dart';
+import 'support/wallet.dart';
+
+/// A widget test that lets the controller's 3 s sync debounce run out before it ends (no timer may be pending).
+void tw(String name, Future<void> Function(WidgetTester tester) body) => testWidgets(name, (tester) async {
+      await body(tester);
+      await tester.pump(const Duration(seconds: 4));
+    });
+
+Finder _key(String k) => find.byKey(ValueKey(k));
+
+WalletController _wallet({bool bill = false}) {
+  final wc = habitsWallet(confirmBill: bill);
+  addTearDown(wc.dispose);
+  return wc;
+}
+
+Future<void> _settle(WidgetTester t) async {
+  await t.pump();
+  await t.pump(const Duration(milliseconds: 500));
+}
+
+/// The distance of [f] from the top of the window (what is higher is above).
+double _top(WidgetTester t, Finder f) => t.getTopLeft(f).dy;
+
+Future<void> _scrollInto(WidgetTester t, Finder f, Type screen) async {
+  await t.scrollUntilVisible(f, 300, scrollable: find.descendant(of: find.byType(screen), matching: find.byType(Scrollable)).first);
+  await _settle(t);
+}
+
+void main() {
+  group('the bar', () {
+    tw('five destinations in order, with their keys, labels and icons', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
+      final nav = find.byType(NavigationBar);
+      expect(nav, findsOneWidget);
+      expect(t.widget<NavigationBar>(nav).destinations.length, 5);
+      final labels = [for (final d in t.widgetList<NavigationDestination>(find.byType(NavigationDestination))) d.label];
+      expect(labels, ['Today', 'Budget', 'Bills', 'Save', 'Settings']);
+      for (final name in Tabs.names) {
+        expect(_key('tab:$name'), findsOneWidget);
+      }
+      // Outlined when not selected, filled when selected.
+      expect(find.byIcon(Icons.account_balance_wallet), findsOneWidget);
+      expect(find.byIcon(Icons.bar_chart_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.receipt_long_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.savings_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
+      await tapTab(t, 'Save');
+      expect(find.byIcon(Icons.savings), findsOneWidget);
+      expect(find.byIcon(Icons.savings_outlined), findsNothing);
+    });
+
+    tw('the rail has the same five, in the same order', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: const Size(900, 800));
+      final rail = t.widget<NavigationRail>(find.byType(NavigationRail));
+      expect([for (final d in rail.destinations) (d.label as Text).data], ['Today', 'Budget', 'Bills', 'Save', 'Settings']);
+      for (final name in Tabs.names) {
+        expect(_key('tab:$name'), findsOneWidget);
+      }
+    });
+  });
+
+  group('Budget', () {
+    tw('the payday plan is above everything else', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
+      await tapTab(t, 'Budget');
+      expect(find.byType(SpendingScreen), findsOneWidget);
+      expect(_key('planHeading'), findsOneWidget);
+      expect(_key('planEdit'), findsOneWidget);
+      final plan = _top(t, _key('planHeading'));
+      await _scrollInto(t, find.text('WHERE IT GOES'), SpendingScreen);
+      // After the scroll the plan is above the view: its top is negative, "Where it goes" is on screen.
+      expect(_top(t, find.text('WHERE IT GOES')), greaterThan(0));
+      expect(plan, lessThan(900));
+      expect(t.takeException(), isNull);
+    });
+
+    tw('Insights and search stay on the page', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
+      await tapTab(t, 'Budget');
+      expect(_key('insightsOpen'), findsOneWidget);
+      expect(_key('searchOpen'), findsOneWidget);
+    });
+  });
+
+  group('Save', () {
+    tw('Goals first, then the wishlist, in one scroll', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
+      await tapTab(t, 'Save');
+      expect(find.byType(SaveScreen), findsOneWidget);
+      expect(find.byType(GoalsScreen), findsOneWidget);
+      expect(find.byType(WishlistScreen), findsOneWidget);
+      final goals = find.text('GOALS'), check = find.text('CAN I AFFORD IT?');
+      expect(goals, findsOneWidget);
+      await _scrollInto(t, check, SaveScreen);
+      expect(check, findsOneWidget);
+      expect(t.getTopLeft(find.byType(GoalsScreen)).dy, lessThan(t.getTopLeft(find.byType(WishlistScreen)).dy));
+      expect(find.descendant(of: _key('savePage'), matching: find.byType(GoalsScreen)), findsOneWidget, reason: 'one scroll for both');
+      expect(find.descendant(of: _key('savePage'), matching: find.byType(WishlistScreen)), findsOneWidget);
+    });
+
+    tw('a wish opened from a toast scrolls into view on Save', (t) async {
+      final wc = _wallet();
+      await pumpFull(t, wc, 1.0, size: const Size(400, 900));
+      final id = wc.addWish('Synthetic highlighted wish', 9000);
+      await _settle(t);
+      wc.openWish(id);
+      await _settle(t);
+      expect(find.byType(SaveScreen), findsOneWidget, reason: 'Save is the tab shown');
+      expect(find.text('Synthetic highlighted wish'), findsOneWidget);
+    });
+  });
+
+  group('Bills', () {
+    tw('Coming up, Expected bills and the bills database, with Add bill', (t) async {
+      final wc = _wallet(bill: true);
+      await pumpFull(t, wc, 1.0, size: const Size(400, 900));
+      await tapTab(t, 'Bills');
+      expect(find.byType(BillsScreen), findsOneWidget);
+      expect(_key('comingUpPanel'), findsOneWidget);
+      expect(find.textContaining('before payday'), findsWidgets);
+      expect(_key('billsAdd'), findsOneWidget);
+      expect(find.text('Add bill'), findsWidgets, reason: 'the button on top and the one in Expected bills');
+      await _scrollInto(t, _key('addRecurring'), BillsScreen);
+      expect(find.text('EXPECTED BILLS'), findsOneWidget);
+      await _scrollInto(t, _key('importBill'), BillsScreen);
+      expect(t.takeException(), isNull);
+    });
+
+    tw('Coming up lists each bill with its due date and what it sets aside', (t) async {
+      final wc = _wallet(bill: true);
+      await pumpFull(t, wc, 1.0, size: const Size(400, 900));
+      await tapTab(t, 'Bills');
+      final p = wc.period();
+      expect(p.dueCycles, isNotEmpty);
+      for (final x in p.dueCycles) {
+        final row = _key('comingUp:${x.bill.id}:${x.due}');
+        expect(row, findsOneWidget);
+        expect(find.descendant(of: row, matching: find.textContaining('Due ')), findsOneWidget);
+      }
+      expect(find.textContaining('29.99'), findsWidgets);
+    });
+
+    tw('no bills before payday: an empty state that says how bills get here', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
+      await tapTab(t, 'Bills');
+      expect(find.textContaining('No bills due before payday'), findsOneWidget);
+      expect(find.textContaining('scan a slip or import a bill file'), findsOneWidget);
+    });
+
+    tw('Add bill opens the repeating bill form', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
+      await tapTab(t, 'Bills');
+      await t.tap(_key('billsAdd'));
+      await t.pumpAndSettle();
+      expect(_key('recurringSheet'), findsOneWidget);
+    });
+
+    tw('Today\'s "Due by payday" line opens the Bills tab', (t) async {
+      final wc = _wallet(bill: true);
+      await pumpFull(t, wc, 1.0, size: const Size(400, 900));
+      await _scrollInto(t, _key('billsLine'), TodayScreen);
+      await t.tap(_key('billsLine'));
+      await t.pumpAndSettle();
+      expect(find.byType(BillsScreen), findsOneWidget);
+      expect(find.byType(TodayScreen), findsNothing);
+    });
+
+    tw('a slip to review: Today\'s line opens Bills at To review, which lists it', (t) async {
+      final wc = _wallet();
+      wc.repo.importBill(const NormalizedBill(source: BillSource.manual, externalId: 'p5-slip', payee: 'Synthetic Slip Shop', total: 5000));
+      wc.reload();
+      await pumpFull(t, wc, 1.0, size: const Size(400, 900));
+      await _scrollInto(t, _key('billsToReview'), TodayScreen);
+      await t.tap(_key('billsToReview'));
+      await t.pumpAndSettle();
+      expect(find.byType(BillsScreen), findsOneWidget);
+      expect(find.text('TO REVIEW'), findsOneWidget);
+      expect(_key('billsReviewPanel'), findsOneWidget);
+      expect(find.text('Synthetic Slip Shop'), findsOneWidget, reason: 'listed once: the database panel leaves To review to this panel');
+      expect(t.takeException(), isNull);
+    });
+  });
+
+  group('links from Today', () {
+    tw('the payday link ("Open Budget") opens Budget', (t) async {
+      final wc = habitsWallet();
+      wc.updateSettings({'salaryConfirmed': false});
+      addTearDown(wc.dispose);
+      await pumpFull(t, wc, 1.0, size: const Size(400, 900));
+      final open = find.text('Open Budget');
+      await _scrollInto(t, open, TodayScreen);
+      await t.ensureVisible(open);
+      await t.pump();
+      await t.tap(open);
+      await t.pumpAndSettle();
+      expect(find.byType(SpendingScreen), findsOneWidget);
+      expect(_key('planHeading'), findsOneWidget);
+    });
+
+    tw('a link to a Settings place selects the Settings tab', (t) async {
+      final wc = _wallet();
+      await pumpFull(t, wc, 1.0, size: const Size(400, 900));
+      wc.openSettings(SettingsSection.income);
+      await t.pumpAndSettle();
+      expect(find.byType(SettingsScreen), findsOneWidget);
+      expect(_key('expectedIncomePanel'), findsOneWidget);
+    });
+  });
+
+  group('Settings on one page', () {
+    tw('every section is on the one page, no section list', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
+      await tapTab(t, 'Settings');
+      expect(_key('settingsPage'), findsOneWidget);
+      expect(find.byKey(const ValueKey('settingsNav:accounts')), findsNothing);
+      // The first widget of each section, in page order, found by scrolling down the one page.
+      final marks = <Finder>[
+        _key('accountAdd'),
+        _key('categoriesPanel'),
+        _key('tagsPanel'),
+        _key('rulesPanel'),
+        _key('budgetsPanel'),
+        _key('expectedIncomePanel'),
+        _key('planImport'),
+        _key('relayAddress'),
+        find.text('Back up now'),
+        _key('calendarsPanel'),
+        find.text('Salary landed: start new month'),
+        _key('themeMode'),
+        find.text('Clear logs'),
+      ];
+      var last = -1.0;
+      for (final f in marks) {
+        await _scrollInto(t, f, SettingsScreen);
+        expect(f, findsOneWidget, reason: '$f');
+        last = t.getTopLeft(f).dy;
+      }
+      expect(last, greaterThan(0));
+      expect(t.takeException(), isNull);
+    });
+
+    tw('a link scrolls the page to its section', (t) async {
+      final wc = _wallet();
+      await pumpFull(t, wc, 1.0, size: const Size(400, 900));
+      await tapTab(t, 'Settings');
+      wc.openSettings(SettingsSection.sync);
+      for (var i = 0; i < 12; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      expect(_key('relayAddress'), findsOneWidget);
+      expect(t.getTopLeft(_key('relayAddress')).dy, lessThan(900));
+    });
+
+    for (final (name, size, scale) in [('320 dp at text 2.0', const Size(320, 640), 2.0), ('dark 600 dp', const Size(600, 900), 1.0)]) {
+      tw('$name: scrolled through without overflow', (t) async {
+        final errors = Errors();
+        await pumpFull(t, _wallet(bill: true), scale, size: size);
+        for (final tab in ['Budget', 'Bills', 'Save', 'Settings']) {
+          await tapTab(t, tab);
+          await scrollThrough(t);
+        }
+        errors.check();
+      });
+    }
+  });
+
+  group('Settings in two panes', () {
+    const wide = Size(1300, 900); // content = window - rail (220) = 1080 >= 1040
+
+    tw('the section list on the left, the first section on the right', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: wide);
+      await tapTab(t, 'Settings');
+      expect(_key('settingsList'), findsOneWidget);
+      expect(_key('settingsPane'), findsOneWidget);
+      for (final s in SettingsSection.listed) {
+        expect(_key('settingsNav:${s.name}'), findsOneWidget, reason: s.title);
+        expect(find.text(s.title), findsWidgets);
+        expect(find.text(s.sub), findsOneWidget);
+      }
+      expect(_key('accountAdd'), findsOneWidget, reason: 'Accounts is the first section');
+      expect(_key('relayAddress'), findsNothing, reason: 'the others are not on the page');
+    });
+
+    tw('tapping a section shows it and leaves the others out', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: wide);
+      await tapTab(t, 'Settings');
+      await t.tap(_key('settingsNav:sync'));
+      await t.pumpAndSettle();
+      expect(_key('relayAddress'), findsOneWidget);
+      expect(_key('accountAdd'), findsNothing);
+      await t.tap(_key('settingsNav:look'));
+      await t.pumpAndSettle();
+      expect(_key('themeMode'), findsOneWidget);
+      expect(_key('relayAddress'), findsNothing);
+      await t.tap(_key('settingsNav:backup'));
+      await t.pumpAndSettle();
+      expect(find.text('Back up now'), findsOneWidget);
+      expect(find.text('Plain files, not encrypted.'), findsOneWidget, reason: 'Backup and export share a section');
+    });
+
+    tw('a deep link selects its section; Currencies is inside Accounts', (t) async {
+      final wc = _wallet();
+      await pumpFull(t, wc, 1.0, size: wide);
+      wc.openSettings(SettingsSection.income);
+      await t.pumpAndSettle();
+      expect(find.byType(SettingsScreen), findsOneWidget);
+      expect(_key('expectedIncomePanel'), findsOneWidget);
+      expect(_key('accountAdd'), findsNothing);
+      wc.openSettings(SettingsSection.currencies);
+      await t.pumpAndSettle();
+      expect(_key('accountAdd'), findsOneWidget);
+      expect(_key('expectedIncomePanel'), findsNothing);
+    });
+
+    tw('the chosen section is marked with more than colour', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: wide);
+      await tapTab(t, 'Settings');
+      Finder arrow(String s) => find.descendant(of: _key('settingsNav:$s'), matching: find.byIcon(Icons.chevron_right));
+      expect(arrow('accounts'), findsOneWidget);
+      expect(arrow('sync'), findsNothing);
+      await t.tap(_key('settingsNav:sync'));
+      await t.pumpAndSettle();
+      expect(arrow('sync'), findsOneWidget);
+      expect(arrow('accounts'), findsNothing);
+    });
+
+    tw('1039 dp of content is one page, 1040 is two panes', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: wide);
+      await tapTab(t, 'Settings');
+      final rail = t.getSize(find.byType(NavigationRail)).width;
+      for (final (c, panes) in [(1039.0, false), (1040.0, true), (1041.0, true)]) {
+        t.view.physicalSize = Size(rail + c, 900);
+        await t.pump();
+        expect(_key('settingsList').evaluate().isNotEmpty, panes, reason: 'content $c');
+      }
+    });
+
+    tw('the selected section survives a resize to one page and back', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: wide);
+      await tapTab(t, 'Settings');
+      await t.tap(_key('settingsNav:sync'));
+      await t.pumpAndSettle();
+      t.view.physicalSize = const Size(700, 900);
+      await t.pump();
+      expect(_key('settingsPage'), findsOneWidget);
+      t.view.physicalSize = wide;
+      await t.pump();
+      await t.pumpAndSettle();
+      expect(_key('relayAddress'), findsOneWidget);
+    });
+
+    tw('text 1.3 at 1280 wide is one page (the rail grows): scrolled through, then Accounts is found again from the top', (t) async {
+      await pumpFull(t, demoWallet(), 1.3, size: const Size(1280, 720));
+      await tapTab(t, 'Settings');
+      expect(_key('settingsPage'), findsOneWidget);
+      await scrollThrough(t);
+      await tapTab(t, 'Save');
+      await tapTab(t, 'Settings');
+      await _scrollInto(t, _key('accountAdd'), SettingsScreen);
+      expect(_key('accountAdd'), findsOneWidget);
+    });
+
+    tw('1040 dp: every section, scrolled through, without overflow', (t) async {
+      final errors = Errors();
+      await pumpFull(t, _wallet(bill: true), 1.0, size: wide);
+      for (final tab in ['Budget', 'Bills', 'Save', 'Settings']) {
+        await tapTab(t, tab);
+        await scrollThrough(t);
+      }
+      for (final s in SettingsSection.listed) {
+        await t.tap(_key('settingsNav:${s.name}'));
+        await t.pumpAndSettle();
+        await scrollThrough(t);
+      }
+      errors.check();
+    });
+  });
+
+  group('keys', () {
+    tw('Ctrl+1..5 switch the five tabs', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: const Size(1300, 900));
+      await t.pump();
+      Future<void> ctrl(LogicalKeyboardKey k) async {
+        await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        await t.sendKeyEvent(k);
+        await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await t.pump();
+      }
+
+      final screens = <(LogicalKeyboardKey, Type)>[
+        (LogicalKeyboardKey.digit2, SpendingScreen),
+        (LogicalKeyboardKey.digit3, BillsScreen),
+        (LogicalKeyboardKey.digit4, SaveScreen),
+        (LogicalKeyboardKey.digit5, SettingsScreen),
+        (LogicalKeyboardKey.digit1, TodayScreen),
+      ];
+      for (final (k, type) in screens) {
+        await ctrl(k);
+        expect(find.byType(type), findsOneWidget, reason: '$type');
+      }
+      await ctrl(LogicalKeyboardKey.comma);
+      expect(find.byType(SettingsScreen), findsOneWidget, reason: 'Ctrl+, opens Settings');
+    });
+  });
+}

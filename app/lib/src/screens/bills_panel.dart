@@ -85,12 +85,61 @@ Future<void> _pickAndImportBills(BuildContext context, WalletController wc, File
   }
 }
 
-/// Plan › Bills: the bills database. To review (read from codes, files and photos; nothing counts until confirmed), Unpaid (confirmed,
+/// One bill in a list: name, dates, state mark and total. Tap opens the bill sheet.
+class BillRow extends StatelessWidget {
+  final WalletController wc;
+  final FileChooser chooser;
+  final Bill bill;
+  final bool unpaid;
+  const BillRow({super.key, required this.wc, required this.chooser, required this.bill, this.unpaid = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final b = bill;
+    final c = context.c;
+    final cur = wc.currency;
+    final today = wc.today();
+    final name = (b.payee ?? '').isNotEmpty ? b.payee! : ((b.description ?? '').isNotEmpty ? b.description! : 'Bill');
+    final overdue = unpaid && b.dueDate != null && b.dueDate!.compareTo(today) < 0;
+    final dates = [
+      if (b.date != null) shortDateOrRaw(b.date!),
+      if (b.dueDate != null && b.status == BillStatus.confirmed) 'due ${shortDateOrRaw(b.dueDate!)}',
+    ].join(' · ');
+    return InkWell(
+      key: ValueKey('bill:${b.id}'),
+      hoverColor: c.surface2,
+      focusColor: c.accentSoft,
+      onTap: () => openBill(context, wc, b.id, chooser: chooser),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: touchMin),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: SplitRow(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
+            if (dates.isNotEmpty) Text(dates, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+            if (overdue) const StatusLabel(good: false, text: 'Overdue'),
+            if (b.paid) const StatusLabel(good: true, text: 'Paid'),
+          ]),
+          end: b.total == null
+              ? Text('No total', textAlign: TextAlign.end, style: TextStyle(fontSize: BwType.metaSize, color: c.muted))
+              : Text(moneyExact(b.total!, b.currency.isEmpty ? cur : b.currency),
+                  textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500)),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bills › Bills: the bills database. To review (read from codes, files and photos; nothing counts until confirmed), Unpaid (confirmed,
 /// not linked to a payment yet) and Paid. "Import bill file" adds PDFs, e-invoices and photos; "Scan bill" opens the camera.
 class BillsPanel extends StatefulWidget {
   final WalletController wc;
   final FileChooser chooser;
-  const BillsPanel({super.key, required this.wc, this.chooser = const FileChooser()});
+
+  /// False where "To review" has a panel of its own (the Bills tab).
+  final bool showReview;
+  const BillsPanel({super.key, required this.wc, this.chooser = const FileChooser(), this.showReview = true});
   @override
   State<BillsPanel> createState() => _BillsPanelState();
 }
@@ -140,47 +189,12 @@ class _BillsPanelState extends State<BillsPanel> {
   Widget build(BuildContext context) {
     final wc = widget.wc;
     final lists = wc.billLists();
-    final c = context.c;
-    final cur = wc.currency;
-    final today = wc.today();
-
-    Widget row(Bill b, {bool unpaid = false}) {
-      final name = (b.payee ?? '').isNotEmpty ? b.payee! : ((b.description ?? '').isNotEmpty ? b.description! : 'Bill');
-      final overdue = unpaid && b.dueDate != null && b.dueDate!.compareTo(today) < 0;
-      final dates = [
-        if (b.date != null) shortDateOrRaw(b.date!),
-        if (b.dueDate != null && b.status == BillStatus.confirmed) 'due ${shortDateOrRaw(b.dueDate!)}',
-      ].join(' · ');
-      return InkWell(
-        key: ValueKey('bill:${b.id}'),
-        hoverColor: c.surface2,
-        focusColor: c.accentSoft,
-        onTap: () => openBill(context, wc, b.id, chooser: widget.chooser),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: touchMin),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: SplitRow(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
-              if (dates.isNotEmpty) Text(dates, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
-              if (overdue) const StatusLabel(good: false, text: 'Overdue'),
-              if (b.paid) const StatusLabel(good: true, text: 'Paid'),
-            ]),
-            end: b.total == null
-                ? Text('No total', textAlign: TextAlign.end, style: TextStyle(fontSize: BwType.metaSize, color: c.muted))
-                : Text(moneyExact(b.total!, b.currency.isEmpty ? cur : b.currency),
-                    textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500)),
-          ),
-        ),
-      );
-    }
 
     Widget group(String title, List<Bill> list, {bool unpaid = false, int? limit}) {
       final shown = limit == null || _allPaid ? list : list.take(limit).toList();
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Heading('$title (${list.length})', size: BwType.headingSize),
-        Rows(children: [for (final b in shown) row(b, unpaid: unpaid)]),
+        Rows(children: [for (final b in shown) BillRow(wc: wc, chooser: widget.chooser, bill: b, unpaid: unpaid)]),
         if (limit != null && list.length > limit)
           Align(
             alignment: Alignment.centerLeft,
@@ -215,7 +229,7 @@ class _BillsPanelState extends State<BillsPanel> {
           ),
       ]),
       if (lists.isEmpty) const EmptyNote('No bills yet. Import a bill file, or scan one with the camera.'),
-      if (lists.review.isNotEmpty) group('To review', lists.review),
+      if (widget.showReview && lists.review.isNotEmpty) group('To review', lists.review),
       if (lists.unpaid.isNotEmpty) group('Unpaid', lists.unpaid, unpaid: true),
       if (lists.paid.isNotEmpty) group('Paid', lists.paid, limit: _paidShown),
       const Divider(height: 24),

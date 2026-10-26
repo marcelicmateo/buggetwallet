@@ -9,7 +9,7 @@ import 'support/layout.dart';
 import 'support/wallet.dart';
 
 const _sizes = <Size>[Size(360, 800), Size(800, 1000), Size(1280, 800)];
-const _tabs = ['Today', 'Spending', 'Wishlist', 'Goals', 'Plan'];
+const _tabs = ['Today', 'Budget', 'Bills', 'Save', 'Settings'];
 
 void main() {
   for (final size in _sizes) {

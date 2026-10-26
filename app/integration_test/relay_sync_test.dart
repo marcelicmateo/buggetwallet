@@ -4,8 +4,9 @@
 import 'dart:io';
 
 import 'package:budget_wallet/src/controller.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,9 +52,9 @@ void main() {
         expect(b.syncError, isNull, reason: 'B sync');
       }
 
-      // A: Plan › Sync: type the address, test it, save (the first sync runs).
-      await goTab(t, 'Plan');
-      await scrollTo(t, _address, PlanScreen);
+      // A: Settings › Sync: type the address, test it, save (the first sync runs).
+      await goSettings(t, SettingsSection.sync);
+      await scrollTo(t, _address, SettingsScreen);
       await t.enterText(_address, addr);
       await tapVisible(t, find.text('Test connection'));
       await waitFor(t, () => status('Relay reachable').evaluate().isNotEmpty, what: 'Relay reachable');
@@ -72,7 +73,7 @@ void main() {
       b.addExpense(amount: 3777, category: 'Groceries', note: 'Zebra note', date: todayIso());
       await syncB();
       final before = a.lastSync;
-      await scrollTo(t, find.text('Sync now'), PlanScreen);
+      await scrollTo(t, find.text('Sync now'), SettingsScreen);
       await tapVisible(t, find.text('Sync now'));
       await waitFor(t, () => a.lastSync != before, what: 'Sync now');
       expect(a.syncError, isNull);
@@ -81,7 +82,7 @@ void main() {
       expect(find.textContaining('Last seen'), findsNWidgets(2));
       expect(find.textContaining('· this device'), findsOneWidget);
       await Harness.shot(t, 'relay_sync/plan-sync');
-      await goTab(t, 'Spending');
+      await goTab(t, 'Budget');
       await scrollTo(t, find.widgetWithText(TxTile, '−37.77 €'), SpendingScreen);
       expect(find.widgetWithText(TxTile, 'Zebra note'), findsOneWidget);
 
@@ -90,8 +91,8 @@ void main() {
       relayUp = false;
       a.addExpense(amount: 1999, category: 'Groceries', note: 'Offline note', date: todayIso());
       await t.pumpAndSettle();
-      await goTab(t, 'Plan');
-      await scrollTo(t, find.text('Sync now'), PlanScreen);
+      await goSettings(t, SettingsSection.sync);
+      await scrollTo(t, find.text('Sync now'), SettingsScreen);
       await tapVisible(t, find.text('Sync now'));
       await waitFor(t, () => a.syncError != null, what: 'the outage message');
       expect(find.byKey(const ValueKey('syncError')), findsOneWidget);

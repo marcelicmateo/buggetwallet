@@ -21,7 +21,7 @@ void main() {
       addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
       await pumpFull(tester, demoWallet(), 1.0, size: const Size(800, 1000));
       var total = 0;
-      for (final tab in ['Today', 'Spending', 'Wishlist', 'Goals']) {
+      for (final tab in ['Today', 'Budget', 'Bills', 'Save']) {
         await tapTab(tester, tab);
         final list = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down).hitTestable();
         if (list.evaluate().isNotEmpty) {
@@ -68,7 +68,7 @@ void main() {
 
   testWidgets('transaction amounts share one right edge', (tester) async {
     await pumpFull(tester, demoWallet(), 1.0, size: const Size(800, 1000));
-    await tapTab(tester, 'Spending');
+    await tapTab(tester, 'Budget');
     final amounts =
         find.byWidgetPredicate((w) => w is Text && w.data != null && RegExp(r'^[+−-]\d').hasMatch(w.data!) && _money.hasMatch(w.data!));
     // Rows in one list: group by the x of their right edge; the signed amounts of the transaction list must align.

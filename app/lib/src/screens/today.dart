@@ -26,22 +26,22 @@ class TodayScreen extends StatelessWidget {
   final WalletController wc;
   final VoidCallback openPlan;
 
-  /// Opens the Spending tab (the budget line); without it the line is not tappable.
+  /// Opens the Budget tab (the budget line); without it the line is not tappable.
   final VoidCallback? openSpending;
 
   /// Opens the Add expense sheet (HomeShell owns it so Ctrl+N does the same); without it the button opens it itself.
   final VoidCallback? addExpense;
 
-  /// Opens Plan at "Expected bills" (the "Due by payday" line); without it the line is not tappable.
+  /// Opens the Bills tab (the "Due by payday" line); without it the line is not tappable.
   final VoidCallback? openBills;
 
-  /// Opens Plan › Bills at "To review" ("N bills to review"); without it the line opens Plan.
+  /// Opens the Bills tab at "To review" ("N bills to review"); without it the line opens Budget.
   final VoidCallback? openBillsReview;
 
-  /// Opens Plan › Accounts ("Held: …"); without it the line opens Plan.
+  /// Opens Settings › Accounts ("Held: …"); without it the line opens Budget.
   final VoidCallback? openAccounts;
 
-  /// Opens Plan at Expected income (the expected-income line); without it the line is not tappable.
+  /// Opens Settings › Expected income (the expected-income line); without it the line is not tappable.
   final VoidCallback? openIncome;
 
   /// The file chooser of the review's Import step (tests pass one that fails).
@@ -310,7 +310,7 @@ class TodayScreen extends StatelessWidget {
                       start: const Heading('Recent', size: BwType.headingSize),
                       end: Muted(_freshness(wc), size: BwType.metaSize, align: TextAlign.end)),
                   if (recent.isEmpty)
-                    const EmptyNote('No transactions yet. Import your bank exports in Plan, or add your first expense.')
+                    const EmptyNote('No transactions yet. Import your bank exports in Settings, or add your first expense.')
                   else
                     Column(children: [
                       const TxHeaderRow(),
@@ -556,11 +556,11 @@ class _SetupPanel extends StatelessWidget {
         Text('Planning on ${money(s.salary, cur, decimals: 0)} a month', style: TextStyle(fontWeight: FontWeight.w600, color: c.warnInk)),
         Text(
             s.salary > 0
-                ? 'Check this matches a normal month of pay. Fix it in Plan if not.'
-                : 'Enter your monthly salary in Plan so the daily budget can be worked out.',
+                ? 'Check this matches a normal month of pay. Fix it in Budget if not.'
+                : 'Enter your monthly salary in Budget so the daily budget can be worked out.',
             style: TextStyle(color: c.warnInk, fontSize: BwType.metaSize)),
         Wrap(alignment: WrapAlignment.spaceBetween, spacing: 8, runSpacing: 8, children: [
-          OutlinedButton(onPressed: openPlan, child: const Text('Open Plan')),
+          OutlinedButton(onPressed: openPlan, child: const Text('Open Budget')),
           FilledButton(onPressed: () => wc.updateSettings({'salaryConfirmed': true}), child: const Text('Looks right')),
         ]),
       ],

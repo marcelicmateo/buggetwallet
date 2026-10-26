@@ -6,7 +6,6 @@ import 'dart:convert';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/platform.dart' as plat;
 import 'package:budget_wallet/src/screens/onboarding.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/wallet_db.dart';
 import 'package:budget_wallet/src/widgets/common.dart' show StatusLabel;
 import 'package:flutter/material.dart';
@@ -14,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'db_open_test.dart' show World, loadWith;
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 /// What the fake key store holds for the join-pending marker.
@@ -57,7 +57,7 @@ WalletController _wallet(List<String> events, {bool keySaved = true, Map<String,
 }
 
 Future<void> _pumpPlan(WidgetTester tester, WalletController wc) async {
-  await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 12000));
+  await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 12000));
   await tester.pump();
 }
 
@@ -96,7 +96,7 @@ void main() {
     await tester.tap(_key('joinAnotherCancel'));
     await tester.pumpAndSettle();
     expect(find.byType(OnboardingScreen), findsNothing);
-    expect(find.byType(PlanScreen), findsOneWidget);
+    expect(find.byType(PlanPage), findsOneWidget);
     expect(events, isEmpty);
     expect(wc.hasWallet, isTrue);
     expect(identical(wc.repo, repo), isTrue);
@@ -123,7 +123,7 @@ void main() {
     await tester.tap(_key('joinBack'));
     await tester.pumpAndSettle();
     expect(find.byType(OnboardingScreen), findsNothing);
-    expect(find.byType(PlanScreen), findsOneWidget);
+    expect(find.byType(PlanPage), findsOneWidget);
     expect(events, isEmpty);
     expect(wc.hasWallet, isTrue);
     expect(identical(wc.repo, repo), isTrue);
@@ -166,7 +166,7 @@ void main() {
     expect(identical(wc.repo, old), isFalse, reason: 'the joined wallet has its own database');
     expect(wc.goals, isEmpty);
     expect(find.byType(OnboardingScreen), findsNothing, reason: 'the join page closed');
-    expect(find.byType(PlanScreen), findsOneWidget);
+    expect(find.byType(PlanPage), findsOneWidget);
     expect(find.text('Joined. Your old wallet is set aside on this device.'), findsOneWidget);
     wc.dispose(); // the join restarted the sync timers
     await tester.pump(const Duration(seconds: 5));

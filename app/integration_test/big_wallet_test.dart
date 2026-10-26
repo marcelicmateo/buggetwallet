@@ -121,14 +121,14 @@ void main() {
     phase('tabs');
     final framesTabs = await frames(t, () async {
       for (var r = 0; r < 2; r++) {
-        for (final tab in ['Spending', 'Wishlist', 'Goals', 'Plan', 'Today']) {
+        for (final tab in ['Budget', 'Bills', 'Save', 'Settings', 'Today']) {
           await goTab(t, tab);
         }
       }
     });
 
     phase('spending-scroll');
-    await goTab(t, 'Spending');
+    await goTab(t, 'Budget');
     final list = pageList(SpendingScreen);
     final framesScroll = await frames(t, () async {
       for (var i = 0; i < 10; i++) {

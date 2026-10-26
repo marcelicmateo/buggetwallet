@@ -7,11 +7,11 @@
 import 'dart:io';
 
 import 'package:budget_wallet/src/platform.dart' as plat; // flutter_test has its own isWindows
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 void main() {
@@ -41,7 +41,7 @@ void main() {
       testWidgets(p.name, (tester) async {
         debugDefaultTargetPlatformOverride = p;
         try {
-          await pumpApp(tester, Scaffold(body: PlanScreen(wc: demoWallet())), size: const Size(400, 8000)); // all rows built
+          await pumpApp(tester, Scaffold(body: PlanPage(wc: demoWallet())), size: const Size(400, 8000)); // all rows built
           expect(find.widgetWithText(TextField, 'Relay address'), findsOneWidget);
           expect(find.text('Test connection'), findsOneWidget);
           expect(find.text('Show wallet key'), findsOneWidget);

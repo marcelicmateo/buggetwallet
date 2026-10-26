@@ -12,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/layout.dart';
 import 'support/wallet.dart';
 
-const _tabs = ['Today', 'Spending', 'Wishlist', 'Goals', 'Plan'];
+const _tabs = ['Today', 'Budget', 'Bills', 'Save', 'Settings'];
 const _minFont = 12.0;
 
 /// Known failures, keyed by the test name; each reason names the failing widgets (Stage I builds against these).

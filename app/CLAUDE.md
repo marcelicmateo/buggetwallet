@@ -6,9 +6,18 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
 ## Files
 - `lib/main.dart` — app shell (`HomeShell`): bottom bar on compact windows, `NavigationRail` from 600 dp, one shared destinations
   list (the app bar with search icon, sync spinner and pay-period chip exists on compact windows only; from 600 dp the rail holds the add button, `appBarSearch`, `periodBadge`
-  and the spinner, so nothing stays pinned above the page), Ctrl shortcuts (Ctrl+1..5 tabs, Ctrl+N add expense, Ctrl+R/F5 sync, Ctrl+, Plan; logged as `nav.key`).
+  and the spinner, so nothing stays pinned above the page), Ctrl shortcuts (Ctrl+1..5 tabs, Ctrl+N add expense, Ctrl+R/F5 sync, Ctrl+, Settings; logged as `nav.key`).
   The pages are built once (see below) and the body keeps the same widget shape at every size (keyed `Expanded`), so a
   resize keeps every page's State: never build pages in `build()` or a `LayoutBuilder`.
+- Tabs (P5; spec `docs/context/P5_SPEC.md`): `Today · Budget · Bills · Save · Settings` (`lib/src/tabs.dart`: `Tabs.today|budget|bills|save|settings` = 0..4 and `Tabs.names`; bar/rail destination keys `tab:today|budget|bills|save|settings`;
+  Ctrl+1..5, Ctrl+, = Settings; `wc.openTab(Tabs.x)`, `wc.openSettings(SettingsSection, via:)` = the tab then `wc.settingsRequest` (a `JumpRequest`); `openWish` = Save). **Where the old Plan went** (every older "Plan ›" in these notes means the new place):
+  Payday plan + suggestions (`screens/payday_plan.dart` `PaydayPlan`, the old `PlanScreen` state with its keys) = on top of **Budget** (`SpendingScreen(header: [PaydayPlan])`, in the left column of `TwoCol`; Budget = the old Spending tab under it);
+  Expected bills + the bills database (`BillsPanel(showReview: false)`) + `ComingUpPanel` (core's `dueCycles`, `comingUp:<bill>:<due>`, `comingHeld:<bill>`) + a "To review" panel (`billsReviewPanel`, rows `BillRow`) + `billsScan` / `billsAdd` = **Bills** (`screens/bills_tab.dart`, one `SingleChildScrollView`;
+  `BillsAnchor.comingUp|review|expected|slips` through `JumpRequest`, Today's "Due by payday" = comingUp, "N bills to review" = review); Goals panel then Wishlist (both `embedded: true`, no list of their own) = **Save** (`screens/save.dart`);
+  everything else = **Settings** (`screens/settings.dart`: `SettingsSection` order Accounts [+ Currencies], Main tags and tags, Rules, Budgets per category, Expected income, Import [+ layouts], Sync [+ Another wallet / This browser],
+  Backup and export, Calendars and reminders [+ Nudges, Weekly review day], Month, Look, Diagnostics; `settingsPanels(context, wc, section)` builds a section's panels; small panels in `screens/settings_panels.dart`).
+  Below 1040 dp of content one page (`settingsPage`, a lazy ListView; a link scrolls with `widgets/scroll_to.dart` `scrollToKey`); from `twoColMin` two panes: `settingsList` (`settingsNav:<section>` rows: title, one-line sub, chosen = tint + bold + arrow) and `settingsPane` (the chosen section; a link selects it, `currencies` selects Accounts).
+  Tests: `test/p5_tabs_test.dart`; tests of what a moved panel does (not where it sits) pump `test/support/plan_page.dart` `PlanPage` (all the old Plan panels in one list); integration tests use `goSettings(t, section)` / `settingsSection` / `pageList(SettingsScreen)` from `integration_test/support/harness.dart`.
 - `lib/src/layout.dart` — `LayoutSize` (compact < 600, medium 600–1023, expanded ≥ 1024) and `sizeFor(width)`; decide on the
   window width (`MediaQuery.sizeOf`/`LayoutBuilder`), never on the device type. Content max width 720 (medium) / 1040 (expanded);
   `TwoCol(left, right)` = two columns when the content is ≥ 1040 wide (Today, Spending), `NarrowPage` = 720 (Wishlist, Plan).

@@ -40,7 +40,7 @@ void main() {
     AppLog.startMonitors();
     expect(opened.txs.length, greaterThan(18000));
 
-    await goTab(t, 'Spending');
+    await goTab(t, 'Budget');
     final list = pageList(SpendingScreen);
     t.state<ScrollableState>(list).position.jumpTo(0);
     await t.pumpAndSettle();
@@ -60,7 +60,7 @@ void main() {
     // Every tab, twice
     await binding.traceAction(() async {
       for (var r = 0; r < 2; r++) {
-        for (final tab in ['Spending', 'Wishlist', 'Goals', 'Plan', 'Today']) {
+        for (final tab in ['Budget', 'Bills', 'Save', 'Settings', 'Today']) {
           await goTab(t, tab);
         }
       }
@@ -68,7 +68,7 @@ void main() {
 
     // Insights: open it from Spending, switch the range of the first graph through every kind and step back and forward (each
     // switch draws a new range from ~20k rows), scroll through the graphs, open a category, close both
-    await goTab(t, 'Spending');
+    await goTab(t, 'Budget');
     await binding.traceAction(() async {
       await t.tap(find.byKey(const ValueKey('insightsOpen')));
       await t.pumpAndSettle();

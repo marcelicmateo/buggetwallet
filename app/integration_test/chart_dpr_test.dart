@@ -22,7 +22,7 @@ void main() {
       t.view.devicePixelRatio = dpr;
       t.view.physicalSize = const Size(1280, 800) * dpr;
       await t.pumpAndSettle();
-      await goTab(t, 'Spending');
+      await goTab(t, 'Budget');
       await Harness.shot(t, 'dpr-$dpr');
     }
     await Harness.checkLog();

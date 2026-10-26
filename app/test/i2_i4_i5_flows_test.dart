@@ -162,7 +162,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('txDelete')));
       await tester.pumpAndSettle();
       expect(find.byType(SnackBar), findsOneWidget, reason: 'the toast is up after the delete');
-      await tapTab(tester, 'Goals');
+      await tapTab(tester, 'Save');
       expect(find.byType(SnackBar), findsNothing);
       await tester.pump(const Duration(minutes: 6));
     }, skip: _skipToast);
@@ -206,7 +206,7 @@ void main() {
       final name = wc.goals.first.name;
       final saved = wc.goals.first.saved;
       await _pumpHome(tester, wc);
-      await tapTab(tester, 'Goals');
+      await tapTab(tester, 'Save');
       await tester.tap(find.text(name).first);
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const ValueKey('goalDelete')));

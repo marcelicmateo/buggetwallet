@@ -1,12 +1,12 @@
 // Stage N2 UI: Plan › "Suggestions from your imports" (accept one, accept all, Not now, none when equal). All data is SYNTHETIC.
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 /// 20 Oct 2026. Salary of 1,200.00 on the 10th of Aug, Sep and Oct (so: salary 1,200.00, payday day 10) and rent of 600.00 on
@@ -41,7 +41,7 @@ void main() {
   testWidgets('one row per differing value: current → suggested and why; nothing is written by looking', (t) async {
     final wc = proposalWallet();
     final before = wc.dataVersion;
-    await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));
+    await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
     expect(find.text('SUGGESTIONS FROM YOUR IMPORTS'), findsOneWidget);
     expect(valueOf(t, 'salary'), '${moneyExact(150000, 'EUR')} → ${moneyExact(120000, 'EUR')}');
     expect(valueOf(t, 'paydayDay'), 'day 15 → day 10');
@@ -60,7 +60,7 @@ void main() {
     final wc = proposalWallet();
     wc.repo.updateSettings({'salaryConfirmed': false});
     wc.reload();
-    await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));
+    await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
     final before = wc.settings.toMap();
     await tapKey(t, 'proposalAccept:salary');
     final after = wc.settings.toMap();
@@ -82,7 +82,7 @@ void main() {
 
   testWidgets('Accept on rent changes the rent only', (t) async {
     final wc = proposalWallet();
-    await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));
+    await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
     await tapKey(t, 'proposalAccept:rent');
     expect(wc.settings.rent, 60000);
     expect(wc.settings.salary, 150000);
@@ -91,7 +91,7 @@ void main() {
 
   testWidgets('Accept all writes every listed value in one change; the panel goes', (t) async {
     final wc = proposalWallet();
-    await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));
+    await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
     final before = wc.dataVersion;
     await tapKey(t, 'proposalAcceptAll');
     expect((wc.settings.salary, wc.settings.paydayDay, wc.settings.rent), (120000, 10, 60000));
@@ -103,7 +103,7 @@ void main() {
 
   testWidgets('accepting the last suggestion keeps what was typed in Budgets', (t) async {
     final wc = proposalWallet();
-    await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));
+    await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
     final field = find.byKey(const ValueKey('budget:Groceries'));
     await t.ensureVisible(field);
     await t.enterText(field, '123');
@@ -117,7 +117,7 @@ void main() {
 
   testWidgets('Not now hides the row without writing; it comes back when the suggested value changes', (t) async {
     final wc = proposalWallet();
-    await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));
+    await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
     final before = wc.dataVersion;
     await tapKey(t, 'proposalLater:salary');
     expect(find.byKey(const ValueKey('proposal:salary')), findsNothing);
@@ -146,7 +146,7 @@ void main() {
     wc.repo.updateSettings({'salary': 120000, 'paydayDay': 10, 'rent': 60000});
     wc.reload();
     expect(wc.planProposalList(), isEmpty);
-    await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));
+    await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
     expect(find.byKey(const ValueKey('planSuggestions')), findsNothing);
     expect(find.text('SUGGESTIONS FROM YOUR IMPORTS'), findsNothing);
     await settle(t);
@@ -154,7 +154,7 @@ void main() {
 
   testWidgets('no panel in an empty wallet', (t) async {
     final wc = emptyWallet();
-    await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));
+    await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
     expect(find.byKey(const ValueKey('planSuggestions')), findsNothing);
     await settle(t);
   });
@@ -162,7 +162,7 @@ void main() {
   for (final (w, s) in [(320.0, 2.0), (360.0, 1.0), (1280.0, 1.0)]) {
     testWidgets('fits at ${w.toInt()} dp, text ${s}x, with 48 dp buttons', (t) async {
       final wc = proposalWallet();
-      await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: Size(w, 6000), textScale: s);
+      await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: Size(w, 6000), textScale: s);
       expect(t.takeException(), isNull);
       for (final k in ['proposalAccept:salary', 'proposalLater:salary', 'proposalAcceptAll']) {
         expect(t.getSize(find.byKey(ValueKey(k))).height, greaterThanOrEqualTo(48), reason: k);

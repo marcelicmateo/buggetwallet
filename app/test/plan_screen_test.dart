@@ -1,8 +1,8 @@
 // Plan screen: the numbers form. All data is SYNTHETIC.
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 Finder _field(String label) => find.widgetWithText(TextField, label);
@@ -23,7 +23,7 @@ Future<void> _save(WidgetTester tester) async {
 void main() {
   testWidgets('rent cash threshold is editable in Plan and changes categorisation', (tester) async {
     final wc = demoWallet();
-    await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)));
+    await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)));
     await openPlanEdit(tester);
     expect(wc.txs.where((t) => t.amount == -55000).single.category, 'Rent');
     final f = _field('Cash withdrawal counts as rent from');
@@ -40,7 +40,7 @@ void main() {
 
     testWidgets('a setting changed by sync shows in its field', (tester) async {
       final wc = demoWallet();
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)));
       await openPlanEdit(tester);
       expect(text(tester, 'Rent'), '550');
       remoteSetting(wc, 'rent', 61000);
@@ -50,7 +50,7 @@ void main() {
 
     testWidgets('editing one field and saving keeps settings changed elsewhere', (tester) async {
       final wc = demoWallet();
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)));
       await openPlanEdit(tester);
       remoteSetting(wc, 'rent', 61000); // another device
       wc.updateSettings({'subs': 2500, 'coolHours': 48}); // another screen
@@ -67,7 +67,7 @@ void main() {
 
     testWidgets('an edit in progress is not overwritten by sync, and Save writes only that field', (tester) async {
       final wc = demoWallet();
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)));
       await openPlanEdit(tester);
       await tester.enterText(_field('Rent'), '570');
       remoteSetting(wc, 'rent', 61000);
@@ -83,7 +83,7 @@ void main() {
 
     testWidgets('Save with nothing edited writes nothing', (tester) async {
       final wc = demoWallet();
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)));
       await openPlanEdit(tester);
       final before = wc.repo.pendingOps().length;
       await _tapSave(tester);
@@ -98,7 +98,7 @@ void main() {
     for (final input in ['-1', '-72', ' -5 ']) {
       testWidgets('"$input" shows a message and saves nothing', (tester) async {
         final wc = demoWallet();
-        await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)));
+        await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)));
         await openPlanEdit(tester);
         final before = wc.repo.pendingOps().length;
         await tester.enterText(_field('Wait (hours)'), input);
@@ -116,7 +116,7 @@ void main() {
 
     testWidgets('fixing the value clears the error and saves', (tester) async {
       final wc = demoWallet();
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)));
       await openPlanEdit(tester);
       await tester.enterText(_field('Wait (hours)'), '-3');
       await _tapSave(tester);

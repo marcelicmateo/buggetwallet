@@ -54,7 +54,8 @@ class _WelcomeBalanceSheetState extends State<WelcomeBalanceSheet> {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const Heading('How much cash do you have right now?', key: ValueKey('welcomeHeading')),
       const SizedBox(height: 6),
-      const Muted('Optional. It starts a Cash account, so the app can show what you hold. You can add or change accounts later in Plan.'),
+      const Muted(
+          'Optional. It starts a Cash account, so the app can show what you hold. You can add or change accounts later in Settings.'),
       const SizedBox(height: 12),
       MoneyField(
         fieldKey: const ValueKey('welcomeCash'),

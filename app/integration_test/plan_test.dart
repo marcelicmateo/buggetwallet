@@ -3,8 +3,11 @@
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/logging.dart';
+import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/diagnostics.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
+import 'package:budget_wallet/src/screens/spending.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,12 +18,13 @@ import 'package:wallet_importer/wallet_importer.dart';
 import 'demo_data.dart';
 import 'support/harness.dart';
 
-Finder inPlan(Finder f) => find.descendant(of: find.byType(PlanScreen), matching: f);
+/// The payday plan sits on the Budget tab.
+Finder inPlan(Finder f) => find.descendant(of: find.byType(SpendingScreen), matching: f);
 String fieldText(WidgetTester t, String label) => t.widget<TextField>(inPlan(field(label))).controller!.text;
 
 /// Payday plan lists the ledger lines until Edit is tapped (then it has the fields); no-op when the fields are already showing.
 Future<void> edit(WidgetTester t) async {
-  await scrollTo(t, find.text('PAYDAY PLAN'), PlanScreen, delta: -250);
+  await scrollTo(t, find.text('PAYDAY PLAN'), SpendingScreen, delta: -250);
   final button = inPlan(find.byKey(const ValueKey('planEdit')));
   if (button.evaluate().isEmpty) return;
   await tapVisible(t, button);
@@ -30,14 +34,14 @@ Future<void> edit(WidgetTester t) async {
 Future<void> fill(WidgetTester t, Map<String, String> values) async {
   await edit(t);
   for (final e in values.entries) {
-    await scrollTo(t, inPlan(field(e.key)), PlanScreen);
+    await scrollTo(t, inPlan(field(e.key)), SpendingScreen);
     await t.enterText(inPlan(field(e.key)), e.value);
   }
   await t.pumpAndSettle();
 }
 
 Future<void> save(WidgetTester t) async {
-  await scrollTo(t, find.byKey(const ValueKey('planSave')), PlanScreen);
+  await scrollTo(t, find.byKey(const ValueKey('planSave')), SpendingScreen);
   await tapVisible(t, find.byKey(const ValueKey('planSave')));
   await t.pumpAndSettle();
 }
@@ -52,9 +56,9 @@ void main() {
   Harness.init();
   Harness.private(cents: [250000, 60050, 25000, 4599, 8000, 70000, 40000, 260000, 123456, 7500]);
 
-  itest('Plan numbers: bad input is refused, good input is saved and used everywhere', (t) async {
+  itest('Payday plan numbers: bad input is refused, good input is saved and used everywhere', (t) async {
     final wc = await Harness.start(t);
-    await goTab(t, 'Plan');
+    await goTab(t, 'Budget');
     await fill(t, {'Salary per month': '2500', 'Rent': '600,50', 'Loan': 'abc'});
     await save(t);
     expect(find.text('Enter an amount, like 12.50.'), findsOneWidget);
@@ -88,15 +92,15 @@ void main() {
     final p = wc.period();
     // 2500 - 600.50 - 250 - 45.99 - 200 (default goals) = 1403.51
     expect(p.flexBudget, 140351);
-    await scrollTo(t, find.text('PAYDAY PLAN'), PlanScreen, delta: -250);
+    await scrollTo(t, find.text('PAYDAY PLAN'), SpendingScreen, delta: -250);
     expect(find.text('${moneyExact(140351, 'EUR')} to spend · ${moneyExact(p.planDaily, 'EUR')}/day'), findsOneWidget);
-    await goTab(t, 'Wishlist');
+    await goTab(t, 'Save');
     expect(find.text('Anything over 80\u00A0€ waits 48 hours on the wishlist first.'), findsOneWidget);
     await goTab(t, 'Today');
     expect(find.textContaining('Planning on'), findsNothing);
 
     // A wait below zero is refused like the other numbers; nothing is saved.
-    await goTab(t, 'Plan');
+    await goTab(t, 'Budget');
     await fill(t, {'Wait (hours)': '-3', 'Bills & subs': '50'});
     await save(t);
     expect(find.text("Wait (hours) can't be negative."), findsOneWidget);
@@ -109,7 +113,7 @@ void main() {
 
     // Currency.
     await edit(t);
-    await scrollTo(t, inPlan(find.byType(DropdownButtonFormField<String>)), PlanScreen);
+    await scrollTo(t, inPlan(find.byType(DropdownButtonFormField<String>)), SpendingScreen);
     await pickDropdown(t, inPlan(find.byType(DropdownButtonFormField<String>)), 'USD');
     await save(t);
     expect(wc.settings.currency, 'USD');
@@ -120,9 +124,9 @@ void main() {
     // A change from elsewhere (sync from another device, "Looks right" on Today) while Plan is open.
     wc.updateSettings({'rent': 70000});
     await t.pumpAndSettle();
-    await goTab(t, 'Plan');
+    await goTab(t, 'Budget');
     await edit(t);
-    await scrollTo(t, inPlan(field('Rent')), PlanScreen);
+    await scrollTo(t, inPlan(field('Rent')), SpendingScreen);
     expect(fieldText(t, 'Rent'), '700', reason: 'Plan fields follow changes made elsewhere');
     await save(t);
     expect(find.text('Nothing to save'), findsOneWidget);
@@ -148,10 +152,10 @@ void main() {
         batch: demoBatch(today), settings: {'salary': 100000, 'salaryConfirmed': true, 'paydayDay': 15, 'rent': 0, 'loan': 0});
     await wc.addAccount(name: 'Bank 1', source: 'pbz', currency: 'EUR', opening: 123456, openingDate: addDays(today, -30));
     final cash = await wc.addAccount(name: 'Cash', currency: 'EUR', opening: 7500, openingDate: addDays(today, -30));
-    await goTab(t, 'Plan');
+    await goTab(t, 'Budget');
 
     // Suggestions from the imports: nothing is written until a tap; Not now hides one, Accept writes one key.
-    await scrollTo(t, find.text('SUGGESTIONS FROM YOUR IMPORTS'), PlanScreen);
+    await scrollTo(t, find.text('SUGGESTIONS FROM YOUR IMPORTS'), SpendingScreen);
     expect(find.byKey(const ValueKey('proposal:salary')), findsOneWidget);
     expect(find.byKey(const ValueKey('proposal:paydayDay')), findsOneWidget);
     expect(wc.settings.salary, 100000);
@@ -165,7 +169,8 @@ void main() {
     expect(wc.settings.paydayDay, 10);
 
     // Accounts: balances, correct, delete + Undo.
-    await scrollTo(t, find.byKey(const ValueKey('accountAdd')), PlanScreen);
+    await goSettings(t, SettingsSection.accounts);
+    await scrollTo(t, find.byKey(const ValueKey('accountAdd')), SettingsScreen);
     expect(find.byKey(ValueKey('account:$cash')), findsOneWidget);
     await Harness.shot(t, 'plan-accounts');
     await tapVisible(t, find.byKey(ValueKey('accountCorrect:$cash')));
@@ -192,8 +197,8 @@ void main() {
     final wc = await Harness.start(t, batch: demoBatch(today), settings: {'salary': 100000, 'salaryConfirmed': true, 'paydayDay': 15});
     final pets = await wc.addOwnCategory(name: 'Pets', kind: BudgetKind.flex);
     final vet = await wc.addOwnCategory(name: 'Vet', kind: BudgetKind.flex);
-    await goTab(t, 'Plan');
-    await scrollTo(t, find.byKey(const ValueKey('categoryAdd')), PlanScreen);
+    await goSettings(t, SettingsSection.tags);
+    await scrollTo(t, find.byKey(const ValueKey('categoryAdd')), SettingsScreen);
     expect(find.byKey(ValueKey('category:$pets')), findsOneWidget);
     expect(find.byKey(ValueKey('category:$vet')), findsOneWidget);
     await Harness.shot(t, 'plan-categories');
@@ -216,7 +221,7 @@ void main() {
     // Plan › Tags: add a tag, see it in the list, rename it, delete it with Undo.
     final tag = await wc.addTag('Holiday');
     await t.pumpAndSettle();
-    await scrollTo(t, find.byKey(ValueKey('tag:$tag')), PlanScreen);
+    await scrollTo(t, find.byKey(ValueKey('tag:$tag')), SettingsScreen);
     await Harness.shot(t, 'plan-tags');
     await tapVisible(t, find.byKey(ValueKey('tagMenu:$tag')));
     await t.pumpAndSettle();
@@ -235,8 +240,8 @@ void main() {
     wc.repo.setMerchantPattern('Shopping', 'webshop', match: 'contains', minCents: 1200, maxCents: 3000);
     wc.repo.setMerchantPattern('Cash', r'^atm\b');
     wc.reload();
-    await goTab(t, 'Plan');
-    await scrollTo(t, find.byKey(const ValueKey('rulesAdd')), PlanScreen);
+    await goSettings(t, SettingsSection.rules);
+    await scrollTo(t, find.byKey(const ValueKey('rulesAdd')), SettingsScreen);
     final id = wc.settings.patternRules.first.id;
     expect(find.byKey(ValueKey('rule:$id')), findsOneWidget);
     await Harness.shot(t, 'plan-rules');
@@ -294,8 +299,8 @@ void main() {
     wc.repo.importBill(
         NormalizedBill(source: BillSource.manual, externalId: 'gym-slip', date: on(2), total: 3050, payee: 'POS SYNTHGYM ZAGREB'));
     wc.reload();
-    await goTab(t, 'Plan');
-    await scrollTo(t, find.byKey(ValueKey('billHistory_${bill.id}')), PlanScreen);
+    await goTab(t, 'Bills');
+    await scrollTo(t, find.byKey(ValueKey('billHistory_${bill.id}')), BillsScreen);
     await Harness.shot(t, 'plan-bill-row');
     await tapVisible(t, find.byKey(ValueKey('billHistory_${bill.id}')));
     await t.pumpAndSettle();
@@ -312,9 +317,9 @@ void main() {
   itest('Start new month from Plan: cancel, today, another day', (t) async {
     final today = todayIso();
     final wc = await Harness.start(t, settings: {'salary': 200000, 'salaryConfirmed': true, 'periodStart': addDays(today, -10)});
-    await goTab(t, 'Plan');
+    await goSettings(t, SettingsSection.month);
     final button = find.text('Salary landed: start new month');
-    await scrollTo(t, button, PlanScreen);
+    await scrollTo(t, button, SettingsScreen);
     await tapVisible(t, button);
     await t.pumpAndSettle();
     expect(find.byType(DatePickerDialog), findsOneWidget);
@@ -349,10 +354,10 @@ void main() {
     final wc = await Harness.start(t);
     final key = await wc.keyText();
     Harness.private(texts: ['it-relay.local']);
-    await goTab(t, 'Plan');
+    await goSettings(t, SettingsSection.diagnostics);
 
     // Log level.
-    await scrollTo(t, find.text('Clear logs'), PlanScreen);
+    await scrollTo(t, find.text('Clear logs'), SettingsScreen);
     expect(wc.logLevel, 'all');
     expect(logFilesValue(t), matches(RegExp(r'^\d+ · \d+ (B|KB|MB)$')));
     await tapVisible(t, find.text('Warnings'));
@@ -376,7 +381,8 @@ void main() {
     wc.syncRunner = (relay, k, repo) async =>
         SyncReport(0, 0, 0, caughtUp: true, devices: [SyncDevice('ab12f3', lastSeen: DateTime.now(), isThis: true)]);
     wc.healthCheck = (relay) async {};
-    await scrollTo(t, find.text('Test connection'), PlanScreen, delta: -250);
+    await settingsSection(t, SettingsSection.sync);
+    await scrollTo(t, find.text('Test connection'), SettingsScreen, delta: -250);
     final field = find.byKey(const ValueKey('relayAddress'));
     await t.enterText(field, 'gopher://nope');
     await tapVisible(t, find.text('Save address'));
@@ -400,7 +406,7 @@ void main() {
     expect(await AppLog.combined(), contains('sync.done {"trigger":"button"'));
 
     // Wallet key dialog and copy.
-    await scrollTo(t, find.text('Show wallet key'), PlanScreen);
+    await scrollTo(t, find.text('Show wallet key'), SettingsScreen);
     await tapVisible(t, find.text('Show wallet key'));
     await t.pumpAndSettle();
     // QR first (H10): the text shows only after "Show as text".
@@ -418,7 +424,8 @@ void main() {
     await Harness.checkLog();
 
     // Clear logs: one fresh file that starts with log.cleared.
-    await scrollTo(t, find.text('Clear logs'), PlanScreen);
+    await settingsSection(t, SettingsSection.diagnostics);
+    await scrollTo(t, find.text('Clear logs'), SettingsScreen);
     await tapVisible(t, find.text('Clear logs'));
     await waitFor(t, () => find.text('Logs cleared.').evaluate().isNotEmpty, what: 'logs cleared');
     final stats = await wc.logStats();

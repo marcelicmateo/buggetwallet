@@ -5,7 +5,7 @@ import 'package:budget_wallet/src/layout.dart';
 import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/screens/category_detail.dart';
 import 'package:budget_wallet/src/screens/insights.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
@@ -16,7 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'demo_data.dart';
 import 'support/harness.dart';
 
-const _tabs = ['Today', 'Spending', 'Wishlist', 'Goals', 'Plan'];
+const _tabs = ['Today', 'Budget', 'Bills', 'Save', 'Settings'];
 
 Future<void> _resize(WidgetTester t, Size s) async {
   t.view.physicalSize = s * t.view.devicePixelRatio;
@@ -50,8 +50,8 @@ void main() {
         await goTab(t, tab);
         await Harness.shot(t, '$name-${tab.toLowerCase()}');
       }
-      // Spending's transaction list is the right column on a wide window, below the charts otherwise.
-      await goTab(t, 'Spending');
+      // Budget's transaction list is the right column on a wide window, below the charts otherwise.
+      await goTab(t, 'Budget');
       expect(find.textContaining('All transactions in'), findsOneWidget);
       // Insights: four graphs with their range controls, then a category's detail on top of it
       await tapVisible(t, find.byKey(const ValueKey('insightsOpen')));
@@ -85,7 +85,7 @@ void main() {
     final wc = await Harness.start(t);
     wc.repo.importBatch(demoBatch(wc.today()));
     await _resize(t, const Size(1280, 800));
-    final plan = t.state(find.byType(PlanScreen, skipOffstage: false));
+    final plan = t.state(find.byType(SettingsScreen, skipOffstage: false));
     final spending = t.state(find.byType(SpendingScreen, skipOffstage: false));
 
     Future<void> ctrl(LogicalKeyboardKey k) async {
@@ -96,7 +96,7 @@ void main() {
     }
 
     await ctrl(LogicalKeyboardKey.digit5);
-    expect(find.byType(PlanScreen), findsOneWidget);
+    expect(find.byType(SettingsScreen), findsOneWidget);
     await ctrl(LogicalKeyboardKey.digit2);
     expect(find.byType(SpendingScreen), findsOneWidget);
     await ctrl(LogicalKeyboardKey.keyN);
@@ -107,7 +107,7 @@ void main() {
 
     for (final s in const [Size(360, 800), Size(800, 1280), Size(1920, 1080), Size(360, 800)]) {
       await _resize(t, s);
-      expect(identical(t.state(find.byType(PlanScreen, skipOffstage: false)), plan), isTrue, reason: 'Plan at $s');
+      expect(identical(t.state(find.byType(SettingsScreen, skipOffstage: false)), plan), isTrue, reason: 'Settings at $s');
       expect(identical(t.state(find.byType(SpendingScreen, skipOffstage: false)), spending), isTrue, reason: 'Spending at $s');
     }
     expect(find.byType(NavigationBar), findsOneWidget);

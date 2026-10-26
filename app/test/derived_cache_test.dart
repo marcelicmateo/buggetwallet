@@ -29,7 +29,7 @@ void main() {
     final wc = demoWallet();
     await pumpApp(t, HomeShell(wc: wc));
     final spending = t.widget<SpendingScreen>(find.byType(SpendingScreen, skipOffstage: false));
-    await t.tap(find.text('Spending').last);
+    await t.tap(find.text('Budget').last);
     await t.pump();
     expect(identical(t.widget<SpendingScreen>(find.byType(SpendingScreen)), spending), isTrue);
     expect(find.byType(TodayScreen), findsNothing);

@@ -4,12 +4,12 @@ import 'dart:typed_data';
 
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/screens/diagnostics.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 /// Stands in for the portal error; its text names a path, which must never reach the log.
@@ -54,7 +54,7 @@ void main() {
   testWidgets('Choose files: a failing chooser shows a message, logs the type only and keeps the button usable', (t) async {
     final wc = demoWallet();
     final chooser = FailingChooser();
-    await pumpApp(t, Scaffold(body: PlanScreen(wc: wc, chooser: chooser)));
+    await pumpApp(t, Scaffold(body: PlanPage(wc: wc, chooser: chooser)));
     await _tapKey(t, 'planImport');
     expect(chooser.calls, 1);
     expect(find.text(chooserFailedMessage), findsOneWidget);

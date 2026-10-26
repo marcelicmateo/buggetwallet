@@ -5,9 +5,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:budget_wallet/src/format.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -28,7 +29,7 @@ void main() {
 
   itest('PBZ .xls, Revolut .xlsx and .csv: result lines, transactions, re-import adds nothing', (t) async {
     final wc = await Harness.start(t);
-    await goTab(t, 'Plan');
+    await goSettings(t, SettingsSection.import);
     final files = [
       ('pbz_synthetic.xls', pbzXls),
       ('revolut_synthetic.xlsx', revolutXlsx),
@@ -49,7 +50,7 @@ void main() {
     expect(wc.txs, hasLength(416));
     expect(wc.repo.transactions(), hasLength(416));
 
-    await scrollTo(t, find.text('Import bank exports'), PlanScreen);
+    await scrollTo(t, find.text('Import bank exports'), SettingsScreen);
     for (final l in lines) {
       expect(status('${l.file}: ${l.message}'), findsOneWidget);
     }
@@ -118,7 +119,7 @@ void main() {
     expect(wc.period().spent, 2345 + 890 + 5499, reason: 'counted once; the top-up is a transfer, the pending row is skipped');
     expect(wc.txs.where((x) => x.tx.description == 'IKEA ZAGREB'), isEmpty);
 
-    await goTab(t, 'Spending');
+    await goTab(t, 'Budget');
     expect(find.text('${monthLong(monthOf(today))}: 87\u00A0€ out'), findsOneWidget);
     await scrollTo(t, find.text('Top places in ${monthLong(monthOf(today))}'), SpendingScreen);
     expect(find.widgetWithText(LineItem, 'DECATHLON ZAGREB'), findsOneWidget);

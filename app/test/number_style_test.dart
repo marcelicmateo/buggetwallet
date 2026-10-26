@@ -38,23 +38,23 @@ void main() {
       .textSpan!
       .toPlainText();
 
-  testWidgets('Plan › Look switches Today and Spending, and a new controller on the same repo keeps it', (tester) async {
+  testWidgets('Settings › Look switches Today and Budget, and a new controller on the same repo keeps it', (tester) async {
     final wc = wallet();
     await pumpFull(tester, wc, 1.0, size: const Size(400, 900));
     final before = hero(tester);
     expect(before, contains(','), reason: 'hero is grouped in the default style: $before');
     expect(before, isNot(contains('.')));
-    await tapTab(tester, 'Spending');
+    await tapTab(tester, 'Budget');
     expect(find.textContaining('1,234.56'), findsWidgets);
 
-    await tapTab(tester, 'Plan');
+    await tapTab(tester, 'Settings');
     expect(wc.numberStyleName, 'point');
     await pickStyle(tester, '1.234,50');
     expect(wc.numberStyleName, 'comma');
     expect(numberStyle, NumberStyle.comma);
     await tapTab(tester, 'Today');
     expect(hero(tester), before.replaceAll(',', '.'));
-    await tapTab(tester, 'Spending');
+    await tapTab(tester, 'Budget');
     expect(find.textContaining('1.234,56'), findsWidgets);
     expect(find.textContaining('1,234.56'), findsNothing);
 
@@ -65,7 +65,7 @@ void main() {
     expect(numberStyle, NumberStyle.comma);
 
     // Back to the default.
-    await tapTab(tester, 'Plan');
+    await tapTab(tester, 'Settings');
     await pickStyle(tester, '1,234.50');
     expect(wc.numberStyleName, 'point');
     await tapTab(tester, 'Today');

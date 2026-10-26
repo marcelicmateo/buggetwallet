@@ -47,7 +47,7 @@ Future<Set<String>> _tour(WidgetTester tester, WalletController wc, {Size size =
   }
 
   await scroll();
-  for (final tab in ['Spending', 'Wishlist', 'Goals', 'Plan', 'Today']) {
+  for (final tab in ['Budget', 'Bills', 'Save', 'Settings', 'Today']) {
     await tapTab(tester, tab);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
@@ -85,7 +85,7 @@ void main() {
     expect(_has(seen, 'No transactions yet'), isTrue);
     expect(_has(seen, 'No goals yet.'), isTrue);
     expect(_has(seen, 'Your wishlist is empty'), isTrue);
-    expect(_has(seen, 'Enter your monthly salary in Plan'), isTrue, reason: 'salary 0 asks for the number instead of dividing by it');
+    expect(_has(seen, 'Enter your monthly salary in Budget'), isTrue, reason: 'salary 0 asks for the number instead of dividing by it');
   });
 
   _scenario('one income transaction only', (wc) {

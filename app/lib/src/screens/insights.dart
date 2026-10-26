@@ -82,7 +82,7 @@ class InsightPanel extends StatelessWidget {
           ...body,
           if (foreign.isNotEmpty)
             ForeignNote(foreign, key: ValueKey('foreign_$id'), onSetRate: () {
-              Navigator.of(context).popUntil((r) => r.isFirst); // close Insights, then Plan opens at Currencies
+              Navigator.of(context).popUntil((r) => r.isFirst); // close Insights, then Settings opens at Currencies
               wc.openCurrencies();
             }),
         ]);
@@ -199,7 +199,7 @@ class InsightPanel extends StatelessWidget {
     final c = context.c;
     final bars = wc.budgetBars(r);
     if (bars.every((b) => b.budgeted == 0)) {
-      return const [EmptyNote('No budgets set. Add them in Plan.')];
+      return const [EmptyNote('No budgets set. Add them in Settings.')];
     }
     final now = monthOf(wc.today());
     String name(String m) => m == now ? '${monthLong(m)} · so far' : monthLong(m);

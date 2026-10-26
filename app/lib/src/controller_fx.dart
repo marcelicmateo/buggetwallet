@@ -37,11 +37,10 @@ extension FxDb on WalletController {
   CategorizedTx rawRow(CategorizedTx t) =>
       wholeTxs.where((w) => w.tx.id == t.tx.id).firstOrNull ?? (t.isPart ? categorizer.categorize(t.tx) : t);
 
-  /// Opens Plan at Currencies (from a "not counted" note).
+  /// Opens Settings at Currencies (from a "not counted" note).
   void openCurrencies() {
     logEvent(_fxLog, Level.INFO, 'fx.open');
-    openTab(4, via: 'foreignNote');
-    currenciesRequest.value++;
+    openSettings(SettingsSection.currencies, via: 'foreignNote');
   }
 
   /// Sets the rate of [code] ([rate] = wallet minor units per 1,000,000 minor units), dated today or [date] (an Undo). An [ArgumentError] carries core's text.

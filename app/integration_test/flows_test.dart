@@ -94,7 +94,7 @@ void main() {
     expect(find.widgetWithText(TxTile, 'added'), findsOneWidget);
     await Harness.shot(t, 'today-after-expense');
 
-    await goTab(t, 'Spending');
+    await goTab(t, 'Budget');
     expect(find.text('${monthLong(monthOf(today))}: 23\u00A0€ out'), findsOneWidget);
     await scrollTo(t, tile('−23.47\u00A0€'), SpendingScreen);
     expect(find.widgetWithText(TxTile, 'Lunch synthetic note'), findsOneWidget);
@@ -149,7 +149,7 @@ void main() {
     String cat(String id) => wc.txs.firstWhere((x) => x.tx.id == id).category;
     expect([for (final id in ids) cat(id)], ['Shopping', 'Shopping', 'Shopping', 'Groceries']);
 
-    await goTab(t, 'Spending');
+    await goTab(t, 'Budget');
     await scrollTo(t, tile('−19.99\u00A0€'), SpendingScreen);
     await tapVisible(t, tile('−19.99\u00A0€'));
     expect(find.byType(TxSheet), findsOneWidget);

@@ -5,9 +5,10 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/key_store.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/welcome_balance.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -69,8 +70,8 @@ void main() {
 
     // No salary yet: the banner asks for it and links to Plan.
     expect(find.text('Planning on 0\u00A0€ a month'), findsOneWidget);
-    expect(find.textContaining('Enter your monthly salary in Plan'), findsOneWidget);
-    await t.tap(find.text('Open Plan'));
+    expect(find.textContaining('Enter your monthly salary in Budget'), findsOneWidget);
+    await t.tap(find.text('Open Budget'));
     await t.pumpAndSettle();
     expect(find.text('PAYDAY PLAN'), findsOneWidget);
     await goTab(t, 'Today');
@@ -99,9 +100,9 @@ void main() {
     expect(wc.accountsAll(), isEmpty);
     expect(find.byKey(const ValueKey('heldLine')), findsNothing);
 
-    // Plan › Accounts adds it any time.
-    await goTab(t, 'Plan');
-    await scrollTo(t, find.byKey(const ValueKey('accountAdd')), PlanScreen);
+    // Settings › Accounts adds it any time.
+    await goSettings(t, SettingsSection.accounts);
+    await scrollTo(t, find.byKey(const ValueKey('accountAdd')), SettingsScreen);
     await t.tap(find.byKey(const ValueKey('accountAdd')));
     await t.pumpAndSettle();
     await t.enterText(find.byKey(const ValueKey('accountOpening')), '40');

@@ -13,7 +13,7 @@ import 'support/layout.dart';
 import 'support/wallet.dart';
 
 void main() {
-  const tabs = ['Today', 'Spending', 'Wishlist', 'Goals', 'Plan'];
+  const tabs = ['Today', 'Budget', 'Bills', 'Save', 'Settings'];
 
   group('add button', () {
     for (final tab in tabs) {
@@ -53,11 +53,11 @@ void main() {
   });
 
   group('theme mode', () {
-    testWidgets('Plan › Look switches to dark and back, kept as a device-local value', (tester) async {
+    testWidgets('Settings › Look switches to dark and back, kept as a device-local value', (tester) async {
       final wc = demoWallet();
       await pumpFull(tester, wc, 1.0);
       expect(wc.themeModeName, 'system');
-      await tapTab(tester, 'Plan');
+      await tapTab(tester, 'Settings');
       final seg = find.byKey(const ValueKey('themeMode'));
       await tester.scrollUntilVisible(seg, 400, scrollable: find.byType(Scrollable).hitTestable().first);
       await Scrollable.ensureVisible(tester.element(seg), alignment: 0.5); // clear of the bottom bar

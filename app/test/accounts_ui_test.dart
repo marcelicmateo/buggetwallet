@@ -5,7 +5,6 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/accounts_panel.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/welcome_balance.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 final day = DateTime(2026, 10, 20, 12);
@@ -348,7 +348,7 @@ void main() {
   testWidgets('Plan holds the Accounts panel', (t) async {
     final wc = wallet();
     await seed(wc);
-    await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 6000));
+    await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
     expect(find.text('ACCOUNTS'), findsOneWidget);
     await settle(t);
   });

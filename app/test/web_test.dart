@@ -12,7 +12,6 @@ import 'package:budget_wallet/src/screens/backup_panel.dart';
 import 'package:budget_wallet/src/screens/diagnostics.dart';
 import 'package:budget_wallet/src/screens/in_use.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/unlock.dart';
 import 'package:budget_wallet/src/wallet_db.dart';
 import 'package:file_picker/file_picker.dart';
@@ -21,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/layout.dart';
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 /// Throws any object (the fakes hold errors of every kind).
@@ -441,7 +441,7 @@ void main() {
   group('Plan on the web', () {
     Future<void> pumpPlan(WidgetTester t, WalletController wc,
             {FakeChooser? chooser, Size size = const Size(400, 10500), double scale = 1}) =>
-        pumpApp(t, Scaffold(body: PlanScreen(wc: wc, chooser: chooser ?? FakeChooser())), size: size, textScale: scale);
+        pumpApp(t, Scaffold(body: PlanPage(wc: wc, chooser: chooser ?? FakeChooser())), size: size, textScale: scale);
 
     webTest('Sync (relay) is there, Nudges are not; Backup, Export, Diagnostics and This browser stay', (t) async {
       final w = webWallet(full: true);

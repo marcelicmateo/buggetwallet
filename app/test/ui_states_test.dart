@@ -4,11 +4,11 @@ import 'package:budget_wallet/src/clock_notice.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/backup_panel.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/sync_panel.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/wishlist.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +18,7 @@ import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart' show ImportBatch;
 
 import 'support/layout.dart' show pumpFull, tapTab;
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 Finder key(String k) => find.byKey(ValueKey(k));
@@ -96,7 +97,7 @@ void main() {
       wc.repo.updateSettings({'rent': 90000, 'loan': 30000});
       wc.reload();
       expect(wc.period().flexBudget < 0, isTrue);
-      await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 4000));
+      await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
       final row = find.descendant(of: key('ledgerSpendingMoney'), matching: find.byType(Text));
       final texts = t.widgetList<Text>(row).map((w) => w.data ?? '').join(' ');
       expect(texts, contains('Over by'));
@@ -112,7 +113,7 @@ void main() {
       wc.repo.updateSettings({'rent': 1050, 'loan': 2050});
       wc.addPlannedCost(title: 'Dentist', date: '2026-10-25', amount: 3333);
       wc.reload();
-      await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 4000));
+      await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
       expect(key('ledgerSetAside'), findsOneWidget, reason: 'precondition: a coming cost is set aside');
       String value(Finder row) =>
           t.widgetList<Text>(find.descendant(of: row, matching: find.byType(Text))).map((w) => w.data ?? '').toList().last;
@@ -137,7 +138,7 @@ void main() {
       wc.reload();
       final p = wc.period();
       expect(p.flexBudget > 0 && p.planDaily == 0, isTrue, reason: 'precondition: ${p.flexBudget} cents, ${p.planDaily}/day');
-      await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 4000));
+      await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
       final h = textOf(t, 'planHeading');
       expect(h, contains('0.10'));
       expect(h, isNot(contains('over')));
@@ -169,7 +170,7 @@ void main() {
     testWidgets('at 320 dp and text scale 2 the Skip button keeps a readable width (the amount no longer squeezes it)', (t) async {
       final wc = habitsWallet(confirmBill: true);
       await pumpFull(t, wc, 2.0);
-      await tapTab(t, 'Plan');
+      await tapTab(t, 'Bills');
       final skip = find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key! as ValueKey).value}'.startsWith('skip:'));
       await t.dragUntilVisible(skip, find.byType(Scrollable).first, const Offset(0, -300));
       expect(t.getSize(skip).width, greaterThan(120), reason: 'the label "Skip this cycle" must not wrap letter by letter');
@@ -294,7 +295,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 400));
       await t.tap(key('toastAction'));
       await t.pump();
-      expect(opened, 2);
+      expect(opened, Tabs.save);
       expect(wc.highlightWish.value, wc.wish.single.id);
       await t.pump(const Duration(seconds: 4));
     });

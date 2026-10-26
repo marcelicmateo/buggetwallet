@@ -21,10 +21,13 @@ class SpendingScreen extends StatefulWidget {
   /// Counts the Ctrl+F presses; the search view opens on each.
   final Listenable? searchRequest;
 
-  /// Jumps to a tab (a goal or wish found by the search); [openBills] goes to Plan › Expected bills.
+  /// Jumps to a tab (a goal or wish found by the search, see `Tabs`); [openBills] goes to the Bills tab.
   final void Function(int tab)? openTab;
   final VoidCallback? openBills;
-  const SpendingScreen({super.key, required this.wc, this.searchRequest, this.openTab, this.openBills});
+
+  /// Panels above everything else (the Budget tab puts the payday plan here).
+  final List<Widget> header;
+  const SpendingScreen({super.key, required this.wc, this.searchRequest, this.openTab, this.openBills, this.header = const []});
   @override
   State<SpendingScreen> createState() => _SpendingScreenState();
 }
@@ -115,6 +118,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
         ),
       ]),
       TwoCol(left: [
+        ...widget.header,
         Panel(children: [
           const Eyebrow('Saving or losing'),
           if (periods.isEmpty) ...[
