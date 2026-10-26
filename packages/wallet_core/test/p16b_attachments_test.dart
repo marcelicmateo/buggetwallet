@@ -243,14 +243,14 @@ void main() {
       expect(r.bill(billId)!.linkedTx, isNull);
       expect(r.bill(att)!.attachedTx, tx, reason: 'an attachment stays on its payment');
       expect((r.bill(att)!.deleted, r.hasCachedBlob(f.hash)), (false, true), reason: 'kept');
-      expect(r.liveBlobHashes(), isEmpty, reason: 'a deleted payment\'s attachments are not declared');
-      expect(r.backupBlobCandidates(), isEmpty, reason: 'nor backed up');
+      expect(r.liveBlobHashes(), [f.hash], reason: 'a deleted payment\'s attachments stay declared (relay GC must not drop them)');
+      expect(r.backupBlobCandidates().map((e) => e.$1), [f.hash], reason: 'and backed up');
       r.importBatch(rows([n('2026-03-07', -100, 'POS', 'SYNTHETIC KIOSK')])); // _autoLinkBills' unlink of deleted rows
       expect(r.bill(att)!.attachedTx, tx);
       r.undeleteTransaction(tx);
       expect(r.bill(billId)!.linkedTx, tx);
       expect(r.attachments(tx).single.id, att);
-      expect(r.liveBlobHashes(), [f.hash], reason: 'the restored payment brings them back');
+      expect(r.liveBlobHashes(), [f.hash], reason: 'still declared after the undelete');
       expect(r.backupBlobCandidates().map((e) => e.$1), [f.hash]);
     });
 
@@ -343,6 +343,28 @@ void main() {
       r.restoreAttachment(id);
       expect(r.liveBlobHashes(), [f.hash]);
       expect(r.pendingBlobRefs(), {f.hash}, reason: 'the undelete op references the file again');
+    });
+
+    test('regression: a deleted payment\'s attachment stays declared on the relay through GC; undelete finds the file', () async {
+      final (r, tx) = withPayment();
+      final f = await file(r);
+      final id = r.addAttachment(tx, f);
+      await run(r);
+      r.deleteTransaction(tx);
+      for (var i = 0; i < 3; i++) {
+        now = now.add(const Duration(days: 20));
+        r.updateSettings({'returnReminderDays': 2 + i});
+        await run(r);
+        expect(relay.declared.values.last, contains(f.hash));
+      }
+      expect(relay.gcRuns, greaterThan(0), reason: 'GC ran with the file past its 30 days');
+      expect(relay.blobs.keys, contains(f.hash), reason: 'never collected while its row is live');
+      r.undeleteTransaction(tx);
+      expect(r.attachments(tx).single.id, id);
+      expect(r.liveBlobHashes(), [f.hash]);
+      final other = mk();
+      await run(other);
+      expect(await BlobStore(other, key).read(f.hash, transport: relay), isNotNull, reason: 'the file is still on the relay');
     });
 
     test('goes into a backup and comes back on restore with its file', () async {

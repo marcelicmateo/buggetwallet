@@ -428,8 +428,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (`_moveMatchedAttachments` in `_reconcile` after matching, cap not checked); they stay there if the match reopens. Invisible elsewhere: `bills()` (unless `includeAttachments`), the bill calls (`_liveBill` refuses
   them), `planBillLinks`/`billCandidates` (neither link nor take a row), the one-bill-per-payment repair, the
   deleted-payment unlink (they stay on the payment), `_billWrites` (no planned row), search, upcoming reminders, bill
-  history. Live ones stay in `liveBlobHashes`/`backupBlobCandidates` while their payment is a live row here (a deleted
-  payment's are kept but neither declared nor backed up; an undelete brings them back). Tests: `test/p16b_attachments_test.dart`.
+  history. Every live attachment stays in `liveBlobHashes`/`backupBlobCandidates`, also while its payment is deleted
+  (the relay's 30 days count from upload, and an undelete of the payment re-uploads nothing). Tests: `test/p16b_attachments_test.dart`.
   `BlobStore(repo, key, maxCacheBytes:)`:
   `add` (async: seal, hash = SHA-256 of the sealed bytes, cached with `uploaded` 0), `read(hash, transport:)` (cache, else
   fetch, hash checked, unsealed, cached as uploaded). **P14 (schema 15, `docs/context/P14_SPEC.md`):** one device-local
@@ -701,8 +701,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   can leave more than 5 live after a merge (all kept, never deleted; no add or restore until the payment is below 5).
   Builds before P16b read `source: attachment` as `manual` and ignore `attached_tx`: they list an attachment as a
   confirmed, unpaid bill without a link (Bills › Unpaid; never reserved: no due date; never auto-linked: no link token;
-  it never touches a real bill's link) until they upgrade; the owner could link it by hand there. A payment deleted for
-  over 30 days whose attachments the relay's GC collected gets them back on undelete only from a device cache.
+  it never touches a real bill's link) until they upgrade; the owner could link it by hand there. A deleted payment's
+  attachments keep their files on the relay and in backups (counted in the 16 MB backup budget) until the attachment
+  itself is removed.
 - Rules (P7, no schema bump): a build before P7 reads a `contains` pattern as a regex and ignores its amount range, so
   it can categorize differently (text only) until it upgrades. A deleted pattern's tombstone keeps no order: Undo
   (set again) puts it last. A text rename (new row + tombstone of the old one) on one device and an edit of the same
