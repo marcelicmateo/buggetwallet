@@ -2,15 +2,17 @@
 // behind them. All data is SYNTHETIC (habitsWallet: Tuesday 20 Oct 2026).
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/layout.dart';
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 /// The synthetic habits wallet, closed when the test ends (a pending sync timer would fail it).
@@ -212,7 +214,7 @@ void main() {
     });
 
     tw('Plan: covered and overdue are written on the bill rows', (tester) async {
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wallet())), size: const Size(400, 4000));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wallet())), size: const Size(400, 4000));
       expect(find.text('Covered by your plan'), findsOneWidget);
       expect(find.textContaining('Overdue'), findsOneWidget);
       expect(find.byIcon(Icons.error_outline), findsWidgets);
@@ -349,7 +351,7 @@ void main() {
 
   group('Plan', () {
     Future<void> plan(WidgetTester tester, WalletController wc, {Size size = const Size(400, 8000), double scale = 1}) =>
-        pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: size, textScale: scale);
+        pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
 
     tw('review day chips: Sunday selected, a tap changes the day', (tester) async {
       final wc = hw();
@@ -454,15 +456,16 @@ void main() {
       expect(find.text('Reminders work in the phone app.'), findsOneWidget);
     });
 
-    tw('Today\'s bills line scrolls Plan to Expected bills', (tester) async {
+    tw('a link to Expected bills scrolls the Bills tab there', (tester) async {
       final wc = hw();
-      final notifier = ValueNotifier<int>(0);
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc, showBills: notifier)), size: const Size(400, 500));
-      notifier.value++;
+      final request = JumpRequest<BillsAnchor>();
+      addTearDown(request.dispose);
+      await pumpApp(tester, Scaffold(body: BillsScreen(wc: wc, request: request)), size: const Size(400, 500));
+      request.request(BillsAnchor.expected);
       for (var i = 0; i < 12; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      expect(find.text('EXPECTED BILLS'), findsOneWidget, reason: 'the page moved down until the panel was built');
+      expect(find.text('EXPECTED BILLS'), findsOneWidget);
       expect(tester.getTopLeft(find.text('EXPECTED BILLS')).dy, lessThan(300));
       expect(tester.takeException(), isNull);
     });
@@ -495,7 +498,7 @@ void main() {
       tw('$name: Plan with the review day, expected bills and nudges', (tester) async {
         final errors = Errors();
         final wc = hw(confirmBill: true, nudges: FakeNudges());
-        await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: size, textScale: scale);
+        await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
         await scrollThrough(tester);
         errors.check();
       });

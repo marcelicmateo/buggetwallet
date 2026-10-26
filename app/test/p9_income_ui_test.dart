@@ -5,13 +5,15 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 NormalizedTransaction payout(String date, int cents) => syntheticTx(date, cents, 'Ostalo', 'Quorvant Payout 2026');
@@ -45,7 +47,7 @@ void tw(String name, Future<void> Function(WidgetTester tester) body) => testWid
     }, timeout: const Timeout(Duration(seconds: 60)));
 
 Future<void> plan(WidgetTester tester, WalletController wc, {Size size = const Size(400, 1400), double scale = 1}) =>
-    pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: size, textScale: scale);
+    pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
 
 Future<void> todayPage(WidgetTester tester, WalletController wc,
         {Size size = const Size(400, 1600), double scale = 1, VoidCallback? openIncome}) =>
@@ -167,8 +169,9 @@ void main() {
       expect(find.byKey(const ValueKey('recurringSheet')), findsNothing);
       expect(find.text('Add income'), findsWidgets);
       expect(find.byKey(const ValueKey('recurringEnds')), findsNothing);
-      expect(find.textContaining('set aside'), findsNothing);
-      expect(find.textContaining('Held'), findsNothing);
+      final sheet = find.byKey(const ValueKey('incomeSheet'));
+      expect(find.descendant(of: sheet, matching: find.textContaining('set aside')), findsNothing);
+      expect(find.descendant(of: sheet, matching: find.textContaining('Held')), findsNothing);
       // Main tags: only kind extra.
       await tapKey(tester, 'recurringCategory');
       await tester.pump(const Duration(milliseconds: 300));
@@ -346,13 +349,11 @@ void main() {
           find.descendant(of: find.byKey(const ValueKey('expectedIncomeLine')), matching: find.byIcon(Icons.chevron_right)), findsNothing);
     });
 
-    tw('Plan scrolls to Expected income when asked (the notifier the line uses)', (tester) async {
+    tw('Settings scrolls to Expected income when asked (what the line uses)', (tester) async {
       final wc = incomeWallet(confirm: true);
-      final request = ValueNotifier<int>(0);
-      addTearDown(request.dispose);
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc, showIncome: request)), size: const Size(400, 700));
+      await pumpApp(tester, Scaffold(body: SettingsScreen(wc: wc)), size: const Size(400, 700));
       expect(find.byKey(const ValueKey('expectedIncomePanel')), findsNothing);
-      request.value++;
+      wc.openSettings(SettingsSection.income);
       for (var i = 0; i < 40 && find.byKey(const ValueKey('expectedIncomePanel')).evaluate().isEmpty; i++) {
         await tester.pump(const Duration(milliseconds: 300));
       }

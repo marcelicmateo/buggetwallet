@@ -176,7 +176,7 @@ class _ExplainerState extends State<Explainer> {
 
 /// One muted line "Other currencies, not counted: 12 $ spent" for rows in a currency other than the wallet's (they are in no total).
 /// Nothing when [byCurrency] is empty. Signed cents by currency code, never rounded. Core lists only the currencies without
-/// an owner-set rate (P15); with [onSetRate] a second line "Set a rate in Plan › Currencies" (`foreignSetRate`) is a tap.
+/// an owner-set rate (P15); with [onSetRate] a second line "Set a rate in Settings › Accounts" (`foreignSetRate`) is a tap.
 class ForeignNote extends StatelessWidget {
   final Map<String, int> byCurrency;
   final VoidCallback? onSetRate;
@@ -199,7 +199,7 @@ class ForeignNote extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 44),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: Text('Set a rate in Plan › Currencies',
+            child: Text('Set a rate in Settings › Accounts',
                 style: TextStyle(fontSize: BwType.metaSize, color: context.c.accent, decoration: TextDecoration.underline)),
           ),
         ),

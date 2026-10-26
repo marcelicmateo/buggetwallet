@@ -6,7 +6,6 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/bill_history.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/recurring_sheet.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +14,7 @@ import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/layout.dart';
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 WalletController hw() {
@@ -41,7 +41,7 @@ void tw(String name, Future<void> Function(WidgetTester tester) body) => testWid
     });
 
 Future<void> plan(WidgetTester tester, WalletController wc, {Size size = const Size(400, 1400), double scale = 1}) =>
-    pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: size, textScale: scale);
+    pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
 
 Future<void> see(WidgetTester tester, Finder f) async {
   await tester.scrollUntilVisible(f, 300, scrollable: find.byType(Scrollable).first);
@@ -595,7 +595,7 @@ void main() {
             intervalDays: 7,
             firstDue: '2026-10-21',
             instalments: 12);
-        await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: size, textScale: scale);
+        await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
         await scrollThrough(tester);
         errors.check();
       });
@@ -603,7 +603,7 @@ void main() {
       tw('$name: the add sheet with the range and instalments open', (tester) async {
         final errors = Errors();
         final wc = hw();
-        await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: size, textScale: scale);
+        await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
         await openAdd(tester);
         await tapKey(tester, 'recurringRange');
         await tapKey(tester, 'recurringEnds');

@@ -5,15 +5,16 @@ import 'dart:math';
 
 import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/screens/accounts_panel.dart';
+import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/category_detail.dart';
-import 'package:budget_wallet/src/screens/goals.dart';
 import 'package:budget_wallet/src/screens/insights.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:budget_wallet/src/screens/save.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
-import 'package:budget_wallet/src/screens/wishlist.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
@@ -128,24 +129,32 @@ void main() {
         await closeSheet(t, AddExpenseSheet);
 
         for (final (tab, screen) in [
-          ('Spending', SpendingScreen),
-          ('Wishlist', WishlistScreen),
-          ('Goals', GoalsScreen),
-          ('Plan', PlanScreen)
+          ('Budget', SpendingScreen),
+          ('Bills', BillsScreen),
+          ('Save', SaveScreen),
+          ('Settings', SettingsScreen)
         ]) {
           where = tab.toLowerCase();
           debugPrint('layout $name: $where');
           await goTab(t, tab);
-          if (tab == 'Wishlist') {
+          if (tab == 'Save') {
             await t.enterText(field('Price'), '120');
             await t.pumpAndSettle();
           }
-          await scrollThrough(t, screen, '$name-${tab.toLowerCase()}', shots: tab == 'Plan' ? 6 : 3);
+          await scrollThrough(t, screen, '$name-${tab.toLowerCase()}', shots: tab == 'Settings' ? 6 : 3);
+          // From two panes wide each Settings section has a page of its own: look at every one.
+          if (tab == 'Settings' && find.byKey(const ValueKey('settingsNav:accounts')).evaluate().isNotEmpty) {
+            for (final sec in SettingsSection.listed) {
+              await settingsSection(t, sec);
+              await scrollThrough(t, SettingsScreen, '$name-settings-${sec.name}', shots: 2);
+            }
+            await settingsSection(t, SettingsSection.accounts);
+          }
         }
 
         where = 'tx-sheet';
         debugPrint('layout $name: $where');
-        await goTab(t, 'Spending');
+        await goTab(t, 'Budget');
         await scrollTo(t, find.textContaining('All transactions in'), SpendingScreen);
         await scrollTo(t, find.descendant(of: find.byType(SpendingScreen), matching: find.byType(TxTile)).first, SpendingScreen);
         await tapVisible(t, find.descendant(of: find.byType(SpendingScreen), matching: find.byType(TxTile)).first);
@@ -154,8 +163,8 @@ void main() {
 
         where = 'insights';
         debugPrint('layout $name: $where');
-        await goTab(t, 'Spending');
-        // Spending is still scrolled down from the transaction sheet step: back up to the Insights button
+        await goTab(t, 'Budget');
+        // Budget is still scrolled down from the transaction sheet step: back up to the Insights button
         await scrollTo(t, find.byKey(const ValueKey('insightsOpen')), SpendingScreen, delta: -400);
         await tapVisible(t, find.byKey(const ValueKey('insightsOpen')));
         await scrollThrough(t, InsightsScreen, '$name-insights', shots: 6);
@@ -177,16 +186,16 @@ void main() {
 
         where = 'goal-sheet';
         debugPrint('layout $name: $where');
-        await goTab(t, 'Goals');
-        await scrollTo(t, find.text(longGoal), GoalsScreen);
+        await goTab(t, 'Save');
+        await scrollTo(t, find.text(longGoal), SaveScreen);
         await tapVisible(t, find.text(longGoal));
         await Harness.shot(t, '$name-sheet-goal');
         await closeSheet(t, GoalSheet);
 
         where = 'account-sheet';
         debugPrint('layout $name: $where');
-        await goTab(t, 'Plan');
-        await scrollTo(t, find.byKey(const ValueKey('accountAdd')), PlanScreen);
+        await goSettings(t, SettingsSection.accounts);
+        await scrollTo(t, find.byKey(const ValueKey('accountAdd')), SettingsScreen);
         await tapVisible(t, find.byKey(const ValueKey('accountAdd')));
         await Harness.shot(t, '$name-sheet-account');
         await closeSheet(t, AccountFormSheet);

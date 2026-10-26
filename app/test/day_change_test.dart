@@ -115,15 +115,15 @@ void main() {
     final clock = _Clock();
     final wc = _wallet(clock);
     await pumpApp(t, HomeShell(wc: wc));
-    await t.tap(find.text('Spending').last);
+    await t.tap(find.text('Budget').last);
     await t.pump();
     expect(find.textContaining('October 2026: '), findsOneWidget);
     expect(find.byType(SpendingScreen), findsOneWidget);
 
     clock.now = DateTime(2026, 11, 1, 0, 5); // midnight passes while the app is open: nothing notifies
-    await t.tap(find.text('Goals').last);
+    await t.tap(find.text('Save').last);
     await t.pump();
-    await t.tap(find.text('Spending').last);
+    await t.tap(find.text('Budget').last);
     await t.pump();
     expect(find.textContaining('November 2026: '), findsOneWidget);
     expect(find.textContaining('October 2026: '), findsNothing);
@@ -133,7 +133,7 @@ void main() {
     final clock = _Clock();
     final wc = _wallet(clock);
     await _pumpApp(t, wc);
-    await t.tap(find.text('Spending').last);
+    await t.tap(find.text('Budget').last);
     await t.pump();
     expect(find.textContaining('October 2026: '), findsOneWidget);
 

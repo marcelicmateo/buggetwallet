@@ -12,16 +12,18 @@ import 'src/layout.dart';
 import 'src/logging.dart';
 import 'src/platform.dart';
 import 'src/screens/bill_sheet.dart';
-import 'src/screens/goals.dart';
+import 'src/screens/bills_tab.dart';
 import 'src/screens/in_use.dart';
 import 'src/screens/key_backup.dart';
 import 'src/screens/onboarding.dart';
-import 'src/screens/plan.dart';
+import 'src/screens/payday_plan.dart';
+import 'src/screens/save.dart';
+import 'src/screens/settings.dart';
 import 'src/screens/spending.dart';
 import 'src/screens/today.dart';
 import 'src/screens/unlock.dart';
 import 'src/screens/welcome_balance.dart';
-import 'src/screens/wishlist.dart';
+import 'src/tabs.dart';
 import 'src/theme.dart';
 import 'src/widgets/common.dart';
 import 'src/widgets/sheets.dart';
@@ -185,15 +187,13 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-const _tabs = ['today', 'spending', 'wishlist', 'goals', 'plan'];
-
 /// One list for the bottom bar and the rail.
 const _destinations = [
   (label: 'Today', icon: Icons.account_balance_wallet_outlined, selected: Icons.account_balance_wallet),
-  (label: 'Spending', icon: Icons.bar_chart_outlined, selected: Icons.bar_chart),
-  (label: 'Wishlist', icon: Icons.hourglass_empty, selected: Icons.hourglass_bottom),
-  (label: 'Goals', icon: Icons.flag_outlined, selected: Icons.flag),
-  (label: 'Plan', icon: Icons.tune, selected: Icons.tune),
+  (label: 'Budget', icon: Icons.bar_chart_outlined, selected: Icons.bar_chart),
+  (label: 'Bills', icon: Icons.receipt_long_outlined, selected: Icons.receipt_long),
+  (label: 'Save', icon: Icons.savings_outlined, selected: Icons.savings),
+  (label: 'Settings', icon: Icons.settings_outlined, selected: Icons.settings),
 ];
 
 /// Label with its shortcut, for tooltips; the shortcut shows only where a keyboard is usual (desktop, web).
@@ -212,8 +212,8 @@ class _SyncIntent extends Intent {
   const _SyncIntent();
 }
 
-class _PlanIntent extends Intent {
-  const _PlanIntent();
+class _SettingsIntent extends Intent {
+  const _SettingsIntent();
 }
 
 class _SearchIntent extends Intent {
@@ -233,7 +233,7 @@ final _shortcuts = <ShortcutActivator, Intent>{
   const SingleActivator(LogicalKeyboardKey.keyN, control: true): const _AddIntent(),
   const SingleActivator(LogicalKeyboardKey.keyR, control: true): const _SyncIntent(),
   const SingleActivator(LogicalKeyboardKey.f5): const _SyncIntent(),
-  const SingleActivator(LogicalKeyboardKey.comma, control: true): const _PlanIntent(),
+  const SingleActivator(LogicalKeyboardKey.comma, control: true): const _SettingsIntent(),
   const SingleActivator(LogicalKeyboardKey.keyF, control: true): const _SearchIntent(),
 };
 
@@ -245,18 +245,16 @@ class _HomeShellState extends State<HomeShell> {
   final _focus = FocusNode(debugLabel: 'shell', skipTraversal: true);
   bool _adding = false;
 
-  /// Counts the taps on Today's "Due by payday" line; Plan scrolls to Expected bills on each.
-  final _billsRequest = ValueNotifier<int>(0);
-
-  /// Counts the taps on Today's "N bills to review" line; Plan scrolls to Bills on each.
-  final _billsDbRequest = ValueNotifier<int>(0);
-  final _accountsRequest = ValueNotifier<int>(0);
-  final _incomeRequest = ValueNotifier<int>(0);
+  /// Today's "Due by payday" and "N bills to review" lines ask the Bills tab for a place on its page.
+  final _billsRequest = JumpRequest<BillsAnchor>();
   StreamSubscription<BillImport>? _sharedSub;
   StreamSubscription<void>? _shortcutSub;
 
-  /// Counts the Ctrl+F presses; Spending opens its search view on each.
+  /// Counts the Ctrl+F presses; Budget opens its search view on each.
   final _searchRequest = ValueNotifier<int>(0);
+
+  /// The payday plan keeps its State (typed text, focus) when Budget changes between one and two columns: its place in the tree moves.
+  final _paydayKey = GlobalKey();
 
   /// The five tab pages, built once per data version and day (not on every tab switch): switching tabs only moves the
   /// IndexedStack, so the pages are not rebuilt and their derived data is not worked out again.
@@ -271,53 +269,40 @@ class _HomeShellState extends State<HomeShell> {
     _pages = _buildPages();
   }
 
-  List<Widget> _buildPages() => [for (var i = 0; i < _tabs.length; i++) _page(i)];
+  List<Widget> _buildPages() => [for (var i = 0; i < Tabs.names.length; i++) _page(i)];
 
   Widget _page(int i) => switch (i) {
-        0 => TodayScreen(
+        Tabs.today => TodayScreen(
             wc: widget.wc,
-            openPlan: () => _go(4, 'today'),
-            openSpending: () => _go(1, 'today'),
+            openPlan: () => _go(Tabs.budget, 'today'),
+            openSpending: () => _go(Tabs.budget, 'today'),
             addExpense: _addExpense,
             openBills: () {
-              _go(4, 'today');
-              _billsRequest.value++; // Plan scrolls to Expected bills
+              _go(Tabs.bills, 'today');
+              _billsRequest.request(BillsAnchor.comingUp);
             },
             openBillsReview: () {
-              _go(4, 'today');
-              _billsDbRequest.value++; // Plan scrolls to Bills
+              _go(Tabs.bills, 'today');
+              _billsRequest.request(BillsAnchor.review);
             },
-            openAccounts: () {
-              _go(4, 'today');
-              _accountsRequest.value++; // Plan scrolls to Accounts
-            },
-            openIncome: () {
-              _go(4, 'today');
-              _incomeRequest.value++; // Plan scrolls to Expected income
-            }),
-        1 => SpendingScreen(
+            openAccounts: () => widget.wc.openSettings(SettingsSection.accounts, via: 'today'),
+            openIncome: () => widget.wc.openSettings(SettingsSection.income, via: 'today')),
+        Tabs.budget => SpendingScreen(
             wc: widget.wc,
             searchRequest: _searchRequest,
+            header: [PaydayPlan(key: _paydayKey, wc: widget.wc)],
             openTab: (i) => _go(i, 'search'),
-            openBills: () {
-              _go(4, 'search');
-              _billsRequest.value++;
-            }),
-        2 => WishlistScreen(wc: widget.wc),
-        3 => GoalsScreen(wc: widget.wc),
-        _ => PlanScreen(
-            wc: widget.wc,
-            showBills: _billsRequest,
-            showBillsDb: _billsDbRequest,
-            showAccounts: _accountsRequest,
-            showIncome: _incomeRequest),
+            openBills: () => _go(Tabs.bills, 'search')),
+        Tabs.bills => BillsScreen(wc: widget.wc, request: _billsRequest),
+        Tabs.save => SaveScreen(wc: widget.wc),
+        _ => SettingsScreen(wc: widget.wc),
       };
 
   @override
   void initState() {
     super.initState();
     widget.wc.tabHook = _go;
-    AppLog.setScreen(_tabs[tab]);
+    AppLog.setScreen(Tabs.names[tab]);
     _refreshPages();
     _life = AppLifecycleListener(
       onResume: () {
@@ -357,11 +342,11 @@ class _HomeShellState extends State<HomeShell> {
   void _go(int i, String via) {
     if (i == tab) return;
     clearToasts(context);
-    logNav('nav.tab', {'from': _tabs[tab], 'to': _tabs[i], 'via': via});
-    AppLog.setScreen(_tabs[i]);
-    // Today and Wishlist show the time of day (delivery hour, hours left): they get a fresh build when opened.
+    logNav('nav.tab', {'from': Tabs.names[tab], 'to': Tabs.names[i], 'via': via});
+    AppLog.setScreen(Tabs.names[i]);
+    // Today and Save (the wishlist) show the time of day (delivery hour, hours left): they get a fresh build when opened.
     // The data they use is cached in the controller, so this is cheap.
-    if (i == 0 || i == 2) _pages[i] = _page(i);
+    if (i == Tabs.today || i == Tabs.save) _pages[i] = _page(i);
     setState(() => tab = i);
   }
 
@@ -386,7 +371,7 @@ class _HomeShellState extends State<HomeShell> {
 
   void _syncNow() {
     if (widget.wc.relayUrl == null) {
-      toast(context, 'No relay address yet. Set one in Plan › Sync.');
+      toast(context, 'No relay address yet. Set one in Settings › Sync.');
       return;
     }
     widget.wc.syncNow(trigger: 'key');
@@ -403,10 +388,10 @@ class _HomeShellState extends State<HomeShell> {
     _TabIntent: CallbackAction<_TabIntent>(onInvoke: (i) => _key('ctrl${i.tab + 1}', () => _go(i.tab, 'key'))),
     _AddIntent: CallbackAction<_AddIntent>(onInvoke: (_) => _key('ctrlN', _addExpense)),
     _SyncIntent: CallbackAction<_SyncIntent>(onInvoke: (_) => _key('sync', _syncNow)),
-    _PlanIntent: CallbackAction<_PlanIntent>(onInvoke: (_) => _key('ctrlComma', () => _go(4, 'key'))),
+    _SettingsIntent: CallbackAction<_SettingsIntent>(onInvoke: (_) => _key('ctrlComma', () => _go(Tabs.settings, 'key'))),
     _SearchIntent: CallbackAction<_SearchIntent>(
         onInvoke: (_) => _key('ctrlF', () {
-              _go(1, 'key');
+              _go(Tabs.budget, 'key');
               _searchRequest.value++;
             })),
   };
@@ -424,9 +409,6 @@ class _HomeShellState extends State<HomeShell> {
     _life.dispose();
     _focus.dispose();
     _billsRequest.dispose();
-    _billsDbRequest.dispose();
-    _accountsRequest.dispose();
-    _incomeRequest.dispose();
     _sharedSub?.cancel();
     _shortcutSub?.cancel();
     _searchRequest.dispose();
@@ -487,7 +469,7 @@ class _HomeShellState extends State<HomeShell> {
         tooltip: _hint('Search', 'Ctrl+F'),
         icon: const Icon(Icons.search),
         onPressed: () => _key('appBarSearch', () {
-          _go(1, 'appbar');
+          _go(Tabs.budget, 'appbar');
           _searchRequest.value++;
         }),
       );
@@ -566,8 +548,8 @@ class _HomeShellState extends State<HomeShell> {
                 destinations: [
                   for (final (i, d) in _destinations.indexed)
                     NavigationRailDestination(
-                      icon: _railIcon(d.label, i, Icon(d.icon)),
-                      selectedIcon: _railIcon(d.label, i, Icon(d.selected)),
+                      icon: _railIcon(d.label, i, Icon(d.icon, key: ValueKey('tab:${Tabs.names[i]}'))),
+                      selectedIcon: _railIcon(d.label, i, Icon(d.selected, key: ValueKey('tab:${Tabs.names[i]}'))),
                       label: Text(d.label),
                     ),
                 ],
@@ -679,7 +661,11 @@ class _HomeShellState extends State<HomeShell> {
                 destinations: [
                   for (final (i, d) in _destinations.indexed)
                     NavigationDestination(
-                        icon: Icon(d.icon), selectedIcon: Icon(d.selected), label: d.label, tooltip: _hint(d.label, 'Ctrl+${i + 1}')),
+                        key: ValueKey('tab:${Tabs.names[i]}'),
+                        icon: Icon(d.icon),
+                        selectedIcon: Icon(d.selected),
+                        label: d.label,
+                        tooltip: _hint(d.label, 'Ctrl+${i + 1}')),
                 ],
               ),
             )

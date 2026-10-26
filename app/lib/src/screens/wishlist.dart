@@ -10,7 +10,10 @@ import '../widgets/sheets.dart';
 
 class WishlistScreen extends StatefulWidget {
   final WalletController wc;
-  const WishlistScreen({super.key, required this.wc});
+
+  /// On the Save tab the panels sit in that tab's scroll: no list or page width of their own.
+  final bool embedded;
+  const WishlistScreen({super.key, required this.wc, this.embedded = false});
   @override
   State<WishlistScreen> createState() => _WishlistScreenState();
 }
@@ -61,88 +64,87 @@ class _WishlistScreenState extends State<WishlistScreen> {
     final skipped = done.where((w) => w.status == 'skipped').fold<int>(0, (a, w) => a + w.price);
     final p = parseMoney(price.text);
 
-    return NarrowPage(
-        child: ListView(
-            padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
-            children: gapped([
-              Panel(children: [
-                const Eyebrow('Can I afford it?'),
-                const Heading('Check before you buy'),
-                Muted('Anything over ${money(s.impulse, cur, decimals: 0)} waits ${s.coolHours} hours on the wishlist first.'),
-                Row(children: [
-                  Expanded(
-                      child: TextField(
-                          controller: name,
-                          onChanged: (_) => setState(() {}),
-                          decoration: const InputDecoration(labelText: 'What', hintText: 'Running shoes'))),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    width: 120,
-                    child: MoneyField(
-                        controller: price,
-                        onChanged: (_) => setState(() {}),
-                        decoration: InputDecoration(labelText: 'Price', suffixText: currencySymbol(cur))),
-                  ),
-                ]),
-                if (p != null && p > 0) _verdict(context, p),
+    final panels = gapped([
+      Panel(children: [
+        const Eyebrow('Can I afford it?'),
+        const Heading('Check before you buy'),
+        Muted('Anything over ${money(s.impulse, cur, decimals: 0)} waits ${s.coolHours} hours on the wishlist first.'),
+        Row(children: [
+          Expanded(
+              child: TextField(
+                  controller: name,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(labelText: 'What', hintText: 'Running shoes'))),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 120,
+            child: MoneyField(
+                controller: price,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(labelText: 'Price', suffixText: currencySymbol(cur))),
+          ),
+        ]),
+        if (p != null && p > 0) _verdict(context, p),
+      ]),
+      if (ready.isEmpty)
+        const _EmptySection('Ready to decide', 'Nothing has finished waiting yet.')
+      else
+        Panel(children: [
+          HeadingRow(const Heading('Ready to decide', size: BwType.headingSize), Tag('${ready.length}')),
+          Rows(children: [
+            for (final w in ready)
+              WishRow(key: _rowKey(w), highlight: w.id == _highlight, w: w, currency: cur, sub: 'Waited ${s.coolHours}h', actions: [
+                OutlinedButton(style: accentOutlined(context), onPressed: () => _buy(w), child: const Text('Buy it')),
+                TextButton(onPressed: () => _skip(w), child: const Text('Skip')),
               ]),
-              if (ready.isEmpty)
-                const _EmptySection('Ready to decide', 'Nothing has finished waiting yet.')
-              else
-                Panel(children: [
-                  HeadingRow(const Heading('Ready to decide', size: BwType.headingSize), Tag('${ready.length}')),
-                  Rows(children: [
-                    for (final w in ready)
-                      WishRow(key: _rowKey(w), highlight: w.id == _highlight, w: w, currency: cur, sub: 'Waited ${s.coolHours}h', actions: [
-                        OutlinedButton(style: accentOutlined(context), onPressed: () => _buy(w), child: const Text('Buy it')),
-                        TextButton(onPressed: () => _skip(w), child: const Text('Skip')),
-                      ]),
+          ]),
+        ]),
+      if (waiting.isEmpty)
+        const _EmptySection('Cooling off', 'Your wishlist is empty. Check something above to add it.')
+      else
+        Panel(children: [
+          HeadingRow(const Heading('Cooling off', size: BwType.headingSize), Tag('${waiting.length}')),
+          Rows(children: [
+            for (final w in waiting)
+              WishRow(
+                  key: _rowKey(w),
+                  highlight: w.id == _highlight,
+                  w: w,
+                  currency: cur,
+                  sub: timeLeft(w.hoursLeft(s.coolHours, now)),
+                  actions: [
+                    TextButton(onPressed: () => _skip(w), child: const Text("Don't need it")),
                   ]),
-                ]),
-              if (waiting.isEmpty)
-                const _EmptySection('Cooling off', 'Your wishlist is empty. Check something above to add it.')
-              else
-                Panel(children: [
-                  HeadingRow(const Heading('Cooling off', size: BwType.headingSize), Tag('${waiting.length}')),
-                  Rows(children: [
-                    for (final w in waiting)
-                      WishRow(
-                          key: _rowKey(w),
-                          highlight: w.id == _highlight,
-                          w: w,
-                          currency: cur,
-                          sub: timeLeft(w.hoursLeft(s.coolHours, now)),
-                          actions: [
-                            TextButton(onPressed: () => _skip(w), child: const Text("Don't need it")),
-                          ]),
-                  ]),
-                  TotalRule(
-                      child: SplitRow(
-                          start: const Text('Waiting in total', style: TextStyle(fontWeight: FontWeight.w600)),
-                          end: Text(money(wc.waitingTotal, cur, decimals: 0),
-                              textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w600)))),
-                ]),
-              if (done.isEmpty)
-                const _EmptySection('Decided', 'Items you buy or skip show up here.')
-              else
-                Panel(children: [
-                  HeadingRow(
-                    const Heading('Decided', size: BwType.headingSize),
-                    Text('Saved by waiting: ${money(skipped, cur, decimals: 0)}',
-                        style: const TextStyle(fontSize: BwType.metaSize, fontWeight: FontWeight.w600)),
-                  ),
-                  Rows(children: [
-                    for (final w in done.take(20))
-                      WishRow(
-                          key: _rowKey(w),
-                          highlight: w.id == _highlight,
-                          w: w,
-                          currency: cur,
-                          sub: w.status == 'bought' ? 'Bought' : 'Skipped',
-                          actions: const [])
-                  ]),
-                ]),
-            ])));
+          ]),
+          TotalRule(
+              child: SplitRow(
+                  start: const Text('Waiting in total', style: TextStyle(fontWeight: FontWeight.w600)),
+                  end: Text(money(wc.waitingTotal, cur, decimals: 0),
+                      textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w600)))),
+        ]),
+      if (done.isEmpty)
+        const _EmptySection('Decided', 'Items you buy or skip show up here.')
+      else
+        Panel(children: [
+          HeadingRow(
+            const Heading('Decided', size: BwType.headingSize),
+            Text('Saved by waiting: ${money(skipped, cur, decimals: 0)}',
+                style: const TextStyle(fontSize: BwType.metaSize, fontWeight: FontWeight.w600)),
+          ),
+          Rows(children: [
+            for (final w in done.take(20))
+              WishRow(
+                  key: _rowKey(w),
+                  highlight: w.id == _highlight,
+                  w: w,
+                  currency: cur,
+                  sub: w.status == 'bought' ? 'Bought' : 'Skipped',
+                  actions: const [])
+          ]),
+        ]),
+    ]);
+    if (widget.embedded) return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: panels);
+    return NarrowPage(child: ListView(padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad), children: panels));
   }
 
   Key _rowKey(WishItem w) => w.id == _highlight ? _highlightKey : ValueKey('wish:${w.id}');

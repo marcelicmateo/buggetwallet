@@ -4,7 +4,6 @@
 //
 // Behaviour not built on v2 carries a FIXED skip string `BUG: I<n> - ...`; the lead lifts them at merge.
 import 'package:budget_wallet/src/controller.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
@@ -12,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 // BUG: I1 - overSentence / no negative figures on Today (testWidgets takes a bool skip; the lead lifts it at merge)
@@ -183,7 +183,7 @@ void main() {
 
   group('I3: the Plan payday ledger adds up', () {
     Future<void> pumpPlan(WidgetTester tester, WalletController wc) async {
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 4000));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
     }
 
     String valueOf(WidgetTester tester, String key) {

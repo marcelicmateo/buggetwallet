@@ -1,0 +1,50 @@
+// The five tabs and the places a link can point at inside them (P5). Pure: no widgets.
+import 'package:flutter/foundation.dart';
+
+/// Tab indexes, in bar order: Today, Budget, Bills, Save, Settings.
+abstract final class Tabs {
+  static const today = 0, budget = 1, bills = 2, save = 3, settings = 4;
+  static const names = ['today', 'budget', 'bills', 'save', 'settings'];
+}
+
+/// The sections of the Settings tab, in page order. [currencies] is a place inside Accounts (a link scrolls to it).
+enum SettingsSection {
+  accounts('Accounts', 'Cash, banks and currencies'),
+  tags('Main tags and tags', 'How payments are grouped'),
+  rules('Rules', 'Which payee gets which main tag'),
+  budgets('Budgets per category', 'A monthly limit for each'),
+  income('Expected income', 'Regular money coming in'),
+  import('Import', 'Bank files and file layouts'),
+  sync('Sync', 'Relay, devices and wallet key'),
+  backup('Backup and export', 'Files you keep'),
+  calendars('Calendars and reminders', 'Calendars, nudges, review day'),
+  month('Month', 'Start a new pay month'),
+  look('Look', 'Theme and number style'),
+  diagnostics('Diagnostics', 'Logs for support'),
+  currencies('Currencies', 'Rates for other currencies');
+
+  final String title, sub;
+  const SettingsSection(this.title, this.sub);
+
+  /// The entry of the section list this place belongs to.
+  SettingsSection get nav => this == currencies ? accounts : this;
+
+  /// The entries of the section list (everything but the places inside one).
+  static List<SettingsSection> get listed => [
+        for (final s in values)
+          if (s == s.nav) s
+      ];
+}
+
+/// Places on the Bills tab a link can scroll to.
+enum BillsAnchor { comingUp, review, expected, slips }
+
+/// A "go there" request: a section or place to show. Each [request] notifies, also for the same value twice.
+class JumpRequest<T> extends ChangeNotifier {
+  T? _value;
+  T? get value => _value;
+  void request(T v) {
+    _value = v;
+    notifyListeners();
+  }
+}

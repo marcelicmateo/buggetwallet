@@ -14,7 +14,6 @@ import 'package:budget_wallet/src/ics_fetch.dart';
 import 'package:budget_wallet/src/nudges.dart';
 import 'package:budget_wallet/src/screens/calendars_panel.dart';
 import 'package:budget_wallet/src/screens/export_panel.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/upcoming.dart';
 import 'package:file_picker/file_picker.dart';
@@ -24,6 +23,7 @@ import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/layout.dart';
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 WalletController fw({FakeNudges? nudges, FakeCalendars? calendars}) {
@@ -683,9 +683,11 @@ void main() {
 
     tw('Plan lists Calendars and the heads-up switch next to Nudges', (tester) async {
       final wc = fw(nudges: FakeNudges());
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 8500));
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 8500));
       expect(key('calImport'), findsOneWidget);
       expect(key('headsUpSwitch'), findsOneWidget);
+      await tester.ensureVisible(key('headsUpSwitch'));
+      await tester.pump();
       await tester.tap(key('headsUpSwitch'));
       await tester.pumpAndSettle();
       expect(wc.headsUpNotify, isTrue);
@@ -1123,7 +1125,7 @@ void main() {
         await wc.addIcsLink('https://example.org/a/very/long/path/to/a/calendar.ics');
         wc.icsFetcher = (u) async => throw const IcsFetchException('The link took too long to answer.');
         await wc.readCalendars();
-        await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: size, textScale: scale);
+        await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
         await scrollThrough(tester);
         errors.check();
       });

@@ -7,7 +7,6 @@ import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/insights_api.dart';
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
 import 'package:budget_wallet/src/screens/categories_panel.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/plan_suggestions.dart';
 import 'package:budget_wallet/src/screens/planned_sheets.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
@@ -16,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/bills.dart';
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 const _timeout = Timeout(Duration(seconds: 90));
@@ -92,7 +92,7 @@ void main() {
     testWidgets('Edit shows a field per line, labelled by the category; Save writes only the edited line', (t) async {
       final (:wc, :id) = await withFixed();
       wc.savePlanLines({id: 12000});
-      await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+      await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
       await openPlanEdit(t);
       final field = _key('planLine_$id');
       expect(field, findsOneWidget);
@@ -116,7 +116,7 @@ void main() {
 
     testWidgets('an empty field is shown for a missing line; typing and clearing removes it', (t) async {
       final (:wc, :id) = await withFixed();
-      await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+      await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
       await openPlanEdit(t);
       expect(t.widget<TextField>(_key('planLine_$id')).controller!.text, '');
       await t.enterText(_key('planLine_$id'), '80');
@@ -133,7 +133,7 @@ void main() {
 
     testWidgets('a bad amount shows the error under the field and writes nothing; 0 on a missing line is no change', (t) async {
       final (:wc, :id) = await withFixed();
-      await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+      await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
       await openPlanEdit(t);
       final ops = wc.repo.pendingOps().length;
       await t.enterText(_key('planLine_$id'), 'abc');
@@ -159,7 +159,7 @@ void main() {
       final (:wc, :id) = await withFixed();
       wc.repo.addTransaction(date: '2026-10-08', amount: 5000, category: id, note: 'Cover');
       wc.reload();
-      await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+      await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
       final row = _key('ledgerPlanLine_$id');
       expect(row, findsOneWidget);
       expect(find.descendant(of: row, matching: find.text('Pet insurance')), findsOneWidget);
@@ -178,7 +178,7 @@ void main() {
     testWidgets('a flex category has no line', (t) async {
       final (:wc, :id) = await withFixed();
       await wc.addOwnCategory(name: 'Cat food', kind: BudgetKind.flex);
-      await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+      await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
       await openPlanEdit(t);
       expect(find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('planLine_')),
           findsOneWidget);
@@ -288,7 +288,7 @@ void main() {
       ]);
       wc.reload();
       expect(wc.categoryTable.planLineIds, containsAll([id, dup]));
-      await pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+      await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
       await openPlanEdit(t);
       expect(_key('planLine_$id'), findsOneWidget);
       expect(_key('planLine_$dup'), findsOneWidget);

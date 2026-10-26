@@ -2,8 +2,8 @@
 // content width, no overflow on any tab, page State kept across tab switches and resizes, Today's columns, sheets as
 // dialogs and the keyboard shortcuts. More edge cases: adaptive_edge_test.dart. All data is SYNTHETIC.
 import 'package:budget_wallet/src/layout.dart';
-import 'package:budget_wallet/src/screens/goals.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:budget_wallet/src/screens/save.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
@@ -15,7 +15,7 @@ import 'support/layout.dart';
 import 'support/wallet.dart';
 
 const _sizes = <Size>[Size(360, 800), Size(800, 1280), Size(1280, 800), Size(1920, 1080)];
-const _tabs = ['Spending', 'Wishlist', 'Goals', 'Plan', 'Today'];
+const _tabs = ['Budget', 'Bills', 'Save', 'Settings', 'Today'];
 
 LayoutSize _kind(Size s) => sizeFor(s.width);
 
@@ -63,16 +63,16 @@ void main() {
 
       testWidgets('$name: a tap shows the page and the other pages keep their State', (tester) async {
         await pumpFull(tester, demoWallet(), scale, size: size);
-        final plan = tester.state(find.byType(PlanScreen, skipOffstage: false));
+        final plan = tester.state(find.byType(SettingsScreen, skipOffstage: false));
         final spending = tester.state(find.byType(SpendingScreen, skipOffstage: false));
-        for (final tab in ['Plan', 'Spending', 'Plan', 'Today']) {
+        for (final tab in ['Settings', 'Budget', 'Settings', 'Today']) {
           await tapTab(tester, tab);
         }
         expect(find.byType(TodayScreen), findsOneWidget); // onstage
-        await tapTab(tester, 'Plan');
-        expect(find.byType(PlanScreen), findsOneWidget);
+        await tapTab(tester, 'Settings');
+        expect(find.byType(SettingsScreen), findsOneWidget);
         expect(find.byType(TodayScreen), findsNothing);
-        expect(identical(tester.state(find.byType(PlanScreen, skipOffstage: false)), plan), isTrue);
+        expect(identical(tester.state(find.byType(SettingsScreen, skipOffstage: false)), plan), isTrue);
         expect(identical(tester.state(find.byType(SpendingScreen, skipOffstage: false)), spending), isTrue);
       });
     }
@@ -80,13 +80,13 @@ void main() {
 
   testWidgets('resizing 360 -> 1280 -> 360 keeps the pages and their State', (tester) async {
     await pumpFull(tester, demoWallet(), 1.0, size: const Size(360, 800));
-    final plan = tester.state(find.byType(PlanScreen, skipOffstage: false));
+    final plan = tester.state(find.byType(SettingsScreen, skipOffstage: false));
     final spending = tester.state(find.byType(SpendingScreen, skipOffstage: false));
     final todayWidget = tester.widget(find.byType(TodayScreen, skipOffstage: false));
     for (final s in const [Size(1280, 800), Size(800, 1280), Size(360, 800)]) {
       tester.view.physicalSize = s;
       await tester.pump();
-      expect(identical(tester.state(find.byType(PlanScreen, skipOffstage: false)), plan), isTrue, reason: 'Plan at $s');
+      expect(identical(tester.state(find.byType(SettingsScreen, skipOffstage: false)), plan), isTrue, reason: 'Settings at $s');
       expect(identical(tester.state(find.byType(SpendingScreen, skipOffstage: false)), spending), isTrue, reason: 'Spending at $s');
       expect(identical(tester.widget(find.byType(TodayScreen, skipOffstage: false)), todayWidget), isTrue, reason: 'Today at $s');
     }
@@ -171,9 +171,9 @@ void main() {
       await pumpFull(tester, demoWallet(), 1.0, size: const Size(1280, 800));
       await tester.pump();
       await ctrl(tester, LogicalKeyboardKey.digit4);
-      expect(find.byType(GoalsScreen), findsOneWidget);
+      expect(find.byType(SaveScreen), findsOneWidget);
       await ctrl(tester, LogicalKeyboardKey.digit5);
-      expect(find.byType(PlanScreen), findsOneWidget);
+      expect(find.byType(SettingsScreen), findsOneWidget);
       await ctrl(tester, LogicalKeyboardKey.digit1);
       expect(find.byType(TodayScreen), findsOneWidget);
       await ctrl(tester, LogicalKeyboardKey.keyN);
@@ -183,7 +183,7 @@ void main() {
 
     testWidgets('a plain "1" is not a shortcut: the Plan field keeps its focus and the tab stays', (tester) async {
       await pumpFull(tester, demoWallet(), 1.0, size: const Size(1280, 800));
-      await tapTab(tester, 'Plan');
+      await tapTab(tester, 'Budget'); // the payday plan is on Budget
       await openPlanEdit(tester);
       final field = find.widgetWithText(TextField, 'Rent');
       await tester.ensureVisible(field);
@@ -191,7 +191,7 @@ void main() {
       await tester.enterText(field, '1');
       await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
       await tester.pump();
-      expect(find.byType(PlanScreen), findsOneWidget);
+      expect(find.byType(SpendingScreen), findsOneWidget);
       expect(tester.widget<TextField>(field).controller!.text, '1');
     });
   });

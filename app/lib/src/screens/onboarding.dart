@@ -58,7 +58,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return GatePage(children: [
       Muted(
           isWeb
-              ? 'Your money, kept in this browser. It syncs only with your own relay, encrypted with a key only your devices have. Save a backup file from Plan now and then.'
+              ? 'Your money, kept in this browser. It syncs only with your own relay, encrypted with a key only your devices have. Save a backup file from Settings now and then.'
               : 'Your money, on your devices. Everything is stored here first and works offline. Sync goes through your own relay, encrypted with a key only your devices have.',
           size: BwType.bodySize),
       if (widget.wc.hasUnopenedDb)
@@ -90,8 +90,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         if (widget.replaceCurrent)
           const Muted('Your current wallet is set aside on this device when you join.', key: ValueKey('replaceNote')),
         Muted(isWeb
-            ? 'On a device that already has your wallet, open Plan › Show wallet key, then type or paste the key here. You can then restore a backup file in Plan.'
-            : 'On a device that already has your wallet, open Plan › Show wallet key, then type or paste the key here.'),
+            ? 'On a device that already has your wallet, open Settings › Sync › Show wallet key, then type or paste the key here. You can then restore a backup file in Settings.'
+            : 'On a device that already has your wallet, open Settings › Sync › Show wallet key, then type or paste the key here.'),
         TextField(
             controller: keyText, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Wallet key', hintText: 'BW1-…')),
         TextField(
@@ -102,7 +102,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             decoration: const InputDecoration(
                 labelText: 'Relay address (optional)',
                 hintText: 'http://homeserver:8787',
-                helperText: 'You can also set it later in Plan › Sync.',
+                helperText: 'You can also set it later in Settings › Sync.',
                 helperMaxLines: 2)),
         if (error != null) StatusLabel(good: false, text: error!),
         FilledButton(

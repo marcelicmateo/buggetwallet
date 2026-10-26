@@ -5,7 +5,7 @@ import 'dart:io';
 
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
@@ -18,7 +18,7 @@ import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/wallet.dart';
 
-const _tabLabels = ['Today', 'Spending', 'Wishlist', 'Goals', 'Plan'];
+const _tabLabels = ['Today', 'Budget', 'Bills', 'Save', 'Settings'];
 
 Future<void> _size(WidgetTester tester, double w, double h) async {
   tester.view.physicalSize = Size(w, h);
@@ -222,13 +222,13 @@ void main() {
       }
       expect(tester.takeException(), isNull);
     });
-    testWidgets('Spending: one column at content 1039, two at 1040 and 1041', (tester) async {
+    testWidgets('Budget: one column at content 1039, two at 1040 and 1041', (tester) async {
       await _pumpShell(tester, demoWallet(), w: 1500, h: 900);
       final rail = tester.getSize(_rail).width;
       await _goTab(tester, 1);
       for (final c in [1039.0, 1040.0, 1041.0]) {
         await _size(tester, rail + c, 900);
-        expect(_twoColumns(_twoColOn(SpendingScreen)), c >= 1040, reason: 'Spending at content $c');
+        expect(_twoColumns(_twoColOn(SpendingScreen)), c >= 1040, reason: 'Budget at content $c');
       }
       expect(tester.takeException(), isNull);
     });
@@ -401,7 +401,7 @@ void main() {
     });
     testWidgets('typed text and focus in a Plan field survive compact -> expanded -> compact', (tester) async {
       await _pumpShell(tester, emptyWallet(), w: 400, h: 800);
-      await _goTab(tester, 4);
+      await _goTab(tester, 1); // the payday plan is on Budget
       await openPlanEdit(tester);
       final field = find.widgetWithText(TextField, 'Salary per month');
       await tester.ensureVisible(field);
@@ -417,8 +417,8 @@ void main() {
     });
     testWidgets('rapid resizes across boundaries keep the State of the pages', (tester) async {
       await _pumpShell(tester, demoWallet(), w: 400, h: 800);
-      final plan = tester.state(find.byType(PlanScreen, skipOffstage: false));
-      final planWidget = tester.widget(find.byType(PlanScreen, skipOffstage: false));
+      final plan = tester.state(find.byType(SettingsScreen, skipOffstage: false));
+      final planWidget = tester.widget(find.byType(SettingsScreen, skipOffstage: false));
       final spending = tester.state(find.byType(SpendingScreen, skipOffstage: false));
       final today = tester.widget(find.byType(TodayScreen, skipOffstage: false));
       final widths = [599.0, 600.0, 1023.0, 1024.0, 1039.0, 1296.0, 599.0, 1024.0, 320.0, 3840.0, 600.0, 400.0];
@@ -427,15 +427,15 @@ void main() {
           await _size(tester, w, 800);
         }
       }
-      expect(identical(tester.state(find.byType(PlanScreen, skipOffstage: false)), plan), isTrue, reason: 'Plan State');
-      expect(identical(tester.widget(find.byType(PlanScreen, skipOffstage: false)), planWidget), isTrue, reason: 'Plan not rebuilt');
+      expect(identical(tester.state(find.byType(SettingsScreen, skipOffstage: false)), plan), isTrue, reason: 'Plan State');
+      expect(identical(tester.widget(find.byType(SettingsScreen, skipOffstage: false)), planWidget), isTrue, reason: 'Plan not rebuilt');
       expect(identical(tester.state(find.byType(SpendingScreen, skipOffstage: false)), spending), isTrue, reason: 'Spending State');
       expect(identical(tester.widget(find.byType(TodayScreen, skipOffstage: false)), today), isTrue, reason: 'Today not rebuilt');
       expect(tester.takeException(), isNull);
     });
     testWidgets('tab switches at any width keep the Plan and Spending pages (not rebuilt)', (tester) async {
       await _pumpShell(tester, demoWallet(), w: 1300, h: 800);
-      final plan = tester.widget(find.byType(PlanScreen, skipOffstage: false));
+      final plan = tester.widget(find.byType(SettingsScreen, skipOffstage: false));
       final spending = tester.widget(find.byType(SpendingScreen, skipOffstage: false));
       for (final i in [4, 1, 3, 0, 2, 4]) {
         await _goTab(tester, i);
@@ -444,7 +444,7 @@ void main() {
       for (final i in [1, 4, 0]) {
         await _goTab(tester, i);
       }
-      expect(identical(tester.widget(find.byType(PlanScreen, skipOffstage: false)), plan), isTrue);
+      expect(identical(tester.widget(find.byType(SettingsScreen, skipOffstage: false)), plan), isTrue);
       expect(identical(tester.widget(find.byType(SpendingScreen, skipOffstage: false)), spending), isTrue);
     });
   });
@@ -467,7 +467,7 @@ void main() {
         }
         expect(tester.takeException(), isNull);
       });
-      testWidgets('Ctrl+, opens Plan at $w', (tester) async {
+      testWidgets('Ctrl+, opens Settings at $w', (tester) async {
         await _pumpShell(tester, emptyWallet(), w: w, h: 800);
         await _focusBody(tester);
         await _ctrl(tester, LogicalKeyboardKey.comma);
@@ -504,7 +504,7 @@ void main() {
     });
     testWidgets('plain digits and letters in a focused text field do not switch tabs or open sheets', (tester) async {
       await _pumpShell(tester, emptyWallet(), w: 1300, h: 800);
-      await _goTab(tester, 4);
+      await _goTab(tester, 1); // the payday plan is on Budget
       await openPlanEdit(tester);
       final field = find.widgetWithText(TextField, 'Salary per month');
       await tester.ensureVisible(field);
@@ -520,7 +520,7 @@ void main() {
       ]) {
         await tester.sendKeyEvent(k, character: ch);
         await tester.pump();
-        expect(_tab(tester), 4, reason: 'plain "$ch"');
+        expect(_tab(tester), 1, reason: 'plain "$ch"');
         expect(find.byType(AddExpenseSheet), findsNothing, reason: 'plain "$ch"');
       }
       expect(tester.takeException(), isNull);

@@ -13,7 +13,6 @@ import 'package:budget_wallet/src/nudges.dart';
 import 'package:budget_wallet/src/pdf_parse.dart';
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
 import 'package:budget_wallet/src/screens/bills_panel.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:budget_wallet/src/screens/scan_bill.dart';
 import 'package:budget_wallet/src/screens/search.dart';
 import 'package:budget_wallet/src/screens/sync_panel.dart';
@@ -28,6 +27,7 @@ import 'package:wallet_importer/wallet_importer.dart' show ImportBatch;
 
 import 'support/bills.dart';
 import 'support/layout.dart';
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 WalletController bw({FakeBillInputs? inputs, FakeNudges? nudges}) {
@@ -1540,7 +1540,7 @@ void main() {
 
       tw('$name: Plan with the Bills panel', (tester) async {
         final errors = Errors();
-        await pumpApp(tester, Scaffold(body: PlanScreen(wc: full())), size: size, textScale: scale);
+        await pumpApp(tester, Scaffold(body: PlanPage(wc: full())), size: size, textScale: scale);
         await scrollThrough(tester);
         errors.check();
       });

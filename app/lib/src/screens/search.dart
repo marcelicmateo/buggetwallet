@@ -9,6 +9,7 @@ import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
+import '../tabs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
@@ -27,7 +28,7 @@ class SearchPane extends StatefulWidget {
   final WalletController wc;
   final VoidCallback onClose;
 
-  /// Goal, wish or bill tapped: the tab to jump to (3 goals, 2 wishlist); [onOpenBills] for a bill (Plan, Expected bills).
+  /// Goal, wish or bill tapped: the tab to jump to (both are on Save); [onOpenBills] for a bill (the Bills tab).
   final void Function(int tab) onOpenTab;
   final VoidCallback onOpenBills;
   const SearchPane({super.key, required this.wc, required this.onClose, required this.onOpenTab, required this.onOpenBills});
@@ -139,15 +140,19 @@ class _SearchPaneState extends State<SearchPane> {
             Rows(children: [
               for (final g in r.goals)
                 tap(g.name, '${money(g.saved, cur, decimals: 0)} / ${money(g.target, cur, decimals: 0)}', 'Goal', 'goal',
-                    () => widget.onOpenTab(3)),
+                    () => widget.onOpenTab(Tabs.save)),
             ]),
           ]),
         if (r.wishlist.isNotEmpty)
           section('Wishlist', r.wishlist.length, [
             Rows(children: [
               for (final w in r.wishlist)
-                tap(w.name, money(w.price, cur, decimals: 0),
-                    switch (w.status) { 'bought' => 'Bought', 'skipped' => 'Skipped', _ => 'Waiting' }, 'wish', () => widget.onOpenTab(2)),
+                tap(
+                    w.name,
+                    money(w.price, cur, decimals: 0),
+                    switch (w.status) { 'bought' => 'Bought', 'skipped' => 'Skipped', _ => 'Waiting' },
+                    'wish',
+                    () => widget.onOpenTab(Tabs.save)),
             ]),
           ]),
         if (planned.isNotEmpty)

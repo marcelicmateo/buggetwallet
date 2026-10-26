@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/screens/currencies_panel.dart';
 import 'package:budget_wallet/src/screens/search.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
@@ -223,17 +224,17 @@ void main() {
       expect(find.text('Other currencies, not counted: ${moneyExact(1200, 'USD')} spent'), findsOneWidget);
     });
 
-    testWidgets('the note is a tap to Plan › Currencies', (t) async {
+    testWidgets('the note is a tap to Settings › Currencies', (t) async {
       final wc = fxWallet();
       final opened = <int>[];
       wc.tabHook = (tab, via) => opened.add(tab);
       await pumpApp(t, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(400, 4000));
-      expect(find.text('Set a rate in Plan › Currencies'), findsOneWidget);
+      expect(find.text('Set a rate in Settings › Accounts'), findsOneWidget);
       await t.ensureVisible(find.byKey(const ValueKey('foreignSetRate')));
       await t.tap(find.byKey(const ValueKey('foreignSetRate')));
       await t.pump();
-      expect(opened, [4]);
-      expect(wc.currenciesRequest.value, 1);
+      expect(opened, [Tabs.settings]);
+      expect(wc.settingsRequest.value, SettingsSection.currencies);
     });
 
     testWidgets('ForeignNote without a callback is the plain line', (t) async {

@@ -1,10 +1,10 @@
 // Plan › Budgets per category. All data is SYNTHETIC (budgetWallet: fixed clock, made-up amounts).
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 Finder _field(String category) => find.byKey(ValueKey('budget:$category'));
@@ -29,7 +29,7 @@ Future<void> _pump(WidgetTester tester,
     Size size = const Size(400, 10500),
     double scale = 1}) async {
   _wc = budgetWallet(budgets: budgets, groceriesBudget: groceriesBudget, eatingOutBudget: eatingOutBudget);
-  await pumpApp(tester, Scaffold(body: PlanScreen(wc: _wc)), size: size, textScale: scale);
+  await pumpApp(tester, Scaffold(body: PlanPage(wc: _wc)), size: size, textScale: scale);
 }
 
 void main() {

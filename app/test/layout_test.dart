@@ -14,7 +14,7 @@ void main() {
       final errors = Errors();
       await pumpFull(tester, wc, scale);
       await scrollThrough(tester);
-      for (final tab in ['Spending', 'Wishlist', 'Goals', 'Plan', 'Today']) {
+      for (final tab in ['Budget', 'Bills', 'Save', 'Settings', 'Today']) {
         await tapTab(tester, tab);
         await scrollThrough(tester);
       }

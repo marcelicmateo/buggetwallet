@@ -13,6 +13,8 @@ import 'dart:io';
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/logging.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -283,8 +285,30 @@ Future<void> goTab(WidgetTester t, String label) async {
   await t.pumpAndSettle();
 }
 
-/// The vertical list of the page shown by [screen] (a screen widget type).
-Finder pageList(Type screen) => find.descendant(of: find.byType(screen), matching: find.byType(Scrollable)).first;
+/// Opens the Settings tab on [s]: from two panes wide it taps the section in the list; one page has nothing to tap (the test scrolls).
+Future<void> goSettings(WidgetTester t, SettingsSection s) async {
+  await goTab(t, 'Settings');
+  await settingsSection(t, s);
+}
+
+/// Selects [s] in Settings when the section list is showing (two panes); no-op on one page.
+Future<void> settingsSection(WidgetTester t, SettingsSection s) async {
+  final nav = find.byKey(ValueKey('settingsNav:${s.nav.name}'));
+  if (nav.evaluate().isEmpty) return;
+  await tapVisible(t, nav);
+}
+
+/// The vertical list of the page shown by [screen] (a screen widget type). Settings has two lists from two panes wide: the
+/// section list and the chosen section; this is the one with the panels.
+Finder pageList(Type screen) {
+  if (screen == SettingsScreen) {
+    final panels = find.descendant(
+        of: find.byType(SettingsScreen),
+        matching: find.byWidgetPredicate((w) => w.key == const ValueKey('settingsPane') || w.key == const ValueKey('settingsPage')));
+    return find.descendant(of: panels, matching: find.byType(Scrollable)).first;
+  }
+  return find.descendant(of: find.byType(screen), matching: find.byType(Scrollable)).first;
+}
 
 /// Scrolls the page of [screen] until [f] is built and visible.
 Future<void> scrollTo(WidgetTester t, Finder f, Type screen, {double delta = 250}) async {

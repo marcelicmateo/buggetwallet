@@ -1,9 +1,9 @@
 // Plan › Payday plan: one section that lists the ledger lines and turns into the number fields with Edit (Save / Cancel).
 // All data is SYNTHETIC.
-import 'package:budget_wallet/src/screens/plan.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/plan_page.dart';
 import 'support/wallet.dart';
 
 Finder _field(String label) => find.widgetWithText(TextField, label);
@@ -19,7 +19,7 @@ Future<void> _tapKey(WidgetTester tester, String k) async {
 void main() {
   testWidgets('without Edit the section lists the ledger lines and has no fields', (tester) async {
     final wc = demoWallet();
-    await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+    await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
     expect(_key('planHeading'), findsOneWidget);
     expect(_key('ledgerSpendingMoney'), findsOneWidget);
     expect(_key('planEdit'), findsOneWidget);
@@ -33,7 +33,7 @@ void main() {
 
   testWidgets('Edit turns the section into the fields with Save and Cancel', (tester) async {
     final wc = demoWallet();
-    await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+    await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
     await openPlanEdit(tester);
     expect(_field('Salary per month'), findsOneWidget);
     expect(_field('Rent'), findsOneWidget);
@@ -48,7 +48,7 @@ void main() {
 
   testWidgets('Edit, change one field, Save: only that field is written and the ledger comes back', (tester) async {
     final wc = demoWallet();
-    await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+    await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
     final before = wc.settings.toMap();
     final heading = tester.widget<Text>(find.descendant(of: _key('planHeading'), matching: find.byType(Text))).data;
     await openPlanEdit(tester);
@@ -72,7 +72,7 @@ void main() {
 
   testWidgets('Cancel leaves the settings unchanged and the next Edit shows the saved values', (tester) async {
     final wc = demoWallet();
-    await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+    await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
     final before = wc.settings.toMap();
     final ops = wc.repo.pendingOps().length;
     await openPlanEdit(tester);
@@ -95,7 +95,7 @@ void main() {
 
   testWidgets('Cancel also puts the currency back', (tester) async {
     final wc = demoWallet();
-    await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+    await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
     await openPlanEdit(tester);
     await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
     await tester.tap(find.byType(DropdownButtonFormField<String>));
@@ -110,7 +110,7 @@ void main() {
 
   testWidgets('a validation error keeps edit mode open and saves nothing', (tester) async {
     final wc = demoWallet();
-    await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+    await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
     final before = wc.settings.toMap();
     await openPlanEdit(tester);
     await tester.enterText(_field('Loan'), '300');
@@ -131,7 +131,7 @@ void main() {
 
   testWidgets('Save with nothing changed closes the editor and writes nothing', (tester) async {
     final wc = demoWallet();
-    await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: const Size(400, 3000));
+    await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
     final ops = wc.repo.pendingOps().length;
     await openPlanEdit(tester);
     await _tapKey(tester, 'planSave');
@@ -144,7 +144,7 @@ void main() {
   for (final (name, size, scale) in const [('320 dp at text 2.0', Size(320, 9000), 2.0), ('1280 wide', Size(1280, 3000), 1.0)]) {
     testWidgets('$name: ledger and editor lay out without overflow', (tester) async {
       final wc = demoWallet();
-      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc)), size: size, textScale: scale);
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
       expect(tester.takeException(), isNull);
       await openPlanEdit(tester);
       expect(_key('planSave'), findsOneWidget);
