@@ -386,7 +386,7 @@ void main() {
 
       final up = WalletRepo.open(path);
       addTearDown(up.close);
-      expect(up.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '15');
+      expect(up.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '${WalletRepo.schemaVersion}');
       expect(up.queuedBlobs(), [h1]);
       expect(up.hasCachedBlob(h2), isTrue);
       final tables = {for (final r in up.db.select("SELECT name FROM sqlite_master WHERE type = 'table'")) r['name']};

@@ -7,6 +7,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:test/test.dart';
+import 'package:wallet_core/src/schema.dart' show entitySchema;
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
@@ -72,8 +73,10 @@ void main() {
       final f = await file(r, 'pdf');
       final id = r.addAttachment(tx, f);
       final a = r.bill(id)!;
-      expect((a.source, a.status, a.linkedTx, a.paid, a.date, a.total, a.currency, a.deleted),
+      expect((a.source, a.status, a.attachedTx, a.paid, a.date, a.total, a.currency, a.deleted),
           (BillSource.attachment, BillStatus.confirmed, tx, true, '2026-03-05', 4599, 'EUR', false));
+      expect(a.linkedTx, isNull, reason: 'never a payment link: builds before P16b must not see one');
+      expect(r.db.select('SELECT linked_tx FROM bills WHERE id = ?', [id]).single['linked_tx'], isNull);
       expect(a.isAttachment, isTrue);
       expect(a.file, f);
       expect((a.dueDate, a.payee, a.category, a.warrantyUntil, a.returnBy), (null, null, null, null, null));
@@ -184,7 +187,7 @@ void main() {
       expect(() => r.deleteBill(att), throwsArgumentError);
       expect(() => r.linkBill(att, tx), throwsArgumentError);
       expect(() => r.addExpenseFromBill(att, category: 'Groceries'), throwsArgumentError);
-      expect(r.bill(att)!.linkedTx, tx);
+      expect(r.bill(att)!.attachedTx, tx);
     });
   });
 
@@ -233,15 +236,22 @@ void main() {
       final (r, tx) = withPayment();
       final (billId, _) = r.importBill(slip());
       r.confirmWithCategory(billId);
-      final att = r.addAttachment(tx, await file(r));
+      final f = await file(r);
+      final att = r.addAttachment(tx, f);
+      expect(r.liveBlobHashes(), [f.hash]);
       r.deleteTransaction(tx);
       expect(r.bill(billId)!.linkedTx, isNull);
-      expect(r.bill(att)!.linkedTx, tx, reason: 'an attachment stays on its payment');
+      expect(r.bill(att)!.attachedTx, tx, reason: 'an attachment stays on its payment');
+      expect((r.bill(att)!.deleted, r.hasCachedBlob(f.hash)), (false, true), reason: 'kept');
+      expect(r.liveBlobHashes(), isEmpty, reason: 'a deleted payment\'s attachments are not declared');
+      expect(r.backupBlobCandidates(), isEmpty, reason: 'nor backed up');
       r.importBatch(rows([n('2026-03-07', -100, 'POS', 'SYNTHETIC KIOSK')])); // _autoLinkBills' unlink of deleted rows
-      expect(r.bill(att)!.linkedTx, tx);
+      expect(r.bill(att)!.attachedTx, tx);
       r.undeleteTransaction(tx);
       expect(r.bill(billId)!.linkedTx, tx);
       expect(r.attachments(tx).single.id, att);
+      expect(r.liveBlobHashes(), [f.hash], reason: 'the restored payment brings them back');
+      expect(r.backupBlobCandidates().map((e) => e.$1), [f.hash]);
     });
 
     test('pure rules: planBillLinks and billCandidates neither use nor count attachments', () async {
@@ -277,12 +287,46 @@ void main() {
           id: att.id,
           source: BillSource.attachment,
           status: BillStatus.confirmed,
-          linkedTx: tx,
+          attachedTx: tx,
           total: 4599,
           warrantyUntil: '2026-03-20',
           returnBy: '2026-03-10');
       expect(
           upcoming(planned: const [], bills: const [], events: const [], from: '2026-03-01', to: '2026-04-30', billsDb: [dated]), isEmpty);
+    });
+  });
+
+  group('builds before P16b (no attached_tx)', () {
+    test('an attachment never holds linked_tx, so the old one-bill-per-payment repair and unlinks leave the real bill', () async {
+      final (r, tx) = withPayment();
+      final (billId, _) = r.importBill(slip());
+      r.confirmWithCategory(billId);
+      for (var i = 0; i < 3; i++) {
+        r.addAttachment(tx, await file(r));
+      }
+      // af68260's _repairFieldPairs: live bills sharing a linked_tx (no source filter).
+      expect(r.db.select('SELECT linked_tx FROM bills WHERE deleted = 0 AND linked_tx IS NOT NULL GROUP BY linked_tx HAVING COUNT(*) > 1'),
+          isEmpty);
+      // af68260's deleteTransaction / deleted-payment unlink: the bills paid by the row.
+      expect([
+        for (final x in r.db.select('SELECT id FROM bills WHERE deleted = 0 AND linked_tx = ?', [tx])) x['id']
+      ], [
+        billId
+      ]);
+      // af68260's auto link reads an attachment as a confirmed, unpaid manual bill: it has no link token, so it links nothing.
+      final asOld = [
+        for (final x in r.db.select("SELECT * FROM bills WHERE deleted = 0 AND status = 'confirmed' AND linked_tx IS NULL"))
+          Bill.fromRow({...x, 'source': 'manual'})
+      ];
+      expect(asOld, hasLength(3));
+      expect(asOld.every((b) => billLinkTokens(b).isEmpty), isTrue);
+      expect(planBillLinks([...asOld, r.bill(billId)!], r.transactions()), isEmpty);
+      expect(r.bill(billId)!.linkedTx, tx);
+    });
+
+    test('schema 16: attached_tx is a synced column', () {
+      expect(WalletRepo.schemaVersion, 16);
+      expect(entitySchema['bill']!.columns.map((c) => c.name), contains('attached_tx'));
     });
   });
 
@@ -377,7 +421,7 @@ void main() {
       final bank = bankOf(r);
       r.deleteTransaction(bank);
       expect(r.transaction(cash)!.matchedTo, isNull);
-      expect(r.bill(ids.single)!.linkedTx, bank, reason: 'rule: once moved, an attachment stays on the bank row');
+      expect(r.bill(ids.single)!.attachedTx, bank, reason: 'rule: once moved, an attachment stays on the bank row');
       expect(r.bill(ids.single)!.deleted, isFalse, reason: 'never deleted');
       r.undeleteTransaction(bank);
       expect(r.transaction(cash)!.matchedTo, bank);
@@ -398,7 +442,7 @@ void main() {
       await run(b);
       for (final r in [a, b]) {
         expect(r.transaction(cash)!.matchedTo, bank);
-        expect(r.bill(id)!.linkedTx, bank);
+        expect(r.bill(id)!.attachedTx, bank);
         expect(r.attachments(cash), isEmpty);
       }
       expect(a.pendingOps(), isEmpty, reason: 'a wrote the same value, or nothing');

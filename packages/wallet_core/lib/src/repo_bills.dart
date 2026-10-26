@@ -177,8 +177,9 @@ extension WalletRepoBills on WalletRepo {
   }
 
   /// P16b: attaches [file] (a photo or PDF, one of [attachmentTypes]) to payment [txId] and returns the new attachment's id.
-  /// An attachment is a bill row with source [BillSource.attachment], linked to the payment, `total` = |amount|, the
-  /// payment's date and currency, confirmed and paid, in one [_write] (its file is uploaded before the op like a bill's,
+  /// An attachment is a bill row with source [BillSource.attachment], `attached_tx` = the payment (`linked_tx` stays
+  /// null, so builds before P16b never take it for the bill that paid the row), `total` = |amount|, the payment's date
+  /// and currency, confirmed ([Bill.paid] is true for it), in one [_write] (its file is uploaded before the op like a bill's,
   /// declared by snapshots and carried by backups). It is listed only by [attachments]: never by [bills], matching,
   /// candidates, planned rows, search or reminders. An unknown or deleted payment, or a file type outside [attachmentTypes]:
   /// [ArgumentError]; a payment that already holds [maxAttachmentsPerTx] live attachments: [StateError].
@@ -198,7 +199,7 @@ extension WalletRepoBills on WalletRepo {
           'date': t.date,
           'total': t.amount.abs(),
           'currency': t.currency,
-          'linked_tx': txId,
+          'attached_tx': txId,
           'blob': file.hash,
           'blob_type': file.type,
           'blob_bytes': file.bytes,
@@ -215,7 +216,7 @@ extension WalletRepoBills on WalletRepo {
   List<Bill> attachments(String txId) {
     final rs = db.select('''
       SELECT b.*, c.hlc AS made_clock FROM bills b LEFT JOIN clocks c ON c.entity = 'bill' AND c.id = b.id AND c.field = 'source'
-      WHERE b.deleted = 0 AND b.source = 'attachment' AND b.linked_tx = ?''', [txId]);
+      WHERE b.deleted = 0 AND b.source = 'attachment' AND b.attached_tx = ?''', [txId]);
     final list = [for (final r in rs) (r['made_clock'] as String? ?? '', Bill.fromRow(r))];
     list.sort((x, y) {
       final c = x.$1.isEmpty || y.$1.isEmpty ? x.$1.compareTo(y.$1) : Hlc.compareStrings(x.$1, y.$1);
@@ -225,17 +226,17 @@ extension WalletRepoBills on WalletRepo {
   }
 
   /// P16b: a hand-added entry that matching replaced with its bank row ([planMatches]: `matched_to` = a live bank row
-  /// here, not an own transfer) hands its live attachments to that row (`linked_tx` through [_write]; the cap is not
+  /// here, not an own transfer) hands its live attachments to that row (`attached_tx` through [_write]; the cap is not
   /// checked: nothing is ever dropped). Rule: they stay on the bank row from then on; a reopened match (bank row
   /// deleted or paired) does not move them back, and an undelete of the row shows them there again. The same rows give
   /// the same writes on every device. Runs in [_reconcile] after matching (caught up only).
   void _moveMatchedAttachments() {
     final moves = [
       for (final r in db.select('''
-        SELECT b.id AS id, e.matched_to AS bank FROM bills b JOIN tx e ON e.id = b.linked_tx JOIN tx k ON k.id = e.matched_to
+        SELECT b.id AS id, e.matched_to AS bank FROM bills b JOIN tx e ON e.id = b.attached_tx JOIN tx k ON k.id = e.matched_to
         WHERE b.deleted = 0 AND b.source = 'attachment' AND e.manual = 1 AND e.deleted = 0
           AND k.manual = 0 AND k.deleted = 0 AND k.transfer_to IS NULL ORDER BY b.id'''))
-        ('bill', r['id'] as String, <String, Object?>{'linked_tx': r['bank']}),
+        ('bill', r['id'] as String, <String, Object?>{'attached_tx': r['bank']}),
     ];
     if (moves.isEmpty) return;
     _write(moves);
@@ -243,7 +244,8 @@ extension WalletRepoBills on WalletRepo {
   }
 
   int _attachmentCount(String txId) =>
-      db.select("SELECT COUNT(*) AS n FROM bills WHERE deleted = 0 AND source = 'attachment' AND linked_tx = ?", [txId]).first['n'] as int;
+      db.select("SELECT COUNT(*) AS n FROM bills WHERE deleted = 0 AND source = 'attachment' AND attached_tx = ?", [txId]).first['n']
+          as int;
 
   Bill _attachment(String id) {
     final b = bill(id);
@@ -266,7 +268,7 @@ extension WalletRepoBills on WalletRepo {
   void restoreAttachment(String id) {
     final b = _attachment(id);
     if (!b.deleted) return;
-    if (b.linkedTx != null && _attachmentCount(b.linkedTx!) >= maxAttachmentsPerTx) {
+    if (b.attachedTx != null && _attachmentCount(b.attachedTx!) >= maxAttachmentsPerTx) {
       throw StateError('A payment holds at most $maxAttachmentsPerTx attachments.');
     }
     _write([

@@ -55,8 +55,12 @@ class Bill {
   /// Fields the reader guessed from free text (PDF text, OCR): the UI marks the bill as unsure while > 0.
   final int unsure;
 
-  /// The payment: a bank row or a hand-added expense ([WalletRepo.linkBill], [WalletRepo.addExpenseFromBill]).
+  /// The payment: a bank row or a hand-added expense ([WalletRepo.linkBill], [WalletRepo.addExpenseFromBill]). Null
+  /// for an attachment (its payment is [attachedTx]).
   final String? linkedTx;
+
+  /// The payment an attachment (P16b, [isAttachment]) belongs to; null for every other bill.
+  final String? attachedTx;
   final String? warrantyUntil, returnBy;
 
   /// The bill's file on the relay ([BlobRef.hash]), its type and plain size.
@@ -82,6 +86,7 @@ class Bill {
     this.items = const [],
     this.unsure = 0,
     this.linkedTx,
+    this.attachedTx,
     this.warrantyUntil,
     this.returnBy,
     this.blob,
@@ -90,7 +95,8 @@ class Bill {
     this.deleted = false,
   });
 
-  bool get paid => linkedTx != null;
+  /// Linked to its payment; an attachment always (it is a record of its payment, [attachedTx]).
+  bool get paid => linkedTx != null || isAttachment;
   bool get confirmed => status == BillStatus.confirmed;
 
   /// A file attached to its payment ([linkedTx]; P16b): never a bill to review, pay, reserve, match or remind of.
@@ -124,6 +130,7 @@ class Bill {
         items: decodeBillItems(r['items']) ?? const [],
         unsure: _i(r['unsure']) ?? 0,
         linkedTx: _s(r['linked_tx']),
+        attachedTx: _s(r['attached_tx']),
         warrantyUntil: _s(r['warranty_until']),
         returnBy: _s(r['return_by']),
         blob: _s(r['blob']),

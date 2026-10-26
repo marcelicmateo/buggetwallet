@@ -172,6 +172,10 @@ const Map<String, EntityDef> entitySchema = {
     ColumnDef('blob_type', nullable: true),
     ColumnDef.integer('blob_bytes', nullable: true),
     ColumnDef.flag('deleted'),
+    // v16 (P16b): the payment an attachment belongs to; `linked_tx` stays null for attachments, so builds before
+    // P16b never take one for the bill that paid a row. No index: the DDL (with its indexes) runs before the column
+    // migration adds this column to an existing table.
+    ColumnDef('attached_tx', nullable: true),
   ], indexes: {
     'bills_date': 'date',
     'bills_linked': 'linked_tx'

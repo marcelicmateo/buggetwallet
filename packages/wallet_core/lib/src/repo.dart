@@ -150,8 +150,8 @@ class WalletRepo {
   /// the `split` entity; no data migration), version 14: recurring income (P9: `recurring` gains `direction`; no data
   /// migration), version 15: bill-file invariants (P14: no synced change; the local `blob_outbox`, `blob_delete` and
   /// `blob_own` tables become `blob_cache.uploaded`, [_migrateBlobTables]; snapshots of this schema carry declared
-  /// blob sets).
-  static const schemaVersion = 15;
+  /// blob sets), version 16: attachments (P16b: `bills` gains `attached_tx`; no data migration).
+  static const schemaVersion = 16;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
   /// a live bill points to again (api-3 builds deleted files on the relay), cleared once all of them were stored.
