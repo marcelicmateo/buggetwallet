@@ -21,7 +21,8 @@ selected, outlined otherwise). Search and the period chip stay in the app bar on
   pay period" line stays under the wishlist.
 - **Settings:** every other Plan section, unchanged, in this order: Accounts, Main tags and tags, Rules, Expected
   income, Import, Sync, Backup and export, Calendars and reminders, Look, Diagnostics (plus any existing section not
-  named here, at the end; nothing is dropped). Phone: one page. **From 1040 dp: two panes** — section list on the
+  named here; nothing is dropped). As built: Budgets per category sits after Rules and Month after Calendars and
+  reminders (lead, 2026-10-26: grouped by topic). Phone: one page. **From 1040 dp: two panes** — section list on the
   left (title + one-line sub as in the mockup), the chosen section on the right; first section selected by default;
   a link to a section selects it.
 
