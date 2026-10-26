@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:budget_wallet/src/bill_inputs.dart';
+import 'package:budget_wallet/src/clock_notice.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/screens/bills_panel.dart';
@@ -12,6 +13,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart' show ImportBatch;
 
 import 'support/bills.dart';
 import 'support/wallet.dart';
@@ -25,12 +27,12 @@ void tw(String name, Future<void> Function(WidgetTester tester) body) => testWid
     }, timeout: const Timeout(Duration(seconds: 60)));
 
 /// A picked file whose size and bytes the test sets (a huge file is only a number: it is never read).
-base class _Picked extends PlatformFile {
+base class FakePicked extends PlatformFile {
   @override
   final String name;
   final Uint8List data;
   final int? fakeSize;
-  _Picked(this.name, this.data, {this.fakeSize});
+  FakePicked(this.name, this.data, {this.fakeSize});
   @override
   Uri get uri => Uri(path: name);
   @override
@@ -47,8 +49,15 @@ base class _Picked extends PlatformFile {
 
 class FakeAttachChooser extends FileChooser {
   List<PlatformFile> picks = [];
+  final savedNames = <String>[];
   int calls = 0;
   Object? error;
+  @override
+  Future<Uri?> saveBillFile({required String fileName, required Uint8List bytes, required String title}) async {
+    savedNames.add(fileName);
+    return Uri(path: fileName);
+  }
+
   @override
   Future<List<PlatformFile>> pickAttachmentFiles() async {
     calls++;
@@ -103,8 +112,11 @@ Future<void> addMany(WidgetTester tester, WalletController wc, int n) async {
   }
 }
 
+/// Fakes where the phone can size pictures ([FakePdf.supported]) and sizes every one to the tiny PNG, unless [pdf] says otherwise.
+FakeBillInputs inputsOf(FakeCamera camera, {FakePdf? pdf}) => FakeBillInputs(camera: camera, pdf: pdf ?? FakePdf(jpeg: tinyPng));
+
 WalletController wallet({FakeBillInputs? inputs}) {
-  final wc = billsWallet(inputs: inputs);
+  final wc = billsWallet(inputs: inputs ?? inputsOf(FakeCamera()));
   addTearDown(wc.dispose);
   return wc;
 }
@@ -112,7 +124,7 @@ WalletController wallet({FakeBillInputs? inputs}) {
 void main() {
   group('attaching', () {
     tw('from the camera: a chooser first, then the photo is listed and opens', (tester) async {
-      final inputs = FakeBillInputs(camera: FakeCamera(photo: tinyPng));
+      final inputs = inputsOf(FakeCamera(photo: tinyPng));
       final wc = wallet(inputs: inputs);
       await openTx(tester, wc);
       expect(key('attachAdd'), findsOneWidget);
@@ -138,10 +150,10 @@ void main() {
     });
 
     tw('from a file where there is no camera: straight to the file dialog; a PDF is kept as a PDF', (tester) async {
-      final wc = wallet(inputs: FakeBillInputs(camera: FakeCamera(canShow: false)));
+      final wc = wallet(inputs: inputsOf(FakeCamera(canShow: false)));
       final chooser = FakeAttachChooser()
         ..picks = [
-          _Picked('receipt.PDF', smallPdf(['Warranty']))
+          FakePicked('receipt.PDF', smallPdf(['Warranty']))
         ];
       await openTx(tester, wc, chooser: chooser);
       await tapVisible(tester, key('attachAdd'));
@@ -157,7 +169,7 @@ void main() {
 
     tw('on Android "Pick a file" in the chooser opens the file dialog', (tester) async {
       final wc = wallet();
-      final chooser = FakeAttachChooser()..picks = [_Picked('a.png', photoBytes)];
+      final chooser = FakeAttachChooser()..picks = [FakePicked('a.png', photoBytes)];
       await openTx(tester, wc, chooser: chooser);
       await tapVisible(tester, key('attachAdd'));
       await tester.pumpAndSettle();
@@ -169,7 +181,7 @@ void main() {
     });
 
     tw('a cancelled photo or file dialog changes nothing and says nothing', (tester) async {
-      final inputs = FakeBillInputs(camera: FakeCamera()); // photo null = cancelled
+      final inputs = inputsOf(FakeCamera()); // photo null = cancelled
       final wc = wallet(inputs: inputs);
       final chooser = FakeAttachChooser(); // picks empty = cancelled
       await openTx(tester, wc, chooser: chooser);
@@ -188,12 +200,12 @@ void main() {
     });
 
     tw('a file that is too big is refused with plain words, before it is read', (tester) async {
-      final wc = wallet(inputs: FakeBillInputs(camera: FakeCamera(canShow: false)));
-      final chooser = FakeAttachChooser()..picks = [_Picked('big.pdf', photoBytes, fakeSize: maxBlobPlainBytes + 1)];
+      final wc = wallet(inputs: inputsOf(FakeCamera(canShow: false)));
+      final chooser = FakeAttachChooser()..picks = [FakePicked('big.pdf', photoBytes, fakeSize: maxBlobPlainBytes + 1)];
       await openTx(tester, wc, chooser: chooser);
       await tapVisible(tester, key('attachAdd'));
       await settle(tester);
-      expect(snack('That file is too big (max 15 MB).'), findsOneWidget);
+      expect(snack('This file is too big to attach (max 15 MB).'), findsOneWidget);
       expect(wc.attachments(payment(wc).tx.id), isEmpty);
       // A picture may be bigger before it is sized down, but not past 40 MB.
       expect(maxBillFileBytes('png'), greaterThan(maxBlobPlainBytes));
@@ -217,9 +229,57 @@ void main() {
       expect(attachMessage(AttachResult.failed), "Couldn't save that file. Try again.");
     });
 
+    tw('a 20 MB picture is sized down by the phone and kept as a small JPEG', (tester) async {
+      final wc = wallet();
+      final tx = payment(wc).tx.id;
+      expect(await tester.runAsync(() => wc.attachFile(tx, Uint8List(20 << 20), 'png')), AttachResult.ok);
+      final a = wc.attachments(tx).single;
+      expect(a.blobType, 'jpg');
+      expect(a.blobBytes, tinyPng.length);
+    });
+
+    tw('where pictures cannot be sized, a 20 MB picture is too big and nothing is cached or queued', (tester) async {
+      final wc = wallet(inputs: inputsOf(FakeCamera(), pdf: FakePdf(canRender: false)));
+      final tx = payment(wc).tx.id;
+      expect(await tester.runAsync(() => wc.attachFile(tx, Uint8List(20 << 20), 'png')), AttachResult.tooBig);
+      expect(wc.attachments(tx), isEmpty);
+      expect(wc.repo.queuedBlobs(), isEmpty);
+    });
+
+    tw('where pictures can be sized, one the phone cannot read is refused and nothing is queued', (tester) async {
+      final wc = wallet(inputs: inputsOf(FakeCamera(), pdf: FakePdf()));
+      final tx = payment(wc).tx.id;
+      expect(await tester.runAsync(() => wc.attachFile(tx, photoBytes, 'jpg')), AttachResult.badType);
+      expect(wc.attachments(tx), isEmpty);
+      expect(wc.repo.queuedBlobs(), isEmpty);
+    });
+
+    tw('a payment that is gone is refused before any file is sealed', (tester) async {
+      final wc = wallet();
+      expect(await tester.runAsync(() => wc.attachFile('no-such-payment', photoBytes, 'jpg')), AttachResult.failed);
+      expect(wc.repo.queuedBlobs(), isEmpty);
+    });
+
+    tw('a clock that is behind raises the notice and fails the attach', (tester) async {
+      var t = budgetToday.millisecondsSinceEpoch;
+      final repo = WalletRepo.inMemory(now: () => t);
+      repo.importBatch(
+          ImportBatch(source: 'pbz', transactions: [syntheticTx('2026-10-19', -1250, 'POS plaćanje', 'POS SYNTHSHOP ZAGREB')]));
+      repo.updateSettings({'salary': 150000, 'salaryConfirmed': true, 'periodStart': '2026-10-01'});
+      final wc =
+          WalletController.forTest(repo, key: VaultKey.generate(), clock: () => budgetToday, billInputs: inputsOf(FakeCamera()).inputs);
+      addTearDown(wc.dispose);
+      wc.reload();
+      t -= const Duration(hours: 3).inMilliseconds; // the clock was set back
+      final before = clockBehindNotice.value;
+      expect(await tester.runAsync(() => wc.attachFile(payment(wc).tx.id, photoBytes, 'jpg')), AttachResult.failed);
+      expect(clockBehindNotice.value, before + 1);
+      expect(wc.attachments(payment(wc).tx.id), isEmpty);
+    });
+
     tw('a file that is not a photo or PDF is refused', (tester) async {
-      final wc = wallet(inputs: FakeBillInputs(camera: FakeCamera(canShow: false)));
-      final chooser = FakeAttachChooser()..picks = [_Picked('invoice.xml', photoBytes)];
+      final wc = wallet(inputs: inputsOf(FakeCamera(canShow: false)));
+      final chooser = FakeAttachChooser()..picks = [FakePicked('invoice.xml', photoBytes)];
       await openTx(tester, wc, chooser: chooser);
       await tapVisible(tester, key('attachAdd'));
       await settle(tester);
@@ -229,7 +289,7 @@ void main() {
 
     tw('a refused camera permission says so in plain words; any other failure says it could not take the photo', (tester) async {
       final camera = FakeCamera()..photoError = 'permission';
-      final wc = wallet(inputs: FakeBillInputs(camera: camera));
+      final wc = wallet(inputs: inputsOf(camera));
       await openTx(tester, wc);
       await tapVisible(tester, key('attachAdd'));
       await tester.pumpAndSettle();
@@ -251,7 +311,7 @@ void main() {
     });
 
     tw('a file dialog that fails says so', (tester) async {
-      final wc = wallet(inputs: FakeBillInputs(camera: FakeCamera(canShow: false)));
+      final wc = wallet(inputs: inputsOf(FakeCamera(canShow: false)));
       final chooser = FakeAttachChooser()..error = StateError('no portal');
       await openTx(tester, wc, chooser: chooser);
       await tapVisible(tester, key('attachAdd'));
@@ -294,6 +354,40 @@ void main() {
       expect(key('attachRow:$id'), findsOneWidget);
       expect(key('attachAdd'), findsNothing);
       expect(wc.attachments(payment(wc).tx.id).map((b) => b.id), contains(id));
+    });
+
+    tw('Undo stays after a cancelled Attach, and a new file replaces the note', (tester) async {
+      final wc = wallet(inputs: inputsOf(FakeCamera(canShow: false)));
+      await addMany(tester, wc, 1);
+      final chooser = FakeAttachChooser(); // cancels
+      await openTx(tester, wc, chooser: chooser);
+      final id = wc.attachments(payment(wc).tx.id).single.id;
+      await tapVisible(tester, key('attachRemove:$id'));
+      await tester.pump();
+      await tapVisible(tester, key('attachAdd'));
+      await settle(tester);
+      expect(chooser.calls, 1);
+      expect(key('attachUndo'), findsOneWidget);
+      expect(snack('Attachment removed'), findsOneWidget);
+      chooser.picks = [FakePicked('a.png', photoBytes)];
+      await tapVisible(tester, key('attachAdd'));
+      await settle(tester);
+      expect(key('attachUndo'), findsNothing);
+      expect(key('attachNote'), findsNothing);
+      expect(wc.attachments(payment(wc).tx.id), hasLength(1));
+    });
+
+    tw('an attachment saves as attachment-<payment date>.pdf', (tester) async {
+      final wc = wallet(inputs: inputsOf(FakeCamera(), pdf: FakePdf(canRender: false)));
+      final tx = payment(wc).tx.id;
+      expect(await tester.runAsync(() => wc.attachFile(tx, smallPdf(['x']), 'pdf')), AttachResult.ok);
+      final chooser = FakeAttachChooser();
+      await openTx(tester, wc, chooser: chooser);
+      await tapVisible(tester, key('attachRow:${wc.attachments(tx).single.id}'));
+      await settle(tester);
+      await tester.tap(key('saveBillFile'));
+      await tester.pump();
+      expect(chooser.savedNames.single, 'attachment-${payment(wc).tx.date}.pdf');
     });
 
     tw('Undo with the payment full again says so and keeps the count at 5', (tester) async {

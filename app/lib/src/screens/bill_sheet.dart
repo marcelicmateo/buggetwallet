@@ -588,7 +588,7 @@ class _BillFileScreenState extends State<BillFileScreen> {
   Future<void> _save(_Shown s) async {
     logNav('bill.saveFile', {'type': s.type});
     try {
-      final name = 'bill-${widget.bill.date ?? widget.wc.today()}.${s.type}';
+      final name = '${widget.bill.isAttachment ? 'attachment' : 'bill'}-${widget.bill.date ?? widget.wc.today()}.${s.type}';
       await widget.chooser.saveBillFile(fileName: name, bytes: s.bytes!, title: 'Save the bill file');
     } catch (e, st) {
       logError(Logger('bw.bills'), 'bill.saveFailed', e, st, fields: {'type': e.runtimeType.toString()});
@@ -604,7 +604,10 @@ class _BillFileScreenState extends State<BillFileScreen> {
             builder: (context, snap) {
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
               final s = snap.data!;
-              if (s.state == BillFileState.none) return const Center(child: EmptyNote('This bill has no photo or file.'));
+              if (s.state == BillFileState.none) {
+                return Center(
+                    child: EmptyNote(widget.bill.isAttachment ? 'This attachment has no file.' : 'This bill has no photo or file.'));
+              }
               if (s.state == BillFileState.missing) {
                 return Center(
                     child: Padding(

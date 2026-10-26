@@ -15,7 +15,7 @@ enum AttachResult { ok, tooBig, badType, full, failed }
 /// The plain words for a failed attach (null for [AttachResult.ok]).
 String? attachMessage(AttachResult r) => switch (r) {
       AttachResult.ok => null,
-      AttachResult.tooBig => 'That file is too big (max 15 MB).',
+      AttachResult.tooBig => 'This file is too big to attach (max 15 MB).',
       AttachResult.badType => 'Only photos and PDFs can be attached.',
       AttachResult.full => 'A payment holds 5 attachments at most.',
       AttachResult.failed => "Couldn't save that file. Try again.",
@@ -523,20 +523,37 @@ extension BillsDb on WalletController {
         if (jpeg != null) {
           keep = jpeg;
           type = 'jpg';
+        } else if (billInputs.pdf.supported) {
+          // The phone can size pictures and could not read this one: do not keep something that may not open.
+          logEvent(_billLog, Level.INFO, 'attach', {'result': 'badType', 'where': 'unreadable'});
+          return AttachResult.badType;
         }
       }
       if (keep.length > maxBlobPlainBytes) {
         logEvent(_billLog, Level.INFO, 'attach', {'result': 'tooBig', 'where': 'kept'});
         return AttachResult.tooBig;
       }
+      // The sizing above took time: sync may have deleted the payment or filled it meanwhile. Check again before a file is sealed
+      // and queued for upload that nothing would reference.
+      final tx = repo.transaction(txId);
+      if (tx == null || tx.deleted) return AttachResult.failed;
+      if (repo.attachments(txId).length >= maxAttachmentsPerTx) {
+        logEvent(_billLog, Level.INFO, 'attach', {'result': 'full', 'where': 'late'});
+        return AttachResult.full;
+      }
       final ref = await _blobStore().add(keep, type);
-      repo.addAttachment(txId, ref);
+      try {
+        repo.addAttachment(txId, ref);
+      } on StateError {
+        logEvent(_billLog, Level.INFO, 'attach', {'result': 'full', 'where': 'write'});
+        return AttachResult.full;
+      }
       logEvent(_billLog, Level.INFO, 'attach', {'result': 'ok', 'type': type, 'bytes': keep.length});
       _changed();
       return AttachResult.ok;
-    } on StateError {
-      logEvent(_billLog, Level.INFO, 'attach', {'result': 'full'});
-      return AttachResult.full;
+    } on ClockBehindException catch (e) {
+      noticeClockBehind(e);
+      return AttachResult.failed;
     } catch (err, st) {
       logError(_billLog, 'attach.failed', err, st, fields: {'type': err.runtimeType.toString()});
       return AttachResult.failed;

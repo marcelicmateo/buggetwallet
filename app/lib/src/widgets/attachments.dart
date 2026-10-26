@@ -52,16 +52,15 @@ class _AttachmentsSectionState extends State<AttachmentsSection> {
 
   Future<void> _add() async {
     if (busy) return;
-    if (note != null) setState(() => note = undoId = null);
-    var how = 'file';
-    if (widget.wc.billInputs.camera.supported) {
-      logNav('attach.choose');
-      final r = await showSheet<String>(context, const _AttachChooser());
-      if (r == null || !mounted) return;
-      how = r;
-    }
-    setState(() => busy = true);
+    setState(() => busy = true); // before the chooser opens: a second tap must not open a second one
     try {
+      var how = 'file';
+      if (widget.wc.billInputs.camera.supported) {
+        logNav('attach.choose');
+        final r = await showSheet<String>(context, const _AttachChooser());
+        if (r == null || !mounted) return;
+        how = r;
+      }
       if (how == 'camera') {
         await _fromCamera();
       } else {
@@ -129,9 +128,13 @@ class _AttachmentsSectionState extends State<AttachmentsSection> {
   Future<void> _store(Uint8List bytes, String ext) async {
     final r = await widget.wc.attachFile(widget.txId, bytes, ext);
     if (!mounted) return;
-    setState(() {});
     final msg = attachMessage(r);
-    if (msg != null) _say(msg);
+    if (msg != null) {
+      _say(msg);
+    } else {
+      // A new file replaces an old note (and its Undo); a cancelled Attach leaves them alone.
+      setState(() => note = undoId = null);
+    }
   }
 
   void _remove(Bill a) {
