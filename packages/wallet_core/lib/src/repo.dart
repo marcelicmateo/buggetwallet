@@ -1068,7 +1068,8 @@ class WalletRepo {
     // A bill paid by this row is unpaid again at once (its planned row reopens and reserves): exact money.
     final today = _today();
     final paid = [
-      for (final r in db.select('SELECT * FROM bills WHERE deleted = 0 AND linked_tx = ?', [txId])) Bill.fromRow(r)
+      for (final r in db.select("SELECT * FROM bills WHERE deleted = 0 AND source != 'attachment' AND linked_tx = ?", [txId]))
+        Bill.fromRow(r)
     ];
     _write([
       for (final b in paid) ..._billWrites(b, {'linked_tx': null}, today),
@@ -1141,7 +1142,7 @@ class WalletRepo {
     final relink = <Bill>[];
     final rematch = <String>[], repair = <String>[];
     if (_undoRecord(_meta('$_undoKey$txId')) case final u?) {
-      final held = db.select('SELECT 1 FROM bills WHERE deleted = 0 AND linked_tx = ?', [txId]).isNotEmpty;
+      final held = db.select("SELECT 1 FROM bills WHERE deleted = 0 AND source != 'attachment' AND linked_tx = ?", [txId]).isNotEmpty;
       for (final id in u.bills) {
         final b = db.select('SELECT * FROM bills WHERE id = ? AND deleted = 0 AND linked_tx IS NULL', [id]);
         if (!held && b.isNotEmpty) relink.add(Bill.fromRow(b.first));

@@ -277,6 +277,7 @@ class _BillSheetState extends State<BillSheet> {
             BillSource.pdf => 'Read from a PDF.',
             BillSource.photo => 'Read from a photo.',
             BillSource.manual => 'Added by you.',
+            BillSource.attachment => 'Attachment',
           },
           size: BwType.metaSize),
       if (review) const Muted('Check the fields, then confirm. Nothing counts until you do.', size: BwType.metaSize),

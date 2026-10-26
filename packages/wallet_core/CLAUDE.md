@@ -418,7 +418,16 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   date − 3 .. (due ?? date) + 60, exactly one row and one bill; never by amount alone, never reclassifies. Deleting the
   paying tx unlinks at once; other devices unlink a bill whose payment row arrives deleted in `_autoLinkBills` (caught
   up). `billCandidates` (no own transfers), `upcoming(billsDb:)` (`UpcomingKind.warranty`/`returnBy`),
-  settings `returnReminderDays` (3, 0..30) / `warrantyReminderDays` (14, 0..90). `BlobStore(repo, key, maxCacheBytes:)`:
+  settings `returnReminderDays` (3, 0..30) / `warrantyReminderDays` (14, 0..90).
+  **Attachments (P16b):** a bill row with `source: attachment` (`Bill.isAttachment`), random id, linked to its payment,
+  `total` = |amount|, its date/currency, confirmed, paid. `addAttachment(txId, BlobRef)` (unknown/deleted tx or a type
+  outside `blobTypes`: `ArgumentError`; `maxAttachmentsPerTx` (5) live: `StateError`), `attachments(txId)` (live,
+  oldest first by the `source` clock, then id), `removeAttachment` (soft delete) / `restoreAttachment` (Undo; cap →
+  `StateError`). Invisible elsewhere: `bills()` (unless `includeAttachments`), the bill calls (`_liveBill` refuses
+  them), `planBillLinks`/`billCandidates` (neither link nor take a row), the one-bill-per-payment repair, the
+  deleted-payment unlink (they stay on the payment), `_billWrites` (no planned row), search, upcoming reminders, bill
+  history. Live ones stay in `liveBlobHashes`/`backupBlobCandidates`. Tests: `test/p16b_attachments_test.dart`.
+  `BlobStore(repo, key, maxCacheBytes:)`:
   `add` (async: seal, hash = SHA-256 of the sealed bytes, cached with `uploaded` 0), `read(hash, transport:)` (cache, else
   fetch, hash checked, unsealed, cached as uploaded). **P14 (schema 15, `docs/context/P14_SPEC.md`):** one device-local
   table `blob_cache` (`uploaded` 0/1; LRU by a use counter, never evicts an un-uploaded file nor one a pending outbox op
@@ -685,6 +694,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   its category keeps it from being reserved on top of the fixed plan). An unattached file (added, bill not saved) is
   uploaded and later collected by the relay GC. A key holder declaring empty sets twice lets GC drop files older than
   30 days (recoverable from caches and backups). Two devices adding an `asNew` copy before syncing make one bill.
+  Attachments (P16b): the 5-per-payment cap is checked on local adds and restores only; two devices attaching offline
+  can leave more than 5 live after a merge (all kept, never deleted; no add or restore until the payment is below 5).
+  Builds before P16b read `source: attachment` as `manual`: they show an attachment as a paid, confirmed bill in their
+  Bills list (never reserved: no due date) until they upgrade.
 - Rules (P7, no schema bump): a build before P7 reads a `contains` pattern as a regex and ignores its amount range, so
   it can categorize differently (text only) until it upgrades. A deleted pattern's tombstone keeps no order: Undo
   (set again) puts it last. A text rename (new row + tombstone of the old one) on one device and an edit of the same

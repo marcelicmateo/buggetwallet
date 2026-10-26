@@ -110,6 +110,7 @@ List<Map<String, Object?>> searchRows(String entity, String query, Iterable<Map<
   final cents = parseAmountQuery(query)?.abs();
   bool hit(Map<String, Object?> r) {
     if (r['deleted'] == 1) return false;
+    if (entity == 'bill' && r['source'] == 'attachment') return false; // P16b: listed on its payment only
     for (final c in cols) {
       final v = r[c.name];
       if (c.type == ColumnType.text) {
@@ -216,6 +217,7 @@ SearchResult searchAll(
     billsDb: [
       for (final b in billsDb)
         if (!b.deleted &&
+            !b.isAttachment &&
             (text(b.payee) || text(b.description) || b.items.any((i) => text(i.name)) || (b.total != null && amount(b.total!))))
           b
     ],

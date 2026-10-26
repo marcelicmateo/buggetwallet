@@ -36,6 +36,7 @@ export 'src/bills.dart'
         BillStatus,
         BlobRef,
         descriptionHasToken,
+        maxAttachmentsPerTx,
         maxBillItemName,
         maxBillItems,
         occurrenceKey,

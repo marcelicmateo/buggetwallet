@@ -1,8 +1,9 @@
 /// Bills read from receipts, payment slips, e-invoices, PDFs and photos (stage B, `docs/context/BILLS_API.md`).
 library;
 
-/// Where a bill was read from.
-enum BillSource { receiptQr, hub3, eInvoice, pdf, photo, manual }
+/// Where a bill was read from. [attachment] (P16b) is a photo or PDF the owner attached to a payment: stored as a
+/// bill row (wallet_core), never read by a reader here.
+enum BillSource { receiptQr, hub3, eInvoice, pdf, photo, manual, attachment }
 
 /// One line of a bill (e-invoices only, for now).
 class BillItem {
