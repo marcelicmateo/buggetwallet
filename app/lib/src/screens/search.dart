@@ -152,7 +152,7 @@ class _SearchPaneState extends State<SearchPane> {
                     money(w.price, cur, decimals: 0),
                     switch (w.status) { 'bought' => 'Bought', 'skipped' => 'Skipped', _ => 'Waiting' },
                     'wish',
-                    () => widget.wc.openWish(w.id)),
+                    () => widget.wc.openWish(w.id, via: 'search')),
             ]),
           ]),
         if (planned.isNotEmpty)

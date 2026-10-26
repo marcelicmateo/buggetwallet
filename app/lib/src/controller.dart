@@ -2259,9 +2259,9 @@ class WalletController extends ChangeNotifier {
   }
 
   /// Opens the Save tab on the wish [wishId].
-  void openWish(String wishId) {
+  void openWish(String wishId, {String via = 'toast'}) {
     highlightWish.value = wishId;
-    openTab(Tabs.save);
+    openTab(Tabs.save, via: via);
   }
 
   void decideWish(String id, String status) {

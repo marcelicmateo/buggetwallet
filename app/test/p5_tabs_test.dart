@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/layout.dart';
 import 'support/wallet.dart';
@@ -270,44 +271,71 @@ void main() {
       expect(on(), isFalse, reason: 'hidden when it changed: rebuilt when shown again');
     });
 
-    tw('a hidden tab is not rebuilt by a change, a shown one is', (t) async {
-      final wc = _wallet(bill: true);
+    tw('switching tabs without a change does not rebuild; a change or a theme change while hidden does, on show', (t) async {
+      final wc = _wallet();
       var builds = 0;
-      Widget tabs(int shown) => MaterialApp(
-              home: Scaffold(
-                  body: IndexedStack(index: shown, children: [
-            for (final i in [0, 1])
-              TickerMode(
-                  enabled: i == shown,
-                  child: i == 1
-                      ? RebuildWhenShown(
-                          listenable: wc,
-                          builder: (_) {
-                            builds++;
-                            return const SizedBox();
-                          })
-                      : const SizedBox()),
+      // The same widget instance every time, like the shell's pages: only what changes around it reaches it.
+      final page = RebuildWhenShown(
+          listenable: wc,
+          builder: (context) {
+            builds++;
+            return Text(Theme.of(context).brightness.name);
+          });
+      Widget tabs(int shown, {Brightness b = Brightness.light}) => MaterialApp(
+          theme: ThemeData(brightness: b),
+          home: Scaffold(
+              body: IndexedStack(index: shown, children: [
+            for (final i in [0, 1]) TickerMode(enabled: i == shown, child: i == 1 ? page : const SizedBox()),
           ])));
-      await t.pumpWidget(tabs(0));
-      await t.pump();
+      Future<void> show(int i, {Brightness b = Brightness.light}) async {
+        await t.pumpWidget(tabs(i, b: b));
+        await t.pump(const Duration(seconds: 1));
+      }
+
+      await show(0);
       final first = builds;
-      wc.setThemeMode('dark');
+      await show(1);
+      await show(0);
+      await show(1);
+      await show(0);
+      expect(builds, first, reason: 'showing and hiding again with no change rebuilt nothing');
+      wc.setThemeMode('dark'); // a change while hidden
       await t.pump();
-      expect(builds, first, reason: 'hidden: no rebuild');
-      await t.pumpWidget(tabs(1));
-      await t.pump();
-      final shown = builds;
-      expect(shown, greaterThan(first), reason: 'shown again: built at once');
+      expect(builds, first, reason: 'hidden: not rebuilt now');
+      await show(1);
+      expect(builds, first + 1, reason: 'rebuilt when shown');
+      await show(0);
+      await show(1);
+      expect(builds, first + 1, reason: 'no change since: not rebuilt');
+      await show(0, b: Brightness.dark); // a theme change while hidden
+      expect(builds, first + 1);
+      await show(1, b: Brightness.dark);
+      expect(builds, first + 2, reason: 'the theme changed while hidden: rebuilt when shown');
+      expect(find.text('dark'), findsOneWidget);
       wc.setThemeMode('light');
       await t.pump();
-      expect(builds, greaterThan(shown), reason: 'shown: rebuilt');
+      expect(builds, first + 3, reason: 'shown: rebuilt at once');
     });
 
-    test('billPaidThisPeriod reads one map per data version', () {
-      final wc = _wallet(bill: true);
-      final b = wc.expectedBills().single;
-      expect(wc.billPaidThisPeriod(b), isFalse);
-      expect(wc.billPaidThisPeriod(b), isFalse);
+    test('billPaidThisPeriod follows the data: a payment in the period makes it true, deleting it or an older one false', () {
+      final wc = _wallet();
+      final start = wc.period().start;
+      NormalizedTransaction pay(String date, String name) => syntheticTx(date, -3000, 'POS plaćanje', 'POS $name ZAGREB');
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [pay(start, 'ZORBLEXM'), pay(addDays(start, -5), 'ZORBLEXO')]));
+      wc.reload();
+      String key(String s) => wc.recentPayees().firstWhere((p) => p.key.toLowerCase().contains(s)).key;
+      String add(String label, String payee, String due) =>
+          wc.addRecurringBill(label: label, category: 'Groceries', amount: 3000, intervalDays: 30, firstDue: due, payee: key(payee));
+      final inPeriod = add('Zorblex now', 'zorblexm', start);
+      final old = add('Zorblex old', 'zorblexo', addDays(start, -5));
+      RecurringBill bill(String id) => wc.recurringBills().firstWhere((b) => b.id == id);
+      expect(bill(inPeriod).lastPaidTx, isNotNull);
+      expect(bill(old).lastPaidTx, isNotNull);
+      expect(wc.billPaidThisPeriod(bill(inPeriod)), isTrue);
+      expect(wc.billPaidThisPeriod(bill(old)), isFalse, reason: 'paid before the period started');
+      wc.repo.deleteTransaction(bill(inPeriod).lastPaidTx!);
+      wc.reload();
+      expect(wc.billPaidThisPeriod(bill(inPeriod)), isFalse, reason: 'the payment is gone: the map was rebuilt for the new data');
     });
   });
 
