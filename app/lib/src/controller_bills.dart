@@ -9,6 +9,18 @@ part of 'controller.dart';
 
 final _billLog = Logger('bw.bills');
 
+/// How a try to attach a file to a payment ended.
+enum AttachResult { ok, tooBig, badType, full, failed }
+
+/// The plain words for a failed attach (null for [AttachResult.ok]).
+String? attachMessage(AttachResult r) => switch (r) {
+      AttachResult.ok => null,
+      AttachResult.tooBig => 'That file is too big (max 15 MB).',
+      AttachResult.badType => 'Only photos and PDFs can be attached.',
+      AttachResult.full => 'A payment holds 5 attachments at most.',
+      AttachResult.failed => "Couldn't save that file. Try again.",
+    };
+
 /// How a try to add a bill ended.
 enum BillImportKind { added, duplicate, unreadable, tooBig, failed, clockBehind }
 
@@ -481,6 +493,74 @@ extension BillsDb on WalletController {
     repo.addExpenseFromBill(id, category: category);
     logEvent(_billLog, Level.INFO, 'bill.cashExpense', {'category': _logCategory(category)});
     _changed();
+  }
+
+  // ---------- attachments (P16b) ----------
+
+  /// The files attached to a payment (photos and PDFs of a receipt, a warranty, a slip), oldest first. Never in the bill lists.
+  List<Bill> attachments(String txId) => _cached('attach|$txId', () => repo.attachments(txId));
+
+  /// Attaches [raw] (a photo or PDF, [ext] with or without the dot) to the payment [txId]. Pictures are sized down like a bill's.
+  Future<AttachResult> attachFile(String txId, Uint8List raw, String ext) async {
+    try {
+      final e = ext.toLowerCase().replaceFirst('.', '');
+      if (e != 'pdf' && e != 'jpg' && e != 'jpeg' && e != 'png') {
+        logEvent(_billLog, Level.INFO, 'attach', {'result': 'badType'});
+        return AttachResult.badType;
+      }
+      if (raw.length > maxBillFileBytes(e)) {
+        logEvent(_billLog, Level.INFO, 'attach', {'result': 'tooBig', 'where': 'raw'});
+        return AttachResult.tooBig;
+      }
+      if (key == null) return AttachResult.failed;
+      if (attachments(txId).length >= maxAttachmentsPerTx) {
+        logEvent(_billLog, Level.INFO, 'attach', {'result': 'full'});
+        return AttachResult.full;
+      }
+      var keep = raw, type = e == 'jpeg' ? 'jpg' : e;
+      if (type != 'pdf') {
+        final jpeg = await billInputs.pdf.toJpeg(raw);
+        if (jpeg != null) {
+          keep = jpeg;
+          type = 'jpg';
+        }
+      }
+      if (keep.length > maxBlobPlainBytes) {
+        logEvent(_billLog, Level.INFO, 'attach', {'result': 'tooBig', 'where': 'kept'});
+        return AttachResult.tooBig;
+      }
+      final ref = await _blobStore().add(keep, type);
+      repo.addAttachment(txId, ref);
+      logEvent(_billLog, Level.INFO, 'attach', {'result': 'ok', 'type': type, 'bytes': keep.length});
+      _changed();
+      return AttachResult.ok;
+    } on StateError {
+      logEvent(_billLog, Level.INFO, 'attach', {'result': 'full'});
+      return AttachResult.full;
+    } catch (err, st) {
+      logError(_billLog, 'attach.failed', err, st, fields: {'type': err.runtimeType.toString()});
+      return AttachResult.failed;
+    }
+  }
+
+  /// Removes an attachment from its payment (Undo: [restoreAttachment]).
+  void removeAttachment(String id) {
+    repo.removeAttachment(id);
+    logEvent(_billLog, Level.INFO, 'attach.remove');
+    _changed();
+  }
+
+  /// Undo of [removeAttachment]; false when the payment already holds the most ([maxAttachmentsPerTx]).
+  bool restoreAttachment(String id) {
+    try {
+      repo.restoreAttachment(id);
+    } on StateError {
+      logEvent(_billLog, Level.INFO, 'attach.restore', {'result': 'full'});
+      return false;
+    }
+    logEvent(_billLog, Level.INFO, 'attach.restore', {'result': 'ok'});
+    _changed();
+    return true;
   }
 
   BlobStore _blobStore() => BlobStore(repo, key!, maxCacheBytes: isWeb ? blobCacheBytesWeb : blobCacheBytesNative);

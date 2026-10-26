@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
+import '../file_chooser.dart';
 import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
@@ -10,6 +11,7 @@ import '../screens/bill_sheet.dart';
 import '../screens/rules_panel.dart';
 import '../screens/scan_bill.dart';
 import '../theme.dart';
+import 'attachments.dart';
 import 'category_picker.dart';
 import 'common.dart';
 import 'split_sheet.dart';
@@ -325,7 +327,10 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
 class TxSheet extends StatefulWidget {
   final WalletController wc;
   final CategorizedTx t;
-  const TxSheet({super.key, required this.wc, required this.t});
+
+  /// The file dialogs (a fake in tests) for "Attach photo or PDF".
+  final FileChooser chooser;
+  const TxSheet({super.key, required this.wc, required this.t, this.chooser = const FileChooser()});
   @override
   State<TxSheet> createState() => _TxSheetState();
 }
@@ -445,6 +450,7 @@ class _TxSheetState extends State<TxSheet> {
               onPressed: () => openBill(context, widget.wc, bill.id)),
         ),
       ],
+      AttachmentsSection(wc: widget.wc, txId: t.id, chooser: widget.chooser),
       const SizedBox(height: 14),
       MainTagPicker(
         dropdown: true,

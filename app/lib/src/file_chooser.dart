@@ -23,6 +23,10 @@ class FileChooser {
   Future<List<PlatformFile>> pickBillFiles() =>
       FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['pdf', 'xml', 'jpg', 'jpeg', 'png']);
 
+  /// A photo or PDF to attach to a payment (no e-invoice XML). An empty list means the user cancelled.
+  Future<List<PlatformFile>> pickAttachmentFiles() =>
+      FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png']);
+
   /// A calendar file (`.ics`). An empty list means the user cancelled.
   Future<List<PlatformFile>> pickCalendarFile() => FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['ics']);
 
