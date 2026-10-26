@@ -344,6 +344,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Test fixes:** bills tests and the number-style test depended on the real date (went red on 26 Oct); now pinned / robust.
   - **Stage run:** importer 374, core 2549, relay 216, app 1758, desktop 13 files, web-test, emulator screens, perf ok.
   - **Update every device and the relay together** (schema 15, relay api 4).
+- 2026-10-27: **Stages P16b + P5** (specs `P16_SPEC.md` P16b, `P5_SPEC.md`; schema 16; built overnight in parallel, verified together).
+  - **P16b attachments:** a payment's sheet has "Attach photo or PDF" (Android: Take photo or Pick a file; desktop: file pick; jpg/png/pdf only, pictures sized down, 15 MB max), up to 5 per payment, each opens like a bill file, Remove with Undo in the sheet. Attachments never count as bills: no Bills lists, no money set aside, no matching, reminders or search. Files ride on P14 (upload before the change, kept on the relay, in backups). A hand-added entry's attachments move to its bank row when matched. Linked through a new column `attached_tx` so builds before P16b never mistake them for a bill payment (they show one under Bills › Unpaid, never reserved).
+  - **P5 new tabs:** Today · Budget · Bills · Save · Settings (your approved mockup). Budget = payday plan on top of the old Spending page; Bills = Coming up (or "Held until paid: X"), To review, Expected bills, the bills list, Scan/Add bill; Save = Goals then Wishlist; Settings = every other Plan section, one page on the phone, two panes from 1040 dp. Today's lines, search results and the currency note open the right tab and section. Bills and Settings rebuild only while shown.
+  - **Reviews:** P16b core 1 medium-high (old builds would unlink a real bill → money set aside again; fixed with `attached_tx`), 1 fix reverted after re-review (files of a deleted payment could be lost on undelete), matched-entry bug; P16b UI 1 medium (clock behind showed "couldn't save"), 6 low, 4 test gaps; P5 3 (search links, held heading, rebuild cost) + 3 follow-ups; emulator screens test order. All fixed with tests.
+  - **Known limits:** a deleted payment's attachments keep their files on the relay and in backups (16 MB budget) until removed; more than 5 can exist after two offline devices attach to the same payment (nothing deleted, adding is refused until below 5).
+  - **Stage run:** importer 374, core 2575, relay 216, app 1814, desktop 13 files, web-test, emulator screens, perf ok (all three actions in budget). **Update every device together** (schema 16).
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -430,6 +436,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
   N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
+- Owner checks after P16b + P5 (phone):
+  - Five tabs at the bottom; Budget starts with the payday plan, Edit plan saves/cancels; Save shows goals above the wishlist.
+  - Bills: Coming up first, then slips to review, Expected bills, the bills list; Scan bill and Add bill work. Today's "Due by payday" and "N bills to review" open Bills.
+  - Settings: one page with every section; Today's held-money and expected-income lines jump to their section. On the laptop (wide window) Settings has two panes.
+  - Open a payment › Attach photo or PDF: take a photo (allow, then once refuse the camera), pick a PDF; open it; Remove → Undo; the button goes away at 5.
+  - Attach a receipt to a hand-added expense, import the bank file → the receipt is now on the bank row.
 - Owner checks after P12/P14/P16a (phone + relay):
   - Import a CSV from another bank or app: Map columns, fix a problem it shows, Save & import; import the same file again → nothing new; Settings › Import › Saved file layouts: rename, delete + Undo.
   - Update the relay to api 4 with the phones; scan a bill with a photo, sync, delete the bill → the file still opens on the other device until it syncs; Undo the delete → the photo is there.
