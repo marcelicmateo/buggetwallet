@@ -421,9 +421,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   settings `returnReminderDays` (3, 0..30) / `warrantyReminderDays` (14, 0..90).
   **Attachments (P16b):** a bill row with `source: attachment` (`Bill.isAttachment`), random id, linked to its payment,
   `total` = |amount|, its date/currency, confirmed, paid. `addAttachment(txId, BlobRef)` (unknown/deleted tx or a type
-  outside `blobTypes`: `ArgumentError`; `maxAttachmentsPerTx` (5) live: `StateError`), `attachments(txId)` (live,
+  outside `attachmentTypes` = jpg/png/pdf: `ArgumentError`; `maxAttachmentsPerTx` (5) live: `StateError`), `attachments(txId)` (live,
   oldest first by the `source` clock, then id), `removeAttachment` (soft delete) / `restoreAttachment` (Undo; cap →
-  `StateError`). Invisible elsewhere: `bills()` (unless `includeAttachments`), the bill calls (`_liveBill` refuses
+  `StateError`). A hand-added entry replaced by its bank row hands its live attachments to that row
+  (`_moveMatchedAttachments` in `_reconcile` after matching, cap not checked); they stay there if the match reopens. Invisible elsewhere: `bills()` (unless `includeAttachments`), the bill calls (`_liveBill` refuses
   them), `planBillLinks`/`billCandidates` (neither link nor take a row), the one-bill-per-payment repair, the
   deleted-payment unlink (they stay on the payment), `_billWrites` (no planned row), search, upcoming reminders, bill
   history. Live ones stay in `liveBlobHashes`/`backupBlobCandidates`. Tests: `test/p16b_attachments_test.dart`.

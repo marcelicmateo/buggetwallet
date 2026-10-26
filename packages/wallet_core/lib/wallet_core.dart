@@ -28,6 +28,7 @@ export 'src/backup.dart'
 export 'src/bill_history.dart' show BillMonth, BillMonthState, billHistory;
 export 'src/bills.dart'
     show
+        attachmentTypes,
         Bill,
         billCandidates,
         billCoveredBy,

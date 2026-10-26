@@ -95,6 +95,9 @@ void main() {
       final f = await file(r);
       expect(() => r.addAttachment('no-such-tx', f), throwsArgumentError);
       expect(() => r.addAttachment(tx, BlobRef(hash: f.hash, type: 'gif', bytes: f.bytes)), throwsArgumentError);
+      final xml = await file(r, 'xml'); // a bill may keep an e-invoice; an attachment is a photo or PDF only
+      expect(() => r.addAttachment(tx, xml), throwsArgumentError);
+      expect(attachmentTypes, {'jpg', 'png', 'pdf'});
       expect(() => r.addAttachment(tx, const BlobRef(hash: 'not-a-hash', type: 'jpg', bytes: 1)), throwsArgumentError);
       r.deleteTransaction(tx);
       expect(() => r.addAttachment(tx, f), throwsArgumentError);
@@ -324,6 +327,81 @@ void main() {
       r.updateSettings({'returnReminderDays': 5});
       await run(r);
       expect(relay.declared.values.last, [f.hash]);
+    });
+  });
+
+  group('a hand-added entry replaced by its bank row', () {
+    final card = n('2026-03-06', -1250, 'POS plaćanje', 'PBZ POS PBZ7LIDL HRVATSKA ZAGREB');
+
+    /// A cash expense with [k] attachments, then its card row imported (matching replaces the entry).
+    Future<(WalletRepo, String, List<String>)> entryWith(int k) async {
+      final r = mk();
+      final cash = r.addTransaction(date: '2026-03-05', amount: 1250, category: 'Groceries');
+      final ids = [for (var i = 0; i < k; i++) r.addAttachment(cash, await file(r))];
+      return (r, cash, ids);
+    }
+
+    String bankOf(WalletRepo r) => r.transactions().firstWhere((t) => !t.manual).id;
+
+    test('BUG repro: its attachments move to the bank row', () async {
+      final (r, cash, ids) = await entryWith(2);
+      expect(r.importBatch(rows([card])).matched, 1);
+      final bank = bankOf(r);
+      expect(r.transaction(cash)!.matchedTo, bank);
+      expect(r.attachments(bank).map((b) => b.id), ids);
+      expect(r.attachments(cash), isEmpty);
+      expect(r.bills(), isEmpty);
+    });
+
+    test('the cap is not enforced on a move: 3 + 3 = 6 on the bank row, nothing removed', () async {
+      final r = mk();
+      r.importBatch(rows([n('2026-03-01', -900, 'POS', 'SYNTHETIC SHOP')]));
+      final cash = r.addTransaction(date: '2026-03-05', amount: 1250, category: 'Groceries');
+      final onCash = [for (var i = 0; i < 3; i++) r.addAttachment(cash, await file(r))];
+      // The bank row arrives while not caught up (no match yet); the owner attaches 3 to it.
+      r.setLocalValue(WalletRepo.caughtUpKey, '0');
+      r.importBatch(rows([card]));
+      final bankRow = r.transactions().firstWhere((t) => t.amount == -1250 && !t.manual).id;
+      expect(r.transaction(cash)!.matchedTo, isNull);
+      final onBank = [for (var i = 0; i < 3; i++) r.addAttachment(bankRow, await file(r))];
+      r.setLocalValue(WalletRepo.caughtUpKey, '1');
+      r.runPendingMatch();
+      expect(r.transaction(cash)!.matchedTo, bankRow);
+      expect(r.attachments(bankRow).map((b) => b.id).toSet(), {...onCash, ...onBank});
+      expect(r.bills(includeDeleted: true, includeAttachments: true).where((b) => b.deleted), isEmpty);
+    });
+
+    test('a deleted bank row: the entry counts again, the attachments stay on the bank row; Undo shows them again', () async {
+      final (r, cash, ids) = await entryWith(1);
+      r.importBatch(rows([card]));
+      final bank = bankOf(r);
+      r.deleteTransaction(bank);
+      expect(r.transaction(cash)!.matchedTo, isNull);
+      expect(r.bill(ids.single)!.linkedTx, bank, reason: 'rule: once moved, an attachment stays on the bank row');
+      expect(r.bill(ids.single)!.deleted, isFalse, reason: 'never deleted');
+      r.undeleteTransaction(bank);
+      expect(r.transaction(cash)!.matchedTo, bank);
+      expect(r.attachments(bank).single.id, ids.single);
+    });
+
+    test('two devices converge: the entry\'s device and the importing device both move it to the bank row', () async {
+      final a = mk(), b = mk();
+      final cash = a.addTransaction(date: '2026-03-05', amount: 1250, category: 'Groceries');
+      final id = a.addAttachment(cash, await file(a));
+      await run(a);
+      await run(b);
+      b.importBatch(rows([card]));
+      final bank = bankOf(b);
+      expect(b.attachments(bank).single.id, id);
+      await run(b);
+      await run(a);
+      await run(b);
+      for (final r in [a, b]) {
+        expect(r.transaction(cash)!.matchedTo, bank);
+        expect(r.bill(id)!.linkedTx, bank);
+        expect(r.attachments(cash), isEmpty);
+      }
+      expect(a.pendingOps(), isEmpty, reason: 'a wrote the same value, or nothing');
     });
   });
 

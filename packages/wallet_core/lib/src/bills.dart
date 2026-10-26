@@ -31,6 +31,9 @@ class BlobRef {
 /// File types a bill may keep.
 const blobTypes = {'jpg', 'png', 'pdf', 'xml'};
 
+/// File types an attachment (P16b) may have: photos and PDFs (an e-invoice `xml` belongs to a bill).
+const attachmentTypes = {'jpg', 'png', 'pdf'};
+
 /// At most this many live attachments ([BillSource.attachment], P16b) per payment.
 const maxAttachmentsPerTx = 5;
 

@@ -681,6 +681,7 @@ class WalletRepo {
   (int, int) _reconcile() => _asInternal(() {
         final pairs = _pairTransfers();
         final matches = _matchManual();
+        _moveMatchedAttachments();
         _repairFieldPairs();
         _autoLinkBills();
         return (pairs, matches);

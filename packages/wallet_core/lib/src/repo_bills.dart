@@ -176,14 +176,14 @@ extension WalletRepoBills on WalletRepo {
     logEvent(_log, Level.INFO, 'bills.update', {'fields': fields.length});
   }
 
-  /// P16b: attaches [file] (a photo or PDF, one of [blobTypes]) to payment [txId] and returns the new attachment's id.
+  /// P16b: attaches [file] (a photo or PDF, one of [attachmentTypes]) to payment [txId] and returns the new attachment's id.
   /// An attachment is a bill row with source [BillSource.attachment], linked to the payment, `total` = |amount|, the
   /// payment's date and currency, confirmed and paid, in one [_write] (its file is uploaded before the op like a bill's,
   /// declared by snapshots and carried by backups). It is listed only by [attachments]: never by [bills], matching,
-  /// candidates, planned rows, search or reminders. An unknown or deleted payment, or a file type outside [blobTypes]:
+  /// candidates, planned rows, search or reminders. An unknown or deleted payment, or a file type outside [attachmentTypes]:
   /// [ArgumentError]; a payment that already holds [maxAttachmentsPerTx] live attachments: [StateError].
   String addAttachment(String txId, BlobRef file) {
-    if (!blobTypes.contains(file.type) || !isBlobHash(file.hash)) throw ArgumentError('Unknown file type.');
+    if (!attachmentTypes.contains(file.type) || !isBlobHash(file.hash)) throw ArgumentError('Unknown file type.');
     final t = transaction(txId);
     if (t == null || t.deleted) throw ArgumentError('No such transaction.');
     if (_attachmentCount(txId) >= maxAttachmentsPerTx) throw StateError('A payment holds at most $maxAttachmentsPerTx attachments.');
@@ -222,6 +222,24 @@ extension WalletRepoBills on WalletRepo {
       return c != 0 ? c : x.$2.id.compareTo(y.$2.id);
     });
     return [for (final (_, b) in list) b];
+  }
+
+  /// P16b: a hand-added entry that matching replaced with its bank row ([planMatches]: `matched_to` = a live bank row
+  /// here, not an own transfer) hands its live attachments to that row (`linked_tx` through [_write]; the cap is not
+  /// checked: nothing is ever dropped). Rule: they stay on the bank row from then on; a reopened match (bank row
+  /// deleted or paired) does not move them back, and an undelete of the row shows them there again. The same rows give
+  /// the same writes on every device. Runs in [_reconcile] after matching (caught up only).
+  void _moveMatchedAttachments() {
+    final moves = [
+      for (final r in db.select('''
+        SELECT b.id AS id, e.matched_to AS bank FROM bills b JOIN tx e ON e.id = b.linked_tx JOIN tx k ON k.id = e.matched_to
+        WHERE b.deleted = 0 AND b.source = 'attachment' AND e.manual = 1 AND e.deleted = 0
+          AND k.manual = 0 AND k.deleted = 0 AND k.transfer_to IS NULL ORDER BY b.id'''))
+        ('bill', r['id'] as String, <String, Object?>{'linked_tx': r['bank']}),
+    ];
+    if (moves.isEmpty) return;
+    _write(moves);
+    logEvent(_log, Level.INFO, 'bills.attachMoved', {'attachments': moves.length});
   }
 
   int _attachmentCount(String txId) =>
