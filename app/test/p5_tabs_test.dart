@@ -1,6 +1,7 @@
 // P5: the five tabs (Today, Budget, Bills, Save, Settings): what each one holds, the links that open them, Settings on one page and in
 // two panes. The panels themselves are tested where they were (they moved unchanged). All data is SYNTHETIC.
 import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
 import 'package:budget_wallet/src/screens/save.dart';
@@ -9,6 +10,7 @@ import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/wishlist.dart';
 import 'package:budget_wallet/src/tabs.dart';
+import 'package:budget_wallet/src/widgets/rebuild_when_shown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -196,6 +198,116 @@ void main() {
       expect(_key('billsReviewPanel'), findsOneWidget);
       expect(find.text('Synthetic Slip Shop'), findsOneWidget, reason: 'listed once: the database panel leaves To review to this panel');
       expect(t.takeException(), isNull);
+    });
+  });
+
+  group('review fixes', () {
+    tw('search: a wish result opens Save on that wish; an expected bill opens Bills at Expected bills', (t) async {
+      final wc = _wallet(bill: true); // a confirmed SYNTHGYM bill and a "Synthetic lamp" wish
+      await pumpFull(t, wc, 1.0, size: const Size(400, 900));
+      await t.tap(_key('appBarSearch'));
+      await t.pumpAndSettle();
+      await t.enterText(_key('searchField'), 'synth');
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.text('Synthetic lamp'));
+      await t.tap(find.text('Synthetic lamp'));
+      await t.pumpAndSettle();
+      expect(find.byType(SaveScreen), findsOneWidget);
+      expect(wc.highlightWish.value, isNull, reason: 'Save took the highlight');
+      final y = t.getTopLeft(find.text('Synthetic lamp')).dy;
+      expect(y, inInclusiveRange(0, 900), reason: 'the wish is on screen');
+
+      await tapTab(t, 'Budget');
+      await t.pumpAndSettle();
+      await t.tap(_key('appBarSearch'));
+      await t.pumpAndSettle();
+      await t.enterText(_key('searchField'), 'synth');
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pumpAndSettle();
+      final bill = find.textContaining('Confirmed');
+      await t.ensureVisible(bill);
+      await t.tap(bill);
+      for (var i = 0; i < 12; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byType(BillsScreen), findsOneWidget);
+      expect(find.text('EXPECTED BILLS'), findsOneWidget);
+      expect(_top(t, find.text('EXPECTED BILLS')), lessThan(400), reason: 'scrolled to Expected bills');
+    });
+
+    tw('Coming up with only a long bill held until paid says so, with the held total', (t) async {
+      final wc = _wallet();
+      final due = addDays(wc.period().end, 40);
+      final id = wc.addRecurringBill(label: 'Car cover', category: 'Car & transport', amount: 60000, intervalDays: 365, firstDue: due);
+      final p = wc.period();
+      final held = p.dueCycles.where((c) => c.bill.id == id).single;
+      expect(held.reserve, 60000, reason: 'core holds the whole yearly amount');
+      await pumpFull(t, wc, 1.0, size: const Size(400, 900));
+      await tapTab(t, 'Bills');
+      expect(find.text('Held until paid: ${moneyExact(60000, wc.currency)}'), findsOneWidget);
+      expect(find.textContaining('Nothing to set aside'), findsNothing);
+      expect(_key('comingHeld:$id'), findsOneWidget);
+    });
+
+    tw('a device-local switch still updates Settings while shown, and after the tab was hidden', (t) async {
+      final wc = habitsWallet(nudges: FakeNudges());
+      addTearDown(wc.dispose);
+      await pumpFull(t, wc, 1.0, size: const Size(400, 900));
+      await tapTab(t, 'Settings');
+      await _scrollInto(t, _key('nudgesSwitch'), SettingsScreen);
+      bool on() => t.widget<SwitchListTile>(_key('nudgesSwitch')).value;
+      expect(on(), isFalse);
+      await wc.setNudges(true);
+      await t.pump();
+      expect(on(), isTrue, reason: 'shown: rebuilt at once');
+      await tapTab(t, 'Today');
+      await wc.setNudges(false);
+      await t.pump();
+      await tapTab(t, 'Settings');
+      await t.pump();
+      await _scrollInto(t, _key('nudgesSwitch'), SettingsScreen);
+      expect(on(), isFalse, reason: 'hidden when it changed: rebuilt when shown again');
+    });
+
+    tw('a hidden tab is not rebuilt by a change, a shown one is', (t) async {
+      final wc = _wallet(bill: true);
+      var builds = 0;
+      Widget tabs(int shown) => MaterialApp(
+              home: Scaffold(
+                  body: IndexedStack(index: shown, children: [
+            for (final i in [0, 1])
+              TickerMode(
+                  enabled: i == shown,
+                  child: i == 1
+                      ? RebuildWhenShown(
+                          listenable: wc,
+                          builder: (_) {
+                            builds++;
+                            return const SizedBox();
+                          })
+                      : const SizedBox()),
+          ])));
+      await t.pumpWidget(tabs(0));
+      await t.pump();
+      final first = builds;
+      wc.setThemeMode('dark');
+      await t.pump();
+      expect(builds, first, reason: 'hidden: no rebuild');
+      await t.pumpWidget(tabs(1));
+      await t.pump();
+      final shown = builds;
+      expect(shown, greaterThan(first), reason: 'shown again: built at once');
+      wc.setThemeMode('light');
+      await t.pump();
+      expect(builds, greaterThan(shown), reason: 'shown: rebuilt');
+    });
+
+    test('billPaidThisPeriod reads one map per data version', () {
+      final wc = _wallet(bill: true);
+      final b = wc.expectedBills().single;
+      expect(wc.billPaidThisPeriod(b), isFalse);
+      expect(wc.billPaidThisPeriod(b), isFalse);
     });
   });
 

@@ -7,6 +7,7 @@ import '../logging.dart';
 import '../platform.dart';
 import '../tabs.dart';
 import '../theme.dart';
+import '../widgets/rebuild_when_shown.dart';
 import '../widgets/scroll_to.dart';
 import 'accounts_panel.dart';
 import 'backup_panel.dart';
@@ -128,11 +129,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   List<Widget> _panels(SettingsSection s) => settingsPanels(context, widget.wc, s, chooser: widget.chooser, keys: _keys);
 
   // The panels read the wallet in build(); the old Plan tab rebuilt on every change of the controller (a device-local switch changes
-  // no data version, so the shell would not rebuild the page), and so does this one.
+  // no data version, so the shell would not rebuild the page), and so does this one while it is shown.
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
+  Widget build(BuildContext context) => RebuildWhenShown(
       listenable: widget.wc,
-      builder: (context, _) => LayoutBuilder(builder: (context, box) {
+      builder: (context) => LayoutBuilder(builder: (context, box) {
             _twoPane = box.maxWidth >= twoColMin;
             return _twoPane ? _twoPanes(context) : _onePage(context);
           }));

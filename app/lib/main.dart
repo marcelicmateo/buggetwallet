@@ -292,7 +292,10 @@ class _HomeShellState extends State<HomeShell> {
             searchRequest: _searchRequest,
             header: [PaydayPlan(key: _paydayKey, wc: widget.wc)],
             openTab: (i) => _go(i, 'search'),
-            openBills: () => _go(Tabs.bills, 'search')),
+            openBills: () {
+              _go(Tabs.bills, 'search');
+              _billsRequest.request(BillsAnchor.expected);
+            }),
         Tabs.bills => BillsScreen(wc: widget.wc, request: _billsRequest),
         Tabs.save => SaveScreen(wc: widget.wc),
         _ => SettingsScreen(wc: widget.wc),
@@ -640,7 +643,11 @@ class _HomeShellState extends State<HomeShell> {
                     child: Center(
                       child: ConstrainedBox(
                         constraints: BoxConstraints(maxWidth: maxContentWidth(size)),
-                        child: IndexedStack(index: tab, children: _pages),
+                        // A tab that is not shown has its tickers off (IndexedStack keeps it built, and does not do this itself): pages that wait
+                        // for it (Explainer, RebuildWhenShown) know they are hidden.
+                        child: IndexedStack(index: tab, children: [
+                          for (final (i, page) in _pages.indexed) TickerMode(enabled: i == tab, child: page),
+                        ]),
                       ),
                     ),
                   ),

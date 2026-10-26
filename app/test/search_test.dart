@@ -135,7 +135,8 @@ void main() {
 
     testWidgets('a transaction opens the edit sheet; goal, wish and bill jump to their tab', (t) async {
       final wc = searchWallet();
-      final tabs = <int>[];
+      final tabs = <int>[], hooked = <int>[];
+      wc.tabHook = (tab, via) => hooked.add(tab);
       var bills = 0;
       await pumpApp(t, _page(wc, openTab: tabs.add, openBills: () => bills++));
       await _open(t);
@@ -145,7 +146,9 @@ void main() {
       final bill = find.textContaining('Confirmed');
       await t.ensureVisible(bill);
       await t.tap(bill);
-      expect(tabs, [Tabs.save, Tabs.save]);
+      expect(tabs, [Tabs.save], reason: 'a goal jumps to Save');
+      expect(hooked, [Tabs.save], reason: 'a wish goes through openWish: Save, and the wish is the one to show');
+      expect(wc.highlightWish.value, wc.wish.firstWhere((w) => w.name == 'Synthetic lamp').id);
       expect(bills, 1);
       final tx = find.byType(TxTile).first;
       await t.ensureVisible(tx);
