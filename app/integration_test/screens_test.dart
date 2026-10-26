@@ -123,6 +123,10 @@ void main() {
     await tester.pumpAndSettle();
     Future<void> settings(SettingsSection section, Finder target, String shot) async {
       await settingsSection(tester, section);
+      // The list only scrolls forward, and on a phone's one page the sections follow each other in page order (Sync and Backup come
+      // before Calendars): start each look from the top.
+      tester.state<ScrollableState>(pageList(SettingsScreen)).position.jumpTo(0);
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(target, 300, scrollable: pageList(SettingsScreen));
       await tester.pumpAndSettle();
       await binding.takeScreenshot(shot);
@@ -134,13 +138,14 @@ void main() {
     // Settings › Calendars (F3).
     await settings(SettingsSection.calendars, find.text('Import .ics file'), '5-settings-calendars');
 
-    // Settings › Weekly review day and Nudges (M4; Expected bills is on the Bills tab).
-    await tester.scrollUntilVisible(find.text('Review day'), 300, scrollable: pageList(SettingsScreen));
-    await tester.pumpAndSettle();
-    await binding.takeScreenshot('5-settings-habits');
+    // Settings › Nudges, then the Weekly review day under them (M4; Expected bills is on the Bills tab). Calendars, Nudges and Review
+    // day are in this order on the page, so scroll down to each in turn (the list only scrolls forward).
     await tester.scrollUntilVisible(find.textContaining('Remind me at'), 300, scrollable: pageList(SettingsScreen));
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-settings-nudges');
+    await tester.scrollUntilVisible(find.text('Review day'), 300, scrollable: pageList(SettingsScreen));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-settings-habits');
 
     // Settings › Sync (relay address, status, devices), then Backup and Export (M5). The relay is a fake run: no network.
     wc.syncRunner = (relay, key, repo) async => SyncReport(0, 0, 0, caughtUp: true, devices: [
