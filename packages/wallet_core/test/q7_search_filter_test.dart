@@ -2,6 +2,9 @@
 // highlighting. All data SYNTHETIC.
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart';
+
+import 'support/synthetic.dart';
 
 CategorizedTx _tx(String id, int cents, String desc,
         {String date = '2026-01-10', String cat = 'Shopping', String? own, bool deleted = false}) =>
@@ -65,18 +68,60 @@ void main() {
       expect(_ids(_s('', txs, const SearchFilter(categories: {'Rent'}))), isEmpty);
     });
 
+    test('a sync duplicate main tag is found by its twin, on rows and on parts (review fix)', () {
+      final table = CategoryTable.from(const [
+        CategoryRow(id: 'kaaaaaaaaaaaa', name: 'Cinema', kind: BudgetKind.flex),
+        CategoryRow(id: 'kbbbbbbbbbbbb', name: 'Cinema', kind: BudgetKind.flex),
+      ]);
+      expect(table.duplicateOf('kbbbbbbbbbbbb'), 'kaaaaaaaaaaaa');
+      const whole = CategorizedTx(
+          Tx(id: 's', source: 'pbz', date: '2026-01-20', amount: -3000, description: 'POS CINESTAR ZAGREB'), 'Shopping', BudgetKind.flex);
+      final rows = [
+        _tx('dup', -700, 'POS CINESTAR ZAGREB', cat: 'kbbbbbbbbbbbb'),
+        _tx('orig', -800, 'POS CINESTAR ZAGREB', cat: 'kaaaaaaaaaaaa'),
+        _tx('other', -900, 'POS CINESTAR ZAGREB'),
+        CategorizedTx(whole.tx, 'Shopping', BudgetKind.flex, amount: -1000, part: 0, parts: 2, whole: whole),
+        CategorizedTx(whole.tx, 'kbbbbbbbbbbbb', BudgetKind.flex, amount: -2000, part: 1, parts: 2, whole: whole),
+      ];
+      List<String> by(String id) => _ids(searchAll('',
+          txs: rows, goals: const [], wishlist: const [], bills: const [], table: table, filter: SearchFilter(categories: {id})));
+      expect(by('kaaaaaaaaaaaa'), unorderedEquals(['dup', 'orig', 's']));
+      expect(by('kbbbbbbbbbbbb'), unorderedEquals(['dup', 'orig', 's']));
+    });
+
     test('uncategorised = the owner never chose the main tag', () {
       expect(_ids(_s('', txs, const SearchFilter(uncategorised: true))), ['e', 'd', 'b', 'a']);
     });
 
-    test('attachments: live attachment bills of the payment only', () {
-      const bills = [
-        Bill(id: 'b1', source: BillSource.attachment, attachedTx: 'a'),
-        Bill(id: 'b2', source: BillSource.attachment, attachedTx: 'c', deleted: true),
-        Bill(id: 'b3', linkedTx: 'e'), // a paying bill, not an attachment
-      ];
-      expect(_ids(_s('', txs, const SearchFilter(hasAttachment: true), billsDb: bills)), ['a']);
-      expect(_ids(_s('', txs, const SearchFilter(hasAttachment: false), billsDb: bills)), ['e', 'd', 'c', 'b']);
+    test('attachments, through a real repo: attachedTxIds() (bills() leaves attachments out)', () {
+      // Review fix: the ids came from billsDb, which the app fills from bills(): no attachment there, so the filter
+      // found nothing.
+      final repo = WalletRepo.inMemory(now: () => DateTime.utc(2026, 1, 20).millisecondsSinceEpoch);
+      addTearDown(repo.close);
+      repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        n('2026-01-02', -2340, 'POS plaćanje', 'POS KONZUM 0000 ZAGREB'),
+        n('2026-01-03', -5000, 'POS plaćanje', 'POS ZARA ZAGREB'),
+        n('2026-01-04', -999, 'POS plaćanje', 'POS IKEA ZAGREB'),
+      ]));
+      final ids = {for (final t in repo.transactions()) t.description: t.id};
+      final konzum = ids['POS KONZUM 0000 ZAGREB']!, zara = ids['POS ZARA ZAGREB']!, ikea = ids['POS IKEA ZAGREB']!;
+      BlobRef file(String c) => BlobRef(hash: c * 64, type: 'jpg', bytes: 300);
+      repo.addAttachment(konzum, file('a'));
+      repo.addAttachment(konzum, file('b'));
+      repo.removeAttachment(repo.addAttachment(zara, file('c')));
+      expect(repo.bills(), isEmpty);
+      expect(repo.attachedTxIds(), {konzum});
+      final rows = repo.categorizer().expandAll(repo.transactions());
+      SearchResult go(bool has) => searchAll('',
+          txs: rows,
+          goals: const [],
+          wishlist: const [],
+          bills: const [],
+          billsDb: repo.bills(),
+          attachedTx: repo.attachedTxIds(),
+          filter: SearchFilter(hasAttachment: has));
+      expect(_ids(go(true)), [konzum]);
+      expect(_ids(go(false)), [ikea, zara]);
     });
 
     test('split payments: whole amount, any part main tag, split flag; never uncategorised', () {

@@ -491,13 +491,16 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `bw.perf`), `FrameStats`.
 - Stage Q core B (pure unless noted, nothing written; tests `test/q1_suggest_categories_test.dart`, `q6_rule_suggestions_test.dart`,
   `q7_search_filter_test.dart`, `q9_recent_changes_test.dart`, `q10_recurring_cost_test.dart`):
-  `tags.dart` `suggestCategoriesForText(text, history, cz, {limit: 3})` (rule on the text, then rows whose folded
-  description/note holds it, ≥ 3 chars, by count then newest; pickable categories only; never the amount) and
+  `tags.dart` `suggestCategoriesForText(text, history, cz, {limit: 3, kinds, exclude})` (rule on the text, then rows
+  whose folded description/note holds it, ≥ 3 chars, by count then newest; only `pickable(kinds:)` minus `exclude`, on
+  every step before the limit, so the result is what the caller's picker offers; never the amount) and
   `recentPayees(history, prefix, {limit: 5})` (bank merchant names + notes, prefix hits first, newest first).
   `rules.dart` `ruleSuggestions(rows, cz, {min: 3, off})` / `ruleSuggestionFor(t, rows, cz, …)` → `RuleSuggestion`
   (≥ min of a payee's newest 5 bank rows set to one live category by hand, no rule, not dismissed; never when a payee
   rule would not decide one of those rows, i.e. its automatic tag is not flex/fixed). `search.dart` `SearchFilter`
-  (`searchAll(filter:)`: per payment on its whole row, `abs` amount and dates inclusive, a split fits by any part's tag,
+  (`searchAll(filter:, attachedTx:)`: per payment on its whole row, `abs` amount and dates inclusive, a split fits by
+  any part's tag, tags compared as `duplicateOf` originals (with `table`), attachments from `attachedTx` =
+  `repo.attachedTxIds()` (`bills()` holds none),
   `uncategorised` = no owner category and not split; an active filter returns payments only, also for a blank query)
   and `matchSpans(text, query)` (folded match mapped back to the original text). `changes.dart` `ChangeEntry` +
   `repo_changes.dart` (`WalletRepoChanges.recentChanges({limit: 100})`: newest clock per (entity, id) from `clocks`,

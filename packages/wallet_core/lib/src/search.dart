@@ -49,7 +49,7 @@ String foldText(String s) {
 /// Q7: what [searchAll]'s payments must also be. Every set field narrows; [isEmpty] = no filter. Amount bounds are on
 /// the payment's absolute amount in the list's currency (`amount.abs()`, whole payment), inclusive; [from]/[to] are
 /// inclusive `YYYY-MM-DD` dates; [categories] = main tag ids, a split payment fits when its own main tag or one part's
-/// is in it; [hasAttachment] true/false = with/without a live attached file ([Bill.isAttachment], `attachedTx`); [split]
+/// is in it; [hasAttachment] true/false = with/without a live attached file (`searchAll`'s `attachedTx`); [split]
 /// true/false = a payment counted in parts or not; [uncategorised] = rows whose main tag the owner never chose
 /// (`Tx.category` null, and not split: a split's parts are chosen).
 class SearchFilter {
@@ -80,9 +80,9 @@ class SearchFilter {
       split == null &&
       !uncategorised;
 
-  /// Whether payment [w] (the whole row) fits; [parts] = its parts' main tags when it is split, [attached] whether it
-  /// has a live attachment.
-  bool _fits(CategorizedTx w, Set<String>? parts, bool attached) {
+  /// Whether payment [w] (the whole row) fits; [parts] = its parts' main tags (as originals) when it is split,
+  /// [attached] whether it has a live attachment, [wanted] = [categories] as originals, [original] maps a main tag.
+  bool _fits(CategorizedTx w, Set<String>? parts, bool attached, Set<String> wanted, String Function(String) original) {
     final a = w.amount.abs();
     if (minCents != null && a < minCents!) return false;
     if (maxCents != null && a > maxCents!) return false;
@@ -91,7 +91,7 @@ class SearchFilter {
     final isSplit = parts != null;
     if (split != null && split != isSplit) return false;
     if (hasAttachment != null && hasAttachment != attached) return false;
-    if (categories.isNotEmpty && !categories.contains(w.category) && !(parts?.any(categories.contains) ?? false)) return false;
+    if (wanted.isNotEmpty && !wanted.contains(original(w.category)) && !(parts?.any(wanted.contains) ?? false)) return false;
     if (uncategorised && (w.tx.category != null || isSplit)) return false;
     return true;
   }
@@ -256,8 +256,11 @@ List<Map<String, Object?>> searchRows(String entity, String query, Iterable<Map<
 /// amount; a payment is found once, as its whole row ([CategorizedTx.whole]: whole amount and main tag). When only a
 /// part matched (not the payment's own text, note, amount, main tag or tags), [SearchResult.matchedPart] names it.
 ///
-/// Q7: a [filter] that is not [SearchFilter.isEmpty] keeps only the payments that fit it (attachments from [billsDb])
-/// and returns payments only (the other lists stay empty); with a blank query it lists every live payment that fits.
+/// Q7: a [filter] that is not [SearchFilter.isEmpty] keeps only the payments that fit it and returns payments only (the
+/// other lists stay empty); with a blank query it lists every live payment that fits. [attachedTx] = the ids of the
+/// payments with a live attachment, for [SearchFilter.hasAttachment]: fill it from `WalletRepoBills.attachedTxIds()`
+/// ([billsDb] never holds attachments: `bills()` leaves them out). With [table], [SearchFilter.categories] and the rows'
+/// main tags compare as their originals ([CategoryTable.duplicateOf]), so a row on a sync duplicate is found by its twin.
 SearchResult searchAll(
   String query, {
   required List<CategorizedTx> txs,
@@ -270,6 +273,7 @@ SearchResult searchAll(
   CategoryTable? table,
   TagTable? tags,
   SearchFilter? filter,
+  Set<String> attachedTx = const {},
 }) {
   final q = foldText(query.trim());
   final f = filter == null || filter.isEmpty ? null : filter;
@@ -289,24 +293,20 @@ SearchResult searchAll(
   final paymentHit = <String, bool>{};
   // Q7: the filter, decided once per payment on its whole row (a split's parts' main tags count for [SearchFilter.categories]).
   final fits = <String, bool>{};
-  final attached = f?.hasAttachment == null
-      ? const <String>{}
-      : {
-          for (final b in billsDb)
-            if (!b.deleted && b.isAttachment && b.attachedTx != null) b.attachedTx!
-        };
+  String original(String c) => table?.duplicateOf(c) ?? c;
+  final wanted = f == null ? const <String>{} : {for (final c in f.categories) original(c)};
   final partCats = <String, Set<String>>{};
   if (f != null) {
     for (final t in txs) {
-      if (t.isPart) partCats.putIfAbsent(t.tx.id, () => {}).add(t.category);
+      if (t.isPart) partCats.putIfAbsent(t.tx.id, () => {}).add(original(t.category));
     }
   }
   for (final t in txs) {
     final id = t.tx.id;
     if (!t.tx.live) continue;
     if (f != null &&
-        !(fits[id] ??= f._fits(
-            t.isPart ? t.whole ?? CategorizedTx(t.tx, t.category, t.kind, tags: t.tags) : t, partCats[id], attached.contains(id)))) {
+        !(fits[id] ??= f._fits(t.isPart ? t.whole ?? CategorizedTx(t.tx, t.category, t.kind, tags: t.tags) : t, partCats[id],
+            attachedTx.contains(id), wanted, original))) {
       continue;
     }
     if (!t.isPart) {

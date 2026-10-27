@@ -277,13 +277,16 @@ const _suggestMinChars = 3;
 /// first the category the personal patterns and built-in rules give the text ([Categorizer.merchantCategory]); then
 /// the categories of live rows of [history] whose folded description or note ([foldText]) holds the folded text (at
 /// least 3 characters), by how many rows, then the newest row, then the id; a sync duplicate counts for its original.
-/// Pickable categories only ([CategoryTable.pickable] of [Categorizer.table]: live, not hidden), each once, at most
-/// [limit]. Blank text → none.
-List<String> suggestCategoriesForText(String text, List<CategorizedTx> history, Categorizer c, {int limit = 3}) {
+/// Only what the caller's picker offers: [CategoryTable.pickable] of [Categorizer.table] (live, not hidden) of [kinds]
+/// (all when null), minus [exclude]; applied to every step before [limit] cuts, so the Add expense sheet
+/// (`kinds: {BudgetKind.flex}`, `exclude: {'Bank fees'}`) never gets a transfer, income or fixed tag. Each once, at
+/// most [limit]. Blank text → none.
+List<String> suggestCategoriesForText(String text, List<CategorizedTx> history, Categorizer c,
+    {int limit = 3, Set<BudgetKind>? kinds, Set<String> exclude = const {}}) {
   final q = foldText(text.trim());
   if (q.isEmpty || limit <= 0) return const [];
   final table = c.table;
-  final pickable = table.pickable().toSet();
+  final pickable = table.pickable(kinds: kinds).toSet()..removeAll(exclude);
   String? usable(String? id) {
     if (id == null) return null;
     final r = table.duplicateOf(id) ?? id;

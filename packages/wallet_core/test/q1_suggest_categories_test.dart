@@ -94,6 +94,24 @@ void main() {
       expect(suggestCategoriesForText('lidl', const [], c), isEmpty);
     });
 
+    test('kinds and exclude match the Add expense picker on every step, before the limit (review fix)', () {
+      // Without kinds, "revolut" offered Internal transfer first: one tap made a cash expense count nowhere.
+      const sheet = {BudgetKind.flex};
+      final transfers = [
+        for (var i = 1; i <= 3; i++) _row('2026-01-0$i', 'Internal transfer', desc: 'REVOLUT TOPUP'),
+        _row('2026-01-05', 'Salary', desc: 'REVOLUT PAYOUT'),
+        _row('2026-01-06', 'Bank fees', desc: 'REVOLUT FEE'),
+      ];
+      final history = [...transfers, _row('2026-01-04', 'Shopping', desc: 'Revolut shop')];
+      expect(suggestCategoriesForText('revolut', history, cz, limit: 1), ['Internal transfer']);
+      expect(suggestCategoriesForText('revolut', history, cz, limit: 1, kinds: sheet, exclude: const {'Bank fees'}), ['Shopping']);
+      expect(suggestCategoriesForText('revolut', transfers, cz, kinds: sheet, exclude: const {'Bank fees'}), isEmpty);
+      expect(suggestCategoriesForText('revolut', transfers, cz, kinds: sheet), ['Bank fees']);
+      // The rule step too: Netflix's built-in rule is a fixed tag.
+      expect(suggestCategoriesForText('netflix', const [], cz), ['Bills & subscriptions']);
+      expect(suggestCategoriesForText('netflix', const [], cz, kinds: sheet), isEmpty);
+    });
+
     test('limit', () {
       final history = [
         for (final cat in ['Shopping', 'Cash', 'Home & tools', 'Eating out']) _row('2026-01-02', cat, desc: 'POS BAUHAUS ZAGREB'),

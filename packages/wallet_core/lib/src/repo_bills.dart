@@ -243,6 +243,14 @@ extension WalletRepoBills on WalletRepo {
     logEvent(_log, Level.INFO, 'bills.attachMoved', {'attachments': moves.length});
   }
 
+  /// Q7: the ids of the payments that hold a live attachment (`attached_tx` of live `source: attachment` bills), for
+  /// `searchAll(attachedTx:)`. Read-only.
+  Set<String> attachedTxIds() => {
+        for (final r in db
+            .select("SELECT DISTINCT attached_tx AS t FROM bills WHERE deleted = 0 AND source = 'attachment' AND attached_tx IS NOT NULL"))
+          r['t'] as String,
+      };
+
   int _attachmentCount(String txId) =>
       db.select("SELECT COUNT(*) AS n FROM bills WHERE deleted = 0 AND source = 'attachment' AND attached_tx = ?", [txId]).first['n']
           as int;
