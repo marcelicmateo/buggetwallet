@@ -36,16 +36,65 @@ extension WalletRepoImport on WalletRepo {
   /// rows that could replace it, so a large history costs little. Logged as `repo.match` on `bw.perf` once per run.
   int _matchManual() {
     final t = PerfTimer('repo.match');
+    final r = _planManualMatches();
+    if (r.open == 0) {
+      _clearMatchPending();
+      t.done({'manual': r.manual.length, 'open': 0, 'bank': 0, 'added': 0});
+      return 0;
+    }
+    final plan = r.plan;
+    _write([
+      for (final e in plan.matchedTo.entries) ('tx', e.key, {'matched_to': e.value}),
+      for (final e in plan.bankCategory.entries) ('tx', e.key, {'category': e.value}),
+      ..._matchedTagLinks(plan.matchedTo),
+    ]);
+    _clearMatchPending();
+    t.done({
+      'manual': r.manual.length,
+      'open': r.open,
+      'bank': r.bank,
+      'added': plan.added,
+      'unmatched': plan.matchedTo.values.where((v) => v == null).length,
+      'categories': plan.bankCategory.length,
+    });
+    return plan.added;
+  }
+
+  /// The [planMatches] plan over the stored rows, read only. For [previewImport] the stored rows are seen as the import
+  /// would leave them: [fresh] rows (not stored yet, written after every entry, so unseen by all of them) are added,
+  /// [revived] ids read as live, and [transfers] (a [TransferPlan.transferTo]) overrides `transfer_to`.
+  ({MatchPlan plan, List<Tx> manual, int open, int bank}) _planManualMatches(
+      {List<Tx> fresh = const [], Set<String> revived = const {}, Map<String, String?> transfers = const {}}) {
     final written = <String, String>{}, seenBank = <String, String>{};
+    Tx over(Tx tx) {
+      var x = revived.contains(tx.id) ? _txWith(tx, deleted: false) : tx;
+      if (transfers.containsKey(x.id)) x = _txWith(x, transferTo: transfers[x.id]);
+      return x;
+    }
+
     List<Tx> rows(String where, [List<Object?> args = const []]) {
       final out = <Tx>[];
       for (final r in db.select('SELECT tx.*, c.hlc AS written FROM tx $_writtenJoin WHERE $where', args)) {
         final tx = Tx.fromRow(r);
         if (r['written'] case final String h) written[tx.id] = h;
         if (r['seen_bank'] case final String v) seenBank[tx.id] = v;
-        out.add(tx);
+        out.add(over(tx));
       }
       return out;
+    }
+
+    // Rows the import would add: written after everything this device holds or has received.
+    final extra = [for (final f in fresh) over(f)];
+    if (extra.isNotEmpty) {
+      final after = Hlc(_afterAllMillis, 0, deviceId).toString();
+      for (final f in extra) {
+        written[f.id] = after;
+      }
+    }
+    final ids = [...revived];
+    for (var i = 0; i < ids.length; i += _chunk) {
+      final part = ids.sublist(i, min(i + _chunk, ids.length));
+      extra.addAll(rows('tx.id IN (${List.filled(part.length, '?').join(',')})', part).where((r) => !r.manual));
     }
 
     const live = 'tx.manual = 0 AND tx.deleted = 0';
@@ -54,15 +103,19 @@ extension WalletRepoImport on WalletRepo {
     // was paired as an own transfer) reopens its entry. A target this device has not received yet keeps the match
     // (no unmatch/rematch churn).
     final targets = rows('tx.id IN (SELECT matched_to FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to IS NOT NULL)');
+    if (extra.isNotEmpty) {
+      final pointed = {for (final m in manual) m.matchedTo};
+      final have = {for (final b in targets) b.id};
+      targets.addAll([
+        for (final x in extra)
+          if (pointed.contains(x.id) && have.add(x.id)) x
+      ]);
+    }
     final open = openEntries(manual, {
       for (final b in targets)
         if (b.manual || b.deleted || b.transferTo != null) b.id
     });
-    if (open.isEmpty) {
-      _clearMatchPending();
-      t.done({'manual': manual.length, 'open': 0, 'bank': 0, 'added': 0});
-      return 0;
-    }
+    if (open.isEmpty) return (plan: const MatchPlan({}, {}, 0), manual: manual, open: 0, bank: 0);
     final bank = {for (final b in targets) b.id: b};
     for (final m in open) {
       final since = written[m.id];
@@ -71,10 +124,15 @@ extension WalletRepoImport on WalletRepo {
       // Without a seen_bank value, only rows written in or after the entry's millisecond (comparing the 15-digit
       // millis prefix as text is safe for any counter).
       final seen = SeenBank.of(since, seenBank[m.id]);
-      final window = [m.amount, addDays(m.date, -matchDays), addDays(m.date, matchDays)];
-      for (final b in seen.recorded
-          ? rows('$live AND tx.amount = ? AND tx.date BETWEEN ? AND ?', window)
-          : rows('$live AND tx.amount = ? AND tx.date BETWEEN ? AND ? AND c.hlc >= ?', [...window, since.split(':').first])) {
+      final from = addDays(m.date, -matchDays), to = addDays(m.date, matchDays);
+      final window = [m.amount, from, to];
+      for (final b in [
+        ...(seen.recorded
+            ? rows('$live AND tx.amount = ? AND tx.date BETWEEN ? AND ?', window)
+            : rows('$live AND tx.amount = ? AND tx.date BETWEEN ? AND ? AND c.hlc >= ?', [...window, since.split(':').first])),
+        for (final x in extra)
+          if (!x.manual && !x.deleted && x.amount == m.amount && x.date.compareTo(from) >= 0 && x.date.compareTo(to) <= 0) x,
+      ]) {
         if (written[b.id] case final String at when seen.unseen(at)) bank[b.id] = b;
       }
     }
@@ -83,21 +141,7 @@ extension WalletRepoImport on WalletRepo {
       final k = cz.table.kindOf(cz.autoCategory(b));
       return k == BudgetKind.flex || k == BudgetKind.fixed;
     }, written, seenBank: seenBank);
-    _write([
-      for (final e in plan.matchedTo.entries) ('tx', e.key, {'matched_to': e.value}),
-      for (final e in plan.bankCategory.entries) ('tx', e.key, {'category': e.value}),
-      ..._matchedTagLinks(plan.matchedTo),
-    ]);
-    _clearMatchPending();
-    t.done({
-      'manual': manual.length,
-      'open': open.length,
-      'bank': bank.length,
-      'added': plan.added,
-      'unmatched': plan.matchedTo.values.where((v) => v == null).length,
-      'categories': plan.bankCategory.length,
-    });
-    return plan.added;
+    return (plan: plan, manual: manual, open: open.length, bank: bank.length);
   }
 
   void _clearMatchPending() => db.execute("DELETE FROM meta WHERE key = 'match_pending'");
@@ -119,11 +163,32 @@ extension WalletRepoImport on WalletRepo {
   /// at (so the plan checks them the same way). Logged as `repo.transfers` on `bw.perf`.
   int _pairTransfers() {
     final t = PerfTimer('repo.transfers');
+    final r = _planPairs();
+    final plan = r.plan;
+    _write([
+      for (final e in plan.transferTo.entries) ('tx', e.key, {'transfer_to': e.value})
+    ]);
+    t.done({'candidates': r.candidates, 'rows': r.rows, 'paired': plan.paired, 'reopened': plan.reopened});
+    return plan.paired;
+  }
+
+  /// The [planTransfers] plan over the stored rows, read only. For [previewImport]: [fresh] rows are added as the import
+  /// would write them, [revived] ids read as live, and so are the stored rows that could pair with one of them (open,
+  /// the opposite amount) or point at one: a superset of what [_pairTransfers] loads after that import, and the plan
+  /// only pairs rows that have a partner, so it is the same plan.
+  ({TransferPlan plan, int candidates, int rows}) _planPairs({List<Tx> fresh = const [], Set<String> revived = const {}}) {
     final rows = <String, Tx>{};
     void load(String sql, [List<Object?> args = const []]) {
       for (final r in db.select(sql, args)) {
         final tx = Tx.fromRow(r);
-        rows[tx.id] = tx;
+        rows[tx.id] = revived.contains(tx.id) ? _txWith(tx, deleted: false) : tx;
+      }
+    }
+
+    void loadIn(String sqlPrefix, List<Object?> values) {
+      for (var i = 0; i < values.length; i += _chunk) {
+        final part = values.sublist(i, min(i + _chunk, values.length));
+        load('$sqlPrefix (${List.filled(part.length, '?').join(',')})', part);
       }
     }
 
@@ -132,19 +197,100 @@ extension WalletRepoImport on WalletRepo {
         "WHERE a.date != '' AND (a.kind_hint = '$_own' OR b.kind_hint = '$_own') AND ${_openTransfer('a')}");
     final candidates = rows.length;
     load('SELECT a.* FROM tx a WHERE a.transfer_to IS NOT NULL AND ${_openTransfer('a')}');
+    if (fresh.isNotEmpty || revived.isNotEmpty) {
+      loadIn('SELECT * FROM tx WHERE id IN', [...revived]);
+      final added = [
+        ...fresh,
+        for (final id in revived)
+          if (rows[id] case final Tx x) x
+      ];
+      loadIn('SELECT a.* FROM tx a WHERE ${_openTransfer('a')} AND a.amount IN', [
+        ...{for (final x in added) -x.amount}
+      ]);
+      loadIn('SELECT * FROM tx WHERE transfer_to IN', [for (final x in added) x.id]);
+      for (final f in fresh) {
+        rows[f.id] = f;
+      }
+    }
     final targets = [
       for (final r in rows.values)
         if (r.transferTo case final String to when !rows.containsKey(to)) to
     ];
-    if (targets.isNotEmpty) {
-      load('SELECT * FROM tx WHERE id IN (${List.filled(targets.length, '?').join(',')})', targets);
+    if (targets.isNotEmpty) loadIn('SELECT * FROM tx WHERE id IN', targets);
+    return (plan: planTransfers([...rows.values]), candidates: candidates, rows: rows.length);
+  }
+
+  /// Most `?` parameters in one `IN (...)` list.
+  static const _chunk = 500;
+
+  /// A millisecond after every clock this wallet holds (15 digits, like every stored clock; exact on the web too).
+  static const _afterAllMillis = 999999999999999;
+
+  // ---------- import preview (Q4) ----------
+  /// What [WalletRepo.importBatch] would do with [batch] (with the same [revive] set), row by row, without writing
+  /// anything (no row, clock, outbox entry or device-local value; the HLC is not advanced). Reads the stored ids the
+  /// same way `importBatch` does: a row beyond ±[maxAmountCents] is [PreviewStatus.tooLarge]; a stored id (or one an
+  /// earlier row of the batch took) is a duplicate, or a collision when amount or description differ; a deleted one
+  /// in [revive] with the same values is [PreviewStatus.revivable]; the rest are fresh. Then, only while
+  /// [WalletRepo.syncCaughtUp] (otherwise the import pairs and matches nothing either), the same [planTransfers] and
+  /// [planMatches] the import runs, over the stored rows plus the batch's fresh rows as unseen by every hand-added
+  /// entry: a fresh row an entry ends up pointing at (a new match, or one made on another device before this row
+  /// arrived) is [PreviewStatus.matchesManual] with [PreviewRow.matchedManualId]; a row the plan pairs gets
+  /// [PreviewRow.transferPairId]. `importBatch(batch, revive: revive)` then writes exactly that (see
+  /// `test/q4_import_preview_test.dart`). Logged as `repo.preview` on `bw.perf` (counts only).
+  ImportPreview previewImport(ImportBatch batch, {Set<String> revive = const {}}) {
+    final t = PerfTimer('repo.preview');
+    final c = _classifyBatch(batch, revive: revive);
+    final fresh = [
+      for (final (i, n) in batch.transactions.indexed)
+        if (c.fates[i] == _RowFate.fresh) _txOf(n)
+    ];
+    final revived = {
+      for (final (i, n) in batch.transactions.indexed)
+        if (c.fates[i] == _RowFate.revived) n.id
+    };
+    var transferTo = const <String, String?>{};
+    final matchedBy = <String, String>{}; // bank row id -> the entry pointing at it after the import
+    if (syncCaughtUp && (fresh.isNotEmpty || revived.isNotEmpty)) {
+      transferTo = _planPairs(fresh: fresh, revived: revived).plan.transferTo;
+      final m = _planManualMatches(fresh: fresh, revived: revived, transfers: transferTo);
+      final ids = {for (final f in fresh) f.id, ...revived};
+      for (final e in m.manual) {
+        final to = m.plan.matchedTo.containsKey(e.id) ? m.plan.matchedTo[e.id] : e.matchedTo;
+        if (to != null && ids.contains(to)) matchedBy.putIfAbsent(to, () => e.id);
+      }
     }
-    final plan = planTransfers([...rows.values]);
-    _write([
-      for (final e in plan.transferTo.entries) ('tx', e.key, {'transfer_to': e.value})
-    ]);
-    t.done({'candidates': candidates, 'rows': rows.length, 'paired': plan.paired, 'reopened': plan.reopened});
-    return plan.paired;
+    final rows = <PreviewRow>[];
+    for (final (i, n) in batch.transactions.indexed) {
+      final fate = c.fates[i];
+      final written = fate == _RowFate.fresh || fate == _RowFate.revived;
+      final entry = written ? matchedBy[n.id] : null;
+      rows.add(PreviewRow(
+        tx: n,
+        status: switch (fate) {
+          _RowFate.fresh => entry != null ? PreviewStatus.matchesManual : PreviewStatus.fresh,
+          _RowFate.revived => PreviewStatus.revivable,
+          _RowFate.duplicate || _RowFate.skipped => PreviewStatus.duplicate,
+          _RowFate.collision => PreviewStatus.collision,
+          _RowFate.tooLarge => PreviewStatus.tooLarge,
+        },
+        matchedManualId: entry,
+        transferPairId: written ? transferTo[n.id] : null,
+      ));
+    }
+    final p = ImportPreview.of(rows);
+    t.done({
+      'source': sourceLogKey(batch.source),
+      'rows': rows.length,
+      'fresh': p.fresh,
+      'dupes': p.duplicates,
+      'collisions': p.collisions,
+      'revivable': p.revivable,
+      'matches': p.matchesManual,
+      'transfers': p.transfers,
+      'tooLarge': p.tooLarge,
+    });
+    return p;
   }
 
   /// After rows changed (import, delete, remote ops): pairs own-account transfers, then matches hand-added expenses
@@ -179,3 +325,40 @@ extension WalletRepoImport on WalletRepo {
     });
   }
 }
+
+/// What [WalletRepo.importBatch] does with one batch row (`_classifyBatch`).
+enum _RowFate { fresh, revived, duplicate, collision, tooLarge, skipped }
+
+/// A batch row as the import stores it (no category, not manual, live).
+Tx _txOf(NormalizedTransaction n) => Tx(
+      id: n.id,
+      source: n.source,
+      date: n.date,
+      amount: n.amountMinor,
+      currency: n.currency,
+      bankType: n.bankType,
+      description: n.description,
+      kindHint: n.kindHint,
+    );
+
+const _keep = Object();
+
+/// [t] with `transfer_to` and/or `deleted` replaced (the import preview's view of rows after the import).
+Tx _txWith(Tx t, {Object? transferTo = _keep, bool? deleted}) => Tx(
+      id: t.id,
+      source: t.source,
+      date: t.date,
+      amount: t.amount,
+      currency: t.currency,
+      bankType: t.bankType,
+      description: t.description,
+      category: t.category,
+      note: t.note,
+      manual: t.manual,
+      matchedTo: t.matchedTo,
+      deleted: deleted ?? t.deleted,
+      kindHint: t.kindHint,
+      transferTo: identical(transferTo, _keep) ? t.transferTo : transferTo as String?,
+      matchPending: t.matchPending,
+      homeAmount: t.homeAmount,
+    );

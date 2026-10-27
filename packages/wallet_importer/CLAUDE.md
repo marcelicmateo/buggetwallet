@@ -28,6 +28,14 @@ Pure Dart. **The only code that knows bank formats.** Turns PBZ .xls, Revolut .x
   `serialDate`/`excelDate`, `jsRound` (v1's Math.round), `fixMojibake`.
 - `xls_reader.dart` (own BIFF8 reader), `xlsx_reader.dart` (`archive` + `xml`), `csv_reader.dart`. `grid.dart` —
   `sparseRows`: cells → rows without a dense grid, capped at `maxSheetCells` (bigger = ImportException).
+- Stage Q: `limits.dart` `maxRowAmountMinor` (10^11, the same single cap as typed input; 90,000 rows at it sum under
+  2^53, `exactRowsAtCap`): a row beyond it after the fee is invalid and counted in `ImportBatch.tooLarge` (profiles in
+  `BankProfile.parse`, mapped CSV as a "too large" problem). `NormalizedTransaction.balanceAfter` (optional, never in the
+  id, `toJson` only when set): Revolut `Balance`, PBZ `STANJE`/`SALDO` when the header row has it (detection unchanged),
+  `CsvMapping.balanceCol` (JSON `balance`, old layouts read as none; `guessMapping` fills it from the balance header).
+  `ImportBatch.bankBalances` (`BankBalance`): per currency, the newest day whose end-of-day row (file order, read
+  newest-first files backwards) has a balance; none for a currency mixing two `account`s (Revolut pockets). Tests:
+  `test/q_balance_import_test.dart`.
 - `model.dart` — `NormalizedTransaction`, `TxKind`, `ImportBatch`. `ids.dart` — `transactionId` (v1),
   `sourceTransactionId` (banks added after v1); `fnv1a36`, `formatCents` are internal (tests import `src/ids.dart`).
 - `bills/` — bill readers (`docs/context/BILLS_API.md` §1), all pure Dart, web-safe, never throw: `model.dart`

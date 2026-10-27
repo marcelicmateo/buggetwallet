@@ -11,6 +11,7 @@ library;
 export 'package:wallet_importer/wallet_importer.dart' show BillItem, BillSource, NormalizedBill, TxKind;
 
 export 'src/accounts.dart' show AccountBalance, accountBalances, accountSourceLabel, balanceTotals;
+export 'src/accounts.dart' show BalanceCheck, BankCheck, balanceTrusted, bankCheckTrustDays, checkBankBalance;
 export 'src/backup.dart'
     show
         backupBlobBytesDefault,
@@ -113,9 +114,12 @@ export 'src/export.dart'
         transactionsCsv,
         transactionsCsvHeader,
         transactionsCsvTagsHeader;
+export 'src/forecast.dart'
+    show BalanceWarning, BalanceWarningKind, balanceWarnings, ForecastPoint, forecastAfterAllowance, forecastToPayday;
 export 'src/fx.dart' show convertMinor, homeAmount, inHomeCurrency;
 export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
 export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, parseIcs, plannedIcs;
+export 'src/import_preview.dart' show ImportPreview, PreviewRow, PreviewStatus;
 export 'src/insights.dart'
     show
         BudgetMonth,
@@ -196,6 +200,7 @@ export 'src/planned.dart'
         upcoming,
         UpcomingItem,
         UpcomingKind;
+export 'src/planned.dart' show isSafeCents;
 export 'src/ranges.dart' show DateRange, RangeKind, rangeFor, rangeLabel, shiftRange;
 export 'src/recurring.dart' show detectRecurring, medianCents, partsDays, partsThreshold, planRecurringPayments, RecurringPayments;
 export 'src/repo.dart'

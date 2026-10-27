@@ -438,11 +438,13 @@ void main() {
       }
     });
 
-    test('decision: an amount beyond 10 billion (10^12 cents) leaves the row out and counts it; up to it imports', () {
+    test('decision (Q3): an amount beyond 1 billion (10^11 cents, maxRowAmountMinor) leaves the row out and counts it; up to it imports',
+        () {
       for (final (a, cents) in [
-        ('10000000000', 1000000000000),
-        ('-10000000000', -1000000000000),
-        ('10000000000.01', null),
+        ('1000000000', 100000000000),
+        ('-1000000000', -100000000000),
+        ('1000000000.01', null),
+        ('10000000000', null),
         ('1e22', null)
       ]) {
         final b = importBankFile(_b('${h}Card Payment,2026-01-01,x,$a,0,COMPLETED\n'));

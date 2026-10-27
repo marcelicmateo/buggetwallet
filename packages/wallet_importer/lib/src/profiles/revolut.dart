@@ -12,7 +12,7 @@ class RevolutProfile extends BankProfile {
   String get label => 'Revolut';
 
   static const _required = ['Started Date', 'Description', 'Amount'];
-  static const _columns = ['Type', 'Product', 'Started Date', 'Description', 'Amount', 'Fee', 'State', 'Currency'];
+  static const _columns = ['Type', 'Product', 'Started Date', 'Description', 'Amount', 'Fee', 'State', 'Currency', 'Balance'];
 
   /// Type → kind. A type not listed here gives no hint.
   static const _kinds = <String, TxKind>{
@@ -64,6 +64,10 @@ class RevolutProfile extends BankProfile {
     final desc = fixMojibake(cellText(at('Description')));
     final product = cellText(at('Product'));
     final cents = amount - feeCents;
+    // Optional: the pocket's balance after the row. An empty or unreadable cell gives none; the row still imports.
+    final balanceCell = ctx.column('Balance') >= 0 ? at('Balance') : '';
+    final balanceNum = cellText(balanceCell).isEmpty ? null : cellNumber(balanceCell);
+    final balance = balanceNum == null ? null : cellCents(balanceNum);
     return RowResult.transaction(NormalizedTransaction(
       id: ctx.v1Id(d, cents, desc),
       source: id,
@@ -74,6 +78,7 @@ class RevolutProfile extends BankProfile {
       description: desc,
       kindHint: _kinds[type],
       account: product.isEmpty ? null : product,
+      balanceAfter: balance,
     ));
   }
 }

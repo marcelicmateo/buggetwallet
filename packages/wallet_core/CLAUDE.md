@@ -258,6 +258,28 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   possible partner (self-join on `amount`, index `tx_amount`, one side hinted) plus stale links and their targets
   (`_openTransfer` mirrors `openTransfers`). A paired row counts as gone for the manual match it replaced (the cash
   entry counts again). `ImportSummary.transfers` = new pairs.
+- **Stage Q core A.** Q3 one amount cap: `isSafeCents` (±`maxAmountCents` = `WalletSettings.maxAmount`, `planned.dart`);
+  `addTransaction` refuses beyond it (`ArgumentError`), `importBatch` skips and counts (`ImportSummary.tooLarge`,
+  `repo.tooLarge {source, count}`), `_fieldValue` quarantines a synced amount column beyond its cap like a wrong type
+  (`_amountCaps`: row amounts, planned, bills, recurring, wish price, account opening; goals keep `goalTotal`'s clamping);
+  budget sums assert < 2^53 (`_ok`; 90,000 rows at the cap fit, `exactRowsAtCap`).
+  Q4 `previewImport(batch, {revive})` (`repo_import.dart`, types in `import_preview.dart`): read-only (no row, clock,
+  outbox, meta or HLC change), the same classification as `importBatch` (`_classifyBatch`) and the same planners
+  (`_planPairs`, `_planManualMatches`, which `_pairTransfers`/`_matchManual` now call) over stored rows + the batch's
+  fresh rows (unseen by every entry) + revived ids; only while caught up. `importBatch(skip:)` writes nothing for those
+  ids (`ImportSummary.skippedByOwner`). Tests: `test/q4_import_preview_test.dart` (prediction == import).
+  Q5 (`accounts.dart`): `checkBankBalance` → `BalanceCheck` (`appCents` as `accountBalances` up to the date, `diff` =
+  bank − app, `rowsSince`/`since` = opening date), `BankCheck` stored device-locally (`recordBankCheck`/`lastBankCheck`,
+  local `bankCheck:<accountId>`, never synced, never changes the balance), `balanceTrusted` (opening date or a matching
+  check within `bankCheckTrustDays` 35). `importBatch` records a check per `ImportBatch.bankBalances` for the counting
+  live bank account (`ImportSummary.bankChecks`; an older-dated check never replaces a newer one).
+  Q11 (`forecast.dart`): `forecastToPayday` (steps: unpaid bill cycles on their date, overdue ones today; open planned
+  costs today..payday, a slip its cycle holds once; incomes on their date, overdue ones never; payday exclusive; out
+  before in on a day), `forecastAfterAllowance` (− allowance × days left), `balanceWarnings` (per home-currency bank
+  account: untrusted → `checkBalance` only, `belowNow`, `goesBelow` at the first negative point). **Attribution is
+  exact:** a bill/income counts on an account only when its `lastPaidTx` row is that account's imported row; planned
+  costs and unplaced bills go only into the total forecast. Tests: `test/q3_overflow_test.dart`,
+  `q5_bank_balance_test.dart`, `q11_forecast_test.dart`.
 - `matching.dart` — `planMatches`: hand-added expense ↔ bank row (same amount, ±3 days, one-to-one), deterministic;
   only a bank row the adding device did not hold yet replaces the entry (`SeenBank`: the entry's synced `seen_bank`,
   per device the highest bank `amount` clock held at add time; older entries: rows written after the entry). A match

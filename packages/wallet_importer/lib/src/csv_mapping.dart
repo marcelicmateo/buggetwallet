@@ -71,6 +71,10 @@ class CsvMapping {
   /// A row whose cell in this column is empty is skipped (counted in `ImportBatch.skipped`), e.g. pending rows.
   final int? skipIfEmptyCol;
 
+  /// A column with the account balance after each row (optional, never part of the amount): read into
+  /// `NormalizedTransaction.balanceAfter` for the bank balance check; an empty or unreadable cell gives none.
+  final int? balanceCol;
+
   /// The header names the layout was made from (for "see the columns" and to refuse another file's columns).
   final List<String> headers;
 
@@ -88,6 +92,7 @@ class CsvMapping {
     this.currencyCol,
     this.currencyCode,
     this.skipIfEmptyCol,
+    this.balanceCol,
     this.headers = const [],
   });
 
@@ -111,6 +116,7 @@ class CsvMapping {
     Object? currencyCol = _unset,
     Object? currencyCode = _unset,
     Object? skipIfEmptyCol = _unset,
+    Object? balanceCol = _unset,
     List<String>? headers,
   }) =>
       CsvMapping(
@@ -127,6 +133,7 @@ class CsvMapping {
         currencyCol: identical(currencyCol, _unset) ? this.currencyCol : currencyCol as int?,
         currencyCode: identical(currencyCode, _unset) ? this.currencyCode : currencyCode as String?,
         skipIfEmptyCol: identical(skipIfEmptyCol, _unset) ? this.skipIfEmptyCol : skipIfEmptyCol as int?,
+        balanceCol: identical(balanceCol, _unset) ? this.balanceCol : balanceCol as int?,
         headers: headers ?? this.headers,
       );
 
@@ -160,6 +167,9 @@ class CsvMapping {
     if (bad(currencyCol)) out.add('Pick the currency column.');
     if (currencyCode != null && !RegExp(r'^[A-Z]{3}$').hasMatch(currencyCode!)) out.add('The currency is three capital letters, like EUR.');
     if (bad(skipIfEmptyCol)) out.add('Pick the column that marks rows to skip.');
+    if (bad(balanceCol) || (balanceCol != null && [dateCol, amountCol, debitCol, creditCol].contains(balanceCol))) {
+      out.add('Pick the balance column again.');
+    }
     return out;
   }
 
@@ -175,6 +185,7 @@ class CsvMapping {
         'description': descriptionCols,
         if (currencyCol != null) 'currency': {'col': currencyCol} else if (currencyCode != null) 'currency': {'code': currencyCode},
         if (skipIfEmptyCol != null) 'skipIfEmpty': skipIfEmptyCol,
+        if (balanceCol != null) 'balance': balanceCol,
         'headers': headers,
       };
 
@@ -215,6 +226,7 @@ class CsvMapping {
       currencyCol: currency is Map ? optCol(currency['col']) : null,
       currencyCode: code as String?,
       skipIfEmptyCol: optCol(json['skipIfEmpty']),
+      balanceCol: optCol(json['balance']),
       headers: [for (final h in headers) h as String],
     );
   }

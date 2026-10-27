@@ -247,12 +247,16 @@ void main() {
       expect(_amounts(one('0.00', fee: '1.00')), [-100], reason: 'fee on a zero amount is still a cost');
     });
 
-    test('the limit is 10 billion: at the limit imports, one cent over is counted as invalid', () {
-      expect(_amounts(one('10000000000.00')), [1000000000000]);
-      expect(_amounts(one('-10000000000.00')), [-1000000000000]);
-      final over = one('10000000000.01');
+    test('the limit is 1 billion (Q3, maxRowAmountMinor): at the limit imports, one cent over is counted as invalid and too large', () {
+      expect(_amounts(one('1000000000.00')), [100000000000]);
+      expect(_amounts(one('-1000000000.00')), [-100000000000]);
+      final over = one('1000000000.01');
       expect(over.transactions, isEmpty);
       expect(over.invalid, 1);
+      expect(over.tooLarge, 1);
+      // The fee is applied first: a row at the cap whose fee takes it one cent over is too large.
+      expect(one('-1000000000.00', fee: '0.01').tooLarge, 1);
+      expect(_amounts(one('-999999999.99', fee: '0.01')), [-100000000000]);
       final huge = one('99999999999999999999999');
       expect(huge.transactions, isEmpty);
       expect(huge.invalid, 1);

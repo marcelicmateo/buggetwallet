@@ -70,6 +70,12 @@ int? amountFromText(String text) {
 /// stops here on purpose: one cap for every money field.
 const maxAmountCents = WalletSettings.maxAmount;
 
+/// Whether [cents] is within ±[maxAmountCents], the one amount cap (Q3): a hand-added row, an imported row
+/// ([WalletRepo.importBatch] skips and counts the others in `ImportSummary.tooLarge`) and a synced amount field are
+/// held to it. With it, at least 90,000 such amounts sum exactly (90,000 × 10^11 = 9.0e15 < 2^53, the largest whole
+/// number a web number holds exactly); the budget sums assert they stay under 2^53.
+bool isSafeCents(int cents) => cents >= -maxAmountCents && cents <= maxAmountCents;
+
 final _plainNumber = RegExp(r'^[+-]?(\d+\.?\d*|\.\d+)$');
 
 /// The cents of an amount typed by hand: "12", "12.5", "12,50", "1.234,56", "1,234.56" (a comma followed by one or
