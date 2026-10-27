@@ -438,7 +438,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   newer builds dissolve such pairs, but a device still on 5b8fc13 would re-create them on every sync.
 - Importer: v1-compatible rounding changed ids of rows with an exact negative half cent (3-decimal amounts, very rare);
   such rows imported by earlier v2 builds may re-import once as duplicates.
-- Search matches the cleaned description, note and category, not merchant-rule names, and opens from Spending only (not from Today's Recent list).
+- Search matches the cleaned description, note and category, not merchant-rule names.
 - Sync: a device stays stuck on a damaged sync file only if no device that applied it before the damage still syncs
   and is caught up (details in `packages/wallet_core/CLAUDE.md` "Known limits"). Devices on a pre-relay build cannot
   sync with relay devices: update all devices together.

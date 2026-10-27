@@ -492,7 +492,7 @@ class PaceBar extends StatelessWidget {
 /// Opens the date range picker for [RangeControl]; tests give their own.
 typedef RangePicker = Future<DateTimeRange?> Function(BuildContext context, DateTimeRange initial, DateTime first, DateTime last);
 
-Future<DateTimeRange?> _systemPicker(BuildContext context, DateTimeRange initial, DateTime first, DateTime last) =>
+Future<DateTimeRange?> systemRangePicker(BuildContext context, DateTimeRange initial, DateTime first, DateTime last) =>
     showDateRangePicker(context: context, initialDateRange: initial, firstDate: first, lastDate: last, saveText: 'Use range');
 
 /// The range control every Insights graph has: chips for the kind (this pay period, month, 3 / 6 / 12 months, custom), a
@@ -502,7 +502,7 @@ Future<DateTimeRange?> _systemPicker(BuildContext context, DateTimeRange initial
 class RangeControl extends StatelessWidget {
   final InsightRange model;
   final RangePicker picker;
-  const RangeControl({super.key, required this.model, this.picker = _systemPicker});
+  const RangeControl({super.key, required this.model, this.picker = systemRangePicker});
 
   Future<void> _pick(BuildContext context) async {
     final now = model.wc.now;

@@ -40,6 +40,7 @@ part 'controller_import.dart';
 part 'controller_settings.dart';
 part 'controller_review.dart';
 part 'controller_tx.dart';
+part 'controller_suggest.dart';
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');
@@ -1139,6 +1140,9 @@ class WalletController extends ChangeNotifier {
 
   /// The ids last deleted in this session: the toast's Undo restores them.
   String? lastDeletedTx, lastDeletedGoal;
+
+  /// The payee rule offered after the last hand-set main tag (Q6): the toast after the sheet reads it once (`takeRuleOffer`).
+  RuleOffer? ruleOffer;
 
   /// The split removed last (payment and its parts): the toast's Undo puts it back (`restoreSplitOf`).
   (Tx, List<SplitPart>)? lastRemovedSplit;

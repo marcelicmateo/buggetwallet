@@ -421,6 +421,31 @@ class TxHeaderRow extends StatelessWidget {
 }
 
 /// One transaction row: Date | Particulars | Amount with hairline column dividers (stacked at large text).
+/// [text] with the places [query] occurs in it (accents and case ignored, `matchSpans`) in bold: a plain [Text] when there are none.
+class Highlighted extends StatelessWidget {
+  final String text, query;
+  final TextStyle? style;
+  final int? maxLines;
+  final TextOverflow? overflow;
+  const Highlighted(this.text, this.query, {super.key, this.style, this.maxLines, this.overflow});
+
+  @override
+  Widget build(BuildContext context) {
+    final spans = query.isEmpty ? const <(int, int)>[] : matchSpans(text, query);
+    if (spans.isEmpty) return Text(text, style: style, maxLines: maxLines, overflow: overflow);
+    final base = DefaultTextStyle.of(context).style.merge(style);
+    final children = <InlineSpan>[];
+    var at = 0;
+    for (final (a, b) in spans) {
+      if (a > at) children.add(TextSpan(text: text.substring(at, a)));
+      children.add(TextSpan(text: text.substring(a, b), style: const TextStyle(fontWeight: FontWeight.w800)));
+      at = b;
+    }
+    if (at < text.length) children.add(TextSpan(text: text.substring(at)));
+    return Text.rich(TextSpan(style: base, children: children), maxLines: maxLines, overflow: overflow);
+  }
+}
+
 class TxTile extends StatelessWidget {
   final CategorizedTx t;
   final String currency;
@@ -444,6 +469,9 @@ class TxTile extends StatelessWidget {
   /// A search found this payment by one of its parts (0-based): "Part 2 matches".
   final int? matchedPart;
 
+  /// A search's text: where it occurs in the payee name it is shown in bold (Q7).
+  final String? highlight;
+
   /// The wallet's rates (`settings.fxRates`): a converted payment shows its original amount "100.00 $ at 0.9240" under the amount.
   final Map<String, FxRate>? fxRates;
   const TxTile(
@@ -457,7 +485,8 @@ class TxTile extends StatelessWidget {
       this.tagTable,
       this.splitCount = 0,
       this.splitBroken = false,
-      this.matchedPart});
+      this.matchedPart,
+      this.highlight});
 
   @override
   Widget build(BuildContext context) {
@@ -477,8 +506,8 @@ class TxTile extends StatelessWidget {
                 key: const ValueKey('txOriginal'),
                 textAlign: TextAlign.end,
                 style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.ink2)));
-    final name =
-        Text(merchantName(t.tx), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500));
+    final name = Highlighted(merchantName(t.tx), highlight ?? '',
+        maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500));
     final catLabel = (table ?? CategoryTable.builtIn).label(t.category);
     final date = shortDateOrRaw(t.date);
     final sub = Wrap(spacing: 6, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
