@@ -80,7 +80,8 @@ void main() {
       expect(status('Up to date'), findsOneWidget);
       expect(a.syncDevices.length, 2);
       expect(find.textContaining('Last seen'), findsNWidgets(2));
-      expect(find.textContaining('· this device'), findsOneWidget);
+      // The device list's own row ("<id> · this device"); Recent changes rows also mention this device (Q9).
+      expect(find.byWidgetPredicate((w) => w is Text && (w.data ?? '').endsWith(' · this device')), findsOneWidget);
       await Harness.shot(t, 'relay_sync/plan-sync');
       await goTab(t, 'Budget');
       await scrollTo(t, find.widgetWithText(TxTile, '−37.77 €'), SpendingScreen);
