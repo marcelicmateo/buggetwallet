@@ -1558,10 +1558,7 @@ class WalletController extends ChangeNotifier {
 
   /// Changes when wallet data changes: every data write (local or applied from a peer) records its field clock. Bookkeeping
   /// a failed run still makes (the next file number in `meta`, the outbox) doesn't count.
-  String _dataMark() {
-    final r = repo.db.select('SELECT count(*) AS n, max(hlc) AS m FROM clocks').first;
-    return '${r['n']}|${r['m']}';
-  }
+  (WalletRepo, int) _dataMark() => (repo, repo.dataVersion);
 
   void _startAutoSync() {
     _dayTimer?.cancel();

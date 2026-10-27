@@ -372,7 +372,8 @@ void main() {
       w.wc.sync.relayInstance = 'A1B2C3D4E5F60718';
       w.wc.sync.problems = const [SyncProblem('abcd1234', SyncProblemReason.deviceIdInUse, bytes: 0)];
       await w.wc.forgetBrowser();
-      expect((w.wc.sync.badFiles, w.wc.sync.relayInstance, w.wc.sync.problems), (0, null, isEmpty), reason: 'the old status is gone');
+      expect((w.wc.sync.badFiles, w.wc.sync.relayInstance), (0, null), reason: 'the old status is gone');
+      expect(w.wc.sync.problems, isEmpty);
       expect(w.db.forgotten, isTrue);
       expect(w.keyForgets, 1);
       expect(w.wc.hasWallet, isFalse);
