@@ -1,4 +1,4 @@
-// WalletRepo.clockStats: the field-clock count and newest clock (the app's "wallet data changed" mark). All data SYNTHETIC.
+// WalletRepo.clockStats: field-clock count and newest clock (not a change mark; see dataVersion). All data SYNTHETIC.
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 

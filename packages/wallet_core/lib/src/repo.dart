@@ -396,8 +396,9 @@ class WalletRepo {
   }
 
   T _tx<T>(T Function() body) {
+    // Every way out of a transaction clears it (commit, rollback, a dry run's rollback).
+    assert(!_dataPending, 'a data write left a transaction without clearing its mark');
     db.execute('BEGIN');
-    _dataPending = false;
     try {
       final r = body();
       db.execute('COMMIT');

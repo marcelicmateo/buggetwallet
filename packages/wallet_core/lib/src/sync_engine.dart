@@ -801,13 +801,12 @@ class SyncEngine {
         run.listed.add(k);
         return _PeerBlocked(SyncWaiting(_short(d), seq, reason: was.reason), was.problem(isNew: false));
       }
-      final clocksBefore = _debugClockStats(repo), versionBefore = repo.dataVersion;
+      final versionBefore = repo.dataVersion;
       final int changed, count;
       try {
         (changed, count) = await _applyBytes(repo, key, bytes, _fileOps, aadSyncFile(d, seq), repo.clock.now());
       } on _Refused catch (r) {
-        assert(run.cur(d) == seq - 1 && repo.dataVersion == versionBefore && repo.clockStats() == clocksBefore,
-            'a refused file changes nothing');
+        assert(run.cur(d) == seq - 1 && repo.dataVersion == versionBefore, 'a refused file changes nothing');
         logError(_log, 'sync.file.failed', r.error, r.stack, fields: {'seq': seq, 'reason': r.reason.name, 'bytes': bytes.length});
         run.listed.add(k);
         run.bad.byKey[k] = BadFile(d, '$seq', r.reason, size: bytes.length, hash: await fileHash(bytes), build: build, retryAt: r.retryAt);
@@ -841,17 +840,6 @@ class SyncEngine {
       blocked.remove(d);
       run.record(d, await _applyPeer(repo, run, d));
     }
-  }
-
-  /// [WalletRepo.clockStats] while asserts are on (debug builds and tests), else null: for the "a refused file changes
-  /// nothing" check in [_applyPeer].
-  static ({int count, String? maxHlc})? _debugClockStats(WalletRepo repo) {
-    ({int count, String? maxHlc})? stats;
-    assert(() {
-      stats = repo.clockStats();
-      return true;
-    }());
-    return stats;
   }
 
   /// Uploads the bill files waiting for upload plus the cached ones in [refs] (files the ops about to go up reference:

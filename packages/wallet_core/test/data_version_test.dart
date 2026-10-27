@@ -65,6 +65,50 @@ void main() {
     expect(_value(r, 'alpha'), '"one"');
   });
 
+  test('a write rolled back inside its transaction leaves it, also for the next transaction', () {
+    var now = _t0;
+    final r = WalletRepo.inMemory(now: () => now);
+    addTearDown(r.close);
+    r.importBatch(january);
+    final v = r.dataVersion, id = r.transactions().first.id;
+    // The field is written, then queuing its op fails: the whole write rolls back.
+    r.db.execute("CREATE TEMP TRIGGER bw_test_fail BEFORE INSERT ON outbox BEGIN SELECT RAISE(ABORT, 'test'); END");
+    now += 60000;
+    expect(() => r.setCategory(id, 'Groceries'), throwsA(predicate(WalletRepo.isWriteError)));
+    r.db.execute('DROP TRIGGER bw_test_fail');
+    expect(r.dataVersion, v);
+    // A later transaction that writes no data must not pick up the rolled-back write's mark.
+    expect(r.applyRemote([_setting('alpha', '"one"', _t0 - 9000)]), 1);
+    final v2 = r.dataVersion;
+    expect(v2, v + 1);
+    expect(r.applyRemote([_setting('alpha', '"one"', _t0 - 9000)]), 0);
+    expect(r.dataVersion, v2);
+  });
+
+  test('a backup restore and a merge move it; a dry-run merge does not', () async {
+    final key = VaultKey.generate();
+    final src = WalletRepo.inMemory(now: () => _t0);
+    addTearDown(src.close);
+    src.importBatch(january);
+    final bytes = await backupBytes(src, key);
+
+    final fresh = WalletRepo.inMemory(now: () => _t0);
+    addTearDown(fresh.close);
+    final v0 = fresh.dataVersion;
+    expect(await restoreBackupBytes(fresh, bytes, key), greaterThan(0));
+    expect(fresh.dataVersion, greaterThan(v0));
+
+    final other = WalletRepo.inMemory(now: () => _t0);
+    addTearDown(other.close);
+    other.applyRemote([_setting('alpha', '"one"', _t0 - 9000)]);
+    final v1 = other.dataVersion;
+    final dry = await mergeBackupBytes(other, bytes, key, dryRun: true);
+    expect(dry.changed, greaterThan(0));
+    expect(other.dataVersion, v1);
+    await mergeBackupBytes(other, bytes, key);
+    expect(other.dataVersion, greaterThan(v1));
+  });
+
   group('sync', () {
     late MemoryTransport relay;
     late VaultKey key;
