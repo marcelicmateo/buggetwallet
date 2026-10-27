@@ -47,9 +47,6 @@ final _searchLog = Logger('bw.search');
 /// The core function; the controller method of the same name would hide it inside the class.
 const _computeBudget = budgetVsActual;
 
-/// The core backup functions; the controller methods of similar names would hide them inside the class.
-const _restoreBackupBytesFn = restoreBackupBytes;
-
 /// Which transactions Plan › Export writes.
 enum ExportRange { period, year, all }
 
@@ -1616,8 +1613,7 @@ class WalletController extends ChangeNotifier {
     final sw = Stopwatch()..start();
     try {
       final opener = otherKey == null ? k : await VaultKey.parse(otherKey);
-      final reader = deps.backupBytesReader ?? (r, b, o) => _restoreBackupBytesFn(r, b, o, walletKey: k); // always the wallet's own key too
-      final rows = await reader(repo, bytes, opener);
+      final rows = await deps.backupBytesReader(repo, bytes, opener, k); // always the wallet's own key too
       logEvent(_backupLog, Level.INFO, 'backup.restored',
           {'ms': sw.elapsedMilliseconds, 'rows': rows, 'bytes': bytes.length, 'otherKey': otherKey != null});
       _changed();

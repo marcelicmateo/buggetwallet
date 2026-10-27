@@ -455,9 +455,8 @@ extension BillsDb on WalletController {
   bool billNeedsCategory(Bill b) => b.category == null && b.dueDate != null && b.dueDate!.compareTo(today()) >= 0;
 
   /// The category worth suggesting for [b] (earlier bills and payments of the same payee); null when nothing fits.
-  String? suggestedBillCategory(Bill b) => deps.billCategorySuggester != null
-      ? deps.billCategorySuggester!(b)
-      : suggestBillCategory(b, recurring: expectedBills(), txs: wholeTxs, table: categoryTable);
+  String? suggestedBillCategory(Bill b) =>
+      deps.billCategorySuggester(b, () => suggestBillCategory(b, recurring: expectedBills(), txs: wholeTxs, table: categoryTable));
 
   /// The confirmed expected bill that already plans this slip (same payee, due about one cycle), or null. Such a bill's planned row is
   /// listed but not reserved (decided by core when read).

@@ -24,7 +24,6 @@ import 'wallet_db.dart';
 class WalletControllerDeps {
   const WalletControllerDeps({
     required this.clock,
-    required this.keyStore,
     required this.nudges,
     required this.calendars,
     required this.homeWidget,
@@ -53,8 +52,8 @@ class WalletControllerDeps {
     required this.clipboardRead,
     required this.icsFetcher,
     required this.pdfParser,
-    this.billCategorySuggester,
-    this.backupBytesReader,
+    required this.billCategorySuggester,
+    required this.backupBytesReader,
   });
 
   /// The real ones. The four platform objects are looked up only when not given (tests pass the inert ones); [dbDir] points the
@@ -70,7 +69,6 @@ class WalletControllerDeps {
     final ks = keyStore ?? KeyStore();
     return WalletControllerDeps(
       clock: DateTime.now,
-      keyStore: ks,
       nudges: nudges ?? defaultNudgePlatform(),
       calendars: calendars ?? defaultCalendarSource(),
       homeWidget: homeWidget ?? defaultHomeWidget(),
@@ -99,14 +97,13 @@ class WalletControllerDeps {
       clipboardRead: () async => (await Clipboard.getData(Clipboard.kTextPlain))?.text,
       icsFetcher: fetchIcs,
       pdfParser: parsePdf,
+      billCategorySuggester: (b, builtIn) => builtIn(),
+      backupBytesReader: (r, bytes, opener, walletKey) => restoreBackupBytes(r, bytes, opener, walletKey: walletKey),
     );
   }
 
   /// The current time; tests move it.
   final DateTime Function() clock;
-
-  /// Where the wallet key and the device id live (system keystore, a file, or the browser).
-  final KeyStore keyStore;
 
   /// The phone's reminders (Plan › Nudges); [NoNudges] in tests and on desktop.
   final NudgePlatform nudges;
@@ -192,16 +189,15 @@ class WalletControllerDeps {
   /// Reads a PDF's text layer and the bill in it: off the UI isolate on native (pdf_parse.dart).
   final PdfParser pdfParser;
 
-  /// Replaces the category suggestion for a bill; null = the real one.
-  final String? Function(Bill b)? billCategorySuggester;
+  /// The category to suggest for a bill; [builtIn] works out the real suggestion (the default returns it).
+  final String? Function(Bill b, String? Function() builtIn) billCategorySuggester;
 
-  /// Restores picked backup bytes; null = core's restore, always with the wallet's own key too.
-  final Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey key)? backupBytesReader;
+  /// Restores picked backup bytes with [opener]; the controller always passes the wallet's own key too ([walletKey]).
+  final Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey opener, VaultKey walletKey) backupBytesReader;
 
   /// A copy with the given members replaced (a nullable member cannot be reset to null this way).
   WalletControllerDeps copyWith({
     DateTime Function()? clock,
-    KeyStore? keyStore,
     NudgePlatform? nudges,
     CalendarSource? calendars,
     HomeWidget? homeWidget,
@@ -230,12 +226,11 @@ class WalletControllerDeps {
     Future<String?> Function()? clipboardRead,
     Future<String> Function(Uri url)? icsFetcher,
     PdfParser? pdfParser,
-    String? Function(Bill b)? billCategorySuggester,
-    Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey key)? backupBytesReader,
+    String? Function(Bill b, String? Function() builtIn)? billCategorySuggester,
+    Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey opener, VaultKey walletKey)? backupBytesReader,
   }) =>
       WalletControllerDeps(
         clock: clock ?? this.clock,
-        keyStore: keyStore ?? this.keyStore,
         nudges: nudges ?? this.nudges,
         calendars: calendars ?? this.calendars,
         homeWidget: homeWidget ?? this.homeWidget,

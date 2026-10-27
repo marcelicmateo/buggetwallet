@@ -1,5 +1,5 @@
 // Mutable stand-ins for the controller's seams. [WalletControllerDeps] is immutable, so a test that swaps a seam mid-test
-// (`wc.seams.seams.syncRunner = ...`) goes through these: every function in the deps handed to the controller forwards to the field here.
+// (`wc.seams.syncRunner = ...`) goes through these: every function in the deps handed to the controller forwards to the field here.
 // Create the controller with [seamedController] (or [seamedLoad]); [ControllerSeams.seams] gives the fake back.
 import 'dart:typed_data';
 
@@ -42,8 +42,8 @@ class TestSeams {
         clipboardRead = base.clipboardRead,
         icsFetcher = base.icsFetcher,
         pdfParser = base.pdfParser,
-        billCategorySuggester = base.billCategorySuggester,
-        backupBytesReader = base.backupBytesReader;
+        billCategorySuggester = null,
+        backupBytesReader = null;
 
   Future<SyncReport> Function(Uri relay, VaultKey key, WalletRepo repo) syncRunner;
   Future<void> Function(Uri relay) healthCheck;
@@ -70,13 +70,11 @@ class TestSeams {
   Future<String> Function(Uri url) icsFetcher;
   PdfParser pdfParser;
 
-  /// null = the controller's own suggestion.
+  /// null = the controller's own suggestion (not forwarded).
   String? Function(Bill b)? billCategorySuggester;
 
-  /// null = core's restore with the wallet's own key.
+  /// null = the controller's own restore path (not forwarded).
   Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey key)? backupBytesReader;
-
-  WalletController? _wc;
 
   /// The deps for the controller: each function forwards to the field of the same name, read at call time.
   WalletControllerDeps build(WalletControllerDeps base) => base.copyWith(
@@ -105,14 +103,11 @@ class TestSeams {
         clipboardRead: () => clipboardRead(),
         icsFetcher: (url) => icsFetcher(url),
         pdfParser: (pdf) => pdfParser(pdf),
-        billCategorySuggester: (b) => (billCategorySuggester ?? _realSuggester)(b),
-        backupBytesReader: (r, b, k) => (backupBytesReader ?? _realReader)(r, b, k),
+        // Forwarded only when a test set them; otherwise the controller's own (production) path runs.
+        billCategorySuggester: (b, builtIn) => billCategorySuggester != null ? billCategorySuggester!(b) : builtIn(),
+        backupBytesReader: (r, bytes, opener, walletKey) =>
+            backupBytesReader != null ? backupBytesReader!(r, bytes, opener) : base.backupBytesReader(r, bytes, opener, walletKey),
       );
-
-  Future<int> _realReader(WalletRepo repo, Uint8List bytes, VaultKey opener) =>
-      restoreBackupBytes(repo, bytes, opener, walletKey: _wc!.key);
-
-  String? _realSuggester(Bill b) => suggestBillCategory(b, recurring: _wc!.expectedBills(), txs: _wc!.wholeTxs, table: _wc!.categoryTable);
 }
 
 WalletControllerDeps _inert() => WalletControllerDeps.platform(
@@ -141,7 +136,6 @@ WalletController seamedController(WalletRepo repo,
       billInputs: billInputs,
       db: db,
       locked: locked);
-  seams._wc = wc;
   _registry[wc] = seams;
   return wc;
 }
@@ -152,7 +146,6 @@ Future<WalletController> seamedBoot(Future<WalletController> Function(WalletCont
   final b = base ?? WalletControllerDeps.platform();
   final seams = TestSeams(b);
   final wc = await make(seams.build(b));
-  seams._wc = wc;
   _registry[wc] = seams;
   return wc;
 }
