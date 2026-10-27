@@ -266,3 +266,38 @@ RecurringPayments planRecurringPayments(List<RecurringBill> bills, List<Tx> rows
   }
   return RecurringPayments(paid, parts: parts, paidInParts: inParts);
 }
+
+/// What the confirmed bills cost a month and a year (Q10, display only; integer cents, rounded down per bill): bills
+/// only (never an income), confirmed, not [RecurringBill.finished]. A cycle's amount is [RecurringBill.expectedAmount],
+/// or the midpoint of its range (`(min + max) ~/ 2`, [RecurringBill.hasRange]; then [approximate] is true). Per bill: a
+/// monthly one (27..31 days, as P4 tells them apart) = the amount a month, × 12 a year; a quarterly one
+/// ([RecurringPeriod.of] = quarterly) × 4 a year, a yearly one × 1; any other interval (weekly, every 2 weeks, custom
+/// days) `amount × 365 ~/ intervalDays` a year; the monthly figure of a non-monthly bill is its yearly ~/ 12. The
+/// totals add the bills' own figures, so `monthly × 12` may differ from `yearly` by the rounding. Bills carry no
+/// currency of their own (detected only from rows in the wallet currency, entered in it by hand): [currency] names
+/// the wallet currency the result is in.
+({int monthly, int yearly, bool approximate}) recurringCost(List<RecurringBill> bills, {required String currency}) {
+  var monthly = 0, yearly = 0;
+  var approximate = false;
+  for (final b in bills) {
+    if (b.isIncome || !b.confirmed || b.finished) continue;
+    final ranged = b.hasRange;
+    final amount = ranged ? (b.minAmount! + b.maxAmount!) ~/ 2 : b.expectedAmount;
+    final days = b.intervalDays;
+    if (amount <= 0 || days < 1) continue;
+    if (ranged) approximate = true;
+    if (!b.isShort && !b.isLong) {
+      monthly += amount;
+      yearly += amount * 12;
+      continue;
+    }
+    final y = switch (RecurringPeriod.of(days)) {
+      RecurringPeriod.quarterly => amount * 4,
+      RecurringPeriod.yearly => amount,
+      _ => amount * 365 ~/ days,
+    };
+    yearly += y;
+    monthly += y ~/ 12;
+  }
+  return (monthly: monthly, yearly: yearly, approximate: approximate);
+}

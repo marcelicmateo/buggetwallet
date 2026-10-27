@@ -6,6 +6,7 @@ import 'package:wallet_importer/wallet_importer.dart';
 
 import 'bills.dart';
 import 'categories.dart';
+import 'changes.dart';
 import 'dates.dart';
 import 'hlc.dart';
 import 'logs.dart';
@@ -23,6 +24,7 @@ import 'transfers.dart';
 part 'repo_accounts.dart';
 part 'repo_bills.dart';
 part 'repo_categories.dart';
+part 'repo_changes.dart';
 part 'repo_blobs.dart';
 part 'repo_import.dart';
 part 'repo_meta.dart';
