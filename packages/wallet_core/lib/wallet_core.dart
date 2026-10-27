@@ -37,6 +37,7 @@ export 'src/bills.dart'
         BillStatus,
         BlobRef,
         descriptionHasToken,
+        isBlobHash,
         maxAttachmentsPerTx,
         maxBillItemName,
         maxBillItems,
@@ -47,7 +48,7 @@ export 'src/bills.dart'
         plannedReserves,
         sha256Hex,
         suggestBillCategory;
-export 'src/blob_store.dart' show blobCacheBytesNative, blobCacheBytesWeb, BlobStore, isBlobHash, maxBlobPlainBytes;
+export 'src/blob_store.dart' show blobCacheBytesNative, blobCacheBytesWeb, BlobStore, maxBlobPlainBytes;
 export 'src/budget.dart'
     show
         Affordability,
@@ -148,6 +149,7 @@ export 'src/logs.dart'
         Logger,
         LogRecord,
         FrameStats,
+        LogSafeError,
         logError,
         LogEvent,
         logEvent,

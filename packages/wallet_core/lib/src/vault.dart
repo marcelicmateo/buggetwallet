@@ -30,7 +30,7 @@ enum UnsealFailure {
   tooLarge,
 }
 
-class VaultException implements Exception {
+class VaultException implements Exception, LogSafeError {
   final String message;
 
   /// Set by [unseal]; null for key errors.
