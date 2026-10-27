@@ -10,8 +10,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
-import 'support/sim.dart';
+import '../../wallet_core/test/support/sim.dart';
 
 const _hour = 3600000;
 

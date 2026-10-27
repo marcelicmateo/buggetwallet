@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 /// A part of the controller's state that is a [Listenable] of its own. Its setters only mark it changed ([touch]); the controller
 /// calls [flush] right after it notified its own listeners, so this state tells its listeners at most once per controller

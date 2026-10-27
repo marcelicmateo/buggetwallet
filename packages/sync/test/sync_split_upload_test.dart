@@ -8,9 +8,10 @@ import 'dart:math';
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
-import 'support/engine_spec_sim.dart';
-import 'support/synthetic.dart';
+import '../../wallet_core/test/support/engine_spec_sim.dart';
+import '../../wallet_core/test/support/synthetic.dart';
 
 /// Records the size of every stored file per device (the relay may prune them later) and fails every PUT after the
 /// first [okPuts] (a run that dies half-way through an upload).

@@ -4,14 +4,10 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:sqlite3/common.dart' show SqliteException;
+import 'package:wallet_core/wallet_core.dart';
 
-import 'backup.dart';
-import 'hlc.dart';
-import 'logs.dart';
-import 'repo.dart';
 import 'sync.dart';
 import 'sync_problems.dart';
-import 'vault.dart';
 
 export 'sync_memory.dart';
 export 'sync_relay.dart';

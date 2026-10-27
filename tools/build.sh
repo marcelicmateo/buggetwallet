@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Local builds in a rootless Podman container. Runs the same steps as CI (.github/workflows/ci.yml).
 #
-#   tools/build.sh test     lint, then importer + core + relay + app: analyze and tests (all in parallel)
+#   tools/build.sh test     lint, then importer + core + sync + relay + app: analyze and tests (all in parallel)
 #   tools/build.sh lint     quick checks: Dart formatting, shellcheck, actionlint (pre-commit hook)
-#   tools/build.sh analyze [pkg…]   analyze only (importer core relay app; default all): app compiles against a changed API
+#   tools/build.sh analyze [pkg…]   analyze only (importer core sync relay app; default all): app compiles against a changed API
 #                           without running its tests (app ~7 s)
 #   tools/build.sh stage    one stage verification, each step its own run and history lines, in this order: test, desktop-test,
 #                           web-test, tools/emulator.sh screens (skipped when the emulator volumes don't exist), perf (last).
@@ -30,10 +30,10 @@
 #                           tab switches; flutter drive --profile under Xvfb). Writes <action>.timeline.json (open in DevTools or
 #                           Perfetto) and .timeline_summary.json to dist/logs, appends history/perf.jsonl, fails on a budget
 #                           overrun (app/test_driver/perf_budget.dart). Not part of test or all.
-#   tools/build.sh importer|core|relay|app   analyze and test one package (what CI runs, one step each)
-#   tools/build.sh importer|core|relay|app <test file or dir>…   only those tests (paths relative to the package or the repo root),
+#   tools/build.sh importer|core|sync|relay|app   analyze and test one package (what CI runs, one step each)
+#   tools/build.sh importer|core|sync|relay|app <test file or dir>…   only those tests (paths relative to the package or the repo root),
 #                           no analyze; step name <pkg>:one, so the full-suite medians stay clean
-#   tools/build.sh mutate <importer|core> <lib file>… [--max N] [--seed S] [--tests <test file>…] [--timeout SECS] [--list]
+#   tools/build.sh mutate <importer|core|sync> <lib file>… [--max N] [--seed S] [--tests <test file>…] [--timeout SECS] [--list]
 #                           mutation testing (tools/mutate.py): seeded sample of simple mutants per lib file, each run against the
 #                           package tests (one at a time, file restored after each), survivors listed; dist/mutation/<pkg>-<file>.json
 #   tools/build.sh shell    interactive shell in the container;  shell -c '<command>' runs one command non-interactively
@@ -151,7 +151,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   case "$CMD" in
     image) build_image; exit ;;
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
-    test|lint|apk|linux|all|importer|core|relay|app|mutate|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated) run_begin "$CMD"; hook_hint ;;
+    test|lint|apk|linux|all|importer|core|sync|relay|app|mutate|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated) run_begin "$CMD"; hook_hint ;;
     stage) host_stage; exit ;;
     format|shell|lsp|mcp) ;;
     *) usage ;;
@@ -159,8 +159,8 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   [[ "$CMD" == web || "$CMD" == web-test ]] && { fetch_sqlite_wasm || exit 1; }
   # mutate works on a copy, but a leftover mutant from an older run would be mutated again: refuse (checked here, the
   # worktree's git directory is not visible inside the container)
-  if [[ "$CMD" == mutate ]] && ! git -C "$ROOT" diff --quiet HEAD -- packages/wallet_core/lib packages/wallet_importer/lib; then
-    echo "mutate: lib files differ from HEAD (a leftover mutant?). Restore with: git checkout -- packages/wallet_core/lib packages/wallet_importer/lib" >&2
+  if [[ "$CMD" == mutate ]] && ! git -C "$ROOT" diff --quiet HEAD -- packages/wallet_core/lib packages/sync/lib packages/wallet_importer/lib; then
+    echo "mutate: lib files differ from HEAD (a leftover mutant?). Restore with: git checkout -- packages/wallet_core/lib packages/sync/lib packages/wallet_importer/lib" >&2
     exit 1
   fi
   # Build output goes to stderr (stdout belongs to the LSP client in `lsp` mode)
@@ -240,7 +240,7 @@ dart_files() {
 # Also needed by `dart format`, which reads page_width through the analysis_options.yaml includes.
 pub_ready() {
   local d
-  for d in packages/wallet_importer packages/wallet_core relay app; do
+  for d in packages/wallet_importer packages/wallet_core packages/sync relay app; do
     pub_stale "$d" || continue
     echo "--- pub get: $d"
     # app and relay have a tracked pubspec.lock: --enforce-lockfile fails instead of silently moving versions (to change a
@@ -348,13 +348,14 @@ LINT=(format format_check
 declare -A SUITE=(
   [importer]='suite importer packages/wallet_importer "dart analyze --fatal-infos" dart test --timeout 60s'
   [core]='suite core packages/wallet_core "dart analyze --fatal-infos" dart test --timeout 60s'
+  [sync]='suite sync packages/sync "dart analyze --fatal-infos" dart test --timeout 60s'
   [relay]='suite relay relay "dart analyze --fatal-infos" dart test --timeout 60s'
   [app]='suite app app "flutter analyze --fatal-infos --no-pub" flutter test --no-pub --timeout 60s')
-# one_suite <importer|core|relay|app> <test file or dir>…: just those tests, no analyze, as step "<pkg>:one"
+# one_suite <importer|core|sync|relay|app> <test file or dir>…: just those tests, no analyze, as step "<pkg>:one"
 one_suite() {
   local pkg=$1 dir f files=() tcmd=dart
   shift
-  case "$pkg" in importer) dir=packages/wallet_importer ;; core) dir=packages/wallet_core ;; relay) dir=relay ;; *) dir=app; tcmd='flutter' ;; esac
+  case "$pkg" in importer) dir=packages/wallet_importer ;; core) dir=packages/wallet_core ;; sync) dir=packages/sync ;; relay) dir=relay ;; *) dir=app; tcmd='flutter' ;; esac
   for f in "$@"; do
     f=${f#"$ROOT/"}; f=${f#"$dir/"}
     [[ -e $dir/$f ]] || { echo "no such test file or dir in $dir: $f" >&2; failed=1; return; }
@@ -368,14 +369,15 @@ one_suite() {
 # analyze [pkg…]: analysis only (fatal infos), in parallel, step "analyze-<pkg>"
 analyze_pkgs() {
   local pkgs=("$@") p args=()
-  ((${#pkgs[@]})) || pkgs=(importer core relay app)
+  ((${#pkgs[@]})) || pkgs=(importer core sync relay app)
   for p in "${pkgs[@]}"; do
     case $p in
       importer) args+=(analyze-importer "cd packages/wallet_importer && dart analyze --fatal-infos") ;;
       core) args+=(analyze-core "cd packages/wallet_core && dart analyze --fatal-infos") ;;
+      sync) args+=(analyze-sync "cd packages/sync && dart analyze --fatal-infos") ;;
       relay) args+=(analyze-relay "cd relay && dart analyze --fatal-infos") ;;
       app) args+=(analyze-app "cd app && flutter analyze --fatal-infos --no-pub") ;;
-      *) echo "analyze: unknown package $p (importer core relay app)" >&2; failed=1; return ;;
+      *) echo "analyze: unknown package $p (importer core sync relay app)" >&2; failed=1; return ;;
     esac
   done
   steps "${args[@]}"
@@ -384,16 +386,16 @@ analyze_pkgs() {
 # shellcheck disable=SC2329  # called by name through a step
 outdated() {
   local d
-  for d in packages/wallet_importer packages/wallet_core relay app; do
+  for d in packages/wallet_importer packages/wallet_core packages/sync relay app; do
     echo "=== $d"
     if [[ $d == app ]]; then (cd "$d" && flutter pub outdated); else (cd "$d" && dart pub outdated); fi || true
   done
 }
 export -f outdated
-TESTS=(importer "${SUITE[importer]}" core "${SUITE[core]}" relay "${SUITE[relay]}" app "${SUITE[app]}")
+TESTS=(importer "${SUITE[importer]}" core "${SUITE[core]}" sync "${SUITE[sync]}" relay "${SUITE[relay]}" app "${SUITE[app]}")
 run_pub() {
   local cold=false d
-  for d in packages/wallet_importer packages/wallet_core relay app; do [[ -f $d/.dart_tool/package_config.json ]] || cold=true; done
+  for d in packages/wallet_importer packages/wallet_core packages/sync relay app; do [[ -f $d/.dart_tool/package_config.json ]] || cold=true; done
   run_step pub pub_ready || true
   # Only worth showing (and timing) when something had to be resolved
   if [[ $(wc -l < "$LOGS/pub.log") -gt 2 || $(cut -d' ' -f2 "$LOGS/pub.status") != 0 ]]; then
@@ -719,7 +721,7 @@ case "$CMD" in
   analyze) run_pub; [[ $failed == 0 ]] && analyze_pkgs "${@:2}" ;;
   outdated) outdated ;;
   test)   run_pub; [[ $failed == 0 ]] && steps "${LINT[@]}" "${TESTS[@]}" ;;
-  importer|core|relay|app)
+  importer|core|sync|relay|app)
     if (($# > 1)); then run_pub; [[ $failed == 0 ]] && one_suite "$CMD" "${@:2}"
     else run_pub; [[ $failed == 0 ]] && steps "$CMD" "${SUITE[$CMD]}"; fi ;;
   mutate) pub_ready; (($# > 2)) || usage

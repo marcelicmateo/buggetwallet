@@ -1,7 +1,7 @@
 # relay — notes for Claude
 
 Pure Dart server (`dart:io` + `cryptography` for SHA-256 and Ed25519 verification). Stores sealed sync files it cannot read. **The wire protocol is
-`docs/context/RELAY_PROTOCOL.md`: change it there first**, the client (`RelayTransport` in `wallet_core`) follows the same file.
+`docs/context/RELAY_PROTOCOL.md`: change it there first**, the client (`RelayTransport` in `wallet_sync`, `packages/sync`) follows the same file.
 Never put a signature, public key, body, full id or client address in a log line, a test fixture or a comment.
 
 ## Files

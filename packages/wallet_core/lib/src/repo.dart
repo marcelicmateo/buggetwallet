@@ -5,7 +5,6 @@ import 'package:sqlite3/common.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'bills.dart';
-import 'blob_store.dart' show isBlobHash;
 import 'categories.dart';
 import 'dates.dart';
 import 'hlc.dart';

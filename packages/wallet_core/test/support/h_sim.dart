@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:relay/relay.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 import 'engine_spec_sim.dart';
 import 'h_compat.dart';

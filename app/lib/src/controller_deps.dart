@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 import 'bill_inputs.dart';
 import 'bill_platform.dart';

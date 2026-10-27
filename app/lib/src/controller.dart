@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show AppLifecycleListener, AppLifecycleState, WidgetsBinding;
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 import 'bill_inputs.dart';
 import 'calendar_source.dart';

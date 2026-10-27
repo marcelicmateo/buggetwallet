@@ -14,8 +14,6 @@ import 'package:sqlite3/common.dart' show SqliteException;
 import 'package:wallet_importer/wallet_importer.dart' show ImportException;
 
 import 'platform_error_io.dart' if (dart.library.js_interop) 'platform_error_web.dart' as platform;
-import 'sync.dart' show SyncException;
-import 'vault.dart' show VaultException;
 
 export 'package:logging/logging.dart' show Level, LogRecord, Logger;
 
@@ -55,6 +53,10 @@ String formatLogTime(DateTime t) {
       '.${l.millisecond.toString().padLeft(3, '0')}${off.isNegative ? '-' : '+'}${_two(mins ~/ 60)}:${_two(mins % 60)}';
 }
 
+/// An error whose `toString()` holds only fixed texts, enum words and numbers, so [describeError] logs it as it is
+/// (`SyncException`, `VaultException`). Lets the sync package's errors be classified without core importing them.
+abstract interface class LogSafeError {}
+
 /// Extra redaction for error types this package can't see (the app registers one for PlatformException).
 /// Return null to fall through to the default handling.
 String? Function(Object e)? describeErrorHook;
@@ -85,7 +87,7 @@ String describeError(Object? e) {
       // invalidValue can be any value; keep the name and message.
       return 'ArgumentError${e.name != null ? '(${e.name})' : ''}: ${e.message ?? 'invalid argument'}';
     // Our own exceptions and Dart errors whose messages are fixed texts or numbers.
-    case ImportException() || SyncException() || VaultException() || StateError() || UnsupportedError() || TimeoutException():
+    case ImportException() || LogSafeError() || StateError() || UnsupportedError() || TimeoutException():
       return e.toString();
     case TypeError():
       return 'TypeError'; // can name runtime values' types only, but keep it minimal

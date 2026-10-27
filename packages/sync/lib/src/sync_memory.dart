@@ -3,7 +3,8 @@ import 'dart:collection';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'bills.dart' show sha256Hex;
+import 'package:wallet_core/wallet_core.dart' show sha256Hex;
+
 import 'sync_engine.dart';
 
 class _Dev {

@@ -26,9 +26,7 @@ Future<void> main(List<String> args) async {
   final repo = WalletRepo.fromDatabase(openKeyed(() => db, dbKey), file: false);
   final Uint8List bytes = await backupBytes(repo, key);
   final ops = await restoreBackupBytes(repo, bytes, key);
-  final SyncTransport transport = args.length > 1 ? RelayTransport(Uri.parse(args[1]), key) : MemoryTransport();
-  final report = await SyncEngine(transport, key).run(repo);
-  logEvent(log, Level.INFO, 'web.smoke.sync', {'caughtUp': report.caughtUp, 'id': (await deriveKey(key, 'smoke')).length});
+  logEvent(log, Level.INFO, 'web.smoke.key', {'id': (await deriveKey(key, 'smoke')).length});
   final ics = parseIcs(plannedIcs(repo.plannedCosts(), const [], from: '2026-01-01', to: '2026-12-31'),
       calendarId: 'smoke', from: '2026-01-01', to: '2026-12-31', toLocal: (t) => t.toLocal());
   logEvent(log, Level.INFO, 'web.smoke.ics', {'events': ics.events.length, 'ref': calendarRef('c', 'u', '2026-01-01').length});
@@ -36,7 +34,6 @@ Future<void> main(List<String> args) async {
     'rows': repo.transactions().length,
     'ops': ops,
     'failures': BackupFailure.values.length,
-    'bad': const SyncReport(0, 0, 0).badFiles,
   });
   repo.close();
 }

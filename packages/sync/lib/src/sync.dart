@@ -1,9 +1,11 @@
 // Sync types the app reads (compile for the web). The engine and its transports are in `sync_engine.dart`.
+import 'package:wallet_core/wallet_core.dart' show LogSafeError;
+
 import 'sync_problems.dart';
 
 export 'sync_problems.dart' show SyncProblem, SyncProblemReason, syncReaderVersion;
 
-class SyncException implements Exception {
+class SyncException implements Exception, LogSafeError {
   final String message;
   const SyncException(this.message);
   @override

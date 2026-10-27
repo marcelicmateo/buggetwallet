@@ -2,7 +2,7 @@
 // and the gzip change in vault.dart (package:archive instead of dart:io): files sealed by phones (dart:io gzip) must
 // still unseal, and what the pure-Dart gzip of a web build writes must be accepted. All data is SYNTHETIC.
 import 'dart:convert';
-import 'dart:io' show Directory, File, gzip;
+import 'dart:io' show Directory, gzip;
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart' show GZipDecoderWeb, GZipEncoderWeb;
@@ -237,20 +237,6 @@ void main() {
       addTearDown(() => dir.deleteSync(recursive: true));
       final sinks = <LogSink>[MemoryLogSink(), RotatingFileSink(dir)];
       expect(sinks, hasLength(2));
-    });
-  });
-
-  group('web-safe sync types', () {
-    test('SyncReport, SyncException and the engine are exported (no dart:io in the engine)', () {
-      const r = SyncReport(1, 2, 3, problems: [SyncProblem('abcdef01', SyncProblemReason.badKey, bytes: 10)]);
-      expect(r.badFiles, 1);
-      expect(r.problemsByDevice, {'abcdef01': 1});
-      expect([r.caughtUp, r.waiting.isEmpty, r.devices.isEmpty], [false, true, true]);
-      expect(const SyncException('x').toString(), 'x');
-      expect(SyncEngine(MemoryTransport(), VaultKey.generate(), appVersion: '1.2').build, endsWith('+1.2'));
-      for (final f in ['sync_engine.dart', 'sync_memory.dart', 'sync_relay.dart', 'sync.dart', 'sync_problems.dart']) {
-        expect(File('lib/src/$f').readAsStringSync(), isNot(contains("import 'dart:io'")), reason: f);
-      }
     });
   });
 }

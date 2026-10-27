@@ -1,9 +1,7 @@
 import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
-
-import 'logs.dart';
-import 'repo.dart';
+import 'package:wallet_core/wallet_core.dart';
 
 final _log = Logger('bw.sync');
 

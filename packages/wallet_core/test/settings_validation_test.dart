@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 /// Log lines written while [body] runs.
 List<String> _logs(void Function() body) {

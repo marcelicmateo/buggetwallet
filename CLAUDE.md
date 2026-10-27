@@ -11,7 +11,9 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 - `app/` — Flutter app (Android, iOS, Windows, macOS, Linux).
 - `packages/wallet_importer/` — bank files → normalized transactions. The only code that knows bank formats.
 - `relay/` — the sync relay server (pure Dart, stores sealed sync files; `relay/CLAUDE.md`, protocol in `docs/context/RELAY_PROTOCOL.md`); `tools/relay.sh` runs it locally in Podman, `dev/Containerfile.relay` builds its image.
-- `packages/wallet_core/` — SQLite repo, change log + HLC, encrypted folder sync, categories, budget engine.
+- `packages/wallet_core/` — SQLite repo, change log + HLC, vault (encryption), backups, categories, budget engine.
+- `packages/sync/` (`wallet_sync`) — relay sync engine, `RelayTransport`/`MemoryTransport`, `BlobStore`; depends on core.
+  Core uses it only as a dev dependency (two-device tests); core's `lib/` never imports it (`tools/build.sh sync`).
 - `artifact/` — v1 single-file web app (claude.ai artifact) and its JS tests (`npm test`).
 - `docs/architecture.md`, `docs/setup.md`.
 - Each package has its own short `CLAUDE.md` (files, rules, how to test). Read the one for the code you touch.
@@ -26,14 +28,14 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
   names, the key, paths or file names (see package `CLAUDE.md`s).
 
 ## Local builds (owner's laptop)
-`tools/build.sh test|lint|format|relay|apk|linux|desktop-test|desktop-smoke|perf|web|web-test|all|shell|lsp` runs the CI steps in a rootless **Podman** container
+`tools/build.sh test|lint|format|relay|sync|apk|linux|desktop-test|desktop-smoke|perf|web|web-test|all|shell|lsp` runs the CI steps in a rootless **Podman** container
 (not Docker), image from `dev/Containerfile`, Flutter version pinned by `environment: flutter:` in `app/pubspec.yaml`
 (CI reads the same line). Outputs land in `dist/` (git-ignored). Run `tools/build.sh test` before pushing.
 The release APK is 64-bit only: `--target-platform` plus `packaging.jniLibs.excludes` in `app/android/app/build.gradle.kts` (the ML Kit AARs ship armeabi-v7a libs anyway). Local `tools/build.sh apk` keeps arm64 + x86_64 (~86 MB) so `tools/emulator.sh install` works; `BW_APK_ABIS=arm64` (set in ci.yml and release.yml, so the published APK) drops x86_64 too (~44 MB).
 The scripts assume a Linux host: Bash 5, GNU tools (`grep -P`, `sha256sum`, `base64 -w0`), Python 3, Podman.
 Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't spend effort on them.
-- **Mutation testing:** `tools/build.sh mutate <importer|core> <lib file>… [--max N --seed S --tests <test file>…]` (`tools/mutate.py`) runs a seeded sample of one-token mutants against the package tests and lists survivors; results in `dist/mutation/`.
-- **One test file:** `tools/build.sh core|importer|app <test file or dir>…` runs only those tests (paths relative to the package or repo root; no analyze; step `<pkg>:one`, kept apart from full-suite medians); `tools/build.sh shell -c '<command>'` runs a command non-interactively in the container.
+- **Mutation testing:** `tools/build.sh mutate <importer|core|sync> <lib file>… [--max N --seed S --tests <test file>…]` (`tools/mutate.py`) runs a seeded sample of one-token mutants against the package tests (core: also the whole `packages/sync` suite unless `--tests`) and lists survivors; results in `dist/mutation/`.
+- **One test file:** `tools/build.sh core|sync|importer|app <test file or dir>…` runs only those tests (paths relative to the package or repo root; no analyze; step `<pkg>:one`, kept apart from full-suite medians); `tools/build.sh shell -c '<command>'` runs a command non-interactively in the container.
 - **Logs and timings** are kept outside the repo in `~/.local/share/budget-wallet/` (`BW_DATA_DIR`), shared by all
   worktrees and never committed: `runs/<time>-<cmd>-<commit>/` (step logs, image build logs, emulator log, test
   reports, screenshots; newest 30 kept; `dist/logs` links to this worktree's latest run, so `dist/logs/<step>.log`

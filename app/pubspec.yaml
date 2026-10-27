@@ -14,6 +14,8 @@ dependencies:
     path: ../packages/wallet_core
   wallet_importer:
     path: ../packages/wallet_importer
+  wallet_sync:
+    path: ../packages/sync
   sqlite3: ^3.7.1 # already used by wallet_core; the web database opens it directly (wasm). Native library: see hooks below
   cryptography: ^2.7.0 # already used by wallet_core; the web key store derives its passphrase key with it
   web: ^1.1.0 # localStorage / sessionStorage in the browser key store

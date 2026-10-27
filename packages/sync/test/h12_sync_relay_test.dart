@@ -7,11 +7,12 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
-import 'support/engine_spec_sim.dart';
-import 'support/h_compat.dart';
-import 'support/h_sim.dart';
-import 'support/synthetic.dart';
+import '../../wallet_core/test/support/engine_spec_sim.dart';
+import '../../wallet_core/test/support/h_compat.dart';
+import '../../wallet_core/test/support/h_sim.dart';
+import '../../wallet_core/test/support/synthetic.dart';
 
 const _t = Timeout(Duration(seconds: 60));
 

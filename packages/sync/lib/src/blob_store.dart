@@ -2,11 +2,9 @@
 // RELAY_PROTOCOL.md "Blobs"). Web-safe: the cache and queues are device-local tables of the wallet database.
 import 'dart:typed_data';
 
-import 'bills.dart';
-import 'logs.dart';
-import 'repo.dart';
+import 'package:wallet_core/wallet_core.dart';
+
 import 'sync_engine.dart';
-import 'vault.dart';
 
 final _log = Logger('bw.blob');
 
@@ -15,9 +13,6 @@ const maxBlobPlainBytes = 15 << 20;
 
 /// Cache limits (sealed bytes): native and web.
 const blobCacheBytesNative = 200 << 20, blobCacheBytesWeb = 50 << 20;
-
-/// Whether [s] is a blob hash: 64 lowercase hex characters.
-bool isBlobHash(String s) => RegExp(r'^[0-9a-f]{64}$').hasMatch(s);
 
 /// Seals bill files, keeps them in the device-local cache (`blob_cache`, least recently used dropped past
 /// [maxCacheBytes], never one still waiting for upload) and queues them for the relay (`blob_cache.uploaded` 0,

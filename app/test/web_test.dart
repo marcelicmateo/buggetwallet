@@ -17,6 +17,7 @@ import 'package:budget_wallet/src/wallet_db.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 import 'support/layout.dart';
 import 'support/plan_page.dart';

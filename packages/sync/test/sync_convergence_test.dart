@@ -9,7 +9,7 @@ import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
-import 'support/sim.dart';
+import '../../wallet_core/test/support/sim.dart';
 
 const _cats = ['Groceries', 'Eating out', 'Shopping', 'Car & transport', 'Food delivery', 'Bills & subscriptions', 'Cash', 'Rent'];
 const _merchants = [

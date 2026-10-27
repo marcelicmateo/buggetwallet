@@ -5,8 +5,9 @@ import 'dart:math';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
-import 'support/engine_spec_sim.dart';
+import '../../wallet_core/test/support/engine_spec_sim.dart';
 
 const _day = Duration(days: 1);
 

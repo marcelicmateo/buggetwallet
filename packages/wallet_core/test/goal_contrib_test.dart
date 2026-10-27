@@ -7,6 +7,7 @@ import 'dart:math';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 import 'support/sim.dart';
 

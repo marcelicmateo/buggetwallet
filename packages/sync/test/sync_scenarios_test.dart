@@ -9,9 +9,10 @@ import 'dart:typed_data';
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
-import 'support/sim.dart';
-import 'support/synthetic.dart';
+import '../../wallet_core/test/support/sim.dart';
+import '../../wallet_core/test/support/synthetic.dart';
 
 /// Random ops on a few ids from three nodes, every HLC unique.
 List<Op> _randomOps(Random r, int count) {
