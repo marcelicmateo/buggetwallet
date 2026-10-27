@@ -34,14 +34,11 @@ const peerClock = '001767225600000:00000:feedfeedfeedfeed';
 
 void populate(WalletRepo r, {bool peer = false}) {
   r.importBatch(january);
-  r.updateSettings({
-    'salary': 150000,
-    'paydayDay': 15,
-    'categoryBudgets': {'Groceries': 30000, 'Eating out': 12000},
-    'merchantPatterns': [
-      ['Shopping', 'synth shop']
-    ],
-  });
+  r.updateSettings({'salary': 150000, 'paydayDay': 15});
+  // Per-key settings since schema 8 (the schema 7 files were written with the legacy maps and are not regenerated).
+  r.setCategoryBudget('Groceries', 30000);
+  r.setCategoryBudget('Eating out', 12000);
+  r.setMerchantPattern('Shopping', 'synth shop');
   r.saveGoal(name: 'Synthetic fund', target: 100000, saved: 2500, monthly: 5000);
   r.addWish('Synthetic gadget', 12000);
   r.addTransaction(date: '2026-01-21', amount: -450, category: 'Eating out', note: 'synthetic');
