@@ -297,6 +297,8 @@ class WalletRepo {
       accepted[e.key] = v;
     }
     if (accepted.isEmpty) return null;
+    assert(!db.autocommit, 'data is written inside a transaction');
+    _dataPending = true;
     db.execute('INSERT OR IGNORE INTO $table(id) VALUES(?)', [op.id]);
     for (final k in accepted.keys) {
       db.execute('INSERT OR REPLACE INTO clocks(entity, id, field, hlc) VALUES(?, ?, ?, ?)', [op.entity, op.id, k, op.hlc]);
@@ -331,6 +333,18 @@ class WalletRepo {
 
   /// Nesting depth of [_asInternal]: while above 0, [_write] skips the clock guard.
   int _internalDepth = 0;
+
+  int _dataVersion = 0;
+
+  /// Set by [_apply] when a field was written in the open transaction; [_tx] turns it into a [dataVersion] step on
+  /// commit and drops it on rollback.
+  bool _dataPending = false;
+
+  /// Goes up by one on every committed transaction that wrote wallet data: a local write ([_write]) or ops applied from
+  /// another device or a backup ([applyRemote], snapshots, restore and merge), whatever their clocks. Never on sync
+  /// bookkeeping (cursors, the outbox, `meta`, local values) or on an apply that changed nothing (a re-sent file, a
+  /// refused one, a dry run). In memory only: starts at 0 each time the database is opened.
+  int get dataVersion => _dataVersion;
 
   /// The highest wall-clock reading of this device (meta `wall_high`): the owner-write guard compares with it.
   late int _wallHigh;
@@ -383,11 +397,15 @@ class WalletRepo {
 
   T _tx<T>(T Function() body) {
     db.execute('BEGIN');
+    _dataPending = false;
     try {
       final r = body();
       db.execute('COMMIT');
+      if (_dataPending) _dataVersion++;
+      _dataPending = false;
       return r;
     } catch (e, st) {
+      _dataPending = false;
       // Marked first: on SQLITE_FULL / IOERR / NOMEM / BUSY SQLite may have rolled back already, and the original error is
       // what the app must see (a ROLLBACK error would replace it).
       if (e is SqliteException) _writeErrors[e] = true;
@@ -462,6 +480,7 @@ class WalletRepo {
         beforeRollback?.call();
       } finally {
         if (!db.autocommit) db.execute('ROLLBACK');
+        _dataPending = false;
       }
       t.done({'ops': ops.length, 'changed': changed, 'dryRun': true});
       return byEntity;
@@ -719,8 +738,8 @@ class WalletRepo {
   String _today() => isoDate(DateTime.fromMillisecondsSinceEpoch(clock.now()));
 
   /// How many field clocks the wallet holds ([count]) and the newest of them ([maxHlc]; `null` when there are none).
-  /// Every data write, local or applied from a peer, records its field clock, so a write that adds a field or carries
-  /// the newest clock changes this; sync bookkeeping (cursors, the outbox, `meta`) does not.
+  /// Not a change mark: a peer op that replaces a field's clock with one older than the newest overall changes data and
+  /// leaves both as they were. Use [dataVersion] to tell whether wallet data changed.
   ({int count, String? maxHlc}) clockStats() {
     final r = db.select('SELECT count(*) AS n, max(hlc) AS m FROM clocks').first;
     return (count: r['n'] as int, maxHlc: r['m'] as String?);
