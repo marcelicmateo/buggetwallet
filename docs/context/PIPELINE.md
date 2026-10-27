@@ -180,7 +180,8 @@ every brief must begin with `git reset --hard <base>`.
 ## Stage Q progress (2026-10-27)
 Plan: `STAGE_Q_PLAN.md` (Q1–Q11, waves 0–3, delegation table). Base eaa790f.
 - Wave 0 done: controller split b956c4c (review clean) → 2ee1574; repo split 130e413 (review clean) → fae77a3; CLAUDE.md c227cc8. Full test on c227cc8 running.
-- Wave 1 running (base c227cc8): core A (Q3, Q4, Q5, Q11), core B (Q1, Q6, Q7, Q9, Q10), core C (Q8 schema 17 + old-build entity test), test-writer Q2 (base 2ee1574). Packs in the session scratchpad `q/pack-{a,b,c,t}.md`. Merge order B → A → C → Q2, then v17.sql.
+- Wave 1 done: Q2 166000c → f129f70; core B a84be90+fc49576 (review: 2 med, 1 low fixed) → 483e66a; core C 88ddd8c+9bd7251+816fbac (review 4 + re-review 4 incl. 1 high snapshot replay, fixed) → e02bf23; core A a79376f+2f4de44 (review 8 fixed) → merged; IOU amount caps b9eaf45. Check green: importer 400, core 2528, sync 327, analyze all.
+- Wave 2 running (base 483e66a / b9eaf45): UI Y (Q1, Q6, Q7, Q9), UI X (Q4, Q5, Q8, Q10, Q11), test-writer aligning spec tests c4b5339 to the real API.
 - Wave 2 note: extension members are only visible where their library is imported; public controller methods called from tests stay on the class.
 
 ## Queue (2026-10-20)
