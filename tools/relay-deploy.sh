@@ -10,8 +10,9 @@
 #
 # <ip|host> is an address or an ssh alias. Without "user@" it is bw@ (bootstrap: root@). --dry-run prints the commands and the
 # remote scripts instead of running them. --yes answers the DNS question with yes (BW_YES=1 does the same).
-# Podman only. The wallet-creation token is created on the server as a Podman secret and shown once, on install, on your
-# terminal; it is never written to a file or the repository. Re-running any step is safe (the token is only made once).
+# Podman only. The wallet-creation token is created on the server as a Podman secret (kept by Podman's secret driver there, as in
+# docs/setup.md 5.3) and shown once, on install, on your terminal. This script never writes it to a file on the laptop, logs it or
+# puts it in the repository. Re-running any step is safe (the token is only made once).
 # BW_BACKUP_DIR sets the default backup folder (~/backups/budget-wallet-relay).
 set -euo pipefail
 
@@ -25,7 +26,7 @@ SSH_OPTS=(-o StrictHostKeyChecking=accept-new)
 usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
 die() { echo "relay-deploy: $*" >&2; exit 1; }
 
-# ---- remote scripts (run on the server with `bash -s -- args`) ----
+# ---- remote scripts (run on the server with bash -c) ----
 # Not run on the laptop, so they are plain text here.
 
 remote_bootstrap() {
@@ -33,8 +34,8 @@ remote_bootstrap() {
 set -euo pipefail
 . /etc/os-release
 case "${ID:-} ${ID_LIKE:-}" in
-  *fedora*|*rhel*) os=fedora; wheel=wheel; sshd=sshd ;;
-  *ubuntu*|*debian*) os=ubuntu; wheel=sudo; sshd=ssh ;;
+  *fedora*|*rhel*) os=fedora; wheel=wheel ;;
+  *ubuntu*|*debian*) os=ubuntu; wheel=sudo ;;
   *) echo "unsupported system: ${PRETTY_NAME:-unknown} (Fedora or Ubuntu)" >&2; exit 1 ;;
 esac
 echo "system: $os"
@@ -42,26 +43,40 @@ echo "system: $os"
 id bw >/dev/null 2>&1 || useradd -m -G "$wheel" bw
 mkdir -p /home/bw/.ssh
 if [ ! -s /home/bw/.ssh/authorized_keys ]; then cp /root/.ssh/authorized_keys /home/bw/.ssh/authorized_keys; fi
-chown -R bw: /home/bw/.ssh && chmod 700 /home/bw/.ssh && chmod 600 /home/bw/.ssh/authorized_keys
-[ -s /home/bw/.ssh/authorized_keys ] || { echo "no ssh key for bw: not closing root login" >&2; exit 1; }
+if command -v restorecon >/dev/null; then restorecon -R /home/bw/.ssh; fi
+[ -s /home/bw/.ssh/authorized_keys ] || { echo "no ssh key for bw" >&2; exit 1; }
 echo 'bw ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/bw && chmod 440 /etc/sudoers.d/bw
-# Updates, podman, rsync (backups), automatic updates.
+# Updates, podman, rsync (backups), automatic updates. Stdin is closed so nothing eats this script.
 if [ "$os" = fedora ]; then
   dnf -y upgrade && dnf -y install podman rsync dnf-automatic
-  systemctl enable --now dnf-automatic-install.timer
+  mkdir -p /etc/dnf
+  printf '[commands]\napply_updates = yes\n' > /etc/dnf/automatic.conf
+  systemctl enable --now dnf-automatic.timer || systemctl enable --now dnf5-automatic.timer \
+    || systemctl enable --now dnf-automatic-install.timer
 else
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update && apt-get -y upgrade && apt-get -y install podman rsync unattended-upgrades
+  export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
+  apt_opts='-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold'
+  # shellcheck disable=SC2086
+  apt-get update && apt-get -y $apt_opts upgrade && apt-get -y $apt_opts install podman rsync unattended-upgrades
 fi
 # Rootless Caddy may bind 80 and 443.
 echo 'net.ipv4.ip_unprivileged_port_start=80' > /etc/sysctl.d/90-bw-relay.conf && sysctl --system >/dev/null
 if systemctl is-active --quiet firewalld; then
   firewall-cmd --permanent --add-service=http --add-service=https && firewall-cmd --reload
 fi
-# Last: no root login, no passwords (only after bw has a key, above).
+echo "bootstrap done (ssh not hardened yet)"
+REMOTE
+}
+
+# Second script, run only after the laptop has logged in as bw with sudo: no root login, no passwords.
+remote_harden() {
+  cat <<'REMOTE'
+set -euo pipefail
+if systemctl cat sshd.service >/dev/null 2>&1; then sshd=sshd; else sshd=ssh; fi
 printf 'PermitRootLogin no\nPasswordAuthentication no\n' > /etc/ssh/sshd_config.d/10-bw.conf
-sshd -t && systemctl restart "$sshd"
-echo "bootstrap done"
+sshd -t || { rm -f /etc/ssh/sshd_config.d/10-bw.conf; echo "sshd config check failed; hardening removed" >&2; exit 1; }
+systemctl restart "$sshd"
+echo "ssh hardened"
 REMOTE
 }
 
@@ -129,7 +144,7 @@ remote_status() {
   cat <<'REMOTE'
 systemctl --user is-active bw-relay bw-relay-caddy || true
 if podman healthcheck run bw-relay; then echo "healthcheck: healthy"; else echo "healthcheck: failed"; fi
-sed -n 's/^BW_RELAY_DOMAIN=//p' ~/.config/budget-wallet-relay/bw-relay.env
+sed -n 's/^BW_RELAY_DOMAIN=//p' ~/.config/budget-wallet-relay/bw-relay.env || true
 REMOTE
 }
 
@@ -164,16 +179,21 @@ remote() {
   local target=$1 fn=$2
   shift 2
   if ((DRY)); then
-    printf '+ ssh %s bash -s -- %s   # script %s:\n' "$target" "$*" "$fn"
+    printf '+ ssh -n %s bash -c <script> bash %s   # script %s:\n' "$target" "$*" "$fn"
     "$fn" | sed 's/^/    | /'
   else
-    "$fn" | ssh "${SSH_OPTS[@]}" "$target" bash -s -- "$@"
+    # The script travels as an argument (base64), not on stdin: nothing in it can eat the rest of the script.
+    # Arguments are validated names (domain), so plain words are safe here.
+    local b64
+    b64=$("$fn" | base64 -w0)
+    ssh -n "${SSH_OPTS[@]}" "$target" "bash -c \"\$(printf %s $b64 | base64 -d)\" bash $*"
   fi
 }
 
 # target <host> <default user>: "user@host" unless the argument already has a user.
 target() {
-  [[ $1 =~ ^[A-Za-z0-9._:@-]+$ && $1 != -* ]] || die "bad host: $1"
+  [[ $1 != *:* ]] || die "IPv6 addresses are not supported here: give an ssh alias (Host entry in ~/.ssh/config) or the IPv4 address"
+  [[ $1 =~ ^[A-Za-z0-9._@-]+$ && $1 != -* ]] || die "bad host: $1"
   if [[ $1 == *@* ]]; then echo "$1"; else echo "$2@$1"; fi
 }
 
@@ -184,7 +204,7 @@ check_domain() {
 # Address of the server behind an ssh target (the ip itself, or what ssh would connect to for an alias).
 server_addr() {
   local h=${1#*@}
-  if [[ $h =~ ^[0-9.]+$ || $h == *:* ]]; then echo "$h"; else ssh -G "$h" | awk '$1 == "hostname" {print $2}'; fi
+  if [[ $h =~ ^[0-9.]+$ ]]; then echo "$h"; else ssh -G "$h" | awk '$1 == "hostname" {print $2}'; fi
 }
 
 # Does the domain point at the server? Warn and ask if not (a wrong record never works; a late one Caddy retries).
@@ -204,7 +224,7 @@ check_dns() {
     echo "dns: $domain -> $addr ok"
     return
   fi
-  echo "WARNING: $domain does not resolve to $addr (it gives: ${found//$'\n'/ }${found:-nothing})." >&2
+  echo "WARNING: $domain does not resolve to $addr (it gives: ${found:+${found//$'\n'/ }}${found:-nothing})." >&2
   echo "Create the A record first; until then Caddy cannot get a certificate." >&2
   ((YES)) && return
   [[ -t 0 ]] || die "DNS does not match; fix it or use --yes"
@@ -246,6 +266,13 @@ cmd_bootstrap() {
   local t
   t=$(target "$1" root)
   remote "$t" remote_bootstrap
+  # Close root login only if bw can log in and use sudo (a failed check here leaves root login open).
+  if ((DRY)); then
+    echo "+ ssh -n bw@${1#*@} sudo -n true   # must succeed before hardening"
+  else
+    ssh -n "${SSH_OPTS[@]}" "bw@${1#*@}" sudo -n true || die "cannot log in as bw with sudo; root login left open, ssh not hardened"
+  fi
+  remote "$t" remote_harden
   echo "Next: tools/relay-deploy.sh install ${1#*@} <domain>   (bw@ from now on)"
 }
 
@@ -291,6 +318,7 @@ cmd_upgrade() {
     return
   fi
   domain=$(remote "$t" remote_domain)
+  [[ -n $domain ]] || die "no BW_RELAY_DOMAIN in the server's bw-relay.env (run install first)"
   check_health "$domain"
 }
 
@@ -300,7 +328,16 @@ cmd_backup() {
   run mkdir -p "$dir"
   # Stopping the relay stops Caddy too (it requires it): both are started again, whatever rsync did.
   remote "$t" remote_stop
-  run rsync -a "$t:/srv/budget-wallet-relay/" "$dir/" || rc=$?
+  # Also on Ctrl-C or a kill: do not leave the relay down.
+  BACKUP_TARGET=$t
+  if ((DRY)); then
+    echo "+ trap 'restart bw-relay bw-relay-caddy' EXIT INT TERM"
+  else
+    trap 'trap - EXIT INT TERM; remote "$BACKUP_TARGET" remote_restart || echo "relay-deploy: could not restart the relay: run upgrade or status" >&2; exit 1' EXIT INT TERM
+  fi
+  # --delete: the folder is only this backup, so it mirrors the server.
+  run rsync -a --delete "$t:/srv/budget-wallet-relay/" "$dir/" || rc=$?
+  if ((!DRY)); then trap - EXIT INT TERM; fi
   remote "$t" remote_restart
   ((rc == 0)) || die "rsync failed ($rc); the relay was started again"
   echo "backup in $dir"
@@ -327,12 +364,12 @@ self_test() {
     grep -qE -- "$2" <<<"$3" || { echo "relay-deploy self-test: $1: missing /$2/" >&2; rc=1; }
   }
   out=$("$me" --dry-run bootstrap 203.0.113.9) || rc=1
-  chk bootstrap-target 'ssh root@203\.0\.113\.9 bash -s' "$out"
+  chk bootstrap-target 'ssh -n root@203\.0\.113\.9 bash -c' "$out"
   chk bootstrap-ssh 'PermitRootLogin no' "$out"
   chk bootstrap-os 'dnf-automatic' "$out"
   chk bootstrap-port 'ip_unprivileged_port_start=80' "$out"
   out=$("$me" --dry-run install myalias wallet.example.org) || rc=1
-  chk install-target 'ssh bw@myalias bash -s' "$out"
+  chk install-target 'ssh -n bw@myalias bash -c' "$out"
   chk install-build 'podman build --format docker -f .*Containerfile\.relay' "$out"
   chk install-load 'podman save localhost/budget-wallet-relay:latest \| ssh bw@myalias podman load' "$out"
   chk install-domain 'BW_RELAY_DOMAIN=.domain' "$out"
@@ -342,12 +379,16 @@ self_test() {
   out=$("$me" --dry-run upgrade bw@h) || rc=1
   chk upgrade 'restart bw-relay$' "$out"
   out=$("$me" --dry-run backup h /tmp/bwb) || rc=1
-  chk backup-order 'systemctl --user stop bw-relay bw-relay-caddy.*rsync -a bw@h:/srv/budget-wallet-relay/ /tmp/bwb/.*restart bw-relay' \
+  chk backup-order 'systemctl --user stop bw-relay bw-relay-caddy.*rsync -a --delete bw@h:/srv/budget-wallet-relay/ /tmp/bwb/.*restart bw-relay' \
     "$(tr '\n' ' ' <<<"$out")"
   out=$("$me" --dry-run status h) || rc=1
   chk status 'is-active bw-relay bw-relay-caddy' "$out"
   if "$me" --dry-run install h 'bad domain' >/dev/null 2>&1; then echo "relay-deploy self-test: bad domain accepted" >&2; rc=1; fi
   if "$me" --dry-run install >/dev/null 2>&1; then echo "relay-deploy self-test: missing args accepted" >&2; rc=1; fi
+  if "$me" --dry-run bootstrap 2001:db8::1 >/dev/null 2>&1; then echo "relay-deploy self-test: IPv6 host accepted" >&2; rc=1; fi
+  out=$("$me" --dry-run bootstrap h) || rc=1
+  chk harden-after-login 'sudo -n true.*sshd -t \|\| \{ rm -f' "$(tr '\n' ' ' <<<"$out")"
+  chk fedora-timer 'apply_updates = yes' "$out"
   if "$me" --dry-run bootstrap -oProxyCommand=x >/dev/null 2>&1; then echo "relay-deploy self-test: option-like host accepted" >&2; rc=1; fi
   # The files it copies must exist and the units must still use the names it relies on.
   for f in "${UNITS[@]}"; do [[ -f $DEPLOY/$f ]] || { echo "relay-deploy self-test: no $f" >&2; rc=1; }; done

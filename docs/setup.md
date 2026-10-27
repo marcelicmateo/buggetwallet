@@ -214,11 +214,13 @@ useradd -m -G wheel bw && mkdir -p /home/bw/.ssh && cp ~/.ssh/authorized_keys /h
   && chown -R bw: /home/bw/.ssh && chmod 700 /home/bw/.ssh && echo 'bw ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/bw
 # (Ubuntu: -G sudo instead of -G wheel)
 printf 'PermitRootLogin no\nPasswordAuthentication no\n' > /etc/ssh/sshd_config.d/10-bw.conf && systemctl restart sshd
-dnf -y upgrade && dnf -y install podman dnf-automatic && systemctl enable --now dnf-automatic-install.timer
+dnf -y upgrade && dnf -y install podman rsync dnf-automatic && printf "[commands]\napply_updates = yes\n" > /etc/dnf/automatic.conf && systemctl enable --now dnf-automatic.timer
 # (Ubuntu: apt update && apt -y upgrade && apt -y install podman unattended-upgrades)
 echo 'net.ipv4.ip_unprivileged_port_start=80' > /etc/sysctl.d/90-bw-relay.conf && sysctl --system
 ```
 
+(On Fedora with dnf5 the timer is `dnf-automatic.timer` or `dnf5-automatic.timer`; there is no `-install` one, hence the config line.
+Before closing root login, open a second terminal and check that `ssh bw@<server IP> sudo true` works.)
 The last line lets rootless Caddy bind 80 and 443 (5.2). If firewalld is running on the server (`systemctl is-active firewalld`),
 also allow the ports there: `firewall-cmd --permanent --add-service=http --add-service=https && firewall-cmd --reload`. From now on
 log in as `ssh bw@<server IP>`.
@@ -259,11 +261,11 @@ Either turn on Hetzner's backups (6.1; restore = the whole server as it was) or 
 
 ```sh
 ssh bw@<server IP> systemctl --user stop bw-relay
-rsync -a bw@<server IP>:/srv/budget-wallet-relay/ ~/backups/budget-wallet-relay/
+rsync -a --delete bw@<server IP>:/srv/budget-wallet-relay/ ~/backups/budget-wallet-relay/
 ssh bw@<server IP> systemctl --user start bw-relay bw-relay-caddy   # stopping the relay stopped Caddy too
 ```
 
-A copy older than the devices is safe: they notice the relay went back and upload what it is missing (Stage H). The devices' own
+`--delete` makes the folder an exact copy of the server, so use a folder that holds only this backup. A copy older than the devices is safe: they notice the relay went back and upload what it is missing (Stage H). The devices' own
 `.bwb` backups stay the real backup of the wallet.
 
 ### 6.6 Moving from the home server
