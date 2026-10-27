@@ -130,7 +130,18 @@ class PeriodBudget {
   bool get overBudget => overBy > 0 || planDaily <= 0;
 }
 
-int _sum(Iterable<CategorizedTx> xs) => xs.fold(0, (s, x) => s + x.amount);
+/// Below 2^53 (the largest whole number a web number holds exactly): every sum of amounts asserts it in debug builds
+/// (Q3; new amounts are capped at ±`maxAmountCents`, so at least 90,000 of them fit; rows synced from builds before Q
+/// may reach `legacyRowCapCents`, where at least 9,000 fit).
+const _exact = 9007199254740992;
+
+/// [s], asserted exact ([_exact]); returned unchanged in release builds.
+int _ok(int s) {
+  assert(s.abs() < _exact, 'a sum of amounts passed 2^53');
+  return s;
+}
+
+int _sum(Iterable<CategorizedTx> xs) => xs.fold(0, (s, x) => _ok(s + x.amount));
 
 /// The confirmed bills of [bills] that still need paying out of this period's money: the distinct bills of
 /// [dueCycles] (a monthly bill: `nextDue` before [end], the next payday, exclusive, and not paid in this period yet,
@@ -371,23 +382,24 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final partsArriving = !paydayPassed && age < samePaydayDays;
   final income = st.incomeMode == 'received' && received > 0 ? (partsArriving && st.salary > received ? st.salary : received) : st.salary;
   final lowIncome = received > 0 && received * 10 < st.salary * 9 && age >= 4 && !partsArriving;
-  final goalMonthly = goals.fold<int>(0, (s, g) => s + g.monthly);
+  final goalMonthly = goals.fold<int>(0, (s, g) => _ok(s + g.monthly));
   // Plan lines of custom fixed categories (P1) count with rent, loan and subs; only lines the table still allows.
-  final fixedPlan = st.rent + st.loan + st.subs + st.planLines.entries.fold<int>(0, (s, e) => table.hasPlanLine(e.key) ? s + e.value : s);
+  final fixedPlan =
+      st.rent + st.loan + st.subs + st.planLines.entries.fold<int>(0, (s, e) => table.hasPlanLine(e.key) ? _ok(s + e.value) : s);
   final cycles = dueCycles(outBills, raw, start, end, currency: st.currency);
   final seenBills = <String>{};
   final due = [
     for (final c in cycles)
       if (seenBills.add(c.bill.id)) c.bill
   ];
-  final reservedBills = cycles.fold<int>(0, (s, c) => s + (c.coveredIn(table) ? 0 : c.reserve));
+  final reservedBills = cycles.fold<int>(0, (s, c) => _ok(s + (c.coveredIn(table) ? 0 : c.reserve)));
   final duePl = duePlanned(planned, today, end);
   final counted = {for (final c in cycles) occurrenceKey(c.bill.id, c.due)};
   final reservedRows = [
     for (final p in duePl)
       if (plannedReserves(p, outBills, counted, table: table)) p
   ];
-  final reservedPlanned = reservedRows.fold<int>(0, (s, p) => s + p.amount!);
+  final reservedPlanned = reservedRows.fold<int>(0, (s, p) => _ok(s + p.amount!));
   // P9: only the payees of confirmed incomes; the actual landed amounts (never the expected ones).
   final byPayee = <String, List<RecurringBill>>{};
   for (final b in incomes) {

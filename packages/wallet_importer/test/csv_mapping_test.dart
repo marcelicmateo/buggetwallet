@@ -248,8 +248,8 @@ void main() {
       expect(parseCsvCents('0.1', CsvDecimal.point), 10);
       expect(parseCsvCents('12,30', CsvDecimal.point), isNull);
       expect(parseCsvCents('1.234', CsvDecimal.point), isNull, reason: 'three decimals');
-      expect(parseCsvCents('19999999999.99', CsvDecimal.point), isNull, reason: 'over maxAmountCents');
-      expect(parseCsvCents('9999999999.99', CsvDecimal.point), 999999999999);
+      expect(parseCsvCents('1000000000.01', CsvDecimal.point), isNull, reason: 'over maxRowAmountMinor (Q3)');
+      expect(parseCsvCents('1000000000.00', CsvDecimal.point), 100000000000);
       expect(parseCsvCents('1e3', CsvDecimal.point), isNull);
       expect(parseCsvCents('NaN', CsvDecimal.point), isNull);
       expect(parseCsvCents('', CsvDecimal.point), isNull);

@@ -13,7 +13,6 @@ import 'importer.dart' show ImportException, unknownLayoutMessage;
 import 'limits.dart';
 import 'log.dart';
 import 'model.dart';
-import 'profiles/cells.dart' show maxAmountCents;
 import 'profiles/profile.dart';
 import 'text_codec.dart';
 
@@ -309,8 +308,22 @@ class CsvPreviewRow {
   /// What is wrong with the row (owner-readable, may quote the cell), or null when it imports.
   final String? problem;
 
+  /// The [problem] is an amount beyond `maxRowAmountMinor` (counted in `ImportBatch.tooLarge`).
+  final bool tooLarge;
+
+  /// The balance column's amount ([CsvMapping.balanceCol]), or null when there is none or it is not an amount.
+  final int? balanceAfter;
+
   const CsvPreviewRow(
-      {required this.row, this.skipped = false, this.date, this.amountMinor, this.currency, this.description = '', this.problem});
+      {required this.row,
+      this.skipped = false,
+      this.date,
+      this.amountMinor,
+      this.currency,
+      this.description = '',
+      this.problem,
+      this.tooLarge = false,
+      this.balanceAfter});
 
   bool get ok => problem == null && !skipped;
 
@@ -356,7 +369,7 @@ final _amountRes = {
 };
 
 /// Exact cents of an amount cell in [decimal] style (thousands marks of the other kind, spaces allowed; a leading
-/// `+`, `-` or `−`). No doubles: at most 2 decimals, up to [maxAmountCents].
+/// `+`, `-` or `−`). No doubles: at most 2 decimals, up to [maxRowAmountMinor].
 (int?, _AmountError?) _cents(String raw, CsvDecimal decimal) {
   var s = raw.replaceAll(_space, '');
   if (s.isEmpty) return (null, _AmountError.empty);
@@ -372,7 +385,7 @@ final _amountRes = {
   final whole = m[1]!.replaceAll(decimal == CsvDecimal.comma ? '.' : ',', '').replaceFirst(RegExp(r'^0+(?=\d)'), '');
   if (whole.length > 13) return (null, _AmountError.tooBig);
   final cents = int.parse(whole) * 100 + int.parse(frac.padRight(2, '0'));
-  if (cents > maxAmountCents) return (null, _AmountError.tooBig);
+  if (cents > maxRowAmountMinor) return (null, _AmountError.tooBig);
   return (neg ? -cents : cents, null);
 }
 
@@ -393,22 +406,22 @@ CsvPreviewRow _mapRow(List<String> cells, int row, CsvMapping m, String walletCu
   String cell(int? c) => c == null || c >= cells.length ? '' : cells[c].trim();
   if (m.skipIfEmptyCol != null && cell(m.skipIfEmptyCol).isEmpty) return CsvPreviewRow(row: row, skipped: true);
   final description = [for (final c in m.descriptionCols) cell(c)].where((s) => s.isNotEmpty).join(' · ');
-  CsvPreviewRow bad(String p) => CsvPreviewRow(row: row, description: description, problem: p);
+  CsvPreviewRow bad(String p, {bool tooLarge = false}) => CsvPreviewRow(row: row, description: description, problem: p, tooLarge: tooLarge);
   final dateCell = cell(m.dateCol);
   final date = parseCsvDate(dateCell, m.dateFormat);
   if (date == null) return bad(dateCell.isEmpty ? 'Row ${row + 1}: no date' : 'Row ${row + 1}: the date ${_q(dateCell)} is not a date');
   int cents;
   if (m.amountCol != null) {
     final (c, e) = _cents(cell(m.amountCol), m.decimal);
-    if (e != null) return bad(_amountProblem(row, 'amount', cell(m.amountCol), e));
+    if (e != null) return bad(_amountProblem(row, 'amount', cell(m.amountCol), e), tooLarge: e == _AmountError.tooBig);
     cents = c!;
   } else {
     final debitCell = cell(m.debitCol), creditCell = cell(m.creditCol);
     if (debitCell.replaceAll(_space, '').isEmpty && creditCell.replaceAll(_space, '').isEmpty) return bad('Row ${row + 1}: no amount');
     final (d, de) = debitCell.isEmpty ? (0, null) : _cents(debitCell, m.decimal);
-    if (de != null) return bad(_amountProblem(row, 'debit', debitCell, de));
+    if (de != null) return bad(_amountProblem(row, 'debit', debitCell, de), tooLarge: de == _AmountError.tooBig);
     final (c, ce) = creditCell.isEmpty ? (0, null) : _cents(creditCell, m.decimal);
-    if (ce != null) return bad(_amountProblem(row, 'credit', creditCell, ce));
+    if (ce != null) return bad(_amountProblem(row, 'credit', creditCell, ce), tooLarge: ce == _AmountError.tooBig);
     if (d != 0 && c != 0) return bad('Row ${row + 1}: both debit and credit');
     // Exactly as written: credit − debit (a debit of −12,30 is a reversal, money in; a credit of −50,00 is money out).
     cents = c! - d!;
@@ -424,7 +437,8 @@ CsvPreviewRow _mapRow(List<String> cells, int row, CsvMapping m, String walletCu
   } else {
     currency = m.currencyCode ?? walletCurrency;
   }
-  return CsvPreviewRow(row: row, date: date, amountMinor: cents, currency: currency, description: description);
+  final balance = m.balanceCol == null ? null : _cents(cell(m.balanceCol), m.decimal).$1;
+  return CsvPreviewRow(row: row, date: date, amountMinor: cents, currency: currency, description: description, balanceAfter: balance);
 }
 
 /// The sample rows of [shape] read with [m], for the preview (date, description, signed amount, or the problem).
@@ -483,7 +497,7 @@ ImportBatch parseMappedCsv(Uint8List bytes, CsvMapping layout, {String? fileName
   final ctx = ImportContext(head: const [], format: 'csv', fileName: fileName);
   final out = <NormalizedTransaction>[];
   final invalidRows = <int>[];
-  var skipped = 0;
+  var skipped = 0, tooLarge = 0;
   for (var i = m.headerRow + 1; i < rows.length; i++) {
     if (rows[i].every((c) => c.isEmpty)) continue;
     final r = _mapRow(rows[i], i, m, walletCurrency);
@@ -491,6 +505,7 @@ ImportBatch parseMappedCsv(Uint8List bytes, CsvMapping layout, {String? fileName
       skipped++;
     } else if (r.problem != null) {
       invalidRows.add(i);
+      if (r.tooLarge) tooLarge++;
     } else {
       out.add(NormalizedTransaction(
         id: ctx.sourceId(source, r.date!, r.amountMinor!, r.description),
@@ -500,6 +515,7 @@ ImportBatch parseMappedCsv(Uint8List bytes, CsvMapping layout, {String? fileName
         currency: r.currency!,
         bankType: '',
         description: r.description,
+        balanceAfter: r.balanceAfter,
       ));
     }
   }
@@ -514,7 +530,8 @@ ImportBatch parseMappedCsv(Uint8List bytes, CsvMapping layout, {String? fileName
     'invalid': invalidRows.length,
     'ms': sw.elapsedMilliseconds,
   });
-  return ImportBatch(source: source, transactions: out, skipped: skipped, invalid: invalidRows.length, invalidRows: invalidRows);
+  return ImportBatch(
+      source: source, transactions: out, skipped: skipped, invalid: invalidRows.length, invalidRows: invalidRows, tooLarge: tooLarge);
 }
 
 /// Header text folded for guessing: lower case, Croatian letters without marks, trimmed.
@@ -529,7 +546,8 @@ String _foldGuess(String h) {
 }
 
 /// A starting mapping from [shape]'s header names (Croatian and English: Datum/Date, Iznos/Amount, Duguje/Potražuje,
-/// Debit/Credit, Isplata/Uplata, Opis/Description/Primatelj, Valuta/Currency), the date format and decimal style
+/// Debit/Credit, Isplata/Uplata, Opis/Description/Primatelj, Valuta/Currency, Saldo/Stanje/Balance as the balance
+/// column), the date format and decimal style
 /// from the samples. Null when no date or no amount column is found. Only a suggestion: the app shows every field
 /// and the owner accepts it.
 CsvMapping? guessMapping(CsvShape shape) {
@@ -558,6 +576,8 @@ CsvMapping? guessMapping(CsvShape shape) {
   used.addAll([amount, debit, credit].whereType<int>());
   final currency = find((s) => s == 'valuta' || s.startsWith('valuta ') || s.contains('currency') || s == 'ccy', not: used);
   if (currency != null) used.add(currency);
+  final balanceCol = find(balance, not: used);
+  if (balanceCol != null) used.add(balanceCol);
   final description = <int>[];
   for (var i = 0; i < h.length && description.length < 3; i++) {
     if (!used.contains(i) &&
@@ -585,6 +605,7 @@ CsvMapping? guessMapping(CsvShape shape) {
     decimal: point ? CsvDecimal.point : CsvDecimal.comma,
     descriptionCols: description,
     currencyCol: currency,
+    balanceCol: balanceCol,
     headers: shape.headers,
   );
 }

@@ -46,10 +46,30 @@ class PbzProfile extends BankProfile {
         return true;
       });
 
+  /// An optional balance column after the fixed ones, used only when the header row names it (`STANJE` or `SALDO`).
+  static const balanceHeaders = ['STANJE', 'SALDO'];
+
   /// Columns are fixed (DATUM, VRSTA TRANSAKCIJE, OPIS PLAĆANJA, IZNOS, VALUTA); every row is tried, a dated first
-  /// cell marks a transaction. The IBAN is the cell under or after the `TRANSAKCIJSKI RAČUN:` label.
+  /// cell marks a transaction. A [balanceHeaders] column in the header row, after the fixed ones, gives each row's
+  /// balance. The IBAN is the cell under or after the `TRANSAKCIJSKI RAČUN:` label.
   @override
   void prepare(ImportContext ctx) {
+    ctx.columns['balance'] = -1;
+    for (final r in ctx.head) {
+      if (r.length < header.length) continue;
+      var match = true;
+      for (var i = 0; i < header.length && match; i++) {
+        match = fixMojibake(r[i]).toUpperCase() == header[i];
+      }
+      if (!match) continue;
+      for (var c = header.length; c < r.length; c++) {
+        if (balanceHeaders.contains(r[c].toUpperCase())) {
+          ctx.columns['balance'] = c;
+          break;
+        }
+      }
+      break;
+    }
     for (var r = 0; r < ctx.head.length; r++) {
       final row = ctx.head[r];
       for (var c = 0; c < row.length; c++) {
@@ -84,6 +104,8 @@ class PbzProfile extends BankProfile {
     if (amount == null) return const RowResult.invalid();
     final currency = row.length > 4 && cellText(row[4]).isNotEmpty ? cellText(row[4]) : 'EUR';
     final type = cellText(row[1]);
+    final bc = ctx.column('balance');
+    final balanceNum = bc >= 0 && bc < row.length && cellText(row[bc]).isNotEmpty ? cellNumber(row[bc]) : null;
     return RowResult.transaction(NormalizedTransaction(
       id: ctx.v1Id(d, amount, desc),
       source: id,
@@ -94,6 +116,7 @@ class PbzProfile extends BankProfile {
       description: desc,
       kindHint: _kind(type, desc),
       account: ctx.account,
+      balanceAfter: balanceNum == null ? null : cellCents(balanceNum),
     ));
   }
 

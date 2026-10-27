@@ -4,14 +4,17 @@ import 'dart:math';
 import 'package:sqlite3/common.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'accounts.dart';
 import 'bills.dart';
 import 'categories.dart';
 import 'changes.dart';
 import 'dates.dart';
 import 'hlc.dart';
+import 'import_preview.dart';
 import 'logs.dart';
 import 'matching.dart';
 import 'models.dart';
+import 'planned.dart' show isSafeCents, legacyRowCapCents, maxAmountCents;
 import 'recurring.dart';
 import 'rules.dart';
 import 'schema.dart';
@@ -59,7 +62,19 @@ class ImportSummary {
 
   /// Pairs of own-account transfers found after this import ([planTransfers]).
   final int transfers;
-  const ImportSummary(this.added, this.duplicates, this.matched, this.skipped, {this.transfers = 0, this.collisions = 0});
+
+  /// Rows left out because the amount is beyond ±[maxAmountCents] (Q3, [isSafeCents]); not in [duplicates].
+  final int tooLarge;
+
+  /// Rows left out because their id was in `importBatch`'s `skip` set (the owner's Skip, Q4); not in [duplicates].
+  final int skippedByOwner;
+
+  /// The bank balance checks this import recorded (Q5), by account id: one per balance the file states
+  /// (`ImportBatch.bankBalances`) that has a live bank account of its source and currency.
+  final Map<String, BalanceCheck> bankChecks;
+
+  const ImportSummary(this.added, this.duplicates, this.matched, this.skipped,
+      {this.transfers = 0, this.collisions = 0, this.tooLarge = 0, this.skippedByOwner = 0, this.bankChecks = const {}});
 }
 
 final _log = Logger('bw.repo');
@@ -502,54 +517,48 @@ class WalletRepo {
   /// [revive] (P12): ids of rows `setCsvMapping(force: true)` deleted. A deleted row whose id is in it and in the batch
   /// (same amount and description) is undeleted through [_write] and counted as added, so a forced layout change that
   /// reads some rows to the same ids never leaves them deleted. Only those ids: a row deleted for any other reason stays.
-  ImportSummary importBatch(ImportBatch batch, {Set<String> revive = const {}}) {
+  ///
+  /// Q3: a row beyond ±[maxAmountCents] ([isSafeCents]) is never written ([ImportSummary.tooLarge]). Q4: rows whose id
+  /// is in [skip] (the owner's Skip in the import preview, `previewImport`) are not written at all
+  /// ([ImportSummary.skippedByOwner]). Q5: for each balance the file states ([ImportBatch.bankBalances]) the live bank
+  /// account of that source and currency gets a device-local check (`recordBankCheck`, [ImportSummary.bankChecks]);
+  /// the balance itself never changes (correcting it is the owner's tap on `correctBalance`).
+  ImportSummary importBatch(ImportBatch batch, {Set<String> revive = const {}, Set<String> skip = const {}}) {
     final t = PerfTimer('repo.importBatch', warnMs: 500);
-    final known = <String, (Object?, Object?)>{};
-    final deleted = <String>{};
-    for (final r in db.select('SELECT id, amount, description, deleted FROM tx')) {
-      final id = r['id'] as String;
-      known[id] = (r['amount'], r['description']);
-      if (r['deleted'] != 0) deleted.add(id);
-    }
-    // In batch order: a stored id, or one an earlier row of this batch took, is a duplicate (the first row wins and is
-    // never overwritten); with another amount or description it is also a collision.
-    final fresh = <NormalizedTransaction>[];
-    final revived = <String>[];
-    var collisions = 0;
-    for (final n in batch.transactions) {
-      if (known[n.id] case (final amount, final description)) {
-        if (amount != n.amountMinor || description != n.description) {
-          collisions++;
-        } else if (revive.contains(n.id) && deleted.remove(n.id)) {
-          revived.add(n.id);
-        }
-        continue;
-      }
-      known[n.id] = (n.amountMinor, n.description);
-      fresh.add(n);
-    }
-
+    final c = _classifyBatch(batch, revive: revive, skip: skip);
+    final collisions = c.count(_RowFate.collision), tooLarge = c.count(_RowFate.tooLarge), skipped = c.count(_RowFate.skipped);
     // The count only: never the ids, amounts or descriptions.
     if (collisions > 0) logEvent(_log, Level.WARNING, 'repo.idCollision', {'source': sourceLogKey(batch.source), 'count': collisions});
+    if (tooLarge > 0) logEvent(_log, Level.WARNING, 'repo.tooLarge', {'source': sourceLogKey(batch.source), 'count': tooLarge});
     final changes = <(String, String, Map<String, Object?>)>[];
-    for (final n in fresh) {
-      changes.add((
-        'tx',
-        n.id,
-        {
-          'source': n.source,
-          'date': n.date,
-          'amount': n.amountMinor,
-          'currency': n.currency,
-          'bank_type': n.bankType,
-          'description': n.description,
-          if (n.kindHint case final k?) 'kind_hint': k.name, // never `account`: it names the owner's account
-          'manual': 0,
-          // Never 'deleted': a new row is live through the column default, and writing deleted: 0 here with a
-          // fresh HLC would undo a delete made on another device that this one has not synced yet. Only
-          // deleteTransaction (and a future undelete) write that field.
-        }
-      ));
+    final revived = <String>[];
+    var fresh = 0;
+    for (final (i, n) in batch.transactions.indexed) {
+      switch (c.fates[i]) {
+        case _RowFate.fresh:
+          fresh++;
+          changes.add((
+            'tx',
+            n.id,
+            {
+              'source': n.source,
+              'date': n.date,
+              'amount': n.amountMinor,
+              'currency': n.currency,
+              'bank_type': n.bankType,
+              'description': n.description,
+              if (n.kindHint case final k?) 'kind_hint': k.name, // never `account`: it names the owner's account
+              'manual': 0,
+              // Never 'deleted': a new row is live through the column default, and writing deleted: 0 here with a
+              // fresh HLC would undo a delete made on another device that this one has not synced yet. Only
+              // deleteTransaction (and a future undelete) write that field.
+            }
+          ));
+        case _RowFate.revived:
+          revived.add(n.id);
+        default:
+          break;
+      }
     }
     for (final id in revived) {
       changes.add(('tx', id, {'deleted': 0}));
@@ -557,8 +566,10 @@ class WalletRepo {
     _write(changes);
     final (transfers, matched) = _reconcileLocal();
     refreshRecurring(_today());
-    final added = fresh.length + revived.length;
-    final s = ImportSummary(added, batch.transactions.length - added, matched, batch.skipped, transfers: transfers, collisions: collisions);
+    final checks = _recordBankChecks(batch);
+    final added = fresh + revived.length;
+    final s = ImportSummary(added, batch.transactions.length - added - tooLarge - skipped, matched, batch.skipped,
+        transfers: transfers, collisions: collisions, tooLarge: tooLarge, skippedByOwner: skipped, bankChecks: checks);
     t.done({
       'source': sourceLogKey(batch.source), // `csv` for a mapped CSV: the shape id is a hash of header names
       'rows': batch.transactions.length,
@@ -568,9 +579,47 @@ class WalletRepo {
       'matched': s.matched,
       'transfers': s.transfers,
       'collisions': collisions,
-      'skipped': s.skipped
+      'skipped': s.skipped,
+      if (tooLarge > 0) 'tooLarge': tooLarge,
+      if (skipped > 0) 'ownerSkipped': skipped,
+      if (checks.isNotEmpty) 'bankChecks': checks.length,
     });
     return s;
+  }
+
+  /// What [importBatch] (and `previewImport`) does with each row of [batch], in batch order, from one read of the
+  /// stored ids: beyond ±[maxAmountCents] → tooLarge; in [skip] → skipped; a stored id, or one an earlier row of this
+  /// batch took (the first row wins and is never overwritten) → duplicate, or collision with another amount or
+  /// description, or revived when deleted, in [revive] and the same; else fresh.
+  ({List<_RowFate> fates, int Function(_RowFate) count}) _classifyBatch(ImportBatch batch,
+      {Set<String> revive = const {}, Set<String> skip = const {}}) {
+    final known = <String, (Object?, Object?)>{};
+    final deleted = <String>{};
+    for (final r in db.select('SELECT id, amount, description, deleted FROM tx')) {
+      final id = r['id'] as String;
+      known[id] = (r['amount'], r['description']);
+      if (r['deleted'] != 0) deleted.add(id);
+    }
+    final fates = <_RowFate>[];
+    for (final n in batch.transactions) {
+      if (!isSafeCents(n.amountMinor)) {
+        fates.add(_RowFate.tooLarge);
+      } else if (skip.contains(n.id)) {
+        fates.add(_RowFate.skipped);
+      } else if (known[n.id] case (final amount, final description)) {
+        if (amount != n.amountMinor || description != n.description) {
+          fates.add(_RowFate.collision);
+        } else if (revive.contains(n.id) && deleted.remove(n.id)) {
+          fates.add(_RowFate.revived);
+        } else {
+          fates.add(_RowFate.duplicate);
+        }
+      } else {
+        known[n.id] = (n.amountMinor, n.description);
+        fates.add(_RowFate.fresh);
+      }
+    }
+    return (fates: fates, count: (f) => fates.where((x) => x == f).length);
   }
 
   String _newId(String prefix) {
@@ -581,7 +630,9 @@ class WalletRepo {
   /// A hand-entered expense (positive [amount] = money spent). Records which bank rows this device holds now
   /// (`seen_bank`, in the same op): none of them is this entry's row, but a bank row imported on another device that
   /// has not synced yet may be ([planMatches]).
+  /// An [amount] beyond ±[maxAmountCents] ([isSafeCents]) is an [ArgumentError] (Q3), nothing written.
   String addTransaction({required String date, required int amount, required String category, String note = '', String currency = 'EUR'}) {
+    if (!isSafeCents(amount)) throw ArgumentError('The amount is over the allowed amount.');
     final id = _newId('m');
     final seen = _seenBank();
     _write([

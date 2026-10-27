@@ -1,6 +1,7 @@
 // The bank profile contract. One [BankProfile] per bank knows that bank's layout: how to recognise it from the
 // first rows, where the columns are, and what each row means. The importer itself knows no bank.
 import '../ids.dart';
+import '../limits.dart';
 import '../model.dart';
 import 'cells.dart';
 
@@ -101,15 +102,21 @@ abstract class BankProfile {
   /// What one sheet row means. Ids come from [ImportContext.v1Id] or [ImportContext.sourceId]; `source` is [id].
   RowResult mapRow(List<Object> row, ImportContext ctx);
 
-  /// Runs [prepare] and [mapRow] over the sheet: rows from [ImportContext.firstRow] on, in order.
+  /// Runs [prepare] and [mapRow] over the sheet: rows from [ImportContext.firstRow] on, in order. A transaction whose
+  /// amount (after the fee) is beyond ±[maxRowAmountMinor] is left out and counted as invalid and [ImportBatch.tooLarge].
   ImportBatch parse(List<List<Object>> rows, ImportContext ctx) {
     prepare(ctx);
     final out = <NormalizedTransaction>[];
-    var skipped = 0, invalid = 0;
+    var skipped = 0, invalid = 0, tooLarge = 0;
     for (var i = ctx.firstRow; i < rows.length; i++) {
       final r = mapRow(rows[i], ctx);
       switch (r.outcome) {
         case RowOutcome.transaction:
+          if (r.transaction!.amountMinor.abs() > maxRowAmountMinor) {
+            invalid++;
+            tooLarge++;
+            continue;
+          }
           out.add(r.transaction!);
         case RowOutcome.skipped:
           skipped++;
@@ -119,6 +126,6 @@ abstract class BankProfile {
           break;
       }
     }
-    return ImportBatch(source: id, transactions: out, skipped: skipped, invalid: invalid);
+    return ImportBatch(source: id, transactions: out, skipped: skipped, invalid: invalid, tooLarge: tooLarge);
   }
 }

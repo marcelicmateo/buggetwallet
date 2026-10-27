@@ -9,6 +9,18 @@ const maxImportBytes = 20 * 1024 * 1024;
 /// is refused with [tooLargeMessage].
 const maxXlsxUnpackedBytes = 64 * 1024 * 1024;
 
+/// Largest amount of one transaction row, in minor units: 1 billion in the account currency, the same single cap as
+/// typed input (`WalletSettings.maxAmount` / `maxAmountCents` in wallet_core). A row beyond it, after its fee is
+/// applied, is left out and counted in `ImportBatch.invalid` and `ImportBatch.tooLarge`, never imported.
+///
+/// Exactness bound: sums run over the whole wallet, and web numbers are exact up to 2^53 ≈ 9.007e15, so at least
+/// [exactRowsAtCap] rows at this cap still sum exactly (90,000 × 10^11 = 9.0e15). Core's debug asserts in its sums catch
+/// anything beyond (`test/import_limits_test.dart`).
+const maxRowAmountMinor = 100000000000;
+
+/// How many rows at [maxRowAmountMinor] are guaranteed to sum exactly (under 2^53).
+const exactRowsAtCap = 90000;
+
 /// The message for a password-protected export (an .xls with a FILEPASS record, or an Office file encrypted as a
 /// whole). It is not damaged: saved again without the password, it imports.
 const passwordProtectedMessage = 'This file is password-protected. Save it again without a password, then import it.';

@@ -1,5 +1,6 @@
 import 'package:wallet_importer/wallet_importer.dart' show CsvMapping, bankProfiles, csvSourcePrefix;
 
+import 'dates.dart';
 import 'models.dart';
 
 /// What an account or import `source` is called: `Cash` for null, a bank profile's label, a saved CSV layout's name
@@ -84,4 +85,79 @@ Map<String, int> balanceTotals(List<AccountBalance> b) {
   }
   final keys = sums.keys.toList()..sort();
   return {for (final k in keys) k: sums[k]!};
+}
+
+// ---------- bank balance checks (Q5) ----------
+
+/// How long a confirmed balance is trusted for warnings ([balanceTrusted]), in days.
+const bankCheckTrustDays = 35;
+
+/// [checkBankBalance]'s result: the bank's [bankCents] at the end of [date] against the app's own count [appCents]
+/// for that day; [diff] = bank − app (0 = matches the bank). [rowsSince] = the rows counted from [since] (the account's
+/// opening date, its last anchor) up to and including [date]: where a difference would be (the "see rows since" line).
+class BalanceCheck {
+  final String date;
+  final int bankCents;
+  final int appCents;
+  final int rowsSince;
+  final String since;
+  const BalanceCheck({required this.date, required this.bankCents, required this.appCents, required this.rowsSince, required this.since});
+
+  int get diff => bankCents - appCents;
+  bool get matches => diff == 0;
+
+  /// What is stored on this device (`WalletRepoAccounts.recordBankCheck`).
+  BankCheck get stored => BankCheck(date: date, bankCents: bankCents, appCents: appCents);
+}
+
+/// The bank's balance [bankCents] at the end of [date] compared with the app's: `a.opening` + the rows that count for
+/// [a] (the same rule as [accountBalances]: not deleted, the account's currency, after its opening date, its own
+/// source's imported rows, or for cash the unmatched hand-added ones) dated up to and including [date]. Pass the
+/// account that counts its (source, currency) (not one with [AccountBalance.duplicateOf]). Exact cents; never writes.
+BalanceCheck checkBankBalance(Account a, List<Tx> rows, {required String date, required int bankCents}) {
+  var sum = a.opening, n = 0;
+  for (final r in rows) {
+    if (!_counts(a, r) || r.date.compareTo(date) > 0) continue;
+    sum += r.amount;
+    n++;
+  }
+  assert(sum.abs() < _exact, 'balance sums stay exact');
+  return BalanceCheck(date: date, bankCents: bankCents, appCents: sum, rowsSince: n, since: a.openingDate);
+}
+
+const _exact = 9007199254740992; // 2^53
+
+/// A check as stored on this device (`WalletRepoAccounts.recordBankCheck`, device-local `bankCheck:<accountId>`,
+/// never synced): the bank's [bankCents] and the app's [appCents] at the end of [date]. [appCents] and [diff] are what
+/// the app counted then, for display only: trust is decided again from the rows ([balanceTrusted]).
+class BankCheck {
+  final String date;
+  final int bankCents;
+  final int appCents;
+  const BankCheck({required this.date, required this.bankCents, required this.appCents});
+
+  int get diff => bankCents - appCents;
+
+  Map<String, Object?> toJson() => {'date': date, 'bank': bankCents, 'app': appCents};
+
+  /// Reads [toJson]'s shape; null for anything else (a damaged value).
+  static BankCheck? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final d = j['date'], b = j['bank'], a = j['app'];
+    if (d is! String || !isIsoDate(d) || b is! int || a is! int) return null;
+    return BankCheck(date: d, bankCents: b, appCents: a);
+  }
+}
+
+/// Whether [a]'s worked-out balance may be warned from on [today] (Q5): its anchor is at most [bankCheckTrustDays]
+/// days old. The anchor is the opening date (set when the account was added, or by a correction: `correctBalance`
+/// moves it, so a check the owner then corrected counts from the correction) or [last] when the bank's balance still
+/// matches the app's: decided now from [rows] ([checkBankBalance] at `last.date` against `last.bankCents`), never from
+/// the stored [BankCheck.appCents] (a row deleted later, here or by a sync, makes a stored match stale). A check that is
+/// off now, or dated before the opening, never counts. A date after [today] counts as recent.
+bool balanceTrusted(Account a, {required String today, BankCheck? last, required List<Tx> rows}) {
+  bool recent(String d) => isIsoDate(d) && isIsoDate(today) && daysBetween(d, today) <= bankCheckTrustDays;
+  if (recent(a.openingDate)) return true;
+  if (last == null || !recent(last.date) || last.date.compareTo(a.openingDate) < 0) return false;
+  return checkBankBalance(a, rows, date: last.date, bankCents: last.bankCents).matches;
 }

@@ -40,7 +40,8 @@ export 'src/csv_generic.dart'
 export 'src/csv_mapping.dart' show CsvMapping, CsvDateFormat, CsvDecimal, maxCsvColumns, maxCsvHeaderChars;
 export 'src/ids.dart' show transactionId, sourceTransactionId;
 export 'src/importer.dart' show importBankFile, parseRows, ImportException, unknownLayoutMessage;
-export 'src/limits.dart' show maxImportBytes, maxXlsxUnpackedBytes, passwordProtectedMessage, tooLargeMessage;
+export 'src/limits.dart'
+    show exactRowsAtCap, maxImportBytes, maxRowAmountMinor, maxXlsxUnpackedBytes, passwordProtectedMessage, tooLargeMessage;
 export 'src/model.dart';
 export 'src/profiles/profile.dart' show BankProfile, ImportContext, RowResult, RowOutcome, headRows;
 export 'src/profiles/registry.dart' show bankProfiles;
