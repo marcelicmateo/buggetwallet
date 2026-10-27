@@ -157,6 +157,12 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     *) usage ;;
   esac
   [[ "$CMD" == web || "$CMD" == web-test ]] && { fetch_sqlite_wasm || exit 1; }
+  # mutate works on a copy, but a leftover mutant from an older run would be mutated again: refuse (checked here, the
+  # worktree's git directory is not visible inside the container)
+  if [[ "$CMD" == mutate ]] && ! git -C "$ROOT" diff --quiet HEAD -- packages/wallet_core/lib packages/wallet_importer/lib; then
+    echo "mutate: lib files differ from HEAD (a leftover mutant?). Restore with: git checkout -- packages/wallet_core/lib packages/wallet_importer/lib" >&2
+    exit 1
+  fi
   # Build output goes to stderr (stdout belongs to the LSP client in `lsp` mode)
   podman image exists "$IMAGE" || build_image
   if [[ "$CMD" == lsp ]]; then

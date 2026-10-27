@@ -8,14 +8,13 @@ Normally started as `tools/build.sh mutate <importer|core> <lib file>… [option
 Per target file it lists simple one-token mutants (+/-, * and ~/, < <=, > >=, == !=, && ||, integer literals, true/false,
 a trivially typed `return x;` replaced by a default), skipping comments, strings, imports and assert lines. A seeded sample
 of --max mutants (default 60 per file) is then run serially: the mutant is written into the lib file, `dart test
---fail-fast` runs (the whole package suite, or only --tests), and the file is restored. The original is saved next to the
-run output and restored on exit, SIGINT and SIGTERM. A mutant is `killed` (a test failed), `survived` (all passed),
+--fail-fast` runs (the whole package suite, or only --tests), and the file is restored. Mutants are written into a copy under
+dist/mutation/work/, never into the tracked files. A mutant is `killed` (a test failed), `survived` (all passed),
 `timeout`, or `invalid` (does not compile; not counted).
 
 Result: dist/mutation/<package>-<file>.json and a table on stdout.
 """
 import argparse
-import atexit
 import json
 import os
 import random
@@ -27,6 +26,7 @@ import sys
 import time
 
 PKG_DIR = {"importer": "packages/wallet_importer", "core": "packages/wallet_core"}
+RUN = {}
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # (regex on a space-surrounded operator, replacement) pairs; spaces keep generics (List<int>) and `=>` out.
@@ -138,6 +138,7 @@ def run_tests(pkg_dir, tests, timeout):
     cmd = ["dart", "test", "--fail-fast", "--timeout", "30s", "-r", "compact"] + tests
     t0 = time.time()
     p = subprocess.Popen(cmd, cwd=pkg_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True)
+    RUN.get("stop", {})["proc"] = p
     try:
         out, _ = p.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -145,10 +146,10 @@ def run_tests(pkg_dir, tests, timeout):
         p.communicate()
         return "timeout", time.time() - t0, ""
     dt = time.time() - t0
+    if re.search(r"\.dart:\d+:\d+: Error:|Compilation failed", out):  # does not compile: checked before test failures
+        return "invalid", dt, out
     if p.returncode == 0:
         return "survived", dt, out
-    if re.search(r"Failed to load|Error: |Compilation failed|compiler|Unhandled exception", out) and not re.search(r"\[E\]|Some tests failed|-\d+: ", out):
-        return "invalid", dt, out
     return "killed", dt, out
 
 
@@ -168,8 +169,11 @@ def main():
     for f in a.files:
         f = f[len(ROOT) + 1:] if f.startswith(ROOT + "/") else f
         f = f[len(PKG_DIR[a.package]) + 1:] if f.startswith(PKG_DIR[a.package] + "/") else f
-        if not os.path.isfile(os.path.join(pkg_dir, f)):
-            sys.exit("no such file in %s: %s" % (PKG_DIR[a.package], f))
+        full = os.path.realpath(os.path.join(pkg_dir, f))
+        if not full.startswith(os.path.join(os.path.realpath(pkg_dir), "lib") + os.sep) or not full.endswith(".dart") \
+                or not os.path.isfile(full):
+            sys.exit("not a .dart file under %s/lib: %s" % (PKG_DIR[a.package], f))
+        f = os.path.relpath(full, os.path.realpath(pkg_dir))
         targets.append(f)
 
     plans = []
@@ -184,46 +188,67 @@ def main():
 
     out_dir = os.path.join(ROOT, "dist", "mutation")
     os.makedirs(out_dir, exist_ok=True)
-    state = {"path": None, "src": None}
+    stale = [n for n in os.listdir(out_dir) if n.startswith(".orig-")]
+    if stale:
+        sys.exit("stale %s from an older mutate.py that edited lib in place: restore the file by hand (checkout of "
+                 "packages/*/lib), then delete dist/mutation/.orig-*" % stale[0])
 
-    def restore(*_):
-        if state["path"] and state["src"] is not None:
-            with open(state["path"], "w", encoding="utf-8") as fh:
-                fh.write(state["src"])
-            state["src"] = None
-        if _:
-            sys.exit(130)
+    # The tracked files are never touched: mutants are written into a copy of the packages (same layout, so the relative
+    # path dependencies and .dart_tool/package_config.json keep working) and the tests run there.
+    work = os.path.join(out_dir, "work")
+    shutil.rmtree(work, ignore_errors=True)
+    for rel in ("packages/wallet_importer", "packages/wallet_core", "relay"):
+        if os.path.isdir(os.path.join(ROOT, rel)):
+            shutil.copytree(os.path.join(ROOT, rel), os.path.join(work, rel), symlinks=True,
+                            ignore=shutil.ignore_patterns("build", "ephemeral", ".symlinks"))
+    if os.path.exists(os.path.join(ROOT, "analysis_options.yaml")):
+        shutil.copy(os.path.join(ROOT, "analysis_options.yaml"), work)
+    wpkg = os.path.join(work, PKG_DIR[a.package])
 
-    atexit.register(restore)
-    signal.signal(signal.SIGINT, restore)
-    signal.signal(signal.SIGTERM, restore)
+    stop = {"flag": False, "proc": None}
+
+    def on_signal(sig, _frame):  # only sets a flag (and kills the running test); the loop ends after it
+        stop["flag"] = True
+        if stop["proc"] is not None:
+            try:
+                os.killpg(stop["proc"].pid, signal.SIGKILL)
+            except OSError:
+                pass
+
+    signal.signal(signal.SIGINT, on_signal)
+    signal.signal(signal.SIGTERM, on_signal)
+    RUN["stop"] = stop
 
     print("baseline run ...", flush=True)
-    st, base_secs, out = run_tests(pkg_dir, a.tests, 1800)
+    st, base_secs, out = run_tests(wpkg, a.tests, 1800)
     if st != "survived":
         print(out[-3000:])
         sys.exit("baseline tests do not pass (%s); nothing to mutate" % st)
     timeout = a.timeout or max(30.0, 3 * base_secs)
     print("baseline %.1fs, per-mutant timeout %.0fs" % (base_secs, timeout), flush=True)
 
+    def put(path, text):  # whole file via a temp file and rename: never a half-written source
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+
     totals = []
     for f, src, total, sample in plans:
-        path = os.path.join(pkg_dir, f)
-        backup = os.path.join(out_dir, ".orig-" + f.replace("/", "_"))
-        shutil.copyfile(path, backup)  # survives a kill -9: copy it back by hand
-        state["path"], state["src"] = path, src
+        if stop["flag"]:
+            break
+        path = os.path.join(wpkg, f)
         rows = []
         for i, m in enumerate(sample, 1):
-            with open(path, "w", encoding="utf-8") as fh:
-                fh.write(src[:m["start"]] + m["text"] + src[m["end"]:])
-            st, dt, _ = run_tests(pkg_dir, a.tests, timeout)
-            restore_src = src
-            with open(path, "w", encoding="utf-8") as fh:
-                fh.write(restore_src)
+            if stop["flag"]:
+                break
+            put(path, src[:m["start"]] + m["text"] + src[m["end"]:])
+            st, dt, _ = run_tests(wpkg, a.tests, timeout)
+            if stop["flag"]:
+                break
             rows.append({k: m[k] for k in ("line", "col", "op", "orig", "mutant")} | {"status": st, "seconds": round(dt, 1)})
             print("[%d/%d] %s:%d %-10s %s -> %s" % (i, len(sample), f, m["line"], st, m["orig"], m["mutant"]), flush=True)
-        state["src"] = None
-        os.remove(backup)
+        put(path, src)
         counts = {s: sum(r["status"] == s for r in rows) for s in ("killed", "survived", "timeout", "invalid")}
         name = "%s-%s.json" % (a.package, f.replace("/", "_"))
         with open(os.path.join(out_dir, name), "w") as fh:
