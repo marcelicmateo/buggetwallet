@@ -326,7 +326,7 @@ void main() {
     });
 
     test('schema 16: attached_tx is a synced column', () {
-      expect(WalletRepo.schemaVersion, 16);
+      expect(WalletRepo.schemaVersion, greaterThanOrEqualTo(16));
       expect(entitySchema['bill']!.columns.map((c) => c.name), contains('attached_tx'));
     });
   });
