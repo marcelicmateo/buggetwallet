@@ -358,6 +358,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **J4 (`packages/sync`)** not clean yet (core's logs, local_db and repo import sync files): after M6. Counters as delta rows (J3) change the sync format: after M6.
   - **Reviews:** J2 core 0 blocking (1 medium for the app, 4 low), J1 0 blocking (5 low), J2 UI 0 blocking (2 drifts restored). All fixed.
   - **Stage run:** importer 374, core 2584, relay 216, app 1822, desktop, web-test, perf ok; emulator screens ok on rerun (first run: emulator went offline after the test passed).
+  - **J3 mutation testing:** `tools/build.sh mutate <core|importer> <lib file>… [--max --seed --tests]` (`tools/mutate.py`) plants small errors in a copy of the package (never the tracked files) and lists the ones no test catches. First pass (seed 7): budget 29/60 survived, periods 7/60, loan 3/26, CSV detection 3/10. 34 new invariant tests (`j3_invariants_test`, `j3_csv_invariants_test`) catch all of them except 8 proven equivalent; no money bug found. Also: `BW_FUZZ_ITERATIONS`/`BW_FUZZ_SEED` now reach the container (were silently ignored), lint checks it. Review: 2 medium in the tool (a killed run could leave a mutant in lib/) → fixed. Tests: importer 377, core 2618, relay 216, app 1822.
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
