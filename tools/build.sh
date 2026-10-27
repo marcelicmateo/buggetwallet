@@ -33,6 +33,9 @@
 #   tools/build.sh importer|core|relay|app   analyze and test one package (what CI runs, one step each)
 #   tools/build.sh importer|core|relay|app <test file or dir>…   only those tests (paths relative to the package or the repo root),
 #                           no analyze; step name <pkg>:one, so the full-suite medians stay clean
+#   tools/build.sh mutate <importer|core> <lib file>… [--max N] [--seed S] [--tests <test file>…] [--timeout SECS] [--list]
+#                           mutation testing (tools/mutate.py): seeded sample of simple mutants per lib file, each run against the
+#                           package tests (one at a time, file restored after each), survivors listed; dist/mutation/<pkg>-<file>.json
 #   tools/build.sh shell    interactive shell in the container;  shell -c '<command>' runs one command non-interactively
 #   tools/build.sh image    (re)build the container image (first build ~15 min)
 #   tools/build.sh lsp      Dart language server on stdin/stdout, for editors (repo mounted at its host path)
@@ -148,7 +151,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   case "$CMD" in
     image) build_image; exit ;;
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
-    test|lint|apk|linux|all|importer|core|relay|app|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated) run_begin "$CMD"; hook_hint ;;
+    test|lint|apk|linux|all|importer|core|relay|app|mutate|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated) run_begin "$CMD"; hook_hint ;;
     stage) host_stage; exit ;;
     format|shell|lsp|mcp) ;;
     *) usage ;;
@@ -202,7 +205,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     -v bw-gradle-cache:/cache/gradle \
     -v bw-android-user:/cache/android \
     "${signing[@]}" "${run[@]}" \
-    -e BW_NATIVE=1 -e BW_JOBS -e BW_GL_THREADS -e BW_APK_ABIS \
+    -e BW_NATIVE=1 -e BW_JOBS -e BW_GL_THREADS -e BW_APK_ABIS -e BW_FUZZ_ITERATIONS -e BW_FUZZ_SEED \
     -w /work "$IMAGE" "${inner[@]}" || rc=$?
   exit "$rc"
 fi
@@ -274,7 +277,16 @@ suite() {
   [[ -f "$LOGS/tests-$name.json" ]] && python3 -I "$ROOT/tools/build_log.py" tests "$name" "$LOGS/tests-$name.json"
   return "$rc"
 }
-export -f dart_files pub_ready pub_stale format_check suite
+# Every BW_* variable a test reads through Platform.environment must be passed into the container (podman run -e above).
+# shellcheck disable=SC2329  # run by the env-selftest lint step (export -f below)
+env_selftest() {
+  local v rc=0
+  while read -r v; do
+    grep -q -- "-e $v\\b" "$ROOT/tools/build.sh" || { echo "env-selftest: $v is read by a test but not passed by tools/build.sh" >&2; rc=1; }
+  done < <(grep -rhoP "Platform\.environment\[['\"]\KBW_[A-Z_]+" packages/*/test relay/test app/test 2>/dev/null | sort -u | grep -v '^BW_ANDROID_ROOT$')
+  return "$rc"
+}
+export -f dart_files pub_ready pub_stale format_check suite env_selftest
 
 # run_step <name> <command> [live]: run the command (bash -c) with its output in dist/logs/<name>.log between
 # start/end stamps, and "<seconds> <exit> <started>" in dist/logs/<name>.status. `live` also shows the output.
@@ -325,7 +337,8 @@ steps() {
 LINT=(format format_check
       shellcheck 'shellcheck tools/*.sh dev/*.sh .github/scripts/*.sh'
       actionlint actionlint
-      hook-selftest 'tools/no-poll-hook.sh --self-test')
+      hook-selftest 'tools/no-poll-hook.sh --self-test'
+      env-selftest env_selftest)
 declare -A SUITE=(
   [importer]='suite importer packages/wallet_importer "dart analyze --fatal-infos" dart test --timeout 60s'
   [core]='suite core packages/wallet_core "dart analyze --fatal-infos" dart test --timeout 60s'
@@ -703,6 +716,8 @@ case "$CMD" in
   importer|core|relay|app)
     if (($# > 1)); then run_pub; [[ $failed == 0 ]] && one_suite "$CMD" "${@:2}"
     else run_pub; [[ $failed == 0 ]] && steps "$CMD" "${SUITE[$CMD]}"; fi ;;
+  mutate) pub_ready; (($# > 2)) || usage
+          python3 -I "$ROOT/tools/mutate.py" "${@:2}" 2>&1 | tee "$LOGS/mutate.log"; exit "${PIPESTATUS[0]}" ;;
   apk)    run_pub; [[ $failed == 0 ]] && build_apk ;;
   linux)  run_pub; [[ $failed == 0 ]] && build_linux ;;
   desktop-test)  run_pub; [[ $failed == 0 ]] && desktop_tests "${@:2}" ;;
