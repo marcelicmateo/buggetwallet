@@ -244,7 +244,15 @@ List<DueCycle> dueCycles(List<RecurringBill> bills, List<CategorizedTx> txs, Str
       if (!b.isIncome && b.confirmed && isIsoDate(b.nextDue) && !b.finished) b
   ];
   if (live.isEmpty) return const [];
-  final pay = payments ?? planRecurringPayments(live, wholePayments(txs), currency: currency);
+  // Q8: a payment linked to an IOU (money lent or paid back) never pays a bill.
+  final pay = payments ??
+      planRecurringPayments(
+          live,
+          wholePayments([
+            for (final t in txs)
+              if (!t.iou) t
+          ]),
+          currency: currency);
   final paidOn = <String, String>{for (final t in txs) t.tx.id: t.date};
   final out = <DueCycle>[];
   DueCycle first(RecurringBill b) {

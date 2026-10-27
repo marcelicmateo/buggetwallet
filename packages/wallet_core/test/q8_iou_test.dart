@@ -338,6 +338,117 @@ void main() {
     }
   });
 
+  group('review fixes', () {
+    void bad(void Function() f, String text) =>
+        expect(f, throwsA(isA<ArgumentError>().having((e) => '${e.message}', 'message', contains(text))));
+    String lendIou(WalletRepo r, String tx, {int amount = 3000, String person = 'Ana'}) =>
+        r.addIou(person: person, direction: IouDirection.lent, amount: amount, currency: 'EUR', date: '2026-03-16', tx: tx);
+
+    /// A wallet with a hand-added entry of 30.00 and the bank row that then replaced it (`matched_to`).
+    (WalletRepo, String cash, String bank) matched({bool linkFirst = true}) {
+      final m = WalletRepo.inMemory(now: () => _now);
+      addTearDown(m.close);
+      final cash = m.addTransaction(date: '2026-03-16', amount: 3000, category: 'Shopping', note: 'lent');
+      if (linkFirst) lendIou(m, cash);
+      final bank = n('2026-03-17', -3000, 'POS plaćanje', 'PBZ POS PBZ7KONZUM ZAGREB');
+      m.importBatch(ImportBatch(source: 'pbz', transactions: [bank]));
+      expect(m.transaction(cash)!.matchedTo, bank.id);
+      return (m, cash, bank.id);
+    }
+
+    test('monthly summary CSV: a linked payment is in no category column and not in the total', () {
+      final r = _wallet();
+      String march() {
+        final cz = r.categorizer();
+        return monthlySummaryCsv(cz.expandAll(r.transactions()), currency: 'EUR', table: cz.table)
+            .split('\n')
+            .firstWhere((l) => l.startsWith('2026-03'));
+      }
+
+      expect(march(), endsWith(',65.00'));
+      lendIou(r, _id(_lend), amount: 4000);
+      expect(march(), endsWith(',25.00'));
+    });
+
+    test('updateIou keeps an unchanged link whose payment was replaced by its bank row, deleted, re-tagged or paired', () {
+      final (m, cash, _) = matched();
+      final id = m.ious().single.iou.id;
+      m.updateIou(id, person: 'Ana B', note: 'still lent');
+      expect((m.ious().single.iou.person, m.ious().single.iou.tx), ('Ana B', cash));
+
+      final r = _wallet();
+      final a = lendIou(r, _id(_lend), amount: 4000);
+      r.setCategory(_id(_lend), 'Internal transfer');
+      r.updateIou(a, person: 'Re-tagged');
+      r.deleteTransaction(_id(_lend));
+      r.updateIou(a, note: 'deleted payment');
+      expect(r.ious().single.iou.note, 'deleted payment');
+      bad(() => r.updateIou(a, amount: 3000), 'No such payment');
+      r.updateIou(a, amount: 3000, clearTx: true);
+      expect(r.ious().single.iou.tx, isNull);
+    });
+
+    test('a link to a hand-added entry is checked against the bank row that replaced it; neither can be linked twice', () {
+      // Linked after the match: validated on the bank row.
+      final (m0, cash0, bank0) = matched(linkFirst: false);
+      lendIou(m0, cash0);
+      expect(m0.iouLinkedTx(), {cash0, bank0});
+      bad(() => lendIou(m0, bank0, person: 'Bo'), 'already linked');
+
+      final (m, cash, bank) = matched();
+      bad(() => lendIou(m, bank, person: 'Bo'), 'already linked');
+      bad(() => lendIou(m, cash, person: 'Bo'), 'already linked');
+      final b = m.addIou(person: 'Bo', direction: IouDirection.borrowed, amount: 9000, currency: 'EUR', date: '2026-03-01');
+      bad(() => m.addIouPart(b, amount: 3000, date: '2026-03-17', tx: bank), 'already linked');
+    });
+
+    test('undelete refuses an IOU or a repayment whose payment another IOU took meanwhile (matched_to included)', () {
+      final (m, _, bank) = matched();
+      final a = m.ious().single.iou.id;
+      m.deleteIou(a);
+      lendIou(m, bank, person: 'Bo');
+      bad(() => m.undeleteIou(a), 'now linked');
+      expect(m.ious().single.iou.person, 'Bo');
+
+      final r = _wallet();
+      final x = lendIou(r, _id(_lend), amount: 4000);
+      final p = r.addIouPart(x, amount: 1500, date: '2026-03-20', tx: _id(_back));
+      r.deleteIouPart(p);
+      final y = r.addIou(person: 'Cy', direction: IouDirection.lent, amount: 9000, currency: 'EUR', date: '2026-03-01');
+      r.addIouPart(y, amount: 1500, date: '2026-03-20', tx: _id(_back));
+      bad(() => r.undeleteIouPart(p), 'already linked');
+    });
+
+    test('a payment lent to a payee with a monthly bill never pays the bill (refresh, the period reserve, bill history)', () {
+      for (final linked in [false, true]) {
+        final r = _wallet();
+        if (linked) lendIou(r, _id(_lend), amount: 4000);
+        final payee = merchantKey(r.transaction(_id(_lend))!);
+        r.addRecurring(label: 'Synth bill', category: 'Groceries', amount: 4000, intervalDays: 30, firstDue: '2026-03-16', payee: payee);
+        r.refreshRecurring(_today);
+        final bill = r.recurringBills().single;
+        expect(bill.lastPaidTx, linked ? isNull : _id(_lend), reason: 'linked: $linked');
+        final cz = r.categorizer();
+        final p = computePeriod(cz.expandAll(r.transactions()), r.settings(), const [], _today, bills: r.recurringBills(), table: cz.table);
+        expect(p.reservedBills, linked ? 4000 : 0, reason: 'linked: $linked');
+        final history = billHistory(bill, r.transactions(), const [], today: _today, currency: 'EUR', table: cz.table, iouTx: cz.iouTx);
+        expect(history.expand((m) => m.payments).map((t) => t.id), linked ? isEmpty : contains(_id(_lend)), reason: 'linked: $linked');
+      }
+    });
+
+    test('dueCycles: a linked row never pays a cycle, even when the bill was not refreshed', () {
+      final r = _wallet();
+      final payee = merchantKey(r.transaction(_id(_lend))!);
+      r.addRecurring(label: 'Synth bill', category: 'Groceries', amount: 4000, intervalDays: 30, firstDue: '2026-03-16', payee: payee);
+      lendIou(r, _id(_lend), amount: 4000);
+      final cz = r.categorizer();
+      final txs = cz.expandAll(r.transactions());
+      expect(txs.firstWhere((t) => t.tx.id == _id(_lend)).iou, isTrue);
+      final cycles = dueCycles(r.recurringBills(), txs, '2026-03-15', '2026-04-15', currency: 'EUR');
+      expect(cycles.single.paid, 0);
+    });
+  });
+
   group('two devices', () {
     late Directory tmp;
     late VaultKey key;

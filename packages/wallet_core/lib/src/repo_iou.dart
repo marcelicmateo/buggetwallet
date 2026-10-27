@@ -48,18 +48,30 @@ extension WalletRepoIou on WalletRepo {
         for (final r in db.select('SELECT * FROM iou_parts WHERE iou_id = ? AND deleted = 0 ORDER BY date, id', [iouId])) IouPart.fromRow(r)
       ];
 
-  /// Checks that payment [txId] may be linked as [amount] in [currency]: it exists and is live, is no own transfer and
-  /// has no split, is in [currency], is money out when [outflow] (else money in) of exactly [amount], and no other live
-  /// link holds it (the IOU [exceptIou] / repayment [exceptPart] being edited aside).
+  /// The payment a link to [txId] stands for, and the ids the link holds: [txId] itself and, for a hand-added entry,
+  /// the bank row that replaced it (`matched_to`), which inherits the link ([iouLinkedTx]). The payment is that bank row
+  /// once the entry is replaced, else the row itself (null when neither is here).
+  (Tx?, Set<String>) _linkRows(String txId) {
+    final t = transaction(txId);
+    final m = t?.matchedTo;
+    final ids = {txId, if (m != null) m};
+    if (t != null && m != null && !t.live) return (transaction(m), ids);
+    return (t, ids);
+  }
+
+  /// Checks that payment [txId] may be linked as [amount] in [currency]: it (or the bank row that replaced it,
+  /// [_linkRows]) exists and is live, is no own transfer and has no split, is in [currency], is money out when
+  /// [outflow] (else money in) of exactly [amount], and no other live link holds it, directly or through `matched_to`
+  /// (the IOU [exceptIou]'s own link / repayment [exceptPart] being edited aside).
   void _checkLink(String txId,
       {required int amount, required String currency, required bool outflow, String? exceptIou, String? exceptPart}) {
-    final t = transaction(txId);
+    final (t, ids) = _linkRows(txId);
     if (t == null || !t.live) throw ArgumentError('No such payment.');
     final cz = categorizer(withTags: false);
     if (t.transferTo != null || cz.table.kindOf(cz.categoryOf(t)) == BudgetKind.transfer) {
       throw ArgumentError('An own transfer cannot be linked to an IOU.');
     }
-    if (splits().containsKey(txId)) throw ArgumentError('A split payment cannot be linked to an IOU.');
+    if (splits().containsKey(t.id)) throw ArgumentError('A split payment cannot be linked to an IOU.');
     if (t.currency != currency) throw ArgumentError('The payment is in ${t.currency}, the IOU in $currency.');
     if (outflow && t.amount >= 0) throw ArgumentError('Link a payment that went out.');
     if (!outflow && t.amount <= 0) throw ArgumentError('Link a payment that came in.');
@@ -67,12 +79,13 @@ extension WalletRepoIou on WalletRepo {
       throw ArgumentError('The payment must be exactly this amount. A payment that was only partly a loan cannot be linked: '
           'add it without a payment.');
     }
-    final taken = db.select(
-        'SELECT 1 FROM ious WHERE tx = ? AND deleted = 0 AND id IS NOT ? '
-        'UNION ALL SELECT 1 FROM iou_parts p JOIN ious i ON i.id = p.iou_id '
-        'WHERE p.tx = ? AND p.deleted = 0 AND i.deleted = 0 AND p.id IS NOT ?',
-        [txId, exceptIou, txId, exceptPart]);
-    if (taken.isNotEmpty) throw ArgumentError('This payment is already linked to an IOU.');
+    _checkFree(ids, exceptIou: exceptIou, exceptPart: exceptPart);
+  }
+
+  /// Throws when another live link ([_linked]) holds one of [ids].
+  void _checkFree(Set<String> ids, {String? exceptIou, String? exceptPart}) {
+    final held = _linked(exceptIou: exceptIou, exceptPart: exceptPart);
+    if (ids.any(held.contains)) throw ArgumentError('This payment is already linked to an IOU.');
   }
 
   /// Adds an IOU and returns its id (`o…`): [person] (1..[Iou.maxPerson] characters after trimming), [direction],
@@ -143,7 +156,10 @@ extension WalletRepoIou on WalletRepo {
     final parts = _liveParts(id);
     final repaid = parts.fold(0, (s, x) => s + x.amount);
     if (a < repaid) throw ArgumentError('The amount cannot be less than what was already paid back.');
-    if (t != null) _checkLink(t, amount: a, currency: c, outflow: d == IouDirection.lent, exceptIou: id);
+    // An unchanged link is not checked again: its payment may since have been replaced by its bank row, deleted,
+    // re-tagged or paired, and the owner must still be able to edit the IOU (clearTx removes such a link).
+    final relink = t != old.tx || a != old.amount || c != old.currency || d != old.direction;
+    if (t != null && relink) _checkLink(t, amount: a, currency: c, outflow: d == IouDirection.lent, exceptIou: id);
     if (d != old.direction || c != old.currency) {
       for (final x in parts) {
         if (x.tx case final xt?) _checkLink(xt, amount: x.amount, currency: c, outflow: d == IouDirection.borrowed, exceptPart: x.id);
@@ -174,9 +190,16 @@ extension WalletRepoIou on WalletRepo {
   }
 
   /// Undo of [deleteIou]: writes `deleted: 0` (synced; the later write by HLC wins, like `undeleteGoal`). A live IOU:
-  /// nothing is written. Unknown id: [ArgumentError].
+  /// nothing is written. Unknown id, or a payment of it (or of its repayments) another live IOU took meanwhile
+  /// (`matched_to` included): [ArgumentError].
   void undeleteIou(String id) {
-    if (!_iou(id).deleted) return;
+    final i = _iou(id);
+    if (!i.deleted) return;
+    // Its links (and its repayments') may have been taken by another IOU while it was deleted.
+    final held = _linked();
+    for (final x in [i.tx, for (final p in _liveParts(id)) p.tx]) {
+      if (x != null && _linkRows(x).$2.any(held.contains)) throw ArgumentError('A payment of this IOU is now linked to another IOU.');
+    }
     _write([
       ('iou', id, {'deleted': 0})
     ]);
@@ -231,6 +254,7 @@ extension WalletRepoIou on WalletRepo {
     final rs = db.select('SELECT amount FROM ious WHERE id = ?', [x.iouId]);
     final owed = rs.isEmpty ? 0 : (rs.first['amount'] as int) - _liveParts(x.iouId).fold(0, (s, p) => s + p.amount);
     if (x.amount > owed) throw ArgumentError('That is more than is still owed.');
+    if (x.tx case final xt?) _checkFree(_linkRows(xt).$2, exceptPart: id);
     _write([
       ('iou_part', id, {'deleted': 0})
     ]);
@@ -258,12 +282,17 @@ extension WalletRepoIou on WalletRepo {
 
   /// Ids of the payments linked to a live IOU or to a live repayment of a live IOU, closed ones included, plus the
   /// bank row that replaced a linked hand-added entry (`matched_to`), so the link survives the match.
-  Set<String> iouLinkedTx() {
-    final rs = db.select('WITH l(id) AS ( '
-        "SELECT tx FROM ious WHERE deleted = 0 AND tx IS NOT NULL AND tx != '' "
+  Set<String> iouLinkedTx() => _linked();
+
+  /// [iouLinkedTx] without the own link of IOU [exceptIou] and without repayment [exceptPart].
+  Set<String> _linked({String? exceptIou, String? exceptPart}) {
+    final rs = db.select(
+        'WITH l(id) AS ( '
+        "SELECT tx FROM ious WHERE deleted = 0 AND tx IS NOT NULL AND tx != '' AND id IS NOT ? "
         'UNION SELECT p.tx FROM iou_parts p JOIN ious i ON i.id = p.iou_id '
-        "WHERE p.deleted = 0 AND i.deleted = 0 AND p.tx IS NOT NULL AND p.tx != '') "
-        'SELECT id FROM l UNION SELECT t.matched_to FROM tx t JOIN l ON t.id = l.id WHERE t.matched_to IS NOT NULL');
+        "WHERE p.deleted = 0 AND i.deleted = 0 AND p.tx IS NOT NULL AND p.tx != '' AND p.id IS NOT ?) "
+        'SELECT id FROM l UNION SELECT t.matched_to FROM tx t JOIN l ON t.id = l.id WHERE t.matched_to IS NOT NULL',
+        [exceptIou, exceptPart]);
     return {for (final r in rs) r['id'] as String};
   }
 }

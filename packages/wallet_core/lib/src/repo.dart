@@ -835,9 +835,16 @@ class WalletRepo {
       bills.add(current[b.id]!);
     }
     var paid = 0;
+    // Q8: a payment linked to an IOU (money lent or paid back) never pays a bill or lands an income.
+    final payRows = cz.iouTx.isEmpty
+        ? rows
+        : [
+            for (final r in rows)
+              if (!cz.iouTx.contains(r.id)) r
+          ];
     // One payment per bill per pass; repeated so a history import with several cycles catches up (bounded).
     for (var pass = 0; pass < 120 && bills.isNotEmpty; pass++) {
-      final plan = planRecurringPayments(bills, rows, currency: currency);
+      final plan = planRecurringPayments(bills, payRows, currency: currency);
 
       if (plan.isEmpty) break;
       // A single payment anchors the next cycle on its own date; parts adding up on the cycle's due date.

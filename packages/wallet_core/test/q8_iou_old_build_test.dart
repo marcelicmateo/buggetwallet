@@ -49,8 +49,36 @@ class _Schema16Reader implements SyncTransport {
 
   @override
   Future<List<int>> get(String device, int seq) async => _rewrite(await inner.get(device, seq), aadSyncFile(device, seq));
+
+  /// Snapshot ids as the old build judges them: it is schema 16, this engine is newer, so a `s16-` id (its own schema)
+  /// is shown under the engine's schema; newer ones stay as they are (newer than 16 either way).
+  final _real = <String, String>{};
+  RelaySnapshot? _shown(RelaySnapshot? s) {
+    if (s == null) return null;
+    final id = s.id.replaceFirst(RegExp(r'^s16-'), 's${WalletRepo.schemaVersion}-');
+    _real[id] = s.id;
+    return RelaySnapshot(id, s.covers);
+  }
+
   @override
-  Future<List<int>> getSnapshot(String id) async => _rewrite(await inner.getSnapshot(id), aadSnapshot(id));
+  Future<RelayState> state() async {
+    final s = await inner.state();
+    return RelayState(
+        devices: s.devices,
+        snapshot: _shown(s.snapshot),
+        previous: _shown(s.previous),
+        instance: s.instance,
+        bytes: s.bytes,
+        maxBytes: s.maxBytes,
+        api: s.api);
+  }
+
+  @override
+  Future<List<int>> getSnapshot(String id) async {
+    final real = _real[id] ?? id;
+    return _rewrite(await inner.getSnapshot(real), aadSnapshot(real));
+  }
+
   @override
   Future<void> putSnapshot(String id, Map<String, int> covers, List<int> bytes) async {
     final old = id.replaceFirst(RegExp(r'^s\d+-'), 's16-');
@@ -58,8 +86,6 @@ class _Schema16Reader implements SyncTransport {
     return inner.putSnapshot(old, covers, await seal(clear, key, aad: aadSnapshot(old)));
   }
 
-  @override
-  Future<RelayState> state() => inner.state();
   @override
   Future<void> put(String device, int seq, List<int> bytes) => inner.put(device, seq, bytes);
   @override
@@ -237,6 +263,94 @@ void main() {
     expect(dump(old.repo), dump(a.repo));
     expect(dump(c.repo), dump(a.repo));
   }, timeout: _t);
+
+  group('the relay pruned the file holding the IOUs before the old device upgraded', () {
+    // Wall clock of every device and of the relay (prune rule, lastSeen), moved on by hand.
+    var t = DateTime.utc(2026, 1, 25, 9);
+    late MemoryTransport relay;
+    late WalletRepo phone, laptop;
+    late String phonePath;
+    setUp(() {
+      t = DateTime.utc(2026, 1, 25, 9);
+      relay = MemoryTransport(now: () => t);
+      phonePath = '${tmp.path}/phone.db';
+      File('${_fixtures.path}/schema16_plain.db').copySync(phonePath);
+      phone = WalletRepo.open(phonePath, now: () => t.millisecondsSinceEpoch);
+      phone.db.execute("UPDATE meta SET value = '16' WHERE key = 'schema'");
+      laptop = WalletRepo.inMemory(now: () => t.millisecondsSinceEpoch);
+    });
+    tearDown(() {
+      phone.close();
+      laptop.close();
+    });
+    Future<SyncReport> oldPhone() => SyncEngine(_Schema16Reader(relay, key), key, now: () => t).run(phone);
+    Future<SyncReport> run(WalletRepo r) => SyncEngine(relay, key, now: () => t).run(r);
+    String? snapSchema(RelaySnapshot? s) => s?.id.split('-').first;
+
+    /// The laptop's IOU file, skipped and acked by the old phone, then two old-schema snapshots from the phone (eight
+    /// days apart: [SyncEngine.snapshotAge]); with [laptopBetween] the laptop syncs between them. Returns the IOU file's seq.
+    Future<int> setUpPruned({required bool laptopBetween}) async {
+      await oldPhone();
+      await run(laptop);
+      laptop.addIou(person: 'Ana', direction: IouDirection.lent, amount: 2000, currency: 'EUR', date: '2026-01-24');
+      await run(laptop);
+      final iouFile = (await relay.state()).devices[laptop.deviceId]!.last;
+      await oldPhone();
+      expect(iouRows(phone), 0);
+      t = t.add(const Duration(days: 8));
+      await oldPhone();
+      expect(snapSchema((await relay.state()).snapshot), 's16');
+      if (laptopBetween) {
+        await run(laptop);
+        expect(snapSchema((await relay.state()).snapshot), 's${WalletRepo.schemaVersion}',
+            reason: 'a newer build replaces an older-schema newest snapshot with its own');
+      }
+      t = t.add(const Duration(days: 8));
+      phone.addWish('Synthetic kettle', 2500); // the phone has news, so its aged snapshot rule writes again
+      await oldPhone();
+      final st = await relay.state();
+      expect(snapSchema(st.snapshot), 's16');
+      expect(st.devices[laptop.deviceId]!.first, greaterThan(iouFile), reason: 'the file with the IOU is pruned');
+      return iouFile;
+    }
+
+    test('with a snapshot of the new schema still kept, the upgraded device starts from it (and the older one on top)', () async {
+      await setUpPruned(laptopBetween: true);
+      expect(snapSchema((await relay.state()).previous), 's${WalletRepo.schemaVersion}');
+      phone.close();
+      phone = WalletRepo.open(phonePath, now: () => t.millisecondsSinceEpoch);
+      expect(cursors(phone), isEmpty, reason: 'the real migration cleared the cursors');
+      final r = await run(phone);
+      expect(r.problems, isEmpty);
+      expect(ious(phone), ious(laptop));
+      expect(phone.localValue(SyncEngine.wantCurrentKey), isNull);
+      await run(laptop);
+      await run(phone);
+      expect(dump(phone, clocks: false), dump(laptop, clocks: false));
+    }, timeout: _t);
+
+    test(
+        'with only older-schema snapshots left, the upgraded device holds its own snapshots back until the newer build '
+        'writes one, then takes the IOUs from it', () async {
+      await setUpPruned(laptopBetween: false);
+      phone.close();
+      phone = WalletRepo.open(phonePath, now: () => t.millisecondsSinceEpoch);
+      await run(phone);
+      expect(ious(phone), isEmpty, reason: 'nothing on the relay holds them yet');
+      expect(phone.localValue(SyncEngine.wantCurrentKey), isNotNull);
+      t = t.add(const Duration(days: 8));
+      await run(phone);
+      expect(snapSchema((await relay.state()).snapshot), 's16', reason: 'the phone writes no snapshot of its own meanwhile');
+      await run(laptop);
+      expect(snapSchema((await relay.state()).snapshot), 's${WalletRepo.schemaVersion}');
+      await run(phone);
+      expect(ious(phone), ious(laptop));
+      expect(phone.localValue(SyncEngine.wantCurrentKey), isNull);
+      await run(laptop);
+      await run(phone);
+      expect(dump(phone, clocks: false), dump(laptop, clocks: false));
+    }, timeout: _t);
+  });
 
   test('the skip itself: an op of a record kind this build does not know stores nothing, records no clock and fails nothing', () {
     final r = WalletRepo.inMemory(now: () => now);

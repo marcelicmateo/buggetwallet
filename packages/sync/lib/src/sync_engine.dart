@@ -265,13 +265,17 @@ List<int> _filePayload(List<Op> ops) => utf8.encode(jsonEncode([for (final op in
 ///    never leaves a gap). The first time this device meets a relay (or a relay that lost its files) the file is its
 ///    whole state instead ([WalletRepo.snapshotOps], original clocks), which also migrates a folder-sync wallet;
 /// 2. starts from the latest snapshot (or `previous`) when a needed file was pruned, or when this device has applied
-///    nothing yet (new device, schema-bump replay) and the snapshot is of this schema or newer;
+///    nothing yet (new device, schema-bump replay) and the snapshot is of this schema or newer. After a prune a
+///    snapshot of this schema or newer is applied first (then an older-schema latest one on top: it may cover later
+///    files); with none, the older one alone and [wantCurrentKey] is set, so the next snapshot of this schema or newer
+///    is applied too, once (Q8: the replay after a schema bump must not lose the ops the old build skipped);
 /// 3. applies each other device's files strictly in seq order from its cursor ([WalletRepo.syncCursors]); a file that
 ///    cannot be fetched or is refused (quarantined in [BadFiles]) stops that device's later files ([SyncReport.waiting]);
 /// 4. acks the cursors (every run, which keeps this device's `lastSeen` fresh);
 /// 5. when caught up (every device applied through its `last`, nothing waiting or refused) runs matching and pairing
-///    ([WalletRepo.runPendingMatch]) and writes a snapshot when the newest is older than [snapshotAge] or
-///    [snapshotOpsBehind] ops behind.
+///    ([WalletRepo.runPendingMatch]) and writes a snapshot when the newest is older than [snapshotAge],
+///    [snapshotOpsBehind] ops behind, or written by an older schema (then it lacks the newer record kinds, and the
+///    relay could prune the files that hold them).
 class SyncEngine {
   final SyncTransport transport;
   final VaultKey key;
@@ -419,6 +423,25 @@ class SyncEngine {
   /// of them (its cursor, or its own last), that ack and since when (ms) it has stayed there
   /// (`{"<peer>/<device>": [ack, ms]}`); and when this device last wrote a heal snapshot (ms).
   static const stuckKey = 'syncPeerStuck', healKey = 'syncHealAt';
+
+  /// Device-local: when (ms) a pruned file left only a snapshot of an older schema to start from, so this device may
+  /// lack record kinds the old build skipped and another device still holds. Until then + [wantCurrentFor] it writes no
+  /// snapshot (the relay's newest stays older-schema, so a device that has them writes one, see [_maybeSnapshot]) and
+  /// applies the next snapshot of this schema or newer as well (field by field: the newer clock wins), then clears it.
+  static const wantCurrentKey = 'syncWantCurrentSnapshot';
+
+  /// How long [wantCurrentKey] holds back this device's snapshots at most.
+  static const wantCurrentFor = Duration(days: 30);
+
+  /// Whether [wantCurrentKey] is set and not older than [wantCurrentFor] (an expired mark is cleared).
+  static bool _wantCurrent(WalletRepo repo, DateTime now) {
+    final ms = int.tryParse(repo.localValue(wantCurrentKey) ?? '');
+    if (ms == null) return false;
+    if (now.difference(DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true)) <= wantCurrentFor) return true;
+    repo.setLocalValue(wantCurrentKey, null);
+    logEvent(_log, Level.WARNING, 'sync.snapshot.wantExpired');
+    return false;
+  }
 
   /// Self-heal: a device seen within this long whose ack for some device's files has stayed below what this device
   /// applied of them for longer than this is taken as blocked on a file it refused; a caught-up device that holds the
@@ -757,9 +780,28 @@ class SyncEngine {
     });
     final fresh = run.cursors.isEmpty && peers.any((d) => state.devices[d]!.last > 0);
     final snap = state.snapshot;
-    if (snap == null || !(pruned || (fresh && _current(snap)))) return false;
-    // A pruned file leaves no choice; otherwise only a snapshot of this schema or newer (else it lacks fields).
-    return _useSnapshot(repo, run, usable: pruned ? null : _current);
+    if (snap == null) return false;
+    if (!pruned) {
+      if (fresh && _current(snap)) return _useSnapshot(repo, run, usable: _current);
+      if (_wantCurrent(repo, _now()) && _current(snap) && await _useSnapshot(repo, run, usable: _current)) {
+        repo.setLocalValue(wantCurrentKey, null);
+        logEvent(_log, Level.INFO, 'sync.snapshot.caughtUpSchema');
+        return true;
+      }
+      return false;
+    }
+    // A pruned file leaves no choice but a snapshot. One of this schema or newer first: an older one lacks the record
+    // kinds and fields this build added (a schema-bump replay would lose what the old build skipped). Then an older
+    // latest one on top, as it may cover files after that one's covers (applied field by field: it removes nothing).
+    // A current one refused above is not tried twice.
+    final current = await _useSnapshot(repo, run, usable: _current);
+    if (current && _current(snap)) return true;
+    final older = await _useSnapshot(repo, run, usable: current ? (s) => identical(s, snap) : (s) => !_current(s));
+    if (!current && older) {
+      repo.setLocalValue(wantCurrentKey, '${_now().millisecondsSinceEpoch}');
+      logEvent(_log, Level.INFO, 'sync.snapshot.olderSchema');
+    }
+    return current || older;
   }
 
   /// Applies a snapshot of the relay ([_applySnapshot]) and counts it as one file read. Returns whether one was applied.
@@ -1156,10 +1198,17 @@ class SyncEngine {
       {bool heal = false, bool heldBlobs = false, bool declare = true}) async {
     final me = _streamOf(repo);
     final current = state.snapshot;
+    if (_wantCurrent(repo, now)) {
+      logEvent(_log, Level.INFO, 'sync.snapshot.skipped', {'reason': 'wantCurrent'});
+      return;
+    }
     final old = current?.covers ?? const <String, int>{};
     repo.forgetSyncFiles(old);
     final behind = repo.syncOpsAfter(old);
-    if (behind == 0 && !heal) return;
+    // Q8: the newest snapshot was written by an older schema, so it lacks what this build added; once files it covers
+    // are pruned, a device replaying after its upgrade could only start from it. Write one of this schema now.
+    final olderSchema = current != null && !_current(current);
+    if (behind == 0 && !heal && !olderSchema) return;
     final since = current == null
         ? switch (int.tryParse(repo.localValue(sinceKey) ?? '')) {
             final int ms => DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true),
@@ -1167,7 +1216,7 @@ class SyncEngine {
           }
         : _snapshotTime(current.id);
     final aged = since != null && now.difference(since) > snapshotAge;
-    if (behind < snapshotOpsBehind && !aged && !heal) return;
+    if (behind < snapshotOpsBehind && !aged && !heal && !olderSchema) return;
     final covers = <String, int>{
       for (final d in state.devices.keys)
         if (d != me) d: cursors[d] ?? 0,
@@ -1211,7 +1260,15 @@ class SyncEngine {
     }
     repo.forgetSyncFiles(covers);
     if (heal) repo.setLocalValue(healKey, '${now.millisecondsSinceEpoch}');
-    t.done({'ops': ops.length, 'bytes': sealed.length, 'devices': covers.length, 'behind': behind, 'aged': aged, 'heal': heal});
+    t.done({
+      'ops': ops.length,
+      'bytes': sealed.length,
+      'devices': covers.length,
+      'behind': behind,
+      'aged': aged,
+      'heal': heal,
+      'olderSchema': olderSchema
+    });
   }
 }
 

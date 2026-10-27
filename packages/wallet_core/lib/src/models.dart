@@ -159,8 +159,13 @@ class CategorizedTx {
   final int? originalAmount;
   final String? originalCurrency;
 
+  /// Q8: the payment is linked to an IOU (`Categorizer.iouTx`): its [kind] is then [BudgetKind.transfer] and it never
+  /// pays a recurring bill (`dueCycles`). Kept by [withCategory] and [converted].
+  final bool iou;
+
   const CategorizedTx(this.tx, this.category, this.kind,
       {this.tags = const [],
+      this.iou = false,
       int? amount,
       this.part,
       this.parts = 0,
@@ -188,7 +193,8 @@ class CategorizedTx {
       splitBroken: splitBroken,
       whole: whole,
       originalAmount: originalAmount,
-      originalCurrency: originalCurrency);
+      originalCurrency: originalCurrency,
+      iou: iou);
 
   /// This row converted (P15): [tx] in the wallet currency, [amount] the part's converted amount (null for a whole
   /// payment), [whole] the converted whole; the original amount and currency kept. Category, kind, tags and part fields kept.
@@ -201,7 +207,8 @@ class CategorizedTx {
       splitBroken: splitBroken,
       whole: whole,
       originalAmount: this.amount,
-      originalCurrency: this.tx.currency);
+      originalCurrency: this.tx.currency,
+      iou: iou);
 }
 
 /// The distinct payments of [rows] ([CategorizedTx.tx], first appearance order): an expanded list

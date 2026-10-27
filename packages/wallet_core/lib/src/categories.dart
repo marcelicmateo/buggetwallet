@@ -499,7 +499,7 @@ class Categorizer {
   /// recurring, paydays, balances, rule hits, tag suggestions); money by category, tag or kind uses [expand].
   CategorizedTx categorize(Tx t) {
     final c = categoryOf(t);
-    return CategorizedTx(t, c, kindFor(t, c), tags: tagContext?.of(t) ?? const []);
+    return CategorizedTx(t, c, kindFor(t, c), tags: tagContext?.of(t) ?? const [], iou: iouTx.contains(t.id));
   }
 
   /// The budget kind of [t] with main tag [category]: [BudgetKind.transfer] when the owner linked it to an IOU
@@ -523,7 +523,7 @@ class Categorizer {
     if (t.transferTo != null || whole.kind == BudgetKind.transfer) return [whole];
     final fallbackOk = table.isLive(whole.category) && whole.kind != BudgetKind.transfer;
     if (!splitFits(t.amount, stored) || (!fallbackOk && stored.any((p) => !table.isLive(p.category)))) {
-      return [CategorizedTx(t, whole.category, whole.kind, tags: whole.tags, splitBroken: true)];
+      return [CategorizedTx(t, whole.category, whole.kind, tags: whole.tags, splitBroken: true, iou: whole.iou)];
     }
     final tags = tagContext?.tags;
     return [

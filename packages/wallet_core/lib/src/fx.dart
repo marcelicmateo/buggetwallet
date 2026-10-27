@@ -63,7 +63,7 @@ CategorizedTx _convert(
     CategorizedTx t, WalletSettings st, int home, Map<String, Set<int>> seen, Map<String, int> others, Map<String, CategorizedTx> wholes) {
   final tx = t.tx.inCurrency(st.currency, home);
   if (!t.isPart) return t.converted(tx);
-  final w = wholes[t.tx.id] ??= (t.whole ?? CategorizedTx(t.tx, t.category, t.kind)).converted(tx);
+  final w = wholes[t.tx.id] ??= (t.whole ?? CategorizedTx(t.tx, t.category, t.kind, iou: t.iou)).converted(tx);
   final last = t.part! + 1 >= t.parts;
   final amount = last && (seen[t.tx.id]?.length ?? 0) == t.parts - 1 ? home - (others[t.tx.id] ?? 0) : _partHome(t, st, home);
   return t.converted(w.tx, amount: amount, whole: w);
