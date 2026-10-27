@@ -179,7 +179,9 @@ every brief must begin with `git reset --hard <base>`.
 
 ## Stage Q progress (2026-10-27)
 Plan: `STAGE_Q_PLAN.md` (Q1–Q11, waves 0–3, delegation table). Base eaa790f.
-- Wave 0 running: core-builder splits `repo.dart` (worktree), ui-builder splits `controller.dart` (worktree); moves only, same test counts (importer 377, core 2296, sync 326, app 1822).
+- Wave 0 done: controller split b956c4c (review clean) → 2ee1574; repo split 130e413 (review clean) → fae77a3; CLAUDE.md c227cc8. Full test on c227cc8 running.
+- Wave 1 running (base c227cc8): core A (Q3, Q4, Q5, Q11), core B (Q1, Q6, Q7, Q9, Q10), core C (Q8 schema 17 + old-build entity test), test-writer Q2 (base 2ee1574). Packs in the session scratchpad `q/pack-{a,b,c,t}.md`. Merge order B → A → C → Q2, then v17.sql.
+- Wave 2 note: extension members are only visible where their library is imported; public controller methods called from tests stay on the class.
 
 ## Queue (2026-10-20)
 | # | Item | Agent | Base | Depends on | Status |
