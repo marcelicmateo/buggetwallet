@@ -2,7 +2,6 @@
 // (where there is a camera) or picks a file; a row opens the file, Remove has an Undo. Logs: counts and enum words only.
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -13,6 +12,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../screens/bill_sheet.dart';
 import '../theme.dart';
+import 'async_action.dart';
 import 'common.dart';
 import 'sheets.dart' show showSheet;
 
@@ -33,9 +33,7 @@ class AttachmentsSection extends StatefulWidget {
   State<AttachmentsSection> createState() => _AttachmentsSectionState();
 }
 
-class _AttachmentsSectionState extends State<AttachmentsSection> {
-  bool busy = false;
-
+class _AttachmentsSectionState extends State<AttachmentsSection> with AsyncAction {
   /// The last result in plain words (shown inside the sheet: a snack bar would sit behind it), and the removed file it can bring back.
   String? note;
   String? undoId;
@@ -52,8 +50,8 @@ class _AttachmentsSectionState extends State<AttachmentsSection> {
 
   Future<void> _add() async {
     if (busy) return;
-    setState(() => busy = true); // before the chooser opens: a second tap must not open a second one
-    try {
+    // busy is set before the chooser opens: a second tap must not open a second one
+    await run(() async {
       var how = 'file';
       if (widget.wc.billInputs.camera.supported) {
         logNav('attach.choose');
@@ -66,9 +64,7 @@ class _AttachmentsSectionState extends State<AttachmentsSection> {
       } else {
         await _fromFile();
       }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
+    });
   }
 
   Future<void> _fromCamera() async {
@@ -94,7 +90,7 @@ class _AttachmentsSectionState extends State<AttachmentsSection> {
 
   Future<void> _fromFile() async {
     logNav('attach.pick');
-    final List<PlatformFile> picked;
+    final List<PickedFile> picked;
     try {
       picked = await widget.chooser.pickAttachmentFiles();
     } catch (e, st) {
@@ -116,7 +112,7 @@ class _AttachmentsSectionState extends State<AttachmentsSection> {
         _say(attachMessage(AttachResult.tooBig)!);
         return;
       }
-      bytes = await pf.readAsBytes();
+      bytes = await pf.readBytes();
     } catch (e, st) {
       logError(_log, 'attach.openFailed', e, st, fields: {'type': e.runtimeType.toString()});
       _say("Couldn't open that file.");

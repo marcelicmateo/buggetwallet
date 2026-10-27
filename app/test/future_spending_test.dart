@@ -18,7 +18,6 @@ import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/screens/upcoming.dart';
 import 'package:budget_wallet/src/screens/upcoming_view.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -41,30 +40,15 @@ void tw(String name, Future<void> Function(WidgetTester tester) body) => testWid
       await tester.pump(const Duration(seconds: 4));
     });
 
-base class _Picked extends PlatformFile {
-  @override
-  final String name;
-  final Uint8List data;
-  _Picked(this.name, this.data);
-  @override
-  Uri get uri => Uri(path: name);
-  @override
-  Never get xFile => throw UnimplementedError();
-  @override
-  int? lengthSync() => data.length;
-  @override
-  Future<int?> length() async => data.length;
-  @override
-  Future<Uint8List> readAsBytes() async => data;
-  @override
-  Stream<Uint8List> readAsByteStream() => Stream.value(data);
+class _Picked extends PickedFile {
+  _Picked(String name, Uint8List data) : super(name, () async => data, length: () async => data.length);
 }
 
 class _Chooser extends FileChooser {
-  List<PlatformFile> picks = [];
+  List<PickedFile> picks = [];
   final saved = <({String name, Uint8List bytes})>[];
   @override
-  Future<List<PlatformFile>> pickCalendarFile() async => picks;
+  Future<List<PickedFile>> pickCalendarFile() async => picks;
   @override
   Future<Uri?> saveText({required String fileName, required Uint8List bytes, required String title}) async {
     saved.add((name: fileName, bytes: bytes));

@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/screens/backup_panel.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -21,28 +20,13 @@ class DiskTrouble implements Exception {
   String toString() => 'DiskTrouble: cannot write /home/someone/x';
 }
 
-base class _Picked extends PlatformFile {
-  @override
-  final String name = 'picked.bwb';
-  final Uint8List data;
-  _Picked(this.data);
-  @override
-  Uri get uri => Uri(path: name);
-  @override
-  Never get xFile => throw UnimplementedError();
-  @override
-  int? lengthSync() => data.length;
-  @override
-  Future<int?> length() async => data.length;
-  @override
-  Future<Uint8List> readAsBytes() async => data;
-  @override
-  Stream<Uint8List> readAsByteStream() => Stream.value(data);
+class _Picked extends PickedFile {
+  _Picked(Uint8List data) : super('picked.bwb', () async => data, length: () async => data.length);
 }
 
 class FakeChooser extends FileChooser {
   final saved = <({String name, Uint8List bytes})>[];
-  List<PlatformFile> picks = [];
+  List<PickedFile> picks = [];
   Object? saveError;
   bool cancelSave = false;
   FakeChooser();
@@ -55,7 +39,7 @@ class FakeChooser extends FileChooser {
   }
 
   @override
-  Future<List<PlatformFile>> pickBackupFile() async => picks;
+  Future<List<PickedFile>> pickBackupFile() async => picks;
 }
 
 /// [full]: the wallet holds data (restore must not show).

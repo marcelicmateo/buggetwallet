@@ -1,7 +1,6 @@
 // Stage B4: the bills database in the app. Adding bills (camera codes, photos, PDFs, e-invoices, Share to app) through fakes,
 // Plan › Bills, the bill sheet, "Paid by…", Today's "to review" line, Spending's receipt mark, Upcoming's warranty and return-by
 // rows, search, reminders, log privacy and layout. All data is SYNTHETIC (billsWallet: Tuesday 20 Oct 2026).
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -21,7 +20,6 @@ import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/screens/upcoming.dart';
 import 'package:budget_wallet/src/screens/upcoming_view.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -51,43 +49,22 @@ Finder snack(String text) => find.descendant(of: find.byType(SnackBar), matching
 /// A 1x1 PNG, so Image.memory has something real to show.
 final tinyPng = base64.decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
 
-base class _Picked extends PlatformFile {
-  @override
-  final String name;
-  final Uint8List data;
-  _Picked(this.name, this.data);
-  @override
-  Uri get uri => Uri(path: name);
-  @override
-  Never get xFile => throw UnimplementedError();
-  @override
-  int? lengthSync() => data.length;
-  @override
-  Future<int?> length() async => data.length;
-  @override
-  Future<Uint8List> readAsBytes() async => data;
-  @override
-  Stream<Uint8List> readAsByteStream() => Stream.value(data);
+class _Picked extends PickedFile {
+  _Picked(String name, Uint8List data) : super(name, () async => data, length: () async => data.length);
 }
 
 /// A picked file that says it is [size] bytes long and must never be read.
-base class _Huge extends _Picked {
-  final int size;
-  _Huge(String name, this.size) : super(name, Uint8List(0));
-  @override
-  int? lengthSync() => size;
-  @override
-  Future<int?> length() async => size;
-  @override
-  Future<Uint8List> readAsBytes() async => throw StateError('a file over the limit must not be read');
+class _Huge extends PickedFile {
+  _Huge(String name, int size)
+      : super(name, () async => throw StateError('a file over the limit must not be read'), length: () async => size);
 }
 
 class _Chooser extends FileChooser {
-  List<PlatformFile> picks = [];
+  List<PickedFile> picks = [];
   bool fail = false;
   final saved = <({String name, Uint8List bytes})>[];
   @override
-  Future<List<PlatformFile>> pickBillFiles() async {
+  Future<List<PickedFile>> pickBillFiles() async {
     if (fail) throw StateError('no portal');
     return picks;
   }

@@ -103,6 +103,12 @@ class CalendarState extends SubState {
   int version = 0;
 }
 
+/// What one [WalletController.readCalendars] run collects: the events and the counts it logs.
+class _CalendarRead {
+  final events = <CalendarEvent>[];
+  var unsupported = 0, calendars = 0;
+}
+
 /// Saved `.ics` calendar sources (files and links), kept in a device-local value; the text of each in `icsText:<id>`.
 class _IcsSource {
   final String id, name;
@@ -506,61 +512,76 @@ extension FutureSpending on WalletController {
     cal.reading = true;
     _refreshView();
     final from = today(), to = addDays(from, calendarHorizonDays);
-    final events = <CalendarEvent>[];
-    var unsupported = 0, calendars = 0;
+    final read = _CalendarRead();
     try {
-      if (calendarSource.supported && ids.isNotEmpty) {
-        try {
-          if (await calendarSource.hasPermission()) {
-            cal.permission = true;
-            events.addAll(await calendarSource.events(ids, from, to));
-            calendars += ids.length;
-          } else {
-            cal.permission = false;
-          }
-        } catch (e, st) {
-          logError(_calLog, 'calendar.deviceReadFailed', e, st, fields: {'type': e.runtimeType.toString()});
-        }
-      }
+      if (calendarSource.supported && ids.isNotEmpty) await _readDevice(ids, from, to, read);
       for (final s in sources) {
-        var text = repo.localValue('icsText:${s.id}');
-        cal.clearError(s.id);
-        if (s.kind == CalendarKind.link && s.url != null) {
-          try {
-            final fresh = await deps.icsFetcher(Uri.parse(s.url!));
-            if (fresh.length > icsMaxBytes || _icsProblem(fresh) != null) {
-              throw const IcsFetchException("That link isn't a calendar any more.");
-            }
-            text = fresh;
-            repo.setLocalValue('icsText:${s.id}', fresh);
-          } on IcsFetchException catch (e) {
-            cal.setError(s.id, "Couldn't refresh this link. ${e.message} Showing what was saved.");
-          } catch (e, st) {
-            cal.setError(s.id, "Couldn't refresh this link. Showing what was saved.");
-            logError(_calLog, 'calendar.refreshFailed', e, st, fields: {'type': e.runtimeType.toString()});
-          }
-        }
-        if (text == null) continue;
-        try {
-          final r = parseIcs(text, calendarId: s.id, from: from, to: to, toLocal: (t) => t.toLocal());
-          events.addAll(r.events);
-          unsupported += r.unsupported;
-          calendars++;
-        } catch (e, st) {
-          cal.setError(s.id, "Couldn't read this calendar.");
-          logError(_calLog, 'calendar.parseFailed', e, st, fields: {'type': e.runtimeType.toString()});
-        }
+        await _readSource(s, from, to, read);
       }
-      cal.events = events;
+      cal.events = read.events;
       cal.lastRead = from;
       cal.version++;
       logEvent(_calLog, Level.INFO, 'calendar.read',
-          {'calendars': calendars, 'events': events.length, 'unsupported': unsupported, 'trigger': trigger});
+          {'calendars': read.calendars, 'events': read.events.length, 'unsupported': read.unsupported, 'trigger': trigger});
     } finally {
       cal.reading = false;
       dataVersion++; // the pages are built per data version: Today and Upcoming show the new events
       _memo.clear();
       _refreshView();
+    }
+  }
+
+  /// The phone's chosen calendars into [read]; without the calendar permission nothing is read and `cal.permission` says so.
+  Future<void> _readDevice(Set<String> ids, String from, String to, _CalendarRead read) async {
+    try {
+      if (await calendarSource.hasPermission()) {
+        cal.permission = true;
+        read.events.addAll(await calendarSource.events(ids, from, to));
+        read.calendars += ids.length;
+      } else {
+        cal.permission = false;
+      }
+    } catch (e, st) {
+      logError(_calLog, 'calendar.deviceReadFailed', e, st, fields: {'type': e.runtimeType.toString()});
+    }
+  }
+
+  /// One `.ics` source into [read]: a link is fetched again first (the saved copy is used when that fails), then its text is parsed.
+  Future<void> _readSource(_IcsSource s, String from, String to, _CalendarRead read) async {
+    var text = repo.localValue('icsText:${s.id}');
+    cal.clearError(s.id);
+    if (s.kind == CalendarKind.link && s.url != null) text = await _refreshLink(s, text);
+    if (text == null) return;
+    _parseSource(s, text, from, to, read);
+  }
+
+  /// The fresh text of a link source, saved as its copy; on a failure the entry says so and [saved] stays in use.
+  Future<String?> _refreshLink(_IcsSource s, String? saved) async {
+    try {
+      final fresh = await deps.icsFetcher(Uri.parse(s.url!));
+      if (fresh.length > icsMaxBytes || _icsProblem(fresh) != null) {
+        throw const IcsFetchException("That link isn't a calendar any more.");
+      }
+      repo.setLocalValue('icsText:${s.id}', fresh);
+      return fresh;
+    } on IcsFetchException catch (e) {
+      cal.setError(s.id, "Couldn't refresh this link. ${e.message} Showing what was saved.");
+    } catch (e, st) {
+      cal.setError(s.id, "Couldn't refresh this link. Showing what was saved.");
+      logError(_calLog, 'calendar.refreshFailed', e, st, fields: {'type': e.runtimeType.toString()});
+    }
+    return saved;
+  }
+
+  void _parseSource(_IcsSource s, String text, String from, String to, _CalendarRead read) {
+    try {
+      final r = parseIcs(text, calendarId: s.id, from: from, to: to, toLocal: (t) => t.toLocal());
+      read.events.addAll(r.events);
+      read.unsupported += r.unsupported;
+      read.calendars++;
+    } catch (e, st) {
+      cal.setError(s.id, "Couldn't read this calendar.");
+      logError(_calLog, 'calendar.parseFailed', e, st, fields: {'type': e.runtimeType.toString()});
     }
   }
 

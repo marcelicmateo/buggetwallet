@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart' show Logger, logError;
 import 'package:wallet_importer/wallet_importer.dart'
@@ -102,7 +101,7 @@ Future<void> editCsvLayout(BuildContext context, WalletController wc, FileChoose
   final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
   void say(String m, {String? label, VoidCallback? action}) =>
       toastOn(messenger, m, wide: wide, accessible: accessible, actionLabel: label, onAction: action);
-  final List<PlatformFile> picked;
+  final List<PickedFile> picked;
   try {
     picked = await chooser.pickBankFiles();
   } catch (e, st) {
@@ -114,7 +113,7 @@ Future<void> editCsvLayout(BuildContext context, WalletController wc, FileChoose
   final Uint8List bytes;
   final CsvShape shape;
   try {
-    bytes = await picked.first.readAsBytes();
+    bytes = await picked.first.readBytes();
     final first = csvShape(bytes);
     final match = matchCsvLayout(bytes, first, {id: old});
     if (match == null) {

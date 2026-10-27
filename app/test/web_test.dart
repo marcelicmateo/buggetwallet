@@ -14,7 +14,6 @@ import 'package:budget_wallet/src/screens/in_use.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
 import 'package:budget_wallet/src/screens/unlock.dart';
 import 'package:budget_wallet/src/wallet_db.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -28,29 +27,14 @@ import 'support/wallet.dart';
 Never raise(Object error) => Error.throwWithStackTrace(error, StackTrace.current);
 
 /// A picked file with its bytes in memory.
-base class FakePicked extends PlatformFile {
-  @override
-  final String name;
-  final Uint8List bytes;
-  FakePicked(this.name, this.bytes);
-  @override
-  Uri get uri => Uri(path: name);
-  @override
-  Never get xFile => throw UnimplementedError();
-  @override
-  int? lengthSync() => bytes.length;
-  @override
-  Future<int?> length() async => bytes.length;
-  @override
-  Future<Uint8List> readAsBytes() async => bytes;
-  @override
-  Stream<Uint8List> readAsByteStream() => Stream.value(bytes);
+class FakePicked extends PickedFile {
+  FakePicked(String name, Uint8List bytes) : super(name, () async => bytes, length: () async => bytes.length);
 }
 
 class FakeChooser extends FileChooser {
   final backups = <({String name, Uint8List bytes})>[];
   final texts = <({String name, Uint8List bytes})>[];
-  List<PlatformFile> picks = [];
+  List<PickedFile> picks = [];
   Object? saveError, pickError;
   FakeChooser();
   @override
@@ -68,7 +52,7 @@ class FakeChooser extends FileChooser {
   }
 
   @override
-  Future<List<PlatformFile>> pickBackupFile() async {
+  Future<List<PickedFile>> pickBackupFile() async {
     if (pickError != null) raise(pickError!);
     return picks;
   }

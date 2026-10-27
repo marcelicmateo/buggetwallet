@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:wallet_core/wallet_core.dart' show Bill, BillStatus, PlannedCost, PlannedStatus;
+import 'package:wallet_core/wallet_core.dart' show Bill, BillStatus, PlannedCost, PlannedStatus, SearchResult;
 
 import '../controller.dart';
 import '../format.dart';
@@ -73,128 +73,6 @@ class _SearchPaneState extends State<SearchPane> {
 
   @override
   Widget build(BuildContext context) {
-    final wc = widget.wc;
-    final cur = wc.currency;
-    final c = context.c;
-    final searched = _query.length >= searchMinChars;
-    final r = searched ? wc.search(_query) : null;
-    final planned = searched ? wc.searchPlanned(_query) : const <PlannedCost>[];
-    final billsFound = searched ? wc.searchBills(_query) : const <Bill>[];
-
-    // The name wraps and the value keeps its width (SplitRow), so a long goal name or amount fits 320 dp at text scale 2.0.
-    Widget tap(String label, String value, String sub, String kind, VoidCallback go) => InkWell(
-          hoverColor: c.surface2,
-          focusColor: c.accentSoft,
-          mouseCursor: SystemMouseCursors.click,
-          onTap: () {
-            logNav('search.open.result', {'kind': kind});
-            go();
-          },
-          child: Container(
-            constraints: const BoxConstraints(minHeight: rowMin),
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              SplitRow(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  start: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-                  end: Text(value, textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
-              Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2))),
-            ]),
-          ),
-        );
-
-    Widget section(String title, int n, List<Widget> rows) => Panel(children: [
-          SectionHead(title, trailing: Tag('$n')),
-          ...rows,
-        ]);
-
-    final body = <Widget>[
-      if (!searched)
-        const EmptyNote('Type at least 2 letters or digits to search transactions, goals, the wishlist and bills.')
-      else if (r!.isEmpty && planned.isEmpty && billsFound.isEmpty)
-        const EmptyNote('Nothing found')
-      else ...[
-        if (r.txs.isNotEmpty)
-          section('Transactions', r.txs.length, [
-            const TxHeaderRow(),
-            for (final t in r.txs.take(searchTxLimit))
-              TxTile(
-                  table: wc.categoryTable,
-                  tagTable: wc.tagTable,
-                  key: ValueKey('hit:${t.tx.id}'),
-                  t: wc.shown(t),
-                  currency: cur,
-                  fxRates: wc.settings.fxRates,
-                  hasBill: wc.billForTx(t.tx.id) != null,
-                  splitCount: wc.splitCount(t.tx.id),
-                  splitBroken: wc.splitIsBroken(t.tx.id),
-                  matchedPart: r.matchedPart[t.tx.id],
-                  onTap: () async {
-                    logNav('search.open.result', {'kind': 'tx'});
-                    final res = await showSheet<String>(context, TxSheet(wc: wc, t: t));
-                    if (context.mounted) txSheetToast(context, wc, res);
-                  }),
-            if (r.txs.length > searchTxLimit) const Muted('Showing the first 50. Type more to narrow it down.'),
-          ]),
-        if (r.goals.isNotEmpty)
-          section('Goals', r.goals.length, [
-            Rows(children: [
-              for (final g in r.goals)
-                tap(g.name, '${money(g.saved, cur, decimals: 0)} / ${money(g.target, cur, decimals: 0)}', 'Goal', 'goal',
-                    () => widget.onOpenTab(Tabs.save)),
-            ]),
-          ]),
-        if (r.wishlist.isNotEmpty)
-          section('Wishlist', r.wishlist.length, [
-            Rows(children: [
-              for (final w in r.wishlist)
-                tap(
-                    w.name,
-                    money(w.price, cur, decimals: 0),
-                    switch (w.status) { 'bought' => 'Bought', 'skipped' => 'Skipped', _ => 'Waiting' },
-                    'wish',
-                    () => widget.wc.openWish(w.id, via: 'search')),
-            ]),
-          ]),
-        if (planned.isNotEmpty)
-          section('Planned costs', planned.length, [
-            Rows(children: [
-              for (final p in planned)
-                tap(
-                    p.title,
-                    p.amount == null ? 'No amount' : moneyExact(p.amount!, cur),
-                    '${shortDateOrRaw(p.date)}${p.category == null ? '' : ' · ${wc.categoryTable.label(p.category!)}'}${p.status == PlannedStatus.open ? '' : ' · ${p.status == PlannedStatus.paid ? 'Paid' : 'Skipped'}'}',
-                    'planned',
-                    () => p.isBill ? openBill(context, wc, p.sourceRef!) : openUpcoming(context, UpcomingView(wc))),
-            ]),
-          ]),
-        if (billsFound.isNotEmpty)
-          section('Bills', billsFound.length, [
-            Rows(children: [
-              for (final b in billsFound)
-                tap(
-                    (b.payee ?? '').isNotEmpty ? b.payee! : ((b.description ?? '').isNotEmpty ? b.description! : 'Bill'),
-                    b.total == null ? 'No total' : moneyExact(b.total!, cur),
-                    '${b.date == null ? 'No date' : shortDateOrRaw(b.date!)} · ${b.status == BillStatus.review ? 'To review' : (b.paid ? 'Paid' : 'Unpaid')}',
-                    'billDb',
-                    () => openBill(context, wc, b.id)),
-            ]),
-          ]),
-        if (r.bills.isNotEmpty)
-          section('Expected bills', r.bills.length, [
-            Rows(children: [
-              for (final b in r.bills)
-                tap(
-                    b.label.isNotEmpty ? b.label : b.payee,
-                    moneyExact(b.expectedAmount, cur),
-                    '${b.status == 'confirmed' ? 'Confirmed' : 'Looks like a bill'} · next ${shortDateOrRaw(b.nextDue)}',
-                    'bill',
-                    widget.onOpenBills),
-            ]),
-          ]),
-      ],
-    ];
-
     return CallbackShortcuts(
       bindings: {const SingleActivator(LogicalKeyboardKey.escape): _close},
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -218,15 +96,173 @@ class _SearchPaneState extends State<SearchPane> {
             ),
           ),
         ),
-        Expanded(
-          child: ListView(
-            key: const ValueKey('searchResults'),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(pagePad, 0, pagePad, pageBottomPad),
-            children: gapped(body),
-          ),
-        ),
+        Expanded(child: _SearchResults(wc: widget.wc, query: _query, onOpenTab: widget.onOpenTab, onOpenBills: widget.onOpenBills)),
       ]),
     );
   }
+}
+
+/// The ruled result sections for [query] (or the hint while it is too short).
+class _SearchResults extends StatelessWidget {
+  const _SearchResults({required this.wc, required this.query, required this.onOpenTab, required this.onOpenBills});
+  final WalletController wc;
+  final String query;
+  final void Function(int tab) onOpenTab;
+  final VoidCallback onOpenBills;
+
+  @override
+  Widget build(BuildContext context) {
+    final cur = wc.currency;
+    final searched = query.length >= searchMinChars;
+    final r = searched ? wc.search(query) : null;
+    final planned = searched ? wc.searchPlanned(query) : const <PlannedCost>[];
+    final billsFound = searched ? wc.searchBills(query) : const <Bill>[];
+
+    final body = <Widget>[
+      if (!searched)
+        const EmptyNote('Type at least 2 letters or digits to search transactions, goals, the wishlist and bills.')
+      else if (r!.isEmpty && planned.isEmpty && billsFound.isEmpty)
+        const EmptyNote('Nothing found')
+      else ...[
+        if (r.txs.isNotEmpty) _TxResults(wc, r),
+        if (r.goals.isNotEmpty)
+          _ResultSection('Goals', r.goals.length, [
+            Rows(children: [
+              for (final g in r.goals)
+                _ResultRow(g.name, '${money(g.saved, cur, decimals: 0)} / ${money(g.target, cur, decimals: 0)}', 'Goal', 'goal',
+                    () => onOpenTab(Tabs.save)),
+            ]),
+          ]),
+        if (r.wishlist.isNotEmpty)
+          _ResultSection('Wishlist', r.wishlist.length, [
+            Rows(children: [
+              for (final w in r.wishlist)
+                _ResultRow(
+                    w.name,
+                    money(w.price, cur, decimals: 0),
+                    switch (w.status) { 'bought' => 'Bought', 'skipped' => 'Skipped', _ => 'Waiting' },
+                    'wish',
+                    () => wc.openWish(w.id, via: 'search')),
+            ]),
+          ]),
+        if (planned.isNotEmpty)
+          _ResultSection('Planned costs', planned.length, [
+            Rows(children: [
+              for (final p in planned)
+                _ResultRow(
+                    p.title,
+                    p.amount == null ? 'No amount' : moneyExact(p.amount!, cur),
+                    '${shortDateOrRaw(p.date)}${p.category == null ? '' : ' · ${wc.categoryTable.label(p.category!)}'}${p.status == PlannedStatus.open ? '' : ' · ${p.status == PlannedStatus.paid ? 'Paid' : 'Skipped'}'}',
+                    'planned',
+                    () => p.isBill ? openBill(context, wc, p.sourceRef!) : openUpcoming(context, UpcomingView(wc))),
+            ]),
+          ]),
+        if (billsFound.isNotEmpty)
+          _ResultSection('Bills', billsFound.length, [
+            Rows(children: [
+              for (final b in billsFound)
+                _ResultRow(
+                    (b.payee ?? '').isNotEmpty ? b.payee! : ((b.description ?? '').isNotEmpty ? b.description! : 'Bill'),
+                    b.total == null ? 'No total' : moneyExact(b.total!, cur),
+                    '${b.date == null ? 'No date' : shortDateOrRaw(b.date!)} · ${b.status == BillStatus.review ? 'To review' : (b.paid ? 'Paid' : 'Unpaid')}',
+                    'billDb',
+                    () => openBill(context, wc, b.id)),
+            ]),
+          ]),
+        if (r.bills.isNotEmpty)
+          _ResultSection('Expected bills', r.bills.length, [
+            Rows(children: [
+              for (final b in r.bills)
+                _ResultRow(
+                    b.label.isNotEmpty ? b.label : b.payee,
+                    moneyExact(b.expectedAmount, cur),
+                    '${b.status == 'confirmed' ? 'Confirmed' : 'Looks like a bill'} · next ${shortDateOrRaw(b.nextDue)}',
+                    'bill',
+                    onOpenBills),
+            ]),
+          ]),
+      ],
+    ];
+
+    return ListView(
+      key: const ValueKey('searchResults'),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.fromLTRB(pagePad, 0, pagePad, pageBottomPad),
+      children: gapped(body),
+    );
+  }
+}
+
+/// A ruled result section: its title with the count, then the [rows].
+class _ResultSection extends StatelessWidget {
+  const _ResultSection(this.title, this.n, this.rows);
+  final String title;
+  final int n;
+  final List<Widget> rows;
+  @override
+  Widget build(BuildContext context) => Panel(children: [
+        SectionHead(title, trailing: Tag('$n')),
+        ...rows,
+      ]);
+}
+
+/// One tappable result. The name wraps and the value keeps its width (SplitRow), so a long goal name or amount fits 320 dp at
+/// text scale 2.0.
+class _ResultRow extends StatelessWidget {
+  const _ResultRow(this.label, this.value, this.sub, this.kind, this.go);
+  final String label, value, sub, kind;
+  final VoidCallback go;
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return InkWell(
+      hoverColor: c.surface2,
+      focusColor: c.accentSoft,
+      mouseCursor: SystemMouseCursors.click,
+      onTap: () {
+        logNav('search.open.result', {'kind': kind});
+        go();
+      },
+      child: Container(
+        constraints: const BoxConstraints(minHeight: rowMin),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SplitRow(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              start: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+              end: Text(value, textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
+          Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2))),
+        ]),
+      ),
+    );
+  }
+}
+
+/// The matching transactions (the first [searchTxLimit]).
+class _TxResults extends StatelessWidget {
+  const _TxResults(this.wc, this.r);
+  final WalletController wc;
+  final SearchResult r;
+  @override
+  Widget build(BuildContext context) => _ResultSection('Transactions', r.txs.length, [
+        const TxHeaderRow(),
+        for (final t in r.txs.take(searchTxLimit))
+          TxTile(
+              table: wc.categoryTable,
+              tagTable: wc.tagTable,
+              key: ValueKey('hit:${t.tx.id}'),
+              t: wc.shown(t),
+              currency: wc.currency,
+              fxRates: wc.settings.fxRates,
+              hasBill: wc.billForTx(t.tx.id) != null,
+              splitCount: wc.splitCount(t.tx.id),
+              splitBroken: wc.splitIsBroken(t.tx.id),
+              matchedPart: r.matchedPart[t.tx.id],
+              onTap: () async {
+                logNav('search.open.result', {'kind': 'tx'});
+                final res = await showSheet<String>(context, TxSheet(wc: wc, t: t));
+                if (context.mounted) txSheetToast(context, wc, res);
+              }),
+        if (r.txs.length > searchTxLimit) const Muted('Showing the first 50. Type more to narrow it down.'),
+      ]);
 }

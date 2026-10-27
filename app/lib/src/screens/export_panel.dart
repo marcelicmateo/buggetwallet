@@ -5,6 +5,7 @@ import '../controller.dart';
 import '../file_chooser.dart';
 import '../logging.dart';
 import '../theme.dart';
+import '../widgets/async_action.dart';
 import '../widgets/common.dart';
 
 final _log = Logger('bw.export');
@@ -18,9 +19,8 @@ class ExportPanel extends StatefulWidget {
   State<ExportPanel> createState() => _ExportPanelState();
 }
 
-class _ExportPanelState extends State<ExportPanel> {
+class _ExportPanelState extends State<ExportPanel> with AsyncAction {
   ExportRange _range = ExportRange.period;
-  bool _busy = false;
 
   static const _labels = {ExportRange.period: 'This period', ExportRange.year: 'This year', ExportRange.all: 'Everything'};
 
@@ -32,17 +32,16 @@ class _ExportPanelState extends State<ExportPanel> {
       toast(context, empty);
       return;
     }
-    setState(() => _busy = true);
-    try {
-      final uri = await widget.chooser.saveText(fileName: f.name, bytes: f.bytes, title: title);
-      logEvent(_log, Level.INFO, 'export.saved', {'what': what, 'saved': uri != null, 'rows': f.rows, 'bytes': f.bytes.length});
-      if (uri != null && mounted) toast(context, 'Saved ${f.name}');
-    } catch (e, st) {
-      logError(_log, 'export.saveFailed', e, st, fields: {'type': e.runtimeType.toString()});
-      if (mounted) toast(context, chooserFailedMessage);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    await run(() async {
+      try {
+        final uri = await widget.chooser.saveText(fileName: f.name, bytes: f.bytes, title: title);
+        logEvent(_log, Level.INFO, 'export.saved', {'what': what, 'saved': uri != null, 'rows': f.rows, 'bytes': f.bytes.length});
+        if (uri != null && mounted) toast(context, 'Saved ${f.name}');
+      } catch (e, st) {
+        logError(_log, 'export.saveFailed', e, st, fields: {'type': e.runtimeType.toString()});
+        if (mounted) toast(context, chooserFailedMessage);
+      }
+    });
   }
 
   @override
@@ -62,15 +61,15 @@ class _ExportPanelState extends State<ExportPanel> {
           OutlinedButton(
               key: const ValueKey('exportTx'),
               style: accentOutlined(context),
-              onPressed: _busy ? null : () => _save(() => widget.wc.exportTransactions(_range), 'transactions'),
+              onPressed: busy ? null : () => _save(() => widget.wc.exportTransactions(_range), 'transactions'),
               child: const Text('Export transactions (CSV)')),
           OutlinedButton(
               key: const ValueKey('exportSummary'),
-              onPressed: _busy ? null : () => _save(widget.wc.exportSummary, 'summary'),
+              onPressed: busy ? null : () => _save(widget.wc.exportSummary, 'summary'),
               child: const Text('Export monthly summary (CSV)')),
           OutlinedButton(
               key: const ValueKey('exportPlanned'),
-              onPressed: _busy
+              onPressed: busy
                   ? null
                   : () => _save(widget.wc.exportPlannedIcs, 'planned',
                       title: 'Save calendar file', empty: 'No planned costs with an amount to export'),

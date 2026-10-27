@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -12,6 +11,7 @@ import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
+import '../widgets/async_action.dart';
 import '../widgets/common.dart';
 import 'bill_sheet.dart';
 import 'scan_bill.dart';
@@ -37,7 +37,7 @@ String billImportMessage(List<BillImport> results) {
 /// paths) and shown as a short message. A single new bill opens its sheet.
 Future<void> _pickAndImportBills(BuildContext context, WalletController wc, FileChooser chooser) async {
   logNav('bills.pick');
-  final List<PlatformFile> picked;
+  final List<PickedFile> picked;
   try {
     picked = await chooser.pickBillFiles();
   } catch (e, st) {
@@ -55,7 +55,7 @@ Future<void> _pickAndImportBills(BuildContext context, WalletController wc, File
     for (final pf in picked) {
       final ext = fileExt(pf.name);
       final size = await pf.length();
-      files.add((ext, size != null && size > maxBillFileBytes(ext) ? null : await pf.readAsBytes()));
+      files.add((ext, size != null && size > maxBillFileBytes(ext) ? null : await pf.readBytes()));
     }
   } catch (e, st) {
     logError(_log, 'bills.openFailed', e, st, fields: {'files': picked.length, 'read': files.length});
@@ -144,8 +144,7 @@ class BillsPanel extends StatefulWidget {
   State<BillsPanel> createState() => _BillsPanelState();
 }
 
-class _BillsPanelState extends State<BillsPanel> {
-  bool _busy = false;
+class _BillsPanelState extends State<BillsPanel> with AsyncAction {
   bool _allPaid = false;
   late final _returnDays = TextEditingController(text: '${widget.wc.returnReminderDays}');
   late final _warrantyDays = TextEditingController(text: '${widget.wc.warrantyReminderDays}');
@@ -176,35 +175,22 @@ class _BillsPanelState extends State<BillsPanel> {
 
   static const _paidShown = 6;
 
-  Future<void> _import() async {
-    setState(() => _busy = true);
-    try {
-      await _pickAndImportBills(context, widget.wc, widget.chooser);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
+  Future<void> _import() => run(() => _pickAndImportBills(context, widget.wc, widget.chooser));
 
   @override
   Widget build(BuildContext context) {
     final wc = widget.wc;
     final lists = wc.billLists();
 
-    Widget group(String title, List<Bill> list, {bool unpaid = false, int? limit}) {
-      final shown = limit == null || _allPaid ? list : list.take(limit).toList();
-      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Heading('$title (${list.length})', size: BwType.headingSize),
-        Rows(children: [for (final b in shown) BillRow(wc: wc, chooser: widget.chooser, bill: b, unpaid: unpaid)]),
-        if (limit != null && list.length > limit)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-                key: const ValueKey('paidMore'),
-                onPressed: () => setState(() => _allPaid = !_allPaid),
-                child: Text(_allPaid ? 'Show fewer' : 'Show all ${list.length}')),
-          ),
-      ]);
-    }
+    Widget group(String title, List<Bill> list, {bool unpaid = false, int? limit}) => _BillGroup(
+        wc: wc,
+        chooser: widget.chooser,
+        title: title,
+        list: list,
+        unpaid: unpaid,
+        limit: limit,
+        showAll: _allPaid,
+        onToggleAll: () => setState(() => _allPaid = !_allPaid));
 
     return Panel(children: [
       const SectionHead('Bills'),
@@ -214,11 +200,11 @@ class _BillsPanelState extends State<BillsPanel> {
         OutlinedButton.icon(
           key: const ValueKey('importBill'),
           style: accentOutlined(context),
-          icon: _busy
+          icon: busy
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.upload_file),
           label: const Text('Import bill file'),
-          onPressed: _busy ? null : _import,
+          onPressed: busy ? null : _import,
         ),
         if (wc.billInputs.camera.supported)
           OutlinedButton.icon(
@@ -262,6 +248,44 @@ class _BillsPanelState extends State<BillsPanel> {
       Align(
           alignment: Alignment.centerLeft,
           child: FilledButton(key: const ValueKey('remindSave'), onPressed: _saveReminders, child: const Text('Save reminder days'))),
+    ]);
+  }
+}
+
+/// One list of bills under its heading ("Unpaid (3)"). With a [limit] only that many show, and a button shows all or fewer.
+class _BillGroup extends StatelessWidget {
+  const _BillGroup({
+    required this.wc,
+    required this.chooser,
+    required this.title,
+    required this.list,
+    required this.unpaid,
+    required this.limit,
+    required this.showAll,
+    required this.onToggleAll,
+  });
+  final WalletController wc;
+  final FileChooser chooser;
+  final String title;
+  final List<Bill> list;
+  final bool unpaid;
+  final int? limit;
+  final bool showAll;
+  final VoidCallback onToggleAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final limit = this.limit;
+    final shown = limit == null || showAll ? list : list.take(limit).toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Heading('$title (${list.length})', size: BwType.headingSize),
+      Rows(children: [for (final b in shown) BillRow(wc: wc, chooser: chooser, bill: b, unpaid: unpaid)]),
+      if (limit != null && list.length > limit)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+              key: const ValueKey('paidMore'), onPressed: onToggleAll, child: Text(showAll ? 'Show fewer' : 'Show all ${list.length}')),
+        ),
     ]);
   }
 }

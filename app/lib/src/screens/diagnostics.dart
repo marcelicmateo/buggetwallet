@@ -6,6 +6,7 @@ import '../file_chooser.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../theme.dart';
+import '../widgets/async_action.dart';
 import '../widgets/common.dart';
 
 final _log = Logger('bw.app');
@@ -22,10 +23,9 @@ class DiagnosticsPanel extends StatefulWidget {
   State<DiagnosticsPanel> createState() => _DiagnosticsPanelState();
 }
 
-class _DiagnosticsPanelState extends State<DiagnosticsPanel> {
+class _DiagnosticsPanelState extends State<DiagnosticsPanel> with AsyncAction {
   LogStats? stats;
   String? status;
-  bool busy = false;
 
   @override
   void initState() {
@@ -43,22 +43,17 @@ class _DiagnosticsPanelState extends State<DiagnosticsPanel> {
   }
 
   Future<void> _run(String what, Future<String?> Function() body) async {
-    setState(() {
-      busy = true;
-      status = null;
+    setState(() => status = null);
+    final msg = await run(() async {
+      try {
+        return await body();
+      } catch (e, st) {
+        logError(_log, 'log.$what.failed', e, st);
+        return "Couldn't do that: $e";
+      }
     });
-    String? msg;
-    try {
-      msg = await body();
-    } catch (e, st) {
-      logError(_log, 'log.$what.failed', e, st);
-      msg = "Couldn't do that: $e";
-    }
     if (!mounted) return;
-    setState(() {
-      busy = false;
-      status = msg;
-    });
+    setState(() => status = msg);
     await _refresh();
   }
 

@@ -8,7 +8,6 @@ import 'package:budget_wallet/src/backup_texts.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/screens/backup_panel.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -17,30 +16,15 @@ import 'support/bills.dart';
 import 'support/seams.dart';
 import 'support/wallet.dart';
 
-base class _Picked extends PlatformFile {
-  @override
-  final String name = 'other.bwb';
-  final Uint8List data;
-  _Picked(this.data);
-  @override
-  Uri get uri => Uri(path: name);
-  @override
-  Never get xFile => throw UnimplementedError();
-  @override
-  int? lengthSync() => data.length;
-  @override
-  Future<int?> length() async => data.length;
-  @override
-  Future<Uint8List> readAsBytes() async => data;
-  @override
-  Stream<Uint8List> readAsByteStream() => Stream.value(data);
+class _Picked extends PickedFile {
+  _Picked(Uint8List data) : super('other.bwb', () async => data, length: () async => data.length);
 }
 
 class _Chooser extends FileChooser {
-  List<PlatformFile> picks = [];
+  List<PickedFile> picks = [];
   final saved = <String>[];
   @override
-  Future<List<PlatformFile>> pickBackupFile() async => picks;
+  Future<List<PickedFile>> pickBackupFile() async => picks;
   @override
   Future<Uri?> saveBackup({required String fileName, required Uint8List bytes, required String title}) async {
     saved.add(fileName);

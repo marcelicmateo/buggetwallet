@@ -16,6 +16,8 @@ import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 import 'pay_sheet.dart';
 
+part 'bill_sheet_sections.dart';
+
 /// Opens one bill (the sheet with its fields) and shows the toast for its result. [chooser] saves the original file where it cannot
 /// be shown.
 Future<void> openBill(BuildContext context, WalletController wc, String billId, {FileChooser chooser = const FileChooser()}) async {
@@ -231,245 +233,41 @@ class _BillSheetState extends State<BillSheet> {
         return _body(context, b);
       });
 
+  /// Lets the sections change the sheet's state.
+  void edit(VoidCallback f) => setState(f);
+
   Widget _body(BuildContext context, Bill b) {
-    final wc = widget.wc;
-    final cur = wc.currency;
-    final c = context.c;
     final review = b.status == BillStatus.review;
-    // In review with a due date, or confirmed, unpaid and due from today on (a bill reopened without one): until it has a
-    // category its planned row is listed, not reserved.
-    final categoryNeeded = due != null && !b.paid && (review || due!.compareTo(widget.wc.today()) >= 0);
-    final planner = wc.billPlannedBy(b);
-    // Values read from free text (PDF text, a photo) are guesses: each filled field says so until the owner confirms the bill.
-    final guessed = review && b.unsure > 0;
-    InputDecoration deco(String label, {bool filled = true, String? hint, String? suffix}) => InputDecoration(
-        labelText: label,
-        hintText: hint,
-        suffixText: suffix,
-        helperText: guessed && filled ? 'Unsure: read from text. Check it.' : null,
-        helperMaxLines: 2,
-        suffixIcon: guessed && filled ? Icon(Icons.help_outline, size: 18, color: c.warnInk) : null);
-
-    Widget dateButton(String label, String? value, ValueChanged<String?> onPick, {bool clearable = false, bool guess = false}) {
-      return DateField(
-        label: label,
-        value: value,
-        helper: guess && value != null ? 'Unsure: check it.' : null,
-        onPick: () async {
-          final d = await _pick(value);
-          if (d != null) setState(() => onPick(d));
-        },
-        onClear: clearable ? () => setState(() => onPick(null)) : null,
-      );
-    }
-
-    final tx = b.linkedTx == null ? null : wc.wholeTxs.where((t) => t.tx.id == b.linkedTx).firstOrNull;
-    final fileType = b.blobType;
-
+    final v = _BillView(this, b,
+        review: review,
+        // Values read from free text (PDF text, a photo) are guesses: each filled field says so until the owner confirms the bill.
+        guessed: review && b.unsure > 0,
+        categoryNeeded: due != null && !b.paid && (review || due!.compareTo(widget.wc.today()) >= 0));
     final content = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Heading(review ? 'Bill to review' : 'Bill'),
-      const SizedBox(height: 4),
-      Muted(
-          switch (b.source) {
-            BillSource.receiptQr => 'Read from a receipt code.',
-            BillSource.hub3 => 'Read from the code on a payment slip.',
-            BillSource.eInvoice => 'Read from an e-invoice.',
-            BillSource.pdf => 'Read from a PDF.',
-            BillSource.photo => 'Read from a photo.',
-            BillSource.manual => 'Added by you.',
-            BillSource.attachment => 'Attachment',
-          },
-          size: BwType.metaSize),
-      if (review) const Muted('Check the fields, then confirm. Nothing counts until you do.', size: BwType.metaSize),
-      if (planner != null)
-        Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(Icons.event_repeat, size: 16, color: c.ink2),
-            const SizedBox(width: 6),
-            Expanded(
-                child: Text('Planned by ${planner.label}',
-                    key: const ValueKey('plannedBy'), style: TextStyle(fontSize: BwType.metaSize, color: c.ink2))),
-          ]),
-        ),
+      _BillHeader(v),
       const SizedBox(height: 12),
-      MoneyField(
-        fieldKey: const ValueKey('billTotal'),
-        controller: total,
-        onChanged: (_) => setState(() => error = null),
-        style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500),
-        decoration:
-            deco('Total', filled: total.text.isNotEmpty, hint: amountHint, suffix: currencySymbol(b.currency.isEmpty ? cur : b.currency)),
-      ),
-      const SizedBox(height: 4),
-      const DoubleRule(),
+      _BillTotal(v),
       const SizedBox(height: 12),
-      Wrap(spacing: 12, runSpacing: 8, children: [
-        SizedBox(width: 200, child: dateButton('Date', date, (v) => date = v, guess: guessed)),
-        SizedBox(width: 200, child: dateButton('Due date', due, (v) => due = v, clearable: true, guess: guessed)),
-      ]),
+      _BillDates(v),
       const SizedBox(height: 10),
-      TextField(key: const ValueKey('billPayee'), controller: payee, decoration: deco('Payee', filled: payee.text.isNotEmpty)),
+      _BillTextFields(v),
       const SizedBox(height: 10),
-      TextField(
-          key: const ValueKey('billIban'),
-          controller: iban,
-          onChanged: (_) => setState(() => error = null),
-          decoration: deco('IBAN', filled: iban.text.isNotEmpty)),
-      const SizedBox(height: 10),
-      TextField(
-          key: const ValueKey('billReference'), controller: reference, decoration: deco('Reference', filled: reference.text.isNotEmpty)),
-      const SizedBox(height: 10),
-      TextField(
-          key: const ValueKey('billDescription'),
-          controller: description,
-          decoration: deco('Description', filled: description.text.isNotEmpty)),
-      const SizedBox(height: 10),
-      DropdownButtonFormField<String?>(
-        key: ValueKey('billCategory:${category ?? ''}'),
-        isExpanded: true,
-        initialValue: category,
-        decoration: InputDecoration(
-            labelText: categoryNeeded ? 'Category (needed)' : 'Category',
-            helperText: category != null && category == _suggested
-                ? 'Suggested from your earlier bills. Check it.'
-                : (categoryNeeded && category == null ? "Pick the category so Budget Wallet doesn't count this bill twice." : null),
-            helperMaxLines: 3),
-        items: categoryMenuItems(widget.wc.categoryTable, current: category, noneLabel: 'None'),
-        onChanged: (v) => setState(() {
-          category = v;
-          _categoryPicked = true;
-          error = null;
-        }),
-      ),
+      _BillCategory(v),
       const SizedBox(height: 10),
       TextField(key: const ValueKey('billNote'), controller: note, decoration: const InputDecoration(labelText: 'Note')),
-      if (b.items.isNotEmpty) ...[
-        const SizedBox(height: 14),
-        const SectionHead('Items'),
-        Rows(children: [
-          for (final i in b.items) LineItem(i.name, moneyExact(i.amount, cur), sub: i.quantity == null ? null : 'Quantity ${i.quantity}'),
-        ]),
-      ],
-      if (b.status == BillStatus.confirmed && !b.paid && iban.text.trim().isNotEmpty && (parseMoney(total.text) ?? 0) > 0) ...[
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            key: const ValueKey('billPay'),
-            style: accentOutlined(context),
-            icon: const Icon(Icons.payments_outlined, size: 18),
-            label: const Text('Pay'),
-            onPressed: () => _pay(b),
-          ),
-        ),
-      ],
-      if (fileType != null) ...[
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            key: const ValueKey('showBillFile'),
-            icon: const Icon(Icons.image_outlined, size: 18),
-            label: Text(_billFileLabel(fileType)),
-            onPressed: () {
-              logNav('bill.showFile', {'type': fileType});
-              Navigator.of(context).push<void>(
-                  MaterialPageRoute(fullscreenDialog: true, builder: (_) => BillFileScreen(wc: wc, bill: b, chooser: widget.chooser)));
-            },
-          ),
-        ),
-      ],
-      if (!review) ...[
-        const SizedBox(height: 14),
-        const SectionHead('Paid'),
-        const SizedBox(height: 6),
-        if (b.paid) ...[
-          const StatusLabel(good: true, text: 'Paid'),
-          if (tx != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: SplitRow(
-                  start: Text('${merchantName(tx.tx)} · ${shortDateOrRaw(tx.date)}', style: const TextStyle(fontSize: BwType.bodySize)),
-                  end: Text(money(tx.amount, tx.tx.currency, decimals: 2, signed: true), textAlign: TextAlign.end, style: numStyle)),
-            )
-          else
-            const Padding(padding: EdgeInsets.only(top: 6), child: Muted('The payment has not arrived on this device yet.')),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-                key: const ValueKey('unlinkBill'),
-                onPressed: () {
-                  logNav('bill.unlink');
-                  widget.wc.unlinkBill(b.id);
-                },
-                child: const Text('Unlink payment')),
-          ),
-        ] else
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            OutlinedButton.icon(
-                key: const ValueKey('paidBy'),
-                style: accentOutlined(context),
-                icon: const Icon(Icons.link, size: 18),
-                label: const Text('Paid by…'),
-                onPressed: () => _paidBy(b)),
-            OutlinedButton.icon(
-                key: const ValueKey('paidCash'),
-                icon: const Icon(Icons.payments_outlined, size: 18),
-                label: const Text('Paid in cash → Add as expense'),
-                onPressed: () => _cash(b)),
-          ]),
-      ],
-      const SizedBox(height: 14),
-      const SectionHead('Warranty and returns'),
-      const SizedBox(height: 6),
-      Wrap(spacing: 12, runSpacing: 8, children: [
-        SizedBox(
-            width: 200,
-            child: dateButton('Warranty until', b.warrantyUntil, (v) {
-              _saveDates(b, warrantyUntil: v, clearWarranty: v == null);
-            }, clearable: true)),
-        SizedBox(
-            width: 200,
-            child: dateButton('Return by', b.returnBy, (v) {
-              _saveDates(b, returnBy: v, clearReturnBy: v == null);
-            }, clearable: true)),
-      ]),
-      if (review)
-        const Padding(
-            padding: EdgeInsets.only(top: 4), child: Muted('Shown in Upcoming once the bill is confirmed.', size: BwType.metaSize)),
-      if (error != null) ...[const SizedBox(height: 10), StatusLabel(key: const ValueKey('billError'), good: false, text: error!)],
-      const SizedBox(height: 14),
-      // Delete lives at the end of the form, away from the confirm button.
-      Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton(
-            key: const ValueKey('deleteBill'),
-            style: TextButton.styleFrom(foregroundColor: c.bad),
-            onPressed: () => _delete(b),
-            child: const Text('Delete this bill')),
-      ),
+      _BillItems(v),
+      _BillPayButton(v),
+      _BillFileButton(v),
+      _BillPaid(v),
+      _BillWarranty(v),
+      _BillFooter(v),
     ]);
 
     // The main button stays in view while the form scrolls.
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Flexible(child: SingleChildScrollView(child: content)),
       const SizedBox(height: 10),
-      if (review)
-        FilledButton.icon(
-            key: const ValueKey('confirmBill'),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
-            icon: const Icon(Icons.check),
-            label: const Text('Confirm bill'),
-            onPressed: () => _confirm(b))
-      else
-        FilledButton(
-            key: const ValueKey('saveBill'),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
-            onPressed: () {
-              if (_save(b)) Navigator.pop(context, 'saved');
-            },
-            child: const Text('Save')),
+      _BillMainButton(v),
     ]);
   }
 }

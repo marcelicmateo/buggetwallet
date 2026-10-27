@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart' show PlatformFile;
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -12,6 +11,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../secure_window.dart';
 import '../theme.dart';
+import '../widgets/async_action.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 
@@ -29,43 +29,36 @@ class BackupPanel extends StatefulWidget {
   State<BackupPanel> createState() => _BackupPanelState();
 }
 
-class _BackupPanelState extends State<BackupPanel> {
-  bool _busy = false;
-  String? _error;
-
+class _BackupPanelState extends State<BackupPanel> with AsyncAction {
   Future<void> _backup() async {
     logNav('backup.pressed');
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    String? error;
+    setState(() => error = null);
     String? saved;
     var files = 0;
-    try {
-      final b = await widget.wc.backupDownload();
-      final uri = await widget.chooser.saveBackup(fileName: b.name, bytes: b.bytes, title: 'Save backup');
-      if (uri != null) {
-        saved = b.name;
-        files = b.blobs;
+    final failed = await run(() async {
+      try {
+        final b = await widget.wc.backupDownload();
+        final uri = await widget.chooser.saveBackup(fileName: b.name, bytes: b.bytes, title: 'Save backup');
+        if (uri != null) {
+          saved = b.name;
+          files = b.blobs;
+        }
+        logEvent(_log, Level.INFO, 'backup.saveDialog', {'saved': uri != null, 'bytes': b.bytes.length});
+        return null;
+      } catch (e, st) {
+        logError(_log, 'backup.saveFailed', e, st, fields: {'type': e.runtimeType.toString()});
+        return "Couldn't save the backup.";
       }
-      logEvent(_log, Level.INFO, 'backup.saveDialog', {'saved': uri != null, 'bytes': b.bytes.length});
-    } catch (e, st) {
-      logError(_log, 'backup.saveFailed', e, st, fields: {'type': e.runtimeType.toString()});
-      error = "Couldn't save the backup.";
-    }
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _error = error;
     });
+    if (!mounted) return;
+    setState(() => error = failed);
     if (saved != null) toast(context, files > 0 ? 'Backup saved with ${billFilesText(files)}' : 'Saved $saved');
   }
 
   /// Pick a `.bwb` file, confirm, restore. With [otherKey] the file was made with another wallet key: ask for it, then restore.
   Future<void> _restoreFile({bool otherKey = false}) async {
     logNav(otherKey ? 'restore.otherKey.pressed' : 'restore.pressed');
-    final List<PlatformFile> picked;
+    final List<PickedFile> picked;
     try {
       picked = await widget.chooser.pickBackupFile();
     } catch (e, st) {
@@ -76,10 +69,10 @@ class _BackupPanelState extends State<BackupPanel> {
     if (picked.isEmpty || !mounted) return;
     final Uint8List bytes;
     try {
-      bytes = await picked.first.readAsBytes();
+      bytes = await picked.first.readBytes();
     } catch (e, st) {
       logError(_log, 'restore.openFailed', e, st, fields: {'type': e.runtimeType.toString()});
-      if (mounted) setState(() => _error = "This backup file can't be read.");
+      if (mounted) setState(() => error = "This backup file can't be read.");
       return;
     }
     if (!mounted) return;
@@ -110,37 +103,33 @@ class _BackupPanelState extends State<BackupPanel> {
 
   /// Runs a restore and shows its error text (one text per failure) or the toast with the row count.
   Future<void> _runRestore(Future<int> Function() restore, {bool otherKey = false}) async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    String? error;
+    setState(() => error = null);
     int rows = 0;
-    try {
-      rows = await restore();
-    } on StateError {
-      error = 'The wallet is not empty, so nothing was restored.';
-    } on VaultException catch (e) {
-      error = _keyErrorText(e, otherKey);
-    } on BackupException catch (e) {
-      error = _backupErrorText(e);
-    } catch (e, st) {
-      logError(_log, 'restore.unexpected', e, st);
-      error = "Couldn't restore the backup.";
-    }
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _error = error;
+    final failed = await run(() async {
+      try {
+        rows = await restore();
+        return null;
+      } on StateError {
+        return 'The wallet is not empty, so nothing was restored.';
+      } on VaultException catch (e) {
+        return _keyErrorText(e, otherKey);
+      } on BackupException catch (e) {
+        return _backupErrorText(e);
+      } catch (e, st) {
+        logError(_log, 'restore.unexpected', e, st);
+        return "Couldn't restore the backup.";
+      }
     });
-    if (error == null) toast(context, rows == 1 ? 'Restored 1 row' : 'Restored $rows rows');
+    if (!mounted) return;
+    setState(() => error = failed);
+    if (failed == null) toast(context, rows == 1 ? 'Restored 1 row' : 'Restored $rows rows');
   }
 
   /// Pick a `.bwb` file and merge it into this wallet: a dry run, a preview with the counts, then the merge. A file made with
   /// another key asks for that key first (used once, kept only in this call).
   Future<void> _mergeFile() async {
     logNav('merge.pressed');
-    final List<PlatformFile> picked;
+    final List<PickedFile> picked;
     try {
       picked = await widget.chooser.pickBackupFile();
     } catch (e, st) {
@@ -151,18 +140,18 @@ class _BackupPanelState extends State<BackupPanel> {
     if (picked.isEmpty || !mounted) return;
     final Uint8List bytes;
     try {
-      bytes = await picked.first.readAsBytes();
+      bytes = await picked.first.readBytes();
     } catch (e, st) {
       logError(_log, 'merge.openFailed', e, st, fields: {'type': e.runtimeType.toString()});
-      if (mounted) setState(() => _error = "This backup file can't be read.");
+      if (mounted) setState(() => error = "This backup file can't be read.");
       return;
     }
     if (!mounted) return;
     setState(() {
-      _busy = true;
-      _error = null;
+      busy = true;
+      error = null;
     });
-    String? error;
+    String? failed;
     String? done;
     String? otherKey;
     try {
@@ -174,35 +163,35 @@ class _BackupPanelState extends State<BackupPanel> {
         if (e.failure != UnsealFailure.badKey) rethrow;
         // Not this wallet's key: ask for the one the backup was made with.
         if (!mounted) return;
-        setState(() => _busy = false);
+        setState(() => busy = false);
         otherKey = await askOldKey(context, widget.wc, action: 'Continue');
         if (otherKey == null || !mounted) return;
-        setState(() => _busy = true);
+        setState(() => busy = true);
         preview = await widget.wc.mergeBackupFile(bytes, otherKey: otherKey, dryRun: true);
       }
       if (!mounted) return;
       if (preview.changed == 0 && preview.blobs == 0) {
         done = 'Nothing new in this backup';
       } else {
-        setState(() => _busy = false);
+        setState(() => busy = false);
         final go = await _confirmMerge(preview);
         if (!go || !mounted) return;
-        setState(() => _busy = true);
+        setState(() => busy = true);
         final r = await widget.wc.mergeBackupFile(bytes, otherKey: otherKey);
         done = r.changed == 0 && r.blobs == 0 ? 'Nothing new in this backup' : mergedToastText(r);
       }
     } on VaultException catch (e) {
-      error = _keyErrorText(e, otherKey != null);
+      failed = _keyErrorText(e, otherKey != null);
     } on BackupException catch (e) {
-      error = _backupErrorText(e);
+      failed = _backupErrorText(e);
     } catch (e, st) {
       logError(_log, 'merge.unexpected', e, st);
-      error = "Couldn't merge the backup.";
+      failed = "Couldn't merge the backup.";
     }
     if (!mounted) return;
     setState(() {
-      _busy = false;
-      _error = error;
+      busy = false;
+      error = failed;
     });
     if (done != null) toast(context, done);
   }
@@ -238,20 +227,20 @@ class _BackupPanelState extends State<BackupPanel> {
         OutlinedButton(
             key: const ValueKey('backupNow'),
             style: accentOutlined(context),
-            onPressed: _busy ? null : _backup,
-            child: Text(_busy ? 'Working…' : 'Back up now')),
+            onPressed: busy ? null : _backup,
+            child: Text(busy ? 'Working…' : 'Back up now')),
         if (wc.walletIsEmpty)
           OutlinedButton(
-              key: const ValueKey('restoreBackup'), onPressed: _busy ? null : _restoreFile, child: const Text('Restore from backup…')),
+              key: const ValueKey('restoreBackup'), onPressed: busy ? null : _restoreFile, child: const Text('Restore from backup…')),
         if (!wc.walletIsEmpty)
-          OutlinedButton(key: const ValueKey('mergeBackup'), onPressed: _busy ? null : _mergeFile, child: const Text('Merge a backup…')),
+          OutlinedButton(key: const ValueKey('mergeBackup'), onPressed: busy ? null : _mergeFile, child: const Text('Merge a backup…')),
       ]),
       if (wc.walletIsEmpty)
         TextButton(
             key: const ValueKey('restoreOtherKey'),
-            onPressed: _busy ? null : () => _restoreFile(otherKey: true),
+            onPressed: busy ? null : () => _restoreFile(otherKey: true),
             child: const Text('Restore a backup made with another key…')),
-      if (_error != null) StatusLabel(good: false, text: _error!),
+      if (error != null) StatusLabel(good: false, text: error!),
     ]);
   }
 }

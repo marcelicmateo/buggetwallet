@@ -1,4 +1,3 @@
-import 'package:file_picker/file_picker.dart' show PlatformFile;
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -8,6 +7,7 @@ import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
+import '../widgets/async_action.dart';
 import '../widgets/common.dart';
 
 final _log = Logger('bw.calendar');
@@ -27,12 +27,12 @@ class CalendarsPanel extends StatefulWidget {
   State<CalendarsPanel> createState() => _CalendarsPanelState();
 }
 
-class _CalendarsPanelState extends State<CalendarsPanel> {
+class _CalendarsPanelState extends State<CalendarsPanel> with AsyncAction {
   final _link = TextEditingController();
   late final _cents = TextEditingController(text: centsToFieldText(widget.wc.headsUpCents));
   late final _days = TextEditingController(text: '${widget.wc.headsUpDays}');
-  bool _addingLink = false, _busy = false;
-  String? _error, _headsUpError;
+  bool _addingLink = false;
+  String? _headsUpError;
 
   @override
   void initState() {
@@ -56,44 +56,37 @@ class _CalendarsPanelState extends State<CalendarsPanel> {
 
   Future<void> _importFile() async {
     logNav('calendar.import');
-    final List<PlatformFile> picked;
+    final List<PickedFile> picked;
     try {
       picked = await widget.chooser.pickCalendarFile();
     } catch (e, st) {
       logError(_log, 'calendar.pickerFailed', e, st, fields: {'type': e.runtimeType.toString()});
-      if (mounted) setState(() => _error = chooserFailedMessage);
+      if (mounted) setState(() => error = chooserFailedMessage);
       return;
     }
     if (picked.isEmpty || !mounted) return;
-    setState(() {
-      _busy = true;
-      _error = null;
+    setState(() => error = null);
+    await run(() async {
+      try {
+        final bytes = await picked.first.readBytes();
+        final err = await widget.wc.importIcsFile(picked.first.name, bytes);
+        if (!mounted) return;
+        setState(() => error = err);
+        if (err == null) toast(context, 'Calendar added');
+      } catch (e, st) {
+        logError(_log, 'calendar.openFailed', e, st, fields: {'type': e.runtimeType.toString()});
+        if (mounted) setState(() => error = "Couldn't open that file.");
+      }
     });
-    try {
-      final bytes = await picked.first.readAsBytes();
-      final err = await widget.wc.importIcsFile(picked.first.name, bytes);
-      if (!mounted) return;
-      setState(() => _error = err);
-      if (err == null) toast(context, 'Calendar added');
-    } catch (e, st) {
-      logError(_log, 'calendar.openFailed', e, st, fields: {'type': e.runtimeType.toString()});
-      if (mounted) setState(() => _error = "Couldn't open that file.");
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Future<void> _addLink() async {
     logNav('calendar.link');
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    final err = await widget.wc.addIcsLink(_link.text);
+    setState(() => error = null);
+    final err = await run(() => widget.wc.addIcsLink(_link.text));
     if (!mounted) return;
     setState(() {
-      _busy = false;
-      _error = err;
+      error = err;
       if (err == null) {
         _link.clear();
         _addingLink = false;
@@ -104,9 +97,7 @@ class _CalendarsPanelState extends State<CalendarsPanel> {
 
   Future<void> _readNow() async {
     logNav('calendar.read');
-    setState(() => _busy = true);
-    await widget.wc.readCalendars(trigger: 'button');
-    if (mounted) setState(() => _busy = false);
+    await run(() => widget.wc.readCalendars(trigger: 'button'));
   }
 
   void _saveHeadsUp() {
@@ -200,21 +191,21 @@ class _CalendarsPanelState extends State<CalendarsPanel> {
                 key: const ValueKey('calImport'),
                 icon: const Icon(Icons.upload_file),
                 label: const Text('Import .ics file'),
-                onPressed: _busy ? null : _importFile),
+                onPressed: busy ? null : _importFile),
             if (wc.linksSupported)
               OutlinedButton.icon(
                   key: const ValueKey('calLink'),
                   icon: const Icon(Icons.add_link),
                   label: const Text('Add .ics link'),
-                  onPressed: _busy ? null : () => setState(() => _addingLink = !_addingLink)),
+                  onPressed: busy ? null : () => setState(() => _addingLink = !_addingLink)),
             if (reads)
               OutlinedButton.icon(
                   key: const ValueKey('calRead'),
-                  icon: _busy || wc.cal.reading
+                  icon: busy || wc.cal.reading
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.sync),
                   label: const Text('Read now'),
-                  onPressed: _busy || wc.cal.reading ? null : _readNow),
+                  onPressed: busy || wc.cal.reading ? null : _readNow),
           ]),
           if (_addingLink) ...[
             TextField(
@@ -228,10 +219,10 @@ class _CalendarsPanelState extends State<CalendarsPanel> {
             if (isInsecureLink(_link.text)) const StatusLabel(key: ValueKey('calLinkInsecure'), good: false, text: insecureLinkWarning),
             Align(
                 alignment: Alignment.centerLeft,
-                child: FilledButton(key: const ValueKey('calLinkAdd'), onPressed: _busy ? null : _addLink, child: const Text('Add link'))),
+                child: FilledButton(key: const ValueKey('calLinkAdd'), onPressed: busy ? null : _addLink, child: const Text('Add link'))),
             const Muted('The link is kept on this device only and read again when the app starts.', size: BwType.metaSize),
           ],
-          if (_error != null) StatusLabel(key: const ValueKey('calError'), good: false, text: _error!),
+          if (error != null) StatusLabel(key: const ValueKey('calError'), good: false, text: error!),
           if (reads && wc.cal.lastRead != null)
             Muted('Read ${wc.cal.events.length} ${wc.cal.events.length == 1 ? 'event' : 'events'} for the next 90 days.',
                 size: BwType.metaSize),
