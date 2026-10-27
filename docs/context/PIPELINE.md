@@ -30,6 +30,21 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 Agent models: scout, ci-watcher haiku/low; test-writer, devops sonnet/medium; ui-builder sonnet/high; core-builder, reviewer Fable/high.
 Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the lead from the branch named in "Base".
 
+## Stage J: deeper structure (2026-10-27, `PATH_FORWARD.md` §4 J1–J4; refactor-only, no schema/protocol change)
+Owner (2026-10-27): J before the live test; `ci` (APK + Linux only) started in parallel for the owner's phone build.
+Counters as delta rows (J3 second half) change the sync format: left for after M6. Merge order: J2c → J1 → J2u → J3.
+| # | Item | Agent | Branch | Depends on | Status |
+|---|---|---|---|---|---|
+| J0w | Watch ci run 40467776375 (APK + Linux) | ci-watcher | – | – | running |
+| J0a | Context pack J1: controller closures, globals, KeyStore, sub-states, memo keys, screens taking the controller | scout | – | – | running |
+| J0b | Context pack J2 core: `pdf_text.dart`, `SyncEngine.run` apply loop, fuzz corpus | scout | – | – | running |
+| J1 | `WalletControllerDeps`, `KeyStore` instance, Listenable sub-states, typed memo keys, view objects, `searchRows` into `searchAll` | ui-builder | j1 | J0a | queued |
+| J2c | `pdf_text/` folder split; per-peer apply loop out of `SyncEngine.run` with asserts | core-builder | j2-core | J0b | queued |
+| J2u | Screen sub-widgets, `AsyncAction` mixin, `PickedFile`, `bill_sheet` sections, `readCalendars` | ui-builder | j2-ui | J1 | queued |
+| J3 | Mutation testing on importer + core pure code (tool script, no new package); surviving mutants → invariant tests | test-writer | j3 | J2c | queued |
+| J4 | `packages/sync` split — only if J2c shows a clean seam | core-builder | j4 | J2c | decide after J2c |
+| J | Merge, review, stage run, push, STATUS | lead | v2 | all | queued |
+
 ## Stage P6: split transactions (2026-10-25, spec `P6_SPEC.md`; schema 13)
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
