@@ -35,14 +35,14 @@ Owner (2026-10-27): J before the live test; `ci` (APK + Linux only) started in p
 Counters as delta rows (J3 second half) change the sync format: left for after M6. Merge order: J2c → J1 → J2u → J3.
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
-| J0w | Watch ci run 40467776375 (APK + Linux) | ci-watcher | – | – | running |
-| J0a | Context pack J1: controller closures, globals, KeyStore, sub-states, memo keys, screens taking the controller | scout | – | – | running |
-| J0b | Context pack J2 core: `pdf_text.dart`, `SyncEngine.run` apply loop, fuzz corpus | scout | – | – | running |
-| J1 | `WalletControllerDeps`, `KeyStore` instance, Listenable sub-states, typed memo keys, view objects, `searchRows` into `searchAll` | ui-builder | j1 | J0a | queued |
-| J2c | `pdf_text/` folder split; per-peer apply loop out of `SyncEngine.run` with asserts | core-builder | j2-core | J0b | queued |
-| J2u | Screen sub-widgets, `AsyncAction` mixin, `PickedFile`, `bill_sheet` sections, `readCalendars` | ui-builder | j2-ui | J1 | queued |
-| J3 | Mutation testing on importer + core pure code (tool script, no new package); surviving mutants → invariant tests | test-writer | j3 | J2c | queued |
-| J4 | `packages/sync` split — only if J2c shows a clean seam | core-builder | j4 | J2c | decide after J2c |
+| J0w | Watch ci run 40467776375 (APK + Linux) | ci-watcher | – | – | done (all green, dev release published) |
+| J0a | Context pack J1: controller closures, globals, KeyStore, sub-states, memo keys, screens taking the controller | scout | – | – | done |
+| J0b | Context pack J2 core: `pdf_text.dart`, `SyncEngine.run` apply loop, fuzz corpus | scout | – | – | done |
+| J1 | `WalletControllerDeps`, `KeyStore` instance, Listenable sub-states, typed memo keys, view objects, `searchRows` into `searchAll` | ui-builder | j1 | J0a | done 89e4ebb (app 1820/0, desktop onboarding/plan/screens ok; forgetBrowser also clears stale sync status) → review (0 blocking, 5 low) → eb74b06 (j2-core merged, `_dataMark` = (repo, dataVersion) + sync_reload_test; test green: app 1821) |
+| J2c | `pdf_text/` folder split; per-peer apply loop out of `SyncEngine.run` with asserts | core-builder | j2-core | J0b | done 422683b (pdf/ parts, `_applyPeer` + sealed result + asserts, `clockStats`) → BUG: stale view after a peer edit below max hlc → ef3d12c `repo.dataVersion` → review (0 blocking; 1 med for app: compare (repo, dataVersion); 4 low) → 3661414 (core 2584/0) |
+| J2u | Screen sub-widgets, `AsyncAction` mixin, `PickedFile`, `bill_sheet` sections, `readCalendars` | ui-builder | j2-ui | J1 | done 7553029 (14 bill-sheet sections, Today ~20 widgets, readCalendars split, AsyncAction on 6 panels, PickedFile; test green, desktop screens/plan/flows/import ok) → review (0 blocking, 2 drifts) → f466144 (app 1822/0) |
+| J3 | Mutation testing on importer + core pure code (tool script, no new package); surviving mutants → invariant tests | test-writer | j3 | J2c | tools half running (devops, j3-tools: `tools/mutate.py`, BW_FUZZ_* into container); tests from survivors next |
+| J4 | `packages/sync` split — only if J2c shows a clean seam | core-builder | j4 | J2c | not clean yet (logs→SyncException/VaultException, local_db→vault, repo→isBlobHash; backup→vault+blob_store): after M6 |
 | J | Merge, review, stage run, push, STATUS | lead | v2 | all | queued |
 
 ## Stage P6: split transactions (2026-10-25, spec `P6_SPEC.md`; schema 13)
