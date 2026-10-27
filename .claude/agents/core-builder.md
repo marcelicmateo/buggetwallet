@@ -1,6 +1,6 @@
 ---
 name: core-builder
-description: Builds the logic half of one Budget Wallet feature or fix in its own worktree — packages/wallet_core (money, budget, sync, settings) and packages/wallet_importer — with unit tests. Give it the spec and the API the UI will call. Never edits app/.
+description: Builds the logic half of one Budget Wallet feature or fix in its own worktree — packages/wallet_core (money, budget, settings), packages/sync (sync engine, relay client, blobs) and packages/wallet_importer — with unit tests. Give it the spec and the API the UI will call. Never edits app/.
 effort: high
 ---
 
