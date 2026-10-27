@@ -41,6 +41,12 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (`WalletRepoPlanned`), `repo_bills.dart` (`WalletRepoBills`), `repo_blobs.dart` (`WalletRepoBlobs`), `repo_settings.dart`
   (`WalletRepoSettings`: `setCategoryBudget`, `setMerchantPattern`, `removeMerchantPattern`, the schema-8 migration, and
   `_readSettings`/`_settingChanges` behind `settings()`/`updateSettings`).
+  Stage Q0 split the core of `repo.dart` (moves only): `repo_import.dart` (`WalletRepoImport`: matching/transfer glue,
+  `_reconcile`, `_reconcileLocal`, `runPendingMatch`), `repo_sync_apply.dart` (`WalletRepoSyncApply`: `_apply`, `_fieldValue`,
+  `applyRemote`, `snapshotOps`, `clockStats`, sync cursors/files), `repo_tx.dart` (`WalletRepoTx`: `setCategory`, delete/undelete
+  transaction, merchant rules), `repo_meta.dart` (`WalletRepoMeta`: `_migrate`, `_meta`). An extension member is visible only
+  where the barrel is imported, so public methods that app/sync files reach without that import (`importBatch`,
+  `addTransaction`, `transactions`, `localValue`, `setLocalValue`, `pendingOps`) stay on the class.
   `importBatch`: a known id whose stored row has another `amount` or `description` is an id collision: skipped like a
   duplicate (never overwritten), counted in `ImportSummary.collisions` (also in `duplicates`) and logged as
   `repo.idCollision {source, count}` (WARNING; never ids, amounts or descriptions).
