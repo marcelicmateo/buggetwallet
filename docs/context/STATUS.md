@@ -364,6 +364,9 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - `tools/build.sh sync [file]` and the `sync` step in test/stage; `ci.yml` runs sync in the core job (with `tests`); `tools/build.sh mutate core` also runs the sync suite. App: import lines + pubspec only.
   - Review: 0 blocking, 3 low (mutate coverage, layering check, docs) fixed.
   - **Stage run:** importer 377, core 2296, sync 326, relay 216, app 1822, desktop, web-test, emulator screens, perf ok.
+- 2026-10-27: CI run 40501803217 (bd10966, apk + linux) green; `dev` release updated for the owner's test.
+- 2026-10-27: **`tools/relay-deploy.sh`**: `bootstrap|install|upgrade|backup|status` for the Hetzner relay (setup.md §6 "Quick way"); `--dry-run`, offline `--self-test` in lint (`deploy-selftest`). Not yet run against a real server. Review: 1 blocker (dnf5 has no `dnf-automatic-install.timer`, also wrong in §6.2) + lockout/stdin/backup-trap fixes. Manual docs fixed: stopping `bw-relay` also stops Caddy (`Requires=`), so §6.4/6.5 start both.
+- 2026-10-27: Research: Actual Budget + Cashew read for ideas (no code taken). Proposed, waiting on the owner: category suggestion chips, schema upgrade-from-every-version tests, bill weekend shift, hide-amounts toggle, total overflow guard; then statement reconciliation, import preview, search filters, rule suggestions, budget presets, IOU list; after M6: device state digest (sync change).
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
