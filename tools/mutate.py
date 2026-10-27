@@ -8,7 +8,8 @@ Normally started as `tools/build.sh mutate <importer|core|sync> <lib file>… [o
 Per target file it lists simple one-token mutants (+/-, * and ~/, < <=, > >=, == !=, && ||, integer literals, true/false,
 a trivially typed `return x;` replaced by a default), skipping comments, strings, imports and assert lines. A seeded sample
 of --max mutants (default 60 per file) is then run serially: the mutant is written into the lib file, `dart test
---fail-fast` runs (the whole package suite, or only --tests), and the file is restored. Mutants are written into a copy under
+--fail-fast` runs (the whole package suite plus the suites of packages built on it, see DOWNSTREAM; or only --tests),
+and the file is restored. Mutants are written into a copy under
 dist/mutation/work/, never into the tracked files. A mutant is `killed` (a test failed), `survived` (all passed),
 `timeout`, or `invalid` (does not compile; not counted).
 
@@ -26,6 +27,9 @@ import sys
 import time
 
 PKG_DIR = {"importer": "packages/wallet_importer", "core": "packages/wallet_core", "sync": "packages/sync"}
+# Packages whose whole suite also runs for a mutant (without --tests): core's sync and blob tests moved to packages/sync
+# in J4, so a core mutant only they catch (repo_blobs, backup, vault) would otherwise look like a survivor.
+DOWNSTREAM = {"core": ["packages/sync"]}
 RUN = {}
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -159,7 +163,7 @@ def main():
     ap.add_argument("files", nargs="+", help="lib files, relative to the repo root or the package")
     ap.add_argument("--max", type=int, default=60, help="mutants per file (sampled with --seed)")
     ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--tests", nargs="*", default=[], help="test files/dirs relative to the package (default: the whole suite)")
+    ap.add_argument("--tests", nargs="*", default=[], help="test files/dirs relative to the package (default: the whole suite and the DOWNSTREAM suites)")
     ap.add_argument("--timeout", type=float, default=0, help="seconds per mutant (default: 3x the baseline run, at least 30; a timeout counts as killed, e.g. an endless loop)")
     ap.add_argument("--list", action="store_true", help="only list how many mutants each file has")
     a = ap.parse_args()
@@ -219,8 +223,19 @@ def main():
     signal.signal(signal.SIGTERM, on_signal)
     RUN["stop"] = stop
 
-    print("baseline run ...", flush=True)
-    st, base_secs, out = run_tests(wpkg, a.tests, 1800)
+    suites = [wpkg] + ([] if a.tests else [os.path.join(work, d) for d in DOWNSTREAM.get(a.package, [])])
+
+    def run_all(timeout):  # the first suite that does not pass decides; seconds add up
+        total, out = 0.0, ""
+        for d in suites:
+            st, dt, out = run_tests(d, a.tests if d == wpkg else [], timeout)
+            total += dt
+            if st != "survived" or stop["flag"]:
+                return st, total, out
+        return "survived", total, out
+
+    print("baseline run (%s) ..." % ", ".join(os.path.relpath(d, work) for d in suites), flush=True)
+    st, base_secs, out = run_all(1800)
     if st != "survived":
         print(out[-3000:])
         sys.exit("baseline tests do not pass (%s); nothing to mutate" % st)
@@ -243,7 +258,7 @@ def main():
             if stop["flag"]:
                 break
             put(path, src[:m["start"]] + m["text"] + src[m["end"]:])
-            st, dt, _ = run_tests(wpkg, a.tests, timeout)
+            st, dt, _ = run_all(timeout)
             if stop["flag"]:
                 break
             rows.append({k: m[k] for k in ("line", "col", "op", "orig", "mutant")} | {"status": st, "seconds": round(dt, 1)})
