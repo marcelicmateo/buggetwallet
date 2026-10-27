@@ -18,7 +18,7 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 - `docs/architecture.md`, `docs/setup.md`.
 - Each package has its own short `CLAUDE.md` (files, rules, how to test). Read the one for the code you touch.
 - `tools/` — `build.sh` (local builds, lint, format, LSP, MCP), `emulator.sh`, `live.sh` + `live_vm.py`, `build-times.sh` + `build_log.py` +
-  `timing.sh` (run logs and timing history), `ci-status.sh` (CI results), `make-signing-key.sh`, `install-hooks.sh`,
+  `timing.sh` (run logs and timing history), `ci-status.sh` (CI results), `make-signing-key.sh`, `relay-deploy.sh` (sets up/upgrades/backs up the relay on a rented server over ssh; `--dry-run`), `install-hooks.sh`,
   `make_fixtures.py`, `log-summary.py` (summary of an app log), `token-usage.py` (Claude token use per day/session/model/commit,
   from local transcripts). `dev/` — `Containerfile` and `install-lint-tools.sh`.
 - **App logs:** the app logs to `<app support dir>/logs/bw-YYYY-MM-DD.log` (debug level by default while testing; Plan ›

@@ -344,7 +344,8 @@ LINT=(format format_check
       shellcheck 'shellcheck tools/*.sh dev/*.sh .github/scripts/*.sh'
       actionlint actionlint
       hook-selftest 'tools/no-poll-hook.sh --self-test'
-      env-selftest env_selftest)
+      env-selftest env_selftest
+      deploy-selftest 'tools/relay-deploy.sh --self-test')
 declare -A SUITE=(
   [importer]='suite importer packages/wallet_importer "dart analyze --fatal-infos" dart test --timeout 60s'
   [core]='suite core packages/wallet_core "dart analyze --fatal-infos" dart test --timeout 60s'

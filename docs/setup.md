@@ -180,6 +180,20 @@ sync keeps working when the home internet or power is down. The server only ever
 phone / laptop --https :443--> Hetzner server: Caddy (bw-relay-caddy) --private network--> relay (bw-relay) --> /srv/budget-wallet-relay
 ```
 
+### Quick way
+After 6.1 (the server exists, your ssh key is on it) and the DNS record from 6.3 step 1, `tools/relay-deploy.sh` does 6.2 to 6.5
+from the laptop (add `--dry-run` to see the commands first):
+
+```sh
+tools/relay-deploy.sh bootstrap <server IP>               # 6.2, as root, once
+tools/relay-deploy.sh install <server IP> <your name>     # 6.3 and 5.3; shows the creation token once: save it
+tools/relay-deploy.sh upgrade <server IP>                 # 6.4
+tools/relay-deploy.sh backup <server IP> [folder]         # 6.5
+tools/relay-deploy.sh status <server IP>
+```
+
+The steps below are the reference for what it does.
+
 ### 6.1 Create the server
 In the Hetzner Cloud console (console.hetzner.cloud), new project, **Add server**:
 - **Location:** an EU one (Falkenstein, Nuremberg or Helsinki).
@@ -237,7 +251,7 @@ In the app the relay address is `https://<your name>` (Plan › Sync › Test co
 
 ### 6.4 Upgrading
 Relay: rebuild on the laptop and copy it again (6.3 step 2, the `podman build` and `podman save | ssh … podman load` lines), then
-`ssh bw@<server IP> systemctl --user restart bw-relay`. Caddy and system packages as in 5.5; the system updates itself
+`ssh bw@<server IP> systemctl --user restart bw-relay` (then `systemctl --user start bw-relay-caddy`, in case it stopped with it). Caddy and system packages as in 5.5; the system updates itself
 (`dnf-automatic` / `unattended-upgrades`), reboot now and then with `sudo systemctl reboot` (the containers start again by themselves).
 
 ### 6.5 Backup
@@ -246,7 +260,7 @@ Either turn on Hetzner's backups (6.1; restore = the whole server as it was) or 
 ```sh
 ssh bw@<server IP> systemctl --user stop bw-relay
 rsync -a bw@<server IP>:/srv/budget-wallet-relay/ ~/backups/budget-wallet-relay/
-ssh bw@<server IP> systemctl --user start bw-relay
+ssh bw@<server IP> systemctl --user start bw-relay bw-relay-caddy   # stopping the relay stopped Caddy too
 ```
 
 A copy older than the devices is safe: they notice the relay went back and upload what it is missing (Stage H). The devices' own
