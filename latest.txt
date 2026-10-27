@@ -1,12 +1,12 @@
-commit: c1bc24e235ca18eaf10875976b6195c8ea718f74  ref: v2  run: 40467776375
+commit: bd10966ccc6a775c3baa69b00bea7d468110e752  ref: v2  run: 40501803217
 
-lint=skipped importer=skipped core=skipped relay=skipped app=skipped desktop=skipped signing=success apk=success(325s) linux=success(79s) smoke=success(19s)
+lint=skipped importer=skipped core=skipped relay=skipped app=skipped desktop=skipped signing=success apk=success(220s) linux=success(94s) smoke=success(26s)
 job:lint=skipped job:importer=skipped job:core=skipped job:relay=skipped job:app=skipped job:desktop=skipped job:apk=success job:linux=success job:publish=success 
 
 step seconds exit
-apk 325 0
-linux 79 0
-smoke 19 0
+apk 220 0
+linux 94 0
+smoke 26 0
 
 
 
@@ -25,6 +25,7 @@ Downloading packages...
   file_picker_darwin 2.3.2 (2.4.0 available)
   fl_chart 1.2.0 (1.3.0 available)
   flutter_local_notifications 22.3.2 (22.3.3 available)
+  jni 1.1.0 (1.1.1 available)
   material_color_utilities 0.13.0 (0.13.1 available)
   posix 6.5.2 (6.5.3 available)
   qr 3.0.2 (4.0.0 available)
@@ -33,16 +34,15 @@ Downloading packages...
   vector_math 2.4.0 (2.4.4 available)
   web 1.1.1 (1.1.2 available)
 Got dependencies!
-15 packages have newer versions incompatible with dependency constraints.
+16 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Running Gradle task 'assembleRelease'...                        
 Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 10944 bytes (99.3% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
 Caught exception: Already watching path: /home/runner/work/buggetwallet/buggetwallet/app/android
-Running Gradle task 'assembleRelease'...                          312.0s
+Running Gradle task 'assembleRelease'...                          210.2s
 ✓ Built build/app/outputs/flutter-apk/app-release.apk (45.2MB)
 
 === linux ===
-  flutter_local_notifications 22.3.2 (22.3.3 available)
   material_color_utilities 0.13.0 (0.13.1 available)
   posix 6.5.2 (6.5.3 available)
   qr 3.0.2 (4.0.0 available)
@@ -51,7 +51,7 @@ Running Gradle task 'assembleRelease'...                          312.0s
   vector_math 2.4.0 (2.4.4 available)
   web 1.1.1 (1.1.2 available)
 Got dependencies!
-15 packages have newer versions incompatible with dependency constraints.
+16 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 === linux ===
 Resolving dependencies...
@@ -64,6 +64,7 @@ Downloading packages...
   file_picker_darwin 2.3.2 (2.4.0 available)
   fl_chart 1.2.0 (1.3.0 available)
   flutter_local_notifications 22.3.2 (22.3.3 available)
+  jni 1.1.0 (1.1.1 available)
   material_color_utilities 0.13.0 (0.13.1 available)
   posix 6.5.2 (6.5.3 available)
   qr 3.0.2 (4.0.0 available)
@@ -72,15 +73,15 @@ Downloading packages...
   vector_math 2.4.0 (2.4.4 available)
   web 1.1.1 (1.1.2 available)
 Got dependencies!
-15 packages have newer versions incompatible with dependency constraints.
+16 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Building Linux application...                                   
 ✓ Built build/linux/x64/release/bundle/budget_wallet
 
 step              seconds  result
-pub                  12.5  ok
-linux                66.3  ok
-total                78.9
+pub                  12.7  ok
+linux                81.8  ok
+total                94.6
 pub=ok linux=ok
 === smoke ===
 === linux ===
@@ -94,6 +95,7 @@ Downloading packages...
   file_picker_darwin 2.3.2 (2.4.0 available)
   fl_chart 1.2.0 (1.3.0 available)
   flutter_local_notifications 22.3.2 (22.3.3 available)
+  jni 1.1.0 (1.1.1 available)
   material_color_utilities 0.13.0 (0.13.1 available)
   posix 6.5.2 (6.5.3 available)
   qr 3.0.2 (4.0.0 available)
@@ -102,18 +104,18 @@ Downloading packages...
   vector_math 2.4.0 (2.4.4 available)
   web 1.1.1 (1.1.2 available)
 Got dependencies!
-15 packages have newer versions incompatible with dependency constraints.
+16 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Building Linux application...                                   
 ✓ Built build/linux/x64/release/bundle/budget_wallet
 === desktop-smoke ===
 app still running after 10 s; sending SIGTERM
 app exited with code 143
-app log: 26 lines (dist/logs/app-linux-smoke.log)
-WARNING lines: 1
+app log: 22 lines (dist/logs/app-linux-smoke.log)
+WARNING lines: 0
 
 step              seconds  result
-linux                 4.1  ok
-desktop-smoke        14.5  ok
-total                18.6
+linux                 4.7  ok
+desktop-smoke        21.1  ok
+total                25.9
 linux=ok desktop-smoke=ok
