@@ -5,6 +5,7 @@ import '../controller.dart';
 import '../format.dart';
 import '../logging.dart';
 import '../theme.dart';
+import '../widgets/charts.dart' show ForecastStepChart;
 import '../widgets/common.dart';
 import 'plan_suggestions.dart';
 
@@ -264,6 +265,7 @@ class _PaydayPlanState extends State<PaydayPlan> {
                   ),
                 ]),
             ]),
+          if (!_editing) ForecastPanel(wc: wc),
           PlanSuggestionsPanel(wc: wc),
         ]));
   }
@@ -357,3 +359,34 @@ class _PaydayPlanState extends State<PaydayPlan> {
     toast(context, 'Plan saved');
   }
 }
+
+/// Budget › under the payday plan (Q11): "On payday: about X (after bills, before day-to-day spending)" and the steps that lead there.
+/// Hidden until a bank account in the wallet currency has a balance the app trusts (confirmed lately).
+class ForecastPanel extends StatelessWidget {
+  final WalletController wc;
+  const ForecastPanel({super.key, required this.wc});
+
+  @override
+  Widget build(BuildContext context) {
+    final f = wc.paydayForecast();
+    if (f == null) return const SizedBox.shrink();
+    final cur = wc.currency;
+    final c = context.c;
+    final below = f.onPayday < 0;
+    return Panel(key: const ValueKey('forecastPanel'), children: [
+      const SectionHead('Until payday'),
+      Text('On payday: about ${moneyExact(f.onPayday, cur)} (after bills, before day-to-day spending)',
+          key: const ValueKey('forecastLine'), style: TextStyle(fontWeight: FontWeight.w600, color: below ? c.bad : null)),
+      if (f.afterSpending != null)
+        Muted('After your daily allowance: about ${moneyExact(f.afterSpending!, cur)}', key: const ValueKey('forecastAfter')),
+      if (f.points.length > 1 || f.points.first.cents != 0)
+        Semantics(
+          label: 'Balance until payday',
+          child: ForecastStepChart(key: const ValueKey('forecastChart'), points: f.points, payday: f.payday, currency: cur),
+        ),
+      if (f.leftOut != null) Muted(_capital(f.leftOut!), key: const ValueKey('forecastUnchecked')),
+    ]);
+  }
+}
+
+String _capital(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}.';

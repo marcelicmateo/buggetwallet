@@ -11,6 +11,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../screens/bill_sheet.dart';
+import '../screens/owed.dart';
 import '../screens/rules_panel.dart';
 import '../screens/scan_bill.dart';
 import '../theme.dart';
@@ -498,6 +499,51 @@ class _TxSheetState extends State<TxSheet> {
     );
   }
 
+  Future<void> _lent() async {
+    final r = await showSheet<String>(context, IouSheet(wc: widget.wc, tx: row.tx));
+    if (r != null && mounted) Navigator.pop(context, r);
+  }
+
+  Future<void> _repayment() async {
+    final r = await showSheet<String>(context, RepaymentSheet(wc: widget.wc, tx: row.tx));
+    if (r != null && mounted) Navigator.pop(context, r);
+  }
+
+  /// Q8: "Lent to someone" on an expense, "Repayment" on income; a payment already linked to an IOU says so instead.
+  Widget? _iouSection(BuildContext context) {
+    final t = row.tx;
+    final tag = widget.wc.iouTagOf(t.id);
+    if (!t.live || t.amount == 0) return null;
+    if (tag == null && (t.transferTo != null || row.kind == BudgetKind.transfer || widget.wc.splitCount(t.id) > 0)) return null;
+    if (tag != null) {
+      return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Row(key: const ValueKey('iouLinked'), children: [
+            Icon(Icons.link, size: 16, color: context.c.good),
+            const SizedBox(width: 6),
+            Expanded(
+                child: Text(
+                    tag == 'repaid'
+                        ? 'Repayment of an IOU. Not counted as income.'
+                        : 'Linked to an IOU ($tag). Not counted as spending or income.',
+                    style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2))),
+          ]));
+    }
+    final out = t.amount < 0;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton(
+          key: ValueKey(out ? 'txLent' : 'txRepayment'),
+          style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+          onPressed: out ? _lent : _repayment,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(out ? Icons.call_made : Icons.call_received, size: 18),
+            const SizedBox(width: 8),
+            Flexible(child: Text(out ? 'Lent to someone' : 'Repayment')),
+          ])),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = row.tx;
@@ -593,6 +639,7 @@ class _TxSheetState extends State<TxSheet> {
             tagRule = rule;
           }),
       if (canSplit) _splitSection(context),
+      if (_iouSection(context) case final w?) w,
       const SizedBox(height: 8),
       Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, children: [
         FilledButton(

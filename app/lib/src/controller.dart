@@ -12,7 +12,7 @@ import 'bill_inputs.dart';
 import 'calendar_source.dart';
 import 'clock_notice.dart';
 import 'controller_deps.dart';
-import 'format.dart' show NumberStyle, money, numberStyle;
+import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDateOrRaw;
 import 'home_widget.dart';
 import 'ics_fetch.dart';
 import 'insights_api.dart' show InsightRange;
@@ -40,6 +40,8 @@ part 'controller_import.dart';
 part 'controller_settings.dart';
 part 'controller_review.dart';
 part 'controller_tx.dart';
+part 'controller_forecast.dart';
+part 'controller_iou.dart';
 part 'controller_suggest.dart';
 
 final _log = Logger('bw.app');
@@ -88,7 +90,18 @@ class ImportLine {
 
   /// Set when this import replaced a saved layout's earlier payments (P12): the toast's Undo puts them back.
   final VoidCallback? undo;
-  const ImportLine(this.file, this.message, this.ok, {this.added = 0, this.undo});
+
+  /// Bank balance questions this import leaves (Q5): accounts the file gave no balance for. The import flow asks them in order.
+  final List<BankQuestion> questions;
+  const ImportLine(this.file, this.message, this.ok, {this.added = 0, this.undo, this.questions = const []});
+}
+
+/// "What did the bank app show when you downloaded this file?" (Q5): account [accountId] ([name], [currency]), the file's newest row
+/// date [date] and what the app itself counts for that day ([appCents], the prefill of the answer).
+class BankQuestion {
+  final String accountId, name, currency, date;
+  final int appCents;
+  const BankQuestion({required this.accountId, required this.name, required this.currency, required this.date, required this.appCents});
 }
 
 /// What a saved layout replaced while one file was imported (P12): filled by [WalletController._readImportFile] the moment a forced save
@@ -97,8 +110,33 @@ class _Remap {
   String? id;
   List<String> removed = const [];
 
+  /// The waiting `csvRevive:<id>` value before the forced save (null = none): Cancel puts exactly that back.
+  String? reviveBefore;
+
   /// The layout as it was before (the removed one), written back by the Undo; null when core kept none.
   CsvMapping? old;
+}
+
+/// One question per account: of several (several files of one pick) the one with the newest date.
+List<BankQuestion> newestPerAccount(Iterable<BankQuestion> questions) {
+  final by = <String, BankQuestion>{};
+  for (final q in questions) {
+    final have = by[q.accountId];
+    if (have == null || q.date.compareTo(have.date) > 0) by[q.accountId] = q;
+  }
+  return by.values.toList();
+}
+
+/// One file read: its [batch], the column [mapping] that read it (null for a bank profile) and, for a layout the owner just chose,
+/// [commit] (saves it once the preview is confirmed) and [revert] (takes a layout saved early back on Cancel).
+class _ReadFile {
+  final ImportBatch batch;
+  final CsvMapping? mapping;
+
+  /// [commit] runs before the rows are written and throws core's [ArgumentError] for a refused layout (shown as the layout line);
+  /// [revert] takes a layout saved early back on Cancel.
+  final void Function()? commit, revert;
+  const _ReadFile(this.batch, this.mapping, {this.commit, this.revert});
 }
 
 /// What the Map columns sheet hands back (P12): the layout and the shape id of the file at the layout's header row.
@@ -113,6 +151,10 @@ typedef AskMapping = Future<CsvChoice?> Function(NeedsMapping need, Uint8List by
 
 /// Asked when the chosen layout reads differently from a removed one that imported [payments] payments: true = remove them.
 typedef ConfirmRemoval = Future<bool> Function(int payments);
+
+/// Asked before a file is written (Q4): the owner sees [preview] of [bank]'s file. The ids to leave out (the Skip toggles), or null =
+/// Cancel, nothing is written. [canSkip] is false when per-row Skip cannot be offered honestly.
+typedef ConfirmPreview = Future<Set<String>?> Function(ImportPreview preview, String bank);
 
 /// Everything the Spending tab shows for one month, worked out in [WalletController.spending].
 class SpendingView {
@@ -775,10 +817,11 @@ class WalletController extends ChangeNotifier {
               final periods = payPeriods(count: 12);
 
               final merch = <String, (int, int)>{};
-              // The list shows each payment once (its parts hang under it, `splitParts`); the places add up the parts.
+              // The list shows each payment once (its parts hang under it, `splitParts`); the places add up the parts. A payment linked to
+              // an IOU is neither spending nor income but is still a payment: it is listed, with its "lent" / "repaid" tag.
               final monthTxs = [
                 for (final t in wholeTxs)
-                  if (monthOf(t.date) == month && t.kind != BudgetKind.transfer) t
+                  if (monthOf(t.date) == month && (t.kind != BudgetKind.transfer || t.iou)) t
               ];
               final merchSeen = <String>{};
               for (final t in txs) {
@@ -1054,7 +1097,8 @@ class WalletController extends ChangeNotifier {
   /// Logs per file on `bw.import`: index, extension, size and counts. Never the file name.
   /// A CSV no bank profile knows is read with its saved layout, else [askMapping] opens the Map columns sheet (null = the
   /// message "map its columns"); the chosen layout is saved, then the file is read with it.
-  Future<List<ImportLine>> importFiles(List<(String, Uint8List)> files, {AskMapping? askMapping, ConfirmRemoval? confirmRemoval}) async {
+  Future<List<ImportLine>> importFiles(List<(String, Uint8List)> files,
+      {AskMapping? askMapping, ConfirmRemoval? confirmRemoval, ConfirmPreview? confirmPreview}) async {
     final all = PerfTimer('import.files', warnMs: 3000);
     final lines = <ImportLine>[];
     for (final (i, (name, bytes)) in files.indexed) {
@@ -1063,24 +1107,43 @@ class WalletController extends ChangeNotifier {
       final remap = _Remap();
       VoidCallback? undoOf() => remap.id == null ? null : () => undoCsvRemap(remap.id!, remap.removed, remap.old);
       try {
-        final read = await _readImportFile(name, bytes, askMapping, confirmRemoval, remap);
+        final read = await _readImportFile(name, bytes, askMapping, confirmRemoval, remap, deferLayout: confirmPreview != null);
         if (read == null) {
           logEvent(_import, Level.INFO, 'import.mapCancelled', f);
           lines.add(ImportLine(name, 'Not imported. Map its columns to read it.', false));
           continue;
         }
-        final (batch, usedMapping) = read;
+        final batch = read.batch, usedMapping = read.mapping;
         final mapped = usedMapping != null;
         // Payments a forced layout edit removed come back exactly once when the same file is read the new way (`csvRevive:<shape id>`).
         final reviveKey = batch.source.startsWith(csvSourcePrefix) ? batch.source.substring(csvSourcePrefix.length) : null;
         final revive = reviveKey == null ? const <String>[] : csvReviveIds(reviveKey);
-        final s = repo.importBatch(batch, revive: revive.toSet()); // logs repo.importBatch
+        var skip = const <String>{};
+        if (confirmPreview != null) {
+          // Q4: the preview equals the import (same batch, same revive set, after the layout is decided); Cancel writes nothing.
+          final preview = repo.previewImport(batch, revive: revive.toSet());
+          final bank = usedMapping?.name ?? accountSourceLabel(batch.source, csvMappings: settings.csvMappings);
+          final chosen = await confirmPreview(preview, bank);
+          if (chosen == null) {
+            read.revert?.call();
+            logEvent(_import, Level.INFO, 'import.previewCancelled', {...f, 'rows': batch.transactions.length, 'fresh': preview.fresh});
+            lines.add(ImportLine(name, 'Not imported. You chose Cancel.', false));
+            continue;
+          }
+          skip = chosen;
+        }
+        read.commit?.call(); // a new column layout is saved only now
+        final s = repo.importBatch(batch, revive: revive.toSet(), skip: skip); // logs repo.importBatch
         if (revive.isNotEmpty) {
           // Only the ids this file read are done; the rest wait for their own files (January's and February's rows both come back).
-          final read = {for (final t in batch.transactions) t.id};
+          // A row the owner skipped is not done: its id stays waiting, so the file brings it back later as "Read again".
+          final done = {
+            for (final t in batch.transactions)
+              if (!skip.contains(t.id)) t.id
+          };
           final rest = [
             for (final id in revive)
-              if (!read.contains(id)) id
+              if (!done.contains(id)) id
           ];
           repo.setLocalValue('csvRevive:$reviveKey', rest.isEmpty ? null : jsonEncode(rest));
         }
@@ -1093,7 +1156,9 @@ class WalletController extends ChangeNotifier {
           'dupes': s.duplicates,
           'matched': s.matched,
           'skipped': s.skipped,
-          'invalid': batch.invalid
+          'invalid': batch.invalid,
+          if (skip.isNotEmpty) 'skippedByOwner': s.skippedByOwner,
+          if (s.bankChecks.isNotEmpty) 'checks': s.bankChecks.length,
         });
         final bank = usedMapping?.name ?? accountSourceLabel(batch.source, csvMappings: settings.csvMappings);
         final replaced = remap.removed.length;
@@ -1101,10 +1166,12 @@ class WalletController extends ChangeNotifier {
             name,
             '$bank: ${s.added} new, ${s.duplicates} already here${s.matched > 0 ? ', ${s.matched} matched to expenses you added' : ''}'
             '${batch.invalid > 0 ? ', ${batch.invalid} unreadable ${batch.invalid == 1 ? 'row' : 'rows'} left out' : ''}'
-            '${replaced > 0 ? ', $replaced earlier ${replaced == 1 ? 'payment' : 'payments'} read again' : ''}.',
+            '${replaced > 0 ? ', $replaced earlier ${replaced == 1 ? 'payment' : 'payments'} read again' : ''}.'
+            '${s.skippedByOwner > 0 ? ' ${s.skippedByOwner} left out by you.' : ''}${_bankCheckText(s.bankChecks)}',
             true,
             added: s.added,
-            undo: undoOf()));
+            undo: undoOf(),
+            questions: _bankQuestions(batch, s.bankChecks)));
       } on ClockBehindException catch (e) {
         noticeClockBehind(e); // nothing of this file was written; say why instead of "couldn't read"
         lines.add(ImportLine(name, clockBehindText, false, undo: undoOf()));

@@ -61,6 +61,14 @@ Future<void> seedDemoAccounts(WalletRepo repo, String today) async {
   await repo.addAccount(name: 'Revolut travel', source: 'revolut', currency: 'USD', opening: 8000, openingDate: opened);
 }
 
+/// SYNTHETIC IOUs for the demo (Q8): 120 lent to "Sam" with a 40 repayment, and 35 borrowed from "Alex"; neither is linked to a payment.
+void seedDemoIous(WalletRepo repo, String today) {
+  final lent = repo.addIou(
+      person: 'Sam', direction: IouDirection.lent, amount: 12000, currency: 'EUR', date: addDays(today, -12), note: 'Concert tickets');
+  repo.addIouPart(lent, amount: 4000, date: addDays(today, -4));
+  repo.addIou(person: 'Alex', direction: IouDirection.borrowed, amount: 3500, currency: 'EUR', date: addDays(today, -6));
+}
+
 /// Monthly budgets for the demo wallet (cents): Groceries is usually under, Eating out and Food delivery often over.
 const demoBudgets = {'Groceries': 40000, 'Eating out': 6000, 'Food delivery': 4000};
 

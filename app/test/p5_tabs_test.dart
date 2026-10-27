@@ -402,7 +402,7 @@ void main() {
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
       await tapTab(t, 'Settings');
       wc.openSettings(SettingsSection.sync);
-      for (var i = 0; i < 12; i++) {
+      for (var i = 0; i < 20; i++) {
         await t.pump(const Duration(milliseconds: 100));
       }
       expect(_key('relayAddress'), findsOneWidget);

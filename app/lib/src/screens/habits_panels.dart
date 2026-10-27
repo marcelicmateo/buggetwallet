@@ -92,6 +92,12 @@ class ExpectedBillsPanel extends StatelessWidget {
       const SectionHead('Expected bills'),
       Explainer(wc, 'expectedBills',
           'Found in your imports, or added by you. A confirmed bill is set aside from your daily money until it is paid. A bill that comes less often than monthly is set aside in full. Rent, loan and bills in your plan are already counted.'),
+      if (wc.billsCost() case final cost?)
+        Text(
+            'Bills and subscriptions: ${cost.approximate ? 'about ' : ''}${moneyExact(cost.monthly, cur)} a month · '
+            '${cost.approximate ? 'about ' : ''}${moneyExact(cost.yearly, cur)} a year',
+            key: const ValueKey('recurringCost'),
+            style: const TextStyle(fontWeight: FontWeight.w600)),
       if (candidates.isEmpty && confirmed.isEmpty)
         const EmptyNote('No repeating bills found yet. They show up after a few months of imports.'),
       if (candidates.isNotEmpty) ...[

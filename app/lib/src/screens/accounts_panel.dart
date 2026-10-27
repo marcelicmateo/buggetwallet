@@ -84,10 +84,21 @@ class _AccountRow extends StatelessWidget {
         ),
         Text('${accountTypeLabel(a.source, csvMappings: wc.settings.csvMappings)} · ${a.currency} · as of ${shortDateOrRaw(asOf)}',
             style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+        if (!a.isCash && b.duplicateOf == null) _CheckLine(wc, a),
         const SizedBox(height: 4),
         Wrap(spacing: 8, runSpacing: 4, children: [
           TextButton(
               key: ValueKey('accountRename:${a.id}'), onPressed: () => openRenameAccount(context, wc, a), child: const Text('Rename')),
+          if (!a.isCash && b.duplicateOf == null)
+            TextButton(
+                key: ValueKey('accountCheck:${a.id}'),
+                onPressed: () => askBankBalance(
+                    context,
+                    wc,
+                    BankQuestion(
+                        accountId: a.id, name: a.name, currency: a.currency, date: wc.today(), appCents: wc.appBalanceOn(a.id, wc.today())),
+                    fromImport: false),
+                child: const Text('Check balance')),
           TextButton(
               key: ValueKey('accountCorrect:${a.id}'),
               onPressed: () => openCorrectBalance(context, wc, b),
@@ -385,14 +396,19 @@ class _RenameAccountSheetState extends State<RenameAccountSheet> {
 class CorrectBalanceSheet extends StatefulWidget {
   final WalletController wc;
   final AccountBalance balance;
-  const CorrectBalanceSheet({super.key, required this.wc, required this.balance});
+
+  /// The number to start from (the bank's, after a check that was off) and the day it was true on; default: the app's balance, today.
+  final int? prefill;
+  final String? date;
+  const CorrectBalanceSheet({super.key, required this.wc, required this.balance, this.prefill, this.date});
   @override
   State<CorrectBalanceSheet> createState() => _CorrectBalanceSheetState();
 }
 
 class _CorrectBalanceSheetState extends State<CorrectBalanceSheet> {
-  late final _amount = TextEditingController(text: centsToFieldText(widget.balance.balance.abs()));
-  late bool _negative = widget.balance.balance < 0;
+  late final int _start = widget.prefill ?? widget.balance.balance;
+  late final _amount = TextEditingController(text: centsToFieldText(_start.abs()));
+  late bool _negative = _start < 0;
   String? _error;
 
   @override
@@ -408,7 +424,7 @@ class _CorrectBalanceSheetState extends State<CorrectBalanceSheet> {
       return;
     }
     try {
-      await widget.wc.correctAccountBalance(widget.balance.account.id, balance: cents, date: widget.wc.today());
+      await widget.wc.correctAccountBalance(widget.balance.account.id, balance: cents, date: widget.date ?? widget.wc.today());
       if (mounted) Navigator.pop(context, true);
     } on ArgumentError catch (e) {
       setState(() => _error = e.message.toString());
@@ -421,7 +437,7 @@ class _CorrectBalanceSheetState extends State<CorrectBalanceSheet> {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(a.name),
       const SizedBox(height: 6),
-      const Muted('The real balance today is…'),
+      Muted(widget.date == null ? 'The real balance today is…' : 'The real balance on ${longDateOrRaw(widget.date!)} was…'),
       const SizedBox(height: 12),
       MoneyField(
         fieldKey: const ValueKey('accountCorrectAmount'),
@@ -441,7 +457,155 @@ class _CorrectBalanceSheetState extends State<CorrectBalanceSheet> {
           onPressed: _save,
           child: const Text('Set balance')),
       const SizedBox(height: 8),
-      const Muted('Rows after today are added to this number.'),
+      Muted(widget.date == null ? 'Rows after today are added to this number.' : 'Rows after that day are added to this number.'),
+    ]);
+  }
+}
+
+/// "Checked 12 Oct: matches the bank" / "off by 12 €" under an account (Q5). Says so when it was never checked.
+class _CheckLine extends StatelessWidget {
+  final WalletController wc;
+  final Account a;
+  const _CheckLine(this.wc, this.a);
+  @override
+  Widget build(BuildContext context) {
+    final last = wc.lastBankCheckOf(a.id);
+    final style = TextStyle(fontSize: BwType.metaSize, color: context.c.ink2);
+    if (last == null) return Text('Not checked against the bank yet', key: ValueKey('accountChecked:${a.id}'), style: style);
+    final diff = last.bankCents - wc.appBalanceOn(a.id, last.date);
+    return Text('Checked ${shortDateOrRaw(last.date)}: ${diff == 0 ? 'matches the bank' : 'off by ${moneyExact(diff.abs(), a.currency)}'}',
+        key: ValueKey('accountChecked:${a.id}'), style: diff == 0 ? style : style.copyWith(color: context.c.bad));
+  }
+}
+
+/// Asks "What did the bank app show…" for [q] (after an import, or from Settings › Accounts). Returns once the owner answered or skipped.
+Future<void> askBankBalance(BuildContext context, WalletController wc, BankQuestion q, {required bool fromImport}) async {
+  logNav('bankCheck.open', {'import': fromImport});
+  await showSheet<bool>(context, BankCheckSheet(wc: wc, q: q, fromImport: fromImport));
+}
+
+/// The bank question: the file's newest date, the app's own balance prefilled, **Matches** (one tap), a Below zero switch and Skip.
+/// The answer is stored as a check ([WalletController.recordBalanceCheck]); a number that is off shows the difference and offers
+/// Correct balance, never corrects by itself.
+class BankCheckSheet extends StatefulWidget {
+  final WalletController wc;
+  final BankQuestion q;
+  final bool fromImport;
+  const BankCheckSheet({super.key, required this.wc, required this.q, required this.fromImport});
+  @override
+  State<BankCheckSheet> createState() => _BankCheckSheetState();
+}
+
+class _BankCheckSheetState extends State<BankCheckSheet> {
+  late final _amount = TextEditingController(text: centsToFieldText(widget.q.appCents.abs()));
+  late bool _negative = widget.q.appCents < 0;
+  String? _error;
+  BalanceCheck? _result;
+  int _bank = 0;
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    super.dispose();
+  }
+
+  void _record(int bankCents) {
+    try {
+      final c = widget.wc.recordBalanceCheck(widget.q.accountId, date: widget.q.date, bankCents: bankCents);
+      if (c.matches) {
+        Navigator.pop(context, true);
+      } else {
+        setState(() {
+          _result = c;
+          _bank = bankCents;
+        });
+      }
+    } on ArgumentError catch (e) {
+      setState(() => _error = e.message.toString());
+    }
+  }
+
+  void _save() {
+    final cents = _balanceCents(_amount.text, negative: _negative);
+    if (cents == null) {
+      setState(() => _error = invalidAmountMessage);
+      return;
+    }
+    _record(cents);
+  }
+
+  Future<void> _correct() async {
+    final b = widget.wc.accountBalanceList().where((x) => x.account.id == widget.q.accountId).firstOrNull;
+    if (b == null) return;
+    final done = await showSheet<bool>(context, CorrectBalanceSheet(wc: widget.wc, balance: b, prefill: _bank, date: widget.q.date));
+    if (done == true && mounted) Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = widget.q;
+    final r = _result;
+    if (r != null) {
+      return Column(key: const ValueKey('bankCheckOff'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Heading(q.name),
+        const SizedBox(height: 8),
+        StatusLabel(good: false, text: 'Off by ${moneyExact(r.diff.abs(), q.currency)}. See the rows since ${shortDateOrRaw(r.since)}.'),
+        const SizedBox(height: 6),
+        const Muted('Payments may still be pending at the bank. Nothing was changed.'),
+        const SizedBox(height: 14),
+        FilledButton(
+            key: const ValueKey('bankCheckCorrect'),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
+            onPressed: _correct,
+            child: const Text('Correct balance')),
+        const SizedBox(height: 8),
+        TextButton(
+            key: const ValueKey('bankCheckLeave'),
+            style: TextButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Leave it')),
+      ]);
+    }
+    return Column(key: const ValueKey('bankCheckSheet'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Heading(q.name),
+      const SizedBox(height: 6),
+      Muted(widget.fromImport
+          ? 'What did the bank app show when you downloaded this file? Newest row: ${longDateOrRaw(q.date)}.'
+          : 'What does the bank app show now?'),
+      const SizedBox(height: 12),
+      MoneyField(
+        fieldKey: const ValueKey('bankCheckAmount'),
+        controller: _amount,
+        onChanged: (_) {
+          if (_error != null) setState(() => _error = null);
+        },
+        style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500),
+        decoration: InputDecoration(labelText: 'Bank balance', suffixText: currencySymbol(q.currency), errorText: _error, errorMaxLines: 3),
+      ),
+      _BelowZero(value: _negative, onChanged: (v) => setState(() => _negative = v)),
+      const SizedBox(height: 6),
+      Muted('The app counts ${moneyExact(q.appCents, q.currency)}.'),
+      const SizedBox(height: 14),
+      FilledButton(
+          key: const ValueKey('bankCheckMatches'),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
+          onPressed: () => _record(q.appCents),
+          child: const Text('Matches')),
+      const SizedBox(height: 8),
+      OutlinedButton(
+          key: const ValueKey('bankCheckSave'),
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
+          onPressed: _save,
+          child: const Text('Save this number')),
+      const SizedBox(height: 8),
+      TextButton(
+          key: const ValueKey('bankCheckSkip'),
+          style: TextButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
+          onPressed: () {
+            logNav('bankCheck.skip');
+            Navigator.pop(context, false);
+          },
+          child: const Text('Skip')),
     ]);
   }
 }

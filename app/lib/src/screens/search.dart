@@ -302,6 +302,7 @@ class _TxResults extends StatelessWidget {
               currency: wc.currency,
               fxRates: wc.settings.fxRates,
               hasBill: wc.billForTx(t.tx.id) != null,
+              iouTag: wc.iouTagOf(t.tx.id),
               splitCount: wc.splitCount(t.tx.id),
               splitBroken: wc.splitIsBroken(t.tx.id),
               matchedPart: r.matchedPart[t.tx.id],

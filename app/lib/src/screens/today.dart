@@ -73,7 +73,8 @@ class TodayScreen extends StatelessWidget {
     final suggestions = view.suggestionCount();
     final tight = view.tightestBudget();
     final toReview = view.billsToReview();
-    final recent = view.wholeTxs.where((t) => t.kind != BudgetKind.transfer).take(12).toList();
+    final recent =
+        view.wholeTxs.where((t) => t.kind != BudgetKind.transfer || t.iou).take(12).toList(); // an IOU-linked payment shows, tagged
 
     return MarginLine(
         child: ListView(
@@ -97,6 +98,7 @@ class TodayScreen extends StatelessWidget {
                   if (p.dueCycles.isNotEmpty) _BillsLine(p.dueCycles, p.end, view.today(), f.cur, openBills, view.categoryTable),
                   if (comingUp.count > 0 || suggestions > 0) _ComingUpLine(f, comingUp, suggestions),
                   for (final n in view.plannedNeedingCategory()) _NeedsCategoryLine(f, n),
+                  for (final w in view.balanceWarnings()) _BalanceWarnLine(view, w),
                   if (held.isNotEmpty) _HeldLine(held, openAccounts ?? openPlan),
                   if (toReview > 0) _BillsToReviewLine(toReview, openBillsReview ?? openPlan),
                   for (final h in view.headsUpLines()) _HeadsUpLine(f, h),
@@ -342,6 +344,53 @@ class _NeedsCategoryLine extends StatelessWidget {
       });
 }
 
+/// A red line for a bank account (Q5): below zero now, goes below zero before payday (and at which bill), or "Check your balance"
+/// (the balance is not confirmed lately: the question opens). Warn style; never from a balance the app does not trust.
+class _BalanceWarnLine extends StatelessWidget {
+  const _BalanceWarnLine(this.view, this.w);
+  final TodayView view;
+  final BalanceWarning w;
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final name = w.account.name;
+    final cur = w.account.currency;
+    final text = switch (w.kind) {
+      BalanceWarningKind.belowNow => '$name is below zero now (${moneyExact(w.cents ?? 0, cur)})',
+      BalanceWarningKind.goesBelow =>
+        '$name goes below zero around ${shortDateOrRaw(w.date ?? '')}${(w.cause ?? '').isEmpty ? '' : ' (${w.cause})'}',
+      BalanceWarningKind.checkBalance => 'Check your $name balance',
+    };
+    final check = w.kind == BalanceWarningKind.checkBalance;
+    return Container(
+      key: ValueKey('balanceWarn:${w.account.id}'),
+      decoration:
+          BoxDecoration(color: check ? null : c.warnBg, border: check ? null : Border(left: BorderSide(color: c.warnInk, width: 3))),
+      padding: check ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 8),
+      child: InkWell(
+        onTap: check
+            ? () {
+                logNav('balance.checkOpen');
+                view.showBalanceCheck(context, w.account);
+              }
+            : null,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: rowMin),
+          child: Row(children: [
+            Icon(check ? Icons.help_outline : Icons.warning_amber_outlined, size: 18, color: check ? c.ink2 : c.warnInk),
+            const SizedBox(width: 8),
+            Expanded(
+                child: Text(text,
+                    style: TextStyle(
+                        fontSize: BwType.bodySize, color: check ? c.ink2 : c.warnInk, fontWeight: check ? null : FontWeight.w600))),
+            if (check) Icon(Icons.chevron_right, size: 20, color: c.muted),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 /// "Held: …" per currency; a tap opens Settings › Accounts.
 class _HeldLine extends StatelessWidget {
   const _HeldLine(this.held, this.open);
@@ -521,6 +570,7 @@ class _RecentPanel extends StatelessWidget {
                   currency: cur,
                   fxRates: view.settings.fxRates,
                   hasBill: view.billForTx(t.tx.id) != null,
+                  iouTag: view.iouTagOf(t.tx.id),
                   splitCount: view.splitCount(t.tx.id),
                   splitBroken: view.splitIsBroken(t.tx.id),
                   onTap: () async {

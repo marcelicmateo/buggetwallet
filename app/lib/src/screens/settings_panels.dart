@@ -51,6 +51,14 @@ class _ImportPanelState extends State<ImportPanel> {
           label: const Text('Choose files'),
           onPressed: importing ? null : _import,
         ),
+        SwitchListTile(
+          key: const ValueKey('importPreviewAlways'),
+          contentPadding: EdgeInsets.zero,
+          value: widget.wc.importPreviewAlways,
+          onChanged: (v) => setState(() => widget.wc.setImportPreviewAlways(v)),
+          title: const Text('Always show', style: TextStyle(fontSize: BwType.bodySize)),
+          subtitle: const Text('See what a file will add before it is imported. Off: files go straight in.'),
+        ),
         for (final l in widget.wc.lastImport) StatusLabel(good: l.ok, text: '${l.file}: ${l.message}'),
       ]);
 }
