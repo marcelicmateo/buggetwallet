@@ -24,11 +24,15 @@ part 'repo_accounts.dart';
 part 'repo_bills.dart';
 part 'repo_categories.dart';
 part 'repo_blobs.dart';
+part 'repo_import.dart';
+part 'repo_meta.dart';
 part 'repo_planned.dart';
 part 'repo_recurring.dart';
 part 'repo_settings.dart';
+part 'repo_sync_apply.dart';
 part 'repo_splits.dart';
 part 'repo_tags.dart';
+part 'repo_tx.dart';
 
 /// One field-level change. This is what syncs between devices.
 class Op {
@@ -156,47 +160,6 @@ class WalletRepo {
   /// a live bill points to again (api-3 builds deleted files on the relay), cleared once all of them were stored.
   static const blobReuploadKey = 'blobReupload';
 
-  /// The folder sync's bookkeeping (`peer_files`: which files of the shared folder were read) means nothing on a relay,
-  /// whose sequence numbers start over (every device's first relay file is its whole state), so it is dropped once.
-  void _dropFolderSync() {
-    if (db.select("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'peer_files'").isEmpty) return;
-    final n = db.select('SELECT COUNT(*) AS n FROM peer_files').first['n'] as int;
-    db.execute('DROP TABLE peer_files');
-    logEvent(_log, Level.INFO, 'repo.peerFiles.dropped', {'files': n});
-  }
-
-  /// Builds before a synced entity existed skipped its ops but still advanced their sync cursors past the files
-  /// holding them. So when an existing database is opened by a build with a newer [schemaVersion], it forgets how far
-  /// it applied each device (`sync_cursor`): the next sync starts over like a new device (the latest snapshot when one
-  /// of this schema or newer exists, else every file still on the relay), ops already applied change nothing (their
-  /// clocks are not newer), and the skipped ones apply. A new database just records the version.
-  ///
-  /// Below version 4, Revolut Exchange legs were imported with the `ownTransfer` hint, which lets them anchor a pair
-  /// across sources; `importBatch` skips known ids and never edits `kind_hint`, so they are rewritten here once to
-  /// `exchange` through [_write] (the change syncs) and reconciled at once, which dissolves their pairs.
-  void _migrate() {
-    final from = int.tryParse(_meta('schema') ?? '') ?? 1;
-    if (from >= schemaVersion) return;
-    var replay = 0, rehinted = 0, perKey = 0;
-    if (!_created) {
-      replay = db.select('SELECT COUNT(*) AS n FROM sync_cursor').first['n'] as int;
-      db.execute('DELETE FROM sync_cursor');
-      if (from < 4) {
-        final stale = db.select("SELECT id FROM tx WHERE source = 'revolut' AND bank_type = ? AND kind_hint = ?",
-            [revolutExchangeType, TxKind.ownTransfer.name]);
-        rehinted = stale.length;
-        _writeInternal([
-          for (final r in stale) ('tx', r['id'] as String, {'kind_hint': TxKind.exchange.name})
-        ]);
-      }
-      if (from < 8) perKey = WalletRepoSettings(this)._migratePerKeySettings();
-    }
-    _setMeta('schema', '$schemaVersion');
-    logEvent(_log, Level.INFO, 'repo.migrate',
-        {'from': from, 'to': schemaVersion, 'new': _created, 'replayDevices': replay, 'rehinted': rehinted, 'perKeySettings': perKey});
-    if (rehinted > 0) _reconcileLocal();
-  }
-
   /// Ids given to [open]: letters and digits only (a relay stream name is `<id>-<epoch>`, at most 64 characters).
   static final _deviceIdPattern = RegExp(r'^[A-Za-z0-9]{1,48}$');
 
@@ -252,83 +215,9 @@ class WalletRepo {
     db.close();
   }
 
-  // ---------- meta ----------
-  String? _meta(String key) {
-    final rs = db.select('SELECT value FROM meta WHERE key = ?', [key]);
-    return rs.isEmpty ? null : rs.first['value'] as String?;
-  }
-
-  void _setMeta(String key, String? value) => db.execute('INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)', [key, value]);
-
   /// Device-local values that never sync (e.g. the sync folder path).
   String? localValue(String key) => _meta('local.$key');
   void setLocalValue(String key, String? value) => _setMeta('local.$key', value);
-
-  // ---------- change log ----------
-  /// Applies [op] field by field: a field wins if its HLC is newer than the one stored for it ([clocks]).
-  ///
-  /// Each known field's value is checked first ([_fieldValue]): one of the wrong type (another device's bug, a damaged
-  /// op) is ignored and logged as `repo.badField` with the entity and field name only, and its clock is not recorded,
-  /// so a later valid write still wins. The decision depends only on the op, so every device makes the same one. The
-  /// row is created only when at least one field applies: an op with no usable field leaves nothing behind.
-  ///
-  /// Returns the fields that applied (their stored values), or null when none did.
-  Map<String, Object?>? _apply(Op op) {
-    final def = entitySchema[op.entity];
-    if (def == null) return null;
-    final table = def.table;
-    final accepted = <String, Object?>{};
-    Map<String, String>? stored; // field -> hlc, read once per (entity, id)
-    for (final e in op.fields.entries) {
-      final col = def.column(e.key);
-      if (col == null) continue;
-      final v = _fieldValue(col, e.value);
-      if (identical(v, _bad)) {
-        logEvent(_log, Level.WARNING, 'repo.badField', {'entity': op.entity, 'field': e.key});
-        continue;
-      }
-      stored ??= {
-        for (final r in db.select('SELECT field, hlc FROM clocks WHERE entity = ? AND id = ?', [op.entity, op.id]))
-          r['field'] as String: r['hlc'] as String
-      };
-      final have = stored[e.key];
-      if (have != null && Hlc.compareStrings(have, op.hlc) >= 0) continue;
-      accepted[e.key] = v;
-    }
-    if (accepted.isEmpty) return null;
-    assert(!db.autocommit, 'data is written inside a transaction');
-    _dataPending = true;
-    db.execute('INSERT OR IGNORE INTO $table(id) VALUES(?)', [op.id]);
-    for (final k in accepted.keys) {
-      db.execute('INSERT OR REPLACE INTO clocks(entity, id, field, hlc) VALUES(?, ?, ?, ?)', [op.entity, op.id, k, op.hlc]);
-    }
-    final sets = accepted.keys.map((k) => '$k = ?').join(', ');
-    db.execute('UPDATE $table SET $sets WHERE id = ?', [...accepted.values, op.id]);
-    return accepted;
-  }
-
-  static const _bad = Object();
-
-  /// [value] as it is stored in column [col] ([ColumnType]: a 0/1 flag takes a bool or 0/1, an integer column an
-  /// int, every other column text), or [_bad] if it has the wrong type. NULL only in a nullable column. A whole
-  /// number sent as a float (`12.0`) within the range a double holds exactly is accepted; fractions, huge or
-  /// non-finite floats are not.
-  static Object? _fieldValue(ColumnDef col, Object? value) {
-    if (value == null) return col.nullable ? null : _bad;
-    switch (col.type) {
-      case ColumnType.flag:
-        return switch (value) { true || 1 => 1, false || 0 => 0, _ => _bad };
-      case ColumnType.integer:
-        const exact = 9007199254740992; // 2^53
-        return switch (value) {
-          final int v => v,
-          final double v when v.isFinite && v == v.roundToDouble() && v.abs() <= exact => v.toInt(),
-          _ => _bad,
-        };
-      case ColumnType.text:
-        return value is String ? value : _bad;
-    }
-  }
 
   /// Nesting depth of [_asInternal]: while above 0, [_write] skips the clock guard.
   int _internalDepth = 0;
@@ -435,277 +324,6 @@ class WalletRepo {
           (r['seq'] as int, Op.fromJson(jsonDecode(r['op'] as String) as Map<String, Object?>)),
       ];
 
-  void markExported(int upToSeq) {
-    db.execute('DELETE FROM outbox WHERE seq <= ?', [upToSeq]);
-    logEvent(_log, Level.FINE, 'repo.markExported', {'upTo': upToSeq, 'removed': db.updatedRows});
-  }
-
-  /// Applies ops from another device. Returns how many changed something here.
-  ///
-  /// A manual entry and its bank row can arrive in either order (imported on another device before the entry
-  /// synced), so matching runs after remote changes too; it is deterministic, so every device writes the same
-  /// matches. With [match] false (a sync applying many files) it only records that matching is due, and the caller
-  /// runs it once at the end with [runPendingMatch].
-  ///
-  /// With [resend] the ops are also queued in the outbox, clocks unchanged, so this device's next sync carries them
-  /// to the other devices like its own writes (a restore from a backup, see `restoreBackup`). Devices that already
-  /// hold those fields with the same clocks change nothing when they read them (a clock is only accepted when newer).
-  ///
-  /// With [resendChanged] (a merge from a backup) only the fields that changed something here are queued, each op cut
-  /// to those fields with its clock unchanged; ops this wallet already held (or held newer) are not re-sent.
-  int applyRemote(List<Op> ops, {bool match = true, bool resend = false, bool resendChanged = false}) =>
-      applyRemoteByEntity(ops, match: match, resend: resend, resendChanged: resendChanged).values.fold(0, (a, b) => a + b);
-
-  /// [applyRemote], returning how many ops changed a field, per entity (entities with none left out).
-  ///
-  /// With [dryRun] the ops are applied in a transaction that is rolled back: the counts are those a real apply would
-  /// give, and tables, clocks, outbox, the HLC (in memory and stored) and the match flag stay exactly as they were;
-  /// nothing is queued and matching does not run. [beforeRollback] runs inside that transaction after the ops, so it
-  /// reads the merged state (the backup's bill-file count).
-  Map<String, int> applyRemoteByEntity(List<Op> ops,
-      {bool match = true, bool resend = false, bool resendChanged = false, bool dryRun = false, void Function()? beforeRollback}) {
-    final t = PerfTimer('repo.applyRemote');
-    final byEntity = <String, int>{};
-    var changed = 0;
-    if (dryRun) {
-      // No clock.receive: _apply decides on the stored clocks only, and the in-memory HLC is not rolled back by SQLite.
-      db.execute('BEGIN');
-      try {
-        for (final op in ops) {
-          if (_apply(op) != null) {
-            byEntity[op.entity] = (byEntity[op.entity] ?? 0) + 1;
-            changed++;
-          }
-        }
-        beforeRollback?.call();
-      } finally {
-        if (!db.autocommit) db.execute('ROLLBACK');
-        _dataPending = false;
-      }
-      t.done({'ops': ops.length, 'changed': changed, 'dryRun': true});
-      return byEntity;
-    }
-    _tx(() {
-      for (final op in ops) {
-        clock.receive(Hlc.parse(op.hlc));
-        final accepted = _apply(op);
-        if (accepted != null) {
-          byEntity[op.entity] = (byEntity[op.entity] ?? 0) + 1;
-          changed++;
-        }
-        if (resend) {
-          db.execute('INSERT INTO outbox(op) VALUES(?)', [jsonEncode(op.toJson())]);
-        } else if (resendChanged && accepted != null) {
-          db.execute('INSERT INTO outbox(op) VALUES(?)', [jsonEncode(Op(op.entity, op.id, accepted, op.hlc).toJson())]);
-        }
-      }
-      _setMeta('hlc', clock.last.toString());
-      if (changed > 0) _setMeta('match_pending', '1');
-    });
-    t.done({'ops': ops.length, 'changed': changed, 'resend': resend, 'resendChanged': resendChanged});
-    if (match && syncCaughtUp) runPendingMatch();
-    return byEntity;
-  }
-
-  /// The whole wallet as ops: for every row of every synced entity (deleted rows included, so a restore reproduces
-  /// the state exactly) one op per distinct field clock, holding the fields written with that clock and their current
-  /// values. A field with no clock (never written: the column default) is left out, so a restore records the same
-  /// clocks as this device holds; a row with no clocked field at all gives no op. Device-local values (`local.*`
-  /// meta, the outbox, sync cursors) are not included. Ordered by entity, id, clock.
-  List<Op> snapshotOps() {
-    final t = PerfTimer('repo.snapshot', warnMs: 1000);
-    final out = <Op>[];
-    for (final e in entitySchema.entries) {
-      final entity = e.key;
-      final def = e.value;
-      final clocks = <String, Map<String, String>>{}; // id -> field -> hlc
-      for (final r in db.select('SELECT id, field, hlc FROM clocks WHERE entity = ? ORDER BY id', [entity])) {
-        if ((r['id'], r['field'], r['hlc']) case (final String id, final String f, final String h)) {
-          if (def.column(f) != null) (clocks[id] ??= {})[f] = h;
-        }
-      }
-      for (final r in db.select('SELECT * FROM ${def.table} ORDER BY id')) {
-        final id = r['id'] as String;
-        final byClock = <String, Map<String, Object?>>{};
-        for (final MapEntry(key: f, value: h) in (clocks[id] ?? const {}).entries) {
-          (byClock[h] ??= {})[f] = r[f];
-        }
-        final hlcs = byClock.keys.toList()..sort(Hlc.compareStrings);
-        for (final h in hlcs) {
-          out.add(Op(entity, id, byClock[h]!, h));
-        }
-      }
-    }
-    t.done({'ops': out.length});
-    return out;
-  }
-
-  /// Whether nothing has been put into this wallet yet: no transactions, goals, goal contributions, wishes, recurring
-  /// bills, planned costs, bills (receipts, slips), accounts, categories (overrides included), tags, tag links, rule
-  /// tags, merchant rules (deleted rows count: they were data once) and no synced settings. Only such a wallet may
-  /// take a restore from a backup; anything else merges through the sync folder.
-  bool get isEmpty {
-    for (final e in entitySchema.values) {
-      if (db.select('SELECT 1 FROM ${e.table} LIMIT 1').isNotEmpty) return false;
-    }
-    return true;
-  }
-
-  /// The `on` links (T1) of each hand-added entry in [matchedTo] (entry id → bank row id; null = reopened, skipped), copied to its bank row
-  /// (`<bankId>|<tagId>`), so the row that replaces it keeps the tags the owner gave it. `off` links are never copied,
-  /// nor a link the bank row already has for that tag. Written with the match; a later reopen leaves them (like the
-  /// category).
-  List<(String, String, Map<String, Object?>)> _matchedTagLinks(Map<String, String?> matchedTo) {
-    if (matchedTo.isEmpty) return const [];
-    final out = <(String, String, Map<String, Object?>)>[];
-    for (final MapEntry(key: entry, value: bank) in matchedTo.entries) {
-      if (bank == null) continue; // a reopened match keeps what was copied
-      final have = {
-        for (final r in db.select('SELECT tag FROM tx_tags WHERE tx = ?', [bank])) r['tag'] as String
-      };
-      for (final r in db.select("SELECT tag FROM tx_tags WHERE tx = ? AND state = 'on' AND tag != ''", [entry])) {
-        final tag = r['tag'] as String;
-        if (have.add(tag)) out.add(('txtag', '$bank|$tag', {'tx': bank, 'tag': tag, 'state': 'on'}));
-      }
-    }
-    return out;
-  }
-
-  // ---------- matching and pairing (hand-added entries ↔ bank rows, own transfers) ----------
-  /// Each row's first write, for [planMatches] and `seen_bank`: the clock of its `amount`. Only the write that creates a row sets it
-  /// (importBatch, addTransaction; matching, categories and deletes never touch it), and the clocks table converges to the
-  /// same value on every device. If the same bank row is imported on two devices before they sync, the later import
-  /// wins (highest HLC per field), so the row counts as written at that later import.
-  static const _writtenJoin = "LEFT JOIN clocks c ON c.entity = 'tx' AND c.id = tx.id AND c.field = 'amount'";
-
-  /// Matches hand-added expenses to bank rows ([planMatches]) and writes the changes. Returns the new matches.
-  ///
-  /// Loads the manual entries, the bank rows they point at, and for each open entry ([openEntries]) only the bank
-  /// rows that could replace it, so a large history costs little. Logged as `repo.match` on `bw.perf` once per run.
-  int _matchManual() {
-    final t = PerfTimer('repo.match');
-    final written = <String, String>{}, seenBank = <String, String>{};
-    List<Tx> rows(String where, [List<Object?> args = const []]) {
-      final out = <Tx>[];
-      for (final r in db.select('SELECT tx.*, c.hlc AS written FROM tx $_writtenJoin WHERE $where', args)) {
-        final tx = Tx.fromRow(r);
-        if (r['written'] case final String h) written[tx.id] = h;
-        if (r['seen_bank'] case final String v) seenBank[tx.id] = v;
-        out.add(tx);
-      }
-      return out;
-    }
-
-    const live = 'tx.manual = 0 AND tx.deleted = 0';
-    final manual = rows('tx.manual = 1 AND tx.deleted = 0');
-    // Every row an entry points at, deleted ones included: only a deleted target (or one that is not a bank row, or
-    // was paired as an own transfer) reopens its entry. A target this device has not received yet keeps the match
-    // (no unmatch/rematch churn).
-    final targets = rows('tx.id IN (SELECT matched_to FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to IS NOT NULL)');
-    final open = openEntries(manual, {
-      for (final b in targets)
-        if (b.manual || b.deleted || b.transferTo != null) b.id
-    });
-    if (open.isEmpty) {
-      _clearMatchPending();
-      t.done({'manual': manual.length, 'open': 0, 'bank': 0, 'added': 0});
-      return 0;
-    }
-    final bank = {for (final b in targets) b.id: b};
-    for (final m in open) {
-      final since = written[m.id];
-      if (since == null || !isIsoDate(m.date)) continue;
-      // Candidates for this entry only: same amount, within the window, and not on its device when it was added.
-      // Without a seen_bank value, only rows written in or after the entry's millisecond (comparing the 15-digit
-      // millis prefix as text is safe for any counter).
-      final seen = SeenBank.of(since, seenBank[m.id]);
-      final window = [m.amount, addDays(m.date, -matchDays), addDays(m.date, matchDays)];
-      for (final b in seen.recorded
-          ? rows('$live AND tx.amount = ? AND tx.date BETWEEN ? AND ?', window)
-          : rows('$live AND tx.amount = ? AND tx.date BETWEEN ? AND ? AND c.hlc >= ?', [...window, since.split(':').first])) {
-        if (written[b.id] case final String at when seen.unseen(at)) bank[b.id] = b;
-      }
-    }
-    final cz = categorizer(withTags: false);
-    final plan = planMatches(manual, [...bank.values], (b) {
-      final k = cz.table.kindOf(cz.autoCategory(b));
-      return k == BudgetKind.flex || k == BudgetKind.fixed;
-    }, written, seenBank: seenBank);
-    _write([
-      for (final e in plan.matchedTo.entries) ('tx', e.key, {'matched_to': e.value}),
-      for (final e in plan.bankCategory.entries) ('tx', e.key, {'category': e.value}),
-      ..._matchedTagLinks(plan.matchedTo),
-    ]);
-    _clearMatchPending();
-    t.done({
-      'manual': manual.length,
-      'open': open.length,
-      'bank': bank.length,
-      'added': plan.added,
-      'unmatched': plan.matchedTo.values.where((v) => v == null).length,
-      'categories': plan.bankCategory.length,
-    });
-    return plan.added;
-  }
-
-  void _clearMatchPending() => db.execute("DELETE FROM meta WHERE key = 'match_pending'");
-
-  /// A live bank row that needs a transfer partner: no `transfer_to`, or a link that no longer holds because the
-  /// partner here is deleted, is a manual row, points elsewhere, or neither side is a hinted own transfer (mirrors
-  /// `openTransfers`; a partner not here at all keeps the link). `x` is the row's alias.
-  static String _openTransfer(String x) => '($x.manual = 0 AND $x.deleted = 0 AND $x.amount != 0 AND ($x.transfer_to IS NULL '
-      'OR $x.transfer_to = $x.id OR EXISTS (SELECT 1 FROM tx p WHERE p.id = $x.transfer_to AND (p.deleted = 1 OR p.manual = 1 '
-      "OR IFNULL(p.transfer_to, '') != $x.id OR ($x.kind_hint IS NOT '$_own' AND p.kind_hint IS NOT '$_own')))))";
-  static const _own = 'ownTransfer';
-
-  /// Pairs own-account transfers ([planTransfers]) and writes the links. Returns the new pairs.
-  ///
-  /// Loads only the rows that can pair: open rows with an open opposite-amount row of the same currency in another
-  /// source within [transferDays], one of the two a hinted own transfer (a self-join on `amount`, indexed), plus open
-  /// rows with a stale link (to clear it; a pair with no hint on either side is stale) and the rows those links point
-  /// at (so the plan checks them the same way). Logged as `repo.transfers` on `bw.perf`.
-  int _pairTransfers() {
-    final t = PerfTimer('repo.transfers');
-    final rows = <String, Tx>{};
-    void load(String sql, [List<Object?> args = const []]) {
-      for (final r in db.select(sql, args)) {
-        final tx = Tx.fromRow(r);
-        rows[tx.id] = tx;
-      }
-    }
-
-    load('SELECT DISTINCT a.* FROM tx a JOIN tx b ON b.amount = -a.amount AND b.currency = a.currency AND b.source != a.source '
-        "AND b.date BETWEEN date(a.date, '-$transferDays days') AND date(a.date, '+$transferDays days') AND ${_openTransfer('b')} "
-        "WHERE a.date != '' AND (a.kind_hint = '$_own' OR b.kind_hint = '$_own') AND ${_openTransfer('a')}");
-    final candidates = rows.length;
-    load('SELECT a.* FROM tx a WHERE a.transfer_to IS NOT NULL AND ${_openTransfer('a')}');
-    final targets = [
-      for (final r in rows.values)
-        if (r.transferTo case final String to when !rows.containsKey(to)) to
-    ];
-    if (targets.isNotEmpty) {
-      load('SELECT * FROM tx WHERE id IN (${List.filled(targets.length, '?').join(',')})', targets);
-    }
-    final plan = planTransfers([...rows.values]);
-    _write([
-      for (final e in plan.transferTo.entries) ('tx', e.key, {'transfer_to': e.value})
-    ]);
-    t.done({'candidates': candidates, 'rows': rows.length, 'paired': plan.paired, 'reopened': plan.reopened});
-    return plan.paired;
-  }
-
-  /// After rows changed (import, delete, remote ops): pairs own-account transfers, then matches hand-added expenses
-  /// (a paired row is a transfer, so it is no longer a payment a cash entry could be), then links confirmed bills to
-  /// their payments ([planBillLinks]). Returns (pairs, matches).
-  (int, int) _reconcile() => _asInternal(() {
-        final pairs = _pairTransfers();
-        final matches = _matchManual();
-        _moveMatchedAttachments();
-        _repairFieldPairs();
-        _autoLinkBills();
-        return (pairs, matches);
-      });
-
   /// Device-local: whether this device's last sync run was caught up (`'1'`/`'0'`, written by `SyncEngine` after every
   /// run; absent = never synced, which counts as caught up).
   static const caughtUpKey = 'syncCaughtUp';
@@ -714,69 +332,8 @@ class WalletRepo {
   /// received yet may be the right partners, and a pair or match once made is never re-planned.
   bool get syncCaughtUp => localValue(caughtUpKey) != '0';
 
-  /// After a local change of rows (import, delete, a migration rewrite): pairing and matching at once when
-  /// [syncCaughtUp], else only marked due ([runPendingMatch] runs it on the next caught-up sync). Returns (pairs,
-  /// matches), (0, 0) when deferred.
-  (int, int) _reconcileLocal() {
-    if (syncCaughtUp) return _reconcile();
-    _setMeta('match_pending', '1');
-    logEvent(_log, Level.INFO, 'repo.match.deferred');
-    return (0, 0);
-  }
-
-  /// Runs transfer pairing and matching if ops applied with `applyRemote(match: false)` changed something since it
-  /// last ran (also after a crash mid-sync: the flag is stored). `SyncEngine.run` calls it once, only when caught up.
-  void runPendingMatch() {
-    if (_meta('match_pending') == null) return;
-    _asInternal(() {
-      _reconcile();
-      refreshRecurring(_today());
-    });
-  }
-
   /// Today's date on this device's clock (the one the HLC uses, so tests can set it).
   String _today() => isoDate(DateTime.fromMillisecondsSinceEpoch(clock.now()));
-
-  /// How many field clocks the wallet holds ([count]) and the newest of them ([maxHlc]; `null` when there are none).
-  /// Not a change mark: a peer op that replaces a field's clock with one older than the newest overall changes data and
-  /// leaves both as they were. Use [dataVersion] to tell whether wallet data changed.
-  ({int count, String? maxHlc}) clockStats() {
-    final r = db.select('SELECT count(*) AS n, max(hlc) AS m FROM clocks').first;
-    return (count: r['n'] as int, maxHlc: r['m'] as String?);
-  }
-
-  // ---------- sync bookkeeping (device-local, never synced) ----------
-  /// How far this device applied each other device's relay files (device id → last applied seq; absent = none).
-  /// Advanced file by file by `SyncEngine`, raised to a snapshot's covers; a schema bump clears it ([_migrate]).
-  Map<String, int> syncCursors() => {
-        for (final r in db.select('SELECT device, seq FROM sync_cursor')) r['device'] as String: r['seq'] as int,
-      };
-
-  /// Sets [device]'s cursor; 0 forgets it (the relay lost that device's files, which start again at 1).
-  void setSyncCursor(String device, int seq) => seq <= 0
-      ? db.execute('DELETE FROM sync_cursor WHERE device = ?', [device])
-      : db.execute('INSERT OR REPLACE INTO sync_cursor(device, seq) VALUES(?, ?)', [device, seq]);
-
-  /// Records that relay file [seq] of [device] (this device's own uploads included) held [ops] ops, for the snapshot
-  /// rule ("500 ops behind the newest snapshot").
-  void recordSyncFile(String device, int seq, int ops) =>
-      db.execute('INSERT OR REPLACE INTO sync_files(device, seq, ops) VALUES(?, ?, ?)', [device, seq, ops]);
-
-  /// Ops in recorded files not covered by [covers] (device → seq; a device not in it covers nothing).
-  int syncOpsAfter(Map<String, int> covers) {
-    var n = 0;
-    for (final r in db.select('SELECT device, seq, ops FROM sync_files')) {
-      if ((r['seq'] as int) > (covers[r['device']] ?? 0)) n += r['ops'] as int;
-    }
-    return n;
-  }
-
-  /// Forgets recorded files that [covers] covers.
-  void forgetSyncFiles(Map<String, int> covers) {
-    for (final MapEntry(key: d, value: s) in covers.entries) {
-      db.execute('DELETE FROM sync_files WHERE device = ? AND seq <= ?', [d, s]);
-    }
-  }
 
   // ---------- reads ----------
   /// Rows with [Tx.matchPending]: a manual entry matched to a bank row this device does not hold yet (missing, or only
@@ -903,17 +460,6 @@ class WalletRepo {
           r,
       ], (cz, r) => cz.resolveStored(r['category'] as String?, text: '${r['title'] ?? ''}'), PlannedCost.fromRow);
 
-  /// The live payee rules ([merchantRules]) as [MerchantRule]s, by key (for `rulesView`).
-  List<MerchantRule> payeeRules() => [
-        for (final MapEntry(:key, :value) in (merchantRules().entries.toList()..sort((a, b) => a.key.compareTo(b.key))))
-          MerchantRule(key, value)
-      ];
-
-  Map<String, String> merchantRules() => {
-        for (final r in db.select('SELECT id, category FROM merchant_rules WHERE deleted = 0 AND category IS NOT NULL'))
-          if ((r['id'], r['category']) case (final String id, final String c)) id: c,
-      };
-
   /// The stored settings ([_readSettings]: per-key budget and pattern rows, legacy maps only as a fallback).
   WalletSettings settings() => _readSettings(db, table: categoryTable());
 
@@ -1027,16 +573,6 @@ class WalletRepo {
     return '$prefix${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${r.nextInt(1 << 20).toRadixString(36)}';
   }
 
-  /// The `seen_bank` value for an entry added now ([SeenBank]): per device, the highest `amount` clock of the bank
-  /// rows (live or deleted) this device holds. Grouped in SQL by the node part of the clock (position 23 on: 15 millis
-  /// digits, `:`, 5 counter digits, `:`), so each group's strings have one width and MAX is their HLC maximum;
-  /// [SeenBank.encode] then takes the maximum per node exactly.
-  String _seenBank() => SeenBank.encode([
-        for (final r in db.select('SELECT MAX(c.hlc) AS h FROM clocks c JOIN tx ON tx.id = c.id '
-            "WHERE c.entity = 'tx' AND c.field = 'amount' AND tx.manual = 0 GROUP BY substr(c.hlc, 23)"))
-          r['h'] as String,
-      ]);
-
   /// A hand-entered expense (positive [amount] = money spent). Records which bank rows this device holds now
   /// (`seen_bank`, in the same op): none of them is this entry's row, but a bank row imported on another device that
   /// has not synced yet may be ([planMatches]).
@@ -1065,155 +601,8 @@ class WalletRepo {
     return id;
   }
 
-  void setCategory(String txId, String? category) => _write([
-        ('tx', txId, {'category': category})
-      ]);
-
-  /// Deletes a row. A hand-added expense that this bank row replaced counts again (and may be matched by a later
-  /// bank row): see [planMatches]. The other side of an own transfer it was paired with is open again ([planTransfers]).
-  void deleteTransaction(String txId) {
-    _purgeUndo();
-    // Read before any write: the links this row holds are cleared below (not caught up) or by [_reconcileLocal].
-    final matched = [
-      for (final r in db.select('SELECT id FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to = ?', [txId])) r['id'] as String
-    ];
-    final partners = [
-      for (final r in db.select('SELECT id FROM tx WHERE deleted = 0 AND transfer_to = ? AND id != ?', [txId, txId])) r['id'] as String
-    ];
-    _write([
-      ('tx', txId, {'deleted': 1})
-    ]);
-    if (!syncCaughtUp) {
-      // New pairs and matches wait for a caught-up sync, but the links this row held are undone at once: that needs
-      // only its own deletion, and a cash entry it replaced must count again now (exact money).
-      _write([
-        for (final r in db.select('SELECT id FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to = ?', [txId]))
-          ('tx', r['id'] as String, {'matched_to': null}),
-        for (final r in db.select('SELECT id FROM tx WHERE transfer_to = ? AND id != ?', [txId, txId]))
-          ('tx', r['id'] as String, {'transfer_to': null}),
-      ]);
-    }
-    // A bill paid by this row is unpaid again at once (its planned row reopens and reserves): exact money.
-    final today = _today();
-    final paid = [
-      for (final r in db.select("SELECT * FROM bills WHERE deleted = 0 AND source != 'attachment' AND linked_tx = ?", [txId]))
-        Bill.fromRow(r)
-    ];
-    _write([
-      for (final b in paid) ..._billWrites(b, {'linked_tx': null}, today),
-    ]);
-    // Device-local, for undeleteTransaction: automatic linking takes only bank rows (a cash expense made from a bill
-    // would come back without its bill: reserved and counted, twice), and while not caught up nothing re-links a
-    // match or a pair (the entry and the row would both count).
-    if (paid.isNotEmpty || matched.isNotEmpty || partners.isNotEmpty) {
-      _setMeta(
-          '$_undoKey$txId',
-          jsonEncode({
-            'at': clock.now(),
-            'bills': [for (final b in paid) b.id],
-            'matched': matched,
-            'transfer': partners,
-          }));
-    }
-    _reconcileLocal();
-  }
-
-  /// Meta key prefix (device-local, never synced), value JSON with `at` (wall ms) and id lists `bills`, `matched` and
-  /// `transfer`: the bills [deleteTransaction] unlinked from a row, the hand-added entries it replaced
-  /// (`matched_to`) and its own-transfer partners (`transfer_to`), for its undo. Removed by the undo, or after
-  /// [_undoKeep] ([_purgeUndo], at open and on every delete).
-  static const _undoKey = 'undo.';
-  static const _undoKeep = Duration(days: 1);
-
-  /// Drops the [_undoKey] records older than [_undoKeep] (or unreadable): the app's Undo lasts seconds.
-  void _purgeUndo() {
-    final cutoff = clock.now() - _undoKeep.inMilliseconds;
-    final old = <String>[];
-    for (final r in db.select('SELECT key, value FROM meta WHERE substr(key, 1, ${_undoKey.length}) = ?', [_undoKey])) {
-      final at = _undoRecord(r['value'] as String?)?.at;
-      if (at == null || at < cutoff) old.add(r['key'] as String);
-    }
-    for (final k in old) {
-      db.execute('DELETE FROM meta WHERE key = ?', [k]);
-    }
-    if (old.isNotEmpty) logEvent(_log, Level.FINE, 'repo.undo.purged', {'records': old.length});
-  }
-
-  /// An [_undoKey] value; null when it is not one.
-  static ({int? at, List<String> bills, List<String> matched, List<String> transfer})? _undoRecord(String? v) {
-    try {
-      final j = v == null ? null : jsonDecode(v);
-      if (j is! Map) return null;
-      List<String> ids(Object? l) => l is List ? l.whereType<String>().toList() : const <String>[];
-      return (at: j['at'] is int ? j['at'] as int : null, bills: ids(j['bills']), matched: ids(j['matched']), transfer: ids(j['transfer']));
-    } on FormatException catch (e, st) {
-      logError(_log, 'repo.undo.badRecord', e, st);
-      return null;
-    }
-  }
-
-  /// Undo of [deleteTransaction] (Stage I): writes `deleted: 0` (an owner write, synced), so the row is live again with
-  /// every other field as it is now (a hand-added entry keeps its `matched_to`). Per DESIGN_DECISIONS §4.10 only this
-  /// write revives a deleted row, and the later of it and the delete (by HLC) wins on every device; edits made
-  /// elsewhere meanwhile stay (per field). From this device's undo record, in the same write: the bill the delete
-  /// unlinked is linked again when it is still live and unlinked and no other live bill holds the row (a cash expense
-  /// made from a bill is never linked automatically); each hand-added entry it replaced gets `matched_to` back and each
-  /// own-transfer partner `transfer_to` back when that field is still null and the entry or partner is live (while not
-  /// caught up nothing re-links them, so the money would count twice). Pairing, matching and bill links then run as
-  /// after any change of rows ([_reconcileLocal]). A live row: nothing is written. Throws [ArgumentError] for an id
-  /// this wallet does not hold.
-  void undeleteTransaction(String txId) {
-    final rs = db.select('SELECT deleted, transfer_to FROM tx WHERE id = ?', [txId]);
-    if (rs.isEmpty) throw ArgumentError('No such transaction.');
-    if (rs.first['deleted'] == 0) return;
-    final today = _today();
-    final relink = <Bill>[];
-    final rematch = <String>[], repair = <String>[];
-    if (_undoRecord(_meta('$_undoKey$txId')) case final u?) {
-      final held = db.select("SELECT 1 FROM bills WHERE deleted = 0 AND source != 'attachment' AND linked_tx = ?", [txId]).isNotEmpty;
-      for (final id in u.bills) {
-        final b = db.select('SELECT * FROM bills WHERE id = ? AND deleted = 0 AND linked_tx IS NULL', [id]);
-        if (!held && b.isNotEmpty) relink.add(Bill.fromRow(b.first));
-      }
-      for (final id in u.matched) {
-        if (db.select('SELECT 1 FROM tx WHERE id = ? AND manual = 1 AND deleted = 0 AND matched_to IS NULL', [id]).isNotEmpty) {
-          rematch.add(id);
-        }
-      }
-      for (final id in u.transfer) {
-        if (db.select('SELECT 1 FROM tx WHERE id = ? AND deleted = 0 AND transfer_to IS NULL', [id]).isNotEmpty) repair.add(id);
-      }
-    }
-    _write([
-      ('tx', txId, {'deleted': 0}),
-      // One bill per payment row (the field-pair repair would unlink the others anyway).
-      for (final b in relink.take(1)) ..._billWrites(b, {'linked_tx': txId}, today),
-      for (final id in rematch) ('tx', id, {'matched_to': txId}),
-      for (final id in repair) ('tx', id, {'transfer_to': txId}),
-      // Its own side, when a caught-up repair cleared it meanwhile (a pair is always written on both rows).
-      if (repair.length == 1 && rs.first['transfer_to'] == null) ('tx', txId, {'transfer_to': repair.single}),
-    ]);
-    db.execute('DELETE FROM meta WHERE key = ?', ['$_undoKey$txId']);
-    logEvent(_log, Level.INFO, 'repo.undelete',
-        {'entity': 'tx', 'bills': relink.take(1).length, 'matches': rematch.length, 'transfers': repair.length});
-    _reconcileLocal();
-  }
-
   /// The id of a bill's planned row (`bill:<billId>`, the same on every device).
   static String billPlannedId(String billId) => '${PlannedSource.bill.name}:$billId';
-
-  void setMerchantRule(String key, String category) => _write([
-        ('rule', key, {'category': category, 'deleted': 0})
-      ]);
-
-  /// Removes the payee rule [key] (a tombstone; the category stays stored, so `setMerchantRule` brings it back).
-  /// Nothing is written when there is no live rule.
-  void removeMerchantRule(String key) {
-    if (db.select('SELECT 1 FROM merchant_rules WHERE id = ? AND deleted = 0', [key]).isEmpty) return;
-    _write([
-      ('rule', key, {'deleted': 1})
-    ]);
-  }
 
   /// Creates or edits a goal. [saved] is the total the user sees: a new goal stores it as its base (the `saved`
   /// column); for an existing goal it is never written back. A different total becomes ONE contribution of the
