@@ -42,6 +42,7 @@ part 'controller_review.dart';
 part 'controller_tx.dart';
 part 'controller_forecast.dart';
 part 'controller_iou.dart';
+part 'controller_suggest.dart';
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');
@@ -109,8 +110,21 @@ class _Remap {
   String? id;
   List<String> removed = const [];
 
+  /// The waiting `csvRevive:<id>` value before the forced save (null = none): Cancel puts exactly that back.
+  String? reviveBefore;
+
   /// The layout as it was before (the removed one), written back by the Undo; null when core kept none.
   CsvMapping? old;
+}
+
+/// One question per account: of several (several files of one pick) the one with the newest date.
+List<BankQuestion> newestPerAccount(Iterable<BankQuestion> questions) {
+  final by = <String, BankQuestion>{};
+  for (final q in questions) {
+    final have = by[q.accountId];
+    if (have == null || q.date.compareTo(have.date) > 0) by[q.accountId] = q;
+  }
+  return by.values.toList();
 }
 
 /// One file read: its [batch], the column [mapping] that read it (null for a bank profile) and, for a layout the owner just chose,
@@ -118,6 +132,9 @@ class _Remap {
 class _ReadFile {
   final ImportBatch batch;
   final CsvMapping? mapping;
+
+  /// [commit] runs before the rows are written and throws core's [ArgumentError] for a refused layout (shown as the layout line);
+  /// [revert] takes a layout saved early back on Cancel.
   final void Function()? commit, revert;
   const _ReadFile(this.batch, this.mapping, {this.commit, this.revert});
 }
@@ -800,10 +817,11 @@ class WalletController extends ChangeNotifier {
               final periods = payPeriods(count: 12);
 
               final merch = <String, (int, int)>{};
-              // The list shows each payment once (its parts hang under it, `splitParts`); the places add up the parts.
+              // The list shows each payment once (its parts hang under it, `splitParts`); the places add up the parts. A payment linked to
+              // an IOU is neither spending nor income but is still a payment: it is listed, with its "lent" / "repaid" tag.
               final monthTxs = [
                 for (final t in wholeTxs)
-                  if (monthOf(t.date) == month && t.kind != BudgetKind.transfer) t
+                  if (monthOf(t.date) == month && (t.kind != BudgetKind.transfer || t.iou)) t
               ];
               final merchSeen = <String>{};
               for (final t in txs) {
@@ -1118,10 +1136,14 @@ class WalletController extends ChangeNotifier {
         final s = repo.importBatch(batch, revive: revive.toSet(), skip: skip); // logs repo.importBatch
         if (revive.isNotEmpty) {
           // Only the ids this file read are done; the rest wait for their own files (January's and February's rows both come back).
-          final read = {for (final t in batch.transactions) t.id};
+          // A row the owner skipped is not done: its id stays waiting, so the file brings it back later as "Read again".
+          final done = {
+            for (final t in batch.transactions)
+              if (!skip.contains(t.id)) t.id
+          };
           final rest = [
             for (final id in revive)
-              if (!read.contains(id)) id
+              if (!done.contains(id)) id
           ];
           repo.setLocalValue('csvRevive:$reviveKey', rest.isEmpty ? null : jsonEncode(rest));
         }
@@ -1185,6 +1207,9 @@ class WalletController extends ChangeNotifier {
 
   /// The ids last deleted in this session: the toast's Undo restores them.
   String? lastDeletedTx, lastDeletedGoal;
+
+  /// The payee rule offered after the last hand-set main tag (Q6): the toast after the sheet reads it once (`takeRuleOffer`).
+  RuleOffer? ruleOffer;
 
   /// The split removed last (payment and its parts): the toast's Undo puts it back (`restoreSplitOf`).
   (Tx, List<SplitPart>)? lastRemovedSplit;

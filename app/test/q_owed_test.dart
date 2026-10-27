@@ -4,6 +4,8 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/owed.dart';
 import 'package:budget_wallet/src/screens/save.dart';
+import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
@@ -79,6 +81,42 @@ void main() {
       await _panel(t, wc);
       expect(find.text('People owe you ${moneyExact(0, 'EUR')} · You owe ${moneyExact(3500, 'EUR')}'), findsOneWidget);
       expect(find.textContaining('you owe'), findsWidgets);
+    }, timeout: _t);
+
+    tw('only foreign IOUs: a total per currency, never "0 €" for the wallet', (t) async {
+      final wc = _wallet();
+      wc.addIou(person: 'Sam', direction: IouDirection.lent, amount: 5000, date: '2026-10-10', currency: 'USD');
+      wc.addIou(person: 'Alex', direction: IouDirection.borrowed, amount: 2000, date: '2026-10-10', currency: 'USD');
+      await _panel(t, wc);
+      expect(_key('owedSummary'), findsNothing);
+      expect(find.text('In USD: People owe you ${moneyExact(5000, 'USD')} · You owe ${moneyExact(2000, 'USD')}'), findsOneWidget);
+      expect(find.textContaining('0 €'), findsNothing);
+    }, timeout: _t);
+
+    tw('mixed currencies: the wallet total first, the others on their own line', (t) async {
+      final wc = _wallet();
+      wc.addIou(person: 'Sam', direction: IouDirection.lent, amount: 5000, date: '2026-10-10');
+      wc.addIou(person: 'Alex', direction: IouDirection.lent, amount: 3000, date: '2026-10-10', currency: 'USD');
+      await _panel(t, wc);
+      expect(find.text('People owe you ${moneyExact(5000, 'EUR')} · You owe ${moneyExact(0, 'EUR')}'), findsOneWidget);
+      expect(find.text('In USD: People owe you ${moneyExact(3000, 'USD')} · You owe ${moneyExact(0, 'USD')}'), findsOneWidget);
+    }, timeout: _t);
+
+    tw('a person with two IOUs is one group, a line per IOU under the name; one IOU stays a single line', (t) async {
+      final wc = _wallet();
+      final a = wc.addIou(person: 'Sam', direction: IouDirection.lent, amount: 5000, date: '2026-10-10');
+      final b = wc.addIou(person: 'sam', direction: IouDirection.lent, amount: 2500, date: '2026-10-12');
+      final c = wc.addIou(person: 'Alex', direction: IouDirection.lent, amount: 1000, date: '2026-10-11');
+      await _panel(t, wc);
+      expect(_key('owedPerson:sam'), findsOneWidget);
+      expect(find.descendant(of: _key('owedPerson:sam'), matching: find.text('sam')), findsOneWidget); // the newest IOU's spelling
+      expect(find.descendant(of: _key('owedPerson:sam'), matching: _key('iou:$a')), findsOneWidget);
+      expect(find.descendant(of: _key('owedPerson:sam'), matching: _key('iou:$b')), findsOneWidget);
+      expect(_key('owedPerson:alex'), findsNothing);
+      expect(_key('iou:$c'), findsOneWidget);
+      await t.tap(_key('iou:$b'));
+      await _settle(t);
+      expect(_key('iouSheet'), findsOneWidget);
     }, timeout: _t);
 
     tw('validation shows core\'s message: no name, a zero amount, a name that is too long', (t) async {
@@ -242,6 +280,25 @@ void main() {
       wc.addIou(person: 'Sam', direction: IouDirection.lent, amount: 4000, date: '2026-10-12', tx: id);
       final row = wc.txs.firstWhere((x) => x.tx.id == id);
       await pumpApp(t, Scaffold(body: TxTile(t: row, currency: 'EUR', iouTag: wc.iouTagOf(id))));
+      expect(find.text('lent'), findsOneWidget);
+    }, timeout: _t);
+
+    tw('the tag also shows with the search highlight (TxTile.highlight + iouTag)', (t) async {
+      final wc = _wallet();
+      final id = wc.repo.addTransaction(date: '2026-10-12', amount: 4000, category: 'Shopping', note: 'Synthetic lamp');
+      wc.addIou(person: 'Sam', direction: IouDirection.lent, amount: 4000, date: '2026-10-12', tx: id);
+      final row = wc.txs.firstWhere((x) => x.tx.id == id);
+      await pumpApp(t, Scaffold(body: TxTile(t: row, currency: 'EUR', iouTag: wc.iouTagOf(id), highlight: 'lamp')));
+      expect(find.text('lent'), findsOneWidget);
+    }, timeout: _t);
+
+    tw('Today\'s Recent list carries the tag', (t) async {
+      final wc = _wallet();
+      final id = wc.repo.addTransaction(date: '2026-10-19', amount: 4000, category: 'Shopping', note: 'Synthetic lamp');
+      wc.addIou(person: 'Sam', direction: IouDirection.lent, amount: 4000, date: '2026-10-19', tx: id);
+      wc.snoozeKeyBackup();
+      await pumpApp(t, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
+          size: const Size(400, 3000));
       expect(find.text('lent'), findsOneWidget);
     }, timeout: _t);
 

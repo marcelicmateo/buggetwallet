@@ -278,6 +278,10 @@ class _HomeShellState extends State<HomeShell> {
             view: TodayView(widget.wc),
             openPlan: () => _go(Tabs.budget, 'today'),
             openSpending: () => _go(Tabs.budget, 'today'),
+            openSearch: () {
+              _go(Tabs.budget, 'today');
+              _searchRequest.value++;
+            },
             addExpense: _addExpense,
             openBills: () {
               _go(Tabs.bills, 'today');

@@ -63,7 +63,7 @@ Future<void> pickAndImport(BuildContext context, WalletController wc, FileChoose
     toast(context, 'Earlier payments of that layout were read again.', actionLabel: 'Undo', onAction: undo);
   }
   // Q5: accounts the file gave no balance for: "What did the bank app show when you downloaded this file?"
-  for (final q in lines.expand((l) => l.questions)) {
+  for (final q in newestPerAccount(lines.expand((l) => l.questions))) {
     if (!context.mounted) break;
     await askBankBalance(context, wc, q, fromImport: true);
   }

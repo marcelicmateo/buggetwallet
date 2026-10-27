@@ -40,6 +40,9 @@ class TodayScreen extends StatelessWidget {
   /// Opens Settings › Expected income (the expected-income line); without it the line is not tappable.
   final VoidCallback? openIncome;
 
+  /// Opens search (the magnifier in Recent); without it the Recent panel has no search button.
+  final VoidCallback? openSearch;
+
   /// The file chooser of the review's Import step (tests pass one that fails).
   final FileChooser chooser;
 
@@ -55,6 +58,7 @@ class TodayScreen extends StatelessWidget {
     this.openBillsReview,
     this.openAccounts,
     this.openIncome,
+    this.openSearch,
     this.chooser = const FileChooser(),
     this.clock = DateTime.now,
   });
@@ -69,7 +73,8 @@ class TodayScreen extends StatelessWidget {
     final suggestions = view.suggestionCount();
     final tight = view.tightestBudget();
     final toReview = view.billsToReview();
-    final recent = view.wholeTxs.where((t) => t.kind != BudgetKind.transfer).take(12).toList();
+    final recent =
+        view.wholeTxs.where((t) => t.kind != BudgetKind.transfer || t.iou).take(12).toList(); // an IOU-linked payment shows, tagged
 
     return MarginLine(
         child: ListView(
@@ -106,7 +111,7 @@ class TodayScreen extends StatelessWidget {
                 if (f.s.savedFor != p.start && view.goals.isNotEmpty) _PaydayChecklist(f),
                 if (f.deliveryHour) _DeliveryHourPanel(f),
               ], right: [
-                _RecentPanel(view, recent, f.cur),
+                _RecentPanel(view, recent, f.cur, openSearch),
               ]),
             ])));
   }
@@ -531,14 +536,26 @@ class _DeliveryHourPanel extends StatelessWidget {
 
 /// The latest rows, with when each bank file last brought something.
 class _RecentPanel extends StatelessWidget {
-  const _RecentPanel(this.view, this.recent, this.cur);
+  const _RecentPanel(this.view, this.recent, this.cur, this.openSearch);
+  final VoidCallback? openSearch;
   final TodayView view;
   final List<CategorizedTx> recent;
   final String cur;
   @override
   Widget build(BuildContext context) => Panel(children: [
         SplitRow(
-            start: const Heading('Recent', size: BwType.headingSize),
+            start: Row(children: [
+              const Flexible(child: Heading('Recent', size: BwType.headingSize)),
+              if (openSearch != null)
+                IconButton(
+                    key: const ValueKey('todaySearch'),
+                    tooltip: 'Search payments',
+                    icon: const Icon(Icons.search),
+                    onPressed: () {
+                      logNav('today.search');
+                      openSearch!();
+                    }),
+            ]),
             end: Muted(TodayScreen._freshness(view), size: BwType.metaSize, align: TextAlign.end)),
         if (recent.isEmpty)
           const EmptyNote('No transactions yet. Import your bank exports in Settings, or add your first expense.')
@@ -553,6 +570,7 @@ class _RecentPanel extends StatelessWidget {
                   currency: cur,
                   fxRates: view.settings.fxRates,
                   hasBill: view.billForTx(t.tx.id) != null,
+                  iouTag: view.iouTagOf(t.tx.id),
                   splitCount: view.splitCount(t.tx.id),
                   splitBroken: view.splitIsBroken(t.tx.id),
                   onTap: () async {

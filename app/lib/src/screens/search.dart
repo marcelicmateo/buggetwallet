@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:wallet_core/wallet_core.dart' show Bill, BillStatus, CategorizedTx, PlannedCost, PlannedStatus, SearchResult;
+import 'package:wallet_core/wallet_core.dart' show Bill, BillStatus, CategorizedTx, PlannedCost, PlannedStatus, SearchFilter, SearchResult;
 
 import '../controller.dart';
 import '../format.dart';
@@ -11,9 +11,11 @@ import '../logging.dart';
 import '../platform.dart';
 import '../tabs.dart';
 import '../theme.dart';
+import '../widgets/charts.dart' show RangePicker, systemRangePicker;
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 import 'bill_sheet.dart';
+import 'search_filters.dart';
 import 'upcoming.dart';
 import 'upcoming_view.dart';
 
@@ -32,7 +34,16 @@ class SearchPane extends StatefulWidget {
   /// Goal, wish or bill tapped: the tab to jump to (both are on Save); [onOpenBills] for a bill (the Bills tab).
   final void Function(int tab) onOpenTab;
   final VoidCallback onOpenBills;
-  const SearchPane({super.key, required this.wc, required this.onClose, required this.onOpenTab, required this.onOpenBills});
+
+  /// The date range picker of the Date filter (tests give their own).
+  final RangePicker picker;
+  const SearchPane(
+      {super.key,
+      required this.wc,
+      required this.onClose,
+      required this.onOpenTab,
+      required this.onOpenBills,
+      this.picker = systemRangePicker});
   @override
   State<SearchPane> createState() => _SearchPaneState();
 }
@@ -44,6 +55,9 @@ class _SearchPaneState extends State<SearchPane> {
 
   /// The query the results are for (the field's text, a moment after typing stops).
   String _query = '';
+
+  /// The filter chips' state (Q7). With a filter on, the results are payments only and a blank query is allowed.
+  SearchFilter _filter = const SearchFilter();
 
   @override
   void initState() {
@@ -104,9 +118,16 @@ class _SearchPaneState extends State<SearchPane> {
             ),
           ),
         ),
+        SearchFilterBar(wc: widget.wc, filter: _filter, picker: widget.picker, onChanged: (f) => setState(() => _filter = f)),
+        const SizedBox(height: 4),
         Expanded(
             child: _SearchResults(
-                wc: widget.wc, query: _query, onOpenTab: widget.onOpenTab, onOpenBills: widget.onOpenBills, onOpenTx: _openTx)),
+                wc: widget.wc,
+                query: _query,
+                filter: _filter,
+                onOpenTab: widget.onOpenTab,
+                onOpenBills: widget.onOpenBills,
+                onOpenTx: _openTx)),
       ]),
     );
   }
@@ -114,9 +135,16 @@ class _SearchPaneState extends State<SearchPane> {
 
 /// The ruled result sections for [query] (or the hint while it is too short).
 class _SearchResults extends StatelessWidget {
-  const _SearchResults({required this.wc, required this.query, required this.onOpenTab, required this.onOpenBills, required this.onOpenTx});
+  const _SearchResults(
+      {required this.wc,
+      required this.query,
+      required this.filter,
+      required this.onOpenTab,
+      required this.onOpenBills,
+      required this.onOpenTx});
   final WalletController wc;
   final String query;
+  final SearchFilter filter;
   final void Function(int tab) onOpenTab;
   final VoidCallback onOpenBills;
   final Future<void> Function(CategorizedTx t) onOpenTx;
@@ -124,10 +152,11 @@ class _SearchResults extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cur = wc.currency;
-    final searched = query.length >= searchMinChars;
-    final r = searched ? wc.search(query) : null;
-    final planned = searched ? wc.searchPlanned(query) : const <PlannedCost>[];
-    final billsFound = searched ? wc.searchBills(query) : const <Bill>[];
+    final filtered = !filter.isEmpty;
+    final searched = query.length >= searchMinChars || filtered;
+    final r = !searched ? null : (filtered ? wc.searchFiltered(query, filter) : wc.search(query));
+    final planned = searched && !filtered ? wc.searchPlanned(query) : const <PlannedCost>[];
+    final billsFound = searched && !filtered ? wc.searchBills(query) : const <Bill>[];
 
     final body = <Widget>[
       if (!searched)
@@ -135,13 +164,14 @@ class _SearchResults extends StatelessWidget {
       else if (r!.isEmpty && planned.isEmpty && billsFound.isEmpty)
         const EmptyNote('Nothing found')
       else ...[
-        if (r.txs.isNotEmpty) _TxResults(wc, r, onOpenTx),
+        if (filtered) const Muted('Filters on: only payments are listed.', key: ValueKey('filterNote')),
+        if (r.txs.isNotEmpty) _TxResults(wc, r, query, onOpenTx),
         if (r.goals.isNotEmpty)
           _ResultSection('Goals', r.goals.length, [
             Rows(children: [
               for (final g in r.goals)
                 _ResultRow(g.name, '${money(g.saved, cur, decimals: 0)} / ${money(g.target, cur, decimals: 0)}', 'Goal', 'goal',
-                    () => onOpenTab(Tabs.save)),
+                    () => onOpenTab(Tabs.save), query),
             ]),
           ]),
         if (r.wishlist.isNotEmpty)
@@ -153,7 +183,8 @@ class _SearchResults extends StatelessWidget {
                     money(w.price, cur, decimals: 0),
                     switch (w.status) { 'bought' => 'Bought', 'skipped' => 'Skipped', _ => 'Waiting' },
                     'wish',
-                    () => wc.openWish(w.id, via: 'search')),
+                    () => wc.openWish(w.id, via: 'search'),
+                    query),
             ]),
           ]),
         if (planned.isNotEmpty)
@@ -165,7 +196,8 @@ class _SearchResults extends StatelessWidget {
                     p.amount == null ? 'No amount' : moneyExact(p.amount!, cur),
                     '${shortDateOrRaw(p.date)}${p.category == null ? '' : ' · ${wc.categoryTable.label(p.category!)}'}${p.status == PlannedStatus.open ? '' : ' · ${p.status == PlannedStatus.paid ? 'Paid' : 'Skipped'}'}',
                     'planned',
-                    () => p.isBill ? openBill(context, wc, p.sourceRef!) : openUpcoming(context, UpcomingView(wc))),
+                    () => p.isBill ? openBill(context, wc, p.sourceRef!) : openUpcoming(context, UpcomingView(wc)),
+                    query),
             ]),
           ]),
         if (billsFound.isNotEmpty)
@@ -177,7 +209,8 @@ class _SearchResults extends StatelessWidget {
                     b.total == null ? 'No total' : moneyExact(b.total!, cur),
                     '${b.date == null ? 'No date' : shortDateOrRaw(b.date!)} · ${b.status == BillStatus.review ? 'To review' : (b.paid ? 'Paid' : 'Unpaid')}',
                     'billDb',
-                    () => openBill(context, wc, b.id)),
+                    () => openBill(context, wc, b.id),
+                    query),
             ]),
           ]),
         if (r.bills.isNotEmpty)
@@ -189,7 +222,8 @@ class _SearchResults extends StatelessWidget {
                     moneyExact(b.expectedAmount, cur),
                     '${b.status == 'confirmed' ? 'Confirmed' : 'Looks like a bill'} · next ${shortDateOrRaw(b.nextDue)}',
                     'bill',
-                    onOpenBills),
+                    onOpenBills,
+                    query),
             ]),
           ]),
       ],
@@ -220,8 +254,8 @@ class _ResultSection extends StatelessWidget {
 /// One tappable result. The name wraps and the value keeps its width (SplitRow), so a long goal name or amount fits 320 dp at
 /// text scale 2.0.
 class _ResultRow extends StatelessWidget {
-  const _ResultRow(this.label, this.value, this.sub, this.kind, this.go);
-  final String label, value, sub, kind;
+  const _ResultRow(this.label, this.value, this.sub, this.kind, this.go, [this.query = '']);
+  final String label, value, sub, kind, query;
   final VoidCallback go;
   @override
   Widget build(BuildContext context) {
@@ -240,7 +274,7 @@ class _ResultRow extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SplitRow(
               crossAxisAlignment: CrossAxisAlignment.start,
-              start: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+              start: Highlighted(label, query, style: const TextStyle(fontWeight: FontWeight.w500)),
               end: Text(value, textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
           Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2))),
         ]),
@@ -251,9 +285,10 @@ class _ResultRow extends StatelessWidget {
 
 /// The matching transactions (the first [searchTxLimit]).
 class _TxResults extends StatelessWidget {
-  const _TxResults(this.wc, this.r, this.onOpenTx);
+  const _TxResults(this.wc, this.r, this.query, this.onOpenTx);
   final WalletController wc;
   final SearchResult r;
+  final String query;
   final Future<void> Function(CategorizedTx t) onOpenTx;
   @override
   Widget build(BuildContext context) => _ResultSection('Transactions', r.txs.length, [
@@ -267,9 +302,11 @@ class _TxResults extends StatelessWidget {
               currency: wc.currency,
               fxRates: wc.settings.fxRates,
               hasBill: wc.billForTx(t.tx.id) != null,
+              iouTag: wc.iouTagOf(t.tx.id),
               splitCount: wc.splitCount(t.tx.id),
               splitBroken: wc.splitIsBroken(t.tx.id),
               matchedPart: r.matchedPart[t.tx.id],
+              highlight: query,
               onTap: () => onOpenTx(t)),
         if (r.txs.length > searchTxLimit) const Muted('Showing the first 50. Type more to narrow it down.'),
       ]);

@@ -20,9 +20,10 @@ class PaydayForecast {
   /// [onPayday] minus the daily allowance for the days left; null when there is no allowance to take off.
   final int? afterSpending;
 
-  /// True when a bank account in the home currency is not confirmed lately (its balance is only worked out).
-  final bool someUnchecked;
-  const PaydayForecast(this.points, this.payday, this.onPayday, this.afterSpending, this.someUnchecked);
+  /// What the start balance leaves out, in words ("PBZ not checked lately, cash and other currencies are not included"), or null when
+  /// nothing is left out. Account names are the owner's own words: shown, never logged.
+  final String? leftOut;
+  const PaydayForecast(this.points, this.payday, this.onPayday, this.afterSpending, this.leftOut);
 }
 
 extension ForecastDb on WalletController {
@@ -39,8 +40,11 @@ extension ForecastDb on WalletController {
   BalanceCheck recordBalanceCheck(String accountId, {required String date, required int bankCents}) {
     final a = accountsAll().firstWhere((x) => x.id == accountId, orElse: () => throw ArgumentError('No such account.'));
     final c = checkBankBalance(a, [for (final t in wholeTxs) t.tx], date: date, bankCents: bankCents);
-    repo.recordBankCheck(accountId, date: date, bankCents: bankCents, appCents: c.appCents);
-    logEvent(_fcLog, Level.INFO, 'balance.check', {'result': c.matches ? 'match' : 'off', 'rows': c.rowsSince});
+    // An older answer (an older file) never replaces a newer check: the comparison is shown, nothing is stored.
+    final last = repo.lastBankCheck(accountId);
+    final older = last != null && last.date.compareTo(date) > 0;
+    if (!older) repo.recordBankCheck(accountId, date: date, bankCents: bankCents, appCents: c.appCents);
+    logEvent(_fcLog, Level.INFO, 'balance.check', {'result': c.matches ? 'match' : 'off', 'rows': c.rowsSince, 'older': older});
     _changed();
     return c;
   }
@@ -81,15 +85,31 @@ extension ForecastDb on WalletController {
         final rows = [for (final t in wholeTxs) t.tx];
         final checks = bankChecks();
         final now = today();
-        var banks = 0, trusted = 0;
+        // The start is the confirmed bank balances in the home currency only: an unchecked account, cash and other currencies are left
+        // out (and said so), so a number the app does not trust never moves the headline.
+        var trusted = 0, start = 0, cash = false, foreign = false;
+        final unchecked = <String>[];
         for (final b in accountBalanceList()) {
           final a = b.account;
-          if (a.isCash || b.duplicateOf != null || a.currency != currency) continue;
-          banks++;
-          if (balanceTrusted(a, today: now, last: checks[a.id], rows: rows)) trusted++;
+          if (b.duplicateOf != null) continue;
+          if (a.isCash) {
+            cash = true;
+          } else if (a.currency != currency) {
+            foreign = true;
+          } else if (balanceTrusted(a, today: now, last: checks[a.id], rows: rows)) {
+            trusted++;
+            start += b.balance;
+          } else {
+            unchecked.add(a.name);
+          }
         }
         if (trusted == 0) return null;
-        final start = heldTotals()[currency] ?? 0;
+        final out = [if (cash) 'cash', if (foreign) 'other currencies'];
+        final left = [
+          if (unchecked.isNotEmpty) '${unchecked.join(', ')} not checked lately',
+          if (out.isNotEmpty) '${out.join(' and ')} ${out.length == 1 ? 'is' : 'are'} not included',
+        ];
+        final leftOut = left.isEmpty ? null : left.join(', ');
         final points = forecastToPayday(
           startCents: start,
           today: now,
@@ -100,7 +120,7 @@ extension ForecastDb on WalletController {
           bills: recurringBills(),
         );
         final after = p.allowanceToday > 0 ? forecastAfterAllowance(points, allowance: p.allowanceToday, daysLeft: p.daysLeft) : null;
-        return PaydayForecast(points, p.end, points.last.cents, after, trusted < banks);
+        return PaydayForecast(points, p.end, points.last.cents, after, leftOut);
       });
 
   /// "Bills and subscriptions: X a month · Y a year" (Q10): the confirmed bills' cost, or null when there are none.

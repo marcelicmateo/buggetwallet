@@ -235,7 +235,8 @@ void main() {
       const note = '🍕 Pizza ‏مطعم ‏שלום 日本語 é';
       await tester.enterText(find.byType(TextField).first, '8');
       await tester.enterText(_field('Note'), note);
-      await _tap(tester, find.widgetWithText(ChoiceChip, 'Eating out'));
+      // The note's pizza also suggests Eating out (a chip under the note): pick from the main tag list itself.
+      await _tap(tester, find.byKey(const ValueKey('cat:Eating out')));
       await _tap(tester, _primary);
       await _settle(tester);
       expect(wc.txs.single.category, 'Eating out');

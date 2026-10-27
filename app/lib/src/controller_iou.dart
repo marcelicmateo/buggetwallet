@@ -7,10 +7,13 @@ part of 'controller.dart';
 
 final _iouLog = Logger('bw.iou');
 
-/// "People owe you X · You owe Y" (home currency; other currencies are listed per person, not added up).
+/// "People owe you X · You owe Y" per currency (never added together): [owedToYou] and [youOwe] by currency code.
 class OwedTotals {
-  final int owedToYou, youOwe;
-  const OwedTotals(this.owedToYou, this.youOwe);
+  final Map<String, int> owedToYou, youOwe;
+
+  /// Every currency with an open IOU, the wallet's own first, then the others by code.
+  final List<String> currencies;
+  const OwedTotals(this.owedToYou, this.youOwe, this.currencies);
 }
 
 extension IouDb on WalletController {
@@ -23,18 +26,15 @@ extension IouDb on WalletController {
           if (!v.iou.closed) v
       ];
 
-  /// What people owe you and what you owe, over the open IOUs in the wallet currency.
+  /// What people owe you and what you owe, over the open IOUs, per currency.
   OwedTotals owedTotals() => _cached(const MemoKey('owedTotals'), () {
-        var to = 0, by = 0;
+        final to = <String, int>{}, by = <String, int>{};
         for (final v in iousOpen()) {
-          if (v.iou.currency != currency) continue;
-          if (v.iou.direction == IouDirection.lent) {
-            to += v.outstanding;
-          } else {
-            by += v.outstanding;
-          }
+          final m = v.iou.direction == IouDirection.lent ? to : by;
+          m[v.iou.currency] = (m[v.iou.currency] ?? 0) + v.outstanding;
         }
-        return OwedTotals(to, by);
+        final all = {...to.keys, ...by.keys}.toList()..sort();
+        return OwedTotals(to, by, [if (all.remove(currency)) currency, ...all]);
       });
 
   /// The IOU [id], or null when it is gone.

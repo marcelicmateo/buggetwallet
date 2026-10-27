@@ -48,6 +48,7 @@ class _RulesPanelState extends State<RulesPanel> {
     final wc = widget.wc;
     final rules = wc.rulesList; // memoized per data version
     final counts = wc.ruleUseCounts();
+    final suggested = wc.ruleSuggestionList;
     final own = [
       for (final r in rules)
         if (r.kind != RuleKind.builtIn) r
@@ -73,6 +74,11 @@ class _RulesPanelState extends State<RulesPanel> {
           'Rules choose the main tag of a payment. A payee rule covers every payment from one payee. A text rule looks for words in the '
               'description, and can also check the amount. An amount alone never makes a rule. Text rules go in the order shown: the first '
               'that fits wins.'),
+      if (suggested.isNotEmpty) ...[
+        const Heading('Suggested', size: BwType.headingSize),
+        const Muted('You gave these payees the same main tag by hand. A rule does it for every payment from them.'),
+        Rows(children: [for (final s in suggested) _SuggestRow(wc: wc, s: s)]),
+      ],
       if (own.isEmpty)
         const EmptyNote('No rules of your own yet. Add one here, or tap "Make a rule…" on a payment.', key: ValueKey('rulesEmpty'))
       else
@@ -95,6 +101,44 @@ class _RulesPanelState extends State<RulesPanel> {
         if (_builtIn) Rows(children: [for (final r in builtIn) _RuleRow(wc: wc, rule: r, count: counts[r.id] ?? 0)]),
       ],
     ]);
+  }
+}
+
+/// One payee rule the wallet offers (Q6): Make rule writes it (with an Undo), Dismiss hides it on this device. Never made on its own.
+class _SuggestRow extends StatelessWidget {
+  final WalletController wc;
+  final RuleSuggestion s;
+  const _SuggestRow({required this.wc, required this.s});
+
+  @override
+  Widget build(BuildContext context) {
+    final key = s.merchantKey;
+    return Container(
+      key: ValueKey('ruleSuggest:$key'),
+      alignment: Alignment.centerLeft,
+      constraints: const BoxConstraints(minHeight: touchMin),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(s.merchantName, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500)),
+        Text('→ ${wc.categoryTable.label(s.category)}', style: const TextStyle(fontSize: BwType.bodySize)),
+        Muted('You chose it on ${s.count} payments'),
+        Wrap(spacing: 8, runSpacing: 4, children: [
+          FilledButton(
+              key: ValueKey('ruleSuggestMake:$key'),
+              style: FilledButton.styleFrom(minimumSize: const Size(0, touchMin)),
+              onPressed: () {
+                wc.makeSuggestedRule(s);
+                toast(context, 'Rule made', actionLabel: 'Undo', onAction: () => wc.undoSuggestedRule(s));
+              },
+              child: const Text('Make rule')),
+          TextButton(
+              key: ValueKey('ruleSuggestDismiss:$key'),
+              style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+              onPressed: () => wc.dismissRuleSuggestion(key),
+              child: const Text('Dismiss')),
+        ]),
+      ]),
+    );
   }
 }
 

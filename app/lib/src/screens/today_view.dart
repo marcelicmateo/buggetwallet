@@ -40,6 +40,7 @@ class TodayView implements Listenable {
   ({int count, int total}) comingUp() => _wc.comingUp();
   Map<String, int> heldTotals() => _wc.heldTotals();
   List<BalanceWarning> balanceWarnings() => _wc.balanceWarningList();
+  String? iouTagOf(String txId) => _wc.iouTagOf(txId);
   int suggestionCount() => _wc.suggestionCount();
   List<HeadsUp> headsUpLines() => _wc.headsUpLines();
   List<PlannedCost> plannedNeedingCategory() => _wc.plannedNeedingCategory();

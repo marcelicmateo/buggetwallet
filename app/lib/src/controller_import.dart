@@ -142,13 +142,19 @@ extension ImportAndBackup on WalletController {
         if (choice == null) return null;
         m = choice.mapping;
         if (deferLayout && repo.csvRowsFor(choice.shapeId) == 0) {
-          commit = () => _saveChoice(choice, need, null, null);
+          // Synchronous: a refused layout throws before any row is written, and the import reports it as before.
+          commit = () =>
+              _noteSaved(choice, need, repo.removedCsvMapping(choice.shapeId), repo.setCsvMapping(choice.shapeId, choice.mapping), null);
         } else {
+          final before = repo.removedCsvMapping(choice.shapeId);
           if (!await _saveChoice(choice, need, confirm, remap)) return null;
           revert = () {
             if (remap.id != null) {
               undoCsvRemap(remap.id!, remap.removed, remap.old);
+              repo.setLocalValue('csvRevive:${choice.shapeId}', remap.reviveBefore); // exactly the earlier waiting list
             } else {
+              // Nothing was removed: the layout goes back to what it was, a removed record with its own reading (or none).
+              if (before != null) repo.setCsvMapping(choice.shapeId, before);
               repo.removeCsvMapping(choice.shapeId);
               settings = repo.settings();
               _changed();
@@ -168,6 +174,7 @@ extension ImportAndBackup on WalletController {
   /// Saves the layout the owner chose; false = the owner declined to remove the payments it would replace. A forced save fills [remap].
   Future<bool> _saveChoice(CsvChoice choice, NeedsMapping need, ConfirmRemoval? confirm, _Remap? remap) async {
     final before = repo.removedCsvMapping(choice.shapeId); // what the Undo writes back
+    final reviveBefore = repo.localValue('csvRevive:${choice.shapeId}');
     var removed = const <String>[];
     try {
       removed = repo.setCsvMapping(choice.shapeId, choice.mapping);
@@ -177,17 +184,24 @@ extension ImportAndBackup on WalletController {
       if (!await confirm(n)) return false;
       removed = repo.setCsvMapping(choice.shapeId, choice.mapping, force: true);
     }
-    settings = repo.settings(); // a second file of this shape in the same pick reads with it, no new question
+    _noteSaved(choice, need, before, removed, remap, reviveBefore: reviveBefore);
+    return true;
+  }
+
+  /// What follows a saved layout: the settings are read again (a second file of this shape in the same pick reads with it, no new
+  /// question); payments the save removed are remembered for the Undo and wait to be read again.
+  void _noteSaved(CsvChoice choice, NeedsMapping need, CsvMapping? before, List<String> removed, _Remap? remap, {String? reviveBefore}) {
+    settings = repo.settings();
     if (removed.isNotEmpty && remap != null) {
       // Added to what is waiting already: another file's rows, or rows an Undo took away that this reading brings back.
       repo.setLocalValue('csvRevive:${choice.shapeId}', jsonEncode({...csvReviveIds(choice.shapeId), ...removed}.toList()));
       remap
         ..id = choice.shapeId
         ..removed = removed
-        ..old = before;
+        ..old = before
+        ..reviveBefore = reviveBefore;
     }
     logEvent(_import, Level.INFO, 'import.layoutSaved', {'columns': need.shape.headers.length, 'removed': removed.length});
-    return true;
   }
 
   // ---------- bank balance after an import (Q5) ----------

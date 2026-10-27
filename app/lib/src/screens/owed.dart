@@ -51,9 +51,12 @@ class _OwedPanelState extends State<OwedPanel> {
         if (v.iou.closed) v
     ];
     final t = wc.owedTotals();
-    Widget line(IouView v) {
+    // [named] false: the person's name is the group header above, so the line says what it is instead.
+    Widget line(IouView v, {bool named = true}) {
       final i = v.iou;
       final lent = i.direction == IouDirection.lent;
+      final state = i.closed ? 'settled' : (lent ? 'owes you' : 'you owe');
+      final reps = v.parts.isEmpty ? '' : ' · ${v.parts.length} ${v.parts.length == 1 ? 'repayment' : 'repayments'}';
       return InkWell(
         key: ValueKey('iou:${i.id}'),
         onTap: () => _open(i.id),
@@ -63,10 +66,9 @@ class _OwedPanelState extends State<OwedPanel> {
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: SplitRow(
               start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(i.person, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-                Text(
-                    '${i.closed ? 'settled' : (lent ? 'owes you' : 'you owe')} · ${shortDateOrRaw(i.date)}'
-                    '${v.parts.isEmpty ? '' : ' · ${v.parts.length} ${v.parts.length == 1 ? 'repayment' : 'repayments'}'}',
+                Text(named ? i.person : '${lent ? 'Lent' : 'Borrowed'} ${shortDateOrRaw(i.date)}',
+                    maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(named ? '$state · ${shortDateOrRaw(i.date)}$reps' : '$state$reps',
                     style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
               ]),
               end: Text(moneyExact(v.outstanding, i.currency),
@@ -75,6 +77,30 @@ class _OwedPanelState extends State<OwedPanel> {
           ),
         ),
       );
+    }
+
+    // One line per IOU (each has its own date and repayments); a person with more than one is a group under their name.
+    List<Widget> lines(List<IouView> vs) {
+      final groups = <String, List<IouView>>{};
+      for (final v in vs) {
+        (groups[v.iou.person.trim().toLowerCase()] ??= []).add(v);
+      }
+      return [
+        for (final e in groups.entries)
+          if (e.value.length == 1)
+            line(e.value.single)
+          else
+            Padding(
+              key: ValueKey('owedPerson:${e.key}'),
+              padding: const EdgeInsets.only(top: 6),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text(e.value.first.iou.person,
+                    maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Padding(
+                    padding: const EdgeInsets.only(left: 12), child: Column(children: [for (final v in e.value) line(v, named: false)])),
+              ]),
+            ),
+      ];
     }
 
     return Panel(key: const ValueKey('owedPanel'), children: [
@@ -87,9 +113,13 @@ class _OwedPanelState extends State<OwedPanel> {
       if (open.isEmpty)
         const EmptyNote('Nothing owed. Add money you lent or borrowed to keep track of it.')
       else ...[
-        Text('People owe you ${moneyExact(t.owedToYou, cur)} · You owe ${moneyExact(t.youOwe, cur)}',
-            key: const ValueKey('owedSummary'), style: const TextStyle(fontWeight: FontWeight.w600)),
-        Rows(children: [for (final v in open) line(v)]),
+        // A total per currency, never added together: the wallet's own first, the others as "In USD: ...".
+        for (final cc in t.currencies)
+          Text(
+              '${cc == cur ? '' : 'In $cc: '}People owe you ${moneyExact(t.owedToYou[cc] ?? 0, cc)} · You owe ${moneyExact(t.youOwe[cc] ?? 0, cc)}',
+              key: ValueKey(cc == cur ? 'owedSummary' : 'owedSummary:$cc'),
+              style: TextStyle(fontWeight: FontWeight.w600, color: cc == cur ? null : c.ink2)),
+        Rows(children: lines(open)),
       ],
       if (closed.isNotEmpty) ...[
         TextButton(
@@ -97,7 +127,7 @@ class _OwedPanelState extends State<OwedPanel> {
             style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
             onPressed: () => setState(() => showClosed = !showClosed),
             child: Text(showClosed ? 'Hide settled' : 'Show settled (${closed.length})')),
-        if (showClosed) Rows(children: [for (final v in closed) line(v)]),
+        if (showClosed) Rows(children: lines(closed)),
       ],
     ]);
   }

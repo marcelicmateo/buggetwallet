@@ -120,6 +120,40 @@ void main() {
       expect(_key('forecastLine'), findsOneWidget);
     }, timeout: _t);
 
+    tw('the start is the confirmed bank only: an unchecked bank, cash and other currencies are left out, and the note says so', (t) async {
+      final wc = _wallet(openingDate: '2026-10-10', opening: 100000); // PBZ, trusted
+      await wc.repo
+          .addAccount(name: 'Revolut main', source: 'revolut', currency: 'EUR', opening: -500000, openingDate: '2026-07-01'); // unchecked
+      await wc.repo.addAccount(name: 'Cash', currency: 'EUR', opening: 20000, openingDate: '2026-10-10');
+      await wc.repo.addAccount(name: 'Dollars', source: 'revolut', currency: 'USD', opening: 9900, openingDate: '2026-10-10');
+      wc.reload();
+      final f = wc.paydayForecast()!;
+      expect(f.points.first.cents, 100000, reason: 'only the confirmed PBZ balance');
+      expect(f.leftOut, 'Revolut main not checked lately, cash and other currencies are not included');
+      await plan(t, wc);
+      expect(find.text('Revolut main not checked lately, cash and other currencies are not included.'), findsOneWidget);
+      final headline = t.widget<Text>(_key('forecastLine'));
+      expect(headline.data, contains(moneyExact(100000, 'EUR')));
+    }, timeout: _t);
+
+    tw('an unchecked account that is negative never turns the headline red', (t) async {
+      final wc = _wallet(openingDate: '2026-10-10', opening: 100000);
+      await wc.repo.addAccount(name: 'Revolut main', source: 'revolut', currency: 'EUR', opening: -900000, openingDate: '2026-07-01');
+      wc.reload();
+      expect(wc.paydayForecast()!.onPayday, 100000);
+      await plan(t, wc);
+      final headline = t.widget<Text>(_key('forecastLine'));
+      expect(headline.style!.color, isNull, reason: 'not the bad colour');
+      expect(headline.data, isNot(contains('−')));
+    }, timeout: _t);
+
+    tw('nothing left out: no note', (t) async {
+      final wc = _wallet(openingDate: '2026-10-10');
+      expect(wc.paydayForecast()!.leftOut, isNull);
+      await plan(t, wc);
+      expect(_key('forecastUnchecked'), findsNothing);
+    }, timeout: _t);
+
     tw('cash alone does not show it', (t) async {
       final wc = _wallet();
       await wc.repo.addAccount(name: 'Cash', currency: 'EUR', opening: 100000, openingDate: '2026-10-10');

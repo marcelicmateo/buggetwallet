@@ -138,6 +138,19 @@ void main() {
     }
   });
 
+  group('older answers', () {
+    tw('an older answer never replaces a newer stored check', (t) async {
+      final (wc, id) = await _wallet(openingDate: '2026-09-01', rows: [('2026-10-10', -2000)]);
+      wc.recordBalanceCheck(id, date: '2026-10-18', bankCents: 98000);
+      final c = wc.recordBalanceCheck(id, date: '2026-10-12', bankCents: 90000);
+      expect(c.matches, isFalse, reason: 'the comparison is still told');
+      final last = wc.lastBankCheckOf(id)!;
+      expect((last.date, last.bankCents), ('2026-10-18', 98000));
+      wc.recordBalanceCheck(id, date: '2026-10-19', bankCents: 98000);
+      expect(wc.lastBankCheckOf(id)!.date, '2026-10-19', reason: 'a newer one still replaces');
+    }, timeout: _t);
+  });
+
   group('Settings > Accounts', () {
     tw('shows "not checked", then the last check, and Check balance opens the question for today', (t) async {
       final (wc, id) = await _wallet(openingDate: '2026-09-01', rows: [('2026-10-10', -2000)]);

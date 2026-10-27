@@ -384,7 +384,9 @@ class ForecastPanel extends StatelessWidget {
           label: 'Balance until payday',
           child: ForecastStepChart(key: const ValueKey('forecastChart'), points: f.points, payday: f.payday, currency: cur),
         ),
-      if (f.someUnchecked) const Muted("Includes accounts you haven't checked lately.", key: ValueKey('forecastUnchecked')),
+      if (f.leftOut != null) Muted(_capital(f.leftOut!), key: const ValueKey('forecastUnchecked')),
     ]);
   }
 }
+
+String _capital(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}.';

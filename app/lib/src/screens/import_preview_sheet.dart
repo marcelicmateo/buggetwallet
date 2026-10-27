@@ -49,14 +49,27 @@ class _ImportPreviewSheetState extends State<ImportPreviewSheet> {
     int left(PreviewStatus s) => p.rows.where((r) => r.status == s && !skip.contains(r.tx.id)).length;
     final nFresh = left(PreviewStatus.fresh);
     final nMatch = left(PreviewStatus.matchesManual);
-    final nTransfers = p.rows.where((r) => r.transferPairId != null && !skip.contains(r.tx.id)).length;
-    final extra = [
+    final nRead = left(PreviewStatus.revivable);
+    // Transfers are pairs (a row and the row of the owner's other account it pairs with), counted once, only for rows that will be written.
+    final pairs = <String>{
+      for (final r in p.rows)
+        if ((r.status == PreviewStatus.fresh || r.status == PreviewStatus.revivable) &&
+            r.transferPairId != null &&
+            !skip.contains(r.tx.id) &&
+            !skip.contains(r.transferPairId))
+          ([r.tx.id, r.transferPairId!]..sort()).join('|'),
+    };
+    final parts = [
+      '$nFresh new',
+      if (nRead > 0) '$nRead read again',
+      if (p.duplicates > 0) '${p.duplicates} already here',
+      if (nMatch > 0) '$nMatch match expenses you added',
+      if (pairs.isNotEmpty) '${pairs.length} ${pairs.length == 1 ? 'transfer' : 'transfers'}',
       if (p.collisions > 0) '${p.collisions} clash${p.collisions == 1 ? '' : 'es'}',
       if (p.tooLarge > 0) '${p.tooLarge} too large',
       if (skip.isNotEmpty) '${skip.length} skipped',
     ];
-    final summary = '$nFresh new · ${p.duplicates} already here · $nMatch match expenses you added · $nTransfers transfers'
-        '${extra.isEmpty ? '' : ' · ${extra.join(' · ')}'}';
+    final summary = parts.join(' · ');
     final cur = p.rows.isEmpty ? 'EUR' : p.rows.first.tx.currency;
     return Column(key: const ValueKey('importPreview'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const Heading('Check before importing'),

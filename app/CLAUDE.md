@@ -187,6 +187,13 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   `SearchPane`): the icon in Spending's header or Ctrl+F (`HomeShell._searchRequest`) swaps the page for a pinned field + ruled result sections via an
   `IndexedStack` (the page keeps its scroll); 2+ characters, 150 ms debounce, `wc.search(q)` cached per data version; goal/wish/bill rows jump to their tab.
   Log events (counts only): `backup.done|restored|failed`, `export.transactions|summary|saved`, `search.run`.
+- Stage Q2 UI Y (suggestions, filters, changes): `controller_suggest.dart` (`extension SuggestDb`, `part` of controller.dart): `suggestCategoriesFor(text)` / `payeesFor(prefix)` (cached per data version; the
+  Add expense note is a `RawAutocomplete` with up to 3 `suggestCat:<id>` chips under it, 250 ms debounce, a tap sets only the main tag; constants `addExpenseKinds/addExpenseExclude` are the
+  picker's set), rule offers (`setCategory(always: false)` on a bank row leaves `wc.ruleOffer`; `txSheetToast` shows "Always put X in Y?" with **Make rule** then an Undo; Rules › Suggested
+  `ruleSuggest:<key>` / `ruleSuggestMake:<key>` / `ruleSuggestDismiss:<key>`, dismissed keys device-local `ruleSuggestOff`), `searchFiltered(q, filter)` (filter chips in
+  `screens/search_filters.dart`: `filterAmount|Date|Category|Attachment|Split|Uncategorised`, the date picker is the injectable `RangePicker`; `Highlighted` in common.dart bolds `matchSpans`;
+  `todaySearch` on Today's Recent panel via `TodayScreen.openSearch`) and `recentChangesList` (`screens/recent_changes.dart`, in Settings › Sync under Devices: `change:<entity>:<id>`, `changesMore`).
+  Tests: `q_suggest_ui_test`, `q_search_ui_test`, `q9_changes_ui_test`; screenshots `integration_test/suggest_search_test.dart`. Logs: counts and enum words only.
 - Future spending (F3): `controller_future.dart` (a `part` of controller.dart: `extension FutureSpending` + `CalendarState` `wc.cal`): planned costs
   (`plannedOpen/plannedEverything`, `upcomingItems(from,to)` cached per data version + `cal.version`, `upcomingRange(next:)` = the pay period or the next one,
   `comingUp()`, `countedIn`, `addPlannedCost/updatePlanned/confirmSuggestion/dismissSuggestion/markPlannedPaid/skipPlanned/deletePlanned`,
