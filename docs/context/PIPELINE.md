@@ -42,7 +42,7 @@ Counters as delta rows (J3 second half) change the sync format: left for after M
 | J2c | `pdf_text/` folder split; per-peer apply loop out of `SyncEngine.run` with asserts | core-builder | j2-core | J0b | done 422683b (pdf/ parts, `_applyPeer` + sealed result + asserts, `clockStats`) → BUG: stale view after a peer edit below max hlc → ef3d12c `repo.dataVersion` → review (0 blocking; 1 med for app: compare (repo, dataVersion); 4 low) → 3661414 (core 2584/0) |
 | J2u | Screen sub-widgets, `AsyncAction` mixin, `PickedFile`, `bill_sheet` sections, `readCalendars` | ui-builder | j2-ui | J1 | done 7553029 (14 bill-sheet sections, Today ~20 widgets, readCalendars split, AsyncAction on 6 panels, PickedFile; test green, desktop screens/plan/flows/import ok) → review (0 blocking, 2 drifts) → f466144 (app 1822/0) |
 | J3 | Mutation testing on importer + core pure code (tool script, no new package); surviving mutants → invariant tests | test-writer | j3 | J2c | done (tools a3c0b9e after review: work copy, invalid count, lib-only targets; tests 94fba4d: 34 killed, 8 equivalent, 0 bugs) |
-| J4 | `packages/sync` split — only if J2c shows a clean seam | core-builder | j4 | J2c | running (owner 2026-10-27: do it before M6): step 1 core→sync deps out, step 2 `packages/sync` (`wallet_sync`) + build.sh/ci.yml wiring |
+| J4 | `packages/sync` split — only if J2c shows a clean seam | core-builder | j4 | J2c | done 2026-10-27 (e3b4093 + 3df97ae + 58e0015; merged 6b2c6b7; stage green) |
 | J | Merge, review, stage run, push, STATUS | lead | v2 | all | done 2026-10-27 (J1+J2 77c5edb; J3 86b0b5a, test green) |
 
 ## Stage P6: split transactions (2026-10-25, spec `P6_SPEC.md`; schema 13)

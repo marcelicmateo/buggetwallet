@@ -359,6 +359,11 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Reviews:** J2 core 0 blocking (1 medium for the app, 4 low), J1 0 blocking (5 low), J2 UI 0 blocking (2 drifts restored). All fixed.
   - **Stage run:** importer 374, core 2584, relay 216, app 1822, desktop, web-test, perf ok; emulator screens ok on rerun (first run: emulator went offline after the test passed).
   - **J3 mutation testing:** `tools/build.sh mutate <core|importer> <lib file>… [--max --seed --tests]` (`tools/mutate.py`) plants small errors in a copy of the package (never the tracked files) and lists the ones no test catches. First pass (seed 7): budget 29/60 survived, periods 7/60, loan 3/26, CSV detection 3/10. 34 new invariant tests (`j3_invariants_test`, `j3_csv_invariants_test`) catch all of them except 8 proven equivalent; no money bug found. Also: `BW_FUZZ_ITERATIONS`/`BW_FUZZ_SEED` now reach the container (were silently ignored), lint checks it. Review: 2 medium in the tool (a killed run could leave a mutant in lib/) → fixed. Tests: importer 377, core 2618, relay 216, app 1822.
+- 2026-10-27: **Stage J4: sync in its own package** (`packages/sync`, `wallet_sync`; owner: before the live test; no schema, format or behaviour change).
+  - Core no longer depends on sync: `isBlobHash` in `bills.dart`, logs classify errors through a `LogSafeError` marker (same log text). `sync_engine`, `sync`, `sync_problems`, `sync_relay`, `sync_memory`, `blob_store` + 18 sync tests moved (`git mv`); `vault`, `backup`, `repo_blobs` stay in core. Core's feature tests still sync two devices through `wallet_sync` as a **dev dependency only**; `layering_test` fails if core `lib/` ever imports sync.
+  - `tools/build.sh sync [file]` and the `sync` step in test/stage; `ci.yml` runs sync in the core job (with `tests`); `tools/build.sh mutate core` also runs the sync suite. App: import lines + pubspec only.
+  - Review: 0 blocking, 3 low (mutate coverage, layering check, docs) fixed.
+  - **Stage run:** importer 377, core 2296, sync 326, relay 216, app 1822, desktop, web-test, emulator screens, perf ok.
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -445,7 +450,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
   N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
-- Owner checks after Stage J (phone): nothing should look different. Try the bill sheet (confirm, save), the Today lines, import and backup buttons (busy while working), calendars refresh, search → delete → Undo; after a sync from the laptop, numbers update without reopening.
+- Owner checks after Stage J + J4 (phone): nothing should look different; sync phone ↔ laptop through the relay both ways (J4 moved the sync code). Try the bill sheet (confirm, save), the Today lines, import and backup buttons (busy while working), calendars refresh, search → delete → Undo; after a sync from the laptop, numbers update without reopening.
 - Owner checks after P16b + P5 (phone):
   - Five tabs at the bottom; Budget starts with the payday plan, Edit plan saves/cancels; Save shows goals above the wishlist.
   - Bills: Coming up first, then slips to review, Expected bills, the bills list; Scan bill and Add bill work. Today's "Due by payday" and "N bills to review" open Bills.
