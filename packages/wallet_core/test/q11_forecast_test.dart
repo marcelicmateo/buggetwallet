@@ -34,7 +34,8 @@ List<ForecastPoint> _f(
         List<DueCycle> cycles = const [],
         List<PlannedCost> planned = const [],
         List<IncomeCycle> incomes = const []}) =>
-    forecastToPayday(startCents: start, today: _today, payday: _payday, cycles: cycles, planned: planned, incomes: incomes);
+    forecastToPayday(
+        startCents: start, today: _today, payday: _payday, cycles: cycles, planned: planned, incomes: incomes, bills: const []);
 
 Account _acc(String id, String? source, {String currency = 'EUR', String openingDate = '2026-01-10', int opening = 0}) =>
     Account(id: id, name: 'Synthetic $id', source: source, currency: currency, opening: opening, openingDate: openingDate);
@@ -101,12 +102,31 @@ void main() {
           payday: _payday,
           cycles: [DueCycle(bill: b, due: '2026-01-25', reserve: 4000, paid: 0)],
           planned: [slip],
-          incomes: const []);
+          incomes: const [],
+          bills: [b]);
       expect([for (final p in f) p.cents], [10000, 6000]);
       // Without the cycle the slip counts.
       final alone = forecastToPayday(
           startCents: 10000, today: _today, payday: _payday, cycles: const [], planned: [slip], incomes: const [], bills: [b]);
       expect([for (final p in alone) p.cents], [10000, 5900]);
+    });
+
+    // Review fix 5: `bills` is required, so the slip of a cycle just paid (no longer in the cycles) is known.
+    test('the slip of a bill cycle just paid is not subtracted again', () {
+      final key = merchantKey(const Tx(id: '', source: 'bill', date: '', amount: 0, description: 'Synthetic Power Co'));
+      // Paid on 25 January: nextDue moved on to 24 February (after payday 15 February), so no cycle is due.
+      final b = RecurringBill(
+          id: 'rec:power',
+          payee: key,
+          label: 'Power',
+          category: 'Shopping',
+          expectedAmount: 4000,
+          nextDue: '2026-02-24',
+          status: 'confirmed');
+      final slip = _planned('bill:x', '2026-01-26', 4100, source: PlannedSource.bill, title: 'Synthetic Power Co');
+      final f = forecastToPayday(
+          startCents: 10000, today: _today, payday: _payday, cycles: const [], planned: [slip], incomes: const [], bills: [b]);
+      expect([for (final p in f) p.cents], [10000]);
     });
 
     test('forecastAfterAllowance: the last point minus allowance × days left', () {
@@ -148,10 +168,13 @@ void main() {
       final out = w([_bal(stale, -100)]);
       expect(out.single.kind, BalanceWarningKind.checkBalance);
       expect(out.single.cents, isNull);
-      // A matching check within 35 days makes it trusted.
-      final ok = w([_bal(stale, -100)], checks: {'a1': const BankCheck(date: '2026-01-15', bankCents: 7, appCents: 7)});
+      // A check within 35 days that the rows match (−30000 + 20000 by 15 January) makes it trusted.
+      final ok = w([_bal(stale, -100)], checks: {'a1': const BankCheck(date: '2026-01-15', bankCents: -10000, appCents: -10000)});
       expect(ok.single.kind, BalanceWarningKind.belowNow);
       expect(ok.single.cents, -100);
+      // Review fix 1: a stored match the rows no longer give is not trusted.
+      final stored = w([_bal(stale, -100)], checks: {'a1': const BankCheck(date: '2026-01-15', bankCents: 7, appCents: 7)});
+      expect(stored.single.kind, BalanceWarningKind.checkBalance);
     });
 
     test('goes below zero on the bill paid from this account, with the cause', () {

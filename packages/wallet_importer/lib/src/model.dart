@@ -130,12 +130,14 @@ class ImportBatch {
   /// The balance the bank states at the end of the file, per currency ([BankBalance]), from the rows'
   /// [NormalizedTransaction.balanceAfter] (completed rows only: the others are not in [transactions]).
   ///
-  /// Per currency: the newest date whose last row of the day carries a balance, and that row's balance. "Last of the
-  /// day" is in file order, read in the file's direction: when the file runs newest first (its first row of the
-  /// currency is dated after its last), the day's first row is its last booking. A day whose last row has no balance is
-  /// passed over for an older one (a balance from earlier in a day is not the day's end). A currency whose rows name
-  /// more than one [NormalizedTransaction.account] (a Revolut Current and Savings pocket) has none: the column is per
-  /// pocket, so it cannot be compared with one account. Ordered by currency.
+  /// Per currency: the newest date whose last booking of the day carries a balance, and that row's balance. A date with
+  /// one row has it. On a date with several rows, which one was booked last comes from the balance chain, never from a
+  /// guess: the file runs oldest first when every balance is the one before plus its row's amount, newest first when
+  /// every balance is the one after plus that row's amount (pairs that fit both ways or neither say nothing). When the
+  /// chain does not tell (no telling pair, or pairs both ways), the currency has no balance. A day whose last row has no
+  /// balance is passed over for an older one (a balance from earlier in a day is not the day's end). A currency whose
+  /// rows name more than one [NormalizedTransaction.account] (a Revolut Current and Savings pocket) has none: the column
+  /// is per pocket, so it cannot be compared with one account. Ordered by currency.
   List<BankBalance> get bankBalances {
     final by = <String, List<NormalizedTransaction>>{};
     for (final t in transactions) {
@@ -146,15 +148,26 @@ class ImportBatch {
       final rows = by[cur]!;
       if (!rows.any((t) => t.balanceAfter != null)) continue;
       if ({for (final t in rows) t.account}.length > 1) continue;
-      final newestFirst = rows.first.date.compareTo(rows.last.date) > 0;
-      // The end-of-day row of each date: the last in file order, or the first when the file runs newest first.
-      final endOfDay = <String, NormalizedTransaction>{};
-      for (final t in newestFirst ? rows.reversed : rows) {
-        endOfDay[t.date] = t;
+      var up = 0, down = 0;
+      for (var i = 1; i < rows.length; i++) {
+        final p = rows[i - 1], q = rows[i];
+        final pb = p.balanceAfter, qb = q.balanceAfter;
+        if (pb == null || qb == null) continue;
+        final oldestFirst = qb == pb + q.amountMinor, newestFirst = pb == qb + p.amountMinor;
+        if (oldestFirst && !newestFirst) up++;
+        if (newestFirst && !oldestFirst) down++;
       }
-      final dates = endOfDay.keys.toList()..sort();
+      final bool? oldestFirst = up > 0 && down == 0 ? true : (down > 0 && up == 0 ? false : null);
+      final byDate = <String, List<NormalizedTransaction>>{};
+      for (final t in rows) {
+        (byDate[t.date] ??= []).add(t);
+      }
+      final dates = byDate.keys.toList()..sort();
       for (final d in dates.reversed) {
-        final cents = endOfDay[d]!.balanceAfter;
+        final day = byDate[d]!;
+        if (day.length > 1 && oldestFirst == null) break; // which row ends the day is unknown: no balance
+        final end = day.length == 1 || oldestFirst! ? day.last : day.first;
+        final cents = end.balanceAfter;
         if (cents == null) continue;
         out.add(BankBalance(source: source, currency: cur, date: d, cents: cents));
         break;

@@ -160,7 +160,7 @@ void main() {
     });
 
     test('extreme amounts from another device are stored and read back exactly', () {
-      final ids = <String, int>{'zero': 0, 'neg': -1, 'big': maxAmountCents, 'small': -maxAmountCents, 'cent': 1};
+      final ids = <String, int>{'zero': 0, 'neg': -1, 'big': legacyRowCapCents, 'small': -legacyRowCapCents, 'cent': 1};
       r.applyRemote([
         for (final e in ids.entries) _txOp(e.key, {'amount': e.value})
       ]);
@@ -168,10 +168,10 @@ void main() {
       expect(got, ids);
     });
 
-    // Q3 changed this (it used to store the int64 extremes): an amount beyond the one cap is quarantined like a
-    // wrong-typed field, so the row keeps its default amount.
+    // Q3 changed this (it used to store the int64 extremes): an amount beyond the synced row cap (the old importer's,
+    // legacyRowCapCents) is quarantined like a wrong-typed field, so the row keeps its default amount.
     test('amounts beyond the cap from another device are not stored (Q3), the int64 extremes included', () {
-      final ids = <String, int>{'big': _maxInt, 'small': _minInt, 'over': maxAmountCents + 1, 'under': -maxAmountCents - 1};
+      final ids = <String, int>{'big': _maxInt, 'small': _minInt, 'over': legacyRowCapCents + 1, 'under': -legacyRowCapCents - 1};
       r.applyRemote([
         for (final e in ids.entries) _txOp(e.key, {'amount': e.value})
       ]);

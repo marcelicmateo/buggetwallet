@@ -249,16 +249,33 @@ extension WalletRepoImport on WalletRepo {
       for (final (i, n) in batch.transactions.indexed)
         if (c.fates[i] == _RowFate.revived) n.id
     };
-    var transferTo = const <String, String?>{};
-    final matchedBy = <String, String>{}; // bank row id -> the entry pointing at it after the import
-    if (syncCaughtUp && (fresh.isNotEmpty || revived.isNotEmpty)) {
-      transferTo = _planPairs(fresh: fresh, revived: revived).plan.transferTo;
-      final m = _planManualMatches(fresh: fresh, revived: revived, transfers: transferTo);
-      final ids = {for (final f in fresh) f.id, ...revived};
-      for (final e in m.manual) {
-        final to = m.plan.matchedTo.containsKey(e.id) ? m.plan.matchedTo[e.id] : e.matchedTo;
-        if (to != null && ids.contains(to)) matchedBy.putIfAbsent(to, () => e.id);
+    final ids = {for (final f in fresh) f.id, ...revived};
+    // What is stored now: a revived row keeps its `transfer_to`, and an entry may already point at a batch row (matched
+    // on another device before the row arrived here). The import leaves both as they are unless its plan changes them.
+    final transferTo = <String, String?>{};
+    final rev = [...revived];
+    for (var i = 0; i < rev.length; i += _chunk) {
+      final part = rev.sublist(i, min(i + _chunk, rev.length));
+      for (final r in db.select('SELECT id, transfer_to FROM tx WHERE id IN (${List.filled(part.length, '?').join(',')})', part)) {
+        transferTo[r['id'] as String] = r['transfer_to'] as String?;
       }
+    }
+    final matchedTo = <String, String?>{
+      if (ids.isNotEmpty)
+        for (final r in db.select('SELECT id, matched_to FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to IS NOT NULL ORDER BY id'))
+          r['id'] as String: r['matched_to'] as String?
+    };
+    // Pairing and matching run only while caught up (as in the import): only then does the plan change those links.
+    if (syncCaughtUp && ids.isNotEmpty) {
+      final pairs = _planPairs(fresh: fresh, revived: revived).plan.transferTo;
+      transferTo.addAll(pairs);
+      final m = _planManualMatches(fresh: fresh, revived: revived, transfers: pairs);
+      matchedTo.addAll(m.plan.matchedTo);
+    }
+    final matchedBy = <String, String>{}; // bank row id -> the entry pointing at it after the import
+    for (final e in [...matchedTo.keys]..sort()) {
+      final to = matchedTo[e];
+      if (to != null && ids.contains(to)) matchedBy.putIfAbsent(to, () => e);
     }
     final rows = <PreviewRow>[];
     for (final (i, n) in batch.transactions.indexed) {

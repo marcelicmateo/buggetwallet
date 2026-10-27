@@ -131,7 +131,8 @@ class PeriodBudget {
 }
 
 /// Below 2^53 (the largest whole number a web number holds exactly): every sum of amounts asserts it in debug builds
-/// (Q3; amounts are capped at ±`maxAmountCents`, so at least 90,000 of them always fit).
+/// (Q3; new amounts are capped at ±`maxAmountCents`, so at least 90,000 of them fit; rows synced from builds before Q
+/// may reach `legacyRowCapCents`, where at least 9,000 fit).
 const _exact = 9007199254740992;
 
 /// [s], asserted exact ([_exact]); returned unchanged in release builds.

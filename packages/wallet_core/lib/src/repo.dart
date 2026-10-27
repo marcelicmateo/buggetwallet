@@ -13,7 +13,7 @@ import 'import_preview.dart';
 import 'logs.dart';
 import 'matching.dart';
 import 'models.dart';
-import 'planned.dart' show isSafeCents, maxAmountCents;
+import 'planned.dart' show isSafeCents, legacyRowCapCents, maxAmountCents;
 import 'recurring.dart';
 import 'rules.dart';
 import 'schema.dart';
@@ -561,7 +561,7 @@ class WalletRepo {
     _write(changes);
     final (transfers, matched) = _reconcileLocal();
     refreshRecurring(_today());
-    final checks = _recordBankChecks(batch.bankBalances);
+    final checks = _recordBankChecks(batch);
     final added = fresh + revived.length;
     final s = ImportSummary(added, batch.transactions.length - added - tooLarge - skipped, matched, batch.skipped,
         transfers: transfers, collisions: collisions, tooLarge: tooLarge, skippedByOwner: skipped, bankChecks: checks);

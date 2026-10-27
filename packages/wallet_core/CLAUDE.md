@@ -261,19 +261,24 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - **Stage Q core A.** Q3 one amount cap: `isSafeCents` (±`maxAmountCents` = `WalletSettings.maxAmount`, `planned.dart`);
   `addTransaction` refuses beyond it (`ArgumentError`), `importBatch` skips and counts (`ImportSummary.tooLarge`,
   `repo.tooLarge {source, count}`), `_fieldValue` quarantines a synced amount column beyond its cap like a wrong type
-  (`_amountCaps`: row amounts, planned, bills, recurring, wish price, account opening; goals keep `goalTotal`'s clamping);
-  budget sums assert < 2^53 (`_ok`; 90,000 rows at the cap fit, `exactRowsAtCap`).
+  (`_amountCaps`: tx and recurring amounts at `legacyRowCapCents` 10^12, the pre-Q importer cap, so an old import is
+  never dropped; planned, bills, wish price, account opening and goal `monthly` at the cap; goal target/saved keep
+  `goalTotal`'s clamping); budget sums assert < 2^53 (`_ok`; 90,000 rows at 10^11 fit, 9,000 at 10^12).
   Q4 `previewImport(batch, {revive})` (`repo_import.dart`, types in `import_preview.dart`): read-only (no row, clock,
   outbox, meta or HLC change), the same classification as `importBatch` (`_classifyBatch`) and the same planners
   (`_planPairs`, `_planManualMatches`, which `_pairTransfers`/`_matchManual` now call) over stored rows + the batch's
-  fresh rows (unseen by every entry) + revived ids; only while caught up. `importBatch(skip:)` writes nothing for those
-  ids (`ImportSummary.skippedByOwner`). Tests: `test/q4_import_preview_test.dart` (prediction == import).
+  fresh rows (unseen by every entry) + revived ids; plans only while caught up, stored `matched_to`/`transfer_to` of
+  batch rows always. With a forced CSV remap it equals the import only when called after `setCsvMapping(force: true)`
+  with its revive set. `importBatch(skip:)` writes nothing for those ids (`ImportSummary.skippedByOwner`). Tests: `test/q4_import_preview_test.dart` (prediction == import).
   Q5 (`accounts.dart`): `checkBankBalance` → `BalanceCheck` (`appCents` as `accountBalances` up to the date, `diff` =
   bank − app, `rowsSince`/`since` = opening date), `BankCheck` stored device-locally (`recordBankCheck`/`lastBankCheck`,
-  local `bankCheck:<accountId>`, never synced, never changes the balance), `balanceTrusted` (opening date or a matching
-  check within `bankCheckTrustDays` 35). `importBatch` records a check per `ImportBatch.bankBalances` for the counting
-  live bank account (`ImportSummary.bankChecks`; an older-dated check never replaces a newer one).
-  Q11 (`forecast.dart`): `forecastToPayday` (steps: unpaid bill cycles on their date, overdue ones today; open planned
+  local `bankCheck:<accountId>`, never synced, never changes the balance; stored `appCents` is for display only),
+  `balanceTrusted(a, today:, last:, rows:)` (opening date within `bankCheckTrustDays` 35, or a check within 35 days that
+  `checkBankBalance` over the rows still matches now). `importBatch` records a check per `ImportBatch.bankBalances` for
+  the counting live bank account (`ImportSummary.bankChecks`; an older-dated check never replaces a newer one; none
+  dated before the opening, and none when stored rows of that source/currency inside the file's dates are not in the
+  file: another IBAN or pocket in one app account).
+  Q11 (`forecast.dart`): `forecastToPayday` (`bills` required: every confirmed recurring bill; steps: unpaid bill cycles on their date, overdue ones today; open planned
   costs today..payday, a slip its cycle holds once; incomes on their date, overdue ones never; payday exclusive; out
   before in on a day), `forecastAfterAllowance` (− allowance × days left), `balanceWarnings` (per home-currency bank
   account: untrusted → `checkBalance` only, `belowNow`, `goesBelow` at the first negative point). **Attribution is

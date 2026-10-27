@@ -48,19 +48,23 @@ extension WalletRepoSyncApply on WalletRepo {
 
   static const _bad = Object();
 
-  /// The largest magnitude each synced amount column takes (Q3): the one amount cap ([maxAmountCents]) for rows,
-  /// planned costs, bills, recurring amounts, wishes and account openings. Goals (`target`, `saved`) and contributions
-  /// have none here: `goalTotal` already clamps each contribution and the total (any synced whole number is safe there,
-  /// `test/goal_contrib_test.dart`). Other integer columns (dates in ms, sort keys, sizes, counts) have none.
+  /// The largest magnitude each synced amount column takes (Q3). Imported row amounts and recurring amounts:
+  /// [legacyRowCapCents] (10^12, what builds before Q imported), so no device drops a value an older build could
+  /// write; planned costs, bills, wishes, account openings and a goal's `monthly` (summed in `computePeriod`): the one
+  /// cap [maxAmountCents], which every build checked when typed. Goals' `target`/`saved` and contributions have none
+  /// here: `goalTotal` already clamps each contribution and the total (`test/goal_contrib_test.dart`). Other integer
+  /// columns (dates in ms, sort keys, sizes, counts) have none. New local writes stay at [maxAmountCents]
+  /// ([isSafeCents]: `addTransaction`, `importBatch`).
   static const _amountCaps = <(String, String), int>{
-    ('tx', 'amount'): maxAmountCents,
+    ('tx', 'amount'): legacyRowCapCents,
     ('planned', 'amount'): maxAmountCents,
     ('bill', 'total'): maxAmountCents,
-    ('recurring', 'expected_amount'): maxAmountCents,
-    ('recurring', 'min_amount'): maxAmountCents,
-    ('recurring', 'max_amount'): maxAmountCents,
+    ('recurring', 'expected_amount'): legacyRowCapCents,
+    ('recurring', 'min_amount'): legacyRowCapCents,
+    ('recurring', 'max_amount'): legacyRowCapCents,
     ('wish', 'price'): maxAmountCents,
     ('account', 'opening'): maxAmountCents,
+    ('goal', 'monthly'): maxAmountCents,
   };
 
   /// [value] as it is stored in column [col] ([ColumnType]: a 0/1 flag takes a bool or 0/1, an integer column an

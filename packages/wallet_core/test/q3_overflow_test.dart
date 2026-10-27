@@ -100,33 +100,38 @@ void main() {
       expect((s.added, s.duplicates, s.tooLarge, s.skippedByOwner), (0, 0, 0, 0));
     });
 
-    test('a synced amount over the cap is quarantined like a wrong-typed field; at the cap it applies', () {
+    // Review fix 8: rows an older build imported (up to 10^12) still apply; beyond that they are quarantined.
+    test('a synced row amount over the legacy cap is quarantined like a wrong-typed field; at it, it applies', () {
       const base = {'source': 'pbz', 'date': '2026-01-10', 'amount': -500, 'description': 'Synthetic shop'};
       r.applyRemote([Op('tx', 't', base, _h(1))]);
       final lines = _capture(() => r.applyRemote([
-            Op('tx', 't', {'amount': -maxAmountCents - 1, 'note': 'Synthetic note'}, _h(2))
+            Op('tx', 't', {'amount': -legacyRowCapCents - 1, 'note': 'Synthetic note'}, _h(2))
           ]));
       final t = r.transaction('t')!;
       expect((t.amount, t.note), (-500, 'Synthetic note'));
       final bad = lines.where((l) => l.contains('repo.badField')).single;
       expect(bad, contains('"entity":"tx"'));
       expect(bad, contains('"field":"amount"'));
-      expect(bad, isNot(contains('$maxAmountCents')));
-      // Its clock was not recorded: a valid write with an older clock still wins.
+      expect(bad, isNot(contains('$legacyRowCapCents')));
+      // Its clock was not recorded: a valid write with an older clock still wins (above the local cap: an old import).
       r.applyRemote([
-        Op('tx', 't', {'amount': -maxAmountCents}, _h(2))
+        Op('tx', 't', {'amount': -legacyRowCapCents}, _h(2))
       ]);
-      expect(r.transaction('t')!.amount, -maxAmountCents);
+      expect(r.transaction('t')!.amount, -legacyRowCapCents);
       // A whole float over the cap too.
       r.applyRemote([
-        Op('tx', 't', {'amount': (maxAmountCents + 1).toDouble()}, _h(3))
+        Op('tx', 't', {'amount': (legacyRowCapCents + 1).toDouble()}, _h(3))
       ]);
-      expect(r.transaction('t')!.amount, -maxAmountCents);
+      expect(r.transaction('t')!.amount, -legacyRowCapCents);
       // The smallest int (whose abs() is itself) is refused too.
       r.applyRemote([
         Op('tx', 't', {'amount': -9223372036854775808}, _h(4))
       ]);
-      expect(r.transaction('t')!.amount, -maxAmountCents);
+      expect(r.transaction('t')!.amount, -legacyRowCapCents);
+    });
+
+    test('9,000 rows at the legacy cap still sum under 2^53', () {
+      expect(9000 * legacyRowCapCents, lessThan(_twoTo53));
     });
 
     test('other row-amount columns are capped; goals keep their own clamping; non-amount integers are not capped', () {
@@ -135,6 +140,15 @@ void main() {
         Op('goal', 'g', {'name': 'Synthetic goal', 'target': Goal.maxSaved, 'saved': Goal.maxSaved, 'monthly': 0, 'deleted': 0}, _h(1))
       ]);
       expect(r.goals().single.target, Goal.maxSaved);
+      // Review fix 2: a goal's monthly is summed in computePeriod, so it takes the one cap.
+      r.applyRemote([
+        Op('goal', 'g', {'monthly': maxAmountCents + 1}, _h(2))
+      ]);
+      expect(r.goals().single.monthly, 0);
+      r.applyRemote([
+        Op('goal', 'g', {'monthly': maxAmountCents}, _h(2))
+      ]);
+      expect(r.goals().single.monthly, maxAmountCents);
       // A planned cost's amount is a row amount.
       r.applyRemote([
         Op('planned', 'p1',

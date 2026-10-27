@@ -128,7 +128,8 @@ BalanceCheck checkBankBalance(Account a, List<Tx> rows, {required String date, r
 const _exact = 9007199254740992; // 2^53
 
 /// A check as stored on this device (`WalletRepoAccounts.recordBankCheck`, device-local `bankCheck:<accountId>`,
-/// never synced): the bank's [bankCents] and the app's [appCents] at the end of [date].
+/// never synced): the bank's [bankCents] and the app's [appCents] at the end of [date]. [appCents] and [diff] are what
+/// the app counted then, for display only: trust is decided again from the rows ([balanceTrusted]).
 class BankCheck {
   final String date;
   final int bankCents;
@@ -150,9 +151,13 @@ class BankCheck {
 
 /// Whether [a]'s worked-out balance may be warned from on [today] (Q5): its anchor is at most [bankCheckTrustDays]
 /// days old. The anchor is the opening date (set when the account was added, or by a correction: `correctBalance`
-/// moves it, so a check the owner then corrected counts from the correction) or [last] when the bank matched it
-/// (`diff == 0`). A check that was off and not corrected never counts. A date after [today] counts as recent.
-bool balanceTrusted(Account a, {required String today, BankCheck? last}) {
+/// moves it, so a check the owner then corrected counts from the correction) or [last] when the bank's balance still
+/// matches the app's: decided now from [rows] ([checkBankBalance] at `last.date` against `last.bankCents`), never from
+/// the stored [BankCheck.appCents] (a row deleted later, here or by a sync, makes a stored match stale). A check that is
+/// off now, or dated before the opening, never counts. A date after [today] counts as recent.
+bool balanceTrusted(Account a, {required String today, BankCheck? last, required List<Tx> rows}) {
   bool recent(String d) => isIsoDate(d) && isIsoDate(today) && daysBetween(d, today) <= bankCheckTrustDays;
-  return recent(a.openingDate) || (last != null && last.diff == 0 && recent(last.date));
+  if (recent(a.openingDate)) return true;
+  if (last == null || !recent(last.date) || last.date.compareTo(a.openingDate) < 0) return false;
+  return checkBankBalance(a, rows, date: last.date, bankCents: last.bankCents).matches;
 }

@@ -47,8 +47,9 @@ class ForecastPoint {
 ///   unpaid) on its due date; one already overdue (due before today) on [today]. Cycles covered by a plan line count
 ///   too: the money still leaves the account. A cycle due on or after [payday] is left out.
 /// - Each open planned cost of [planned] with an amount dated [today] .. the day before [payday] subtracts its amount
-///   on its date, except a bill slip whose covering recurring cycle ([plannedCoverage] over [bills], default the
-///   cycles' bills) is one of [cycles] or the cycle just paid or skipped (counted once, never twice).
+///   on its date, except a bill slip whose covering recurring cycle ([plannedCoverage] over [bills]: pass every
+///   confirmed recurring bill, `WalletRepo.recurringBills()`, so a slip of a cycle just paid or skipped is known) is one
+///   of [cycles] or that just-paid cycle (counted once, never twice).
 /// - Each expected income of [incomes] (`PeriodBudget.expectedIncome`) dated [today] .. the day before [payday] adds its
 ///   amount on its date. One overdue (due before today, not landed) is left out: the forecast never counts on late money.
 /// - No daily-spending guess: [forecastAfterAllowance] is the separate line with the day-to-day money taken off.
@@ -62,7 +63,7 @@ List<ForecastPoint> forecastToPayday({
   required List<DueCycle> cycles,
   required List<PlannedCost> planned,
   required List<IncomeCycle> incomes,
-  List<RecurringBill>? bills,
+  required List<RecurringBill> bills,
 }) {
   final events = <({String date, int delta, String cause, String id})>[];
   final counted = <String>{};
@@ -72,14 +73,10 @@ List<ForecastPoint> forecastToPayday({
     if (c.reserve <= 0) continue;
     events.add((date: c.due.compareTo(today) < 0 ? today : c.due, delta: -c.reserve, cause: c.bill.label, id: c.bill.id));
   }
-  final coverBills = bills ??
-      [
-        for (final b in {for (final c in cycles) c.bill.id: c.bill}.values) b
-      ];
   for (final p in planned) {
     final a = p.amount;
     if (!p.isOpen || a == null || a <= 0 || p.date.compareTo(today) < 0 || p.date.compareTo(payday) >= 0) continue;
-    final cov = plannedCoverage(p, coverBills);
+    final cov = plannedCoverage(p, bills);
     if (cov != null && (cov.occurrence == null || counted.contains(occurrenceKey(cov.bill.id, cov.occurrence!)))) continue;
     events.add((date: p.date, delta: -a, cause: p.title, id: p.id));
   }
@@ -180,7 +177,7 @@ List<BalanceWarning> balanceWarnings({
   for (final ab in balances) {
     final a = ab.account;
     if (a.deleted || !live.contains(a.id) || a.isCash || ab.duplicateOf != null || a.currency != currency) continue;
-    if (!balanceTrusted(a, today: today, last: checks[a.id])) {
+    if (!balanceTrusted(a, today: today, last: checks[a.id], rows: rows)) {
       out.add(BalanceWarning(account: a, kind: BalanceWarningKind.checkBalance));
       continue;
     }
@@ -198,6 +195,7 @@ List<BalanceWarning> balanceWarnings({
       payday: payday,
       cycles: mine,
       planned: const [],
+      bills: const [],
       incomes: [
         for (final i in incomes)
           if (paidFrom(i.bill, a)) i

@@ -57,33 +57,48 @@ void main() {
   group('balanceTrusted', () {
     const old = Account(id: 'a1', name: 'Synthetic', source: 'pbz', currency: 'EUR', opening: 0, openingDate: '2025-06-01');
     const today = '2026-02-05';
+    final rows = [_t('r1', '2025-12-20', 5)]; // the app counts 5 from 20 December on
 
     test('the opening date (a new account or a correction) exactly 35 days old is trusted, 36 is not', () {
       expect(
           balanceTrusted(const Account(id: 'a', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: '2026-01-01'),
-              today: today),
+              today: today, rows: const []),
           isTrue); // 35 days
       expect(
           balanceTrusted(const Account(id: 'a', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: '2025-12-31'),
-              today: today),
+              today: today, rows: const []),
           isFalse); // 36 days
     });
 
-    test('a matching check exactly 35 days old is trusted, 36 is not; one that was off never is', () {
-      expect(balanceTrusted(old, today: today, last: const BankCheck(date: '2026-01-01', bankCents: 5, appCents: 5)), isTrue);
-      expect(balanceTrusted(old, today: today, last: const BankCheck(date: '2025-12-31', bankCents: 5, appCents: 5)), isFalse);
-      expect(balanceTrusted(old, today: today, last: const BankCheck(date: '2026-02-05', bankCents: 5, appCents: 6)), isFalse);
-      expect(balanceTrusted(old, today: today), isFalse);
+    test('a matching check exactly 35 days old is trusted, 36 is not; one that is off never is', () {
+      expect(balanceTrusted(old, today: today, rows: rows, last: const BankCheck(date: '2026-01-01', bankCents: 5, appCents: 5)), isTrue);
+      expect(balanceTrusted(old, today: today, rows: rows, last: const BankCheck(date: '2025-12-31', bankCents: 5, appCents: 5)), isFalse);
+      expect(balanceTrusted(old, today: today, rows: rows, last: const BankCheck(date: '2026-02-05', bankCents: 6, appCents: 6)), isFalse,
+          reason: 'off against the rows now, whatever was stored');
+      expect(balanceTrusted(old, today: today, rows: rows), isFalse);
+    });
+
+    // Review fix 1: trust is decided from the rows now, never from the stored appCents/diff.
+    test('a stored match goes stale when a row up to its date is deleted later', () {
+      const check = BankCheck(date: '2026-01-20', bankCents: 5, appCents: 5);
+      expect(balanceTrusted(old, today: today, rows: rows, last: check), isTrue);
+      final deleted = [_t('r1', '2025-12-20', 5, deleted: true)];
+      expect(balanceTrusted(old, today: today, rows: deleted, last: check), isFalse);
+      // A stored "off" that the rows now match (a missing row arrived by sync) is trusted.
+      expect(balanceTrusted(old, today: today, rows: rows, last: const BankCheck(date: '2026-01-20', bankCents: 5, appCents: 0)), isTrue);
     });
 
     test('a check that was off, then corrected by the owner (the opening moves to it), is trusted', () {
       const corrected = Account(id: 'a1', name: 'Synthetic', source: 'pbz', currency: 'EUR', opening: 5, openingDate: '2026-02-01');
-      expect(balanceTrusted(corrected, today: today, last: const BankCheck(date: '2026-02-01', bankCents: 5, appCents: 9)), isTrue);
+      expect(balanceTrusted(corrected, today: today, rows: const [], last: const BankCheck(date: '2026-02-01', bankCents: 5, appCents: 9)),
+          isTrue);
     });
 
     test('a date after today counts as recent; a bad date never', () {
-      expect(balanceTrusted(old, today: today, last: const BankCheck(date: '2026-02-07', bankCents: 1, appCents: 1)), isTrue);
-      expect(balanceTrusted(const Account(id: 'a', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: ''), today: today),
+      expect(balanceTrusted(old, today: today, rows: rows, last: const BankCheck(date: '2026-02-07', bankCents: 5, appCents: 5)), isTrue);
+      expect(
+          balanceTrusted(const Account(id: 'a', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: ''),
+              today: today, rows: const []),
           isFalse);
     });
   });
@@ -146,6 +161,43 @@ void main() {
       final usd =
           r.importBatch(ImportBatch(source: 'revolut', transactions: [_n('2026-01-10', -2, 'Synthetic u', currency: 'USD', balance: 5)]));
       expect(usd.bankChecks, isEmpty);
+    });
+
+    // Review fix 3.
+    test('a file balance dated before the account opening records no check', () async {
+      final id = await r.addAccount(name: 'Synthetic', source: 'revolut', currency: 'EUR', opening: 10000, openingDate: '2026-01-10');
+      final s = r.importBatch(ImportBatch(source: 'revolut', transactions: [_n('2026-01-05', -1000, 'Synthetic a', balance: 9000)]));
+      expect(s.bankChecks, isEmpty);
+      expect(r.lastBankCheck(id), isNull);
+    });
+
+    // Review fix 4.
+    test('another bank account or pocket of the same source and currency in the file dates: no check', () async {
+      final id = await r.addAccount(name: 'Synthetic', source: 'revolut', currency: 'EUR', opening: 10000, openingDate: '2026-01-01');
+      // A Savings pocket's file first (its own rows, its own balance): checked against everything, so far only its rows.
+      r.importBatch(ImportBatch(source: 'revolut', transactions: [_n('2026-01-06', 500, 'Synthetic savings', balance: 10500)]));
+      // The Current file covers the same days: the Savings row is stored there but not in this file.
+      final s = r.importBatch(ImportBatch(source: 'revolut', transactions: [
+        _n('2026-01-05', -1000, 'Synthetic a', balance: 9000),
+        _n('2026-01-07', -500, 'Synthetic b', balance: 8500),
+      ]));
+      expect(s.bankChecks, isEmpty);
+      expect(r.lastBankCheck(id)!.date, '2026-01-06', reason: 'the first file\'s check stays; nothing wrong recorded');
+      // A later file whose dates hold only its own rows is checked again.
+      final later = r.importBatch(ImportBatch(source: 'revolut', transactions: [_n('2026-01-09', -100, 'Synthetic c', balance: 8900)]));
+      expect(later.bankChecks.keys, [id]);
+    });
+
+    // Review fix 1 at the repo: a match recorded at import goes stale when a row is deleted.
+    test('a recorded match stops being trusted once a row it counted is deleted', () async {
+      final id = await r.addAccount(name: 'Synthetic', source: 'revolut', currency: 'EUR', opening: 10000, openingDate: '2025-01-01');
+      final a = _n('2026-01-05', -1000, 'Synthetic a', balance: 9000);
+      r.importBatch(ImportBatch(source: 'revolut', transactions: [a]));
+      final acc = r.accounts().single;
+      expect(balanceTrusted(acc, today: '2026-01-20', last: r.lastBankCheck(id), rows: r.transactions()), isTrue);
+      r.deleteTransaction(a.id);
+      expect(r.lastBankCheck(id)!.diff, 0, reason: 'the stored numbers are for display only');
+      expect(balanceTrusted(acc, today: '2026-01-20', last: r.lastBankCheck(id), rows: r.transactions(includeHidden: true)), isFalse);
     });
 
     test('the preview records nothing', () async {

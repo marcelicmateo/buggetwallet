@@ -155,11 +155,17 @@ extension WalletRepoAccounts on WalletRepo {
           if (lastBankCheck(id) case final BankCheck c) id: c
       };
 
-  /// After an import (owner's choice: automatic, from the bank file): for each balance the file states, the live bank
-  /// account counting its (source, currency) (the smallest id, as in `accountBalances`) gets a check against its
-  /// rows ([checkBankBalance]), recorded unless this device already holds a check of a later date. Returns them by
-  /// account id. A balance beyond ±[maxAmountCents] or without a real date is ignored.
-  Map<String, BalanceCheck> _recordBankChecks(List<BankBalance> balances) {
+  /// After an import (owner's choice: automatic, from the bank file): for each balance the file states
+  /// ([ImportBatch.bankBalances]), the live bank account counting its (source, currency) (the smallest id, as in
+  /// `accountBalances`) gets a check against its rows ([checkBankBalance]), recorded unless this device already holds a
+  /// check of a later date. Returns them by account id. No check (better none than a wrong "off by"):
+  /// - for a balance beyond ±[maxAmountCents] or without a real date;
+  /// - for a balance dated before the account's opening date (the opening is the anchor);
+  /// - when the account's stored rows dated within the file's dates (for that currency) are not all rows of [batch]:
+  ///   the app account then also holds another bank account or pocket of the same source and currency (two PBZ
+  ///   IBANs, a Revolut Savings pocket in its own file), whose rows the file's balance does not include.
+  Map<String, BalanceCheck> _recordBankChecks(ImportBatch batch) {
+    final balances = batch.bankBalances;
     if (balances.isEmpty) return const {};
     final live = accounts();
     final out = <String, BalanceCheck>{};
@@ -169,12 +175,26 @@ extension WalletRepoAccounts on WalletRepo {
       for (final x in live) {
         if (x.source == b.source && x.currency == b.currency && (a == null || x.id.compareTo(a.id) < 0)) a = x;
       }
-      if (a == null) continue;
+      if (a == null || b.date.compareTo(a.openingDate) < 0) continue;
       final rows = [
         for (final r
             in db.select('SELECT * FROM tx WHERE source = ? AND currency = ? AND manual = 0 AND deleted = 0', [b.source, b.currency]))
           Tx.fromRow(r)
       ];
+      final mine = [
+        for (final t in batch.transactions)
+          if (t.currency == b.currency) t
+      ];
+      final ids = {for (final t in mine) t.id};
+      var from = mine.first.date, to = from;
+      for (final t in mine) {
+        if (t.date.compareTo(from) < 0) from = t.date;
+        if (t.date.compareTo(to) > 0) to = t.date;
+      }
+      if (rows.any((r) => r.date.compareTo(from) >= 0 && r.date.compareTo(to) <= 0 && !ids.contains(r.id))) {
+        logEvent(_log, Level.INFO, 'account.bankCheck.skipped', {'reason': 'otherRows'});
+        continue;
+      }
       final c = checkBankBalance(a, rows, date: b.date, bankCents: b.cents);
       out[a.id] = c;
       final have = lastBankCheck(a.id);

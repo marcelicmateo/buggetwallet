@@ -133,6 +133,48 @@ void main() {
       expect(b.bankBalances.single, const BankBalance(source: 'revolut', currency: 'EUR', date: '2026-02-03', cents: 9700));
     });
 
+    // Review fix 7: the direction comes from the balance chain, not from the first and last dates.
+    test('a newest-first file covering one day: the chain says which row ends the day', () {
+      final b = _rev([
+        _r('2026-02-03', 'c', '-1.00', balance: '97.00'),
+        _r('2026-02-03', 'b', '-1.00', balance: '98.00'),
+      ]);
+      expect(b.bankBalances.single.cents, 9700);
+      final up = _rev([
+        _r('2026-02-03', 'b', '-1.00', balance: '98.00'),
+        _r('2026-02-03', 'c', '-1.00', balance: '97.00'),
+      ]);
+      expect(up.bankBalances.single.cents, 9700);
+    });
+
+    test('a chain that does not tell the direction gives no balance for a day with several rows', () {
+      // Balances that fit neither way.
+      expect(
+          _rev([
+            _r('2026-02-03', 'b', '-1.00', balance: '50.00'),
+            _r('2026-02-03', 'c', '-1.00', balance: '10.00'),
+          ]).bankBalances,
+          isEmpty);
+      // Pairs both ways.
+      expect(
+          _rev([
+            _r('2026-02-03', 'a', '-1.00', balance: '99.00'),
+            _r('2026-02-03', 'b', '-1.00', balance: '98.00'),
+            _r('2026-02-03', 'c', '-5.00', balance: '99.00'),
+          ]).bankBalances,
+          isEmpty);
+      // Missing balances: no telling pair.
+      expect(
+          _rev([
+            _r('2026-02-03', 'b', '-1.00', balance: '98.00'),
+            _r('2026-02-03', 'c', '-1.00'),
+            _r('2026-02-03', 'd', '-1.00', balance: '96.00'),
+          ]).bankBalances,
+          isEmpty);
+      // One row on the newest day needs no direction.
+      expect(_rev([_r('2026-02-03', 'b', '-1.00', balance: '50.00')]).bankBalances.single.cents, 5000);
+    });
+
     test('a balance missing on the last row of the newest day falls back to an older day, never to earlier in that day', () {
       final b = _rev([
         _r('2026-02-01', 'a', '-1.00', balance: '99.00'),
@@ -252,14 +294,15 @@ void main() {
           descriptionCols: [1],
           currencyCode: 'EUR',
           balanceCol: 3);
-      final b = parseMappedCsv(_b('Datum;Opis;Iznos;Stanje\n01.01.2026;a;-1,00;5,00\n02.01.2026;b;-1,00;?\n02.01.2026;c;-1,00;3,00\n'), m);
-      expect(b.transactions.map((t) => t.balanceAfter), [500, null, 300]);
-      expect(b.bankBalances.single.date, '2026-01-02');
-      expect(b.bankBalances.single.cents, 300);
+      const file = 'Datum;Opis;Iznos;Stanje\n01.01.2026;a;-1,00;6,00\n02.01.2026;b;-1,00;5,00\n02.01.2026;c;-1,00;?\n';
+      final b = parseMappedCsv(_b(file), m);
+      expect(b.transactions.map((t) => t.balanceAfter), [600, 500, null]);
+      // The chain (6,00 then 5,00 after -1,00) says oldest first, so c ends 2 January; it has no balance: 1 January.
+      expect(b.bankBalances.single.date, '2026-01-01');
+      expect(b.bankBalances.single.cents, 600);
       expect(b.bankBalances.single.source, b.source);
       // Without the role, the same file gives no balances and the same ids.
-      final plain = parseMappedCsv(_b('Datum;Opis;Iznos;Stanje\n01.01.2026;a;-1,00;5,00\n02.01.2026;b;-1,00;?\n02.01.2026;c;-1,00;3,00\n'),
-          m.copyWith(balanceCol: null));
+      final plain = parseMappedCsv(_b(file), m.copyWith(balanceCol: null));
       expect(plain.bankBalances, isEmpty);
       expect(plain.transactions.map((t) => t.id), b.transactions.map((t) => t.id));
     });

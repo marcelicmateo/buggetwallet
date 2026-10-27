@@ -159,6 +159,42 @@ void main() {
     expect(p.rows.single.matchedManualId, 'mpeer');
   });
 
+  // Review fix 6: the preview must equal the import while not caught up too.
+  test('not caught up: an entry already pointing at a batch row still shows as its match', () {
+    r.setLocalValue(WalletRepo.caughtUpKey, '0');
+    final row = n('2026-01-18', -2340, 'POS plaćanje', _lidl, kind: TxKind.card);
+    r.applyRemote([
+      Op(
+          'tx',
+          'mpeer',
+          {
+            'source': 'manual',
+            'date': '2026-01-17',
+            'amount': -2340,
+            'currency': 'EUR',
+            'category': 'Groceries',
+            'manual': 1,
+            'deleted': 0,
+            'matched_to': row.id,
+          },
+          _h(1))
+    ], match: false);
+    final (p, _) = _predicted(r, ImportBatch(source: 'pbz', transactions: [row]));
+    expect(p.rows.single.status, PreviewStatus.matchesManual);
+    expect(p.rows.single.matchedManualId, 'mpeer');
+  });
+
+  test('a revived row keeps its stored transfer link; the preview says so', () {
+    final topup = n('2026-01-16', 5000, 'Topup', 'Top-up by *0000', source: 'revolut', kind: TxKind.ownTransfer);
+    final pay = n('2026-01-16', -5000, 'POS plaćanje', 'POS Revolut**0000* Dublin', kind: TxKind.ownTransfer);
+    r.importBatch(ImportBatch(source: 'revolut', transactions: [topup]));
+    r.importBatch(ImportBatch(source: 'pbz', transactions: [pay]));
+    r.setLocalValue(WalletRepo.caughtUpKey, '0'); // the delete then leaves the links to the next caught-up run
+    r.deleteTransaction(pay.id);
+    final (p, _) = _predicted(r, ImportBatch(source: 'pbz', transactions: [pay]), revive: {pay.id});
+    expect(p.rows.single.status, PreviewStatus.revivable);
+  });
+
   test('revive: a deleted row in the revive set is revivable and comes back; without it, a duplicate', () {
     final a = n('2026-01-10', -1000, 'Ostalo', 'Synthetic a');
     r.importBatch(ImportBatch(source: 'pbz', transactions: [a]));

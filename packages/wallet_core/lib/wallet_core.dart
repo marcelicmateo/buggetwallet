@@ -200,7 +200,7 @@ export 'src/planned.dart'
         upcoming,
         UpcomingItem,
         UpcomingKind;
-export 'src/planned.dart' show isSafeCents;
+export 'src/planned.dart' show isSafeCents, legacyRowCapCents;
 export 'src/ranges.dart' show DateRange, RangeKind, rangeFor, rangeLabel, shiftRange;
 export 'src/recurring.dart' show detectRecurring, medianCents, partsDays, partsThreshold, planRecurringPayments, RecurringPayments;
 export 'src/repo.dart'

@@ -70,11 +70,16 @@ int? amountFromText(String text) {
 /// stops here on purpose: one cap for every money field.
 const maxAmountCents = WalletSettings.maxAmount;
 
-/// Whether [cents] is within ±[maxAmountCents], the one amount cap (Q3): a hand-added row, an imported row
-/// ([WalletRepo.importBatch] skips and counts the others in `ImportSummary.tooLarge`) and a synced amount field are
-/// held to it. With it, at least 90,000 such amounts sum exactly (90,000 × 10^11 = 9.0e15 < 2^53, the largest whole
-/// number a web number holds exactly); the budget sums assert they stay under 2^53.
+/// Whether [cents] is within ±[maxAmountCents], the one amount cap (Q3) for new local writes: a hand-added row and an
+/// imported row ([WalletRepo.importBatch] skips and counts the others in `ImportSummary.tooLarge`). With it, at least
+/// 90,000 such amounts sum exactly (90,000 × 10^11 = 9.0e15 < 2^53, the largest whole number a web number holds
+/// exactly). Synced row amounts are accepted up to [legacyRowCapCents]; the budget sums assert they stay under 2^53.
 bool isSafeCents(int cents) => cents >= -maxAmountCents && cents <= maxAmountCents;
+
+/// The largest row amount a synced op may carry (Q3): 10^12 cents, the importer's cap before Stage Q, so a row an
+/// older build imported is never dropped. At it, at least 9,000 rows still sum exactly (9,000 × 10^12 = 9.0e15 <
+/// 2^53); the debug asserts in the budget sums cover the rest.
+const legacyRowCapCents = 1000000000000;
 
 final _plainNumber = RegExp(r'^[+-]?(\d+\.?\d*|\.\d+)$');
 

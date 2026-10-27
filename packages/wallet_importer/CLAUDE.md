@@ -33,8 +33,9 @@ Pure Dart. **The only code that knows bank formats.** Turns PBZ .xls, Revolut .x
   `BankProfile.parse`, mapped CSV as a "too large" problem). `NormalizedTransaction.balanceAfter` (optional, never in the
   id, `toJson` only when set): Revolut `Balance`, PBZ `STANJE`/`SALDO` when the header row has it (detection unchanged),
   `CsvMapping.balanceCol` (JSON `balance`, old layouts read as none; `guessMapping` fills it from the balance header).
-  `ImportBatch.bankBalances` (`BankBalance`): per currency, the newest day whose end-of-day row (file order, read
-  newest-first files backwards) has a balance; none for a currency mixing two `account`s (Revolut pockets). Tests:
+  `ImportBatch.bankBalances` (`BankBalance`): per currency, the newest day whose end-of-day row has a balance; with
+  several rows that day, the file's direction comes from the balance chain (`bal[i] == bal[i-1] + amount[i]`), and no
+  balance when the chain does not tell; none for a currency mixing two `account`s (Revolut pockets). Tests:
   `test/q_balance_import_test.dart`.
 - `model.dart` — `NormalizedTransaction`, `TxKind`, `ImportBatch`. `ids.dart` — `transactionId` (v1),
   `sourceTransactionId` (banks added after v1); `fnv1a36`, `formatCents` are internal (tests import `src/ids.dart`).
