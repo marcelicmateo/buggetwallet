@@ -272,7 +272,9 @@ extension ImportAndBackup on WalletController {
     }
     repo.removeCsvMapping(id);
     // The rows the new reading made stay deleted; reading the file that way again must bring them back, not skip them as known.
-    repo.setLocalValue('csvRevive:$id', taken.isEmpty ? null : jsonEncode(taken));
+    // Rows already waiting (another file's, say February's) keep waiting; only the ones this Undo brought back are no longer.
+    final waiting = [...csvReviveIds(id).where((x) => !earlier.contains(x)), ...taken];
+    repo.setLocalValue('csvRevive:$id', waiting.isEmpty ? null : jsonEncode(waiting.toSet().toList()));
     logEvent(_import, Level.INFO, 'csvLayout.remapUndone', {'restored': removed.length});
     _changed();
   }

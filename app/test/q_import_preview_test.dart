@@ -16,6 +16,9 @@ import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/wallet.dart';
 
+const _jan = 'Datum;Opis;Iznos;Valuta\n03.01.2026;Synthetic jan one;-1,00;EUR\n04.01.2026;Synthetic jan two;-2,00;EUR\n';
+const _feb = 'Datum;Opis;Iznos;Valuta\n03.02.2026;Synthetic feb one;-3,00;EUR\n04.02.2026;Synthetic feb two;-4,00;EUR\n';
+
 const _t = Timeout(Duration(seconds: 60));
 
 const _csvA = 'Datum;Opis;Iznos;Valuta\n'
@@ -235,6 +238,27 @@ void main() {
       expect(next.revivable, 1, reason: 'the skipped row comes back as Read again');
       expect(wc.txs.any((x) => x.tx.id == skipped), isTrue);
       expect(jsonDecode(wc.repo.localValue('csvRevive:$shape') ?? '[]'), isNot(contains(skipped)));
+    });
+
+    test('Undo of a remap keeps the rows that were already waiting: Feb comes back when Feb is read again', () async {
+      final wc = emptyWallet();
+      CsvChoice normal(Uint8List b) => _choiceFor(b);
+      await wc.importFiles([('jan.csv', _bytes(_jan))], askMapping: (_, b) async => normal(b));
+      await wc.importFiles([('feb.csv', _bytes(_feb))]);
+      List<int> amounts() => wc.txs.map((x) => x.tx.amount).toList()..sort();
+      expect(amounts(), [-400, -300, -200, -100]);
+      // Read Jan the other way: Jan and Feb are removed and wait to be read again.
+      wc.deleteCsvLayout(wc.csvLayouts().single.key);
+      await wc.importFiles([('jan.csv', _bytes(_jan))],
+          askMapping: (_, b) async => _choiceFor(b, negate: true), confirmRemoval: (_) async => true);
+      // Back to the first reading: only Jan is read, so Feb still waits; then that second change is undone.
+      wc.deleteCsvLayout(wc.csvLayouts().single.key);
+      final lines =
+          await wc.importFiles([('jan.csv', _bytes(_jan))], askMapping: (_, b) async => normal(b), confirmRemoval: (_) async => true);
+      lines.single.undo!();
+      // Reading Feb the first way again must bring Feb's rows back.
+      await wc.importFiles([('feb.csv', _bytes(_feb))], askMapping: (_, b) async => normal(b), confirmRemoval: (_) async => true);
+      expect(amounts(), containsAll([-400, -300]), reason: 'Feb was waiting and is not lost by the Undo');
     });
 
     test('without a preview callback the file goes straight in (today)', () async {

@@ -272,6 +272,35 @@ void main() {
       expect(wc.lastBankCheckOf(id), isNull);
     });
 
+    test('two files out of date order: the question is recounted over every row when it is asked', () async {
+      const late = 'Datum;Opis;Iznos;Valuta\n20.10.2026;Synthetic late;-30,00;EUR\n';
+      const early = 'Datum;Opis;Iznos;Valuta\n05.10.2026;Synthetic early;-20,00;EUR\n';
+      final (wc, id) = await csvWallet(late);
+      final lines = await wc
+          .importFiles([('late.csv', Uint8List.fromList(utf8.encode(late))), ('early.csv', Uint8List.fromList(utf8.encode(early)))],
+              askMapping: (_, b) async {
+        final shape = csvShape(b);
+        return CsvChoice(shape.shapeId, guessMapping(shape)!.copyWith(name: 'Erste (CSV)', headers: shape.headers));
+      });
+      final built = newestPerAccount(lines.expand((l) => l.questions)).single;
+      expect((built.date, built.appCents), ('2026-10-20', 100000 - 3000), reason: 'built before the early file was written');
+      final asked = wc.questionNow(built)!;
+      expect(asked.date, '2026-10-20');
+      expect(asked.appCents, 100000 - 3000 - 2000, reason: 'both files counted');
+      expect(wc.appBalanceOn(id, '2026-10-20'), asked.appCents);
+    });
+
+    test('a question older than a stored check is not asked; a newer one is', () async {
+      final (wc, id) = await csvWallet(without);
+      wc.recordBalanceCheck(id, date: '2026-10-25', bankCents: 100000);
+      final old = BankQuestion(accountId: id, name: 'Erste', currency: 'EUR', date: '2026-10-12', appCents: 1);
+      expect(wc.questionNow(old), isNull);
+      final same = BankQuestion(accountId: id, name: 'Erste', currency: 'EUR', date: '2026-10-25', appCents: 1);
+      expect(wc.questionNow(same), isNull, reason: 'a check of that very day is enough');
+      final newer = BankQuestion(accountId: id, name: 'Erste', currency: 'EUR', date: '2026-10-26', appCents: 1);
+      expect(wc.questionNow(newer)!.appCents, 100000);
+    });
+
     test('no question when the last check is already as new as the file', () async {
       final (wc, id) = await csvWallet(without);
       wc.recordBalanceCheck(id, date: '2026-10-12', bankCents: 100000);
