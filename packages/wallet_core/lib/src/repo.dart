@@ -718,6 +718,14 @@ class WalletRepo {
   /// Today's date on this device's clock (the one the HLC uses, so tests can set it).
   String _today() => isoDate(DateTime.fromMillisecondsSinceEpoch(clock.now()));
 
+  /// How many field clocks the wallet holds ([count]) and the newest of them ([maxHlc]; `null` when there are none).
+  /// Every data write, local or applied from a peer, records its field clock, so a write that adds a field or carries
+  /// the newest clock changes this; sync bookkeeping (cursors, the outbox, `meta`) does not.
+  ({int count, String? maxHlc}) clockStats() {
+    final r = db.select('SELECT count(*) AS n, max(hlc) AS m FROM clocks').first;
+    return (count: r['n'] as int, maxHlc: r['m'] as String?);
+  }
+
   // ---------- sync bookkeeping (device-local, never synced) ----------
   /// How far this device applied each other device's relay files (device id → last applied seq; absent = none).
   /// Advanced file by file by `SyncEngine`, raised to a snapshot's covers; a schema bump clears it ([_migrate]).

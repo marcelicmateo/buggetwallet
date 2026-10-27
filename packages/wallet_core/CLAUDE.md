@@ -549,7 +549,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   again (idempotent). `MemoryTransport.maxFileBytes` (default 16 MiB) lowers the limit in tests. Cursors (`sync_cursor` table, device-local, `WalletRepo.syncCursors`):
   per other device the last seq applied; files apply strictly in order; the first file that cannot be fetched (`waiting`
   with reason null + an `unreadable` problem), is pruned without a usable snapshot, or is refused (quarantined in
-  `BadFiles` under `<device>/<seq>`, fetched and hashed again each run) stops that device. A cursor above a device's
+  `BadFiles` under `<device>/<seq>`, fetched and hashed again each run) stops that device. The per-peer loop is `_applyPeer` (state in `_ApplyRun`, result `_PeerApplied`/`_PeerWaiting`/`_PeerRefused`/`_PeerBlocked`); its invariants are asserts (in order per device, a refused file leaves `WalletRepo.clockStats` unchanged, records forgotten only after a complete pass). A cursor above a device's
   `last` is reset to 0 (relay lost its files). Snapshot use: when a needed file is pruned; when this device applied
   nothing yet (new device, schema-bump replay) and the snapshot id says this schema or newer (`s<schema>-<ms>-<hex>`);
   and when a blocked file is covered by the snapshot (then the device goes on after it). Latest first, then `previous`;
@@ -734,7 +734,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `support/bill_helpers.dart` `confirmWithCategory`), bill files (BlobStore, engine queues, Memory/RelayTransport blob calls):
   `test/blob_store_test.dart` (+ `blob_spec_test.dart`; real relay: `sync_relay_test.dart`), future spending (planned costs, .ics, Upcoming, two
   devices): `test/future_spending_test.dart` (+ `future_spending_spec_test.dart`, `ics_spec_test.dart`; F4a: content refs
-  incl. two devices `calendar_ref_test.dart`, parseIcs cost bounds + dismiss title `future_spending_fixes_test.dart`), CSV: `test/export_test.dart`, search: `test/search_test.dart`,
+  incl. two devices `calendar_ref_test.dart`, parseIcs cost bounds + dismiss title `future_spending_fixes_test.dart`), CSV: `test/export_test.dart`, search: `test/search_test.dart`, clock stats (`WalletRepo.clockStats`, two devices): `test/clock_stats_test.dart`,
   web-safe core (`fromDatabase`, `backupBytes`/`restoreBackupBytes`, `MemoryLogSink`, gzip compatibility): `test/web_core_test.dart`,
   encrypted local database (new/convert/wrong key/WAL/interrupted conversion/perf numbers): `test/local_db_test.dart`
   (sqlite3mc proof tests: `test/encrypted_db_test.dart`), sync self-heal: `test/sync_self_heal_test.dart`, bill-file invariants incl. two devices, GC and the 14 → 15 migration (P14): `test/p14_blob_invariants_test.dart`;
