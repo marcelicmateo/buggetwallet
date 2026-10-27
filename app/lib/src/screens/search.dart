@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:wallet_core/wallet_core.dart' show Bill, BillStatus, PlannedCost, PlannedStatus, SearchResult;
+import 'package:wallet_core/wallet_core.dart' show Bill, BillStatus, CategorizedTx, PlannedCost, PlannedStatus, SearchResult;
 
 import '../controller.dart';
 import '../format.dart';
@@ -66,6 +66,14 @@ class _SearchPaneState extends State<SearchPane> {
     });
   }
 
+  /// Opens a transaction found by the search. It runs here, in the pane's own context, so the toast after "Delete" still shows when
+  /// the section the row was in has gone.
+  Future<void> _openTx(CategorizedTx t) async {
+    logNav('search.open.result', {'kind': 'tx'});
+    final res = await showSheet<String>(context, TxSheet(wc: widget.wc, t: t));
+    if (mounted) txSheetToast(context, widget.wc, res);
+  }
+
   void _close() {
     logNav('search.close');
     widget.onClose();
@@ -96,7 +104,9 @@ class _SearchPaneState extends State<SearchPane> {
             ),
           ),
         ),
-        Expanded(child: _SearchResults(wc: widget.wc, query: _query, onOpenTab: widget.onOpenTab, onOpenBills: widget.onOpenBills)),
+        Expanded(
+            child: _SearchResults(
+                wc: widget.wc, query: _query, onOpenTab: widget.onOpenTab, onOpenBills: widget.onOpenBills, onOpenTx: _openTx)),
       ]),
     );
   }
@@ -104,11 +114,12 @@ class _SearchPaneState extends State<SearchPane> {
 
 /// The ruled result sections for [query] (or the hint while it is too short).
 class _SearchResults extends StatelessWidget {
-  const _SearchResults({required this.wc, required this.query, required this.onOpenTab, required this.onOpenBills});
+  const _SearchResults({required this.wc, required this.query, required this.onOpenTab, required this.onOpenBills, required this.onOpenTx});
   final WalletController wc;
   final String query;
   final void Function(int tab) onOpenTab;
   final VoidCallback onOpenBills;
+  final Future<void> Function(CategorizedTx t) onOpenTx;
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +135,7 @@ class _SearchResults extends StatelessWidget {
       else if (r!.isEmpty && planned.isEmpty && billsFound.isEmpty)
         const EmptyNote('Nothing found')
       else ...[
-        if (r.txs.isNotEmpty) _TxResults(wc, r),
+        if (r.txs.isNotEmpty) _TxResults(wc, r, onOpenTx),
         if (r.goals.isNotEmpty)
           _ResultSection('Goals', r.goals.length, [
             Rows(children: [
@@ -240,9 +251,10 @@ class _ResultRow extends StatelessWidget {
 
 /// The matching transactions (the first [searchTxLimit]).
 class _TxResults extends StatelessWidget {
-  const _TxResults(this.wc, this.r);
+  const _TxResults(this.wc, this.r, this.onOpenTx);
   final WalletController wc;
   final SearchResult r;
+  final Future<void> Function(CategorizedTx t) onOpenTx;
   @override
   Widget build(BuildContext context) => _ResultSection('Transactions', r.txs.length, [
         const TxHeaderRow(),
@@ -258,11 +270,7 @@ class _TxResults extends StatelessWidget {
               splitCount: wc.splitCount(t.tx.id),
               splitBroken: wc.splitIsBroken(t.tx.id),
               matchedPart: r.matchedPart[t.tx.id],
-              onTap: () async {
-                logNav('search.open.result', {'kind': 'tx'});
-                final res = await showSheet<String>(context, TxSheet(wc: wc, t: t));
-                if (context.mounted) txSheetToast(context, wc, res);
-              }),
+              onTap: () => onOpenTx(t)),
         if (r.txs.length > searchTxLimit) const Muted('Showing the first 50. Type more to narrow it down.'),
       ]);
 }

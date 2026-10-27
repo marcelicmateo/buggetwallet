@@ -258,6 +258,21 @@ void main() {
       expect(e.error, allOf(contains("Couldn't refresh"), contains('Showing what was saved')));
     });
 
+    test('a fresh link text that cannot be saved is still read this time; the entry says the refresh failed', () async {
+      final wc = fw();
+      var closeDuringFetch = false;
+      wc.seams.icsFetcher = (u) async {
+        if (closeDuringFetch) wc.repo.close(); // the save of the fresh copy then throws
+        return fakeIcs([(closeDuringFetch ? 'u2' : 'u1', '2026-10-25', 'Car service 120 €')]);
+      };
+      expect(await wc.addIcsLink('webcal://example.org/me.ics'), isNull);
+      final id = wc.calendarEntries().single.id;
+      closeDuringFetch = true;
+      await wc.readCalendars(trigger: 'resume');
+      expect(wc.cal.events.single.uid, 'u2', reason: 'the fresh text is read even though keeping it failed');
+      expect(wc.cal.errorFor(id), allOf(contains("Couldn't refresh"), contains('Showing what was saved')));
+    });
+
     test('bad links are refused before any request', () async {
       final wc = fw();
       var asked = 0;

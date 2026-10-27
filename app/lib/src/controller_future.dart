@@ -555,22 +555,24 @@ extension FutureSpending on WalletController {
     _parseSource(s, text, from, to, read);
   }
 
-  /// The fresh text of a link source, saved as its copy; on a failure the entry says so and [saved] stays in use.
+  /// The fresh text of a link source, saved as its copy; on a failure the entry says so and [saved] stays in use. A fresh text that
+  /// could not be saved is still the one to read this time.
   Future<String?> _refreshLink(_IcsSource s, String? saved) async {
+    var text = saved;
     try {
       final fresh = await deps.icsFetcher(Uri.parse(s.url!));
       if (fresh.length > icsMaxBytes || _icsProblem(fresh) != null) {
         throw const IcsFetchException("That link isn't a calendar any more.");
       }
+      text = fresh;
       repo.setLocalValue('icsText:${s.id}', fresh);
-      return fresh;
     } on IcsFetchException catch (e) {
       cal.setError(s.id, "Couldn't refresh this link. ${e.message} Showing what was saved.");
     } catch (e, st) {
       cal.setError(s.id, "Couldn't refresh this link. Showing what was saved.");
       logError(_calLog, 'calendar.refreshFailed', e, st, fields: {'type': e.runtimeType.toString()});
     }
-    return saved;
+    return text;
   }
 
   void _parseSource(_IcsSource s, String text, String from, String to, _CalendarRead read) {
