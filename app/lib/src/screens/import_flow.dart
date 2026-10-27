@@ -63,9 +63,10 @@ Future<void> pickAndImport(BuildContext context, WalletController wc, FileChoose
     toast(context, 'Earlier payments of that layout were read again.', actionLabel: 'Undo', onAction: undo);
   }
   // Q5: accounts the file gave no balance for: "What did the bank app show when you downloaded this file?"
-  for (final q in newestPerAccount(lines.expand((l) => l.questions))) {
+  for (final built in newestPerAccount(lines.expand((l) => l.questions))) {
     if (!context.mounted) break;
-    await askBankBalance(context, wc, q, fromImport: true);
+    final q = wc.questionNow(built); // counted again now; none when a check as new as the file exists
+    if (q != null) await askBankBalance(context, wc, q, fromImport: true);
   }
   // An import that added rows and leaves plan suggestions: "Looks right?" once per wallet.
   if (context.mounted && lines.any((l) => l.ok && l.added > 0)) await offerFirstPlan(context, wc);

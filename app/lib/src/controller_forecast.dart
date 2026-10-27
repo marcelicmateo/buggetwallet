@@ -55,6 +55,16 @@ extension ForecastDb on WalletController {
     return checkBankBalance(a, [for (final t in wholeTxs) t.tx], date: date, bankCents: 0).appCents;
   }
 
+  /// The question to put to the owner now, or null: [q] was built while its file was written, so the app's number is counted again over
+  /// every row (another file of the same pick may have added older rows since), and a question not newer than the stored check is dropped.
+  BankQuestion? questionNow(BankQuestion q) {
+    if (!accountsAll().any((a) => a.id == q.accountId)) return null;
+    final last = repo.lastBankCheck(q.accountId);
+    if (last != null && last.date.compareTo(q.date) >= 0) return null;
+    return BankQuestion(
+        accountId: q.accountId, name: q.name, currency: q.currency, date: q.date, appCents: appBalanceOn(q.accountId, q.date));
+  }
+
   /// The red lines for Today (Q5): below zero now, goes below zero before payday (and at which bill), or "check your balance".
   /// Empty while the period has ended or there is no bank account.
   List<BalanceWarning> balanceWarningList() => _cached(const MemoKey('balanceWarnings'), () {
