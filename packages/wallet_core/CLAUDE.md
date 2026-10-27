@@ -304,7 +304,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   never revives or undoes a per-key change; new patterns get orders after the largest live one; a clock-less legacy row
   goes through `_write`; the map rows are left in place for older builds; `repo.migrate` logs `perKeySettings` (count);
   9 = the `account` entity, no data migration; 10 = the `category` entity (P1), no data migration; 11 = tags (T1); 12 = P4
-  recurring columns, no data migration; 13 = splits; 14 = recurring income; 15 = P14 local blob tables, no synced change; 16 = `bills.attached_tx` (P16b), no data migration). Opening an existing database with an older version
+  recurring columns, no data migration; 13 = splits; 14 = recurring income; 15 = P14 local blob tables, no synced change; 16 = `bills.attached_tx` (P16b), no data migration; 17 = the `iou` and `iou_part` entities (Q8), no data migration). Opening an existing database with an older version
   clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
   written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
 - `local_db.dart` — encrypted local database (§4.9, SQLite3MultipleCiphers, web-safe): `localDbKey(VaultKey)` = HKDF
@@ -319,6 +319,20 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   main/-wal/-shm/-journal replaced by it and converted again; a failed rekey or check restores it at once. Test hook
   `step:` (`copied`, `rekeyed`, `verified`). The app (R6b) passes the key on native and wraps the web VFS
   (`multipleciphers-<fs>`) itself.
+- `repo_iou.dart` — IOUs (Q8, schema 17): entities `iou` (table `ious`: person, direction `lent`|`borrowed`, amount
+  > 0 cents, currency, date, note, `tx`, closed, deleted; id `o…`) and `iou_part` (table `iou_parts`, index on `iou_id`:
+  amount, date, `tx`, deleted; id `r…`); models `Iou`, `IouDirection`, `IouPart`, `IouView(iou, parts, outstanding)`
+  (outstanding = amount − Σ live parts, never below 0). `WalletRepoIou`: `addIou`, `updateIou` (`clearNote`/`clearTx`),
+  `deleteIou`/`undeleteIou`, `closeIou(closed:)`, `addIouPart`, `deleteIouPart`/`undeleteIouPart`, `ious(includeClosed:)`,
+  `iouLinkedTx()`. Local writes only (`ArgumentError`): person 1..60, amount 1..`maxAmount`, valid date, no overpaying;
+  a linked payment exists, is live, no own transfer, no split, same currency, sign (lent: the IOU's payment out, parts
+  in; borrowed: the reverse) and **exactly** the amount, held by one live link only. **Money:** `repo.categorizer()`
+  passes `iouLinkedTx()` as `Categorizer(iouTx:)`; `categorize`/`expand` give such a row `BudgetKind.transfer` and keep
+  its main tag (`kindFor`), so every total that leaves transfers out leaves it out (period, month, insights, budgets,
+  recurring detection, reports); account balances (raw rows) keep it; `setSplit` refuses it. `iouLinkedTx` follows a
+  linked hand-added entry to the bank row that replaced it (`matched_to`). Unlinked IOUs change no number. Older builds
+  skip both entities (replayed on upgrade). Logs `iou.*` with direction/linked/count only. Tests: `test/q8_iou_test.dart`,
+  schema-16 ↔ 17 old-build replay `test/q8_iou_old_build_test.dart`.
 - `loan.dart` — `loanLeft(settings, today)` → `LoanLeft {payments, cents, endMonth}` or null (no loan, no `loanEnd`, none left): counts the months from today's month to `loanEnd` inclusive whose payday (`paydayDay`, clamped to the month's last day) is today or later; `cents = payments × loan` (no interest data). Tests: `test/loan_left_test.dart`.
 - `dates.dart` — `YYYY-MM-DD` string helpers. `hlc.dart` (H7 bounded HLC: `maxClockDrift` 1 h; an owner write (the
   public write API) throws `ClockBehindException` (nothing written, message without clock values) while this device's

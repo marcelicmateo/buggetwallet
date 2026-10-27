@@ -311,6 +311,13 @@ class Categorizer {
   /// Tx id → its live split's parts (P6, `WalletRepoSplits.splits`, read once), for [expand]. Empty: no splits.
   final Map<String, List<SplitPart>> splits;
 
+  /// Ids of the payments the owner linked to an IOU (Q8, `WalletRepoIou.iouLinkedTx`, read once). Such a row keeps its
+  /// main tag (shown as before) but counts as [BudgetKind.transfer] in [categorize] and [expand]: money lent or paid
+  /// back is neither spending nor income, so every total that leaves transfers out (`computePeriod`, `monthSummary`,
+  /// `periodSummaries`, `countsAsSpending`, insights, budget vs actual, recurring detection, reports) leaves it out,
+  /// while account balances (raw rows) still count it. A split on such a row is ignored, as on a transfer. Empty: none.
+  final Set<String> iouTx;
+
   /// [patternRules] (P7, [WalletSettings.patternRules]) are the personal patterns with their match kind and range; when
   /// null, [patterns] (`[category, regex]` pairs, [WalletSettings.merchantPatterns]) are used as regex patterns.
   factory Categorizer(
@@ -320,7 +327,8 @@ class Categorizer {
       int rentCashThreshold = defaultRentCashThreshold,
       CategoryTable? table,
       TagContext? tagContext,
-      Map<String, List<SplitPart>> splits = const {}}) {
+      Map<String, List<SplitPart>> splits = const {},
+      Set<String> iouTx = const {}}) {
     final t = table ?? CategoryTable.builtIn;
     final rules = patternRules ??
         [
@@ -333,10 +341,10 @@ class Categorizer {
     ];
     // Counts only: merchant rules and patterns are personal.
     logEvent(_log, Level.FINE, 'categories.build', {'rules': merchantRules.length, 'patterns': rules.length, 'patternsUsed': used.length});
-    return Categorizer._(merchantRules, used, rentCashThreshold, t, tagContext, splits);
+    return Categorizer._(merchantRules, used, rentCashThreshold, t, tagContext, splits, iouTx);
   }
 
-  Categorizer._(this.merchantRules, this._patterns, this.rentCashThreshold, this.table, this.tagContext, this.splits)
+  Categorizer._(this.merchantRules, this._patterns, this.rentCashThreshold, this.table, this.tagContext, this.splits, this.iouTx)
       : userPatterns = List.unmodifiable([for (final p in _patterns) (p.rule.category, p.rule)]);
 
   /// A pattern ready to match, or null (logged as `categories.badPattern`) when its text is empty (only spaces
@@ -491,8 +499,12 @@ class Categorizer {
   /// recurring, paydays, balances, rule hits, tag suggestions); money by category, tag or kind uses [expand].
   CategorizedTx categorize(Tx t) {
     final c = categoryOf(t);
-    return CategorizedTx(t, c, table.kindOf(c), tags: tagContext?.of(t) ?? const []);
+    return CategorizedTx(t, c, kindFor(t, c), tags: tagContext?.of(t) ?? const []);
   }
+
+  /// The budget kind of [t] with main tag [category]: [BudgetKind.transfer] when the owner linked it to an IOU
+  /// ([iouTx]), else the tag's kind.
+  BudgetKind kindFor(Tx t, String category) => iouTx.contains(t.id) ? BudgetKind.transfer : table.kindOf(category);
 
   /// The rows [t] counts as (P6): [categorize] when it has no live split in [splits] or is not live itself (a deleted
   /// row, an entry replaced by its bank row: it counts nothing, so it stays one row); else one row per part, in stored

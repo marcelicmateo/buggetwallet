@@ -17,6 +17,7 @@ extension WalletRepoSplits on WalletRepo {
     if (tx.transferTo != null || cz.table.kindOf(cz.categoryOf(tx)) == BudgetKind.transfer) {
       throw ArgumentError('A transfer cannot be split.');
     }
+    if (cz.iouTx.contains(txId)) throw ArgumentError('A payment linked to an IOU cannot be split.');
     if (tx.amount == 0) throw ArgumentError('A payment of 0.00 cannot be split.');
     if (parts.length < SplitPart.minParts) throw ArgumentError('A split needs at least ${SplitPart.minParts} parts.');
     if (parts.length > SplitPart.maxParts) throw ArgumentError('A split can have at most ${SplitPart.maxParts} parts.');

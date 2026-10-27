@@ -481,7 +481,8 @@ class WalletRepo {
         rentCashThreshold: st.rentCashThreshold,
         table: table,
         tagContext: withTags ? tagContext() : null,
-        splits: withTags ? splits() : const {});
+        splits: withTags ? splits() : const {},
+        iouTx: WalletRepoIou(this).iouLinkedTx());
   }
 
   // ---------- writes ----------
