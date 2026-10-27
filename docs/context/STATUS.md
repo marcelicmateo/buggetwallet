@@ -368,6 +368,23 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 - 2026-10-27: **`tools/relay-deploy.sh`**: `bootstrap|install|upgrade|backup|status` for the Hetzner relay (setup.md §6 "Quick way"); `--dry-run`, offline `--self-test` in lint (`deploy-selftest`). Not yet run against a real server. Review: 1 blocker (dnf5 has no `dnf-automatic-install.timer`, also wrong in §6.2) + lockout/stdin/backup-trap fixes. Manual docs fixed: stopping `bw-relay` also stops Caddy (`Requires=`), so §6.4/6.5 start both.
 - 2026-10-27: Research: Actual Budget + Cashew read for ideas (no code taken). Proposed, waiting on the owner: category suggestion chips, schema upgrade-from-every-version tests, bill weekend shift, hide-amounts toggle, total overflow guard; then statement reconciliation, import preview, search filters, rule suggestions, budget presets, IOU list; after M6: device state digest (sync change).
 
+- 2026-10-27: **Stage Q: ideas from Actual Budget + Cashew** (plan `STAGE_Q_PLAN.md`; schema 17; update every device together).
+  - **Wave 0 (structure):** `repo.dart` and `controller.dart` split into part files (moves only, same test counts).
+  - **Add expense:** up to 3 suggested main-tag chips under the note (from your rules and earlier rows with the same word; only tags the picker offers, a tap is needed) and a list of recent payees/notes while typing.
+  - **Rules:** after you set the same main tag by hand on a payee's bank rows, a toast asks "Always put X in Y?" (Make rule, then Undo); Settings › Rules › Suggested (Make rule / Dismiss, dismissed stays on this device).
+  - **Search:** filter chips (amount, date, main tag, has attachment, split, uncategorised), matched text in bold, a search button on Today's Recent panel.
+  - **Settings › Sync › Recent changes:** what changed, when, on this device or another (read-only, no values shown).
+  - **Import preview** (Settings › Import › "Always show", on by default): "3 new · 3 already here · …" with Skip per row; Cancel writes nothing (no rows, no layout).
+  - **Bank balance:** a Revolut file's own balance is checked automatically; for PBZ the app asks "What did the bank app show?" (Matches / Save this number / Skip); "off by X" offers Correct balance, never corrects by itself. Settings › Accounts shows the last check.
+  - **Red warning:** Today says "PBZ goes below zero around <date> (<bill>)" / "is below zero now", only from a balance checked in the last 35 days; otherwise "Check your PBZ balance".
+  - **Payday forecast:** Budget › under the payday plan "On payday: about X (after bills, before day-to-day spending)" with a step chart, from checked home-currency bank accounts only (the note says what is left out).
+  - **Owed (IOU list):** Save tab › Owed: "People owe you X · You owe Y", IOUs with repayments, Close, Delete + Undo; on a payment "Lent to someone" / "Repayment". A linked payment counts as neither spending nor income (like a transfer) but stays in account balances and in the lists with a "lent"/"repaid" tag.
+  - **Bills:** "Bills and subscriptions: X a month · Y a year" on Expected bills ("about" for a bill with a range).
+  - **Safety:** one amount cap everywhere (see Known limits); database upgrade tests from every schema 8–17 (plain and encrypted) + a real schema-16 old build; sums stay exact.
+  - **Bugs found and fixed in the stage:** after a schema bump that adds a record kind, a device that had skipped the new records could lose them for good when the relay had already pruned the file (now it starts from a snapshot of its own schema and waits for one if needed; two more data-loss orders found in the re-review and fixed); a cap check that let the smallest number through; suggestions that could offer "Internal transfer" for a cash expense; the rule toast offering a different tag than the one picked (and its Undo restoring the wrong one); a stale bank-balance question when two months are imported in one go; a skipped "read again" row lost for good; the forecast starting from cash and unchecked accounts; IOU links breaking after the bank row replaced a hand-added entry; a lent payment still in the monthly summary CSV and able to mark a bill paid.
+  - **Reviews:** every half reviewed as it landed, sync fix re-reviewed, merge delta reviewed; all findings fixed with tests. Mutation testing on the forecast, bank checks, recurring cost and IOU code: every surviving mutant killed or shown equivalent.
+  - **Stage run:** importer 400, core 2638, sync 327, relay 216, app 1949, desktop (all files), web-test, emulator screens, perf ok.
+
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -450,7 +467,22 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   differently from the bank text is not matched to its expected bill (its required category still keeps a fixed-category
   slip from being reserved twice); Upcoming's "Set aside" leaves out an overdue expected bill that Today still reserves;
   photos are not in `.bwb` backups (they stay on the relay).
+- Stage Q (money limits, owner please confirm):
+  - **One amount cap:** a typed or newly imported amount over 1,000,000,000.00 is refused (the importer allowed 10× that before); an older import up to that old limit still syncs. Sums stay exact up to 90,000 rows at the cap.
+  - **IOUs:** a payment can be linked only when its amount equals the IOU or repayment exactly (a payment that was partly a loan: add the IOU without a payment); closing an IOU with money still owed counts it as forgiven and the lent payment never becomes spending.
+  - **Red warning per account** uses only bills/incomes whose last payment came from that account; planned costs and bills never paid from an imported account count only in the total forecast. Overdue expected income is never counted.
+  - **Bank balance from the file:** none when one app account holds several bank accounts or Revolut pockets of the same currency, or when a one-day file's order is unclear.
+  - **Schema 17:** update every device together; a device that stays on an older build for over 30 days after the others upgraded may miss IOUs until they are edited again.
+
 ## Next
+- Owner checks after Stage Q (phone + laptop, update both first):
+  - Add expense: type "lunch" → chips under the note; tap one; the payee list while typing.
+  - Set the same main tag by hand on 3 payments of one bank payee → "Always put X in Y?" → Make rule → Undo. Settings › Rules › Suggested.
+  - Search: filter chips (try Amount with 1.234,50 style), bold matches; the search button on Today's Recent panel.
+  - Import a PBZ file: preview sheet (Skip one row, Cancel once), then "What did the bank app show?" → type a wrong number → "Off by" → Correct balance. Import a Revolut file: "matches the bank ✓".
+  - Today: a red "goes below zero" line when a bill would overdraw a checked account; Budget: "On payday: about X" + chart.
+  - Save › Owed: add an IOU, a repayment, Close, Delete → Undo; on an expense "Lent to someone" → it leaves the Budget totals but stays in the list with "lent".
+  - Bills: "Bills and subscriptions: X a month · Y a year". Settings › Sync › Recent changes after a sync.
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
   N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
 - Owner checks after Stage J + J4 (phone): nothing should look different; sync phone ↔ laptop through the relay both ways (J4 moved the sync code). Try the bill sheet (confirm, save), the Today lines, import and backup buttons (busy while working), calendars refresh, search → delete → Undo; after a sync from the laptop, numbers update without reopening.
