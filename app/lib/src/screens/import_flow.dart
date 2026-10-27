@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/widgets.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -18,7 +17,7 @@ final _log = Logger('bw.app');
 /// only, never file names or paths) and shown as a short message; the result lines are in [WalletController.lastImport].
 Future<void> pickAndImport(BuildContext context, WalletController wc, FileChooser chooser) async {
   logNav('import.pick');
-  final List<PlatformFile> picked;
+  final List<PickedFile> picked;
   try {
     picked = await chooser.pickBankFiles();
   } catch (e, st) {
@@ -33,7 +32,7 @@ Future<void> pickAndImport(BuildContext context, WalletController wc, FileChoose
   final files = <(String, Uint8List)>[];
   try {
     for (final pf in picked) {
-      files.add((pf.name, await pf.readAsBytes()));
+      files.add((pf.name, await pf.readBytes()));
     }
   } catch (e, st) {
     // describeError drops the path (it would name the bank file).

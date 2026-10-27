@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/layout.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 final _relay = Uri.parse('http://homeserver.local:8787');
@@ -81,7 +82,7 @@ void main() {
       final wc = emptyWallet();
       var runs = 0;
       Uri? used;
-      wc.syncRunner = (relay, k, r) async {
+      wc.seams.syncRunner = (relay, k, r) async {
         runs++;
         used = relay;
         return const SyncReport(0, 0, 0, caughtUp: true);
@@ -113,7 +114,7 @@ void main() {
     test('syncNow without an address does nothing; with one it keeps caughtUp, waiting and devices', () async {
       final wc = emptyWallet();
       var runs = 0;
-      wc.syncRunner = (relay, k, r) async {
+      wc.seams.syncRunner = (relay, k, r) async {
         runs++;
         return SyncReport(0, 0, 0, waiting: const [
           SyncWaiting('ab12f3', 4)
@@ -137,15 +138,15 @@ void main() {
 
     test('a SyncException shows its message, any other failure a short generic one (never the address)', () async {
       final wc = emptyWallet()..relayUrl = _relay;
-      wc.syncRunner = (relay, k, r) async => throw const SyncException('Cannot reach the relay.');
+      wc.seams.syncRunner = (relay, k, r) async => throw const SyncException('Cannot reach the relay.');
       await wc.syncNow();
       expect(wc.syncError, 'Cannot reach the relay.');
-      wc.syncRunner = (relay, k, r) async => throw StateError('boom');
+      wc.seams.syncRunner = (relay, k, r) async => throw StateError('boom');
       await wc.syncNow();
       expect(wc.syncError, isNot(contains('homeserver')));
       expect(wc.syncError, isNotNull);
       expect(lines.join('\n'), isNot(contains('homeserver')));
-      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true);
+      wc.seams.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true);
       await wc.syncNow();
       expect(wc.syncError, isNull);
     });
@@ -156,7 +157,7 @@ void main() {
       final other = Uri.parse('http://second.local:8787');
       final gates = <Completer<SyncReport>>[];
       final used = <Uri>[];
-      wc.syncRunner = (relay, k, r) {
+      wc.seams.syncRunner = (relay, k, r) {
         used.add(relay);
         final c = Completer<SyncReport>();
         gates.add(c);
@@ -196,9 +197,9 @@ void main() {
 
     test('testRelay passes the failure on and logs only its kind', () async {
       final wc = emptyWallet();
-      wc.healthCheck = (relay) async {};
+      wc.seams.healthCheck = (relay) async {};
       await wc.testRelay(_relay);
-      wc.healthCheck = (relay) async => throw const TransportException(TransportFailure.newerApi, 'api 9');
+      wc.seams.healthCheck = (relay) async => throw const TransportException(TransportFailure.newerApi, 'api 9');
       await expectLater(wc.testRelay(_relay), throwsA(isA<TransportException>()));
       final log = lines.join('\n');
       expect(log, contains('sync.health {"ok":true}'));
@@ -210,11 +211,11 @@ void main() {
       final key = VaultKey.generate();
       final mem = MemoryTransport();
       Future<SyncReport> run(Uri relay, VaultKey k, WalletRepo repo) => SyncEngine(mem, k).run(repo);
-      final a = WalletController.forTest(WalletRepo.inMemory(), key: key)
-        ..syncRunner = run
+      final a = seamedController(WalletRepo.inMemory(), key: key)
+        ..seams.syncRunner = run
         ..relayUrl = _relay;
-      final b = WalletController.forTest(WalletRepo.inMemory(), key: key)
-        ..syncRunner = run
+      final b = seamedController(WalletRepo.inMemory(), key: key)
+        ..seams.syncRunner = run
         ..relayUrl = _relay;
       addTearDown(a.dispose);
       addTearDown(b.dispose);
@@ -262,7 +263,7 @@ void main() {
 
     testWidgets('a good address is saved (trimmed), synced, and the status shows', (t) async {
       final wc = emptyWallet();
-      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true);
+      wc.seams.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true);
       await _pumpSync(t, wc);
       await t.enterText(_address, '  http://homeserver.local:8787/ ');
       await t.tap(_save);
@@ -291,7 +292,7 @@ void main() {
       testWidgets('Test connection: $name', (t) async {
         final wc = emptyWallet();
         Uri? asked;
-        wc.healthCheck = (relay) async {
+        wc.seams.healthCheck = (relay) async {
           asked = relay;
           if (failure != null) throw TransportException(failure, 'x');
         };
@@ -317,12 +318,12 @@ void main() {
 
     testWidgets('status: waiting for a file, not caught up, and the last sync time', (t) async {
       final wc = emptyWallet()..relayUrl = _relay;
-      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, waiting: [SyncWaiting('ab12f3', 12)]);
+      wc.seams.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, waiting: [SyncWaiting('ab12f3', 12)]);
       await wc.syncNow();
       await _pumpSync(t, wc);
       expect(find.textContaining('Waiting for file 12 from device ab12f3'), findsOneWidget);
       expect(find.textContaining('Last sync '), findsOneWidget);
-      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0);
+      wc.seams.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0);
       await wc.syncNow();
       await t.pump();
       expect(find.textContaining('Not caught up yet: matching waits'), findsOneWidget);
@@ -330,7 +331,7 @@ void main() {
 
     testWidgets('the devices are listed with last seen and "this device"', (t) async {
       final wc = emptyWallet()..relayUrl = _relay;
-      wc.syncRunner = (relay, k, r) async => SyncReport(0, 0, 0, caughtUp: true, devices: [
+      wc.seams.syncRunner = (relay, k, r) async => SyncReport(0, 0, 0, caughtUp: true, devices: [
             SyncDevice('ab12f3', lastSeen: DateTime.now().subtract(const Duration(hours: 3))),
             SyncDevice('c9d8e7', lastSeen: DateTime.now(), isThis: true),
           ]);
@@ -346,12 +347,12 @@ void main() {
 
     testWidgets('a sync error shows its message and the unreadable-files note', (t) async {
       final wc = emptyWallet()..relayUrl = _relay;
-      wc.syncRunner = (relay, k, r) async => throw const SyncException('This relay belongs to another wallet.');
+      wc.seams.syncRunner = (relay, k, r) async => throw const SyncException('This relay belongs to another wallet.');
       await wc.syncNow();
       await _pumpSync(t, wc);
       expect(find.textContaining('This relay belongs to another wallet.'), findsOneWidget);
       expect(find.textContaining('Up to date'), findsNothing);
-      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, problems: [
+      wc.seams.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, problems: [
             SyncProblem('ab12f3', SyncProblemReason.corrupt, bytes: 10),
           ]);
       await wc.syncNow();
@@ -362,7 +363,7 @@ void main() {
     testWidgets('Sync now runs a sync', (t) async {
       final wc = emptyWallet()..relayUrl = _relay;
       var runs = 0;
-      wc.syncRunner = (relay, k, r) async {
+      wc.seams.syncRunner = (relay, k, r) async {
         runs++;
         return const SyncReport(0, 0, 0, caughtUp: true);
       };
@@ -375,7 +376,7 @@ void main() {
     for (final (w, h, scale) in [(320.0, 700.0, 2.0), (360.0, 800.0, 1.0), (1280.0, 800.0, 1.0)]) {
       testWidgets('layout at ${w.toInt()} dp, text ${scale}x: no overflow with every row shown', (t) async {
         final wc = emptyWallet()..relayUrl = _relay;
-        wc.syncRunner = (relay, k, r) async => SyncReport(0, 0, 0, waiting: const [
+        wc.seams.syncRunner = (relay, k, r) async => SyncReport(0, 0, 0, waiting: const [
               SyncWaiting('ab12f3', 123456, reason: SyncProblemReason.corrupt),
               SyncWaiting('c9d8e7', 4),
             ], problems: [
@@ -400,7 +401,7 @@ void main() {
   group('joining with an address', () {
     Future<WalletController> pumpJoin(WidgetTester t, {Size size = const Size(400, 1000), double scale = 1}) async {
       final wc = emptyWallet(withKey: false);
-      wc.keyWriter = (k, {passphrase}) async {};
+      wc.seams.keyWriter = (k, {passphrase}) async {};
       await pumpApp(t, OnboardingScreen(wc: wc), size: size, textScale: scale);
       await t.tap(find.byKey(const ValueKey('joinStart')));
       await t.pump();
@@ -411,7 +412,7 @@ void main() {
       final key = VaultKey.generate();
       final wc = await pumpJoin(t);
       Uri? used;
-      wc.syncRunner = (relay, k, r) async {
+      wc.seams.syncRunner = (relay, k, r) async {
         used = relay;
         return const SyncReport(0, 0, 0, caughtUp: true);
       };
@@ -432,7 +433,7 @@ void main() {
       final key = VaultKey.generate();
       final wc = await pumpJoin(t);
       var runs = 0;
-      wc.syncRunner = (relay, k, r) async {
+      wc.seams.syncRunner = (relay, k, r) async {
         runs++;
         return const SyncReport(0, 0, 0);
       };

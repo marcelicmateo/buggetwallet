@@ -6,6 +6,7 @@ import 'package:budget_wallet/src/screens/category_detail.dart';
 import 'package:budget_wallet/src/screens/search.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:budget_wallet/src/widgets/split_sheet.dart';
@@ -425,7 +426,8 @@ void main() {
       final (wc, id) = _wallet();
       wc.repo.setSplit(id, threeParts);
       wc.reload();
-      await pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday)), size: const Size(400, 3000));
+      await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
+          size: const Size(400, 3000));
       await tester.pumpAndSettle();
       expect(find.text('Split · 3'), findsOneWidget);
       await _settle(tester);

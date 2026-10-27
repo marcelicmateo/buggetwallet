@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/screens/backup_panel.dart';
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/sync_panel.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/screens/wishlist.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
@@ -19,13 +20,14 @@ import 'package:wallet_importer/wallet_importer.dart' show ImportBatch;
 
 import 'support/layout.dart' show pumpFull, tapTab;
 import 'support/plan_page.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 Finder key(String k) => find.byKey(ValueKey(k));
 
 /// A wallet on 20 Oct 2026 with the key confirmed (no setup panel), salary confirmed, plan from 1 Oct.
 WalletController wallet({DateTime? now, int salary = 150000}) {
-  final wc = WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => now ?? budgetToday);
+  final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => now ?? budgetToday);
   wc.repo.updateSettings({'salary': salary, 'salaryConfirmed': true, 'periodStart': '2026-10-01', 'paydayDay': 1});
   wc.repo.setLocalValue('keyBackupConfirmed', '1');
   wc.reload();
@@ -34,7 +36,7 @@ WalletController wallet({DateTime? now, int salary = 150000}) {
 }
 
 Widget today(WalletController wc) =>
-    Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), wc: wc, openPlan: () {}, clock: () => budgetToday));
+    Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {}, clock: () => budgetToday));
 
 String textOf(WidgetTester t, String k) =>
     t.widgetList<Text>(find.descendant(of: key(k), matching: find.byType(Text))).map((w) => w.data ?? '').join(' ');
@@ -75,7 +77,10 @@ void main() {
       expect(p.allowanceTomorrow, isNull);
       expect(p.overToday > 0 && p.overBy > 0, isTrue, reason: 'precondition: over on the last day (${p.overToday}, ${p.overBy})');
       await pumpApp(
-          t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), wc: wc, openPlan: () {}, clock: () => DateTime(2026, 10, 31, 12))),
+          t,
+          Scaffold(
+              body: TodayScreen(
+                  key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {}, clock: () => DateTime(2026, 10, 31, 12))),
           size: const Size(400, 1600));
       expect(find.descendant(of: key('overSentence'), matching: find.textContaining('over the plan for this period.', findRichText: true)),
           findsOneWidget);
@@ -87,7 +92,10 @@ void main() {
       final wc = wallet(now: DateTime(2026, 10, 31, 12));
       expect(wc.period().allowanceTomorrow, isNull);
       await pumpApp(
-          t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), wc: wc, openPlan: () {}, clock: () => DateTime(2026, 10, 31, 12))),
+          t,
+          Scaffold(
+              body: TodayScreen(
+                  key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {}, clock: () => DateTime(2026, 10, 31, 12))),
           size: const Size(400, 1600));
       expect(key('overSentence'), findsNothing);
     });
@@ -184,18 +192,21 @@ void main() {
       final wc = emptyWallet();
       addTearDown(wc.dispose);
       expect(wc.keyBackupRowVisible, isTrue);
-      await pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), wc: wc, openPlan: () {})), size: const Size(400, 1600));
+      await pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {})),
+          size: const Size(400, 1600));
       expect(key('setupPanel'), findsOneWidget);
       expect(key('keyBackupRow'), findsOneWidget, reason: 'the key step is inside it');
       expect(find.textContaining('Planning on'), findsOneWidget, reason: 'the salary step too');
       await t.tap(key('setupHide'));
       await t.pump();
-      await pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), wc: wc, openPlan: () {})), size: const Size(400, 1600));
+      await pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {})),
+          size: const Size(400, 1600));
       expect(key('setupPanel'), findsNothing);
       expect(key('setupLine'), findsOneWidget);
       await t.tap(key('setupLine'));
       await t.pump();
-      await pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), wc: wc, openPlan: () {})), size: const Size(400, 1600));
+      await pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {})),
+          size: const Size(400, 1600));
       expect(key('setupPanel'), findsOneWidget);
     });
 
@@ -203,7 +214,8 @@ void main() {
       final wc = emptyWallet();
       addTearDown(wc.dispose);
       Future<void> rebuild(WidgetTester t) =>
-          pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), wc: wc, openPlan: () {})), size: const Size(400, 1600));
+          pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {})),
+              size: const Size(400, 1600));
       await rebuild(t);
       await t.tap(key('setupHide'));
       await t.pump();
@@ -386,14 +398,14 @@ void main() {
 
     testWidgets('Sync shows relay usage when known, nothing when not', (t) async {
       final wc = wallet();
-      wc.syncRunner =
+      wc.seams.syncRunner =
           (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, relayBytes: 3 * 1048576, relayMaxBytes: 50 * 1048576);
       await t.runAsync(() => wc.setRelay(Uri.parse('http://homeserver.local:8787')));
       await pumpApp(t, Scaffold(body: SingleChildScrollView(child: SyncPanel(wc: wc, onShowKey: () {}))), size: const Size(400, 1400));
       await t.runAsync(wc.syncNow);
       await t.pump();
       expect(textOf(t, 'relayUsage'), '3 MB of 50 MB used on the relay');
-      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true);
+      wc.seams.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true);
       await t.runAsync(wc.syncNow);
       await t.pump();
       expect(key('relayUsage'), findsNothing, reason: 'an older relay: hidden');

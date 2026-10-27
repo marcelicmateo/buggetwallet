@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import '../test/support/seams.dart';
 import 'demo_data.dart';
 import 'support/harness.dart';
 
@@ -378,9 +379,9 @@ void main() {
     expect(Logger.root.level, Level.ALL);
 
     // Relay address: a bad one is refused, a good one is saved device-locally and synced (a fake run: no network).
-    wc.syncRunner = (relay, k, repo) async =>
+    wc.seams.syncRunner = (relay, k, repo) async =>
         SyncReport(0, 0, 0, caughtUp: true, devices: [SyncDevice('ab12f3', lastSeen: DateTime.now(), isThis: true)]);
-    wc.healthCheck = (relay) async {};
+    wc.seams.healthCheck = (relay) async {};
     await settingsSection(t, SettingsSection.sync);
     await scrollTo(t, find.text('Test connection'), SettingsScreen, delta: -250);
     final field = find.byKey(const ValueKey('relayAddress'));

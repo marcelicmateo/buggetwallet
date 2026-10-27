@@ -3,6 +3,7 @@
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/screens/wishlist.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
@@ -43,7 +44,8 @@ void main() {
   for (final behind in [false, true]) {
     final label = behind ? 'behind pace' : 'ahead of pace';
     testWidgets('"$label" is right-aligned on a wide window', (tester) async {
-      await pumpApp(tester, Scaffold(body: TodayScreen(wc: _wallet(behind: behind), openPlan: () {})), size: const Size(1200, 3000));
+      await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(_wallet(behind: behind)), openPlan: () {})),
+          size: const Size(1200, 3000));
       expect(tester.takeException(), isNull);
       final text = find.textContaining(label, findRichText: true);
       expect(text, findsOneWidget);

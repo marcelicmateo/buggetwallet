@@ -7,6 +7,7 @@ import 'package:wallet_core/wallet_core.dart';
 
 import 'src/clock_notice.dart';
 import 'src/controller.dart';
+import 'src/controller_deps.dart';
 import 'src/format.dart';
 import 'src/layout.dart';
 import 'src/logging.dart';
@@ -21,6 +22,7 @@ import 'src/screens/save.dart';
 import 'src/screens/settings.dart';
 import 'src/screens/spending.dart';
 import 'src/screens/today.dart';
+import 'src/screens/today_view.dart';
 import 'src/screens/unlock.dart';
 import 'src/screens/welcome_balance.dart';
 import 'src/tabs.dart';
@@ -52,13 +54,13 @@ Future<void> main() async {
 }
 
 /// Logging first, then the wallet. Logs `app.info` and the `app.start` phases (logs, db, key, reload, ready).
-/// The screenshot test calls this too, with [catchErrors] off (the test binding owns the error hooks).
-Future<WalletController> bootstrap({bool catchErrors = true}) async {
+/// The screenshot test calls this too, with [catchErrors] off (the test binding owns the error hooks) and its own [deps].
+Future<WalletController> bootstrap({bool catchErrors = true, WalletControllerDeps? deps}) async {
   final sw = Stopwatch()..start();
   await AppLog.init(catchErrors: catchErrors);
   AppLog.logAppInfo();
   logEvent(_log, Level.INFO, 'app.start', {'phase': 'logs', 'ms': sw.elapsedMilliseconds});
-  final wc = await WalletController.load();
+  final wc = await WalletController.load(deps: deps);
   AppLog.setLevel(wc.logLevel);
   logEvent(_log, Level.INFO, 'app.start', {'phase': 'ready', 'ms': sw.elapsedMilliseconds});
   return wc;
@@ -273,7 +275,7 @@ class _HomeShellState extends State<HomeShell> {
 
   Widget _page(int i) => switch (i) {
         Tabs.today => TodayScreen(
-            wc: widget.wc,
+            view: TodayView(widget.wc),
             openPlan: () => _go(Tabs.budget, 'today'),
             openSpending: () => _go(Tabs.budget, 'today'),
             addExpense: _addExpense,

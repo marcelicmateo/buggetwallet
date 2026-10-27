@@ -6,7 +6,6 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/screens/first_plan_sheet.dart';
 import 'package:budget_wallet/src/screens/import_flow.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -17,30 +16,15 @@ import 'support/wallet.dart';
 const _csv = 'Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance\n'
     'Card Payment,Current,2026-10-01 10:00:00,2026-10-02 10:00:00,Synthetic shop,-12.30,0.00,EUR,COMPLETED,100.00\n';
 
-base class _Picked extends PlatformFile {
-  @override
-  final String name = 'synthetic.csv';
-  final Uint8List data;
-  _Picked(this.data);
-  @override
-  Uri get uri => Uri(path: name);
-  @override
-  Never get xFile => throw UnimplementedError();
-  @override
-  int? lengthSync() => data.length;
-  @override
-  Future<int?> length() async => data.length;
-  @override
-  Future<Uint8List> readAsBytes() async => data;
-  @override
-  Stream<Uint8List> readAsByteStream() => Stream.value(data);
+class _Picked extends PickedFile {
+  _Picked(Uint8List data) : super('synthetic.csv', () async => data, length: () async => data.length);
 }
 
 class _Chooser extends FileChooser {
   final String text;
   _Chooser(this.text);
   @override
-  Future<List<PlatformFile>> pickBankFiles() async {
+  Future<List<PickedFile>> pickBankFiles() async {
     return [_Picked(Uint8List.fromList(utf8.encode(text)))];
   }
 }

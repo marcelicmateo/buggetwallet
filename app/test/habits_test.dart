@@ -5,8 +5,8 @@ import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/tabs.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_importer/wallet_importer.dart';
@@ -38,7 +38,12 @@ String eur(String s) => s.replaceAll(' €', ' €');
 
 Widget today(WalletController wc, {VoidCallback? openBills, VoidCallback? openSpending}) => Scaffold(
     body: TodayScreen(
-        wc: wc, openPlan: () {}, openBills: openBills, openSpending: openSpending, clock: () => budgetToday, chooser: const FileChooser()));
+        view: TodayView(wc),
+        openPlan: () {},
+        openBills: openBills,
+        openSpending: openSpending,
+        clock: () => budgetToday,
+        chooser: const FileChooser()));
 
 void main() {
   group('controller', () {
@@ -508,7 +513,7 @@ void main() {
 
 class _FailingChooser extends FileChooser {
   @override
-  Future<List<PlatformFile>> pickBankFiles() async => throw StateError('no portal');
+  Future<List<PickedFile>> pickBankFiles() async => throw StateError('no portal');
 }
 
 /// Rows share a key prefix and end in an id (`confirm:<id>`), so a test finds them by the prefix.

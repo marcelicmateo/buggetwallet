@@ -14,42 +14,27 @@ import 'package:budget_wallet/src/screens/in_use.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
 import 'package:budget_wallet/src/screens/unlock.dart';
 import 'package:budget_wallet/src/wallet_db.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/layout.dart';
 import 'support/plan_page.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 /// Throws any object (the fakes hold errors of every kind).
 Never raise(Object error) => Error.throwWithStackTrace(error, StackTrace.current);
 
 /// A picked file with its bytes in memory.
-base class FakePicked extends PlatformFile {
-  @override
-  final String name;
-  final Uint8List bytes;
-  FakePicked(this.name, this.bytes);
-  @override
-  Uri get uri => Uri(path: name);
-  @override
-  Never get xFile => throw UnimplementedError();
-  @override
-  int? lengthSync() => bytes.length;
-  @override
-  Future<int?> length() async => bytes.length;
-  @override
-  Future<Uint8List> readAsBytes() async => bytes;
-  @override
-  Stream<Uint8List> readAsByteStream() => Stream.value(bytes);
+class FakePicked extends PickedFile {
+  FakePicked(String name, Uint8List bytes) : super(name, () async => bytes, length: () async => bytes.length);
 }
 
 class FakeChooser extends FileChooser {
   final backups = <({String name, Uint8List bytes})>[];
   final texts = <({String name, Uint8List bytes})>[];
-  List<PlatformFile> picks = [];
+  List<PickedFile> picks = [];
   Object? saveError, pickError;
   FakeChooser();
   @override
@@ -67,7 +52,7 @@ class FakeChooser extends FileChooser {
   }
 
   @override
-  Future<List<PlatformFile>> pickBackupFile() async {
+  Future<List<PickedFile>> pickBackupFile() async {
     if (pickError != null) raise(pickError!);
     return picks;
   }
@@ -110,16 +95,16 @@ class Web {
 Web webWallet({bool full = false, bool withKey = true, bool locked = false}) {
   final repo = WalletRepo.inMemory();
   final fake = FakeDb(repo);
-  final wc = WalletController.forTest(repo, key: withKey ? VaultKey.generate() : null, db: fake.db, locked: locked);
+  final wc = seamedController(repo, key: withKey ? VaultKey.generate() : null, db: fake.db, locked: locked);
   final w = Web(wc, fake);
   addTearDown(w.dispose);
   if (full) {
     wc.repo.addTransaction(date: wc.today(), amount: 1200, category: 'Groceries');
     wc.reload();
   }
-  wc.keyWriter = (key, {passphrase}) async => w.keyWrites.add(passphrase);
-  wc.keyForgetter = () async => w.keyForgets++;
-  wc.dbOpener = (dbKey, {deviceId}) async => FakeDb(WalletRepo.inMemory()).db;
+  wc.seams.keyWriter = (key, {passphrase}) async => w.keyWrites.add(passphrase);
+  wc.seams.keyForgetter = () async => w.keyForgets++;
+  wc.seams.dbOpener = (dbKey, {deviceId}) async => FakeDb(WalletRepo.inMemory()).db;
   return w;
 }
 
@@ -173,7 +158,7 @@ void main() {
       final c = FakeChooser();
       final sealed = Uint8List.fromList([1, 2, 3, 4]);
       VaultKey? usedKey;
-      w.wc.backupBytesWriter = (repo, key) async {
+      w.wc.seams.backupBytesWriter = (repo, key) async {
         usedKey = key;
         return fakeBackup(sealed);
       };
@@ -194,7 +179,7 @@ void main() {
     webTest('a failed download shows one short text and the button works again', (t) async {
       final w = webWallet(full: true);
       final c = FakeChooser()..saveError = StateError('browser said no');
-      w.wc.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(3));
+      w.wc.seams.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(3));
       await pumpPanel(t, w.wc, c);
       await t.tap(backupBtn);
       await t.pump();
@@ -206,7 +191,7 @@ void main() {
 
     webTest('a core failure while making the backup shows the same text', (t) async {
       final w = webWallet(full: true);
-      w.wc.backupBytesWriter = (repo, key) async => throw const VaultException('x');
+      w.wc.seams.backupBytesWriter = (repo, key) async => throw const VaultException('x');
       await pumpPanel(t, w.wc, FakeChooser());
       await t.tap(backupBtn);
       await t.pump();
@@ -228,7 +213,7 @@ void main() {
       final file = Uint8List.fromList([9, 8, 7]);
       final c = FakeChooser()..picks = [FakePicked('wallet.bwb', file)];
       Uint8List? got;
-      w.wc.backupBytesReader = (repo, bytes, key) async {
+      w.wc.seams.backupBytesReader = (repo, bytes, key) async {
         got = bytes;
         return 12;
       };
@@ -249,7 +234,7 @@ void main() {
     webTest('Cancel in the picker or in the question restores nothing', (t) async {
       final w = webWallet();
       var reads = 0;
-      w.wc.backupBytesReader = (repo, bytes, key) async => ++reads;
+      w.wc.seams.backupBytesReader = (repo, bytes, key) async => ++reads;
       final c = FakeChooser();
       await pumpPanel(t, w.wc, c);
       await t.tap(restoreBtn); // picker cancelled: empty list
@@ -294,7 +279,7 @@ void main() {
       webTest('restore with $label: the same texts as on the other platforms', (t) async {
         final w = webWallet();
         final c = FakeChooser()..picks = [FakePicked('a.bwb', Uint8List(2))];
-        w.wc.backupBytesReader = (repo, bytes, key) async => raise(error);
+        w.wc.seams.backupBytesReader = (repo, bytes, key) async => raise(error);
         await pumpPanel(t, w.wc, c);
         await t.tap(restoreBtn);
         await t.pumpAndSettle();
@@ -327,7 +312,7 @@ void main() {
       await expectLater(noKey.wc.restoreBackupFile(Uint8List(1)), throwsA(isA<BackupException>()));
       final w = webWallet();
       final before = w.wc.dataVersion;
-      w.wc.backupBytesReader = (repo, bytes, key) async => 5;
+      w.wc.seams.backupBytesReader = (repo, bytes, key) async => 5;
       expect(await w.wc.restoreBackupFile(Uint8List(1)), 5);
       expect(w.wc.dataVersion, greaterThan(before));
     });
@@ -347,7 +332,7 @@ void main() {
     test('unlock sets the key; a wrong passphrase leaves the wallet locked', () async {
       final w = webWallet(withKey: false, locked: true);
       final key = VaultKey.generate();
-      w.wc.unlocker = (p) async {
+      w.wc.seams.unlocker = (p) async {
         if (p != 'right passphrase') throw const WrongPassphrase();
         return key;
       };
@@ -367,7 +352,12 @@ void main() {
       final w = webWallet(full: true);
       final oldRepo = w.wc.repo;
       expect(w.wc.txs, isNotEmpty);
+      w.wc.sync.badFiles = 2;
+      w.wc.sync.relayInstance = 'A1B2C3D4E5F60718';
+      w.wc.sync.problems = const [SyncProblem('abcd1234', SyncProblemReason.deviceIdInUse, bytes: 0)];
       await w.wc.forgetBrowser();
+      expect((w.wc.sync.badFiles, w.wc.sync.relayInstance), (0, null), reason: 'the old status is gone');
+      expect(w.wc.sync.problems, isEmpty);
       expect(w.db.forgotten, isTrue);
       expect(w.keyForgets, 1);
       expect(w.wc.hasWallet, isFalse);
@@ -430,7 +420,7 @@ void main() {
 
     testWidgets('a file database (nothing to flush) starts no timer', (t) async {
       final repo = WalletRepo.inMemory();
-      final wc = WalletController.forTest(repo, key: VaultKey.generate(), db: WalletDb(repo));
+      final wc = seamedController(repo, key: VaultKey.generate(), db: WalletDb(repo));
       addTearDown(wc.dispose);
       wc.reload();
       // The test fails on its own if a timer is still pending when it ends.
@@ -616,7 +606,7 @@ void main() {
 
     webTest('a key that cannot be saved shows a short text and lets the owner try again', (t) async {
       final w = webWallet(withKey: false);
-      w.wc.keyWriter = (key, {passphrase}) async => throw StateError('storage is full');
+      w.wc.seams.keyWriter = (key, {passphrase}) async => throw StateError('storage is full');
       await pumpOnboarding(t, w.wc);
       await t.tap(find.byKey(const ValueKey('startWallet')));
       await t.pump();
@@ -701,7 +691,7 @@ void main() {
       final w = webWallet(withKey: false, locked: true);
       final tried = <String>[];
       final key = VaultKey.generate();
-      w.wc.unlocker = (p) async {
+      w.wc.seams.unlocker = (p) async {
         tried.add(p);
         if (p != 'right-one') throw const WrongPassphrase();
         return key;
@@ -727,7 +717,7 @@ void main() {
 
     webTest('an unexpected failure shows a short text without its message', (t) async {
       final w = webWallet(withKey: false, locked: true);
-      w.wc.unlocker = (p) async => throw const FormatException('stored blob is damaged: secret detail');
+      w.wc.seams.unlocker = (p) async => throw const FormatException('stored blob is damaged: secret detail');
       await pumpUnlock(t, w.wc);
       await t.enterText(pass, 'whatever-123');
       await t.tap(find.byKey(const ValueKey('unlockButton')));
@@ -754,7 +744,7 @@ void main() {
 
     webTest('the app shows Unlock while locked and the wallet after the right passphrase', (t) async {
       final w = webWallet(withKey: false, locked: true);
-      w.wc.unlocker = (p) async => VaultKey.generate();
+      w.wc.seams.unlocker = (p) async => VaultKey.generate();
       await pumpFull(t, w.wc, 1, size: const Size(400, 900));
       expect(find.byType(UnlockScreen), findsOneWidget);
       expect(find.byType(OnboardingScreen), findsNothing);
@@ -775,7 +765,7 @@ void main() {
 
     webTest('fits 320 dp at text scale 2.0 with an error showing', (t) async {
       final w = webWallet(withKey: false, locked: true);
-      w.wc.unlocker = (p) async => throw const WrongPassphrase();
+      w.wc.seams.unlocker = (p) async => throw const WrongPassphrase();
       await pumpUnlock(t, w.wc, size: const Size(320, 1600), scale: 2);
       await t.enterText(pass, 'abcdefgh');
       await t.tap(find.byKey(const ValueKey('unlockButton')));

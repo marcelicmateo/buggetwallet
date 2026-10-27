@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 /// A wallet on 31 Oct 2026 with a saved period start of 10 Oct, a salary on 10 Oct and the next one already
@@ -21,7 +22,7 @@ class _Clock {
 }
 
 WalletController _wallet(_Clock clock) {
-  final wc = WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: clock.call);
+  final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: clock.call);
   wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
     syntheticTx('2026-10-10', 150000, 'Plaća/Mirovina', 'Neto placa synthetic'),
     syntheticTx('2026-10-20', -2340, 'POS plaćanje', 'PBZ POS PBZ7LIDL HRVATSKA ZAGREB'),
@@ -161,7 +162,7 @@ void main() {
       wc.relayUrl = Uri.parse('http://relay.test');
       expect(wc.settings.rent, isNot(61000));
       final before = wc.dataVersion;
-      wc.syncRunner = (relay, key, repo) async {
+      wc.seams.syncRunner = (relay, key, repo) async {
         // File A applied, then the relay failed.
         final now = DateTime.now().millisecondsSinceEpoch;
         repo.applyRemote([
@@ -179,7 +180,7 @@ void main() {
       final wc = emptyWallet();
       wc.relayUrl = Uri.parse('http://relay.test');
       final before = wc.dataVersion;
-      wc.syncRunner = (relay, key, repo) async => throw const SyncException('The relay is unreachable.');
+      wc.seams.syncRunner = (relay, key, repo) async => throw const SyncException('The relay is unreachable.');
       await wc.syncNow();
       expect(wc.syncError, isNotNull);
       expect(wc.dataVersion, before);
@@ -189,7 +190,7 @@ void main() {
       final wc = emptyWallet();
       wc.relayUrl = Uri.parse('http://relay.test');
       final before = wc.dataVersion;
-      wc.syncRunner = (relay, key, repo) async => throw const FileSystemException('cannot read vault.json');
+      wc.seams.syncRunner = (relay, key, repo) async => throw const FileSystemException('cannot read vault.json');
       await wc.syncNow();
       await wc.syncNow();
       expect(wc.syncError, isNotNull);
@@ -202,7 +203,7 @@ void main() {
     final wc = _wallet(clock);
     // The date moves past midnight on the second read, while period() is computing (effectiveSettings asks for the day).
     var reads = 0;
-    final racing = WalletController.forTest(wc.repo, key: VaultKey.generate(), clock: () {
+    final racing = seamedController(wc.repo, key: VaultKey.generate(), clock: () {
       reads++;
       return reads > 1 ? DateTime(2026, 11, 1, 0, 0, 1) : DateTime(2026, 10, 31, 23, 59, 59);
     });

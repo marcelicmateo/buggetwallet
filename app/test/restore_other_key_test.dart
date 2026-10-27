@@ -7,39 +7,24 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/screens/backup_panel.dart';
 import 'package:budget_wallet/src/secure_window.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/bills.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
-base class _Picked extends PlatformFile {
-  @override
-  final String name = 'old.bwb';
-  final Uint8List data;
-  _Picked(this.data);
-  @override
-  Uri get uri => Uri(path: name);
-  @override
-  Never get xFile => throw UnimplementedError();
-  @override
-  int? lengthSync() => data.length;
-  @override
-  Future<int?> length() async => data.length;
-  @override
-  Future<Uint8List> readAsBytes() async => data;
-  @override
-  Stream<Uint8List> readAsByteStream() => Stream.value(data);
+class _Picked extends PickedFile {
+  _Picked(Uint8List data) : super('old.bwb', () async => data, length: () async => data.length);
 }
 
 class _Chooser extends FileChooser {
-  List<PlatformFile> picks = [];
+  List<PickedFile> picks = [];
   int picked = 0;
   @override
-  Future<List<PlatformFile>> pickBackupFile() async {
+  Future<List<PickedFile>> pickBackupFile() async {
     picked++;
     return picks;
   }
@@ -70,10 +55,10 @@ void main() {
 
   Future<WalletController> pump(WidgetTester t, _Chooser c,
       {VaultKey? walletKey, Size size = const Size(400, 900), double scale = 1, FakeBillInputs? inputs}) async {
-    final wc = WalletController.forTest(WalletRepo.inMemory(),
+    final wc = seamedController(WalletRepo.inMemory(),
         key: walletKey ?? VaultKey.generate(), billInputs: (inputs ?? FakeBillInputs(camera: FakeCamera(canShow: false))).inputs);
     addTearDown(wc.dispose);
-    wc.syncRunner = (u, k, r) async => const SyncReport(0, 0, 0);
+    wc.seams.syncRunner = (u, k, r) async => const SyncReport(0, 0, 0);
     await pumpApp(t, Scaffold(body: SingleChildScrollView(child: BackupPanel(wc: wc, chooser: c))), size: size, textScale: scale);
     return wc;
   }

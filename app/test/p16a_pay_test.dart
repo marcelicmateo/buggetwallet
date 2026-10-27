@@ -10,6 +10,7 @@ import 'package:wallet_core/wallet_core.dart';
 
 import 'support/bills.dart';
 import 'support/plan_page.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 Finder key(String k) => find.byKey(ValueKey(k));
@@ -25,8 +26,8 @@ Future<({WalletController wc, String id, List<String?> clip})> slipWallet() asyn
   final wc = billsWallet();
   addTearDown(wc.dispose);
   final clip = <String?>[null];
-  wc.clipboardWrite = (t) async => clip[0] = t;
-  wc.clipboardRead = () async => clip[0];
+  wc.seams.clipboardWrite = (t) async => clip[0] = t;
+  wc.seams.clipboardRead = () async => clip[0];
   final r = await wc.importScannedCode(const ScannedCode(CodeKind.pdf417, hub3Slip));
   // Pay is offered for a confirmed bill only; the slip has no date, so give it one and confirm (no due date: no category needed).
   // The total moves off 45.60 so confirming does not link the wallet's 45.60 bank row (that would make the bill paid).

@@ -35,24 +35,24 @@ extension TagsDb on WalletController {
   /// The main tags to offer for [t] (null: a new hand-added expense), payee first, then by use. Cached per data version
   /// (core's ordering reads every row, so never call it per row or per keystroke).
   List<String> recommendedMainFor(Tx? t, {Set<BudgetKind>? kinds}) => memo(
-      'tags.main.${t?.id}.${kinds?.map((k) => k.name).join(',')}',
+      MemoKey('tags.main', (t?.id, kinds?.map((k) => k.name).join(','))),
       () => timed('tags.recommendedMain', () => recommendedMainTags(t ?? _placeholderTx, wholeTxs, categoryTable, kinds: kinds),
           fields: {'tx': wholeTxs.length}, warnMs: 50));
 
   /// The extra tags to offer for [t] (null: a new expense), payee first, then by use, then the table order. Cached per data version.
   List<String> recommendedTagsFor(Tx? t) => memo(
-      'tags.recommended.${t?.id}',
+      MemoKey('tags.recommended', t?.id),
       () => timed('tags.recommended', () => recommendedTags(t ?? _placeholderTx, wholeTxs, tagTable),
           fields: {'tx': wholeTxs.length}, warnMs: 50));
 
   /// The tags suggested for [t] from what the same payee had before (never applied). Cached per data version.
   List<String> suggestedTagsFor(Tx t) => memo(
-      'tags.suggest.${t.id}',
+      MemoKey('tags.suggest', t.id),
       () => timed('tags.suggest', () => suggestTags(t, wholeTxs, tagTable, limit: 5, off: tagContext.offTags(t)),
           fields: {'tx': wholeTxs.length}, warnMs: 50));
 
   /// Live rows per tag (a duplicate's rows count for its original): the numbers in Plan › Tags. Cached per data version.
-  Map<String, int> tagUseCounts() => memo('tags.use', () {
+  Map<String, int> tagUseCounts() => memo(const MemoKey('tags.use'), () {
         final out = <String, int>{};
         final seen = <String>{}; // a payment counts once per tag, however many of its parts carry it
         for (final t in txs) {
@@ -223,14 +223,14 @@ extension TagsDb on WalletController {
 
   // ---------- Insights ----------
   /// Spending per extra tag over [r] (overlapping totals). Cached per data version.
-  TagShare tagShareFor(DateRange r) => memo('ins.tags.${r.start}.${r.end}',
+  TagShare tagShareFor(DateRange r) => memo(MemoKey('ins.tags', (r.start, r.end)),
       () => timed('insights.tags', () => tagShare(txs, r, currency: currency), fields: {'days': r.days, 'tx': txs.length}, warnMs: 50));
 
   /// The payments behind [tag]'s total over [r], newest first (they add up to it).
   List<CategorizedTx> rowsOfTag(String tag, DateRange r) =>
-      memo('ins.tagrows.${r.start}.${r.end}.$tag', () => rowsForTag(tag, txs, r, currency: currency));
+      memo(MemoKey('ins.tagrows', (r.start, r.end, tag)), () => rowsForTag(tag, txs, r, currency: currency));
 
   /// [tag]'s spending per month over [r].
   List<MonthBar> tagBars(String tag, DateRange r) =>
-      memo('ins.tagtrend.${r.start}.${r.end}.$tag', () => tagTrend(tag, txs, r, today: today(), currency: currency));
+      memo(MemoKey('ins.tagtrend', (r.start, r.end, tag)), () => tagTrend(tag, txs, r, today: today(), currency: currency));
 }

@@ -9,7 +9,6 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/screens/bills_panel.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -27,28 +26,12 @@ void tw(String name, Future<void> Function(WidgetTester tester) body) => testWid
     }, timeout: const Timeout(Duration(seconds: 60)));
 
 /// A picked file whose size and bytes the test sets (a huge file is only a number: it is never read).
-base class FakePicked extends PlatformFile {
-  @override
-  final String name;
-  final Uint8List data;
-  final int? fakeSize;
-  FakePicked(this.name, this.data, {this.fakeSize});
-  @override
-  Uri get uri => Uri(path: name);
-  @override
-  Never get xFile => throw UnimplementedError();
-  @override
-  int? lengthSync() => fakeSize ?? data.length;
-  @override
-  Future<int?> length() async => fakeSize ?? data.length;
-  @override
-  Future<Uint8List> readAsBytes() async => data;
-  @override
-  Stream<Uint8List> readAsByteStream() => Stream.value(data);
+class FakePicked extends PickedFile {
+  FakePicked(String name, Uint8List data, {int? fakeSize}) : super(name, () async => data, length: () async => fakeSize ?? data.length);
 }
 
 class FakeAttachChooser extends FileChooser {
-  List<PlatformFile> picks = [];
+  List<PickedFile> picks = [];
   final savedNames = <String>[];
   int calls = 0;
   Object? error;
@@ -59,7 +42,7 @@ class FakeAttachChooser extends FileChooser {
   }
 
   @override
-  Future<List<PlatformFile>> pickAttachmentFiles() async {
+  Future<List<PickedFile>> pickAttachmentFiles() async {
     calls++;
     if (error != null) Error.throwWithStackTrace(error!, StackTrace.current);
     return picks;

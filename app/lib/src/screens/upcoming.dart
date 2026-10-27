@@ -1,27 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
-import '../controller.dart';
 import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
-import 'bill_sheet.dart';
-import 'planned_sheets.dart';
+import 'planned_sheets.dart' show sourceLabel;
+import 'upcoming_view.dart';
 
 /// Opens Upcoming: a page on a phone, a dialog from [dialogMin] wide (like the weekly review).
-Future<void> openUpcoming(BuildContext context, WalletController wc) {
-  return openPageOrDialog<void>(context, UpcomingScreen(wc: wc), width: 600, maxHeight: 800, logName: 'UpcomingScreen');
+Future<void> openUpcoming(BuildContext context, UpcomingView view) {
+  return openPageOrDialog<void>(context, UpcomingScreen(view: view), width: 600, maxHeight: 800, logName: 'UpcomingScreen');
 }
 
 /// The pay period (and the next one) as a month grid with a mark per day, then a ruled list of what is coming: planned costs,
 /// bills, and calendar events that have no amount yet ("Suggested 80 €": Confirm / Change / No cost). A suggestion never counts
 /// until it is confirmed.
 class UpcomingScreen extends StatefulWidget {
-  final WalletController wc;
-  const UpcomingScreen({super.key, required this.wc});
+  final UpcomingView view;
+  const UpcomingScreen({super.key, required this.view});
   @override
   State<UpcomingScreen> createState() => _UpcomingScreenState();
 }
@@ -32,7 +31,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
 
   Future<void> _add() async {
     logNav('planned.add');
-    final r = await showSheet<String>(context, PlannedFormSheet(wc: widget.wc, date: _day));
+    final r = await widget.view.showAddForm(context, date: _day);
     if (r == 'saved' && mounted) toast(context, 'Planned cost added');
   }
 
@@ -40,7 +39,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
     final bill = i.billDb;
     if (bill != null) {
       logNav('bill.openFromUpcoming');
-      await openBill(context, widget.wc, bill.id);
+      await widget.view.showBill(context, bill.id);
       return;
     }
     final p = i.planned;
@@ -48,11 +47,11 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
     if (p.isBill) {
       // A bill's planned row is the bill: Paid, Skip and Delete belong to the bill sheet.
       logNav('bill.openFromUpcoming');
-      await openBill(context, widget.wc, p.sourceRef!);
+      await widget.view.showBill(context, p.sourceRef!);
       return;
     }
     logNav('planned.open');
-    final r = await showSheet<String>(context, PlannedEntrySheet(wc: widget.wc, planned: p));
+    final r = await widget.view.showEntry(context, p);
     if (!mounted) return;
     final msg = switch (r) {
       'saved' => 'Saved',
@@ -65,7 +64,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
     if (r == 'paid' || r == 'skipped') {
       toast(context, msg, actionLabel: 'Undo', onAction: () {
         logNav('planned.undo');
-        widget.wc.reopenPlanned(p);
+        widget.view.reopenPlanned(p);
       });
     } else {
       toast(context, msg);
@@ -74,26 +73,26 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
 
   Future<void> _change(UpcomingItem i) async {
     logNav('planned.change');
-    final r = await showSheet<String>(context, PlannedFormSheet(wc: widget.wc, suggestion: i));
+    final r = await widget.view.showSuggestionForm(context, i);
     if (r == 'saved' && mounted) toast(context, 'Added to your plan');
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-      listenable: widget.wc,
+      listenable: widget.view,
       builder: (context, _) {
-        final wc = widget.wc;
-        final cur = wc.currency;
-        final range = wc.upcomingRange(next: _next);
-        final items = wc.upcomingItems(range.start, range.end);
+        final view = widget.view;
+        final cur = view.currency;
+        final range = view.upcomingRange(next: _next);
+        final items = view.upcomingItems(range.start, range.end);
         final shown = _day == null
             ? items
             : [
                 for (final i in items)
                   if (i.date == _day) i
               ];
-        final counted = wc.countedIn(items);
-        final today = wc.today();
+        final counted = view.countedIn(items);
+        final today = view.today();
         return Scaffold(
           appBar: DialogAppBar(
             title: 'Upcoming',
@@ -157,7 +156,9 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                         ? 'Nothing planned in this period. Add a planned cost, or connect a calendar in Settings.'
                         : 'Nothing on this day.')
                   else
-                    Rows(children: [for (final i in shown) _UpcomingRow(wc: wc, item: i, today: today, onOpen: _open, onChange: _change)]),
+                    Rows(children: [
+                      for (final i in shown) _UpcomingRow(view: view, item: i, today: today, onOpen: _open, onChange: _change)
+                    ]),
                   if (_day == null && counted.count > 0)
                     TotalRule(
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -365,17 +366,17 @@ class _DayCell extends StatelessWidget {
 }
 
 class _UpcomingRow extends StatelessWidget {
-  final WalletController wc;
+  final UpcomingView view;
   final UpcomingItem item;
   final String today;
   final Future<void> Function(UpcomingItem) onOpen;
   final Future<void> Function(UpcomingItem) onChange;
-  const _UpcomingRow({required this.wc, required this.item, required this.today, required this.onOpen, required this.onChange});
+  const _UpcomingRow({required this.view, required this.item, required this.today, required this.onOpen, required this.onChange});
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final cur = wc.currency;
+    final cur = view.currency;
     final i = item;
     final isSuggestion = i.kind == UpcomingKind.suggestion;
     final isBillDate = i.kind == UpcomingKind.warranty || i.kind == UpcomingKind.returnBy;
@@ -384,7 +385,7 @@ class _UpcomingRow extends StatelessWidget {
       Text(shortDateOrRaw(i.date), style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       Tag(sourceLabel(i)),
       if (past && !isSuggestion) Text('past', style: TextStyle(fontSize: BwType.metaSize, color: c.muted)),
-      if ((i.planned?.coveredByPlanIn(wc.categoryTable) ?? false) || (i.bill?.coveredByPlanIn(wc.categoryTable) ?? false))
+      if ((i.planned?.coveredByPlanIn(view.categoryTable) ?? false) || (i.bill?.coveredByPlanIn(view.categoryTable) ?? false))
         Text('covered by your plan', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       if (i.planned?.needsCategory ?? false) StatusLabel(key: ValueKey('needsCategory:${i.key}'), good: false, text: 'Needs a category'),
     ]);
@@ -418,7 +419,7 @@ class _UpcomingRow extends StatelessWidget {
                     key: ValueKey('confirm:${i.key}'),
                     onPressed: () {
                       logNav('suggestion.confirm');
-                      wc.confirmSuggestion(i, amount: i.suggested!, category: i.category);
+                      view.confirmSuggestion(i, amount: i.suggested!, category: i.category);
                       toast(context, 'Added to your plan');
                     },
                     child: const Text('Confirm')),
@@ -430,7 +431,7 @@ class _UpcomingRow extends StatelessWidget {
                   key: ValueKey('nocost:${i.key}'),
                   onPressed: () {
                     logNav('suggestion.dismiss');
-                    wc.dismissSuggestion(i);
+                    view.dismissSuggestion(i);
                     toast(context, "Won't suggest it again");
                   },
                   child: const Text('No cost')),

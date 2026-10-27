@@ -6,6 +6,7 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/wallet_db_io.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'support/seams.dart';
 
 void main() {
   late Directory dir;
@@ -14,27 +15,25 @@ void main() {
   setUp(() {
     storedId = null;
     dir = Directory.systemTemp.createTempSync('bw-dbio-');
-    walletDbDirOverride = dir.path;
     path = '${dir.path}${Platform.pathSeparator}wallet.db';
     addTearDown(() {
-      walletDbDirOverride = null;
       dir.deleteSync(recursive: true);
     });
   });
 
   Future<WalletController> load(VaultKey? key) async {
-    final wc = await WalletController.load(
+    final wc = await seamedLoad(loadDeps(dbDir: dir.path).copyWith(
       deviceIdReader: () async => storedId,
       deviceIdWriter: (id) async => storedId = id,
       keyReader: () async => key,
       joinMarkerReader: () async => null,
       isLocked: () => false,
       clock: () => DateTime(2026, 10, 22, 12),
-    );
+    ));
     await Future<void>.delayed(Duration.zero);
     addTearDown(wc.dispose);
-    wc.keyWriter = (k, {passphrase}) async {};
-    wc.keyForgetter = () async {};
+    wc.seams.keyWriter = (k, {passphrase}) async {};
+    wc.seams.keyForgetter = () async {};
     return wc;
   }
 
@@ -60,13 +59,13 @@ void main() {
 
   test('joining with a key while an unkeyed wallet.db exists sets it aside as it was; nothing is converted or merged', () async {
     plaintextWallet();
-    expect(await walletDbIsPlaintext(), isTrue);
+    expect(await walletDbIsPlaintext(dir: dir.path), isTrue);
     final before = File(path).readAsBytesSync();
     final wc = await load(null);
     await wc.joinWallet(await VaultKey.generate().toText());
     expect(wc.goals, isEmpty);
     expect(File('$path.unopened-2026-10-22').readAsBytesSync(), before); // untouched, still plaintext
-    expect(await walletDbIsPlaintext(), isFalse);
+    expect(await walletDbIsPlaintext(dir: dir.path), isFalse);
   });
 
   test('a wallet.db without a key is left alone until a new wallet is created, then set aside with its side files', () async {
@@ -84,12 +83,12 @@ void main() {
   });
 
   test('setting aside twice on one day uses a new name; without a file nothing happens', () async {
-    await setAsideWalletDb('2026-10-22');
+    await setAsideWalletDb('2026-10-22', dir: dir.path);
     expect(names(), isEmpty);
     File(path).writeAsStringSync('a');
-    await setAsideWalletDb('2026-10-22');
+    await setAsideWalletDb('2026-10-22', dir: dir.path);
     File(path).writeAsStringSync('b');
-    await setAsideWalletDb('2026-10-22');
+    await setAsideWalletDb('2026-10-22', dir: dir.path);
     expect(names(), ['wallet.db.unopened-2026-10-22', 'wallet.db.unopened-2026-10-22-2']);
     expect(File('$path.unopened-2026-10-22-2').readAsStringSync(), 'b');
   });
@@ -100,7 +99,7 @@ void main() {
     File('$path-shm').writeAsStringSync('shm');
     // The target of the -shm file is taken by a folder, so that rename fails after wallet.db and -wal were moved.
     Directory('$path.unopened-2026-10-22-shm').createSync();
-    await expectLater(setAsideWalletDb('2026-10-22'), throwsA(anything));
+    await expectLater(setAsideWalletDb('2026-10-22', dir: dir.path), throwsA(anything));
     expect(File(path).readAsStringSync(), 'main', reason: 'wallet.db is back');
     expect(File('$path-wal').readAsStringSync(), 'wal');
     expect(File('$path-shm').readAsStringSync(), 'shm');
@@ -131,9 +130,9 @@ void main() {
   });
 
   test('walletDbExists sees the file', () async {
-    expect(await walletDbExists(), isFalse);
+    expect(await walletDbExists(dir: dir.path), isFalse);
     plaintextWallet();
-    expect(await walletDbExists(), isTrue);
+    expect(await walletDbExists(dir: dir.path), isTrue);
   });
 
   group('device id (H6) with a real file', () {

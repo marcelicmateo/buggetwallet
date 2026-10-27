@@ -16,6 +16,7 @@ import 'package:wallet_core/wallet_core.dart';
 
 import 'support/bills.dart';
 import 'support/plan_page.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 const _timeout = Timeout(Duration(seconds: 90));
@@ -326,7 +327,7 @@ void main() {
 
     testWidgets('confirming a bill accepts the shown suggestion, also when it is past due', (t) async {
       final wc = billsWallet();
-      wc.billCategorySuggester = (b) => 'Groceries';
+      wc.seams.billCategorySuggester = (b) => 'Groceries';
       final (id, _) = wc.repo.importBill(syntheticBill('past-cat', due: '2000-01-01'));
       wc.reload();
       await _openBill(t, wc, id);
@@ -342,7 +343,7 @@ void main() {
     testWidgets('confirming a bill whose stored category is a deleted own one writes no category over it', (t) async {
       final wc = billsWallet();
       final cid = await wc.addOwnCategory(name: 'Pet shop', kind: BudgetKind.flex);
-      wc.billCategorySuggester = (b) => 'Groceries';
+      wc.seams.billCategorySuggester = (b) => 'Groceries';
       final (id, _) = wc.repo.importBill(syntheticBill('dead-cat', due: '2000-01-01'));
       wc.repo.updateBill(id, category: cid);
       await wc.deleteOwnCategory(cid);
@@ -380,7 +381,7 @@ void main() {
 
     testWidgets('confirming a bill that is still to be paid accepts the shown suggestion', (t) async {
       final wc = billsWallet();
-      wc.billCategorySuggester = (b) => 'Groceries';
+      wc.seams.billCategorySuggester = (b) => 'Groceries';
       final (id, _) = wc.repo.importBill(syntheticBill('live-cat', due: '2026-10-28'));
       wc.reload();
       await _openBill(t, wc, id);

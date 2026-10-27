@@ -13,16 +13,16 @@ String mode(String path) => (FileStat.statSync(path).mode & 0xFFF).toRadixString
 void main() {
   late Directory dir;
   late Directory keyDir;
+  late KeyStore ks;
 
   setUp(() async {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux; // flutter test reports android: that would use the system keystore
     dir = await Directory.systemTemp.createTemp('bw-key-');
     keyDir = Directory('${dir.path}/support');
-    KeyStore.keyDirOverride = keyDir;
+    ks = KeyStore(keyDir: keyDir);
   });
 
   tearDown(() async {
-    KeyStore.keyDirOverride = null;
     debugDefaultTargetPlatformOverride = null;
     await dir.delete(recursive: true);
   });
@@ -31,75 +31,75 @@ void main() {
 
   test('write creates a private folder and a 0600 key file; read gives the key back', () async {
     final key = VaultKey.generate();
-    await KeyStore.write(key);
+    await ks.write(key);
     final file = File('${keyDir.path}/wallet.key');
     expect(file.existsSync(), isTrue);
     expect(mode(keyDir.path), '700');
     expect(mode(file.path), '600');
-    expect((await KeyStore.read())!.bytes, key.bytes);
+    expect((await ks.read())!.bytes, key.bytes);
   }, skip: posix);
 
   test('writeAside keeps a set-aside wallet\'s key in its own private slot next to the active key (never over it)', () async {
     final active = VaultKey.generate();
     final old = VaultKey.generate();
-    await KeyStore.write(active);
-    final slot = await KeyStore.writeAside('2026-10-25', old);
+    await ks.write(active);
+    final slot = await ks.writeAside('2026-10-25', old);
     expect(slot, 'aside.2026-10-25');
     final file = File('${keyDir.path}/wallet.key.$slot');
     expect(file.existsSync(), isTrue);
     expect(mode(file.path), '600');
     expect((await VaultKey.parse(file.readAsStringSync())).bytes, old.bytes);
-    expect((await KeyStore.read())!.bytes, active.bytes, reason: 'the active key is untouched');
+    expect((await ks.read())!.bytes, active.bytes, reason: 'the active key is untouched');
     // The same day again: a new slot, the first one is never overwritten.
     final other = VaultKey.generate();
-    expect(await KeyStore.writeAside('2026-10-25', other), 'aside.2026-10-25-2');
+    expect(await ks.writeAside('2026-10-25', other), 'aside.2026-10-25-2');
     expect((await VaultKey.parse(file.readAsStringSync())).bytes, old.bytes);
     // Only a slot made for a set-aside that did not happen is taken back.
-    await KeyStore.removeAside('aside.2026-10-25-2');
+    await ks.removeAside('aside.2026-10-25-2');
     expect(File('${keyDir.path}/wallet.key.aside.2026-10-25-2').existsSync(), isFalse);
     expect(file.existsSync(), isTrue);
     // forget() (the web "Forget this browser" path and tests) leaves aside keys alone.
-    await KeyStore.forget();
+    await ks.forget();
     expect(file.existsSync(), isTrue);
   }, skip: posix);
 
   test('the join-pending marker is a private side file: written, read back, cleared', () async {
-    expect(await KeyStore.readJoinMarker(), isNull);
-    await KeyStore.writeJoinMarker('{"v":1}');
+    expect(await ks.readJoinMarker(), isNull);
+    await ks.writeJoinMarker('{"v":1}');
     final f = File('${keyDir.path}/join.pending');
     expect(mode(f.path), '600');
-    expect(await KeyStore.readJoinMarker(), '{"v":1}');
-    await KeyStore.clearJoinMarker();
+    expect(await ks.readJoinMarker(), '{"v":1}');
+    await ks.clearJoinMarker();
     expect(f.existsSync(), isFalse);
-    expect(await KeyStore.readJoinMarker(), isNull);
+    expect(await ks.readJoinMarker(), isNull);
   }, skip: posix);
 
   test('a folder that already exists with open permissions is made private', () async {
     await keyDir.create();
     await Process.run('chmod', ['755', keyDir.path]);
-    await KeyStore.write(VaultKey.generate());
+    await ks.write(VaultKey.generate());
     expect(mode(keyDir.path), '700');
   }, skip: posix);
 
   test('writing again replaces the key atomically: no temp file is left, the mode stays 0600', () async {
     final first = VaultKey.generate();
     final second = VaultKey.generate();
-    await KeyStore.write(first);
-    await KeyStore.write(second);
+    await ks.write(first);
+    await ks.write(second);
     final names = keyDir.listSync().map((e) => e.uri.pathSegments.where((s) => s.isNotEmpty).last).toList();
     expect(names, ['wallet.key']);
     expect(mode('${keyDir.path}/wallet.key'), '600');
-    expect((await KeyStore.read())!.bytes, second.bytes);
+    expect((await ks.read())!.bytes, second.bytes);
   }, skip: posix);
 
   test('a stale temp file from a crashed write does not break the next write and the old key survives until the rename', () async {
     final old = VaultKey.generate();
-    await KeyStore.write(old);
+    await ks.write(old);
     File('${keyDir.path}/wallet.key.tmp').writeAsStringSync('half');
-    expect((await KeyStore.read())!.bytes, old.bytes);
+    expect((await ks.read())!.bytes, old.bytes);
     final fresh = VaultKey.generate();
-    await KeyStore.write(fresh);
-    expect((await KeyStore.read())!.bytes, fresh.bytes);
+    await ks.write(fresh);
+    expect((await ks.read())!.bytes, fresh.bytes);
     expect(File('${keyDir.path}/wallet.key.tmp').existsSync(), isFalse);
   }, skip: posix);
 
@@ -110,7 +110,7 @@ void main() {
     await Process.run('chmod', ['755', keyDir.path]);
     await Process.run('chmod', ['644', file.path]);
     expect(mode(keyDir.path), '755');
-    expect((await KeyStore.read())!.bytes, key.bytes);
+    expect((await ks.read())!.bytes, key.bytes);
     expect(mode(keyDir.path), '700');
     expect(mode(file.path), '600');
   }, skip: posix);
@@ -118,24 +118,24 @@ void main() {
   test('reading with no key file leaves the folder alone and gives null', () async {
     await keyDir.create();
     await Process.run('chmod', ['755', keyDir.path]);
-    expect(await KeyStore.read(), isNull);
+    expect(await ks.read(), isNull);
     expect(mode(keyDir.path), '755');
   }, skip: posix);
 
   test('the key file holds only the key text, forget deletes it, read then gives null', () async {
     final key = VaultKey.generate();
-    await KeyStore.write(key);
+    await ks.write(key);
     expect(File('${keyDir.path}/wallet.key').readAsStringSync().trim(), await key.toText());
-    await KeyStore.forget();
+    await ks.forget();
     expect(File('${keyDir.path}/wallet.key').existsSync(), isFalse);
-    expect(await KeyStore.read(), isNull);
+    expect(await ks.read(), isNull);
   });
 
   group('device id (H6)', () {
     test('none stored reads null; written it is read back from device.id beside wallet.key, 0600 in a 0700 folder', () async {
-      expect(await KeyStore.readDeviceId(), isNull);
-      await KeyStore.writeDeviceId('abcDEF0123456789');
-      expect(await KeyStore.readDeviceId(), 'abcDEF0123456789');
+      expect(await ks.readDeviceId(), isNull);
+      await ks.writeDeviceId('abcDEF0123456789');
+      expect(await ks.readDeviceId(), 'abcDEF0123456789');
       expect(File('${keyDir.path}/device.id').readAsStringSync(), 'abcDEF0123456789');
       expect(mode('${keyDir.path}/device.id'), '600');
       expect(mode(keyDir.path), '700');
@@ -144,25 +144,25 @@ void main() {
     test('writing again replaces it atomically (no temp file left) and a stale temp file does not break it', () async {
       await keyDir.create(recursive: true);
       File('${keyDir.path}/device.id.tmp').writeAsStringSync('stale');
-      await KeyStore.writeDeviceId('first1');
-      await KeyStore.writeDeviceId('second2');
-      expect(await KeyStore.readDeviceId(), 'second2');
+      await ks.writeDeviceId('first1');
+      await ks.writeDeviceId('second2');
+      expect(await ks.readDeviceId(), 'second2');
       final names = keyDir.listSync().map((e) => e.uri.pathSegments.where((s) => s.isNotEmpty).last).toList();
       expect(names, ['device.id']);
     }, skip: posix);
 
     test('the key and the id are separate files; forget removes both', () async {
-      await KeyStore.write(VaultKey.generate());
-      await KeyStore.writeDeviceId('idid1234');
-      await KeyStore.forget();
-      expect(await KeyStore.read(), isNull);
-      expect(await KeyStore.readDeviceId(), isNull);
+      await ks.write(VaultKey.generate());
+      await ks.writeDeviceId('idid1234');
+      await ks.forget();
+      expect(await ks.read(), isNull);
+      expect(await ks.readDeviceId(), isNull);
     });
 
     test('an empty file reads as none', () async {
       await keyDir.create(recursive: true);
       File('${keyDir.path}/device.id').writeAsStringSync('\n');
-      expect(await KeyStore.readDeviceId(), isNull);
+      expect(await ks.readDeviceId(), isNull);
     });
   });
 }

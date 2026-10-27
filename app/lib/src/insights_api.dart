@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'controller.dart';
+import 'memo_key.dart';
 
 final _log = Logger('bw.insights');
 
@@ -169,16 +170,16 @@ extension WalletInsights on WalletController {
   /// [ArgumentError] for a range core refuses.
   DateRange resolveRange(RangeKind kind, {int offset = 0, String? from, String? to}) {
     if (kind == RangeKind.custom) {
-      return memo('ins.range.custom.$from.$to', () => rangeFor(kind, today(), effectiveSettings, txs: txs, from: from, to: to));
+      return memo(MemoKey('ins.range.custom', (from, to)), () => rangeFor(kind, today(), effectiveSettings, txs: txs, from: from, to: to));
     }
-    final base = memo('ins.range.$kind', () => rangeFor(kind, today(), effectiveSettings, txs: txs));
+    final base = memo(MemoKey('ins.range', kind), () => rangeFor(kind, today(), effectiveSettings, txs: txs));
     return offset == 0 ? base : shiftedRange(base, kind, offset);
   }
 
   /// [r] moved by [steps] ranges of [kind]; [ArgumentError] when core refuses the result.
   DateRange shiftedRange(DateRange r, RangeKind kind, int steps) => shiftRange(r, kind, steps, effectiveSettings, txs: txs, today: today());
 
-  String _k(String what, DateRange r) => 'ins.$what.${r.start}.${r.end}';
+  MemoKey _k(String what, DateRange r, [Object? extra]) => MemoKey('ins.$what', (r.start, r.end, extra));
 
   /// The calendar month that "now" means inside [r]: the month of its last day, but never after today (a pay period that ends
   /// next month still compares this month).
@@ -204,24 +205,24 @@ extension WalletInsights on WalletController {
           fields: _f(r), warnMs: 50));
 
   List<MerchantTotal> merchantsFor(String category, DateRange r) => memo(
-      '${_k('merchants', r)}.$category',
+      _k('merchants', r, category),
       () => timed('insights.merchants', () => merchantsIn(category, txs, r, currency: currency, table: categoryTable),
           fields: _f(r), warnMs: 50));
 
   /// The rows behind a total ([merchantKey] null: the whole category), newest first; they add up to the total.
   List<CategorizedTx> rowsOf(String category, String? merchantKey, DateRange r) => memo(
-      '${_k('rows', r)}.$category.$merchantKey',
+      _k('rows', r, (category, merchantKey)),
       () => timed('insights.rows', () => rowsFor(category, merchantKey, txs, r, currency: currency, table: categoryTable),
           fields: _f(r), warnMs: 50));
 
   List<MonthBar> merchantBars(String category, String merchantKey, DateRange r) => memo(
-      '${_k('mtrend', r)}.$category.$merchantKey',
+      _k('mtrend', r, (category, merchantKey)),
       () => timed('insights.merchantTrend',
           () => merchantTrend(category, merchantKey, txs, r, currency: currency, today: today(), table: categoryTable),
           fields: _f(r), warnMs: 50));
 
   /// The category's spending per month over [r]: its rows added up per calendar month (the same rows as [categoryTotal]).
-  List<MonthBar> categoryBars(String category, DateRange r) => memo('${_k('ctrend', r)}.$category', () {
+  List<MonthBar> categoryBars(String category, DateRange r) => memo(_k('ctrend', r, category), () {
         final spent = <String, int>{};
         for (final t in rowsOf(category, null, r)) {
           spent[monthOf(t.date)] = (spent[monthOf(t.date)] ?? 0) - t.amount;
@@ -231,31 +232,31 @@ extension WalletInsights on WalletController {
 
   /// This month, last month and the 6-month average of [category] (the figures equal the "Where it goes" rows).
   CategoryCompare compareFor(String category, DateRange r) =>
-      memo('${_k('compare', r)}.$category', () => compareCategory(category, txs, monthIn(r), currency: currency, table: categoryTable));
+      memo(_k('compare', r, category), () => compareCategory(category, txs, monthIn(r), currency: currency, table: categoryTable));
 
   List<CategorizedTx> biggestIn(DateRange r) =>
       memo(_k('biggest', r), () => timed('insights.biggest', () => biggestRows(txs, r, currency: currency), fields: _f(r), warnMs: 50));
 
   /// Income, fixed and flexible spending and the net of the last [count] pay periods, oldest first (the last one is running).
   List<PeriodReport> periodReportsFor({int count = 12}) => memo(
-      'rep.periods.$count',
+      MemoKey('rep.periods', count),
       () => timed('reports.periods', () => periodReports(txs, settings, today(), table: categoryTable, count: count),
           fields: {'count': count, 'tx': txs.length}, warnMs: 50));
 
   /// What [category] spent in each of the last [count] pay periods against its budget, oldest first.
   List<CategoryPeriod> categoryByPeriodFor(String category, {int count = 12}) => memo(
-      'rep.catPeriods.$category.$count',
+      MemoKey('rep.catPeriods', (category, count)),
       () => timed('reports.categoryPeriods', () => categoryByPeriod(category, txs, settings, today(), table: categoryTable, count: count),
           fields: {'count': count, 'tx': txs.length}, warnMs: 50));
 
   /// Wishes skipped since the current pay period started (its first day to now).
-  SavedByWaiting savedThisPeriod() => memo('rep.saved.${period().start}', () {
+  SavedByWaiting savedThisPeriod() => memo(MemoKey('rep.saved', period().start), () {
         final from = DateTime.parse(period().start).millisecondsSinceEpoch;
         return savedByWaiting(wish, fromMillis: from, toMillis: now.millisecondsSinceEpoch + 1);
       });
 
   /// Every skipped wish, all time.
-  SavedByWaiting savedAllTime() => memo('rep.savedAll', () => savedByWaitingAll(wish));
+  SavedByWaiting savedAllTime() => memo(const MemoKey('rep.savedAll'), () => savedByWaitingAll(wish));
 
   /// The month `YYYY-MM` as a range (first to last day).
   DateRange monthRange(String month) => DateRange(start: '$month-01', end: '$month-${daysInMonth(month).toString().padLeft(2, '0')}');

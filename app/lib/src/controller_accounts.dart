@@ -8,14 +8,14 @@ final _accLog = Logger('bw.accounts');
 
 extension AccountsDb on WalletController {
   /// The live accounts, ordered by name.
-  List<Account> accountsAll() => _cached('accounts', () => repo.accounts());
+  List<Account> accountsAll() => _cached(const MemoKey('accounts'), () => repo.accounts());
 
   /// A balance per live account (opening + the rows after it), a sync duplicate marked `duplicateOf`. Cached per data version.
   List<AccountBalance> accountBalanceList() =>
-      _cached('accountBalances', () => accountBalances(accountsAll(), [for (final t in wholeTxs) t.tx]));
+      _cached(const MemoKey('accountBalances'), () => accountBalances(accountsAll(), [for (final t in wholeTxs) t.tx]));
 
   /// What is held, per currency (never mixed; sync duplicates left out). Empty when there are no accounts.
-  Map<String, int> heldTotals() => _cached('heldTotals', () => balanceTotals(accountBalanceList()));
+  Map<String, int> heldTotals() => _cached(const MemoKey('heldTotals'), () => balanceTotals(accountBalanceList()));
 
   /// Adds an account and returns its id. A refused value is an [ArgumentError] with a readable message.
   Future<String> addAccount(
@@ -57,7 +57,7 @@ extension AccountsDb on WalletController {
   // suggestion changes. Nothing is written to the settings without a tap.
 
   /// Plan values read from the imports and the confirmed bills (home currency only). Cached per data version and day.
-  PlanSuggestion planSuggestion() => _cached('planSuggestion', () {
+  PlanSuggestion planSuggestion() => _cached(const MemoKey('planSuggestion'), () {
         final confirmed = [
           for (final b in expectedBills())
             if (b.confirmed) b

@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/screens/currencies_panel.dart';
 import 'package:budget_wallet/src/screens/search.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
@@ -114,7 +115,8 @@ void main() {
 
     testWidgets('Today: the note drops the currency once it has a rate and its total counts', (t) async {
       final wc = fxWallet();
-      Widget today() => ListenableBuilder(listenable: wc, builder: (_, __) => Scaffold(body: TodayScreen(wc: wc, openPlan: () {})));
+      Widget today() =>
+          ListenableBuilder(listenable: wc, builder: (_, __) => Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {})));
       await pumpApp(t, today(), size: const Size(400, 3000));
       expect(find.byKey(const ValueKey('foreignNote')), findsOneWidget);
       wc.setFxRate('USD', 924000);

@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/screens/diagnostics.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -22,7 +21,7 @@ class FailingChooser extends FileChooser {
   int calls = 0;
   FailingChooser();
   @override
-  Future<List<PlatformFile>> pickBankFiles() async {
+  Future<List<PickedFile>> pickBankFiles() async {
     calls++;
     throw PortalMissing();
   }

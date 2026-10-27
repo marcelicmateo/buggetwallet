@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'seams.dart';
 import 'wallet.dart';
 
 /// A made-up fiscal receipt QR (Croatian shape): a fixed JIR, 12.34 on 2026-10-18.
@@ -168,10 +169,10 @@ Future<PdfParse> inlinePdfParser(Uint8List pdf) async {
 
 /// A wallet on 20 Oct 2026 for the bills tests: two bank rows (one could have paid a slip), a salary period, and the fakes.
 WalletController billsWallet({FakeBillInputs? inputs, FakeNudges? nudges}) {
-  final wc = WalletController.forTest(WalletRepo.inMemory(now: () => budgetToday.millisecondsSinceEpoch),
+  final wc = seamedController(WalletRepo.inMemory(now: () => budgetToday.millisecondsSinceEpoch),
       key: VaultKey.generate(), clock: () => budgetToday, nudges: nudges, billInputs: (inputs ?? FakeBillInputs()).inputs);
   // Widget tests run in fake time, where a real isolate never answers: PDFs are read inline unless a test asks for the isolate path.
-  wc.pdfParser = inlinePdfParser;
+  wc.seams.pdfParser = inlinePdfParser;
   wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
     syntheticTx('2026-10-19', -4560, 'Trajni nalog', 'SYNTHETIC WATER HR01 1234-5678'),
     syntheticTx('2026-10-19', -1250, 'POS plaćanje', 'POS SYNTHSHOP ZAGREB'),

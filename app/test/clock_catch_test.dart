@@ -14,6 +14,7 @@ import 'package:wallet_importer/wallet_importer.dart' show ImportBatch;
 
 import 'support/bills.dart';
 import 'support/layout.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 const _revolutCsv = 'Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance\n'
@@ -34,9 +35,9 @@ void main() {
   /// A wallet whose repo reads [wall]; one write sets its high-water mark, then [behind] sets the clock back.
   WalletController wallet() {
     final repo = WalletRepo.inMemory(now: () => wall);
-    final wc = WalletController.forTest(repo,
-        key: VaultKey.generate(), clock: () => DateTime(2026, 10, 20, 12), billInputs: FakeBillInputs().inputs);
-    wc.pdfParser = inlinePdfParser;
+    final wc =
+        seamedController(repo, key: VaultKey.generate(), clock: () => DateTime(2026, 10, 20, 12), billInputs: FakeBillInputs().inputs);
+    wc.seams.pdfParser = inlinePdfParser;
     wc.snoozeKeyBackup();
     addTearDown(wc.dispose);
     repo.updateSettings({'reviewDay': 3});

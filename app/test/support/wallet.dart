@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
+import 'seams.dart';
 
 NormalizedTransaction _n(String date, int cents, String type, String desc, {String source = 'pbz', String currency = 'EUR'}) =>
     NormalizedTransaction(
@@ -25,8 +26,7 @@ NormalizedTransaction _n(String date, int cents, String type, String desc, {Stri
 NormalizedTransaction syntheticTx(String date, int cents, String type, String desc) => _n(date, cents, type, desc);
 
 /// An empty in-memory wallet with a key (no sync folder, no timers).
-WalletController emptyWallet({bool withKey = true}) =>
-    WalletController.forTest(WalletRepo.inMemory(), key: withKey ? VaultKey.generate() : null);
+WalletController emptyWallet({bool withKey = true}) => seamedController(WalletRepo.inMemory(), key: withKey ? VaultKey.generate() : null);
 
 /// A wallet that shows every optional Today/Wishlist panel: salary not confirmed, a new payday waiting,
 /// the payday checklist, goals, recent rows, wishlist items waiting / ready / decided.
@@ -100,7 +100,7 @@ final budgetToday = DateTime(2026, 10, 20, 12);
 /// Groceries 252, Eating out 112, Shopping 60. With [budgets]: Groceries 300 (48 left) and [eatingOutBudget] for Eating out
 /// (default 100: over by 12). Without: nothing budgeted.
 WalletController budgetWallet({bool budgets = true, int eatingOutBudget = 10000, int groceriesBudget = 30000}) {
-  final wc = WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => budgetToday);
+  final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => budgetToday);
   for (final m in const ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']) {
     wc.repo.addTransaction(date: '$m-10', amount: 29000, category: 'Groceries');
     wc.repo.addTransaction(date: '$m-12', amount: 8500, category: 'Eating out');
@@ -243,7 +243,7 @@ String fakeIcs(List<(String uid, String date, String title)> events) => 'BEGIN:V
 /// three card payments in the last week without a learned category, a monthly gym payment three months running (a bill
 /// candidate), and a wish that finished waiting. The review is due (never done), the review day is Sunday.
 WalletController habitsWallet({FakeNudges? nudges, bool confirmBill = false}) {
-  final wc = WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => budgetToday, nudges: nudges);
+  final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => budgetToday, nudges: nudges);
   for (final m in const ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']) {
     wc.repo.addTransaction(date: '$m-10', amount: 29000, category: 'Groceries');
     wc.repo.addTransaction(date: '$m-12', amount: 8500, category: 'Eating out');
@@ -290,8 +290,8 @@ WalletController habitsWallet({FakeNudges? nudges, bool confirmBill = false}) {
 /// 22nd that could have paid the insurance, and (with [calendars]) two phone calendars. Calendar events are not read yet:
 /// call `wc.setCalendarOn('c1', true)` or `readCalendars` in the test.
 WalletController futureWallet({FakeNudges? nudges, FakeCalendars? calendars}) {
-  final wc = WalletController.forTest(WalletRepo.inMemory(),
-      key: VaultKey.generate(), clock: () => budgetToday, nudges: nudges, calendars: calendars);
+  final wc =
+      seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => budgetToday, nudges: nudges, calendars: calendars);
   wc.repo.addTransaction(date: '2026-10-03', amount: 15200, category: 'Groceries');
   wc.repo.addTransaction(date: '2026-10-22', amount: 33900, category: 'Car & transport');
   wc.repo.updateSettings({'salary': 150000, 'salaryConfirmed': true, 'periodStart': '2026-10-01'});
