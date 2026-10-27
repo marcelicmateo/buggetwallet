@@ -22,6 +22,9 @@ extension TxEdits on WalletController {
       repo.setCategory(t.id, category);
     }
     _changed();
+    // Q6: a bank row set by hand only for itself may be the third of its payee: offer a rule (a toast; nothing is made).
+    ruleOffer = null;
+    if (!always && t.source != 'manual') _offerRule(t.id);
   }
 
   /// The hand-added expense that the bank row [bankId] replaced (hidden from lists), or null.

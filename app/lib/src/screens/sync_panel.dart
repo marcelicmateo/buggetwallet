@@ -8,6 +8,7 @@ import '../platform.dart';
 import '../sync_status.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'recent_changes.dart';
 
 final _log = Logger('bw.sync');
 
@@ -227,6 +228,7 @@ class _SyncPanelState extends State<SyncPanel> {
             sub: 'Last seen ${lastSeenText(d.lastSeen, now)}',
           ),
       ],
+      RecentChanges(wc: wc),
       if (!isWeb)
         OutlinedButton.icon(
             key: const ValueKey('showKey'), icon: const Icon(Icons.key), label: const Text('Show wallet key'), onPressed: widget.onShowKey),

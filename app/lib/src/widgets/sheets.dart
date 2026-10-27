@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -84,6 +87,7 @@ void txSheetToast(BuildContext context, WalletController wc, String? result) {
   if (result == null) return;
   final id = wc.lastDeletedTx;
   final removed = wc.lastRemovedSplit;
+  final offer = result == 'saved' ? wc.takeRuleOffer() : null; // Q6: read once
   if (result == 'splitRemoved' && removed != null) {
     final messenger = ScaffoldMessenger.of(context);
     final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
@@ -94,6 +98,15 @@ void txSheetToast(BuildContext context, WalletController wc, String? result) {
     toast(context, 'Split saved');
   } else if (result == 'deleted' && id != null) {
     toast(context, 'Deleted', actionLabel: 'Undo', onAction: () => wc.undeleteTransaction(id));
+  } else if (offer != null) {
+    // Q6: the third payment of a payee set by hand: offer a rule. Nothing is made until the tap; the Undo after it takes it back.
+    final messenger = ScaffoldMessenger.of(context);
+    final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
+    final name = offer.suggestion.merchantName, cat = wc.categoryTable.label(offer.suggestion.category);
+    toastOn(messenger, 'Always put $name in $cat?', wide: wide, accessible: accessible, actionLabel: 'Make rule', onAction: () {
+      wc.makeOfferedRule(offer);
+      toastOn(messenger, 'Rule made', wide: wide, accessible: accessible, actionLabel: 'Undo', onAction: () => wc.undoOfferedRule(offer));
+    });
   } else {
     toast(context, result == 'deleted' ? 'Deleted' : (tagFailureText(wc.takeTagFailures()) ?? 'Saved'));
   }
@@ -189,18 +202,112 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
 
   /// The main tags in recommended order, read once (core's ordering reads every row).
   late final List<String> mainIds = [
-    for (final id in widget.wc.recommendedMainFor(null, kinds: const {BudgetKind.flex}))
-      if (id != 'Bank fees') id
+    for (final id in widget.wc.recommendedMainFor(null, kinds: addExpenseKinds))
+      if (!addExpenseExclude.contains(id)) id
   ];
   final wishName = TextEditingController();
   late DateTime date = widget.wc.now;
   String? error;
   bool warned = false;
 
+  final _noteFocus = FocusNode(debugLabel: 'expenseNote');
+
+  /// The main tags the typed note suggests (Q1): chips under the note, a tap picks one. Never applied on its own.
+  List<String> _suggested = const [];
+  Timer? _suggestDebounce;
+  String _suggestFor = '';
+
   @override
   void initState() {
     super.initState();
     warned = widget.skipImpulse;
+    _suggested = widget.wc.suggestCategoriesFor(note.text);
+    _suggestFor = note.text;
+    note.addListener(_noteChanged);
+  }
+
+  @override
+  void dispose() {
+    _suggestDebounce?.cancel();
+    note.removeListener(_noteChanged);
+    _noteFocus.dispose();
+    super.dispose();
+  }
+
+  /// A typed or completed note: the chips follow 250 ms after the typing stops.
+  void _noteChanged() {
+    if (note.text == _suggestFor) return;
+    _suggestDebounce?.cancel();
+    _suggestDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      _suggestFor = note.text;
+      final next = widget.wc.suggestCategoriesFor(note.text);
+      if (!listEquals(next, _suggested)) setState(() => _suggested = next);
+    });
+  }
+
+  Widget _noteField() => LayoutBuilder(
+        builder: (context, box) => RawAutocomplete<String>(
+          textEditingController: note,
+          focusNode: _noteFocus,
+          // Upwards: the list must not cover the chips and the Add button under the field.
+          optionsViewOpenDirection: OptionsViewOpenDirection.up,
+          optionsBuilder: (v) => widget.wc.payeesFor(v.text),
+          optionsViewBuilder: (context, onSelected, options) => Align(
+            alignment: Alignment.bottomLeft,
+            child: Material(
+              elevation: 4,
+              color: context.c.surface,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: box.maxWidth, maxHeight: touchMin * 5),
+                child: ListView(key: const ValueKey('payeeOptions'), padding: EdgeInsets.zero, shrinkWrap: true, children: [
+                  for (final (i, o) in options.indexed)
+                    InkWell(
+                      key: ValueKey('payeeOption:$i'),
+                      onTap: () {
+                        logNav('expense.payeePicked');
+                        onSelected(o);
+                      },
+                      child: Container(
+                          constraints: const BoxConstraints(minHeight: touchMin),
+                          alignment: Alignment.centerLeft,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Text(o)),
+                    ),
+                ]),
+              ),
+            ),
+          ),
+          fieldViewBuilder: (context, controller, focus, onSubmit) => TextField(
+              key: const ValueKey('expenseNote'),
+              controller: controller,
+              focusNode: focus,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: 'Note', hintText: 'Lunch with Ana')),
+        ),
+      );
+
+  Widget _suggestChips(BuildContext context) {
+    final table = widget.wc.categoryTable;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(key: const ValueKey('suggestChips'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Muted('Suggested main tag', size: BwType.metaSize),
+        const SizedBox(height: 4),
+        Wrap(spacing: 8, runSpacing: 4, children: [
+          for (final id in _suggested)
+            ChoiceChip(
+              key: ValueKey('suggestCat:$id'),
+              label: Text(table.label(id)),
+              selected: cat == id,
+              onSelected: (_) {
+                logNav('expense.suggestPicked');
+                setState(() => cat = id);
+              },
+            ),
+        ]),
+      ]),
+    );
   }
 
   @override
@@ -244,10 +351,8 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       const SizedBox(height: 14),
       ExtraTagsEditor(wc: widget.wc, initial: tags, onChanged: (v, _) => tags = v),
       const SizedBox(height: 14),
-      TextField(
-          controller: note,
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(labelText: 'Note', hintText: 'Lunch with Ana')),
+      _noteField(),
+      if (_suggested.isNotEmpty) _suggestChips(context),
       const SizedBox(height: 14),
       DateField(
         label: 'Date',
@@ -492,6 +597,7 @@ class _TxSheetState extends State<TxSheet> {
               ? null
               : () async {
                   saving = true;
+                  widget.wc.ruleOffer = null; // an offer left by an earlier sheet is stale
                   // Only an owner's pick is written: the category shown is the resolved one, so an untouched Save must not overwrite a
                   // deleted custom id (or the merchant rule that points at it).
                   if (cat != row.category) widget.wc.setCategory(t, cat, always: always && !manual);
