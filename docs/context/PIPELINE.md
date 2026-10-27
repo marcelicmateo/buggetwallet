@@ -177,6 +177,10 @@ every brief must begin with `git reset --hard <base>`.
 - Also fixed: nudge slots already past in the phone zone failed the whole schedule (c516b03).
 - Done: W4 merged (40c3628), Haiku full run green, web build + localhost shots read, pushed. Next: sync redesign spec (owner decisions).
 
+## Stage Q progress (2026-10-27)
+Plan: `STAGE_Q_PLAN.md` (Q1–Q11, waves 0–3, delegation table). Base eaa790f.
+- Wave 0 running: core-builder splits `repo.dart` (worktree), ui-builder splits `controller.dart` (worktree); moves only, same test counts (importer 377, core 2296, sync 326, app 1822).
+
 ## Queue (2026-10-20)
 | # | Item | Agent | Base | Depends on | Status |
 |---|---|---|---|---|---|
