@@ -222,6 +222,28 @@ const Map<String, EntityDef> entitySchema = {
     ColumnDef('parts', defaultSql: "'[]'"),
     ColumnDef.flag('deleted'),
   ]),
+  // IOUs (v17, Q8): money lent to or borrowed from a person (see `Iou`), and its repayments (`IouPart`). A payment
+  // linked through `tx` is neither spending nor income (`Categorizer.iouTx`).
+  'iou': EntityDef('ious', [
+    ColumnDef('person', searchable: true),
+    ColumnDef('direction', defaultSql: "'lent'"),
+    ColumnDef.integer('amount'),
+    ColumnDef('currency', defaultSql: "'EUR'"),
+    ColumnDef('date'),
+    ColumnDef('note', nullable: true, searchable: true),
+    ColumnDef('tx', nullable: true),
+    ColumnDef.flag('closed'),
+    ColumnDef.flag('deleted'),
+  ]),
+  'iou_part': EntityDef('iou_parts', [
+    ColumnDef('iou_id'),
+    ColumnDef.integer('amount'),
+    ColumnDef('date'),
+    ColumnDef('tx', nullable: true),
+    ColumnDef.flag('deleted'),
+  ], indexes: {
+    'iou_parts_iou': 'iou_id'
+  }),
 };
 
 /// The device-local tables: never synced or backed up.

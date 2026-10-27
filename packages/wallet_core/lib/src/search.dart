@@ -313,7 +313,7 @@ SearchResult searchAll(
       if (payment(t)) found[id] = t;
       continue;
     }
-    final w = t.whole ?? CategorizedTx(t.tx, t.category, t.kind, tags: t.tags);
+    final w = t.whole ?? CategorizedTx(t.tx, t.category, t.kind, tags: t.tags, iou: t.iou);
     if (paymentHit[id] ??= payment(w)) {
       found[id] ??= w;
     } else if (!matchedPart.containsKey(id) && part(t)) {

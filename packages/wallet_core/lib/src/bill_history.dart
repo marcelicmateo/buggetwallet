@@ -78,7 +78,8 @@ class BillMonth {
 /// before today's month are [BillMonthState.missing] (the bill stores no confirmation date: the app opens History only
 /// for confirmed bills) or [BillMonthState.paidNearby]; an empty today's month is [BillMonthState.upcoming]. Dates
 /// that are not real `YYYY-MM-DD` values are skipped. [today] is `YYYY-MM-DD`; [months] ≥ 1, else an [ArgumentError].
-/// [table] tells which stored categories are own transfers (built-ins when null).
+/// [table] tells which stored categories are own transfers (built-ins when null). [iouTx] (Q8, `Categorizer.iouTx`):
+/// payments linked to an IOU, never a bill's payment.
 List<BillMonth> billHistory(
   RecurringBill bill,
   List<Tx> rows,
@@ -87,6 +88,7 @@ List<BillMonth> billHistory(
   int months = 12,
   required String currency,
   CategoryTable? table,
+  Set<String> iouTx = const {},
 }) {
   final cats = table ?? CategoryTable.builtIn;
   if (months < 1) throw ArgumentError.value(months, 'months', 'must be at least 1');
@@ -94,7 +96,7 @@ List<BillMonth> billHistory(
 
   final payments = <String, Tx>{};
   for (final t in rows) {
-    if (!_isPayment(t, currency, cats, income: bill.isIncome)) continue;
+    if (iouTx.contains(t.id) || !_isPayment(t, currency, cats, income: bill.isIncome)) continue;
     if (t.id == bill.lastPaidTx || merchantKey(t) == bill.payee) payments[t.id] = t;
   }
 

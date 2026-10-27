@@ -63,6 +63,22 @@ void main() {
     expect((await snapshot())!.id, snap.id);
   });
 
+  test('a device waiting for a current-schema snapshot (Q8 mark) still heals a stuck peer after 24 h', () async {
+    final (a, b) = await stuckPair();
+    a.repo.setLocalValue(SyncEngine.wantCurrentKey, '${sim.clock.ms}');
+    final before = (await snapshot())?.id;
+    for (final h in [6, 6, 6, 5]) {
+      sim.tick(Duration(hours: h));
+      await b.sync();
+      await a.sync();
+    }
+    sim.tick(const Duration(hours: 1, minutes: 30));
+    await b.sync();
+    await a.sync();
+    expect((await snapshot())?.id, isNot(before), reason: 'the heal is not held back by the mark');
+    expect((await b.sync()).caughtUp, isTrue);
+  });
+
   test('a peer not seen for 24 h gets no snapshot (it is away, not stuck)', () async {
     final (a, _) = await stuckPair();
     final before = (await snapshot())?.id;

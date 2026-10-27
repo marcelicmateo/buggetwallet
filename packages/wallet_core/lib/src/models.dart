@@ -159,8 +159,13 @@ class CategorizedTx {
   final int? originalAmount;
   final String? originalCurrency;
 
+  /// Q8: the payment is linked to an IOU (`Categorizer.iouTx`): its [kind] is then [BudgetKind.transfer] and it never
+  /// pays a recurring bill (`dueCycles`). Kept by [withCategory] and [converted].
+  final bool iou;
+
   const CategorizedTx(this.tx, this.category, this.kind,
       {this.tags = const [],
+      this.iou = false,
       int? amount,
       this.part,
       this.parts = 0,
@@ -188,7 +193,8 @@ class CategorizedTx {
       splitBroken: splitBroken,
       whole: whole,
       originalAmount: originalAmount,
-      originalCurrency: originalCurrency);
+      originalCurrency: originalCurrency,
+      iou: iou);
 
   /// This row converted (P15): [tx] in the wallet currency, [amount] the part's converted amount (null for a whole
   /// payment), [whole] the converted whole; the original amount and currency kept. Category, kind, tags and part fields kept.
@@ -201,7 +207,8 @@ class CategorizedTx {
       splitBroken: splitBroken,
       whole: whole,
       originalAmount: this.amount,
-      originalCurrency: this.tx.currency);
+      originalCurrency: this.tx.currency,
+      iou: iou);
 }
 
 /// The distinct payments of [rows] ([CategorizedTx.tx], first appearance order): an expanded list
@@ -603,6 +610,90 @@ class Account {
         openingDate: _str(r['opening_date']) ?? '',
         deleted: r['deleted'] == 1,
       );
+}
+
+/// Which way an [Iou]'s money went: the owner lent it to the person (they owe the owner) or borrowed it from them.
+enum IouDirection { lent, borrowed }
+
+/// Money lent to or borrowed from a person (Q8), synced entity `iou` (schema 17). [amount] is positive cents in
+/// [currency]; [tx] is the payment the owner linked as the loan itself (lent: an outflow, borrowed: an inflow), which
+/// then counts as neither spending nor income (`Categorizer.iouTx`). An IOU without a link changes no number.
+class Iou {
+  final String id;
+  final String person;
+  final IouDirection direction;
+  final int amount;
+  final String currency;
+  final String date; // YYYY-MM-DD
+  final String? note;
+  final String? tx;
+  final bool closed;
+  final bool deleted;
+
+  const Iou({
+    required this.id,
+    required this.person,
+    required this.direction,
+    required this.amount,
+    required this.currency,
+    required this.date,
+    this.note,
+    this.tx,
+    this.closed = false,
+    this.deleted = false,
+  });
+
+  /// Longest accepted person name and note (characters, after trimming).
+  static const maxPerson = 60;
+  static const maxNote = 200;
+
+  /// An unknown stored direction (a newer build's word) reads as lent.
+  static Iou fromRow(Map<String, Object?> r) => Iou(
+        id: r['id'] as String,
+        person: _str(r['person']) ?? '',
+        direction: _str(r['direction']) == IouDirection.borrowed.name ? IouDirection.borrowed : IouDirection.lent,
+        amount: _int(r['amount']) ?? 0,
+        currency: _str(r['currency']) ?? 'EUR',
+        date: _str(r['date']) ?? '',
+        note: _str(r['note']),
+        tx: _str(r['tx']),
+        closed: r['closed'] == 1,
+        deleted: r['deleted'] == 1,
+      );
+}
+
+/// One repayment of an [Iou] (Q8), synced entity `iou_part`: positive cents in the IOU's currency, on [date]; [tx] is
+/// the payment that repaid it (lent: an inflow, borrowed: an outflow), which then counts as neither spending nor income.
+class IouPart {
+  final String id;
+  final String iouId;
+  final int amount;
+  final String date; // YYYY-MM-DD
+  final String? tx;
+  final bool deleted;
+
+  const IouPart({required this.id, required this.iouId, required this.amount, required this.date, this.tx, this.deleted = false});
+
+  static IouPart fromRow(Map<String, Object?> r) => IouPart(
+        id: r['id'] as String,
+        iouId: _str(r['iou_id']) ?? '',
+        amount: _int(r['amount']) ?? 0,
+        date: _str(r['date']) ?? '',
+        tx: _str(r['tx']),
+        deleted: r['deleted'] == 1,
+      );
+}
+
+/// A live [Iou] with its live [parts] (oldest first) and what is still owed: [Iou.amount] minus the parts, never below
+/// 0 (two devices may each add a repayment; a local write refuses to overpay).
+class IouView {
+  final Iou iou;
+  final List<IouPart> parts;
+  final int outstanding;
+  const IouView(this.iou, this.parts, this.outstanding);
+
+  /// What the parts add up to (may exceed [Iou.amount] after two devices' repayments meet).
+  int get repaid => parts.fold(0, (s, p) => s + p.amount);
 }
 
 /// Where a planned cost came from: typed by hand, a calendar event the owner gave an amount (or dismissed), or (later,

@@ -27,6 +27,7 @@ part 'repo_categories.dart';
 part 'repo_changes.dart';
 part 'repo_blobs.dart';
 part 'repo_import.dart';
+part 'repo_iou.dart';
 part 'repo_meta.dart';
 part 'repo_planned.dart';
 part 'repo_recurring.dart';
@@ -155,8 +156,9 @@ class WalletRepo {
   /// the `split` entity; no data migration), version 14: recurring income (P9: `recurring` gains `direction`; no data
   /// migration), version 15: bill-file invariants (P14: no synced change; the local `blob_outbox`, `blob_delete` and
   /// `blob_own` tables become `blob_cache.uploaded`, [_migrateBlobTables]; snapshots of this schema carry declared
-  /// blob sets), version 16: attachments (P16b: `bills` gains `attached_tx`; no data migration).
-  static const schemaVersion = 16;
+  /// blob sets), version 16: attachments (P16b: `bills` gains `attached_tx`; no data migration), version 17: IOUs (Q8:
+  /// the `iou` and `iou_part` entities; no data migration).
+  static const schemaVersion = 17;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
   /// a live bill points to again (api-3 builds deleted files on the relay), cleared once all of them were stored.
@@ -481,7 +483,8 @@ class WalletRepo {
         rentCashThreshold: st.rentCashThreshold,
         table: table,
         tagContext: withTags ? tagContext() : null,
-        splits: withTags ? splits() : const {});
+        splits: withTags ? splits() : const {},
+        iouTx: WalletRepoIou(this).iouLinkedTx());
   }
 
   // ---------- writes ----------
@@ -834,9 +837,16 @@ class WalletRepo {
       bills.add(current[b.id]!);
     }
     var paid = 0;
+    // Q8: a payment linked to an IOU (money lent or paid back) never pays a bill or lands an income.
+    final payRows = cz.iouTx.isEmpty
+        ? rows
+        : [
+            for (final r in rows)
+              if (!cz.iouTx.contains(r.id)) r
+          ];
     // One payment per bill per pass; repeated so a history import with several cycles catches up (bounded).
     for (var pass = 0; pass < 120 && bills.isNotEmpty; pass++) {
-      final plan = planRecurringPayments(bills, rows, currency: currency);
+      final plan = planRecurringPayments(bills, payRows, currency: currency);
 
       if (plan.isEmpty) break;
       // A single payment anchors the next cycle on its own date; parts adding up on the cycle's due date.
