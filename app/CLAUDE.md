@@ -29,6 +29,12 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   Use these, not `Platform.isX`. Tests set `debugDefaultTargetPlatformOverride` (and must unset it before the test body ends).
 - `lib/src/controller.dart` — `WalletController` (ChangeNotifier): owns the `WalletRepo`, the cached lists,
   sync timers. Screens call controller methods; the controller calls the repo and `notifyListeners()`.
+- J1 (controller seams): `controller_deps.dart` `WalletControllerDeps` = one immutable object with the clock, the `KeyStore` instance, the platform objects and every function seam (sync, health check, backup, key, join marker,
+  database files, device id, clipboard, `.ics`, PDF, bill category). `WalletController.load({deps, claim})` / `forTest(repo, deps:, clock:, …)`; `WalletControllerDeps.platform({dbDir, keyStore, …})` holds the real ones, `copyWith` replaces some.
+  Nothing is reassigned after the controller exists: tests that swap a seam mid-test use `test/support/seams.dart` (`seamedController(...)` / `seamedLoad(deps)` instead of `forTest`/`load`, then `wc.seams.syncRunner = …`; the deps forward to those fields).
+  `tabHook` stays a plain field (the home shell registers itself). `KeyStore` is an instance (`KeyStore(keyDir:)` on native). `wc.sync` (`SyncState`) and `wc.cal` (`CalendarState`) are `Listenable`s (`sub_state.dart`): their setters mark them
+  changed and the controller's `notifyListeners()` tells them right after its own listeners, so the controller notifies exactly as before (`test/sub_state_test.dart`); the old `wc.syncError` etc. forward to `wc.sync`.
+  Memo keys are `MemoKey(name, args)` (`memo_key.dart`), never joined strings. `screens/today_view.dart` `TodayView` and `screens/upcoming_view.dart` `UpcomingView` are the read-only facades `TodayScreen(view:)` / `UpcomingScreen(view:)` take instead of the controller (`Listenable`; they launch the sheets those pages open).
 - Budgets (E1): `categoryBudgets` (monthly cents per category), `budgetVsActual(month)`, `suggestedBudgets(month)`, `tightestBudget()`
   (cached like `spending()`), `saveCategoryBudgets(map)` (logs `budgets.saved` with the count only). Spending's "Where it goes" bars use the
   budget as the 100 % mark (`CategoryBars(budget:)`: ruled track, hatched `bad` stretch and "over by 12 €" when over, "48 € left" otherwise,
@@ -165,7 +171,7 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   `bw.deviceId`; `KeyStore.forget` removes it too). `WalletController._openWithId`: no id stored (first open after an upgrade) → the database opens with its own id and
   `repo.deviceId` is moved into the store once; from then on every open passes `deviceId:` (`openWalletDb(dbKey, {deviceId})` → `WalletRepo.open/fromDatabase`);
   `createWallet` / `joinWallet` make a new id (`WalletRepo.newDeviceId()`), stored before the database opens. A store that fails is logged (`deviceId.storeFailed`) and the
-  app goes on; the id is never logged. Tests replace the store with `WalletController.load(deviceIdReader:, deviceIdWriter:)` / `wc.deviceIdReader/Writer`.
+  app goes on; the id is never logged. Tests replace the store through `WalletControllerDeps` (`deviceIdReader/deviceIdWriter`).
 - Polish (M5): Plan › Backup (`screens/backup_panel.dart`: "Back up now" = `wc.backupDownload()` → `FileChooser.saveBackup` (the system save dialog on every platform; a cancel
   shows nothing), "Restore from backup…" only while `walletIsEmpty`: `pickBackupFile()` → confirm → `restoreBackupFile(bytes)` → toast with the row count; the core
   functions sit behind `backupBytesWriter/backupBytesReader` so tests use fakes) and Plan › Export (`screens/export_panel.dart`: range chips This period/year/Everything,
@@ -300,7 +306,7 @@ it; creating a wallet (or joining with another key) moves it to `wallet.db.unope
 web: copied inside IndexedDB) and logs `db.setAside` (no paths). Web: one `IndexedDbFileSystem` per generation (`vfsName` `indexeddb-<n>`),
 registered without `makeDefault`, opened via `openKeyed(() => sqlite.open('/wallet.db', vfs: 'multipleciphers-<name>'), dbKey)`.
 Tests: `test/db_open_test.dart` (load/create/join/unlock/forget flows with a fake disk), `test/wallet_db_io_test.dart` (real files in a temp
-folder via `walletDbDirOverride`), `test/web/wallet_db_web_test.dart` (`tools/build.sh web-test`: real IndexedDB, wrong key, converted
+folder via `dir:` of `walletDbExists/openWalletDb/…`, i.e. `WalletControllerDeps.platform(dbDir:)`), `test/web/wallet_db_web_test.dart` (`tools/build.sh web-test`: real IndexedDB, wrong key, converted
 unkeyed db, set aside, forget + reopen).
 
 ## Encrypted database plumbing (stage R1)

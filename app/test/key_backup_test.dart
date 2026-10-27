@@ -5,38 +5,40 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 DateTime day = DateTime(2026, 10, 20, 12);
 
 /// A wallet without a key yet (onboarding), a fake key store and a fake clipboard.
 ({WalletController wc, List<String?> clip}) fresh() {
-  final wc = WalletController.forTest(WalletRepo.inMemory(), clock: () => day);
-  wc.keyWriter = (k, {passphrase}) async {};
+  final wc = seamedController(WalletRepo.inMemory(), clock: () => day);
+  wc.seams.keyWriter = (k, {passphrase}) async {};
   final clip = <String?>[null];
-  wc.clipboardWrite = (t) async => clip[0] = t;
-  wc.clipboardRead = () async => clip[0];
+  wc.seams.clipboardWrite = (t) async => clip[0] = t;
+  wc.seams.clipboardRead = () async => clip[0];
   return (wc: wc, clip: clip);
 }
 
 WalletController keyed() {
-  final wc = WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => day);
+  final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => day);
   final clip = <String?>[null];
-  wc.clipboardWrite = (t) async => clip[0] = t;
-  wc.clipboardRead = () async => clip[0];
+  wc.seams.clipboardWrite = (t) async => clip[0] = t;
+  wc.seams.clipboardRead = () async => clip[0];
   return wc;
 }
 
 /// Like HomeShell: the page is built again when the data version moves.
 Widget todayOf(WalletController wc) => ListenableBuilder(
     listenable: wc,
-    builder: (_, __) => Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), wc: wc, openPlan: () {}, clock: () => day)));
+    builder: (_, __) => Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {}, clock: () => day)));
 
 Widget opener(WalletController wc) =>
     Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => openKeyBackup(c, wc), child: const Text('open'))));
@@ -99,8 +101,8 @@ void main() {
     testWidgets('copy clears the clipboard after 60 s, but only while it still holds the key', (t) async {
       final wc = keyed();
       final clip = <String?>[null];
-      wc.clipboardWrite = (x) async => clip[0] = x;
-      wc.clipboardRead = () async => clip[0];
+      wc.seams.clipboardWrite = (x) async => clip[0] = x;
+      wc.seams.clipboardRead = () async => clip[0];
       final text = await wc.keyText();
       await wc.copyKeyBackup();
       expect(clip[0], text);
@@ -118,8 +120,8 @@ void main() {
     testWidgets('background app reads null from the clipboard: still cleared', (t) async {
       final wc = keyed();
       final clip = <String?>[null];
-      wc.clipboardWrite = (x) async => clip[0] = x;
-      wc.clipboardRead = () async => null;
+      wc.seams.clipboardWrite = (x) async => clip[0] = x;
+      wc.seams.clipboardRead = () async => null;
       await wc.copyKeyBackup();
       expect(clip[0], isNotEmpty);
       await t.pump(const Duration(seconds: 61));
@@ -129,8 +131,8 @@ void main() {
     testWidgets('a failing clipboard read still clears', (t) async {
       final wc = keyed();
       final clip = <String?>[null];
-      wc.clipboardWrite = (x) async => clip[0] = x;
-      wc.clipboardRead = () async => throw StateError('no access');
+      wc.seams.clipboardWrite = (x) async => clip[0] = x;
+      wc.seams.clipboardRead = () async => throw StateError('no access');
       await wc.copyKeyBackup();
       await t.pump(const Duration(seconds: 61));
       expect(clip[0], '');
@@ -139,8 +141,8 @@ void main() {
     testWidgets('in the background at 60 s: cleared on the next resume', (t) async {
       final wc = keyed();
       final clip = <String?>[null];
-      wc.clipboardWrite = (x) async => clip[0] = x;
-      wc.clipboardRead = () async => null;
+      wc.seams.clipboardWrite = (x) async => clip[0] = x;
+      wc.seams.clipboardRead = () async => null;
       final text = await wc.keyText();
       await wc.copyKeyBackup();
       t.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
@@ -158,8 +160,8 @@ void main() {
     testWidgets('dispose with a pending clear empties the clipboard at once', (t) async {
       final wc = keyed();
       final clip = <String?>[null];
-      wc.clipboardWrite = (x) async => clip[0] = x;
-      wc.clipboardRead = () async => clip[0];
+      wc.seams.clipboardWrite = (x) async => clip[0] = x;
+      wc.seams.clipboardRead = () async => clip[0];
       await wc.copyKeyBackup();
       expect(clip[0], isNotEmpty);
       wc.dispose();
@@ -170,8 +172,8 @@ void main() {
     testWidgets('a second copy restarts the 60 s', (t) async {
       final wc = keyed();
       final clip = <String?>[null];
-      wc.clipboardWrite = (x) async => clip[0] = x;
-      wc.clipboardRead = () async => clip[0];
+      wc.seams.clipboardWrite = (x) async => clip[0] = x;
+      wc.seams.clipboardRead = () async => clip[0];
       final text = await wc.keyText();
       await wc.copyKeyBackup();
       await t.pump(const Duration(seconds: 40));
@@ -264,8 +266,8 @@ void main() {
     testWidgets('Copy key button copies and the sheet says it is cleared in 60 seconds', (t) async {
       final wc = keyed();
       final clip = <String?>[null];
-      wc.clipboardWrite = (x) async => clip[0] = x;
-      wc.clipboardRead = () async => clip[0];
+      wc.seams.clipboardWrite = (x) async => clip[0] = x;
+      wc.seams.clipboardRead = () async => clip[0];
       await pumpApp(t, opener(wc));
       await t.tap(find.text('open'));
       await t.pump();
@@ -369,7 +371,7 @@ void main() {
         final tail = (await k.toText()).replaceAll('-', '');
         final last4 = tail.substring(tail.length - 4);
         if (last4.contains(letter)) {
-          return (WalletController.forTest(WalletRepo.inMemory(), key: k, clock: () => day), last4);
+          return (seamedController(WalletRepo.inMemory(), key: k, clock: () => day), last4);
         }
       }
       throw StateError('no synthetic key ends with $letter');

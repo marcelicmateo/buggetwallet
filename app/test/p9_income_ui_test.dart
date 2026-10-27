@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -55,7 +56,12 @@ Future<void> todayPage(WidgetTester tester, WalletController wc,
         tester,
         Scaffold(
             body: TodayScreen(
-                wc: wc, openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser(), openBills: () {}, openIncome: openIncome)),
+                view: TodayView(wc),
+                openPlan: () {},
+                clock: () => budgetToday,
+                chooser: const FileChooser(),
+                openBills: () {},
+                openIncome: openIncome)),
         size: size,
         textScale: scale);
 

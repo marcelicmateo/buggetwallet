@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 /// The wallet file on a fake disk: absent, plaintext, or encrypted with [fileKey]; plus the files set aside.
@@ -95,25 +96,26 @@ Future<WalletController> loadWith(
   String? joinMarker,
   void Function()? markerCleared,
 }) async {
-  final wc = await WalletController.load(
-    opener: w.open,
-    deviceIdReader: w.readId,
-    deviceIdWriter: w.writeId,
-    exists: w.exists,
-    setAside: w.setAside,
-    isPlaintext: w.isPlaintext,
-    claim: claim ?? () async {},
-    joinMarkerReader: () async => joinMarker,
-    joinMarkerClearer: () async => markerCleared?.call(),
-    keyReader: () async => keyError != null ? Error.throwWithStackTrace(keyError, StackTrace.current) : key,
-    isLocked: () => locked,
-    clock: () => DateTime(2026, 10, 22, 12),
-  );
+  final wc = await seamedLoad(
+      loadDeps().copyWith(
+        dbOpener: w.open,
+        deviceIdReader: w.readId,
+        deviceIdWriter: w.writeId,
+        dbExists: w.exists,
+        dbSetAside: w.setAside,
+        dbIsPlaintext: w.isPlaintext,
+        joinMarkerReader: () async => joinMarker,
+        joinMarkerClearer: () async => markerCleared?.call(),
+        keyReader: () async => keyError != null ? Error.throwWithStackTrace(keyError, StackTrace.current) : key,
+        isLocked: () => locked,
+        clock: () => DateTime(2026, 10, 22, 12),
+      ),
+      claim: claim);
   await Future<void>.delayed(Duration.zero); // lets the start-up microtasks (nudges, recurring) run
   if (autoDispose) addTearDown(wc.dispose);
-  wc.keyWriter = (k, {passphrase}) async => w.events.add('key');
-  wc.keyForgetter = () async {};
-  wc.unlocker = (p) async => throw const WrongPassphrase();
+  wc.seams.keyWriter = (k, {passphrase}) async => w.events.add('key');
+  wc.seams.keyForgetter = () async {};
+  wc.seams.unlocker = (p) async => throw const WrongPassphrase();
   return wc;
 }
 
@@ -227,15 +229,16 @@ void main() {
     test('a store that cannot be written does not stop the start, and the id is not in the log', () async {
       final key = VaultKey.generate();
       final w = World(hasFile: true, fileKey: await localDbKey(key));
-      final wc = await WalletController.load(
-        opener: w.open,
-        deviceIdReader: () async => null,
-        deviceIdWriter: (_) async => throw StateError('disk'),
-        exists: w.exists,
-        claim: () async {},
-        keyReader: () async => key,
-        isLocked: () => false,
-      );
+      final wc = await seamedLoad(
+          loadDeps().copyWith(
+            dbOpener: w.open,
+            deviceIdReader: () async => null,
+            deviceIdWriter: (_) async => throw StateError('disk'),
+            dbExists: w.exists,
+            keyReader: () async => key,
+            isLocked: () => false,
+          ),
+          claim: () async {});
       addTearDown(wc.dispose);
       expect(wc.hasWallet, isTrue);
       expect(log(), contains('deviceId.storeFailed'));
@@ -348,7 +351,7 @@ void main() {
     test('joining with a relay address saves it in the file database', () async {
       final w = World();
       final wc = await loadWith(w);
-      wc.syncRunner = (relay, key, repo) async => throw StateError('offline');
+      wc.seams.syncRunner = (relay, key, repo) async => throw StateError('offline');
       await wc.joinWallet(await VaultKey.generate().toText(), relay: Uri.parse('http://homeserver:8787'));
       expect(wc.repo.localValue('relayUrl'), 'http://homeserver:8787');
       expect(wc.relayUrl, Uri.parse('http://homeserver:8787'));
@@ -371,7 +374,7 @@ void main() {
       expect(wc.locked, isTrue);
       expect(w.existsCalls, 0);
       expect(w.opens, isEmpty);
-      wc.unlocker = (p) async => key;
+      wc.seams.unlocker = (p) async => key;
       await wc.unlock('right passphrase');
       expect(wc.locked, isFalse);
       expect(wc.hasWallet, isTrue);
@@ -382,7 +385,7 @@ void main() {
     test('unlock with a key that does not open the file keeps the file and goes to onboarding', () async {
       final w = World(hasFile: true, fileKey: await localDbKey(VaultKey.generate()));
       final wc = await loadWith(w, locked: true);
-      wc.unlocker = (p) async => VaultKey.generate();
+      wc.seams.unlocker = (p) async => VaultKey.generate();
       await wc.unlock('right passphrase');
       expect(wc.locked, isFalse);
       expect(wc.hasWallet, isFalse);

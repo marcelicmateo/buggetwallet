@@ -38,17 +38,17 @@ class RuleDraft {
 
 extension RulesDb on WalletController {
   /// The Rules list (own rules, then built-ins), computed once per data version.
-  List<RuleView> get rulesList => memo(
-      'rules.view', () => timed('rules.view', () => rulesView(settings, repo.payeeRules(), tagContext.ruleTags, tagTable, categoryTable)));
+  List<RuleView> get rulesList => memo(const MemoKey('rules.view'),
+      () => timed('rules.view', () => rulesView(settings, repo.payeeRules(), tagContext.ruleTags, tagTable, categoryTable)));
 
   /// How many live payments in the wallet's currency each rule decided the main tag of (rule id -> count), once per data version.
   Map<String, int> ruleUseCounts() => memo(
-      'rules.hits',
+      const MemoKey('rules.hits'),
       () => timed('rules.hits', () => ruleHits([for (final t in wholeTxs) t.tx], categorizer, currency: currency),
           fields: {'tx': wholeTxs.length}, warnMs: 50));
 
   /// The payees of the most recent payments (newest first, one each), for the payee picker. Once per data version.
-  List<RulePayee> recentPayees({int limit = 40}) => memo('rules.payees.$limit', () {
+  List<RulePayee> recentPayees({int limit = 40}) => memo(MemoKey('rules.payees', limit), () {
         final seen = <String>{};
         final out = <RulePayee>[];
         final rows = [...wholeTxs]..sort((a, b) => b.date.compareTo(a.date));

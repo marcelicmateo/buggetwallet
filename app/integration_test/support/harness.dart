@@ -25,6 +25,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import '../../test/support/seams.dart';
+
 const strict = bool.fromEnvironment('BW_STRICT');
 
 /// Texts of the synthetic data used by any test: none may reach the log.
@@ -110,7 +112,7 @@ class Harness {
       _logsCleared = true;
       await AppLog.clear();
     }
-    final wc = await bootstrap(catchErrors: false);
+    final wc = await seamedBoot((deps) => bootstrap(catchErrors: false, deps: deps));
     _wc = wc;
     if (wallet) {
       await wc.createWallet();
@@ -138,7 +140,7 @@ class Harness {
   /// Closes the app and starts it again on the same wallet (database and key kept), as after a phone restart.
   static Future<WalletController> restart(WidgetTester t) async {
     await stop(t);
-    final wc = await bootstrap(catchErrors: false);
+    final wc = await seamedBoot((deps) => bootstrap(catchErrors: false, deps: deps));
     _wc = wc;
     await t.pumpWidget(BudgetWalletApp(wc: wc));
     await t.pumpAndSettle();

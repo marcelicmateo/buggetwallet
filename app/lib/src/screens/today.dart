@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
-import '../controller.dart';
 import '../file_chooser.dart';
 import '../format.dart';
 import '../layout.dart';
@@ -10,11 +9,8 @@ import '../platform.dart';
 import '../theme.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
-import '../widgets/sheets.dart';
-import 'bill_sheet.dart';
-import 'key_backup.dart';
-import 'review.dart';
-import 'upcoming.dart';
+import 'review.dart' show reviewSummary, streakText;
+import 'today_view.dart';
 
 /// A small overspend is shown to the cent: "Over today by 0 €" would hide it.
 String shown(int cents, String cur) => cents > 0 && cents < 10000 ? moneyExact(cents, cur) : money(cents, cur, decimals: 0);
@@ -23,7 +19,7 @@ String shown(int cents, String cur) => cents > 0 && cents < 10000 ? moneyExact(c
 const typicalOrderCents = 1500;
 
 class TodayScreen extends StatelessWidget {
-  final WalletController wc;
+  final TodayView view;
   final VoidCallback openPlan;
 
   /// Opens the Budget tab (the budget line); without it the line is not tappable.
@@ -51,7 +47,7 @@ class TodayScreen extends StatelessWidget {
   final DateTime Function() clock;
   const TodayScreen({
     super.key,
-    required this.wc,
+    required this.view,
     required this.openPlan,
     this.openSpending,
     this.addExpense,
@@ -66,9 +62,9 @@ class TodayScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final s = wc.settings;
-    final cur = wc.currency;
-    final p = wc.period();
+    final s = view.settings;
+    final cur = view.currency;
+    final p = view.period();
     final ended = p.paydayPassed;
     final over = p.overToday > 0;
     // Over the whole period (the plan is spent) outranks over today in the sentence under the hero.
@@ -84,32 +80,32 @@ class TodayScreen extends StatelessWidget {
             ? "You're ${shown(p.overToday, cur)} over for today. Nothing more today; tomorrow starts at ${money(tomorrow, cur)}."
             : "You're ${shown(p.overToday, cur)} over for today. Nothing more today; a new pay period starts tomorrow.";
     final worry = over || p.overBudget;
-    final newPayday = wc.newPayday(p.start);
+    final newPayday = view.newPayday(p.start);
     // The first-run steps (I1): one panel below the hero while any is open.
-    final setupSteps = [if (wc.keyBackupRowVisible) 'key', if (!s.salaryConfirmed) 'salary', if (newPayday != null) 'payday'];
+    final setupSteps = [if (view.keyBackupRowVisible) 'key', if (!s.salaryConfirmed) 'salary', if (newPayday != null) 'payday'];
     final used = p.flexBudget > 0 ? p.spent / p.flexBudget : 1.0;
     final ahead = p.aheadOfPace;
     // Several missed paydays move on in one tap: the latest payday on or before today.
-    final newStart = currentPeriodStart(p.start, s.paydayDay, wc.today());
+    final newStart = currentPeriodStart(p.start, s.paydayDay, view.today());
     final now = clock();
     // Only for a wallet that ordered food in the last 90 days.
-    final deliveryHour = ((now.hour >= 14 && now.hour < 19) || now.weekday == DateTime.sunday) && wc.deliveryOrders90 > 0;
-    final (deliveryCount, deliverySum) = wc.deliveries;
-    final tight = wc.tightestBudget();
-    final review = wc.reviewState();
-    final reviewedToday = wc.lastReview == wc.today() && !review.due;
-    final comingUp = wc.comingUp();
-    final held = wc.heldTotals();
-    final suggestions = wc.suggestionCount();
-    final headsUps = wc.headsUpLines();
-    final needCategory = wc.plannedNeedingCategory();
-    final toReview = wc.billsToReview();
+    final deliveryHour = ((now.hour >= 14 && now.hour < 19) || now.weekday == DateTime.sunday) && view.deliveryOrders90 > 0;
+    final (deliveryCount, deliverySum) = view.deliveries;
+    final tight = view.tightestBudget();
+    final review = view.reviewState();
+    final reviewedToday = view.lastReview == view.today() && !review.due;
+    final comingUp = view.comingUp();
+    final held = view.heldTotals();
+    final suggestions = view.suggestionCount();
+    final headsUps = view.headsUpLines();
+    final needCategory = view.plannedNeedingCategory();
+    final toReview = view.billsToReview();
     void upcoming() {
       logNav('upcoming.open');
-      openUpcoming(context, wc);
+      view.showUpcoming(context);
     }
 
-    final recent = wc.wholeTxs.where((t) => t.kind != BudgetKind.transfer).take(12).toList();
+    final recent = view.wholeTxs.where((t) => t.kind != BudgetKind.transfer).take(12).toList();
 
     return MarginLine(
         child: ListView(
@@ -121,7 +117,7 @@ class TodayScreen extends StatelessWidget {
                   const Text('Start the new period to get a daily budget again.', style: TextStyle(fontSize: BwType.metaSize)),
                   FilledButton(
                       key: const ValueKey('startNewPeriod'),
-                      onPressed: () => wc.startNewMonth(newStart),
+                      onPressed: () => view.startNewMonth(newStart),
                       child: Text('Start new period on ${shortDate(newStart)}')),
                 ]),
               TwoCol(left: [
@@ -185,8 +181,8 @@ class TodayScreen extends StatelessWidget {
                           : StatusLabel(good: false, text: '${money(-ahead, cur, decimals: 0)} behind pace', textAlign: TextAlign.end),
                     ),
                   if (p.foreignByCurrency.isNotEmpty)
-                    ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: wc.openCurrencies),
-                  if (tight != null) _BudgetLine(tight, wc.categoryTable.label(tight.category), cur, openSpending),
+                    ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: view.openCurrencies),
+                  if (tight != null) _BudgetLine(tight, view.categoryTable.label(tight.category), cur, openSpending),
                   if (p.expectedIncome.isNotEmpty)
                     _InfoLine(
                         key: const ValueKey('expectedIncomeLine'),
@@ -194,7 +190,7 @@ class TodayScreen extends StatelessWidget {
                         text: 'Expected income: ${moneyExact(p.expectedIncome.fold<int>(0, (a, x) => a + x.amount), cur)} '
                             'by ${shortDateOrRaw(p.expectedIncome.last.due)} (counts when it lands)',
                         onTap: openIncome),
-                  if (p.dueCycles.isNotEmpty) _BillsLine(p.dueCycles, p.end, wc.today(), cur, openBills, wc.categoryTable),
+                  if (p.dueCycles.isNotEmpty) _BillsLine(p.dueCycles, p.end, view.today(), cur, openBills, view.categoryTable),
                   if (comingUp.count > 0 || suggestions > 0)
                     _InfoLine(
                         key: const ValueKey('comingUpLine'),
@@ -210,7 +206,7 @@ class TodayScreen extends StatelessWidget {
                         text: '${n.title.isEmpty ? 'Bill' : n.title} · ${moneyExact(n.amount!, cur)} · needs a category',
                         onTap: () {
                           logNav('bill.needsCategory');
-                          openBill(context, wc, n.sourceRef!);
+                          view.showBill(context, n.sourceRef!);
                         }),
                   if (held.isNotEmpty)
                     _InfoLine(
@@ -240,7 +236,7 @@ class TodayScreen extends StatelessWidget {
                         onTap: () {
                           final p = h.item.planned;
                           if (p != null && p.isBill) {
-                            openBill(context, wc, p.sourceRef!);
+                            view.showBill(context, p.sourceRef!);
                           } else {
                             upcoming();
                           }
@@ -254,11 +250,11 @@ class TodayScreen extends StatelessWidget {
                       key: const ValueKey('addExpense'),
                       icon: const Icon(Icons.add),
                       label: const Text('Add expense', style: TextStyle(fontSize: BwType.headingSize)),
-                      onPressed: addExpense ?? () => addExpenseFlow(context, wc),
+                      onPressed: addExpense ?? () => view.showAddExpense(context),
                     ),
                   ),
                 ]),
-                if (setupSteps.isNotEmpty) _SetupPanel(wc: wc, steps: setupSteps, openPlan: openPlan, newPayday: newPayday),
+                if (setupSteps.isNotEmpty) _SetupPanel(view: view, steps: setupSteps, openPlan: openPlan, newPayday: newPayday),
                 if (review.due)
                   Panel(key: const ValueKey('reviewCard'), children: [
                     const SectionHead('Weekly review'),
@@ -268,24 +264,24 @@ class TodayScreen extends StatelessWidget {
                       key: const ValueKey('startReview'),
                       onPressed: () {
                         logNav('review.open');
-                        openReview(context, wc, openSpending: openSpending, chooser: chooser);
+                        view.showReview(context, openSpending: openSpending, chooser: chooser);
                       },
                       child: const Text('Start review'),
                     ),
                   ]),
-                if (s.savedFor != p.start && wc.goals.isNotEmpty)
+                if (s.savedFor != p.start && view.goals.isNotEmpty)
                   Panel(children: [
                     const HeadingRow(Heading('Payday checklist', size: BwType.headingSize), Tag('pay yourself first')),
                     Text('Move ${money(p.goalMonthly, cur, decimals: 0)} to your savings account before you spend anything else.',
                         style: const TextStyle(fontSize: BwType.bodySize)),
                     Rows(children: [
-                      for (final g in wc.goals) LineItem(g.name, money(g.monthly, cur, decimals: 0), leading: const CheckSquare())
+                      for (final g in view.goals) LineItem(g.name, money(g.monthly, cur, decimals: 0), leading: const CheckSquare())
                     ]),
                     OutlinedButton.icon(
                       icon: const Icon(Icons.check),
                       label: Text('I moved ${money(p.goalMonthly, cur, decimals: 0)}'),
                       onPressed: () {
-                        wc.paydayDone(p.start);
+                        view.paydayDone(p.start);
                         toast(context, 'Savings logged');
                       },
                     ),
@@ -308,7 +304,7 @@ class TodayScreen extends StatelessWidget {
                 Panel(children: [
                   SplitRow(
                       start: const Heading('Recent', size: BwType.headingSize),
-                      end: Muted(_freshness(wc), size: BwType.metaSize, align: TextAlign.end)),
+                      end: Muted(_freshness(view), size: BwType.metaSize, align: TextAlign.end)),
                   if (recent.isEmpty)
                     const EmptyNote('No transactions yet. Import your bank exports in Settings, or add your first expense.')
                   else
@@ -316,17 +312,16 @@ class TodayScreen extends StatelessWidget {
                       const TxHeaderRow(),
                       for (final t in recent)
                         TxTile(
-                            table: wc.categoryTable,
-                            tagTable: wc.tagTable,
-                            t: wc.shown(t),
+                            table: view.categoryTable,
+                            tagTable: view.tagTable,
+                            t: view.shown(t),
                             currency: cur,
-                            fxRates: wc.settings.fxRates,
-                            hasBill: wc.billForTx(t.tx.id) != null,
-                            splitCount: wc.splitCount(t.tx.id),
-                            splitBroken: wc.splitIsBroken(t.tx.id),
+                            fxRates: view.settings.fxRates,
+                            hasBill: view.billForTx(t.tx.id) != null,
+                            splitCount: view.splitCount(t.tx.id),
+                            splitBroken: view.splitIsBroken(t.tx.id),
                             onTap: () async {
-                              final r = await showSheet<String>(context, TxSheet(wc: wc, t: t));
-                              if (context.mounted) txSheetToast(context, wc, r);
+                              await view.openTx(context, t);
                             }),
                     ]),
                 ]),
@@ -334,8 +329,8 @@ class TodayScreen extends StatelessWidget {
             ])));
   }
 
-  static String _freshness(WalletController wc) {
-    final latest = wc.latestBySource;
+  static String _freshness(TodayView view) {
+    final latest = view.latestBySource;
     String last(String src) => latest[src] == null ? 'none' : shortDateOrRaw(latest[src]!);
 
     return 'PBZ ${last('pbz')} · Revolut ${last('revolut')}';
@@ -502,23 +497,23 @@ class _Stats extends StatelessWidget {
 /// The first-run steps in one panel under the hero (I1): save the key, confirm the salary, start a new month. After the owner
 /// hides it once it is a single line (`setupLine`) that opens it again.
 class _SetupPanel extends StatelessWidget {
-  final WalletController wc;
+  final TodayView view;
   final List<String> steps;
   final VoidCallback openPlan;
   final String? newPayday;
-  const _SetupPanel({required this.wc, required this.steps, required this.openPlan, required this.newPayday});
+  const _SetupPanel({required this.view, required this.steps, required this.openPlan, required this.newPayday});
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final s = wc.settings;
-    final cur = wc.currency;
-    if (wc.setupCollapsedFor(steps)) {
+    final s = view.settings;
+    final cur = view.currency;
+    if (view.setupCollapsedFor(steps)) {
       final n = steps.length;
       return Panel(color: c.warnBg, children: [
         InkWell(
           key: const ValueKey('setupLine'),
-          onTap: () => wc.setSetupCollapsed(false, steps),
+          onTap: () => view.setSetupCollapsed(false, steps),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 48),
             child: Row(children: [
@@ -538,7 +533,7 @@ class _SetupPanel extends StatelessWidget {
         Icon(Icons.checklist, size: 18, color: c.warnInk),
         const SizedBox(width: 8),
         Expanded(child: Text('Set up your wallet', style: TextStyle(fontWeight: FontWeight.w600, color: c.warnInk))),
-        TextButton(key: const ValueKey('setupHide'), onPressed: () => wc.setSetupCollapsed(true, steps), child: const Text('Hide')),
+        TextButton(key: const ValueKey('setupHide'), onPressed: () => view.setSetupCollapsed(true, steps), child: const Text('Hide')),
       ]),
       if (steps.contains('key')) ...[
         Row(key: const ValueKey('keyBackupRow'), children: [
@@ -548,8 +543,8 @@ class _SetupPanel extends StatelessWidget {
         ]),
         Text('Without it, this wallet cannot be opened again.', style: TextStyle(color: c.warnInk, fontSize: BwType.metaSize)),
         Wrap(spacing: 8, runSpacing: 8, children: [
-          FilledButton(key: const ValueKey('keySaveNow'), onPressed: () => openKeyBackup(context, wc), child: const Text('Save now')),
-          TextButton(key: const ValueKey('keyRowLater'), onPressed: wc.snoozeKeyBackup, child: const Text('Later')),
+          FilledButton(key: const ValueKey('keySaveNow'), onPressed: () => view.showKeyBackup(context), child: const Text('Save now')),
+          TextButton(key: const ValueKey('keyRowLater'), onPressed: view.snoozeKeyBackup, child: const Text('Later')),
         ]),
       ],
       if (steps.contains('salary')) ...[
@@ -561,14 +556,14 @@ class _SetupPanel extends StatelessWidget {
             style: TextStyle(color: c.warnInk, fontSize: BwType.metaSize)),
         Wrap(alignment: WrapAlignment.spaceBetween, spacing: 8, runSpacing: 8, children: [
           OutlinedButton(onPressed: openPlan, child: const Text('Open Budget')),
-          FilledButton(onPressed: () => wc.updateSettings({'salaryConfirmed': true}), child: const Text('Looks right')),
+          FilledButton(onPressed: () => view.updateSettings({'salaryConfirmed': true}), child: const Text('Looks right')),
         ]),
       ],
       if (steps.contains('payday') && newPayday != null) ...[
         Text('Salary landed on ${shortDate(newPayday!)}', style: TextStyle(fontWeight: FontWeight.w600, color: c.warnInk)),
         Text('Start a new month to reset your daily budget and run the payday checklist.',
             style: TextStyle(fontSize: BwType.metaSize, color: c.warnInk)),
-        FilledButton(onPressed: () => wc.startNewMonth(newPayday!), child: Text('Start new month on ${shortDate(newPayday!)}')),
+        FilledButton(onPressed: () => view.startNewMonth(newPayday!), child: Text('Start new month on ${shortDate(newPayday!)}')),
       ],
     ]);
   }

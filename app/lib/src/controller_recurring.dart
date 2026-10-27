@@ -7,7 +7,7 @@ part of 'controller.dart';
 extension RecurringDb on WalletController {
   /// What pays the current cycle of each confirmed bill: the single payments and the parts counted so far (once per data version).
   RecurringPayments recurringPayments() => _cached(
-      'recurringPayments',
+      const MemoKey('recurringPayments'),
       () => planRecurringPayments([
             for (final b in expectedBills())
               if (b.confirmed) b
@@ -55,7 +55,7 @@ extension RecurringDb on WalletController {
   }
 
   /// The payees of the most recent incoming payments of kind extra (newest first, one each), for the payee picker of an income. Once per data version.
-  List<RulePayee> incomePayees({int limit = 40}) => memo('recurring.incomePayees.$limit', () {
+  List<RulePayee> incomePayees({int limit = 40}) => memo(MemoKey('recurring.incomePayees', limit), () {
         final seen = <String>{};
         final out = <RulePayee>[];
         final rows = [...wholeTxs]..sort((a, b) => b.date.compareTo(a.date));

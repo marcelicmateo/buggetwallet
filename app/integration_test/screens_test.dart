@@ -19,6 +19,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import '../test/support/seams.dart';
 import 'demo_data.dart';
 import 'support/harness.dart' show navTab, pageList, settingsSection;
 
@@ -38,7 +39,7 @@ void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('every tab with a synthetic wallet', (tester) async {
-    final wc = await bootstrap(catchErrors: false);
+    final wc = await seamedBoot((deps) => bootstrap(catchErrors: false, deps: deps));
     if (!wc.hasWallet) await wc.createWallet();
     wc.takeKeyBackupPrompt(); // opened below from Today's row
     wc.repo.importBatch(demoBatch(wc.today()));
@@ -148,7 +149,7 @@ void main() {
     await binding.takeScreenshot('5-settings-habits');
 
     // Settings › Sync (relay address, status, devices), then Backup and Export (M5). The relay is a fake run: no network.
-    wc.syncRunner = (relay, key, repo) async => SyncReport(0, 0, 0, caughtUp: true, devices: [
+    wc.seams.syncRunner = (relay, key, repo) async => SyncReport(0, 0, 0, caughtUp: true, devices: [
           SyncDevice('ab12f3', lastSeen: DateTime.now().subtract(const Duration(minutes: 5)), isThis: true),
           SyncDevice('c9d8e7', lastSeen: DateTime.now().subtract(const Duration(hours: 3))),
         ]);

@@ -5,6 +5,7 @@
 // Behaviour not built on v2 carries a FIXED skip string `BUG: I<n> - ...`; the lead lifts them at merge.
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
@@ -52,7 +53,7 @@ WalletController _wallet({
 
 Future<void> _pumpToday(WidgetTester tester, WalletController wc, {DateTime? now}) async {
   final at = now ?? DateTime(2026, 10, 25, 12);
-  await pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => at)), size: const Size(400, 3000));
+  await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => at)), size: const Size(400, 3000));
 }
 
 /// Every Text on screen that shows a minus sign in front of a figure.
@@ -122,8 +123,11 @@ void main() {
 
   group('I1: the first-run setup panel', () {
     // demoWallet: key not saved, salary not confirmed, a new payday waiting: three open steps.
-    Future<void> pumpDemo(WidgetTester tester, WalletController wc) => pumpApp(tester,
-        Scaffold(body: ListenableBuilder(listenable: wc, builder: (_, __) => TodayScreen(wc: wc, openPlan: () {}, clock: () => wc.now))),
+    Future<void> pumpDemo(WidgetTester tester, WalletController wc) => pumpApp(
+        tester,
+        Scaffold(
+            body: ListenableBuilder(
+                listenable: wc, builder: (_, __) => TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => wc.now))),
         size: const Size(400, 3000));
 
     testWidgets('three open steps are ONE panel listing all of them', (tester) async {

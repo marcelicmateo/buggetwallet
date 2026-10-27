@@ -15,6 +15,7 @@ import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 import 'bill_sheet.dart';
 import 'upcoming.dart';
+import 'upcoming_view.dart';
 
 /// A query needs this many characters before anything is searched.
 const searchMinChars = 2;
@@ -164,7 +165,7 @@ class _SearchPaneState extends State<SearchPane> {
                     p.amount == null ? 'No amount' : moneyExact(p.amount!, cur),
                     '${shortDateOrRaw(p.date)}${p.category == null ? '' : ' · ${wc.categoryTable.label(p.category!)}'}${p.status == PlannedStatus.open ? '' : ' · ${p.status == PlannedStatus.paid ? 'Paid' : 'Skipped'}'}',
                     'planned',
-                    () => p.isBill ? openBill(context, wc, p.sourceRef!) : openUpcoming(context, wc)),
+                    () => p.isBill ? openBill(context, wc, p.sourceRef!) : openUpcoming(context, UpcomingView(wc))),
             ]),
           ]),
         if (billsFound.isNotEmpty)

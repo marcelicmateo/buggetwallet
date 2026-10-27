@@ -4,6 +4,7 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/screens/wishlist.dart';
 import 'package:budget_wallet/src/widgets/charts.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
@@ -24,7 +25,7 @@ WalletController passedWallet() {
 }
 
 Widget today(WalletController wc, {DateTime? at}) =>
-    Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => at ?? DateTime(2026, 10, 20, 10)));
+    Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => at ?? DateTime(2026, 10, 20, 10)));
 
 /// Every Text on screen outside the transaction rows (those show spending as negative amounts, on purpose).
 List<String> _texts(WidgetTester tester) => [

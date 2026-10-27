@@ -72,7 +72,7 @@ const _readOnly = 0x01, _readWriteCreate = 0x02 | 0x04;
 Future<void> claimWalletDb() => _takeTabLock();
 
 /// Is there a `wallet.db` in this browser's IndexedDB file system?
-Future<bool> walletDbExists() async {
+Future<bool> walletDbExists({String? dir}) async {
   await _takeTabLock();
   final (_, fs) = await _store();
   return fs.xAccess(_path, 0) != 0;
@@ -80,7 +80,7 @@ Future<bool> walletDbExists() async {
 
 /// Copies `/wallet.db` (and a `-journal`) to `/wallet.db.unopened-<stamp>` and removes the originals. The bytes are copied as
 /// they are (encrypted or not); the originals go only after the copy is whole and flushed.
-Future<void> setAsideWalletDb(String stamp) async {
+Future<void> setAsideWalletDb(String stamp, {String? dir}) async {
   await _takeTabLock();
   final (_, fs) = await _store();
   var target = '$_path.unopened-$stamp';
@@ -129,7 +129,7 @@ bool _isPlaintext(IndexedDbFileSystem fs) {
 }
 
 /// Is the stored wallet an unkeyed one (opening it with any key would convert it)?
-Future<bool> walletDbIsPlaintext() async {
+Future<bool> walletDbIsPlaintext({String? dir}) async {
   await _takeTabLock();
   final (_, fs) = await _store();
   return _isPlaintext(fs);
@@ -139,7 +139,7 @@ Future<bool> walletDbIsPlaintext() async {
 /// file system, encrypted with [dbKey] (`localDbKey`) through the wrapped VFS. An unkeyed database from an older build is
 /// converted. A key that does not open it throws [WalletDbKeyException]. Changes are in memory until [WalletDb.persist]
 /// flushes them to IndexedDB.
-Future<WalletDb> openWalletDb(Uint8List dbKey, {String? deviceId}) async {
+Future<WalletDb> openWalletDb(Uint8List dbKey, {String? deviceId, String? dir}) async {
   await _takeTabLock();
   final (sqlite, fs) = await _store();
   final converted = _isPlaintext(fs);

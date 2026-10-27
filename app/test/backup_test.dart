@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/layout.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 /// Stands in for an I/O error whose text names a path; the log must keep only the type.
@@ -61,7 +62,7 @@ class FakeChooser extends FileChooser {
 WalletController wallet({bool full = false}) {
   final wc = full ? habitsWallet() : emptyWallet();
   addTearDown(wc.dispose);
-  wc.syncRunner = (u, k, r) async => const SyncReport(0, 0, 0);
+  wc.seams.syncRunner = (u, k, r) async => const SyncReport(0, 0, 0);
   return wc;
 }
 
@@ -96,7 +97,7 @@ void main() {
     final wc = wallet(full: true);
     final c = FakeChooser();
     final sealed = Uint8List.fromList([1, 2, 3, 4]);
-    wc.backupBytesWriter = (repo, key) async => fakeBackup(sealed);
+    wc.seams.backupBytesWriter = (repo, key) async => fakeBackup(sealed);
     await pumpPanel(t, wc, c);
     await t.tap(backupBtn);
     await t.pump();
@@ -113,7 +114,7 @@ void main() {
 
   testWidgets('cancelling the save dialog shows neither a toast nor an error', (t) async {
     final wc = wallet(full: true);
-    wc.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(3));
+    wc.seams.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(3));
     await pumpPanel(t, wc, FakeChooser()..cancelSave = true);
     await t.tap(backupBtn);
     await t.pump();
@@ -125,7 +126,7 @@ void main() {
 
   testWidgets('a failing save shows a message, keeps the button usable and logs the type only', (t) async {
     final wc = wallet(full: true);
-    wc.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(3));
+    wc.seams.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(3));
     await pumpPanel(t, wc, FakeChooser()..saveError = DiskTrouble());
     await t.tap(backupBtn);
     await t.pump();
@@ -150,7 +151,7 @@ void main() {
     final bytes = Uint8List.fromList([9, 8, 7]);
     final c = FakeChooser()..picks = [_Picked(bytes)];
     final reads = <Uint8List>[];
-    wc.backupBytesReader = (repo, b, key) async {
+    wc.seams.backupBytesReader = (repo, b, key) async {
       reads.add(b);
       return 12;
     };
@@ -173,7 +174,7 @@ void main() {
   testWidgets('cancelling the picker or the confirm restores nothing', (t) async {
     final wc = wallet();
     var reads = 0;
-    wc.backupBytesReader = (repo, b, key) async => ++reads;
+    wc.seams.backupBytesReader = (repo, b, key) async => ++reads;
     final c = FakeChooser();
     await pumpPanel(t, wc, c);
     await t.tap(restoreBtn); // picker cancelled: an empty list
@@ -207,7 +208,7 @@ void main() {
   ]) {
     testWidgets('restore error ($name) shows a short message and no toast', (t) async {
       final wc = wallet();
-      wc.backupBytesReader = (repo, b, key) => Future<int>.error(error);
+      wc.seams.backupBytesReader = (repo, b, key) => Future<int>.error(error);
       await pumpPanel(t, wc, FakeChooser()..picks = [_Picked(Uint8List(2))]);
       await t.tap(restoreBtn);
       await t.pumpAndSettle();

@@ -3,26 +3,24 @@ import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart' show Sha256;
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter/widgets.dart' show AppLifecycleListener, AppLifecycleState, WidgetsBinding;
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'bill_inputs.dart';
-import 'bill_platform.dart';
-import 'calendar_platform.dart';
 import 'calendar_source.dart';
 import 'clock_notice.dart';
+import 'controller_deps.dart';
 import 'format.dart' show NumberStyle, money, numberStyle;
 import 'home_widget.dart';
 import 'ics_fetch.dart';
 import 'insights_api.dart' show InsightRange;
 import 'key_store.dart';
 import 'logging.dart';
-import 'nudge_platform.dart';
+import 'memo_key.dart';
 import 'nudges.dart';
-import 'pdf_parse.dart';
 import 'platform.dart' show isWeb;
+import 'sub_state.dart';
 import 'tabs.dart';
 import 'wallet_db.dart';
 
@@ -50,8 +48,6 @@ final _searchLog = Logger('bw.search');
 const _computeBudget = budgetVsActual;
 
 /// The core backup functions; the controller methods of similar names would hide them inside the class.
-const _backupBytesFn = backupBytesWithInfo;
-const _mergeBackupBytesFn = mergeBackupBytes;
 const _restoreBackupBytesFn = restoreBackupBytes;
 
 /// Which transactions Plan › Export writes.
@@ -205,25 +201,27 @@ class WalletController extends ChangeNotifier {
 
   /// Counts [reload]s: the derived values below are cached per version (and per day) and recomputed only after the data changed.
   int dataVersion = 0;
-  final Map<String, Object?> _memo = {};
+  final Map<MemoKey, Object?> _memo = {};
 
   /// The day [_memo] was filled for: a new day drops every cached value (old days would only pile up).
   String? _memoDay;
 
   /// The day the screens last showed (set by [reload] and [checkDay]); a different [today] means the pages are out of date.
   String? _seenDay;
-  final DateTime Function() _clock;
 
-  /// Runs the sync against the relay at an address; tests replace it (with a [MemoryTransport] or a fake).
-  @visibleForTesting
-  Future<SyncReport> Function(Uri relay, VaultKey key, WalletRepo repo) syncRunner = _runRelaySync;
+  /// Everything the controller reaches outside the app through (clock, key store, database files, relay, clipboard, platform
+  /// objects); built once, never changed. Tests hand in their own (see [WalletControllerDeps]).
+  final WalletControllerDeps deps;
+
+  DateTime _clock() => deps.clock();
 
   /// The creation token to send to [relay]: [stored] unless it is empty or the address is a public `http://` one (a stored address
   /// from before the https rule; the token would travel in the clear).
   static String? createTokenFor(Uri relay, String? stored) =>
       stored == null || stored.isEmpty || relayAddressIssue(relay.toString()) != null ? null : stored;
 
-  static Future<SyncReport> _runRelaySync(Uri relay, VaultKey key, WalletRepo repo) async {
+  /// The real sync run ([WalletControllerDeps.syncRunner]).
+  static Future<SyncReport> runRelaySync(Uri relay, VaultKey key, WalletRepo repo) async {
     final transport = RelayTransport(relay, key, createToken: createTokenFor(relay, repo.localValue(relayCreateTokenKey)));
     try {
       return await SyncEngine(transport, key, appVersion: appVersion).run(repo);
@@ -231,62 +229,6 @@ class WalletController extends ChangeNotifier {
       transport.close();
     }
   }
-
-  /// Checks that a relay answers at an address; tests replace it.
-  @visibleForTesting
-  Future<void> Function(Uri relay) healthCheck = RelayTransport.health;
-
-  /// Backup work: a backup is the bytes of an encrypted file (saved through the system save dialog) and a restore reads
-  /// picked bytes. Tests replace them.
-  @visibleForTesting
-  Future<BackupResult> Function(WalletRepo repo, VaultKey key) backupBytesWriter = _backupBytesFn;
-  @visibleForTesting
-  late Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey key) backupBytesReader =
-      (repo, bytes, opener) => _restoreBackupBytesFn(repo, bytes, opener, walletKey: key); // always the wallet's own key too
-  @visibleForTesting
-  Future<MergeResult> Function(WalletRepo repo, Uint8List bytes, VaultKey key, {bool dryRun, VaultKey? walletKey}) backupMerger =
-      _mergeBackupBytesFn;
-
-  /// Key work; tests replace them (the real ones use the system keystore, a file, or the browser's storage).
-  @visibleForTesting
-  Future<void> Function(VaultKey key, {String? passphrase}) keyWriter = KeyStore.write;
-  @visibleForTesting
-  Future<VaultKey> Function(String passphrase) unlocker = KeyStore.unlock;
-  @visibleForTesting
-  Future<void> Function() keyForgetter = KeyStore.forget;
-
-  /// The old wallet's key, kept under a second slot named after the set-aside stamp (returns the slot); and its removal when the
-  /// set-aside did not happen.
-  @visibleForTesting
-  Future<void> Function(String text) joinMarkerWriter = KeyStore.writeJoinMarker;
-  @visibleForTesting
-  Future<void> Function() joinMarkerClearer = KeyStore.clearJoinMarker;
-  @visibleForTesting
-  Future<String> Function(String stamp, VaultKey key) keyAsideWriter = KeyStore.writeAside;
-  @visibleForTesting
-  Future<void> Function(String slot) keyAsideRemover = KeyStore.removeAside;
-
-  /// Database work; tests replace them. [dbOpener] opens (or creates) the keyed wallet database with `localDbKey(key)`.
-  @visibleForTesting
-  Future<WalletDb> Function(Uint8List dbKey, {String? deviceId}) dbOpener = openWalletDb;
-
-  /// This install's device id (H6), kept next to the key; tests replace them.
-  @visibleForTesting
-  Future<String?> Function() deviceIdReader = KeyStore.readDeviceId;
-  @visibleForTesting
-  Future<void> Function(String id) deviceIdWriter = KeyStore.writeDeviceId;
-
-  /// Is there a wallet database file on this device? (Asked only while no key is known.)
-  @visibleForTesting
-  Future<bool> Function() dbExists = walletDbExists;
-
-  /// Is the stored wallet file an unkeyed (plaintext) one? Asked on join, which must never convert such a file.
-  @visibleForTesting
-  Future<bool> Function() dbIsPlaintext = walletDbIsPlaintext;
-
-  /// Moves the wallet database aside (`wallet.db.unopened-<stamp>`), nothing deleted.
-  @visibleForTesting
-  Future<void> Function(String stamp) dbSetAside = setAsideWalletDb;
 
   /// A wallet database exists on this device but the key we have does not open it (or there is no key). It is never deleted or
   /// overwritten: joining with the key that opens it uses it; creating a new wallet sets it aside first. Onboarding says so.
@@ -298,34 +240,35 @@ class WalletController extends ChangeNotifier {
 
   /// The relay's address, device-local (`relayUrl` in the local settings); null until one is set.
   Uri? relayUrl;
-  DateTime? lastSync;
-  String? syncError;
 
-  /// From the last successful sync: every device applied through its last file (matching only runs then).
-  bool syncCaughtUp = false;
+  /// The sync status the screens show (last run, devices, problems, errors), a [Listenable] of its own; the getters and setters
+  /// below forward to it. The controller does not listen to it: it notifies its own listeners exactly where it always did.
+  final SyncState sync = SyncState();
 
-  /// From the last successful sync: devices whose later files wait for a missing or refused file.
-  List<SyncWaiting> syncWaiting = const [];
-
-  /// Bill photos and files the last sync could not upload yet (they stay queued and are tried again).
-  int syncBlobsWaiting = 0;
-
-  /// The relay is older than bill files: it answers 404 to every upload (Plan › Sync says to update it).
-  bool syncBlobsUnsupported = false;
-
-  /// From the last successful sync: the devices the relay knows (short ids), this one included.
-  List<SyncDevice> syncDevices = const [];
-
-  /// Files from other devices the last sync could not read (damaged or half-synced); retried on every sync.
-  int syncBadFiles = 0;
-
-  /// From the last successful sync: the relay's instance id (shown only as [relayFingerprintText]), whether the relay was new or
-  /// reset since the previous sync, and the files not applied (a device whose clock is ahead; this device's own id in use).
-  String? syncRelayInstance;
-
-  /// What the relay holds for this wallet and its limit, from the last sync (null: not known, e.g. an older relay).
-  int? syncRelayBytes, syncRelayMaxBytes;
-  List<SyncProblem> syncProblems = const [];
+  DateTime? get lastSync => sync.lastSync;
+  set lastSync(DateTime? v) => sync.lastSync = v;
+  String? get syncError => sync.error;
+  set syncError(String? v) => sync.error = v;
+  bool get syncCaughtUp => sync.caughtUp;
+  set syncCaughtUp(bool v) => sync.caughtUp = v;
+  List<SyncWaiting> get syncWaiting => sync.waiting;
+  set syncWaiting(List<SyncWaiting> v) => sync.waiting = v;
+  int get syncBlobsWaiting => sync.blobsWaiting;
+  set syncBlobsWaiting(int v) => sync.blobsWaiting = v;
+  bool get syncBlobsUnsupported => sync.blobsUnsupported;
+  set syncBlobsUnsupported(bool v) => sync.blobsUnsupported = v;
+  List<SyncDevice> get syncDevices => sync.devices;
+  set syncDevices(List<SyncDevice> v) => sync.devices = v;
+  int get syncBadFiles => sync.badFiles;
+  set syncBadFiles(int v) => sync.badFiles = v;
+  String? get syncRelayInstance => sync.relayInstance;
+  set syncRelayInstance(String? v) => sync.relayInstance = v;
+  int? get syncRelayBytes => sync.relayBytes;
+  set syncRelayBytes(int? v) => sync.relayBytes = v;
+  int? get syncRelayMaxBytes => sync.relayMaxBytes;
+  set syncRelayMaxBytes(int? v) => sync.relayMaxBytes = v;
+  List<SyncProblem> get syncProblems => sync.problems;
+  set syncProblems(List<SyncProblem> v) => sync.problems = v;
 
   /// Core reports a changed relay and an id in use once, so each notice is kept on this device (device-local values, never synced)
   /// until the owner taps OK on it; a new relay address clears both.
@@ -359,7 +302,8 @@ class WalletController extends ChangeNotifier {
     if (t.isNotEmpty && relayUrl != null) await syncNow(trigger: 'token');
   }
 
-  bool syncing = false;
+  bool get syncing => sync.running;
+  set syncing(bool v) => sync.running = v;
 
   /// Completes when the running sync ends (set while [syncing]); [joinAnotherWallet] waits for it before closing the database.
   Completer<void>? _syncRun;
@@ -371,13 +315,7 @@ class WalletController extends ChangeNotifier {
   Timer? _persistTimer;
 
   /// The phone's reminders (Plan › Nudges); [NoNudges] in tests and on desktop.
-  final NudgePlatform nudges;
-
-  /// The system clipboard behind two functions so tests can swap it ([copyKeyBackup] clears the key from it again).
-  @visibleForTesting
-  Future<void> Function(String text) clipboardWrite = (t) => Clipboard.setData(ClipboardData(text: t));
-  @visibleForTesting
-  Future<String?> Function() clipboardRead = () async => (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+  NudgePlatform get nudges => deps.nudges;
 
   /// How long the copied wallet key stays on the clipboard.
   static const keyClipboardLife = Duration(seconds: 60);
@@ -385,28 +323,17 @@ class WalletController extends ChangeNotifier {
   bool _keyPromptPending = false;
 
   /// The phone's calendars (Plan › Calendars); [NoCalendars] in tests and on desktop and web.
-  final CalendarSource calendarSource;
+  CalendarSource get calendarSource => deps.calendars;
 
   /// The Android home-screen widget and launcher shortcut (P13); [NoHomeWidget] in tests, on desktop and on the web. See controller_home.dart.
-  final HomeWidget homeWidget;
-
-  /// Downloads the text of an `.ics` link; tests replace it.
-  @visibleForTesting
-  Future<String> Function(Uri url) icsFetcher = fetchIcs;
+  HomeWidget get homeWidget => deps.homeWidget;
 
   /// Device-local calendar state (events read, permission, errors); see controller_future.dart.
   final CalendarState cal = CalendarState();
 
   /// The camera, picture reading, PDF pages and Share intent of this device (bills); [BillInputs.none] in tests and off Android.
-  final BillInputs billInputs;
+  BillInputs get billInputs => deps.billInputs;
 
-  /// Reads a PDF's text layer and the bill in it: off the UI isolate on native (pdf_parse.dart); tests swap it.
-  @visibleForTesting
-  PdfParser pdfParser = parsePdf;
-
-  /// Replaces the category suggestion for a bill (tests); null = the real one.
-  @visibleForTesting
-  String? Function(Bill b)? billCategorySuggester;
   StreamSubscription<List<SharedFile>>? _shareSub;
 
   // Home-screen widget and shortcut (P13); the methods are in controller_home.dart.
@@ -419,21 +346,7 @@ class WalletController extends ChangeNotifier {
   /// True after the system refused the notification permission when the switch was turned on (Plan says how to allow it).
   bool nudgesDenied = false;
 
-  WalletController._(this.repo, this.key,
-      {DateTime Function()? clock,
-      NudgePlatform? nudges,
-      CalendarSource? calendars,
-      HomeWidget? homeWidget,
-      BillInputs? billInputs,
-      WalletDb? db,
-      this.locked = false,
-      this.inUseElsewhere = false})
-      : _db = db,
-        _clock = clock ?? DateTime.now,
-        nudges = nudges ?? const NoNudges(),
-        calendarSource = calendars ?? const NoCalendars(),
-        homeWidget = homeWidget ?? const NoHomeWidget(),
-        billInputs = billInputs ?? const BillInputs.none() {
+  WalletController._(this.repo, this.key, {required this.deps, WalletDb? db, this.locked = false, this.inUseElsewhere = false}) : _db = db {
     relayUrl = _parseRelay(repo.localValue('relayUrl'));
     _applyNumberStyle();
   }
@@ -442,38 +355,29 @@ class WalletController extends ChangeNotifier {
   /// (onboarding, web locked) the controller runs on an in-memory placeholder; [createWallet], [joinWallet] and [unlock] open
   /// the file database later. A database file the key does not open stays untouched ([hasUnopenedDb]). Logs each startup phase as
   /// `app.start`. If another browser tab has the wallet open ([claim] throws [WalletInUse]), nothing is opened or written and
-  /// [inUseElsewhere] is true. The other parameters are for tests.
+  /// [inUseElsewhere] is true. [deps] and [claim] are for tests.
   static Future<WalletController> load({
-    Future<WalletDb> Function(Uint8List dbKey, {String? deviceId}) opener = openWalletDb,
-    Future<String?> Function() deviceIdReader = KeyStore.readDeviceId,
-    Future<void> Function(String id) deviceIdWriter = KeyStore.writeDeviceId,
-    Future<bool> Function() exists = walletDbExists,
-    Future<void> Function(String stamp) setAside = setAsideWalletDb,
-    Future<bool> Function() isPlaintext = walletDbIsPlaintext,
+    WalletControllerDeps? deps,
     Future<void> Function() claim = claimWalletDb,
-    Future<VaultKey?> Function() keyReader = KeyStore.read,
-    Future<String?> Function() joinMarkerReader = KeyStore.readJoinMarker,
-    Future<void> Function() joinMarkerClearer = KeyStore.clearJoinMarker,
-    bool Function()? isLocked,
-    DateTime Function()? clock,
   }) async {
+    final d = deps ?? WalletControllerDeps.platform();
     var sw = Stopwatch()..start();
     try {
       await claim();
     } on WalletInUse {
       logEvent(_log, Level.WARNING, 'app.start', {'phase': 'db', 'inUse': true});
-      return WalletController._(WalletRepo.inMemory(), null, inUseElsewhere: true);
+      return WalletController._(WalletRepo.inMemory(), null, deps: d, inUseElsewhere: true);
     }
 
     VaultKey? key;
     try {
-      key = await keyReader();
+      key = await d.keyReader();
     } catch (e, st) {
       // The app then shows onboarding; the error says why the stored key could not be read.
       logError(_key, 'key.readFailed', e, st, level: Level.SEVERE);
       key = null;
     }
-    final locked = key == null && (isLocked ?? () => KeyStore.isLocked)();
+    final locked = key == null && d.isLocked();
     logEvent(_log, Level.INFO, 'app.start', {'phase': 'key', 'ms': sw.elapsedMilliseconds, 'found': key != null});
 
     sw = Stopwatch()..start();
@@ -485,7 +389,7 @@ class WalletController extends ChangeNotifier {
     var finishedJoin = false;
     if (key != null) {
       try {
-        final raw = await joinMarkerReader();
+        final raw = await d.joinMarkerReader();
         if (raw != null && raw.trim().isNotEmpty) marker = Map<String, Object?>.from(jsonDecode(raw) as Map);
       } catch (e, st) {
         logError(_log, 'join.markerReadFailed', e, st);
@@ -494,22 +398,22 @@ class WalletController extends ChangeNotifier {
     final markerId = marker?['id'] as String?;
     if (key != null) {
       try {
-        if (marker != null && !await exists()) {
-          db = await _openWithId(opener, key, deviceIdReader, deviceIdWriter, fresh: true, useId: markerId);
+        if (marker != null && !await d.dbExists()) {
+          db = await _openWithId(d.dbOpener, key, d.deviceIdReader, d.deviceIdWriter, fresh: true, useId: markerId);
           finishedJoin = true;
         } else {
-          db = await _openWithId(opener, key, deviceIdReader, deviceIdWriter);
+          db = await _openWithId(d.dbOpener, key, d.deviceIdReader, d.deviceIdWriter);
         }
       } on WalletInUse {
         logEvent(_log, Level.WARNING, 'app.start', {'phase': 'db', 'inUse': true});
-        return WalletController._(WalletRepo.inMemory(), null, inUseElsewhere: true);
+        return WalletController._(WalletRepo.inMemory(), null, deps: d, inUseElsewhere: true);
       } on WalletDbKeyException {
         var finished = false;
         if (marker != null) {
           // The new key was written but the old file was never moved: move it now and open the new wallet.
           try {
-            await setAside(isoDate((clock ?? DateTime.now)()));
-            db = await _openWithId(opener, key, deviceIdReader, deviceIdWriter, fresh: true, useId: markerId);
+            await d.dbSetAside(isoDate(d.clock()));
+            db = await _openWithId(d.dbOpener, key, d.deviceIdReader, d.deviceIdWriter, fresh: true, useId: markerId);
             finished = finishedJoin = true;
           } catch (e, st) {
             logError(_log, 'join.resumeFailed', e, st, level: Level.SEVERE);
@@ -523,22 +427,14 @@ class WalletController extends ChangeNotifier {
         }
       }
     } else if (!locked) {
-      unopened = await exists();
+      unopened = await d.dbExists();
     }
     logEvent(_log, Level.INFO, 'app.start', {'phase': 'db', 'ms': sw.elapsedMilliseconds, 'opened': db != null, 'unopened': unopened});
 
     sw = Stopwatch()..start();
-    final c = WalletController._(db?.repo ?? WalletRepo.inMemory(), key,
-        clock: clock,
-        nudges: defaultNudgePlatform(),
-        calendars: defaultCalendarSource(),
-        homeWidget: defaultHomeWidget(),
-        billInputs: defaultBillInputs(),
-        db: db,
-        locked: locked);
+    final c = WalletController._(db?.repo ?? WalletRepo.inMemory(), key, deps: d, db: db, locked: locked);
     c._dbPending = db == null;
     c.hasUnopenedDb = unopened;
-    c.joinMarkerClearer = joinMarkerClearer;
     if (marker != null && db != null) {
       // Join finished from the marker (or already finished before the marker was cleared): the relay it carried, then clear it.
       final relay = marker['relay'] as String?;
@@ -552,12 +448,6 @@ class WalletController extends ChangeNotifier {
       }
       await c._clearJoinMarker();
     }
-    c.dbOpener = opener;
-    c.deviceIdReader = deviceIdReader;
-    c.deviceIdWriter = deviceIdWriter;
-    c.dbExists = exists;
-    c.dbSetAside = setAside;
-    c.dbIsPlaintext = isPlaintext;
     c.reload();
     logEvent(_log, Level.INFO, 'app.start',
         {'phase': 'reload', 'ms': sw.elapsedMilliseconds, 'tx': c.wholeTxs.length, 'relay': c.relayUrl != null, 'logLevel': c.logLevel});
@@ -630,7 +520,7 @@ class WalletController extends ChangeNotifier {
   }
 
   Future<void> _setAsideUnopened() async {
-    await dbSetAside(isoDate(_clock()));
+    await deps.dbSetAside(isoDate(_clock()));
     hasUnopenedDb = false;
     logEvent(_log, Level.WARNING, 'db.setAside');
   }
@@ -640,7 +530,7 @@ class WalletController extends ChangeNotifier {
   /// file is set aside without trying [k]. With [asideOnMismatch] false a [WalletDbKeyException] is thrown instead (unlock).
   Future<void> _openFileDb(VaultKey k, {bool newWallet = false, bool asideOnMismatch = true, bool freshId = false}) async {
     if (newWallet && hasUnopenedDb) await _setAsideUnopened();
-    Future<WalletDb> open() => _openWithId(dbOpener, k, deviceIdReader, deviceIdWriter, fresh: freshId);
+    Future<WalletDb> open() => _openWithId(deps.dbOpener, k, deps.deviceIdReader, deps.deviceIdWriter, fresh: freshId);
     WalletDb db;
     try {
       db = await open();
@@ -657,6 +547,7 @@ class WalletController extends ChangeNotifier {
   @visibleForTesting
   factory WalletController.forTest(WalletRepo repo,
           {VaultKey? key,
+          WalletControllerDeps? deps,
           DateTime Function()? clock,
           NudgePlatform? nudges,
           CalendarSource? calendars,
@@ -665,7 +556,15 @@ class WalletController extends ChangeNotifier {
           WalletDb? db,
           bool locked = false}) =>
       WalletController._(repo, key,
-          clock: clock, nudges: nudges, calendars: calendars, homeWidget: homeWidget, billInputs: billInputs, db: db, locked: locked)
+          deps: (deps ??
+                  WalletControllerDeps.platform(
+                      nudges: const NoNudges(),
+                      calendars: const NoCalendars(),
+                      homeWidget: const NoHomeWidget(),
+                      billInputs: const BillInputs.none()))
+              .copyWith(clock: clock, nudges: nudges, calendars: calendars, homeWidget: homeWidget, billInputs: billInputs),
+          db: db,
+          locked: locked)
         ..reload();
 
   /// The saved monthly budgets per category (cents).
@@ -699,6 +598,8 @@ class WalletController extends ChangeNotifier {
   void notifyListeners() {
     numberStyle = _numberStyle; // before the screens rebuild; read from the repo only on load, reload and change
     super.notifyListeners();
+    sync.flush(); // the sub-states tell their own listeners after the controller's, never the other way round
+    cal.flush();
     final db = _db;
     if (db == null || !db.persists || (_persistTimer?.isActive ?? false)) return;
     _persistTimer = Timer(const Duration(milliseconds: 800), () => unawaited(persistNow()));
@@ -763,7 +664,7 @@ class WalletController extends ChangeNotifier {
   }
 
   /// [_cached] for extensions in other files (the insights API): the value is kept until the data or the day changes.
-  T memo<T>(String key, T Function() compute) => _cached(key, compute);
+  T memo<T>(MemoKey key, T Function() compute) => _cached(key, compute);
 
   final Map<String, InsightRange> _insightRanges = {};
 
@@ -771,7 +672,7 @@ class WalletController extends ChangeNotifier {
   InsightRange insightRange(String id) => _insightRanges.putIfAbsent(id, () => InsightRange(this, id));
 
   /// Derived values are computed once per [dataVersion] and day, however often a screen asks (every build, every tab).
-  T _cached<T>(String key, T Function() compute) {
+  T _cached<T>(MemoKey key, T Function() compute) {
     final day = today();
     if (day != _memoDay) {
       _memo.clear();
@@ -785,7 +686,7 @@ class WalletController extends ChangeNotifier {
   }
 
   /// This month's Food delivery orders: how many, and the total spent (positive cents).
-  (int, int) get deliveries => _cached('deliveries', () {
+  (int, int) get deliveries => _cached(const MemoKey('deliveries'), () {
         final month = monthOf(today());
         final xs = txs.where((t) =>
             categoryTable.topLevel(t.category) == 'Food delivery' && t.tx.currency == currency && monthOf(t.date) == month && t.amount < 0);
@@ -794,7 +695,7 @@ class WalletController extends ChangeNotifier {
 
   /// How many Food delivery orders the last 90 days hold (today and the 89 days before it; the wallet's currency only). Today shows its delivery-hour panel only when this is
   /// above 0, so a wallet that never orders in never sees it. Cached per data version and day.
-  int get deliveryOrders90 => _cached('deliveryOrders90', () {
+  int get deliveryOrders90 => _cached(const MemoKey('deliveryOrders90'), () {
         final from = addDays(today(), -89);
         return txs
             .where((t) =>
@@ -808,7 +709,7 @@ class WalletController extends ChangeNotifier {
       });
 
   /// The sum of every goal's target (cents).
-  int get goalTargetTotal => _cached('goalTargetTotal', () => goals.fold<int>(0, (a, g) => a + g.target));
+  int get goalTargetTotal => _cached(const MemoKey('goalTargetTotal'), () => goals.fold<int>(0, (a, g) => a + g.target));
 
   /// The sum of the prices of wishes still cooling off (cents). Not cached: it depends on the clock ([now], the injected one in tests).
   int get waitingTotal {
@@ -817,7 +718,7 @@ class WalletController extends ChangeNotifier {
   }
 
   /// The date of the newest transaction per bank source (`pbz`, `revolut`); a source without rows is missing.
-  Map<String, String> get latestBySource => _cached('latestBySource', () {
+  Map<String, String> get latestBySource => _cached(const MemoKey('latestBySource'), () {
         final out = <String, String>{};
         for (final t in wholeTxs) {
           out.putIfAbsent(t.tx.source, () => t.date); // txs are newest first
@@ -826,10 +727,10 @@ class WalletController extends ChangeNotifier {
         return out;
       });
 
-  List<String> get _paydays => _cached('paydays', () => salaryPaydays(wholeTxs, today(), currency: currency));
+  List<String> get _paydays => _cached(const MemoKey('paydays'), () => salaryPaydays(wholeTxs, today(), currency: currency));
 
   /// The period start: saved value, or the latest payday (its first salary payment), or today.
-  WalletSettings get effectiveSettings => _cached('effective', () {
+  WalletSettings get effectiveSettings => _cached(const MemoKey('effective'), () {
         if (settings.periodStart != null) return settings;
         final m = settings.toMap()..['periodStart'] = _paydays.lastOrNull ?? today();
         return WalletSettings.fromMap(m, table: categoryTable);
@@ -840,7 +741,7 @@ class WalletController extends ChangeNotifier {
 
   /// The budget of the running pay period. Confirmed recurring bills are reserved in it (`reservedBills`, `dueBills`).
   PeriodBudget period() => _cached(
-      'period',
+      const MemoKey('period'),
       () => timed(
           'wc.period',
           () => computePeriod(txs, effectiveSettings, goals, today(),
@@ -848,7 +749,7 @@ class WalletController extends ChangeNotifier {
           warnMs: 50));
 
   /// Saved or lost per pay period (salary to salary), oldest first; the last one is still running.
-  List<PeriodSummary> payPeriods({int count = 12}) => _cached('payPeriods$count',
+  List<PeriodSummary> payPeriods({int count = 12}) => _cached(MemoKey('payPeriods', count),
       () => timed('wc.payPeriods', () => periodSummaries(txs, settings, today(), count: count), fields: {'count': count}, warnMs: 50));
 
   /// What the Spending tab shows for month [sel] (`YYYY-MM`, default: this month). Cached per month until the data changes.
@@ -857,11 +758,11 @@ class WalletController extends ChangeNotifier {
     final months = monthsEnding(current, 13);
     final month = sel != null && months.contains(sel) ? sel : current;
     return _cached(
-        'spending$month',
+        MemoKey('spending', month),
         () => timed('spending.derive', () {
               final sums = [
                 for (final m in months)
-                  _cached('monthSummary$m',
+                  _cached(MemoKey('monthSummary', m),
                       () => timed('wc.monthSummary', () => monthSummary(txs, m, currency: currency), fields: {'month': m}))
               ];
               final selSum = sums.firstWhere((s) => s.month == month);
@@ -902,19 +803,19 @@ class WalletController extends ChangeNotifier {
 
   /// Budget against spending per category for [month] (`YYYY-MM`). Cached per month until the data changes.
   BudgetVsActual budgetVsActual(String month) => _cached(
-      'budget$month',
+      MemoKey('budget', month),
       () => timed(
           'wc.budgetVsActual', () => _computeBudget(txs, month, categoryBudgets, today: today(), currency: currency, table: categoryTable),
           fields: {'month': month, 'tx': txs.length}, warnMs: 50));
 
   /// Budgets worked out from the 6 months before [month], per category (cents, rounded up to 10).
   Map<String, int> suggestedBudgets(String month) => _cached(
-      'suggest$month',
+      MemoKey('suggest', month),
       () => timed('wc.suggestBudgets', () => suggestBudgets(txs, month, currency: currency, table: categoryTable),
           fields: {'month': month}, warnMs: 50));
 
   /// The budgeted category with the least money left this month, or null when nothing is budgeted.
-  CategoryBudgetLine? tightestBudget() => _cached('tightest', () {
+  CategoryBudgetLine? tightestBudget() => _cached(const MemoKey('tightest'), () {
         CategoryBudgetLine? best;
         for (final l in budgetVsActual(monthOf(today())).lines) {
           final r = l.remaining;
@@ -953,7 +854,7 @@ class WalletController extends ChangeNotifier {
   /// Spending rows of the last 7 days without a category the owner set: the rows the review's "Confirm categories" step
   /// counts (same rule as core's `reviewState`). "Looks right" and the category sheet pin the category, so the row leaves
   /// the list. Cached per data version and day.
-  List<CategorizedTx> reviewRows() => _cached('reviewRows', () {
+  List<CategorizedTx> reviewRows() => _cached(const MemoKey('reviewRows'), () {
         final to = today(), from = addDays(to, -7);
         return [
           for (final t in wholeTxs)
@@ -979,7 +880,7 @@ class WalletController extends ChangeNotifier {
 
   /// This month's budgeted categories that are over budget or spending faster than the month passes.
   List<CategoryBudgetLine> paceRows() => _cached(
-      'paceRows',
+      const MemoKey('paceRows'),
       () => [
             for (final l in budgetVsActual(monthOf(today())).lines)
               if (l.over || (l.pace ?? 0) > 1.0) l
@@ -993,7 +894,7 @@ class WalletController extends ChangeNotifier {
 
   /// Is the weekly review due, its steps with counts, and the streak. Cached per data version and day.
   ReviewState reviewState() => _cached(
-      'reviewState',
+      const MemoKey('reviewState'),
       () => reviewStateOf(txs, settings, wish, categoryBudgets,
           today: today(), nowMillis: _clock().millisecondsSinceEpoch, table: categoryTable));
 
@@ -1018,11 +919,11 @@ class WalletController extends ChangeNotifier {
 
   /// Recurring bills worth showing: candidates and confirmed (dismissed ones stay hidden). Cached per data version.
   /// P9: this list holds the recurring **incomes** too; anything that treats a row as a bill reads [expectedBills] instead.
-  List<RecurringBill> recurringBills() => _cached('recurringBills', repo.recurringBills);
+  List<RecurringBill> recurringBills() => _cached(const MemoKey('recurringBills'), repo.recurringBills);
 
   /// The recurring bills only (no incomes): candidates and confirmed. Cached per data version.
   List<RecurringBill> expectedBills() => _cached(
-      'expectedBills',
+      const MemoKey('expectedBills'),
       () => [
             for (final b in recurringBills())
               if (!b.isIncome) b
@@ -1030,7 +931,7 @@ class WalletController extends ChangeNotifier {
 
   /// The recurring incomes only (P9): candidates and confirmed. Cached per data version.
   List<RecurringBill> expectedIncomes() => _cached(
-      'expectedIncomes',
+      const MemoKey('expectedIncomes'),
       () => [
             for (final b in recurringBills())
               if (b.isIncome) b
@@ -1051,7 +952,7 @@ class WalletController extends ChangeNotifier {
     final id = b.lastPaidTx;
     if (id == null) return false;
     // One id -> date map per data version: the Bills tab asks once per bill on every build.
-    final dates = memo<Map<String, String>>('bills.txDates', () {
+    final dates = memo<Map<String, String>>(const MemoKey('bills.txDates'), () {
       final m = <String, String>{};
       for (final t in wholeTxs) {
         m.putIfAbsent(t.tx.id, () => t.date);
@@ -1144,7 +1045,7 @@ class WalletController extends ChangeNotifier {
     // The older file goes aside before the key is written: a crash in between must not leave a key next to a plaintext file
     // (the next start would convert that file under the new wallet's key). A crash after the key only costs an empty database.
     if (_dbPending && hasUnopenedDb) await _setAsideUnopened();
-    await keyWriter(k, passphrase: passphrase);
+    await deps.keyWriter(k, passphrase: passphrase);
     if (_dbPending) await _openFileDb(k, newWallet: true, freshId: true);
     key = k;
     _keyPromptPending = true; // HomeShell asks the owner to save the key before the first Today
@@ -1164,8 +1065,8 @@ class WalletController extends ChangeNotifier {
     if (relay != null && r == null) throw const FormatException('Not a relay address');
     // No key was stored but an unkeyed (plaintext) file exists: it belongs to no wallet we can name, and opening it with this key
     // would convert it and merge its data into the joined wallet. Set it aside (before the key is written, as in create).
-    if (_dbPending && hasUnopenedDb && await dbIsPlaintext()) await _setAsideUnopened();
-    if (!keyWritten) await keyWriter(k, passphrase: passphrase);
+    if (_dbPending && hasUnopenedDb && await deps.dbIsPlaintext()) await _setAsideUnopened();
+    if (!keyWritten) await deps.keyWriter(k, passphrase: passphrase);
     if (_dbPending) await _openFileDb(k, freshId: true);
     key = k;
     repo.setLocalValue('keyBackupConfirmed', today()); // they typed the key in, so they have it
@@ -1243,15 +1144,15 @@ class WalletController extends ChangeNotifier {
     final oldKey = key!;
     String? slot;
     try {
-      slot = await keyAsideWriter(stamp, oldKey);
-      await joinMarkerWriter(_joinMarkerText(relay));
-      await keyWriter(newKey, passphrase: passphrase);
+      slot = await deps.keyAsideWriter(stamp, oldKey);
+      await deps.joinMarkerWriter(_joinMarkerText(relay));
+      await deps.keyWriter(newKey, passphrase: passphrase);
     } catch (e, st) {
       logError(_log, 'db.setAside.keyFailed', e, st, level: Level.SEVERE);
       if (slot != null) {
         // Put the old key back first; only when that worked is the slot (and the marker) given up.
         try {
-          await keyWriter(oldKey);
+          await deps.keyWriter(oldKey);
           await _removeAsideKey(slot);
           await _clearJoinMarker();
         } catch (e2, st2) {
@@ -1268,13 +1169,13 @@ class WalletController extends ChangeNotifier {
     _dbPending = true;
     old.close();
     try {
-      await dbSetAside(stamp);
+      await deps.dbSetAside(stamp);
     } catch (e, st) {
       logError(_log, 'db.setAside.failed', e, st, level: Level.SEVERE);
       try {
         // A partial move (wallet.db gone) is not "reopened" as a new empty wallet.db.
-        if (!await dbExists()) throw StateError('wallet.db is gone after a partial set-aside');
-        await keyWriter(oldKey);
+        if (!await deps.dbExists()) throw StateError('wallet.db is gone after a partial set-aside');
+        await deps.keyWriter(oldKey);
         await _openFileDb(oldKey, asideOnMismatch: false);
         await _removeAsideKey(slot);
         await _clearJoinMarker();
@@ -1285,7 +1186,7 @@ class WalletController extends ChangeNotifier {
         hasUnopenedDb = true;
         key = null;
         try {
-          await keyWriter(oldKey);
+          await deps.keyWriter(oldKey);
         } catch (e3, st3) {
           logError(_log, 'db.keyRestoreFailed', e3, st3, level: Level.SEVERE);
         }
@@ -1307,7 +1208,7 @@ class WalletController extends ChangeNotifier {
 
   Future<void> _clearJoinMarker() async {
     try {
-      await joinMarkerClearer();
+      await deps.joinMarkerClearer();
     } catch (e, st) {
       logError(_log, 'join.markerClearFailed', e, st);
     }
@@ -1315,7 +1216,7 @@ class WalletController extends ChangeNotifier {
 
   Future<void> _removeAsideKey(String slot) async {
     try {
-      await keyAsideRemover(slot);
+      await deps.keyAsideRemover(slot);
     } catch (e, st) {
       logError(_log, 'db.setAside.slotFailed', e, st);
     }
@@ -1324,18 +1225,7 @@ class WalletController extends ChangeNotifier {
   /// Nothing of the old wallet's sync status, devices or errors may show for the next wallet (also when it uses the same relay).
   void _resetSyncStatus() {
     relayUrl = null;
-    lastSync = null;
-    syncError = null;
-    syncCaughtUp = false;
-    syncWaiting = const [];
-    syncBlobsWaiting = 0;
-    syncBlobsUnsupported = false;
-    syncDevices = const [];
-    syncBadFiles = 0;
-    syncRelayInstance = null;
-    syncRelayBytes = null;
-    syncRelayMaxBytes = null;
-    syncProblems = const [];
+    sync.reset();
     _relayFollowUp = false;
   }
 
@@ -1398,7 +1288,7 @@ class WalletController extends ChangeNotifier {
   /// Puts [text] on the clipboard and empties it again after [keyClipboardLife] (the rules of [copyKeyBackup]); a later copy
   /// replaces the pending clear. Used for the wallet key and the pay-sheet fields.
   Future<void> copySensitive(String t) async {
-    await clipboardWrite(t);
+    await deps.clipboardWrite(t);
     _clipboardTimer?.cancel();
     _resumeClear?.dispose();
     _resumeClear = null;
@@ -1431,13 +1321,13 @@ class WalletController extends ChangeNotifier {
       String? now;
       var readable = true;
       try {
-        now = await clipboardRead();
+        now = await deps.clipboardRead();
       } catch (e, st) {
         readable = false;
         logError(_key, 'key.backup.clipboard', e, st, fields: {'type': e.runtimeType.toString()});
       }
       if (readable && now != null && now != t) return;
-      await clipboardWrite('');
+      await deps.clipboardWrite('');
     } catch (e, st) {
       logError(_key, 'key.backup.clipboard', e, st, fields: {'type': e.runtimeType.toString()});
     }
@@ -1460,7 +1350,7 @@ class WalletController extends ChangeNotifier {
 
   /// Web: opens the key stored in this browser with [passphrase]. Throws [WrongPassphrase]; the typed text is never logged.
   Future<void> unlock(String passphrase) async {
-    final k = await unlocker(passphrase);
+    final k = await deps.unlocker(passphrase);
     if (_dbPending) {
       try {
         await _openFileDb(k, asideOnMismatch: false);
@@ -1503,7 +1393,7 @@ class WalletController extends ChangeNotifier {
       failureStack = st;
     }
     try {
-      await keyForgetter();
+      await deps.keyForgetter();
     } catch (e, st) {
       logError(_log, 'wallet.forget.keyFailed', e, st, level: Level.SEVERE);
       if (failure == null) {
@@ -1519,13 +1409,7 @@ class WalletController extends ChangeNotifier {
     _dbPending = true;
     hasUnopenedDb = false;
     relayUrl = null;
-    lastSync = null;
-    syncError = null;
-    syncCaughtUp = false;
-    syncWaiting = const [];
-    syncBlobsWaiting = 0;
-    syncBlobsUnsupported = false;
-    syncDevices = const [];
+    sync.reset();
     lastImport = const [];
     reload();
     _startAutoSync();
@@ -1587,16 +1471,7 @@ class WalletController extends ChangeNotifier {
     repo.setLocalValue('relayUrl', u?.toString());
     relayUrl = u;
     // What the screen shows belongs to the old relay: clear it at once (a run in flight for the old relay is dropped below).
-    syncError = null;
-    syncCaughtUp = false;
-    syncWaiting = const [];
-    syncBlobsWaiting = 0;
-    syncBlobsUnsupported = false;
-    syncDevices = const [];
-    syncRelayInstance = null;
-    syncRelayBytes = null;
-    syncRelayMaxBytes = null;
-    syncProblems = const [];
+    sync.reset(keepLastSync: true);
     repo.setLocalValue(_noticeRelayChanged, null);
     repo.setLocalValue(_noticeIdInUse, null);
     _relayFollowUp = u != null && syncing; // a run is going: exactly one follow-up for the new address when it ends
@@ -1609,7 +1484,7 @@ class WalletController extends ChangeNotifier {
   /// (`unreachable`, `newerApi`, …). Nothing about the address is logged.
   Future<void> testRelay(Uri url) async {
     try {
-      await healthCheck(url);
+      await deps.healthCheck(url);
       logEvent(_sync, Level.INFO, 'sync.health', {'ok': true});
     } on TransportException catch (e) {
       logEvent(_sync, Level.INFO, 'sync.health', {'ok': false, 'failure': e.failure.name});
@@ -1633,7 +1508,7 @@ class WalletController extends ChangeNotifier {
     if (!quiet) notifyListeners();
     final dataBefore = _dataMark();
     try {
-      final r = await timedAsync('sync.run', () => syncRunner(relay, k, repo), fields: {'trigger': trigger}, warnMs: 3000);
+      final r = await timedAsync('sync.run', () => deps.syncRunner(relay, k, repo), fields: {'trigger': trigger}, warnMs: 3000);
       if (relay != relayUrl) {
         // The address changed during this run: its status belongs to the old relay. Keep the data it applied, show nothing of it.
         logEvent(_sync, Level.INFO, 'sync.stale', {'trigger': trigger, 'sent': r.sent, 'received': r.received});
@@ -1701,7 +1576,7 @@ class WalletController extends ChangeNotifier {
 
   // ---------- backup, export, search (see app/CLAUDE.md, Polish) ----------
   /// True while the wallet holds nothing (no transactions, goals or wishes): the only time a backup can be restored.
-  bool get walletIsEmpty => _cached('walletIsEmpty', () => repo.isEmpty);
+  bool get walletIsEmpty => _cached(const MemoKey('walletIsEmpty'), () => repo.isEmpty);
 
   /// A backup of the wallet as bytes for the save dialog, with its file name (never log it). Throws [StateError] without a key.
   /// [blobs] = the bill files inside it (for the toast).
@@ -1713,7 +1588,7 @@ class WalletController extends ChangeNotifier {
     }
     final sw = Stopwatch()..start();
     try {
-      final made = await backupBytesWriter(repo, k);
+      final made = await deps.backupBytesWriter(repo, k);
       logEvent(_backupLog, Level.INFO, 'backup.done', {
         'ms': sw.elapsedMilliseconds,
         'tx': wholeTxs.length,
@@ -1741,7 +1616,8 @@ class WalletController extends ChangeNotifier {
     final sw = Stopwatch()..start();
     try {
       final opener = otherKey == null ? k : await VaultKey.parse(otherKey);
-      final rows = await backupBytesReader(repo, bytes, opener);
+      final reader = deps.backupBytesReader ?? (r, b, o) => _restoreBackupBytesFn(r, b, o, walletKey: k); // always the wallet's own key too
+      final rows = await reader(repo, bytes, opener);
       logEvent(_backupLog, Level.INFO, 'backup.restored',
           {'ms': sw.elapsedMilliseconds, 'rows': rows, 'bytes': bytes.length, 'otherKey': otherKey != null});
       _changed();
@@ -1762,7 +1638,7 @@ class WalletController extends ChangeNotifier {
     final sw = Stopwatch()..start();
     try {
       final opener = otherKey == null ? k : await VaultKey.parse(otherKey);
-      final r = await backupMerger(repo, bytes, opener, dryRun: dryRun, walletKey: k);
+      final r = await deps.backupMerger(repo, bytes, opener, dryRun: dryRun, walletKey: k);
       logEvent(_backupLog, Level.INFO, dryRun ? 'backup.mergePreview' : 'backup.merged', {
         'ms': sw.elapsedMilliseconds,
         'ops': r.ops,
@@ -1810,7 +1686,7 @@ class WalletController extends ChangeNotifier {
   static Uint8List _csvBytes(String csv) => Uint8List.fromList([0xEF, 0xBB, 0xBF, ...utf8.encode(csv)]);
 
   /// Everything that matches [query] (transactions, goals, wishlist, expected bills). Cached per data version. Logs counts only.
-  SearchResult search(String query) => _cached('search$query', () {
+  SearchResult search(String query) => _cached(MemoKey('search', query), () {
         final r = searchAll(query,
             txs: txs,
             goals: goals,
@@ -1914,6 +1790,8 @@ class WalletController extends ChangeNotifier {
     _shareResults.close();
     _shortcutAdds.close();
     repo.close();
+    sync.dispose();
+    cal.dispose();
     super.dispose();
   }
 

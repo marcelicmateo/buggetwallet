@@ -15,7 +15,9 @@ import 'package:budget_wallet/src/nudges.dart';
 import 'package:budget_wallet/src/screens/calendars_panel.dart';
 import 'package:budget_wallet/src/screens/export_panel.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/screens/upcoming.dart';
+import 'package:budget_wallet/src/screens/upcoming_view.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +26,7 @@ import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/layout.dart';
 import 'support/plan_page.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 WalletController fw({FakeNudges? nudges, FakeCalendars? calendars}) {
@@ -89,7 +92,7 @@ Future<WalletController> withCalendar({FakeNudges? nudges}) async {
 }
 
 Widget todayOf(WalletController wc) =>
-    Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser()));
+    Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser()));
 
 String eur(String s) => s.replaceAll(' €', '\u00A0€');
 
@@ -257,7 +260,7 @@ void main() {
     test('an .ics link is fetched, kept, and read again; when the refresh fails the saved copy is used and the entry says so', () async {
       final wc = fw();
       var fail = false;
-      wc.icsFetcher = (u) async {
+      wc.seams.icsFetcher = (u) async {
         if (fail) throw const IcsFetchException('The link took too long to answer.');
         return fakeIcs([('u1', '2026-10-25', 'Car service 120 €')]);
       };
@@ -274,14 +277,14 @@ void main() {
     test('bad links are refused before any request', () async {
       final wc = fw();
       var asked = 0;
-      wc.icsFetcher = (u) async {
+      wc.seams.icsFetcher = (u) async {
         asked++;
         return '';
       };
       expect(await wc.addIcsLink('ftp://example.org/x.ics'), contains('http'));
       expect(await wc.addIcsLink('not a link'), isNotNull);
       expect(asked, 0);
-      wc.icsFetcher = (u) async => throw const IcsFetchException("Couldn't reach the link. Check the network.");
+      wc.seams.icsFetcher = (u) async => throw const IcsFetchException("Couldn't reach the link. Check the network.");
       expect(await wc.addIcsLink('https://example.org/x.ics'), contains("Couldn't reach"));
       expect(wc.calendarEntries(), isEmpty);
     });
@@ -448,7 +451,7 @@ void main() {
   group('Upcoming', () {
     tw('the grid marks days and the list is ruled with date, title, amount and source', (tester) async {
       final wc = await withCalendar();
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
       expect(find.text('October 2026'), findsOneWidget);
       for (final d in const ['2026-10-23', '2026-10-27', '2026-10-24']) {
         expect(key('day:$d'), findsOneWidget);
@@ -465,7 +468,7 @@ void main() {
 
     tw('tapping a day lists just that day; Show all brings the rest back', (tester) async {
       final wc = fw();
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
       await tester.tap(key('day:2026-10-23'));
       await tester.pump();
       expect(find.text('Car insurance'), findsOneWidget);
@@ -477,7 +480,7 @@ void main() {
 
     tw('Confirm turns a suggestion into a planned cost that counts', (tester) async {
       final wc = await withCalendar();
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
       final confirm = find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('confirm:e:'));
       expect(confirm, findsOneWidget, reason: 'only the suggestion with an amount can be confirmed as is');
       await tester.tap(confirm);
@@ -489,7 +492,7 @@ void main() {
 
     tw('No cost dismisses the suggestion', (tester) async {
       final wc = await withCalendar();
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
       final no = find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('nocost:e:'));
       expect(no, findsNWidgets(2));
       await tester.tap(no.first);
@@ -501,7 +504,7 @@ void main() {
 
     tw('Change on a suggestion without an amount asks for one, then adds it to the plan', (tester) async {
       final wc = await withCalendar();
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
       final hair = find.descendant(
           of: find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('up:e:')).last,
           matching: find.text('Add amount'));
@@ -518,7 +521,7 @@ void main() {
 
     tw('+ Planned cost: needs a name and an amount, then the cost is in the list', (tester) async {
       final wc = fw();
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
       await tester.tap(key('addPlanned'));
       await tester.pumpAndSettle();
       await tester.tap(key('plannedSave'));
@@ -534,7 +537,7 @@ void main() {
 
     tw('the entry sheet: Paid lists the matching payments and picking one takes the cost out', (tester) async {
       final wc = fw();
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
       await tester.tap(key('up:p:${wc.plannedOpen().first.id}'));
       await tester.pumpAndSettle();
       await tester.tap(key('entryPaid'));
@@ -550,7 +553,7 @@ void main() {
 
     tw('Paid with no matching payment says so', (tester) async {
       final wc = fw();
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
       await tester.tap(key('up:p:${wc.plannedOpen().last.id}'));
       await tester.pumpAndSettle();
       await tester.tap(key('entryPaid'));
@@ -560,7 +563,7 @@ void main() {
 
     tw('Skip and Delete from the entry sheet', (tester) async {
       final wc = fw();
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
       await tester.tap(key('up:p:${wc.plannedOpen().first.id}'));
       await tester.pumpAndSettle();
       await tester.tap(key('entrySkip'));
@@ -576,7 +579,7 @@ void main() {
 
     tw('Change edits the amount', (tester) async {
       final wc = fw();
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
       await tester.tap(key('up:p:${wc.plannedOpen().first.id}'));
       await tester.pumpAndSettle();
       await tester.tap(key('entryEdit'));
@@ -589,7 +592,7 @@ void main() {
 
     tw('the next period link shows the days after payday', (tester) async {
       final wc = fw();
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
       final next = wc.upcomingRange(next: true);
       await tester.tap(key('periodNext'));
       await tester.pump();
@@ -655,7 +658,7 @@ void main() {
 
     tw('a link that cannot be fetched shows the reason', (tester) async {
       final wc = fw();
-      wc.icsFetcher = (u) async => throw const IcsFetchException("Couldn't reach the link. Check the network.");
+      wc.seams.icsFetcher = (u) async => throw const IcsFetchException("Couldn't reach the link. Check the network.");
       await pumpApp(tester, panel(wc, _Chooser()), size: const Size(400, 1600));
       await tester.tap(key('calLink'));
       await tester.pump();
@@ -727,7 +730,7 @@ void main() {
       wc.addPlannedCost(title: 'SecretTitle', date: '2026-10-25', amount: 12345);
       await wc.requestCalendarAccess();
       await wc.setCalendarOn('c1', true);
-      wc.icsFetcher = (u) async => fakeIcs([('u9', '2026-10-25', 'LinkEvent 77 €')]);
+      wc.seams.icsFetcher = (u) async => fakeIcs([('u9', '2026-10-25', 'LinkEvent 77 €')]);
       await wc.addIcsLink('https://secret.example.org/private-token.ics');
       await wc.importIcsFile('private-file-name.ics', bytesOf(fakeIcs([('u1', '2026-10-26', 'FileEvent')])));
       await wc.importIcsFile('bad-name.ics', bytesOf('nope'));
@@ -806,7 +809,7 @@ void main() {
     tw('tapping Confirm on that suggestion passes the category on', (tester) async {
       final wc = await rentWallet();
       final reservedBefore = wc.period().reservedPlanned;
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
       final confirm = find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('confirm:e:'));
       await tester.tap(confirm);
       await tester.pump();
@@ -827,7 +830,7 @@ void main() {
     tw('the change sheet: choosing "No category" really removes the category', (tester) async {
       final wc = fw();
       final id = wc.plannedOpen().firstWhere((p) => p.title == 'Dentist').id;
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
       await tester.ensureVisible(key('up:p:$id'));
       await tester.tap(find.descendant(of: key('up:p:$id'), matching: find.text('Dentist')));
       await tester.pumpAndSettle();
@@ -929,9 +932,9 @@ void main() {
 
       test('a link that fails in a way nobody expected still leaves reading switched off', () async {
         final wc = fw();
-        wc.icsFetcher = (u) async => fakeIcs([('u2', '2026-10-26', 'Link event')]);
+        wc.seams.icsFetcher = (u) async => fakeIcs([('u2', '2026-10-26', 'Link event')]);
         await wc.addIcsLink('https://example.org/a.ics');
-        wc.icsFetcher = (u) async => throw StateError('boom');
+        wc.seams.icsFetcher = (u) async => throw StateError('boom');
         await wc.readCalendars();
         expect(wc.cal.reading, isFalse);
         expect(wc.calendarEntries().single.error, contains('Showing what was saved'));
@@ -963,7 +966,7 @@ void main() {
     tw('a saved http:// link keeps its warning in the list', (tester) async {
       final errors = Errors();
       final wc = fw();
-      wc.icsFetcher = (u) async => fakeIcs([('u2', '2026-10-26', 'Link event')]);
+      wc.seams.icsFetcher = (u) async => fakeIcs([('u2', '2026-10-26', 'Link event')]);
       expect(await wc.addIcsLink('http://example.org/a.ics'), isNull, reason: 'accepted, with a warning');
       expect(wc.calendarEntries().single.insecure, isTrue);
       await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: CalendarsPanel(wc: wc))),
@@ -1011,7 +1014,7 @@ void main() {
       tw('Skip: "Skipped" with Undo; Undo puts the cost back in the plan', (tester) async {
         final wc = fw();
         final id = wc.plannedOpen().firstWhere((p) => p.title == 'Car insurance').id;
-        await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+        await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
         await tester.ensureVisible(key('up:p:$id'));
         await tester.tap(find.descendant(of: key('up:p:$id'), matching: find.text('Car insurance')));
         await tester.pumpAndSettle();
@@ -1029,7 +1032,7 @@ void main() {
         final wc = fw();
         final p = wc.plannedOpen().firstWhere((p) => p.title == 'Car insurance');
         final tx = wc.paidCandidatesFor(p).single.tx;
-        await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+        await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
         await tester.ensureVisible(key('up:p:${p.id}'));
         await tester.tap(find.descendant(of: key('up:p:${p.id}'), matching: find.text('Car insurance')));
         await tester.pumpAndSettle();
@@ -1050,7 +1053,7 @@ void main() {
       tw('Delete has no Undo', (tester) async {
         final wc = fw();
         final id = wc.plannedOpen().firstWhere((p) => p.title == 'Dentist').id;
-        await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1600));
+        await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1600));
         await tester.ensureVisible(key('up:p:$id'));
         await tester.tap(find.descendant(of: key('up:p:$id'), matching: find.text('Dentist')));
         await tester.pumpAndSettle();
@@ -1091,14 +1094,14 @@ void main() {
         final wc = await withCalendar();
         wc.addPlannedCost(
             title: 'A very long synthetic planned cost name that has to wrap on a narrow screen', date: '2026-10-29', amount: 123456);
-        await pumpApp(tester, UpcomingScreen(wc: wc), size: size, textScale: scale);
+        await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: size, textScale: scale);
         await scrollThrough(tester);
         errors.check();
       });
 
       tw('$name: the planned cost sheet and the entry sheet', (tester) async {
         final wc = fw();
-        await pumpApp(tester, UpcomingScreen(wc: wc), size: size, textScale: scale);
+        await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: size, textScale: scale);
         await tester.tap(key('addPlannedTop'));
         await tester.pumpAndSettle();
         expect(key('plannedSave'), findsOneWidget);
@@ -1121,9 +1124,9 @@ void main() {
         final wc = fw(calendars: cals, nudges: FakeNudges());
         await wc.requestCalendarAccess();
         await wc.importIcsFile('a-rather-long-synthetic-calendar-file-name.ics', bytesOf(fakeIcs([('u1', '2026-10-25', 'Car service')])));
-        wc.icsFetcher = (u) async => fakeIcs([('u2', '2026-10-26', 'Link event')]);
+        wc.seams.icsFetcher = (u) async => fakeIcs([('u2', '2026-10-26', 'Link event')]);
         await wc.addIcsLink('https://example.org/a/very/long/path/to/a/calendar.ics');
-        wc.icsFetcher = (u) async => throw const IcsFetchException('The link took too long to answer.');
+        wc.seams.icsFetcher = (u) async => throw const IcsFetchException('The link took too long to answer.');
         await wc.readCalendars();
         await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
         await scrollThrough(tester);

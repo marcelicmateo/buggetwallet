@@ -34,17 +34,65 @@ class CalendarEntry {
 
 /// Device-local calendar state. Events are only ever held in memory here: they are re-read from the phone (or the saved `.ics`
 /// text) at start and resume, and never synced.
-class CalendarState {
-  List<CalendarEvent> events = const [];
-  List<DeviceCalendarInfo> device = const [];
-  bool permission = false;
-  bool denied = false;
-  bool reading = false;
+class CalendarState extends SubState {
+  List<CalendarEvent> _events = const [];
+  List<DeviceCalendarInfo> _device = const [];
+  bool _permission = false;
+  bool _denied = false;
+  bool _reading = false;
+  String? _lastRead;
+  final Map<String, String> _errors = {};
+
+  List<CalendarEvent> get events => _events;
+  set events(List<CalendarEvent> v) {
+    _events = v;
+    touch();
+  }
+
+  List<DeviceCalendarInfo> get device => _device;
+  set device(List<DeviceCalendarInfo> v) {
+    _device = v;
+    touch();
+  }
+
+  bool get permission => _permission;
+  set permission(bool v) {
+    if (v != _permission) touch();
+    _permission = v;
+  }
+
+  bool get denied => _denied;
+  set denied(bool v) {
+    if (v != _denied) touch();
+    _denied = v;
+  }
+
+  bool get reading => _reading;
+  set reading(bool v) {
+    if (v != _reading) touch();
+    _reading = v;
+  }
+
+  String? get lastRead => _lastRead;
+  set lastRead(String? v) {
+    if (v != _lastRead) touch();
+    _lastRead = v;
+  }
+
+  /// A plain message when the last read of a calendar source failed (change it with [setError] / [clearError]).
+  String? errorFor(String id) => _errors[id];
+
+  void setError(String id, String message) {
+    if (_errors[id] != message) touch();
+    _errors[id] = message;
+  }
+
+  void clearError(String id) {
+    if (_errors.remove(id) != null) touch();
+  }
 
   /// How many saved sources the last read could not use (logged when it changes).
   int skippedSources = 0;
-  String? lastRead;
-  final Map<String, String> errors = {};
 
   bool headsUpQueued = false;
 
@@ -68,13 +116,13 @@ extension FutureSpending on WalletController {
   // ---------- planned costs and Upcoming ----------
 
   /// Every planned row, open or closed (the list core needs to tell which calendar events are already stored). Cached.
-  List<PlannedCost> plannedEverything() => _cached('plannedAll', () => repo.plannedCosts(includeClosed: true));
+  List<PlannedCost> plannedEverything() => _cached(const MemoKey('plannedAll'), () => repo.plannedCosts(includeClosed: true));
 
   /// Open planned costs only.
-  List<PlannedCost> plannedOpen() => _cached('plannedOpen', () => repo.plannedCosts());
+  List<PlannedCost> plannedOpen() => _cached(const MemoKey('plannedOpen'), () => repo.plannedCosts());
 
   /// Planned costs, confirmed bills and unconfirmed calendar events from [from] to [to] (inclusive), by date. Cached.
-  List<UpcomingItem> upcomingItems(String from, String to) => _cached('upcoming|$from|$to|${cal.version}',
+  List<UpcomingItem> upcomingItems(String from, String to) => _cached(MemoKey('upcoming', (from, to, cal.version)),
       () => upcoming(planned: plannedEverything(), bills: recurringBills(), events: cal.events, from: from, to: to, billsDb: billsAll()));
 
   /// The dates Upcoming shows: the pay period, or the next one of the same length ([next]). `end` is the last day shown.
@@ -85,14 +133,14 @@ extension FutureSpending on WalletController {
 
   /// "Coming up": exactly the planned costs this period reserves (core's `PeriodBudget.reservedPlannedRows`, summed into
   /// `reservedPlanned`), so the count and total shown are what comes off the spending money. Suggestions and bills are not in it.
-  ({int count, int total}) comingUp() => _cached('comingUp', () {
+  ({int count, int total}) comingUp() => _cached(const MemoKey('comingUp'), () {
         final p = period();
         return (count: p.reservedPlannedRows.length, total: p.reservedPlanned);
       });
 
   /// The bill rows due this period that have no category: listed, not reserved, until the owner picks one (Today says so).
   List<PlannedCost> plannedNeedingCategory() => _cached(
-      'needsCategory',
+      const MemoKey('needsCategory'),
       () => [
             for (final p in period().duePlanned)
               if (p.needsCategory && p.sourceRef != null) p
@@ -193,7 +241,7 @@ extension FutureSpending on WalletController {
   void saveHeadsUp({required int cents, required int days}) => updateSettings({'headsUpCents': cents, 'headsUpDays': days});
 
   /// The big costs within the heads-up days (planned with an amount and confirmed bills; suggestions never). Cached.
-  List<HeadsUp> headsUpLines() => _cached('headsUps', () {
+  List<HeadsUp> headsUpLines() => _cached(const MemoKey('headsUps'), () {
         final t = today();
         return headsUps(upcomingItems(t, addDays(t, headsUpDays)), t, thresholdCents: headsUpCents, days: headsUpDays);
       });
@@ -329,7 +377,7 @@ extension FutureSpending on WalletController {
     return [
       if (cal.permission)
         for (final d in cal.device) CalendarEntry(d.id, CalendarKind.device, d.name, account: d.account, on: on.contains(d.id)),
-      for (final s in _icsSources) CalendarEntry(s.id, s.kind, s.name, error: cal.errors[s.id], insecure: isInsecureLink(s.url)),
+      for (final s in _icsSources) CalendarEntry(s.id, s.kind, s.name, error: cal.errorFor(s.id), insecure: isInsecureLink(s.url)),
     ];
   }
 
@@ -400,7 +448,7 @@ extension FutureSpending on WalletController {
     }
     final String text;
     try {
-      text = await icsFetcher(u);
+      text = await deps.icsFetcher(u);
     } on IcsFetchException catch (e) {
       logEvent(_calLog, Level.WARNING, 'calendar.import', {'ok': false, 'kind': 'link', 'reason': 'fetch'});
       return e.message;
@@ -428,7 +476,7 @@ extension FutureSpending on WalletController {
       for (final s in _icsSources)
         if (s.id != id) s
     ]);
-    cal.errors.remove(id);
+    cal.clearError(id);
     logEvent(_calLog, Level.INFO, 'calendar.remove', {});
     _refreshView();
     unawaited(readCalendars(trigger: 'remove'));
@@ -476,19 +524,19 @@ extension FutureSpending on WalletController {
       }
       for (final s in sources) {
         var text = repo.localValue('icsText:${s.id}');
-        cal.errors.remove(s.id);
+        cal.clearError(s.id);
         if (s.kind == CalendarKind.link && s.url != null) {
           try {
-            final fresh = await icsFetcher(Uri.parse(s.url!));
+            final fresh = await deps.icsFetcher(Uri.parse(s.url!));
             if (fresh.length > icsMaxBytes || _icsProblem(fresh) != null) {
               throw const IcsFetchException("That link isn't a calendar any more.");
             }
             text = fresh;
             repo.setLocalValue('icsText:${s.id}', fresh);
           } on IcsFetchException catch (e) {
-            cal.errors[s.id] = "Couldn't refresh this link. ${e.message} Showing what was saved.";
+            cal.setError(s.id, "Couldn't refresh this link. ${e.message} Showing what was saved.");
           } catch (e, st) {
-            cal.errors[s.id] = "Couldn't refresh this link. Showing what was saved.";
+            cal.setError(s.id, "Couldn't refresh this link. Showing what was saved.");
             logError(_calLog, 'calendar.refreshFailed', e, st, fields: {'type': e.runtimeType.toString()});
           }
         }
@@ -499,7 +547,7 @@ extension FutureSpending on WalletController {
           unsupported += r.unsupported;
           calendars++;
         } catch (e, st) {
-          cal.errors[s.id] = "Couldn't read this calendar.";
+          cal.setError(s.id, "Couldn't read this calendar.");
           logError(_calLog, 'calendar.parseFailed', e, st, fields: {'type': e.runtimeType.toString()});
         }
       }

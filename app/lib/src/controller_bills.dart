@@ -116,7 +116,7 @@ class BillHistoryView {
 extension BillsDb on WalletController {
   /// The history of the confirmed recurring bill [billId] (12 months, home currency), or null when it is not a confirmed
   /// bill (any more). Computed once per data version and day, and only for a bill whose History is open (never per list row).
-  BillHistoryView? billHistoryFor(String billId) => _cached<BillHistoryView?>('billHistory:$billId', () {
+  BillHistoryView? billHistoryFor(String billId) => _cached<BillHistoryView?>(MemoKey('billHistory', billId), () {
         RecurringBill? found;
         for (final b in recurringBills()) {
           // An income has its own cycles, not a bill's history (P9): `found` stays null for it.
@@ -147,7 +147,7 @@ extension BillsDb on WalletController {
   // ---------- lists ----------
 
   /// Every live bill (cached per data version).
-  List<Bill> billsAll() => _cached('billsDb', () => repo.bills());
+  List<Bill> billsAll() => _cached(const MemoKey('billsDb'), () => repo.bills());
 
   Bill? bill(String id) {
     for (final b in billsAll()) {
@@ -157,7 +157,7 @@ extension BillsDb on WalletController {
   }
 
   /// To review / Unpaid (confirmed, not linked) / Paid (linked), newest first.
-  BillLists billLists() => _cached('billLists', () {
+  BillLists billLists() => _cached(const MemoKey('billLists'), () {
         int newest(Bill a, Bill b) => (b.date ?? '').compareTo(a.date ?? '');
         final all = billsAll();
         final review = all.where((b) => b.status == BillStatus.review).toList()..sort(newest);
@@ -171,7 +171,7 @@ extension BillsDb on WalletController {
 
   /// The bill paid by this transaction, or null (cached map).
   Bill? billForTx(String txId) => _cached<Map<String, Bill>>(
-      'billByTx',
+      const MemoKey('billByTx'),
       () => {
             for (final b in billsAll())
               if (b.linkedTx != null) b.linkedTx!: b
@@ -259,7 +259,7 @@ extension BillsDb on WalletController {
     String? text;
     try {
       // Off the UI isolate on native: a big PDF must not stall the screen.
-      final parsed = await pdfParser(pdf);
+      final parsed = await deps.pdfParser(pdf);
       text = parsed.text;
       fromText = parsed.bill;
     } catch (e, st) {
@@ -455,8 +455,8 @@ extension BillsDb on WalletController {
   bool billNeedsCategory(Bill b) => b.category == null && b.dueDate != null && b.dueDate!.compareTo(today()) >= 0;
 
   /// The category worth suggesting for [b] (earlier bills and payments of the same payee); null when nothing fits.
-  String? suggestedBillCategory(Bill b) => billCategorySuggester != null
-      ? billCategorySuggester!(b)
+  String? suggestedBillCategory(Bill b) => deps.billCategorySuggester != null
+      ? deps.billCategorySuggester!(b)
       : suggestBillCategory(b, recurring: expectedBills(), txs: wholeTxs, table: categoryTable);
 
   /// The confirmed expected bill that already plans this slip (same payee, due about one cycle), or null. Such a bill's planned row is
@@ -498,7 +498,7 @@ extension BillsDb on WalletController {
   // ---------- attachments (P16b) ----------
 
   /// The files attached to a payment (photos and PDFs of a receipt, a warranty, a slip), oldest first. Never in the bill lists.
-  List<Bill> attachments(String txId) => _cached('attach|$txId', () => repo.attachments(txId));
+  List<Bill> attachments(String txId) => _cached(MemoKey('attach', txId), () => repo.attachments(txId));
 
   /// Attaches [raw] (a photo or PDF, [ext] with or without the dot) to the payment [txId]. Pictures are sized down like a bill's.
   Future<AttachResult> attachFile(String txId, Uint8List raw, String ext) async {

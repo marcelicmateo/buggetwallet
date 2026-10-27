@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/bills.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 base class _Picked extends PlatformFile {
@@ -81,10 +82,10 @@ void main() {
       {VaultKey? walletKey, bool data = true, Size size = const Size(400, 900), double scale = 1}) async {
     final repo = WalletRepo.inMemory();
     if (data) repo.addTransaction(date: '2026-10-01', amount: -500, category: 'Transport');
-    final wc = WalletController.forTest(repo,
+    final wc = seamedController(repo,
         key: walletKey ?? VaultKey.generate(), billInputs: FakeBillInputs(camera: FakeCamera(canShow: false)).inputs);
     addTearDown(wc.dispose);
-    wc.syncRunner = (u, k, r) async => const SyncReport(0, 0, 0);
+    wc.seams.syncRunner = (u, k, r) async => const SyncReport(0, 0, 0);
     await pumpApp(t, Scaffold(body: SingleChildScrollView(child: BackupPanel(wc: wc, chooser: c))), size: size, textScale: scale);
     return wc;
   }
@@ -253,7 +254,7 @@ void main() {
       BackupFailure.unreadable: "This backup file can't be read.",
     };
     for (final e in cases.entries) {
-      wc.backupMerger = (repo, bytes, k, {dryRun = false, walletKey}) async => throw BackupException(e.key, 'core text');
+      wc.seams.backupMerger = (repo, bytes, k, {dryRun = false, walletKey}) async => throw BackupException(e.key, 'core text');
       await t.tap(_merge);
       await settle(t);
       expect(find.textContaining(e.value, findRichText: true), findsOneWidget, reason: e.key.name);
@@ -325,7 +326,7 @@ void main() {
   testWidgets('a real merge that brings in nothing says "Nothing new", not "Merged 0"', (t) async {
     final c = _Chooser()..picks = [_Picked(Uint8List(4))];
     final wc = await pump(t, c);
-    wc.backupMerger = (repo, bytes, k, {dryRun = false, walletKey}) async => dryRun
+    wc.seams.backupMerger = (repo, bytes, k, {dryRun = false, walletKey}) async => dryRun
         ? const MergeResult(ops: 2, changed: 2, changedByEntity: {'tx': 2})
         : const MergeResult(ops: 2, changed: 0, changedByEntity: {});
     await t.tap(_merge);
@@ -340,20 +341,20 @@ void main() {
   testWidgets('Back up now says how many bill files went in; no files, the old toast', (t) async {
     final c = _Chooser();
     final wc = await pump(t, c);
-    wc.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(4), blobs: 3);
+    wc.seams.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(4), blobs: 3);
     await t.tap(find.byKey(const ValueKey('backupNow')));
     await settle(t);
     expect(find.text('Backup saved with 3 bill files'), findsOneWidget);
     await t.pump(const Duration(seconds: 5));
     expect(lines.any((l) => l.contains('backup.done') && l.contains('"blobs":3')), isTrue);
 
-    wc.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(4), blobs: 1);
+    wc.seams.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(4), blobs: 1);
     await t.tap(find.byKey(const ValueKey('backupNow')));
     await settle(t);
     expect(find.text('Backup saved with 1 bill file'), findsOneWidget);
     await t.pump(const Duration(seconds: 5));
 
-    wc.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(4));
+    wc.seams.backupBytesWriter = (repo, key) async => fakeBackup(Uint8List(4));
     await t.tap(find.byKey(const ValueKey('backupNow')));
     await settle(t);
     expect(find.text('Saved ${backupFileName(wc.today())}'), findsOneWidget);
@@ -365,7 +366,7 @@ void main() {
       final key = VaultKey.generate();
       final c = _Chooser()..picks = [_Picked(await _otherBackup(key))];
       final wc = await pump(t, c, walletKey: key, size: Size(w, 1400), scale: 2);
-      wc.backupMerger = (repo, bytes, k, {dryRun = false, walletKey}) async => const MergeResult(
+      wc.seams.backupMerger = (repo, bytes, k, {dryRun = false, walletKey}) async => const MergeResult(
           ops: 90,
           changed: 84,
           blobs: 12,

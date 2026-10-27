@@ -8,6 +8,7 @@ import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/bill_history.dart';
 import 'package:budget_wallet/src/screens/recurring_sheet.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -344,8 +345,8 @@ void main() {
   });
 
   group('Today', () {
-    Widget today(WalletController wc) =>
-        Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser(), openBills: () {}));
+    Widget today(WalletController wc) => Scaffold(
+        body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser(), openBills: () {}));
 
     tw('a held yearly bill: "Car cover 600 € held until paid"', (tester) async {
       final wc = hw();
@@ -549,8 +550,11 @@ void main() {
       wc.reload();
       final c = wc.period().dueCycles.firstWhere((c) => c.bill.label == 'Zorblex cover');
       expect(c.reserve, 0);
-      await pumpApp(tester,
-          Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser(), openBills: () {})),
+      await pumpApp(
+          tester,
+          Scaffold(
+              body: TodayScreen(
+                  view: TodayView(wc), openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser(), openBills: () {})),
           size: const Size(400, 3000));
       expect(find.textContaining('held until paid'), findsNothing);
     });

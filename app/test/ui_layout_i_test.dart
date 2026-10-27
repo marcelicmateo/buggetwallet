@@ -3,6 +3,7 @@
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/search.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
@@ -114,7 +115,7 @@ void main() {
       final wc = budgetWallet();
       if (orders) wc.repo.addTransaction(date: '2026-09-10', amount: 1800, category: 'Food delivery');
       wc.reload();
-      await pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => DateTime(2026, 10, 20, 15))),
+      await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => DateTime(2026, 10, 20, 15))),
           size: const Size(400, 4000));
     }
 
@@ -135,7 +136,7 @@ void main() {
       final wc = budgetWallet();
       setUp(wc);
       wc.reload();
-      await pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => DateTime(2026, 10, 20, 15))),
+      await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => DateTime(2026, 10, 20, 15))),
           size: const Size(400, 4000));
     }
 

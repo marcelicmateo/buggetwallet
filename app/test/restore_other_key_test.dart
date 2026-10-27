@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/bills.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 base class _Picked extends PlatformFile {
@@ -70,10 +71,10 @@ void main() {
 
   Future<WalletController> pump(WidgetTester t, _Chooser c,
       {VaultKey? walletKey, Size size = const Size(400, 900), double scale = 1, FakeBillInputs? inputs}) async {
-    final wc = WalletController.forTest(WalletRepo.inMemory(),
+    final wc = seamedController(WalletRepo.inMemory(),
         key: walletKey ?? VaultKey.generate(), billInputs: (inputs ?? FakeBillInputs(camera: FakeCamera(canShow: false))).inputs);
     addTearDown(wc.dispose);
-    wc.syncRunner = (u, k, r) async => const SyncReport(0, 0, 0);
+    wc.seams.syncRunner = (u, k, r) async => const SyncReport(0, 0, 0);
     await pumpApp(t, Scaffold(body: SingleChildScrollView(child: BackupPanel(wc: wc, chooser: c))), size: size, textScale: scale);
     return wc;
   }

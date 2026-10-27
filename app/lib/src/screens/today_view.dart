@@ -1,0 +1,77 @@
+import 'package:flutter/widgets.dart';
+import 'package:wallet_core/wallet_core.dart';
+
+import '../controller.dart';
+import '../file_chooser.dart';
+import '../widgets/sheets.dart';
+import 'bill_sheet.dart';
+import 'key_backup.dart';
+import 'review.dart';
+import 'upcoming.dart';
+import 'upcoming_view.dart';
+
+/// What the Today page reads and does, and nothing else: a read-only facade over the controller, so [TodayScreen] never holds it.
+/// It is a [Listenable] (it notifies when the controller does). The sheets Today opens are launched here, with the controller
+/// they need.
+class TodayView implements Listenable {
+  const TodayView(this._wc);
+
+  final WalletController _wc;
+
+  @override
+  void addListener(VoidCallback listener) => _wc.addListener(listener);
+
+  @override
+  void removeListener(VoidCallback listener) => _wc.removeListener(listener);
+
+  // ---------- reads ----------
+  WalletSettings get settings => _wc.settings;
+  String get currency => _wc.currency;
+  String today() => _wc.today();
+  PeriodBudget period() => _wc.period();
+  String? newPayday(String periodStart) => _wc.newPayday(periodStart);
+  bool get keyBackupRowVisible => _wc.keyBackupRowVisible;
+  int get deliveryOrders90 => _wc.deliveryOrders90;
+  (int, int) get deliveries => _wc.deliveries;
+  CategoryBudgetLine? tightestBudget() => _wc.tightestBudget();
+  ReviewState reviewState() => _wc.reviewState();
+  String? get lastReview => _wc.lastReview;
+  ({int count, int total}) comingUp() => _wc.comingUp();
+  Map<String, int> heldTotals() => _wc.heldTotals();
+  int suggestionCount() => _wc.suggestionCount();
+  List<HeadsUp> headsUpLines() => _wc.headsUpLines();
+  List<PlannedCost> plannedNeedingCategory() => _wc.plannedNeedingCategory();
+  int billsToReview() => _wc.billsToReview();
+  List<CategorizedTx> get wholeTxs => _wc.wholeTxs;
+  List<Goal> get goals => _wc.goals;
+  Map<String, String> get latestBySource => _wc.latestBySource;
+  CategoryTable get categoryTable => _wc.categoryTable;
+  TagTable get tagTable => _wc.tagTable;
+  CategorizedTx shown(CategorizedTx t) => _wc.shown(t);
+  Bill? billForTx(String txId) => _wc.billForTx(txId);
+  int splitCount(String txId) => _wc.splitCount(txId);
+  bool splitIsBroken(String txId) => _wc.splitIsBroken(txId);
+  bool setupCollapsedFor(List<String> steps) => _wc.setupCollapsedFor(steps);
+
+  // ---------- actions ----------
+  void startNewMonth(String date) => _wc.startNewMonth(date);
+  void paydayDone(String periodStart) => _wc.paydayDone(periodStart);
+  void updateSettings(Map<String, Object?> changes) => _wc.updateSettings(changes);
+  void setSetupCollapsed(bool v, List<String> steps) => _wc.setSetupCollapsed(v, steps);
+  void snoozeKeyBackup() => _wc.snoozeKeyBackup();
+  void openCurrencies() => _wc.openCurrencies();
+
+  // ---------- sheets and pages Today opens ----------
+  Future<void> showUpcoming(BuildContext context) => openUpcoming(context, UpcomingView(_wc));
+  Future<void> showBill(BuildContext context, String billId) => openBill(context, _wc, billId);
+  Future<void> showAddExpense(BuildContext context) => addExpenseFlow(context, _wc);
+  Future<void> showReview(BuildContext context, {VoidCallback? openSpending, FileChooser chooser = const FileChooser()}) =>
+      openReview(context, _wc, openSpending: openSpending, chooser: chooser);
+  Future<bool> showKeyBackup(BuildContext context) => openKeyBackup(context, _wc);
+
+  /// A payment's sheet, then the toast for what it did.
+  Future<void> openTx(BuildContext context, CategorizedTx t) async {
+    final r = await showSheet<String>(context, TxSheet(wc: _wc, t: t));
+    if (context.mounted) txSheetToast(context, _wc, r);
+  }
+}

@@ -5,6 +5,7 @@ import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -38,7 +39,12 @@ String eur(String s) => s.replaceAll(' €', ' €');
 
 Widget today(WalletController wc, {VoidCallback? openBills, VoidCallback? openSpending}) => Scaffold(
     body: TodayScreen(
-        wc: wc, openPlan: () {}, openBills: openBills, openSpending: openSpending, clock: () => budgetToday, chooser: const FileChooser()));
+        view: TodayView(wc),
+        openPlan: () {},
+        openBills: openBills,
+        openSpending: openSpending,
+        clock: () => budgetToday,
+        chooser: const FileChooser()));
 
 void main() {
   group('controller', () {

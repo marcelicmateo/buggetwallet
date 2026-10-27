@@ -3,6 +3,7 @@ import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/charts.dart';
 import 'package:flutter/material.dart';
@@ -153,7 +154,8 @@ void main() {
     for (final (name, size, scale) in _sizes) {
       testWidgets('$name: the least-left category shows under the stats', (tester) async {
         final wc = budgetWallet(eatingOutBudget: 20000);
-        await pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday)), size: size, textScale: scale);
+        await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
+            size: size, textScale: scale);
         expect(find.text(_eur('Groceries: 48 € left this month')), findsOneWidget);
         expect(tester.takeException(), isNull);
       });
@@ -161,7 +163,8 @@ void main() {
 
     testWidgets('amounts are exact on the line: 47.50 € left, over by 0.49 €', (tester) async {
       Future<void> pumpToday(WalletController wc) =>
-          pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday)), size: const Size(360, 3000));
+          pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
+              size: const Size(360, 3000));
       await pumpToday(budgetWallet(groceriesBudget: 29950, eatingOutBudget: 20000));
       expect(find.text(_eur('Groceries: 47.50 € left this month')), findsOneWidget);
       await pumpToday(budgetWallet(groceriesBudget: 29950, eatingOutBudget: 11151));
@@ -170,7 +173,8 @@ void main() {
 
     testWidgets('over budget: the line says so, in the bad colour with an icon', (tester) async {
       final wc = budgetWallet();
-      await pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday)), size: const Size(360, 3000));
+      await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
+          size: const Size(360, 3000));
       final t = find.text(_eur('Eating out: over by 12 €'));
       expect(t, findsOneWidget);
       expect(tester.widget<Text>(t).style!.color, WalletColors.light.bad);
@@ -179,7 +183,8 @@ void main() {
 
     testWidgets('the line sits below the pace line and above Add expense', (tester) async {
       final wc = budgetWallet();
-      await pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday)), size: const Size(360, 3000));
+      await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
+          size: const Size(360, 3000));
       final y = tester.getTopLeft(find.byKey(const ValueKey('budgetLine'))).dy;
       expect(y, greaterThan(tester.getBottomLeft(find.textContaining('used').first).dy));
       expect(y, lessThan(tester.getTopLeft(find.text('Add expense').first).dy));
@@ -187,7 +192,8 @@ void main() {
 
     testWidgets('no budgets: no line', (tester) async {
       final wc = budgetWallet(budgets: false);
-      await pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => budgetToday)), size: const Size(360, 3000));
+      await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
+          size: const Size(360, 3000));
       expect(find.byKey(const ValueKey('budgetLine')), findsNothing);
       expect(find.textContaining('this month'), findsNothing);
     });
@@ -195,7 +201,8 @@ void main() {
     testWidgets('tapping the line calls openSpending', (tester) async {
       var opened = 0;
       final wc = budgetWallet();
-      await pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, openSpending: () => opened++, clock: () => budgetToday)),
+      await pumpApp(
+          tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, openSpending: () => opened++, clock: () => budgetToday)),
           size: const Size(360, 3000));
       await tester.tap(find.byKey(const ValueKey('budgetLine')));
       expect(opened, 1);

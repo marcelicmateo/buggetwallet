@@ -1,5 +1,6 @@
 // Today's delivery-hour panel: shown 14:00–19:00 and on Sundays, amounts in the wallet's currency. Synthetic wallets.
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -10,7 +11,7 @@ void main() {
     final wc = demoWallet(currency: currency); // rows in the wallet's currency: other currencies are not counted
     wc.repo.updateSettings({'currency': currency});
     wc.reload();
-    await pumpApp(tester, Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, clock: () => at)), size: const Size(400, 4000));
+    await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => at)), size: const Size(400, 4000));
   }
 
   testWidgets('shown on a weekday at 15:00, hidden at 10:00', (tester) async {

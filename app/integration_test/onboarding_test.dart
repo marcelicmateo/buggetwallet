@@ -62,7 +62,7 @@ void main() {
     expect((cash.name, cash.source, cash.currency, cash.opening, cash.openingDate), ('Cash', null, wc.currency, 25000, wc.today()));
     expect(find.byKey(const ValueKey('heldLine')), findsOneWidget);
     expect(key, startsWith('BW1-'));
-    final stored = await KeyStore.read();
+    final stored = await KeyStore().read();
     expect(stored, isNotNull, reason: 'the key is kept on the device');
     expect(await stored!.toText(), key);
     expect(wc.goals.map((g) => g.name), ['Emergency fund', 'Yearly costs']);
@@ -126,7 +126,7 @@ void main() {
     expect(wc.hasWallet, isFalse);
     expect(find.byType(StatusLabel), findsOneWidget, reason: 'the error is shown');
     expect(find.byType(OnboardingScreen), findsOneWidget);
-    expect(await KeyStore.read(), isNull);
+    expect(await KeyStore().read(), isNull);
 
     await t.tap(find.text('Back'));
     await t.pumpAndSettle();

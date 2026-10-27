@@ -23,7 +23,7 @@ class FxCurrency {
 
 extension FxDb on WalletController {
   /// A row per currency other than the wallet's that appears in the payments or has a rate, by code. Cached per data version.
-  List<FxCurrency> fxCurrencies() => _cached('fxCurrencies', () {
+  List<FxCurrency> fxCurrencies() => _cached(const MemoKey('fxCurrencies'), () {
         final seen = <String, int>{};
         for (final t in wholeTxs) {
           if (t.tx.currency != currency) seen[t.tx.currency] = (seen[t.tx.currency] ?? 0) + 1;

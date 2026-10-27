@@ -17,7 +17,9 @@ import 'package:budget_wallet/src/screens/scan_bill.dart';
 import 'package:budget_wallet/src/screens/search.dart';
 import 'package:budget_wallet/src/screens/sync_panel.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/screens/upcoming.dart';
+import 'package:budget_wallet/src/screens/upcoming_view.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -28,6 +30,7 @@ import 'package:wallet_importer/wallet_importer.dart' show ImportBatch;
 import 'support/bills.dart';
 import 'support/layout.dart';
 import 'support/plan_page.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 WalletController bw({FakeBillInputs? inputs, FakeNudges? nudges}) {
@@ -132,7 +135,7 @@ Future<void> openSheetFor(WidgetTester tester, WalletController wc, String id,
 }
 
 Widget todayOf(WalletController wc, {VoidCallback? openBillsReview}) =>
-    Scaffold(body: TodayScreen(wc: wc, openPlan: () {}, openBillsReview: openBillsReview, clock: () => budgetToday));
+    Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, openBillsReview: openBillsReview, clock: () => budgetToday));
 
 void main() {
   late List<String> lines;
@@ -917,7 +920,7 @@ void main() {
       final wc = bw();
       final id = addBill(wc, syntheticBill('up', payee: 'Gadget Shop'), confirm: true);
       wc.setBillDates(id, warrantyUntil: '2026-10-28', returnBy: '2026-10-24');
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1800));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1800));
       expect(key('up:w:$id'), findsOneWidget);
       expect(key('up:r:$id'), findsOneWidget);
       expect(find.descendant(of: key('up:w:$id'), matching: find.text('Warranty')), findsOneWidget);
@@ -933,7 +936,7 @@ void main() {
       final wc = bw();
       final id = addBill(wc, syntheticBill('pl', due: '2026-10-25'), confirm: true, category: 'Bills & one-offs'); // flex: reserves money
       final row = key('up:p:${WalletRepo.billPlannedId(id)}');
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1800));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1800));
       expect(row, findsOneWidget);
       expect(find.descendant(of: row, matching: find.text('Bill')), findsOneWidget);
       expect(wc.comingUp().count, 1, reason: 'the slip reserves its money like any planned cost');
@@ -981,7 +984,7 @@ void main() {
 
     tw('Confirm on the sheet asks for the category first, says why, and works after picking one', (tester) async {
       final wc = bw();
-      wc.billCategorySuggester = (b) => null; // the real core would offer one from the water payment
+      wc.seams.billCategorySuggester = (b) => null; // the real core would offer one from the water payment
       final id = addBill(wc, syntheticBill('cat4', due: '2026-10-25'));
       await openSheetFor(tester, wc, id, size: const Size(400, 1600));
       expect(find.text("Pick the category so Budget Wallet doesn't count this bill twice."), findsOneWidget);
@@ -1005,7 +1008,7 @@ void main() {
 
     tw('the category is prefilled from the suggestion and marked as one; Confirm then works as it is', (tester) async {
       final wc = bw();
-      wc.billCategorySuggester = (b) => 'Bills & subscriptions';
+      wc.seams.billCategorySuggester = (b) => 'Bills & subscriptions';
       final id = addBill(wc, syntheticBill('cat5', due: '2026-10-25'));
       await openSheetFor(tester, wc, id, size: const Size(400, 1600));
       expect(find.text('Suggested from your earlier bills. Check it.'), findsOneWidget);
@@ -1019,7 +1022,7 @@ void main() {
 
     tw('a bill that already has a category is not marked as suggested; no suggestion leaves the field empty', (tester) async {
       final wc = bw();
-      wc.billCategorySuggester = (b) => 'Groceries';
+      wc.seams.billCategorySuggester = (b) => 'Groceries';
       final id = addBill(wc, syntheticBill('cat6', due: '2026-10-25'));
       wc.updateBill(id, category: 'Rent');
       await openSheetFor(tester, wc, id, size: const Size(400, 1600));
@@ -1079,7 +1082,7 @@ void main() {
     tw('Upcoming opens a bill row as the bill, not as a planned cost', (tester) async {
       final wc = bw();
       final id = addBill(wc, syntheticBill('up1', due: '2026-10-25'), confirm: true);
-      await pumpApp(tester, UpcomingScreen(wc: wc), size: const Size(400, 1800));
+      await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 1800));
       await tester.tap(key('up:p:${WalletRepo.billPlannedId(id)}'));
       await tester.pumpAndSettle();
       expect(key('paidBy'), findsOneWidget);
@@ -1118,7 +1121,7 @@ void main() {
       var parsed = 0;
       final fakes = FakeBillInputs(pdf: FakePdf(jpeg: Uint8List.fromList([1, 2, 3])));
       final wc = bw(inputs: fakes);
-      wc.pdfParser = (pdf) async {
+      wc.seams.pdfParser = (pdf) async {
         parsed++;
         return (text: null, bill: null);
       };
@@ -1169,13 +1172,13 @@ void main() {
     // ---- 5. PDF reading off the UI isolate ----
     test('a PDF is read through the isolate path on native, and through the swappable reader', () async {
       final wc = bw(inputs: FakeBillInputs(pictures: FakePictures(canRead: false), pdf: FakePdf(canRender: false)));
-      wc.pdfParser = parsePdf; // the real one: Isolate.run
+      wc.seams.pdfParser = parsePdf; // the real one: Isolate.run
       final before = pdfParsedOffUi;
       final r = await wc.importBillFile(smallPdf(['Datum racuna: 18.10.2026', 'Ukupno: 45,60 EUR']), 'pdf');
       expect(wc.bill(r.billId!)!.total, 4560);
       expect(pdfParsedOffUi, before + 1, reason: 'pdfText + billFromText ran in Isolate.run, not on the UI isolate');
       var calls = 0;
-      wc.pdfParser = (pdf) async {
+      wc.seams.pdfParser = (pdf) async {
         calls++;
         return (text: 'Ukupno: 10,00 EUR\n01.10.2026', bill: null);
       };
@@ -1185,7 +1188,7 @@ void main() {
 
     test('a PDF the reader fails on is still kept, to be typed', () async {
       final wc = bw(inputs: FakeBillInputs(pictures: FakePictures(canRead: false), pdf: FakePdf(canRender: false)));
-      wc.pdfParser = (pdf) async => throw StateError('boom');
+      wc.seams.pdfParser = (pdf) async => throw StateError('boom');
       final r = await wc.importBillFile(smallPdf(['Ukupno: 5,00 EUR']), 'pdf');
       expect(r.kind, BillImportKind.added);
       expect(wc.bill(r.billId!)!.total, isNull);
@@ -1229,12 +1232,12 @@ void main() {
 
     tw('Plan › Sync tells that an older relay cannot keep bill photos', (tester) async {
       final wc = bw();
-      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 2, blobsUnsupported: true);
+      wc.seams.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 2, blobsUnsupported: true);
       await tester.runAsync(() => wc.setRelay(Uri.parse('http://homeserver.local:8787')));
       await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: SyncPanel(wc: wc, onShowKey: () {}))), size: const Size(400, 1200));
       expect(find.textContaining("This relay can't keep bill photos yet. Update the relay on the home server.", findRichText: true),
           findsOneWidget);
-      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 2);
+      wc.seams.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 2);
       await tester.runAsync(wc.syncNow);
       await tester.pump();
       expect(key('blobsUnsupported'), findsNothing);
@@ -1278,15 +1281,15 @@ void main() {
 
     tw('Plan › Sync says how many bill files wait to upload, only when some do', (tester) async {
       final wc = bw();
-      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 2);
+      wc.seams.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 2);
       await tester.runAsync(() => wc.setRelay(Uri.parse('http://homeserver.local:8787')));
       await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: SyncPanel(wc: wc, onShowKey: () {}))), size: const Size(400, 1200));
       expect(find.textContaining('2 bill files waiting to upload', findRichText: true), findsOneWidget);
-      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 1);
+      wc.seams.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true, blobsWaiting: 1);
       await tester.runAsync(wc.syncNow);
       await tester.pump();
       expect(find.textContaining('1 bill file waiting to upload', findRichText: true), findsOneWidget);
-      wc.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true);
+      wc.seams.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true);
       await tester.runAsync(wc.syncNow);
       await tester.pump();
       expect(key('blobsWaiting'), findsNothing);
@@ -1369,7 +1372,7 @@ void main() {
     /// and a gas slip with no category (confirmed while paid, then unlinked).
     ({WalletController wc, String plain, String power, String water, String gas}) mixedWallet() {
       final repo = WalletRepo.inMemory(now: () => budgetToday.millisecondsSinceEpoch);
-      final wc = WalletController.forTest(repo, key: VaultKey.generate(), clock: () => budgetToday, billInputs: FakeBillInputs().inputs);
+      final wc = seamedController(repo, key: VaultKey.generate(), clock: () => budgetToday, billInputs: FakeBillInputs().inputs);
       repo.importBatch(ImportBatch(source: 'pbz', transactions: [
         for (final d in ['2026-07-22', '2026-08-21', '2026-09-20']) syntheticTx(d, -3000, 'Trajni nalog', 'SYNTH POWER'),
         syntheticTx('2026-10-19', -2500, 'POS plaćanje', 'POS SYNTHSHOP ZAGREB'),
@@ -1437,7 +1440,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Category (needed)'), findsNothing);
 
-      await pumpApp(tester, Scaffold(body: UpcomingScreen(wc: w.wc)), size: const Size(320, 4000), textScale: 2);
+      await pumpApp(tester, Scaffold(body: UpcomingScreen(view: UpcomingView(w.wc))), size: const Size(320, 4000), textScale: 2);
       final tag = key('needsCategory:p:${WalletRepo.billPlannedId(w.gas)}');
       expect(tag, findsOneWidget);
       expect(find.textContaining('Needs a category', findRichText: true), findsOneWidget);
@@ -1582,7 +1585,7 @@ void main() {
         final wc = full();
         await pumpApp(tester, todayOf(wc), size: size, textScale: scale);
         await scrollThrough(tester);
-        await pumpApp(tester, UpcomingScreen(wc: wc), size: size, textScale: scale);
+        await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: size, textScale: scale);
         await scrollThrough(tester);
         await pumpApp(tester, ScanBillScreen(wc: wc), size: size, textScale: scale);
         errors.check();

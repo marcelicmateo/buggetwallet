@@ -7,6 +7,7 @@ import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/home_widget.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/widgets/common.dart' show MoneyText;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 /// A widget stand-in: records what the app gave it.
@@ -51,7 +53,7 @@ void main() {
   late List<String> lines;
 
   WalletController wallet(FakeHomeWidget w) {
-    final wc = WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => now, homeWidget: w);
+    final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => now, homeWidget: w);
     wc.repo.updateSettings({'salary': 150000, 'salaryConfirmed': true, 'periodStart': '2026-10-01'});
     wc.repo.addTransaction(date: '2026-10-03', amount: 15200, category: 'Groceries', note: 'SecretShopNote');
     wc.reload();
@@ -90,7 +92,7 @@ void main() {
       final w = FakeHomeWidget();
       final wc = wallet(w);
       await t.runAsync(flush);
-      await pumpApp(t, Scaffold(body: TodayScreen(wc: wc, openPlan: () {})), size: const Size(400, 3000));
+      await pumpApp(t, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {})), size: const Size(400, 3000));
       final shown = t.widget<MoneyText>(find.byKey(const ValueKey('safeToSpend'))).text;
       expect(w.updates.last.status, WidgetStatus.ok);
       expect(w.updates.last.amount, shown);
@@ -175,7 +177,7 @@ void main() {
       final w = FakeHomeWidget();
       final wc = wallet(w);
       await flush();
-      wc.keyForgetter = () async {};
+      wc.seams.keyForgetter = () async {};
       await wc.forgetBrowser();
       await flush();
       expect(w.clears, greaterThanOrEqualTo(1));
@@ -269,7 +271,7 @@ void main() {
       expect(wc.takeShortcutAdd(), isTrue);
       expect(wc.takeShortcutAdd(), isFalse, reason: 'one request, one answer');
       expect(lines.where((l) => l.contains('shortcut.used')), isNotEmpty);
-      wc.keyForgetter = () async {};
+      wc.seams.keyForgetter = () async {};
       await wc.forgetBrowser();
       wc.onShortcut(addExpenseAction);
       expect(wc.takeShortcutAdd(), isFalse, reason: 'onboarding');

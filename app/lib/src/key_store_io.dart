@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -18,12 +17,13 @@ class KeyStore {
   static const _idName = 'budget_wallet_device_id';
   static String get _store => isMobile ? 'secure' : 'file';
 
-  /// Tests point the desktop key file at a temporary folder.
-  @visibleForTesting
-  static Directory? keyDirOverride;
+  /// [keyDir] is for tests: they point the desktop key file at a temporary folder (null = the app's support folder).
+  KeyStore({Directory? keyDir}) : _keyDir = keyDir;
 
-  static Future<File> _file([String name = 'wallet.key']) async {
-    final dir = keyDirOverride ?? await getApplicationSupportDirectory();
+  final Directory? _keyDir;
+
+  Future<File> _file([String name = 'wallet.key']) async {
+    final dir = _keyDir ?? await getApplicationSupportDirectory();
     return File('${dir.path}${Platform.pathSeparator}$name');
   }
 
@@ -39,12 +39,12 @@ class KeyStore {
   }
 
   /// Only the browser build locks the key behind a passphrase.
-  static bool get isLocked => false;
+  bool get isLocked => false;
 
   /// Browser only.
-  static Future<VaultKey> unlock(String passphrase) => throw UnsupportedError('Unlocking with a passphrase is for the web build.');
+  Future<VaultKey> unlock(String passphrase) => throw UnsupportedError('Unlocking with a passphrase is for the web build.');
 
-  static Future<VaultKey?> read() async {
+  Future<VaultKey?> read() async {
     final t = PerfTimer('key.read', warnMs: 1000);
     String? text;
     if (isMobile) {
@@ -64,7 +64,7 @@ class KeyStore {
   }
 
   /// [passphrase] is for the web build and ignored here: the system keeps the key.
-  static Future<void> write(VaultKey key, {String? passphrase}) async {
+  Future<void> write(VaultKey key, {String? passphrase}) async {
     final t = PerfTimer('key.write', warnMs: 1000);
     final text = await key.toText();
     if (isMobile) {
@@ -77,7 +77,7 @@ class KeyStore {
 
   /// Keeps the key of a wallet that is being set aside under its own slot, `<name>.aside.<stamp>` (`-2`, `-3`… when taken, like the
   /// database copy), and returns the slot. The slot is never read by the app yet (reopening a set-aside wallet is not built).
-  static Future<String> writeAside(String stamp, VaultKey key) async {
+  Future<String> writeAside(String stamp, VaultKey key) async {
     final text = await key.toText();
     var slot = 'aside.$stamp';
     for (var n = 2; await _asideExists(slot); n++) {
@@ -91,12 +91,12 @@ class KeyStore {
     return slot;
   }
 
-  static Future<bool> _asideExists(String slot) async =>
+  Future<bool> _asideExists(String slot) async =>
       isMobile ? await const FlutterSecureStorage().containsKey(key: '${_name}_$slot') : await (await _file('wallet.key.$slot')).exists();
 
   /// The "join pending" marker of Join another wallet (relay address and a fresh device id, no key): a private side file / secure
   /// storage entry next to the key, never in the database, so a start after a crash can finish the join.
-  static Future<void> writeJoinMarker(String text) async {
+  Future<void> writeJoinMarker(String text) async {
     if (isMobile) {
       await const FlutterSecureStorage().write(key: '${_name}_join_pending', value: text);
     } else {
@@ -104,13 +104,13 @@ class KeyStore {
     }
   }
 
-  static Future<String?> readJoinMarker() async {
+  Future<String?> readJoinMarker() async {
     if (isMobile) return const FlutterSecureStorage().read(key: '${_name}_join_pending');
     final f = await _file('join.pending');
     return await f.exists() ? (await f.readAsString()).trim() : null;
   }
 
-  static Future<void> clearJoinMarker() async {
+  Future<void> clearJoinMarker() async {
     if (isMobile) {
       await const FlutterSecureStorage().delete(key: '${_name}_join_pending');
     } else {
@@ -120,7 +120,7 @@ class KeyStore {
   }
 
   /// Takes back a slot made by [writeAside] whose set-aside did not happen.
-  static Future<void> removeAside(String slot) async {
+  Future<void> removeAside(String slot) async {
     if (isMobile) {
       await const FlutterSecureStorage().delete(key: '${_name}_$slot');
     } else {
@@ -131,7 +131,7 @@ class KeyStore {
 
   /// The folder is private (0700); the text goes into a temp file there that is 0600 before any byte is written, then renamed
   /// over [f], so it is never readable by others and a crash never leaves half a file.
-  static Future<void> _writePrivate(File f, String text) async {
+  Future<void> _writePrivate(File f, String text) async {
     await f.parent.create(recursive: true);
     await _chmod('700', f.parent.path, 'key.dirChmodFailed');
     final tmp = File('${f.path}.tmp');
@@ -152,7 +152,7 @@ class KeyStore {
 
   /// This install's device id (H6), kept next to the key (not in the database, so a copied database does not share it);
   /// null when none is stored yet. The value is never logged.
-  static Future<String?> readDeviceId() async {
+  Future<String?> readDeviceId() async {
     String? text;
     if (isMobile) {
       text = await const FlutterSecureStorage().read(key: _idName);
@@ -164,7 +164,7 @@ class KeyStore {
     return text == null || text.isEmpty ? null : text;
   }
 
-  static Future<void> writeDeviceId(String id) async {
+  Future<void> writeDeviceId(String id) async {
     if (isMobile) {
       await const FlutterSecureStorage().write(key: _idName, value: id);
     } else {
@@ -174,7 +174,7 @@ class KeyStore {
   }
 
   /// Deletes the stored key and device id (used by "Forget this browser", which only the web build offers; kept so every build compiles).
-  static Future<void> forget() async {
+  Future<void> forget() async {
     if (isMobile) {
       await const FlutterSecureStorage().delete(key: _name);
       await const FlutterSecureStorage().delete(key: _idName);

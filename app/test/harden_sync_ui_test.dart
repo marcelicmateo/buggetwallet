@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/layout.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 final _relay = Uri.parse('http://homeserver.local:8787');
@@ -151,14 +152,14 @@ void main() {
       final wc = emptyWallet()..relayUrl = _relay;
       await _pumpSync(t, wc);
       expect(find.byKey(const ValueKey('relayFingerprint')), findsNothing);
-      wc.syncRunner = (r, k, repo) async => _report(instance: 'A1B2C3D4E5F60718', changed: true);
+      wc.seams.syncRunner = (r, k, repo) async => _report(instance: 'A1B2C3D4E5F60718', changed: true);
       await t.runAsync(wc.syncNow);
       await t.pump();
       expect(wc.relayFingerprintText, relayFingerprint('A1B2C3D4E5F60718'));
       expect(find.textContaining('a1b2-c3d4'), findsOneWidget);
       expect(find.textContaining(relayChangedText, findRichText: true), findsOneWidget);
       expect(find.byKey(const ValueKey('relayChanged')), findsOneWidget);
-      wc.syncRunner = (r, k, repo) async => _report(instance: 'A1B2C3D4E5F60718');
+      wc.seams.syncRunner = (r, k, repo) async => _report(instance: 'A1B2C3D4E5F60718');
       await t.runAsync(wc.syncNow);
       await t.pump();
       expect(find.textContaining(relayChangedText, findRichText: true), findsOneWidget, reason: 'core reports it once; the note stays');
@@ -172,15 +173,15 @@ void main() {
 
     testWidgets('both notes are kept on this device across restarts and next runs until OK; a new address clears them', (t) async {
       final repo = WalletRepo.inMemory();
-      final wc = WalletController.forTest(repo, key: VaultKey.generate())..relayUrl = _relay;
-      wc.syncRunner =
+      final wc = seamedController(repo, key: VaultKey.generate())..relayUrl = _relay;
+      wc.seams.syncRunner =
           (r, k, rp) async => _report(changed: true, problems: const [SyncProblem('abcd1234', SyncProblemReason.deviceIdInUse, bytes: 0)]);
       await t.runAsync(wc.syncNow);
-      wc.syncRunner = (r, k, rp) async => _report(); // the next run: core does not say it again
+      wc.seams.syncRunner = (r, k, rp) async => _report(); // the next run: core does not say it again
       await t.runAsync(wc.syncNow);
       expect(wc.syncRelayChanged && wc.syncDeviceIdInUse, isTrue);
 
-      final again = WalletController.forTest(repo, key: wc.key)..relayUrl = _relay; // the app was restarted
+      final again = seamedController(repo, key: wc.key)..relayUrl = _relay; // the app was restarted
       await _pumpSync(t, again);
       expect(find.textContaining(relayChangedText, findRichText: true), findsOneWidget);
       expect(find.textContaining(deviceIdInUseText, findRichText: true), findsOneWidget);
@@ -192,7 +193,7 @@ void main() {
       expect(repo.localValue('noticeDeviceIdInUse'), isNull);
       expect(log(), isNot(contains('abcd1234')));
 
-      again.syncRunner = (r, k, rp) async => _report();
+      again.seams.syncRunner = (r, k, rp) async => _report();
       await t.runAsync(() => again.setRelay(Uri.parse('http://other.local:8787')));
       await t.pump();
       expect(find.textContaining(relayChangedText, findRichText: true), findsNothing);
@@ -202,7 +203,7 @@ void main() {
 
     testWidgets('an older relay (no instance): no fingerprint line', (t) async {
       final wc = emptyWallet()..relayUrl = _relay;
-      wc.syncRunner = (r, k, repo) async => _report();
+      wc.seams.syncRunner = (r, k, repo) async => _report();
       await _pumpSync(t, wc);
       await t.runAsync(wc.syncNow);
       await t.pump();
@@ -211,7 +212,7 @@ void main() {
 
     testWidgets('deviceIdInUse is information only (no button); clockDrift is a warning line', (t) async {
       final wc = emptyWallet()..relayUrl = _relay;
-      wc.syncRunner = (r, k, repo) async => _report(problems: const [
+      wc.seams.syncRunner = (r, k, repo) async => _report(problems: const [
             SyncProblem('abcd1234', SyncProblemReason.deviceIdInUse, bytes: 0),
             SyncProblem('ef567890', SyncProblemReason.clockDrift, bytes: 120),
           ]);
@@ -229,12 +230,12 @@ void main() {
 
     testWidgets('changing the address clears the fingerprint and the notes of the old relay', (t) async {
       final wc = emptyWallet()..relayUrl = _relay;
-      wc.syncRunner = (r, k, repo) async => _report(instance: 'A1B2C3D4E5F60718', changed: true);
+      wc.seams.syncRunner = (r, k, repo) async => _report(instance: 'A1B2C3D4E5F60718', changed: true);
       await _pumpSync(t, wc);
       await t.runAsync(wc.syncNow);
       await t.pump();
       expect(find.textContaining(relayChangedText, findRichText: true), findsOneWidget);
-      wc.syncRunner = (r, k, repo) async => throw const SyncException('x');
+      wc.seams.syncRunner = (r, k, repo) async => throw const SyncException('x');
       await t.runAsync(() => wc.setRelay(Uri.parse('http://other.local:8787')));
       await t.pump();
       expect(find.textContaining(relayChangedText, findRichText: true), findsNothing);
@@ -243,7 +244,7 @@ void main() {
 
     testWidgets('fits 320 dp at text scale 2.0 with every line showing', (t) async {
       final wc = emptyWallet()..relayUrl = _relay;
-      wc.syncRunner = (r, k, repo) async => _report(instance: 'A1B2C3D4E5F60718', changed: true, problems: const [
+      wc.seams.syncRunner = (r, k, repo) async => _report(instance: 'A1B2C3D4E5F60718', changed: true, problems: const [
             SyncProblem('abcd1234', SyncProblemReason.deviceIdInUse, bytes: 0),
             SyncProblem('ef567890', SyncProblemReason.clockDrift, bytes: 120),
           ]);
@@ -361,7 +362,7 @@ void main() {
 
       var wall = DateTime(2026, 10, 20, 12).millisecondsSinceEpoch;
       final repo = WalletRepo.inMemory(now: () => wall);
-      final wc = WalletController.forTest(repo, key: VaultKey.generate(), clock: () => DateTime(2026, 10, 20, 12));
+      final wc = seamedController(repo, key: VaultKey.generate(), clock: () => DateTime(2026, 10, 20, 12));
       wc.snoozeKeyBackup();
       repo.updateSettings({'reviewDay': 3}); // a write at 12:00 sets the device's highest reading
       wc.reload();

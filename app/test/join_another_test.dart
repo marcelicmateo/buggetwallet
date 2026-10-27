@@ -14,6 +14,7 @@ import 'package:wallet_core/wallet_core.dart';
 
 import 'db_open_test.dart' show World, loadWith;
 import 'support/plan_page.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 /// What the fake key store holds for the join-pending marker.
@@ -28,28 +29,28 @@ Finder _key(String k) => find.byKey(ValueKey(k));
 WalletController _wallet(List<String> events, {bool keySaved = true, Map<String, String>? asideKeys, List<String>? written}) {
   final wc = demoWallet();
   if (keySaved) wc.repo.setLocalValue('keyBackupConfirmed', '2026-10-20');
-  wc.dbSetAside = (stamp) async => events.add('aside');
-  wc.dbExists = () async => true;
-  wc.joinMarkerWriter = (t) async {};
-  wc.joinMarkerClearer = () async {};
-  wc.keyWriter = (k, {passphrase}) async {
+  wc.seams.dbSetAside = (stamp) async => events.add('aside');
+  wc.seams.dbExists = () async => true;
+  wc.seams.joinMarkerWriter = (t) async {};
+  wc.seams.joinMarkerClearer = () async {};
+  wc.seams.keyWriter = (k, {passphrase}) async {
     events.add('key');
     written?.add(await k.toText());
   };
-  wc.keyAsideWriter = (stamp, k) async {
+  wc.seams.keyAsideWriter = (stamp, k) async {
     events.add('keyAside');
     final slot = 'aside.$stamp';
     asideKeys?[slot] = await k.toText();
     return slot;
   };
-  wc.keyAsideRemover = (slot) async {
+  wc.seams.keyAsideRemover = (slot) async {
     events.add('asideRemoved');
     asideKeys?.remove(slot);
   };
-  wc.keyForgetter = () async => events.add('FORGET-KEY');
-  wc.deviceIdWriter = (id) async {};
-  wc.deviceIdReader = () async => null;
-  wc.dbOpener = (dbKey, {deviceId}) async {
+  wc.seams.keyForgetter = () async => events.add('FORGET-KEY');
+  wc.seams.deviceIdWriter = (id) async {};
+  wc.seams.deviceIdReader = () async => null;
+  wc.seams.dbOpener = (dbKey, {deviceId}) async {
     events.add('open');
     return WalletDb(WalletRepo.inMemory(deviceId: deviceId), forget: () async => events.add('FORGET-DB'));
   };
@@ -194,8 +195,8 @@ void main() {
 
     WalletController wallet(List<String> events, {Map<String, String>? aside, List<String>? written}) {
       final wc = _wallet(events, asideKeys: aside, written: written);
-      wc.joinMarkerWriter = (t) async => markers.text = markers.last = t;
-      wc.joinMarkerClearer = () async {
+      wc.seams.joinMarkerWriter = (t) async => markers.text = markers.last = t;
+      wc.seams.joinMarkerClearer = () async {
         markers.cleared++;
         markers.text = null;
       };
@@ -256,7 +257,7 @@ void main() {
       final repo = wc.repo;
       final oldText = await wc.keyText();
       var calls = 0;
-      wc.keyWriter = (k, {passphrase}) async {
+      wc.seams.keyWriter = (k, {passphrase}) async {
         events.add('key');
         if (++calls == 1) throw StateError('disk full');
         written.add(await k.toText());
@@ -274,7 +275,7 @@ void main() {
       final events = <String>[];
       final aside = <String, String>{};
       final wc = wallet(events, aside: aside);
-      wc.keyWriter = (k, {passphrase}) async => throw StateError('disk full');
+      wc.seams.keyWriter = (k, {passphrase}) async => throw StateError('disk full');
       await expectLater(wc.joinAnotherWallet(await VaultKey.generate().toText()), throwsA(isA<StateError>()));
       expect(events, ['keyAside']);
       expect(aside, hasLength(1), reason: 'the old key stays in its slot: the key store may hold either key');
@@ -289,7 +290,7 @@ void main() {
       final wc = wallet(events, aside: aside, written: written);
       final oldText = await wc.keyText();
       final newText = await VaultKey.generate().toText();
-      wc.dbSetAside = (s) async => throw StateError('rename failed');
+      wc.seams.dbSetAside = (s) async => throw StateError('rename failed');
       await expectLater(wc.joinAnotherWallet(newText), throwsA(isA<StateError>()));
       expect(written, [newText, oldText], reason: 'the old key is written back');
       expect(events, ['keyAside', 'key', 'key', 'open', 'asideRemoved'], reason: 'the slot goes after the reopen worked');
@@ -306,9 +307,9 @@ void main() {
       final oldText = await wc.keyText();
       var notified = 0;
       wc.addListener(() => notified++);
-      wc.dbSetAside = (s) async => throw StateError('rename failed');
+      wc.seams.dbSetAside = (s) async => throw StateError('rename failed');
       var opens = 0;
-      wc.dbOpener = (k, {deviceId}) async {
+      wc.seams.dbOpener = (k, {deviceId}) async {
         opens++;
         throw StateError('cannot open');
       };
@@ -320,8 +321,8 @@ void main() {
       expect(aside.values.single, oldText, reason: 'the old key is still in its slot');
       expect(events, isNot(contains('asideRemoved')));
       // The owner then starts a new wallet: the older file is set aside, and the old key is still in the slot.
-      wc.dbSetAside = (s) async => events.add('aside');
-      wc.dbOpener = (k, {deviceId}) async => WalletDb(WalletRepo.inMemory(deviceId: deviceId));
+      wc.seams.dbSetAside = (s) async => events.add('aside');
+      wc.seams.dbOpener = (k, {deviceId}) async => WalletDb(WalletRepo.inMemory(deviceId: deviceId));
       await wc.createWallet();
       expect(events, contains('aside'));
       expect(aside.values.single, oldText, reason: 'create did not touch the slot');
@@ -332,8 +333,8 @@ void main() {
       final aside = <String, String>{};
       final wc = wallet(events, aside: aside);
       final oldText = await wc.keyText();
-      wc.dbSetAside = (s) async => throw StateError('side file rename failed');
-      wc.dbExists = () async => false; // the main file was moved, a side file was not and could not be moved back
+      wc.seams.dbSetAside = (s) async => throw StateError('side file rename failed');
+      wc.seams.dbExists = () async => false; // the main file was moved, a side file was not and could not be moved back
       await expectLater(wc.joinAnotherWallet(await VaultKey.generate().toText()), throwsA(isA<StateError>()));
       expect(events, isNot(contains('open')), reason: 'no new wallet.db next to the remains');
       expect(wc.hasWallet, isFalse);
@@ -347,12 +348,12 @@ void main() {
       final wc = wallet(events);
       wc.relayUrl = Uri.parse('http://homeserver:8787');
       var runs = 0;
-      wc.syncRunner = (relay, k, r) async {
+      wc.seams.syncRunner = (relay, k, r) async {
         runs++;
         return const SyncReport(0, 0, 0, caughtUp: true);
       };
       final gate = Completer<void>();
-      wc.keyAsideWriter = (stamp, k) async {
+      wc.seams.keyAsideWriter = (stamp, k) async {
         events.add('keyAside');
         await gate.future;
         return 'aside.$stamp';
@@ -373,13 +374,13 @@ void main() {
       final events = <String>[];
       final wc = wallet(events);
       final relay = Uri.parse('http://homeserver:8787');
-      wc.syncRunner = (r, k, repo) async => const SyncReport(0, 0, 0);
+      wc.seams.syncRunner = (r, k, repo) async => const SyncReport(0, 0, 0);
       final order = <String>[];
-      wc.joinMarkerWriter = (t) async {
+      wc.seams.joinMarkerWriter = (t) async {
         order.add('marker');
         markers.text = markers.last = t;
       };
-      wc.keyWriter = (k, {passphrase}) async => order.add('key');
+      wc.seams.keyWriter = (k, {passphrase}) async => order.add('key');
       await wc.joinAnotherWallet(await VaultKey.generate().toText(), relay: relay);
       expect(order, ['marker', 'key']);
       final m = jsonDecode(markers.last!) as Map<String, Object?>;
@@ -449,7 +450,7 @@ void main() {
         final wc = wallet(events);
         wc.relayUrl = Uri.parse('http://homeserver:8787');
         expect(wc.repo.pendingOps(), isNotEmpty, reason: 'precondition: unsent changes');
-        wc.syncRunner = (relay, k, r) async {
+        wc.seams.syncRunner = (relay, k, r) async {
           events.add('sync');
           return const SyncReport(0, 0, 0, caughtUp: true);
         };
@@ -463,7 +464,7 @@ void main() {
         final wc = wallet(events);
         wc.relayUrl = Uri.parse('http://homeserver:8787');
         final gate = Completer<void>();
-        wc.syncRunner = (relay, k, r) async {
+        wc.seams.syncRunner = (relay, k, r) async {
           events.add('sync start');
           await gate.future;
           events.add('sync end');
@@ -493,7 +494,7 @@ void main() {
         wc.syncRelayInstance = 'abcd1234abcd1234';
         wc.syncRelayBytes = 10;
         wc.lastSync = DateTime(2026, 10, 1);
-        wc.syncRunner = (r, k, repo) async => const SyncReport(0, 0, 0);
+        wc.seams.syncRunner = (r, k, repo) async => const SyncReport(0, 0, 0);
         await wc.joinAnotherWallet(await VaultKey.generate().toText(), relay: relay);
         expect(wc.syncError, isNull);
         expect(wc.syncBadFiles, 0);

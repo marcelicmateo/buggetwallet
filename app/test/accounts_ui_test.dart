@@ -6,6 +6,7 @@ import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/accounts_panel.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/screens/welcome_balance.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,11 +14,12 @@ import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/plan_page.dart';
+import 'support/seams.dart';
 import 'support/wallet.dart';
 
 final day = DateTime(2026, 10, 20, 12);
 
-WalletController wallet() => WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => day);
+WalletController wallet() => seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => day);
 
 NormalizedTransaction bankRow(String source, String date, int cents, {String currency = 'EUR', String desc = 'SYNTHETIC SHOP'}) =>
     NormalizedTransaction(
@@ -271,8 +273,8 @@ void main() {
   group('Today: Held line', () {
     Widget todayOf(WalletController wc, VoidCallback open) => ListenableBuilder(
         listenable: wc,
-        builder: (_, __) =>
-            Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), wc: wc, openPlan: () {}, openAccounts: open, clock: () => day)));
+        builder: (_, __) => Scaffold(
+            body: TodayScreen(key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {}, openAccounts: open, clock: () => day)));
 
     testWidgets('one figure per currency, tap opens Plan › Accounts; absent without accounts', (t) async {
       final wc = wallet();
@@ -293,8 +295,8 @@ void main() {
 
   group('welcome cash step', () {
     ({WalletController wc}) fresh() {
-      final wc = WalletController.forTest(WalletRepo.inMemory(), clock: () => day);
-      wc.keyWriter = (k, {passphrase}) async {};
+      final wc = seamedController(WalletRepo.inMemory(), clock: () => day);
+      wc.seams.keyWriter = (k, {passphrase}) async {};
       return (wc: wc);
     }
 
