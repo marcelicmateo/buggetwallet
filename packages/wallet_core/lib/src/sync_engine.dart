@@ -619,132 +619,24 @@ class SyncEngine {
         cursors.remove(d);
       }
     }
-    int cur(String d) => cursors[d] ?? 0;
-
-    var received = 0, filesRead = 0, opsRead = 0, bytesRead = 0, known = 0;
+    final run = _ApplyRun(state, cursors, BadFiles.load(repo), _BadSnapshots.load(repo));
     final problems = <SyncProblem>[if (inUse != null) inUse];
     final waiting = <SyncWaiting>[];
-    final bad = BadFiles.load(repo), listed = <String>{};
-    final badSnaps = _BadSnapshots.load(repo);
-    var badChanged = false, complete = false;
-    // Per device that stopped: what it waits on, and the problem to report (none when a pruned file has no snapshot).
-    final blocked = <String, (SyncWaiting, SyncProblem?)>{};
-    Future<bool> snapshot({bool Function(RelaySnapshot s)? usable}) async {
-      final got = await _applySnapshot(repo, state, cursors, badSnaps, usable: usable);
-      if (got == null) return false;
-      received += got.$1;
-      opsRead += got.$2;
-      bytesRead += got.$3;
-      filesRead++;
-      return true;
-    }
-
-    /// Applies [d]'s files from its cursor, strictly in order, until one cannot be used.
-    Future<void> applyPeer(String d) async {
-      final dev = state.devices[d]!;
-      while (cur(d) < dev.last) {
-        final seq = cur(d) + 1;
-        if (seq < dev.first) {
-          logEvent(_log, Level.WARNING, 'sync.file.pruned', {'seq': seq});
-          blocked[d] = (SyncWaiting(_short(d), seq), null);
-          return;
-        }
-        final k = BadFile.keyOf(d, '$seq');
-        final List<int> bytes;
-        try {
-          bytes = await transport.get(d, seq);
-        } on TransportException catch (e) {
-          // Not the file's fault (or not known to be): not quarantined, fetched again next run.
-          logEvent(_log, Level.WARNING, 'sync.file.unreadable', {'seq': seq, 'failure': e.failure.name});
-          blocked[d] = (SyncWaiting(_short(d), seq), SyncProblem(_short(d), SyncProblemReason.unreadable, bytes: 0));
-          return;
-        }
-        final was = bad.byKey[k];
-        if (was != null && !was.retryNow(build, repo.clock.now()) && was.hash == await fileHash(bytes)) {
-          listed.add(k);
-          blocked[d] = (SyncWaiting(_short(d), seq, reason: was.reason), was.problem(isNew: false));
-          known++;
-          return;
-        }
-        final int changed, count;
-        try {
-          (changed, count) = await _applyBytes(repo, key, bytes, _fileOps, aadSyncFile(d, seq), repo.clock.now());
-        } on _Refused catch (r) {
-          logError(_log, 'sync.file.failed', r.error, r.stack, fields: {'seq': seq, 'reason': r.reason.name, 'bytes': bytes.length});
-          listed.add(k);
-          bad.byKey[k] = BadFile(d, '$seq', r.reason, size: bytes.length, hash: await fileHash(bytes), build: build, retryAt: r.retryAt);
-          badChanged = true;
-          blocked[d] = (SyncWaiting(_short(d), seq, reason: r.reason), SyncProblem(_short(d), r.reason, bytes: bytes.length));
-          return;
-        }
-        if (bad.byKey.remove(k) != null) badChanged = true;
-        repo.setSyncCursor(d, seq);
-        repo.recordSyncFile(d, seq, count);
-        cursors[d] = seq;
-        received += changed;
-        filesRead++;
-        opsRead += count;
-        bytesRead += bytes.length;
-        logEvent(_log, Level.FINE, 'sync.file', {'seq': seq, 'bytes': bytes.length, 'ops': count, 'changed': changed});
-      }
-    }
-
     try {
-      final pruned = peers.any((d) {
-        final dev = state.devices[d]!;
-        return cur(d) < dev.last && cur(d) + 1 < dev.first;
-      });
-      final fresh = cursors.isEmpty && peers.any((d) => state.devices[d]!.last > 0);
-      final snap = state.snapshot;
-      var usedSnapshot = false;
-      if (snap != null && (pruned || (fresh && _current(snap)))) {
-        // A pruned file leaves no choice; otherwise only a snapshot of this schema or newer (else it lacks fields).
-        usedSnapshot = await snapshot(usable: pruned ? null : _current);
-      }
+      final usedSnapshot = await _startFromSnapshot(repo, run, peers);
       for (final d in peers) {
-        await applyPeer(d);
+        run.record(d, await _applyPeer(repo, run, d));
       }
-      // A file refused for good (quarantined, not one that merely could not be fetched) that a snapshot of this schema
-      // or newer covers (it was readable for the device that wrote it): start from that snapshot, then go on after
-      // it. Otherwise that device would wait for good.
-      final refused = {
-        for (final MapEntry(key: d, value: (w, _)) in blocked.entries)
-          if (w.reason != null) d: w.seq
-      };
-      bool unblocks(RelaySnapshot s) => _current(s) && refused.entries.any((e) => e.value <= (s.covers[e.key] ?? 0));
-      if (!usedSnapshot && [state.snapshot, state.previous].nonNulls.any(unblocks)) {
-        logEvent(_log, Level.INFO, 'sync.snapshot.unblock', {'devices': refused.length});
-        if (await snapshot(usable: unblocks)) {
-          for (final d in blocked.keys.toList()) {
-            if (cur(d) < blocked[d]!.$1.seq) continue;
-            blocked.remove(d);
-            await applyPeer(d);
-          }
-        }
-      }
-      for (final (w, p) in blocked.values) {
+      if (!usedSnapshot) await _unblockBySnapshot(repo, run);
+      for (final (w, p) in run.blocked.values) {
         waiting.add(w);
         if (p != null) problems.add(p);
       }
-      complete = true;
+      run.complete = true;
     } finally {
-      // Records of files that are no longer the one a device waits on (applied, or older bookkeeping) are forgotten,
-      // but only after a complete pass.
-      if (complete) {
-        final gone = [
-          for (final k in bad.byKey.keys)
-            if (!listed.contains(k)) k
-        ];
-        for (final k in gone) {
-          bad.byKey.remove(k);
-        }
-        badChanged |= gone.isNotEmpty;
-        badSnaps.keepOnly({
-          for (final s in [state.snapshot, state.previous].nonNulls) s.id
-        });
-      }
-      if (badChanged) bad.save(repo);
-      badSnaps.save(repo);
+      if (run.complete) run.forgetUnlisted();
+      if (run.badChanged) run.bad.save(repo);
+      run.badSnaps.save(repo);
     }
 
     // 4. Ack what was applied.
@@ -752,7 +644,7 @@ class SyncEngine {
     var acked = false;
     final acks = {
       for (final d in peers)
-        if (cur(d) > 0 && cur(d) <= state.devices[d]!.last) d: cur(d)
+        if (run.cur(d) > 0 && run.cur(d) <= state.devices[d]!.last) d: run.cur(d)
     };
     final stored = _map(repo, ackedKey);
     void remember(String as, Map<String, int> m) {
@@ -787,9 +679,9 @@ class SyncEngine {
     // deviceIdInUse is information about this install's own stream (already handled), not a file left unread.
     final caughtUp = waiting.isEmpty &&
         problems.every((p) => p.reason == SyncProblemReason.deviceIdInUse) &&
-        peers.every((d) => cur(d) >= state.devices[d]!.last);
+        peers.every((d) => run.cur(d) >= state.devices[d]!.last);
     // Snapshots not used are reported, but a device that applied every file is caught up without them.
-    problems.addAll(badSnaps.problems.values);
+    problems.addAll(run.badSnaps.problems.values);
     // Local imports and deletes match at once only while this holds (WalletRepo.syncCaughtUp); otherwise they wait
     // for the next caught-up run, like the ops applied here.
     repo.setLocalValue(WalletRepo.caughtUpKey, caughtUp ? '1' : '0');
@@ -829,19 +721,19 @@ class SyncEngine {
     t.done({
       'devices': peers.length,
       'sent': sent,
-      'files': filesRead,
-      'ops': opsRead,
-      'changed': received,
-      'bytes': bytesRead,
+      'files': run.filesRead,
+      'ops': run.opsRead,
+      'changed': run.received,
+      'bytes': run.bytesRead,
       'bad': problems.length,
-      'known': known,
+      'known': run.known,
       'waiting': waiting.length,
       'caughtUp': caughtUp,
       'blobsSent': blobsSent,
       'blobsWaiting': repo.queuedBlobs().length,
       'blobsUnsupported': blobsUnsupported,
     });
-    return SyncReport(sent, received, filesRead,
+    return SyncReport(sent, run.received, run.filesRead,
         problems: problems,
         caughtUp: caughtUp,
         waiting: waiting,
@@ -857,6 +749,97 @@ class SyncEngine {
           for (final d in ids)
             SyncDevice(_short(d), lastSeen: d == me ? (acked || sent > 0 ? now : seenById[d]) : seenById[d], isThis: d == me),
         ]);
+  }
+
+  /// Step 2: starts from the relay's snapshot when a file a peer still needs was pruned, or when this device has applied
+  /// nothing yet and the snapshot is of this schema or newer. Returns whether one was applied.
+  Future<bool> _startFromSnapshot(WalletRepo repo, _ApplyRun run, List<String> peers) async {
+    final state = run.state;
+    final pruned = peers.any((d) {
+      final dev = state.devices[d]!;
+      return run.cur(d) < dev.last && run.cur(d) + 1 < dev.first;
+    });
+    final fresh = run.cursors.isEmpty && peers.any((d) => state.devices[d]!.last > 0);
+    final snap = state.snapshot;
+    if (snap == null || !(pruned || (fresh && _current(snap)))) return false;
+    // A pruned file leaves no choice; otherwise only a snapshot of this schema or newer (else it lacks fields).
+    return _useSnapshot(repo, run, usable: pruned ? null : _current);
+  }
+
+  /// Applies a snapshot of the relay ([_applySnapshot]) and counts it as one file read. Returns whether one was applied.
+  Future<bool> _useSnapshot(WalletRepo repo, _ApplyRun run, {bool Function(RelaySnapshot s)? usable}) async {
+    final got = await _applySnapshot(repo, run.state, run.cursors, run.badSnaps, usable: usable);
+    if (got == null) return false;
+    run
+      ..received += got.$1
+      ..opsRead += got.$2
+      ..bytesRead += got.$3
+      ..filesRead += 1;
+    return true;
+  }
+
+  /// Step 3 for peer [d]: applies its files from its cursor, strictly in order, until one cannot be used.
+  Future<_PeerResult> _applyPeer(WalletRepo repo, _ApplyRun run, String d) async {
+    final dev = run.state.devices[d]!;
+    while (run.cur(d) < dev.last) {
+      final seq = run.cur(d) + 1;
+      if (seq < dev.first) {
+        logEvent(_log, Level.WARNING, 'sync.file.pruned', {'seq': seq});
+        return _PeerWaiting(SyncWaiting(_short(d), seq), null);
+      }
+      final k = BadFile.keyOf(d, '$seq');
+      final List<int> bytes;
+      try {
+        bytes = await transport.get(d, seq);
+      } on TransportException catch (e) {
+        // Not the file's fault (or not known to be): not quarantined, fetched again next run.
+        logEvent(_log, Level.WARNING, 'sync.file.unreadable', {'seq': seq, 'failure': e.failure.name});
+        return _PeerWaiting(SyncWaiting(_short(d), seq), SyncProblem(_short(d), SyncProblemReason.unreadable, bytes: 0));
+      }
+      final was = run.bad.byKey[k];
+      if (was != null && !was.retryNow(build, repo.clock.now()) && was.hash == await fileHash(bytes)) {
+        run.listed.add(k);
+        return _PeerBlocked(SyncWaiting(_short(d), seq, reason: was.reason), was.problem(isNew: false));
+      }
+      final versionBefore = repo.dataVersion;
+      final int changed, count;
+      try {
+        (changed, count) = await _applyBytes(repo, key, bytes, _fileOps, aadSyncFile(d, seq), repo.clock.now());
+      } on _Refused catch (r) {
+        assert(run.cur(d) == seq - 1 && repo.dataVersion == versionBefore, 'a refused file changes nothing');
+        logError(_log, 'sync.file.failed', r.error, r.stack, fields: {'seq': seq, 'reason': r.reason.name, 'bytes': bytes.length});
+        run.listed.add(k);
+        run.bad.byKey[k] = BadFile(d, '$seq', r.reason, size: bytes.length, hash: await fileHash(bytes), build: build, retryAt: r.retryAt);
+        run.badChanged = true;
+        return _PeerRefused(SyncWaiting(_short(d), seq, reason: r.reason), SyncProblem(_short(d), r.reason, bytes: bytes.length));
+      }
+      if (run.bad.byKey.remove(k) != null) run.badChanged = true;
+      repo.setSyncCursor(d, seq);
+      repo.recordSyncFile(d, seq, count);
+      run.applied(d, seq, changed: changed, ops: count, bytes: bytes.length);
+      logEvent(_log, Level.FINE, 'sync.file', {'seq': seq, 'bytes': bytes.length, 'ops': count, 'changed': changed});
+    }
+    return const _PeerApplied();
+  }
+
+  /// A file refused for good (quarantined, not one that merely could not be fetched) that a snapshot of this schema or
+  /// newer covers (it was readable for the device that wrote it): start from that snapshot, then go on after it.
+  /// Otherwise that device would wait for good. Only when no snapshot was used in step 2.
+  Future<void> _unblockBySnapshot(WalletRepo repo, _ApplyRun run) async {
+    final state = run.state, blocked = run.blocked;
+    final refused = {
+      for (final MapEntry(key: d, value: (w, _)) in blocked.entries)
+        if (w.reason != null) d: w.seq
+    };
+    bool unblocks(RelaySnapshot s) => _current(s) && refused.entries.any((e) => e.value <= (s.covers[e.key] ?? 0));
+    if (![state.snapshot, state.previous].nonNulls.any(unblocks)) return;
+    logEvent(_log, Level.INFO, 'sync.snapshot.unblock', {'devices': refused.length});
+    if (!await _useSnapshot(repo, run, usable: unblocks)) return;
+    for (final d in blocked.keys.toList()) {
+      if (run.cur(d) < blocked[d]!.$1.seq) continue;
+      blocked.remove(d);
+      run.record(d, await _applyPeer(repo, run, d));
+    }
   }
 
   /// Uploads the bill files waiting for upload plus the cached ones in [refs] (files the ops about to go up reference:
@@ -1233,6 +1216,103 @@ class SyncEngine {
     repo.forgetSyncFiles(covers);
     if (heal) repo.setLocalValue(healKey, '${now.millisecondsSinceEpoch}');
     t.done({'ops': ops.length, 'bytes': sealed.length, 'devices': covers.length, 'behind': behind, 'aged': aged, 'heal': heal});
+  }
+}
+
+/// How one peer's apply pass ([SyncEngine._applyPeer]) ended.
+sealed class _PeerResult {
+  const _PeerResult();
+}
+
+/// Every file the relay lists for the peer is applied.
+final class _PeerApplied extends _PeerResult {
+  const _PeerApplied();
+}
+
+/// Stopped at file `waiting.seq`; that device's later files wait for it. [problem] is what the run reports (none for a
+/// pruned file with no snapshot to start from).
+sealed class _PeerStopped extends _PeerResult {
+  final SyncWaiting waiting;
+  final SyncProblem? problem;
+  const _PeerStopped(this.waiting, this.problem);
+}
+
+/// The file is not there to read: pruned, or it could not be fetched (not quarantined, fetched again next run).
+final class _PeerWaiting extends _PeerStopped {
+  const _PeerWaiting(super.waiting, super.problem);
+}
+
+/// The file was refused in this run and is now quarantined in [BadFiles]; it changed nothing.
+final class _PeerRefused extends _PeerStopped {
+  const _PeerRefused(super.waiting, SyncProblem super.problem);
+}
+
+/// The file is quarantined from an earlier run, with the same bytes and not due for a retry.
+final class _PeerBlocked extends _PeerStopped {
+  const _PeerBlocked(super.waiting, SyncProblem super.problem);
+}
+
+/// The state of one run's apply phase (steps 2 and 3 of [SyncEngine]): cursors, quarantine records, what stopped each
+/// peer, and the counts the report and the run log carry.
+class _ApplyRun {
+  final RelayState state;
+
+  /// Device → last applied seq, kept equal to [WalletRepo.syncCursors] (a snapshot raises them).
+  final Map<String, int> cursors;
+  final BadFiles bad;
+  final _BadSnapshots badSnaps;
+
+  /// Quarantine keys still current this run (a file some device waits on); the others are forgotten after a complete
+  /// pass ([forgetUnlisted]).
+  final listed = <String>{};
+
+  /// Per device that stopped: what it waits on, and the problem to report (none when a pruned file has no snapshot).
+  final blocked = <String, (SyncWaiting, SyncProblem?)>{};
+  var received = 0, filesRead = 0, opsRead = 0, bytesRead = 0, known = 0;
+  var badChanged = false;
+
+  /// Every peer was tried and the waiting list built: only then are quarantine records forgotten.
+  var complete = false;
+
+  _ApplyRun(this.state, this.cursors, this.bad, this.badSnaps);
+
+  int cur(String d) => cursors[d] ?? 0;
+
+  /// [d]'s file [seq] was applied: [changed] fields, [ops] ops, [bytes] long.
+  void applied(String d, int seq, {required int changed, required int ops, required int bytes}) {
+    assert(seq == cur(d) + 1, 'files apply strictly in order per device');
+    cursors[d] = seq;
+    received += changed;
+    filesRead++;
+    opsRead += ops;
+    bytesRead += bytes;
+  }
+
+  /// Notes where [d]'s pass ended.
+  void record(String d, _PeerResult r) {
+    if (r case _PeerStopped(:final waiting, :final problem)) {
+      blocked[d] = (waiting, problem);
+      if (r is _PeerBlocked) known++;
+    }
+  }
+
+  /// Forgets the records of files that are no longer the one a device waits on (applied, or older bookkeeping) and of
+  /// snapshots the relay no longer lists. Only after a complete pass: one that stopped early has not listed them all.
+  void forgetUnlisted() {
+    assert(complete, 'forget only after a complete pass');
+    final gone = [
+      for (final k in bad.byKey.keys)
+        if (!listed.contains(k)) k
+    ];
+    for (final k in gone) {
+      bad.byKey.remove(k);
+    }
+    badChanged |= gone.isNotEmpty;
+    badSnaps.keepOnly({
+      for (final s in [state.snapshot, state.previous].nonNulls) s.id
+    });
+    assert(blocked.entries.every((e) => e.value.$1.reason == null || bad.byKey.containsKey(BadFile.keyOf(e.key, '${e.value.$1.seq}'))),
+        'a file refused for good keeps its quarantine record');
   }
 }
 
