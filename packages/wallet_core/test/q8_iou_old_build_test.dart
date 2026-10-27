@@ -350,6 +350,90 @@ void main() {
       await run(phone);
       expect(dump(phone, clocks: false), dump(laptop, clocks: false));
     }, timeout: _t);
+
+    Future<void> upgradePhone() async {
+      phone.close();
+      phone = WalletRepo.open(phonePath, now: () => t.millisecondsSinceEpoch);
+      expect(cursors(phone), isEmpty);
+    }
+
+    test(
+        'the IOU written after the newer build\'s snapshot: the upgraded device stops at that snapshot and reads the files '
+        'after it (an older one on top would skip them); a leftover mark is cleared', () async {
+      await oldPhone();
+      laptop.addWish('Synthetic mug', 900);
+      await run(laptop); // a file of its own before its snapshot
+      t = t.add(const Duration(days: 8));
+      await oldPhone(); // s16, aged
+      await run(laptop); // replaces it with its own (newest is older-schema)
+      expect(snapSchema((await relay.state()).snapshot), 's${WalletRepo.schemaVersion}');
+      final covered = (await relay.state()).snapshot!.covers[laptop.deviceId]!;
+      laptop.addIou(person: 'Ana', direction: IouDirection.lent, amount: 2000, currency: 'EUR', date: '2026-02-02');
+      await run(laptop);
+      final iouFile = (await relay.state()).devices[laptop.deviceId]!.last;
+      expect(iouFile, greaterThan(covered));
+      await oldPhone(); // skips the IOU, acks the file
+      t = t.add(const Duration(days: 8));
+      phone.addWish('Synthetic kettle', 2500);
+      await oldPhone(); // s16 covering the IOU file
+      final st = await relay.state();
+      expect((snapSchema(st.snapshot), snapSchema(st.previous)), ('s16', 's${WalletRepo.schemaVersion}'));
+      expect(st.snapshot!.covers[laptop.deviceId], greaterThanOrEqualTo(iouFile));
+      expect(st.devices[laptop.deviceId]!.first, greaterThan(1), reason: 'files both snapshots cover are pruned');
+      expect(st.devices[laptop.deviceId]!.first, lessThanOrEqualTo(iouFile), reason: 'the IOU file is still there');
+
+      await upgradePhone();
+      phone.setLocalValue(SyncEngine.wantCurrentKey, '${t.millisecondsSinceEpoch}');
+      final r = await run(phone);
+      expect(r.problems, isEmpty);
+      expect(ious(phone), ious(laptop));
+      expect(phone.localValue(SyncEngine.wantCurrentKey), isNull);
+    }, timeout: _t);
+
+    test(
+        'a device that kept its cursors never waits for a current snapshot: after 90 days away the newer build writes '
+        'one and the upgraded device takes the IOUs from it', () async {
+      await oldPhone();
+      await run(laptop);
+      laptop.addIou(person: 'Ana', direction: IouDirection.lent, amount: 2000, currency: 'EUR', date: '2026-01-24');
+      await run(laptop);
+      await oldPhone();
+      // The laptop is away for over 90 days; the phone keeps writing older-schema snapshots, and its files go too.
+      for (var i = 0; i < 13; i++) {
+        t = t.add(const Duration(days: 8));
+        phone.addWish('Synthetic item $i', 100 + i);
+        await oldPhone();
+      }
+      final st = await relay.state();
+      expect((snapSchema(st.snapshot), snapSchema(st.previous)), ('s16', 's16'));
+      expect(st.devices[phone.deviceId]!.first, greaterThan(cursors(laptop)[phone.deviceId]! + 1), reason: 'pruned past the laptop');
+
+      final back = await run(laptop);
+      expect(back.problems, isEmpty);
+      expect(laptop.localValue(SyncEngine.wantCurrentKey), isNull, reason: 'it kept its cursors: nothing skipped');
+      expect(snapSchema((await relay.state()).snapshot), 's${WalletRepo.schemaVersion}', reason: 'so it writes a current one');
+      expect(ious(laptop), hasLength(1));
+
+      await upgradePhone();
+      await run(phone);
+      expect(ious(phone), ious(laptop));
+      expect(phone.localValue(SyncEngine.wantCurrentKey), isNull);
+    }, timeout: _t);
+
+    test('the mark holds snapshots back for 30 days at most', () async {
+      await oldPhone();
+      await run(laptop);
+      t = t.add(const Duration(days: 8));
+      await oldPhone(); // s16
+      laptop.setLocalValue(SyncEngine.wantCurrentKey, '${t.millisecondsSinceEpoch}');
+      await run(laptop);
+      expect(snapSchema((await relay.state()).snapshot), 's16', reason: 'held back while marked');
+      expect(laptop.localValue(SyncEngine.wantCurrentKey), isNotNull);
+      t = t.add(SyncEngine.wantCurrentFor + const Duration(days: 1));
+      await run(laptop);
+      expect(laptop.localValue(SyncEngine.wantCurrentKey), isNull, reason: 'expired');
+      expect(snapSchema((await relay.state()).snapshot), 's${WalletRepo.schemaVersion}');
+    }, timeout: _t);
   });
 
   test('the skip itself: an op of a record kind this build does not know stores nothing, records no clock and fails nothing', () {

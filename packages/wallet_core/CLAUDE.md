@@ -556,8 +556,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - Snapshots are made from the writer's database, so one written by an older build lacks the fields that build does not
   know. A schema-bump replay or a new device ignores a snapshot of an older schema while the files are still there. A
   device whose next file is pruned starts from a kept snapshot of its schema first (newer builds write one as soon as
-  the newest is older-schema, Q8); with none kept it starts from the older one, writes no snapshot of its own for up to
-  30 days and takes the next current-schema one when a device holding the fields writes it. Past those 30 days (no
+  the newest is older-schema, Q8); with none kept it starts from the older one and, if it started from empty cursors,
+  writes no snapshot of its own (heal snapshots excepted) for up to 30 days and takes the next current-schema one when
+  a device holding the fields writes it. Past those 30 days (no
   upgraded device that holds them synced) the fields stay missing there until they are written again.
 - A wiped, replaced or restored relay (H5/H5b): a device whose stream lost files moves to a new stream epoch (never a
   seq reused with other content), and a relay that names another instance makes every device start over (cursors 0,

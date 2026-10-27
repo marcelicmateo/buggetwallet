@@ -106,11 +106,13 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   `last` is reset to 0 (relay lost its files). Snapshot use: when a needed file is pruned; when this device applied
   nothing yet (new device, schema-bump replay) and the snapshot id says this schema or newer (`s<schema>-<ms>-<hex>`);
   and when a blocked file is covered by the snapshot (then the device goes on after it). Latest first, then `previous`;
-  covers raise the cursors. Q8 (a pruned needed file): a snapshot of this schema or newer first (latest or `previous`),
-  then an older-schema latest on top (it may cover later files; field by field, removes nothing); with no current one,
-  the older one alone and device-local `syncWantCurrentSnapshot` = ms: for up to 30 days (`wantCurrentFor`) this device
-  writes no snapshot and applies the next one of this schema or newer once, then clears it (so ops an older build
-  skipped come back after a schema-bump replay even when the relay pruned their files). The unblock case only for a quarantined wait (`SyncWaiting.reason` set, not a file that
+  covers raise the cursors. Q8 (a pruned needed file): a snapshot of this schema or newer (latest or `previous`) and
+  nothing on top (the relay prunes only what every kept snapshot covers, so the files after it are still there); with
+  no current one an older one, and only when the device started from empty cursors (schema-bump replay, new install)
+  the device-local mark `syncWantCurrentSnapshot` = ms: for up to 30 days (`wantCurrentFor`) it writes no snapshot
+  (heal snapshots excepted) and applies the next one of this schema or newer once, then clears it (also cleared when a
+  current one is applied after a prune). So ops an older build skipped come back after a schema-bump replay even when
+  the relay pruned their files. Known limit: a heal snapshot written while marked can be taken as the awaited one. The unblock case only for a quarantined wait (`SyncWaiting.reason` set, not a file that
   could not be fetched) and, like the new-device case, only with a snapshot of this schema or newer (latest or
   `previous`, whichever covers it). A snapshot that could not be fetched or refused to apply is remembered device-locally
   (`syncBadSnapshots` = `{"<id>": {reason (null = not fetched), bytes, hash, build, at}}`) and not downloaded again until

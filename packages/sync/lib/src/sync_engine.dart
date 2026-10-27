@@ -424,10 +424,13 @@ class SyncEngine {
   /// (`{"<peer>/<device>": [ack, ms]}`); and when this device last wrote a heal snapshot (ms).
   static const stuckKey = 'syncPeerStuck', healKey = 'syncHealAt';
 
-  /// Device-local: when (ms) a pruned file left only a snapshot of an older schema to start from, so this device may
-  /// lack record kinds the old build skipped and another device still holds. Until then + [wantCurrentFor] it writes no
-  /// snapshot (the relay's newest stays older-schema, so a device that has them writes one, see [_maybeSnapshot]) and
-  /// applies the next snapshot of this schema or newer as well (field by field: the newer clock wins), then clears it.
+  /// Device-local: when (ms) a pruned file left only a snapshot of an older schema to start from while this device
+  /// started from nothing (empty cursors: a schema-bump replay or a new install), so it may lack record kinds the old
+  /// build skipped and another device still holds. Until then + [wantCurrentFor] it writes no snapshot (the relay's
+  /// newest stays older-schema, so a device that has them writes one, see [_maybeSnapshot]) and applies the next
+  /// snapshot of this schema or newer as well (field by field: the newer clock wins), then clears it. Known limit: a heal
+  /// snapshot (written all the same) is current-schema without those kinds; if it becomes the newest, this device takes
+  /// it as the one it waited for and the kinds stay missing here until written again.
   static const wantCurrentKey = 'syncWantCurrentSnapshot';
 
   /// How long [wantCurrentKey] holds back this device's snapshots at most.
@@ -791,17 +794,22 @@ class SyncEngine {
       return false;
     }
     // A pruned file leaves no choice but a snapshot. One of this schema or newer first: an older one lacks the record
-    // kinds and fields this build added (a schema-bump replay would lose what the old build skipped). Then an older
-    // latest one on top, as it may cover files after that one's covers (applied field by field: it removes nothing).
-    // A current one refused above is not tried twice.
-    final current = await _useSnapshot(repo, run, usable: _current);
-    if (current && _current(snap)) return true;
-    final older = await _useSnapshot(repo, run, usable: current ? (s) => identical(s, snap) : (s) => !_current(s));
-    if (!current && older) {
+    // kinds and fields this build added (a schema-bump replay would lose what the old build skipped). It is enough: the
+    // relay prunes a file only when every kept snapshot covers it, so every file after its covers is still there (an
+    // older snapshot on top would move the cursors past them unread).
+    if (await _useSnapshot(repo, run, usable: _current)) {
+      if (repo.localValue(wantCurrentKey) != null) repo.setLocalValue(wantCurrentKey, null);
+      return true;
+    }
+    // None: an older one (a current one refused above is not tried twice). A device that started from nothing (a
+    // schema-bump replay, a new install) may now lack what the old build skipped: it waits for a current snapshot
+    // ([wantCurrentKey]). One that kept its cursors applied every op it had read, so it skipped no record kind.
+    final older = await _useSnapshot(repo, run, usable: (s) => !_current(s));
+    if (older && fresh) {
       repo.setLocalValue(wantCurrentKey, '${_now().millisecondsSinceEpoch}');
       logEvent(_log, Level.INFO, 'sync.snapshot.olderSchema');
     }
-    return current || older;
+    return older;
   }
 
   /// Applies a snapshot of the relay ([_applySnapshot]) and counts it as one file read. Returns whether one was applied.
@@ -1198,7 +1206,9 @@ class SyncEngine {
       {bool heal = false, bool heldBlobs = false, bool declare = true}) async {
     final me = _streamOf(repo);
     final current = state.snapshot;
-    if (_wantCurrent(repo, now)) {
+    // A heal snapshot is written all the same: a peer stuck on a refused file must not wait for weeks. Known limit: it
+    // lacks the record kinds this device may be missing, and a current snapshot clears the mark (see [wantCurrentKey]).
+    if (!heal && _wantCurrent(repo, now)) {
       logEvent(_log, Level.INFO, 'sync.snapshot.skipped', {'reason': 'wantCurrent'});
       return;
     }
