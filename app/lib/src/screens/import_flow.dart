@@ -7,9 +7,11 @@ import '../controller.dart';
 import '../file_chooser.dart';
 import '../logging.dart';
 import '../widgets/common.dart';
+import 'accounts_panel.dart' show askBankBalance;
 import 'csv_layouts_panel.dart';
 import 'csv_map_sheet.dart';
 import 'first_plan_sheet.dart';
+import 'import_preview_sheet.dart';
 
 final _log = Logger('bw.app');
 
@@ -51,11 +53,19 @@ Future<void> pickAndImport(BuildContext context, WalletController wc, FileChoose
         if (!context.mounted) return null;
         return openMapColumns(context, wc, need.shape, bytes);
       },
-      confirmRemoval: (n) async => context.mounted && await confirmRemovePayments(context, n));
+      confirmRemoval: (n) async => context.mounted && await confirmRemovePayments(context, n),
+      // Q4: the owner sees what the file will do first (Settings › Import › Always show; off = files go straight in).
+      confirmPreview:
+          wc.importPreviewAlways ? (preview, bank) async => context.mounted ? openImportPreview(context, preview, bank) : null : null);
   // A saved layout that read the file another way replaced its earlier payments: Undo puts them back.
   final undo = lines.map((l) => l.undo).whereType<VoidCallback>().firstOrNull;
   if (undo != null && context.mounted) {
     toast(context, 'Earlier payments of that layout were read again.', actionLabel: 'Undo', onAction: undo);
+  }
+  // Q5: accounts the file gave no balance for: "What did the bank app show when you downloaded this file?"
+  for (final q in lines.expand((l) => l.questions)) {
+    if (!context.mounted) break;
+    await askBankBalance(context, wc, q, fromImport: true);
   }
   // An import that added rows and leaves plan suggestions: "Looks right?" once per wallet.
   if (context.mounted && lines.any((l) => l.ok && l.added > 0)) await offerFirstPlan(context, wc);

@@ -446,6 +446,9 @@ class TxTile extends StatelessWidget {
 
   /// The wallet's rates (`settings.fxRates`): a converted payment shows its original amount "100.00 $ at 0.9240" under the amount.
   final Map<String, FxRate>? fxRates;
+
+  /// The payment is linked to an IOU (Q8): a small "lent", "borrowed" or "repaid" tag.
+  final String? iouTag;
   const TxTile(
       {super.key,
       required this.t,
@@ -457,7 +460,8 @@ class TxTile extends StatelessWidget {
       this.tagTable,
       this.splitCount = 0,
       this.splitBroken = false,
-      this.matchedPart});
+      this.matchedPart,
+      this.iouTag});
 
   @override
   Widget build(BuildContext context) {
@@ -486,6 +490,7 @@ class TxTile extends StatelessWidget {
           maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       Tag(src),
       if (splitCount > 0) Tag('Split · $splitCount'),
+      if (iouTag != null) Tag(iouTag!),
       if (matchedPart != null) Tag('Part ${matchedPart! + 1} matches'),
       if (t.isPart) Tag('part of ${money(t.tx.amount, t.tx.currency, decimals: 2, signed: true)}'),
       if (splitBroken || t.splitBroken)

@@ -23,6 +23,8 @@ void main() {
       seedDemoPlanned(repo, today, p.end);
       seedDemoBills(repo, today);
       await seedDemoAccounts(repo, today);
+      seedDemoIous(repo, today);
+      expect(repo.ious(), hasLength(2));
       expect(repo.accounts(), hasLength(3));
       seedDemoSplit(repo);
       expect(repo.splits(), hasLength(1));

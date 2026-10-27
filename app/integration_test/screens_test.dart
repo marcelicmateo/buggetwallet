@@ -1,13 +1,16 @@
 // Screenshots of every tab with the synthetic demo wallet, then the app's log. Run on the emulator: tools/emulator.sh screens
 // -> dist/screens/*.png and dist/logs/app-emulator.log (written by test_driver/integration_test.dart).
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/bill_inputs.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/logging.dart';
+import 'package:budget_wallet/src/screens/accounts_panel.dart' show askBankBalance;
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
+import 'package:budget_wallet/src/screens/import_preview_sheet.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
@@ -17,6 +20,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart';
 import 'package:wallet_sync/wallet_sync.dart';
 
 import '../test/support/seams.dart';
@@ -49,6 +54,7 @@ void main() {
     seedDemoBills(wc.repo, wc.today());
     seedDemoSplit(wc.repo);
     await seedDemoAccounts(wc.repo, wc.today());
+    seedDemoIous(wc.repo, wc.today());
     wc.reload();
     await wc.importIcsFile('demo.ics', Uint8List.fromList(utf8.encode(demoIcs(wc.today()))));
 
@@ -87,6 +93,53 @@ void main() {
       await tester.pumpAndSettle();
       await binding.takeScreenshot('${i + 2}-${tab.toLowerCase()}');
     }
+
+    // Stage Q: the payday forecast under the plan, the bills cost header, the Owed panel with its IOU sheet, the import preview and the
+    // bank balance question.
+    await tester.tap(navTab('Bills'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('recurringCost')));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('3-bills-cost');
+    await tester.tap(navTab('Save'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('owedPanel')));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('4-save-owed');
+    await tester.tap(find.byKey(ValueKey('iou:${wc.iousOpen().first.iou.id}')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('iouSheet')), findsOneWidget);
+    await binding.takeScreenshot('4-save-iou');
+    await tester.tap(find.byKey(const ValueKey('sheetClose')));
+    await tester.pumpAndSettle();
+    final ctx = tester.element(find.byType(Scaffold).first);
+    NormalizedTransaction row(String id, String date, int cents, String d) => NormalizedTransaction(
+        id: id, source: 'pbz', date: date, amountMinor: cents, currency: 'EUR', bankType: 'POS plaćanje', description: d);
+    final known = demoBatch(wc.today()).transactions.take(3);
+    final preview = wc.repo.previewImport(ImportBatch(source: 'pbz', transactions: [
+      ...known,
+      row('demo-new-1', addDays(wc.today(), -1), -2150, 'POS KONZUM 0000 ZAGREB'),
+      row('demo-new-2', wc.today(), -980, 'POS WOLT ZAGREB'),
+      row('demo-new-3', wc.today(), 12000, 'UPLATA DEMO SIDE JOB'),
+    ]));
+    unawaited(openImportPreview(ctx, preview, 'PBZ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('previewGroup:fresh')));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('8-import-preview');
+    await tester.tap(find.byKey(const ValueKey('importPreviewCancel')));
+    await tester.pumpAndSettle();
+    final pbz = wc.accountsAll().firstWhere((a) => a.source == 'pbz');
+    unawaited(askBankBalance(
+        ctx,
+        wc,
+        BankQuestion(
+            accountId: pbz.id, name: pbz.name, currency: pbz.currency, date: wc.today(), appCents: wc.appBalanceOn(pbz.id, wc.today())),
+        fromImport: true));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('8-bank-question');
+    await tester.tap(find.byKey(const ValueKey('bankCheckSkip')));
+    await tester.pumpAndSettle();
 
     // Bills tab (B4, P5): Coming up, To review, Expected bills, then the bills database: To review, Unpaid and Paid, and the sheet of the
     // one waiting for review.
@@ -182,6 +235,14 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('searchField')), findsNothing);
+
+    // Stage Q: the payday forecast under the plan (last on Budget: it scrolls the page).
+    await tester.tap(navTab('Budget'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('forecastPanel')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('forecastChart')), findsOneWidget);
+    await binding.takeScreenshot('2-budget-forecast');
 
     // The weekly review (M4): the Today card opens it; one row is confirmed, then it closes and Done is left for the real flow.
     await tester.tap(navTab('Today'));

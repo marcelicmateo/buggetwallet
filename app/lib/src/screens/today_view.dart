@@ -4,6 +4,7 @@ import 'package:wallet_core/wallet_core.dart';
 import '../controller.dart';
 import '../file_chooser.dart';
 import '../widgets/sheets.dart';
+import 'accounts_panel.dart' show askBankBalance;
 import 'bill_sheet.dart';
 import 'key_backup.dart';
 import 'review.dart';
@@ -38,6 +39,7 @@ class TodayView implements Listenable {
   String? get lastReview => _wc.lastReview;
   ({int count, int total}) comingUp() => _wc.comingUp();
   Map<String, int> heldTotals() => _wc.heldTotals();
+  List<BalanceWarning> balanceWarnings() => _wc.balanceWarningList();
   int suggestionCount() => _wc.suggestionCount();
   List<HeadsUp> headsUpLines() => _wc.headsUpLines();
   List<PlannedCost> plannedNeedingCategory() => _wc.plannedNeedingCategory();
@@ -68,6 +70,18 @@ class TodayView implements Listenable {
   Future<void> showReview(BuildContext context, {VoidCallback? openSpending, FileChooser chooser = const FileChooser()}) =>
       openReview(context, _wc, openSpending: openSpending, chooser: chooser);
   Future<bool> showKeyBackup(BuildContext context) => openKeyBackup(context, _wc);
+
+  /// "Check your PBZ balance": the bank question for [account] with today's date and the app's own number prefilled.
+  Future<void> showBalanceCheck(BuildContext context, Account account) => askBankBalance(
+      context,
+      _wc,
+      BankQuestion(
+          accountId: account.id,
+          name: account.name,
+          currency: account.currency,
+          date: _wc.today(),
+          appCents: _wc.appBalanceOn(account.id, _wc.today())),
+      fromImport: false);
 
   /// A payment's sheet, then the toast for what it did.
   Future<void> openTx(BuildContext context, CategorizedTx t) async {

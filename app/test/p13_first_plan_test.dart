@@ -29,13 +29,17 @@ class _Chooser extends FileChooser {
   }
 }
 
-Future<void> _pumpImportButton(WidgetTester t, WalletController wc, FileChooser chooser) => pumpApp(
-    t,
-    Scaffold(
-        body: Builder(
-            builder: (context) =>
-                TextButton(key: const ValueKey('go'), onPressed: () => pickAndImport(context, wc, chooser), child: const Text('Import')))),
-    size: const Size(400, 900));
+/// These tests are about the plan sheet after an import: the import preview (Q4, `q_import_preview_test.dart`) is switched off.
+Future<void> _pumpImportButton(WidgetTester t, WalletController wc, FileChooser chooser) {
+  wc.setImportPreviewAlways(false);
+  return pumpApp(
+      t,
+      Scaffold(
+          body: Builder(
+              builder: (context) => TextButton(
+                  key: const ValueKey('go'), onPressed: () => pickAndImport(context, wc, chooser), child: const Text('Import')))),
+      size: const Size(400, 900));
+}
 
 Future<void> _tap(WidgetTester t, String key) async {
   final f = find.byKey(ValueKey(key));

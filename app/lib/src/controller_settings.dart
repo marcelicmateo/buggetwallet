@@ -5,6 +5,15 @@
 part of 'controller.dart';
 
 extension DeviceSettings on WalletController {
+  /// Device-local (never synced): show the import preview before every import (default on, Q4). Off = files go straight in.
+  bool get importPreviewAlways => repo.localValue('importPreview') != '0';
+
+  void setImportPreviewAlways(bool on) {
+    repo.setLocalValue('importPreview', on ? null : '0');
+    logEvent(_import, Level.INFO, 'import.previewSetting', {'on': on});
+    notifyListeners();
+  }
+
   /// Device-local (never synced): are reminders on?
   bool get nudgesEnabled => repo.localValue('nudgesEnabled') == '1';
 

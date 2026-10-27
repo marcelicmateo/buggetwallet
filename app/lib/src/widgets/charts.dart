@@ -19,6 +19,77 @@ double snapPx(double logical, double dpr) {
 /// [c] over [ground] as one opaque colour: strokes and fills drawn on top of each other then never mix alpha at their edges.
 Color solidOver(Color c, Color ground) => Color.alphaBlend(c, ground);
 
+/// The balance from today to payday as steps (Q11): it stays flat until a bill or income lands, then jumps. [points] are core's
+/// forecast points; the line runs on to [payday]. Strokes snap to whole device pixels and are opaque, like the other charts.
+class ForecastStepChart extends StatelessWidget {
+  final List<ForecastPoint> points;
+  final String payday;
+  final String currency;
+  const ForecastStepChart({super.key, required this.points, required this.payday, required this.currency});
+
+  static const _height = 110.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    double px(double logical) => snapPx(logical, dpr);
+    final first = points.first.date;
+    double x(String d) => daysBetween(first, d).toDouble();
+    final end = x(payday).clamp(1, 1000).toDouble();
+    final spots = [
+      for (final p in points) FlSpot(x(p.date).clamp(0, end).toDouble(), p.cents / 100),
+      FlSpot(end, points.last.cents / 100),
+    ];
+    final ys = [for (final s in spots) s.y];
+    var maxY = ys.reduce((a, b) => a > b ? a : b);
+    var minY = ys.reduce((a, b) => a < b ? a : b);
+    if (minY > 0) minY = 0;
+    if (maxY < 0) maxY = 0;
+    final pad = ((maxY - minY).abs() * 0.1).clamp(5, double.infinity).toDouble();
+    maxY += pad;
+    if (minY < 0) minY -= pad;
+    const hidden = AxisTitles(sideTitles: SideTitles(showTitles: false));
+    final line = solidOver(c.ink.withValues(alpha: 0.8), c.bg);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      SizedBox(
+        height: _height,
+        child: LineChart(LineChartData(
+          minX: 0,
+          maxX: end,
+          minY: minY,
+          maxY: maxY,
+          borderData: FlBorderData(show: false),
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            getDrawingHorizontalLine: (v) => FlLine(color: v == 0 ? c.lineStrong : c.line, strokeWidth: px(1)),
+          ),
+          titlesData: const FlTitlesData(leftTitles: hidden, rightTitles: hidden, topTitles: hidden, bottomTitles: hidden),
+          lineTouchData: const LineTouchData(enabled: false),
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              isStepLineChart: true,
+              lineChartStepData: const LineChartStepData(stepDirection: LineChartStepData.stepDirectionForward),
+              isCurved: false,
+              color: line,
+              barWidth: px(2),
+              dotData: FlDotData(
+                getDotPainter: (s, p, b, i) => FlDotCirclePainter(radius: px(2.5), color: line, strokeWidth: 0),
+              ),
+            ),
+          ],
+        )),
+      ),
+      const SizedBox(height: 4),
+      SplitRow(
+          start: Text('Today', style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
+          end: Text(shortDateOrRaw(payday), style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted))),
+    ]);
+  }
+}
+
 /// Saved (above the line) or lost (below) per pay period, with the rolling average as a line.
 /// The running period is faded.
 class PeriodNetChart extends StatelessWidget {

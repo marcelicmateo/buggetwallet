@@ -72,6 +72,7 @@ CsvChoice _choiceFor(Uint8List bytes, {String name = 'Erste (CSV)'}) {
 
 Future<void> _openImportButton(WidgetTester t, WalletController wc, _Chooser chooser,
     {Size size = const Size(400, 900), double scale = 1}) async {
+  wc.setImportPreviewAlways(false); // Q4's preview has its own tests (q_import_preview_test.dart)
   await pumpApp(
       t,
       Scaffold(

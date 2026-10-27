@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import '../controller.dart';
 import '../layout.dart';
 import 'goals.dart';
+import 'owed.dart';
 import 'wishlist.dart';
 
-/// The Save tab (P5): the Goals panel, then the Wishlist, in one scroll. Both are the screens that were tabs of their own; their
+/// The Save tab (P5): the Goals panel, the Wishlist, then Owed (Q8), in one scroll. Both are the screens that were tabs of their own; their
 /// content is unchanged.
 class SaveScreen extends StatelessWidget {
   final WalletController wc;
@@ -18,7 +19,7 @@ class SaveScreen extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: gapped([GoalsScreen(wc: wc, embedded: true), WishlistScreen(wc: wc, embedded: true)]),
+            children: gapped([GoalsScreen(wc: wc, embedded: true), WishlistScreen(wc: wc, embedded: true), OwedPanel(wc: wc)]),
           ),
         ),
       );
