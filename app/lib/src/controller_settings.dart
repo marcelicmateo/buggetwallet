@@ -1,0 +1,111 @@
+// Device settings in the controller: reminders (nudges), theme and number style, explainers seen, the log level,
+// and the log files. A `part` of controller.dart so it can use `_changed`.
+//
+// Privacy: logs carry setting words and keys only, never values the owner typed.
+part of 'controller.dart';
+
+extension DeviceSettings on WalletController {
+  /// Device-local (never synced): are reminders on?
+  bool get nudgesEnabled => repo.localValue('nudgesEnabled') == '1';
+
+  /// Turns reminders on or off. On: asks the system for permission first; when refused the switch stays off and
+  /// [nudgesDenied] says why. Returns whether reminders are on afterwards.
+  Future<bool> setNudges(bool on) async {
+    try {
+      if (!on) {
+        repo.setLocalValue('nudgesEnabled', null);
+        nudgesDenied = false;
+        await nudges.cancelAll();
+        logEvent(_nudgeLog, Level.INFO, 'nudges.enabled', {'on': false});
+        notifyListeners();
+        await rescheduleHeadsUps(); // cancelAll took the heads-ups too
+        return false;
+      }
+      final granted = await nudges.requestPermission();
+      logEvent(_nudgeLog, Level.INFO, 'nudges.enabled', {'on': granted, 'granted': granted});
+      nudgesDenied = !granted;
+      if (granted) repo.setLocalValue('nudgesEnabled', '1');
+      notifyListeners();
+      if (granted) await rescheduleNudges();
+      return granted;
+    } catch (e, st) {
+      logError(_nudgeLog, 'nudges.setFailed', e, st, fields: {'on': on});
+      notifyListeners();
+      return nudgesEnabled;
+    }
+  }
+
+  /// Schedules the next days of reminders again (app start, resume): the list is only ever 4 weeks long.
+  Future<void> rescheduleNudges() async {
+    if (!nudges.supported) return;
+    if (nudgesEnabled) {
+      try {
+        final n = await nudges.schedule(nudgeSlots(_clock()));
+        logEvent(_nudgeLog, Level.INFO, 'nudges.scheduled', {'count': n});
+      } catch (e, st) {
+        logError(_nudgeLog, 'nudges.scheduleFailed', e, st);
+      }
+    }
+    await rescheduleHeadsUps(); // scheduling the reminders cancelled everything, heads-ups included
+  }
+
+  // ---------- look (device-local) ----------
+  /// Theme mode: 'system' (default), 'light' or 'dark'. Device-local, never synced.
+  String get themeModeName {
+    final v = repo.localValue('themeMode');
+    return v == 'light' || v == 'dark' ? v! : 'system';
+  }
+
+  void setThemeMode(String mode) {
+    if (mode != 'system' && mode != 'light' && mode != 'dark') return;
+    final from = themeModeName;
+    if (mode == from) return;
+    repo.setLocalValue('themeMode', mode);
+    logEvent(_log, Level.INFO, 'theme.mode', {'from': from, 'to': mode});
+    notifyListeners();
+  }
+
+  /// Number style: 'point' (1,234.50, default) or 'comma' (1.234,50). Device-local, never synced.
+  String get numberStyleName => _numberStyle.name;
+
+  void _applyNumberStyle() => numberStyle = _numberStyle = NumberStyle.fromName(repo.localValue('numberStyle'));
+
+  void setNumberStyle(String style) {
+    if (style != 'point' && style != 'comma') return;
+    if (style == numberStyleName) return;
+    repo.setLocalValue('numberStyle', style);
+    _numberStyle = NumberStyle.fromName(style);
+    logEvent(_log, Level.INFO, 'number.style', {'style': style});
+    notifyListeners();
+  }
+
+  /// Whether the explainer paragraphs (the muted text under section heads) have been shown once. Device-local.
+  bool explainerSeen(String key) => repo.localValue('explainer:$key') != null;
+
+  /// Notes that the explainer [key] was shown; later it starts collapsed behind an info icon.
+  void markExplainerSeen(String key) {
+    if (explainerSeen(key)) return;
+    repo.setLocalValue('explainer:$key', today());
+  }
+
+  // ---------- diagnostics ----------
+  /// Device-local log level: 'all' (debug, the default while testing), 'info' or 'warning'.
+  String get logLevel => repo.localValue('logLevel') ?? 'all';
+
+  void setLogLevel(String level) {
+    final from = logLevel;
+    repo.setLocalValue('logLevel', level);
+    AppLog.setLevel(level); // first, so the event below is logged at the new level
+    logEvent(_log, Level.INFO, 'log.level', {'from': from, 'to': level});
+    notifyListeners();
+  }
+
+  Future<LogStats> logStats() => AppLog.stats();
+
+  String logFileName() => 'budget-wallet-logs-${today()}.txt';
+
+  /// All logs as one text file's bytes.
+  Future<Uint8List> logBytes() async => Uint8List.fromList(utf8.encode(await AppLog.combined()));
+
+  Future<void> clearLogs() => AppLog.clear();
+}
