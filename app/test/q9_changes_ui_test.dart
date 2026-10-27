@@ -1,6 +1,7 @@
 // Stage Q9 UI: Settings › Sync › Recent changes. A local edit, an edit that arrived from another device, a deleted payment, "Show more", a
 // tap that opens the payment, the layout and the log. All data is SYNTHETIC.
 import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/memo_key.dart';
 import 'package:budget_wallet/src/screens/recent_changes.dart';
 import 'package:budget_wallet/src/screens/sync_panel.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
@@ -66,7 +67,8 @@ void main() {
     expect(rows, findsWidgets);
     final line = lineOf(t, 'change:setting:paydayDay');
     expect(line, startsWith('Today '));
-    expect(line, endsWith(' · this device · Setting paydayDay · value'));
+    expect(line, endsWith(' · this device · Payday · changed'));
+    expect(line, isNot(contains('paydayDay')), reason: 'owner words, not the stored key');
     for (final w in ['kind_hint', 'bank_type', 'transfer_to', 'matched_to']) {
       expect(find.textContaining(w), findsNothing, reason: 'no column names');
     }
@@ -131,6 +133,56 @@ void main() {
     expect(k('changesEmpty'), findsOneWidget);
     expect(k('changesMore'), findsNothing);
   }, timeout: _timeout);
+
+  testWidgets('the payment lookup is built once per data version, not on every rebuild', (t) async {
+    final c = changesWallet();
+    addTearDown(c.wc.dispose);
+    await pumpList(t, c.wc);
+    // Already cached by the first build: a second ask must not compute.
+    expect(() => c.wc.memo<Object>(const MemoKey('changes.txById'), () => throw StateError('computed again')), returnsNormally);
+  }, timeout: _timeout);
+
+  testWidgets('exactly one full page: no Show more', (t) async {
+    final c = changesWallet();
+    addTearDown(c.wc.dispose);
+    var n = c.wc.repo.recentChanges(limit: 1000).length;
+    while (n < changesPage) {
+      c.wc.repo.addWish('Synthetic wish $n', 1000 + n);
+      n = c.wc.repo.recentChanges(limit: 1000).length;
+    }
+    expect(n, changesPage, reason: 'one change per wish');
+    c.wc.reload();
+    await pumpList(t, c.wc, size: const Size(400, 3000));
+    final rows = find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('change:'));
+    expect(rows, findsNWidgets(changesPage));
+    expect(k('changesMore'), findsNothing);
+    // One more change and the button comes.
+    c.wc.repo.addWish('Synthetic wish more', 5);
+    c.wc.reload();
+    await t.pump();
+    expect(k('changesMore'), findsOneWidget);
+    expect(rows, findsNWidgets(changesPage));
+  }, timeout: _timeout);
+
+  test('settings read in owner words, never as stored keys or values', () {
+    ChangeEntry setting(String key, {bool deleted = false}) =>
+        ChangeEntry('setting', key, const ['value', 'deleted'], _at.millisecondsSinceEpoch, 'n', true, key, deleted);
+    String line(ChangeEntry e) => changeLine(e, _at);
+    expect(line(setting('salary')), endsWith(' · this device · Salary · changed'));
+    expect(line(setting('paydayDay')), endsWith(' · Payday · changed'));
+    expect(line(setting('budget:Groceries')), endsWith(' · Budget · changed'));
+    expect(line(setting('pattern:0123456789abcdef')), endsWith(' · Rule · changed'));
+    expect(line(setting('someFutureKey')), endsWith(' · Setting · changed'));
+    expect(line(setting('budget:Groceries', deleted: true)), endsWith(' · Budget · removed'));
+    for (final key in ['budget:Groceries', 'pattern:0123456789abcdef', 'someFutureKey', 'salaryConfirmed']) {
+      expect(line(setting(key)), isNot(contains(key)));
+    }
+    // A payee rule's label is the payee's key: not shown.
+    final rule =
+        ChangeEntry('rule', 'konzum_zagreb', const ['category', 'deleted'], _at.millisecondsSinceEpoch, 'n', true, 'konzum_zagreb', false);
+    expect(line(rule), isNot(contains('konzum')));
+    expect(line(rule), contains('Payee rule'));
+  });
 
   testWidgets('it sits under Devices in Settings › Sync', (t) async {
     final c = changesWallet();

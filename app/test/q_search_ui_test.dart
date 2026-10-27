@@ -1,9 +1,11 @@
 // Stage Q7 UI: the search filter chips (Amount, Date, Category, Has attachment, Split, Uncategorised), filter-only search, the bold match,
 // and the search button on Today's Recent panel. All data is SYNTHETIC.
 import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/format.dart' show NumberStyle, numberStyle;
 import 'package:budget_wallet/src/screens/search.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/today_view.dart';
+import 'package:budget_wallet/src/theme.dart' show buildTheme;
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -264,6 +266,61 @@ void main() {
       final span = t.widget<Text>(find.byType(Text)).textSpan! as TextSpan;
       expect([for (final c in span.children!) c.toPlainText()], ['Kon', 'zum']);
     });
+  });
+
+  group('chips', () {
+    testWidgets('a selected chip takes the on-accent ink, in the light and the dark theme', (t) async {
+      for (final brightness in [Brightness.light, Brightness.dark]) {
+        final d = searchData();
+        addTearDown(d.wc.dispose);
+        t.view.physicalSize = const Size(400, 900);
+        t.view.devicePixelRatio = 1;
+        addTearDown(t.view.reset);
+        await t.pumpWidget(MaterialApp(
+            theme: buildTheme(brightness),
+            home: Scaffold(
+                body: SearchPane(wc: d.wc, onClose: () {}, onOpenTab: (_) {}, onOpenBills: () {}, picker: (c, i, f, l) async => i))));
+        await t.pump(const Duration(milliseconds: 100));
+        await tapKey(t, 'filterUncategorised');
+        await amountSheet(t, min: '10');
+        final onAccent = Theme.of(t.element(k('filterAmount'))).colorScheme.onPrimary;
+        for (final key in ['filterUncategorised', 'filterAmount']) {
+          final label = find.descendant(of: k(key), matching: find.textContaining(RegExp('Uncategorised|10')));
+          expect(DefaultTextStyle.of(t.element(label.first)).style.color, onAccent, reason: '$key $brightness');
+        }
+        await expectLater(t, meetsGuideline(textContrastGuideline));
+        await t.pumpWidget(const SizedBox());
+      }
+      await settle(t);
+    }, timeout: _timeout);
+  });
+
+  group('number style', () {
+    tearDown(() => numberStyle = NumberStyle.point);
+
+    testWidgets('1.234,50 in the Amount field is 1234.50 in the comma style', (t) async {
+      final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => budgetToday);
+      addTearDown(wc.dispose);
+      wc.repo.setLocalValue('numberStyle', 'comma'); // the controller applies the stored style on every reload
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        syntheticTx('2026-10-02', -123449, 'POS plaćanje', 'POS KONZUM 0000 ZAGREB'),
+        syntheticTx('2026-10-03', -123450, 'POS plaćanje', 'POS ZARA ZAGREB'),
+        syntheticTx('2026-10-04', -123451, 'POS plaćanje', 'POS IKEA ZAGREB'),
+      ]));
+      wc.reload();
+      final byDate = {for (final c in wc.wholeTxs) c.tx.date: c.tx.id};
+      await pumpPane(t, wc);
+      await amountSheet(t, min: '1.234,50');
+      expect(find.textContaining('Enter an amount'), findsNothing);
+      final shown = {
+        for (final e
+            in find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('hit:')).evaluate())
+          ((e.widget.key as ValueKey).value as String).substring(4)
+      };
+      expect(shown, {byDate['2026-10-03'], byDate['2026-10-04']});
+      expect(find.descendant(of: k('filterAmount'), matching: find.textContaining('1.234,50')), findsOneWidget);
+      await settle(t);
+    }, timeout: _timeout);
   });
 
   group('layout', () {

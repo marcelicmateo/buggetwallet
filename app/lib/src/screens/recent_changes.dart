@@ -7,6 +7,7 @@ import '../controller.dart';
 import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
+import '../memo_key.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
@@ -24,14 +25,25 @@ String changeWhenText(int millis, DateTime now) {
   return '${shortDate(day)} $hm';
 }
 
-/// The line of one change (the owner's words, not column names).
+/// The line of one change (the owner's words, not column names or setting keys; never a value).
 String changeLine(ChangeEntry e, DateTime now) {
   final who = e.thisDevice ? 'this device' : 'other device${e.node.length >= 4 ? ' ${e.node.substring(0, 4)}' : ''}';
-  var label = e.label;
-  if (e.entity == 'tx') label = label.replaceFirst(RegExp(r' · \d{4}-\d{2}-\d{2}$'), '');
-  final what = changeEntityWord(e.entity);
-  final named = label.isEmpty || label == e.entity ? what : '$what $label';
-  return '${changeWhenText(e.millis, now)} · $who · $named · ${e.deleted ? 'deleted' : changeFieldsText(e.fields)}';
+  final String named, what;
+  switch (e.entity) {
+    case 'setting':
+      named = changeSettingWord(e.id);
+      what = e.deleted ? 'removed' : 'changed';
+    case 'rule' || 'ruletag':
+      named = changeEntityWord(e.entity); // the label is the payee's key: not shown
+      what = e.deleted ? 'deleted' : changeFieldsText(e.fields);
+    default:
+      var label = e.label;
+      if (e.entity == 'tx') label = label.replaceFirst(RegExp(r' · \d{4}-\d{2}-\d{2}$'), '');
+      final word = changeEntityWord(e.entity);
+      named = label.isEmpty || label == e.entity ? word : '$word $label';
+      what = e.deleted ? 'deleted' : changeFieldsText(e.fields);
+  }
+  return '${changeWhenText(e.millis, now)} · $who · $named · $what';
 }
 
 class RecentChanges extends StatefulWidget {
@@ -53,8 +65,11 @@ class _RecentChangesState extends State<RecentChanges> {
   @override
   Widget build(BuildContext context) {
     final wc = widget.wc;
-    final list = wc.recentChangesList(limit: _limit);
-    final byId = {for (final c in wc.wholeTxs) c.tx.id: c};
+    // One more than shown: the extra row says there is more (no "Show more" at exactly a full page).
+    final fetched = wc.recentChangesList(limit: _limit + 1);
+    final more = fetched.length > _limit;
+    final list = more ? fetched.sublist(0, _limit) : fetched;
+    final byId = wc.memo(const MemoKey('changes.txById'), () => {for (final c in wc.wholeTxs) c.tx.id: c}); // once per data version
     final c = context.c;
     return Column(key: const ValueKey('recentChanges'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const Heading('Recent changes', size: BwType.headingSize),
@@ -78,7 +93,7 @@ class _RecentChangesState extends State<RecentChanges> {
               ),
             ),
         ]),
-      if (list.length >= _limit)
+      if (more)
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton(

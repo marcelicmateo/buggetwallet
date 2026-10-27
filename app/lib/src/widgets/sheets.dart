@@ -103,7 +103,10 @@ void txSheetToast(BuildContext context, WalletController wc, String? result) {
     final messenger = ScaffoldMessenger.of(context);
     final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
     final name = offer.suggestion.merchantName, cat = wc.categoryTable.label(offer.suggestion.category);
-    toastOn(messenger, 'Always put $name in $cat?', wide: wide, accessible: accessible, actionLabel: 'Make rule', onAction: () {
+    // A tag that could not be added in this same save is said first (it must not surface on a later, unrelated Save).
+    final failure = tagFailureText(wc.takeTagFailures());
+    toastOn(messenger, '${failure == null ? '' : '$failure. '}Always put $name in $cat?',
+        wide: wide, accessible: accessible, actionLabel: 'Make rule', onAction: () {
       wc.makeOfferedRule(offer);
       toastOn(messenger, 'Rule made', wide: wide, accessible: accessible, actionLabel: 'Undo', onAction: () => wc.undoOfferedRule(offer));
     });

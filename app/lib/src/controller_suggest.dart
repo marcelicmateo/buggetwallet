@@ -11,11 +11,13 @@ final _suggestLog = Logger('bw.suggest');
 const addExpenseKinds = {BudgetKind.flex};
 const addExpenseExclude = {'Bank fees'};
 
-/// A payee rule offered after the owner set one payment's main tag ([suggestion]); [txId] is that payment.
+/// A payee rule offered after the owner set one payment's main tag ([suggestion], the very tag just picked); [txId] is that payment and
+/// [own] its own main tag at that moment (what Make rule clears and Undo puts back, exactly; null = none).
 class RuleOffer {
   final RuleSuggestion suggestion;
   final String txId;
-  const RuleOffer(this.suggestion, this.txId);
+  final String? own;
+  const RuleOffer(this.suggestion, this.txId, [this.own]);
 }
 
 const _fieldWords = <String, String>{
@@ -66,6 +68,35 @@ String changeFieldsText(List<String> fields) {
   if (out.isEmpty) return 'restored';
   if (out.length > 3) return '${out.take(3).join(', ')} +${out.length - 3}';
   return out.join(', ');
+}
+
+/// What Settings and Plan call the setting stored under [key], or "Setting" for a key this build has no word for; per-key rows
+/// (`budget:<category>`, `pattern:<hash>`, `plan:<id>`, `fx:<code>`, `csvmap:<id>`) get one word without the rest of the key.
+String changeSettingWord(String key) {
+  for (final (prefix, word) in const [
+    ('budget:', 'Budget'),
+    ('pattern:', 'Rule'),
+    ('plan:', 'Plan line'),
+    ('fx:', 'Exchange rate'),
+    ('csvmap:', 'File layout'),
+  ]) {
+    if (key.startsWith(prefix)) return word;
+  }
+  return switch (key) {
+    'salary' || 'salaryConfirmed' => 'Salary',
+    'paydayDay' => 'Payday',
+    'periodStart' => 'Pay period',
+    'rent' || 'rentCashThreshold' => 'Rent',
+    'loan' || 'loanEnd' => 'Loan',
+    'subs' => 'Subscriptions',
+    'impulse' || 'coolHours' => 'Big-buy rule',
+    'headsUpCents' || 'headsUpDays' => 'Heads-up',
+    'returnReminderDays' || 'warrantyReminderDays' => 'Bill reminders',
+    'reviewDay' || 'reviewStreak' || 'lastReview' => 'Weekly review',
+    'currency' => 'Currency',
+    'savedFor' => 'Saved for',
+    _ => 'Setting',
+  };
 }
 
 /// The word for a changed row's kind ("Payment", "Goal"…).
@@ -166,12 +197,16 @@ extension SuggestDb on WalletController {
     return o;
   }
 
-  /// Remembers the offer for the payment [txId] as just saved, when its payee has enough agreeing rows and no rule.
-  void _offerRule(String txId) {
+  /// Remembers the offer for the payment [txId] as just saved with main tag [picked], when its payee has enough agreeing rows, no
+  /// rule, and they agree on the tag just picked (a payee whose usual tag is another one is not offered: the toast must not
+  /// propose what the owner just moved away from).
+  void _offerRule(String txId, String picked) {
     final t = repo.transaction(txId);
     if (t == null) return;
-    final s = ruleSuggestionFor(t, [for (final c in wholeTxs) c.tx], categorizer, off: ruleSuggestOff);
-    ruleOffer = s == null ? null : RuleOffer(s, txId);
+    var s = ruleSuggestionFor(t, [for (final c in wholeTxs) c.tx], categorizer, off: ruleSuggestOff);
+    final table = categoryTable;
+    if (s != null && (table.duplicateOf(s.category) ?? s.category) != (table.duplicateOf(picked) ?? picked)) s = null;
+    ruleOffer = s == null ? null : RuleOffer(s, txId, t.category);
     if (s != null) logEvent(_suggestLog, Level.FINE, 'ruleSuggest.offer', {'count': s.count});
   }
 
@@ -186,7 +221,7 @@ extension SuggestDb on WalletController {
   /// Undo of [makeOfferedRule]: the rule goes and the payment gets its own main tag back.
   void undoOfferedRule(RuleOffer o) {
     repo.removeMerchantRule(o.suggestion.merchantKey);
-    repo.setCategory(o.txId, o.suggestion.category);
+    repo.setCategory(o.txId, o.own);
     logEvent(_suggestLog, Level.INFO, 'ruleSuggest.undo', {'from': 'toast'});
     _changed();
   }

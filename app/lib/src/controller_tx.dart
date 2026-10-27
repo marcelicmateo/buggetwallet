@@ -24,7 +24,7 @@ extension TxEdits on WalletController {
     _changed();
     // Q6: a bank row set by hand only for itself may be the third of its payee: offer a rule (a toast; nothing is made).
     ruleOffer = null;
-    if (!always && t.source != 'manual') _offerRule(t.id);
+    if (!always && t.source != 'manual') _offerRule(t.id, category);
   }
 
   /// The hand-added expense that the bank row [bankId] replaced (hidden from lists), or null.

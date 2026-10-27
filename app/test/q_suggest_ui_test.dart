@@ -205,8 +205,9 @@ void main() {
       return wc;
     }
 
-    Future<void> openRow(WidgetTester t, WalletController wc, {bool always = false, String pick = 'Eating out'}) async {
-      final row = wc.wholeTxs.firstWhere((c) => c.tx.date == '2026-10-08');
+    Future<void> openRow(WidgetTester t, WalletController wc,
+        {bool always = false, String pick = 'Eating out', String date = '2026-10-08'}) async {
+      final row = wc.wholeTxs.firstWhere((c) => c.tx.date == date);
       await pumpApp(
           t,
           Builder(
@@ -260,6 +261,54 @@ void main() {
       await openRow(t, two);
       expect(find.textContaining('Always put'), findsNothing);
       expect(find.text('Saved'), findsOneWidget);
+      await settle(t);
+    }, timeout: _timeout);
+
+    testWidgets('no offer for the payee\'s usual tag when the owner just picked another one', (t) async {
+      // Three Konzum rows are in Eating out; the newest one is set to Shopping: the majority is Eating out, which is not what was picked.
+      final wc = konzumWallet(chosen: 3);
+      addTearDown(wc.dispose);
+      wc.repo.importBatch(
+          ImportBatch(source: 'pbz', transactions: [syntheticTx('2026-10-12', -700, 'POS plaćanje', 'POS KONZUM 0000 ZAGREB')]));
+      wc.reload();
+      await openRow(t, wc, pick: 'Shopping', date: '2026-10-12');
+      expect(find.textContaining('Always put'), findsNothing);
+      expect(find.text('Saved'), findsOneWidget);
+      expect(wc.takeRuleOffer(), isNull);
+      expect(wc.repo.transactions().firstWhere((r) => r.date == '2026-10-12').category, 'Shopping');
+      await settle(t);
+    }, timeout: _timeout);
+
+    testWidgets('Undo puts back the row\'s own tag exactly as it was before Make rule', (t) async {
+      final wc = konzumWallet();
+      addTearDown(wc.dispose);
+      await openRow(t, wc);
+      final id = wc.repo.transactions().firstWhere((r) => r.date == '2026-10-08').id;
+      expect(wc.ruleOffer, isNull, reason: 'the toast took it');
+      await t.tap(k('toastAction'));
+      await t.pumpAndSettle();
+      expect(wc.repo.transaction(id)!.category, isNull);
+      await t.tap(k('toastUndo'));
+      await t.pumpAndSettle();
+      expect(wc.repo.transaction(id)!.category, 'Eating out');
+      await settle(t);
+    }, timeout: _timeout);
+
+    testWidgets('a tag that could not be added is said in the offer toast, not on a later Save', (t) async {
+      final wc = emptyWallet();
+      addTearDown(wc.dispose);
+      wc.addExpense(amount: 100, category: 'Groceries', note: 'x', date: '2026-10-01', tags: ['no-such-tag']); // one failure
+      wc.ruleOffer = const RuleOffer(RuleSuggestion('konzum_zagreb', 'Konzum', 'Eating out', 3), 'id', null);
+      await pumpApp(
+          t,
+          Builder(
+              builder: (ctx) =>
+                  Scaffold(body: Center(child: ElevatedButton(onPressed: () => txSheetToast(ctx, wc, 'saved'), child: const Text('go'))))));
+      await t.tap(find.text('go'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('could not be added'), findsOneWidget);
+      expect(find.textContaining('Always put Konzum in Eating out?'), findsOneWidget);
+      expect(wc.takeTagFailures(), 0, reason: 'taken here, nothing left for a later toast');
       await settle(t);
     }, timeout: _timeout);
 

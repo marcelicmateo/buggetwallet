@@ -97,31 +97,37 @@ class SearchFilterBar extends StatelessWidget {
     return n == 1 ? wc.categoryTable.label(filter.categories.first) : '$n categories';
   }
 
-  Widget _chip(String key, String label, bool on, VoidCallback onTap, {VoidCallback? onClear}) => InputChip(
-        key: ValueKey(key),
-        label: Text(label),
-        selected: on,
-        showCheckmark: onClear == null,
-        onPressed: onTap,
-        onDeleted: on && onClear != null ? onClear : null,
-        deleteIcon: const Icon(Icons.close, size: 18),
-        deleteButtonTooltipMessage: 'Clear $label',
-      );
+  Widget _chip(BuildContext context, String key, String label, bool on, VoidCallback onTap, {VoidCallback? onClear}) {
+    // InputChip keeps its plain label style when selected (only ChoiceChip swaps it): on the accent fill the label takes the on-accent ink.
+    final onAccent = Theme.of(context).colorScheme.onPrimary;
+    return InputChip(
+      key: ValueKey(key),
+      label: Text(label),
+      labelStyle: on ? TextStyle(color: onAccent, fontWeight: FontWeight.w600) : null,
+      selected: on,
+      showCheckmark: onClear == null,
+      onPressed: onTap,
+      onDeleted: on && onClear != null ? onClear : null,
+      deleteIcon: const Icon(Icons.close, size: 18),
+      deleteIconColor: onAccent,
+      deleteButtonTooltipMessage: 'Clear $label',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final f = filter;
     final chips = <Widget>[
-      _chip('filterAmount', _amountLabel, f.minCents != null || f.maxCents != null, () => _amount(context),
+      _chip(context, 'filterAmount', _amountLabel, f.minCents != null || f.maxCents != null, () => _amount(context),
           onClear: () => _set(editFilter(f, amount: (min: null, max: null)))),
-      _chip('filterDate', _dateLabel, f.from != null || f.to != null, () => _dates(context),
+      _chip(context, 'filterDate', _dateLabel, f.from != null || f.to != null, () => _dates(context),
           onClear: () => _set(editFilter(f, dates: (from: null, to: null)))),
-      _chip('filterCategory', _categoryLabel, f.categories.isNotEmpty, () => _categories(context),
+      _chip(context, 'filterCategory', _categoryLabel, f.categories.isNotEmpty, () => _categories(context),
           onClear: () => _set(editFilter(f, categories: const {}))),
-      _chip('filterAttachment', 'Has attachment', f.hasAttachment == true,
+      _chip(context, 'filterAttachment', 'Has attachment', f.hasAttachment == true,
           () => _set(editFilter(f, attachment: (v: f.hasAttachment == true ? null : true)))),
-      _chip('filterSplit', 'Split', f.split == true, () => _set(editFilter(f, split: (v: f.split == true ? null : true)))),
-      _chip('filterUncategorised', 'Uncategorised', f.uncategorised, () => _set(editFilter(f, uncategorised: !f.uncategorised))),
+      _chip(context, 'filterSplit', 'Split', f.split == true, () => _set(editFilter(f, split: (v: f.split == true ? null : true)))),
+      _chip(context, 'filterUncategorised', 'Uncategorised', f.uncategorised, () => _set(editFilter(f, uncategorised: !f.uncategorised))),
     ];
     if (layoutOf(context) == LayoutSize.compact) {
       return SingleChildScrollView(
@@ -225,6 +231,7 @@ class _CategorySheetState extends State<_CategorySheet> {
           FilterChip(
             key: ValueKey('filterCat:$id'),
             label: Text(widget.table.label(id)),
+            labelStyle: _on.contains(id) ? TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontWeight: FontWeight.w600) : null,
             selected: _on.contains(id),
             onSelected: (v) => setState(() => v ? _on.add(id) : _on.remove(id)),
           ),
