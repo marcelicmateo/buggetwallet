@@ -260,3 +260,111 @@ Map<String, int> ruleHits(List<Tx> rows, Categorizer cz, {required String curren
   }
   return out;
 }
+
+/// A payee rule to offer (Q6; never made on its own): the owner put [count] of [merchantKey]'s newest bank rows in
+/// [category] by hand. [merchantName] is the newest row's name ([merchantName]), for display.
+class RuleSuggestion {
+  final String merchantKey;
+  final String merchantName;
+  final String category;
+  final int count;
+  const RuleSuggestion(this.merchantKey, this.merchantName, this.category, this.count);
+
+  @override
+  bool operator ==(Object other) =>
+      other is RuleSuggestion &&
+      other.merchantKey == merchantKey &&
+      other.merchantName == merchantName &&
+      other.category == category &&
+      other.count == count;
+
+  @override
+  int get hashCode => Object.hash(merchantKey, merchantName, category, count);
+
+  @override
+  String toString() => 'RuleSuggestion($count)';
+}
+
+/// Bank rows of one payee [ruleSuggestions] looks at: its newest ones.
+const _suggestWindow = 5;
+
+/// A bank row a payee rule could decide: live and not hand-added.
+bool _bankRow(Tx t) => t.live && !t.manual && t.source != 'manual';
+
+/// Payee rules to suggest (Q6): per payee key ([merchantKey]) of the live bank rows in [rows] (not hand-added) that has
+/// no payee rule ([Categorizer.merchantRules]) and is not in [off] (dismissed keys), the category the owner set by hand
+/// ([Tx.category], a live one; a sync duplicate counts for its original) on at least [min] of its newest 5 bank rows
+/// (date, then id, descending; the newest row of a tie wins). A payee rule decides only rows whose automatic main tag is
+/// a flex or fixed one (`Categorizer.categoryOf`), and making one clears the rows' own choice, so a payee is never offered
+/// when one of those agreeing rows is not such a row. The amount is never looked at. Most rows first, then the name
+/// (folded), then the key. Pure: nothing is written.
+List<RuleSuggestion> ruleSuggestions(List<Tx> rows, Categorizer c, {int min = 3, Set<String> off = const {}}) {
+  final byKey = <String, List<Tx>>{};
+  for (final t in rows) {
+    if (!_bankRow(t)) continue;
+    final k = merchantKey(t);
+    if (off.contains(k) || c.merchantRules.containsKey(k)) continue;
+    byKey.putIfAbsent(k, () => []).add(t);
+  }
+  final out = [
+    for (final MapEntry(key: k, value: list) in byKey.entries)
+      if (_suggestionFor(k, list, c, min) case final s?) s
+  ]..sort((a, b) {
+      var d = b.count.compareTo(a.count);
+      if (d == 0) d = foldText(a.merchantName).compareTo(foldText(b.merchantName));
+      return d != 0 ? d : a.merchantKey.compareTo(b.merchantKey);
+    });
+  return out;
+}
+
+/// The [ruleSuggestions] entry for [t]'s payee, for the "Always put X in Y?" prompt after the owner sets one row's main
+/// tag; null when there is none (a hand-added row, a payee with a rule or in [off], too few agreeing rows). [t] stands
+/// in for its own row in [rows] (so the edited row can be passed before the list is read again).
+RuleSuggestion? ruleSuggestionFor(Tx t, List<Tx> rows, Categorizer c, {int min = 3, Set<String> off = const {}}) {
+  if (!_bankRow(t)) return null;
+  final k = merchantKey(t);
+  if (off.contains(k) || c.merchantRules.containsKey(k)) return null;
+  final list = [
+    t,
+    for (final r in rows)
+      if (r.id != t.id && _bankRow(r) && merchantKey(r) == k) r
+  ];
+  return _suggestionFor(k, list, c, min);
+}
+
+/// [ruleSuggestions]' rule for the bank rows [list] of payee [key] (sorted here).
+RuleSuggestion? _suggestionFor(String key, List<Tx> list, Categorizer c, int min) {
+  final need = min < 1 ? 1 : min;
+  if (list.length < need) return null;
+  list.sort((a, b) {
+    final d = b.date.compareTo(a.date);
+    return d != 0 ? d : b.id.compareTo(a.id);
+  });
+  final last = list.length > _suggestWindow ? list.sublist(0, _suggestWindow) : list;
+  final table = c.table;
+  String? own(Tx t) {
+    final o = t.category;
+    return o == null || !table.isLive(o) ? null : table.duplicateOf(o) ?? o;
+  }
+
+  final count = <String, int>{};
+  final newest = <String, int>{};
+  for (final (i, t) in last.indexed) {
+    final id = own(t);
+    if (id == null) continue;
+    count[id] = (count[id] ?? 0) + 1;
+    newest.putIfAbsent(id, () => i);
+  }
+  String? best;
+  for (final id in count.keys) {
+    final b = best;
+    if (b == null || count[id]! > count[b]! || (count[id] == count[b] && newest[id]! < newest[b]!)) best = id;
+  }
+  if (best == null || count[best]! < need) return null;
+  for (final t in last) {
+    if (own(t) != best) continue;
+    final k = table.kindOf(c.autoCategory(t));
+    if (k != BudgetKind.flex && k != BudgetKind.fixed) return null;
+  }
+  return RuleSuggestion(key, merchantName(last.first), best, count[best]!);
+}

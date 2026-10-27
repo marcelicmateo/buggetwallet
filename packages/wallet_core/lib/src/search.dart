@@ -46,6 +46,117 @@ String foldText(String s) {
   return sb.toString().replaceAll('dj', 'd');
 }
 
+/// Q7: what [searchAll]'s payments must also be. Every set field narrows; [isEmpty] = no filter. Amount bounds are on
+/// the payment's absolute amount in the list's currency (`amount.abs()`, whole payment), inclusive; [from]/[to] are
+/// inclusive `YYYY-MM-DD` dates; [categories] = main tag ids, a split payment fits when its own main tag or one part's
+/// is in it; [hasAttachment] true/false = with/without a live attached file ([Bill.isAttachment], `attachedTx`); [split]
+/// true/false = a payment counted in parts or not; [uncategorised] = rows whose main tag the owner never chose
+/// (`Tx.category` null, and not split: a split's parts are chosen).
+class SearchFilter {
+  final int? minCents, maxCents;
+  final String? from, to;
+  final Set<String> categories;
+  final bool? hasAttachment;
+  final bool? split;
+  final bool uncategorised;
+  const SearchFilter(
+      {this.minCents,
+      this.maxCents,
+      this.from,
+      this.to,
+      this.categories = const {},
+      this.hasAttachment,
+      this.split,
+      this.uncategorised = false});
+
+  /// Nothing set: [searchAll] behaves as without a filter.
+  bool get isEmpty =>
+      minCents == null &&
+      maxCents == null &&
+      from == null &&
+      to == null &&
+      categories.isEmpty &&
+      hasAttachment == null &&
+      split == null &&
+      !uncategorised;
+
+  /// Whether payment [w] (the whole row) fits; [parts] = its parts' main tags when it is split, [attached] whether it
+  /// has a live attachment.
+  bool _fits(CategorizedTx w, Set<String>? parts, bool attached) {
+    final a = w.amount.abs();
+    if (minCents != null && a < minCents!) return false;
+    if (maxCents != null && a > maxCents!) return false;
+    if (from != null && w.date.compareTo(from!) < 0) return false;
+    if (to != null && w.date.compareTo(to!) > 0) return false;
+    final isSplit = parts != null;
+    if (split != null && split != isSplit) return false;
+    if (hasAttachment != null && hasAttachment != attached) return false;
+    if (categories.isNotEmpty && !categories.contains(w.category) && !(parts?.any(categories.contains) ?? false)) return false;
+    if (uncategorised && (w.tx.category != null || isSplit)) return false;
+    return true;
+  }
+}
+
+/// Where [query] (trimmed, folded with [foldText]) occurs in [text], as `(start, end)` spans of [text] itself (end
+/// exclusive), in order and not overlapping, for showing the match in bold. A letter whose fold is longer or shorter
+/// (`ß` → `ss`, `dj` → `d`) is mapped back to the characters it came from. Blank query → none.
+List<(int, int)> matchSpans(String text, String query) {
+  final q = foldText(query.trim());
+  if (q.isEmpty || text.isEmpty) return const [];
+  final lower = text.toLowerCase();
+  if (lower.length != text.length) {
+    // A case mapping that changes the length (rare, e.g. `İ`): the whole text when it matches, no positions.
+    return foldText(text).contains(q) ? [(0, text.length)] : const [];
+  }
+  // [text] folded code unit by code unit ([_fold] keys are single units), with each folded unit's source index.
+  final folded = StringBuffer();
+  final src = <int>[];
+  for (var i = 0; i < lower.length; i++) {
+    final c = lower[i];
+    final f = _fold[c] ?? c;
+    for (var k = 0; k < f.length; k++) {
+      folded.write(f[k]);
+      src.add(i);
+    }
+  }
+  // `dj` → `d`, as foldText does after the letters.
+  var s = folded.toString();
+  final map = <int>[];
+  final sb = StringBuffer();
+  for (var i = 0; i < s.length; i++) {
+    if (s[i] == 'd' && i + 1 < s.length && s[i + 1] == 'j') {
+      sb.write('d');
+      map.add(src[i]);
+      i++;
+      continue;
+    }
+    sb.write(s[i]);
+    map.add(src[i]);
+  }
+  s = sb.toString();
+  final out = <(int, int)>[];
+  var at = s.indexOf(q);
+  while (at >= 0) {
+    final end = at + q.length;
+    // The span ends where the next folded letter's source starts, so it covers the whole source letter (`ß`) and the
+    // `j` of a folded `dj`.
+    var e = map[end - 1] + 1;
+    if (end >= map.length) {
+      e = text.length;
+    } else if (map[end] > e) {
+      e = map[end];
+    }
+    final start = map[at];
+    if (out.isNotEmpty && start < out.last.$2) {
+      out[out.length - 1] = (out.last.$1, e);
+    } else {
+      out.add((start, e));
+    }
+    at = s.indexOf(q, end);
+  }
+  return out;
+}
+
 /// What matched a query, each list in its own display order ([searchAll]).
 class SearchResult {
   /// Newest first, at most [searchTxLimit].
@@ -144,6 +255,9 @@ List<Map<String, Object?>> searchRows(String entity, String query, Iterable<Map<
 /// P6: [txs] is the expanded list (`Categorizer.expand`). A part also matches by its own note, main tag, tags and
 /// amount; a payment is found once, as its whole row ([CategorizedTx.whole]: whole amount and main tag). When only a
 /// part matched (not the payment's own text, note, amount, main tag or tags), [SearchResult.matchedPart] names it.
+///
+/// Q7: a [filter] that is not [SearchFilter.isEmpty] keeps only the payments that fit it (attachments from [billsDb])
+/// and returns payments only (the other lists stay empty); with a blank query it lists every live payment that fits.
 SearchResult searchAll(
   String query, {
   required List<CategorizedTx> txs,
@@ -155,9 +269,11 @@ SearchResult searchAll(
   Map<String, Iterable<Map<String, Object?>>> rows = const {},
   CategoryTable? table,
   TagTable? tags,
+  SearchFilter? filter,
 }) {
   final q = foldText(query.trim());
-  if (q.isEmpty) return SearchResult.empty;
+  final f = filter == null || filter.isEmpty ? null : filter;
+  if (q.isEmpty && f == null) return SearchResult.empty;
   final cents = parseAmountQuery(query)?.abs();
   bool text(String? s) => s != null && foldText(s).contains(q);
   bool amount(int v) => cents != null && v.abs() == cents;
@@ -171,9 +287,28 @@ SearchResult searchAll(
   final found = <String, CategorizedTx>{};
   final matchedPart = <String, int>{};
   final paymentHit = <String, bool>{};
+  // Q7: the filter, decided once per payment on its whole row (a split's parts' main tags count for [SearchFilter.categories]).
+  final fits = <String, bool>{};
+  final attached = f?.hasAttachment == null
+      ? const <String>{}
+      : {
+          for (final b in billsDb)
+            if (!b.deleted && b.isAttachment && b.attachedTx != null) b.attachedTx!
+        };
+  final partCats = <String, Set<String>>{};
+  if (f != null) {
+    for (final t in txs) {
+      if (t.isPart) partCats.putIfAbsent(t.tx.id, () => {}).add(t.category);
+    }
+  }
   for (final t in txs) {
     final id = t.tx.id;
     if (!t.tx.live) continue;
+    if (f != null &&
+        !(fits[id] ??= f._fits(
+            t.isPart ? t.whole ?? CategorizedTx(t.tx, t.category, t.kind, tags: t.tags) : t, partCats[id], attached.contains(id)))) {
+      continue;
+    }
     if (!t.isPart) {
       if (payment(t)) found[id] = t;
       continue;
@@ -190,14 +325,17 @@ SearchResult searchAll(
       final c = b.date.compareTo(a.date);
       return c != 0 ? c : b.tx.id.compareTo(a.tx.id);
     });
+  final shown = hits.length > searchTxLimit ? hits.sublist(0, searchTxLimit) : hits;
+  final parts = matchedPart.isEmpty
+      ? const <String, int>{}
+      : {
+          for (final h in shown)
+            if (matchedPart[h.tx.id] case final p?) h.tx.id: p
+        };
+  if (f != null) return SearchResult(txs: shown, matchedPart: parts);
   return SearchResult(
-    txs: hits.length > searchTxLimit ? hits.sublist(0, searchTxLimit) : hits,
-    matchedPart: matchedPart.isEmpty
-        ? const {}
-        : {
-            for (final h in hits.take(searchTxLimit))
-              if (matchedPart[h.tx.id] case final p?) h.tx.id: p
-          },
+    txs: shown,
+    matchedPart: parts,
     goals: [
       for (final g in goals)
         if (text(g.name) || amount(g.target) || amount(g.saved)) g

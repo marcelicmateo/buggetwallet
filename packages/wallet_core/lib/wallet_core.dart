@@ -89,6 +89,7 @@ export 'src/categories.dart'
         merchantName,
         rollUp,
         spendingCategories;
+export 'src/changes.dart' show ChangeEntry;
 export 'src/dates.dart'
     show
         addDays,
@@ -197,6 +198,7 @@ export 'src/planned.dart'
         UpcomingItem,
         UpcomingKind;
 export 'src/ranges.dart' show DateRange, RangeKind, rangeFor, rangeLabel, shiftRange;
+export 'src/recurring.dart' show recurringCost;
 export 'src/recurring.dart' show detectRecurring, medianCents, partsDays, partsThreshold, planRecurringPayments, RecurringPayments;
 export 'src/repo.dart'
     show
@@ -205,6 +207,7 @@ export 'src/repo.dart'
         WalletRepo,
         WalletRepoAccounts,
         WalletRepoCategories,
+        WalletRepoChanges,
         WalletRepoBills,
         WalletRepoBlobs,
         WalletRepoImport,
@@ -218,10 +221,13 @@ export 'src/repo.dart'
         WalletRepoTx;
 export 'src/reports.dart'
     show CategoryPeriod, categoryByPeriod, PeriodReport, periodReports, SavedByWaiting, savedByWaiting, savedByWaitingAll;
+export 'src/rules.dart' show RuleSuggestion, ruleSuggestionFor, ruleSuggestions;
 export 'src/rules.dart' show merchantPatternId, MerchantPattern, MerchantRule, MoveDirection, RuleKind, ruleHits, rulesView, RuleView;
+export 'src/search.dart' show matchSpans, SearchFilter;
 export 'src/search.dart' show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchTxLimit;
 export 'src/splits.dart' show decodeSplitParts, encodeSplitParts, SplitPart, splitFits;
 export 'src/suggest.dart' show PlanSuggestion, planProposals, SettingProposal, Suggested, suggestPlan;
+export 'src/tags.dart' show recentPayees, suggestCategoriesForText;
 export 'src/tags.dart' show recommendedMainTags, recommendedTags, suggestTags, TagContext, tagPayee, TagRow, tagsOf, TagTable;
 export 'src/transfers.dart' show openTransfers, planTransfers, transferDays, TransferPlan;
 export 'src/vault.dart'

@@ -1,7 +1,7 @@
 // Tags (stage T1, docs/context/T1_SPEC.md). The main tag is a row's category (CategoryTable); extra tags are the
 // owner's own labels (entity `tag`), given to rows by per-payee rule tags (`ruletag`) and per-row links (`txtag`).
 // Everything here is pure and read time: nothing is written on import.
-import 'categories.dart' show BudgetKind, CategoryTable, merchantKey;
+import 'categories.dart' show BudgetKind, Categorizer, CategoryTable, merchantKey, merchantName;
 import 'models.dart';
 import 'search.dart' show foldText;
 
@@ -269,3 +269,87 @@ List<String> recommendedTags(Tx t, List<CategorizedTx> history, TagTable tags) =
           for (final id in h.tags)
             if (tags.resolve(id) case final r?) r
         });
+
+/// Shortest typed text (folded, trimmed) that [suggestCategoriesForText] looks up in the history.
+const _suggestMinChars = 3;
+
+/// Main tags to offer while the owner types a hand-added payment's [text] (Q1; never applied, never from the amount):
+/// first the category the personal patterns and built-in rules give the text ([Categorizer.merchantCategory]); then
+/// the categories of live rows of [history] whose folded description or note ([foldText]) holds the folded text (at
+/// least 3 characters), by how many rows, then the newest row, then the id; a sync duplicate counts for its original.
+/// Pickable categories only ([CategoryTable.pickable] of [Categorizer.table]: live, not hidden), each once, at most
+/// [limit]. Blank text → none.
+List<String> suggestCategoriesForText(String text, List<CategorizedTx> history, Categorizer c, {int limit = 3}) {
+  final q = foldText(text.trim());
+  if (q.isEmpty || limit <= 0) return const [];
+  final table = c.table;
+  final pickable = table.pickable().toSet();
+  String? usable(String? id) {
+    if (id == null) return null;
+    final r = table.duplicateOf(id) ?? id;
+    return pickable.contains(r) ? r : null;
+  }
+
+  final out = <String>[];
+  if (usable(c.merchantCategory(text)) case final r?) out.add(r);
+  if (q.length >= _suggestMinChars) {
+    final count = <String, int>{};
+    final last = <String, String>{};
+    final seen = <String>{};
+    for (final h in history) {
+      if (!h.tx.live || !seen.add('${h.tx.id}|${h.part}')) continue;
+      final note = h.partNote ?? h.tx.note;
+      if (!foldText(h.tx.description).contains(q) && !(note != null && foldText(note).contains(q))) continue;
+      final id = usable(h.category);
+      if (id == null) continue;
+      count[id] = (count[id] ?? 0) + 1;
+      final l = last[id];
+      if (l == null || h.date.compareTo(l) > 0) last[id] = h.date;
+    }
+    final ranked = [...count.keys]..sort((a, b) {
+        var d = count[b]!.compareTo(count[a]!);
+        if (d == 0) d = last[b]!.compareTo(last[a]!);
+        return d != 0 ? d : a.compareTo(b);
+      });
+    for (final id in ranked) {
+      if (!out.contains(id)) out.add(id);
+    }
+  }
+  return out.length > limit ? out.sublist(0, limit) : out;
+}
+
+/// Payee names to complete a hand-added payment's note with (Q1): the distinct merchant names ([merchantName]) of live
+/// bank rows and the notes of live rows in [history] that hold the folded [prefix] ([foldText]); those starting with
+/// it first, then the others, each newest first (date, then id, descending). A name counts once (folded, trimmed),
+/// spelled as on its newest row. A hand-added row's name is its note only (never its category). At most [limit].
+List<String> recentPayees(List<CategorizedTx> history, String prefix, {int limit = 5}) {
+  if (limit <= 0) return const [];
+  final q = foldText(prefix.trim());
+  final rows = [
+    for (final h in history)
+      if (h.tx.live) h.tx
+  ]..sort((a, b) {
+      final d = b.date.compareTo(a.date);
+      return d != 0 ? d : b.id.compareTo(a.id);
+    });
+  final starts = <String>[], contains = <String>[];
+  final seen = <String>{};
+  void consider(String? name) {
+    final s = name?.trim();
+    if (s == null || s.isEmpty) return;
+    final f = foldText(s);
+    if (!f.contains(q) || !seen.add(f)) return;
+    (f.startsWith(q) ? starts : contains).add(s);
+  }
+
+  for (final t in rows) {
+    if (t.source != 'manual' && !t.manual) {
+      final name = merchantName(t);
+      if (name != '(no description)') consider(name);
+    }
+    consider(t.note);
+    if (starts.length >= limit) break;
+  }
+  final out = [...starts, ...contains];
+  return out.length > limit ? out.sublist(0, limit) : out;
+}
