@@ -262,7 +262,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `addTransaction` refuses beyond it (`ArgumentError`), `importBatch` skips and counts (`ImportSummary.tooLarge`,
   `repo.tooLarge {source, count}`), `_fieldValue` quarantines a synced amount column beyond its cap like a wrong type
   (`_amountCaps`: tx and recurring amounts at `legacyRowCapCents` 10^12, the pre-Q importer cap, so an old import is
-  never dropped; planned, bills, wish price, account opening and goal `monthly` at the cap; goal target/saved keep
+  never dropped; planned, bills, wish price, account opening, goal `monthly` and IOU/repayment amounts at the cap; goal target/saved keep
   `goalTotal`'s clamping); budget sums assert < 2^53 (`_ok`; 90,000 rows at 10^11 fit, 9,000 at 10^12).
   Q4 `previewImport(batch, {revive})` (`repo_import.dart`, types in `import_preview.dart`): read-only (no row, clock,
   outbox, meta or HLC change), the same classification as `importBatch` (`_classifyBatch`) and the same planners

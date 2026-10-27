@@ -65,6 +65,8 @@ extension WalletRepoSyncApply on WalletRepo {
     ('wish', 'price'): maxAmountCents,
     ('account', 'opening'): maxAmountCents,
     ('goal', 'monthly'): maxAmountCents,
+    ('iou', 'amount'): maxAmountCents,
+    ('iou_part', 'amount'): maxAmountCents,
   };
 
   /// [value] as it is stored in column [col] ([ColumnType]: a 0/1 flag takes a bool or 0/1, an integer column an
