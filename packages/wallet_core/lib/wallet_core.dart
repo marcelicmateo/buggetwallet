@@ -207,11 +207,15 @@ export 'src/repo.dart'
         WalletRepoCategories,
         WalletRepoBills,
         WalletRepoBlobs,
+        WalletRepoImport,
+        WalletRepoMeta,
         WalletRepoPlanned,
         WalletRepoRecurring,
         WalletRepoSettings,
         WalletRepoSplits,
-        WalletRepoTags;
+        WalletRepoSyncApply,
+        WalletRepoTags,
+        WalletRepoTx;
 export 'src/reports.dart'
     show CategoryPeriod, categoryByPeriod, PeriodReport, periodReports, SavedByWaiting, savedByWaiting, savedByWaitingAll;
 export 'src/rules.dart' show merchantPatternId, MerchantPattern, MerchantRule, MoveDirection, RuleKind, ruleHits, rulesView, RuleView;
