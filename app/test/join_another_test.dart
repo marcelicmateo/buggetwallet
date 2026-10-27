@@ -11,6 +11,7 @@ import 'package:budget_wallet/src/widgets/common.dart' show StatusLabel;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 import 'db_open_test.dart' show World, loadWith;
 import 'support/plan_page.dart';

@@ -745,6 +745,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0"
+  wallet_sync:
+    dependency: "direct main"
+    description:
+      path: "../packages/sync"
+      relative: true
+    source: path
+    version: "0.1.0"
   web:
     dependency: "direct main"
     description:

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Mutation testing for the pure Dart packages (stdlib only; run with `python3 -I`).
 
-Normally started as `tools/build.sh mutate <importer|core> <lib file>… [options]`, which runs this in the build container.
+Normally started as `tools/build.sh mutate <importer|core|sync> <lib file>… [options]`, which runs this in the build container.
 
-  mutate.py <importer|core> <lib file>… [--max N] [--seed S] [--tests <test file>…] [--timeout SECS] [--list]
+  mutate.py <importer|core|sync> <lib file>… [--max N] [--seed S] [--tests <test file>…] [--timeout SECS] [--list]
 
 Per target file it lists simple one-token mutants (+/-, * and ~/, < <=, > >=, == !=, && ||, integer literals, true/false,
 a trivially typed `return x;` replaced by a default), skipping comments, strings, imports and assert lines. A seeded sample
@@ -25,7 +25,7 @@ import subprocess
 import sys
 import time
 
-PKG_DIR = {"importer": "packages/wallet_importer", "core": "packages/wallet_core"}
+PKG_DIR = {"importer": "packages/wallet_importer", "core": "packages/wallet_core", "sync": "packages/sync"}
 RUN = {}
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -197,7 +197,7 @@ def main():
     # path dependencies and .dart_tool/package_config.json keep working) and the tests run there.
     work = os.path.join(out_dir, "work")
     shutil.rmtree(work, ignore_errors=True)
-    for rel in ("packages/wallet_importer", "packages/wallet_core", "relay"):
+    for rel in ("packages/wallet_importer", "packages/wallet_core", "packages/sync", "relay"):
         if os.path.isdir(os.path.join(ROOT, rel)):
             shutil.copytree(os.path.join(ROOT, rel), os.path.join(work, rel), symlinks=True,
                             ignore=shutil.ignore_patterns("build", "ephemeral", ".symlinks"))

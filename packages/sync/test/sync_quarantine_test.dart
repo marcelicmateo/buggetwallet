@@ -7,11 +7,12 @@ import 'dart:typed_data';
 
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 import 'package:test/test.dart';
-import 'package:wallet_core/src/sync_problems.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/src/sync_problems.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
-import 'support/sim.dart';
-import 'support/synthetic.dart';
+import '../../wallet_core/test/support/sim.dart';
+import '../../wallet_core/test/support/synthetic.dart';
 
 int _clock = 3000000000000;
 

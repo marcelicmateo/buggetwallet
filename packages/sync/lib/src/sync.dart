@@ -1,5 +1,6 @@
 // Sync types the app reads (compile for the web). The engine and its transports are in `sync_engine.dart`.
-import 'logs.dart' show LogSafeError;
+import 'package:wallet_core/wallet_core.dart' show LogSafeError;
+
 import 'sync_problems.dart';
 
 export 'sync_problems.dart' show SyncProblem, SyncProblemReason, syncReaderVersion;

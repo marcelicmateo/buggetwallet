@@ -6,6 +6,7 @@
 import 'dart:typed_data';
 
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 /// The skip reason for a missing feature: null (run) when [present], else the `BUG:` text.
 String? bugUnless(bool present, String item, String what) => present ? null : 'BUG: $item - $what';

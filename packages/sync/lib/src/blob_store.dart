@@ -2,11 +2,9 @@
 // RELAY_PROTOCOL.md "Blobs"). Web-safe: the cache and queues are device-local tables of the wallet database.
 import 'dart:typed_data';
 
-import 'bills.dart';
-import 'logs.dart';
-import 'repo.dart';
+import 'package:wallet_core/wallet_core.dart';
+
 import 'sync_engine.dart';
-import 'vault.dart';
 
 final _log = Logger('bw.blob');
 

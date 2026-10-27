@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 /// Iterations for randomized tests: [base] by default, `BW_FUZZ_ITERATIONS` to run longer (or shorter).
 int fuzzIterations(int base) => int.tryParse(Platform.environment['BW_FUZZ_ITERATIONS'] ?? '') ?? base;

@@ -5,7 +5,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
-import 'package:wallet_core/wallet_core.dart' show maxBlobPlainBytes;
+import 'package:wallet_sync/wallet_sync.dart' show maxBlobPlainBytes;
 
 /// What the owner reads when a file is over the limit.
 const billTooBigMessage = 'This file is too big for a bill (max 15 MB).';

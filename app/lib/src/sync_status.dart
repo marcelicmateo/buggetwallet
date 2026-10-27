@@ -1,5 +1,5 @@
 // Plain-language texts for Plan › Sync (pure: the controller and the tests use them, the screen only shows them).
-import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 /// The one-line state of the last sync: [good] is false while something waits.
 ({String text, bool good}) syncStatusLine({required bool caughtUp, required List<SyncWaiting> waiting}) {

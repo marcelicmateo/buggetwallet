@@ -2,7 +2,7 @@
 # `gh workflow run ci --ref v2`) when a release is ready. Jobs: `apk` (signed release APK), `linux` (release bundle +
 # smoke test), `publish` (dev release when run on v2) and `log`. Lint, package tests, analyze and the desktop integration
 # tests are verified on the laptop (`tools/build.sh test`, `desktop-test`), so they run here only with the `tests` input
-# (jobs lint, importer, core, app, desktop; publish then waits for them and is skipped if one failed).
+# (jobs lint, importer, core (+ sync), app, desktop; publish then waits for them and is skipped if one failed).
 # Every job runs on its own runner (separate checkout, nothing shared on disk; one job used to fill the runner disk).
 # Each job stores its log as the artifact ci-log-<job> (.github/actions/job-log); the `log` job merges them into
 # the `ci-logs` branch (latest.txt, with seconds per step) and appends one JSON line per step to history.jsonl there
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       tests:
-        description: Also run lint, importer, core, relay, app and desktop tests
+        description: Also run lint, importer, core, sync, relay, app and desktop tests
         type: boolean
         default: false
 permissions:
@@ -86,11 +86,16 @@ jobs:
       - name: core tests
         id: core
         run: .github/scripts/timed.sh core 'BW_NATIVE=1 tools/build.sh core'
+      # packages/sync (wallet_sync) runs on the same runner: it shares core's pub cache and build hooks
+      - name: sync tests
+        id: sync
+        if: ${{ !cancelled() }}
+        run: .github/scripts/timed.sh sync 'BW_NATIVE=1 tools/build.sh sync'
       - uses: ./.github/actions/job-log
         if: always()
         with:
           job: core
-          outcomes: "core=${{ steps.core.outcome }}"
+          outcomes: "core=${{ steps.core.outcome }} sync=${{ steps.sync.outcome }}"
 
   relay:
     runs-on: ubuntu-latest

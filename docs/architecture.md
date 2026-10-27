@@ -11,7 +11,7 @@ key. Devices sync through a self-hosted relay that stores only end-to-end encryp
  ├─ screens                        wallet_core.WalletRepo (SQLite)
  └─ WalletController ─────────────► every write = field-level change op (HLC timestamp)
                                           │
-                                   SyncEngine: seal ops ──► relay: devices/<device>/<n> (ciphertext)
+                       wallet_sync.SyncEngine: seal ops ──► relay: devices/<device>/<n> (ciphertext)
                                                open ops ◄── other devices' files
 ```
 
@@ -20,9 +20,10 @@ key. Devices sync through a self-hosted relay that stores only end-to-end encryp
 | Path | What | Depends on |
 |---|---|---|
 | `packages/wallet_importer` | Bank formats → normalized transactions (contract v1). Own BIFF8 .xls reader, .xlsx via `archive` + `xml`, CSV. | nothing Flutter |
-| `packages/wallet_core` | Database, change log, encryption, sync engine and relay client, categorisation, budget maths. | `sqlite3`, `cryptography`, `wallet_importer` |
+| `packages/wallet_core` | Database, change log, encryption (vault), backups, categorisation, budget maths. | `sqlite3`, `cryptography`, `wallet_importer` |
+| `packages/sync` (`wallet_sync`) | Sync engine, relay client (`RelayTransport`), `MemoryTransport`, bill files on the relay (`BlobStore`). Core's tests use it as a dev dependency (two-device tests); core's `lib/` never imports it. | `wallet_core`, `http`, `cryptography` |
 | `relay` | Home-server relay for sync: stores sealed files it cannot read (protocol `docs/context/RELAY_PROTOCOL.md`). Pure Dart server, own container image. | `cryptography` |
-| `app` | Flutter UI for Android, Linux, web (localhost); iOS, Windows, macOS parked. | both packages |
+| `app` | Flutter UI for Android, Linux, web (localhost); iOS, Windows, macOS parked. | the three packages |
 | `artifact` | v1 web app (claude.ai artifact), kept for reference. | — |
 
 The app never touches bank files directly; it only calls `importBankFile()` and stores the result.

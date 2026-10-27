@@ -11,8 +11,9 @@ import 'package:http/testing.dart';
 import 'package:relay/relay.dart';
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
-import 'support/synthetic.dart';
+import '../../wallet_core/test/support/synthetic.dart';
 
 /// HKDF-SHA256 (RFC 5869) written out with plain HMAC, empty salt: an independent check of [deriveKey].
 Future<List<int>> _hkdf(List<int> ikm, String info, int length) async {

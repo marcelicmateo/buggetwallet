@@ -11,7 +11,9 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 - `app/` — Flutter app (Android, iOS, Windows, macOS, Linux).
 - `packages/wallet_importer/` — bank files → normalized transactions. The only code that knows bank formats.
 - `relay/` — the sync relay server (pure Dart, stores sealed sync files; `relay/CLAUDE.md`, protocol in `docs/context/RELAY_PROTOCOL.md`); `tools/relay.sh` runs it locally in Podman, `dev/Containerfile.relay` builds its image.
-- `packages/wallet_core/` — SQLite repo, change log + HLC, encrypted folder sync, categories, budget engine.
+- `packages/wallet_core/` — SQLite repo, change log + HLC, vault (encryption), backups, categories, budget engine.
+- `packages/sync/` (`wallet_sync`) — relay sync engine, `RelayTransport`/`MemoryTransport`, `BlobStore`; depends on core.
+  Core uses it only as a dev dependency (two-device tests); core's `lib/` never imports it (`tools/build.sh sync`).
 - `artifact/` — v1 single-file web app (claude.ai artifact) and its JS tests (`npm test`).
 - `docs/architecture.md`, `docs/setup.md`.
 - Each package has its own short `CLAUDE.md` (files, rules, how to test). Read the one for the code you touch.

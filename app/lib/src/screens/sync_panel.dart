@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 import '../controller.dart';
 import '../logging.dart';

@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart' show ImportBatch;
+import 'package:wallet_sync/wallet_sync.dart';
 
 import 'support/bills.dart';
 import 'support/wallet.dart';

@@ -12,6 +12,7 @@ import 'package:budget_wallet/src/nudges.dart';
 import 'package:budget_wallet/src/pdf_parse.dart';
 import 'package:budget_wallet/src/wallet_db.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 final _registry = Expando<TestSeams>('seams');
 

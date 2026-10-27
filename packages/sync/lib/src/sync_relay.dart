@@ -6,10 +6,9 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:http/http.dart' as http;
+import 'package:wallet_core/wallet_core.dart';
 
-import 'logs.dart';
 import 'sync_engine.dart';
-import 'vault.dart';
 
 final _log = Logger('bw.relay');
 

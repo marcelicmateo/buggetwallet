@@ -2,9 +2,9 @@
 // The author, when caught up, writes a snapshot once a recently seen peer has been stuck on its files for over 24 h.
 // All data is SYNTHETIC.
 import 'package:test/test.dart';
-import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
-import 'support/engine_spec_sim.dart';
+import '../../wallet_core/test/support/engine_spec_sim.dart';
 
 void main() {
   late Sim sim;

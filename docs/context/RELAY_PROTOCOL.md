@@ -1,6 +1,6 @@
 # Relay protocol, api 4 (sync redesign, DESIGN_DECISIONS §4.9; signed requests, decision 2026-10-22; Stage H; blob GC, P14)
 
-The relay stores sealed files it cannot read. Server: `relay/`. Client: `RelayTransport` in `wallet_core`.
+The relay stores sealed files it cannot read. Server: `relay/`. Client: `RelayTransport` in `wallet_sync` (`packages/sync`).
 Both sides follow this file exactly; change it here first. Paths are `/v2/…`; health says `"api": 4`, state says `"api": 4` (`3` to an api-3 app, below).
 
 ## Versions

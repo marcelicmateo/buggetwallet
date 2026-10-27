@@ -6,7 +6,7 @@ import 'dart:typed_data';
 
 import 'package:budget_wallet/src/controller.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 import 'support/seams.dart';
 import 'support/wallet.dart';

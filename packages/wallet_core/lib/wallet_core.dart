@@ -20,6 +20,7 @@ export 'src/backup.dart'
         BackupFailure,
         backupFileName,
         backupPayload,
+        backupPayloadOps,
         BackupResult,
         backupVersion,
         mergeBackupBytes,
@@ -36,6 +37,7 @@ export 'src/bills.dart'
         billPayeeKey,
         BillStatus,
         BlobRef,
+        blobTypes,
         descriptionHasToken,
         isBlobHash,
         maxAttachmentsPerTx,
@@ -48,7 +50,6 @@ export 'src/bills.dart'
         plannedReserves,
         sha256Hex,
         suggestBillCategory;
-export 'src/blob_store.dart' show blobCacheBytesNative, blobCacheBytesWeb, BlobStore, maxBlobPlainBytes;
 export 'src/budget.dart'
     show
         Affordability,
@@ -217,20 +218,6 @@ export 'src/rules.dart' show merchantPatternId, MerchantPattern, MerchantRule, M
 export 'src/search.dart' show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchTxLimit;
 export 'src/splits.dart' show decodeSplitParts, encodeSplitParts, SplitPart, splitFits;
 export 'src/suggest.dart' show PlanSuggestion, planProposals, SettingProposal, Suggested, suggestPlan;
-export 'src/sync.dart'
-    show relayFingerprint, SyncDevice, SyncException, SyncProblem, SyncProblemReason, syncReaderVersion, SyncReport, SyncWaiting;
-export 'src/sync_engine.dart'
-    show
-        MemoryTransport,
-        parseHttpDate,
-        RelayDevice,
-        RelaySnapshot,
-        RelayState,
-        RelayTransport,
-        SyncEngine,
-        SyncTransport,
-        TransportException,
-        TransportFailure;
 export 'src/tags.dart' show recommendedMainTags, recommendedTags, suggestTags, TagContext, tagPayee, TagRow, tagsOf, TagTable;
 export 'src/transfers.dart' show openTransfers, planTransfers, transferDays, TransferPlan;
 export 'src/vault.dart'

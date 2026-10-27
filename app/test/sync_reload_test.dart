@@ -2,6 +2,7 @@
 // change is a peer edit with a clock older than the newest one here. SYNTHETIC; no device.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 import 'support/seams.dart';
 import 'support/wallet.dart';

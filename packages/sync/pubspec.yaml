@@ -1,0 +1,28 @@
+name: wallet_sync
+description: Budget Wallet sync - end-to-end encrypted relay sync engine, transports and bill files on the relay.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  cryptography: ^2.7.0
+  http: ^1.2.0
+  sqlite3: ^3.7.1
+  wallet_core:
+    path: ../wallet_core
+
+dev_dependencies:
+  lints: any
+  relay:
+    path: ../../relay
+  test: any
+  wallet_importer:
+    path: ../wallet_importer
+
+# Same native SQLite as the app (SQLite3 Multiple Ciphers); applies when this package is the root (dart test).
+hooks:
+  user_defines:
+    sqlite3:
+      source: sqlite3mc
