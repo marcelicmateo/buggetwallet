@@ -43,7 +43,7 @@ Counters as delta rows (J3 second half) change the sync format: left for after M
 | J2u | Screen sub-widgets, `AsyncAction` mixin, `PickedFile`, `bill_sheet` sections, `readCalendars` | ui-builder | j2-ui | J1 | done 7553029 (14 bill-sheet sections, Today ~20 widgets, readCalendars split, AsyncAction on 6 panels, PickedFile; test green, desktop screens/plan/flows/import ok) → review (0 blocking, 2 drifts) → f466144 (app 1822/0) |
 | J3 | Mutation testing on importer + core pure code (tool script, no new package); surviving mutants → invariant tests | test-writer | j3 | J2c | tools half running (devops, j3-tools: `tools/mutate.py`, BW_FUZZ_* into container); tests from survivors next |
 | J4 | `packages/sync` split — only if J2c shows a clean seam | core-builder | j4 | J2c | not clean yet (logs→SyncException/VaultException, local_db→vault, repo→isBlobHash; backup→vault+blob_store): after M6 |
-| J | Merge, review, stage run, push, STATUS | lead | v2 | all | queued |
+| J | Merge, review, stage run, push, STATUS | lead | v2 | all | J1+J2 done 2026-10-27 (8aa20cc; stage green, emulator on rerun); J3 follows |
 
 ## Stage P6: split transactions (2026-10-25, spec `P6_SPEC.md`; schema 13)
 | # | Item | Agent | Branch | Depends on | Status |

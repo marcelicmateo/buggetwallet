@@ -350,6 +350,14 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Reviews:** P16b core 1 medium-high (old builds would unlink a real bill → money set aside again; fixed with `attached_tx`), 1 fix reverted after re-review (files of a deleted payment could be lost on undelete), matched-entry bug; P16b UI 1 medium (clock behind showed "couldn't save"), 6 low, 4 test gaps; P5 3 (search links, held heading, rebuild cost) + 3 follow-ups; emulator screens test order. All fixed with tests.
   - **Known limits:** a deleted payment's attachments keep their files on the relay and in backups (16 MB budget) until removed; more than 5 can exist after two offline devices attach to the same payment (nothing deleted, adding is refused until below 5).
   - **Stage run:** importer 374, core 2575, relay 216, app 1814, desktop 13 files, web-test, emulator screens, perf ok (all three actions in budget). **Update every device together** (schema 16).
+- 2026-10-27: **Stage J1 + J2** (`PATH_FORWARD.md` J1–J2; refactor before the live test; no schema or protocol change, still schema 16 / relay api 4).
+  - **J1:** `WalletControllerDeps` (immutable; replaces the mutable function seams and the `walletDbDirOverride` global), `KeyStore` as an instance, `CalendarState`/`SyncState` as Listenables, typed `MemoKey`s, `TodayView`/`UpcomingView` so those screens no longer get the controller.
+  - **J2:** `pdf_text.dart` split into `bills/pdf/` parts; `SyncEngine` per-peer apply as `_applyPeer` with a sealed result and asserts (apply order, refused file changes nothing, forget after a complete pass); bill sheet, Today, search and Bills panel in sub-widgets; `readCalendars` flattened; `AsyncAction` mixin on six panels; `PickedFile` keeps `file_picker` out of screens; `WalletRepo.clockStats()`.
+  - **Bug fixed (found in J2):** after a sync, a change from another device older than the newest clock here did not refresh the screen (stale numbers until the next reload). New `WalletRepo.dataVersion`; the app compares (repo, dataVersion). Tests: `data_version_test`, `sync_reload_test`.
+  - **Small visible changes:** changing the relay address or "Forget this browser" now also clears the old relay's sync warnings (unreadable files, relay size) instead of keeping them until the next sync.
+  - **J4 (`packages/sync`)** not clean yet (core's logs, local_db and repo import sync files): after M6. Counters as delta rows (J3) change the sync format: after M6.
+  - **Reviews:** J2 core 0 blocking (1 medium for the app, 4 low), J1 0 blocking (5 low), J2 UI 0 blocking (2 drifts restored). All fixed.
+  - **Stage run:** importer 374, core 2584, relay 216, app 1822, desktop, web-test, perf ok; emulator screens ok on rerun (first run: emulator went offline after the test passed).
 
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
@@ -436,6 +444,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 ## Next
 - **Plan for all the notes below + further development: `docs/context/OWNER_NOTES_PLAN.md`** (stages N0–N4, decisions D8–D12, delegation table).
   N0–N4 built 2026-10-25. Open: perf over budget on this laptop since 10-24 (host slowdown, not the code; rerun after a reboot). N4 ready (D10: slips + bank payments, one line per month).
+- Owner checks after Stage J (phone): nothing should look different. Try the bill sheet (confirm, save), the Today lines, import and backup buttons (busy while working), calendars refresh, search → delete → Undo; after a sync from the laptop, numbers update without reopening.
 - Owner checks after P16b + P5 (phone):
   - Five tabs at the bottom; Budget starts with the payday plan, Edit plan saves/cancels; Save shows goals above the wishlist.
   - Bills: Coming up first, then slips to review, Expected bills, the bills list; Scan bill and Add bill work. Today's "Due by payday" and "N bills to review" open Bills.
