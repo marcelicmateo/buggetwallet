@@ -46,7 +46,8 @@ class TestSeams {
         pdfParser = base.pdfParser,
         billCategorySuggester = null,
         backupBytesReader = null,
-        deviceRelayOpener = base.deviceRelayOpener;
+        deviceRelayOpener = base.deviceRelayOpener,
+        deviceKeyDeleter = base.deviceKeyDeleter;
 
   Future<SyncReport> Function(Uri relay, VaultKey key, WalletRepo repo) syncRunner;
   Future<void> Function(Uri relay) healthCheck;
@@ -82,6 +83,9 @@ class TestSeams {
   /// The device list / approval relay (stage DK); null = none (the controller then offers no device features).
   DeviceRelayOpener? deviceRelayOpener;
 
+  /// Deletes the device key (stage DK); null = not offered.
+  Future<void> Function()? deviceKeyDeleter;
+
   /// The deps for the controller: each function forwards to the field of the same name, read at call time.
   WalletControllerDeps build(WalletControllerDeps base) => base.copyWith(
         syncRunner: (relay, key, repo) => syncRunner(relay, key, repo),
@@ -114,6 +118,7 @@ class TestSeams {
         backupBytesReader: (r, bytes, opener, walletKey) =>
             backupBytesReader != null ? backupBytesReader!(r, bytes, opener) : base.backupBytesReader(r, bytes, opener, walletKey),
         deviceRelayOpener: (relay, key, repo) => deviceRelayOpener!(relay, key, repo),
+        deviceKeyDeleter: () => deviceKeyDeleter!(),
       );
 }
 

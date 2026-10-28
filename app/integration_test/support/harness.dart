@@ -89,10 +89,15 @@ class Harness {
       if (f.existsSync()) f.deleteSync();
     }
     if (Platform.isAndroid || Platform.isIOS) {
-      await const FlutterSecureStorage().delete(key: 'budget_wallet_key');
+      // The wallet key, this install's device id and its relay device key (stage DK): a test starts as a new install.
+      for (final name in ['budget_wallet_key', 'budget_wallet_device_id', 'budget_wallet_device_key']) {
+        await const FlutterSecureStorage().delete(key: name);
+      }
     } else {
-      final k = File('${dir.path}${sep}wallet.key');
-      if (k.existsSync()) k.deleteSync();
+      for (final name in ['wallet.key', 'device.id', 'device.key']) {
+        final k = File('${dir.path}$sep$name');
+        if (k.existsSync()) k.deleteSync();
+      }
     }
     marker.createSync(recursive: true);
   }

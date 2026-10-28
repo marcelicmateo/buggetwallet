@@ -11,6 +11,28 @@ import 'package:wallet_core/wallet_core.dart';
 /// The permission bits of [path] as an octal string, e.g. `600`.
 String mode(String path) => (FileStat.statSync(path).mode & 0xFFF).toRadixString(8);
 
+/// A store whose reads are slow (a phone's secure storage), so concurrent callers all see "no key yet".
+class _SlowStore extends KeyStore {
+  _SlowStore(Directory dir) : super(keyDir: dir);
+  int writes = 0, failWrites = 0;
+
+  @override
+  Future<List<int>?> readDeviceKey() async {
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    return super.readDeviceKey();
+  }
+
+  @override
+  Future<void> writeDeviceKey(List<int> seed) async {
+    if (failWrites > 0) {
+      failWrites--;
+      throw const FileSystemException('disk full');
+    }
+    writes++;
+    await super.writeDeviceKey(seed);
+  }
+}
+
 void main() {
   late Directory dir;
   late Directory keyDir;
@@ -206,6 +228,28 @@ void main() {
       }
       expect(decodeDeviceKey(null), isNull);
       expect(decodeDeviceKey(encodeDeviceKey(List.filled(32, 9))), List.filled(32, 9));
+    });
+
+    test('two callers at once (first sync run and the Devices block, slow storage) get the same key, made once', () async {
+      final slow = _SlowStore(keyDir);
+      final keys = await Future.wait([deviceKeyOf(slow), deviceKeyOf(slow), deviceKeyOf(slow)]);
+      expect(keys[1], keys[0]);
+      expect(keys[2], keys[0]);
+      expect(slow.writes, 1);
+      expect(await slow.readDeviceKey(), keys[0]);
+      expect(await deviceKeyOf(slow), keys[0], reason: 'kept');
+      expect(slow.writes, 1);
+    });
+
+    test('a failed attempt is forgotten: the next call tries again; a deleted key is made anew', () async {
+      final flaky = _SlowStore(keyDir)..failWrites = 1;
+      await expectLater(deviceKeyOf(flaky), throwsA(isA<FileSystemException>()));
+      final key = await deviceKeyOf(flaky);
+      expect(key, hasLength(32));
+      expect(flaky.writes, 1);
+      await flaky.deleteDeviceKey();
+      expect(await flaky.readDeviceKey(), isNull);
+      expect(await deviceKeyOf(flaky), isNot(key), reason: 'the kept key was dropped with the stored one');
     });
 
     test('the key text is never in the log', () async {

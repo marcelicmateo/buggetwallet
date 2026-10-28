@@ -23,7 +23,27 @@ List<int>? decodeDeviceKey(String? text) {
 
 /// This install's device key: the stored one, else a new one stored now. A key that cannot be stored is not used (the next
 /// run would make another one and enrol it again), so the error goes to the caller.
-Future<List<int>> deviceKeyOf(KeyStore store) async {
+///
+/// One call per [store] is in flight at a time and its result is kept: the first sync run and the Devices block asking together
+/// (slow secure storage) get the same key, never two different ones (the owner's only device would end up waiting for approval).
+/// A failed attempt is forgotten, so the next call tries again; [forgetDeviceKeyMemo] drops a kept key (after the key was deleted).
+Future<List<int>> deviceKeyOf(KeyStore store) {
+  final kept = _kept[store];
+  if (kept != null) return kept;
+  final attempt = _readOrMake(store);
+  _kept[store] = attempt;
+  attempt.then<void>((_) {}, onError: (Object _) {
+    if (identical(_kept[store], attempt)) _kept[store] = null;
+  });
+  return attempt;
+}
+
+final _kept = Expando<Future<List<int>>>('deviceKey');
+
+/// Drops the kept device key of [store] (its stored key was deleted).
+void forgetDeviceKeyMemo(Object store) => _kept[store] = null;
+
+Future<List<int>> _readOrMake(KeyStore store) async {
   final have = await store.readDeviceKey();
   if (have != null) return have;
   final seed = newDeviceKey();

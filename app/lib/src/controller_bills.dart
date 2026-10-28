@@ -587,9 +587,20 @@ extension BillsDb on WalletController {
     if (b.blob == null || key == null) return const BillFile(BillFileState.none);
     SyncTransport? transport;
     RelayTransport? own;
+    DeviceRelay? device;
     try {
       final url = relayUrl;
-      if (url != null) transport = own = RelayTransport(url, key!);
+      if (url != null) {
+        // Signed like every other request of this install (device key, id, api floor): a wallet that requires approval refuses the
+        // wallet key alone. The device relay seam gives that transport; without it the plain one (no device features).
+        final open = deps.deviceRelayOpener;
+        if (open != null) {
+          device = await open(url, key!, repo);
+          transport = device.transport;
+        } else {
+          transport = own = WalletController.relayTransport(url, key!, repo);
+        }
+      }
       final bytes = await _blobStore().read(b.blob!, transport: transport);
       logEvent(_billLog, Level.INFO, 'bill.file', {'found': bytes != null, 'type': b.blobType});
       return bytes == null ? const BillFile(BillFileState.missing) : BillFile(BillFileState.ready, bytes: bytes, type: b.blobType);
@@ -598,6 +609,7 @@ extension BillsDb on WalletController {
       return const BillFile(BillFileState.missing);
     } finally {
       own?.close();
+      device?.close();
     }
   }
 

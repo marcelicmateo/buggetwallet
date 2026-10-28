@@ -13,8 +13,26 @@ const deviceRevokedText = 'This device was removed from the wallet. Its data sta
 const devicePendingTitle = 'Waiting for approval';
 const devicePendingHelp = 'On a device you already use, open Settings › Sync › Devices and approve this code:';
 
-const deviceRemovedAdviceText =
-    "If the removed device may be in someone else's hands, change the wallet key (Settings › Backup › key rotation steps).";
+const deviceRemovedAdviceText = "If the removed device may be in someone else's hands, change the wallet key.";
+
+/// The steps behind "How to change the key" (docs/TECHNICAL_SPEC.md §9): a new key is a new wallet the old device cannot read.
+const changeKeyTitle = 'Change the wallet key';
+const changeKeySteps = [
+  'On a device you trust: Settings › Backup, "Back up now" (sealed with the old key).',
+  'Start fresh on that device: clear the app\'s data (Android: Settings › Apps › Budget Wallet › Clear storage; computer: remove the app\'s data folder; browser: "Forget this browser").',
+  'Choose "Start a new wallet". That makes a new key. Save it.',
+  'Settings › Backup, "Restore a backup made with another key…": pick the backup and enter the old key.',
+  'Join every other device you still use with the new key.',
+  'Delete the old wallet\'s folder on the relay.',
+];
+const changeKeyNote = 'The lost device keeps what it already had, but it sees nothing newer.';
+
+/// The revoked device asks to be approved again with a new device key.
+const useNewKeyTitle = 'Use a new device key?';
+const useNewKeyText = 'This device will ask to be approved again on a device you already use.';
+
+String rejectDeviceTitle(String fp) => 'Reject $fp?';
+const rejectDeviceText = 'It is turned away. It can only join if it asks again.';
 
 const deviceRemovedAlsoLocksText = 'Removing a device also turns on "Require approval for new devices".';
 
@@ -116,13 +134,15 @@ String deviceActionError(TransportException e) => switch (e.failure) {
       _ => "Couldn't do that. Try again.",
     };
 
-/// Which stop a sync run's message names, or null. The engine ends a run on a removed or waiting key with a fixed
-/// [SyncException] message (it carries no typed reason): this reads the two words that make them different.
+/// Which stop ended a sync run: the engine names the transport failure in [SyncException.failure]. `pendingFull` and `tooManyKeys`
+/// are plain errors (never the approval-code screen).
 DeviceStop? deviceStopOf(Object error) {
   if (error is! SyncException) return null;
-  if (error.message.startsWith('This device was removed')) return DeviceStop.revoked;
-  if (error.message.startsWith('This device waits for approval')) return DeviceStop.pending;
-  return null;
+  return switch (error.failure) {
+    TransportFailure.revoked => DeviceStop.revoked,
+    TransportFailure.pending => DeviceStop.pending,
+    _ => null,
+  };
 }
 
 DeviceStop? deviceStopOfTransport(TransportException e) => switch (e.failure) {

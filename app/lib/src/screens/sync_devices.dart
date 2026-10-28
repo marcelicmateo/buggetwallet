@@ -25,7 +25,15 @@ class DeviceStopNotice extends StatelessWidget {
     final stop = wc.deviceStop;
     if (stop == null) return const SizedBox.shrink();
     if (stop == DeviceStop.revoked) {
-      return const StatusLabel(key: ValueKey('deviceRevoked'), good: false, text: deviceRevokedText);
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const StatusLabel(key: ValueKey('deviceRevoked'), good: false, text: deviceRevokedText),
+        TextButton.icon(
+          key: const ValueKey('deviceNewKey'),
+          icon: const Icon(Icons.vpn_key_outlined),
+          label: const Text('Use a new device key'),
+          onPressed: () => _useNewKey(context),
+        ),
+      ]);
     }
     final code = wc.deviceCode;
     final c = context.c;
@@ -68,6 +76,43 @@ class DeviceStopNotice extends StatelessWidget {
   }
 }
 
+extension on DeviceStopNotice {
+  /// "Use a new device key": confirm, then this device asks to be approved again.
+  Future<void> _useNewKey(BuildContext context) async {
+    logNav('devices.newKeyAsk');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(useNewKeyTitle),
+        content: const Text(useNewKeyText),
+        actions: [
+          TextButton(key: const ValueKey('newKeyCancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(key: const ValueKey('newKeyConfirm'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Use a new key')),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final error = await wc.useNewDeviceKey();
+    if (error != null && context.mounted) toast(context, error);
+  }
+}
+
+/// "How to change the key": the steps behind the advice after a removal.
+Future<void> showChangeKeySteps(BuildContext context) => showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(changeKeyTitle),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (final (i, s) in changeKeySteps.indexed)
+              Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('${i + 1}. $s', key: ValueKey('changeKeyStep:${i + 1}'))),
+            const Muted(changeKeyNote),
+          ]),
+        ),
+        actions: [TextButton(key: const ValueKey('changeKeyClose'), onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
+    );
+
 /// The Devices block of Settings › Sync. Reads the relay's device list when it opens.
 class SyncDevicesBlock extends StatefulWidget {
   final WalletController wc;
@@ -83,6 +128,12 @@ class _SyncDevicesBlockState extends State<SyncDevicesBlock> {
   void initState() {
     super.initState();
     if (widget.wc.relayUrl != null && widget.wc.deviceStop == null) widget.wc.refreshDevices();
+  }
+
+  @override
+  void dispose() {
+    widget.wc.stopWatchingDevices(); // no more device-list reads after each sync once the block is gone
+    super.dispose();
   }
 
   Future<void> _act(Future<String?> Function() call, String done) async {
@@ -115,6 +166,13 @@ class _SyncDevicesBlockState extends State<SyncDevicesBlock> {
     final ok = await _confirm(removeDeviceTitle(d.name), '$seen $deviceRemovedAlsoLocksText',
         okKey: const ValueKey('removeConfirm'), cancelKey: const ValueKey('removeCancel'), ok: 'Remove');
     if (ok) await _act(() => widget.wc.removeDevice(d.fp), 'Device removed.');
+  }
+
+  Future<void> _reject(PendingRow p) async {
+    logNav('devices.rejectAsk');
+    final ok = await _confirm(rejectDeviceTitle(p.fp), rejectDeviceText,
+        okKey: const ValueKey('rejectConfirm'), cancelKey: const ValueKey('rejectCancel'), ok: 'Reject');
+    if (ok) await _act(() => widget.wc.removeDevice(p.fp), 'Device turned away.');
   }
 
   Future<void> _approve(PendingRow p) async {
@@ -176,7 +234,13 @@ class _SyncDevicesBlockState extends State<SyncDevicesBlock> {
             ]),
             style: TextStyle(fontSize: BwType.metaSize, color: c.muted, height: 1.4),
           ),
-          TextButton(key: const ValueKey('deviceRemovedOk'), onPressed: wc.dismissDeviceRemovedNote, child: const Text('OK')),
+          Wrap(spacing: 8, children: [
+            TextButton(
+                key: const ValueKey('changeKeyHow'),
+                onPressed: () => showChangeKeySteps(context),
+                child: const Text('How to change the key')),
+            TextButton(key: const ValueKey('deviceRemovedOk'), onPressed: wc.dismissDeviceRemovedNote, child: const Text('OK')),
+          ]),
         ]),
     ]);
   }
@@ -242,14 +306,18 @@ class _SyncDevicesBlockState extends State<SyncDevicesBlock> {
           Expanded(child: Text(p.fp, style: numStyle.copyWith(fontSize: BwType.bodySize, letterSpacing: 1, color: context.c.ink))),
         ]),
         Muted('Device ${p.name}${p.at == null ? '' : ' · asked ${_day(p.at)}'}'),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton(
+        Wrap(spacing: 8, runSpacing: 4, children: [
+          FilledButton(
             key: ValueKey('approveDevice:${p.fp}'),
             onPressed: _busy ? null : () => _approve(p),
             child: const Text('Approve'),
           ),
-        ),
+          OutlinedButton(
+            key: ValueKey('rejectDevice:${p.fp}'),
+            onPressed: _busy ? null : () => _reject(p),
+            child: const Text('Reject'),
+          ),
+        ]),
       ]),
     );
   }

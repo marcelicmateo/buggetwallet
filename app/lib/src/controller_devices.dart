@@ -26,6 +26,28 @@ extension DeviceKeys on WalletController {
   /// A device was removed on this install: the advice to change the wallet key stays until OK.
   bool get deviceRemovedNote => repo.localValue(_noticeDeviceRemoved) != null;
 
+  /// The Devices block closed: sync runs stop reading the device list again.
+  void stopWatchingDevices() => _devicesWanted[this] = false;
+
+  /// This device was removed and the owner chose "Use a new device key": the old key is deleted, the stop and the sync status are
+  /// cleared as for a new relay (the run is not held back any more) and one run follows with trigger `relay`: it asks to be approved
+  /// again, so it ends `pending` with its new code. Returns a message when the key could not be replaced, else null.
+  Future<String?> useNewDeviceKey() async {
+    final delete = deps.deviceKeyDeleter;
+    if (delete == null) return "Couldn't do that. Try again.";
+    try {
+      await delete();
+    } catch (e, st) {
+      logError(_sync, 'devices.newKeyFailed', e, st);
+      return "Couldn't do that. Try again.";
+    }
+    logEvent(_sync, Level.INFO, 'devices.newKey', const {});
+    sync.reset(keepLastSync: true);
+    notifyListeners();
+    await syncNow(trigger: 'relay');
+    return null;
+  }
+
   void dismissDeviceRemovedNote() {
     repo.setLocalValue(_noticeDeviceRemoved, null);
     logNav('sync.noticeDismissed', {'which': 'deviceRemoved'});

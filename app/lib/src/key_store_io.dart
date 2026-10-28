@@ -200,6 +200,18 @@ class KeyStore {
     logEvent(_log, Level.INFO, 'deviceKey.write', {'store': _store});
   }
 
+  /// Deletes only the device key: the next need makes a new one (a removed device asking to be approved again).
+  Future<void> deleteDeviceKey() async {
+    if (isMobile) {
+      await const FlutterSecureStorage().delete(key: _devKeyName);
+    } else {
+      final f = await _file('device.key');
+      if (await f.exists()) await f.delete();
+    }
+    forgetDeviceKeyMemo(this);
+    logEvent(_log, Level.INFO, 'deviceKey.deleted', {'store': _store});
+  }
+
   /// Deletes the stored key, device id and device key (used by "Forget this browser", which only the web build offers; kept so every build compiles).
   Future<void> forget() async {
     if (isMobile) {
@@ -213,6 +225,7 @@ class KeyStore {
         if (await f.exists()) await f.delete();
       }
     }
+    forgetDeviceKeyMemo(this);
     logEvent(_log, Level.INFO, 'key.forgotten', {'store': _store});
   }
 }

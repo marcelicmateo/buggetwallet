@@ -58,6 +58,7 @@ class WalletControllerDeps {
     required this.billCategorySuggester,
     required this.backupBytesReader,
     this.deviceRelayOpener,
+    this.deviceKeyDeleter,
   });
 
   /// The real ones. The four platform objects are looked up only when not given (tests pass the inert ones); [dbDir] points the
@@ -104,6 +105,7 @@ class WalletControllerDeps {
       pdfParser: parsePdf,
       billCategorySuggester: (b, builtIn) => builtIn(),
       backupBytesReader: (r, bytes, opener, walletKey) => restoreBackupBytes(r, bytes, opener, walletKey: walletKey),
+      deviceKeyDeleter: ks.deleteDeviceKey,
       deviceRelayOpener: (relay, key, repo) async {
         final t = WalletController.relayTransport(relay, key, repo, deviceKey: await _deviceKeyOrNull(ks), deviceId: repo.deviceId);
         return DeviceRelay(transport: t, devices: t, fingerprint: () => t.fingerprint, onClose: t.close);
@@ -218,6 +220,9 @@ class WalletControllerDeps {
   /// Opens the relay for the device list, approvals and removals (stage DK); null = no device features (a test without them).
   final DeviceRelayOpener? deviceRelayOpener;
 
+  /// Deletes this install's device key (a removed device asks to be approved again with a new one); null = not offered.
+  final Future<void> Function()? deviceKeyDeleter;
+
   /// A copy with the given members replaced (a nullable member cannot be reset to null this way).
   WalletControllerDeps copyWith({
     DateTime Function()? clock,
@@ -252,6 +257,7 @@ class WalletControllerDeps {
     String? Function(Bill b, String? Function() builtIn)? billCategorySuggester,
     Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey opener, VaultKey walletKey)? backupBytesReader,
     DeviceRelayOpener? deviceRelayOpener,
+    Future<void> Function()? deviceKeyDeleter,
   }) =>
       WalletControllerDeps(
         clock: clock ?? this.clock,
@@ -286,5 +292,6 @@ class WalletControllerDeps {
         billCategorySuggester: billCategorySuggester ?? this.billCategorySuggester,
         backupBytesReader: backupBytesReader ?? this.backupBytesReader,
         deviceRelayOpener: deviceRelayOpener ?? this.deviceRelayOpener,
+        deviceKeyDeleter: deviceKeyDeleter ?? this.deviceKeyDeleter,
       );
 }

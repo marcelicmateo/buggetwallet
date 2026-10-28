@@ -61,8 +61,15 @@ class KeyStore {
 
   Future<void> writeDeviceKey(List<int> seed) async => web.window.localStorage.setItem(_devKeyName, encodeDeviceKey(seed));
 
+  /// Deletes only the device key: the next need makes a new one (a removed device asking to be approved again).
+  Future<void> deleteDeviceKey() async {
+    web.window.localStorage.removeItem(_devKeyName);
+    forgetDeviceKeyMemo(this);
+  }
+
   /// Removes the stored key, its device id and device key, and this tab's copy.
   Future<void> forget() async {
+    forgetDeviceKeyMemo(this);
     _vault.forget();
     web.window.localStorage.removeItem(_idName);
     web.window.localStorage.removeItem(_devKeyName);

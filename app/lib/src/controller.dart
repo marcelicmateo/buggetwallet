@@ -1155,9 +1155,8 @@ class WalletController extends ChangeNotifier {
       if (relay != relayUrl) return;
       // A removed or waiting key has its own notice (with the code); the plain error line would only repeat it.
       // An older relay than this address answered before (api floor 5): a likely downgrade, not a plain "update the relay".
-      final downgraded = e is SyncException &&
-          e.message.startsWith('The relay runs an older version') &&
-          (WalletController.minApiFor(repo, relay) ?? 0) >= 5;
+      final downgraded =
+          e is SyncException && e.failure == TransportFailure.olderApi && (WalletController.minApiFor(repo, relay) ?? 0) >= 5;
       syncError = stop != null
           ? null
           : downgraded

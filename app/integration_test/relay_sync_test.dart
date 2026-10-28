@@ -3,7 +3,14 @@
 // Run: tools/build.sh desktop-test relay_sync. Skipped on Android (the relay would have to run on the host).
 import 'dart:io';
 
+import 'package:budget_wallet/src/bill_inputs.dart';
+import 'package:budget_wallet/src/calendar_source.dart';
 import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/controller_deps.dart';
+import 'package:budget_wallet/src/device_list.dart';
+import 'package:budget_wallet/src/home_widget.dart';
+import 'package:budget_wallet/src/key_store.dart';
+import 'package:budget_wallet/src/nudges.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/tabs.dart';
@@ -43,13 +50,24 @@ void main() {
       a.addExpense(amount: 1250, category: 'Groceries', note: 'Giraffe note', date: todayIso());
       await t.pumpAndSettle();
 
-      // Device B: same key, own database, the default runner (RelayTransport + SyncEngine).
-      final b = WalletController.forTest(WalletRepo.inMemory(), key: a.key);
+      // Device B: same key, own database, its own key store (so its own device key and id), the default runner
+      // (RelayTransport + SyncEngine).
+      final bStore = Directory.systemTemp.createTempSync('bw-relay-it-b');
+      addTearDown(() => bStore.deleteSync(recursive: true));
+      final b = WalletController.forTest(WalletRepo.inMemory(),
+          key: a.key,
+          deps: WalletControllerDeps.platform(
+              nudges: const NoNudges(),
+              calendars: const NoCalendars(),
+              homeWidget: const NoHomeWidget(),
+              billInputs: const BillInputs.none(),
+              keyStore: KeyStore(keyDir: bStore)));
       addTearDown(b.dispose);
       b.relayUrl = Uri.parse(addr);
       Future<void> syncB() async {
         await t.runAsync(b.syncNow);
         expect(b.syncError, isNull, reason: 'B sync');
+        expect(b.deviceStop, isNull, reason: 'B is approved');
       }
 
       // A: Settings › Sync: type the address, test it, save (the first sync runs).
@@ -63,6 +81,18 @@ void main() {
       expect(a.syncError, isNull);
       expect(a.relayUrl, Uri.parse(addr));
       expect(status('Up to date'), findsOneWidget);
+
+      // A new wallet requires approval: B's first sync ends waiting, with its code; A approves that code; B syncs.
+      await t.runAsync(b.syncNow);
+      expect(b.deviceStop, DeviceStop.pending, reason: "B's first sync waits for approval");
+      expect(b.syncError, isNull);
+      final code = b.deviceCode;
+      expect(code, isNotNull);
+      expect(RegExp(r'^[A-Z2-7]{4}-[A-Z2-7]{4}$').hasMatch(code!), isTrue);
+      expect(await t.runAsync(() => a.approveDevice(code)), isNull, reason: 'A approves the code B shows');
+      await t.runAsync(b.syncNow);
+      expect(b.deviceStop, isNull, reason: 'B is enrolled after the approval');
+      expect(b.syncError, isNull);
 
       // B sees A's expense.
       await syncB();

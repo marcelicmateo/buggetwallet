@@ -1,6 +1,8 @@
 // Stage DK (per-device keys): Settings › Sync › Devices (list, Remove this device, Approve, Require approval), the screen of a
 // device that waits for approval or was removed, the older-relay line. The relay's rules come from MemoryTransport.device.
 // All data and keys are SYNTHETIC.
+import 'dart:typed_data';
+
 import 'package:budget_wallet/src/bill_inputs.dart';
 import 'package:budget_wallet/src/calendar_source.dart';
 import 'package:budget_wallet/src/controller.dart';
@@ -19,28 +21,37 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_sync/wallet_sync.dart';
 
+import 'support/bills.dart';
 import 'support/seams.dart';
 import 'support/wallet.dart';
 
 final _relay = Uri.parse('http://homeserver.local:8787');
 
-/// One install: its controller, its view of the relay and how many sync runs it made.
+/// One install: its controller, its view of the relay, how many sync runs it made and how often it opened the device relay.
 class _Install {
-  _Install(this.mem, VaultKey key, String devKey) : repo = WalletRepo.inMemory() {
+  _Install(this.mem, VaultKey key, this.devKey, {BillInputs? inputs}) : repo = WalletRepo.inMemory() {
     t = mem.device(devKey, deviceId: repo.deviceId);
     final deps = WalletControllerDeps.platform(
             nudges: const NoNudges(), calendars: const NoCalendars(), homeWidget: const NoHomeWidget(), billInputs: const BillInputs.none())
-        .copyWith(deviceRelayOpener: (relay, k, r) async => DeviceRelay(transport: t, devices: t, fingerprint: () async => t.fingerprint));
-    wc = seamedController(repo, key: key, deps: deps)..relayUrl = _relay;
+        .copyWith(
+            deviceRelayOpener: (relay, k, r) async {
+              opens++;
+              return DeviceRelay(transport: t, devices: t, fingerprint: () async => t.fingerprint);
+            },
+            deviceKeyDeleter: () async => t = mem.device('$devKey-new${++rekeys}', deviceId: repo.deviceId));
+    wc = seamedController(repo, key: key, deps: deps, billInputs: inputs)..relayUrl = _relay;
     wc.seams.syncRunner = (relay, k, r) {
       runs++;
       return SyncEngine(t, k).run(r);
     };
   }
 
+  final String devKey;
+  int opens = 0, rekeys = 0;
+
   final MemoryTransport mem;
   final WalletRepo repo;
-  late final MemoryDeviceTransport t;
+  late MemoryDeviceTransport t;
   late final WalletController wc;
   int runs = 0;
 
@@ -153,8 +164,8 @@ void main() {
       expect(b.mem.locked, isTrue);
       expect(t.widget<SwitchListTile>(_k('requireApproval')).value, isTrue, reason: 'the list is read again after the removal');
       expect(_k('deviceRemovedNote'), findsOneWidget);
-      expect(find.textContaining('change the wallet key'), findsOneWidget);
-      expect(find.textContaining('key rotation steps'), findsOneWidget);
+      expect(find.textContaining('change the wallet key', findRichText: true), findsOneWidget);
+      expect(_k('changeKeyHow'), findsOneWidget);
       await t.pump(const Duration(seconds: 5));
     });
 
@@ -277,8 +288,8 @@ void main() {
       await a.wc.removeDevice(b.fp);
       await b.wc.syncNow();
       expect(b.wc.deviceStop, DeviceStop.revoked);
-      expect(deviceStopOf(const SyncException('This device was removed from the wallet.')), DeviceStop.revoked);
-      expect(deviceStopOf(const SyncException('The relay is full.')), isNull);
+      expect(deviceStopOf(const SyncException('x', failure: TransportFailure.revoked)), DeviceStop.revoked);
+      expect(deviceStopOf(const SyncException('The relay is full.', failure: TransportFailure.full)), isNull);
     });
 
     testWidgets('Today shows one line with the code while waiting, and one when removed', (t) async {
@@ -306,6 +317,123 @@ void main() {
       await b.wc.syncNow();
       await pumpToday(b.wc);
       expect(find.text('This device was removed from the wallet.'), findsOneWidget);
+      await t.pump(const Duration(seconds: 5));
+    });
+  });
+
+  group('review fixes', () {
+    test('a bill file is read from the relay with the device key: it works on a wallet that requires approval', () async {
+      final mem = MemoryTransport(now: () => relayNow);
+      final fakes = FakeBillInputs(pdf: FakePdf(jpeg: Uint8List.fromList([9, 9, 9])));
+      fakes.pictures.codeList = const [ScannedCode(CodeKind.qr, receiptQr)];
+      final a = _Install(mem, key, 'device-a', inputs: fakes.inputs);
+      final b = _Install(mem, key, 'device-b');
+      addTearDown(a.wc.dispose);
+      addTearDown(b.wc.dispose);
+      final r = await a.wc.importBillFile(Uint8List.fromList([1, 2, 3]), 'jpg');
+      expect(r.kind, BillImportKind.added);
+      await a.wc.syncNow();
+      expect(mem.locked, isTrue, reason: 'a new wallet requires approval');
+      await b.wc.syncNow();
+      expect(b.wc.deviceStop, DeviceStop.pending);
+      expect(await a.wc.approveDevice(b.fp), isNull);
+      await b.wc.syncNow();
+      expect(b.wc.deviceStop, isNull);
+      final bill = b.wc.billsAll().single;
+      final opensBefore = b.opens;
+      final file = await b.wc.billFile(bill);
+      expect(file.state, BillFileState.ready, reason: 'the wallet key alone would be refused on a locked wallet');
+      expect(file.bytes, [9, 9, 9]);
+      expect(b.opens, opensBefore + 1, reason: 'through the device relay seam, closed after');
+    });
+
+    testWidgets('Reject asks first and turns a waiting device away', (t) async {
+      final (a, _) = await twoDevices(lockedAfter: true);
+      final c = _Install(a.mem, key, 'device-c');
+      addTearDown(c.wc.dispose);
+      await c.wc.syncNow();
+      expect(a.mem.pendingKeys, {c.fp});
+      await _pump(t, a.wc);
+      await t.pump();
+      await t.tap(_k('rejectDevice:${c.fp}'));
+      await t.pumpAndSettle(const Duration(milliseconds: 100));
+      expect(find.text('Reject ${c.fp}?'), findsOneWidget);
+      await t.tap(_k('rejectCancel'));
+      await t.pumpAndSettle(const Duration(milliseconds: 100));
+      expect(a.mem.pendingKeys, {c.fp});
+      await t.tap(_k('rejectDevice:${c.fp}'));
+      await t.pumpAndSettle(const Duration(milliseconds: 100));
+      await t.tap(_k('rejectConfirm'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
+      expect(a.mem.pendingKeys, isEmpty);
+      expect(a.mem.enrolledKeys, isNot(contains(c.fp)));
+      expect(_k('approveDevice:${c.fp}'), findsNothing);
+      await t.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('a removed device can use a new key and waits for approval with a new code', (t) async {
+      final (a, b) = await twoDevices();
+      await a.wc.removeDevice(b.fp);
+      await b.wc.syncNow();
+      expect(b.wc.deviceStop, DeviceStop.revoked);
+      final oldCode = b.fp;
+      await _pump(t, b.wc);
+      await t.tap(_k('deviceNewKey'));
+      await t.pumpAndSettle(const Duration(milliseconds: 100));
+      expect(find.text(useNewKeyText), findsOneWidget);
+      await t.tap(_k('newKeyCancel'));
+      await t.pumpAndSettle(const Duration(milliseconds: 100));
+      expect(b.rekeys, 0);
+      expect(b.wc.deviceStop, DeviceStop.revoked);
+      await t.tap(_k('deviceNewKey'));
+      await t.pumpAndSettle(const Duration(milliseconds: 100));
+      await t.tap(_k('newKeyConfirm'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
+      expect(b.rekeys, 1);
+      expect(b.wc.deviceStop, DeviceStop.pending, reason: 'asks to be approved again');
+      expect(b.fp, isNot(oldCode));
+      expect(b.wc.deviceCode, b.fp);
+      expect(a.mem.pendingKeys, {b.fp});
+      expect(await a.wc.approveDevice(b.fp), isNull);
+      await b.wc.syncNow();
+      expect(b.wc.deviceStop, isNull);
+      await t.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('How to change the key shows the steps behind the advice', (t) async {
+      final (a, b) = await twoDevices();
+      await a.wc.removeDevice(b.fp);
+      await _pump(t, a.wc);
+      await t.pump();
+      expect(find.textContaining(deviceRemovedAdviceText, findRichText: true), findsOneWidget);
+      await t.tap(_k('changeKeyHow'));
+      await t.pumpAndSettle(const Duration(milliseconds: 100));
+      expect(find.text(changeKeyTitle), findsOneWidget);
+      for (var i = 0; i < changeKeySteps.length; i++) {
+        expect(_k('changeKeyStep:${i + 1}'), findsOneWidget);
+      }
+      expect(find.textContaining('Restore a backup made with another key'), findsOneWidget);
+      await t.tap(_k('changeKeyClose'));
+      await t.pumpAndSettle(const Duration(milliseconds: 100));
+      await t.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('once the Devices block is closed, sync runs stop reading the device list', (t) async {
+      final (a, _) = await twoDevices();
+      await _pump(t, a.wc);
+      await t.pump();
+      final open = a.opens;
+      expect(open, greaterThan(0));
+      await a.wc.syncNow();
+      await t.pump();
+      expect(a.opens, greaterThan(open), reason: 'a sync while the block is open reads the list again');
+      await t.pumpWidget(const MaterialApp(home: SizedBox()));
+      final closed = a.opens;
+      await a.wc.syncNow();
+      await a.wc.syncNow();
+      expect(a.opens, closed, reason: 'the block is gone: no extra state reads');
       await t.pump(const Duration(seconds: 5));
     });
   });
@@ -412,10 +540,10 @@ void main() {
       expect(deviceStopOfTransport(const TransportException(TransportFailure.pendingFull)), isNull);
       expect(deviceStopOfTransport(const TransportException(TransportFailure.tooManyKeys)), isNull);
       expect(
-          deviceStopOf(const SyncException(
-              "Too many devices are waiting for approval. On a device you already use, reject the ones you don't know.")),
-          isNull);
-      expect(deviceStopOf(const SyncException('This device waits for approval. On a device you already use, open …')), DeviceStop.pending);
+          deviceStopOf(const SyncException('Too many devices are waiting for approval.', failure: TransportFailure.pendingFull)), isNull);
+      expect(deviceStopOf(const SyncException('This wallet already has the most devices.', failure: TransportFailure.tooManyKeys)), isNull);
+      expect(deviceStopOf(const SyncException('no failure named')), isNull);
+      expect(deviceStopOf(const SyncException('y', failure: TransportFailure.pending)), DeviceStop.pending);
     });
 
     test('the lowest accepted relay api is kept per normalised address, device-local, and passed to every transport', () {
@@ -442,7 +570,8 @@ void main() {
       final wc = emptyWallet();
       addTearDown(wc.dispose);
       wc.relayUrl = _relay;
-      const older = SyncException('The relay runs an older version. Update the relay on the home server.');
+      const older =
+          SyncException('The relay runs an older version. Update the relay on the home server.', failure: TransportFailure.olderApi);
       wc.seams.syncRunner = (relay, k, r) async => throw older;
       await wc.syncNow();
       expect(wc.syncError, older.message, reason: 'no floor yet: the plain text');
