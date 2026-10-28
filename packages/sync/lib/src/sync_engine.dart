@@ -7,6 +7,7 @@ import 'package:sqlite3/common.dart' show SqliteException;
 import 'package:wallet_core/wallet_core.dart';
 
 import 'sync.dart';
+import 'sync_digest.dart';
 import 'sync_problems.dart';
 
 export 'sync_memory.dart';
@@ -205,15 +206,18 @@ class _Refused implements Exception {
 
 SyncProblemReason _unsealReason(VaultException e) => switch (e.failure) {
       UnsealFailure.badKey => SyncProblemReason.badKey,
+      UnsealFailure.otherKey => SyncProblemReason.otherKey,
       UnsealFailure.newerFormat => SyncProblemReason.unknownVersion,
       UnsealFailure.damaged || UnsealFailure.tooLarge || null => SyncProblemReason.corrupt,
     };
 
 /// Unseals [bytes] (sealed for [aad]), parses them with [parse] and applies the ops (matching is left to the caller).
-/// Returns (fields changed, ops read). Throws [_Refused] when the file cannot be used, also when its newest clock is
-/// more than [maxClockDrift] ahead of [nowMs]; database errors from [_dbTrouble] are rethrown as they are. The file is
-/// applied in one transaction: a refused file changes nothing.
-Future<(int, int)> _applyBytes(
+/// Returns the fields changed, the ops read, how many of them are data (not records, [isSyncRecord]) and the records.
+/// A file holding a [repairKind] record is a repair resend: its data ops apply with the equal-clock tie-break (V2).
+/// Throws [_Refused] when the file cannot be used, also when its newest clock is more than [maxClockDrift] ahead of
+/// [nowMs]; database errors from [_dbTrouble] are rethrown as they are. The file is applied in one transaction: a
+/// refused file changes nothing.
+Future<({int changed, int ops, int data, List<Op> records})> _applyBytes(
     WalletRepo repo, VaultKey key, List<int> bytes, List<Op> Function(List<int> clear) parse, List<int> aad, int nowMs) async {
   final List<int> clear;
   try {
@@ -239,8 +243,14 @@ Future<(int, int)> _applyBytes(
     throw _Refused(SyncProblemReason.clockDrift, StateError('clock ahead by ${(newest - nowMs) ~/ 60000} min'), StackTrace.current,
         retryAt: newest - drift);
   }
+  final records = [
+    for (final op in ops)
+      if (isSyncRecord(op)) op
+  ];
+  final tieBreak = records.any((op) => op.entity == repairKind);
   try {
-    return (repo.applyRemote(ops, match: false), ops.length);
+    final changed = repo.applyRemote(ops, match: false, tieBreak: tieBreak);
+    return (changed: changed, ops: ops.length, data: ops.length - records.length, records: records);
   } on SqliteException catch (e, st) {
     if (_dbTrouble.contains(e.resultCode)) rethrow;
     throw _Refused(SyncProblemReason.applyFailed, e, st);
@@ -284,6 +294,10 @@ class SyncEngine {
   /// format, are read again once after it changes.
   final String appVersion;
   final DateTime Function() _now;
+
+  /// The digest bookkeeping and the records read in the run under way (runs never overlap, see [run]).
+  DigestBook? _book;
+  RunRecords? _records;
   SyncEngine(this.transport, this.key, {this.appVersion = '', DateTime Function()? now, this.partBytes = maxPartBytes})
       : _now = now ?? DateTime.now;
 
@@ -515,7 +529,11 @@ class SyncEngine {
         relayChanged = true;
       }
     }
+    final book = _book = DigestBook.load(repo);
+    _records = RunRecords();
     if (relayChanged) {
+      book.vector.clear();
+      book.save(repo);
       repo.setLocalValue(ackedKey, null);
       final reset = repo.syncCursors();
       for (final d in reset.keys) {
@@ -534,6 +552,17 @@ class SyncEngine {
     final reuploadList = _reuploadList(repo);
     Set<String> refs() => {...repo.pendingBlobRefs(), if (firstConnect) ...repo.liveBlobHashes(), ...?reuploadList};
     final blobsStored = <String>{};
+    if (book.send != null && !firstConnect) {
+      // A repair resend (V2) references every live bill's file: those this device already stored on the relay (clients
+      // never delete them, and live bills' files are in every snapshot's declared set) count as stored, not PUT again.
+      final queued = repo.queuedBlobs().toSet();
+      final pre = [
+        for (final h in repo.pendingBlobRefs())
+          if (repo.hasCachedBlob(h) && !queued.contains(h)) h
+      ];
+      blobsStored.addAll(pre);
+      if (pre.isNotEmpty) logEvent(_log, Level.INFO, 'sync.repair.blobsKept', {'files': pre.length});
+    }
     final blobFailures = <String, TransportFailure>{};
     var (blobsSent, blobMissing) = await _uploadBlobs(repo, refs(), blobsStored, blobFailures);
     final walletKnown = (state.devices[_streamOf(repo)]?.last ?? 0) > 0;
@@ -631,6 +660,7 @@ class SyncEngine {
       logEvent(_log, Level.WARNING, 'sync.cursor.reset', {'was': cursors[d], 'last': 0});
       repo.setSyncCursor(d, 0);
       cursors.remove(d);
+      if (book.vector.remove(d) != null) book.save(repo);
     }
     for (final d in peers) {
       final c = cursors[d] ?? 0, last = state.devices[d]!.last;
@@ -639,6 +669,7 @@ class SyncEngine {
         logEvent(_log, Level.WARNING, 'sync.cursor.reset', {'was': c, 'last': last});
         repo.setSyncCursor(d, 0);
         cursors.remove(d);
+        if (book.vector.remove(d) != null) book.save(repo);
       }
     }
     final run = _ApplyRun(state, cursors, BadFiles.load(repo), _BadSnapshots.load(repo));
@@ -729,6 +760,13 @@ class SyncEngine {
       logEvent(_log, Level.INFO, 'sync.match.waiting', {'waiting': waiting.length, 'bad': problems.length});
     }
 
+    // 6. State digests (V2): answer a repair ask, compare with the peers' digests, send this device's own.
+    final disagreeBefore = book.disagree;
+    await _digests(repo, myLast, caughtUp: caughtUp && inUse == null);
+    if (book.disagree case final String peer) {
+      problems.add(SyncProblem(peer, SyncProblemReason.devicesDisagree, bytes: 0, isNew: disagreeBefore == null));
+    }
+
     final fresh = problems.where((p) => p.isNew).length;
     if (problems.isNotEmpty) {
       logEvent(_log, fresh > 0 ? Level.WARNING : Level.INFO, 'sync.files.skipped', {'bad': problems.length, 'new': fresh});
@@ -771,6 +809,129 @@ class SyncEngine {
           for (final d in ids)
             SyncDevice(_short(d), lastSeen: d == me ? (acked || sent > 0 ? now : seenById[d]) : seenById[d], isThis: d == me),
         ]);
+  }
+
+  /// Step 6 (V2, after matching): answers the repair asks read in this run that it has not answered yet (by id, see
+  /// [DigestBook.answered]) and that were written after this device first met the relay ([sinceKey]), with one resend
+  /// of its whole state (it goes with the next upload, see [_upload]); otherwise, when [caughtUp] with an empty outbox, compares
+  /// this device's state digest with each peer digest read in this run whose schema and data vector equal this
+  /// device's (others are stale or ahead: ignored). A mismatch starts a repair (whole state + an `ask` record), or,
+  /// within [SyncDigests.repairQuiet] of the last repair or while devicesDisagree is set, raises (keeps)
+  /// [SyncProblemReason.devicesDisagree] instead: no automatic repair until a compare matches, which clears it. Last, a device [caughtUp] with an empty outbox and no resend waiting that applied data since its last
+  /// digest uploads one: a file holding only the digest record, which never makes a peer send one back. (A device's
+  /// own data uploads carry their digest in their last part, see [_upload], so a writer sends no extra file.)
+  Future<void> _digests(WalletRepo repo, int myLast, {required bool caughtUp}) async {
+    final book = _book!, recs = _records!;
+    final nowMs = _now().millisecondsSinceEpoch;
+    // An ask counts once (by id), and only when written after this device first met the relay: a new device replaying
+    // old files must not answer a repair that ended long ago (and then take its own first real mismatch for a second).
+    final since = int.tryParse(repo.localValue(sinceKey) ?? '') ?? 0;
+    final asks = [
+      for (final a in recs.asks)
+        if (!book.answered.contains(a) && Hlc.parse(a).millis >= since) a
+    ];
+    for (final a in recs.asks) {
+      book.answer(a);
+    }
+    if (asks.isNotEmpty) {
+      book.repairAt = nowMs;
+      if (book.send == null) {
+        final n = repo.queueStateResend();
+        book.send = _recordHlc(repo);
+        logEvent(_log, Level.WARNING, 'sync.repair.answer', {'ops': n});
+      }
+      book.save(repo);
+      return;
+    }
+    final outboxEmpty = repo.pendingOps().isEmpty;
+    if (caughtUp && outboxEmpty && book.send == null && recs.digests.isNotEmpty) {
+      String? mine;
+      var matched = 0, ignored = 0;
+      final differ = <String>[];
+      for (final MapEntry(key: d, value: r) in recs.digests.entries) {
+        if (r.schema != WalletRepo.schemaVersion || !sameVector(r.vector, book.vector)) {
+          ignored++;
+          continue;
+        }
+        mine ??= repo.stateDigest();
+        if (r.digest == mine) {
+          matched++;
+        } else {
+          differ.add(d);
+        }
+      }
+      logEvent(_log, Level.FINE, 'sync.digest.compare', {'matched': matched, 'differ': differ.length, 'ignored': ignored});
+      if (differ.isEmpty && matched > 0 && book.disagree != null) {
+        book.disagree = null;
+        logEvent(_log, Level.INFO, 'sync.digest.agree');
+      }
+      if (differ.isNotEmpty) {
+        logEvent(_log, Level.WARNING, 'sync.digest.mismatch', {'peers': differ.length, 'matched': matched});
+        final last = book.repairAt;
+        if (book.disagree != null || (last != null && nowMs - last < SyncDigests.repairQuiet.inMilliseconds)) {
+          // devicesDisagree stops automatic repair until a compare matches: a field that never converges (one build
+          // refuses it) must not cost every device a whole re-upload each week.
+          book.disagree = _short(differ.first);
+          logEvent(_log, Level.WARNING, 'sync.digest.disagree', {'sinceRepairH': last == null ? -1 : (nowMs - last) ~/ 3600000});
+        } else {
+          final n = repo.queueStateResend();
+          final h = _recordHlc(repo);
+          book
+            ..repairAt = nowMs
+            ..send = h
+            ..sendAsk = true
+            ..answer(h); // its own ask, read back from an old stream of this device, is not answered
+          logEvent(_log, Level.WARNING, 'sync.repair.start', {'ops': n});
+        }
+      }
+      book.save(repo);
+    }
+    if (!caughtUp || !book.dirty || book.send != null || repo.pendingOps().isNotEmpty) return;
+    await _putRecords(repo, myLast, [
+      DigestRecord(repo.stateDigest(), Map.of(book.vector), WalletRepo.schemaVersion).toOp(_streamOf(repo), _recordHlc(repo)),
+    ]);
+  }
+
+  /// The clock of a record this device writes now: its wall clock (the one its HLC uses), counter 0, never the HLC
+  /// itself. An HLC pushed ahead by a peer's future-dated op would make the file look ahead to every reader (refused as
+  /// clockDrift, by older builds too); a record changes no field, so it needs no causal order, only "newer ask".
+  static String _recordHlc(WalletRepo repo) => Hlc(repo.clock.now(), 0, repo.deviceId).toString();
+
+  /// Uploads [records] alone as this device's next file (after [myLast], which must be what [sentKey] says, else
+  /// nothing is sent). Best effort: a failure is logged and the run goes on (the digest is sent after the next data
+  /// change). Clears the digest's dirty mark once stored.
+  Future<void> _putRecords(WalletRepo repo, int myLast, List<Op> records) async {
+    final me = _streamOf(repo);
+    if (int.tryParse(repo.localValue(sentKey) ?? '') != myLast) {
+      logEvent(_log, Level.INFO, 'sync.digest.notSent', {'reason': 'marker'});
+      return;
+    }
+    final seq = myLast + 1;
+    final sealed = await seal(_filePayload(records), key, aad: aadSyncFile(me, seq));
+    repo.setLocalValue(
+        sendingKey,
+        jsonEncode({
+          'from': myLast,
+          'parts': {'$seq': await fileHash(sealed)}
+        }));
+    try {
+      await transport.put(me, seq, sealed);
+    } on TransportException catch (e) {
+      // A 409 means another install wrote this seq (the next run's upload handles it); anything else may have stored
+      // it: [sendingKey] stays, so the next run recognises its own file.
+      if (e.failure == TransportFailure.conflict) repo.setLocalValue(sendingKey, null);
+      logEvent(_log, Level.WARNING, 'sync.digest.notSent', {'reason': e.failure.name});
+      return;
+    }
+    final written = _list(repo, streamsKey);
+    if (!written.contains(me)) _setList(repo, streamsKey, [...written, me]);
+    repo.recordSyncFile(me, seq, 0);
+    repo.setLocalValue(sentKey, '$seq');
+    repo.setLocalValue(sendingKey, null);
+    _book!
+      ..dirty = false
+      ..save(repo);
+    logEvent(_log, Level.FINE, 'sync.digest.sent', {'records': records.length, 'bytes': sealed.length});
   }
 
   /// Step 2: starts from the relay's snapshot when a file a peer still needs was pruned, or when this device has applied
@@ -848,9 +1009,11 @@ class SyncEngine {
         return _PeerBlocked(SyncWaiting(_short(d), seq, reason: was.reason), was.problem(isNew: false));
       }
       final versionBefore = repo.dataVersion;
-      final int changed, count;
+      final int changed, count, data;
       try {
-        (changed, count) = await _applyBytes(repo, key, bytes, _fileOps, aadSyncFile(d, seq), repo.clock.now());
+        final got = await _applyBytes(repo, key, bytes, _fileOps, aadSyncFile(d, seq), repo.clock.now());
+        (changed, count, data) = (got.changed, got.ops, got.data);
+        if (got.records.isNotEmpty && streamBase(d) != repo.deviceId) _records!.add(d, got.records);
       } on _Refused catch (r) {
         assert(run.cur(d) == seq - 1 && repo.dataVersion == versionBefore, 'a refused file changes nothing');
         logError(_log, 'sync.file.failed', r.error, r.stack, fields: {'seq': seq, 'reason': r.reason.name, 'bytes': bytes.length});
@@ -861,7 +1024,12 @@ class SyncEngine {
       }
       if (run.bad.byKey.remove(k) != null) run.badChanged = true;
       repo.setSyncCursor(d, seq);
-      repo.recordSyncFile(d, seq, count);
+      repo.recordSyncFile(d, seq, data);
+      if (data > 0) {
+        _book!
+          ..data(d, seq)
+          ..save(repo);
+      }
       run.applied(d, seq, changed: changed, ops: count, bytes: bytes.length);
       logEvent(_log, Level.FINE, 'sync.file', {'seq': seq, 'bytes': bytes.length, 'ops': count, 'changed': changed});
     }
@@ -1007,6 +1175,13 @@ class SyncEngine {
       } else {
         logEvent(_log, Level.FINE, 'sync.export.none');
       }
+      if (_book case final DigestBook book when book.send != null && pending.isEmpty) {
+        // A resend of an empty wallet: nothing to carry the record.
+        book
+          ..send = null
+          ..sendAsk = false
+          ..save(repo);
+      }
       _keepInstance(repo, state);
       return (0, relayLast, inUse);
     }
@@ -1018,11 +1193,26 @@ class SyncEngine {
     // half-way sends everything again next time (ops are idempotent: a clock is only taken when newer).
     var seq = relayLast, done = 0, size = ops.length, jsonBytes = 0, bytes = 0;
     final parts = <String, Object?>{};
+    // V2: a repair resend waits in the outbox: every part carries the repair record (tie-break; `ask` once per hlc).
+    final book = _book;
+    final lead = [
+      if (book?.send case final String h) Op(repairKind, me, {'ask': book!.sendAsk}, h)
+    ];
+    // V2: when this upload carries every local change (nothing held back), the state after it is exactly what the
+    // files in this device's data vector hold: the last part carries the state digest, its vector naming that part.
+    // Only after a caught-up run: otherwise the peers' vectors rarely equal it, and the digest costs a whole read.
+    final digest = book != null && held.isEmpty && repo.syncCaughtUp ? repo.stateDigest() : null;
+    final digestHlc = digest == null ? null : _recordHlc(repo);
     while (done < ops.length) {
       var count = min(size, ops.length - done);
       List<int> payload, sealed;
       while (true) {
-        payload = _filePayload(ops.sublist(done, done + count));
+        final last = done + count == ops.length;
+        payload = _filePayload([
+          ...lead,
+          ...ops.sublist(done, done + count),
+          if (last && digest != null) DigestRecord(digest, {...book!.vector, me: seq + 1}, WalletRepo.schemaVersion).toOp(me, digestHlc!),
+        ]);
         sealed = await seal(payload, key, aad: aadSyncFile(me, seq + 1));
         if (sealed.length <= partBytes || count == 1) break;
         count = (count + 1) ~/ 2;
@@ -1059,6 +1249,18 @@ class SyncEngine {
     repo.markExportedHolding(pending.isEmpty ? null : pending.last.$1, held);
     repo.setLocalValue(sentKey, '$seq');
     repo.setLocalValue(sendingKey, null);
+    if (book != null) {
+      book.data(me, seq);
+      if (digest != null) book.dirty = false;
+      // Ops held back for their bill files keep the resend open: they go later with the same record (tie-break; an
+      // ask counts once by its id).
+      if (book.send != null && held.isEmpty) {
+        logEvent(_log, Level.INFO, 'sync.repair.sent', {'ops': ops.length, 'ask': book.sendAsk, 'held': held.length});
+        book.send = null;
+        book.sendAsk = false;
+      }
+      book.save(repo);
+    }
     if (first) {
       repo.setLocalValue(sinceKey, repo.localValue(sinceKey) ?? '${_now().millisecondsSinceEpoch}');
       logEvent(_log, Level.INFO, 'sync.connect', {'ops': ops.length, 'relayLast': relayLast});
@@ -1136,8 +1338,9 @@ class SyncEngine {
       }
       final int changed, count;
       try {
-        (changed, count) = await _applyBytes(
+        final got = await _applyBytes(
             repo, key, bytes, (c) => backupPayloadOps(c, event: 'sync.snapshot.damaged'), aadSnapshot(s.id), repo.clock.now());
+        (changed, count) = (got.changed, got.ops);
       } on _Refused catch (r) {
         logError(_log, 'sync.snapshot.failed', r.error, r.stack, fields: {'which': which, 'reason': r.reason.name, 'bytes': bytes.length});
         bad.refused(s.id, r.reason, bytes.length, await fileHash(bytes), build, now, retryAt: r.retryAt);
@@ -1149,8 +1352,12 @@ class SyncEngine {
         if (d == _streamOf(repo) || seq <= (cursors[d] ?? 0)) continue;
         repo.setSyncCursor(d, seq);
         cursors[d] = seq;
+        // The covers may end on a file holding only records: then this vector is ahead of the peers' until that device
+        // writes data again (no compare meanwhile; never a false one).
+        _book?.data(d, seq);
         raised++;
       }
+      _book?.save(repo);
       logEvent(_log, Level.INFO, 'sync.snapshot.applied',
           {'which': which, 'ops': count, 'changed': changed, 'bytes': bytes.length, 'devices': raised});
       return (changed, count, bytes.length);

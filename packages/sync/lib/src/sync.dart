@@ -108,13 +108,14 @@ class SyncReport {
       this.relayMaxBytes,
       this.relayApi});
 
-  /// How many files were not applied ([problems]).
-  int get badFiles => problems.length;
+  /// How many files were not applied ([problems] that are about a file: not [SyncProblemReason.devicesDisagree]).
+  int get badFiles => problems.where((p) => p.reason != SyncProblemReason.devicesDisagree).length;
 
-  /// Files not applied, per other device id.
+  /// Files not applied, per other device id ([badFiles] by device).
   Map<String, int> get problemsByDevice {
     final out = <String, int>{};
     for (final p in problems) {
+      if (p.reason == SyncProblemReason.devicesDisagree) continue;
       out[p.device] = (out[p.device] ?? 0) + 1;
     }
     return out;

@@ -179,20 +179,20 @@ void main() {
       expect(repo.settings().salary, 0);
     });
 
-    test('a file sealed with another key is badKey, and the other devices apply', () async {
+    test('a file sealed with another key is otherKey (V1), and the other devices apply', () async {
       final other = VaultKey.generate();
       await put(_devA, 1, await sealed([_setting('salary', 1)], other));
       await good(_devB, 1, 'rent', 2);
       final rep = await run();
-      expect(rep.problems.single.reason, SyncProblemReason.badKey);
-      expect(rep.waiting.single.reason, SyncProblemReason.badKey);
+      expect(rep.problems.single.reason, SyncProblemReason.otherKey);
+      expect(rep.waiting.single.reason, SyncProblemReason.otherKey);
       expect(repo.settings().salary, 0);
       expect(repo.settings().rent, 2);
     });
 
-    test('a future format version (BWOP3) is unknownVersion', () async {
+    test('a future format version (BWOP4) is unknownVersion', () async {
       final bytes = await sealed([_setting('salary', 1)]);
-      bytes[4] = '3'.codeUnitAt(0); // "BWOP2" -> "BWOP3"
+      bytes[4] = '4'.codeUnitAt(0); // "BWOP3" -> "BWOP4"
       await put(_devA, 1, bytes);
       final rep = await run();
       expect(rep.problems.single.reason.name, 'unknownVersion');

@@ -73,14 +73,14 @@ void main() {
   });
 
   group('reasons', () {
-    test('another key or a changed byte is badKey, garbage is corrupt, BWOP3 is unknownVersion; each with device and size', () async {
+    test('another key is otherKey, a cut file or garbage is corrupt, BWOP4 is unknownVersion; each with device and size (V1)', () async {
       final good = await sealed([_setting('salary', 1)]);
       final files = {
         'dev-key': await sealed([_setting('rent', 1)], VaultKey.generate()),
-        // Cut off after sealing: authentication fails, which cannot be told apart from another key.
+        // Cut off after sealing: the key id is this wallet's, so a failing MAC means damage (BWOP3).
         'dev-cut': good.sublist(0, good.length - 7),
         'dev-junk': Uint8List.fromList([1, 2, 3]),
-        'dev-new': Uint8List.fromList([...utf8.encode('BWOP3'), ...good.sublist(5)]),
+        'dev-new': Uint8List.fromList([...utf8.encode('BWOP4'), ...good.sublist(5)]),
       };
       for (final e in files.entries) {
         await peer(e.key, 1, bytes: e.value);
@@ -88,8 +88,8 @@ void main() {
       final rep = await run();
       final got = {for (final p in rep.problems) p.device: (p.reason, p.bytes, p.isNew)};
       expect(got, {
-        'dev-key': (SyncProblemReason.badKey, files['dev-key']!.length, true),
-        'dev-cut': (SyncProblemReason.badKey, good.length - 7, true),
+        'dev-key': (SyncProblemReason.otherKey, files['dev-key']!.length, true),
+        'dev-cut': (SyncProblemReason.corrupt, good.length - 7, true),
         'dev-junk': (SyncProblemReason.corrupt, 3, true),
         'dev-new': (SyncProblemReason.unknownVersion, good.length, true),
       });
@@ -170,7 +170,7 @@ void main() {
     test('a repaired copy of the same size still applies (content decides)', () async {
       final good = await sealed([_setting('salary', 8)]);
       await peer('p1', 1, bytes: Uint8List.fromList(good)..[good.length - 1] ^= 1);
-      expect((await run()).problems.single.reason, SyncProblemReason.badKey, reason: 'a changed byte fails authentication');
+      expect((await run()).problems.single.reason, SyncProblemReason.corrupt, reason: 'a changed byte fails authentication: damaged');
       await peer('p1', 1, bytes: good);
       final rep = await run();
       expect((rep.filesRead, rep.badFiles), (1, 0));
@@ -181,7 +181,7 @@ void main() {
     test('a newer-format file is not retried by the same build, and is retried once after an app update', () async {
       final lines = _capture();
       final good = await sealed([_setting('salary', 9)]);
-      await peer('p1', 1, bytes: [...utf8.encode('BWOP3'), ...good.sublist(5)]);
+      await peer('p1', 1, bytes: [...utf8.encode('BWOP4'), ...good.sublist(5)]);
       await run(appVersion: '1.0.0');
       await run(appVersion: '1.0.0');
       expect(failedLogs(lines), 1);
@@ -291,7 +291,7 @@ void main() {
       final good = net.files['d/${a.repo.deviceId}/3']!;
       net.relay.replace(a.repo.deviceId, 3, good.sublist(0, good.length - 3));
       final first = await b.run();
-      expect((first.filesRead, first.badFiles, first.problems.single.reason), (2, 1, SyncProblemReason.badKey));
+      expect((first.filesRead, first.badFiles, first.problems.single.reason), (2, 1, SyncProblemReason.corrupt));
       expect(failedLogs(lines), 1);
       final before = dump(b.repo, clocks: false);
       // The database as the build before `goal_contrib` left it: this build then forgets how far it applied each device.
@@ -341,7 +341,7 @@ void main() {
     await run();
     final text = lines.join('\n');
     expect(text, contains('sync.file.failed {"seq":2,"reason":"corrupt","bytes":3}'));
-    expect(text, contains('"reason":"badKey"'));
+    expect(text, contains('"reason":"otherKey"'));
     expect(text, contains('sync.files.skipped {"bad":2,"new":0}'));
     expect(text, isNot(contains('secret')));
     expect(text, isNot(contains('device-')));

@@ -136,7 +136,7 @@ void main() {
       // Sealed with another key: refused (quarantined), nothing applied.
       await relay.put('p1', 2, await sealed([_setting('alpha', '"two"', _t0 - 2000)], 'p1', 2, VaultKey.generate()));
       final second = await SyncEngine(relay, key).run(repo);
-      expect(second.problems.map((p) => p.reason), contains(SyncProblemReason.badKey));
+      expect(second.problems.map((p) => p.reason), contains(SyncProblemReason.otherKey));
       expect(_value(repo, 'alpha'), '"one"');
       expect(repo.dataVersion, v1);
 

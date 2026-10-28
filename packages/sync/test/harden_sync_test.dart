@@ -550,15 +550,20 @@ void main() {
     });
   });
 
-  group('H8 BWOP2', () {
-    test('sealed for one place opens only there (another seq, device or use is badKey); BWOP1 still opens', () async {
+  group('H8 BWOP2/BWOP3', () {
+    test('sealed for one place opens only there (another seq, device or use: BWOP3 damaged, BWOP2 badKey); BWOP1 still opens', () async {
       final plain = utf8.encode('[]');
       final f = await seal(plain, key, aad: aadSyncFile('dev1', 3));
-      expect(f.sublist(0, 5), utf8.encode('BWOP2'));
+      final f2 = await seal(plain, key, aad: aadSyncFile('dev1', 3), legacyFormat: true);
+      expect(f.sublist(0, 5), utf8.encode('BWOP3'));
+      expect(f2.sublist(0, 5), utf8.encode('BWOP2'));
       expect(await unseal(f, key, aad: aadSyncFile('dev1', 3)), plain);
+      expect(await unseal(f2, key, aad: aadSyncFile('dev1', 3)), plain);
       for (final other in [aadSyncFile('dev1', 4), aadSyncFile('dev2', 3), aadSnapshot('3'), aadBackup, aadBlob, aadWebKey]) {
         await expectLater(
-            unseal(f, key, aad: other), throwsA(isA<VaultException>().having((e) => e.failure, 'failure', UnsealFailure.badKey)));
+            unseal(f, key, aad: other), throwsA(isA<VaultException>().having((e) => e.failure, 'failure', UnsealFailure.damaged)));
+        await expectLater(
+            unseal(f2, key, aad: other), throwsA(isA<VaultException>().having((e) => e.failure, 'failure', UnsealFailure.badKey)));
       }
       final old = await _sealV1(plain, key);
       for (final any in [aadBackup, aadSyncFile('x', 1)]) {
@@ -575,10 +580,11 @@ void main() {
       final x = await seal(utf8.encode('synthetic'), k, aad: aadBackup, nonce: n);
       final y = await seal(utf8.encode('synthetic'), k, aad: aadBackup, nonce: n);
       expect(x, y);
-      expect(x.sublist(5, 29), n);
+      expect(x.sublist(13, 37), n, reason: 'BWOP3: magic, key id (8), nonce');
+      expect((await seal(utf8.encode('synthetic'), k, aad: aadBackup, nonce: n, legacyFormat: true)).sublist(5, 29), n);
       expect(() => seal(const [1], k, aad: aadBackup, nonce: const [1, 2]), throwsArgumentError);
       final nonces = {
-        for (var i = 0; i < 200; i++) base64.encode((await seal(const [1], k, aad: aadBackup)).sublist(5, 29))
+        for (var i = 0; i < 200; i++) base64.encode((await seal(const [1], k, aad: aadBackup)).sublist(13, 37))
       };
       expect(nonces, hasLength(200));
     });
@@ -592,7 +598,9 @@ void main() {
       expect((await unseal(bomb, key, aad: aadBlob, maxBytes: 2 << 20)).length, 2 << 20);
     });
 
-    test('a peer file moved to another seq or device on the relay is refused (badKey), BWOP1 peer files still apply', () async {
+    test(
+        'a peer file moved to another seq or device on the relay is refused (corrupt: damaged under this key), BWOP1 peer files still apply',
+        () async {
       final a = device('a'), b = device('b');
       a.repo.updateSettings({'salary': 1});
       await a.run();
@@ -601,7 +609,7 @@ void main() {
       final one = net.files['d/${a.repo.deviceId}/1']!;
       net.relay.replace(a.repo.deviceId, 2, one); // the relay serves file 1 as file 2
       final r = await b.run();
-      expect(r.problems.single.reason, SyncProblemReason.badKey);
+      expect(r.problems.single.reason, SyncProblemReason.corrupt);
       expect(r.waiting.single.seq, 2);
 
       final c = device('c');

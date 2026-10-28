@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:cryptography/dart.dart' show DartSha256;
 import 'package:sqlite3/common.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
@@ -244,6 +245,10 @@ class WalletRepo {
   int _internalDepth = 0;
 
   int _dataVersion = 0;
+
+  /// [stateDigest]'s last result and the [dataVersion] it was computed at; how many real computations ran.
+  (int, String)? _digestCache;
+  int _digestRuns = 0;
 
   /// Set by [_apply] when a field was written in the open transaction; [_tx] turns it into a [dataVersion] step on
   /// commit and drops it on rollback.

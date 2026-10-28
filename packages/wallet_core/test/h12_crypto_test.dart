@@ -64,11 +64,13 @@ void main() {
     });
   });
 
-  group('known-answer vectors (BWOP2)', () {
+  group('known-answer vectors (BWOP2, written only with legacyFormat: the web key)', () {
     final nonce = List<int>.generate(24, (i) => 0xa0 + i);
     final aad = utf8.encode('bw-sync-file\nabcd1234abcd1234\n7');
     final plain = utf8.encode('{"ops":[]} synthetic known answer');
     final skip = bugUnless(sealHasNonce, 'H8', 'seal(plain, key, aad:, nonce:) test seam');
+    Future<Uint8List> sealC(List<int> plain, VaultKey key, {required List<int> aad, List<int>? nonce}) =>
+        seal(plain, key, aad: aad, nonce: nonce, legacyFormat: true);
 
     test('layout: magic, the given nonce, then mac and ciphertext that an independent XChaCha20-Poly1305 opens with the AAD', () async {
       final s = await sealC(plain, _key, aad: aad, nonce: nonce);
@@ -129,6 +131,92 @@ void main() {
     }, skip: skip, timeout: _t);
   });
 
+  group('known-answer vectors (BWOP3, V1)', () {
+    final nonce = List<int>.generate(24, (i) => 0xa0 + i);
+    final aad = utf8.encode('bw-sync-file\nabcd1234abcd1234\n7');
+    final plain = utf8.encode('{"ops":[]} synthetic known answer');
+
+    test('keyIdBytes: SHA-256("budget-wallet-key-id" || key)[0:8], and keyId() is its lowercase hex', () async {
+      final want = (await Sha256().hash([...utf8.encode('budget-wallet-key-id'), ..._key.bytes])).bytes.sublist(0, 8);
+      final id = await _key.keyIdBytes();
+      expect(id, want);
+      expect(await _key.keyId(), id.map((b) => b.toRadixString(16).padLeft(2, '0')).join());
+      expect(await VaultKey(List<int>.filled(32, 9)).keyIdBytes(), isNot(id));
+    }, timeout: _t);
+
+    test('layout: magic, key id, the given nonce, then mac and ciphertext that open with AAD || key id', () async {
+      final s = await seal(plain, _key, aad: aad, nonce: nonce);
+      final id = await _key.keyIdBytes();
+      expect(utf8.decode(s.sublist(0, 5)), 'BWOP3');
+      expect(s.sublist(5, 13), id);
+      expect(s.sublist(13, 37), nonce);
+      final box = SecretBox(s.sublist(53), nonce: s.sublist(13, 37), mac: Mac(s.sublist(37, 53)));
+      final gz = await _aead.decrypt(box, secretKey: SecretKey(_key.bytes), aad: [...aad, ...id]);
+      expect(gzip.decode(gz), plain);
+      // Without the key id in the AAD the box does not open: the id is bound to the MAC.
+      await expectLater(_aead.decrypt(box, secretKey: SecretKey(_key.bytes), aad: aad), throwsA(isA<SecretBoxAuthenticationError>()));
+    }, timeout: _t);
+
+    test('deterministic for a fixed nonce; 8 bytes longer than BWOP2', () async {
+      final a = await seal(plain, _key, aad: aad, nonce: nonce);
+      expect(await seal(plain, _key, aad: aad, nonce: nonce), a);
+      expect(a.length, (await seal(plain, _key, aad: aad, nonce: nonce, legacyFormat: true)).length + 8);
+    }, timeout: _t);
+
+    test('another key is otherKey (nothing decrypted); the right key with another AAD is damaged', () async {
+      final s = await seal(plain, _key, aad: aad, nonce: nonce);
+      expect(await unseal(s, _key, aad: aad), plain);
+      await _expectFailure(unseal(s, VaultKey(List<int>.filled(32, 9)), aad: aad), UnsealFailure.otherKey);
+      await _expectFailure(unseal(s, _key, aad: utf8.encode('bw-backup')), UnsealFailure.damaged, reason: 'a sync file used as a backup');
+      await _expectFailure(unseal(s, _key, aad: const []), UnsealFailure.damaged);
+    }, timeout: _t);
+
+    test('every use has its own AAD: sealed for one use, opened as another is damaged', () async {
+      final uses = [aadSyncFile('dev', 1), aadSnapshot('s7-1-ab'), aadBackup, aadBlob];
+      for (var i = 0; i < uses.length; i++) {
+        final s = await seal(plain, _key, aad: uses[i]);
+        for (var j = 0; j < uses.length; j++) {
+          if (i == j) {
+            expect(await unseal(s, _key, aad: uses[j]), plain);
+          } else {
+            await _expectFailure(unseal(s, _key, aad: uses[j]), UnsealFailure.damaged, reason: 'use $i opened as $j');
+          }
+        }
+      }
+    }, timeout: _t);
+
+    test('a flipped bit: in the key id = otherKey, in nonce, mac or ciphertext = damaged, in the magic = refused', () async {
+      final s = await seal(plain, _key, aad: aad, nonce: nonce);
+      for (var i = 0; i < s.length; i++) {
+        final bad = Uint8List.fromList(s)..[i] ^= 0x01;
+        try {
+          await unseal(bad, _key, aad: aad);
+          fail('byte $i flipped but the box opened');
+        } on VaultException catch (e) {
+          if (i >= 5 && i < 13) {
+            expect(e.failure, UnsealFailure.otherKey, reason: 'key id byte $i');
+          } else if (i >= 13) {
+            expect(e.failure, UnsealFailure.damaged, reason: 'byte $i');
+          }
+        }
+      }
+    }, timeout: _t);
+
+    test('a key id swapped for the other key\'s id: that key reads it as its own, but the MAC fails: damaged', () async {
+      final other = VaultKey(List<int>.filled(32, 9));
+      final s = Uint8List.fromList(await seal(plain, _key, aad: aad, nonce: nonce))..setRange(5, 13, await other.keyIdBytes());
+      await _expectFailure(unseal(s, other, aad: aad), UnsealFailure.damaged);
+      await _expectFailure(unseal(s, _key, aad: aad), UnsealFailure.otherKey);
+    }, timeout: _t);
+
+    test('cut inside the header (under 53 bytes) is damaged', () async {
+      final s = await seal(plain, _key, aad: aad, nonce: nonce);
+      for (final n in [45, 46, 52]) {
+        await _expectFailure(unseal(s.sublist(0, n), _key, aad: aad), UnsealFailure.damaged, reason: 'cut to $n');
+      }
+    }, timeout: _t);
+  });
+
   group('boxes written by older builds and damaged boxes', () {
     test('a hand-built BWOP1 box (no AAD) still opens, whatever AAD the caller passes', () async {
       final b = await _box1(gzip.encode(utf8.encode('old build file')), _key);
@@ -155,9 +243,9 @@ void main() {
       }
     }, timeout: _t);
 
-    test('a newer magic (BWOP3 .. BWOP9) is newerFormat, BWOP0 and other text is damaged; an empty file too', () async {
+    test('a newer magic (BWOP4 .. BWOP9) is newerFormat, BWOP0 and other text is damaged; an empty file too', () async {
       final base = await _box1(gzip.encode([1, 2, 3]), _key);
-      for (final d in '3456789'.split('')) {
+      for (final d in '456789'.split('')) {
         final b = Uint8List.fromList(base)..[4] = d.codeUnitAt(0);
         await _expectFailure(unsealC(b, _key), UnsealFailure.newerFormat, reason: 'BWOP$d');
       }

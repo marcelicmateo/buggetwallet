@@ -163,7 +163,7 @@ void main() {
       c.upload(net);
       a.deliver(net, Random(2));
       final got = await a.run();
-      expect(got.filesRead, 1);
+      expect(got.filesRead, 2, reason: "c's restored state, then its digest file after applying a's (V2)");
       expect(got.received, 0, reason: 'nothing newer in the restored ops');
       expect(dump(a.repo), dump(c.repo));
       expect(bookkeeping(c.repo)['outbox'], 0);
