@@ -37,7 +37,7 @@ Merge order: VB → VA → VT → VU.
 | V0a | Context pack V1+V2 (vault, backup, sync quarantine, resend, sim) | scout | – | – | done |
 | V0b | Context pack V3 (streak, entity schema, migrations) | scout | – | – | done |
 | V0c | Context pack UI (failure texts, Settings › Sync problems, review Done) | scout | – | – | done (pack kept by lead) |
-| VA | V1 key id (`BWOP3`) + V2 state digest and repair | core-builder | v-sync | V0a | done 6e04331 (core 2658/0, sync 339/0; digest rides in own upload; app analyze needs VU) → review running |
+| VA | V1 key id (`BWOP3`) + V2 state digest and repair | core-builder | v-sync | V0a | done 6e04331 → review (1 blocking = app half, fixed in VU 8747fd4; 4 med: disagree still repairs weekly, per-field tie SELECTs, digest on UI isolate every upload, blob re-upload on repair; 3 low) → fixes running |
 | VB | V3 review rows, `reviewStreak` pure (schema 18) | core-builder | v-review | V0b | done af0688d + 2e98ae5 (low fix), reviewed, merged 2cc0bcf |
 | VT | Spec tests (seal vectors, digest, divergence → repair, no ping-pong, streak) | test-writer | v-tests | V0a, V0b | done 88c43ab (48 tests unrun until VA+VB merge; backup otherKey asserted as VaultException) |
 | VU | UI: exact key/damaged texts, otherKey + devicesDisagree in Settings › Sync; wire `repo.reviewDates()` | ui-builder | v-ui | V0c, VA, VB (needs their enums/API; no shims) | done 7c331ab + 8747fd4 (on VA; app +167 targeted, lint/analyze ok) → review after VA review |
@@ -56,8 +56,8 @@ Owner: host the relay on their Pi at home, native binary as a systemd service (n
 a systemd service too. Pi model/OS details come later from the owner.
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
-| PI1 | arm64 cross-build of the relay from the laptop container; hardened systemd units (relay + Caddy) and Caddyfile in `relay/deploy/native/`; offline checks in lint | devops | pi-relay | – | running |
-| PI2 | `tools/relay-deploy.sh` Pi target: OS bootstrap (apt or dnf), data on SSD, copy binary, enable units, backup/upgrade/status; `docs/setup.md` §5 rewrite for the Pi | devops | pi-relay | PI1, owner's Pi details | waiting for owner |
+| PI1 | arm64 cross-build of the relay from the laptop container; hardened systemd units (relay + Caddy) and Caddyfile in `relay/deploy/native/`; offline checks in lint | devops | pi-relay | – | done b42ddeb + 78c0d87 (EPERM), merged 85552aa; Dart 3.13.5 cross-compiles arm64; lint + relay 216/0 |
+| PI2 | `tools/relay-deploy.sh` Pi target: OS bootstrap (apt or dnf), data on SSD, copy binary, enable units, backup/upgrade/status; `docs/setup.md` §5 rewrite for the Pi | devops | pi-relay | PI1, owner's Pi details | waiting for owner: Pi model, OS, domain/DDNS, router 80/443, SSD; also verify the hardened unit runs on the Pi (systemd-analyze security, health), caddy validate, setup.md rewrite, keep or drop quadlets |
 
 ## Stage C2: chart audit (2026-10-28, owner; after Stage X)
 Check every chart (`app/lib/src/widgets/charts.dart`, Spending, Insights, payday forecast, savings trend; fl_chart) against
