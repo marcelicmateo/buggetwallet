@@ -232,7 +232,7 @@ export 'src/repo.dart'
         WalletRepoTx;
 export 'src/reports.dart'
     show CategoryPeriod, categoryByPeriod, PeriodReport, periodReports, SavedByWaiting, savedByWaiting, savedByWaitingAll;
-export 'src/rules.dart' show RuleSuggestion, ruleSuggestionFor, ruleSuggestions;
+export 'src/rules.dart' show PayeeCount, RuleSuggestion, ruleSuggestionFor, ruleSuggestions, uncategorisedPayees;
 export 'src/rules.dart' show merchantPatternId, MerchantPattern, MerchantRule, MoveDirection, RuleKind, ruleHits, rulesView, RuleView;
 export 'src/search.dart' show matchSpans, SearchFilter;
 export 'src/search.dart' show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchTxLimit;
