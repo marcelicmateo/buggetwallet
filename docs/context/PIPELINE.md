@@ -30,6 +30,13 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 Agent models: scout, ci-watcher haiku/low; test-writer, devops sonnet/medium; ui-builder sonnet/high; core-builder, reviewer Fable/high.
 Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the lead from the branch named in "Base".
 
+## Stage M: hardening before M6 (2026-10-28; every planned feature is built)
+| # | Item | Agent | Branch | Depends on | Status |
+|---|---|---|---|---|---|
+| M1 | Mutation testing on V/X code (sync_digest, repo_sync_apply conflicts/repair/digest, vault BWOP3, uncategorisedPayees, reviewStreak); survivors → invariant tests, real bugs → `BUG:` skip + report | test-writer (sonnet/medium) | m-mutate | – | running |
+| M2 | Measure `stateDigest` on the emulator; move it off the UI isolate on native if > ~100 ms | core-builder | m-digest | – | running |
+| M | Review, stage run, push, STATUS | lead | v2 | M1, M2 | queued |
+
 ## Stage V: sync format items before M6 (2026-10-28, plan `STAGE_V_PLAN.md`; schema 18; statement ticking dropped)
 Merge order: VB → VA → VT → VU.
 | # | Item | Agent | Branch | Depends on | Status |
