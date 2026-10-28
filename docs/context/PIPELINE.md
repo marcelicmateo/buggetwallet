@@ -47,9 +47,9 @@ Merge order: VB → VA → VT → VU.
 ## Stage X: "Set up my wallet" wizard (2026-10-28, spec `X_SPEC.md`; on-device, no AI; after Stage V)
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
-| X0 | Context pack: onboarding/welcome_balance, import flow, P13 sheet, Plan › Suggestions, expected bills/incomes, rules, budgets panels; core detectors | scout | – | V merged | next |
-| XC | `setupProposals`, `uncategorisedPayees` + tests | core-builder | x-core | X0 | queued |
-| XU | Wizard shell + 8 steps, entry points, widget tests, screenshots | ui-builder | x-ui | X0 (+ XC API) | queued |
+| X0 | Context pack: onboarding/welcome_balance, import flow, P13 sheet, Plan › Suggestions, expected bills/incomes, rules, budgets panels; core detectors | scout | – | V merged | done (pack in lead brief) |
+| XC | `uncategorisedPayees` + tests (no setupProposals: lead decision) | core-builder | x-core | X0 | running (core-builder on sonnet: small pure function) |
+| XU | Wizard shell + 8 steps, entry points, widget tests, screenshots | ui-builder | x-ui | X0 (+ XC API) | running |
 | X | Review, merge, stage run, push, STATUS | lead | v2 | XC, XU | queued |
 
 ## Relay on the Raspberry Pi (2026-10-28, owner; devops, runs beside the feature stages)
