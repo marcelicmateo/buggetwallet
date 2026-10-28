@@ -467,7 +467,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   differently from the bank text is not matched to its expected bill (its required category still keeps a fixed-category
   slip from being reserved twice); Upcoming's "Set aside" leaves out an overdue expected bill that Today still reserves;
   photos are not in `.bwb` backups (they stay on the relay).
-- Stage Q (money limits, owner please confirm):
+- Stage Q money limits (confirmed by the owner 2026-10-28):
   - **One amount cap:** a typed or newly imported amount over 1,000,000,000.00 is refused (the importer allowed 10× that before); an older import up to that old limit still syncs. Sums stay exact up to 90,000 rows at the cap.
   - **IOUs:** a payment can be linked only when its amount equals the IOU or repayment exactly (a payment that was partly a loan: add the IOU without a payment); closing an IOU with money still owed counts it as forgiven and the lent payment never becomes spending.
   - **Red warning per account** uses only bills/incomes whose last payment came from that account; planned costs and bills never paid from an imported account count only in the total forecast. Overdue expected income is never counted.
