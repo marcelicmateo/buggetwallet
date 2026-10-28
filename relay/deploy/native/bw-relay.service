@@ -56,6 +56,8 @@ AmbientCapabilities=
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
+# A blocked call fails with EPERM instead of killing the relay (not yet run under this filter on a Pi; PI2 checks it there).
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=multi-user.target
