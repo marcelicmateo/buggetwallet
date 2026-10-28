@@ -13,7 +13,9 @@ N=$ROOT/relay/deploy/native
 BIN=$ROOT/dist/relay/relay-linux-x64
 # Pinned base images (bump by hand).
 FEDORA_IMG=registry.fedoraproject.org/fedora:43
-DEBIAN_IMG=docker.io/library/debian:trixie
+DEBIAN_IMG=docker.io/library/debian:trixie-20261005
+# Caddy is the distro package of each image (as on a Pi), so its version follows the image.
+# Everything runs as root inside the container: the sudo and firewall branches of the install script are NOT exercised here.
 OSES=("$@")
 ((${#OSES[@]})) || OSES=(fedora debian)
 fail=0
@@ -61,8 +63,9 @@ stage() { # what native_copy puts on the host
 }
 stage
 place() { bash /t/place.sh "$@" 2>/tmp/place.err; } # args: domain datadir startcaddy
-tok=$(place relay-test.example.invalid /var/lib/bw-relay 0) && ok "install script (default data dir)" || { no "install script"; cat /tmp/place.err; }
-[[ -n $tok ]] && ok "token printed once on stdout" || no "no token printed"
+place relay-test.example.invalid /var/lib/bw-relay 0 >/dev/null && ok "install script (default data dir)" || { no "install script"; cat /tmp/place.err; }
+tok=$(grep -A1 'WALLET-CREATION TOKEN' /tmp/place.err | tail -n 1)
+[[ -n $tok ]] && ok "token printed once on stderr" || no "no token printed"
 [[ $(stat -c %a /etc/bw-relay/create-token) == 600 ]] && ok "create-token is 0600" || no "create-token mode"
 grep -q "$tok" /etc/bw-relay/bw-relay.env /etc/systemd/system/bw-relay.service && no "token found in env/unit" || ok "token not in env/unit"
 [[ $(systemctl is-active bw-relay) == active ]] && ok "bw-relay active" || no "bw-relay not active"
@@ -89,13 +92,17 @@ systemctl stop bw-relay && ok "stop" || no "stop"
 [[ $(systemctl show -p Result --value bw-relay) == success ]] && ok "stopped with Result=success" || no "stop result $(systemctl show -p Result --value bw-relay)"
 # Second pass: another data folder (SSD mount) through the drop-in, then the upgrade script on top of it.
 stage; place relay-test.example.invalid /srv/ssd 0 > /tmp/tok2 && ok "install script again (data dir /srv/ssd)" || { no "reinstall"; cat /tmp/place.err; }
-[[ -s /tmp/tok2 ]] && no "token printed again on re-install" || ok "token kept on re-install (not printed)"
+grep -q 'WALLET-CREATION' /tmp/place.err && no "token printed again on re-install" || ok "token kept on re-install (not printed)"
 curl -s -o /dev/null --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8787/v2/health && ok "health with data dir /srv/ssd" || no "no health with /srv/ssd"
 tr '\0' ' ' </proc/"$(systemctl show -p MainPID --value bw-relay)"/cmdline | grep -q -- '--data /srv/ssd' && ok "relay runs with --data /srv/ssd" || no "drop-in not applied"
 [[ $(stat -c %U /srv/ssd) == bw-relay ]] && ok "/srv/ssd owned by bw-relay" || no "/srv/ssd owner"
 stage; bash /t/upgrade.sh 2>/tmp/up.err && ok "upgrade script" || { no "upgrade script"; cat /tmp/up.err; }
 curl -s -o /dev/null --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8787/v2/health && ok "health after upgrade" || no "no health after upgrade"
 tr '\0' ' ' </proc/"$(systemctl show -p MainPID --value bw-relay)"/cmdline | grep -q -- '--data /srv/ssd' && ok "upgrade kept --data /srv/ssd" || no "upgrade lost the data dir"
+# Failed upgrade: a binary that cannot run must be rolled back.
+stage; printf '#!/bin/false\n' > /root/.relay-native/relay-linux-x64; (cd /root/.relay-native && sha256sum relay-linux-x64 > relay-linux-x64.sha256)
+if bash /t/upgrade.sh 2>/tmp/up2.err; then no "broken upgrade reported success"; else ok "broken upgrade fails"; fi
+curl -s -o /dev/null --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8787/v2/health && ok "previous binary restored, health ok" || no "no health after rollback"
 systemctl stop bw-relay
 # Caddy
 set -a; . /etc/bw-relay/bw-relay.env; set +a
@@ -109,9 +116,21 @@ exit "$f"
 IN
 }
 
+cleanup() { # also on Ctrl-C or an error: container, built image, temp files
+  # shellcheck disable=SC2086
+  rm -f ${CLEAN_F:-}
+  if [[ -z ${BW_KEEP:-} && -n ${CLEAN_C:-} ]]; then
+    podman rm -f -t 5 "$CLEAN_C" > /dev/null 2>&1 || true
+    podman rmi -f "$CLEAN_I" > /dev/null 2>&1 || true
+  fi
+  CLEAN_C=
+}
+trap cleanup EXIT INT TERM
+
 one() { # $1 = fedora|debian
   local os=$1 out scripts
   scripts=$(mktemp)
+  CLEAN_C=bw-relay-native-test-$os CLEAN_I=bw-relay-native-test-$os CLEAN_F="$scripts $scripts.up"
   "$ROOT/tools/relay-deploy.sh" --print-script remote_native_place > "$scripts"
   "$ROOT/tools/relay-deploy.sh" --print-script remote_native_upgrade > "$scripts.up"
   local img=bw-relay-native-test-$os c=bw-relay-native-test-$os
@@ -128,11 +147,7 @@ one() { # $1 = fedora|debian
   out=$(inside | podman exec -i "$c" bash -s 2>&1) || true
   while IFS= read -r line; do echo "[$os] $line"; done <<<"$out"
   if grep -q '^FAIL' <<<"$out"; then bad "$os: checks failed"; fi
-  rm -f "$scripts" "$scripts.up"
-  if [[ -z ${BW_KEEP:-} ]]; then
-    podman rm -f -t 5 "$c" > /dev/null 2>&1 || true
-    podman rmi -f "$img" > /dev/null 2>&1 || true
-  fi
+  cleanup
 }
 
 for os in "${OSES[@]}"; do

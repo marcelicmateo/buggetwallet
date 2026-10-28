@@ -411,6 +411,9 @@ fi
 if [ "$data" = /var/lib/bw-relay ]; then
   $S rm -f /etc/systemd/system/bw-relay.service.d/data.conf
 else
+  if [ -d "$data" ] && [ -n "$($S ls -A "$data")" ] && [ "$($S stat -c %U "$data")" != bw-relay ]; then
+    echo "$data exists, is not empty and is not owned by bw-relay: refusing to take it over" >&2; exit 1
+  fi
   $S install -d -m 0700 -o bw-relay -g bw-relay "$data"
   exec_line=$(grep '^ExecStart=' bw-relay.service | sed "s#--data [^ ]*#--data $data#")
   printf '[Service]\nStateDirectory=\nReadWritePaths=%s\nExecStart=\n%s\n' "$data" "$exec_line" \
@@ -423,13 +426,21 @@ if ! $S test -e /etc/bw-relay/create-token; then
   token=$(head -c 24 /dev/urandom | base64)
   (umask 077; printf %s "$token" | $S tee /etc/bw-relay/create-token >/dev/null)
   $S chmod 600 /etc/bw-relay/create-token
+  {
+    echo
+    echo "=========== WALLET-CREATION TOKEN (shown once, not saved anywhere else) ==========="
+    echo "$token"
+    echo "Save it in your password manager now. It is also in /etc/bw-relay/create-token on this host (root only)."
+    echo "====================================================================================="
+  } >&2
+  token=
 else
-  echo "token file exists, left as it is" >&2
+  echo "token file exists, left as it is (show it: sudo cat /etc/bw-relay/create-token on the host)" >&2
 fi
 # Firewall: open 80 and 443 where a manager is active (firewalld, ufw); otherwise say so.
 if command -v firewall-cmd >/dev/null && $S systemctl is-active --quiet firewalld; then
   $S firewall-cmd --permanent --add-service=http --add-service=https >&2 && $S firewall-cmd --reload >&2
-elif command -v ufw >/dev/null && $S ufw status | grep -q '^Status: active'; then
+elif command -v ufw >/dev/null && ufw_state=$($S ufw status) && [[ $ufw_state == "Status: active"* ]]; then
   $S ufw allow 80/tcp >&2 && $S ufw allow 443/tcp >&2
 else
   echo "no active firewalld or ufw: if you run nftables or iptables yourself, allow tcp 80 and 443" >&2
@@ -443,7 +454,6 @@ if [ "$startcaddy" = 1 ]; then
 fi
 cd && rm -rf ~/.relay-native
 echo "installed; domain $domain, data $data" >&2
-[ -z "$token" ] || printf '%s\n' "$token"
 REMOTE
 }
 
@@ -457,10 +467,12 @@ case $(uname -m) in aarch64|arm64) a=arm64 ;; x86_64) a=x64 ;; *) echo "unsuppor
 bin=relay-linux-$a
 sha256sum -c "$bin.sha256" >&2 || { echo "binary checksum mismatch; nothing installed" >&2; exit 1; }
 $S test -e /etc/bw-relay/bw-relay.env || { echo "no install here yet (native-install first)" >&2; exit 1; }
+$S cp -p /usr/local/bin/bw-relay /usr/local/bin/bw-relay.prev
 $S install -m 0755 "$bin" /usr/local/bin/bw-relay.new
 $S mv -f /usr/local/bin/bw-relay.new /usr/local/bin/bw-relay
 $S install -m 0644 bw-relay.service /etc/systemd/system/bw-relay.service
 $S install -m 0644 bw-relay.conf /etc/systemd/system/caddy.service.d/bw-relay.conf
+if [ -f /etc/caddy/Caddyfile ] && ! $S cmp -s Caddyfile /etc/caddy/Caddyfile; then $S cp -p /etc/caddy/Caddyfile /etc/caddy/Caddyfile.pre-bw-relay; fi
 $S install -m 0644 Caddyfile /etc/caddy/Caddyfile
 data=$($S cat /etc/bw-relay/data-dir 2>/dev/null || echo /var/lib/bw-relay)
 if [ "$data" != /var/lib/bw-relay ]; then
@@ -470,9 +482,17 @@ if [ "$data" != /var/lib/bw-relay ]; then
 fi
 cd && rm -rf ~/.relay-native
 $S systemctl daemon-reload
-$S systemctl restart bw-relay
-$S systemctl reload-or-restart caddy
-echo "upgraded" >&2
+if $S systemctl restart bw-relay && curl -fsS --retry 5 --retry-delay 1 --retry-connrefused -o /dev/null http://127.0.0.1:8787/v2/health; then
+  $S systemctl reload-or-restart caddy
+  echo "upgraded (previous binary kept as /usr/local/bin/bw-relay.prev)" >&2
+else
+  echo "new relay did not start or answer health: restoring the previous binary" >&2
+  $S cp -p /usr/local/bin/bw-relay.prev /usr/local/bin/bw-relay
+  $S systemctl reset-failed bw-relay || true
+  $S systemctl restart bw-relay || true
+  echo "previous version restored; read: journalctl -u bw-relay" >&2
+  exit 1
+fi
 REMOTE
 }
 
@@ -537,29 +557,22 @@ native_health() {
 }
 
 cmd_native_install() {
-  local t domain=$2 token f
+  local t domain=$2 f
   t=$(native_target "$1")
   check_domain "$domain"
-  [[ $DATA_DIR =~ ^/[A-Za-z0-9._/-]+$ && $DATA_DIR != *..* ]] || die "bad --data-dir: $DATA_DIR"
+  [[ $DATA_DIR =~ ^/[A-Za-z0-9._/-]+$ && $DATA_DIR != *..* && $DATA_DIR != */ ]] || die "bad --data-dir: $DATA_DIR"
+  case $DATA_DIR in
+    /etc | /etc/* | /usr | /usr/* | /bin | /bin/* | /sbin | /sbin/* | /lib | /lib/* | /boot | /boot/* | /dev | /dev/* | /proc | /proc/* | /sys | /sys/* | /root | /root/* | /home | /var | /run | /run/* | /tmp | /tmp/* | /opt | /srv | /mnt | /media)
+      die "--data-dir $DATA_DIR is a system folder: use a folder of its own, such as /mnt/ssd/bw-relay" ;;
+  esac
   for f in "${NATIVE_FILES[@]}"; do [[ -f $NDIR/$f ]] || die "missing $NDIR/$f"; done
   native_binary
   native_copy "$t"
   if ((DRY)); then
     remote "$t" remote_native_place "$domain" "$DATA_DIR" 1
   else
-    token=$(remote "$t" remote_native_place "$domain" "$DATA_DIR" 1)
-    if [[ -n $token ]]; then
-      {
-        echo
-        echo "=========== WALLET-CREATION TOKEN (shown once, not saved anywhere) ==========="
-        echo "$token"
-        echo "Copy it into your password manager now. The app asks for it when it creates"
-        echo "the wallet on this relay. (Lost? Remove /etc/bw-relay/create-token on the Pi and install again.)"
-        echo "==============================================================================="
-        echo
-      } >&2
-    fi
-    token=
+    # The remote script prints the token itself on stderr (our terminal) as soon as it is written, so a later failure loses nothing.
+    remote "$t" remote_native_place "$domain" "$DATA_DIR" 1 > /dev/null
   fi
   native_health "$domain"
   echo "Relay address for the app: https://$domain"
@@ -585,13 +598,13 @@ cmd_native_backup() {
   t=$(native_target "$1")
   run mkdir -p "$dir"
   if ((!DRY)); then data=$(remote "$t" remote_native_datadir); fi
-  remote "$t" remote_native_stop
   BACKUP_TARGET=$t
   if ((DRY)); then
     echo "+ trap 'start bw-relay' EXIT INT TERM"
   else
     trap 'trap - EXIT INT TERM; remote "$BACKUP_TARGET" remote_native_start || echo "relay-deploy: could not start the relay: run native-status" >&2; exit 1' EXIT INT TERM
   fi
+  remote "$t" remote_native_stop
   # The data folder belongs to bw-relay (0700): read through sudo on the host. The backup mirrors it (--delete), without owners.
   run rsync -a --no-o --no-g --delete --rsync-path="sudo rsync" "$t:$data/" "$dir/" || rc=$?
   if ((!DRY)); then trap - EXIT INT TERM; fi
@@ -638,6 +651,8 @@ native_self_test() {
   chk native-data-dropin 'StateDirectory=' "$out"
   if "$me" --dry-run native-install pi wallet.example.org --data-dir '/mnt/a b' > /dev/null 2>&1; then echo "relay-deploy self-test: bad data dir accepted" >&2; rc=1; fi
   if "$me" --dry-run native-install pi wallet.example.org --data-dir '/mnt/../etc' > /dev/null 2>&1; then echo "relay-deploy self-test: .. in data dir accepted" >&2; rc=1; fi
+  if "$me" --dry-run native-install pi wallet.example.org --data-dir /etc/x > /dev/null 2>&1; then echo "relay-deploy self-test: system data dir accepted" >&2; rc=1; fi
+  if "$me" --print-script usage > /dev/null 2>&1; then echo "relay-deploy self-test: --print-script accepted any function" >&2; rc=1; fi
   out=$("$me" --dry-run native-upgrade pi) || rc=1
   chk native-upgrade 'systemctl restart bw-relay' "$out"
   out=$("$me" --dry-run native-backup pi /tmp/bwb) || rc=1
@@ -698,7 +713,10 @@ while (($#)); do
   case "$a" in
     --print-script)  # the remote script of a function (remote_native_place, ...): used by tools/relay-native-test.sh
       (($#)) || usage
-      "$1"
+      case $1 in
+        remote_native_place | remote_native_upgrade | remote_native_status | remote_native_datadir | remote_native_stop | remote_native_start) "$1" ;;
+        *) usage ;;
+      esac
       exit
       ;;
     --data-dir)

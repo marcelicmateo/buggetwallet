@@ -57,7 +57,7 @@ command from the laptop.
 phone / laptop --https :443--> router --> Pi: Caddy --127.0.0.1:8787--> bw-relay.service --> /var/lib/bw-relay (or your SSD)
 ```
 
-Alternatives: containers on a home server (5.7), a rented server (§6).
+Alternatives: containers on a home server (5.7), or a rented server instead of one at home (§6, same files as 5.7).
 
 ### 5.1 Open choices (yours; nothing below depends on them being decided today)
 | Choice | Options | Notes |
@@ -72,7 +72,9 @@ Alternatives: containers on a home server (5.7), a rented server (§6).
 2. Give the Pi a fixed address on your network (a DHCP reservation in the router) so the port forward keeps working.
 3. Update it once (`sudo apt update && sudo apt full-upgrade`, or `sudo dnf upgrade`), and reboot if the kernel changed.
 4. The install uses `sudo` without a prompt (it cannot type a password): Raspberry Pi OS has that by default; elsewhere add
-   `echo "$USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/90-install` and remove that file when the install is done.
+   `echo "$USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/90-install`. **Keep it:** `native-upgrade`, `native-backup` and
+   `native-status` use sudo the same way (they install files, stop and start services, read the data folder). It is full root for that
+   login, so use an ssh key only (no password login). To lock down between uses, delete the file and add it again before the next one.
 5. On the laptop add an ssh alias for it in `~/.ssh/config` (`Host <pi-host>`, `HostName`, `User`), or use `user@address`.
 
 ### 5.3 A name and the router
@@ -95,7 +97,7 @@ It checks the binary's checksum on the laptop and again on the Pi, installs Cadd
 user, places the hardened unit and the Caddyfile, writes `/etc/bw-relay/bw-relay.env` with your name, enables `bw-relay` and `caddy`
 and asks the relay for its health. The wallet-creation token is made **on the Pi** (a root-only file, 0600, handed to the relay as a
 systemd credential), shown once on your terminal and never written on the laptop: save it in your password manager, the app asks for
-it when it creates the wallet on this relay. Running the command again is safe (the token and your edits to the env file are kept).
+it when it creates the wallet on this relay (the Pi prints it the moment it is written, so a later failure does not lose it; later: `sudo cat /etc/bw-relay/create-token` on the Pi). Running the command again is safe (the token and your edits to the env file are kept).
 
 Check: `tools/relay-deploy.sh native-status <pi-host>` (unit states, local health, public health). From outside your network (mobile
 data) `curl -sI https://<your-domain>/v2/health` should answer `200` once the certificate is issued (first start: a few seconds); many
@@ -117,7 +119,9 @@ copy the files into it as root and `sudo chown -R bw-relay: <dir>`.
 - **Service hardening.** Own user without login, `NoNewPrivileges`, read-only system, private `/tmp`, only the data folder writable, no
   capabilities, a system-call filter, 384 MB memory cap. `systemd-analyze security bw-relay` on the Pi shows the exposure score.
 - **Upgrade.** `tools/build.sh relay-bin arm64 && tools/relay-deploy.sh native-upgrade <pi-host>` replaces the binary and units,
-  keeps env, token and data, restarts the relay (Caddy retries while it restarts) and checks health. OS updates: the OS's own
+  keeps env, token and data (the old binary stays as `/usr/local/bin/bw-relay.prev`; if the new one does not start and answer health it is
+  put back and the command fails), restarts the relay (Caddy retries while it restarts) and checks health. A changed Caddyfile is saved
+  once as `/etc/caddy/Caddyfile.pre-bw-relay`. OS updates: the OS's own
   mechanism (`unattended-upgrades` or `dnf-automatic`), your choice.
 - **Backup.** `tools/relay-deploy.sh native-backup <pi-host> [folder]` stops the relay, copies the data folder to the laptop and
   starts it again (a failed copy still restarts it). The folder holds only sealed files and the wallets' public keys, but losing it
@@ -125,8 +129,6 @@ copy the files into it as root and `sudo chown -R bw-relay: <dir>`.
 - **By hand.** Everything `native-install` does is listed in `relay/deploy/native/README.md`.
 
 ### 5.7 Alternative: containers on a home server (Podman)
-
-Or rent a small server instead of running one at home: §6 (Hetzner Cloud) uses the same files.
 
 The relay is one container (image built from `dev/Containerfile.relay`) that listens on port 8787 inside a private Podman network and
 keeps everything in one data folder. **A second container, Caddy, is the only thing reachable from the internet**: it gets a Let's
