@@ -38,6 +38,11 @@ leaves the device. Over `https://` nobody on the way can read or change the traf
 at home and away. On plain `http://` (a try-out on the home network only) someone on the network can see who syncs, when and
 how much, and can block or delay sync; they still cannot read your data or forge a change.
 
+**Sync the local web build.** The web build (`tools/build.sh web`, `tools/web.sh serve`, opened at `http://127.0.0.1:8080`) syncs through the
+same relay as the phone. A browser may call a relay only from an allowed origin: start the relay with `--origin http://127.0.0.1:8080`
+(`tools/relay.sh start` already allows it) and enter the relay address in Settings › Sync; a relay on another machine must be an
+`https://` address. Join with the wallet key and a passphrase for this browser (it wraps the key in the browser's storage).
+
 Backups: Plan › Backup → **Back up now** saves an encrypted `.bwb` file through the save dialog; restore works only into an empty wallet.
 
 ## 4. Bring in your history

@@ -1,5 +1,6 @@
-// The web build's screens and controller paths, run on the VM with `debugIsWebOverride`: Plan without Sync and Nudges, Backup as
-// download and file restore, "Forget this browser", the passphrase step of onboarding, the Unlock screen, and the database flush.
+// The web build's screens and controller paths, run on the VM with `debugIsWebOverride`: Plan with Sync (through the relay, here a
+// MemoryTransport) but without Nudges, Backup as download and file restore, "Forget this browser", the passphrase step of
+// onboarding, the Unlock screen and the database flush.
 // The browser itself (IndexedDB, localStorage, file downloads) is replaced by fakes. All data is SYNTHETIC.
 import 'dart:typed_data';
 
@@ -93,10 +94,10 @@ class Web {
   Web(this.wc, this.db);
 }
 
-Web webWallet({bool full = false, bool withKey = true, bool locked = false}) {
+Web webWallet({bool full = false, bool withKey = true, bool locked = false, VaultKey? key}) {
   final repo = WalletRepo.inMemory();
   final fake = FakeDb(repo);
-  final wc = seamedController(repo, key: withKey ? VaultKey.generate() : null, db: fake.db, locked: locked);
+  final wc = seamedController(repo, key: withKey ? (key ?? VaultKey.generate()) : null, db: fake.db, locked: locked);
   final w = Web(wc, fake);
   addTearDown(w.dispose);
   if (full) {
@@ -432,6 +433,56 @@ void main() {
       wc.reload();
       // The test fails on its own if a timer is still pending when it ends.
       await wc.persistNow();
+    });
+  });
+
+  group('Sync on the web', () {
+    final relay = Uri.parse('http://127.0.0.1:8080');
+
+    test('an expense added in one web wallet shows up in the other after syncNow (one MemoryTransport)', () async {
+      final key = VaultKey.generate();
+      final mem = MemoryTransport();
+      Future<SyncReport> run(Uri r, VaultKey k, WalletRepo repo) => SyncEngine(mem, k).run(repo);
+      final a = webWallet(key: key), b = webWallet(key: key);
+      for (final w in [a, b]) {
+        w.wc.seams.syncRunner = run;
+        w.wc.relayUrl = relay;
+      }
+      a.wc.repo.addTransaction(date: a.wc.today(), amount: 4250, category: 'Groceries');
+      a.wc.reload();
+      await a.wc.syncNow();
+      expect(a.wc.syncError, isNull);
+      expect(b.wc.txs, isEmpty);
+      await b.wc.syncNow();
+      expect(b.wc.syncError, isNull);
+      expect(b.wc.txs.map((t) => t.amount), [-4250]);
+      expect(b.wc.syncDevices.length, 2);
+      // And back: the second wallet's expense reaches the first.
+      b.wc.repo.addTransaction(date: b.wc.today(), amount: 900, category: 'Transport');
+      b.wc.reload();
+      await b.wc.syncNow();
+      await a.wc.syncNow();
+      expect(a.wc.txs.map((t) => t.amount).toSet(), {-4250, -900});
+      expect(lines.join('\n'), isNot(contains('127.0.0.1')), reason: 'the address is never logged');
+    });
+
+    test('a web wallet and a native-style wallet (not web) share one transport', () async {
+      final key = VaultKey.generate();
+      final mem = MemoryTransport();
+      Future<SyncReport> run(Uri r, VaultKey k, WalletRepo repo) => SyncEngine(mem, k).run(repo);
+      final web = webWallet(key: key);
+      web.wc.seams.syncRunner = run;
+      web.wc.relayUrl = relay;
+      final other = seamedController(WalletRepo.inMemory(), key: key)
+        ..seams.syncRunner = run
+        ..relayUrl = relay;
+      addTearDown(other.dispose);
+      other.repo.addTransaction(date: other.today(), amount: 777, category: 'Groceries');
+      other.reload();
+      await other.syncNow();
+      await web.wc.syncNow();
+      expect(web.wc.syncError, isNull);
+      expect(web.wc.txs.map((t) => t.amount), [-777]);
     });
   });
 

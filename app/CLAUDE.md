@@ -297,8 +297,8 @@ Same app and wallet logic; the files that touch the OS come in pairs chosen by `
   One tab only: web `openWalletDb()` first takes the Web Lock `bw-wallet` (`ifAvailable`, kept for the page's life); if another tab has it, it throws
   `WalletInUse` and `WalletController.load` returns `inUseElsewhere` (empty in-memory repo, nothing opened) → `InUseScreen` (Reload = `page_reload.dart`).
 - `key_store_web.dart` + `key_vault.dart` (pure Dart, tested on the VM with maps for the two storages): the key is wrapped with a
-  passphrase (PBKDF2-HMAC-SHA256, 310000 rounds, random 16-byte salt, then core's `seal`) into localStorage as
-  `bwk1.<rounds>.<salt>.<sealed>`; unlocking puts the plain key into sessionStorage (this tab only). `KeyStore.isLocked` = wrapped key
+  passphrase (PBKDF2-HMAC-SHA256, 600000 rounds, random 16-byte salt, then core's `seal`) into localStorage as
+  `bwk2.<rounds>.<salt>.<sealed>` (`bwk1`, 310000 rounds, still opens and is stored again as `bwk2` on the next unlock, log `key.rewrap`); unlocking puts the plain key into sessionStorage (this tab only). `KeyStore.isLocked` = wrapped key
   but nothing in sessionStorage → `UnlockScreen` (`wc.locked`, `wc.unlock`, `WrongPassphrase`). Onboarding on web asks for a passphrase
   (2 fields, ≥ 8 characters) after "Start a new wallet" / "Use my wallet key". Logs: `store: 'browser'`, found/locked flags only.
 - `log_backend_web.dart` — `MemoryLogSink` (1 MB, newest lines); Plan › Diagnostics "Save logs…" downloads them through `FileChooser.saveText`.

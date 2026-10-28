@@ -17,6 +17,11 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
+  <!--
+    Content Security Policy: scripts only from this origin (wasm allowed), no plugins; the page may talk to this origin, any
+    https relay and a relay on this computer (http://127.0.0.1 / localhost, the local web build's sync).
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Budget Wallet: a private, local-first budget">
 
