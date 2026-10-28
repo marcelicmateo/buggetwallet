@@ -34,7 +34,7 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | # | Item | Agent | Depends on | Status |
 |---|---|---|---|---|
 | BP | Budget presets (3/6/12-month average, 10% less, fit my plan, 50/30/20) as proposals | scout → core (sonnet) + ui | M | done core 12e61df + 6a84a1c (lead tie-break fix), UI c85509b + 4ce0a0b (review fixed); merged; stage run with M |
-| WS | Web sync through the relay (P18), bwk2 key wrap, CSP | scout → core + ui + devops | BP | running (rescoped: bwk2, CSP, web sync tests; one ui-builder) |
+| WS | Web sync through the relay (P18), bwk2 key wrap, CSP | scout → core + ui + devops | BP | done cc0090e..b85cef0 (blank-page bug fixed; review 2 med fixed), merged 852f893; app 2053, web-test 13 |
 | DK | Device keys + revocation (P17), relay api 5 | scout → core + ui + test-writer | WS | core running (protocol api 5 first, relay, sync); UI after WS |
 
 ## Stage M: hardening before M6 (2026-10-28; every planned feature is built)

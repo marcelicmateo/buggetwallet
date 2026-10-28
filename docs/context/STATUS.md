@@ -415,6 +415,8 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - Bugs found and fixed: remainder tie-break relied on List.sort being stable; a flaky log test mistook `"ms":80` for an amount; key hex could appear in a database error log line; deploy rollback blocked by systemd's start limit.
   - **Stage run** (4657514): importer 400, core 2799, sync 379, relay 216, app 2042 (1 test failed: it assumed a tall window built all of Settings; fixed to scroll), desktop, web-test, emulator screens, perf ok.
 
+- 2026-10-28: **Stage WS: web sync** (rescoped: the browser already synced through the relay since Stage R). Key wrap `bwk2` (PBKDF2-SHA256 600,000 rounds; a `bwk1` blob is re-wrapped on the next unlock, a failed re-wrap keeps the old one; a blob's round count is capped at 10 million); Content-Security-Policy meta (no inline/off-origin scripts, CanvasKit served from the app; fallback glyph fonts still come from Google: Flutter ships none); tests: two browser wallets and browser + native through one relay, the CSP string pinned. **Bug found and fixed:** a fresh browser showed a blank page (the pre-wallet placeholder database used a path that throws on the web). Review: 0 blocking, 2 medium (unbounded round count could hang the tab; a failed re-wrap reported a failed unlock), 3 low; fixed. Run: app 2053, web-test 13.
+
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -505,7 +507,8 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Schema 17:** update every device together; a device that stays on an older build for over 30 days after the others upgraded may miss IOUs until they are edited again.
 
 ## Next
-- In progress (owner away, picked 2026-10-28): **web sync** (rescoped: bwk2 key wrap, CSP), **device keys + revocation** (relay api 5). Then the **M6 live test** with `docs/context/M6_CHECKLIST.md`.
+- In progress (owner away, picked 2026-10-28): **device keys + revocation** (relay api 5). Then the **M6 live test** with `docs/context/M6_CHECKLIST.md`.
+- Owner checks after Stage WS (laptop): `tools/build.sh web && tools/web.sh serve` → a fresh browser shows onboarding (no blank page); create a wallet, set the relay address, sync with the phone; reload → unlock with the passphrase.
 - Owner checks after Stage C2 (phone): dark mode Spending bars (a deeper blue) and the legend under the saved/lost chart; rounded bar tops on Insights; amber "Went out" on Income vs spending; tap the payday forecast chart.
 - Owner checks after Stage X (phone): new wallet → save key → the guide with a real bank file: import preview, accounts + cash, plan, bills, payees (pick a tag, Undo), budgets, Done vs Today; close half-way → Today "Finish setting up" → continue; Settings › Set up my wallet again; large text.
 - **PI2 (waiting for the owner):** Pi model, OS (`/etc/os-release`), domain/DDNS name, router 80/443 forward, SSD for the data.
