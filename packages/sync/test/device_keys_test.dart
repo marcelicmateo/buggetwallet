@@ -522,7 +522,28 @@ void main() {
         final r = WalletRepo.inMemory();
         addTearDown(r.close);
         r.updateSettings({'salary': 1});
-        await expectLater(SyncEngine(m, key).run(r), syncFails('removed from the wallet'), reason: at);
+        await expectLater(
+            SyncEngine(m, key).run(r),
+            throwsA(isA<SyncException>()
+                .having((e) => e.message, 'message', contains('removed from the wallet'))
+                .having((e) => e.failure, 'failure', TransportFailure.revoked)),
+            reason: at);
+      }
+    });
+
+    test('every fatal path names its transport failure in SyncException.failure; the message is unchanged', () async {
+      for (final f in TransportFailure.values) {
+        final m = _FailingState(f);
+        final r = WalletRepo.inMemory();
+        addTearDown(r.close);
+        await expectLater(SyncEngine(m, key).run(r), throwsA(isA<SyncException>().having((e) => e.failure, 'failure', f)), reason: f.name);
+      }
+      final r = WalletRepo.inMemory();
+      addTearDown(r.close);
+      try {
+        await SyncEngine(_FailingState(TransportFailure.pendingFull), key).run(r);
+      } on SyncException catch (e) {
+        expect(e.message, startsWith('Too many devices are waiting for approval.'));
       }
     });
   });
@@ -543,4 +564,12 @@ class _RevokedAt extends MemoryTransport {
     if (at == 'ack') throw const TransportException(TransportFailure.revoked, 'revoked');
     return super.ack(device, cursors);
   }
+}
+
+/// A relay whose `GET state` fails with [failure].
+class _FailingState extends MemoryTransport {
+  _FailingState(this.failure);
+  final TransportFailure failure;
+  @override
+  Future<RelayState> state() async => throw TransportException(failure, 'test');
 }

@@ -584,23 +584,27 @@ class SyncEngine {
   /// A transport failure that ends the run, as a short message for people (no address, id or path).
   static SyncException _fatal(String step, TransportException e) {
     logEvent(_log, Level.WARNING, 'sync.failed', {'step': step, 'failure': e.failure.name});
-    return SyncException(switch (e.failure) {
-      TransportFailure.unreachable => 'The relay cannot be reached. Check its address and that this device is on the home network or VPN.',
-      TransportFailure.refused => 'The relay refused this wallet: it holds a wallet with another key at this address.',
-      TransportFailure.full => 'The relay is full. Free space on the home server or raise the relay\'s limits.',
-      TransportFailure.newerApi => 'The relay runs a newer version. Update the app.',
-      TransportFailure.olderApi => 'The relay runs an older version. Update the relay on the home server.',
-      TransportFailure.clockSkew =>
-        "This device's clock and the relay's clock differ by more than a day. Check the date and time settings.",
-      TransportFailure.createToken => "The relay needs its create token to start a new wallet. Enter it in this device's sync settings.",
-      TransportFailure.revoked => 'This device was removed from the wallet.',
-      TransportFailure.pending =>
-        'This device waits for approval. On a device you already use, open Settings › Sync › Devices and approve the code shown here.',
-      TransportFailure.pendingFull =>
-        "Too many devices are waiting for approval. On a device you already use, reject the ones you don't know (or change the wallet key).",
-      TransportFailure.tooManyKeys => 'This wallet already has the most devices (16). Remove one on a device you already use.',
-      _ => 'The relay answered with an error. Try again later.',
-    });
+    return SyncException(
+        switch (e.failure) {
+          TransportFailure.unreachable =>
+            'The relay cannot be reached. Check its address and that this device is on the home network or VPN.',
+          TransportFailure.refused => 'The relay refused this wallet: it holds a wallet with another key at this address.',
+          TransportFailure.full => 'The relay is full. Free space on the home server or raise the relay\'s limits.',
+          TransportFailure.newerApi => 'The relay runs a newer version. Update the app.',
+          TransportFailure.olderApi => 'The relay runs an older version. Update the relay on the home server.',
+          TransportFailure.clockSkew =>
+            "This device's clock and the relay's clock differ by more than a day. Check the date and time settings.",
+          TransportFailure.createToken =>
+            "The relay needs its create token to start a new wallet. Enter it in this device's sync settings.",
+          TransportFailure.revoked => 'This device was removed from the wallet.',
+          TransportFailure.pending =>
+            'This device waits for approval. On a device you already use, open Settings › Sync › Devices and approve the code shown here.',
+          TransportFailure.pendingFull =>
+            "Too many devices are waiting for approval. On a device you already use, reject the ones you don't know (or change the wallet key).",
+          TransportFailure.tooManyKeys => 'This wallet already has the most devices (16). Remove one on a device you already use.',
+          _ => 'The relay answered with an error. Try again later.',
+        },
+        failure: e.failure);
   }
 
   /// A failure no later step gets past (this device was removed, or waits for approval): ends the run at once, as on

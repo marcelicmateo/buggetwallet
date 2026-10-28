@@ -156,7 +156,7 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   (`syncHealAt`), and a second healer skips once the first one's snapshot covers the file. `SyncReport`:
   `sent` ops, `received` fields changed, `filesRead` (snapshots count), `problems`, `caughtUp`, `waiting`, `devices`
   (short ids, `lastSeen`, `isThis`). Fatal `SyncException`s (short, no address): unreachable, refused (401), relay
-  full, newer relay API, older relay API, other. Opening a database from the old folder-sync builds drops its `peer_files` table (`repo.peerFiles.dropped`).
+  full, newer relay API, older relay API, other; `SyncException.failure` names the `TransportFailure` (null when none), so the app never matches the message. Opening a database from the old folder-sync builds drops its `peer_files` table (`repo.peerFiles.dropped`).
 - `blob_store.dart` — `BlobStore(repo, key, maxCacheBytes:)`: `add` (async: seal, hash = SHA-256 of the sealed bytes, cached with `uploaded` 0), `read(hash, transport:)` (cache, else
   fetch, hash checked, unsealed, cached as uploaded). 
 
