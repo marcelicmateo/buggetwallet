@@ -103,12 +103,17 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   drop until the paying row lands (a bill with `lastPaidTx` dated in the period is released even if its next due date
   still falls before payday). A due bill in a fixed category (`RecurringBill.coveredByPlan`: Rent, Loan, Bills &
   subscriptions) is already in `rent`/`loan`/`subs` and is listed but never reserved twice (owner rule: exact).
-  `reviewState(txs, st, wishes, budgets, today:)` (M4 weekly review) → `ReviewState`: `due` from the first `reviewDay`
-  after `lastReview` until done (never reviewed: due at once), `nextReviewDate` = that day (or the coming one),
+  `reviewState(txs, st, wishes, budgets, today:, reviewDates:)` (M4 weekly review) → `ReviewState`: `due` from the
+  first `reviewDay` after the last review (newest of `reviewDates` and the legacy `lastReview`) until done (never
+  reviewed: due at once), `nextReviewDate` = that day (or the coming one), `streak` = `reviewStreak(...)`,
   `steps` = `import` 0 (the UI fills it), `categories` = live spending rows of the last 7 days without a user-set
   category, `pace` = `budgetVsActual` lines over or behind pace this calendar month, `wishlist` = waiting items past
-  their cooling-off at the end of `today`. `WalletRepo.markReviewDone(today)`: `lastReview` = today, `reviewStreak` +1
-  when the previous review was < 14 days before (no review day skipped), else 1; the same day twice is a no-op.
+  their cooling-off at the end of `today`. V3 (schema 18): `WalletRepo.markReviewDone(today)` writes the synced
+  `review` row of that date (id = `done` = today; same day twice: no op), `reviewDates()` lists them ascending; pure
+  `reviewStreak(dates, legacyLast:, legacyStreak:)` walks back from the newest while gaps are < 14 days and adds the
+  legacy `reviewStreak` when the walk reaches `lastReview` (that day counted once). The legacy settings are never
+  written again. Tests: `test/review_streak_test.dart` (pure, repo, two devices, 17 → 18), old build
+  `test/v3_review_old_build_test.dart`.
 - `recurring.dart` — recurring bills (M4). `detectRecurring(txs, today:, currency:)`: candidates = a payee (`merchantKey`) with ≥ 3
   live bank outflows (no transfers, no hand-added rows) in the last 7 calendar months, every gap 30 ± 3 days, every
   amount within 10 % of the median (`withinBand`, inclusive, int arithmetic); `expectedAmount` = median, `nextDue` =
@@ -156,8 +161,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   confirmed income's `nextDue` on once `due + tolerance` passed without a landing. Bill history: an income's landed
   inflows. `addRecurring(direction: 'in')`: payee required, kind extra, no instalments.
   Tests: `test/p9_income_test.dart` (+ `p9_income_spec_test.dart`, `p9_income_repo_spec_test.dart`).
-  Settings `reviewDay` (1..7, default 7), `lastReview` (date),
-  `reviewStreak` (0..`maxStreak`) are validated like the others.
+  Settings `reviewDay` (1..7, default 7), legacy `lastReview` (date) and
+  `reviewStreak` (0..`maxStreak`; read-only since V3) are validated like the others.
 - `bill_history.dart` — N4 bill history (spec + clarifications `docs/context/N4_SPEC.md`), pure and web-safe.
   `billHistory(bill, rows, slips, today:, months: 12, currency:)` → `List<BillMonth>` (`month`, `payments`, `slips`,
   `paid` = Σ −amount, `billed` = Σ slip totals or null, `BillMonthState` paid|slipOnly|missing|paidNearby|upcoming, `paidIn`), newest first;

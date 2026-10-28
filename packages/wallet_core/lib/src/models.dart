@@ -885,8 +885,10 @@ class WalletSettings {
   /// count nowhere (the code is "not counted" again until a new rate is set); the app can say "Rate was set for EUR".
   final Map<String, FxRate> fxStale;
   final int reviewDay; // weekly review day, 1 = Monday .. 7 = Sunday
-  final String? lastReview; // YYYY-MM-DD of the last completed weekly review
-  final int reviewStreak; // weekly reviews done in a row
+  // Legacy (before schema 18): the last review and the streak older builds counted. Never written since V3 (reviews are
+  // `review` rows, `WalletRepo.reviewDates`); read as the base `reviewStreak` continues.
+  final String? lastReview; // YYYY-MM-DD of the last weekly review an older build recorded
+  final int reviewStreak; // the streak an older build counted up to [lastReview]
   final int headsUpCents; // heads-up before a planned cost or bill this big or bigger (minor units)
   final int headsUpDays; // ... this many days before its date (0 = on the day)
   final int returnReminderDays; // remind this many days before a bill's return window ends (0 = on the day)

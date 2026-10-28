@@ -73,6 +73,7 @@ export 'src/budget.dart'
         monthSummary,
         PeriodBudget,
         reviewState,
+        reviewStreak,
         samePaydayDays,
         suggestBudgets,
         Verdict;

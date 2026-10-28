@@ -7,9 +7,9 @@ extension WalletRepoChanges on WalletRepo {
   /// entity, then id. Labels per entity: a payment = its merchant name ([merchantName]) and date; goal, wish, account,
   /// category, tag = name (a built-in category without its own label = its id); recurring bill = label (else payee);
   /// bill = payee (else description); planned cost = title; setting = its key (never the value); payee rule and rule tag =
-  /// the payee key; goal contribution = its goal's name; split and tag link = their payment's label; anything else (an
-  /// entity this build does not know, a row not stored) = the entity name. [ChangeEntry.deleted] = the row's `deleted`
-  /// is 1. Read-only; logs the count and time only. [limit] ≤ 0 → none.
+  /// the payee key; goal contribution = its goal's name; split and tag link = their payment's label; weekly review = its
+  /// date; anything else (an entity this build does not know, a row not stored) = the entity name.
+  /// [ChangeEntry.deleted] = the row's `deleted` is 1. Read-only; logs the count and time only. [limit] ≤ 0 → none.
   List<ChangeEntry> recentChanges({int limit = 100}) {
     if (limit <= 0) return const [];
     final sw = Stopwatch()..start();
@@ -64,6 +64,7 @@ FROM clocks c JOIN last l ON c.entity = l.entity AND c.id = l.id AND c.hlc = l.h
         'goal_contrib' => text(goals[r?['goal_id']], 'name'),
         'split' => txLabel(id),
         'txtag' => txLabel(id.split('|').first),
+        'review' => id,
         _ => text(r, 'name') ?? text(r, 'title') ?? text(r, 'label') ?? text(r, 'payee') ?? text(r, 'person'),
       };
       return l ?? entity;
