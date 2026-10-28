@@ -23,6 +23,7 @@ import 'schema.dart';
 import 'search.dart' show foldText;
 import 'splits.dart';
 import 'sqlite_io.dart' if (dart.library.js_interop) 'sqlite_web.dart' as sqlite;
+import 'sync_conflicts.dart';
 import 'tags.dart';
 import 'transfers.dart';
 
