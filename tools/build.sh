@@ -16,6 +16,8 @@
 #   tools/build.sh linux    Linux release bundle  -> dist/BudgetWallet-linux-x64.tar.gz
 #   tools/build.sh relay-bin [arm64|x64]   relay server as a native executable (dart compile exe, cross-compiled; default arm64 for the
 #                           Raspberry Pi) -> dist/relay/relay-linux-<arch> + .sha256 (relay/deploy/native/README.md)
+#   tools/build.sh relay-native-test [fedora|debian]   x64 relay + relay/deploy/native/ on real systemd in Podman containers (needs network;
+#                           not in lint/test; tools/relay-native-test.sh)
 #   tools/build.sh web      Flutter web build (--wasm, JS if a dependency blocks it) -> dist/web/; fetches sqlite3.wasm first
 #                           (pinned by dev/sqlite3-wasm.sha256). Serve it with tools/web.sh
 #   tools/build.sh web-test [file…]   flutter test --platform chrome: app/test/web/ or the given files
@@ -155,6 +157,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
     test|lint|apk|linux|all|importer|core|sync|relay|app|mutate|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated|relay-bin) run_begin "$CMD"; hook_hint ;;
     stage) host_stage; exit ;;
+    relay-native-test) "$ROOT/tools/build.sh" relay-bin x64 && exec "$ROOT/tools/relay-native-test.sh" "${@:2}" ;;
     format|shell|lsp|mcp) ;;
     *) usage ;;
   esac

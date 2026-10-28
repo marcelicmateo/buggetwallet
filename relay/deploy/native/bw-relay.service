@@ -56,7 +56,7 @@ AmbientCapabilities=
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
-# A blocked call fails with EPERM instead of killing the relay (not yet run under this filter on a Pi; PI2 checks it there).
+# A blocked call fails with EPERM instead of killing the relay. Run under this filter on real systemd (Fedora, Debian; tools/relay-native-test.sh): no blocked call.
 SystemCallErrorNumber=EPERM
 
 [Install]
