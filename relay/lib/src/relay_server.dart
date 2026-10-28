@@ -316,6 +316,10 @@ class Relay {
         final sig = _signature(req, path);
         if (sig.devBytes case final b?) info.device = _short(fingerprint(b));
         return _enrol(req, wid, info, sig);
+      case ('devices', 5) when seg[4] == 'others':
+        info.kind = 'revoke-others';
+        _method(req, ['PUT']);
+        return _revokeOthers(req, wid, info, _signature(req, path));
       case ('devices', 5):
         final fp = seg[4];
         if (!fingerprintPattern.hasMatch(fp)) throw _HttpError(400, 'bad fingerprint');
@@ -631,7 +635,7 @@ class Relay {
       final w = _wallets[wid];
       // Trust on first use: a creation that lost the race to another key is refused here.
       if (w != null && !constantTimeEquals(pub, w.pub)) throw _HttpError(401, 'bad signature');
-      if (w == null) return _createWallet(wid, pub, device, seq, body, sig.dev);
+      if (w == null) return _createWallet(wid, pub, device, seq, body, sig.dev, int.parse(sig.time));
       _admit(w, sig);
       final st = w.devices[device];
       final first = st?.first ?? 1;
@@ -676,13 +680,20 @@ class Relay {
 
   /// The first accepted `PUT d/...` of a wallet creates it and stores its public key [pub] (trust on first use).
   /// With [dev] (api 5) that device key is enrolled `by: "wallet"`.
-  Future<_Out> _createWallet(String wid, String pub, String device, int seq, Uint8List body, String? dev) async {
+  Future<_Out> _createWallet(String wid, String pub, String device, int seq, Uint8List body, String? dev, int signedTime) async {
     if (seq != 1) throw _HttpError(422, 'seq beyond last + 1');
     if (_wallets.length >= maxWallets) throw _HttpError(507, 'relay full');
     if (body.length > maxBytes) throw _HttpError(507, 'wallet full');
     final dir = Directory('${data.path}/$wid');
     final w = Wallet(wid, dir, pub, hooks: hooks);
-    if (dev != null) w.keys[dev] = DeviceKey(fingerprint(decodeBase64Url(dev, 32)!), _now(), 'wallet', device: device);
+    if (dev != null) {
+      // An api-5 creation: the creator is enrolled and the wallet starts locked (every other device needs an approval).
+      final fp = fingerprint(decodeBase64Url(dev, 32)!);
+      w.keys[dev] = DeviceKey(fp, _now(), 'wallet', device: device);
+      w.reserve(fp, dev);
+      w.locked = true;
+      w.lockTime = signedTime;
+    }
     _wallets[wid] = w; // reserve the slot before any await
     try {
       if (await dir.exists()) await dir.delete(recursive: true); // left over from an interrupted creation
@@ -916,12 +927,17 @@ class Relay {
       }
       final now = _now();
       final expired = w.dropExpired(now);
-      final other = w.keyOf(fp);
+      final other = w.holderOf(fp);
       if (other != null && other != dev) {
         if (expired) await w.saveMeta();
         throw _HttpError(409, 'fingerprint');
       }
       if (!w.locked) {
+        if (w.activeKeys >= maxActiveKeys) {
+          if (expired) await w.saveMeta();
+          throw _HttpError(409, 'tooManyKeys');
+        }
+        w.reserve(fp, dev);
         w.pending.remove(dev);
         w.keys[dev] = DeviceKey(fp, now, 'wallet', deviceId: deviceId);
         await w.saveMeta();
@@ -937,6 +953,7 @@ class Relay {
         throw _HttpError(409, 'pendingFull');
       }
       w.pending[dev] = PendingKey(fp, now, deviceId);
+      w.reserve(fp, dev);
       await w.saveMeta();
       _log('relay keys enrolled=${w.activeKeys} pending=${w.pending.length} w=${info.wid}');
       return _Out.json(202, {'pending': true});
@@ -974,6 +991,10 @@ class Relay {
         if (k != null) {
           status = 200;
         } else {
+          if (w.activeKeys >= maxActiveKeys) {
+            if (changed) await w.saveMeta();
+            throw _HttpError(409, 'tooManyKeys');
+          }
           final p = w.pending.remove(target)!;
           w.keys[target] = DeviceKey(p.fp, now, sig.dev!, deviceId: p.deviceId);
           changed = true;
@@ -992,15 +1013,47 @@ class Relay {
           }
           k.revoked = now;
           // A removed device still holds the wallet key: without the lock it would enrol a fresh device key at once.
-          w.locked = true;
-          final t = int.parse(sig.time);
-          if (t > w.lockTime) w.lockTime = t;
+          w.lockAfterRevoke(int.parse(sig.time), now);
           changed = true;
         }
       }
       if (changed) await w.saveMeta();
       _log('relay keys enrolled=${w.activeKeys} pending=${w.pending.length} w=${info.wid}');
       return _Out.json(status, {'fp': fp, 'status': w.keys[target]!.revoked == null ? 'enrolled' : 'revoked'});
+    });
+  }
+
+  /// `PUT devices/others` `{"revoke":true}`: revokes every enrolled key but the signer's, rejects every pending one and
+  /// locks, in one step; applied only when signed later than the last one applied (a replay changes nothing).
+  Future<_Out> _revokeOthers(HttpRequest req, String wid, _LogInfo info, _Sig sig) async {
+    final known = _known(wid);
+    await _needDevice(req, sig);
+    final body = await _readBody(req, _maxDeviceJson, info);
+    await _verify(known.pubBytes, sig, 'PUT', body);
+    _admit(known, sig);
+    final raw = _jsonMap(body);
+    if (raw.length != 1 || raw['revoke'] != true) throw _HttpError(400, 'bad device change');
+    final t = int.parse(sig.time);
+    final me = sig.dev!;
+    return _lockedAs(wid, sig, (w) async {
+      if (t <= w.othersTime) return _Out.json(200, {'revoked': 0});
+      final now = _now();
+      w.dropExpired(now);
+      var n = 0;
+      for (final MapEntry(key: pub, value: k) in w.keys.entries) {
+        if (pub == me || k.revoked != null) continue;
+        k.revoked = now;
+        n++;
+      }
+      for (final MapEntry(key: pub, value: p) in w.pending.entries) {
+        w.keys[pub] = DeviceKey(p.fp, now, me, revoked: now, deviceId: p.deviceId);
+      }
+      w.pending.clear();
+      w.othersTime = t;
+      w.lockAfterRevoke(t, now);
+      await w.saveMeta();
+      _log('relay keys enrolled=${w.activeKeys} pending=0 revoked=$n w=${info.wid}');
+      return _Out.json(200, {'revoked': n});
     });
   }
 

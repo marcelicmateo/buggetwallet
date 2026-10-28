@@ -195,7 +195,7 @@ void main() {
       await expectLater(t.revokeDevice('../state'), fails(TransportFailure.rejected));
       expect(paths, isEmpty);
       await expectLater(t.revokeDevice('ABCD-EFGH'), fails(TransportFailure.lastDevice));
-      await expectLater(t.enrol(), fails(TransportFailure.pending));
+      await expectLater(t.enrol(), fails(TransportFailure.pendingFull), reason: 'its own failure, never pending');
     });
   });
 
@@ -246,7 +246,8 @@ void main() {
       final s1 = await ta.state();
       expect(s1.api, 5);
       expect(s1.keys!.single.fp, await ta.fingerprint);
-      expect((s1.keys!.single.by, s1.keys!.single.self, s1.locked), ('wallet', true, false));
+      expect((s1.keys!.single.by, s1.keys!.single.self, s1.locked), ('wallet', true, true), reason: 'a new wallet starts locked');
+      expect(await ta.setLocked(false), isFalse, reason: 'the owner opens it for joining with the wallet key');
       await SyncEngine(tb, key).run(b);
       expect(b.transactions(), hasLength(1));
       expect(tb.signApi, 5);
@@ -281,6 +282,7 @@ void main() {
       final tb = transport(seedB, client: counting);
       a.updateSettings({'salary': 150000});
       await SyncEngine(ta, key).run(a);
+      await ta.setLocked(false);
       await SyncEngine(tb, key).run(b);
       await ta.revokeDevice((await tb.fingerprint)!);
       await ta.revokeDevice((await tb.fingerprint)!); // idempotent
@@ -314,6 +316,7 @@ void main() {
       final tOld = transport(null);
       a.updateSettings({'salary': 150000});
       await SyncEngine(ta, key).run(a);
+      await ta.setLocked(false);
       final r = await SyncEngine(tOld, key).run(old);
       expect(r.caughtUp, isTrue);
       expect(old.settings().salary, 150000);
@@ -324,6 +327,117 @@ void main() {
       await expectLater(tOld.put('legacy', 1, [1]), fails(TransportFailure.newerApi));
       await ta.setLocked(false);
       expect((await tOld.state()).api, 4, reason: 'unlocking reopens it to the wallet key');
+    });
+  });
+
+  group('security review', () {
+    test('no downgrade: after an api-5 state the transport never falls back to the wallet key; minApi from the app too', () async {
+      var api = 5;
+      final seen = <http.Request>[];
+      http.Client relay() => MockClient((r) async {
+            seen.add(r);
+            if (r.url.path == '/v2/health') return http.Response('{"api":$api}', 200);
+            if (api == 5) return http.Response('{"api":5,"instance":"${'ab' * 16}","devices":{}}', 200);
+            return http.Response('{"error":"bad signature"}', 401); // a "relay" that now claims api 4
+          });
+      final told = <(int, String?)>[];
+      final t =
+          RelayTransport(Uri.parse('http://relay.test'), key, deviceKey: seedA, client: relay(), onMinApi: (m, i) => told.add((m, i)));
+      expect(t.minApi, 3, reason: 'relayMinApi');
+      await t.state();
+      expect(t.minApi, 5);
+      expect(told, [(5, 'ab' * 16)]);
+      await t.state();
+      expect(told, hasLength(1), reason: 'told once');
+      api = 4;
+      seen.clear();
+      await expectLater(t.state(), fails(TransportFailure.olderApi));
+      expect(t.signApi, 5, reason: 'never lowered');
+      expect(seen.where((r) => !r.headers.containsKey('X-BW-Dev') && r.url.path != '/v2/health'), isEmpty,
+          reason: 'no request signed with the wallet key alone');
+      // A new transport the app builds with the stored value refuses the fallback from the start.
+      final t2 = RelayTransport(Uri.parse('http://relay.test'), key, deviceKey: seedA, client: relay(), minApi: 5);
+      await expectLater(t2.state(), fails(TransportFailure.olderApi));
+      expect(t2.signApi, 5);
+    });
+
+    test('pendingFull and tooManyKeys end a run with their own messages', () async {
+      for (final (error, text) in [
+        ('pendingFull', 'Too many devices are waiting for approval'),
+        ('tooManyKeys', 'already has the most devices'),
+      ]) {
+        final t = RelayTransport(Uri.parse('http://relay.test'), key, deviceKey: seedB, client: MockClient((r) async {
+          if (r.url.path.endsWith('/enrol')) return http.Response('{"error":"$error"}', 409);
+          return http.Response('{"error":"unenrolled"}', 401);
+        }));
+        final repo = WalletRepo.inMemory();
+        addTearDown(repo.close);
+        await expectLater(SyncEngine(t, key).run(repo), syncFails(text), reason: error);
+      }
+    });
+
+    test('end to end: revokeOthers removes every other device and the pending ones, locks; tooManyKeys at 16', () async {
+      final dir = Directory.systemTemp.createTempSync('bw-relay-dk2-');
+      final relay = Relay(data: dir, log: (_) {});
+      final server = await relay.serve(port: 0);
+      final base = Uri.parse('http://127.0.0.1:${server.port}');
+      addTearDown(() async {
+        await relay.close();
+        dir.deleteSync(recursive: true);
+      });
+      RelayTransport tr(List<int> seed) {
+        final t = RelayTransport(base, key, deviceKey: seed);
+        addTearDown(t.close);
+        return t;
+      }
+
+      final a = WalletRepo.inMemory();
+      addTearDown(a.close);
+      final ta = tr(seedA), tb = tr(seedB), tc = tr(seedC);
+      a.updateSettings({'salary': 1});
+      await SyncEngine(ta, key).run(a);
+      // Lock changes apply only when signed later than the last one: a few ms apart on the real clock.
+      Future<void> later() => Future<void>.delayed(const Duration(milliseconds: 5));
+      await later();
+      await ta.setLocked(false);
+      expect((await tb.state()).api, 5, reason: 'B enrols itself (unlocked)');
+      await later();
+      await ta.setLocked(true);
+      await expectLater(tc.state(), fails(TransportFailure.pending));
+      expect(await ta.revokeOthers(), 1);
+      await expectLater(tb.state(), fails(TransportFailure.revoked));
+      await expectLater(tc.state(), fails(TransportFailure.revoked), reason: 'its request was rejected');
+      final s = await ta.state();
+      expect((s.locked, s.pending.length, s.keys!.where((k) => !k.isRevoked).length), (true, 0, 1));
+      expect(await ta.setLocked(false), isTrue, reason: 'no unlock for 5 minutes after a revoke');
+      // 16 enrolled keys at most: 15 approvals more, then the 16th is refused.
+      for (var i = 0; i < 16; i++) {
+        final t = tr(List.generate(32, (j) => (i * 13 + j * 3 + 1) & 0xff));
+        await expectLater(t.state(), fails(TransportFailure.pending));
+        if (i < 15) {
+          await ta.approveDevice((await t.fingerprint)!);
+        } else {
+          await expectLater(ta.approveDevice((await t.fingerprint)!), fails(TransportFailure.tooManyKeys));
+        }
+      }
+    });
+
+    test('MemoryTransport: a created wallet is locked; revokeOthers; 16 keys at most; a fingerprint stays with its key', () async {
+      final m = MemoryTransport();
+      final va = m.device('key-a'), vb = m.device('key-b'), vc = m.device('key-c');
+      await va.put('a', 1, [1]);
+      expect(m.locked, isTrue);
+      await expectLater(vb.state(), fails(TransportFailure.pending));
+      await va.approveDevice(vb.fingerprint);
+      await expectLater(vc.state(), fails(TransportFailure.pending));
+      expect(await va.revokeOthers(), 1);
+      expect(m.revokedKeys, {vb.fingerprint, vc.fingerprint});
+      expect(m.enrolledKeys, {va.fingerprint});
+      await va.setLocked(false);
+      for (var i = 0; i < 15; i++) {
+        await m.device('more-$i').state();
+      }
+      await expectLater(m.device('one-too-many').state(), fails(TransportFailure.tooManyKeys));
     });
   });
 
@@ -339,7 +453,9 @@ void main() {
       await SyncEngine(va, key).run(a);
       expect(m.enrolledKeys, {va.fingerprint});
       final s = await va.state();
-      expect((s.api, s.keys!.single.self, s.keys!.single.by, s.locked), (5, true, 'wallet', false));
+      expect((s.api, s.keys!.single.self, s.keys!.single.by, s.locked), (5, true, 'wallet', true));
+      await expectLater(m.state(), fails(TransportFailure.newerApi), reason: 'a new wallet starts locked');
+      expect(await va.setLocked(false), isFalse);
       await SyncEngine(vb, key).run(b);
       expect(b.settings().salary, 150000);
       expect(m.enrolledKeys, {va.fingerprint, vb.fingerprint});
@@ -384,7 +500,7 @@ void main() {
       for (var i = 0; i < 8; i++) {
         expect(await m.device('wait-$i').enrol(), EnrolResult.pending);
       }
-      await expectLater(m.device('late').enrol(), fails(TransportFailure.pending));
+      await expectLater(m.device('late').enrol(), fails(TransportFailure.pendingFull));
       now = now.add(const Duration(days: 7, minutes: 1));
       expect(await m.device('late').enrol(), EnrolResult.pending);
       expect((await va.state()).pending, hasLength(1));

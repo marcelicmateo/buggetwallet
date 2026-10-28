@@ -233,9 +233,14 @@ enum TransportFailure {
   /// 401 `revoked` (api 5): this install's device key was removed from the wallet. Final: never retried.
   revoked,
 
-  /// This install's device key waits for approval on a locked wallet (`PUT enrol` 202; or the relay holds too many
-  /// requests, 409 `pendingFull`).
+  /// This install's device key waits for approval on a locked wallet (`PUT enrol` 202).
   pending,
+
+  /// 409 `pendingFull`: the relay already holds the most requests waiting for approval (8); someone may be filling them.
+  pendingFull,
+
+  /// 409 `tooManyKeys`: the wallet already has the most enrolled devices (16).
+  tooManyKeys,
 
   /// 409 `lastDevice`: the wallet's last enrolled device key cannot be removed.
   lastDevice,
@@ -279,12 +284,14 @@ abstract class SyncTransport {
 /// Device keys (api 5, RELAY_PROTOCOL.md "Device keys"), implemented by [RelayTransport] and
 /// [MemoryDeviceTransport] (apart from [SyncTransport] so other transports need not know them). [enrol]: this
 /// install's key (also automatic on 401 `unenrolled`); [approveDevice] / [revokeDevice] a key by fingerprint
-/// (`ABCD-EFGH`); [setLocked] "Require approval for new devices" (returns the value the relay now holds). Without
-/// device features (an older relay, no device key): [TransportFailure.olderApi].
+/// (`ABCD-EFGH`); [revokeOthers] every key but this install's, rejecting every pending one ("Remove all other
+/// devices"; returns how many keys it revoked); [setLocked] "Require approval for new devices" (returns the value the
+/// relay now holds). Without device features (an older relay, no device key): [TransportFailure.olderApi].
 abstract interface class DeviceKeyTransport {
   Future<EnrolResult> enrol();
   Future<void> approveDevice(String fp);
   Future<void> revokeDevice(String fp);
+  Future<int> revokeOthers();
   Future<bool> setLocked(bool locked);
 }
 
@@ -589,6 +596,9 @@ class SyncEngine {
       TransportFailure.revoked => 'This device was removed from the wallet.',
       TransportFailure.pending =>
         'This device waits for approval. On a device you already use, open Settings › Sync › Devices and approve the code shown here.',
+      TransportFailure.pendingFull =>
+        "Too many devices are waiting for approval. On a device you already use, reject the ones you don't know (or change the wallet key).",
+      TransportFailure.tooManyKeys => 'This wallet already has the most devices (16). Remove one on a device you already use.',
       _ => 'The relay answered with an error. Try again later.',
     });
   }
@@ -596,7 +606,10 @@ class SyncEngine {
   /// A failure no later step gets past (this device was removed, or waits for approval): ends the run at once, as on
   /// `state`, wherever it shows up (a revoke between two calls of one run).
   static void _stopIfFinal(String step, TransportException e) {
-    if (e.failure == TransportFailure.revoked || e.failure == TransportFailure.pending) throw _fatal(step, e);
+    if (const {TransportFailure.revoked, TransportFailure.pending, TransportFailure.pendingFull, TransportFailure.tooManyKeys}
+        .contains(e.failure)) {
+      throw _fatal(step, e);
+    }
   }
 
   Future<SyncReport>? _running;

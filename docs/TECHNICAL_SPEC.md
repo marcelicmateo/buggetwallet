@@ -610,7 +610,9 @@ the owner starts it. Builds are reproducible in a rootless Podman image.
 2. **No key rotation flow; revocation cuts off the relay only.** Since api 5 (Stage DK) a lost device can be removed in
    Settings › Sync › Devices: the relay refuses its device key and, as removing a device turns on "Require approval
    for new devices", the wallet key alone. That protects what is on the relay from now on; the lost device keeps the
-   data it had (sealed with the wallet key on it), and anyone who unlocks it holds the wallet key. If the device may
+   data it had (sealed with the wallet key on it), and anyone who unlocks it holds the wallet key. A wallet started by
+   an api-5 build requires approval from the start, at most 16 devices can be enrolled, and "Remove all other
+   devices" revokes every key but the one in hand at once. If the device may have acted before it was removed, or may
    be in someone else's hands, rotate the key: on a device you trust, Plan › Backup "Back up now" (sealed with the old key); start fresh on that device
    (Android: Settings › Apps › Budget Wallet › Clear storage; Linux: remove the app's data folder; web: "Forget this
    browser"), then "Start a new wallet" (new key); Plan › Backup "Restore a backup made with another key…" with the old key typed or scanned;

@@ -16,6 +16,11 @@ const int apiVersion = 5;
 const int maxPending = 8;
 const Duration pendingExpiry = Duration(days: 7);
 
+/// Most enrolled (non-revoked) device keys per wallet (409 `tooManyKeys` beyond), and how many fingerprint
+/// reservations ([Wallet.fps]) a wallet keeps.
+const int maxActiveKeys = 16;
+const int maxReserved = 256;
+
 /// An enrolled (or revoked) device key of a wallet (api 5; RELAY_PROTOCOL.md "Device keys").
 class DeviceKey {
   DeviceKey(this.fp, this.added, this.by, {this.revoked, this.deviceId, this.device});
@@ -207,6 +212,31 @@ class Wallet {
   bool locked = false;
   int lockTime = 0;
 
+  /// Signed time (Unix ms) of the last applied `devices/others` revoke: older ones (replays) change nothing.
+  int othersTime = 0;
+
+  /// Fingerprint → the first `devpub` that showed it (newest [maxReserved]): another key with that fingerprint can never
+  /// enrol, also after its pending request expired or was rejected.
+  final Map<String, String> fps = {};
+
+  /// Reserves [fp] for [devpub] (no-op when already reserved); drops the oldest reservations beyond [maxReserved].
+  void reserve(String fp, String devpub) {
+    if (fps.containsKey(fp)) return;
+    fps[fp] = devpub;
+    while (fps.length > maxReserved) {
+      fps.remove(fps.keys.first);
+    }
+  }
+
+  /// The `devpub` that holds [fp]: an enrolled, revoked or pending key, else a reservation; null when free.
+  String? holderOf(String fp) => keyOf(fp) ?? fps[fp];
+
+  /// After a revoke: no lock change signed before now + the signature window (held back, sent later) can unlock.
+  void lockAfterRevoke(int signedTime, DateTime now) {
+    locked = true;
+    lockTime = [lockTime, signedTime, now.add(signatureWindow).millisecondsSinceEpoch].reduce(math.max);
+  }
+
   /// Drops pending keys asked more than [pendingExpiry] before [now]; whether any went.
   bool dropExpired(DateTime now) {
     final before = pending.length;
@@ -360,6 +390,8 @@ class Wallet {
       'pending': {for (final e in pending.entries) e.key: e.value.toMeta()},
       'locked': locked,
       'lockTime': lockTime,
+      'othersTime': othersTime,
+      'fps': fps,
       'instance': instance,
       'devices': {
         for (final e in devices.entries) e.key: {'last': e.value.last, 'lastSeen': formatTime(e.value.lastSeen), 'acks': e.value.acks},
@@ -412,8 +444,10 @@ class Wallet {
         final added = time(v['added']);
         final by = v['by'];
         if (added == null || by is! String || (by != 'wallet' && decodeBase64Url(by, 32) == null)) continue;
-        w.keys[pub] =
-            DeviceKey(fingerprint(bytes), added, by, revoked: time(v['revoked']), deviceId: name(v['deviceId']), device: name(v['device']));
+        // A `revoked` that is present but does not parse still counts as revoked (never re-admit a key by accident).
+        final r = v['revoked'];
+        final revoked = r == null ? null : (time(r) ?? DateTime.utc(1970));
+        w.keys[pub] = DeviceKey(fingerprint(bytes), added, by, revoked: revoked, deviceId: name(v['deviceId']), device: name(v['device']));
       }
     }
     final ps = meta['pending'];
@@ -428,6 +462,21 @@ class Wallet {
     w.locked = meta['locked'] == true;
     final lt = meta['lockTime'];
     if (lt is int && lt >= 0) w.lockTime = lt;
+    final ot = meta['othersTime'];
+    if (ot is int && ot >= 0) w.othersTime = ot;
+    final fs = meta['fps'];
+    if (fs is Map<String, Object?>) {
+      for (final MapEntry(key: fp, value: pub) in fs.entries) {
+        if (fingerprintPattern.hasMatch(fp) && pub is String && decodeBase64Url(pub, 32) != null) w.reserve(fp, pub);
+      }
+    }
+    // Every key and pending entry holds its fingerprint too (a meta written before reservations).
+    for (final MapEntry(key: pub, value: k) in w.keys.entries) {
+      w.reserve(k.fp, pub);
+    }
+    for (final MapEntry(key: pub, value: p) in w.pending.entries) {
+      w.reserve(p.fp, pub);
+    }
   }
 
   /// Rebuilds a wallet from [dir]; null when `meta.json` is missing or unreadable.

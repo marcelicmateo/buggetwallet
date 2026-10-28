@@ -93,6 +93,15 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
   /// transport.
   int signApi;
 
+  /// The lowest relay api this transport accepts (RELAY_PROTOCOL.md "Versions", no downgrade): once a state said 5 it
+  /// is raised to 5 and [onMinApi] is told, so the app can keep it per relay address (device-local) and pass it on the
+  /// next transport. A 401 whose health then names an older api is [TransportFailure.olderApi], never a fallback to the
+  /// wallet key.
+  int minApi;
+
+  /// Called once when [minApi] rises (with the new value and the relay's instance id, if it sent one).
+  final void Function(int minApi, String? instance)? onMinApi;
+
   RelayTransport(this.base, this.key,
       {http.Client? client,
       this.timeout = const Duration(seconds: 30),
@@ -100,7 +109,9 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
       this.clockOffsetMs = 0,
       this.createToken,
       this.deviceKey,
-      this.deviceId})
+      this.deviceId,
+      this.minApi = relayMinApi,
+      this.onMinApi})
       : _client = client ?? http.Client(),
         _now = now ?? DateTime.now,
         signApi = deviceKey == null ? 4 : relayApi {
@@ -189,7 +200,8 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
       401 when _error(r) == 'revoked' => TransportFailure.revoked,
       401 when _error(r) == 'unenrolled' => TransportFailure.pending,
       409 when _error(r) == 'lastDevice' => TransportFailure.lastDevice,
-      409 when _error(r) == 'pendingFull' => TransportFailure.pending,
+      409 when _error(r) == 'pendingFull' => TransportFailure.pendingFull,
+      409 when _error(r) == 'tooManyKeys' => TransportFailure.tooManyKeys,
       403 when _error(r) == 'createToken' => TransportFailure.createToken,
       401 || 403 => TransportFailure.refused,
       410 => TransportFailure.gone,
@@ -328,6 +340,11 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
           logEvent(_log, Level.WARNING, 'relay.newerApi', {'api': api});
           throw const TransportException(TransportFailure.newerApi, 'newer api');
         }
+        if (api < minApi) {
+          // This relay (or something answering for it) spoke a newer api before: never sign with the wallet key again.
+          logEvent(_log, Level.WARNING, 'relay.downgrade', {'api': api, 'min': minApi});
+          throw const TransportException(TransportFailure.olderApi, 'downgrade refused');
+        }
         if (api < signApi) {
           // An older relay (api 4 or 3): sign its text with the wallet key from now on and send this request again
           // (RELAY_PROTOCOL.md "Versions"); no device features there.
@@ -362,7 +379,13 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
       throw const TransportException(TransportFailure.newerApi, 'newer api');
     }
     try {
-      return RelayState.fromJson(j);
+      final s = RelayState.fromJson(j);
+      if ((s.api ?? 0) >= 5 && signApi >= 5 && minApi < 5) {
+        minApi = 5;
+        logEvent(_log, Level.INFO, 'relay.minApi', {'api': 5});
+        onMinApi?.call(5, s.instance);
+      }
+      return s;
     } on FormatException catch (e, st) {
       logError(_log, 'relay.badState', e, st);
       throw const TransportException(TransportFailure.other, 'bad state');
@@ -455,6 +478,23 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
     if (!RegExp(r'^[A-Z2-7]{4}-[A-Z2-7]{4}$').hasMatch(fp)) throw const TransportException(TransportFailure.rejected, 'bad fingerprint');
     await _req('PUT', 'devices/$fp', action, body: utf8.encode(jsonEncode({action: true})), headers: {'Content-Type': 'application/json'});
     logEvent(_log, Level.INFO, 'relay.device', {'action': action});
+  }
+
+  /// Revokes every device key but this install's and rejects every pending one, and locks the wallet ("Remove all
+  /// other devices", for a device that may have been taken); returns how many keys it revoked now (0 when replayed).
+  @override
+  Future<int> revokeOthers() async {
+    _needDeviceApi();
+    final r = await _req('PUT', 'devices/others', 'revokeOthers',
+        body: utf8.encode(jsonEncode({'revoke': true})), headers: {'Content-Type': 'application/json'});
+    logEvent(_log, Level.INFO, 'relay.device', {'action': 'revokeOthers'});
+    try {
+      final j = jsonDecode(r.body);
+      if (j is Map && j['revoked'] is int) return j['revoked'] as int;
+    } on FormatException {
+      // fall through
+    }
+    throw const TransportException(TransportFailure.other, 'bad revoke answer');
   }
 
   /// Turns "Require approval for new devices" on or off; returns the value the relay now holds.

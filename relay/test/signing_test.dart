@@ -306,7 +306,8 @@ void main() {
     test('meta.json holds the public key and nothing that can sign', () async {
       final h = await twoDevices();
       final meta = jsonDecode(File('${h.dir.path}/$w1/meta.json').readAsStringSync()) as Map<String, Object?>;
-      expect(meta.keys.toSet(), {'v', 'pub', 'instance', 'devices', 'snapshot', 'previous', 'keys', 'pending', 'locked', 'lockTime'});
+      expect(meta.keys.toSet(),
+          {'v', 'pub', 'instance', 'devices', 'snapshot', 'previous', 'keys', 'pending', 'locked', 'lockTime', 'othersTime', 'fps'});
       expect(meta['v'], 3);
       expect(meta['pub'], await keyA.pub());
       final text = File('${h.dir.path}/$w1/meta.json').readAsStringSync();
