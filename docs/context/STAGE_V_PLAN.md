@@ -94,3 +94,17 @@ unchanged.
 | V | Merge VB → VA → VT → VU, merge-delta review, `tools/build.sh stage` (haiku/low watcher reads the summary), screenshots, push, STATUS | lead + haiku | v2 | all | – |
 
 Four agents at most at once: VA, VB, VT, VU; reviewers start as builders finish.
+
+## VC — the owner chooses on equal-clock conflicts (owner 2026-10-28, replaces the automatic tie-break)
+A repair resend whose field has the **same clock but another value** (only a bug or damage makes this) no longer picks
+the higher canonical JSON. Owner: "have repair ask". Money never changes without the owner's tap.
+- Core: `applyRemote(tieBreak: true)` keeps the stored value and records a device-local conflict (bounded list, e.g.
+  500; logs counts only). `List<SyncConflict> WalletRepo.syncConflicts()`; `SyncConflict {id, entity, rowId, field,
+  mine, theirs, clock}`; an entry is dropped when that field's clock changes (an edit anywhere settles it).
+  `resolveSyncConflict(id, {required bool keepMine})` = an owner write of the chosen value through `_write` (new clock,
+  so it reaches every device; keepMine writes too), entry removed.
+- Sync: while any conflict is open, no automatic repair and `devicesDisagree` stays set; `SyncReport.conflicts` (count).
+  Equal digests after the owner's choices clear it as before.
+- UI: Settings › Sync: "Your devices have N different values. Choose the right ones." → a list: what (entity word,
+  row label such as date + payee for a payment, field in plain words) and both values formatted (money in the number
+  style, dates, deleted = "deleted"), buttons "This device" / "Other device". Widget tests incl. 320 dp, text scale 2.
