@@ -3,6 +3,7 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../file_chooser.dart';
 import '../format.dart';
+import '../hero.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
@@ -106,7 +107,8 @@ class TodayScreen extends StatelessWidget {
                     StatusLabel(key: const ValueKey('reviewed'), good: true, text: 'Reviewed · ${streakText(review.streak)}'),
                   _AddExpenseButton(view, addExpense),
                 ]),
-                if (f.setupSteps.isNotEmpty) _SetupPanel(view: view, steps: f.setupSteps, openPlan: openPlan, newPayday: f.newPayday),
+                if (f.setupSteps.isNotEmpty)
+                  _SetupPanel(view: view, steps: f.setupSteps, openPlan: openPlan, newPayday: f.newPayday, chooser: chooser),
                 if (review.due) _ReviewCard(view, review, openSpending, chooser),
                 if (f.s.savedFor != p.start && view.goals.isNotEmpty) _PaydayChecklist(f),
                 if (f.deliveryHour) _DeliveryHourPanel(f),
@@ -130,12 +132,14 @@ class _TodayFigures {
       : s = view.settings,
         cur = view.currency,
         p = view.period() {
-    ended = p.paydayPassed;
-    over = p.overToday > 0;
+    final h = HeroFigure.of(p);
+    ended = h.ended;
+    over = h.over;
+    heroLabel = h.label;
     // Over the whole period (the plan is spent) outranks over today in the sentence under the hero.
     final overPeriod = !ended && p.overBy > 0;
     // The hero number is never negative: what is left once the period ended, how far over today, else the safe amount.
-    hero = ended ? (p.remaining > 0 ? p.remaining : 0) : (over ? p.overToday : p.safeToday);
+    hero = h.amount;
     // The sentence under an over hero (I1). Tomorrow's allowance is null when a new pay period starts tomorrow.
     final tomorrow = p.allowanceTomorrow;
     periodSentence = overPeriod ? "You're ${shown(p.overBy, cur)} over the plan for this period." : null;
@@ -147,7 +151,12 @@ class _TodayFigures {
     worry = over || p.overBudget;
     newPayday = view.newPayday(p.start);
     // The first-run steps (I1): one panel below the hero while any is open.
-    setupSteps = [if (view.keyBackupRowVisible) 'key', if (!s.salaryConfirmed) 'salary', if (newPayday != null) 'payday'];
+    setupSteps = [
+      if (view.keyBackupRowVisible) 'key',
+      if (view.setupWizardOpen) 'wizard',
+      if (!s.salaryConfirmed) 'salary',
+      if (newPayday != null) 'payday'
+    ];
     used = p.flexBudget > 0 ? p.spent / p.flexBudget : 1.0;
     ahead = p.aheadOfPace;
     // Several missed paydays move on in one tap: the latest payday on or before today.
@@ -164,6 +173,7 @@ class _TodayFigures {
   final PeriodBudget p;
   late final bool ended, over, worry, deliveryHour, reviewedToday;
   late final int hero;
+  late final String heroLabel;
   late final String? periodSentence, overSentence, newPayday;
   late final List<String> setupSteps;
   late final double used;
@@ -192,7 +202,7 @@ class _HeroHeader extends StatelessWidget {
   final _TodayFigures f;
   @override
   Widget build(BuildContext context) => Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Flexible(child: Eyebrow(f.ended ? 'Left this pay period' : (f.over ? 'Over today by' : 'Safe to spend today'))),
+        Flexible(child: Eyebrow(f.heroLabel)),
         const SizedBox(width: 8),
         Flexible(
             child: f.ended
@@ -744,7 +754,9 @@ class _SetupPanel extends StatelessWidget {
   final List<String> steps;
   final VoidCallback openPlan;
   final String? newPayday;
-  const _SetupPanel({required this.view, required this.steps, required this.openPlan, required this.newPayday});
+  final FileChooser chooser;
+  const _SetupPanel(
+      {required this.view, required this.steps, required this.openPlan, required this.newPayday, this.chooser = const FileChooser()});
 
   @override
   Widget build(BuildContext context) {
@@ -788,6 +800,20 @@ class _SetupPanel extends StatelessWidget {
         Wrap(spacing: 8, runSpacing: 8, children: [
           FilledButton(key: const ValueKey('keySaveNow'), onPressed: () => view.showKeyBackup(context), child: const Text('Save now')),
           TextButton(key: const ValueKey('keyRowLater'), onPressed: view.snoozeKeyBackup, child: const Text('Later')),
+        ]),
+      ],
+      if (steps.contains('wizard')) ...[
+        Row(key: const ValueKey('wizardRow'), children: [
+          Icon(Icons.auto_fix_high, size: 16, color: c.warnInk),
+          const SizedBox(width: 8),
+          Expanded(child: Text('Finish setting up', style: TextStyle(fontWeight: FontWeight.w600, color: c.warnInk))),
+        ]),
+        Text('Step ${view.setupWizardStep} of ${view.setupWizardStepCount}. Every step can be skipped.',
+            style: TextStyle(color: c.warnInk, fontSize: BwType.metaSize)),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          FilledButton(
+              key: const ValueKey('wizardResume'), onPressed: () => view.showSetupWizard(context, chooser), child: const Text('Continue')),
+          TextButton(key: const ValueKey('wizardDecline'), onPressed: view.declineSetupWizard, child: const Text('No thanks')),
         ]),
       ],
       if (steps.contains('salary')) ...[

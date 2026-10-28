@@ -1,13 +1,10 @@
 // Stage N2 UI: Plan › Accounts (balances, totals, add / rename / correct / delete + Undo, the duplicate line), Today's "Held" line and the
 // welcome cash step. All data is SYNTHETIC (fixed clock, made-up amounts).
-import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/accounts_panel.dart';
-import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/today_view.dart';
-import 'package:budget_wallet/src/screens/welcome_balance.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -289,60 +286,6 @@ void main() {
       await t.ensureVisible(find.byKey(const ValueKey('heldLine')));
       await t.tap(find.byKey(const ValueKey('heldLine')));
       expect(opened, 1);
-      await settle(t);
-    });
-  });
-
-  group('welcome cash step', () {
-    ({WalletController wc}) fresh() {
-      final wc = seamedController(WalletRepo.inMemory(), clock: () => day);
-      wc.seams.keyWriter = (k, {passphrase}) async {};
-      return (wc: wc);
-    }
-
-    testWidgets('after the save-key prompt: Add cash makes a Cash account in the wallet currency dated today', (t) async {
-      final f = fresh();
-      await f.wc.createWallet();
-      await pumpApp(t, HomeShell(wc: f.wc), size: const Size(400, 2400));
-      await t.pump(const Duration(milliseconds: 600));
-      expect(find.byType(KeyBackupSheet), findsOneWidget);
-      expect(find.byKey(const ValueKey('welcomeHeading')), findsNothing, reason: 'the key comes first');
-      await tapKey(t, 'keyLater');
-      await t.pump(const Duration(milliseconds: 600));
-      expect(find.byType(KeyBackupSheet), findsNothing);
-      expect(find.text('How much cash do you have right now?'), findsOneWidget);
-      await t.enterText(find.byKey(const ValueKey('welcomeCash')), '123.45');
-      await tapKey(t, 'welcomeAdd');
-      await t.pump(const Duration(milliseconds: 600));
-      final a = f.wc.accountsAll().single;
-      expect((a.name, a.source, a.currency, a.opening, a.openingDate), ('Cash', null, 'EUR', 12345, '2026-10-20'));
-      expect(find.byKey(const ValueKey('welcomeCash')), findsNothing);
-      await settle(t);
-    });
-
-    testWidgets('Skip adds nothing, and a bad amount is refused under the field', (t) async {
-      final f = fresh();
-      await f.wc.createWallet();
-      await pumpApp(t, HomeShell(wc: f.wc), size: const Size(400, 2400));
-      await t.pump(const Duration(milliseconds: 600));
-      await tapKey(t, 'keyLater');
-      await t.pump(const Duration(milliseconds: 600));
-      await t.enterText(find.byKey(const ValueKey('welcomeCash')), 'lots');
-      await tapKey(t, 'welcomeAdd');
-      expect(find.text(invalidAmountMessage), findsOneWidget);
-      expect(f.wc.accountsAll(), isEmpty);
-      await tapKey(t, 'welcomeSkip');
-      await t.pump(const Duration(milliseconds: 600));
-      expect(find.byKey(const ValueKey('welcomeCash')), findsNothing);
-      expect(f.wc.accountsAll(), isEmpty);
-      await settle(t);
-    });
-
-    testWidgets('the step is not shown for a wallet that was not just created', (t) async {
-      final wc = wallet();
-      await pumpApp(t, HomeShell(wc: wc), size: const Size(400, 2400));
-      await t.pump(const Duration(milliseconds: 600));
-      expect(find.byType(WelcomeBalanceSheet), findsNothing);
       await settle(t);
     });
   });

@@ -8,6 +8,7 @@ import 'accounts_panel.dart' show askBankBalance;
 import 'bill_sheet.dart';
 import 'key_backup.dart';
 import 'review.dart';
+import 'setup_wizard.dart';
 import 'upcoming.dart';
 import 'upcoming_view.dart';
 
@@ -32,6 +33,9 @@ class TodayView implements Listenable {
   PeriodBudget period() => _wc.period();
   String? newPayday(String periodStart) => _wc.newPayday(periodStart);
   bool get keyBackupRowVisible => _wc.keyBackupRowVisible;
+  bool get setupWizardOpen => _wc.setupWizardOpen;
+  int get setupWizardStep => _wc.setupWizardStep;
+  int get setupWizardStepCount => setupWizardSteps;
   int get deliveryOrders90 => _wc.deliveryOrders90;
   (int, int) get deliveries => _wc.deliveries;
   CategoryBudgetLine? tightestBudget() => _wc.tightestBudget();
@@ -62,6 +66,7 @@ class TodayView implements Listenable {
   void updateSettings(Map<String, Object?> changes) => _wc.updateSettings(changes);
   void setSetupCollapsed(bool v, List<String> steps) => _wc.setSetupCollapsed(v, steps);
   void snoozeKeyBackup() => _wc.snoozeKeyBackup();
+  void declineSetupWizard() => _wc.declineSetupWizard();
   void openCurrencies() => _wc.openCurrencies();
 
   // ---------- sheets and pages Today opens ----------
@@ -71,6 +76,7 @@ class TodayView implements Listenable {
   Future<void> showReview(BuildContext context, {VoidCallback? openSpending, FileChooser chooser = const FileChooser()}) =>
       openReview(context, _wc, openSpending: openSpending, chooser: chooser);
   Future<bool> showKeyBackup(BuildContext context) => openKeyBackup(context, _wc);
+  Future<void> showSetupWizard(BuildContext context, FileChooser chooser) => openSetupWizard(context, _wc, chooser: chooser);
 
   /// "Check your PBZ balance": the bank question for [account] with today's date and the app's own number prefilled.
   Future<void> showBalanceCheck(BuildContext context, Account account) => askBankBalance(

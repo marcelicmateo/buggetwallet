@@ -14,6 +14,7 @@ import 'clock_notice.dart';
 import 'conflict_text.dart';
 import 'controller_deps.dart';
 import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDateOrRaw;
+import 'hero.dart';
 import 'home_widget.dart';
 import 'ics_fetch.dart';
 import 'insights_api.dart' show InsightRange;
@@ -44,6 +45,7 @@ part 'controller_tx.dart';
 part 'controller_forecast.dart';
 part 'controller_iou.dart';
 part 'controller_suggest.dart';
+part 'controller_setup.dart';
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');
@@ -934,6 +936,7 @@ class WalletController extends ChangeNotifier {
     if (_dbPending) await _openFileDb(k, newWallet: true, freshId: true);
     key = k;
     _keyPromptPending = true; // HomeShell asks the owner to save the key before the first Today
+    markSetupWizardPending(); // then it opens the "Set up my wallet" wizard (never for a joined wallet)
     logEvent(_log, Level.INFO, 'wallet.create', {'defaultGoals': repo.goals().isEmpty});
     if (repo.goals().isEmpty) {
       repo.saveGoal(name: 'Emergency fund', target: 300000, saved: 0, monthly: 10000, sort: 1);

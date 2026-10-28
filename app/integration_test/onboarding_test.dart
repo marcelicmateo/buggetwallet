@@ -6,8 +6,8 @@ import 'package:budget_wallet/src/key_store.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
+import 'package:budget_wallet/src/screens/setup_wizard.dart';
 import 'package:budget_wallet/src/screens/today.dart';
-import 'package:budget_wallet/src/screens/welcome_balance.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
@@ -50,14 +50,28 @@ void main() {
     expect(wc.keyBackupConfirmed, isTrue);
     expect(find.byKey(const ValueKey('keyBackupRow')), findsNothing);
 
-    // Then the one optional step: cash on hand. It makes a Cash account in the wallet currency dated today.
-    expect(find.byType(WelcomeBalanceSheet), findsOneWidget);
-    expect(find.text('How much cash do you have right now?'), findsOneWidget);
-    await Harness.shot(t, 'onboarding-welcome-cash');
-    await t.enterText(find.byKey(const ValueKey('welcomeCash')), '250');
-    await t.tap(find.byKey(const ValueKey('welcomeAdd')));
+    // Then the "Set up my wallet" wizard: a screenshot per step, cash on hand in step 2, everything else skipped (nothing is written).
+    expect(find.byType(SetupWizard), findsOneWidget);
+    expect(find.text('Your bank files'), findsOneWidget);
+    expect(wc.setupWizardState, 'step:1');
+    await Harness.shot(t, 'onboarding-setup-1');
+    await t.tap(find.byKey(const ValueKey('setupNext')));
     await t.pumpAndSettle();
-    expect(find.byType(WelcomeBalanceSheet), findsNothing);
+    expect(find.text('Your accounts'), findsOneWidget);
+    await t.enterText(find.byKey(const ValueKey('setupCash')), '250');
+    await t.tap(find.byKey(const ValueKey('setupCashAdd')));
+    await t.pumpAndSettle();
+    await Harness.shot(t, 'onboarding-setup-2');
+    for (var n = 2; n <= 7; n++) {
+      await t.tap(find.byKey(const ValueKey('setupSkip')));
+      await t.pumpAndSettle();
+      await Harness.shot(t, 'onboarding-setup-${n + 1}');
+    }
+    expect(find.text("Here's your wallet"), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('setupDone')));
+    await t.pumpAndSettle();
+    expect(find.byType(SetupWizard), findsNothing);
+    expect(wc.setupWizardState, 'done');
     final cash = wc.accountsAll().single;
     expect((cash.name, cash.source, cash.currency, cash.opening, cash.openingDate), ('Cash', null, wc.currency, 25000, wc.today()));
     expect(find.byKey(const ValueKey('heldLine')), findsOneWidget);
@@ -85,7 +99,7 @@ void main() {
     await Harness.checkLog();
   });
 
-  itest('Start a new wallet: the cash step can be skipped and added later in Plan', (t) async {
+  itest('Start a new wallet: the wizard can be closed early, cash is added later in Settings', (t) async {
     final wc = await Harness.start(t, wallet: false);
     await t.tap(find.text('Start a new wallet'));
     await waitFor(t, () => wc.hasWallet, what: 'wallet created');
@@ -93,10 +107,15 @@ void main() {
     Harness.rememberKey(await wc.keyText());
     await t.tap(find.byKey(const ValueKey('keyLater')));
     await t.pumpAndSettle();
-    expect(find.byType(WelcomeBalanceSheet), findsOneWidget);
-    await t.tap(find.byKey(const ValueKey('welcomeSkip')));
+    expect(find.byType(SetupWizard), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('setupNext')));
     await t.pumpAndSettle();
-    expect(find.byType(WelcomeBalanceSheet), findsNothing);
+    await t.tap(find.byKey(const ValueKey('setupSkip')));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('sheetClose')));
+    await t.pumpAndSettle();
+    expect(find.byType(SetupWizard), findsNothing);
+    expect(wc.setupWizardState, 'step:3', reason: 'closing early keeps the step');
     expect(wc.accountsAll(), isEmpty);
     expect(find.byKey(const ValueKey('heldLine')), findsNothing);
 
@@ -141,7 +160,8 @@ void main() {
     expect(wc.hasWallet, isTrue);
     expect(await wc.keyText(), other);
     expect(find.byType(HomeShell), findsOneWidget);
-    expect(find.byType(WelcomeBalanceSheet), findsNothing, reason: 'the cash step is for a new wallet only');
+    expect(find.byType(SetupWizard), findsNothing, reason: 'the wizard is for a new wallet only');
+    expect(wc.setupWizardState, isNull);
     expect(wc.goals, isEmpty, reason: 'a joined wallet gets its goals from sync, not new defaults');
     await Harness.checkLog(allowSevere: false);
   });
