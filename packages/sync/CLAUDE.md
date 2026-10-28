@@ -91,8 +91,8 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   (never persisted; the app builds a new transport per run, so a device whose clock is off pays one 401 `clock` retry
   per run). 401 `clock` → offset from the
   `Date` header (`parseHttpDate`, no dart:io) and one retry, never more (a second `clock` = `other`); status → failure,
-  `api` above 4 → `newerApi`, below 3 → `olderApi`; a 401 that is not `clock` asks `health` once (api 2 → `olderApi`,
-  above 4 → `newerApi`, 3 → v3 text and one retry, else `refused`); 404 state = empty relay, 30 s timeout; `health(base)` (returns the api) asks
+  `api` above `relayApi` (5) → `newerApi`, below 3 → `olderApi`; a 401 that is not `clock` asks `health` once (api 2 → `olderApi`,
+  above `relayApi` (5) → `newerApi`, 3 → v3 text and one retry, else `refused`); 404 state = empty relay, 30 s timeout; `health(base)` (returns the api) asks
   `/v2/health`, on 404 `/v1/health` to tell an older relay apart; `now:` for tests). About 1.8 ms per signature on the VM.
   Stage H (H5–H9) in the engine: `SyncEngine.run` while a run of the same engine is in progress returns that run's
   future (`sync.run.joined`); relay usage (Stage I: `RelayState.bytes`/`maxBytes`, null from an older relay or for a
