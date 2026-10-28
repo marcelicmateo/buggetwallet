@@ -35,6 +35,9 @@ extension DeviceKeys on WalletController {
   Future<String?> useNewDeviceKey() async {
     final delete = deps.deviceKeyDeleter;
     if (delete == null) return "Couldn't do that. Try again.";
+    // A run in flight still uses the old key, and the run below would skip as busy: let it end first.
+    final running = _syncRun;
+    if (running != null) await running.future;
     try {
       await delete();
     } catch (e, st) {
