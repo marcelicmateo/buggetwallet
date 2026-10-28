@@ -391,6 +391,53 @@ void main() {
       expect(await _enrolAs(h, devB), _status(202), reason: 'its own key may ask again');
     });
 
+    test('devices/others delivered late (held back inside the window) leaves keys and requests newer than its signature', () async {
+      final h = await freshHarness();
+      await _create(h);
+      await _unlock(h);
+      expect(await _enrolAs(h, devB), _status(201));
+      h.advance(const Duration(seconds: 1));
+      await _setLock(h, devA, true);
+      const others = '/v2/w/$w1/devices/others';
+      final held = await h.signV5(devA, 'PUT', others, _json({'revoke': true})); // signed now, delivered a minute later
+      h.advance(const Duration(minutes: 1));
+      final devD = TestKey(List<int>.generate(32, (i) => 0x6D ^ (i * 11)));
+      expect(await _enrolAs(h, devD), _status(202));
+      expect(await _approve(h, devA, await devD.fp()), _status(201));
+      expect(await _enrolAs(h, devC), _status(202));
+      final r = await h.replay('PUT', others, held, body: _json({'revoke': true}));
+      expect(jsonDecode(r.body), {'revoked': 1}, reason: 'only B existed when it was signed');
+      expect(await h.sendV5(devB, 'GET', _state), _status(401, 'revoked'));
+      expect(await h.sendV5(devD, 'GET', _state), _status(200));
+      final s = await _stateAs(h, devA);
+      expect(((s['pending'] as List).single as Map)['fp'], await devC.fp(), reason: 'a request made after it stays');
+    });
+
+    test('free fingerprint reservations: held ones are not stored, the oldest free one goes first, an expired one is newest', () async {
+      final h = await freshHarness();
+      await _create(h);
+      final meta = File('${h.dir.path}/$w1/meta.json');
+      const abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+      String fpOf(int i) => 'QQ${abc[i ~/ 32 % 32]}${abc[i % 32]}-QQQQ';
+      final m = jsonDecode(meta.readAsStringSync()) as Map<String, Object?>;
+      final anyPub = await keyB.pub(); // a valid public key; these fingerprints are free (no key holds them)
+      m['fps'] = {
+        await devA.fp(): await devA.pub(), // held by an enrolled key: dropped on load
+        for (var i = 0; i < 256; i++) fpOf(i): anyPub,
+      };
+      meta.writeAsStringSync(jsonEncode(m));
+      await h.restart();
+      expect(await _enrolAs(h, devB), _status(202));
+      h.advance(const Duration(days: 8));
+      expect(await _enrolAs(h, devC), _status(202)); // drops B's expired request: its fingerprint becomes the newest free one
+      final fps = ((jsonDecode(meta.readAsStringSync()) as Map)['fps'] as Map).keys.toList();
+      expect(fps, hasLength(256));
+      expect(fps.contains(await devA.fp()), isFalse);
+      expect(fps.contains(await devC.fp()), isFalse, reason: 'pending: held, not a free reservation');
+      expect(fps.first, fpOf(1), reason: 'the oldest free one went');
+      expect(fps.last, await devB.fp());
+    });
+
     test('a stored revoked time that does not parse still counts as revoked', () async {
       final h = await freshHarness();
       await _create(h);

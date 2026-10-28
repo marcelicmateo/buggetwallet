@@ -423,17 +423,23 @@ void main() {
     });
 
     test('MemoryTransport: a created wallet is locked; revokeOthers; 16 keys at most; a fingerprint stays with its key', () async {
-      final m = MemoryTransport();
+      var now = DateTime.utc(2026, 10, 1);
+      final m = MemoryTransport(now: () => now);
       final va = m.device('key-a'), vb = m.device('key-b'), vc = m.device('key-c');
       await va.put('a', 1, [1]);
       expect(m.locked, isTrue);
       await expectLater(vb.state(), fails(TransportFailure.pending));
       await va.approveDevice(vb.fingerprint);
       await expectLater(vc.state(), fails(TransportFailure.pending));
+      now = now.add(const Duration(seconds: 1));
       expect(await va.revokeOthers(), 1);
+      expect(await va.revokeOthers(), 0, reason: 'again at the same time: a replay, no change');
       expect(m.revokedKeys, {vb.fingerprint, vc.fingerprint});
       expect(m.enrolledKeys, {va.fingerprint});
-      await va.setLocked(false);
+      // As the relay: no unlock within 5 minutes of a revoke.
+      expect(await va.setLocked(false), isTrue);
+      now = now.add(const Duration(minutes: 5, seconds: 1));
+      expect(await va.setLocked(false), isFalse);
       for (var i = 0; i < 15; i++) {
         await m.device('more-$i').state();
       }

@@ -85,6 +85,7 @@ class MemoryTransport implements SyncTransport {
     _fps.clear();
     _pending.clear();
     locked = false;
+    _othersTime = _lockHeldUntil = null;
     _devs.clear();
     _snap = _prev = null;
     _blobs.clear();
@@ -356,25 +357,48 @@ class MemoryTransport implements SyncTransport {
         throw const TransportException(TransportFailure.lastDevice, 'last device');
       }
       k.revoked = now;
-      locked = true; // the removed device still holds the wallet key
+      _lockAfterRevoke(now); // the removed device still holds the wallet key
     }
   }
 
   /// Revokes every key but [by]'s, rejects every pending one, locks; how many keys it revoked.
+  /// Like the relay's: the call's time is its signed time; one not later than the last applied one changes nothing,
+  /// and keys or requests newer than it are left alone.
   int _revokeOthers(String by) {
     final now = _now().toUtc();
+    if (_othersTime != null && !now.isAfter(_othersTime!)) return 0;
     var n = 0;
     for (final MapEntry(key: pub, value: k) in _keys.entries) {
-      if (pub == by || k.revoked != null) continue;
+      if (pub == by || k.revoked != null || k.added.isAfter(now)) continue;
       k.revoked = now;
       n++;
     }
-    for (final MapEntry(key: pub, value: p) in _pending.entries) {
+    for (final MapEntry(key: pub, value: p) in _pending.entries.toList()) {
+      if (p.at.isAfter(now)) continue;
+      _pending.remove(pub);
       _keys[pub] = _Key(p.fp, now, _keys[by]!.fp, deviceId: p.deviceId, revoked: now);
     }
-    _pending.clear();
-    locked = true;
+    _othersTime = now;
+    _lockAfterRevoke(now);
     return n;
+  }
+
+  DateTime? _othersTime;
+
+  /// No unlock before this (a revoke holds the lock for the relay's signature window, 5 minutes).
+  DateTime? _lockHeldUntil;
+
+  void _lockAfterRevoke(DateTime now) {
+    locked = true;
+    final until = now.add(const Duration(minutes: 5));
+    if (_lockHeldUntil == null || until.isAfter(_lockHeldUntil!)) _lockHeldUntil = until;
+  }
+
+  /// A lock change as the relay applies it: an unlock within 5 minutes of a revoke changes nothing.
+  void _setLocked(bool v) {
+    final held = _lockHeldUntil;
+    if (!v && held != null && _now().toUtc().isBefore(held)) return;
+    locked = v;
   }
 
   static final _fpPattern = RegExp(r'^[A-Z2-7]{4}-[A-Z2-7]{4}$');
@@ -699,7 +723,7 @@ class MemoryDeviceTransport implements SyncTransport, DeviceKeyTransport {
 
   @override
   Future<bool> setLocked(bool locked) async {
-    await _byEnrolled('lock', () => relay.locked = locked);
+    await _byEnrolled('lock', () => relay._setLocked(locked));
     return relay.locked;
   }
 }
