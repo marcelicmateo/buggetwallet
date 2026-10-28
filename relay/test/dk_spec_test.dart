@@ -29,8 +29,18 @@ String? _err(http.Response r) {
 /// The key with seed index [n] (device keys for the pending-cap tests).
 TestKey _key(int n) => TestKey(List<int>.generate(32, (i) => (0x40 + n * 7) ^ (i * (n + 2))));
 
-Future<http.Response> _create(Harness h, [TestKey? dev]) =>
-    h.sendV5(dev ?? devA, 'PUT', '/v2/w/$w1/d/dev1/1', body: bytes('one'), wallet: keyA);
+/// Creates [w1] with device key [dev] (default devA). Changed (security review): a wallet created by an api-5 app starts
+/// locked, so on a 201 this unlocks it a second later (by the creator) and the tests here start from an unlocked wallet
+/// as before; the locked start itself is pinned in device_keys_test.dart.
+Future<http.Response> _create(Harness h, [TestKey? dev]) async {
+  final r = await h.sendV5(dev ?? devA, 'PUT', '/v2/w/$w1/d/dev1/1', body: bytes('one'), wallet: keyA);
+  if (r.statusCode == 201) {
+    h.advance(const Duration(seconds: 1));
+    final u = await _setLock(h, dev ?? devA, false);
+    expect(jsonDecode(u.body), {'locked': false}, reason: u.body);
+  }
+  return r;
+}
 
 Future<http.Response> _enrolAs(Harness h, TestKey dev, {TestKey? wallet, String? deviceId}) =>
     h.sendV5(dev, 'PUT', _enrol, body: _json({if (deviceId != null) 'deviceId': deviceId}), wallet: wallet ?? keyA, withPub: false);
@@ -63,7 +73,7 @@ Future<Harness> _two() async {
 }
 
 /// a request that does not reach 5xx whatever it carries.
-Matcher get _4xx => predicate<http.Response>((r) => r.statusCode >= 400 && r.statusCode < 500, 'a 4xx answer');
+Matcher get _clientError => predicate<http.Response>((r) => r.statusCode >= 400 && r.statusCode < 500, 'a 4xx answer');
 
 void main() {
   group('create, join, locked join', () {
@@ -90,7 +100,7 @@ void main() {
       expect((await _enrolAs(h, devB)).statusCode, 200);
       // no WSig at all
       final bare = await h.sendV5(devC, 'PUT', _enrol, body: _json({}));
-      expect(bare, _4xx);
+      expect(bare, _clientError);
       expect(bare.statusCode, isNot(anyOf(200, 201, 202)));
       // another wallet's key countersigns
       final foreign = await _enrolAs(h, devC, wallet: keyB);
@@ -133,7 +143,7 @@ void main() {
       expect((await _approve(h, devA, await devC.fp())).statusCode, 404);
       expect((await _approve(h, devA, await devB.fp())).statusCode, 200);
       for (final fp in ['abcd-efgh', 'ABCDEFGH', 'ABCD-EFG', 'ABCD-EFG1', 'ABCD-EFGHI']) {
-        expect(await h.sendV5(devA, 'PUT', _dev(fp), body: _json({'approve': true})), _4xx, reason: fp);
+        expect(await h.sendV5(devA, 'PUT', _dev(fp), body: _json({'approve': true})), _clientError, reason: fp);
       }
       for (final b in [
         <String, Object?>{},
@@ -320,7 +330,7 @@ void main() {
         {'locked': null},
         {'locked': 1}
       ]) {
-        expect(await h.sendV5(devA, 'PUT', _lock, body: _json(b)), _4xx, reason: '$b');
+        expect(await h.sendV5(devA, 'PUT', _lock, body: _json(b)), _clientError, reason: '$b');
       }
       expect((await h.sendV5(devA, 'PUT', _lock, body: bytes('zzz'))).statusCode, 400);
     });
@@ -471,12 +481,12 @@ void main() {
           ('PUT', '/v2/w/$w1/d/dev1/9', bytes('x')),
         ]) {
           final r = await h.replay(p.$1, p.$2, {...good, 'x-bw-dev': d}, body: p.$3.isEmpty ? null : p.$3);
-          expect(r, _4xx, reason: 'dev "$d" ${p.$2}');
+          expect(r, _clientError, reason: 'dev "$d" ${p.$2}');
         }
       }
       for (final w in ['', 'x', 'A' * 85, 'A' * 87, '!' * 86, 'A' * 86, (await keyB.sign('other text'))]) {
         final r = await h.replay('PUT', _enrol, {...good, 'x-bw-wsig': w}, body: _json({}));
-        expect(r, _4xx, reason: 'wsig "$w"');
+        expect(r, _clientError, reason: 'wsig "$w"');
       }
       // WSig of the right wallet key but over another text
       final wrongText = await h.replay('PUT', _enrol, {...good, 'x-bw-wsig': await keyA.sign('bw-relay-v5\nPUT\nx')}, body: _json({}));
@@ -527,13 +537,13 @@ void main() {
       final full = await _enrolAs(h, _key(8));
       expect((full.statusCode, _err(full)), (409, 'pendingFull'));
       expect((await _enrolAs(h, _key(3))).statusCode, 202);
-      expect(((await _st(h, devA))['pending'] as List), hasLength(8));
+      expect((await _st(h, devA))['pending'] as List, hasLength(8));
       // approving one frees a place
       expect((await _approve(h, devA, await _key(0).fp())).statusCode, 201);
       expect((await _enrolAs(h, _key(8))).statusCode, 202);
       // 6 days 23 h later the first asks are still there, after 7 days they are gone (and cannot be approved)
       h.advance(const Duration(days: 6, hours: 23));
-      expect(((await _st(h, devA))['pending'] as List), hasLength(8));
+      expect((await _st(h, devA))['pending'] as List, hasLength(8));
       h.advance(const Duration(hours: 2));
       final s = await _st(h, devA);
       expect(s['pending'], isEmpty);

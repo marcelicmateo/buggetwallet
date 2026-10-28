@@ -82,6 +82,7 @@ class MemoryTransport implements SyncTransport {
   /// [instance] id.
   void wipe() {
     _keys.clear();
+    _fps.clear();
     _pending.clear();
     locked = false;
     _devs.clear();
@@ -244,8 +245,17 @@ class MemoryTransport implements SyncTransport {
   final Map<String, _Key> _keys = {};
   final Map<String, _Pending> _pending = {};
 
-  /// "Require approval for new devices" (tests may set it; a revoke sets it).
+  /// "Require approval for new devices" (tests may set it; a revoke sets it, and a wallet a [device] view creates
+  /// starts locked).
   bool locked = false;
+
+  /// Fingerprint → the first key that showed it: another key with it never enrols (409 `fingerprint`: `conflict`).
+  final Map<String, String> _fps = {};
+
+  /// Most enrolled (non-revoked) keys, as the relay.
+  static const maxActiveKeys = 16;
+
+  int get _active => _keys.values.where((k) => k.revoked == null).length;
 
   /// True while a [device] view's delegated call starts (its checks run synchronously, before the first await).
   bool _deviceCall = false;
@@ -306,15 +316,18 @@ class MemoryTransport implements SyncTransport {
     if (_devs.isEmpty && _keys.isEmpty) throw const TransportException(TransportFailure.missing, 'unknown wallet');
     _dropExpired();
     final fp = deviceFingerprint(utf8.encode(key));
-    final other = _keyOf(fp);
+    final other = _keyOf(fp) ?? _fps[fp];
     if (other != null && other != key) throw const TransportException(TransportFailure.conflict, 'fingerprint');
     if (!locked) {
+      if (_active >= maxActiveKeys) throw const TransportException(TransportFailure.tooManyKeys, 'too many keys');
+      _fps[fp] ??= key;
       _pending.remove(key);
       _keys[key] = _Key(fp, _now().toUtc(), 'wallet', deviceId: deviceId);
       return EnrolResult.enrolled;
     }
     if (_pending.containsKey(key)) return EnrolResult.pending;
-    if (_pending.length >= 8) throw const TransportException(TransportFailure.pending, 'pending full');
+    if (_pending.length >= 8) throw const TransportException(TransportFailure.pendingFull, 'pending full');
+    _fps[fp] ??= key;
     _pending[key] = _Pending(fp, _now().toUtc(), deviceId);
     return EnrolResult.pending;
   }
@@ -329,6 +342,7 @@ class MemoryTransport implements SyncTransport {
     if (approve) {
       if (k?.revoked != null) throw const TransportException(TransportFailure.conflict, 'revoked');
       if (k == null) {
+        if (_active >= maxActiveKeys) throw const TransportException(TransportFailure.tooManyKeys, 'too many keys');
         final p = _pending.remove(target)!;
         _keys[target] = _Key(p.fp, now, _keys[by]!.fp, deviceId: p.deviceId);
       }
@@ -344,6 +358,23 @@ class MemoryTransport implements SyncTransport {
       k.revoked = now;
       locked = true; // the removed device still holds the wallet key
     }
+  }
+
+  /// Revokes every key but [by]'s, rejects every pending one, locks; how many keys it revoked.
+  int _revokeOthers(String by) {
+    final now = _now().toUtc();
+    var n = 0;
+    for (final MapEntry(key: pub, value: k) in _keys.entries) {
+      if (pub == by || k.revoked != null) continue;
+      k.revoked = now;
+      n++;
+    }
+    for (final MapEntry(key: pub, value: p) in _pending.entries) {
+      _keys[pub] = _Key(p.fp, now, _keys[by]!.fp, deviceId: p.deviceId, revoked: now);
+    }
+    _pending.clear();
+    locked = true;
+    return n;
   }
 
   static final _fpPattern = RegExp(r'^[A-Z2-7]{4}-[A-Z2-7]{4}$');
@@ -607,7 +638,12 @@ class MemoryDeviceTransport implements SyncTransport, DeviceKeyTransport {
   Future<void> put(String device, int seq, List<int> bytes) => _as('put', () async {
         final creates = relay._devs.isEmpty && relay._keys.isEmpty;
         await relay.put(device, seq, bytes);
-        if (creates) relay._keys[key] = _Key(fingerprint, relay._now().toUtc(), 'wallet', deviceId: deviceId);
+        if (creates) {
+          // A wallet created by an api-5 app starts locked.
+          relay._keys[key] = _Key(fingerprint, relay._now().toUtc(), 'wallet', deviceId: deviceId);
+          relay._fps[fingerprint] ??= key;
+          relay.locked = true;
+        }
         _touch(device);
       });
 
@@ -653,6 +689,13 @@ class MemoryDeviceTransport implements SyncTransport, DeviceKeyTransport {
 
   @override
   Future<void> revokeDevice(String fp) => _byEnrolled('revoke', () => relay._change(key, fp, approve: false));
+
+  @override
+  Future<int> revokeOthers() async {
+    var n = 0;
+    await _byEnrolled('revokeOthers', () => n = relay._revokeOthers(key));
+    return n;
+  }
 
   @override
   Future<bool> setLocked(bool locked) async {

@@ -26,6 +26,14 @@ class _Counting extends http.BaseClient {
 List<int> _seed(int n) => List.generate(32, (i) => (0x50 + n * 11) ^ (i * (n + 3)));
 
 void main() {
+  /// Changed (security review): a wallet created by an api-5 app starts locked. The real-relay tests here start from an
+  /// unlocked wallet, as before: create, then unlock a few ms later (lock changes apply only when signed later).
+  Future<void> createUnlocked(RelayTransport a, List<int> bytes) async {
+    await a.put('d1', 1, bytes);
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    expect(await a.setLocked(false), isFalse);
+  }
+
   group('RelayTransport against the real relay', () {
     late Directory dir;
     late Relay relay;
@@ -57,7 +65,7 @@ void main() {
 
     test('create, unlocked join enrols exactly once; locked join is pending and never loops; approve then syncs', () async {
       final (a, _) = dev(1);
-      await a.put('d1', 1, [1, 2, 3]);
+      await createUnlocked(a, [1, 2, 3]);
       final (b, cb) = dev(2);
       expect((await b.state()).devices.keys, contains('d1'));
       expect(cb.seen, ['GET state', 'PUT enrol', 'GET state'], reason: 'one enrol, one retry');
@@ -75,7 +83,7 @@ void main() {
 
     test('after revoke the client stops: one request per call, no enrol, no health check; revoked everywhere', () async {
       final (a, _) = dev(1);
-      await a.put('d1', 1, [1]);
+      await createUnlocked(a, [1]);
       final (b, cb) = dev(2);
       await b.state();
       cb.seen.clear();
@@ -106,9 +114,12 @@ void main() {
       expect((await a.state()).devices.keys, contains('d1'));
     });
 
-    test('the removed device with only the wallet key cannot get back in; unlocking reopens enrolment', () async {
+    // Changed (security review): a revoke holds the lock for 5 minutes (no unlock signed before then applies), so the
+    // way back in here is an approval.
+    test('the removed device with only the wallet key cannot get back in; an unlock right after is refused; approval lets a new key in',
+        () async {
       final (a, _) = dev(1);
-      await a.put('d1', 1, [1]);
+      await createUnlocked(a, [1]);
       final (b, _) = dev(2);
       await b.state();
       await a.revokeDevice((await b.fingerprint)!);
@@ -116,14 +127,15 @@ void main() {
       await expectLater(c.state(), fails(TransportFailure.pending));
       await expectLater(c.put('d3', 1, [1]), fails(TransportFailure.pending));
       await Future<void>.delayed(const Duration(milliseconds: 1100));
-      expect(await a.setLocked(false), isFalse);
+      expect(await a.setLocked(false), isTrue, reason: 'within 5 minutes of a revoke the wallet stays locked');
+      await a.approveDevice((await c.fingerprint)!);
       expect((await c.state()).devices.keys, contains('d1'));
       await expectLater(b.state(), fails(TransportFailure.revoked));
     });
 
     test('the last enrolled device cannot be revoked; revoke of an unknown fingerprint is missing; bad fingerprint rejected', () async {
       final (a, _) = dev(1);
-      await a.put('d1', 1, [1]);
+      await createUnlocked(a, [1]);
       await expectLater(a.revokeDevice((await a.fingerprint)!), fails(TransportFailure.lastDevice));
       expect(await a.setLocked(false), isFalse, reason: 'refused revoke did not lock');
       await expectLater(a.revokeDevice('AAAA-AAAA'), fails(TransportFailure.missing));
@@ -133,7 +145,7 @@ void main() {
 
     test('an api-4 client (wallet key) works unlocked; after a lock it stops with newerApi, on every call', () async {
       final (a, _) = dev(1);
-      await a.put('d1', 1, [1]);
+      await createUnlocked(a, [1]);
       final (old, co) = dev(9, withDeviceKey: false);
       final s = await old.state();
       expect(s.api, 4);
@@ -151,7 +163,7 @@ void main() {
 
     test('a transport for another wallet (other key) cannot use a revoked/enrolled key of this one', () async {
       final (a, _) = dev(1);
-      await a.put('d1', 1, [1]);
+      await createUnlocked(a, [1]);
       // same device key, other wallet: unknown wallet, so state is empty, never someone else's data
       final (other, _) = dev(1, k: VaultKey.generate());
       expect((await other.state()).devices, isEmpty, reason: 'an unknown wallet reads as an empty relay');
@@ -165,6 +177,8 @@ void main() {
       final a = m.device('A'), b = m.device('B');
       await a.put('d1', 1, [1]);
       expect(m.enrolledKeys, {a.fingerprint});
+      expect(m.locked, isTrue, reason: 'changed (security review): a created wallet starts locked');
+      await a.setLocked(false);
       await expectLater(a.revokeDevice(a.fingerprint), fails(TransportFailure.lastDevice));
       await b.state();
       expect(m.enrolledKeys, {a.fingerprint, b.fingerprint});
@@ -207,7 +221,7 @@ void main() {
         await expectLater(views[i].state(), fails(TransportFailure.pending));
       }
       expect(m.pendingKeys, hasLength(8));
-      await expectLater(views[8].state(), fails(TransportFailure.pending));
+      await expectLater(views[8].state(), fails(TransportFailure.pendingFull), reason: 'changed (security review): its own failure');
       expect(m.pendingKeys, hasLength(8), reason: 'the 9th is not kept');
       await a.revokeDevice(views[0].fingerprint);
       expect(m.revokedKeys, {views[0].fingerprint});
@@ -220,6 +234,7 @@ void main() {
       final m = MemoryTransport();
       final a = m.device('A');
       await a.put('d1', 1, [1]);
+      await a.setLocked(false); // changed (security review): a created wallet starts locked
       await m.put('d1', 2, [2]);
       expect(await a.setLocked(true), isTrue);
       await expectLater(m.get('d1', 1), fails(TransportFailure.newerApi));

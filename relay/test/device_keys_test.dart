@@ -34,6 +34,13 @@ Future<http.Response> _approve(Harness h, TestKey by, String fp) => h.sendV5(by,
 Future<http.Response> _revoke(Harness h, TestKey by, String fp) => h.sendV5(by, 'PUT', _device(fp), body: _json({'revoke': true}));
 Future<http.Response> _setLock(Harness h, TestKey by, bool locked) => h.sendV5(by, 'PUT', _lock, body: _json({'locked': locked}));
 
+/// A wallet created by an api-5 app starts locked (its lock time = the creation's signed time): unlock it a second later.
+Future<void> _unlock(Harness h, {TestKey? by}) async {
+  h.advance(const Duration(seconds: 1));
+  final r = await _setLock(h, by ?? devA, false);
+  expect(jsonDecode(r.body), {'locked': false}, reason: r.body);
+}
+
 String? _error(http.Response r) {
   try {
     final j = jsonDecode(r.body);
@@ -49,12 +56,12 @@ Matcher _status(int code, [String? error]) => isA<http.Response>()
 
 void main() {
   group('create and enrol', () {
-    test('the creating PUT enrols its device key by "wallet"; state lists it to device requests only', () async {
+    test('the creating PUT enrols its device key by "wallet" and locks the new wallet; state lists it to device requests only', () async {
       final h = await freshHarness();
       expect(await _create(h), _status(201));
       final s = await _stateAs(h, devA);
       expect(s['api'], 5);
-      expect(s['locked'], false);
+      expect(s['locked'], true, reason: 'a wallet created by an api-5 app starts locked');
       expect(s['pending'], isEmpty);
       final keys = (s['keys'] as List).cast<Map<String, Object?>>();
       expect(keys.single['fp'], await devA.fp());
@@ -63,6 +70,8 @@ void main() {
       expect(keys.single['revoked'], isNull);
       expect(keys.single['device'], 'dev1');
       // The wallet key (an api-4 app) still works while the wallet is not locked, and sees no device fields.
+      expect(jsonDecode((await h.get(_state, key: keyA)).body), {'api': 5}, reason: 'locked: the wallet key alone is told to update');
+      await _unlock(h);
       final legacy = await h.state(w1);
       expect(legacy['api'], 4);
       expect(legacy.containsKey('keys'), isFalse);
@@ -96,6 +105,7 @@ void main() {
       expect(await h.sendV5(devB, 'PUT', _enrol, body: _json({})), _status(401, 'unsigned'), reason: 'no wallet countersignature');
       expect(await _enrolAs(h, devB, wallet: keyB), _status(401, 'bad signature'), reason: 'another wallet key');
       expect(await h.send('PUT', _enrol, key: keyA, body: _json({})), _status(401, 'device'), reason: 'the wallet key alone');
+      await _unlock(h);
       expect(await _enrolAs(h, devB, deviceId: 'b2'), _status(201));
       expect(await _enrolAs(h, devB, deviceId: 'b2'), _status(200));
       expect(await h.sendV5(devB, 'PUT', '/v2/w/$w1/d/dev2/1', body: bytes('two')), _status(201));
@@ -184,6 +194,7 @@ void main() {
     test('a revoked key gets 401 revoked on every endpoint; the revoke locks the wallet; replays harmless', () async {
       final h = await freshHarness();
       await _create(h);
+      await _unlock(h);
       expect(await _enrolAs(h, devB), _status(201));
       final fpB = await devB.fp();
       final rv = await h.signV5(devA, 'PUT', _device(fpB), _json({'revoke': true}));
@@ -221,7 +232,8 @@ void main() {
       await _create(h);
       final fpA = await devA.fp();
       expect(await _revoke(h, devA, fpA), _status(409, 'lastDevice'));
-      await _enrolAs(h, devB);
+      await _unlock(h);
+      expect(await _enrolAs(h, devB), _status(201));
       expect(await _revoke(h, devB, await devB.fp()), _status(200));
       expect(await _revoke(h, devA, fpA), _status(409, 'lastDevice'), reason: 'B is revoked: A is the last one');
       expect(await h.sendV5(devA, 'GET', _state), _status(200));
@@ -246,6 +258,7 @@ void main() {
     test('a restart keeps keys, pending and locked (meta v3)', () async {
       final h = await freshHarness();
       await _create(h);
+      await _unlock(h);
       await _enrolAs(h, devB);
       await _revoke(h, devA, await devB.fp());
       expect(await _enrolAs(h, devC, deviceId: 'c3'), _status(202));
@@ -283,6 +296,7 @@ void main() {
     test('logs carry fingerprints (shortened) and counts, never a device public key or signature', () async {
       final h = await freshHarness();
       await _create(h);
+      await _unlock(h);
       await _enrolAs(h, devB);
       await _revoke(h, devA, await devB.fp());
       final secrets = [await devA.pub(), await devB.pub(), await keyA.pub(), await devB.fp()];
@@ -294,6 +308,101 @@ void main() {
       expect(h.logs.where((l) => l.startsWith('relay keys enrolled=')), isNotEmpty);
       final short = (await devB.fp()).substring(0, 6);
       expect(h.logs.any((l) => l.startsWith('relay revoke 200') && l.contains('d=$short')), isTrue);
+    });
+  });
+
+  group('security review', () {
+    test('at most 16 enrolled keys: the 17th enrolment or approval is 409 tooManyKeys; a revoke frees a place', () async {
+      final h = await freshHarness();
+      await _create(h);
+      await _unlock(h);
+      final extra = [for (var i = 0; i < 16; i++) TestKey(List<int>.generate(32, (j) => (i * 41 + j * 7 + 3) & 0xff))];
+      for (final k in extra.take(15)) {
+        expect(await _enrolAs(h, k), _status(201));
+      }
+      expect(await _enrolAs(h, extra[15]), _status(409, 'tooManyKeys'));
+      h.advance(const Duration(seconds: 1));
+      await _setLock(h, devA, true);
+      expect(await _enrolAs(h, devB), _status(202));
+      expect(await _approve(h, devA, await devB.fp()), _status(409, 'tooManyKeys'));
+      expect(await _revoke(h, devA, await extra[0].fp()), _status(200));
+      expect(await _approve(h, devA, await devB.fp()), _status(201));
+    });
+
+    test('devices/others revokes every key but the signer, rejects pending, locks; a replay revokes nothing new', () async {
+      final h = await freshHarness();
+      await _create(h);
+      await _unlock(h);
+      expect(await _enrolAs(h, devB), _status(201));
+      h.advance(const Duration(seconds: 1));
+      await _setLock(h, devA, true);
+      expect(await _enrolAs(h, devC), _status(202));
+      const others = '/v2/w/$w1/devices/others';
+      expect(await h.sendV5(devA, 'PUT', others, body: _json({'revoke': false})), _status(400));
+      expect(await h.send('PUT', others, key: keyA, body: _json({'revoke': true})), _status(401, 'device'));
+      final hd = await h.signV5(devA, 'PUT', others, _json({'revoke': true}));
+      final r = await h.replay('PUT', others, hd, body: _json({'revoke': true}));
+      expect(r, _status(200));
+      expect(jsonDecode(r.body), {'revoked': 1});
+      expect(await h.sendV5(devB, 'GET', _state), _status(401, 'revoked'));
+      expect(await _enrolAs(h, devC), _status(401, 'revoked'), reason: 'the pending request was rejected');
+      final s = await _stateAs(h, devA);
+      expect(s['locked'], true);
+      expect(s['pending'], isEmpty);
+      expect((s['keys'] as List).where((k) => (k as Map)['revoked'] == null), hasLength(1));
+      // A replay (same signed time) changes nothing, also not for a key approved after the original request.
+      final devD = TestKey(List<int>.generate(32, (i) => 0x5D ^ (i * 9)));
+      expect(await _enrolAs(h, devD), _status(202));
+      expect(await _approve(h, devA, await devD.fp()), _status(201));
+      final again = await h.replay('PUT', others, hd, body: _json({'revoke': true}));
+      expect(jsonDecode(again.body), {'revoked': 0});
+      expect(await h.sendV5(devD, 'GET', _state), _status(200));
+    });
+
+    test('a revoke holds the lock: an unlock signed up to 5 minutes after it changes nothing; later it works', () async {
+      final h = await freshHarness();
+      await _create(h);
+      await _unlock(h);
+      await _enrolAs(h, devB);
+      expect(await _revoke(h, devA, await devB.fp()), _status(200));
+      h.skew = const Duration(minutes: 4); // an unlock signed ahead (or held back and sent later)
+      expect(jsonDecode((await _setLock(h, devA, false)).body), {'locked': true});
+      h.skew = Duration.zero;
+      h.advance(const Duration(minutes: 5, seconds: 1));
+      expect(jsonDecode((await _setLock(h, devA, false)).body), {'locked': false});
+    });
+
+    test('a fingerprint stays reserved for its first key (after expiry too); another key with it is 409 fingerprint', () async {
+      final h = await freshHarness();
+      await _create(h);
+      expect(await _enrolAs(h, devB), _status(202));
+      h.advance(const Duration(days: 8));
+      expect((await _stateAs(h, devA))['pending'], isEmpty);
+      final meta = File('${h.dir.path}/$w1/meta.json');
+      await _enrolAs(h, devC); // a pending write saves the meta (the expired entry goes, its reservation stays)
+      final m = jsonDecode(meta.readAsStringSync()) as Map<String, Object?>;
+      expect((m['fps'] as Map)[await devB.fp()], await devB.pub());
+      // Same fingerprint, other key (made by editing the stored reservation: 40-bit collisions cannot be produced).
+      (m['fps'] as Map)[await devC.fp()] = await devB.pub();
+      (m['pending'] as Map).clear();
+      meta.writeAsStringSync(jsonEncode(m));
+      await h.restart();
+      expect(await _enrolAs(h, devC), _status(409, 'fingerprint'));
+      expect(await _enrolAs(h, devB), _status(202), reason: 'its own key may ask again');
+    });
+
+    test('a stored revoked time that does not parse still counts as revoked', () async {
+      final h = await freshHarness();
+      await _create(h);
+      await _unlock(h);
+      await _enrolAs(h, devB);
+      await _revoke(h, devA, await devB.fp());
+      final meta = File('${h.dir.path}/$w1/meta.json');
+      final m = jsonDecode(meta.readAsStringSync()) as Map<String, Object?>;
+      ((m['keys'] as Map)[await devB.pub()] as Map)['revoked'] = 'not a time';
+      meta.writeAsStringSync(jsonEncode(m));
+      await h.restart();
+      expect(await h.sendV5(devB, 'GET', _state), _status(401, 'revoked'));
     });
   });
 
