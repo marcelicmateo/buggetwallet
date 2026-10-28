@@ -425,6 +425,8 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Stage run** (01c6bb7): importer 400, core 2799, sync 406, relay 258, app 2088, desktop (incl. relay_sync with approve), web-test, emulator screens, perf ok.
 - Owner checks after Stage DK (phone + laptop, relay updated first): new wallet on the phone; join on the laptop → "Waiting for approval" with a code → approve it on the phone (codes match) → syncs; remove the laptop → approval stays on, the laptop says it was removed → "Use a new device key" → approve again; try "Remove all other devices"; turn approval off right after a removal → stays on with the note.
 
+- 2026-10-28: **Hardening pass after DK** (owner: tests and reviews only). Mutation testing on budget presets, the device-key client, `MemoryTransport` device rules and the async digest: no bugs; 4 tests close real gaps (incl. the digest covering every column of a row). Docs matched to the code (TECHNICAL_SPEC: relay api 5, schema 18, bwk2, web sync, current tabs; package CLAUDE.md file lists). M6 checklist extended to 166 items (budget presets, device approval/removal, web sync). Final: core 2800, sync 409.
+
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -515,7 +517,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Schema 17:** update every device together; a device that stays on an older build for over 30 days after the others upgraded may miss IOUs until they are edited again.
 
 ## Next
-- All picked features built (2026-10-28). Hardening pass (owner: tests and reviews only, no new features), then the **M6 live test** with `docs/context/M6_CHECKLIST.md`.
+- **Next: the M6 live test** with `docs/context/M6_CHECKLIST.md` (owner starts `gh workflow run ci --ref v2`; update the relay and every device together: schema 18, relay api 5). Waiting on the owner: Pi details for PI2 (model, OS, DDNS name, router 80/443, SSD); delete the superseded `p6-tests`/`p9-tests` branches?
 - Owner checks after Stage WS (laptop): `tools/build.sh web && tools/web.sh serve` → a fresh browser shows onboarding (no blank page); create a wallet, set the relay address, sync with the phone; reload → unlock with the passphrase.
 - Owner checks after Stage C2 (phone): dark mode Spending bars (a deeper blue) and the legend under the saved/lost chart; rounded bar tops on Insights; amber "Went out" on Income vs spending; tap the payday forecast chart.
 - Owner checks after Stage X (phone): new wallet → save key → the guide with a real bank file: import preview, accounts + cash, plan, bills, payees (pick a tag, Undo), budgets, Done vs Today; close half-way → Today "Finish setting up" → continue; Settings › Set up my wallet again; large text.
