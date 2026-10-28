@@ -78,6 +78,15 @@ extension SetupWizardDb on WalletController {
     _keyBackupChanged();
   }
 
+  /// The steps the owner skipped without doing anything in them (device-local `setupSkipped`, e.g. `2,5`): the last step offers a
+  /// button for each.
+  Set<int> get setupSkippedSteps => {
+        for (final x in (repo.localValue('setupSkipped') ?? '').split(','))
+          if (int.tryParse(x) case final n?) n
+      };
+
+  void saveSetupSkipped(Set<int> steps) => repo.setLocalValue('setupSkipped', steps.isEmpty ? null : (steps.toList()..sort()).join(','));
+
   /// Counts only: the step reached and what was done (`shown`, `back`, `next`, `skip`, `accept`).
   void logSetupStep(int n, String action, {int? count}) =>
       logEvent(_setupLog, Level.INFO, 'setup.step', {'n': n, 'action': action, if (count != null) 'count': count});
@@ -139,14 +148,12 @@ extension SetupWizardDb on WalletController {
 
   SetupSummary setupSummary() {
     final p = period();
-    final ended = p.paydayPassed, over = p.overToday > 0;
-    final hero = ended ? (p.remaining > 0 ? p.remaining : 0) : (over ? p.overToday : p.safeToday);
-    final label = ended ? 'Left this pay period' : (over ? 'Over today by' : 'Safe to spend today');
+    final h = HeroFigure.of(p);
     return SetupSummary(
-        label: label,
-        hero: hero,
-        ended: ended,
-        over: over,
+        label: h.label,
+        hero: h.amount,
+        ended: h.ended,
+        over: h.over,
         payday: p.end,
         billsHeld: p.reservedBills,
         payments: txs.where((t) => t.tx.live).length,

@@ -225,6 +225,7 @@ void main() {
     testWidgets('3 Payday plan: current → suggested with the basis; one Accept writes only that key; Accept all writes the rest',
         (t) async {
       final wc = setupWallet();
+      wc.repo.setLocalValue('setupWizard', 'pending');
       await openWizard(t, wc);
       await tapKey(t, 'setupNext');
       await tapKey(t, 'setupSkip');
@@ -451,6 +452,102 @@ void main() {
       await tapKey(t, 'setupSkip');
       expect(onStep(3), isTrue);
       expect(textOf(t, 'setupProposalValue:salary'), startsWith(moneyExact(150000, 'EUR')));
+      await settle(t);
+    });
+  });
+
+  group('review fixes', () {
+    testWidgets('P13 stays off only while the wizard is under way: "No thanks" brings it back, a restore ends the wizard', (t) async {
+      final wc = setupWallet();
+      expect(wc.planProposalList(), isNotEmpty);
+      wc.repo.setLocalValue('setupWizard', 'step:2');
+      expect(wc.shouldOfferFirstPlan(), isFalse);
+      wc.declineSetupWizard();
+      expect(wc.shouldOfferFirstPlan(), isTrue, reason: 'step 3 was never seen');
+      wc.repo.setLocalValue('setupWizard', 'step:1');
+      wc.seams.backupBytesReader = (repo, b, key) async => 5;
+      await wc.restoreBackupFile(Uint8List.fromList([1]));
+      expect(wc.setupWizardState, 'done');
+      expect(wc.setupWizardOpen, isFalse);
+      expect(wc.shouldOfferFirstPlan(), isTrue);
+      final other = setupWallet();
+      other.seams.backupBytesReader = (repo, b, key) async => 5;
+      await other.restoreBackupFile(Uint8List.fromList([1]));
+      expect(other.setupWizardState, isNull, reason: 'a wallet that never had the wizard stays without');
+      await settle(t);
+    });
+
+    testWidgets('skipped steps are kept with the progress; a step with something written in it is not skipped', (t) async {
+      final wc = setupWallet();
+      wc.repo.setLocalValue('setupWizard', 'pending');
+      await openWizard(t, wc, restart: false);
+      await tapKey(t, 'setupNext'); // 1 -> 2
+      await t.enterText(find.byKey(const ValueKey('setupCash')), '10');
+      await tapKey(t, 'setupCashAdd');
+      await tapKey(t, 'setupSkip'); // 2 -> 3: cash was added, so not skipped
+      await tapKey(t, 'setupSkip'); // 3 -> 4: skipped
+      await tapKey(t, 'sheetClose');
+      expect(wc.setupWizardState, 'step:4');
+      expect(wc.setupSkippedSteps, {3});
+      await openWizard(t, wc, restart: false);
+      expect(onStep(4), isTrue);
+      for (var i = 0; i < 4; i++) {
+        await tapKey(t, 'setupSkip');
+      }
+      expect(onStep(8), isTrue);
+      expect(find.byKey(const ValueKey('setupGoto:3')), findsOneWidget, reason: 'kept from the first run');
+      expect(find.byKey(const ValueKey('setupGoto:4')), findsOneWidget);
+      expect(find.byKey(const ValueKey('setupGoto:2')), findsNothing, reason: 'cash was added there');
+      await settle(t);
+    });
+
+    testWidgets('restarted from Settings on a finished wallet, closing early keeps it finished', (t) async {
+      final wc = setupWallet();
+      wc.repo.setLocalValue('setupWizard', 'done');
+      await openWizard(t, wc);
+      await tapKey(t, 'setupNext');
+      await tapKey(t, 'setupSkip');
+      expect(onStep(3), isTrue);
+      await tapKey(t, 'sheetClose');
+      expect(wc.setupWizardState, 'done');
+      expect(wc.setupSkippedSteps, isEmpty);
+      expect(wc.setupWizardOpen, isFalse);
+      await settle(t);
+    });
+
+    testWidgets('6 pick A, then B, then Undo: the rule is A again', (t) async {
+      final wc = setupWallet();
+      final key = wc.uncategorisedPayeeList().first.merchantKey;
+      await openWizard(t, wc);
+      await toStep(t, 6);
+      Future<void> pick(String id) async {
+        await t.ensureVisible(find.byKey(ValueKey('setupPayeeTag:$key')));
+        await t.tap(find.byKey(ValueKey('setupPayeeTag:$key')));
+        await go(t);
+        await t.tap(find.byKey(ValueKey('pick:$id')).last);
+        await go(t);
+      }
+
+      await pick('Eating out');
+      await pick('Groceries');
+      expect(wc.categorizer.merchantRules[key], 'Groceries');
+      await t.pump(const Duration(seconds: 1)); // the second toast slides in after the first one left
+      await t.tap(find.text('Undo'));
+      await go(t);
+      expect(wc.categorizer.merchantRules[key], 'Eating out');
+      await settle(t);
+    });
+
+    testWidgets('8 after payday the line says Payday was, like Today', (t) async {
+      final wc = setupWallet();
+      wc.repo.updateSettings({'paydayDay': 1, 'periodStart': '2026-09-01'});
+      wc.reload();
+      expect(wc.period().paydayPassed, isTrue);
+      await openWizard(t, wc);
+      await toStep(t, 8);
+      expect(find.text('Payday was'), findsOneWidget);
+      expect(find.text('Next payday'), findsNothing);
+      expect(find.text('Left this pay period'.toUpperCase()), findsOneWidget);
       await settle(t);
     });
   });

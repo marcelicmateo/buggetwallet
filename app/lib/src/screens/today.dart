@@ -3,6 +3,7 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../file_chooser.dart';
 import '../format.dart';
+import '../hero.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
@@ -131,12 +132,14 @@ class _TodayFigures {
       : s = view.settings,
         cur = view.currency,
         p = view.period() {
-    ended = p.paydayPassed;
-    over = p.overToday > 0;
+    final h = HeroFigure.of(p);
+    ended = h.ended;
+    over = h.over;
+    heroLabel = h.label;
     // Over the whole period (the plan is spent) outranks over today in the sentence under the hero.
     final overPeriod = !ended && p.overBy > 0;
     // The hero number is never negative: what is left once the period ended, how far over today, else the safe amount.
-    hero = ended ? (p.remaining > 0 ? p.remaining : 0) : (over ? p.overToday : p.safeToday);
+    hero = h.amount;
     // The sentence under an over hero (I1). Tomorrow's allowance is null when a new pay period starts tomorrow.
     final tomorrow = p.allowanceTomorrow;
     periodSentence = overPeriod ? "You're ${shown(p.overBy, cur)} over the plan for this period." : null;
@@ -170,6 +173,7 @@ class _TodayFigures {
   final PeriodBudget p;
   late final bool ended, over, worry, deliveryHour, reviewedToday;
   late final int hero;
+  late final String heroLabel;
   late final String? periodSentence, overSentence, newPayday;
   late final List<String> setupSteps;
   late final double used;
@@ -198,7 +202,7 @@ class _HeroHeader extends StatelessWidget {
   final _TodayFigures f;
   @override
   Widget build(BuildContext context) => Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Flexible(child: Eyebrow(f.ended ? 'Left this pay period' : (f.over ? 'Over today by' : 'Safe to spend today'))),
+        Flexible(child: Eyebrow(f.heroLabel)),
         const SizedBox(width: 8),
         Flexible(
             child: f.ended

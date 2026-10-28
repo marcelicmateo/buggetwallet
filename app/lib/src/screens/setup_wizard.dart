@@ -23,11 +23,14 @@ import 'recurring_sheet.dart' show billPeriodText;
 import 'today.dart' show shown;
 
 /// Opens the wizard as a full-screen page (a dialog on wide windows). [restart]: from step 1 (Settings › Set up my wallet again);
-/// otherwise where the last run stopped. Returns when it was closed.
+/// otherwise where the last run stopped. A restart keeps no progress unless the wizard was already under way (a finished or declined
+/// wallet must not get "Finish setting up" back on Today). Returns when it was closed.
 Future<void> openSetupWizard(BuildContext context, WalletController wc, {FileChooser chooser = const FileChooser(), bool restart = false}) {
   final start = restart ? 1 : wc.setupWizardStep;
+  final track = !restart || wc.setupWizardOpen;
   logNav('setup.open', {'step': start, 'restart': restart});
-  return openPageOrDialog<void>(context, SetupWizard(wc: wc, chooser: chooser, start: start), width: 560, logName: 'setup.wizard');
+  return openPageOrDialog<void>(context, SetupWizard(wc: wc, chooser: chooser, start: start, restart: restart, track: track),
+      width: 560, logName: 'setup.wizard');
 }
 
 const _titles = <int, String>{
@@ -45,14 +48,22 @@ class SetupWizard extends StatefulWidget {
   final WalletController wc;
   final FileChooser chooser;
   final int start;
-  const SetupWizard({super.key, required this.wc, this.chooser = const FileChooser(), this.start = 1});
+
+  /// From Settings: the steps skipped by an earlier run are forgotten.
+  final bool restart;
+
+  /// Whether the step reached and the skipped steps are kept for resuming.
+  final bool track;
+  const SetupWizard(
+      {super.key, required this.wc, this.chooser = const FileChooser(), this.start = 1, this.restart = false, this.track = true});
   @override
   State<SetupWizard> createState() => _SetupWizardState();
 }
 
 class _SetupWizardState extends State<SetupWizard> {
   late int _step = widget.start.clamp(1, setupWizardSteps);
-  final Set<int> _skipped = {};
+  late final Set<int> _skipped = widget.restart ? {} : wc.setupSkippedSteps; // skipped with nothing done in them
+  final Set<int> _acted = {}; // steps where something was written on this page
   bool _imported = false; // the owner picked files on this page: their result lines show
 
   WalletController get wc => widget.wc;
@@ -65,8 +76,18 @@ class _SetupWizardState extends State<SetupWizard> {
 
   void _shown() {
     if (!mounted) return;
-    wc.saveSetupStep(_step);
+    if (widget.track) {
+      wc.saveSetupStep(_step);
+      wc.saveSetupSkipped(_skipped);
+    }
     wc.logSetupStep(_step, 'shown');
+  }
+
+  /// A step wrote something (a row accepted, cash added, a rule made): it does not count as skipped any more.
+  void _act(int step, String action) {
+    wc.logSetupStep(step, action, count: 1);
+    _acted.add(step);
+    _skipped.remove(step);
   }
 
   void _go(int n, String action) {
@@ -75,21 +96,28 @@ class _SetupWizardState extends State<SetupWizard> {
     _shown();
   }
 
-  void _next() => _go(_step + 1, 'next');
+  void _next() {
+    _skipped.remove(_step);
+    _go(_step + 1, 'next');
+  }
 
   void _skip() {
-    _skipped.add(_step);
     if (_step == 1) {
       // "Skip, I'll add payments by hand": nothing to find in, so the middle steps are left too.
-      _skipped.addAll([for (var i = 2; i < setupWizardSteps; i++) i]);
+      _skipped.addAll([
+        for (var i = 1; i < setupWizardSteps; i++)
+          if (!_acted.contains(i)) i
+      ]);
       _go(setupWizardSteps, 'skip');
     } else {
+      if (!_acted.contains(_step)) _skipped.add(_step);
       _go(_step + 1, 'skip');
     }
   }
 
   void _accepted(int n) {
     wc.logSetupStep(_step, 'accept', count: n);
+    _acted.add(_step);
     _skipped.remove(_step);
     setState(() => _step = (_step + 1).clamp(1, setupWizardSteps));
     _shown();
@@ -148,12 +176,12 @@ class _SetupWizardState extends State<SetupWizard> {
               await pickAndImport(context, wc, widget.chooser);
               if (mounted) setState(() => _imported = true);
             }),
-        2 => _AccountsStep(wc: wc),
-        3 => _PlanStep(wc: wc),
-        4 => _BillsStep(wc: wc),
-        5 => _IncomeStep(wc: wc),
-        6 => _PayeesStep(wc: wc),
-        7 => _BudgetsStep(wc: wc),
+        2 => _AccountsStep(wc: wc, act: _act),
+        3 => _PlanStep(wc: wc, act: _act),
+        4 => _BillsStep(wc: wc, act: _act),
+        5 => _IncomeStep(wc: wc, act: _act),
+        6 => _PayeesStep(wc: wc, act: _act),
+        7 => _BudgetsStep(wc: wc, act: _act),
         _ => _DoneStep(wc: wc, skipped: _skipped, onGo: (n) => _go(n, 'goto')),
       };
 
@@ -265,7 +293,8 @@ class _ImportStep extends StatelessWidget {
 
 class _AccountsStep extends StatefulWidget {
   final WalletController wc;
-  const _AccountsStep({required this.wc});
+  final void Function(int step, String action) act;
+  const _AccountsStep({required this.wc, required this.act});
   @override
   State<_AccountsStep> createState() => _AccountsStepState();
 }
@@ -289,6 +318,7 @@ class _AccountsStepState extends State<_AccountsStep> {
     final wc = widget.wc;
     try {
       await wc.addAccount(name: 'Cash', currency: wc.currency, opening: cents, openingDate: wc.today());
+      widget.act(2, 'accept');
       _cash.clear();
       if (mounted) setState(() => _error = null);
     } on ArgumentError catch (e) {
@@ -364,7 +394,11 @@ class _AccountsStepState extends State<_AccountsStep> {
         alignment: Alignment.centerLeft,
         child: TextButton.icon(
             key: const ValueKey('setupAccountAdd'),
-            onPressed: () => openAddAccount(context, wc),
+            onPressed: () async {
+              final n = wc.accountsAll().length;
+              await openAddAccount(context, wc);
+              if (wc.accountsAll().length > n) widget.act(2, 'accept');
+            },
             icon: const Icon(Icons.add, size: 18),
             label: const Text('Add another account')),
       ),
@@ -376,7 +410,8 @@ class _AccountsStepState extends State<_AccountsStep> {
 
 class _PlanStep extends StatelessWidget {
   final WalletController wc;
-  const _PlanStep({required this.wc});
+  final void Function(int step, String action) act;
+  const _PlanStep({required this.wc, required this.act});
 
   @override
   Widget build(BuildContext context) {
@@ -405,7 +440,7 @@ class _PlanStep extends StatelessWidget {
                       key: ValueKey('setupProposalAccept:${p.key}'),
                       style: accentOutlined(context),
                       onPressed: () {
-                        wc.logSetupStep(3, 'accept', count: 1);
+                        act(3, 'accept');
                         wc.acceptPlanProposals(only: {p.key});
                       },
                       child: const Text('Accept')),
@@ -453,7 +488,8 @@ Widget _candidateRow(BuildContext context, RecurringBill b, String cur,
 
 class _BillsStep extends StatelessWidget {
   final WalletController wc;
-  const _BillsStep({required this.wc});
+  final void Function(int step, String action) act;
+  const _BillsStep({required this.wc, required this.act});
 
   @override
   Widget build(BuildContext context) {
@@ -486,10 +522,10 @@ class _BillsStep extends StatelessWidget {
                 confirmKey: 'confirm:${b.id}',
                 dismissKey: 'dismiss:${b.id}',
                 dismissLabel: 'Not a bill', onConfirm: () {
-              wc.logSetupStep(4, 'accept', count: 1);
+              act(4, 'accept');
               wc.confirmRecurring(b.id);
             }, onDismiss: () {
-              wc.logSetupStep(4, 'dismiss', count: 1);
+              act(4, 'dismiss');
               wc.dismissRecurring(b.id);
             }),
         ]),
@@ -499,7 +535,8 @@ class _BillsStep extends StatelessWidget {
 
 class _IncomeStep extends StatelessWidget {
   final WalletController wc;
-  const _IncomeStep({required this.wc});
+  final void Function(int step, String action) act;
+  const _IncomeStep({required this.wc, required this.act});
 
   @override
   Widget build(BuildContext context) {
@@ -525,10 +562,10 @@ class _IncomeStep extends StatelessWidget {
                 confirmKey: 'incomeConfirm:${b.id}',
                 dismissKey: 'incomeDismiss:${b.id}',
                 dismissLabel: 'Not income', onConfirm: () {
-              wc.logSetupStep(5, 'accept', count: 1);
+              act(5, 'accept');
               wc.confirmRecurring(b.id);
             }, onDismiss: () {
-              wc.logSetupStep(5, 'dismiss', count: 1);
+              act(5, 'dismiss');
               wc.dismissRecurring(b.id);
             }),
         ]),
@@ -540,7 +577,8 @@ class _IncomeStep extends StatelessWidget {
 
 class _PayeesStep extends StatefulWidget {
   final WalletController wc;
-  const _PayeesStep({required this.wc});
+  final void Function(int step, String action) act;
+  const _PayeesStep({required this.wc, required this.act});
   @override
   State<_PayeesStep> createState() => _PayeesStepState();
 }
@@ -553,12 +591,17 @@ class _PayeesStepState extends State<_PayeesStep> {
 
   void _pick(PayeeCount p, String cat) {
     final wc = widget.wc;
+    final before = _ruled[p.merchantKey]; // Undo goes back to this choice, or to none
     wc.makePayeeRule(p.merchantKey, cat);
-    wc.logSetupStep(6, 'accept', count: 1);
+    widget.act(6, 'accept');
     setState(() => _ruled[p.merchantKey] = cat);
     toast(context, 'Always put ${p.merchantName} in ${wc.categoryTable.label(cat)}', actionLabel: 'Undo', onAction: () {
-      wc.undoPayeeRule(p.merchantKey);
-      if (mounted) setState(() => _ruled.remove(p.merchantKey));
+      if (before == null) {
+        wc.undoPayeeRule(p.merchantKey);
+      } else {
+        wc.makePayeeRule(p.merchantKey, before);
+      }
+      if (mounted) setState(() => before == null ? _ruled.remove(p.merchantKey) : _ruled[p.merchantKey] = before);
     });
   }
 
@@ -608,7 +651,8 @@ class _PayeesStepState extends State<_PayeesStep> {
 
 class _BudgetsStep extends StatelessWidget {
   final WalletController wc;
-  const _BudgetsStep({required this.wc});
+  final void Function(int step, String action) act;
+  const _BudgetsStep({required this.wc, required this.act});
 
   @override
   Widget build(BuildContext context) {
@@ -637,7 +681,7 @@ class _BudgetsStep extends StatelessWidget {
                       key: ValueKey('setupBudgetAccept:${p.category}'),
                       style: accentOutlined(context),
                       onPressed: () {
-                        wc.logSetupStep(7, 'accept', count: 1);
+                        act(7, 'accept');
                         wc.acceptBudgetProposals(only: {p.category});
                       },
                       child: const Text('Accept')),
@@ -677,7 +721,7 @@ class _DoneStep extends StatelessWidget {
                   fontSize: BwType.heroSize, height: 0.95, fontWeight: FontWeight.w500, letterSpacing: -3, color: bad ? c.bad : c.ink)),
         ),
       ),
-      LineItem('Next payday', shortDateOrRaw(s.payday), key: const ValueKey('setupPayday')),
+      LineItem(s.ended ? 'Payday was' : 'Next payday', shortDateOrRaw(s.payday), key: const ValueKey('setupPayday')),
       LineItem('Held for bills', moneyExact(s.billsHeld, cur), key: const ValueKey('setupBillsHeld')),
       const SizedBox(height: 12),
       const Heading('Accounts', size: BwType.headingSize),

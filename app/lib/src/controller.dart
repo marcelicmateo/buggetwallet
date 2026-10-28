@@ -14,6 +14,7 @@ import 'clock_notice.dart';
 import 'conflict_text.dart';
 import 'controller_deps.dart';
 import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDateOrRaw;
+import 'hero.dart';
 import 'home_widget.dart';
 import 'ics_fetch.dart';
 import 'insights_api.dart' show InsightRange;

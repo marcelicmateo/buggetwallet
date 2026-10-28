@@ -50,6 +50,8 @@ extension ImportAndBackup on WalletController {
       final rows = await deps.backupBytesReader(repo, bytes, opener, k); // always the wallet's own key too
       logEvent(_backupLog, Level.INFO, 'backup.restored',
           {'ms': sw.elapsedMilliseconds, 'rows': rows, 'bytes': bytes.length, 'otherKey': otherKey != null});
+      // A wallet restored from a backup is already set up: the wizard started after create has nothing left to offer.
+      if (setupWizardOpen) repo.setLocalValue('setupWizard', 'done');
       _changed();
       return rows;
     } catch (e, st) {
