@@ -37,8 +37,7 @@ void main() {
   Future<Set<String>> digests(List<Device> ds) async => {for (final d in ds) await d.repo.stateDigest()};
 
   Set<SyncProblemReason> reasons(Iterable<SyncReport> rs) => {
-    for (final r in rs) ...r.problems.map((p) => p.reason),
-    ...r.waiting.map((w) => w.reason),
+    for (final r in rs) ...[...r.problems.map((p) => p.reason), ...r.waiting.map((w) => w.reason).whereType<SyncProblemReason>()],
   };
 
   /// Bypasses `_write`: no clock, no op (what a bug or a damaged file would do).
@@ -119,12 +118,18 @@ void main() {
       expect(await a.repo.stateDigest(), isNot(d2), reason: 'deleted rows are part of the state');
     });
 
-    test('a corrupted value (no clock change) changes it', () async {
+    test('a corrupted value (no clock change) changes it once the next data change lands (cached per dataVersion)', () async {
       final a = device('a');
       final id = a.repo.addTransaction(date: '2026-01-05', amount: -1250, category: 'Groceries');
       final before = await a.repo.stateDigest();
       corrupt(a, 'UPDATE tx SET amount = ? WHERE id = ?', [-1000, id]);
-      expect(await a.repo.stateDigest(), isNot(before));
+      expect(await a.repo.stateDigest(), before, reason: 'no data version change yet');
+      a.repo.addTransaction(date: '2026-01-06', amount: -300, category: 'Shopping');
+      final after = await a.repo.stateDigest();
+      a.repo.db.execute('UPDATE tx SET amount = ? WHERE id = ?', [-1250, id]);
+      a.repo.addTransaction(date: '2026-01-07', amount: -10, category: 'Shopping');
+      final healed = await a.repo.stateDigest();
+      expect(after, isNot(healed), reason: 'the corrupted value was in the digest');
     });
   });
 
@@ -138,8 +143,9 @@ void main() {
 
       // -1000 sorts below -1250 as JSON text, so the equal-clock tie-break keeps the original value.
       corrupt(a, 'UPDATE tx SET amount = ? WHERE id = ?', [-1000, id]);
-      expect((await digests([a, b])).length, 2);
+      // stateDigest is cached per dataVersion (known limit): a change behind the change log shows after the next data change.
       a.repo.addTransaction(date: '2026-01-07', amount: -50, category: 'Groceries'); // new data: a digest is due
+      expect((await digests([a, b])).length, 2);
       await settle([a, b, a, b]);
 
       expect((await digests([a, b])).length, 1, reason: 'repaired');

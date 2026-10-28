@@ -42,7 +42,7 @@ Future<UnsealFailure> _failure(Future<Object?> f) async {
   try {
     await f;
   } on VaultException catch (e) {
-    return e.failure;
+    return e.failure!;
   }
   fail('opened but must not');
 }

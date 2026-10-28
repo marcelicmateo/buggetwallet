@@ -9,10 +9,10 @@ import 'support/sim.dart';
 
 void main() {
   group('reviewStreak (pure)', () {
-    test('no dates: 0; with only a legacy streak: that streak', () {
+    test('no dates: 0; with only a legacy streak: that streak (spec: only with its date)', () {
       expect(reviewStreak([]), 0);
       expect(reviewStreak([], legacyLast: '2026-03-01', legacyStreak: 5), 5);
-      expect(reviewStreak([], legacyStreak: 3), 3);
+      expect(reviewStreak([], legacyStreak: 3), 0);
     });
 
     test('one date: 1', () => expect(reviewStreak(['2026-03-01']), 1));
@@ -55,7 +55,7 @@ void main() {
 
     test('clamped at WalletSettings.maxStreak', () {
       expect(reviewStreak(['2026-03-10'], legacyLast: '2026-03-01', legacyStreak: WalletSettings.maxStreak), WalletSettings.maxStreak);
-      expect(reviewStreak([], legacyStreak: WalletSettings.maxStreak + 50), WalletSettings.maxStreak);
+      expect(reviewStreak([], legacyLast: '2026-03-01', legacyStreak: WalletSettings.maxStreak + 50), WalletSettings.maxStreak);
     });
   });
 
