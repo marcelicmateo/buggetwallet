@@ -30,6 +30,19 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 Agent models: scout, ci-watcher haiku/low; test-writer, devops sonnet/medium; ui-builder sonnet/high; core-builder, reviewer Fable/high.
 Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the lead from the branch named in "Base".
 
+## Stage V: sync format items before M6 (2026-10-28, plan `STAGE_V_PLAN.md`; schema 18; statement ticking dropped)
+Merge order: VB → VA → VT → VU.
+| # | Item | Agent | Branch | Depends on | Status |
+|---|---|---|---|---|---|
+| V0a | Context pack V1+V2 (vault, backup, sync quarantine, resend, sim) | scout | – | – | running |
+| V0b | Context pack V3 (streak, entity schema, migrations) | scout | – | – | running |
+| V0c | Context pack UI (failure texts, Settings › Sync problems, review Done) | scout | – | – | running |
+| VA | V1 key id (`BWOP3`) + V2 state digest and repair | core-builder | v-sync | V0a | queued |
+| VB | V3 review rows, `reviewStreak` pure (schema 18) | core-builder | v-review | V0b | queued |
+| VT | Spec tests (seal vectors, digest, divergence → repair, no ping-pong, streak) | test-writer | v-tests | V0a, V0b | queued |
+| VU | UI: exact key/damaged texts, otherKey + devicesDisagree in Settings › Sync | ui-builder | v-ui | V0c | queued |
+| V | Merge, merge-delta review, stage run, push, STATUS | lead | v2 | all | queued |
+
 ## Stage J: deeper structure (2026-10-27, `PATH_FORWARD.md` §4 J1–J4; refactor-only, no schema/protocol change)
 Owner (2026-10-27): J before the live test; `ci` (APK + Linux only) started in parallel for the owner's phone build.
 Counters as delta rows (J3 second half) change the sync format: left for after M6. Merge order: J2c → J1 → J2u → J3.
