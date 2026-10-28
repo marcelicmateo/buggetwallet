@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
+import '../device_list.dart';
 import '../file_chooser.dart';
 import '../widgets/sheets.dart';
 import 'accounts_panel.dart' show askBankBalance;
@@ -33,6 +34,8 @@ class TodayView implements Listenable {
   PeriodBudget period() => _wc.period();
   String? newPayday(String periodStart) => _wc.newPayday(periodStart);
   bool get keyBackupRowVisible => _wc.keyBackupRowVisible;
+  DeviceStop? get deviceStop => _wc.deviceStop;
+  String? get deviceCode => _wc.deviceCode;
   bool get setupWizardOpen => _wc.setupWizardOpen;
   int get setupWizardStep => _wc.setupWizardStep;
   int get setupWizardStepCount => setupWizardSteps;

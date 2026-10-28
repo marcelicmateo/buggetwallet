@@ -351,6 +351,10 @@ extension WalletSync on WalletController {
     final u = url == null ? null : WalletController.parseRelayAddress(url.toString());
     if (url != null && u == null) throw const FormatException('Not a relay address');
     repo.setLocalValue('relayUrl', u?.toString());
+    // The owner changed or re-entered the address on purpose (a relay reinstalled or downgraded): the api floor of both is forgotten.
+    for (final a in [relayUrl, u]) {
+      if (a != null) repo.setLocalValue(WalletController.minApiKey(a), null);
+    }
     relayUrl = u;
     // What the screen shows belongs to the old relay: clear it at once (a run in flight for the old relay is dropped below).
     sync.reset(keepLastSync: true);

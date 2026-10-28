@@ -2,6 +2,7 @@
 // renamed. Real files in a temp folder; all keys are random and SYNTHETIC. POSIX modes: skipped on Windows.
 import 'dart:io';
 
+import 'package:budget_wallet/src/device_key.dart';
 import 'package:budget_wallet/src/key_store.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -163,6 +164,60 @@ void main() {
       await keyDir.create(recursive: true);
       File('${keyDir.path}/device.id').writeAsStringSync('\n');
       expect(await ks.readDeviceId(), isNull);
+    });
+  });
+
+  group('device key (DK)', () {
+    test('none stored reads null; written it is read back from device.key, 0600 in a 0700 folder', () async {
+      expect(await ks.readDeviceKey(), isNull);
+      final seed = List<int>.generate(32, (i) => i * 7 % 256);
+      await ks.writeDeviceKey(seed);
+      expect(await ks.readDeviceKey(), seed);
+      expect(mode('${keyDir.path}/device.key'), '600');
+      expect(mode(keyDir.path), '700');
+      expect(File('${keyDir.path}/device.key').readAsStringSync(), isNot(contains('\n')));
+    }, skip: posix);
+
+    test('deviceKeyOf makes a key once and gives the same one afterwards', () async {
+      final first = await deviceKeyOf(ks);
+      expect(first, hasLength(32));
+      expect(await deviceKeyOf(ks), first);
+      expect(await ks.readDeviceKey(), first);
+      // Another install (another folder) makes another key.
+      final other = KeyStore(keyDir: Directory('${dir.path}/other'));
+      expect(await deviceKeyOf(other), isNot(first));
+    });
+
+    test('forget removes it with the wallet key and the id; a wallet joined afterwards makes a new one', () async {
+      await ks.write(VaultKey.generate());
+      await ks.writeDeviceId('idid1234');
+      final first = await deviceKeyOf(ks);
+      await ks.forget();
+      expect(await ks.readDeviceKey(), isNull);
+      expect(File('${keyDir.path}/device.key').existsSync(), isFalse);
+      expect(await deviceKeyOf(ks), isNot(first));
+    });
+
+    test('a damaged or short file reads as none (a new key is made on the next need)', () async {
+      await keyDir.create(recursive: true);
+      for (final bad in ['', '\n', 'not base64 !!', 'AAAA']) {
+        File('${keyDir.path}/device.key').writeAsStringSync(bad);
+        expect(await ks.readDeviceKey(), isNull, reason: bad);
+      }
+      expect(decodeDeviceKey(null), isNull);
+      expect(decodeDeviceKey(encodeDeviceKey(List.filled(32, 9))), List.filled(32, 9));
+    });
+
+    test('the key text is never in the log', () async {
+      final lines = <String>[];
+      Logger.root.level = Level.ALL;
+      final sub = Logger.root.onRecord.listen((r) => lines.add(r.message));
+      addTearDown(sub.cancel);
+      final seed = List<int>.generate(32, (i) => 200 - i);
+      await ks.writeDeviceKey(seed);
+      await ks.readDeviceKey();
+      expect(lines.join('\n'), isNot(contains(encodeDeviceKey(seed))));
+      expect(lines.join('\n'), contains('deviceKey'));
     });
   });
 }

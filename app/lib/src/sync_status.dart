@@ -20,6 +20,9 @@ String blobsWaitingText(int n) => '$n bill ${n == 1 ? 'file' : 'files'} waiting 
 const blobsUnsupportedText = "This relay can't keep bill photos yet. Update the relay on the home server.";
 
 /// Plan › Sync: the relay was wiped, restored or replaced, so this device sent everything again.
+const relayOlderThanBeforeText =
+    'The relay answered with an older version than before. If you reinstalled or downgraded it on purpose, enter its address again.';
+
 const relayChangedText = 'This relay is new or was reset; this device sent everything again.';
 
 /// Information only: another install used this device's id; core moved this device to a new stream by itself.

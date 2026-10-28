@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'device_key.dart';
 import 'platform.dart';
 
 final _log = Logger('bw.key');
@@ -15,6 +16,7 @@ final _log = Logger('bw.key');
 class KeyStore {
   static const _name = 'budget_wallet_key';
   static const _idName = 'budget_wallet_device_id';
+  static const _devKeyName = 'budget_wallet_device_key';
   static String get _store => isMobile ? 'secure' : 'file';
 
   /// [keyDir] is for tests: they point the desktop key file at a temporary folder (null = the app's support folder).
@@ -173,14 +175,40 @@ class KeyStore {
     logEvent(_log, Level.INFO, 'deviceId.write', {'store': _store});
   }
 
-  /// Deletes the stored key and device id (used by "Forget this browser", which only the web build offers; kept so every build compiles).
+  /// This install's relay device key (DK): a 32-byte Ed25519 seed, kept next to the device id (secure storage on phones, the
+  /// 0600 file `device.key` on computers). Never synced, in no backup, never logged; null when none is stored or it is damaged.
+  Future<List<int>?> readDeviceKey() async {
+    String? text;
+    if (isMobile) {
+      text = await const FlutterSecureStorage().read(key: _devKeyName);
+    } else {
+      final f = await _file('device.key');
+      if (await f.exists()) text = (await f.readAsString()).trim();
+    }
+    final bytes = decodeDeviceKey(text);
+    logEvent(_log, Level.FINE, 'deviceKey.read', {'store': _store, 'found': bytes != null});
+    return bytes;
+  }
+
+  Future<void> writeDeviceKey(List<int> seed) async {
+    final text = encodeDeviceKey(seed);
+    if (isMobile) {
+      await const FlutterSecureStorage().write(key: _devKeyName, value: text);
+    } else {
+      await _writePrivate(await _file('device.key'), text);
+    }
+    logEvent(_log, Level.INFO, 'deviceKey.write', {'store': _store});
+  }
+
+  /// Deletes the stored key, device id and device key (used by "Forget this browser", which only the web build offers; kept so every build compiles).
   Future<void> forget() async {
     if (isMobile) {
       await const FlutterSecureStorage().delete(key: _name);
       await const FlutterSecureStorage().delete(key: _idName);
+      await const FlutterSecureStorage().delete(key: _devKeyName);
       await const FlutterSecureStorage().delete(key: '${_name}_join_pending');
     } else {
-      for (final n in ['wallet.key', 'device.id', 'join.pending']) {
+      for (final n in ['wallet.key', 'device.id', 'device.key', 'join.pending']) {
         final f = await _file(n);
         if (await f.exists()) await f.delete();
       }

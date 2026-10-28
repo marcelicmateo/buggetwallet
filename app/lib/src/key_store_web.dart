@@ -1,6 +1,7 @@
 import 'package:wallet_core/wallet_core.dart';
 import 'package:web/web.dart' as web;
 
+import 'device_key.dart';
 import 'key_vault.dart';
 
 /// `window.localStorage` / `sessionStorage` as a [KeyValueStore].
@@ -52,9 +53,18 @@ class KeyStore {
 
   Future<void> writeDeviceId(String id) async => web.window.localStorage.setItem(_idName, id);
 
-  /// Removes the stored key, its device id and this tab's copy.
+  static const _devKeyName = 'bw.deviceKey';
+
+  /// This browser's relay device key (DK): a revocable relay credential only, never a data key, so plain in localStorage.
+  /// Never logged; null when none is stored or it is damaged.
+  Future<List<int>?> readDeviceKey() async => decodeDeviceKey(web.window.localStorage.getItem(_devKeyName));
+
+  Future<void> writeDeviceKey(List<int> seed) async => web.window.localStorage.setItem(_devKeyName, encodeDeviceKey(seed));
+
+  /// Removes the stored key, its device id and device key, and this tab's copy.
   Future<void> forget() async {
     _vault.forget();
     web.window.localStorage.removeItem(_idName);
+    web.window.localStorage.removeItem(_devKeyName);
   }
 }
