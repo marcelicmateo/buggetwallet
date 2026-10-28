@@ -53,13 +53,16 @@ bool sameVector(Map<String, int> a, Map<String, int> b) {
 }
 
 /// This device's digest bookkeeping, one device-local value ([key], never synced):
-/// `{"v": {"<stream>": seq}, "d": 1, "at": ms, "ans": ["<ask id>", …], "send": "<hlc>", "ask": 1, "dis": "<short id>"}`.
+/// `{"v": {"<stream>": seq}, "d": 1, "at": ms, "ans": ["<ask id>", …], "send": "<hlc>", "ask": 1,`
+/// `"dis": "<short id>", "first": ms}`.
 /// - `v`: the data vector: per stream, the seq of the last file holding data ops this device applied or wrote;
 /// - `d`: data ops were applied or written since the last digest this device sent;
 /// - `at`: when this device last started or answered a repair; `ans`: the ids (record clocks) of the repair asks it
 ///   answered or wrote itself, newest [maxAnswered] kept;
 /// - `send`: the HLC of the [repairKind] record a repair resend waiting in the outbox carries in each of its files;
 ///   `ask`: that record asks the other devices to resend too (this device started the repair);
+/// - `first`: the repo's wall clock (the one record clocks use) when this bookkeeping started, i.e. this device's
+///   first sync run with V2: asks written before it are ignored (a replay of old files);
 /// - `dis`: the peer of a second mismatch within [SyncDigests.repairQuiet] of a repair (`devicesDisagree`).
 class DigestBook {
   static const key = 'syncDigest';
@@ -69,9 +72,10 @@ class DigestBook {
   final Map<String, int> vector;
   final List<String> answered;
   bool dirty, sendAsk;
-  int? repairAt;
+  int? repairAt, first;
   String? send, disagree;
-  DigestBook._(this.vector, {this.dirty = false, this.repairAt, List<String>? answered, this.send, this.sendAsk = false, this.disagree})
+  DigestBook._(this.vector,
+      {this.dirty = false, this.repairAt, List<String>? answered, this.send, this.sendAsk = false, this.disagree, this.first})
       : answered = answered ?? [];
 
   /// Records [ask] as answered (kept to the newest [maxAnswered]).
@@ -99,6 +103,7 @@ class DigestBook {
           send: j['send'] is String ? j['send'] as String : null,
           sendAsk: j['ask'] == 1,
           disagree: j['dis'] is String ? j['dis'] as String : null,
+          first: j['first'] is int ? j['first'] as int : null,
         );
       } on Object catch (e, st) {
         // Only this device's bookkeeping: start over (the next data change sends a digest again).
@@ -117,6 +122,7 @@ class DigestBook {
       if (send != null) 'send': send,
       if (sendAsk) 'ask': 1,
       if (disagree != null) 'dis': disagree,
+      if (first != null) 'first': first,
     };
     repo.setLocalValue(key, j.isEmpty ? null : jsonEncode(j));
   }

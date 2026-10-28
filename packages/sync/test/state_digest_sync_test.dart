@@ -333,6 +333,22 @@ void main() {
       expect(d.repo.pendingOps(), isEmpty);
     });
 
+    test('an ask is aged on the repo clock (its id\'s clock), not the engine clock: answered when they differ', () async {
+      // BUG found by the spec test v_digest_test.dart (devicesDisagree never raised): the "first sync" mark was taken
+      // from the engine clock while ask ids carry the repo clock, so an engine clock ahead ignored every ask.
+      final lines = _capture();
+      final repo = WalletRepo.inMemory(now: () => sim.clock.ms);
+      addTearDown(repo.close);
+      final engine = SyncEngine(sim.transport, sim.key, now: () => sim.clock.t.add(const Duration(days: 300)));
+      repo.updateSettings({'salary': 1000});
+      await engine.run(repo);
+      sim.tick(const Duration(minutes: 5));
+      await peerFile('p1', 1, [data(1), ask(sim.clock.ms)]);
+      await engine.run(repo);
+      expect(lines.join('\n'), contains('sync.repair.answer'));
+      expect(repo.pendingOps(), isNotEmpty, reason: 'the whole state waits for the next upload');
+    });
+
     test('asks count once by id, not by clock order: an ask with an older clock (skewed asker) is still answered', () async {
       final lines = _capture();
       final d = sim.device();
