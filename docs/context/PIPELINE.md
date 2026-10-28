@@ -40,7 +40,7 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 ## Stage M: hardening before M6 (2026-10-28; every planned feature is built)
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
-| M1 | Mutation testing on V/X code (sync_digest, repo_sync_apply conflicts/repair/digest, vault BWOP3, uncategorisedPayees, reviewStreak); survivors → invariant tests, real bugs → `BUG:` skip + report | test-writer (sonnet/medium) | m-mutate | – | d7a5590 (28 tests, no BUG); follow-up: conflict/repair survivors with the right --tests |
+| M1 | Mutation testing on V/X code (sync_digest, repo_sync_apply conflicts/repair/digest, vault BWOP3, uncategorisedPayees, reviewStreak); survivors → invariant tests, real bugs → `BUG:` skip + report | test-writer (sonnet/medium) | m-mutate | – | done d7a5590 + 21b1240 (36 invariant tests, 0 bugs; conflict/repair survivors 10 → 3 equivalent), merged |
 | M2 | Measure `stateDigest` on the emulator; move it off the UI isolate on native if > ~100 ms | core-builder | m-digest | – | running |
 | M | Review, stage run, push, STATUS | lead | v2 | M1, M2 | queued |
 | PI2a | Pi relay proven without the Pi: native unit on systemd containers (Fedora, Debian), caddy validate, deploy script native target, setup.md §5 | devops | pi2a | PI1 | done c93323c (systemd proof Fedora+Debian, security 1.3 OK, caddy validate, deploy native-*); review before merge |
