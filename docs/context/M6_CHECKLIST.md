@@ -92,6 +92,8 @@ Tabs: Today, Budget, Bills, Save, Settings. Settings has the sections (Accounts,
 - [ ] Insights: Tags with its drill-down; the `#tag` chips on rows.
 - [ ] Tap the date on a chart or range -> a date picker for a custom range opens.
 - [ ] Charts in dark mode: spending bars a deeper blue, legend under the saved/lost chart, rounded bar tops, amber "Went out" on Income vs spending.
+- [ ] Budget › Budgets › "Start from…": try each of the six presets -> fields fill or the dialog asks per row; the note under the menu shows the preset and its total; nothing is saved until Save.
+- [ ] "Fit my plan" with a goal that has a monthly amount -> the total drops by it; "50/30/20" shows the needs/savings line.
 
 ## 5. Bills
 - [ ] Bills tab: Coming up first, then slips to review, Expected bills, the bills list.
@@ -156,6 +158,11 @@ Tabs: Today, Budget, Bills, Save, Settings. Settings has the sections (Accounts,
 - [ ] Finish a weekly review on the phone and another on the laptop days later before syncing -> the streak counts both.
 - [ ] Add the same slip as a new bill on two devices before syncing -> you get one bill.
 - [ ] Use the bill sheet, import and backup buttons -> they show busy while working.
+- [ ] Update the relay first (api 5). A new wallet: join the second device -> "Waiting for approval" with a code and QR; on the first device Settings › Sync › Devices › Approve (the codes match) -> it syncs.
+- [ ] Reject a waiting device; remove a device -> approval turns on, the removed one says it was removed and stops syncing; "Use a new device key" -> approve it again.
+- [ ] Turn "Require approval for new devices" off right after a removal -> it stays on with a note; turn it off later -> the warning about removed devices.
+- [ ] "Remove all other devices" (as if a phone was lost) -> only this device is left; read "How to change the key".
+- [ ] Laptop browser: `tools/build.sh web && tools/web.sh serve`, a fresh browser shows onboarding (not a blank page); join with the key + relay -> waits for approval -> approve -> syncs; reload -> unlock with the passphrase.
 
 ## 9. Backup, restore, merge, export
 - [ ] Back up now -> a `.bwb` file is saved through the Android file dialog.
