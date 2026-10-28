@@ -64,6 +64,7 @@ const entityTables = {
   'split': ('tx_splits', ['parts', 'deleted']),
   'iou': ('ious', ['person', 'direction', 'amount', 'currency', 'date', 'note', 'tx', 'closed', 'deleted']),
   'iou_part': ('iou_parts', ['iou_id', 'amount', 'date', 'tx', 'deleted']),
+  'review': ('reviews', ['done', 'deleted']),
 };
 
 const dataTables = [
@@ -83,7 +84,8 @@ const dataTables = [
   'rule_tags',
   'tx_splits',
   'ious',
-  'iou_parts'
+  'iou_parts',
+  'reviews'
 ];
 
 /// Every row of the data tables (and the field clocks), in a stable order, as plain maps.

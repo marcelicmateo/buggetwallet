@@ -495,22 +495,29 @@ void main() {
       expect(b.nextDue, '2026-06-08');
     });
 
+    int streak() => reviewStreak(r.reviewDates(), legacyLast: r.settings().lastReview, legacyStreak: r.settings().reviewStreak);
+
     test('markReviewDone: first review starts the streak at 1, within 14 days +1, a longer gap restarts, same day is a no-op', () {
       r.markReviewDone('2026-03-01');
-      expect((r.settings().lastReview, r.settings().reviewStreak), ('2026-03-01', 1));
+      expect(r.reviewDates(), ['2026-03-01']);
+      expect(streak(), 1);
+      final ops = r.pendingOps().length;
       r.markReviewDone('2026-03-01');
-      expect(r.settings().reviewStreak, 1);
+      expect(r.pendingOps(), hasLength(ops), reason: 'same day twice: no new op');
+      expect(streak(), 1);
       r.markReviewDone('2026-03-08');
-      expect(r.settings().reviewStreak, 2);
+      expect(streak(), 2);
       r.markReviewDone('2026-03-21'); // 13 days: still a streak
-      expect(r.settings().reviewStreak, 3);
+      expect(streak(), 3);
       r.markReviewDone('2026-04-04'); // 14 days: a review day (03-28) was skipped, starts again
-      expect((r.settings().lastReview, r.settings().reviewStreak), ('2026-04-04', 1));
+      expect((r.reviewDates().last, streak()), ('2026-04-04', 1));
       r.markReviewDone('2026-04-05');
-      expect(r.settings().reviewStreak, 2);
+      expect(streak(), 2);
       r.markReviewDone('2026-04-20'); // 15 days: starts again
-      expect((r.settings().lastReview, r.settings().reviewStreak), ('2026-04-20', 1));
+      expect((r.reviewDates().last, streak()), ('2026-04-20', 1));
       expect(() => r.markReviewDone('06.04.2026'), throwsArgumentError);
+      // No counter is written (V3): the legacy settings stay unset.
+      expect((r.settings().lastReview, r.settings().reviewStreak), (null, 0));
       // The review day setting syncs like any other.
       r.updateSettings({'reviewDay': DateTime.wednesday});
       expect(r.settings().reviewDay, 3);
@@ -519,9 +526,9 @@ void main() {
     test('markReviewDone: a skipped week resets the streak (done, skipped, done = 1, not 2)', () {
       r.markReviewDone('2026-10-04'); // Sunday
       r.markReviewDone('2026-10-18'); // the Sunday after next: 2026-10-11 was skipped
-      expect(r.settings().reviewStreak, 1);
+      expect(streak(), 1);
       r.markReviewDone('2026-10-25');
-      expect(r.settings().reviewStreak, 2);
+      expect(streak(), 2);
     });
 
     test('a bill paid on the 15th for a year (real calendar) stays matched: nextDue follows the paying row, never reserved while paid', () {

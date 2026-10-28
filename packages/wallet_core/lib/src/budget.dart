@@ -715,11 +715,17 @@ String _nextWeekday(String from, int day) {
 /// 0 (the UI fills it after importing); `categories` = live spending rows (fixed and flex) of the last 7 days whose
 /// category is not user-set (the rows a merchant rule can be learnt from); `pace` = categories of the current calendar
 /// month behind pace or over budget ([budgetVsActual]); `wishlist` = waiting items whose cooling-off (`coolHours`)
-/// has run out by [nowMillis] (default: the end of [today], UTC). [streak] is the stored `reviewStreak`.
+/// has run out by [nowMillis] (default: the end of [today], UTC). The last review is the newest of [reviewDates]
+/// (`WalletRepo.reviewDates`, the synced `review` rows) and the legacy `lastReview` setting; [ReviewState.streak] =
+/// [reviewStreak] of them.
 ReviewState reviewState(List<CategorizedTx> txs, WalletSettings st, List<WishItem> wishes, Map<String, int> budgets,
-    {required String today, int? nowMillis, CategoryTable? table}) {
+    {required String today, int? nowMillis, CategoryTable? table, List<String> reviewDates = const []}) {
   final cats = table ?? CategoryTable.builtIn;
-  final last = st.lastReview;
+  String? last = st.lastReview;
+  for (final d in reviewDates) {
+    if (isIsoDate(d) && (last == null || d.compareTo(last) > 0)) last = d;
+  }
+  final streak = reviewStreak(reviewDates, legacyLast: st.lastReview, legacyStreak: st.reviewStreak);
   final String next;
   final bool due;
   if (last == null) {
@@ -753,8 +759,37 @@ ReviewState reviewState(List<CategorizedTx> txs, WalletSettings st, List<WishIte
   ];
   // Dates and counts only.
   logEvent(_log, Level.FINER, 'review.state',
-      {'due': due, 'next': next, 'streak': st.reviewStreak, 'categories': automatic, 'pace': pace, 'wishlist': waiting});
-  return ReviewState(due: due, nextReviewDate: next, streak: st.reviewStreak, steps: steps);
+      {'due': due, 'next': next, 'streak': streak, 'categories': automatic, 'pace': pace, 'wishlist': waiting});
+  return ReviewState(due: due, nextReviewDate: next, streak: streak, steps: steps);
+}
+
+/// The weekly-review streak (V3) from the dates reviews were done ([dates], any order, duplicates and non-dates
+/// ignored) and the legacy base older builds stored ([legacyLast] = `lastReview`, [legacyStreak] = `reviewStreak`,
+/// never written since schema 18). Walks back from the newest date while the gap to the previous one is < 14 days (no
+/// weekly review day skipped; the same rule `markReviewDone` used for the counter). When the walk reaches [legacyLast]
+/// (< 14 days before the oldest date of the chain, or one of its dates), [legacyStreak] counts that day and every
+/// review before it, and the walk stops there. No dates: [legacyStreak] when [legacyLast] is set, else 0. Clamped to
+/// 0 .. [WalletSettings.maxStreak].
+int reviewStreak(List<String> dates, {String? legacyLast, int legacyStreak = 0}) {
+  final legacy = legacyLast != null && isIsoDate(legacyLast) ? legacyLast : null;
+  final days = {
+    for (final d in dates)
+      if (isIsoDate(d)) d,
+    if (legacy != null) legacy,
+  }.toList()
+    ..sort();
+  var streak = 0;
+  String? newer;
+  for (final d in days.reversed) {
+    if (newer != null && daysBetween(d, newer) >= 14) break;
+    if (d == legacy) {
+      streak += legacyStreak;
+      break;
+    }
+    streak++;
+    newer = d;
+  }
+  return streak.clamp(0, WalletSettings.maxStreak);
 }
 
 /// [overBudget]: the plan is already over ([PeriodBudget.overBudget]), whatever the price.

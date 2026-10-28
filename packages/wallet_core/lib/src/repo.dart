@@ -6,6 +6,7 @@ import 'package:wallet_importer/wallet_importer.dart';
 
 import 'accounts.dart';
 import 'bills.dart';
+import 'budget.dart' show reviewStreak;
 import 'categories.dart';
 import 'changes.dart';
 import 'dates.dart';
@@ -172,8 +173,9 @@ class WalletRepo {
   /// migration), version 15: bill-file invariants (P14: no synced change; the local `blob_outbox`, `blob_delete` and
   /// `blob_own` tables become `blob_cache.uploaded`, [_migrateBlobTables]; snapshots of this schema carry declared
   /// blob sets), version 16: attachments (P16b: `bills` gains `attached_tx`; no data migration), version 17: IOUs (Q8:
-  /// the `iou` and `iou_part` entities; no data migration).
-  static const schemaVersion = 17;
+  /// the `iou` and `iou_part` entities; no data migration), version 18: weekly reviews as dated rows (V3: the `review`
+  /// entity; no data migration, the legacy `lastReview` / `reviewStreak` settings stay the streak's base).
+  static const schemaVersion = 18;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
   /// a live bill points to again (api-3 builds deleted files on the relay), cleared once all of them were stored.
@@ -1007,16 +1009,28 @@ class WalletRepo {
     logEvent(_log, Level.INFO, 'recurring.skip', {'intervalDays': b.intervalDays});
   }
 
-  /// The weekly review was done on [today]: `lastReview` = today, `reviewStreak` grows by one when the previous review
-  /// was less than 14 days before, i.e. no weekly review day was skipped in between (else starts again at 1). Done
-  /// twice on one day changes nothing.
+  /// The weekly review was done on [today] (V3, schema 18): writes the synced `review` row of that date (id = done =
+  /// [today]), so two devices reviewing on different days before syncing keep both days and the streak is read from the
+  /// rows ([reviewDates], [reviewStreak]). No counter is written; the legacy `lastReview` / `reviewStreak` settings are
+  /// never written again (they stay the base the rows continue). Done twice on one day changes nothing (no new op).
   void markReviewDone(String today) {
     requireIsoDate(today);
+    final row = db.select('SELECT done, deleted FROM reviews WHERE id = ?', [today]);
+    // Already live and intact: nothing to write. A damaged `done` (from another device's op) is written again.
+    if (row.isNotEmpty && row.first['deleted'] == 0 && row.first['done'] == today) return;
+    _write([
+      ('review', today, {'done': today, 'deleted': 0})
+    ]);
+    final dates = reviewDates();
     final st = settings();
-    final last = st.lastReview;
-    if (last == today) return;
-    final streak = last != null && daysBetween(last, today) < 14 ? st.reviewStreak + 1 : 1;
-    updateSettings({'lastReview': today, 'reviewStreak': streak.clamp(0, WalletSettings.maxStreak)});
-    logEvent(_log, Level.INFO, 'review.done', {'streak': streak});
+    final streak = reviewStreak(dates, legacyLast: st.lastReview, legacyStreak: st.reviewStreak);
+    logEvent(_log, Level.INFO, 'review.done', {'streak': streak, 'reviews': dates.length});
   }
+
+  /// The dates of the live `review` rows (V3), ascending, each once; a row whose `done` is not a `YYYY-MM-DD` date (a
+  /// damaged op from another device) is skipped.
+  List<String> reviewDates() => {
+        for (final r in db.select('SELECT done FROM reviews WHERE deleted = 0 ORDER BY done'))
+          if (r['done'] case final String d when isIsoDate(d)) d
+      }.toList();
 }

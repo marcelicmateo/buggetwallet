@@ -244,6 +244,12 @@ const Map<String, EntityDef> entitySchema = {
   ], indexes: {
     'iou_parts_iou': 'iou_id'
   }),
+  // Weekly reviews done (v18, V3): id = the review date (two devices reviewing on one day write the same row), `done`
+  // = that date. The streak is read from these rows (`reviewStreak`), so two devices never overwrite each other's count.
+  'review': EntityDef('reviews', [
+    ColumnDef('done'),
+    ColumnDef.flag('deleted'),
+  ]),
 };
 
 /// The device-local tables: never synced or backed up.
