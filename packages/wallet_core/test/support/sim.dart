@@ -203,7 +203,7 @@ class Device {
 Future<List<Op>> opsInNet(Net net, VaultKey key) async {
   final out = <Op>[];
   for (final e in net.files.entries) {
-    // `d/<device>/<seq>` or `snapshot/<id>`: each sealed for its own place (BWOP2 associated data).
+    // `d/<device>/<seq>` or `snapshot/<id>`: each sealed for its own place (BWOP2/BWOP3 associated data).
     final p = e.key.split('/');
     final clear = await unseal(e.value, key, aad: p[0] == 'd' ? aadSyncFile(p[1], int.parse(p[2])) : aadSnapshot(p[1]));
     final j = jsonDecode(utf8.decode(clear));

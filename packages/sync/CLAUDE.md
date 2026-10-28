@@ -28,8 +28,9 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   `xxxx-xxxx`; web-safe.
 - `sync_problems.dart` — a peer file that cannot be used is skipped (the run goes on with the other files and devices)
   and quarantined: `BadFiles`, one device-local value (`localValue('syncBadFiles')`, never synced), records device,
-  file, `SyncProblemReason` (`badKey`, `corrupt`, `unknownVersion`, `applyFailed`, `clockDrift` (H7, retried at
-  `retryAt`); `unreadable` = I/O error, not quarantined; `deviceIdInUse` (H6) = about this device's own uploads, never a
+  file, `SyncProblemReason` (`badKey` (old `BWOP1/2` only), `otherKey` (V1: a `BWOP3` file of another key id),
+  `corrupt`, `unknownVersion`, `applyFailed`, `clockDrift` (H7, retried at `retryAt`); `devicesDisagree` (V2) is no
+  file but a device-local state problem, see `sync_digest.dart`; `unreadable` = I/O error, not quarantined; `deviceIdInUse` (H6) = about this device's own uploads, never a
   quarantine), size and content hash. It is read again only when its content changes, or (unknownVersion,
   applyFailed) once after `SyncEngine.build` changes (`<syncReaderVersion>.<WalletRepo.schemaVersion>+<app version
   passed to SyncEngine>`). `SyncReport.problems` lists every file not applied, also the known ones on every run
@@ -37,6 +38,19 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   their count. Database errors that are about this device (read-only, disk full, I/O, locked) stop the run instead,
   so the file is not refused for good. The quarantine is separate from the cursors: a schema upgrade reads every
   peer file again, an unchanged badKey/corrupt file stays skipped, unknownVersion/applyFailed are tried once more.
+- `sync_digest.dart` (V2) — state digests and the repair: records are ops of reserved kinds inside normal sync files
+  (`_digest` `{digest, vector, schema}`, `_repair` `{ask}`; `isSyncRecord`), never stored as data (older builds skip
+  unknown kinds). `DigestBook` = one device-local value `syncDigest`: the data vector (per stream, the seq of the last
+  file holding data ops applied or written), the dirty mark, the last repair time, the newest ask answered, a resend
+  waiting (`send` = its record's clock, `ask`), `dis` (devicesDisagree peer). Engine rules: an own data upload that
+  carries every local change puts the digest (`WalletRepo.stateDigest()`, vector incl. that file) into its last part;
+  a caught-up run with an empty outbox that applied peer data sends a records-only digest file (never one for a file
+  of records only: no ping-pong). Step 6 of `run`: the newest unanswered ask → `queueStateResend()` (answered once);
+  else, caught up + empty outbox, each peer digest with equal schema and vector is compared: a mismatch logs
+  `sync.digest.mismatch` and starts a repair (whole state + `_repair{ask}` in every part of the next upload; files with
+  a `_repair` record apply with `applyRemote(tieBreak: true)`), or within `SyncDigests.repairQuiet` (7 days) of the
+  last repair sets `devicesDisagree` (kept until a compare matches, `sync.digest.agree`). Record clocks are the wall
+  clock (`Hlc(clock.now(), 0, device)`), never the HLC: a future-pushed HLC would look like clock drift to readers.
 - `sync_engine.dart` — relay sync (§4.9, wire protocol `docs/context/RELAY_PROTOCOL.md`), web-safe. `SyncTransport`
   (`state`, `put`, `get`, `ack`, `putSnapshot`, `getSnapshot`, `putBlob`/`getBlob` (null on 404)/`putSnapshotBlobs`
   (api 4 declared set; there is no delete call), whose defaults act like an older relay: 404; `run` uploads the
@@ -142,6 +156,8 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
 - bill files (BlobStore, engine queues, Memory/RelayTransport blob calls):
   `test/blob_store_test.dart` (+ `blob_spec_test.dart`; real relay: `sync_relay_test.dart`).
 - sync self-heal: `test/sync_self_heal_test.dart`, bill-file invariants incl. two devices, GC and the 14 → 15 migration (P14): `test/p14_blob_invariants_test.dart`.
+- State digests and repair (V2; 2 and 3 devices, no ping-pong, devicesDisagree, forged records):
+  `test/state_digest_sync_test.dart`.
 - Sync engine: `test/sync_scenarios_test.dart`, `sync_convergence_test.dart` (random, 2-4 devices), `sync_quarantine*_test.dart`,
   `sync_read_edge_test.dart`, `sync_snapshot_use_test.dart`
   (unblock conditions, remembered snapshots), `sync_split_upload_test.dart` (uploads over one file), `sync_engine_spec_test.dart` (+ `support/engine_spec_sim.dart`, shared fake clock: snapshots,

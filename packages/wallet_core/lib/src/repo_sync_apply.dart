@@ -11,8 +11,13 @@ extension WalletRepoSyncApply on WalletRepo {
   /// so a later valid write still wins. The decision depends only on the op, so every device makes the same one. The
   /// row is created only when at least one field applies: an op with no usable field leaves nothing behind.
   ///
+  /// With [tieBreak] (ops of a repair resend, V2) a field whose stored clock equals the op's is taken too when its
+  /// value differs and the op's value sorts higher as canonical JSON ([_tieWins]), so two devices that hold one field
+  /// with the same clock but different values (only a bug or damage does that) end with the same value. Without it an
+  /// equal clock keeps the stored value.
+  ///
   /// Returns the fields that applied (their stored values), or null when none did.
-  Map<String, Object?>? _apply(Op op) {
+  Map<String, Object?>? _apply(Op op, {bool tieBreak = false}) {
     final def = entitySchema[op.entity];
     if (def == null) return null;
     final table = def.table;
@@ -31,7 +36,10 @@ extension WalletRepoSyncApply on WalletRepo {
           r['field'] as String: r['hlc'] as String
       };
       final have = stored[e.key];
-      if (have != null && Hlc.compareStrings(have, op.hlc) >= 0) continue;
+      if (have != null) {
+        final cmp = Hlc.compareStrings(have, op.hlc);
+        if (cmp > 0 || (cmp == 0 && !(tieBreak && _tieWins(table, op.id, col.name, v)))) continue;
+      }
       accepted[e.key] = v;
     }
     if (accepted.isEmpty) return null;
@@ -47,6 +55,15 @@ extension WalletRepoSyncApply on WalletRepo {
   }
 
   static const _bad = Object();
+
+  /// Whether [value] beats the value row [id] of [table] holds in [column] on an equal clock: it differs and its
+  /// canonical JSON sorts higher (UTF-16 code units, the same on every device). A clock without its row (damage): it wins.
+  bool _tieWins(String table, String id, String column, Object? value) {
+    final r = db.select('SELECT $column AS v FROM $table WHERE id = ?', [id]);
+    if (r.isEmpty) return true;
+    final had = jsonEncode(r.first['v']), now = jsonEncode(value);
+    return now != had && now.compareTo(had) > 0;
+  }
 
   /// The largest magnitude each synced amount column takes (Q3). Imported row amounts and recurring amounts:
   /// [legacyRowCapCents] (10^12, what builds before Q imported), so no device drops a value an older build could
@@ -115,8 +132,14 @@ extension WalletRepoSyncApply on WalletRepo {
   ///
   /// With [resendChanged] (a merge from a backup) only the fields that changed something here are queued, each op cut
   /// to those fields with its clock unchanged; ops this wallet already held (or held newer) are not re-sent.
-  int applyRemote(List<Op> ops, {bool match = true, bool resend = false, bool resendChanged = false}) =>
-      applyRemoteByEntity(ops, match: match, resend: resend, resendChanged: resendChanged).values.fold(0, (a, b) => a + b);
+  ///
+  /// With [tieBreak] (a repair resend, V2) an equal clock with a different value is decided by [_tieWins] instead of
+  /// keeping the stored value. Ops of unknown entities (records such as `_digest`/`_repair`, kinds of newer builds)
+  /// are skipped either way.
+  int applyRemote(List<Op> ops, {bool match = true, bool resend = false, bool resendChanged = false, bool tieBreak = false}) =>
+      applyRemoteByEntity(ops, match: match, resend: resend, resendChanged: resendChanged, tieBreak: tieBreak)
+          .values
+          .fold(0, (a, b) => a + b);
 
   /// [applyRemote], returning how many ops changed a field, per entity (entities with none left out).
   ///
@@ -125,7 +148,12 @@ extension WalletRepoSyncApply on WalletRepo {
   /// nothing is queued and matching does not run. [beforeRollback] runs inside that transaction after the ops, so it
   /// reads the merged state (the backup's bill-file count).
   Map<String, int> applyRemoteByEntity(List<Op> ops,
-      {bool match = true, bool resend = false, bool resendChanged = false, bool dryRun = false, void Function()? beforeRollback}) {
+      {bool match = true,
+      bool resend = false,
+      bool resendChanged = false,
+      bool dryRun = false,
+      bool tieBreak = false,
+      void Function()? beforeRollback}) {
     final t = PerfTimer('repo.applyRemote');
     final byEntity = <String, int>{};
     var changed = 0;
@@ -134,7 +162,7 @@ extension WalletRepoSyncApply on WalletRepo {
       db.execute('BEGIN');
       try {
         for (final op in ops) {
-          if (_apply(op) != null) {
+          if (_apply(op, tieBreak: tieBreak) != null) {
             byEntity[op.entity] = (byEntity[op.entity] ?? 0) + 1;
             changed++;
           }
@@ -150,7 +178,7 @@ extension WalletRepoSyncApply on WalletRepo {
     _tx(() {
       for (final op in ops) {
         clock.receive(Hlc.parse(op.hlc));
-        final accepted = _apply(op);
+        final accepted = _apply(op, tieBreak: tieBreak);
         if (accepted != null) {
           byEntity[op.entity] = (byEntity[op.entity] ?? 0) + 1;
           changed++;
@@ -164,7 +192,7 @@ extension WalletRepoSyncApply on WalletRepo {
       _setMeta('hlc', clock.last.toString());
       if (changed > 0) _setMeta('match_pending', '1');
     });
-    t.done({'ops': ops.length, 'changed': changed, 'resend': resend, 'resendChanged': resendChanged});
+    t.done({'ops': ops.length, 'changed': changed, 'resend': resend, 'resendChanged': resendChanged, 'tieBreak': tieBreak});
     if (match && syncCaughtUp) runPendingMatch();
     return byEntity;
   }
@@ -200,6 +228,56 @@ extension WalletRepoSyncApply on WalletRepo {
     }
     t.done({'ops': out.length});
     return out;
+  }
+
+  /// Queues the whole synced state ([snapshotOps], original clocks) in the outbox, so this device's next upload carries
+  /// it to the other devices (V2 repair, after a state digest mismatch). Devices holding a field with the same or a
+  /// newer clock change nothing (a repair applies these with the equal-clock tie-break). Returns the ops queued.
+  int queueStateResend() {
+    final ops = snapshotOps();
+    _tx(() {
+      for (final op in ops) {
+        db.execute('INSERT INTO outbox(op) VALUES(?)', [jsonEncode(op.toJson())]);
+      }
+    });
+    logEvent(_log, Level.INFO, 'repo.resendState', {'ops': ops.length});
+    return ops.length;
+  }
+
+  /// Lowercase hex SHA-256 of the synced state in a canonical form (V2): every entity of [entitySchema] by name, its
+  /// rows (deleted ones included) by id, each row's synced columns by name with their value and field clock (null
+  /// when never written). Device-local tables and values (meta, outbox, cursors, caches) are left out. Two devices
+  /// that applied the same ops give the same digest, on the VM and on the web alike (no map-order dependence; values
+  /// are SQLite integers, text or null).
+  String stateDigest() {
+    final t = PerfTimer('repo.stateDigest', warnMs: 1000);
+    final out = BytesBuilder(copy: false);
+    var rows = 0;
+    for (final entity in entitySchema.keys.toList()..sort()) {
+      final def = entitySchema[entity]!;
+      final cols = def.columnNames.toList()..sort();
+      final clocks = <String, Map<String, String>>{}; // id -> field -> hlc
+      for (final r in db.select('SELECT id, field, hlc FROM clocks WHERE entity = ?', [entity])) {
+        if ((r['id'], r['field'], r['hlc']) case (final String id, final String f, final String h)) (clocks[id] ??= {})[f] = h;
+      }
+      final all = db.select('SELECT * FROM ${def.table}').toList()..sort((a, b) => (a['id'] as String).compareTo(b['id'] as String));
+      for (final r in all) {
+        final id = r['id'] as String;
+        final c = clocks[id] ?? const <String, String>{};
+        out.add(utf8.encode(jsonEncode([
+          entity,
+          id,
+          [
+            for (final f in cols) [f, r[f], c[f]]
+          ],
+        ])));
+        out.addByte(10);
+        rows++;
+      }
+    }
+    final hex = sha256Hex(out.takeBytes());
+    t.done({'rows': rows});
+    return hex;
   }
 
   /// Whether nothing has been put into this wallet yet: no transactions, goals, goal contributions, wishes, recurring

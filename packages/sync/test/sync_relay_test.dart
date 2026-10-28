@@ -587,7 +587,7 @@ void main() {
       b.addTransaction(date: '2026-01-21', amount: 450, category: 'Eating out', note: 'synthetic');
       await eb.run(b);
       final back = await ea.run(a);
-      expect((back.filesRead, back.caughtUp), (1, true));
+      expect((back.filesRead, back.caughtUp), (2, true), reason: "B's digest file after applying A's data (V2), then its edit");
       expect(a.transactions().where((t) => t.manual).length, 1);
       await eb.run(b);
       final s = await ta.state();

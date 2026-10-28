@@ -22,11 +22,12 @@ Future<Uint8List> _sealRaw(List<int> inner, VaultKey key) async {
   return Uint8List.fromList([...utf8.encode('BWOP1'), ...box.nonce, ...box.mac.bytes, ...box.cipherText]);
 }
 
-/// The authenticated content of a sealed file: the gzip member `seal` wrote (`BWOP2`, sealed for [aad]).
-Future<List<int>> _openRaw(List<int> sealed, VaultKey key, List<int> aad) => _aead.decrypt(
-      SecretBox(sealed.sublist(45), nonce: sealed.sublist(5, 29), mac: Mac(sealed.sublist(29, 45))),
+/// The authenticated content of a sealed file: the gzip member `seal` wrote (`BWOP3`: key id after the magic, sealed
+/// for [aad] || key id).
+Future<List<int>> _openRaw(List<int> sealed, VaultKey key, List<int> aad) async => _aead.decrypt(
+      SecretBox(sealed.sublist(53), nonce: sealed.sublist(13, 37), mac: Mac(sealed.sublist(37, 53))),
       secretKey: SecretKey(key.bytes),
-      aad: aad,
+      aad: [...aad, ...await key.keyIdBytes()],
     );
 
 void main() {
@@ -91,7 +92,7 @@ void main() {
       now += 1000;
       a.updateSettings({'reviewDay': 3});
       final bytes = await backupBytes(a, key);
-      expect(bytes.sublist(0, 5), utf8.encode('BWOP2'), reason: 'sealed like a sync file');
+      expect(bytes.sublist(0, 5), utf8.encode('BWOP3'), reason: 'sealed like a sync file');
 
       final b = WalletRepo.inMemory(now: () => now);
       addTearDown(b.close);
@@ -129,7 +130,9 @@ void main() {
       }
 
       await expectRefused(
-          bytes, VaultKey.generate(), throwsA(isA<VaultException>().having((e) => e.failure, 'failure', UnsealFailure.badKey)));
+          bytes, VaultKey.generate(), throwsA(isA<VaultException>().having((e) => e.failure, 'failure', UnsealFailure.otherKey)));
+      await expectRefused(Uint8List.fromList(bytes)..[bytes.length - 1] ^= 1, key,
+          throwsA(isA<VaultException>().having((e) => e.failure, 'failure', UnsealFailure.damaged)));
       await expectRefused(await seal(utf8.encode('[1,2]'), key, aad: aadBackup), key,
           throwsA(isA<BackupException>().having((e) => e.reason, 'reason', BackupFailure.damaged)));
       await expectRefused(await seal(utf8.encode('{"v":${backupVersion + 1},"ops":[]}'), key, aad: aadBackup), key,

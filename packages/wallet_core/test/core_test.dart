@@ -160,13 +160,13 @@ void main() {
       expect(a.settings().salary, 150000);
     });
 
-    test('files sealed with a different key are refused (badKey) and hold up that device; nothing applies', () async {
+    test('files sealed with a different key are refused (otherKey) and hold up that device; nothing applies', () async {
       final a = WalletRepo.inMemory(), b = WalletRepo.inMemory();
       a.updateSettings({'salary': 1});
       await SyncEngine(relay, VaultKey.generate()).run(a);
       final r = await SyncEngine(relay, VaultKey.generate()).run(b);
-      expect(r.problems.single.reason, SyncProblemReason.badKey);
-      expect(r.waiting.single.reason, SyncProblemReason.badKey);
+      expect(r.problems.single.reason, SyncProblemReason.otherKey);
+      expect(r.waiting.single.reason, SyncProblemReason.otherKey);
       expect(r.caughtUp, isFalse);
       expect(b.settings().salary, isNot(1));
     });

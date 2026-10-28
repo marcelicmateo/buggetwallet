@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:sqlite3/common.dart';
 import 'package:wallet_importer/wallet_importer.dart';

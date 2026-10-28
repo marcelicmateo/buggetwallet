@@ -198,7 +198,7 @@ HKDF-SHA256 under distinct labels, so nothing needs to be stored or synchronised
 
 | Use                                   | Derivation                                               | Algorithm                                                                                            |
 | ------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Sync files, snapshots, backups, blobs | wallet key directly                                      | XChaCha20-Poly1305; file = `BWOP1` \| 24-byte nonce \| 16-byte tag \| ciphertext of gzip(JSON ops)   |
+| Sync files, snapshots, backups, blobs | wallet key directly                                      | XChaCha20-Poly1305; file = `BWOP3` \| key id (8) \| 24-byte nonce \| 16-byte tag \| ciphertext of gzip(JSON ops) |
 | Local database                        | HKDF(key, `bw-local-db-v1`)                              | SQLite3 Multiple Ciphers, raw 32-byte key, `PRAGMA key`; same on Android, Linux and web (WASM build) |
 | Relay wallet id (`wid`)               | HKDF(key, `bw-relay-id-v1`, 16 bytes)                    | 32 hex chars; the relay never sees the key                                                           |
 | Relay signing                         | HKDF(key, `bw-relay-sign-v1`, 32 bytes) → Ed25519 seed   | Public key stored by the relay on first use (TOFU)                                                   |
@@ -259,9 +259,9 @@ Every mutating endpoint is idempotent or monotonic, so a replay inside the signa
 | Constant            | Value                   | Where                                                         | Changes when                                                 | Who notices                                                                              |
 | ------------------- | ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | Relay API           | 3                       | `apiVersion`, health and state `{"api":3}`, paths stay `/v2/` | endpoint or signature semantics change                       | client: `olderApi` / `newerApi` with a message; nothing uploaded or read                 |
-| Sealed-file magic   | `BWOP2` (reads `BWOP1`) | `vault.dart`                                                  | the sealed layout or associated data changes                 | `unseal`: `newerFormat` → the file is quarantined until the app is updated               |
+| Sealed-file magic   | `BWOP3` (reads `BWOP1`, `BWOP2`; web key wrap stays `BWOP2`) | `vault.dart`                     | the sealed layout or associated data changes                 | `unseal`: `newerFormat` → the file is quarantined until the app is updated               |
 | Payload version     | 1                       | `backupVersion`, `"v"` in snapshots and backups               | the JSON op envelope changes                                 | backup restore refuses a newer one                                                       |
-| Sync reader version | 2                       | `syncReaderVersion`                                           | how a file's ops are read                                    | part of the build string that retries a quarantined file once                            |
+| Sync reader version | 3                       | `syncReaderVersion`                                           | how a file's ops are read                                    | part of the build string that retries a quarantined file once                            |
 | Schema version      | 8                       | `WalletRepo.schemaVersion`                                    | an entity or synced field is added, or settings change shape | cursors cleared once on upgrade → replay; snapshot id tag decides "this schema or newer" |
 | App version         | `pubspec.yaml`          | `appVersion`                                                  | every release                                                | in the build string only                                                                 |
 
@@ -537,10 +537,16 @@ designed to be safe to expose.
 
 ### Cryptography
 
-- **Content:** XChaCha20-Poly1305 (via `package:cryptography`), fresh 24-byte nonce per file, 16-byte tag; the magic
-  `BWOP2` precedes the nonce, and the associated data names the use (`bw-sync-file\n<device>\n<seq>`,
-  `bw-snapshot\n<id>`, `bw-backup`, `bw-blob`, the web key wrap), so a file cannot stand in for another. `BWOP1`
-  (no associated data) from older builds is still read. Plaintext after inflation is capped at 256 MiB.
+- **Content:** XChaCha20-Poly1305 (via `package:cryptography`), fresh 24-byte nonce per file, 16-byte tag. Layout
+  (V1, Stage V): `"BWOP3"` | key id (8) | nonce (24) | tag (16) | ciphertext. The key id is the key's public
+  fingerprint (`VaultKey.keyIdBytes()` = SHA-256(`budget-wallet-key-id` || key)[0:8], the bytes of `keyId()`); the
+  associated data is the use (`bw-sync-file\n<device>\n<seq>`, `bw-snapshot\n<id>`, `bw-backup`, `bw-blob`) followed
+  by the key id, so a file cannot stand in for another and a changed key id breaks the tag. Another key id is
+  `otherKey` (nothing decrypted); this key's id with a failing tag is `damaged`. The web key wrap (`bw-web-key`,
+  passphrase-derived key) stays `BWOP2` = magic | nonce | tag | ciphertext with the use alone as associated data, so a
+  wrong passphrase stays "wrong passphrase". `BWOP2` and `BWOP1` (no associated data) from older builds are still read
+  (`badKey` = another key or changed: they cannot tell); `BWOP4`+ is `newerFormat`. Plaintext after inflation is
+  capped at 256 MiB. Test vectors: `packages/wallet_core/test/h12_crypto_test.dart` (both layouts, fixed nonce).
 - **Key derivation:** HKDF-SHA256 with empty salt and distinct info strings (`bw-local-db-v1`, `bw-relay-id-v1`,
   `bw-relay-sign-v1`); the wallet key itself is 32 random bytes from the platform CSPRNG.
 - **Request authentication:** Ed25519 signatures over method, relay host, path, covers header, body SHA-256 and time

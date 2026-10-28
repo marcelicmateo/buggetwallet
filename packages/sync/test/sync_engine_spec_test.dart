@@ -541,20 +541,20 @@ void main() {
       expect(a.repo.pendingOps(), isEmpty);
     });
 
-    test('files sealed with another wallet\'s key are quarantined as badKey and never applied', () async {
+    test('files sealed with another wallet\'s key are quarantined as otherKey (V1) and never applied', () async {
       final good = sim.device(), stranger = sim.device(otherKey: VaultKey.generate());
       stranger.repo.addTransaction(date: '2026-01-12', amount: 999, category: 'Eating out');
       await stranger.sync();
       good.repo.addTransaction(date: '2026-01-13', amount: 111, category: 'Eating out');
       final r = await good.sync();
-      expect(r.problems.where((p) => p.reason == SyncProblemReason.badKey), isNotEmpty);
+      expect(r.problems.where((p) => p.reason == SyncProblemReason.otherKey), isNotEmpty);
       expect(good.repo.transactions().map((t) => t.amount), [-111]);
       expect(r.caughtUp, isFalse);
       final w = waitingFor(r, stranger).single;
-      expect(w.reason, SyncProblemReason.badKey);
+      expect(w.reason, SyncProblemReason.otherKey);
       final r2 = await good.sync();
       expect(good.repo.transactions().map((t) => t.amount), [-111]);
-      expect(r2.problems.any((p) => p.reason == SyncProblemReason.badKey), isTrue);
+      expect(r2.problems.any((p) => p.reason == SyncProblemReason.otherKey), isTrue);
     });
   });
 

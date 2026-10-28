@@ -95,14 +95,14 @@ void main() {
       expect(snapGets(), 1);
       expect(r1.caughtUp, isFalse);
       final p1 = r1.problems.singleWhere((p) => p.snapshot);
-      expect((p1.reason, p1.isNew, p1.device), (SyncProblemReason.badKey, true, ''));
+      expect((p1.reason, p1.isNew, p1.device), (SyncProblemReason.otherKey, true, ''));
       expect(r1.waiting.single.seq, 1);
 
       sim.tick();
       final r2 = await c.sync();
       expect(snapGets(), 1, reason: 'not downloaded again');
       final p2 = r2.problems.singleWhere((p) => p.snapshot);
-      expect((p2.reason, p2.isNew), (SyncProblemReason.badKey, false));
+      expect((p2.reason, p2.isNew), (SyncProblemReason.otherKey, false));
 
       // Another device writes a good snapshot: a new id, fetched and applied.
       sim.tick();

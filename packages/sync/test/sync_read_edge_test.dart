@@ -231,9 +231,9 @@ void main() {
       expect(repo.transactions().length, 1);
     });
 
-    test('a file with a newer format version (BWOP3) is skipped and holds up the later files of that device', () async {
+    test('a file with a newer format version (BWOP4) is skipped and holds up the later files of that device', () async {
       final good = await seal(utf8.encode(jsonEncode([_setting('salary', 9)])), key, aad: aadSyncFile('p1', 1));
-      final future = Uint8List.fromList([...utf8.encode('BWOP3'), ...good.sublist(5)]);
+      final future = Uint8List.fromList([...utf8.encode('BWOP4'), ...good.sublist(5)]);
       await peer('p1', 1, bytes: future);
       await peer('p1', 2, ops: [_setting('rent', 4)]);
       final rep = await run();
