@@ -37,10 +37,10 @@ Merge order: VB → VA → VT → VU.
 | V0a | Context pack V1+V2 (vault, backup, sync quarantine, resend, sim) | scout | – | – | done |
 | V0b | Context pack V3 (streak, entity schema, migrations) | scout | – | – | done |
 | V0c | Context pack UI (failure texts, Settings › Sync problems, review Done) | scout | – | – | done (pack kept by lead) |
-| VA | V1 key id (`BWOP3`) + V2 state digest and repair | core-builder | v-sync | V0a | running |
+| VA | V1 key id (`BWOP3`) + V2 state digest and repair | core-builder | v-sync | V0a | done 6e04331 (core 2658/0, sync 339/0; digest rides in own upload; app analyze needs VU) → review running |
 | VB | V3 review rows, `reviewStreak` pure (schema 18) | core-builder | v-review | V0b | done af0688d + 2e98ae5 (low fix), reviewed, merged 2cc0bcf |
 | VT | Spec tests (seal vectors, digest, divergence → repair, no ping-pong, streak) | test-writer | v-tests | V0a, V0b | done 88c43ab (48 tests unrun until VA+VB merge; backup otherKey asserted as VaultException) |
-| VU | UI: exact key/damaged texts, otherKey + devicesDisagree in Settings › Sync; wire `repo.reviewDates()` | ui-builder | v-ui | V0c, VA, VB (needs their enums/API; no shims) | part 1 done 7c331ab (app tests +66, lint/analyze ok); part 2 (texts) after VA |
+| VU | UI: exact key/damaged texts, otherKey + devicesDisagree in Settings › Sync; wire `repo.reviewDates()` | ui-builder | v-ui | V0c, VA, VB (needs their enums/API; no shims) | part 1 done 7c331ab; part 2 (texts, key_vault legacyFormat, sync problems) running on VA branch |
 | V | Merge, merge-delta review, stage run, push, STATUS | lead | v2 | all | queued |
 
 ## Stage X: "Set up my wallet" wizard (2026-10-28, spec `X_SPEC.md`; on-device, no AI; after Stage V)
@@ -50,6 +50,19 @@ Merge order: VB → VA → VT → VU.
 | XC | `setupProposals`, `uncategorisedPayees` + tests | core-builder | x-core | X0 | queued |
 | XU | Wizard shell + 8 steps, entry points, widget tests, screenshots | ui-builder | x-ui | X0 (+ XC API) | queued |
 | X | Review, merge, stage run, push, STATUS | lead | v2 | XC, XU | queued |
+
+## Stage C2: chart audit (2026-10-28, owner; after Stage X)
+Check every chart (`app/lib/src/widgets/charts.dart`, Spending, Insights, payday forecast, savings trend; fl_chart) against
+the `/dataviz` skill: form per chart, colour by job (categorical fixed order, sequential one hue, diverging + grey midpoint,
+status reserved), palette validated by its `scripts/validate_palette.js` in light and dark against the theme surfaces
+(`theme.dart` tokens), one y-axis, thin marks, legend for ≥ 2 series, tooltips on tap/hover, text in ink tokens. Fixes with
+structural widget tests (no golden tests), screenshots at 320 dp / dark / desktop; re-sync the design-system artifact if
+`theme.dart` changes.
+| # | Item | Agent | Branch | Depends on | Status |
+|---|---|---|---|---|---|
+| C2a | Audit: list of charts × rule failures + validator output (read-only) | scout or lead | – | X done | queued |
+| C2b | Fixes + tests + screenshots | ui-builder | c2-ui | C2a | queued |
+| C2 | Review, stage run, push, STATUS | lead | v2 | C2b | queued |
 
 ## Stage J: deeper structure (2026-10-27, `PATH_FORWARD.md` §4 J1–J4; refactor-only, no schema/protocol change)
 Owner (2026-10-27): J before the live test; `ci` (APK + Linux only) started in parallel for the owner's phone build.
