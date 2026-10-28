@@ -219,7 +219,7 @@ void main() {
     await t.enterText(find.byKey(const ValueKey('oldKeyField')), await VaultKey.generate().toText());
     await t.tap(find.byKey(const ValueKey('oldKeyRestore')));
     await settle(t, 6);
-    expect(find.textContaining("doesn't open this backup (or the file is damaged)", findRichText: true), findsOneWidget);
+    expect(find.textContaining("That key doesn't open this backup.", findRichText: true), findsOneWidget);
     expect(_preview, findsNothing);
     expect(_state(wc.repo), before);
   });
@@ -237,6 +237,7 @@ void main() {
       BackupFailure.newerVersion: 'Made by a newer app version. Update first.',
       BackupFailure.clockAhead: "This backup has changes dated later than this device's clock. Check the date and time.",
       BackupFailure.unreadable: "This backup file can't be read.",
+      BackupFailure.otherKey: 'This backup was made with another wallet key.',
     };
     for (final e in cases.entries) {
       wc.seams.backupMerger = (repo, bytes, k, {dryRun = false, walletKey}) async => throw BackupException(e.key, 'core text');
@@ -256,7 +257,7 @@ void main() {
         '200 random bytes': Uint8List.fromList([for (var i = 0; i < 200; i++) (i * 73 + 41) % 256]),
       };
 
-  /// A real backup cut in half: the seal's check fails, which the core cannot tell from another key (`badKey`).
+  /// A real backup cut in half: its key id still matches this wallet's key, so the core calls it damaged (not another key).
   Future<Uint8List> cutOff(VaultKey key) async {
     final real = await _otherBackup(key);
     return Uint8List.sublistView(real, 0, real.length ~/ 2);
@@ -275,13 +276,12 @@ void main() {
       expect(_preview, findsNothing, reason: e.key);
       expect(find.textContaining('This backup file is damaged.', findRichText: true), findsOneWidget, reason: e.key);
     }
-    // A cut-off real backup fails the seal check like another key: the key dialog opens; cancelling changes nothing.
+    // A cut-off real backup of this wallet's own key is damaged (its key id still matches): no key dialog.
     c.picks = [_Picked(await cutOff(key))];
     await t.tap(_merge);
     await settle(t, 6);
-    expect(find.byKey(const ValueKey('oldKeyDialog')), findsOneWidget);
-    await t.tap(find.byKey(const ValueKey('oldKeyCancel')));
-    await settle(t);
+    expect(find.byKey(const ValueKey('oldKeyDialog')), findsNothing);
+    expect(find.textContaining('This backup file is damaged.', findRichText: true), findsOneWidget);
     expect(_state(wc.repo), before);
   });
 
@@ -303,8 +303,8 @@ void main() {
     await settle(t);
     await t.tap(find.byKey(const ValueKey('restoreConfirm')));
     await settle(t, 6);
-    expect(find.textContaining("doesn't open with this wallet's key", findRichText: true), findsOneWidget,
-        reason: 'cut-off = seal check failed');
+    expect(find.textContaining('This backup file is damaged.', findRichText: true), findsOneWidget, reason: 'cut-off, right key');
+    expect(find.textContaining('another wallet key', findRichText: true), findsNothing);
     expect(wc.walletIsEmpty, isTrue);
   });
 

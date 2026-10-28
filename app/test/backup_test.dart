@@ -180,6 +180,13 @@ void main() {
       const VaultException('wrong key'),
       "This backup doesn't open with this wallet's key. It was made with another key, or the file is damaged."
     ),
+    (
+      'another wallet key',
+      const VaultException('other key', failure: UnsealFailure.otherKey),
+      'This backup was made with another wallet key.'
+    ),
+    ('another wallet key (core)', const BackupException(BackupFailure.otherKey, 'x'), 'This backup was made with another wallet key.'),
+    ('changed bytes, right key', const VaultException('damaged', failure: UnsealFailure.damaged), 'This backup file is damaged.'),
     ('unreadable file', const BackupException(BackupFailure.unreadable, 'x'), "This backup file can't be read."),
     ('damaged file', const BackupException(BackupFailure.damaged, 'x'), 'This backup file is damaged.'),
     ('newer version', const BackupException(BackupFailure.newerVersion, 'x'), 'Made by a newer app version. Update first.'),

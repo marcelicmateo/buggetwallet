@@ -28,6 +28,13 @@ const deviceIdInUseText = 'Another install used this device id; this device now 
 /// A peer's newest file waits because its clock is ahead of this device's.
 const clockDriftText = "A device's clock is ahead; its changes wait until the clocks agree.";
 
+/// A file made with another wallet key sits on the relay; sync ignored it.
+const otherKeyFileText = 'A file made with another wallet key is on this relay. It was ignored.';
+
+/// The devices' data differs after a sync; the app tried to repair it and the owner should send the logs.
+const devicesDisagreeText =
+    "Your devices don't agree on some data. The app tried to repair it. Save the logs (Settings › Diagnostics) and send them.";
+
 /// The text under the relay address when the relay needs a creation token.
 const createTokenText = 'The relay needs its creation token.';
 

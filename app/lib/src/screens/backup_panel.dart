@@ -160,7 +160,7 @@ class _BackupPanelState extends State<BackupPanel> with AsyncAction {
         preview = await widget.wc.mergeBackupFile(bytes, dryRun: true);
       } on VaultException catch (e) {
         // Only a key that does not open it means "another key"; a damaged or newer file has its own text.
-        if (e.failure != UnsealFailure.badKey) rethrow;
+        if (e.failure != UnsealFailure.badKey && e.failure != UnsealFailure.otherKey) rethrow;
         // Not this wallet's key: ask for the one the backup was made with.
         if (!mounted) return;
         setState(() => busy = false);
@@ -252,12 +252,14 @@ String _keyErrorText(VaultException e, bool otherKey) => switch (e.failure) {
       UnsealFailure.badKey => otherKey
           ? "That key doesn't open this backup (or the file is damaged)."
           : "This backup doesn't open with this wallet's key. It was made with another key, or the file is damaged.",
+      UnsealFailure.otherKey => otherKey ? "That key doesn't open this backup." : 'This backup was made with another wallet key.',
       UnsealFailure.damaged || UnsealFailure.tooLarge => 'This backup file is damaged.',
       UnsealFailure.newerFormat => 'Made by a newer app version. Update first.',
     };
 
 String _backupErrorText(BackupException e) => switch (e.reason) {
       BackupFailure.unreadable => "This backup file can't be read.",
+      BackupFailure.otherKey => 'This backup was made with another wallet key.',
       BackupFailure.damaged => 'This backup file is damaged.',
       BackupFailure.newerVersion => 'Made by a newer app version. Update first.',
       BackupFailure.clockAhead => "This backup has changes dated later than this device's clock. Check the date and time.",

@@ -9,6 +9,7 @@ import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
 import 'package:budget_wallet/src/screens/sync_panel.dart';
 import 'package:budget_wallet/src/sync_status.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -227,6 +228,57 @@ void main() {
       expect(find.byIcon(Icons.info_outline), findsWidgets);
       expect(log(), isNot(contains('abcd1234')));
       expect(log(), isNot(contains('ef567890')));
+    });
+
+    testWidgets('otherKey and devicesDisagree: fixed texts, no ids; the button opens Settings › Diagnostics', (t) async {
+      final wc = emptyWallet()..relayUrl = _relay;
+      wc.seams.syncRunner = (r, k, repo) async => _report(problems: const [
+            SyncProblem('abcd1234', SyncProblemReason.otherKey, bytes: 0),
+            SyncProblem('ef567890', SyncProblemReason.devicesDisagree, bytes: 0),
+          ]);
+      await _pumpSync(t, wc);
+      expect(find.byKey(const ValueKey('syncOtherKey')), findsNothing);
+      await t.runAsync(wc.syncNow);
+      await t.pump();
+      expect(find.byKey(const ValueKey('syncOtherKey')), findsOneWidget);
+      expect(find.byKey(const ValueKey('syncDevicesDisagree')), findsOneWidget);
+      expect(find.textContaining(otherKeyFileText, findRichText: true), findsOneWidget);
+      expect(find.textContaining(devicesDisagreeText, findRichText: true), findsOneWidget);
+      expect(otherKeyFileText, 'A file made with another wallet key is on this relay. It was ignored.');
+      expect(devicesDisagreeText, contains('Save the logs (Settings › Diagnostics)'));
+      await t.ensureVisible(find.byKey(const ValueKey('syncDisagreeLogs')));
+      await t.tap(find.byKey(const ValueKey('syncDisagreeLogs')));
+      await t.pump();
+      expect(wc.settingsRequest.value, SettingsSection.diagnostics);
+      expect(log(), isNot(contains('abcd1234')));
+      expect(log(), isNot(contains('ef567890')));
+    });
+
+    testWidgets('neither problem: no lines', (t) async {
+      final wc = emptyWallet()..relayUrl = _relay;
+      wc.seams.syncRunner = (r, k, repo) async => _report();
+      await _pumpSync(t, wc);
+      await t.runAsync(wc.syncNow);
+      await t.pump();
+      expect(find.byKey(const ValueKey('syncOtherKey')), findsNothing);
+      expect(find.byKey(const ValueKey('syncDevicesDisagree')), findsNothing);
+      expect(find.byKey(const ValueKey('syncDisagreeLogs')), findsNothing);
+    });
+
+    testWidgets('otherKey and devicesDisagree fit 320 dp at text scale 2.0', (t) async {
+      final wc = emptyWallet()..relayUrl = _relay;
+      wc.seams.syncRunner = (r, k, repo) async => _report(problems: const [
+            SyncProblem('abcd1234', SyncProblemReason.otherKey, bytes: 0),
+            SyncProblem('ef567890', SyncProblemReason.devicesDisagree, bytes: 0),
+            SyncProblem('11223344', SyncProblemReason.clockDrift, bytes: 120),
+          ]);
+      await _pumpSync(t, wc, size: const Size(320, 4000), scale: 2);
+      await t.runAsync(wc.syncNow);
+      await t.pump();
+      expect(t.takeException(), isNull);
+      expect(find.byKey(const ValueKey('syncOtherKey')), findsOneWidget);
+      expect(find.byKey(const ValueKey('syncDevicesDisagree')), findsOneWidget);
+      expect(find.byKey(const ValueKey('syncDisagreeLogs')), findsOneWidget);
     });
 
     testWidgets('changing the address clears the fingerprint and the notes of the old relay', (t) async {
