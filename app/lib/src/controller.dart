@@ -896,6 +896,37 @@ class WalletController extends ChangeNotifier {
       () => timed('wc.suggestBudgets', () => suggestBudgets(txs, month, currency: currency, table: categoryTable),
           fields: {'month': month}, warnMs: 50));
 
+  /// Budgets for [month] by [kind] ("Start from…" on Budget › Budgets), per category in cents. Cached per kind and month until the
+  /// data changes. Nothing is written: the owner saves them like typed ones.
+  BudgetPreset budgetPresetFor(BudgetPresetKind kind, String month) => _cached(
+      MemoKey('budgetPreset', (kind, month)),
+      () => timed('wc.budgetPreset', () => budgetPreset(kind, txs, settings, month, currency: currency, table: categoryTable, goals: goals),
+          fields: {'month': month, 'kind': kind.name}, warnMs: 50));
+
+  /// The menu words and the dialog header of a preset: (menu label, title, one line saying where the numbers come from).
+  (String, String, String) budgetPresetWords(BudgetPresetKind kind) {
+    String euros(int cents) => money(cents ~/ 100 * 100, currency, decimals: 0);
+    switch (kind) {
+      case BudgetPresetKind.avg3:
+        return ('Average of the last 3 months', 'Average of 3 months', 'What you spent a month in the last 3 months, per category.');
+      case BudgetPresetKind.avg6:
+        return ('Average of the last 6 months', 'Average of 6 months', 'What you spent a month in the last 6 months, per category.');
+      case BudgetPresetKind.avg12:
+        return ('Average of the last 12 months', 'Average of 12 months', 'What you spent a month in the last 12 months, per category.');
+      case BudgetPresetKind.spendLess:
+        return ('Spend 10% less', 'Spend 10% less', '10 % under your average of the last 6 months, per category.');
+      case BudgetPresetKind.fitPlan:
+        final flex = monthlyFlex(settings, goals: goals, table: categoryTable);
+        return ('Fit my plan', 'Fit my plan', '${euros(flex)} a month of flexible money, split by what you spent in the last 6 months.');
+      case BudgetPresetKind.fiftyThirtyTwenty:
+        return (
+          '50/30/20',
+          '50/30/20',
+          '30 % of your salary for wants: ${euros(settings.salary * 30 ~/ 100)}. Needs are your payday plan; 20 % is for savings.'
+        );
+    }
+  }
+
   /// The budgeted category with the least money left this month, or null when nothing is budgeted.
   CategoryBudgetLine? tightestBudget() => _cached(const MemoKey('tightest'), () {
         CategoryBudgetLine? best;

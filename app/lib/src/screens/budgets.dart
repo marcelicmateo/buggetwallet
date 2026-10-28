@@ -60,9 +60,23 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
 
   /// Suggest (core's `budgetProposals`): empty fields are filled at once; a field that already has a number is changed only when
   /// the owner ticks it in the dialog. Nothing is saved here: Save does that.
-  Future<void> _suggest() async {
+  Future<void> _suggest() => _apply(widget.wc.suggestedBudgets(monthOf(widget.wc.today())), 'Not enough history yet.');
+
+  /// "Start from…": the same flow with a preset's budgets and a header saying where they come from. Nothing is saved here.
+  Future<void> _preset(BudgetPresetKind kind) {
     final wc = widget.wc;
-    final s = wc.suggestedBudgets(monthOf(wc.today()));
+    final p = wc.budgetPresetFor(kind, monthOf(wc.today()));
+    logNav('budgets.preset', {'kind': kind.name, 'count': p.budgets.length});
+    if (p.budgets.isEmpty) {
+      toast(context, p.empty ?? 'Nothing to suggest.');
+      return Future.value();
+    }
+    final (_, title, subtitle) = wc.budgetPresetWords(kind);
+    return _apply(p.budgets, 'Nothing new to suggest.', title: title, subtitle: subtitle);
+  }
+
+  Future<void> _apply(Map<String, int> s, String emptyText, {String? title, String? subtitle}) async {
+    final wc = widget.wc;
     // What the fields show now (typed, not yet saved, included). A blank or zero field counts as empty; a field with text that
     // is not a number is left alone.
     final current = <String, int>{};
@@ -86,7 +100,9 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
     if (existing.isNotEmpty) {
       logNav('budgets.suggestAsk', {'count': existing.length});
       final picked = await showDialog<Set<String>>(
-          context: context, builder: (_) => SuggestBudgetsDialog(proposals: existing, currency: wc.currency, table: wc.categoryTable));
+          context: context,
+          builder: (_) =>
+              SuggestBudgetsDialog(proposals: existing, currency: wc.currency, table: wc.categoryTable, title: title, subtitle: subtitle));
       if (!mounted) return;
       for (final p in existing.where((p) => picked?.contains(p.category) ?? false)) {
         _ctl(p.category).text = centsToFieldText(p.suggested);
@@ -104,7 +120,7 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
             : existing.isNotEmpty
                 ? 'No budgets changed.'
                 : s.isEmpty
-                    ? 'Not enough history yet.'
+                    ? emptyText
                     : 'Nothing new to suggest.');
   }
 
@@ -201,6 +217,20 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
           icon: const Icon(Icons.auto_awesome_outlined),
           label: const Text('Suggest from the last 6 months'),
           onPressed: _suggest),
+      PopupMenuButton<BudgetPresetKind>(
+        key: const ValueKey('budgetsPreset'),
+        tooltip: 'Start from…',
+        position: PopupMenuPosition.under,
+        onSelected: _preset,
+        itemBuilder: (_) => [
+          for (final k in BudgetPresetKind.values)
+            PopupMenuItem(key: ValueKey('preset:${k.name}'), value: k, child: Text(widget.wc.budgetPresetWords(k).$1)),
+        ],
+        child: IgnorePointer(
+            child: ExcludeSemantics(
+                child: OutlinedButton.icon(
+                    style: accentOutlined(context), icon: const Icon(Icons.tune), label: const Text('Start from…'), onPressed: () {}))),
+      ),
       FilledButton(key: const ValueKey('budgetsSave'), onPressed: _save, child: const Text('Save budgets')),
     ]);
   }
