@@ -8,6 +8,7 @@ import '../insights_api.dart';
 import '../layout.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'insight_charts.dart' show Legend, LegendItem;
 
 /// [logical] dp rounded to a whole number of device pixels (at least one), so a line or bar edge covers whole pixels and does
 /// not blur or look grainy at 1.25 or 1.5 device pixels per dp.
@@ -18,6 +19,10 @@ double snapPx(double logical, double dpr) {
 
 /// [c] over [ground] as one opaque colour: strokes and fills drawn on top of each other then never mix alpha at their edges.
 Color solidOver(Color c, Color ground) => Color.alphaBlend(c, ground);
+
+/// A bar's corners: [radius] at the data end (top for a bar above the zero line, bottom below it), square at the baseline.
+BorderRadius dataEndRadius(bool positive, double radius) =>
+    positive ? BorderRadius.vertical(top: Radius.circular(radius)) : BorderRadius.vertical(bottom: Radius.circular(radius));
 
 /// The balance from today to payday as steps (Q11): it stays flat until a bill or income lands, then jumps. [points] are core's
 /// forecast points; the line runs on to [payday]. Strokes snap to whole device pixels and are opaque, like the other charts.
@@ -51,42 +56,70 @@ class ForecastStepChart extends StatelessWidget {
     if (minY < 0) minY -= pad;
     const hidden = AxisTitles(sideTitles: SideTitles(showTitles: false));
     final line = solidOver(c.ink.withValues(alpha: 0.8), c.bg);
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      SizedBox(
-        height: _height,
-        child: LineChart(LineChartData(
-          minX: 0,
-          maxX: end,
-          minY: minY,
-          maxY: maxY,
-          borderData: FlBorderData(show: false),
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            getDrawingHorizontalLine: (v) => FlLine(color: v == 0 ? c.lineStrong : c.line, strokeWidth: px(1)),
-          ),
-          titlesData: const FlTitlesData(leftTitles: hidden, rightTitles: hidden, topTitles: hidden, bottomTitles: hidden),
-          lineTouchData: const LineTouchData(enabled: false),
-          lineBarsData: [
-            LineChartBarData(
-              spots: spots,
-              isStepLineChart: true,
-              lineChartStepData: const LineChartStepData(stepDirection: LineChartStepData.stepDirectionForward),
-              isCurved: false,
-              color: line,
-              barWidth: px(2),
-              dotData: FlDotData(
-                getDotPainter: (s, p, b, i) => FlDotCirclePainter(radius: px(2.5), color: line, strokeWidth: 0),
+    // Spot i is point i; the last spot is the flat run on to payday.
+    String dateOf(int i) => i < points.length ? points[i].date : payday;
+    int centsOf(int i) => i < points.length ? points[i].cents : points.last.cents;
+    final low = points.reduce((a, b) => b.cents < a.cents ? b : a);
+    final spoken = 'Balance until payday. Starts at ${moneyExact(points.first.cents, currency)} on ${shortDateOrRaw(points.first.date)}, '
+        'lowest ${moneyExact(low.cents, currency)} on ${shortDateOrRaw(low.date)}, '
+        'on payday ${moneyExact(points.last.cents, currency)}.';
+    return Semantics(
+        container: true,
+        label: spoken,
+        child: ExcludeSemantics(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SizedBox(
+            height: _height,
+            child: LineChart(LineChartData(
+              minX: 0,
+              maxX: end,
+              minY: minY,
+              maxY: maxY,
+              borderData: FlBorderData(show: false),
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                getDrawingHorizontalLine: (v) => FlLine(color: v == 0 ? c.lineStrong : c.line, strokeWidth: px(1)),
               ),
-            ),
-          ],
-        )),
-      ),
-      const SizedBox(height: 4),
-      SplitRow(
-          start: Text('Today', style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
-          end: Text(shortDateOrRaw(payday), style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted))),
-    ]);
+              titlesData: const FlTitlesData(leftTitles: hidden, rightTitles: hidden, topTitles: hidden, bottomTitles: hidden),
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipColor: (_) => c.ink,
+                  tooltipBorderRadius: BorderRadius.circular(2),
+                  fitInsideHorizontally: true,
+                  fitInsideVertically: true,
+                  getTooltipItems: (touched) => [
+                    for (final t in touched)
+                      LineTooltipItem(
+                        '${shortDateOrRaw(dateOf(t.spotIndex))}\n${moneyExact(centsOf(t.spotIndex), currency)}',
+                        numStyle.copyWith(fontSize: BwType.metaSize, color: c.bg),
+                      ),
+                  ],
+                ),
+              ),
+              lineBarsData: [
+                LineChartBarData(
+                  spots: spots,
+                  isStepLineChart: true,
+                  lineChartStepData: const LineChartStepData(stepDirection: LineChartStepData.stepDirectionForward),
+                  isCurved: false,
+                  color: line,
+                  barWidth: px(2),
+                  dotData: FlDotData(
+                    getDotPainter: (s, p, b, i) => FlDotCirclePainter(radius: px(4), color: line, strokeWidth: px(2), strokeColor: c.bg),
+                  ),
+                ),
+              ],
+            )),
+          ),
+          const SizedBox(height: 4),
+          SplitRow(
+              start: Text('Today', style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
+              end: Text('${shortDateOrRaw(payday)} · ${moneyExact(points.last.cents, currency)}',
+                  key: const ValueKey('forecastEndLabel'),
+                  textAlign: TextAlign.end,
+                  style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.ink2))),
+        ])));
   }
 }
 
@@ -173,10 +206,11 @@ class PeriodNetChart extends StatelessWidget {
                     width: px(14),
                     // The running period: faded (an opaque tint, so the outline does not mix with it), with a dashed outline.
                     color: periods[i].running
-                        ? solidOver((vals[i] >= 0 ? c.pos : c.neg).withValues(alpha: 0.45), c.bg)
-                        : (vals[i] >= 0 ? c.pos : c.neg),
-                    borderRadius: BorderRadius.zero,
-                    borderSide: periods[i].running ? BorderSide(color: vals[i] >= 0 ? c.pos : c.neg, width: px(1)) : BorderSide.none,
+                        ? solidOver((vals[i] >= 0 ? c.chartPos : c.chartNeg).withValues(alpha: 0.45), c.bg)
+                        : (vals[i] >= 0 ? c.chartPos : c.chartNeg),
+                    borderRadius: dataEndRadius(vals[i] >= 0, px(4)),
+                    borderSide:
+                        periods[i].running ? BorderSide(color: vals[i] >= 0 ? c.chartPos : c.chartNeg, width: px(1)) : BorderSide.none,
                     borderDashArray: periods[i].running ? const [3, 3] : null,
                   ),
                 ]),
@@ -212,8 +246,8 @@ class PeriodNetChart extends StatelessWidget {
                     isStrokeCapRound: true,
                     isStrokeJoinRound: true,
                     dotData: FlDotData(
-                      getDotPainter: (s, p, b, i) =>
-                          FlDotCirclePainter(radius: px(2.5), color: solidOver(c.ink.withValues(alpha: 0.8), c.bg), strokeWidth: 0),
+                      getDotPainter: (s, p, b, i) => FlDotCirclePainter(
+                          radius: px(4), color: solidOver(c.ink.withValues(alpha: 0.8), c.bg), strokeWidth: px(2), strokeColor: c.bg),
                     ),
                   ),
                 ],
@@ -222,6 +256,25 @@ class PeriodNetChart extends StatelessWidget {
           ),
       ]),
     );
+  }
+}
+
+/// The key to [PeriodNetChart]: saved and lost bars, the average line and the faded running period (only what is drawn).
+class PeriodNetLegend extends StatelessWidget {
+  final List<PeriodSummary> periods;
+  final List<int?> trend;
+  const PeriodNetLegend({super.key, required this.periods, required this.trend});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final running = periods.where((p) => p.running).toList();
+    return Legend([
+      LegendItem(c.chartPos, 'Saved'),
+      LegendItem(c.chartNeg, 'Lost'),
+      if (trend.any((t) => t != null)) LegendItem(solidOver(c.ink.withValues(alpha: 0.7), c.bg), 'Average', line: true),
+      if (running.isNotEmpty) LegendItem(running.first.net >= 0 ? c.chartPos : c.chartNeg, 'Faded: running period', dashed: true),
+    ]);
   }
 }
 
@@ -370,13 +423,13 @@ class _CategoryRow extends StatelessWidget {
                 return SizedBox(
                   height: 16,
                   child: Stack(children: [
-                    Positioned(left: 0, top: 2, bottom: 2, width: (w * v).clamp(2, w), child: Container(color: c.bar)),
+                    Positioned(left: 0, top: 2, bottom: 2, width: (w * v).clamp(2, w), child: Container(color: c.chartPos)),
                     Positioned(
                         left: (w * a - 1).clamp(0, w - 2),
                         top: 0,
                         bottom: 0,
                         width: 2,
-                        child: Container(color: c.ink.withValues(alpha: 0.55))),
+                        child: Container(color: solidOver(c.ink.withValues(alpha: 0.55), c.bg))),
                   ]),
                 );
               }),
@@ -452,7 +505,7 @@ class _BudgetBar extends StatelessWidget {
             top: 4,
             height: 12,
             child: DecoratedBox(decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.lineStrong)))),
-        if (solid > 0) Positioned(left: 1, top: 5, height: 10, width: at(solid).clamp(0, inner), child: ColoredBox(color: c.accent)),
+        if (solid > 0) Positioned(left: 1, top: 5, height: 10, width: at(solid).clamp(0, inner), child: ColoredBox(color: c.chartPos)),
         if (value > budget)
           Positioned(
               key: const ValueKey('overHatch'),
@@ -466,7 +519,7 @@ class _BudgetBar extends StatelessWidget {
             top: 3,
             bottom: 3,
             width: 2,
-            child: ColoredBox(color: c.ink.withValues(alpha: 0.55))),
+            child: ColoredBox(color: solidOver(c.ink.withValues(alpha: 0.55), c.bg))),
         Positioned(left: (1 + at(budget) - 1).clamp(0, width - 2), top: 0, bottom: 0, width: 2, child: ColoredBox(color: c.ink)),
       ]),
     );
@@ -485,7 +538,7 @@ class RuledBar extends StatelessWidget {
       height: 10,
       decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.lineStrong)),
       alignment: Alignment.centerLeft,
-      child: FractionallySizedBox(widthFactor: value.clamp(0.0, 1.0), heightFactor: 1, child: ColoredBox(color: color ?? c.accent)),
+      child: FractionallySizedBox(widthFactor: value.clamp(0.0, 1.0), heightFactor: 1, child: ColoredBox(color: color ?? c.chartPos)),
     );
   }
 }
@@ -543,7 +596,7 @@ class PaceBar extends StatelessWidget {
               child: DecoratedBox(decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.lineStrong))),
             ),
             // Inside the 1 px border.
-            Positioned(left: 1, top: 6, height: 8, width: ((w - 2) * solid).clamp(0, w), child: ColoredBox(color: c.accent)),
+            Positioned(left: 1, top: 6, height: 8, width: ((w - 2) * solid).clamp(0, w), child: ColoredBox(color: c.chartPos)),
             if (over && u > e)
               Positioned(
                 left: 1 + (w - 2) * e,

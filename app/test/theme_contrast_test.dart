@@ -36,6 +36,10 @@ void main() {
         'accent/bg': (c.accent, c.bg),
         'pos/bg': (c.pos, c.bg),
         'neg/bg': (c.neg, c.bg),
+        for (final n in {'chartPos': c.chartPos, 'chartNeg': c.chartNeg, 'chart2': c.chart2}.entries) ...{
+          '${n.key}/bg': (n.value, c.bg),
+          '${n.key}/surface': (n.value, c.surface),
+        },
       };
       nonText.forEach((n, p) => test('non-text $n >= 3.0', () => expect(contrastRatio(p.$1, p.$2), greaterThanOrEqualTo(3.0), reason: n)));
 
@@ -58,9 +62,32 @@ void main() {
           'warnBg': c.warnBg,
           'warnInk': c.warnInk,
           'bar': c.bar,
+          'chartPos': c.chartPos,
+          'chartNeg': c.chartNeg,
+          'chart2': c.chart2,
         };
         tokens.forEach((n, col) => expect(col.toARGB32() >>> 24, 255, reason: n));
       });
     });
   }
+
+  // The chart colours are chart-only (not text, not status) and were checked with the dataviz validator (values in theme.dart).
+  group('chart tokens', () {
+    test('are not the status or accent colours', () {
+      for (final c in themes.values) {
+        final status = {c.bad.toARGB32(), c.good.toARGB32(), c.neg.toARGB32(), c.pos.toARGB32(), c.warnInk.toARGB32()};
+        expect(c.chart2.toARGB32(), isNot(anyOf(status)));
+        expect({c.chartPos.toARGB32(), c.chartNeg.toARGB32(), c.chart2.toARGB32()}.length, 3);
+      }
+      expect(WalletColors.dark.chartPos, isNot(WalletColors.dark.pos));
+      expect(WalletColors.dark.chartNeg, isNot(WalletColors.dark.bad));
+      expect(WalletColors.dark.chartPos, isNot(WalletColors.dark.accent));
+    });
+
+    test('hold the validated values', () {
+      const light = WalletColors.light, dark = WalletColors.dark;
+      expect([light.chartPos, light.chartNeg, light.chart2], const [Color(0xFF3A559E), Color(0xFFA93A32), Color(0xFFA8650F)]);
+      expect([dark.chartPos, dark.chartNeg, dark.chart2], const [Color(0xFF6F8FE0), Color(0xFFD56F66), Color(0xFFC27F20)]);
+    });
+  });
 }

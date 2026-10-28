@@ -128,6 +128,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
             Heading(_savedHeading(done, cur)),
             Muted(_savedNote(done)),
             PeriodNetChart(periods: periods, trend: trend, currency: cur),
+            PeriodNetLegend(periods: periods, trend: trend),
           ],
         ]),
         Panel(children: [
