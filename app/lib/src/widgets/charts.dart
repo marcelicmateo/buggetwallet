@@ -269,10 +269,12 @@ class PeriodNetLegend extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.c;
     final running = periods.where((p) => p.running).toList();
+    // A line is drawn only between two neighbouring points.
+    final hasLine = [for (var i = 1; i < trend.length; i++) trend[i] != null && trend[i - 1] != null].contains(true);
     return Legend([
-      LegendItem(c.chartPos, 'Saved'),
-      LegendItem(c.chartNeg, 'Lost'),
-      if (trend.any((t) => t != null)) LegendItem(solidOver(c.ink.withValues(alpha: 0.7), c.bg), 'Average', line: true),
+      if (periods.any((p) => p.net >= 0)) LegendItem(c.chartPos, 'Saved'),
+      if (periods.any((p) => p.net < 0)) LegendItem(c.chartNeg, 'Lost'),
+      if (hasLine) LegendItem(solidOver(c.ink.withValues(alpha: 0.7), c.bg), 'Average', line: true),
       if (running.isNotEmpty) LegendItem(running.first.net >= 0 ? c.chartPos : c.chartNeg, 'Faded: running period', dashed: true),
     ]);
   }
@@ -538,7 +540,7 @@ class RuledBar extends StatelessWidget {
       height: 10,
       decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.lineStrong)),
       alignment: Alignment.centerLeft,
-      child: FractionallySizedBox(widthFactor: value.clamp(0.0, 1.0), heightFactor: 1, child: ColoredBox(color: color ?? c.chartPos)),
+      child: FractionallySizedBox(widthFactor: value.clamp(0.0, 1.0), heightFactor: 1, child: ColoredBox(color: color ?? c.accent)),
     );
   }
 }
@@ -596,7 +598,7 @@ class PaceBar extends StatelessWidget {
               child: DecoratedBox(decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.lineStrong))),
             ),
             // Inside the 1 px border.
-            Positioned(left: 1, top: 6, height: 8, width: ((w - 2) * solid).clamp(0, w), child: ColoredBox(color: c.chartPos)),
+            Positioned(left: 1, top: 6, height: 8, width: ((w - 2) * solid).clamp(0, w), child: ColoredBox(color: c.accent)),
             if (over && u > e)
               Positioned(
                 left: 1 + (w - 2) * e,

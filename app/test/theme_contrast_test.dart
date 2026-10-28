@@ -80,6 +80,7 @@ void main() {
         expect({c.chartPos.toARGB32(), c.chartNeg.toARGB32(), c.chart2.toARGB32()}.length, 3);
       }
       expect(WalletColors.dark.chartPos, isNot(WalletColors.dark.pos));
+      // Light chartNeg equals `bad` on purpose (the same red: "Lost" is the polarity of "Saved"); only dark was moved to pass the validator.
       expect(WalletColors.dark.chartNeg, isNot(WalletColors.dark.bad));
       expect(WalletColors.dark.chartPos, isNot(WalletColors.dark.accent));
     });
