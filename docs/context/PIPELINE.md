@@ -36,6 +36,8 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | M1 | Mutation testing on V/X code (sync_digest, repo_sync_apply conflicts/repair/digest, vault BWOP3, uncategorisedPayees, reviewStreak); survivors → invariant tests, real bugs → `BUG:` skip + report | test-writer (sonnet/medium) | m-mutate | – | running |
 | M2 | Measure `stateDigest` on the emulator; move it off the UI isolate on native if > ~100 ms | core-builder | m-digest | – | running |
 | M | Review, stage run, push, STATUS | lead | v2 | M1, M2 | queued |
+| PI2a | Pi relay proven without the Pi: native unit on systemd containers (Fedora, Debian), caddy validate, deploy script native target, setup.md §5 | devops | pi2a | PI1 | running (owner away 2026-10-28) |
+| D1 | docs/context/M6_CHECKLIST.md: one ordered owner checklist from every STATUS owner-check list + disaster drills | general-purpose (sonnet) | v2 (file only) | – | running |
 
 ## Stage V: sync format items before M6 (2026-10-28, plan `STAGE_V_PLAN.md`; schema 18; statement ticking dropped)
 Merge order: VB → VA → VT → VU.
