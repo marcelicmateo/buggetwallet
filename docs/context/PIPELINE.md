@@ -35,12 +35,12 @@ Merge order: VB → VA → VT → VU.
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
 | V0a | Context pack V1+V2 (vault, backup, sync quarantine, resend, sim) | scout | – | – | running |
-| V0b | Context pack V3 (streak, entity schema, migrations) | scout | – | – | running |
-| V0c | Context pack UI (failure texts, Settings › Sync problems, review Done) | scout | – | – | running |
+| V0b | Context pack V3 (streak, entity schema, migrations) | scout | – | – | done |
+| V0c | Context pack UI (failure texts, Settings › Sync problems, review Done) | scout | – | – | done (pack kept by lead) |
 | VA | V1 key id (`BWOP3`) + V2 state digest and repair | core-builder | v-sync | V0a | queued |
-| VB | V3 review rows, `reviewStreak` pure (schema 18) | core-builder | v-review | V0b | queued |
+| VB | V3 review rows, `reviewStreak` pure (schema 18) | core-builder | v-review | V0b | running |
 | VT | Spec tests (seal vectors, digest, divergence → repair, no ping-pong, streak) | test-writer | v-tests | V0a, V0b | queued |
-| VU | UI: exact key/damaged texts, otherKey + devicesDisagree in Settings › Sync | ui-builder | v-ui | V0c | queued |
+| VU | UI: exact key/damaged texts, otherKey + devicesDisagree in Settings › Sync; wire `repo.reviewDates()` | ui-builder | v-ui | V0c, VA, VB (needs their enums/API; no shims) | queued |
 | V | Merge, merge-delta review, stage run, push, STATUS | lead | v2 | all | queued |
 
 ## Stage J: deeper structure (2026-10-27, `PATH_FORWARD.md` §4 J1–J4; refactor-only, no schema/protocol change)

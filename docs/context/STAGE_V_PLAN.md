@@ -12,9 +12,10 @@ counts only; integer cents, `YYYY-MM-DD`; every write through `WalletRepo._write
 ## V1 — key id on sealed files (core A)
 Today a `BWOP2` seal that does not open is `UnsealFailure.badKey` whether the key is wrong or the file was changed or
 cut, so the app can only say "made with another key, or damaged".
-- **Format `BWOP3`:** `"BWOP3" | keyId(8) | nonce(24) | mac(16) | ciphertext`. `keyId` = first 8 bytes of
-  HKDF-SHA256(ikm = key bytes, salt = empty, info = `bw-key-id-v1`). The key id is part of the associated data too
-  (`aad || keyId`), so changing it breaks the MAC. `VaultKey.keyId` (8 bytes) exposed.
+- **Format `BWOP3`:** `"BWOP3" | keyId(8) | nonce(24) | mac(16) | ciphertext`. `keyId` = the existing
+  `VaultKey.keyId()` fingerprint as bytes (first 8 bytes of SHA-256(`budget-wallet-key-id` || key bytes); no second
+  definition), exposed as `VaultKey.keyIdBytes()`. The key id is part of the associated data too (`aad || keyId`),
+  so changing it breaks the MAC.
 - `seal` writes `BWOP3` for sync files, snapshots, backups and blobs. `wrapKey` (web passphrase) stays `BWOP2`: a
   wrong passphrase must stay `badKey`/`WrongPassphrase`, nothing gained there.
 - `unseal`: `BWOP3` with another key id → new `UnsealFailure.otherKey` (no decrypt attempted); same key id but the
@@ -44,7 +45,11 @@ event.
   vector and it is caught up with an empty outbox; otherwise the record is ignored (stale or ahead).
 - **Repair:** a mismatch is logged (`sync.digest.mismatch`, counts only) and the device uploads its whole state with
   original clocks (the `snapshotOps` resend path, as P10 merge uses) plus a `repair` record asking every device to do
-  the same once. LWW then converges; nothing is deleted (deletes are fields). A second mismatch within 7 days of a
+  the same once. LWW then converges; nothing is deleted (deletes are fields). **Equal clocks:** normal apply keeps the
+  stored value on an equal clock, so a field two devices hold with the same clock but different values (only a bug
+  or damage does that) would never converge. Ops applied from a repair resend use a deterministic tie-break instead:
+  on an equal clock with a different value, the value whose canonical JSON sorts higher wins, on every device alike.
+- Digest records carry the schema version; devices on different schemas never compare. A second mismatch within 7 days of a
   repair stops auto-repair and raises device-local `SyncProblemReason.devicesDisagree` (kept until a later compare
   matches); Settings › Sync shows it with "Save logs" (UI half).
 - Records travel as ops of reserved entity kinds (`_digest`, `_repair`) that `applyRemote` never stores as data;
@@ -71,7 +76,7 @@ device's count (PATH_FORWARD J3 second half: counters as rows). Saved by waiting
 - Weekly review Done screen and Today card read the new streak (no visible change expected); screenshots at 320 dp.
 
 ## Fixed core API (both halves code against this)
-`VaultKey.keyId` · `UnsealFailure.otherKey` · `BackupFailure.otherKey` · `SyncProblemReason.otherKey` ·
+`VaultKey.keyIdBytes()` · `UnsealFailure.otherKey` · `BackupFailure.otherKey` · `SyncProblemReason.otherKey` ·
 `SyncProblemReason.devicesDisagree` · `WalletRepo.stateDigest()` · `reviewStreak(...)` (pure) · `ReviewState.streak`
 unchanged.
 
