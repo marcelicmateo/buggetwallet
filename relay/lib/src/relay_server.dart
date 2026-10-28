@@ -61,7 +61,14 @@ class _Out {
 
 /// The signature headers of a request and what it signs besides method and body (RELAY_PROTOCOL.md "Signed requests").
 class _Sig {
-  _Sig(this.method, this.host, this.path, this.time, this.sig, this.covers);
+  _Sig(this.method, this.host, this.path, this.time, this.sig, this.covers, {this.dev, this.devBytes, this.wsig});
+
+  /// `X-BW-Dev` (api 5): the device key that made [sig] (`bw-relay-v5`), as sent; null = signed with the wallet key.
+  final String? dev;
+  final Uint8List? devBytes;
+
+  /// `X-BW-WSig` (api 5): the wallet key's signature over the same v5 text (creation, enrolment), or null.
+  final Uint8List? wsig;
 
   /// `GET` or `HEAD` for the read endpoints (a HEAD request is signed as `HEAD`).
   final String method;
@@ -77,11 +84,12 @@ class _Sig {
   /// The `X-BW-Covers` value, or empty.
   final String covers;
 
-  /// Which text verified ([Relay._verify]): 4, or 3 for an api-3 app (`bw-relay-v3`).
+  /// Which text verified ([Relay._verify]): 5 (a device key), 4, or 3 for an api-3 app (`bw-relay-v3`).
   int version = 4;
 
-  String text(String method, List<int> body, {bool v3 = false}) =>
-      signedText(method, host, path, covers, sha256OfBytes(body), time, v3: v3);
+  String text(String method, List<int> body, {bool v3 = false}) => dev != null
+      ? signedTextV5(method, host, path, covers, sha256OfBytes(body), time, dev!)
+      : signedText(method, host, path, covers, sha256OfBytes(body), time, v3: v3);
 }
 
 /// What a request log line may say: kind, byte count, short wallet and device ids.
@@ -221,7 +229,8 @@ class Relay {
         res.headers.set('Access-Control-Allow-Origin', origin);
         if (req.method == 'OPTIONS') {
           res.headers.set('Access-Control-Allow-Methods', 'GET, PUT, DELETE, OPTIONS');
-          res.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-BW-Covers, X-BW-Time, X-BW-Sig, X-BW-Pub, X-BW-Create-Token');
+          res.headers.set('Access-Control-Allow-Headers',
+              'Content-Type, X-BW-Covers, X-BW-Time, X-BW-Sig, X-BW-Pub, X-BW-Create-Token, X-BW-Dev, X-BW-WSig');
           res.headers.set('Access-Control-Max-Age', '600');
         } else {
           res.headers.set('Access-Control-Expose-Headers', 'Date');
@@ -301,6 +310,23 @@ class Relay {
         _method(req, ['PUT']);
         info.kind = 'put-set';
         return _putBlobSet(req, wid, id, info, _signature(req, path));
+      case ('enrol', 4):
+        info.kind = 'enrol';
+        _method(req, ['PUT']);
+        final sig = _signature(req, path);
+        if (sig.devBytes case final b?) info.device = _short(fingerprint(b));
+        return _enrol(req, wid, info, sig);
+      case ('devices', 5):
+        final fp = seg[4];
+        if (!fingerprintPattern.hasMatch(fp)) throw _HttpError(400, 'bad fingerprint');
+        info.device = _short(fp);
+        info.kind = 'device';
+        _method(req, ['PUT']);
+        return _putDevice(req, wid, fp, info, _signature(req, path));
+      case ('lock', 4):
+        info.kind = 'lock';
+        _method(req, ['PUT']);
+        return _putLock(req, wid, info, _signature(req, path));
       case ('blob', 5):
         final hash = seg[4];
         if (!blobHashPattern.hasMatch(hash)) throw _HttpError(400, 'bad blob hash');
@@ -366,16 +392,64 @@ class Relay {
     // v3 signs the host the client addressed: a request captured for one relay does not verify at another one that
     // holds the same wallet (a moved or second relay). No Host and no publicHost: the empty string, which no client signs.
     final host = (publicHost ?? req.headers.value(HttpHeaders.hostHeader) ?? '').toLowerCase();
-    return _Sig(req.method, host, path, time, bytes, _header(req, 'x-bw-covers', 'X-BW-Covers') ?? '');
+    // api 5: the device key that signed (in the signed text) and the wallet key's countersignature where one is needed.
+    final dev = _header(req, 'x-bw-dev', 'X-BW-Dev');
+    final devBytes = dev == null ? null : decodeBase64Url(dev, 32);
+    if (dev != null && devBytes == null) throw _HttpError(400, 'bad X-BW-Dev');
+    final w = _header(req, 'x-bw-wsig', 'X-BW-WSig');
+    final wsig = w == null ? null : decodeBase64Url(w, 64);
+    if (w != null && wsig == null) throw _HttpError(400, 'bad X-BW-WSig');
+    return _Sig(req.method, host, path, time, bytes, _header(req, 'x-bw-covers', 'X-BW-Covers') ?? '',
+        dev: dev, devBytes: devBytes, wsig: wsig);
   }
 
-  /// 401 unless [sig] signs this request ([method], [body]) for [pub]: the v4 text, else the v3 text of an api-3 app
-  /// ([_Sig.version] says which).
+  /// 401 unless [sig] signs this request ([method], [body]): with `X-BW-Dev` the v5 text by that device key, else for
+  /// the wallet key [pub] the v4 text, or the v3 text of an api-3 app ([_Sig.version] says which).
   static Future<void> _verify(Uint8List pub, _Sig sig, String method, List<int> body) async {
     if (!await _verified(pub, sig, method, body)) throw _HttpError(401, 'bad signature');
   }
 
+  /// The wallet key's countersignature (`X-BW-WSig`, over the v5 text) for [pub]: 401 `unsigned` when absent, 401
+  /// `bad signature` when it does not verify.
+  static Future<void> _verifyWallet(Uint8List pub, _Sig sig, String method, List<int> body) async {
+    final w = sig.wsig;
+    if (w == null) throw _HttpError(401, 'unsigned');
+    if (!await verifySignature(pub, w, sig.text(method, body))) throw _HttpError(401, 'bad signature');
+  }
+
+  /// Who may (RELAY_PROTOCOL.md "Checks", step 7), after the signature verified: a revoked device key → 401 `revoked`,
+  /// one not enrolled → 401 `unenrolled`, the wallet key on a locked wallet → 401 `locked`. Checked before and again
+  /// inside the wallet lock (a revoke wins over a request verified just before it).
+  static void _admit(Wallet w, _Sig sig) {
+    final dev = sig.dev;
+    if (dev == null) {
+      if (w.locked) throw _HttpError(401, 'locked');
+      return;
+    }
+    final k = w.keys[dev];
+    if (k == null) throw _HttpError(401, 'unenrolled');
+    if (k.revoked != null) throw _HttpError(401, 'revoked');
+  }
+
+  /// [_admit] inside the wallet lock, then [f].
+  Future<T> _lockedAs<T>(String wid, _Sig sig, Future<T> Function(Wallet w) f) => _locked(wid, () {
+        final w = _known(wid);
+        _admit(w, sig);
+        return f(w);
+      });
+
+  /// Records the stream a device key last wrote or acked as (state `keys[].device`); saved with the caller's meta save.
+  static void _touchKey(Wallet w, _Sig sig, String device) {
+    final dev = sig.dev;
+    if (dev != null) w.keys[dev]?.device = device;
+  }
+
   static Future<bool> _verified(Uint8List pub, _Sig sig, String method, List<int> body) async {
+    if (sig.dev case final _?) {
+      if (!await verifySignature(sig.devBytes!, sig.sig, sig.text(method, body))) return false;
+      sig.version = 5;
+      return true;
+    }
     if (await verifySignature(pub, sig.sig, sig.text(method, body))) return true;
     if (!await verifySignature(pub, sig.sig, sig.text(method, body, v3: true))) return false;
     sig.version = 3;
@@ -486,20 +560,28 @@ class Relay {
   Future<_Out> _getState(String wid, _Sig sig) async {
     final w = _known(wid);
     if (!await _verified(w.pubBytes, sig, sig.method, const [])) {
-      // An api-2 app (its `bw-relay-v2` text, no host) gets only `{"api":4}`, which it reads as "update the app"
+      // An api-2 app (its `bw-relay-v2` text, no host) gets only `{"api":5}`, which it reads as "update the app"
       // instead of "this relay refused the wallet". Nothing else is in the answer.
       final legacy = signedTextV2(sig.method, sig.path, sig.covers, sha256OfBytes(const []), sig.time);
-      if (await verifySignature(w.pubBytes, sig.sig, legacy)) return _Out.json(200, {'api': apiVersion});
+      if (sig.dev == null && await verifySignature(w.pubBytes, sig.sig, legacy)) return _Out.json(200, {'api': apiVersion});
       throw _HttpError(401, 'bad signature');
     }
-    // An api-3 app (v3 text) is told api 3, so it syncs on as before (RELAY_PROTOCOL.md "Versions").
-    return _locked(wid, () async => _Out.json(200, w.stateJson(maxBytes: maxBytes, api: sig.version)));
+    // The wallet key on a locked wallet (an api-4 or api-3 app): only `{"api":5}`, so it asks for an update.
+    if (sig.dev == null && w.locked) return _Out.json(200, {'api': apiVersion});
+    _admit(w, sig);
+    return _locked(wid, () async {
+      if (sig.dev == null && w.locked) return _Out.json(200, {'api': apiVersion});
+      _admit(w, sig);
+      // An api-3 app (v3 text) is told api 3, an api-4 app 4, so they sync on as before (RELAY_PROTOCOL.md "Versions").
+      return _Out.json(200, w.stateJson(maxBytes: maxBytes, api: sig.version, self: sig.dev, now: _now()));
+    });
   }
 
   Future<_Out> _getData(String wid, String device, int seq, _LogInfo info, _Sig sig) async {
     final w = _known(wid);
     await _verify(w.pubBytes, sig, sig.method, const []);
-    return _locked(wid, () async {
+    _admit(w, sig);
+    return _lockedAs(wid, sig, (w) async {
       final st = w.devices[device];
       if (st == null || seq > st.last) throw _HttpError(404, 'not stored');
       if (seq < st.first) throw _HttpError(410, 'pruned');
@@ -536,18 +618,25 @@ class Relay {
       final h = _header(req, 'x-bw-pub', 'X-BW-Pub');
       if (h == null) await _refuseBody(req, maxFileBytes, 401, 'unknown wallet without X-BW-Pub');
       if (decodeBase64Url(h, 32) == null) await _refuseBody(req, maxFileBytes, 400, 'bad X-BW-Pub');
+      // api 5: the device key signs, the wallet key countersigns (both must verify).
+      if (sig.dev != null && sig.wsig == null) await _refuseBody(req, maxFileBytes, 401, 'unsigned');
       pub = h;
     }
     final body = await _readBody(req, maxFileBytes, info);
-    await _verify(known?.pubBytes ?? decodeBase64Url(pub, 32)!, sig, 'PUT', body);
+    final pubBytes = known?.pubBytes ?? decodeBase64Url(pub, 32)!;
+    await _verify(pubBytes, sig, 'PUT', body);
+    if (known == null && sig.dev != null) await _verifyWallet(pubBytes, sig, 'PUT', body);
+    if (known != null) _admit(known, sig);
     return _locked(wid, () async {
       final w = _wallets[wid];
       // Trust on first use: a creation that lost the race to another key is refused here.
       if (w != null && !constantTimeEquals(pub, w.pub)) throw _HttpError(401, 'bad signature');
-      if (w == null) return _createWallet(wid, pub, device, seq, body);
+      if (w == null) return _createWallet(wid, pub, device, seq, body, sig.dev);
+      _admit(w, sig);
       final st = w.devices[device];
       final first = st?.first ?? 1;
       final last = st?.last ?? 0;
+      _touchKey(w, sig, device);
       if (seq <= last) {
         // Known device: it is alive whatever the answer.
         st!.lastSeen = _now();
@@ -586,12 +675,14 @@ class Relay {
   }
 
   /// The first accepted `PUT d/...` of a wallet creates it and stores its public key [pub] (trust on first use).
-  Future<_Out> _createWallet(String wid, String pub, String device, int seq, Uint8List body) async {
+  /// With [dev] (api 5) that device key is enrolled `by: "wallet"`.
+  Future<_Out> _createWallet(String wid, String pub, String device, int seq, Uint8List body, String? dev) async {
     if (seq != 1) throw _HttpError(422, 'seq beyond last + 1');
     if (_wallets.length >= maxWallets) throw _HttpError(507, 'relay full');
     if (body.length > maxBytes) throw _HttpError(507, 'wallet full');
     final dir = Directory('${data.path}/$wid');
     final w = Wallet(wid, dir, pub, hooks: hooks);
+    if (dev != null) w.keys[dev] = DeviceKey(fingerprint(decodeBase64Url(dev, 32)!), _now(), 'wallet', device: device);
     _wallets[wid] = w; // reserve the slot before any await
     try {
       if (await dir.exists()) await dir.delete(recursive: true); // left over from an interrupted creation
@@ -611,6 +702,7 @@ class Relay {
     final known = _known(wid);
     final body = await _readBody(req, _maxJsonBytes, info);
     await _verify(known.pubBytes, sig, 'PUT', body);
+    _admit(known, sig);
     final raw = _jsonMap(body);
     final acks = <String, int>{};
     for (final e in raw.entries) {
@@ -618,11 +710,11 @@ class Relay {
       if (!namePattern.hasMatch(e.key) || v is! int || v < 0 || v > maxSeq) throw _HttpError(400, 'bad ack');
       acks[e.key] = v;
     }
-    return _locked(wid, () async {
-      final w = _known(wid);
+    return _lockedAs(wid, sig, (w) async {
       for (final e in acks.entries) {
         if (e.value > (w.devices[e.key]?.last ?? 0)) throw _HttpError(422, 'ack beyond last');
       }
+      _touchKey(w, sig, device);
       final dev = w.devices.putIfAbsent(device, () => DeviceState(_now()));
       dev.lastSeen = _now();
       for (final e in acks.entries) {
@@ -639,8 +731,8 @@ class Relay {
     final covers = _parseCovers(sig.covers.isEmpty ? null : sig.covers);
     final body = await _readBody(req, maxSnapshotBytes, info);
     await _verify(known.pubBytes, sig, 'PUT', body);
-    return _locked(wid, () async {
-      final w = _known(wid);
+    _admit(known, sig);
+    return _lockedAs(wid, sig, (w) async {
       final existing = w.snapshot?.id == id ? w.snapshot : (w.previous?.id == id ? w.previous : null);
       if (existing != null) {
         final stored = await _stored(w.snapFile(id), info);
@@ -685,10 +777,10 @@ class Relay {
     final known = _known(wid);
     final body = await _readBody(req, maxBlobSetBytes, info);
     await _verify(known.pubBytes, sig, 'PUT', body);
+    _admit(known, sig);
     final set = parseBlobSet(body);
     if (set == null) throw _HttpError(400, 'bad blob set');
-    return _locked(wid, () async {
-      final w = _known(wid);
+    return _lockedAs(wid, sig, (w) async {
       final snap = w.snapshot?.id == id ? w.snapshot : (w.previous?.id == id ? w.previous : null);
       if (snap == null) throw _HttpError(404, 'no such snapshot');
       if (snap.blobSet case final had?) {
@@ -708,7 +800,8 @@ class Relay {
   Future<_Out> _getSnapshot(String wid, String id, _LogInfo info, _Sig sig) async {
     final w = _known(wid);
     await _verify(w.pubBytes, sig, sig.method, const []);
-    return _locked(wid, () async {
+    _admit(w, sig);
+    return _lockedAs(wid, sig, (w) async {
       if (w.snapshot?.id != id && w.previous?.id != id) throw _HttpError(404, 'no such snapshot');
       final bytes = await _stored(w.snapFile(id), info);
       info.bytes = bytes.length;
@@ -719,7 +812,8 @@ class Relay {
   Future<_Out> _getBlob(String wid, String hash, _LogInfo info, _Sig sig) async {
     final w = _known(wid);
     await _verify(w.pubBytes, sig, sig.method, const []);
-    return _locked(wid, () async {
+    _admit(w, sig);
+    return _lockedAs(wid, sig, (w) async {
       try {
         final bytes = await w.blobFile(hash).readAsBytes();
         info.bytes = bytes.length;
@@ -736,9 +830,9 @@ class Relay {
     final known = _known(wid);
     final body = await _readBody(req, maxFileBytes, info);
     await _verify(known.pubBytes, sig, 'PUT', body);
+    _admit(known, sig);
     if (sha256OfBytes(body) != hash) throw _HttpError(400, 'hash');
-    return _locked(wid, () async {
-      final w = _known(wid);
+    return _lockedAs(wid, sig, (w) async {
       final file = w.blobFile(hash);
       if (await file.exists()) {
         // A re-upload refreshes the stored time, which only ever delays GC (a client re-PUTs before ops that reference it).
@@ -783,7 +877,152 @@ class Relay {
     final body = await _readBody(req, _maxJsonBytes, info);
     if (body.isNotEmpty) throw _HttpError(400, 'body not allowed');
     await _verify(known.pubBytes, sig, 'DELETE', body);
+    _admit(known, sig);
     return _Out.empty(204);
+  }
+
+  // ---- device keys (api 5) --------------------------------------------------------------------------------------------
+
+  /// Bodies of the device endpoints (`enrol`, `devices/<fp>`, `lock`).
+  static const int _maxDeviceJson = 1024;
+
+  /// The device endpoints need a device key: 401 `device` (body drained) for a wallet-key request.
+  Future<void> _needDevice(HttpRequest req, _Sig sig) async {
+    if (sig.dev == null) await _refuseBody(req, _maxDeviceJson, 401, 'device');
+  }
+
+  /// `PUT enrol` (RELAY_PROTOCOL.md "Device keys"): signed by the new device key and countersigned by the wallet key.
+  Future<_Out> _enrol(HttpRequest req, String wid, _LogInfo info, _Sig sig) async {
+    final known = _known(wid);
+    await _needDevice(req, sig);
+    if (sig.wsig == null) await _refuseBody(req, _maxDeviceJson, 401, 'unsigned');
+    final body = await _readBody(req, _maxDeviceJson, info);
+    await _verify(known.pubBytes, sig, 'PUT', body);
+    await _verifyWallet(known.pubBytes, sig, 'PUT', body);
+    final raw = _jsonMap(body);
+    final id = raw['deviceId'];
+    if (raw.keys.any((k) => k != 'deviceId') || (id != null && (id is! String || !namePattern.hasMatch(id)))) {
+      throw _HttpError(400, 'bad enrol');
+    }
+    final deviceId = id as String?;
+    final dev = sig.dev!;
+    final fp = fingerprint(sig.devBytes!);
+    return _locked(wid, () async {
+      final w = _known(wid);
+      final k = w.keys[dev];
+      if (k != null) {
+        if (k.revoked != null) throw _HttpError(401, 'revoked');
+        return _Out.json(200, {'enrolled': true});
+      }
+      final now = _now();
+      final expired = w.dropExpired(now);
+      final other = w.keyOf(fp);
+      if (other != null && other != dev) {
+        if (expired) await w.saveMeta();
+        throw _HttpError(409, 'fingerprint');
+      }
+      if (!w.locked) {
+        w.pending.remove(dev);
+        w.keys[dev] = DeviceKey(fp, now, 'wallet', deviceId: deviceId);
+        await w.saveMeta();
+        _log('relay keys enrolled=${w.activeKeys} pending=${w.pending.length} w=${info.wid}');
+        return _Out.json(201, {'enrolled': true});
+      }
+      if (w.pending.containsKey(dev)) {
+        if (expired) await w.saveMeta();
+        return _Out.json(202, {'pending': true});
+      }
+      if (w.pending.length >= maxPending) {
+        if (expired) await w.saveMeta();
+        throw _HttpError(409, 'pendingFull');
+      }
+      w.pending[dev] = PendingKey(fp, now, deviceId);
+      await w.saveMeta();
+      _log('relay keys enrolled=${w.activeKeys} pending=${w.pending.length} w=${info.wid}');
+      return _Out.json(202, {'pending': true});
+    });
+  }
+
+  /// `PUT devices/<fp>` `{"approve":true}` or `{"revoke":true}`, by an enrolled device key.
+  Future<_Out> _putDevice(HttpRequest req, String wid, String fp, _LogInfo info, _Sig sig) async {
+    final known = _known(wid);
+    await _needDevice(req, sig);
+    final body = await _readBody(req, _maxDeviceJson, info);
+    await _verify(known.pubBytes, sig, 'PUT', body);
+    _admit(known, sig);
+    final raw = _jsonMap(body);
+    if (raw.length != 1 || raw.values.single != true || !(raw.containsKey('approve') || raw.containsKey('revoke'))) {
+      throw _HttpError(400, 'bad device change');
+    }
+    final approve = raw.containsKey('approve');
+    info.kind = approve ? 'approve' : 'revoke';
+    return _lockedAs(wid, sig, (w) async {
+      final now = _now();
+      var changed = w.dropExpired(now);
+      final target = w.keyOf(fp);
+      if (target == null) {
+        if (changed) await w.saveMeta();
+        throw _HttpError(404, 'no such key');
+      }
+      final k = w.keys[target];
+      var status = 201;
+      if (approve) {
+        if (k?.revoked != null) {
+          if (changed) await w.saveMeta();
+          throw _HttpError(409, 'revoked');
+        }
+        if (k != null) {
+          status = 200;
+        } else {
+          final p = w.pending.remove(target)!;
+          w.keys[target] = DeviceKey(p.fp, now, sig.dev!, deviceId: p.deviceId);
+          changed = true;
+        }
+      } else {
+        status = 200;
+        if (k == null) {
+          // A pending key rejected: recorded as revoked, so it can never enrol.
+          final p = w.pending.remove(target)!;
+          w.keys[target] = DeviceKey(p.fp, now, sig.dev!, revoked: now, deviceId: p.deviceId);
+          changed = true;
+        } else if (k.revoked == null) {
+          if (w.activeKeys <= 1) {
+            if (changed) await w.saveMeta();
+            throw _HttpError(409, 'lastDevice');
+          }
+          k.revoked = now;
+          // A removed device still holds the wallet key: without the lock it would enrol a fresh device key at once.
+          w.locked = true;
+          final t = int.parse(sig.time);
+          if (t > w.lockTime) w.lockTime = t;
+          changed = true;
+        }
+      }
+      if (changed) await w.saveMeta();
+      _log('relay keys enrolled=${w.activeKeys} pending=${w.pending.length} w=${info.wid}');
+      return _Out.json(status, {'fp': fp, 'status': w.keys[target]!.revoked == null ? 'enrolled' : 'revoked'});
+    });
+  }
+
+  /// `PUT lock` `{"locked":bool}`, by an enrolled device key; applied only when signed later than the last change.
+  Future<_Out> _putLock(HttpRequest req, String wid, _LogInfo info, _Sig sig) async {
+    final known = _known(wid);
+    await _needDevice(req, sig);
+    final body = await _readBody(req, _maxDeviceJson, info);
+    await _verify(known.pubBytes, sig, 'PUT', body);
+    _admit(known, sig);
+    final raw = _jsonMap(body);
+    final v = raw['locked'];
+    if (raw.length != 1 || v is! bool) throw _HttpError(400, 'bad lock');
+    final t = int.parse(sig.time);
+    return _lockedAs(wid, sig, (w) async {
+      if (t > w.lockTime) {
+        w.lockTime = t;
+        w.locked = v;
+        await w.saveMeta();
+      }
+      return _Out.json(200, {'locked': w.locked});
+    });
   }
 
   static Map<String, int> _parseCovers(String? header) {

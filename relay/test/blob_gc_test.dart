@@ -157,7 +157,7 @@ void main() {
     expect((await h.putSnapshot(w1, 's1', {'dev1': 2}, 'snap1')).statusCode, 201);
     h.v3 = false;
     expect((await h.state(w1))['api'], 4);
-    expect(jsonDecode((await h.get('/v2/health')).body), {'api': 4});
+    expect(jsonDecode((await h.get('/v2/health')).body), {'api': 5});
   });
 
   test('no GC while the latest snapshot does not cover every device\'s last (a newer file may reference more)', () async {

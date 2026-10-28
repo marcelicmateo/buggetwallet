@@ -1,4 +1,4 @@
-// Request signatures of protocol v4 (docs/context/RELAY_PROTOCOL.md, "Signed requests"): the relay only verifies.
+// Request signatures of protocol v5 (docs/context/RELAY_PROTOCOL.md, "Signed requests"): the relay only verifies.
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -14,6 +14,32 @@ const Duration signatureWindow = Duration(minutes: 5);
 /// relay still accepts from api-3 apps.
 String signedText(String method, String host, String path, String covers, String bodyHash, String time, {bool v3 = false}) =>
     '${v3 ? 'bw-relay-v3' : 'bw-relay-v4'}\n$method\n$host\n$path\n$covers\n$bodyHash\n$time';
+
+/// The api-5 text: the v4 fields under `bw-relay-v5`, then the `X-BW-Dev` value ([devpub]) as sent. Signed by that
+/// device key (`X-BW-Sig`) and, where the wallet key must agree, by the wallet key too (`X-BW-WSig`).
+String signedTextV5(String method, String host, String path, String covers, String bodyHash, String time, String devpub) =>
+    'bw-relay-v5\n$method\n$host\n$path\n$covers\n$bodyHash\n$time\n$devpub';
+
+const _base32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+/// A device key's fingerprint (RELAY_PROTOCOL.md "Identity"): the first 8 base32 characters of SHA-256 of the public
+/// key bytes, as `ABCD-EFGH`.
+String fingerprint(List<int> pub) {
+  final h = const DartSha256().hashSync(pub).bytes;
+  var bits = 0;
+  for (var i = 0; i < 5; i++) {
+    bits = bits * 256 + h[i];
+  }
+  final out = StringBuffer();
+  for (var i = 7; i >= 0; i--) {
+    out.write(_base32[(bits >> (5 * i)) & 31]);
+    if (i == 4) out.write('-');
+  }
+  return out.toString();
+}
+
+/// What [fingerprint] returns.
+final RegExp fingerprintPattern = RegExp(r'^[A-Z2-7]{4}-[A-Z2-7]{4}$');
 
 /// The api-2 text (`bw-relay-v2`, no host): only to tell an app of that version, on `GET state`, to update.
 String signedTextV2(String method, String path, String covers, String bodyHash, String time) =>

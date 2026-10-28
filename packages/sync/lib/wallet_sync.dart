@@ -13,9 +13,16 @@ export 'src/sync.dart'
     show relayFingerprint, SyncDevice, SyncException, SyncProblem, SyncProblemReason, syncReaderVersion, SyncReport, SyncWaiting;
 export 'src/sync_engine.dart'
     show
+        DeviceKeyTransport,
+        deviceFingerprint,
+        EnrolResult,
+        MemoryDeviceTransport,
         MemoryTransport,
+        newDeviceKey,
         parseHttpDate,
         RelayDevice,
+        RelayKey,
+        RelayPendingKey,
         RelaySnapshot,
         RelayState,
         RelayTransport,

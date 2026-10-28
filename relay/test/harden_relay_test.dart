@@ -21,7 +21,7 @@ void main() {
       expect((await h.putData(w1, 'dev1', 1, 'one')).statusCode, 201);
       h.signHost = '127.0.0.1';
       expect((await h.get('/v2/w/$w1/state', key: keyA)).statusCode, 401, reason: 'the port is part of the host');
-      expect(apiVersion, 4);
+      expect(apiVersion, 5);
     });
 
     test('behind a proxy: --public-host is the host checked, whatever Host the proxy sends', () async {
@@ -37,7 +37,7 @@ void main() {
   });
 
   group('an api-2 app on this relay', () {
-    test('GET state signed with the v2 text answers only {"api":3} (the app says "update the app"); other v2 requests 401', () async {
+    test('GET state signed with the v2 text answers only {"api":5} (the app says "update the app"); other v2 requests 401', () async {
       final h = await freshHarness();
       await h.putData(w1, 'dev1', 1, 'one');
       const path = '/v2/w/$w1/state';
@@ -46,7 +46,7 @@ void main() {
       final v2 = {'x-bw-time': t, 'x-bw-sig': await keyA.sign('bw-relay-v2\nGET\n$path\n\n$empty\n$t')};
       final r = await h.get(path, headers: v2);
       expect(r.statusCode, 200);
-      expect(jsonDecode(r.body), {'api': 4});
+      expect(jsonDecode(r.body), {'api': 5});
       final d = await h.get('/v2/w/$w1/d/dev1/1', headers: {
         'x-bw-time': t,
         'x-bw-sig': await keyA.sign('bw-relay-v2\nGET\n/v2/w/$w1/d/dev1/1\n\n$empty\n$t'),
