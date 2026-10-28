@@ -14,6 +14,8 @@
 #   tools/build.sh format   rewrite Dart files with `dart format` (page width in analysis_options.yaml)
 #   tools/build.sh apk      Android release APK   -> dist/BudgetWallet-android.apk
 #   tools/build.sh linux    Linux release bundle  -> dist/BudgetWallet-linux-x64.tar.gz
+#   tools/build.sh relay-bin [arm64|x64]   relay server as a native executable (dart compile exe, cross-compiled; default arm64 for the
+#                           Raspberry Pi) -> dist/relay/relay-linux-<arch> + .sha256 (relay/deploy/native/README.md)
 #   tools/build.sh web      Flutter web build (--wasm, JS if a dependency blocks it) -> dist/web/; fetches sqlite3.wasm first
 #                           (pinned by dev/sqlite3-wasm.sha256). Serve it with tools/web.sh
 #   tools/build.sh web-test [file…]   flutter test --platform chrome: app/test/web/ or the given files
@@ -151,7 +153,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   case "$CMD" in
     image) build_image; exit ;;
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
-    test|lint|apk|linux|all|importer|core|sync|relay|app|mutate|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated) run_begin "$CMD"; hook_hint ;;
+    test|lint|apk|linux|all|importer|core|sync|relay|app|mutate|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated|relay-bin) run_begin "$CMD"; hook_hint ;;
     stage) host_stage; exit ;;
     format|shell|lsp|mcp) ;;
     *) usage ;;
@@ -345,7 +347,8 @@ LINT=(format format_check
       actionlint actionlint
       hook-selftest 'tools/no-poll-hook.sh --self-test'
       env-selftest env_selftest
-      deploy-selftest 'tools/relay-deploy.sh --self-test')
+      deploy-selftest 'tools/relay-deploy.sh --self-test'
+      native-units 'tools/relay-native-check.sh')
 declare -A SUITE=(
   [importer]='suite importer packages/wallet_importer "dart analyze --fatal-infos" dart test --timeout 60s'
   [core]='suite core packages/wallet_core "dart analyze --fatal-infos" dart test --timeout 60s'
@@ -428,6 +431,17 @@ check_signature() {
   [[ -n "$want" && "$want" == "$got" ]]
 }
 export -f check_signature
+# relay_bin <arm64|x64>: AOT executable for linux/<arch> from relay/bin/relay.dart (the pinned Dart cross-compiles; needs glibc on the target)
+# shellcheck disable=SC2329  # called by name through a step
+relay_bin() {
+  local arch=$1 out="dist/relay/relay-linux-$1"
+  mkdir -p dist/relay
+  (cd relay && dart compile exe --target-os linux --target-arch "$arch" bin/relay.dart -o "../$out") || return 1
+  (cd dist/relay && sha256sum "relay-linux-$arch" > "relay-linux-$arch.sha256") || return 1
+  file "$out"
+  cat "$out.sha256"
+}
+export -f relay_bin
 build_linux() {
   local cold=false; [[ -d app/build/linux ]] || cold=true
   step linux 'cd app && flutter build linux --release && tar -C build/linux/x64/release -czf ../dist/BudgetWallet-linux-x64.tar.gz bundle' "$cold"
@@ -728,6 +742,8 @@ case "$CMD" in
   mutate) pub_ready; (($# > 2)) || usage
           python3 -I "$ROOT/tools/mutate.py" "${@:2}" 2>&1 | tee "$LOGS/mutate.log"; exit "${PIPESTATUS[0]}" ;;
   apk)    run_pub; [[ $failed == 0 ]] && build_apk ;;
+  relay-bin) case "${2:-arm64}" in arm64|x64) ;; *) usage ;; esac
+          run_pub; [[ $failed == 0 ]] && step relay-bin "relay_bin ${2:-arm64}" ;;
   linux)  run_pub; [[ $failed == 0 ]] && build_linux ;;
   desktop-test)  run_pub; [[ $failed == 0 ]] && desktop_tests "${@:2}" ;;
   perf)   run_pub; [[ $failed == 0 ]] && step perf perf_run ;;

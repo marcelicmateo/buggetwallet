@@ -1,0 +1,28 @@
+# Caddy (OS package, systemd service) in front of the native Budget Wallet relay. Install as /etc/caddy/Caddyfile.
+# BW_RELAY_DOMAIN comes from /etc/bw-relay/bw-relay.env (caddy.service.d/bw-relay.conf): the public name of this server.
+# Caddy gets and renews the certificate itself and answers plain http:// on port 80 with a redirect to https://.
+# No access log is configured on purpose: request paths hold wallet ids and Caddy would log client addresses.
+# Caddy's error logger (http.log.error, written on every 5xx such as a 502 while the relay restarts) would log the whole request
+# (client address, full URI with the wallet id, all headers); it is dropped. Startup and certificate messages stay.
+{
+	log default {
+		exclude http.log.error
+	}
+}
+
+{$BW_RELAY_DOMAIN} {
+	# Same as the relay's largest body (a 64 MiB snapshot); bigger is refused here with 413.
+	request_body {
+		max_size 64MiB
+	}
+
+	# Caddy overwrites any X-Forwarded-For a client sends with the real client address, so the relay (started with
+	# --trust-proxy) can take the last hop for its rate limit. Do not add header_up lines: in particular the Host header
+	# must reach the relay unchanged, requests are signed for the address the app used.
+	reverse_proxy 127.0.0.1:8787 {
+		health_uri /v2/health
+		health_interval 30s
+	}
+
+	header -Server
+}
