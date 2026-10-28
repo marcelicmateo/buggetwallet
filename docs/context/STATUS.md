@@ -401,6 +401,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - Review: 0 blocking, 2 medium (P13 sheet lost after "No thanks"; a restore left "Finish setting up" on a full wallet), 5 low; all fixed with tests. Today and Done share one hero figure.
   - **Stage run** (b825cf2): importer 400, core 2737, sync 365, relay 216, app 2003, desktop, web-test 9, emulator screens, perf ok.
 
+- 2026-10-28: **Stage C2: chart audit** (owner asked after seeing `/dataviz`; audit `tools`-free, by the dataviz guide and its palette validator).
+  - Chart-only colours `chartPos`/`chartNeg`/`chart2` (light #3A559E/#A93A32/#A8650F, dark #6F8FE0/#D56F66/#C27F20), validated colour-blind safe in light and dark against the real surfaces (the old dark blue/red failed the lightness band and chroma). Text, buttons, meters (goal bar, pace bar) and status colours unchanged.
+  - Income vs spending: "Went out" in amber `chart2`, no longer the status red. Saved/lost chart: legend (only what is drawn). Payday forecast: tap tooltip (date + balance), payday value at the end, screen-reader text. Bars: 4 px rounded data end, square baseline; end dots 4 px with a ring; solid ticks.
+  - Review: 0 blocking, 2 medium (legend listed undrawn series; meters took the chart blue), 3 low; fixed with tests.
+  - **Stage run** (6833ff6): all green except desktop big_wallet over its 1.5 s import budget while a builder's suite ran alongside (every figure ~3× slower, core imports too); rerun alone on 31878a9: 432 ms, green; desktop chart_dpr + layout green; app 2027.
+
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -491,7 +497,8 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Schema 17:** update every device together; a device that stays on an older build for over 30 days after the others upgraded may miss IOUs until they are edited again.
 
 ## Next
-- **Stage C2: chart audit** (`/dataviz` rules), then the M6 live test.
+- **M6 live test** next (owner starts `ci` for the build). Every planned stage is built.
+- Owner checks after Stage C2 (phone): dark mode Spending bars (a deeper blue) and the legend under the saved/lost chart; rounded bar tops on Insights; amber "Went out" on Income vs spending; tap the payday forecast chart.
 - Owner checks after Stage X (phone): new wallet → save key → the guide with a real bank file: import preview, accounts + cash, plan, bills, payees (pick a tag, Undo), budgets, Done vs Today; close half-way → Today "Finish setting up" → continue; Settings › Set up my wallet again; large text.
 - **PI2 (waiting for the owner):** Pi model, OS (`/etc/os-release`), domain/DDNS name, router 80/443 forward, SSD for the data.
 - Owner checks after Stage V (phone + laptop, update both first):

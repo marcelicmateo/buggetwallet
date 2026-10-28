@@ -70,8 +70,8 @@ structural widget tests (no golden tests), screenshots at 320 dp / dark / deskto
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
 | C2a | Audit: list of charts × rule failures + validator output (read-only) | scout or lead | – | X done | done (sonnet audit: dark chart colours fail, PeriodNetChart no legend, forecast no tooltip/semantics, income uses status red, square bar ends) |
-| C2b | Fixes + tests + screenshots | ui-builder | c2-ui | C2a | running (chart-only tokens chartPos/chartNeg/chart2; lead decision) |
-| C2 | Review, stage run, push, STATUS | lead | v2 | C2b | queued |
+| C2b | Fixes + tests + screenshots | ui-builder | c2-ui | C2a | done e446a8e + b8c2388 (review 2 med + 3 low fixed) |
+| C2 | Review, stage run, push, STATUS | lead | v2 | C2b | done 2026-10-28: stage green (big_wallet rerun alone after host-load miss); pushed |
 
 ## Stage J: deeper structure (2026-10-27, `PATH_FORWARD.md` §4 J1–J4; refactor-only, no schema/protocol change)
 Owner (2026-10-27): J before the live test; `ci` (APK + Linux only) started in parallel for the owner's phone build.
@@ -239,7 +239,7 @@ Plan: `STAGE_Q_PLAN.md` (Q1–Q11, waves 0–3, delegation table). Base eaa790f.
 | B2d | `paydayDone` → `payGoals(period:)`; pass appVersion to FolderSync | lead | stage-b | B2b | done (c1dd111, app 446/0) |
 | B2 | Merge B2a–e on `stage-b` (done), review (done, fixed: 6d273f4), test+desktop green on a275d29, perf step hangs (D1d), emulator running, then push | lead | stage-b → v2 | B2a–e, B1 | done |
 | C1 | Ledger theme tests from spec | test-writer | ledger-tests (from 6ebb9bc) | – | done (5 files; ui-builder merges them) |
-| C2 | Ledger theme build (fonts, tokens, components, screens) | ui-builder | ledger-ui (from 6ebb9bc) | – | done (cc64049, app 500/0, tests merged) |
+| C2 | Ledger theme build (fonts, tokens, components, screens) | ui-builder | ledger-ui (from 6ebb9bc) | – | done 2026-10-28: stage green (big_wallet rerun alone after host-load miss); pushed |
 | C3 | Merge C1 into C2, make tests pass; three widths, dark, text scale | ui-builder | ledger-ui | C1, C2 | done (in cc64049) |
 | C | Merge C, review, Haiku, emulator, push, STATUS, re-sync design-system artifact | lead | v2 | C3, B2 | queued |
 | D1 | Bank profiles: PBZ/Revolut as profiles, kindHint, golden no-change tests | core-builder | bank-profiles (from v2) | – | done (00c111d, importer 193/0; merged into stage-b) |
