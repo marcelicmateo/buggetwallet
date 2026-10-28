@@ -20,11 +20,11 @@ import 'src/screens/onboarding.dart';
 import 'src/screens/payday_plan.dart';
 import 'src/screens/save.dart';
 import 'src/screens/settings.dart';
+import 'src/screens/setup_wizard.dart';
 import 'src/screens/spending.dart';
 import 'src/screens/today.dart';
 import 'src/screens/today_view.dart';
 import 'src/screens/unlock.dart';
-import 'src/screens/welcome_balance.dart';
 import 'src/tabs.dart';
 import 'src/theme.dart';
 import 'src/widgets/common.dart';
@@ -339,11 +339,11 @@ class _HomeShellState extends State<HomeShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _shortcutAdd());
     // A wallet just created: ask the owner to save the key before the first Today.
     if (widget.wc.takeKeyBackupPrompt()) {
-      // Then one optional step: how much cash there is (Skip or close it and nothing is added).
+      // Then the "Set up my wallet" wizard (every step skippable; closing it keeps the step for Today's "Finish setting up").
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
         await openKeyBackup(context, widget.wc);
-        if (mounted) await openWelcomeBalance(context, widget.wc);
+        if (mounted) await openSetupWizard(context, widget.wc);
       });
     }
   }

@@ -23,6 +23,7 @@ import 'key_backup.dart';
 import 'look_panel.dart';
 import 'rules_panel.dart';
 import 'settings_panels.dart';
+import 'setup_wizard.dart';
 import 'sync_panel.dart';
 import 'tags_panel.dart';
 
@@ -143,7 +144,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           key: const ValueKey('settingsPage'),
           controller: _scroll,
           padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
-          children: gapped([for (final s in SettingsSection.listed) ..._panels(s)]),
+          children: gapped([_SetupAgainRow(wc: widget.wc, chooser: widget.chooser), for (final s in SettingsSection.listed) ..._panels(s)]),
         ),
       );
 
@@ -157,7 +158,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.fromLTRB(pagePad, 8, 8, pageBottomPad),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [for (final s in SettingsSection.listed) _NavRow(s, selected: s == selected, onTap: () => _select(s))],
+                children: [
+                  for (final s in SettingsSection.listed) _NavRow(s, selected: s == selected, onTap: () => _select(s)),
+                  _SetupAgainRow(wc: widget.wc, chooser: widget.chooser),
+                ],
               ),
             ),
           ),
@@ -172,6 +176,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ]),
       );
+}
+
+/// "Set up my wallet again": opens the setup wizard from step 1 with the wallet's current values (not a section).
+class _SetupAgainRow extends StatelessWidget {
+  final WalletController wc;
+  final FileChooser chooser;
+  const _SetupAgainRow({required this.wc, required this.chooser});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return InkWell(
+      key: const ValueKey('setupAgain'),
+      onTap: () => openSetupWizard(context, wc, chooser: chooser, restart: true),
+      hoverColor: c.surface2,
+      focusColor: c.accentSoft,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 56),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
+        child: Row(children: [
+          Icon(Icons.auto_fix_high, size: 18, color: c.ink),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Set up my wallet again', style: TextStyle(fontWeight: FontWeight.w500)),
+              Text('Files, accounts, plan, bills, tags, budgets', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+            ]),
+          ),
+          Icon(Icons.chevron_right, size: 20, color: c.ink2),
+        ]),
+      ),
+    );
+  }
 }
 
 /// One entry of the section list: title and a one-line sub; the chosen one is tinted, bold and has an arrow.

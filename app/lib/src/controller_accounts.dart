@@ -108,8 +108,8 @@ extension AccountsDb on WalletController {
   // ---------- first import (P13 §4) ----------
 
   /// True when the "Looks right?" sheet should show after an import: the wallet has proposals and has never been offered them
-  /// (device-local `planSuggestShown`). Nothing is written here.
-  bool shouldOfferFirstPlan() => repo.localValue('planSuggestShown') != '1' && planProposalList().isNotEmpty;
+  /// (device-local `planSuggestShown`), and the setup wizard (step 3 offers the same) never ran on this device. Nothing is written here.
+  bool shouldOfferFirstPlan() => repo.localValue('planSuggestShown') != '1' && setupWizardState == null && planProposalList().isNotEmpty;
 
   /// Marks the first-import sheet as shown (once per wallet on this device, whatever the owner answers).
   void markFirstPlanShown() {
