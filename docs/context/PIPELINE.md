@@ -41,6 +41,7 @@ Merge order: VB → VA → VT → VU.
 | VB | V3 review rows, `reviewStreak` pure (schema 18) | core-builder | v-review | V0b | done af0688d + 2e98ae5 (low fix), reviewed, merged 2cc0bcf |
 | VT | Spec tests (seal vectors, digest, divergence → repair, no ping-pong, streak) | test-writer | v-tests | V0a, V0b | done 88c43ab (48 tests unrun until VA+VB merge; backup otherKey asserted as VaultException) |
 | VU | UI: exact key/damaged texts, otherKey + devicesDisagree in Settings › Sync; wire `repo.reviewDates()` | ui-builder | v-ui | V0c, VA, VB (needs their enums/API; no shims) | done 7c331ab + 8747fd4 (on VA; app +167 targeted, lint/analyze ok) → review after VA review |
+| VC | Owner chooses on equal-clock conflicts (replaces tie-break): core `syncConflicts`/`resolveSyncConflict` + Settings › Sync "Choose the right ones" | core-builder (VA) + ui-builder (VU) | v-sync, v-ui | VA, VU | running |
 | V | Merge, merge-delta review, stage run, push, STATUS | lead | v2 | all | queued |
 
 ## Stage X: "Set up my wallet" wizard (2026-10-28, spec `X_SPEC.md`; on-device, no AI; after Stage V)
