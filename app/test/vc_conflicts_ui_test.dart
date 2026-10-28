@@ -131,6 +131,19 @@ void main() {
       expect(conflictValueText('tx', 'x', 'note', 'lunch', 'EUR'), 'lunch');
     });
 
+    test('times in milliseconds read as a local date and time; goal and wish money as money; counts stay numbers', () {
+      numberStyle = NumberStyle.comma;
+      final at = DateTime(2026, 10, 5, 14, 2);
+      for (final f in ['added', 'decided']) {
+        expect(conflictValueText('wish', 'w', f, at.millisecondsSinceEpoch, 'EUR'), '${shortDate('2026-10-05')} 14:02', reason: f);
+      }
+      expect(conflictValueText('wish', 'w', 'decided', null, 'EUR'), 'empty');
+      expect(conflictValueText('wish', 'w', 'price', 123450, 'EUR'), '1.234,50\u00A0€');
+      expect(conflictValueText('goal', 'g', 'monthly', 5000, 'EUR'), '50\u00A0€');
+      expect(conflictValueText('goal', 'g', 'sort', 3, 'EUR'), '3');
+      expect(conflictValueText('recurring', 'r', 'interval_days', 30, 'EUR'), '30');
+    });
+
     test('a setting value is stored as JSON text: salary is money, payday is a number', () {
       numberStyle = NumberStyle.comma;
       expect(conflictValueText('setting', 'salary', 'value', '150000', 'EUR'), '1.500 €');
