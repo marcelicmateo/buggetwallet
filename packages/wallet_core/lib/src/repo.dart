@@ -1015,8 +1015,9 @@ class WalletRepo {
   /// never written again (they stay the base the rows continue). Done twice on one day changes nothing (no new op).
   void markReviewDone(String today) {
     requireIsoDate(today);
-    final row = db.select('SELECT deleted FROM reviews WHERE id = ?', [today]);
-    if (row.isNotEmpty && row.first['deleted'] == 0) return;
+    final row = db.select('SELECT done, deleted FROM reviews WHERE id = ?', [today]);
+    // Already live and intact: nothing to write. A damaged `done` (from another device's op) is written again.
+    if (row.isNotEmpty && row.first['deleted'] == 0 && row.first['done'] == today) return;
     _write([
       ('review', today, {'done': today, 'deleted': 0})
     ]);

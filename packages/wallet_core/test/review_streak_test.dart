@@ -104,6 +104,17 @@ void main() {
       expect(r.reviewDates(), ['2026-03-01'], reason: 'junk skipped, deleted row not live');
     });
 
+    test('a live review row of today with a damaged done value is written again', () {
+      r.db.execute("INSERT INTO reviews(id, done, deleted) VALUES('2026-03-01', 'not a date', 0)");
+      expect(r.reviewDates(), isEmpty);
+      final before = r.pendingOps().length;
+      r.markReviewDone('2026-03-01');
+      expect(r.pendingOps(), hasLength(before + 1));
+      expect(r.reviewDates(), ['2026-03-01']);
+      r.markReviewDone('2026-03-01');
+      expect(r.pendingOps(), hasLength(before + 1), reason: 'repaired: the next call is a no-op');
+    });
+
     test('a deleted review row of today is written live again', () {
       r.applyRemote([
         const Op('review', '2026-03-01', {'done': '2026-03-01', 'deleted': 1}, '001768035600000:00001:peer0001')
