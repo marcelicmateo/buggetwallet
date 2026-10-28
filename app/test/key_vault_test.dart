@@ -23,8 +23,8 @@ void main() {
     addTearDown(sub.cancel);
   });
 
-  test('the real round count is 310000 and the shortest passphrase 8', () {
-    expect(pbkdf2Iterations, 310000);
+  test('the real round count is 600000 and the shortest passphrase 8', () {
+    expect(pbkdf2Iterations, 600000);
     expect(minPassphraseLength, 8);
   });
 
@@ -39,7 +39,7 @@ void main() {
     test('the blob names its round count and carries neither the key text nor the passphrase', () async {
       final key = VaultKey.generate();
       final blob = await wrapKey(key, _pass, iterations: _rounds);
-      expect(blob, startsWith('bwk1.$_rounds.'));
+      expect(blob, startsWith('bwk2.$_rounds.'));
       expect(blob, isNot(contains(_pass)));
       expect(blob, isNot(contains(await key.toText())));
     });
@@ -70,10 +70,14 @@ void main() {
         '',
         'nonsense',
         'bwk1.1000.AAAA',
-        'bwk2.1000.AAAA.AAAA',
         'bwk1.x.AAAA.AAAA',
         'bwk1.0.AAAA.AAAA',
-        'bwk1.1000.!!.!!'
+        'bwk1.1000.!!.!!',
+        'bwk2.1000.AAAA',
+        'bwk2.x.AAAA.AAAA',
+        'bwk2.0.AAAA.AAAA',
+        'bwk2.1000.!!.!!',
+        'bwk3.1000.AAAA.AAAA'
       ]) {
         await expectLater(unwrapKey(bad, _pass), throwsA(isA<FormatException>()), reason: bad);
       }
@@ -90,6 +94,60 @@ void main() {
       final i = sealed.length ~/ 2;
       final flipped = sealed.substring(0, i) + (sealed[i] == 'A' ? 'B' : 'A') + sealed.substring(i + 1);
       await expectLater(unwrapKey([...parts.take(3), flipped].join('.'), _pass), throwsA(anything));
+    });
+  });
+
+  group('bwk1 and bwk2', () {
+    // A blob from before bwk2: the same construction under the old tag.
+    Future<String> oldBlob(VaultKey key, {int rounds = _rounds}) async =>
+        (await wrapKey(key, _pass, iterations: rounds)).replaceFirst('bwk2.', 'bwk1.');
+
+    test('a bwk1 blob still opens; a wrong passphrase is WrongPassphrase for both versions', () async {
+      final key = VaultKey.generate();
+      final old = await oldBlob(key);
+      expect((await unwrapKey(old, _pass)).bytes, key.bytes);
+      final current = await wrapKey(key, _pass, iterations: _rounds);
+      for (final blob in [old, current]) {
+        await expectLater(unwrapKey(blob, 'not the passphrase'), throwsA(isA<WrongPassphrase>()));
+      }
+    });
+
+    test('the round count is read from the blob, not from the default', () async {
+      final key = VaultKey.generate();
+      final blob = await wrapKey(key, _pass, iterations: 1234);
+      expect(blob, startsWith('bwk2.1234.'));
+      expect((await unwrapKey(blob, _pass)).bytes, key.bytes);
+      // A different count in the text derives a different key: the blob no longer opens.
+      final changed = blob.replaceFirst('bwk2.1234.', 'bwk2.1235.');
+      await expectLater(unwrapKey(changed, _pass), throwsA(isA<WrongPassphrase>()));
+    });
+
+    test('unlocking a bwk1 blob stores it again as bwk2 with the same passphrase; the log says only from and to', () async {
+      final key = VaultKey.generate();
+      final local = MapKeyValueStore(), session = MapKeyValueStore();
+      local.write(KeyVault.wrappedName, await oldBlob(key, rounds: 500));
+      final v = vault(local, session);
+      expect((await v.unlock(_pass)).bytes, key.bytes);
+      final stored = local.read(KeyVault.wrappedName)!;
+      expect(stored, startsWith('bwk2.$_rounds.'));
+      expect((await unwrapKey(stored, _pass)).bytes, key.bytes);
+      expect(lines.join('\n'), contains('key.rewrap {"from":1,"to":2}'));
+      expect(lines.join('\n'), isNot(contains(_pass)));
+      // The next tab opens the new blob and does not wrap it again.
+      lines.clear();
+      final tab2 = vault(local, MapKeyValueStore());
+      await tab2.unlock(_pass);
+      expect(local.read(KeyVault.wrappedName), stored);
+      expect(lines.join('\n'), isNot(contains('key.rewrap')));
+    });
+
+    test('a wrong passphrase on a bwk1 blob leaves the stored blob as it was', () async {
+      final key = VaultKey.generate();
+      final local = MapKeyValueStore();
+      final old = await oldBlob(key);
+      local.write(KeyVault.wrappedName, old);
+      await expectLater(vault(local, MapKeyValueStore()).unlock('not the passphrase'), throwsA(isA<WrongPassphrase>()));
+      expect(local.read(KeyVault.wrappedName), old);
     });
   });
 
@@ -112,7 +170,7 @@ void main() {
       await v.write(key, passphrase: _pass);
       expect(v.isLocked, isFalse);
       expect((await v.read())!.bytes, key.bytes);
-      expect(local.values[KeyVault.wrappedName], startsWith('bwk1.$_rounds.'));
+      expect(local.values[KeyVault.wrappedName], startsWith('bwk2.$_rounds.'));
       expect(local.values.values.join(), isNot(contains(await key.toText())), reason: 'the plain key is not in localStorage');
     });
 
@@ -179,7 +237,7 @@ void main() {
       expect(log, contains('key.forgotten'));
       expect(log, isNot(contains(_pass)));
       expect(log, isNot(contains(await key.toText())));
-      expect(log, isNot(contains('bwk1')));
+      expect(log, isNot(contains('bwk')));
     });
 
     test('a tab that closed and a new one in the same browser: only the wrapped key survives', () async {

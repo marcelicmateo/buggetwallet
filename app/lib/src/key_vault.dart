@@ -10,8 +10,13 @@ import 'package:wallet_core/wallet_core.dart';
 
 final _log = Logger('bw.key');
 
-/// PBKDF2-HMAC-SHA256 rounds for the passphrase key (OWASP 2023 advice for this hash).
-const pbkdf2Iterations = 310000;
+/// PBKDF2-HMAC-SHA256 rounds for a new passphrase key (OWASP 2023 advice for this hash is 600000). Blobs made with fewer rounds
+/// (`bwk1`, 310000) still open and are wrapped again as `bwk2` on the next unlock.
+const pbkdf2Iterations = 600000;
+
+/// The blob version [wrapKey] writes; [unwrapKey] also reads the older one.
+const _currentTag = 'bwk2';
+const _oldTag = 'bwk1';
 
 /// The shortest passphrase the app accepts when it wraps a key.
 const minPassphraseLength = 8;
@@ -47,19 +52,19 @@ Future<VaultKey> _derive(String passphrase, List<int> salt, int iterations) asyn
   return VaultKey(await secret.extractBytes());
 }
 
-/// [key] wrapped with [passphrase]: `bwk1.<rounds>.<salt>.<sealed key text>` (base64url parts). A new random 16-byte salt each time.
+/// [key] wrapped with [passphrase]: `bwk2.<rounds>.<salt>.<sealed key text>` (base64url parts). A new random 16-byte salt each time.
 Future<String> wrapKey(VaultKey key, String passphrase, {int iterations = pbkdf2Iterations}) async {
   final salt = SecretKeyData.random(length: 16).bytes;
   final derived = await _derive(passphrase, salt, iterations);
   final sealed = await seal(utf8.encode(await key.toText()), derived, aad: aadWebKey, legacyFormat: true);
-  return 'bwk1.$iterations.${base64Url.encode(salt)}.${base64Url.encode(sealed)}';
+  return '$_currentTag.$iterations.${base64Url.encode(salt)}.${base64Url.encode(sealed)}';
 }
 
 /// The key inside [blob] (from [wrapKey]). A wrong passphrase is [WrongPassphrase]; a blob that is not ours or is damaged is a
 /// [FormatException] / [VaultException].
 Future<VaultKey> unwrapKey(String blob, String passphrase) async {
   final parts = blob.split('.');
-  final rounds = parts.length == 4 && parts[0] == 'bwk1' ? int.tryParse(parts[1]) : null;
+  final rounds = parts.length == 4 && (parts[0] == _currentTag || parts[0] == _oldTag) ? int.tryParse(parts[1]) : null;
   if (rounds == null || rounds < 1) throw const FormatException('The stored key is not in a known format.');
   final Uint8List salt, sealed;
   try {
@@ -112,6 +117,11 @@ class KeyVault {
     try {
       final key = await unwrapKey(blob, passphrase);
       session.write(sessionName, await key.toText());
+      if (blob.startsWith('$_oldTag.')) {
+        // An older blob: wrap it again with today's version and rounds (same passphrase).
+        local.write(wrappedName, await wrapKey(key, passphrase, iterations: iterations));
+        logEvent(_log, Level.INFO, 'key.rewrap', {'from': 1, 'to': 2});
+      }
       t.done({'store': 'browser'});
       logEvent(_log, Level.INFO, 'key.unlocked', {'store': 'browser'});
       return key;
