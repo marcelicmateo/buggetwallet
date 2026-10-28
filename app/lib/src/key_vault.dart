@@ -14,6 +14,9 @@ final _log = Logger('bw.key');
 /// (`bwk1`, 310000) still open and are wrapped again as `bwk2` on the next unlock.
 const pbkdf2Iterations = 600000;
 
+/// The most rounds a stored blob may ask for: the count comes from the blob, so a damaged or planted one must not hang the tab.
+const maxPbkdf2Iterations = 10000000;
+
 /// The blob version [wrapKey] writes; [unwrapKey] also reads the older one.
 const _currentTag = 'bwk2';
 const _oldTag = 'bwk1';
@@ -65,7 +68,7 @@ Future<String> wrapKey(VaultKey key, String passphrase, {int iterations = pbkdf2
 Future<VaultKey> unwrapKey(String blob, String passphrase) async {
   final parts = blob.split('.');
   final rounds = parts.length == 4 && (parts[0] == _currentTag || parts[0] == _oldTag) ? int.tryParse(parts[1]) : null;
-  if (rounds == null || rounds < 1) throw const FormatException('The stored key is not in a known format.');
+  if (rounds == null || rounds < 1 || rounds > maxPbkdf2Iterations) throw const FormatException('The stored key is not in a known format.');
   final Uint8List salt, sealed;
   try {
     salt = base64Url.decode(parts[2]);
@@ -118,9 +121,13 @@ class KeyVault {
       final key = await unwrapKey(blob, passphrase);
       session.write(sessionName, await key.toText());
       if (blob.startsWith('$_oldTag.')) {
-        // An older blob: wrap it again with today's version and rounds (same passphrase).
-        local.write(wrappedName, await wrapKey(key, passphrase, iterations: iterations));
-        logEvent(_log, Level.INFO, 'key.rewrap', {'from': 1, 'to': 2});
+        // An older blob: wrap it again with today's version and rounds (same passphrase). A failure keeps the old blob and the unlock.
+        try {
+          local.write(wrappedName, await wrapKey(key, passphrase, iterations: iterations));
+          logEvent(_log, Level.INFO, 'key.rewrap', {'from': 1, 'to': 2});
+        } catch (_) {
+          logEvent(_log, Level.WARNING, 'key.rewrapFailed', {'from': 1, 'to': 2});
+        }
       }
       t.done({'store': 'browser'});
       logEvent(_log, Level.INFO, 'key.unlocked', {'store': 'browser'});

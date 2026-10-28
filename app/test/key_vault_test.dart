@@ -14,6 +14,16 @@ const _pass = 'correct horse battery';
 
 KeyVault vault(MapKeyValueStore local, MapKeyValueStore session) => KeyVault(local: local, session: session, iterations: _rounds);
 
+/// A [MapKeyValueStore] whose writes can be made to fail (a browser refusing storage).
+class _FailingStore extends MapKeyValueStore {
+  bool failWrites = false;
+  @override
+  void write(String name, String value) {
+    if (failWrites) throw StateError('storage refused');
+    super.write(name, value);
+  }
+}
+
 void main() {
   late List<String> lines;
   setUp(() {
@@ -77,7 +87,10 @@ void main() {
         'bwk2.x.AAAA.AAAA',
         'bwk2.0.AAAA.AAAA',
         'bwk2.1000.!!.!!',
-        'bwk3.1000.AAAA.AAAA'
+        'bwk3.1000.AAAA.AAAA',
+        'bwk2.10000001.AAAA.AAAA',
+        'bwk1.99999999999.AAAA.AAAA',
+        'bwk2.-5.AAAA.AAAA'
       ]) {
         await expectLater(unwrapKey(bad, _pass), throwsA(isA<FormatException>()), reason: bad);
       }
@@ -139,6 +152,29 @@ void main() {
       await tab2.unlock(_pass);
       expect(local.read(KeyVault.wrappedName), stored);
       expect(lines.join('\n'), isNot(contains('key.rewrap')));
+    });
+
+    test('a round count above the limit is refused before any key derivation', () async {
+      final sw = Stopwatch()..start();
+      await expectLater(unwrapKey('bwk2.${maxPbkdf2Iterations + 1}.AAAA.AAAA', _pass), throwsA(isA<FormatException>()));
+      await expectLater(unwrapKey('bwk1.${maxPbkdf2Iterations * 10}.AAAA.AAAA', _pass), throwsA(isA<FormatException>()));
+      expect(sw.elapsedMilliseconds, lessThan(1000));
+    });
+
+    test('a failing store write while wrapping again keeps the bwk1 blob and the unlock succeeds; the log says only from and to', () async {
+      final key = VaultKey.generate();
+      final local = _FailingStore(), session = MapKeyValueStore();
+      final old = await oldBlob(key);
+      local.values[KeyVault.wrappedName] = old;
+      local.failWrites = true;
+      final v = vault(local, session);
+      expect((await v.unlock(_pass)).bytes, key.bytes);
+      expect(local.read(KeyVault.wrappedName), old);
+      expect((await v.read())!.bytes, key.bytes);
+      final text = lines.join('\n');
+      expect(text, contains('key.rewrapFailed {"from":1,"to":2}'));
+      expect(text, isNot(contains('key.rewrap {')));
+      expect(text, isNot(contains(_pass)));
     });
 
     test('a wrong passphrase on a bwk1 blob leaves the stored blob as it was', () async {
