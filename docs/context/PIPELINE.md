@@ -69,8 +69,8 @@ structural widget tests (no golden tests), screenshots at 320 dp / dark / deskto
 `theme.dart` changes.
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
-| C2a | Audit: list of charts × rule failures + validator output (read-only) | scout or lead | – | X done | next |
-| C2b | Fixes + tests + screenshots | ui-builder | c2-ui | C2a | queued |
+| C2a | Audit: list of charts × rule failures + validator output (read-only) | scout or lead | – | X done | done (sonnet audit: dark chart colours fail, PeriodNetChart no legend, forecast no tooltip/semantics, income uses status red, square bar ends) |
+| C2b | Fixes + tests + screenshots | ui-builder | c2-ui | C2a | running (chart-only tokens chartPos/chartNeg/chart2; lead decision) |
 | C2 | Review, stage run, push, STATUS | lead | v2 | C2b | queued |
 
 ## Stage J: deeper structure (2026-10-27, `PATH_FORWARD.md` §4 J1–J4; refactor-only, no schema/protocol change)
