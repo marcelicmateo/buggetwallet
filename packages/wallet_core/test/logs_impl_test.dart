@@ -4,13 +4,34 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:logging/logging.dart' show hierarchicalLoggingEnabled;
+import 'package:sqlite3/common.dart' show CommonDatabase;
 import 'package:sqlite3/sqlite3.dart' show SqliteException, sqlite3;
 import 'package:test/test.dart';
+import 'package:wallet_core/src/local_db.dart' show keyConnection;
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart' show ImportException;
 import 'package:wallet_sync/wallet_sync.dart';
 
 import 'support/synthetic.dart';
+
+/// A synthetic 32-byte key in hex (never a real one).
+const _hexKey = '0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0';
+
+/// A database whose key pragmas fail (with the statement in the error, like SQLite's), everything else a no-op.
+class _KeyFails implements CommonDatabase {
+  @override
+  void execute(String sql, [List<Object?> parameters = const []]) {
+    if (RegExp(r'PRAGMA (re)?key', caseSensitive: false).hasMatch(sql)) {
+      throw SqliteException(extendedResultCode: 1, message: 'cannot set the key', causingStatement: sql);
+    }
+  }
+
+  @override
+  void close() {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 /// Formatted lines of everything logged during the test, at every level.
 /// [formatLogRecord]'s ISO time prefix. Dropped before the private-text checks: a time such as `06:05:23.403` holds the
@@ -97,6 +118,42 @@ void main() {
     test('ArgumentError without the invalid value', () {
       final d = describeError(ArgumentError.value('POS LIDL 23.40', 'description', 'bad'));
       expect(d, 'ArgumentError(description): bad');
+    });
+
+    test('a key pragma never shows the key: statement redacted, a quoting message too (any case, rekey, hexkey)', () {
+      final lines = _captureAll();
+      for (final st in ["PRAGMA key = \"x'$_hexKey'\"", "pragma ReKey = \"x'$_hexKey'\"", "  PRAGMA main.hexkey = '$_hexKey'"]) {
+        final e = SqliteException(
+            extendedResultCode: 1, message: 'near "x\'$_hexKey\'": syntax error', explanation: "x'$_hexKey'", causingStatement: st);
+        final d = describeError(e);
+        expect(d, isNot(contains(_hexKey.substring(0, 12))), reason: st);
+        expect(d, contains('key = <redacted>'));
+        logError(Logger('bw.test'), 'test.keyFailed', e, null);
+      }
+      expect(_body(lines), contains('test.keyFailed'));
+      expect(_body(lines), isNot(contains(_hexKey.substring(0, 12))));
+      // Other statements and plain messages stay as they were.
+      final other =
+          describeError(SqliteException(extendedResultCode: 26, message: 'file is not a database', causingStatement: 'PRAGMA keyword_x'));
+      expect(other, 'SqliteException(26): file is not a database [statement: PRAGMA keyword_x]');
+      expect(describeError(SqliteException(extendedResultCode: 26, message: 'file is not a database', causingStatement: 'PRAGMA key = 1')),
+          'SqliteException(26): file is not a database [statement: PRAGMA key = <redacted>]');
+    });
+
+    test('openKeyed and keyConnection: a failing key pragma logs no key', () {
+      final key = [for (var i = 0; i < 32; i++) 0xa0 + i % 16]; // synthetic: hex a0a1a2…
+      Object? err;
+      try {
+        openKeyed(_KeyFails.new, key);
+      } on SqliteException catch (e) {
+        err = e;
+      }
+      expect(err, isA<SqliteException>(), reason: 'openKeyed rethrows the database error');
+      expect('$err', contains('a0a1a2a3'), reason: 'its own text would leak the key');
+      expect(describeError(err), isNot(contains('a0a1a2a3')));
+      expect(describeError(err), contains('PRAGMA key = <redacted>'));
+      expect(() => keyConnection(_KeyFails(), key),
+          throwsA(isA<StateError>().having((e) => '$e', 'text', allOf(contains('could not key'), isNot(contains('a0a1a2a3'))))));
     });
 
     test('SqliteException without statement parameters', () {

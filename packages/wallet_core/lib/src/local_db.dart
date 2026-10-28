@@ -48,6 +48,24 @@ CommonDatabase openKeyed(CommonDatabase Function() open, List<int> dbKey) => ope
 /// unreadable (or new ones unreadable to older builds).
 const _pinCipher = "PRAGMA cipher = 'chacha20'";
 
+/// The `PRAGMA key` / `rekey` value for [dbKey]: the raw 32-byte key as a blob literal (no KDF).
+String _pragmaKey(List<int> dbKey) {
+  if (dbKey.length != 32) throw ArgumentError.value(dbKey.length, 'dbKey', 'must be 32 bytes');
+  return "\"x'${dbKey.map((b) => (b & 0xff).toRadixString(16).padLeft(2, '0')).join()}'\"";
+}
+
+/// Keys a further connection to a database [openKeyed] already opened (and converted): the pinned cipher, then
+/// [dbKey]. Nothing is checked here; the first read fails (SQLITE_NOTADB) when the key does not fit. A failing pragma
+/// is a [StateError] with a fixed text (the database error's statement would hold the key).
+void keyConnection(CommonDatabase db, List<int> dbKey) {
+  try {
+    db.execute(_pinCipher);
+    db.execute('PRAGMA key = ${_pragmaKey(dbKey)}');
+  } on SqliteException catch (e) {
+    throw StateError('could not key the database connection (sqlite ${e.extendedResultCode})');
+  }
+}
+
 /// [openKeyed] with the native side-copy steps: [beforeRekey] runs once the plaintext database is complete in its main
 /// file (WAL checkpointed and removed) and before it is changed; [onFailed] when the rekey threw or the check failed
 /// (before the error propagates); [onVerified] after the check passed. [step] is a test hook called with `rekeyed`.
@@ -59,8 +77,7 @@ CommonDatabase openKeyedWith(
   void Function()? onVerified,
   void Function(String step)? step,
 }) {
-  if (dbKey.length != 32) throw ArgumentError.value(dbKey.length, 'dbKey', 'must be 32 bytes');
-  final pragmaKey = "\"x'${dbKey.map((b) => (b & 0xff).toRadixString(16).padLeft(2, '0')).join()}'\"";
+  final pragmaKey = _pragmaKey(dbKey);
   final t = PerfTimer('db.openKeyed');
   final keyed = open();
   final bool ok;

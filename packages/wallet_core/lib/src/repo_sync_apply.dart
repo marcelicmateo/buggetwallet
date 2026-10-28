@@ -413,46 +413,44 @@ extension WalletRepoSyncApply on WalletRepo {
   String stateDigest() {
     if (_digestCache case (final int v, final String hex) when v == dataVersion) return hex;
     final t = PerfTimer('repo.stateDigest', warnMs: 1000);
-    final sink = const DartSha256().newHashSink();
-    final buf = StringBuffer(); // hashed in chunks of about 64 KiB: one UTF-8 conversion per chunk, not per row
-    void flush() {
-      sink.add(utf8.encode(buf.toString()));
-      buf.clear();
-    }
-
-    var rows = 0;
-    for (final entity in entitySchema.keys.toList()..sort()) {
-      final def = entitySchema[entity]!;
-      final cols = def.columnNames.toList()..sort();
-      buf
-        ..write(jsonEncode([entity, cols]))
-        ..write('\n');
-      final clocks = <String, Map<String, String>>{}; // id -> field -> hlc
-      for (final r in db.select('SELECT id, field, hlc FROM clocks WHERE entity = ?', [entity])) {
-        if ((r['id'], r['field'], r['hlc']) case (final String id, final String f, final String h)) (clocks[id] ??= {})[f] = h;
-      }
-      for (final r in db.select('SELECT id, ${cols.join(', ')} FROM ${def.table} ORDER BY id').rows) {
-        final id = r[0] as String;
-        final c = clocks[id] ?? const <String, String>{};
-        final line = <Object?>[id];
-        for (var i = 0; i < cols.length; i++) {
-          line
-            ..add(r[i + 1])
-            ..add(c[cols[i]]);
-        }
-        buf
-          ..write(jsonEncode(line))
-          ..write('\n');
-        if (buf.length > 65536) flush();
-        rows++;
-      }
-    }
-    flush();
-    sink.close();
-    final hex = sink.hashSync().bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final (hex, rows) = _canonicalDigest(db);
     _digestCache = (dataVersion, hex);
     _digestRuns++;
-    t.done({'rows': rows});
+    t.done({'rows': rows, 'isolate': false});
+    return hex;
+  }
+
+  /// [stateDigest] of the state at data version [atVersion] (default: [dataVersion] now), computed off this isolate
+  /// for a database file opened by [WalletRepo.open] (native): a new isolate reads the file on its own read-only
+  /// connection (same key) in one read transaction, so the UI isolate stays free on a big wallet. In-memory and
+  /// [WalletRepo.fromDatabase] repos (tests, the web) compute it here, like [stateDigest]. Shares its cache.
+  ///
+  /// Null when the data is not (or no longer) at [atVersion]: a write committed while the file was being read moves
+  /// [dataVersion], and the result, which may hold the state before or after that write, is discarded (never cached).
+  /// The caller records nothing then and asks again later. A failed isolate read (logged) falls back to [stateDigest].
+  Future<String?> stateDigestAsync({int? atVersion}) async {
+    final v = atVersion ?? dataVersion;
+    if (v != dataVersion) return null;
+    if (_digestCache case (final int c, final String hex) when c == v) return hex;
+    final file = _file;
+    if (file == null) return stateDigest();
+    final t = PerfTimer('repo.stateDigest', warnMs: 1000);
+    logEvent(_log, Level.FINER, 'repo.stateDigest.isolate'); // also the tests' cue to write meanwhile
+    final String hex;
+    final int rows;
+    try {
+      (hex, rows) = await sqlite.readInIsolate(file.$1, file.$2, WalletRepo.debugDigestReader ?? _canonicalDigest);
+    } catch (e, st) {
+      logError(_log, 'repo.stateDigest.isolateFailed', e, st);
+      return v == dataVersion ? stateDigest() : null;
+    }
+    if (v != dataVersion) {
+      t.done({'rows': rows, 'isolate': true, 'stale': true});
+      return null;
+    }
+    _digestCache = (v, hex);
+    _digestRuns++;
+    t.done({'rows': rows, 'isolate': true});
     return hex;
   }
 
@@ -510,4 +508,46 @@ extension WalletRepoSyncApply on WalletRepo {
       db.execute('DELETE FROM sync_files WHERE device = ? AND seq <= ?', [d, s]);
     }
   }
+}
+
+/// The canonical synced-state hash of [db] ([WalletRepoSyncApply.stateDigest]) and the row count it read. Top-level and
+/// free of repo state, so [WalletRepoSyncApply.stateDigestAsync] can run it in another isolate on its own connection.
+(String, int) _canonicalDigest(CommonDatabase db) {
+  final sink = const DartSha256().newHashSink();
+  final buf = StringBuffer(); // hashed in chunks of about 64 KiB: one UTF-8 conversion per chunk, not per row
+  void flush() {
+    sink.add(utf8.encode(buf.toString()));
+    buf.clear();
+  }
+
+  var rows = 0;
+  for (final entity in entitySchema.keys.toList()..sort()) {
+    final def = entitySchema[entity]!;
+    final cols = def.columnNames.toList()..sort();
+    buf
+      ..write(jsonEncode([entity, cols]))
+      ..write('\n');
+    final clocks = <String, Map<String, String>>{}; // id -> field -> hlc
+    for (final r in db.select('SELECT id, field, hlc FROM clocks WHERE entity = ?', [entity])) {
+      if ((r['id'], r['field'], r['hlc']) case (final String id, final String f, final String h)) (clocks[id] ??= {})[f] = h;
+    }
+    for (final r in db.select('SELECT id, ${cols.join(', ')} FROM ${def.table} ORDER BY id').rows) {
+      final id = r[0] as String;
+      final c = clocks[id] ?? const <String, String>{};
+      final line = <Object?>[id];
+      for (var i = 0; i < cols.length; i++) {
+        line
+          ..add(r[i + 1])
+          ..add(c[cols[i]]);
+      }
+      buf
+        ..write(jsonEncode(line))
+        ..write('\n');
+      if (buf.length > 65536) flush();
+      rows++;
+    }
+  }
+  flush();
+  sink.close();
+  return (sink.hashSync().bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join(), rows);
 }

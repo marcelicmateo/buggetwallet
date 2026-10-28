@@ -1,8 +1,9 @@
 // Native SQLite (dart:ffi): what `WalletRepo.open` and `WalletRepo.inMemory` use. The web twin is `sqlite_web.dart`.
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:sqlite3/common.dart';
-import 'package:sqlite3/sqlite3.dart' show sqlite3;
+import 'package:sqlite3/sqlite3.dart' show OpenMode, sqlite3;
 
 import 'local_db.dart';
 import 'logs.dart';
@@ -14,6 +15,28 @@ CommonDatabase openFileDb(String path) => sqlite3.open(path);
 
 /// A fresh in-memory database.
 CommonDatabase openMemoryDb() => sqlite3.openInMemory();
+
+/// Runs [read] in a new isolate on a second connection to the database file at [path] (keyed with [dbKey] when given),
+/// read-only (`PRAGMA query_only`) and inside one read transaction, so every query sees one committed state (a WAL
+/// snapshot) whatever the main connection commits meanwhile. [read] must be a top-level or static function (it is
+/// sent to the isolate). The file must exist (never created here); errors come back as the future's error.
+Future<T> readInIsolate<T>(String path, List<int>? dbKey, T Function(CommonDatabase db) read) => Isolate.run(() {
+      final db = sqlite3.open(path, mode: OpenMode.readWrite);
+      try {
+        if (dbKey != null) keyConnection(db, dbKey);
+        db
+          ..execute('PRAGMA query_only = ON')
+          ..execute('PRAGMA busy_timeout = 5000')
+          ..execute('BEGIN');
+        try {
+          return read(db);
+        } finally {
+          if (!db.autocommit) db.execute('COMMIT'); // a failed read may have ended it: keep its own error
+        }
+      } finally {
+        db.close();
+      }
+    }, debugName: 'bw.read');
 
 /// Suffix of the plaintext side copy kept while a database file is being encrypted ([openKeyedFileDb]).
 const plainCopySuffix = '.plain-copy';

@@ -855,7 +855,17 @@ class SyncEngine {
     }
     final outboxEmpty = repo.pendingOps().isEmpty;
     if (caughtUp && outboxEmpty && book.send == null && recs.digests.isNotEmpty) {
+      // This device's digest of the state at this moment (outbox empty, caught up), read off the UI isolate; null when
+      // a write landed meanwhile: then no compare this run (the next quiet run compares).
       String? mine;
+      if (recs.digests.values.any((r) => r.schema == WalletRepo.schemaVersion && sameVector(r.vector, book.vector))) {
+        mine = await repo.stateDigestAsync(atVersion: repo.dataVersion);
+        if (mine == null) {
+          logEvent(_log, Level.FINE, 'sync.digest.stale', {'at': 'compare'});
+          book.save(repo);
+          return;
+        }
+      }
       var matched = 0, ignored = 0;
       final differ = <String>[];
       for (final MapEntry(key: d, value: r) in recs.digests.entries) {
@@ -863,7 +873,6 @@ class SyncEngine {
           ignored++;
           continue;
         }
-        mine ??= repo.stateDigest();
         if (r.digest == mine) {
           matched++;
         } else {
@@ -914,8 +923,14 @@ class SyncEngine {
       book.save(repo);
     }
     if (!caughtUp || !book.dirty || book.send != null || repo.pendingOps().isNotEmpty) return;
+    // Null when a write landed while it was read: that state is not what the vector names; the next run sends one.
+    final digest = await repo.stateDigestAsync(atVersion: repo.dataVersion);
+    if (digest == null) {
+      logEvent(_log, Level.FINE, 'sync.digest.stale', {'at': 'record'});
+      return;
+    }
     await _putRecords(repo, myLast, [
-      DigestRecord(repo.stateDigest(), Map.of(book.vector), WalletRepo.schemaVersion).toOp(_streamOf(repo), _recordHlc(repo)),
+      DigestRecord(digest, Map.of(book.vector), WalletRepo.schemaVersion).toOp(_streamOf(repo), _recordHlc(repo)),
     ]);
   }
 
@@ -1190,6 +1205,7 @@ class SyncEngine {
     relayLast = state.devices[me]?.last ?? 0;
     marker = int.tryParse(repo.localValue(sentKey) ?? '');
     final first = marker == null || relayChanged;
+    final version = repo.dataVersion; // the state the outbox below describes (read in the same moment)
     final pending = repo.pendingOps();
     final (ops, held) = _holdForBlobs(repo, first ? repo.snapshotOps() : [for (final (_, op) in pending) op], stored, holdNone: holdNone);
     if (held.isNotEmpty) logEvent(_log, Level.INFO, 'sync.export.held', {'ops': held.length});
@@ -1228,7 +1244,11 @@ class SyncEngine {
     // V2: when this upload carries every local change (nothing held back), the state after it is exactly what the
     // files in this device's data vector hold: the last part carries the state digest, its vector naming that part.
     // Only after a caught-up run: otherwise the peers' vectors rarely equal it, and the digest costs a whole read.
-    final digest = book != null && held.isEmpty && repo.syncCaughtUp ? repo.stateDigest() : null;
+    // Read off the UI isolate; null when a write landed meanwhile (that state holds ops this upload does not carry):
+    // the upload then goes without a digest, the book stays dirty, and a later quiet run sends one.
+    final wantDigest = book != null && held.isEmpty && repo.syncCaughtUp;
+    final digest = wantDigest ? await repo.stateDigestAsync(atVersion: version) : null;
+    if (wantDigest && digest == null) logEvent(_log, Level.FINE, 'sync.digest.stale', {'at': 'upload'});
     final digestHlc = digest == null ? null : _recordHlc(repo);
     while (done < ops.length) {
       var count = min(size, ops.length - done);
