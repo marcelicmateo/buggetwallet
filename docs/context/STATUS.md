@@ -417,6 +417,14 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 
 - 2026-10-28: **Stage WS: web sync** (rescoped: the browser already synced through the relay since Stage R). Key wrap `bwk2` (PBKDF2-SHA256 600,000 rounds; a `bwk1` blob is re-wrapped on the next unlock, a failed re-wrap keeps the old one; a blob's round count is capped at 10 million); Content-Security-Policy meta (no inline/off-origin scripts, CanvasKit served from the app; fallback glyph fonts still come from Google: Flutter ships none); tests: two browser wallets and browser + native through one relay, the CSP string pinned. **Bug found and fixed:** a fresh browser showed a blank page (the pre-wallet placeholder database used a path that throws on the web). Review: 0 blocking, 2 medium (unbounded round count could hang the tab; a failed re-wrap reported a failed unlock), 3 low; fixed. Run: app 2053, web-test 13.
 
+- 2026-10-28: **Stage DK: device keys and lost-device revocation** (P17; relay **api 5**, `RELAY_PROTOCOL.md`; owner confirmed approval ON by default for new wallets). **Update the relay together with the apps.**
+  - Each install has its own device key (relay credential only; never synced, never in backups or logs). New wallets **require approval**: a joining device shows "Waiting for approval" with a code (ABCD-EFGH) + QR; on a device you already use, Settings › Sync › Devices › Approve (compare the code) or Reject. Existing wallets stay open until "Require approval for new devices" is switched on.
+  - Settings › Sync › Devices: every device with its code, added, last seen; "Remove this device" (turns approval on; approval can't be turned off for 5 minutes after), "Remove all other devices" (for a lost or stolen phone), advice + steps to change the wallet key. A removed device says so, stops syncing (no retry loop) and can ask again with "Use a new device key".
+  - Relay: up to 16 devices, 8 waiting (7-day expiry), codes reserved for their first key, replays harmless, an older app keeps working until approval is on (then "Update the app"); the app never falls back to the old signing once a relay spoke api 5 (cleared only by re-entering the relay address).
+  - Reviews: core twice (stolen-while-enrolled, pending flood, code grinding, held-back unlock, downgrade — all fixed), UI (2 blocking: bill files failed on locked wallets, a race could create two device keys and lock out the only device — fixed), re-check clean. 30 adversarial spec tests written from the protocol alone, all green.
+  - **Stage run** (01c6bb7): importer 400, core 2799, sync 406, relay 258, app 2088, desktop (incl. relay_sync with approve), web-test, emulator screens, perf ok.
+- Owner checks after Stage DK (phone + laptop, relay updated first): new wallet on the phone; join on the laptop → "Waiting for approval" with a code → approve it on the phone (codes match) → syncs; remove the laptop → approval stays on, the laptop says it was removed → "Use a new device key" → approve again; try "Remove all other devices"; turn approval off right after a removal → stays on with the note.
+
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -507,7 +515,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Schema 17:** update every device together; a device that stays on an older build for over 30 days after the others upgraded may miss IOUs until they are edited again.
 
 ## Next
-- In progress (owner away, picked 2026-10-28): **device keys + revocation** (relay api 5). Then the **M6 live test** with `docs/context/M6_CHECKLIST.md`.
+- All picked features built (2026-10-28). Hardening pass (owner: tests and reviews only, no new features), then the **M6 live test** with `docs/context/M6_CHECKLIST.md`.
 - Owner checks after Stage WS (laptop): `tools/build.sh web && tools/web.sh serve` → a fresh browser shows onboarding (no blank page); create a wallet, set the relay address, sync with the phone; reload → unlock with the passphrase.
 - Owner checks after Stage C2 (phone): dark mode Spending bars (a deeper blue) and the legend under the saved/lost chart; rounded bar tops on Insights; amber "Went out" on Income vs spending; tap the payday forecast chart.
 - Owner checks after Stage X (phone): new wallet → save key → the guide with a real bank file: import preview, accounts + cash, plan, bills, payees (pick a tag, Undo), budgets, Done vs Today; close half-way → Today "Finish setting up" → continue; Settings › Set up my wallet again; large text.
