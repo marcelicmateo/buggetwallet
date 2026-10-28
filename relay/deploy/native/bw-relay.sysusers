@@ -1,0 +1,3 @@
+# systemd-sysusers: the relay's dedicated system user (no login, no home). Install as /etc/sysusers.d/bw-relay.conf,
+# then run: systemd-sysusers
+u bw-relay - "Budget Wallet relay" /var/lib/bw-relay /usr/sbin/nologin

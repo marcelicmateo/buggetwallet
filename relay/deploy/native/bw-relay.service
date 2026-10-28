@@ -1,0 +1,63 @@
+# Budget Wallet relay as a native binary (no containers). Install: see README.md in this folder.
+# The relay listens on 127.0.0.1 only; Caddy (native, HTTPS) is the one thing the router forwards to.
+[Unit]
+Description=Budget Wallet relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=bw-relay
+Group=bw-relay
+# BW_RELAY_DOMAIN (also the relay's public host), optional limits: /etc/bw-relay/bw-relay.env (template: bw-relay.env.example).
+EnvironmentFile=/etc/bw-relay/bw-relay.env
+# The wallet-creation token: a root-only file (0600) that systemd hands to this service as $CREDENTIALS_DIRECTORY/create-token
+# (a private tmpfs, readable by this service only). It is not in bw-relay.env, which Caddy also reads, and never on a command line.
+LoadCredential=create-token:/etc/bw-relay/create-token
+Environment=BW_RELAY_CREATE_TOKEN_FILE=%d/create-token
+# --trust-proxy: the client address is Caddy's X-Forwarded-For (rate limit). Safe only because the relay is bound to 127.0.0.1.
+ExecStart=/usr/local/bin/bw-relay --data /var/lib/bw-relay --host 127.0.0.1 --port 8787 --trust-proxy
+Restart=on-failure
+RestartSec=5
+# SIGTERM = graceful stop in the relay
+TimeoutStopSec=20
+
+# The only writable place: /var/lib/bw-relay (wallet files, owner only)
+StateDirectory=bw-relay
+StateDirectoryMode=0700
+UMask=0077
+
+# A Raspberry Pi has 1 to 8 GB; the relay holds at most 32 MiB of request bodies per client address plus its wallet index.
+MemoryHigh=320M
+MemoryMax=384M
+TasksMax=64
+LimitNOFILE=4096
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+# A blocked call fails with EPERM instead of killing the relay (not yet run under this filter on a Pi; PI2 checks it there).
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target
