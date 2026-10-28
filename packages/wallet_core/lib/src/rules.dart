@@ -4,6 +4,8 @@ library;
 
 import 'dart:convert' show utf8;
 
+import 'package:wallet_importer/wallet_importer.dart' show TxKind;
+
 import 'bills.dart' show sha256Hex;
 import 'categories.dart';
 import 'models.dart';
@@ -330,6 +332,63 @@ RuleSuggestion? ruleSuggestionFor(Tx t, List<Tx> rows, Categorizer c, {int min =
       if (r.id != t.id && _bankRow(r) && merchantKey(r) == k) r
   ];
   return _suggestionFor(k, list, c, min);
+}
+
+/// A payee still waiting for a category (X, step 6): [count] live bank rows of [merchantKey] that nothing decided.
+/// [merchantName] is the newest row's name, for display.
+class PayeeCount {
+  final String merchantKey;
+  final String merchantName;
+  final int count;
+  const PayeeCount(this.merchantKey, this.merchantName, this.count);
+
+  @override
+  bool operator ==(Object other) =>
+      other is PayeeCount && other.merchantKey == merchantKey && other.merchantName == merchantName && other.count == count;
+
+  @override
+  int get hashCode => Object.hash(merchantKey, merchantName, count);
+
+  @override
+  String toString() => 'PayeeCount($count)';
+}
+
+/// The tags the categorizer falls back to when no rule or hint decided a bank row (`Categorizer._auto`): card and
+/// outgoing rows with no matching pattern, and a PBZ row of an unlisted bank type.
+const _fallbackCategories = {'Shopping', 'Bills & one-offs'};
+
+/// Payees whose bank rows nothing decides yet (X): per payee key ([merchantKey]) the live bank rows in [rows] (not
+/// hand-added) that have no live own category ([Tx.category]), no split ([Categorizer.splits]), no pairing
+/// ([Tx.transferTo]) and no own-transfer/exchange hint, and where [Categorizer.ruleFor] finds no payee rule, pattern or
+/// built-in rule and the automatic tag is one of the categorizer's fallbacks (`Shopping`, `Bills & one-offs`; a
+/// salary/ATM/fee hint or a bank-type rule gives another tag). A payee without a name (key `x`) is skipped. Most rows
+/// first, then the newest row's date (newest first), then the key; at most [limit]. The amount is never looked at. Pure.
+List<PayeeCount> uncategorisedPayees(List<Tx> rows, Categorizer c, {int limit = 10}) {
+  final byKey = <String, List<Tx>>{};
+  for (final t in rows) {
+    if (!_bankRow(t)) continue;
+    if (t.category != null && c.table.isLive(t.category!)) continue;
+    if (c.splits.containsKey(t.id) || t.transferTo != null) continue;
+    if (t.kindHint == TxKind.ownTransfer || t.kindHint == TxKind.exchange) continue;
+    if (c.ruleFor(t) != null || !_fallbackCategories.contains(c.categoryOf(t))) continue;
+    final k = merchantKey(t);
+    if (k.isEmpty || k == 'x') continue;
+    byKey.putIfAbsent(k, () => []).add(t);
+  }
+  final entries = <(PayeeCount, String)>[];
+  for (final MapEntry(key: k, value: list) in byKey.entries) {
+    list.sort((a, b) {
+      final d = b.date.compareTo(a.date);
+      return d != 0 ? d : b.id.compareTo(a.id);
+    });
+    entries.add((PayeeCount(k, merchantName(list.first), list.length), list.first.date));
+  }
+  entries.sort((a, b) {
+    var d = b.$1.count.compareTo(a.$1.count);
+    if (d == 0) d = b.$2.compareTo(a.$2);
+    return d != 0 ? d : a.$1.merchantKey.compareTo(b.$1.merchantKey);
+  });
+  return [for (final e in entries.take(limit < 0 ? 0 : limit)) e.$1];
 }
 
 /// [ruleSuggestions]' rule for the bank rows [list] of payee [key] (sorted here).
