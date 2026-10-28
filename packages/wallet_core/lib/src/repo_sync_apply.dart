@@ -439,7 +439,7 @@ extension WalletRepoSyncApply on WalletRepo {
     final String hex;
     final int rows;
     try {
-      (hex, rows) = await sqlite.readInIsolate(file.$1, file.$2, _canonicalDigest);
+      (hex, rows) = await sqlite.readInIsolate(file.$1, file.$2, WalletRepo.debugDigestReader ?? _canonicalDigest);
     } catch (e, st) {
       logError(_log, 'repo.stateDigest.isolateFailed', e, st);
       return v == dataVersion ? stateDigest() : null;

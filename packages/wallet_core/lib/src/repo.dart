@@ -256,6 +256,10 @@ class WalletRepo {
   /// a second connection in another isolate. Null for [inMemory] and [fromDatabase] (tests, the web): computed here.
   (String, List<int>?)? _file;
 
+  /// Test seam (never set by the app): a top-level function [WalletRepoSyncApply.stateDigestAsync] runs in the
+  /// isolate instead of the canonical digest, e.g. one that holds its read snapshot until the main isolate committed.
+  static (String, int) Function(CommonDatabase db)? debugDigestReader;
+
   /// Rows a repair resend is restoring in this session (`entity|id`): found missing while this device still held
   /// clocks for them. Their equal-clock fields are restored, not conflicts (the row was recreated with defaults).
   /// Cleared by the next apply that is not a repair (the parts of one resend are applied one after the other).

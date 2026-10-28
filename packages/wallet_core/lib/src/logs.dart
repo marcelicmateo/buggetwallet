@@ -74,9 +74,13 @@ String describeError(Object? e) {
   switch (e) {
     case SqliteException():
       // toString() would append the statement's parameters (descriptions, amounts).
-      final b = StringBuffer('SqliteException(${e.extendedResultCode}): ${e.message}');
-      if (e.explanation != null) b.write(', ${e.explanation}');
-      if (e.causingStatement != null) b.write(' [statement: ${e.causingStatement}]');
+      // A key pragma's statement holds the database key; its message or explanation may quote a token of it ("near").
+      final statement = e.causingStatement;
+      final key = statement != null && _keyPragma.hasMatch(statement);
+      String text(String m) => key && m.contains(RegExp('["\'`]')) ? '<redacted>' : m;
+      final b = StringBuffer('SqliteException(${e.extendedResultCode}): ${text(e.message)}');
+      if (e.explanation case final String x) b.write(', ${text(x)}');
+      if (statement != null) b.write(' [statement: ${_redactStatement(statement)}]');
       return b.toString();
     case FormatException():
       // The source excerpt can be decrypted sync data or a bank file line.
@@ -98,6 +102,15 @@ String describeError(Object? e) {
       return e.runtimeType.toString();
   }
 }
+
+/// `PRAGMA [schema.]key|rekey|hexkey|hexrekey` (any case): the statement holds the database key itself.
+final _keyPragma = RegExp(r'^\s*PRAGMA\s+(?:\w+\.)?(hex)?(re)?key\b', caseSensitive: false);
+
+/// A failed statement as it may be logged: a key pragma keeps only its name, never the key.
+String _redactStatement(String s) => switch (_keyPragma.firstMatch(s)) {
+      final m? => 'PRAGMA ${m.group(2) ?? ''}key = <redacted>',
+      null => s,
+    };
 
 Object? _encodable(Object? o) => o is DateTime ? o.toIso8601String() : o.toString();
 

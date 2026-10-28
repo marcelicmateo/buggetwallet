@@ -31,7 +31,7 @@ Future<T> readInIsolate<T>(String path, List<int>? dbKey, T Function(CommonDatab
         try {
           return read(db);
         } finally {
-          db.execute('COMMIT');
+          if (!db.autocommit) db.execute('COMMIT'); // a failed read may have ended it: keep its own error
         }
       } finally {
         db.close();

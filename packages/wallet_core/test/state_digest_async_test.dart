@@ -4,11 +4,37 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:sqlite3/common.dart' show CommonDatabase;
 import 'package:test/test.dart';
+import 'package:wallet_core/src/sqlite_io.dart' show readInIsolate;
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/synthetic.dart';
+
+/// Isolate reader that starts its snapshot, says so (`<db>.snap`), then holds it until the main isolate committed
+/// (`<db>.go`), and reports the `loan` rows it saw before and after: `loan <before> <after>`.
+(String, int) _heldRead(CommonDatabase db) {
+  final path = db.select('PRAGMA database_list').first['file'] as String;
+  int loans() => db.select("SELECT COUNT(*) AS n FROM settings WHERE id = 'loan'").first['n'] as int;
+  final before = loans(); // the first read starts the WAL snapshot
+  File('$path.snap').writeAsStringSync('');
+  final sw = Stopwatch()..start();
+  while (!File('$path.go').existsSync()) {
+    if (sw.elapsed > const Duration(seconds: 30)) throw StateError('the main isolate never committed');
+    sleep(const Duration(milliseconds: 2));
+  }
+  return ('loan $before ${loans()}', 0);
+}
+
+/// Waits (bounded) until the isolate reader has started its snapshot.
+Future<void> _started(String db) async {
+  final sw = Stopwatch()..start();
+  while (!File('$db.snap').existsSync()) {
+    if (sw.elapsed > const Duration(seconds: 30)) fail('the reader never started');
+    await Future<void>.delayed(const Duration(milliseconds: 2));
+  }
+}
 
 const _t0 = 1767225600000;
 String _hlc(int ms, [String node = 'n1']) => Hlc(_t0 + ms, 0, node).toString();
@@ -97,6 +123,34 @@ void main() {
       expect(await owner, isNull);
       final copy = memory()..applyRemote(f.snapshotOps(), match: false);
       expect(await f.stateDigestAsync(), copy.stateDigest());
+    });
+
+    test('the isolate reads the old state and the main isolate commits afterwards: null, nothing cached', () async {
+      final f = file('a');
+      fill(f);
+      final db = '${dir.path}/a.db';
+      // The reader's snapshot really is the old state, whatever commits meanwhile.
+      final read = readInIsolate(db, null, _heldRead);
+      await _started(db);
+      f.applyRemote([_setting('loan', '1', 30)], match: false);
+      File('$db.go').writeAsStringSync('');
+      expect(await read, ('loan 0 0', 0));
+
+      File('$db.snap').deleteSync();
+      File('$db.go').deleteSync();
+      WalletRepo.debugDigestReader = _heldRead;
+      addTearDown(() => WalletRepo.debugDigestReader = null);
+      final runs = f.stateDigestComputations;
+      final pending = f.stateDigestAsync();
+      await _started(db);
+      f.applyRemote([_setting('loan', '2', 31)], match: false); // committed after the isolate's snapshot began
+      File('$db.go').writeAsStringSync('');
+      expect(await pending, isNull);
+      expect(f.stateDigestComputations, runs, reason: 'nothing cached');
+      WalletRepo.debugDigestReader = null;
+      final copy = memory()..applyRemote(f.snapshotOps(), match: false);
+      expect(await f.stateDigestAsync(), copy.stateDigest());
+      expect(f.stateDigestComputations, runs + 1);
     });
 
     test('atVersion: a version the data already left gives null; the current one the digest', () async {

@@ -55,10 +55,15 @@ String _pragmaKey(List<int> dbKey) {
 }
 
 /// Keys a further connection to a database [openKeyed] already opened (and converted): the pinned cipher, then
-/// [dbKey]. Nothing is checked here; the first read fails (SQLITE_NOTADB) when the key does not fit.
+/// [dbKey]. Nothing is checked here; the first read fails (SQLITE_NOTADB) when the key does not fit. A failing pragma
+/// is a [StateError] with a fixed text (the database error's statement would hold the key).
 void keyConnection(CommonDatabase db, List<int> dbKey) {
-  db.execute(_pinCipher);
-  db.execute('PRAGMA key = ${_pragmaKey(dbKey)}');
+  try {
+    db.execute(_pinCipher);
+    db.execute('PRAGMA key = ${_pragmaKey(dbKey)}');
+  } on SqliteException catch (e) {
+    throw StateError('could not key the database connection (sqlite ${e.extendedResultCode})');
+  }
 }
 
 /// [openKeyed] with the native side-copy steps: [beforeRekey] runs once the plaintext database is complete in its main
