@@ -33,18 +33,18 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 ## Stages BP, WS, DK (owner picked 2026-10-28; plan `STAGE_Y_PLAN.md`; one at a time after Stage M)
 | # | Item | Agent | Depends on | Status |
 |---|---|---|---|---|
-| BP | Budget presets (3/6/12-month average, 10% less, fit my plan, 50/30/20) as proposals | scout → core (sonnet) + ui | M | queued |
+| BP | Budget presets (3/6/12-month average, 10% less, fit my plan, 50/30/20) as proposals | scout → core (sonnet) + ui | M | running (core sonnet + ui) |
 | WS | Web sync through the relay (P18), bwk2 key wrap, CSP | scout → core + ui + devops | BP | queued |
 | DK | Device keys + revocation (P17), relay api 5 | scout → core + ui + test-writer | WS | queued |
 
 ## Stage M: hardening before M6 (2026-10-28; every planned feature is built)
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
-| M1 | Mutation testing on V/X code (sync_digest, repo_sync_apply conflicts/repair/digest, vault BWOP3, uncategorisedPayees, reviewStreak); survivors → invariant tests, real bugs → `BUG:` skip + report | test-writer (sonnet/medium) | m-mutate | – | running |
+| M1 | Mutation testing on V/X code (sync_digest, repo_sync_apply conflicts/repair/digest, vault BWOP3, uncategorisedPayees, reviewStreak); survivors → invariant tests, real bugs → `BUG:` skip + report | test-writer (sonnet/medium) | m-mutate | – | d7a5590 (28 tests, no BUG); follow-up: conflict/repair survivors with the right --tests |
 | M2 | Measure `stateDigest` on the emulator; move it off the UI isolate on native if > ~100 ms | core-builder | m-digest | – | running |
 | M | Review, stage run, push, STATUS | lead | v2 | M1, M2 | queued |
-| PI2a | Pi relay proven without the Pi: native unit on systemd containers (Fedora, Debian), caddy validate, deploy script native target, setup.md §5 | devops | pi2a | PI1 | running (owner away 2026-10-28) |
-| D1 | docs/context/M6_CHECKLIST.md: one ordered owner checklist from every STATUS owner-check list + disaster drills | general-purpose (sonnet) | v2 (file only) | – | running |
+| PI2a | Pi relay proven without the Pi: native unit on systemd containers (Fedora, Debian), caddy validate, deploy script native target, setup.md §5 | devops | pi2a | PI1 | done c93323c (systemd proof Fedora+Debian, security 1.3 OK, caddy validate, deploy native-*); review before merge |
+| D1 | docs/context/M6_CHECKLIST.md: one ordered owner checklist from every STATUS owner-check list + disaster drills | general-purpose (sonnet) | v2 (file only) | – | done cc091b4 (159 items; 2 stale items fixed by lead) |
 
 ## Stage V: sync format items before M6 (2026-10-28, plan `STAGE_V_PLAN.md`; schema 18; statement ticking dropped)
 Merge order: VB → VA → VT → VU.
@@ -258,7 +258,7 @@ Plan: `STAGE_Q_PLAN.md` (Q1–Q11, waves 0–3, delegation table). Base eaa790f.
 | C2 | Ledger theme build (fonts, tokens, components, screens) | ui-builder | ledger-ui (from 6ebb9bc) | – | done 2026-10-28: stage green (big_wallet rerun alone after host-load miss); pushed |
 | C3 | Merge C1 into C2, make tests pass; three widths, dark, text scale | ui-builder | ledger-ui | C1, C2 | done (in cc64049) |
 | C | Merge C, review, Haiku, emulator, push, STATUS, re-sync design-system artifact | lead | v2 | C3, B2 | queued |
-| D1 | Bank profiles: PBZ/Revolut as profiles, kindHint, golden no-change tests | core-builder | bank-profiles (from v2) | – | done (00c111d, importer 193/0; merged into stage-b) |
+| D1 | Bank profiles: PBZ/Revolut as profiles, kindHint, golden no-change tests | core-builder | bank-profiles (from v2) | – | done cc091b4 (159 items; 2 stale items fixed by lead) |
 | D2 | Categorizer reads kindHint; generic own-transfer rule keyed on source (no IBANs stored) | core-builder | kind-hint (from stage-b) | D1 | done (853ea33, core 596/0); unreviewed → merged and reviewed with Stage C, not B |
 | D1b | `tools/build.sh core|app|importer <test file>` runs one test file non-interactively (core-builder found `shell` ignores piped stdin) | devops | single-test (from stage-b) | – | done (6e5572f; merge into stage-b after the fix batch) |
 | D1c | BUG: run pruning deleted an in-progress run dir (newest-30 rule, concurrent worktrees) | devops | prune-fix (from stage-b) | – | running |
