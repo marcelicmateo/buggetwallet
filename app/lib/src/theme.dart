@@ -6,6 +6,12 @@ import 'package:flutter/material.dart';
 /// Colours shared by both themes, picked per brightness. Every token is opaque.
 class WalletColors extends ThemeExtension<WalletColors> {
   final Color bg, surface, surface2, ink, ink2, muted, line, lineStrong, accent, accentSoft, pos, neg, good, bad, warnBg, warnInk, bar;
+
+  /// Chart-only colours (never text or buttons; status stays `bad`/`good`). [chartPos] saved/spent bars, [chartNeg] lost, [chart2] the
+  /// second series that is not a polarity ("went out" next to "came in"). Checked with the dataviz validator, `--mode` light/dark, on both
+  /// chart surfaces (light #F9F6EE/#F2EEE4, dark #21242B/#1B1D23): {chartPos, chartNeg} and {chartPos, chart2} each pass lightness band,
+  /// chroma floor, CVD (light 17.4 / 22.9 protan, dark 18.1 / 25.3), normal-vision floor (light 23.9 / 26.2, dark 22.2 / 25.5) and contrast.
+  final Color chartPos, chartNeg, chart2;
   const WalletColors({
     required this.bg,
     required this.surface,
@@ -24,6 +30,9 @@ class WalletColors extends ThemeExtension<WalletColors> {
     required this.warnBg,
     required this.warnInk,
     required this.bar,
+    required this.chartPos,
+    required this.chartNeg,
+    required this.chart2,
   });
 
   /// Paper and ink.
@@ -45,6 +54,9 @@ class WalletColors extends ThemeExtension<WalletColors> {
     warnBg: Color(0xFFF6EBCB),
     warnInk: Color(0xFF5C4210),
     bar: Color(0xFF3A559E),
+    chartPos: Color(0xFF3A559E),
+    chartNeg: Color(0xFFA93A32),
+    chart2: Color(0xFFA8650F),
   );
 
   /// Night ledger.
@@ -66,6 +78,9 @@ class WalletColors extends ThemeExtension<WalletColors> {
     warnBg: Color(0xFF2F2916),
     warnInk: Color(0xFFE6CF92),
     bar: Color(0xFF9DAEE6),
+    chartPos: Color(0xFF6F8FE0),
+    chartNeg: Color(0xFFD56F66),
+    chart2: Color(0xFFC27F20),
   );
 
   @override

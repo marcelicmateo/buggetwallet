@@ -52,7 +52,7 @@ class TagDetailScreen extends StatelessWidget {
                         BarGroup(
                           month: b.month,
                           partial: b.partial,
-                          rods: [BarRod(b.spent, c.bar)],
+                          rods: [BarRod(b.spent, c.chartPos)],
                           tip: '${monthLong(b.month)}${note(b)}\n${moneyExact(b.spent, cur)}',
                           spoken: '${monthLong(b.month)}${note(b)}: ${moneyExact(b.spent, cur)}',
                         ),

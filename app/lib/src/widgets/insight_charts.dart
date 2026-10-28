@@ -10,7 +10,7 @@ import 'package:wallet_core/wallet_core.dart';
 import '../format.dart';
 import '../layout.dart';
 import '../theme.dart';
-import 'charts.dart' show RuledBar, snapPx, solidOver;
+import 'charts.dart' show RuledBar, dataEndRadius, snapPx, solidOver;
 import 'common.dart';
 
 /// One bar of a group. [overCents] is the last part of [cents] that is over a budget: drawn in `bad`.
@@ -132,7 +132,7 @@ class MonthlyBars extends StatelessWidget {
       toY: v,
       width: width,
       color: tint(r.color),
-      borderRadius: BorderRadius.zero,
+      borderRadius: dataEndRadius(r.cents >= 0, px(4)),
       borderSide: partial ? BorderSide(color: r.color, width: px(1)) : BorderSide.none,
       borderDashArray: partial ? const [3, 3] : null,
       rodStackItems:
@@ -146,19 +146,25 @@ class LegendItem extends StatelessWidget {
   final Color color;
   final String text;
   final bool dashed;
-  const LegendItem(this.color, this.text, {super.key, this.dashed = false});
+
+  /// A thin line key instead of a square swatch, for a line series.
+  final bool line;
+  const LegendItem(this.color, this.text, {super.key, this.dashed = false, this.line = false});
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(
-        width: 12,
-        height: 12,
-        decoration: BoxDecoration(
-          color: dashed ? solidOver(color.withValues(alpha: 0.45), c.bg) : color,
-          border: dashed ? Border.all(color: color) : null,
+      if (line)
+        Container(width: 12, height: 2, color: color)
+      else
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: dashed ? solidOver(color.withValues(alpha: 0.45), c.bg) : color,
+            border: dashed ? Border.all(color: color) : null,
+          ),
         ),
-      ),
       const SizedBox(width: 6),
       Flexible(child: Text(text, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2))),
     ]);
@@ -218,7 +224,7 @@ class ShareBars extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Row(children: [
-                  Expanded(child: RuledBar(value: s.spent / top, color: c.bar)),
+                  Expanded(child: RuledBar(value: s.spent / top, color: c.chartPos)),
                   const SizedBox(width: 8),
                   SizedBox(
                     width: 64,
@@ -274,7 +280,7 @@ class TagBars extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Row(children: [
-                  Expanded(child: RuledBar(value: s.spent / top, color: c.bar)),
+                  Expanded(child: RuledBar(value: s.spent / top, color: c.chartPos)),
                   const SizedBox(width: 8),
                   SizedBox(
                     width: 84,

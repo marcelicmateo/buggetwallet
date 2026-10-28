@@ -113,13 +113,16 @@ class InsightPanel extends StatelessWidget {
             BarGroup(
               month: b.month,
               partial: b.partial,
-              rods: [BarRod(b.spent, c.bar)],
+              rods: [BarRod(b.spent, c.chartPos)],
               tip: '${_name(b.month, b.partial)}\nOut ${moneyExact(b.spent, cur)}',
               spoken: '${_name(b.month, b.partial)}: ${moneyExact(b.spent, cur)} spent',
             ),
         ],
       ),
-      Legend([LegendItem(c.bar, 'Spent'), if (bars.any((b) => b.partial)) LegendItem(c.bar, 'Faded: not a whole month', dashed: true)]),
+      Legend([
+        LegendItem(c.chartPos, 'Spent'),
+        if (bars.any((b) => b.partial)) LegendItem(c.chartPos, 'Faded: not a whole month', dashed: true)
+      ]),
       Rows(children: [
         for (final b in bars) LineItem(_name(b.month, b.partial), moneyExact(b.spent, cur), key: ValueKey('barRow_${id}_${b.month}')),
       ]),
@@ -171,7 +174,7 @@ class InsightPanel extends StatelessWidget {
             BarGroup(
               month: b.month,
               partial: b.partial,
-              rods: [BarRod(b.income + b.extra, c.pos), BarRod(b.spent, c.neg)],
+              rods: [BarRod(b.income + b.extra, c.chartPos), BarRod(b.spent, c.chart2)],
               tip: '${_name(b.month, b.partial)}\nIn ${moneyExact(b.income + b.extra, cur)}\nOut ${moneyExact(b.spent, cur)}\n'
                   'Net ${moneyExactSigned(b.net, cur)}',
               spoken: '${_name(b.month, b.partial)}: in ${moneyExact(b.income + b.extra, cur)}, out ${moneyExact(b.spent, cur)}, '
@@ -180,8 +183,8 @@ class InsightPanel extends StatelessWidget {
         ],
       ),
       Legend([
-        LegendItem(c.pos, 'Came in'),
-        LegendItem(c.neg, 'Went out'),
+        LegendItem(c.chartPos, 'Came in'),
+        LegendItem(c.chart2, 'Went out'),
         if (bars.any((b) => b.partial)) LegendItem(c.ink2, 'Faded: not a whole month', dashed: true),
       ]),
       Rows(children: [
@@ -212,7 +215,7 @@ class InsightPanel extends StatelessWidget {
             BarGroup(
               month: b.month,
               partial: b.month == now,
-              rods: [BarRod(b.budgeted, c.lineStrong), BarRod(b.actual, c.accent, overCents: b.over)],
+              rods: [BarRod(b.budgeted, c.lineStrong), BarRod(b.actual, c.chartPos, overCents: b.over)],
               tip: '${name(b.month)}\nBudget ${moneyExact(b.budgeted, cur)}\nSpent ${moneyExact(b.actual, cur)}'
                   '${b.over > 0 ? '\nOver by ${moneyExact(b.over, cur)}' : ''}',
               spoken: '${name(b.month)}: budget ${moneyExact(b.budgeted, cur)}, spent ${moneyExact(b.actual, cur)}'
@@ -222,7 +225,7 @@ class InsightPanel extends StatelessWidget {
       ),
       Legend([
         LegendItem(c.lineStrong, 'Budget'),
-        LegendItem(c.accent, 'Spent'),
+        LegendItem(c.chartPos, 'Spent'),
         LegendItem(c.bad, 'Over a budget'),
       ]),
       Rows(children: [
