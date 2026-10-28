@@ -182,3 +182,6 @@
 {"ts": "2026-10-27T12:17:36+00:00", "run": "40501803217", "source": "ci", "worktree": "", "commit": "bd10966", "cmd": "ci", "image": "ubuntu24", "cold": false, "step": "apk", "seconds": 220.0, "result": "ok"}
 {"ts": "2026-10-27T12:14:23+00:00", "run": "40501803217", "source": "ci", "worktree": "", "commit": "bd10966", "cmd": "ci", "image": "ubuntu24", "cold": false, "step": "linux", "seconds": 94.0, "result": "ok"}
 {"ts": "2026-10-27T12:14:23+00:00", "run": "40501803217", "source": "ci", "worktree": "", "commit": "bd10966", "cmd": "ci", "image": "ubuntu24", "cold": false, "step": "smoke", "seconds": 26.0, "result": "ok"}
+{"ts": "2026-10-28T22:02:20+00:00", "run": "40775863193", "source": "ci", "worktree": "", "commit": "a81c688", "cmd": "ci", "image": "ubuntu24", "cold": false, "step": "apk", "seconds": 328.0, "result": "ok"}
+{"ts": "2026-10-28T21:58:04+00:00", "run": "40775863193", "source": "ci", "worktree": "", "commit": "a81c688", "cmd": "ci", "image": "ubuntu24", "cold": false, "step": "linux", "seconds": 88.0, "result": "ok"}
+{"ts": "2026-10-28T21:58:04+00:00", "run": "40775863193", "source": "ci", "worktree": "", "commit": "a81c688", "cmd": "ci", "image": "ubuntu24", "cold": false, "step": "smoke", "seconds": 16.0, "result": "ok"}

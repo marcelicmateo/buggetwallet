@@ -1,12 +1,12 @@
-commit: bd10966ccc6a775c3baa69b00bea7d468110e752  ref: v2  run: 40501803217
+commit: a81c688ea4ec2fdaf36d1310308850a847caa013  ref: v2  run: 40775863193
 
-lint=skipped importer=skipped core=skipped relay=skipped app=skipped desktop=skipped signing=success apk=success(220s) linux=success(94s) smoke=success(26s)
+lint=skipped importer=skipped core=skipped relay=skipped app=skipped desktop=skipped signing=success apk=success(328s) linux=success(88s) smoke=success(16s)
 job:lint=skipped job:importer=skipped job:core=skipped job:relay=skipped job:app=skipped job:desktop=skipped job:apk=success job:linux=success job:publish=success 
 
 step seconds exit
-apk 220 0
-linux 94 0
-smoke 26 0
+apk 328 0
+linux 88 0
+smoke 16 0
 
 
 
@@ -27,7 +27,7 @@ Downloading packages...
   flutter_local_notifications 22.3.2 (22.3.3 available)
   jni 1.1.0 (1.1.1 available)
   material_color_utilities 0.13.0 (0.13.1 available)
-  posix 6.5.2 (6.5.3 available)
+  posix 6.5.2 (6.5.4 available)
   qr 3.0.2 (4.0.0 available)
   sqlite3 3.7.1 (3.8.0 available)
   test_api 0.7.12 (0.7.15 available)
@@ -37,14 +37,14 @@ Got dependencies!
 16 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Running Gradle task 'assembleRelease'...                        
-Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 10944 bytes (99.3% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 12240 bytes (99.3% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
 Caught exception: Already watching path: /home/runner/work/buggetwallet/buggetwallet/app/android
-Running Gradle task 'assembleRelease'...                          210.2s
-✓ Built build/app/outputs/flutter-apk/app-release.apk (45.2MB)
+Running Gradle task 'assembleRelease'...                          315.3s
+✓ Built build/app/outputs/flutter-apk/app-release.apk (45.8MB)
 
 === linux ===
   material_color_utilities 0.13.0 (0.13.1 available)
-  posix 6.5.2 (6.5.3 available)
+  posix 6.5.2 (6.5.4 available)
   qr 3.0.2 (4.0.0 available)
   sqlite3 3.7.1 (3.8.0 available)
   test_api 0.7.12 (0.7.15 available)
@@ -66,7 +66,7 @@ Downloading packages...
   flutter_local_notifications 22.3.2 (22.3.3 available)
   jni 1.1.0 (1.1.1 available)
   material_color_utilities 0.13.0 (0.13.1 available)
-  posix 6.5.2 (6.5.3 available)
+  posix 6.5.2 (6.5.4 available)
   qr 3.0.2 (4.0.0 available)
   sqlite3 3.7.1 (3.8.0 available)
   test_api 0.7.12 (0.7.15 available)
@@ -79,9 +79,9 @@ Building Linux application...
 ✓ Built build/linux/x64/release/bundle/budget_wallet
 
 step              seconds  result
-pub                  12.7  ok
-linux                81.8  ok
-total                94.6
+pub                  13.1  ok
+linux                74.6  ok
+total                87.7
 pub=ok linux=ok
 === smoke ===
 === linux ===
@@ -97,7 +97,7 @@ Downloading packages...
   flutter_local_notifications 22.3.2 (22.3.3 available)
   jni 1.1.0 (1.1.1 available)
   material_color_utilities 0.13.0 (0.13.1 available)
-  posix 6.5.2 (6.5.3 available)
+  posix 6.5.2 (6.5.4 available)
   qr 3.0.2 (4.0.0 available)
   sqlite3 3.7.1 (3.8.0 available)
   test_api 0.7.12 (0.7.15 available)
@@ -111,11 +111,11 @@ Building Linux application...
 === desktop-smoke ===
 app still running after 10 s; sending SIGTERM
 app exited with code 143
-app log: 22 lines (dist/logs/app-linux-smoke.log)
-WARNING lines: 0
+app log: 26 lines (dist/logs/app-linux-smoke.log)
+WARNING lines: 1
 
 step              seconds  result
-linux                 4.7  ok
-desktop-smoke        21.1  ok
-total                25.9
+linux                 4.8  ok
+desktop-smoke        10.8  ok
+total                15.7
 linux=ok desktop-smoke=ok
