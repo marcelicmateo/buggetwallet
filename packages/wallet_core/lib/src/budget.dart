@@ -563,6 +563,123 @@ Map<String, int> suggestBudgets(List<CategorizedTx> txs, String month, {required
   };
 }
 
+/// The ways to fill the month's budgets in one go (BP): the averages of the last 3, 6 or 12 months, 90 % of the 6-month
+/// average, the money the payday plan leaves for flexible spending, or 30 % of the salary (50/30/20 "wants").
+enum BudgetPresetKind { avg3, avg6, avg12, spendLess, fitPlan, fiftyThirtyTwenty }
+
+/// Budgets proposed by [budgetPreset]: category -> cents, [total] their sum. When [budgets] is empty, [empty] says
+/// why in words the owner can read.
+class BudgetPreset {
+  final Map<String, int> budgets;
+  final int total;
+  final String? empty;
+  const BudgetPreset(this.budgets, this.total, [this.empty]);
+  const BudgetPreset.none(String reason)
+      : budgets = const {},
+        total = 0,
+        empty = reason;
+}
+
+/// What the payday plan leaves for flexible spending per month: salary minus rent, loan, subs, the plan lines of live
+/// custom fixed categories ([CategoryTable.hasPlanLine]) and the monthly part of every goal. Never below 0.
+int monthlyFlex(WalletSettings st, {List<Goal> goals = const [], CategoryTable? table}) {
+  final t = table ?? CategoryTable.builtIn;
+  var left = st.salary - st.rent - st.loan - st.subs;
+  for (final e in st.planLines.entries) {
+    if (t.hasPlanLine(e.key)) left -= e.value;
+  }
+  for (final g in goals) {
+    left -= g.monthly;
+  }
+  return left < 0 ? 0 : left;
+}
+
+/// Budgets for [month] by [kind] (see [BudgetPresetKind]); home [currency] rows only, per top-level category, from the
+/// exact sums of the months before [month]. Amounts are cents. Nothing is written, no single row decides a category.
+/// - avg3, avg6, avg12: the average rounded UP to 1000 cents (avg6 equals [suggestBudgets]).
+/// - spendLess: 90 % of the exact 6-month average, rounded DOWN to 1000 cents; a category that reaches 0 is dropped.
+/// - fitPlan: [monthlyFlex] in whole euros, split over the flex categories by their 6-month spend share.
+/// - fiftyThirtyTwenty: 30 % of the salary in whole euros, split the same way.
+/// The split uses the largest-remainder method in whole euros, so the parts sum exactly to the total; ties go to the
+/// earlier category of the table.
+BudgetPreset budgetPreset(BudgetPresetKind kind, List<CategorizedTx> txs, WalletSettings st, String month,
+    {required String currency, CategoryTable? table, List<Goal> goals = const []}) {
+  final t = table ?? CategoryTable.builtIn;
+  const step = 1000;
+  BudgetPreset done(Map<String, int> b) => BudgetPreset(Map.unmodifiable(b), b.values.fold(0, (s, v) => s + v));
+  Map<String, int> sums(int months) => rollUp(_outByCategory(txs, _monthsBefore(month, months).toSet(), currency), t);
+  BudgetPreset average(int months) {
+    final s = sums(months);
+    final b = {
+      for (final e in s.entries)
+        if (e.value > 0) e.key: (e.value + months * step - 1) ~/ (months * step) * step,
+    };
+    return b.isEmpty ? BudgetPreset.none('No spending in the last $months months.') : done(b);
+  }
+
+  BudgetPreset split(int cents) {
+    final s = sums(6);
+    final flex = {
+      for (final e in s.entries)
+        if (e.value > 0 && t.kindOf(e.key) == BudgetKind.flex) e.key: e.value,
+    };
+    if (s.values.every((v) => v <= 0)) return const BudgetPreset.none('No spending in the last 6 months.');
+    if (flex.isEmpty) return const BudgetPreset.none('No flexible spending in the last 6 months.');
+    final euros = cents ~/ 100;
+    if (euros <= 0) return const BudgetPreset.none('Nothing is left for flexible spending after your fixed costs and goals.');
+    final total = flex.values.fold(0, (a, v) => a + v);
+    final order = t.topLevelIds;
+    int rank(String id) {
+      final i = order.indexOf(id);
+      return i < 0 ? order.length : i;
+    }
+
+    final ids = flex.keys.toList()
+      ..sort((a, b) {
+        final d = rank(a).compareTo(rank(b));
+        return d != 0 ? d : a.compareTo(b);
+      });
+    final parts = {for (final id in ids) id: euros * flex[id]! ~/ total};
+    var left = euros - parts.values.fold(0, (a, v) => a + v);
+    // List.sort is not stable: equal remainders fall back to the table order explicitly (ids is already in that order).
+    final pos = {for (var i = 0; i < ids.length; i++) ids[i]: i};
+    final byRemainder = [...ids]..sort((a, b) {
+        final d = (euros * flex[b]! % total).compareTo(euros * flex[a]! % total);
+        return d != 0 ? d : pos[a]!.compareTo(pos[b]!);
+      });
+    for (final id in byRemainder) {
+      if (left <= 0) break;
+      parts[id] = parts[id]! + 1;
+      left--;
+    }
+    return done({
+      for (final id in ids)
+        if (parts[id]! > 0) id: parts[id]! * 100,
+    });
+  }
+
+  switch (kind) {
+    case BudgetPresetKind.avg3:
+      return average(3);
+    case BudgetPresetKind.avg6:
+      return average(6);
+    case BudgetPresetKind.avg12:
+      return average(12);
+    case BudgetPresetKind.spendLess:
+      final b = {
+        for (final e in sums(6).entries)
+          if (e.value > 0 && e.value * 9 ~/ (6 * 10 * step) > 0) e.key: e.value * 9 ~/ (6 * 10 * step) * step,
+      };
+      return b.isEmpty ? const BudgetPreset.none('No spending in the last 6 months.') : done(b);
+    case BudgetPresetKind.fitPlan:
+      if (st.salary <= 0) return const BudgetPreset.none('Set your salary in the payday plan first.');
+      return split(monthlyFlex(st, goals: goals, table: t));
+    case BudgetPresetKind.fiftyThirtyTwenty:
+      if (st.salary <= 0) return const BudgetPreset.none('Set your salary in the payday plan first.');
+      return split(st.salary * 30 ~/ 100);
+  }
+}
+
 /// One row of the budget Suggest diff ([budgetProposals]): [current] is null when the category has no budget (or 0).
 class BudgetProposal {
   final String category;
