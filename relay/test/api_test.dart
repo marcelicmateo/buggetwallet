@@ -12,7 +12,7 @@ void main() {
       final h = await freshHarness();
       final r = await h.get('/v2/health');
       expect(r.statusCode, 200);
-      expect(jsonDecode(r.body), {'api': 4});
+      expect(jsonDecode(r.body), {'api': 5});
       expect(r.headers['content-type'], contains('application/json'));
     });
 

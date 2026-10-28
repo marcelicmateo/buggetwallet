@@ -9,6 +9,7 @@ import 'package:wallet_core/wallet_core.dart';
 import 'sync.dart';
 import 'sync_digest.dart';
 import 'sync_problems.dart';
+import 'sync_relay.dart' show EnrolResult;
 
 export 'sync_memory.dart';
 export 'sync_relay.dart';
@@ -35,6 +36,42 @@ class RelayDevice {
   Map<String, Object?> toJson() => {'first': first, 'last': last, 'lastSeen': lastSeen?.toUtc().toIso8601String(), 'acks': acks};
 }
 
+/// A device key of the wallet on the relay (api 5, state `keys`): its fingerprint [fp] (`ABCD-EFGH`), when it was
+/// [added], [by] whom (`wallet` or the approver's fingerprint), when it was [revoked] (null while enrolled), the
+/// [deviceId] its enrolment named and the relay device name (stream) it last wrote or acked as ([device]; its last
+/// sync is `RelayState.devices[device].lastSeen`); [self] for this install's own key.
+class RelayKey {
+  final String fp;
+  final DateTime? added;
+  final String by;
+  final DateTime? revoked;
+  final String? deviceId, device;
+  final bool self;
+  const RelayKey(this.fp, {this.added, this.by = 'wallet', this.revoked, this.deviceId, this.device, this.self = false});
+
+  bool get isRevoked => revoked != null;
+
+  Map<String, Object?> toJson() => {
+        'fp': fp,
+        'added': added?.toUtc().toIso8601String(),
+        'by': by,
+        'revoked': revoked?.toUtc().toIso8601String(),
+        'deviceId': deviceId,
+        'device': device,
+        'self': self,
+      };
+}
+
+/// A device key waiting for approval (api 5, state `pending`): fingerprint, when it asked, the device id it named.
+class RelayPendingKey {
+  final String fp;
+  final DateTime? at;
+  final String? deviceId;
+  const RelayPendingKey(this.fp, {this.at, this.deviceId});
+
+  Map<String, Object?> toJson() => {'fp': fp, 'at': at?.toUtc().toIso8601String(), 'deviceId': deviceId};
+}
+
 /// What `GET state` returns.
 class RelayState {
   final Map<String, RelayDevice> devices;
@@ -52,7 +89,23 @@ class RelayState {
   /// The relay's api version as the state names it (3 or 4 from a relay; null when unknown). From 4 on the engine
   /// declares each snapshot's blob set ([SyncTransport.putSnapshotBlobs]) and the relay collects old bill files.
   final int? api;
-  const RelayState({this.devices = const {}, this.snapshot, this.previous, this.instance, this.bytes, this.maxBytes, this.api});
+
+  /// Device keys (api 5; null from an older relay or to a request signed with the wallet key): enrolled and revoked
+  /// ([keys]), waiting for approval ([pending]), and whether the wallet requires approval for new devices ([locked]).
+  final List<RelayKey>? keys;
+  final List<RelayPendingKey> pending;
+  final bool? locked;
+  const RelayState(
+      {this.devices = const {},
+      this.snapshot,
+      this.previous,
+      this.instance,
+      this.bytes,
+      this.maxBytes,
+      this.api,
+      this.keys,
+      this.pending = const [],
+      this.locked});
 
   /// A relay that never heard of this wallet.
   static const empty = RelayState();
@@ -95,7 +148,29 @@ class RelayState {
       throw const FormatException('bad instance');
     }
     int? usage(Object? v) => v is int && v >= 0 ? v : null;
+    DateTime? time(Object? v) => v is String ? DateTime.tryParse(v) : null;
+    String? str(Object? v) => v is String ? v : null;
+    final rawKeys = j['keys'], rawPending = j['pending'];
+    if ((rawKeys != null && rawKeys is! List) || (rawPending != null && rawPending is! List)) throw const FormatException('bad keys');
+    String fpOf(Object? m) => m is Map && m['fp'] is String ? m['fp'] as String : throw const FormatException('bad key');
     return RelayState(
+      keys: rawKeys == null
+          ? null
+          : [
+              for (final k in rawKeys as List)
+                RelayKey(fpOf(k),
+                    added: time((k as Map)['added']),
+                    by: str(k['by']) ?? 'wallet',
+                    revoked: time(k['revoked']),
+                    deviceId: str(k['deviceId']),
+                    device: str(k['device']),
+                    self: k['self'] == true),
+            ],
+      pending: [
+        for (final p in (rawPending as List?) ?? const [])
+          RelayPendingKey(fpOf(p), at: time((p as Map)['at']), deviceId: str(p['deviceId'])),
+      ],
+      locked: j['locked'] is bool ? j['locked'] as bool : null,
       api: j['api'] is int ? j['api'] as int : null,
       instance: instance as String?,
       bytes: usage(j['bytes']),
@@ -114,6 +189,9 @@ class RelayState {
         if (instance != null) 'instance': instance,
         if (bytes != null) 'bytes': bytes,
         if (maxBytes != null) 'maxBytes': maxBytes,
+        if (keys != null) 'keys': [for (final k in keys!) k.toJson()],
+        if (keys != null) 'pending': [for (final p in pending) p.toJson()],
+        if (locked != null) 'locked': locked,
       };
 }
 
@@ -152,6 +230,16 @@ enum TransportFailure {
   /// 403 `createToken`: the relay creates wallets only with its create token, and this device sent none or a wrong one.
   createToken,
 
+  /// 401 `revoked` (api 5): this install's device key was removed from the wallet. Final: never retried.
+  revoked,
+
+  /// This install's device key waits for approval on a locked wallet (`PUT enrol` 202; or the relay holds too many
+  /// requests, 409 `pendingFull`).
+  pending,
+
+  /// 409 `lastDevice`: the wallet's last enrolled device key cannot be removed.
+  lastDevice,
+
   /// Anything else.
   other,
 }
@@ -186,6 +274,18 @@ abstract class SyncTransport {
   /// default is a relay without declared sets (404).
   Future<void> putSnapshotBlobs(String id, List<String> hashes) async =>
       throw const TransportException(TransportFailure.missing, 'no declared sets');
+}
+
+/// Device keys (api 5, RELAY_PROTOCOL.md "Device keys"), implemented by [RelayTransport] and
+/// [MemoryDeviceTransport] (apart from [SyncTransport] so other transports need not know them). [enrol]: this
+/// install's key (also automatic on 401 `unenrolled`); [approveDevice] / [revokeDevice] a key by fingerprint
+/// (`ABCD-EFGH`); [setLocked] "Require approval for new devices" (returns the value the relay now holds). Without
+/// device features (an older relay, no device key): [TransportFailure.olderApi].
+abstract interface class DeviceKeyTransport {
+  Future<EnrolResult> enrol();
+  Future<void> approveDevice(String fp);
+  Future<void> revokeDevice(String fp);
+  Future<bool> setLocked(bool locked);
 }
 
 /// SQLite result codes that are about this device's database, not about the file being applied (busy, locked, out of
@@ -486,8 +586,17 @@ class SyncEngine {
       TransportFailure.clockSkew =>
         "This device's clock and the relay's clock differ by more than a day. Check the date and time settings.",
       TransportFailure.createToken => "The relay needs its create token to start a new wallet. Enter it in this device's sync settings.",
+      TransportFailure.revoked => 'This device was removed from the wallet.',
+      TransportFailure.pending =>
+        'This device waits for approval. On a device you already use, open Settings › Sync › Devices and approve the code shown here.',
       _ => 'The relay answered with an error. Try again later.',
     });
+  }
+
+  /// A failure no later step gets past (this device was removed, or waits for approval): ends the run at once, as on
+  /// `state`, wherever it shows up (a revoke between two calls of one run).
+  static void _stopIfFinal(String step, TransportException e) {
+    if (e.failure == TransportFailure.revoked || e.failure == TransportFailure.pending) throw _fatal(step, e);
   }
 
   Future<SyncReport>? _running;
@@ -590,6 +699,7 @@ class SyncEngine {
         _keepInstance(repo, state);
         refreshed = true;
       } on TransportException catch (e) {
+        _stopIfFinal('state', e);
         logEvent(_log, Level.WARNING, 'sync.state.again', {'failure': e.failure.name});
       }
     }
@@ -729,6 +839,7 @@ class SyncEngine {
         remember(old, m);
       }
     } on TransportException catch (e) {
+      _stopIfFinal('ack', e);
       logEvent(_log, Level.WARNING, 'sync.ack.failed', {'failure': e.failure.name});
     }
     _setMap(repo, ackedKey, stored);
@@ -959,6 +1070,7 @@ class SyncEngine {
     try {
       await transport.put(me, seq, sealed);
     } on TransportException catch (e) {
+      _stopIfFinal('put', e);
       // A 409 means another install wrote this seq (the next run's upload handles it); anything else may have stored
       // it: [sendingKey] stays, so the next run recognises its own file.
       if (e.failure == TransportFailure.conflict) repo.setLocalValue(sendingKey, null);
@@ -1041,6 +1153,7 @@ class SyncEngine {
       try {
         bytes = await transport.get(d, seq);
       } on TransportException catch (e) {
+        _stopIfFinal('get', e);
         // Not the file's fault (or not known to be): not quarantined, fetched again next run.
         logEvent(_log, Level.WARNING, 'sync.file.unreadable', {'seq': seq, 'failure': e.failure.name});
         return _PeerWaiting(SyncWaiting(_short(d), seq), SyncProblem(_short(d), SyncProblemReason.unreadable, bytes: 0));
@@ -1118,6 +1231,7 @@ class SyncEngine {
         failures.remove(hash);
         sent++;
       } on TransportException catch (e) {
+        _stopIfFinal('putBlob', e);
         failed++;
         failures[hash] = e.failure;
         if (e.failure == TransportFailure.missing) missing = true;
@@ -1269,6 +1383,7 @@ class SyncEngine {
       try {
         await transport.put(me, seq + 1, sealed);
       } on TransportException catch (e) {
+        _stopIfFinal('put', e);
         if (e.failure == TransportFailure.conflict) {
           // Other bytes under this stream's next seq, stored since `state`: another install writes here. Move to a
           // fresh stream and send the whole state there (once per run); the outbox is kept until it is stored.
@@ -1330,6 +1445,7 @@ class SyncEngine {
       try {
         if (await fileHash(await transport.get(me, q)) != want) return false;
       } on TransportException catch (e) {
+        _stopIfFinal('get', e);
         logEvent(_log, Level.WARNING, 'sync.stream.checkFailed', {'seq': q, 'failure': e.failure.name});
         return null;
       }
@@ -1379,6 +1495,7 @@ class SyncEngine {
       try {
         bytes = await transport.getSnapshot(s.id);
       } on TransportException catch (e) {
+        _stopIfFinal('getSnapshot', e);
         logEvent(_log, Level.WARNING, 'sync.snapshot.unreadable', {'which': which, 'failure': e.failure.name});
         bad.unreadable(s.id, now);
         continue;
@@ -1508,6 +1625,7 @@ class SyncEngine {
     try {
       await transport.putSnapshot(id, covers, sealed);
     } on TransportException catch (e) {
+      _stopIfFinal('putSnapshot', e);
       logEvent(_log, Level.WARNING, 'sync.snapshot.refused', {'failure': e.failure.name});
       return;
     }
@@ -1519,6 +1637,7 @@ class SyncEngine {
         await transport.putSnapshotBlobs(id, declared);
         logEvent(_log, Level.INFO, 'sync.snapshot.blobs', {'files': declared.length});
       } on TransportException catch (e) {
+        _stopIfFinal('putSnapshotBlobs', e);
         logEvent(_log, Level.WARNING, 'sync.snapshot.blobsFailed', {'failure': e.failure.name});
       }
     }

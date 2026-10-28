@@ -185,7 +185,8 @@ void main() {
         expect(r.bodyBytes, isEmpty);
         expect(r.headers['access-control-allow-origin'], allowed);
         expect(r.headers['access-control-allow-methods'], 'GET, PUT, DELETE, OPTIONS');
-        expect(r.headers['access-control-allow-headers'], 'Content-Type, X-BW-Covers, X-BW-Time, X-BW-Sig, X-BW-Pub, X-BW-Create-Token');
+        expect(r.headers['access-control-allow-headers'],
+            'Content-Type, X-BW-Covers, X-BW-Time, X-BW-Sig, X-BW-Pub, X-BW-Create-Token, X-BW-Dev, X-BW-WSig');
       }
     });
 

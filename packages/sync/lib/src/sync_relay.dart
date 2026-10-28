@@ -1,7 +1,8 @@
-// HTTP client for the relay (docs/context/RELAY_PROTOCOL.md, api 4 (api 3 relays too): requests signed with the host, paths under /v2/). `package:http` and
+// HTTP client for the relay (docs/context/RELAY_PROTOCOL.md, api 5 (api 4 and 3 relays too): requests signed with the host, paths under /v2/). `package:http` and
 // `package:cryptography` only, so it runs on the VM and the web.
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -12,8 +13,8 @@ import 'sync_engine.dart';
 
 final _log = Logger('bw.relay');
 
-/// The relay API version this build speaks (`api` in health and state). The URL paths stay under `/v2/`.
-const relayApi = 4;
+/// The relay API version this build speaks (`api` in health and state). The URL paths stay under `/v2/`. 5: device keys.
+const relayApi = 5;
 
 /// The oldest relay API this build still syncs with: an api-3 relay (signed text `bw-relay-v3`, no declared blob sets,
 /// RELAY_PROTOCOL.md "Versions").
@@ -27,13 +28,41 @@ class _Identity {
   final String wid;
   final SimpleKeyPair keyPair;
   final String pub;
-  _Identity(this.wid, this.keyPair, this.pub);
+
+  /// The device key (api 5) and its `devpub`, or null without one.
+  final SimpleKeyPair? devPair;
+  final String? devpub;
+  _Identity(this.wid, this.keyPair, this.pub, this.devPair, this.devpub);
+}
+
+/// What `PUT enrol` answered: enrolled (201 or 200), or waiting for approval on a locked wallet (202).
+enum EnrolResult { enrolled, pending }
+
+/// A device key's fingerprint (RELAY_PROTOCOL.md "Identity"): the first 8 base32 characters (`A-Z2-7`) of SHA-256 of
+/// the public key bytes [pub], as `ABCD-EFGH`. People compare it to approve a device.
+String deviceFingerprint(List<int> pub) {
+  final h = sha256Hex(pub);
+  final bits = int.parse(h.substring(0, 10), radix: 16); // 40 bits: exact on the web too
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  final out = StringBuffer();
+  for (var i = 7; i >= 0; i--) {
+    out.write(alphabet[(bits ~/ pow(32, i)) % 32]);
+    if (i == 4) out.write('-');
+  }
+  return out.toString();
+}
+
+/// A new random device key seed (32 bytes, Ed25519; RELAY_PROTOCOL.md "Identity"): made once per install and kept
+/// next to the wallet key; never synced, never in backups.
+List<int> newDeviceKey() {
+  final r = Random.secure();
+  return List<int>.generate(32, (_) => r.nextInt(256));
 }
 
 /// [SyncTransport] over HTTP to a relay at [base] (e.g. `http://homeserver:8787`). The wallet id and the Ed25519 key
 /// that signs every request are derived from [key] ([deriveKey]); the key itself never leaves the device, and the
 /// relay only ever learns the public key.
-class RelayTransport implements SyncTransport {
+class RelayTransport implements SyncTransport, DeviceKeyTransport {
   final Uri base;
   final VaultKey key;
   final http.Client _client;
@@ -51,14 +80,35 @@ class RelayTransport implements SyncTransport {
   /// answers 403 `createToken` ([TransportFailure.createToken]).
   final String? createToken;
 
-  /// The api whose signed text this transport uses: [relayApi], or 3 once an api-3 relay was found (a 401 that is not
-  /// `clock`, then `/v2/health` says 3). In memory, per transport.
-  int signApi = relayApi;
+  /// This install's device key seed (api 5, 32 bytes, [newDeviceKey]): every request is signed with it (`X-BW-Dev`,
+  /// `bw-relay-v5`), and the wallet key only countersigns creation and enrolment. Null = sign with the wallet key as
+  /// an api-4 app does (tests; an install without a device key).
+  final List<int>? deviceKey;
+
+  /// This install's device id, sent with an enrolment (`deviceId`) so other devices can name a pending key.
+  final String? deviceId;
+
+  /// The api whose signed text this transport uses: 5 with a [deviceKey] (else 4), lowered to 4 or 3 once an older relay
+  /// was found (a 401 that is not `clock`, `revoked` or `unenrolled`, then `/v2/health` says so). In memory, per
+  /// transport.
+  int signApi;
 
   RelayTransport(this.base, this.key,
-      {http.Client? client, this.timeout = const Duration(seconds: 30), DateTime Function()? now, this.clockOffsetMs = 0, this.createToken})
+      {http.Client? client,
+      this.timeout = const Duration(seconds: 30),
+      DateTime Function()? now,
+      this.clockOffsetMs = 0,
+      this.createToken,
+      this.deviceKey,
+      this.deviceId})
       : _client = client ?? http.Client(),
-        _now = now ?? DateTime.now;
+        _now = now ?? DateTime.now,
+        signApi = deviceKey == null ? 4 : relayApi {
+    if (deviceKey case final k? when k.length != 32) throw ArgumentError('a device key is 32 bytes');
+  }
+
+  /// The highest api this transport can sign: 5 with a device key, else 4.
+  int get _maxApi => deviceKey == null ? 4 : relayApi;
 
   static final _ed25519 = Ed25519();
 
@@ -69,8 +119,18 @@ class RelayTransport implements SyncTransport {
         final seed = await deriveKey(key, relaySignInfo);
         final pair = await _ed25519.newKeyPairFromSeed(seed);
         final pub = (await pair.extractPublicKey()).bytes;
-        return _Identity(id.map((b) => b.toRadixString(16).padLeft(2, '0')).join(), pair, _b64(pub));
+        final dk = deviceKey;
+        final devPair = dk == null ? null : await _ed25519.newKeyPairFromSeed(dk);
+        final devpub = devPair == null ? null : _b64((await devPair.extractPublicKey()).bytes);
+        return _Identity(id.map((b) => b.toRadixString(16).padLeft(2, '0')).join(), pair, _b64(pub), devPair, devpub);
       }();
+
+  /// This install's device key fingerprint (`ABCD-EFGH`, shown on a device waiting for approval), or null without a
+  /// [deviceKey].
+  Future<String?> get fingerprint async {
+    final dev = (await _id).devPair;
+    return dev == null ? null : deviceFingerprint((await dev.extractPublicKey()).bytes);
+  }
 
   /// (wallet id, public key): `wid` = lowercase hex of HKDF(`bw-relay-id-v1`, 16 bytes), the public key = base64url
   /// without padding of the Ed25519 key from the seed HKDF(`bw-relay-sign-v1`, 32 bytes), as `X-BW-Pub` sends it.
@@ -126,6 +186,10 @@ class RelayTransport implements SyncTransport {
     if (s >= 200 && s < 300) return;
     final failure = switch (s) {
       401 when _isClock(r) => TransportFailure.other,
+      401 when _error(r) == 'revoked' => TransportFailure.revoked,
+      401 when _error(r) == 'unenrolled' => TransportFailure.pending,
+      409 when _error(r) == 'lastDevice' => TransportFailure.lastDevice,
+      409 when _error(r) == 'pendingFull' => TransportFailure.pending,
       403 when _error(r) == 'createToken' => TransportFailure.createToken,
       401 || 403 => TransportFailure.refused,
       410 => TransportFailure.gone,
@@ -176,10 +240,14 @@ class RelayTransport implements SyncTransport {
     return Map<String, Object?>.from(j);
   }
 
-  /// The string a request signs (RELAY_PROTOCOL.md "Signed requests"): `bw-relay-v4`, or with [api] 3 the api-3 text
-  /// (`bw-relay-v3`); [host] is [signedHost] of the URL.
-  static String signedText(String method, String host, String path, String covers, String bodyHash, String time, {int api = relayApi}) =>
-      'bw-relay-v${api == 3 ? 3 : 4}\n$method\n$host\n$path\n$covers\n$bodyHash\n$time';
+  /// The string a request signs (RELAY_PROTOCOL.md "Signed requests"): `bw-relay-v4`, with [api] 3 the api-3 text
+  /// (`bw-relay-v3`), with [api] 5 `bw-relay-v5` ending with the device key [devpub] (`X-BW-Dev`); [host] is
+  /// [signedHost] of the URL.
+  static String signedText(String method, String host, String path, String covers, String bodyHash, String time,
+          {int api = 4, String? devpub}) =>
+      api >= 5
+          ? 'bw-relay-v5\n$method\n$host\n$path\n$covers\n$bodyHash\n$time\n${devpub ?? (throw ArgumentError('v5 needs devpub'))}'
+          : 'bw-relay-v${api == 3 ? 3 : 4}\n$method\n$host\n$path\n$covers\n$bodyHash\n$time';
 
   /// The host a request to [url] names, as its `Host` header carries it: lower case, `:port` only when it is not the
   /// scheme's default, an IPv6 address in brackets.
@@ -193,8 +261,11 @@ class RelayTransport implements SyncTransport {
   /// The largest clock offset taken from a relay's `Date` (RELAY_PROTOCOL.md "Signed requests"); a bigger one fails the call.
   static const maxClockOffset = Duration(hours: 24);
 
+  /// One signed request. [withPub]: the request may create the wallet (`X-BW-Pub`, and with a device key the wallet
+  /// key's countersignature `X-BW-WSig`); [withWallet]: countersign (enrolment). A 401 `unenrolled` (a device key the
+  /// relay does not know yet) enrols once ([enrol]) and sends the request again; 401 `revoked` is final.
   Future<http.Response> _req(String method, String path, String kind,
-      {List<int> body = const [], Map<String, String> headers = const {}, bool withPub = false}) async {
+      {List<int> body = const [], Map<String, String> headers = const {}, bool withPub = false, bool withWallet = false}) async {
     final id = await _id;
     final signedPath = '/v2/w/${id.wid}/$path';
     final url = _url(base, signedPath.substring(1));
@@ -202,11 +273,22 @@ class RelayTransport implements SyncTransport {
     final hash = (await Sha256().hash(body)).bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     Future<http.Response> attempt() async {
       final time = '${_now().millisecondsSinceEpoch + clockOffsetMs}';
-      final sig = await _ed25519.sign(
-          utf8.encode(signedText(method, host, signedPath, headers['X-BW-Covers'] ?? '', hash, time, api: signApi)),
-          keyPair: id.keyPair);
+      // api 5: the device key signs; the wallet key countersigns what needs it. Older relays: the wallet key signs.
+      final dev = signApi >= 5 ? id.devPair : null;
+      final devpub = dev == null ? null : id.devpub;
+      final text = utf8.encode(signedText(method, host, signedPath, headers['X-BW-Covers'] ?? '', hash, time,
+          api: dev == null ? min(signApi, 4) : 5, devpub: devpub));
+      final sig = await _ed25519.sign(text, keyPair: dev ?? id.keyPair);
+      final wsig = dev != null && (withPub || withWallet) ? await _ed25519.sign(text, keyPair: id.keyPair) : null;
       final req = http.Request(method, url)
-        ..headers.addAll({...headers, 'X-BW-Time': time, 'X-BW-Sig': _b64(sig.bytes), if (withPub) 'X-BW-Pub': id.pub});
+        ..headers.addAll({
+          ...headers,
+          'X-BW-Time': time,
+          'X-BW-Sig': _b64(sig.bytes),
+          if (devpub != null) 'X-BW-Dev': devpub,
+          if (wsig != null) 'X-BW-WSig': _b64(wsig.bytes),
+          if (withPub) 'X-BW-Pub': id.pub,
+        });
       if (method != 'GET') req.bodyBytes = body;
       return _send(() async => http.Response.fromStream(await _client.send(req)), timeout, kind);
     }
@@ -228,13 +310,27 @@ class RelayTransport implements SyncTransport {
         r = await attempt();
       }
     }
-    if (r.statusCode == 401 && !_isClock(r)) {
+    if (r.statusCode == 401 && _error(r) == 'unenrolled' && !withWallet && signApi >= 5) {
+      // A device key the relay does not know yet (a new or upgraded install): enrol it, then once more.
+      if (await enrol() == EnrolResult.pending) {
+        logEvent(_log, Level.INFO, 'relay.enrol.pending', {'kind': kind});
+        throw const TransportException(TransportFailure.pending, 'waiting for approval');
+      }
+      r = await attempt();
+    }
+    if (r.statusCode == 401 && !_isClock(r) && _error(r) != 'revoked' && _error(r) != 'unenrolled') {
       // A relay of another api version refuses this build's signatures (the signed text names its version): ask its
       // health once, so mixed versions read as "update the app / the relay", and `refused` stays for a real key clash.
       try {
         final api = await health(base, client: _client, timeout: timeout);
+        if (api > _maxApi) {
+          // An install without a device key on a relay that locked the wallet: as an api-4 app, update.
+          logEvent(_log, Level.WARNING, 'relay.newerApi', {'api': api});
+          throw const TransportException(TransportFailure.newerApi, 'newer api');
+        }
         if (api < signApi) {
-          // An api-3 relay: sign its text from now on and send this request again (RELAY_PROTOCOL.md "Versions").
+          // An older relay (api 4 or 3): sign its text with the wallet key from now on and send this request again
+          // (RELAY_PROTOCOL.md "Versions"); no device features there.
           signApi = api;
           logEvent(_log, Level.INFO, 'relay.signApi', {'api': api});
           r = await attempt();
@@ -260,6 +356,11 @@ class RelayTransport implements SyncTransport {
       rethrow;
     }
     final j = _api(r.body, 'state');
+    if ((j['api'] as int) > signApi) {
+      // `{"api":5}` to a wallet-key request: the wallet requires device approval, which this transport cannot sign.
+      logEvent(_log, Level.WARNING, 'relay.newerApi', {'api': j['api']});
+      throw const TransportException(TransportFailure.newerApi, 'newer api');
+    }
     try {
       return RelayState.fromJson(j);
     } on FormatException catch (e, st) {
@@ -315,6 +416,60 @@ class RelayTransport implements SyncTransport {
   Future<void> putSnapshotBlobs(String id, List<String> hashes) async {
     await _req('PUT', 'snapshot/$id/blobs', 'putSnapshotBlobs',
         body: utf8.encode(jsonEncode([...hashes]..sort())), headers: {'Content-Type': 'application/json'});
+  }
+
+  // ---- device keys (api 5, RELAY_PROTOCOL.md "Device keys") ---------------------------------------------------------
+
+  /// No device features: this transport has no device key, or the relay is older (it signs with the wallet key).
+  void _needDeviceApi() {
+    if (signApi < 5) throw const TransportException(TransportFailure.olderApi, 'no device keys');
+  }
+
+  /// `PUT enrol`: enrols this install's device key (countersigned by the wallet key), or asks for approval when the
+  /// wallet is locked ([EnrolResult.pending]). Called by every request that gets 401 `unenrolled`. Throws
+  /// [TransportFailure.revoked] for a removed key, [TransportFailure.pending] when the relay holds too many requests.
+  @override
+  Future<EnrolResult> enrol() async {
+    _needDeviceApi();
+    final id = deviceId;
+    final r = await _req('PUT', 'enrol', 'enrol',
+        body: utf8.encode(jsonEncode({if (id != null) 'deviceId': id})), headers: {'Content-Type': 'application/json'}, withWallet: true);
+    final result = r.statusCode == 202 ? EnrolResult.pending : EnrolResult.enrolled;
+    logEvent(_log, Level.INFO, 'relay.enrol', {'result': result.name});
+    return result;
+  }
+
+  /// Approves the pending device key with fingerprint [fp] (`ABCD-EFGH`). Idempotent. [TransportFailure.missing] when no
+  /// such key waits (or it expired), [TransportFailure.conflict] when that key was removed.
+  @override
+  Future<void> approveDevice(String fp) => _device(fp, 'approve');
+
+  /// Removes (revokes) the device key with fingerprint [fp], or rejects it while pending; the relay also locks the
+  /// wallet. Idempotent. [TransportFailure.lastDevice] for the wallet's last enrolled key, [TransportFailure.missing]
+  /// for an unknown one.
+  @override
+  Future<void> revokeDevice(String fp) => _device(fp, 'revoke');
+
+  Future<void> _device(String fp, String action) async {
+    _needDeviceApi();
+    if (!RegExp(r'^[A-Z2-7]{4}-[A-Z2-7]{4}$').hasMatch(fp)) throw const TransportException(TransportFailure.rejected, 'bad fingerprint');
+    await _req('PUT', 'devices/$fp', action, body: utf8.encode(jsonEncode({action: true})), headers: {'Content-Type': 'application/json'});
+    logEvent(_log, Level.INFO, 'relay.device', {'action': action});
+  }
+
+  /// Turns "Require approval for new devices" on or off; returns the value the relay now holds.
+  @override
+  Future<bool> setLocked(bool locked) async {
+    _needDeviceApi();
+    final r =
+        await _req('PUT', 'lock', 'lock', body: utf8.encode(jsonEncode({'locked': locked})), headers: {'Content-Type': 'application/json'});
+    try {
+      final j = jsonDecode(r.body);
+      if (j is Map && j['locked'] is bool) return j['locked'] as bool;
+    } on FormatException {
+      // fall through
+    }
+    throw const TransportException(TransportFailure.other, 'bad lock answer');
   }
 
   /// Closes the HTTP client.

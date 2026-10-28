@@ -49,7 +49,38 @@ class TestKey {
       if (withPub) 'x-bw-pub': await pub(),
     };
   }
+
+  /// The api-5 headers with this key as the device key (`X-BW-Dev`, `X-BW-Sig` over `bw-relay-v5` … `<devpub>`); with
+  /// [wallet] also `X-BW-WSig` by the wallet key over the same text and (with [withPub]) its `X-BW-Pub`.
+  Future<Map<String, String>> headersV5(String method, String path, List<int> body,
+      {required int timeMs, required String host, String covers = '', TestKey? wallet, bool withPub = true}) async {
+    final hash = _hex((await Sha256().hash(body)).bytes);
+    final dev = await pub();
+    final text = 'bw-relay-v5\n$method\n$host\n$path\n$covers\n$hash\n$timeMs\n$dev';
+    return {
+      'x-bw-time': '$timeMs',
+      'x-bw-dev': dev,
+      'x-bw-sig': await sign(text),
+      if (wallet != null) 'x-bw-wsig': await wallet.sign(text),
+      if (wallet != null && withPub) 'x-bw-pub': await wallet.pub(),
+    };
+  }
+
+  /// This key's fingerprint as the protocol defines it: base32 (A-Z2-7) of SHA-256(public key), first 8, `ABCD-EFGH`.
+  Future<String> fp() async {
+    final raw = (await (await _pair).extractPublicKey()).bytes;
+    final h = (await Sha256().hash(raw)).bytes;
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    final bits = h.take(5).map((b) => b.toRadixString(2).padLeft(8, '0')).join();
+    final chars = [for (var i = 0; i < 8; i++) alphabet[int.parse(bits.substring(i * 5, i * 5 + 5), radix: 2)]].join();
+    return '${chars.substring(0, 4)}-${chars.substring(4)}';
+  }
 }
+
+/// Synthetic device keys (api 5).
+final TestKey devA = TestKey(List<int>.generate(32, (i) => 0xD0 ^ i));
+final TestKey devB = TestKey(List<int>.generate(32, (i) => 0xD1 ^ (i * 3)));
+final TestKey devC = TestKey(List<int>.generate(32, (i) => 0xD2 ^ (i * 5)));
 
 /// A relay on a free port over a temp folder with a controllable clock and a captured log.
 class Harness {
@@ -161,6 +192,27 @@ class Harness {
       req.headers.addAll(
           await sign(key, method, base.resolve(path).path, body ?? const [], covers: headers['x-bw-covers'] ?? '', withPub: withPub));
     }
+    req.headers.addAll(headers);
+    if (body != null) req.bodyBytes = body;
+    return http.Response.fromStream(await client.send(req));
+  }
+
+  /// The api-5 headers [dev] would send now (see [TestKey.headersV5]).
+  Future<Map<String, String>> signV5(TestKey dev, String method, String path, List<int> body,
+          {String covers = '', TestKey? wallet, bool withPub = true}) =>
+      dev.headersV5(method, path, body,
+          timeMs: clock.add(skew).millisecondsSinceEpoch,
+          host: signHost ?? base.authority,
+          covers: covers,
+          wallet: wallet,
+          withPub: withPub);
+
+  /// Sends a request signed by device key [dev] (api 5), countersigned by [wallet] when given.
+  Future<http.Response> sendV5(TestKey dev, String method, String path,
+      {List<int>? body, TestKey? wallet, Map<String, String> headers = const {}, bool withPub = true}) async {
+    final req = http.Request(method, base.resolve(path));
+    req.headers.addAll(await signV5(dev, method, base.resolve(path).path, body ?? const [],
+        covers: headers['x-bw-covers'] ?? '', wallet: wallet, withPub: withPub));
     req.headers.addAll(headers);
     if (body != null) req.bodyBytes = body;
     return http.Response.fromStream(await client.send(req));
