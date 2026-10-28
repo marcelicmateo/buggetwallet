@@ -149,55 +149,76 @@ void main() {
   });
 
   group('divergence is detected and repaired', () {
-    test('a corrupted row on one device: devices end with equal digests and last-writer-wins values', () async {
+    test('a corrupted value on one device: a conflict on both, nothing picked; the owner\'s choice makes them equal', () async {
       final a = device('a'), b = device('b');
-      final id = a.repo.addTransaction(date: '2026-01-05', amount: -1250, category: 'Groceries');
-      a.repo.addTransaction(date: '2026-01-06', amount: -300, category: 'Shopping');
+      final id = a.repo.addTransaction(date: '2026-01-05', amount: 1250, category: 'Groceries');
+      a.repo.addTransaction(date: '2026-01-06', amount: 300, category: 'Shopping');
       await settle([a, b]);
       expect((await digests([a, b])).length, 1);
-      // addTransaction stores an expense of -1250 as 1250 (sign by category), so read what was stored.
-      final original = a.repo.transactions().firstWhere((t) => t.id == id).amount;
+      int amount(Device d) => d.repo.transactions().firstWhere((t) => t.id == id).amount;
+      final original = amount(a);
 
-      // -1000 sorts below the original as JSON text ("-" before digits), so the equal-clock tie-break keeps the original.
-      corrupt(a, 'UPDATE tx SET amount = ? WHERE id = ?', [-1000, id]);
+      corrupt(a, 'UPDATE tx SET amount = ? WHERE id = ?', [original + 250, id]);
       // stateDigest is cached per dataVersion (known limit): a change behind the change log shows after the next data change.
-      a.repo.addTransaction(date: '2026-01-07', amount: -50, category: 'Groceries'); // new data: a digest is due
+      a.repo.addTransaction(date: '2026-01-07', amount: 50, category: 'Groceries'); // new data: a digest is due
       expect((await digests([a, b])).length, 2);
       await settle([a, b, a, b]);
+      expect((amount(a), amount(b)), (original + 250, original), reason: 'money never changes without the owner');
+      final ca = a.repo.syncConflicts().single, cb = b.repo.syncConflicts().single;
+      expect((ca.entity, ca.rowId, ca.field, ca.mine, ca.theirs), ('tx', id, 'amount', original + 250, original));
+      expect((cb.mine, cb.theirs), (original, original + 250));
 
-      expect((await digests([a, b])).length, 1, reason: 'repaired');
+      a.repo.resolveSyncConflict(ca.id, keepMine: false);
+      await settle([a, b]);
+      expect((await digests([a, b])).length, 1, reason: 'repaired by the owner\'s choice');
       final want = lastWriterWins(await opsInNet(net, key));
       expect(lwwDiff(a.repo, want), isEmpty);
       expect(lwwDiff(b.repo, want), isEmpty);
-      expect(a.repo.transactions().firstWhere((t) => t.id == id).amount, original);
+      expect((amount(a), amount(b)), (original, original));
+      expect([...a.repo.syncConflicts(), ...b.repo.syncConflicts()], isEmpty);
     });
 
-    test('the same clock with a different value converges to the same value on both (the higher canonical JSON)', () async {
+    test('the same clock with a different value: each keeps its own until the owner chooses (keepMine)', () async {
       final a = device('a'), b = device('b');
-      final id = a.repo.addTransaction(date: '2026-01-05', amount: -1250, category: 'Groceries', note: 'aaa');
+      final id = a.repo.addTransaction(date: '2026-01-05', amount: 1250, category: 'Groceries', note: 'aaa');
       await settle([a, b]);
       corrupt(a, 'UPDATE tx SET note = ? WHERE id = ?', ['zzz', id]);
-      a.repo.addTransaction(date: '2026-01-07', amount: -50, category: 'Groceries');
+      a.repo.addTransaction(date: '2026-01-07', amount: 50, category: 'Groceries');
       await settle([a, b, a, b]);
       String note(Device d) => d.repo.db.select('SELECT note FROM tx WHERE id = ?', [id]).single['note'] as String;
-      expect(note(a), note(b));
-      expect(note(a), 'zzz', reason: '"zzz" sorts above "aaa" as JSON');
+      expect((note(a), note(b)), ('zzz', 'aaa'));
+      expect((b.repo.syncConflicts().single.mine, b.repo.syncConflicts().single.theirs), ('aaa', 'zzz'));
+      b.repo.resolveSyncConflict(b.repo.syncConflicts().single.id, keepMine: true);
+      await settle([a, b]);
+      expect((note(a), note(b)), ('aaa', 'aaa'));
       expect((await digests([a, b])).length, 1);
     });
 
-    test('three devices: one corrupted, all three end equal', () async {
+    test('three devices: one corrupted, a conflict on all three; one choice makes all three equal', () async {
       final a = device('a'), b = device('b'), c = device('c');
-      final id = a.repo.addTransaction(date: '2026-01-05', amount: -2500, category: 'Groceries');
-      b.repo.addTransaction(date: '2026-01-06', amount: -300, category: 'Shopping');
+      final id = a.repo.addTransaction(date: '2026-01-05', amount: 2500, category: 'Groceries');
+      b.repo.addTransaction(date: '2026-01-06', amount: 300, category: 'Shopping');
       await settle([a, b, c]);
       expect((await digests([a, b, c])).length, 1);
-      corrupt(c, 'UPDATE tx SET amount = ? WHERE id = ?', [-2000, id]); // JSON text below the original
-      c.repo.addTransaction(date: '2026-01-08', amount: -75, category: 'Groceries');
+      final stored = a.repo.transactions().firstWhere((t) => t.id == id).amount;
+      corrupt(c, 'UPDATE tx SET amount = ? WHERE id = ?', [stored - 500, id]);
+      c.repo.addTransaction(date: '2026-01-08', amount: 75, category: 'Groceries');
       await settle([a, b, c, a, b, c]);
+      expect([
+        for (final d in [a, b, c]) d.repo.syncConflicts().length
+      ], [
+        1,
+        1,
+        1
+      ]);
+      a.repo.resolveSyncConflict(a.repo.syncConflicts().single.id, keepMine: true);
+      await settle([a, b, c]);
       expect((await digests([a, b, c])).length, 1);
       final want = lastWriterWins(await opsInNet(net, key));
       for (final d in [a, b, c]) {
         expect(lwwDiff(d.repo, want), isEmpty);
+        expect(d.repo.syncConflicts(), isEmpty);
+        expect(d.repo.transactions().firstWhere((t) => t.id == id).amount, stored);
       }
     });
 
@@ -244,16 +265,19 @@ void main() {
 
     test('a second divergence within 7 days: devicesDisagree is reported, resends do not go on for ever', () async {
       final a = device('a'), b = device('b');
-      final id1 = a.repo.addTransaction(date: '2026-01-05', amount: -1250, category: 'Groceries');
-      final id2 = a.repo.addTransaction(date: '2026-01-06', amount: -2500, category: 'Groceries');
+      final id1 = a.repo.addTransaction(date: '2026-01-05', amount: 1250, category: 'Groceries');
+      final id2 = a.repo.addTransaction(date: '2026-01-06', amount: 2500, category: 'Groceries');
       await settle([a, b]);
-      corrupt(a, 'UPDATE tx SET amount = ? WHERE id = ?', [-1000, id1]);
-      a.repo.addTransaction(date: '2026-01-07', amount: -50, category: 'Groceries');
+      corrupt(a, 'UPDATE tx SET amount = ? WHERE id = ?', [1000, id1]);
+      a.repo.addTransaction(date: '2026-01-07', amount: 50, category: 'Groceries');
       await settle([a, b], rounds: 8);
+      // VC: the repair leaves a conflict; the owner's choice settles the first divergence.
+      a.repo.resolveSyncConflict(a.repo.syncConflicts().single.id, keepMine: false);
+      await settle([a, b], rounds: 4);
       expect((await digests([a, b])).length, 1, reason: 'first divergence repaired');
 
-      corrupt(b, 'UPDATE tx SET amount = ? WHERE id = ?', [-2000, id2]);
-      b.repo.addTransaction(date: '2026-01-08', amount: -60, category: 'Groceries');
+      corrupt(b, 'UPDATE tx SET amount = ? WHERE id = ?', [2000, id2]);
+      b.repo.addTransaction(date: '2026-01-08', amount: 60, category: 'Groceries');
       final reports = await settle([a, b], rounds: 8);
       // API: assumed: devicesDisagree is a SyncProblem in the report (device-local, kept until a later compare matches).
       expect(reasons(reports), contains(SyncProblemReason.devicesDisagree));

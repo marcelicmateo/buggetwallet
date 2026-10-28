@@ -119,59 +119,96 @@ void main() {
   group('repair', () {
     void corrupt(Dev d, String sql) => d.repo.db.execute(sql);
 
-    test('same clock, different value: the higher value (canonical JSON) wins on every device, then quiet', () async {
+    /// [d] loses settings row [key] with its clocks (behind the change log): no clock, so a repair brings it back.
+    void lose(Dev d, String key) {
+      corrupt(d, "DELETE FROM settings WHERE id = '$key'");
+      corrupt(d, "DELETE FROM clocks WHERE entity = 'setting' AND id = '$key'");
+    }
+
+    test('same clock, different value: both keep their own, a conflict on each (swapped), the owner settles it', () async {
       final lines = _capture();
       final ds = await cluster(2);
       final [a, b] = ds;
-      // b's salary changed behind the change log: same clock as a's, another value ("9" sorts above "150000").
-      corrupt(b, "UPDATE settings SET value = '9' WHERE id = 'salary'");
-      expect(b.repo.settings().salary, 9);
+      corrupt(b, "UPDATE settings SET value = '9' WHERE id = 'salary'"); // same clock as a's, another value
       sim.tick();
       a.repo.updateSettings({'rent': 51000}); // any data change sends a digest
       await settle(ds);
-      expectSame(ds);
-      expect((a.repo.settings().salary, b.repo.settings().salary), (9, 9));
+      expect((a.repo.settings().salary, b.repo.settings().salary), (150000, 9), reason: 'nothing picked without the owner');
       expect(a.repo.settings().rent, 51000);
+      final ca = a.repo.syncConflicts().single, cb = b.repo.syncConflicts().single;
+      expect((ca.entity, ca.rowId, ca.field, ca.mine, ca.theirs), ('setting', 'salary', 'value', '150000', '9'));
+      expect((cb.id, cb.mine, cb.theirs, cb.clock), (ca.id, '9', '150000', ca.clock));
       final text = lines.join('\n');
-      expect(text, contains('sync.digest.mismatch'));
-      expect(text, contains('sync.repair.start'));
-      expect(text, contains('sync.repair.answer'));
       expect(RegExp('sync.repair.start').allMatches(text), hasLength(1), reason: 'one repair');
+      expect(text, contains('sync.repair.answer'));
+      final rb = await b.sync();
+      expect(rb.conflicts, 1);
+
+      // The owner chooses on b: the other device's value. Both end equal, conflicts gone on both.
+      b.repo.resolveSyncConflict(cb.id, keepMine: false);
+      await settle(ds);
+      expectSame(ds);
+      expect((a.repo.settings().salary, b.repo.settings().salary), (150000, 150000));
       for (final d in ds) {
-        expect((await d.sync()).problems, isEmpty);
+        final r = await d.sync();
+        expect(r.conflicts, 0);
+        expect(d.repo.syncConflicts(), isEmpty);
+        expect(r.problems, isEmpty, reason: 'devicesDisagree cleared');
       }
+      expect(RegExp('sync.repair.start').allMatches(lines.join('\n')), hasLength(1), reason: 'no repair while open');
     });
 
-    test('a value that sorts lower loses: the device that was changed gets the others\' value back', () async {
+    test('three devices: one changed value is a conflict on all three; keepMine on the changed one wins everywhere', () async {
       final ds = await cluster(3);
       final [a, b, c] = ds;
       corrupt(c, "UPDATE settings SET value = '0' WHERE id = 'salary'");
       sim.tick();
       b.repo.updateSettings({'rent': 51000});
       await settle(ds);
+      expect([for (final d in ds) d.repo.settings().salary], [150000, 150000, 0]);
+      expect([for (final d in ds) d.repo.syncConflicts().length], [1, 1, 1]);
+      expect(c.repo.syncConflicts().single.theirs, '150000');
+      c.repo.resolveSyncConflict(c.repo.syncConflicts().single.id, keepMine: true);
+      await settle(ds);
       expectSame(ds);
-      expect([for (final d in ds) d.repo.settings().salary], [150000, 150000, 150000]);
-      expect(a.repo.settings().rent, 51000);
+      expect([for (final d in ds) d.repo.settings().salary], [0, 0, 0]);
+      expect([for (final d in ds) d.repo.syncConflicts().length], [0, 0, 0]);
+    });
+
+    test('an edit of the field on any device settles the conflict everywhere', () async {
+      final ds = await cluster(2);
+      final [a, b] = ds;
+      corrupt(b, "UPDATE settings SET value = '9' WHERE id = 'salary'");
+      sim.tick();
+      a.repo.updateSettings({'rent': 51000});
+      await settle(ds);
+      expect([for (final d in ds) d.repo.syncConflicts().length], [1, 1]);
+      sim.tick();
+      a.repo.updateSettings({'salary': 160000});
+      await settle(ds);
+      expectSame(ds);
+      expect([for (final d in ds) d.repo.syncConflicts().length], [0, 0]);
+      expect(b.repo.settings().salary, 160000);
     });
 
     test('a row lost on one device (row and clocks gone) comes back from the others', () async {
       final ds = await cluster(2);
       final [a, b] = ds;
-      corrupt(b, "DELETE FROM settings WHERE id = 'rent'");
-      corrupt(b, "DELETE FROM clocks WHERE entity = 'setting' AND id = 'rent'");
+      lose(b, 'rent');
       expect(b.repo.settings().rent, 0);
       sim.tick();
       a.repo.updateSettings({'salary': 151000});
       await settle(ds);
       expectSame(ds);
       expect(b.repo.settings().rent, 50000);
+      expect(b.repo.syncConflicts(), isEmpty);
     });
 
     test('nothing is deleted by a repair: rows only one device holds stay and spread', () async {
       final ds = await cluster(2);
       final [a, b] = ds;
       final rows = a.repo.transactions().length;
-      // b lost a row behind the change log; a holds it. After the repair both hold every row.
+      // b lost a row behind the change log (its clocks stay); a holds it. After the repair both hold every row.
       final victim = b.repo.transactions().first.id;
       corrupt(b, "DELETE FROM tx WHERE id = '$victim'");
       sim.tick();
@@ -183,19 +220,33 @@ void main() {
   });
 
   group('devicesDisagree', () {
+    void lose(Dev d, String key) {
+      d.repo.db.execute("DELETE FROM settings WHERE id = '$key'");
+      d.repo.db.execute("DELETE FROM clocks WHERE entity = 'setting' AND id = '$key'");
+    }
+
+    Future<List<Dev>> withLoanAndSubs() async {
+      final ds = await cluster(2);
+      sim.tick();
+      ds.first.repo.updateSettings({'loan': 30000, 'subs': 2000});
+      await settle(ds);
+      return ds;
+    }
+
     test('a second mismatch within 7 days of a repair: no second repair, devicesDisagree until a compare matches', () async {
       final lines = _capture();
-      final ds = await cluster(2);
+      final ds = await withLoanAndSubs();
       final [a, b] = ds;
-      b.repo.db.execute("UPDATE settings SET value = '9' WHERE id = 'salary'");
+      lose(b, 'loan');
       sim.tick();
       a.repo.updateSettings({'rent': 51000});
       await settle(ds);
       expectSame(ds);
+      expect(RegExp('sync.repair.start').allMatches(lines.join('\n')), hasLength(1));
 
-      // Again, two days later: b's value changes behind the log once more.
+      // Again, two days later.
       sim.tick(const Duration(days: 2));
-      b.repo.db.execute("UPDATE settings SET value = '8' WHERE id = 'salary'");
+      lose(b, 'subs');
       a.repo.updateSettings({'rent': 52000});
       await a.sync();
       final r = await b.sync();
@@ -211,7 +262,6 @@ void main() {
 
       // Past the 7 days, still disagreeing: devicesDisagree stops automatic repair until a compare matches.
       sim.tick(const Duration(days: 8));
-      b.repo.db.execute("UPDATE settings SET value = '7' WHERE id = 'salary'");
       a.repo.updateSettings({'rent': 52500});
       await a.sync();
       final late = await b.sync();
@@ -219,10 +269,9 @@ void main() {
       expect(RegExp('sync.repair.start').allMatches(lines.join('\n')), hasLength(1), reason: 'still no second repair');
       expect(b.repo.pendingOps(), isEmpty, reason: 'no whole-state resend queued');
 
-      // Put right (by hand here): the next compare matches and clears it.
-      b.repo.db.execute("UPDATE settings SET value = '9' WHERE id = 'salary'");
+      // Put right by an edit of the lost row: the next compare matches and clears it.
       sim.tick();
-      a.repo.updateSettings({'rent': 53000});
+      a.repo.updateSettings({'subs': 2100});
       await a.sync();
       expect((await b.sync()).problems, isEmpty);
       expect(lines.join('\n'), contains('sync.digest.agree'));
@@ -230,14 +279,14 @@ void main() {
 
     test('after 7 days quiet a new mismatch repairs again', () async {
       final lines = _capture();
-      final ds = await cluster(2);
+      final ds = await withLoanAndSubs();
       final [a, b] = ds;
-      b.repo.db.execute("UPDATE settings SET value = '9' WHERE id = 'salary'");
+      lose(b, 'loan');
       sim.tick();
       a.repo.updateSettings({'rent': 51000});
       await settle(ds);
       sim.tick(const Duration(days: 8));
-      b.repo.db.execute("UPDATE settings SET value = '99' WHERE id = 'salary'");
+      lose(b, 'subs');
       a.repo.updateSettings({'rent': 52000});
       await settle(ds);
       expectSame(ds);
@@ -245,6 +294,25 @@ void main() {
       for (final d in ds) {
         expect((await d.sync()).problems, isEmpty);
       }
+    });
+
+    test('while a conflict is open there is no automatic repair, also after 7 days, and devicesDisagree stays', () async {
+      final lines = _capture();
+      final ds = await withLoanAndSubs();
+      final [a, b] = ds;
+      b.repo.db.execute("UPDATE settings SET value = '9' WHERE id = 'salary'");
+      sim.tick();
+      a.repo.updateSettings({'rent': 51000});
+      await settle(ds);
+      expect(b.repo.syncConflicts(), hasLength(1));
+      sim.tick(const Duration(days: 8));
+      lose(b, 'loan');
+      a.repo.updateSettings({'rent': 52000});
+      await settle(ds);
+      expect(RegExp('sync.repair.start').allMatches(lines.join('\n')), hasLength(1), reason: 'only the first');
+      final r = await b.sync();
+      expect(r.problems.map((p) => p.reason), contains(SyncProblemReason.devicesDisagree));
+      expect(r.conflicts, 1);
     });
   });
 
@@ -347,6 +415,44 @@ void main() {
       await engine.run(repo);
       expect(lines.join('\n'), contains('sync.repair.answer'));
       expect(repo.pendingOps(), isNotEmpty, reason: 'the whole state waits for the next upload');
+    });
+
+    test('an ask from a peer whose clock is a little behind (within an hour) is still answered', () async {
+      final lines = _capture();
+      final d = sim.device();
+      await d.sync(); // first V2 run now
+      await peerFile('p1', 1, [data(1), ask(sim.clock.ms - const Duration(minutes: 30).inMilliseconds)]);
+      await d.sync();
+      expect(lines.join('\n'), contains('sync.repair.answer'));
+    });
+
+    test('a resend never counts the schema-15 re-upload list as stored: those files stay listed until PUT', () async {
+      final relay = _NoBlobs(now: () => sim.clock.t);
+      final repo = WalletRepo.inMemory(now: () => sim.clock.ms);
+      addTearDown(repo.close);
+      final engine = SyncEngine(relay, sim.key, now: () => sim.clock.t);
+      Future<void> put(String device, int seq, List<Op> ops) async => relay.put(
+          device, seq, await seal(utf8.encode(jsonEncode([for (final op in ops) op.toJson()])), sim.key, aad: aadSyncFile(device, seq)));
+      repo.updateSettings({'salary': 1000});
+      await engine.run(repo);
+      final ref = await BlobStore(repo, sim.key).add(Uint8List.fromList(List<int>.generate(300, (i) => i % 251)), 'jpg');
+      repo.importBill(
+          const NormalizedBill(
+              source: BillSource.pdf, externalId: 'jir:synthetic-v2r', date: '2026-01-09', total: 1000, payee: 'Test Shop'),
+          file: ref);
+      expect((await engine.run(repo)).blobsSent, 1);
+      // As after the 14 -> 15 migration: marked uploaded, but listed to PUT again (an api-3 build deleted it).
+      repo.setLocalValue(WalletRepo.blobReuploadKey, jsonEncode([ref.hash]));
+      relay.fail = true;
+      sim.tick(const Duration(minutes: 5));
+      await put('p1', 1, [data(1), ask(sim.clock.ms)]);
+      await engine.run(repo); // answers: whole state queued (the re-upload PUT fails)
+      await engine.run(repo); // the resend goes; the file is not taken as stored
+      expect(repo.localValue(WalletRepo.blobReuploadKey), contains(ref.hash));
+      relay.fail = false;
+      await engine.run(repo);
+      expect(repo.localValue(WalletRepo.blobReuploadKey), isNull, reason: 'PUT now, then the list is done');
+      expect(relay.blobs.containsKey(ref.hash), isTrue);
     });
 
     test('asks count once by id, not by clock order: an ask with an older clock (skewed asker) is still answered', () async {

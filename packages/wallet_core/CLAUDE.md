@@ -43,7 +43,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `_readSettings`/`_settingChanges` behind `settings()`/`updateSettings`).
   Stage Q0 split the core of `repo.dart` (moves only): `repo_import.dart` (`WalletRepoImport`: matching/transfer glue,
   `_reconcile`, `_reconcileLocal`, `runPendingMatch`), `repo_sync_apply.dart` (`WalletRepoSyncApply`: `_apply`, `_fieldValue`,
-  `applyRemote` (`tieBreak`: V2 repair, equal clock → higher canonical JSON wins), `snapshotOps`, `queueStateResend`,
+  `applyRemote` (`repair`: VC, an equal clock with another value keeps the stored value and records a device-local
+  `SyncConflict` (`sync_conflicts.dart`): `syncConflicts()` (local value `syncConflicts`, ≤ 500, oldest dropped; an
+  entry whose field clock changed, row is gone or value now equals theirs is dropped on read; ordered entity, row,
+  field), `resolveSyncConflict(id, keepMine:)` = owner write of the choice through `_write`; a clock without its row
+  takes the resend value), `snapshotOps`, `queueStateResend`,
   `stateDigest` (V2: SHA-256 of the canonical synced state), `clockStats`, sync cursors/files), `repo_tx.dart` (`WalletRepoTx`: `setCategory`, delete/undelete
   transaction, merchant rules), `repo_meta.dart` (`WalletRepoMeta`: `_migrate`, `_meta`). An extension member is visible only
   where the barrel is imported, so public methods that app/sync files reach without that import (`importBatch`,
@@ -659,9 +663,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   devices that keep writing at the same moment compare only once one of them is quiet; a device that started from a
   snapshot compares only after every device whose covers ended on a records-only file wrote data again; a snapshot
   written while its writer's outbox held ops (matches made in that run) holds state its covers do not name, so a
-  compare in that window can report a false mismatch (one needless repair). The repair
-  tie-break picks the higher canonical JSON, not "the right" value; a damaged value can therefore win (the owner sees
-  devicesDisagree only on a second mismatch within 7 days; after that no automatic repair until a compare matches).
+  compare in that window can report a false mismatch (one needless repair). A field with the same clock but another
+  value on two devices is never picked automatically (VC): both keep their own until the owner chooses
+  (`syncConflicts`); until then their digests differ, `devicesDisagree` stays and no automatic repair runs. A row whose
+  clocks remain but whose row is gone takes the resend value (restores data, changes no value the owner sees as his).
+  A conflict entry is device-local: a reinstall loses it (the digest mismatch shows again on the next data change).
   `stateDigest` is cached per `dataVersion`, so a change behind the change log shows only after the next data change.
   Two devices that see the mismatch in the same round both ask: each device then resends its state once per ask
   (bounded, accepted). An ask written by a device whose clock is behind this device's first relay sync is ignored.

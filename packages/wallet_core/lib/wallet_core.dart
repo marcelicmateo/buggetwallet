@@ -238,6 +238,7 @@ export 'src/search.dart' show matchSpans, SearchFilter;
 export 'src/search.dart' show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchTxLimit;
 export 'src/splits.dart' show decodeSplitParts, encodeSplitParts, SplitPart, splitFits;
 export 'src/suggest.dart' show PlanSuggestion, planProposals, SettingProposal, Suggested, suggestPlan;
+export 'src/sync_conflicts.dart' show SyncConflict;
 export 'src/tags.dart' show recentPayees, suggestCategoriesForText;
 export 'src/tags.dart' show recommendedMainTags, recommendedTags, suggestTags, TagContext, tagPayee, TagRow, tagsOf, TagTable;
 export 'src/transfers.dart' show openTransfers, planTransfers, transferDays, TransferPlan;

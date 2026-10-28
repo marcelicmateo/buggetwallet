@@ -111,12 +111,12 @@ void main() {
       final copy = repo()..applyRemote(big.snapshotOps(), match: false);
       final snap = big.snapshotOps();
       sw = Stopwatch()..start();
-      expect(copy.applyRemote(snap, match: false, tieBreak: true), 0);
+      expect(copy.applyRemote(snap, match: false, repair: true), 0);
       final tieMs = sw.elapsedMilliseconds;
       expect(copy.stateDigest(), big.stateDigest());
       // ignore: avoid_print
       print('V2 perf: rows ${big.transactions().length}, stateDigest ${digestMs}ms (warm ${warmMs}ms), cached ${cachedMs}ms, '
-          'tie-break resend of ${snap.length} ops ${tieMs}ms');
+          'repair resend of ${snap.length} ops ${tieMs}ms');
     }, timeout: const Timeout(Duration(minutes: 2)));
   });
 
@@ -137,42 +137,74 @@ void main() {
     });
   });
 
-  group('tie-break on equal clocks (repair resend)', () {
-    test('without it the stored value stays; with it the value whose JSON sorts higher wins, on both sides alike', () {
+  group('conflicts on equal clocks (repair resend, VC)', () {
+    test('both keep their own value; the conflict is listed with mine/theirs swapped; normal apply records nothing', () {
       final low = _setting('salary', '100', 1), high = _setting('salary', '200', 1);
       final a = repo()..applyRemote([low], match: false);
       final b = repo()..applyRemote([high], match: false);
       expect(a.applyRemote([high], match: false), 0, reason: 'normal apply keeps the stored value on an equal clock');
-      expect(a.settings().salary, 100);
-      expect(a.applyRemote([high], match: false, tieBreak: true), 1);
-      expect(b.applyRemote([low], match: false, tieBreak: true), 0, reason: 'the lower value never wins');
-      expect((a.settings().salary, b.settings().salary), (200, 200));
-      expect(a.stateDigest(), b.stateDigest());
+      expect(a.syncConflicts(), isEmpty, reason: 'only a repair resend records conflicts');
+      expect(a.applyRemote([high], match: false, repair: true), 0);
+      expect(b.applyRemote([low], match: false, repair: true), 0);
+      expect((a.settings().salary, b.settings().salary), (100, 200), reason: 'nothing changes without the owner');
+      final ca = a.syncConflicts().single, cb = b.syncConflicts().single;
+      expect((ca.id, ca.entity, ca.rowId, ca.field, ca.mine, ca.theirs, ca.clock),
+          ('setting|salary|value', 'setting', 'salary', 'value', '100', '200', low.hlc));
+      expect((cb.mine, cb.theirs), ('200', '100'));
     });
 
-    test('the same value on an equal clock changes nothing, and a newer or older clock follows the normal rule', () {
+    test('the same field again is one entry with the latest theirs; the same value or another clock records nothing', () {
       final a = repo()..applyRemote([_setting('salary', '100', 5)], match: false);
-      expect(a.applyRemote([_setting('salary', '100', 5)], match: false, tieBreak: true), 0);
-      expect(a.applyRemote([_setting('salary', '900', 4)], match: false, tieBreak: true), 0, reason: 'older clock');
-      expect(a.applyRemote([_setting('salary', '50', 6)], match: false, tieBreak: true), 1, reason: 'newer clock wins whatever the value');
-      expect(a.settings().salary, 50);
+      a.applyRemote([_setting('salary', '200', 5)], match: false, repair: true);
+      a.applyRemote([_setting('salary', '300', 5)], match: false, repair: true);
+      expect(a.syncConflicts().single.theirs, '300');
+      final b = repo()..applyRemote([_setting('salary', '100', 5)], match: false);
+      expect(b.applyRemote([_setting('salary', '100', 5)], match: false, repair: true), 0);
+      expect(b.applyRemote([_setting('salary', '900', 4)], match: false, repair: true), 0, reason: 'older clock');
+      expect(b.syncConflicts(), isEmpty);
+      expect(b.applyRemote([_setting('salary', '50', 6)], match: false, repair: true), 1, reason: 'newer clock wins as always');
+      expect(b.settings().salary, 50);
     });
 
-    test('types compare by canonical JSON: an integer column and null', () {
+    test('an edit of the field (any clock change) settles the entry; resolve writes the choice with a new clock', () {
+      final a = repo()..applyRemote([_setting('salary', '100', 1)], match: false);
+      a.applyRemote([_setting('salary', '200', 1)], match: false, repair: true);
+      expect(a.syncConflicts(), hasLength(1));
+      a.updateSettings({'salary': 150});
+      expect(a.syncConflicts(), isEmpty, reason: 'the edit settles it');
+
+      final b = repo()..applyRemote([_setting('salary', '100', 1), _setting('rent', '7', 1)], match: false);
+      b.applyRemote([_setting('salary', '200', 1), _setting('rent', '8', 1)], match: false, repair: true);
+      final [rent, salary] = b.syncConflicts();
+      expect((rent.rowId, salary.rowId), ('rent', 'salary'), reason: 'ordered by entity, row, field');
+      final out = b.pendingOps().length;
+      b.resolveSyncConflict(salary.id, keepMine: false);
+      expect(b.settings().salary, 200);
+      b.resolveSyncConflict(rent.id, keepMine: true);
+      expect(b.settings().rent, 7);
+      expect(b.syncConflicts(), isEmpty);
+      expect(b.pendingOps().length, out + 2, reason: 'both choices are owner writes that sync, keepMine too');
+      expect(() => b.resolveSyncConflict(rent.id, keepMine: true), throwsArgumentError);
+      expect(() => b.resolveSyncConflict('nope', keepMine: true), throwsArgumentError);
+    });
+
+    test('a missing row whose clocks remain (damage) takes the resend value; a dry run records nothing', () {
       final a = repo()..applyRemote([ops[2]], match: false);
-      final b = repo()
-        ..applyRemote([
-          Op('tx', 'tx-a', {...ops[2].fields, 'amount': -1300}, ops[2].hlc)
-        ], match: false);
-      // "-1300" > "-1200" as JSON text: b's value wins on both.
-      a.applyRemote([
-        Op('tx', 'tx-a', {'amount': -1300}, ops[2].hlc)
-      ], match: false, tieBreak: true);
-      b.applyRemote([
-        Op('tx', 'tx-a', {'amount': -1200}, ops[2].hlc)
-      ], match: false, tieBreak: true);
-      expect(a.transaction('tx-a')!.amount, b.transaction('tx-a')!.amount);
-      expect(a.stateDigest(), b.stateDigest());
+      a.db.execute("DELETE FROM tx WHERE id = 'tx-a'");
+      expect(a.applyRemote([ops[2]], match: false, repair: true), 1);
+      expect(a.transaction('tx-a'), isNotNull);
+      final b = repo()..applyRemote([_setting('salary', '100', 1)], match: false);
+      b.applyRemoteByEntity([_setting('salary', '200', 1)], dryRun: true, repair: true);
+      expect(b.syncConflicts(), isEmpty);
+    });
+
+    test('at most 500 open, the oldest dropped first', () {
+      final a = repo()..applyRemote([for (var i = 0; i < 505; i++) _setting('k$i', '1', 1)], match: false);
+      a.applyRemote([for (var i = 0; i < 505; i++) _setting('k$i', '2', 1)], match: false, repair: true);
+      final open = a.syncConflicts();
+      expect(open, hasLength(WalletRepoSyncApply.maxSyncConflicts));
+      expect(open.map((c) => c.rowId), isNot(contains('k0')));
+      expect(open.map((c) => c.rowId), contains('k504'));
     });
 
     test('record kinds (_digest, _repair) and other unknown kinds are never stored', () {
@@ -189,7 +221,7 @@ void main() {
             },
             _hlc(20)),
         Op('_repair', 'dev', {'ask': true}, _hlc(21)),
-      ], match: false, tieBreak: true);
+      ], match: false, repair: true);
       expect(n, 0);
       expect(a.stateDigest(), before);
     });
