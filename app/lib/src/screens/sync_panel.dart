@@ -6,6 +6,7 @@ import '../controller.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../sync_status.dart';
+import '../tabs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'recent_changes.dart';
@@ -191,6 +192,14 @@ class _SyncPanelState extends State<SyncPanel> {
               okKey: const ValueKey('deviceIdInUseOk'),
               onOk: () => wc.dismissSyncNotice(relayChanged: false)),
         if (wc.syncClockDrift) const StatusLabel(key: ValueKey('clockDrift'), good: false, text: clockDriftText),
+        if (wc.syncOtherKey) const StatusLabel(key: ValueKey('syncOtherKey'), good: false, text: otherKeyFileText),
+        if (wc.syncDevicesDisagree) ...[
+          const StatusLabel(key: ValueKey('syncDevicesDisagree'), good: false, text: devicesDisagreeText),
+          OutlinedButton(
+              key: const ValueKey('syncDisagreeLogs'),
+              onPressed: () => wc.openSettings(SettingsSection.diagnostics, via: 'syncDisagree'),
+              child: const Text('Open Diagnostics')),
+        ],
         if (wc.syncBlobsUnsupported)
           const StatusLabel(key: ValueKey('blobsUnsupported'), good: false, text: blobsUnsupportedText)
         else if (wc.syncBlobsWaiting > 0)

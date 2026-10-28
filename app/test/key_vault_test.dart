@@ -51,6 +51,12 @@ void main() {
       expect(a, isNot(b));
     });
 
+    test('the wrapped key is sealed in the old BWOP2 format (a wrong passphrase must read as badKey, never as another key)', () async {
+      final blob = await wrapKey(VaultKey.generate(), _pass, iterations: _rounds);
+      final sealed = base64Url.decode(blob.split('.')[3]);
+      expect(String.fromCharCodes(sealed.sublist(0, 5)), 'BWOP2');
+    });
+
     test('a wrong passphrase is WrongPassphrase; case and spaces count', () async {
       final blob = await wrapKey(VaultKey.generate(), _pass, iterations: _rounds);
       for (final bad in ['', 'wrong passphrase', _pass.toUpperCase(), '$_pass ', ' $_pass']) {

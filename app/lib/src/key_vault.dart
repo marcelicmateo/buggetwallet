@@ -51,7 +51,7 @@ Future<VaultKey> _derive(String passphrase, List<int> salt, int iterations) asyn
 Future<String> wrapKey(VaultKey key, String passphrase, {int iterations = pbkdf2Iterations}) async {
   final salt = SecretKeyData.random(length: 16).bytes;
   final derived = await _derive(passphrase, salt, iterations);
-  final sealed = await seal(utf8.encode(await key.toText()), derived, aad: aadWebKey);
+  final sealed = await seal(utf8.encode(await key.toText()), derived, aad: aadWebKey, legacyFormat: true);
   return 'bwk1.$iterations.${base64Url.encode(salt)}.${base64Url.encode(sealed)}';
 }
 
@@ -73,7 +73,7 @@ Future<VaultKey> unwrapKey(String blob, String passphrase) async {
   try {
     plain = await unseal(sealed, derived, aad: aadWebKey);
   } on VaultException catch (e) {
-    if (e.failure == UnsealFailure.badKey) throw const WrongPassphrase();
+    if (e.failure == UnsealFailure.badKey || e.failure == UnsealFailure.otherKey) throw const WrongPassphrase();
     rethrow;
   }
   return VaultKey.parse(utf8.decode(plain));

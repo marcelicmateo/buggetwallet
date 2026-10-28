@@ -336,6 +336,12 @@ class WalletController extends ChangeNotifier {
   /// A device's clock is ahead, so its newest file waits.
   bool get syncClockDrift => syncProblems.any((p) => p.reason == SyncProblemReason.clockDrift);
 
+  /// A file sealed with another wallet key is on the relay; it was ignored.
+  bool get syncOtherKey => syncProblems.any((p) => p.reason == SyncProblemReason.otherKey);
+
+  /// After a sync this device's data still differs from a peer's (core repaired what it could).
+  bool get syncDevicesDisagree => syncProblems.any((p) => p.reason == SyncProblemReason.devicesDisagree);
+
   /// The relay's creation token, device-local (`relayCreateToken`, never synced, never logged); empty when none.
   String get relayCreateToken => repo.localValue(relayCreateTokenKey) ?? '';
 
