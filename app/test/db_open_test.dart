@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/key_store.dart' show WrongPassphrase;
+import 'package:budget_wallet/src/platform.dart' as plat;
 import 'package:budget_wallet/src/screens/onboarding.dart';
 import 'package:budget_wallet/src/wallet_db.dart';
 import 'package:flutter/material.dart';
@@ -224,6 +225,17 @@ void main() {
       await wc.joinWallet(await VaultKey.generate().toText());
       expect(w.ids.single, isNot('oldidoldidold'));
       expect(w.storedId, w.ids.single);
+    });
+
+    test('the same on the web: a join stores a new id in the store (localStorage bw.deviceId) before the database opens with it', () async {
+      plat.debugIsWebOverride = true;
+      addTearDown(() => plat.debugIsWebOverride = null);
+      final w = World()..storedId = 'oldidoldidold';
+      final wc = await loadWith(w);
+      await wc.joinWallet(await VaultKey.generate().toText(), passphrase: 'another passphrase');
+      expect(w.idWrites, [w.ids.single]);
+      expect(w.ids.single, isNot('oldidoldidold'));
+      expect(wc.repo.deviceId, w.ids.single);
     });
 
     test('a store that cannot be written does not stop the start, and the id is not in the log', () async {

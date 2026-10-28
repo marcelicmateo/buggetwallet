@@ -68,8 +68,27 @@ Future<(WasmSqlite3, IndexedDbFileSystem)> _store() async {
 const _path = '/wallet.db';
 const _readOnly = 0x01, _readWriteCreate = 0x02 | 0x04;
 
-/// Takes the tab lock; throws [WalletInUse] when another tab has the wallet. Called first on every start.
-Future<void> claimWalletDb() => _takeTabLock();
+/// Takes the tab lock; throws [WalletInUse] when another tab has the wallet. Called first on every start. Also loads
+/// `sqlite3.wasm`, which [placeholderRepo] needs at once (the page cannot load it synchronously).
+Future<void> claimWalletDb() async {
+  _sqlite ??= await WasmSqlite3.loadFromUrl(sqliteWasmUri);
+  await _takeTabLock();
+}
+
+/// The throwaway database a controller holds while no wallet is open (no key yet, or another tab has the wallet): an in-memory
+/// database of the loaded `sqlite3.wasm`. [claimWalletDb] has run before the controller needs it.
+WalletRepo placeholderRepo() {
+  final sqlite = _sqlite!;
+  final vfs = _memoryFs ??= InMemoryFileSystem(name: 'bw-placeholder');
+  if (!_memoryFsRegistered) {
+    sqlite.registerVirtualFileSystem(vfs); // not the default: the wallet's own file system is registered the same way
+    _memoryFsRegistered = true;
+  }
+  return WalletRepo.fromDatabase(sqlite.openInMemory(vfs: vfs.name), file: false);
+}
+
+InMemoryFileSystem? _memoryFs;
+bool _memoryFsRegistered = false;
 
 /// Is there a `wallet.db` in this browser's IndexedDB file system?
 Future<bool> walletDbExists({String? dir}) async {

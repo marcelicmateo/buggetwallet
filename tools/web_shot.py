@@ -50,6 +50,17 @@ class WS:
             ln = struct.unpack('>Q', self._read(8))[0]
         return h[0] & 0x0F, self._read(ln)
 
+    events = []  # (level, text) of the page's console errors/warnings and browser log entries (CSP violations show here)
+
+    def _event(self, msg):
+        m, p = msg.get('method'), msg.get('params', {})
+        if m == 'Log.entryAdded' and p['entry']['level'] in ('error', 'warning'):
+            self.events.append((p['entry']['level'], p['entry']['text'][:300]))
+        elif m == 'Runtime.consoleAPICalled' and p['type'] in ('error', 'warning', 'log'):
+            self.events.append(('console.' + p['type'], ' '.join(str(a.get('value', a.get('description', ''))) for a in p['args'])[:300]))
+        elif m == 'Runtime.exceptionThrown':
+            self.events.append(('exception', p['exceptionDetails'].get('text', '')[:300]))
+
     def call(self, method, **params):
         self.n += 1
         data = json.dumps({'id': self.n, 'method': method, 'params': params}).encode()
@@ -68,6 +79,7 @@ class WS:
             else:
                 continue
             msg = json.loads(text)
+            self._event(msg)
             if msg.get('id') == self.n:
                 if 'error' in msg:
                     raise RuntimeError(msg['error'])
@@ -94,6 +106,8 @@ def main():
         else:
             sys.exit('chrome did not start')
         ws = WS('127.0.0.1', 9222, page['webSocketDebuggerUrl'].split('9222', 1)[1])
+        ws.call('Log.enable')
+        ws.call('Runtime.enable')
         ws.call('Emulation.setDeviceMetricsOverride', width=w, height=h, deviceScaleFactor=1, mobile=False)
         ws.call('Page.navigate', url=url)
         deadline = time.time() + wait
@@ -104,7 +118,14 @@ def main():
             time.sleep(0.5)
         else:
             print('warning: no flt-glass-pane after %ds' % wait, file=sys.stderr)
-        time.sleep(3)  # fonts and first frames
+        time.sleep(float(os.environ.get('BW_SHOT_SETTLE', '3')))  # fonts and first frames (BW_SHOT_SETTLE seconds)
+        ws.call('Runtime.evaluate', expression='1')  # reads pending events
+        d = ws.call('Runtime.evaluate', returnByValue=True, expression=
+                    "[document.querySelectorAll('canvas').length, document.querySelectorAll('flt-semantics').length,"
+                    " (document.body.innerText||'').length, document.querySelectorAll('flt-glass-pane').length].join(',')")
+        print('dom canvases,semantics,textlen,panes: %s' % d['result'].get('value'), file=sys.stderr)
+        for level, text in ws.events:
+            print('console %s: %s' % (level, text), file=sys.stderr)
         shot = ws.call('Page.captureScreenshot', format='png')
         with open(out, 'wb') as f:
             f.write(base64.b64decode(shot['data']))

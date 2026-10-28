@@ -57,7 +57,7 @@ case "$CMD" in
     img=$("$ROOT/tools/build.sh" image-name)
     # tools/web_shot.py drives Chrome over the DevTools protocol and captures once Flutter has drawn (Chrome's --screenshot
     # fires at the load event, before that)
-    podman run --rm -v "$ROOT/dist/web:/web:ro,z" -v "$ROOT/tools:/tools:ro,z" -v "$(dirname "$out"):/out:z" "$img" bash -c '
+    podman run --rm -e BW_SHOT_SETTLE -v "$ROOT/dist/web:/web:ro,z" -v "$ROOT/tools:/tools:ro,z" -v "$(dirname "$out"):/out:z" "$img" bash -c '
       python3 -I -m http.server 18080 --bind 127.0.0.1 -d /web > /tmp/http.log 2>&1 &
       curl -fsS -o /dev/null --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:18080/ 2> /dev/null
       python3 -I /tools/web_shot.py "http://127.0.0.1:18080$3" "/out/$2" "$1"

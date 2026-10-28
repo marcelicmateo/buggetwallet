@@ -111,7 +111,7 @@ extension WalletSync on WalletController {
     await _syncRun?.future; // nothing may still be running when the repo closes
     final old = repo;
     _db = null;
-    repo = WalletRepo.inMemory();
+    repo = placeholderRepo();
     _dbPending = true;
     old.close();
     try {
@@ -334,7 +334,7 @@ extension WalletSync on WalletController {
     locked = false;
     // No key, so no database: back to the in-memory placeholder until a wallet is created or joined (a new file system then).
     _db = null;
-    repo = WalletRepo.inMemory();
+    repo = placeholderRepo();
     _dbPending = true;
     hasUnopenedDb = false;
     relayUrl = null;
