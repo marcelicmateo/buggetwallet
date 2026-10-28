@@ -9,6 +9,7 @@ import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallet_core/wallet_core.dart' hide Tx;
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/layout.dart';
@@ -61,6 +62,44 @@ void main() {
       expect(after.due, isFalse);
       expect(after.streak, 1);
       expect(wc.lastReview, '2026-10-20');
+    });
+
+    test('a review done on another device (a synced row, no settings) counts: reviewed, not due, streak 1', () {
+      final wc = hw();
+      expect(wc.reviewState().due, isTrue);
+      expect(wc.lastReview, isNull);
+      wc.repo.applyRemote([
+        Op('review', '2026-10-20', {'done': '2026-10-20', 'deleted': 0},
+            Hlc(DateTime(2026, 10, 20, 9).millisecondsSinceEpoch, 0, 'peer1234').toString()),
+      ]);
+      wc.reload();
+      expect(wc.lastReview, '2026-10-20');
+      final r = wc.reviewState();
+      expect(r.due, isFalse);
+      expect(r.streak, 1);
+    });
+
+    test('lastReview is the newer of the synced rows and the legacy setting', () {
+      final wc = hw();
+      wc.repo.updateSettings({'lastReview': '2026-10-27'});
+      wc.repo.applyRemote([
+        Op('review', '2026-10-13', {'done': '2026-10-13', 'deleted': 0},
+            Hlc(DateTime(2026, 10, 13, 9).millisecondsSinceEpoch, 0, 'peer1234').toString()),
+      ]);
+      wc.reload();
+      expect(wc.lastReview, '2026-10-27');
+    });
+
+    tw('a review done on another device shows "Reviewed" on Today', (tester) async {
+      final wc = hw();
+      wc.repo.applyRemote([
+        Op('review', '2026-10-20', {'done': '2026-10-20', 'deleted': 0},
+            Hlc(DateTime(2026, 10, 20, 9).millisecondsSinceEpoch, 0, 'peer1234').toString()),
+      ]);
+      wc.reload();
+      await pumpApp(tester, today(wc), size: const Size(400, 3000));
+      expect(find.byKey(const ValueKey('reviewCard')), findsNothing);
+      expect(find.textContaining('Reviewed · 1 week in a row'), findsOneWidget);
     });
 
     test('confirming the guessed category of a row takes it off the review list', () {

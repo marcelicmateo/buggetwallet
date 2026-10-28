@@ -77,6 +77,17 @@ void main() {
     await t.pump(const Duration(seconds: 4));
   }, timeout: _timeout);
 
+  testWidgets('a weekly review row reads "Weekly review"', (t) async {
+    final c = changesWallet();
+    addTearDown(c.wc.dispose);
+    c.wc.markReviewDone();
+    await pumpList(t, c.wc);
+    final line = lineOf(t, 'change:review:2026-10-20');
+    expect(line, contains('Weekly review'));
+    expect(line, isNot(contains('Item')));
+    await t.pump(const Duration(seconds: 4)); // the sync debounce
+  }, timeout: _timeout);
+
   testWidgets('tapping a payment opens its sheet; other rows are not tappable', (t) async {
     final c = changesWallet();
     addTearDown(c.wc.dispose);

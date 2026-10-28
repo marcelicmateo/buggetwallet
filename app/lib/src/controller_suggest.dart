@@ -116,6 +116,7 @@ String changeEntityWord(String entity) => switch (entity) {
       'txtag' => 'Payment tags',
       'ruletag' => 'Payee tags',
       'split' => 'Split',
+      'review' => 'Weekly review',
       _ => 'Item',
     };
 

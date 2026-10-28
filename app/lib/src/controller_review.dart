@@ -9,8 +9,13 @@ extension ReviewHabits on WalletController {
   /// The day of the week the review is due from (1 = Monday … 7 = Sunday, default Sunday).
   int get reviewDay => settings.reviewDay;
 
-  /// The date of the last finished review, or null.
-  String? get lastReview => settings.lastReview;
+  /// The date of the last finished review, or null: the newest of the synced `review` rows and the legacy `lastReview` setting.
+  String? get lastReview {
+    final row = repo.reviewDates().lastOrNull, legacy = settings.lastReview;
+    if (row == null) return legacy;
+    if (legacy == null) return row;
+    return row.compareTo(legacy) >= 0 ? row : legacy;
+  }
 
   /// Spending rows of the last 7 days without a category the owner set: the rows the review's "Confirm categories" step
   /// counts (same rule as core's `reviewState`). "Looks right" and the category sheet pin the category, so the row leaves
@@ -57,7 +62,7 @@ extension ReviewHabits on WalletController {
   ReviewState reviewState() => _cached(
       const MemoKey('reviewState'),
       () => reviewStateOf(txs, settings, wish, categoryBudgets,
-          today: today(), nowMillis: _clock().millisecondsSinceEpoch, table: categoryTable));
+          today: today(), nowMillis: _clock().millisecondsSinceEpoch, table: categoryTable, reviewDates: repo.reviewDates()));
 
   /// Finishes this week's review (writes the date; the streak grows by one).
   void markReviewDone() {
