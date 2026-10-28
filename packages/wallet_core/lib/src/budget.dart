@@ -641,7 +641,12 @@ BudgetPreset budgetPreset(BudgetPresetKind kind, List<CategorizedTx> txs, Wallet
       });
     final parts = {for (final id in ids) id: euros * flex[id]! ~/ total};
     var left = euros - parts.values.fold(0, (a, v) => a + v);
-    final byRemainder = [...ids]..sort((a, b) => (euros * flex[b]! % total).compareTo(euros * flex[a]! % total));
+    // List.sort is not stable: equal remainders fall back to the table order explicitly (ids is already in that order).
+    final pos = {for (var i = 0; i < ids.length; i++) ids[i]: i};
+    final byRemainder = [...ids]..sort((a, b) {
+        final d = (euros * flex[b]! % total).compareTo(euros * flex[a]! % total);
+        return d != 0 ? d : pos[a]!.compareTo(pos[b]!);
+      });
     for (final id in byRemainder) {
       if (left <= 0) break;
       parts[id] = parts[id]! + 1;
