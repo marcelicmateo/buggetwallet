@@ -30,6 +30,13 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 Agent models: scout, ci-watcher haiku/low; test-writer, devops sonnet/medium; ui-builder sonnet/high; core-builder, reviewer Fable/high.
 Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the lead from the branch named in "Base".
 
+## Stages BP, WS, DK (owner picked 2026-10-28; plan `STAGE_Y_PLAN.md`; one at a time after Stage M)
+| # | Item | Agent | Depends on | Status |
+|---|---|---|---|---|
+| BP | Budget presets (3/6/12-month average, 10% less, fit my plan, 50/30/20) as proposals | scout → core (sonnet) + ui | M | queued |
+| WS | Web sync through the relay (P18), bwk2 key wrap, CSP | scout → core + ui + devops | BP | queued |
+| DK | Device keys + revocation (P17), relay api 5 | scout → core + ui + test-writer | WS | queued |
+
 ## Stage M: hardening before M6 (2026-10-28; every planned feature is built)
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
