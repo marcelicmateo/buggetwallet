@@ -1,6 +1,7 @@
 // Chart marks (stage C2b): the legend under the pay-period chart, bar ends rounded 4 px at the data end and square at the baseline,
 // the balance chart's tooltip, end label and spoken text, and the chart colours (income "went out" is not the status red).
 // Structural checks, no golden files.
+import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/insights.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/charts.dart';
@@ -29,7 +30,7 @@ Widget _app(Widget child, {Brightness brightness = Brightness.light}) =>
 
 void main() {
   testWidgets('the pay-period chart has a legend: Saved, Lost, Average, Faded running period', (t) async {
-    await t.pumpWidget(_app(const PeriodNetLegend(periods: _periods, trend: [1000, null, -2000])));
+    await t.pumpWidget(_app(const PeriodNetLegend(periods: _periods, trend: [1000, 1500, -2000])));
     for (final word in const ['Saved', 'Lost', 'Average', 'Faded: running period']) {
       expect(find.text(word), findsOneWidget, reason: word);
     }
@@ -40,6 +41,40 @@ void main() {
     expect(find.text('Average'), findsNothing);
     expect(find.text('Faded: running period'), findsNothing);
     expect(find.text('Saved'), findsOneWidget);
+    expect(find.text('Lost'), findsNothing, reason: 'no period lost money');
+  });
+
+  testWidgets('Lost only when a period lost; Average only when a line is drawn (two neighbouring points)', (t) async {
+    const lost = PeriodSummary(start: '2026-08-10', end: '2026-09-10', income: 1000, out: 5000, byCategory: {}, running: false);
+    await t.pumpWidget(_app(const PeriodNetLegend(periods: [lost], trend: [1000])));
+    expect(find.text('Lost'), findsOneWidget);
+    expect(find.text('Saved'), findsNothing);
+    expect(find.text('Average'), findsNothing, reason: 'one point draws no line');
+    await t.pumpWidget(_app(const PeriodNetLegend(periods: _periods, trend: [1000, null, 2000])));
+    expect(find.text('Average'), findsNothing, reason: 'isolated points draw no line');
+    await t.pumpWidget(_app(const PeriodNetLegend(periods: _periods, trend: [1000, 1500, null])));
+    expect(find.text('Average'), findsOneWidget);
+  });
+
+  testWidgets('legend and forecast end label fit 320 dp at text scale 2', (t) async {
+    t.view.physicalSize = const Size(320, 800);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.light),
+      builder: (context, c) => MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2)), child: c!),
+      home: const Scaffold(
+        body: SingleChildScrollView(
+          child: Column(children: [
+            PeriodNetLegend(periods: _periods, trend: [1000, 1500, -2000]),
+            ForecastStepChart(points: _points, payday: '2026-10-28', currency: 'EUR'),
+          ]),
+        ),
+      ),
+    ));
+    expect(t.takeException(), isNull);
+    expect(find.byKey(const ValueKey('forecastEndLabel')), findsOneWidget);
+    expect(find.text('Faded: running period'), findsOneWidget);
   });
 
   testWidgets('pay-period bars: 4 px round at the data end, square at the zero line, in the chart colours', (t) async {
@@ -83,7 +118,7 @@ void main() {
       // The tooltip for the second point (index 1): its date and its balance.
       final spot = LineBarSpot(data.lineBarsData.single, 0, data.lineBarsData.single.spots[1]);
       final items = data.lineTouchData.touchTooltipData.getTooltipItems([spot]);
-      expect(items.single!.text, allOf(contains('25'), contains('700')));
+      expect(items.single!.text, '${shortDateOrRaw('2026-10-25')}\n${moneyExact(70000, 'EUR')}');
       handle.dispose();
     });
 
