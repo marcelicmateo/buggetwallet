@@ -10,6 +10,7 @@ import '../tabs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'recent_changes.dart';
+import 'sync_conflicts.dart';
 
 final _log = Logger('bw.sync');
 
@@ -193,7 +194,13 @@ class _SyncPanelState extends State<SyncPanel> {
               onOk: () => wc.dismissSyncNotice(relayChanged: false)),
         if (wc.syncClockDrift) const StatusLabel(key: ValueKey('clockDrift'), good: false, text: clockDriftText),
         if (wc.syncOtherKey) const StatusLabel(key: ValueKey('syncOtherKey'), good: false, text: otherKeyFileText),
-        if (wc.syncDevicesDisagree) ...[
+        if (wc.syncDevicesDisagree && wc.syncConflictCount > 0) ...[
+          StatusLabel(key: const ValueKey('syncDevicesDisagree'), good: false, text: devicesConflictText(wc.syncConflictCount)),
+          OutlinedButton(
+              key: const ValueKey('syncChooseValues'),
+              onPressed: () => openConflicts(context, wc),
+              child: const Text('Choose the right values')),
+        ] else if (wc.syncDevicesDisagree) ...[
           const StatusLabel(key: ValueKey('syncDevicesDisagree'), good: false, text: devicesDisagreeText),
           OutlinedButton(
               key: const ValueKey('syncDisagreeLogs'),

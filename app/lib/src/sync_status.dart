@@ -35,6 +35,10 @@ const otherKeyFileText = 'A file made with another wallet key is on this relay. 
 const devicesDisagreeText =
     "Your devices don't agree on some data. The app tried to repair it. Save the logs (Settings › Diagnostics) and send them.";
 
+/// Equal-clock conflicts wait for the owner's choice (V, VC).
+String devicesConflictText(int n) =>
+    n == 1 ? 'Your devices have 1 different value. Choose the right one.' : 'Your devices have $n different values. Choose the right ones.';
+
 /// The text under the relay address when the relay needs a creation token.
 const createTokenText = 'The relay needs its creation token.';
 

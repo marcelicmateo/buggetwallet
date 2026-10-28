@@ -11,6 +11,7 @@ import 'package:wallet_sync/wallet_sync.dart';
 import 'bill_inputs.dart';
 import 'calendar_source.dart';
 import 'clock_notice.dart';
+import 'conflict_text.dart';
 import 'controller_deps.dart';
 import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDateOrRaw;
 import 'home_widget.dart';
@@ -335,6 +336,19 @@ class WalletController extends ChangeNotifier {
 
   /// A device's clock is ahead, so its newest file waits.
   bool get syncClockDrift => syncProblems.any((p) => p.reason == SyncProblemReason.clockDrift);
+
+  /// Open equal-clock conflicts after the last run (V, VC). TODO(VC): set from `SyncReport.conflicts` in `syncNow` when core lands.
+  int get syncConflictCount => sync.conflicts;
+  set syncConflictCount(int v) => sync.conflicts = v;
+
+  /// The open conflicts for the "Choose the right values" page, in the owner's words. TODO(VC): build from `repo.syncConflicts()`
+  /// with `conflictLineOf` when core lands.
+  List<ConflictLine> conflictLines() => const [];
+
+  /// The owner's choice for one conflict. TODO(VC): `repo.resolveSyncConflict(id, keepMine: keepMine)` then `_changed()`.
+  void resolveConflict(String id, {required bool keepMine}) {
+    logEvent(_sync, Level.INFO, 'sync.conflict.resolve', {'keepMine': keepMine}); // never the field or a value
+  }
 
   /// A file sealed with another wallet key is on the relay; it was ignored.
   bool get syncOtherKey => syncProblems.any((p) => p.reason == SyncProblemReason.otherKey);
