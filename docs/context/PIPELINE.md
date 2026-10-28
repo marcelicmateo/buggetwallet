@@ -37,17 +37,17 @@ Merge order: VB → VA → VT → VU.
 | V0a | Context pack V1+V2 (vault, backup, sync quarantine, resend, sim) | scout | – | – | done |
 | V0b | Context pack V3 (streak, entity schema, migrations) | scout | – | – | done |
 | V0c | Context pack UI (failure texts, Settings › Sync problems, review Done) | scout | – | – | done (pack kept by lead) |
-| VA | V1 key id (`BWOP3`) + V2 state digest and repair | core-builder | v-sync | V0a | done 6e04331 → review (1 blocking = app half, fixed in VU 8747fd4; 4 med: disagree still repairs weekly, per-field tie SELECTs, digest on UI isolate every upload, blob re-upload on repair; 3 low) → fixes running |
+| VA | V1 key id (`BWOP3`) + V2 state digest and repair | core-builder | v-sync | V0a | done 6e04331 + 25d9a17 + 15be5c7, merged |
 | VB | V3 review rows, `reviewStreak` pure (schema 18) | core-builder | v-review | V0b | done af0688d + 2e98ae5 (low fix), reviewed, merged 2cc0bcf |
 | VT | Spec tests (seal vectors, digest, divergence → repair, no ping-pong, streak) | test-writer | v-tests | V0a, V0b | done 88c43ab (48 tests unrun until VA+VB merge; backup otherKey asserted as VaultException) |
-| VU | UI: exact key/damaged texts, otherKey + devicesDisagree in Settings › Sync; wire `repo.reviewDates()` | ui-builder | v-ui | V0c, VA, VB (needs their enums/API; no shims) | done 7c331ab + 8747fd4 (on VA; app +167 targeted, lint/analyze ok) → review after VA review |
-| VC | Owner chooses on equal-clock conflicts (replaces tie-break): core `syncConflicts`/`resolveSyncConflict` + Settings › Sync "Choose the right ones" | core-builder (VA) + ui-builder (VU) | v-sync, v-ui | VA, VU | running |
-| V | Merge, merge-delta review, stage run, push, STATUS | lead | v2 | all | merged 8dd1f55; merge-delta review: 0 blocking, 1 med (reupload list skipped by resend) + 3 low → with VC; sync texts: code wording kept (clearer); stage run on 8dd1f55 running |
+| VU | UI: exact key/damaged texts, otherKey + devicesDisagree in Settings › Sync; wire `repo.reviewDates()` | ui-builder | v-ui | V0c, VA, VB (needs their enums/API; no shims) | done 7c331ab + 8747fd4, merged |
+| VC | Owner chooses on equal-clock conflicts (replaces tie-break): core `syncConflicts`/`resolveSyncConflict` + Settings › Sync "Choose the right ones" | core-builder (VA) + ui-builder (VU) | v-sync, v-ui | VA, VU | done: core 991fc75 + f519a79 (review: 1 med stale conflict, 3 low, fixed), UI 1f28e41 + 2608f9a |
+| V | Merge, merge-delta review, stage run, push, STATUS | lead | v2 | all | done 2026-10-28: stage run green on 8dd1f55; final test + desktop relay_sync green on ccfba02 (app 1978, core 2727, sync 365); pushed |
 
 ## Stage X: "Set up my wallet" wizard (2026-10-28, spec `X_SPEC.md`; on-device, no AI; after Stage V)
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
-| X0 | Context pack: onboarding/welcome_balance, import flow, P13 sheet, Plan › Suggestions, expected bills/incomes, rules, budgets panels; core detectors | scout | – | V merged | queued |
+| X0 | Context pack: onboarding/welcome_balance, import flow, P13 sheet, Plan › Suggestions, expected bills/incomes, rules, budgets panels; core detectors | scout | – | V merged | next |
 | XC | `setupProposals`, `uncategorisedPayees` + tests | core-builder | x-core | X0 | queued |
 | XU | Wizard shell + 8 steps, entry points, widget tests, screenshots | ui-builder | x-ui | X0 (+ XC API) | queued |
 | X | Review, merge, stage run, push, STATUS | lead | v2 | XC, XU | queued |

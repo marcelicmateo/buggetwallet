@@ -385,6 +385,15 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Reviews:** every half reviewed as it landed, sync fix re-reviewed, merge delta reviewed; all findings fixed with tests. Mutation testing on the forecast, bank checks, recurring cost and IOU code: every surviving mutant killed or shown equivalent.
   - **Stage run:** importer 400, core 2638, sync 327, relay 216, app 1949, desktop (all files), web-test, emulator screens, perf ok.
 
+- 2026-10-28: **Stage V: sync format before M6** (plan `STAGE_V_PLAN.md`; schema 18, reader 3; statement ticking dropped by the owner; update every device together).
+  - **Key id on sealed files (`BWOP3`):** sync files, snapshots, backups and bill files carry the key's id. The app now says exactly "This backup was made with another wallet key" / "That key doesn't open this backup" / "This backup file is damaged" (old `BWOP2` files keep the two-way sentence); a relay file of another key shows in Settings › Sync and is ignored. The web passphrase wrap stays `BWOP2`.
+  - **Device state digest:** devices compare a fingerprint of their synced data when they hold the same files; a mismatch re-sends the whole state once (newer change wins as always). Same change time with different values (only a bug or damage) is **never decided by the app**: Settings › Sync › "Your devices have N different values. Choose the right ones." lists each with both values (This device / Other device); the choice syncs. Automatic repair pauses while one is open or after a second mismatch within 7 days ("devices disagree", Save logs). About 270 ms per digest on a 20k-row wallet, once per data change.
+  - **Weekly review streak** is stored as one row per review date (two devices reviewing on different days before syncing both count); Recent changes says "Weekly review".
+  - **Bugs found and fixed in the stage:** repair asks compared against the wrong clock (devicesDisagree never raised); a resend skipping the schema-15 bill-file re-upload list (files lost for other devices); repair re-uploading every bill file; a stale conflict blocking "agree" forever; the 500-entry cap hiding conflicts for good; a lost row restored by a repair coming back undeleted; a damaged review row for today never repaired; Recent changes showing "Item <date>".
+  - **Reviews:** each half reviewed as it landed, VC re-reviewed, merge delta reviewed; all findings fixed with tests. Spec tests written before the code (48) all run.
+  - **Stage run** (8dd1f55, before VC): importer 400, core 2722, sync 359, relay 216, app 1962, desktop, web-test, emulator screens, perf ok. Final run after VC (ccfba02): importer 400, core 2727, sync 365, relay 216, app 1978, desktop relay_sync.
+- 2026-10-28: **Relay on the Raspberry Pi (PI1):** the owner will host the relay on a Pi at home as a native arm64 binary under systemd (no containers): `tools/build.sh relay-bin` cross-compiles it (Dart 3.13.5), hardened units + native Caddy config in `relay/deploy/native/`, lint step `native-units`. PI2 (OS setup, deploy script, setup.md) waits for the owner's Pi details.
+
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -475,6 +484,12 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Schema 17:** update every device together; a device that stays on an older build for over 30 days after the others upgraded may miss IOUs until they are edited again.
 
 ## Next
+- **Stage X: "Set up my wallet" wizard** (spec `X_SPEC.md`, on-device, no AI: the owner chose no API key), then **Stage C2: chart audit** (`/dataviz` rules), then the M6 live test.
+- **PI2 (waiting for the owner):** Pi model, OS (`/etc/os-release`), domain/DDNS name, router 80/443 forward, SSD for the data.
+- Owner checks after Stage V (phone + laptop, update both first):
+  - Restore a backup with another wallet's key → "made with another wallet key"; cut a `.bwb` in half → "damaged".
+  - Sync phone ↔ laptop as usual: nothing new should appear. Settings › Sync shows no "different values" line.
+  - Finish a weekly review on the phone, another on the laptop a few days later before syncing → the streak counts both.
 - Owner checks after Stage Q (phone + laptop, update both first):
   - Add expense: type "lunch" → chips under the note; tap one; the payee list while typing.
   - Set the same main tag by hand on 3 payments of one bank payee → "Always put X in Y?" → Make rule → Undo. Settings › Rules › Suggested.
