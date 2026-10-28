@@ -13,7 +13,13 @@ extension WalletRepoSyncApply on WalletRepo {
   ///
   /// An equal clock keeps the stored value. With [repair] (ops of a repair resend, V2/VC) a field whose stored clock
   /// equals the op's but whose value differs (only a bug or damage does that) is added to [conflicts] for the owner to
-  /// choose ([WalletRepoSyncApply.syncConflicts]); a clock whose row is missing (damage) takes the op's value.
+  /// choose ([WalletRepoSyncApply.syncConflicts]).
+  ///
+  /// A row missing while this device still holds clocks for it (damage) is restored from the resend: its equal-clock
+  /// fields take the resend's values. A field this device wrote later (newer clock) cannot be restored (its value is
+  /// gone with the row): it becomes a conflict, and a row whose own `deleted` clock exists stays hidden (`deleted` 1,
+  /// clock unchanged) until a resend field with an equal clock says otherwise or the owner chooses: a payment the owner
+  /// deleted never comes back as spending by itself.
   ///
   /// Returns the fields that applied (their stored values), or null when none did.
   Map<String, Object?>? _apply(Op op, {bool repair = false, List<SyncConflict>? conflicts}) {
@@ -23,6 +29,16 @@ extension WalletRepoSyncApply on WalletRepo {
     final accepted = <String, Object?>{};
     Map<String, String>? stored; // field -> hlc, read once per (entity, id)
     Map<String, Object?>? row; // the stored row, read once per op and only for an equal clock in a repair
+    final rowKey = '${op.entity}|${op.id}';
+    bool lost() {
+      if (_restoringRows.contains(rowKey)) return true;
+      row ??= db.select('SELECT * FROM $table WHERE id = ?', [op.id]).firstOrNull ?? const <String, Object?>{};
+      if (row!.isNotEmpty) return false;
+      _restoringRows.add(rowKey);
+      return true;
+    }
+
+    var restoring = false;
     for (final e in op.fields.entries) {
       final col = def.column(e.key);
       if (col == null) continue;
@@ -38,12 +54,27 @@ extension WalletRepoSyncApply on WalletRepo {
       final have = stored[e.key];
       if (have != null) {
         final cmp = Hlc.compareStrings(have, op.hlc);
-        if (cmp > 0) continue;
+        if (cmp > 0) {
+          // A newer local write of a field whose row is gone: its value is unknown here, so the owner decides.
+          if (repair && lost()) {
+            restoring = true;
+            conflicts?.add(SyncConflict(
+                id: SyncConflict.idOf(op.entity, op.id, col.name),
+                entity: op.entity,
+                rowId: op.id,
+                field: col.name,
+                mine: col.name == 'deleted' ? 1 : null,
+                theirs: v,
+                clock: have));
+          }
+          continue;
+        }
         if (cmp == 0) {
           if (!repair) continue;
-          row ??= db.select('SELECT * FROM $table WHERE id = ?', [op.id]).firstOrNull ?? const <String, Object?>{};
-          if (row.isNotEmpty) {
-            final mine = row[col.name];
+          if (lost()) {
+            restoring = true;
+          } else {
+            final mine = row![col.name];
             if (jsonEncode(mine) != jsonEncode(v)) {
               conflicts?.add(SyncConflict(
                   id: SyncConflict.idOf(op.entity, op.id, col.name),
@@ -61,6 +92,10 @@ extension WalletRepoSyncApply on WalletRepo {
       accepted[e.key] = v;
     }
     if (accepted.isEmpty) return null;
+    if (restoring && def.column('deleted') != null && stored!.containsKey('deleted') && !accepted.containsKey('deleted')) {
+      // Hidden until an equal-clock `deleted` arrives or the owner chooses; its clock stays this device's.
+      db.execute('INSERT OR IGNORE INTO $table(id, deleted) VALUES(?, 1)', [op.id]);
+    }
     assert(!db.autocommit, 'data is written inside a transaction');
     _dataPending = true;
     db.execute('INSERT OR IGNORE INTO $table(id) VALUES(?)', [op.id]);
@@ -183,6 +218,7 @@ extension WalletRepoSyncApply on WalletRepo {
       return byEntity;
     }
     final conflicts = <SyncConflict>[];
+    if (!repair) _restoringRows.clear();
     _tx(() {
       for (final op in ops) {
         clock.receive(Hlc.parse(op.hlc));
@@ -277,14 +313,17 @@ extension WalletRepoSyncApply on WalletRepo {
 
   /// Records [found] (one entry per field: a field seen again keeps one entry with the latest `theirs`).
   void _addConflicts(List<SyncConflict> found) {
-    final list = _storedConflicts();
+    final list = _liveConflicts(_storedConflicts()).$1; // settled ones go before the cap counts
     for (final c in found) {
       list
         ..removeWhere((j) => SyncConflict.fromJson(j)?.id == c.id)
         ..add(c.toJson());
     }
     final dropped = list.length > maxSyncConflicts ? list.length - maxSyncConflicts : 0;
-    if (dropped > 0) list.removeRange(0, dropped);
+    if (dropped > 0) {
+      list.removeRange(0, dropped);
+      setLocalValue(syncConflictsDroppedKey, '1');
+    }
     _saveConflicts(list);
     logEvent(_log, Level.WARNING, 'repo.conflicts', {'found': found.length, 'open': list.length, 'dropped': dropped});
   }
@@ -296,6 +335,37 @@ extension WalletRepoSyncApply on WalletRepo {
   List<SyncConflict> syncConflicts() {
     final list = _storedConflicts();
     if (list.isEmpty) return const [];
+    final (keep, out) = _liveConflicts(list);
+    if (keep.length != list.length) {
+      _saveConflicts(keep);
+      logEvent(_log, Level.INFO, 'repo.conflicts.settled', {'settled': list.length - keep.length, 'open': keep.length});
+    }
+    out.sort((a, b) {
+      final e = a.entity.compareTo(b.entity);
+      if (e != 0) return e;
+      final r = a.rowId.compareTo(b.rowId);
+      return r != 0 ? r : a.field.compareTo(b.field);
+    });
+    return out;
+  }
+
+  /// Device-local mark (`'1'`): the [maxSyncConflicts] cap dropped entries, so some differences have no open entry;
+  /// `SyncEngine` lets one more repair run once the list is empty, and clears it.
+  static const syncConflictsDroppedKey = 'syncConflictsDropped';
+
+  /// Drops every open conflict (VC): `SyncEngine` calls it when every peer digest it compared matched this device's,
+  /// so no device holds the other values any more (a device wiped or retired since). Returns how many were open.
+  int dropSyncConflicts() {
+    final n = _storedConflicts().length;
+    if (n > 0) {
+      _saveConflicts(const []);
+      logEvent(_log, Level.INFO, 'repo.conflicts.dropped', {'dropped': n});
+    }
+    return n;
+  }
+
+  /// The entries of [list] still open (field clock unchanged, row there, value still differs), with `mine` read now.
+  (List<Map<String, Object?>>, List<SyncConflict>) _liveConflicts(List<Map<String, Object?>> list) {
     final keep = <Map<String, Object?>>[];
     final out = <SyncConflict>[];
     for (final j in list) {
@@ -311,17 +381,7 @@ extension WalletRepoSyncApply on WalletRepo {
       keep.add(j);
       out.add(SyncConflict.fromJson(j, mine: mine)!);
     }
-    if (keep.length != list.length) {
-      _saveConflicts(keep);
-      logEvent(_log, Level.INFO, 'repo.conflicts.settled', {'settled': list.length - keep.length, 'open': keep.length});
-    }
-    out.sort((a, b) {
-      final e = a.entity.compareTo(b.entity);
-      if (e != 0) return e;
-      final r = a.rowId.compareTo(b.rowId);
-      return r != 0 ? r : a.field.compareTo(b.field);
-    });
-    return out;
+    return (keep, out);
   }
 
   /// The owner's choice for conflict [id] (VC): writes the kept value ([keepMine]: this device's, else the other

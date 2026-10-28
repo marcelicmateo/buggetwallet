@@ -54,7 +54,8 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   a `_repair` record apply with `applyRemote(repair: true)`: an equal clock with another value keeps the stored value
   and becomes a device-local `SyncConflict` the owner resolves, VC), or within `SyncDigests.repairQuiet` (7 days) of
   the last repair, or while `devicesDisagree` is set or any conflict is open (`SyncReport.conflicts`), sets/keeps it
-  with no repair (cleared only by a matching compare with no conflict open,
+  with no repair (cleared only by a matching compare with no conflict open; a compare where every peer digest read
+  matched drops stale conflicts; `syncConflictsDropped` (cap drop) + an empty list re-arms one repair,
   `sync.digest.agree`; not counted in `badFiles`/`problemsByDevice`). A resend does not PUT bill files already marked
   uploaded (they count as stored; never those on the schema-15 re-upload list); ops held for a file whose PUT failed keep the resend open, so they go later with
   the same `_repair` record. Record clocks are the wall

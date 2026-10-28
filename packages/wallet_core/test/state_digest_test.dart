@@ -198,6 +198,56 @@ void main() {
       expect(b.syncConflicts(), isEmpty);
     });
 
+    test('a lost row whose newer local delete cannot be read back stays hidden and becomes a conflict', () {
+      final a = repo()..applyRemote([ops[2]], match: false);
+      a.applyRemote([
+        Op('tx', 'tx-a', {'deleted': 1}, _hlc(50))
+      ], match: false); // the owner's delete, later clock
+      a.db.execute("DELETE FROM tx WHERE id = 'tx-a'"); // the row is lost, its clocks stay
+      // The peer's resend: the row as it knew it (older delete state).
+      expect(a.applyRemote([ops[2]], match: false, repair: true), 1);
+      expect(a.db.select("SELECT deleted FROM tx WHERE id = 'tx-a'").single['deleted'], 1, reason: 'never revived as spending');
+      expect(a.transactions().where((t) => t.id == 'tx-a' && !t.deleted), isEmpty);
+      final c = a.syncConflicts().single;
+      expect((c.field, c.mine, c.theirs, c.clock), ('deleted', 1, 0, _hlc(50)));
+    });
+
+    test('a lost row with fields under several clocks is restored whole, also across two resend files', () {
+      final peer = repo()
+        ..applyRemote([
+          ops[2],
+          Op('tx', 'tx-a', {'note': 'later'}, _hlc(60))
+        ], match: false);
+      final a = repo()..applyRemote(peer.snapshotOps(), match: false);
+      a.db.execute("DELETE FROM tx WHERE id = 'tx-a'");
+      final resend = peer.snapshotOps().where((o) => o.id == 'tx-a').toList();
+      expect(resend, hasLength(2));
+      a.applyRemote([resend[0]], match: false, repair: true);
+      a.applyRemote([resend[1]], match: false, repair: true); // the next part of the same resend
+      expect(a.syncConflicts(), isEmpty);
+      expect(a.stateDigest(), peer.stateDigest());
+    });
+
+    test('settled entries go before the cap counts; a cap drop leaves the dropped mark', () {
+      final a = repo()..applyRemote([for (var i = 0; i < 500; i++) _setting('k$i', '1', 1)], match: false);
+      a.applyRemote([for (var i = 0; i < 500; i++) _setting('k$i', '2', 1)], match: false, repair: true);
+      expect(a.localValue(WalletRepoSyncApply.syncConflictsDroppedKey), isNull);
+      for (var i = 0; i < 10; i++) {
+        a.updateSettings({'k$i': 3}); // settles k0..k9 (their clocks change)
+      }
+      a.applyRemote([for (var i = 0; i < 10; i++) _setting('n$i', '1', 1)], match: false);
+      a.applyRemote([for (var i = 0; i < 10; i++) _setting('n$i', '2', 1)], match: false, repair: true);
+      final open = a.syncConflicts().map((c) => c.rowId).toSet();
+      expect(open, hasLength(500));
+      expect(open, contains('k10'), reason: 'nothing open was dropped: the settled ones made room');
+      expect(a.localValue(WalletRepoSyncApply.syncConflictsDroppedKey), isNull);
+      a.applyRemote([_setting('extra', '1', 1)], match: false);
+      a.applyRemote([_setting('extra', '2', 1)], match: false, repair: true);
+      expect(a.localValue(WalletRepoSyncApply.syncConflictsDroppedKey), '1');
+      expect(a.dropSyncConflicts(), 500);
+      expect(a.syncConflicts(), isEmpty);
+    });
+
     test('at most 500 open, the oldest dropped first', () {
       final a = repo()..applyRemote([for (var i = 0; i < 505; i++) _setting('k$i', '1', 1)], match: false);
       a.applyRemote([for (var i = 0; i < 505; i++) _setting('k$i', '2', 1)], match: false, repair: true);

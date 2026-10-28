@@ -175,6 +175,26 @@ void main() {
       expect([for (final d in ds) d.repo.syncConflicts().length], [0, 0, 0]);
     });
 
+    test('stale conflicts (the device with the other value is gone) are dropped once every peer read agrees', () async {
+      final ds = await cluster(3);
+      final [a, b, c] = ds;
+      corrupt(c, "UPDATE settings SET value = '0' WHERE id = 'salary'");
+      sim.tick();
+      b.repo.updateSettings({'rent': 51000});
+      await settle(ds);
+      expect([for (final d in ds) d.repo.syncConflicts().length], [1, 1, 1]);
+      // c is wiped/retired: a and b hold the same value and keep agreeing.
+      sim.tick();
+      a.repo.updateSettings({'rent': 52000});
+      await settle([a, b]);
+      for (final d in [a, b]) {
+        final r = await d.sync();
+        expect(d.repo.syncConflicts(), isEmpty);
+        expect(r.conflicts, 0);
+        expect(r.problems, isEmpty);
+      }
+    });
+
     test('an edit of the field on any device settles the conflict everywhere', () async {
       final ds = await cluster(2);
       final [a, b] = ds;
@@ -367,6 +387,36 @@ void main() {
       expect(text, isNot(contains('sync.digest.mismatch')));
       expect(text, contains('sync.digest.badRecord'));
       expect(d.repo.pendingOps(), isEmpty);
+    });
+
+    test('after a conflict-cap drop, an empty list lets one more repair run (else the dropped ones stay unfound)', () async {
+      final lines = _capture();
+      final d = sim.device();
+      d.repo.updateSettings({'salary': 1000});
+      await d.sync();
+      var seq = 0;
+      Future<void> mismatch() async {
+        seq++;
+        // d's own entry: its last file holding data (not a digest-only file).
+        final mine = ((jsonDecode(d.repo.localValue('syncDigest')!) as Map)['v'] as Map)[d.id] as int;
+        await peerFile('p1', seq, [
+          data(seq),
+          digest('00' * 32, {'p1': seq, d.id: mine})
+        ]);
+        await d.sync();
+        await d.sync(); // its resend (if any) goes
+      }
+
+      int starts() => RegExp('sync.repair.start').allMatches(lines.join('\n')).length;
+      await mismatch();
+      expect(starts(), 1);
+      await mismatch();
+      expect(starts(), 1, reason: 'within 7 days: devicesDisagree, no repair');
+      expect(lines.where((l) => l.contains('sync.digest.mismatch')), hasLength(2), reason: 'compared, not ignored');
+      d.repo.setLocalValue(WalletRepoSyncApply.syncConflictsDroppedKey, '1'); // as after a cap drop, list now empty
+      await mismatch();
+      expect(starts(), 2, reason: 'one more repair');
+      expect(d.repo.localValue(WalletRepoSyncApply.syncConflictsDroppedKey), isNull);
     });
 
     test('logs of the digest and repair carry counts and enum words only', () async {
