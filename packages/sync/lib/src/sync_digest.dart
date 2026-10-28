@@ -53,20 +53,33 @@ bool sameVector(Map<String, int> a, Map<String, int> b) {
 }
 
 /// This device's digest bookkeeping, one device-local value ([key], never synced):
-/// `{"v": {"<stream>": seq}, "d": 1, "at": ms, "ans": "<hlc>", "send": "<hlc>", "ask": 1, "dis": "<short id>"}`.
+/// `{"v": {"<stream>": seq}, "d": 1, "at": ms, "ans": ["<ask id>", …], "send": "<hlc>", "ask": 1, "dis": "<short id>"}`.
 /// - `v`: the data vector: per stream, the seq of the last file holding data ops this device applied or wrote;
 /// - `d`: data ops were applied or written since the last digest this device sent;
-/// - `at`: when this device last started or answered a repair; `ans`: the newest repair ask it answered (HLC);
+/// - `at`: when this device last started or answered a repair; `ans`: the ids (record clocks) of the repair asks it
+///   answered or wrote itself, newest [maxAnswered] kept;
 /// - `send`: the HLC of the [repairKind] record a repair resend waiting in the outbox carries in each of its files;
 ///   `ask`: that record asks the other devices to resend too (this device started the repair);
 /// - `dis`: the peer of a second mismatch within [SyncDigests.repairQuiet] of a repair (`devicesDisagree`).
 class DigestBook {
   static const key = 'syncDigest';
+
+  /// How many answered ask ids are kept (oldest dropped first).
+  static const maxAnswered = 32;
   final Map<String, int> vector;
+  final List<String> answered;
   bool dirty, sendAsk;
   int? repairAt;
-  String? answered, send, disagree;
-  DigestBook._(this.vector, {this.dirty = false, this.repairAt, this.answered, this.send, this.sendAsk = false, this.disagree});
+  String? send, disagree;
+  DigestBook._(this.vector, {this.dirty = false, this.repairAt, List<String>? answered, this.send, this.sendAsk = false, this.disagree})
+      : answered = answered ?? [];
+
+  /// Records [ask] as answered (kept to the newest [maxAnswered]).
+  void answer(String ask) {
+    if (answered.contains(ask)) return;
+    answered.add(ask);
+    if (answered.length > maxAnswered) answered.removeRange(0, answered.length - maxAnswered);
+  }
 
   static DigestBook load(WalletRepo repo) {
     final raw = repo.localValue(key);
@@ -82,7 +95,7 @@ class DigestBook {
           },
           dirty: j['d'] == 1,
           repairAt: j['at'] is int ? j['at'] as int : null,
-          answered: j['ans'] is String ? j['ans'] as String : null,
+          answered: [if (j['ans'] case final List<Object?> l) ...l.whereType<String>()],
           send: j['send'] is String ? j['send'] as String : null,
           sendAsk: j['ask'] == 1,
           disagree: j['dis'] is String ? j['dis'] as String : null,
@@ -100,7 +113,7 @@ class DigestBook {
       if (vector.isNotEmpty) 'v': vector,
       if (dirty) 'd': 1,
       if (repairAt != null) 'at': repairAt,
-      if (answered != null) 'ans': answered,
+      if (answered.isNotEmpty) 'ans': answered,
       if (send != null) 'send': send,
       if (sendAsk) 'ask': 1,
       if (disagree != null) 'dis': disagree,
@@ -120,8 +133,8 @@ class RunRecords {
   /// The newest digest record per peer stream.
   final digests = <String, DigestRecord>{};
 
-  /// The newest repair ask seen (HLC) and the stream that wrote it.
-  String? askHlc, askFrom;
+  /// The repair asks read (their record clocks = their ids).
+  final asks = <String>{};
 
   void add(String stream, List<Op> records) {
     for (final op in records) {
@@ -133,10 +146,7 @@ class RunRecords {
           logEvent(_log, Level.WARNING, 'sync.digest.badRecord');
         }
       } else if (op.entity == repairKind && op.fields['ask'] == true) {
-        if (askHlc == null || Hlc.compareStrings(op.hlc, askHlc!) > 0) {
-          askHlc = op.hlc;
-          askFrom = stream;
-        }
+        asks.add(op.hlc);
       }
     }
   }

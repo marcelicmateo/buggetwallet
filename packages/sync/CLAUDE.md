@@ -41,15 +41,20 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
 - `sync_digest.dart` (V2) — state digests and the repair: records are ops of reserved kinds inside normal sync files
   (`_digest` `{digest, vector, schema}`, `_repair` `{ask}`; `isSyncRecord`), never stored as data (older builds skip
   unknown kinds). `DigestBook` = one device-local value `syncDigest`: the data vector (per stream, the seq of the last
-  file holding data ops applied or written), the dirty mark, the last repair time, the newest ask answered, a resend
+  file holding data ops applied or written), the dirty mark, the last repair time, the ids of the asks answered or
+  written (newest 32), a resend
   waiting (`send` = its record's clock, `ask`), `dis` (devicesDisagree peer). Engine rules: an own data upload that
   carries every local change puts the digest (`WalletRepo.stateDigest()`, vector incl. that file) into its last part;
   a caught-up run with an empty outbox that applied peer data sends a records-only digest file (never one for a file
-  of records only: no ping-pong). Step 6 of `run`: the newest unanswered ask → `queueStateResend()` (answered once);
+  of records only: no ping-pong; digests only after a caught-up run, `stateDigest` cached per `dataVersion`). Step 6 of
+  `run`: asks not answered yet (by id) and written after this device's `syncSince` → one `queueStateResend()`;
   else, caught up + empty outbox, each peer digest with equal schema and vector is compared: a mismatch logs
   `sync.digest.mismatch` and starts a repair (whole state + `_repair{ask}` in every part of the next upload; files with
   a `_repair` record apply with `applyRemote(tieBreak: true)`), or within `SyncDigests.repairQuiet` (7 days) of the
-  last repair sets `devicesDisagree` (kept until a compare matches, `sync.digest.agree`). Record clocks are the wall
+  last repair, or while `devicesDisagree` is set, sets/keeps it with no repair (cleared only by a matching compare,
+  `sync.digest.agree`; not counted in `badFiles`/`problemsByDevice`). A resend does not PUT bill files already marked
+  uploaded (they count as stored); ops held for a file whose PUT failed keep the resend open, so they go later with
+  the same `_repair` record. Record clocks are the wall
   clock (`Hlc(clock.now(), 0, device)`), never the HLC: a future-pushed HLC would look like clock drift to readers.
 - `sync_engine.dart` — relay sync (§4.9, wire protocol `docs/context/RELAY_PROTOCOL.md`), web-safe. `SyncTransport`
   (`state`, `put`, `get`, `ack`, `putSnapshot`, `getSnapshot`, `putBlob`/`getBlob` (null on 404)/`putSnapshotBlobs`

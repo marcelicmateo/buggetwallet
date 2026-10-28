@@ -2,6 +2,7 @@
 // equal-clock tie-break), a second one within 7 days raises devicesDisagree; quiet devices stay quiet. Divergence is
 // forced by writing a device's database behind the change log. All data is SYNTHETIC.
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -9,6 +10,17 @@ import 'package:wallet_sync/wallet_sync.dart';
 
 import '../../wallet_core/test/support/engine_spec_sim.dart';
 import '../../wallet_core/test/support/synthetic.dart';
+
+/// A relay whose bill-file PUTs can be made to fail.
+class _NoBlobs extends MemoryTransport {
+  _NoBlobs({super.now});
+  bool fail = false;
+  @override
+  Future<void> putBlob(String hash, List<int> bytes) {
+    if (fail) throw const TransportException(TransportFailure.unreachable, 'down');
+    return super.putBlob(hash, bytes);
+  }
+}
 
 List<String> _capture() {
   final lines = <String>[];
@@ -113,7 +125,7 @@ void main() {
       final [a, b] = ds;
       // b's salary changed behind the change log: same clock as a's, another value ("9" sorts above "150000").
       corrupt(b, "UPDATE settings SET value = '9' WHERE id = 'salary'");
-      expect(b.repo.stateDigest(), isNot(a.repo.stateDigest()));
+      expect(b.repo.settings().salary, 9);
       sim.tick();
       a.repo.updateSettings({'rent': 51000}); // any data change sends a digest
       await settle(ds);
@@ -194,6 +206,18 @@ void main() {
       final again = await b.sync();
       expect(again.problems.single.reason, SyncProblemReason.devicesDisagree);
       expect(again.problems.single.isNew, isFalse, reason: 'kept, not new');
+      expect(again.badFiles, 0, reason: 'not a file that could not be read');
+      expect(again.problemsByDevice, isEmpty);
+
+      // Past the 7 days, still disagreeing: devicesDisagree stops automatic repair until a compare matches.
+      sim.tick(const Duration(days: 8));
+      b.repo.db.execute("UPDATE settings SET value = '7' WHERE id = 'salary'");
+      a.repo.updateSettings({'rent': 52500});
+      await a.sync();
+      final late = await b.sync();
+      expect(late.problems.single.reason, SyncProblemReason.devicesDisagree);
+      expect(RegExp('sync.repair.start').allMatches(lines.join('\n')), hasLength(1), reason: 'still no second repair');
+      expect(b.repo.pendingOps(), isEmpty, reason: 'no whole-state resend queued');
 
       // Put right (by hand here): the next compare matches and clears it.
       b.repo.db.execute("UPDATE settings SET value = '9' WHERE id = 'salary'");
@@ -295,6 +319,100 @@ void main() {
       expect(digestLines, isNot(contains('123456')));
       expect(digestLines, isNot(contains('abab')));
       expect(digestLines, isNot(contains(d.repo.stateDigest())));
+    });
+
+    Op ask(int ms) => Op('_repair', 'p1', {'ask': true}, Hlc(ms, 0, 'p1').toString());
+
+    test('an ask written before this device first met the relay is not answered (a replay of old files)', () async {
+      final lines = _capture();
+      final d = sim.device();
+      await peerFile('p1', 1, [data(1), ask(sim.clock.ms - const Duration(days: 3).inMilliseconds)]);
+      await d.sync();
+      await d.sync();
+      expect(lines.join('\n'), isNot(contains('sync.repair.answer')));
+      expect(d.repo.pendingOps(), isEmpty);
+    });
+
+    test('asks count once by id, not by clock order: an ask with an older clock (skewed asker) is still answered', () async {
+      final lines = _capture();
+      final d = sim.device();
+      d.repo.updateSettings({'salary': 1000});
+      await d.sync(); // first meets the relay now
+      final t0 = sim.clock.ms;
+      sim.tick(const Duration(hours: 1));
+      await peerFile('p1', 1, [data(1), ask(t0 + const Duration(minutes: 40).inMilliseconds)]);
+      await d.sync(); // answers: whole state queued
+      await d.sync(); // ... and sent
+      expect(d.repo.pendingOps(), isEmpty);
+      await peerFile('p1', 2, [data(2), ask(t0 + const Duration(minutes: 10).inMilliseconds)]); // another asker's clock, behind
+      await peerFile('p1', 3, [data(3), ask(t0 + const Duration(minutes: 40).inMilliseconds)]); // the first ask again
+      await d.sync();
+      await d.sync();
+      expect(RegExp('sync.repair.answer').allMatches(lines.join('\n')), hasLength(2));
+    });
+
+    test('bill fields held back for a file that could not be PUT go later still carrying the repair record', () async {
+      final relay = _NoBlobs(now: () => sim.clock.t);
+      final repo = WalletRepo.inMemory(now: () => sim.clock.ms);
+      addTearDown(repo.close);
+      final engine = SyncEngine(relay, sim.key, now: () => sim.clock.t);
+      Future<void> put(String device, int seq, List<Op> ops) async => relay.put(
+          device, seq, await seal(utf8.encode(jsonEncode([for (final op in ops) op.toJson()])), sim.key, aad: aadSyncFile(device, seq)));
+      Future<List<Op>> lastFile() async {
+        final last = (await relay.state()).devices[repo.deviceId]!.last;
+        final clear = await unseal(await relay.get(repo.deviceId, last), sim.key, aad: aadSyncFile(repo.deviceId, last));
+        return [for (final o in jsonDecode(utf8.decode(clear)) as List) Op.fromJson(Map<String, Object?>.from(o as Map))];
+      }
+
+      repo.updateSettings({'salary': 1000});
+      await engine.run(repo);
+      relay.fail = true;
+      final ref = await BlobStore(repo, sim.key).add(Uint8List.fromList(List<int>.generate(300, (i) => i % 251)), 'jpg');
+      final (billId, _) = repo.importBill(
+          const NormalizedBill(
+              source: BillSource.pdf, externalId: 'jir:synthetic-v2h', date: '2026-01-09', total: 1000, payee: 'Test Shop'),
+          file: ref);
+      await engine.run(repo); // the file waits: its bill fields are held
+      sim.tick(const Duration(minutes: 5));
+      await put('p1', 1, [data(1), ask(sim.clock.ms)]);
+      await engine.run(repo); // answers: whole state queued
+      await engine.run(repo); // resend goes, the bill's file fields stay held (PUT still failing)
+      expect((await lastFile()).first.entity, '_repair');
+      expect(repo.pendingOps(), isNotEmpty);
+      relay.fail = false;
+      final r = await engine.run(repo);
+      expect(r.blobsSent, 1);
+      expect(repo.pendingOps(), isEmpty);
+      final ops = await lastFile();
+      expect(ops.first.entity, '_repair', reason: 'the held fields apply with the tie-break too');
+      expect(ops.any((o) => o.entity == 'bill' && o.id == billId && o.fields['blob'] == ref.hash), isTrue);
+    });
+
+    test('a repair resend does not PUT bill files this device already stored; their bill fields go with the record', () async {
+      final d = sim.device();
+      d.repo.updateSettings({'salary': 1000});
+      await d.sync();
+      final ref = await BlobStore(d.repo, sim.key).add(Uint8List.fromList(List<int>.generate(300, (i) => i % 251)), 'jpg');
+      final (billId, _) = d.repo.importBill(
+          const NormalizedBill(source: BillSource.pdf, externalId: 'jir:synthetic-v2', date: '2026-01-09', total: 1000, payee: 'Test Shop'),
+          file: ref);
+      final up = await d.sync();
+      expect(up.blobsSent, 1);
+      final mine = (await lasts())[d.id]!;
+      await peerFile('p1', 1, [
+        data(1),
+        digest('00' * 32, {'p1': 1, d.id: mine})
+      ]);
+      await d.sync(); // mismatch: repair starts
+      final resend = await d.sync();
+      expect(resend.sent, greaterThan(0));
+      expect(resend.blobsSent, 0, reason: 'already on the relay');
+      expect(d.repo.pendingOps(), isEmpty, reason: 'nothing held back');
+      final last = (await lasts())[d.id]!;
+      final clear = await unseal(await sim.transport.get(d.id, last), sim.key, aad: aadSyncFile(d.id, last));
+      final ops = [for (final o in jsonDecode(utf8.decode(clear)) as List) Op.fromJson(Map<String, Object?>.from(o as Map))];
+      expect(ops.first.entity, '_repair');
+      expect(ops.any((o) => o.entity == 'bill' && o.id == billId && o.fields['blob'] == ref.hash), isTrue);
     });
   });
 }

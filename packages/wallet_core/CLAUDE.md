@@ -656,7 +656,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   written while its writer's outbox held ops (matches made in that run) holds state its covers do not name, so a
   compare in that window can report a false mismatch (one needless repair). The repair
   tie-break picks the higher canonical JSON, not "the right" value; a damaged value can therefore win (the owner sees
-  devicesDisagree only on a second mismatch within 7 days).
+  devicesDisagree only on a second mismatch within 7 days; after that no automatic repair until a compare matches).
+  `stateDigest` is cached per `dataVersion`, so a change behind the change log shows only after the next data change.
+  Two devices that see the mismatch in the same round both ask: each device then resends its state once per ask
+  (bounded, accepted). An ask written by a device whose clock is behind this device's first relay sync is ignored.
+  About 270 ms per digest on a 20k-row wallet (VM, laptop), run on the UI isolate at most once per data version.
 - H9 repairs run only when caught up; a planned row a confirmed bill wants created is not created for a due date in
   the past.
 - Recurring bills: a device that imports a payee's rows before syncing writes the candidate's amount/due/label again

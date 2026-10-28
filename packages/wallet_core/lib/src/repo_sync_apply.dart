@@ -23,6 +23,7 @@ extension WalletRepoSyncApply on WalletRepo {
     final table = def.table;
     final accepted = <String, Object?>{};
     Map<String, String>? stored; // field -> hlc, read once per (entity, id)
+    Map<String, Object?>? row; // the stored row, read once per op and only for an equal-clock tie-break
     for (final e in op.fields.entries) {
       final col = def.column(e.key);
       if (col == null) continue;
@@ -38,7 +39,12 @@ extension WalletRepoSyncApply on WalletRepo {
       final have = stored[e.key];
       if (have != null) {
         final cmp = Hlc.compareStrings(have, op.hlc);
-        if (cmp > 0 || (cmp == 0 && !(tieBreak && _tieWins(table, op.id, col.name, v)))) continue;
+        if (cmp > 0) continue;
+        if (cmp == 0) {
+          if (!tieBreak) continue;
+          row ??= db.select('SELECT * FROM $table WHERE id = ?', [op.id]).firstOrNull ?? const <String, Object?>{};
+          if (!_tieWins(row, col.name, v)) continue;
+        }
       }
       accepted[e.key] = v;
     }
@@ -56,12 +62,12 @@ extension WalletRepoSyncApply on WalletRepo {
 
   static const _bad = Object();
 
-  /// Whether [value] beats the value row [id] of [table] holds in [column] on an equal clock: it differs and its
-  /// canonical JSON sorts higher (UTF-16 code units, the same on every device). A clock without its row (damage): it wins.
-  bool _tieWins(String table, String id, String column, Object? value) {
-    final r = db.select('SELECT $column AS v FROM $table WHERE id = ?', [id]);
-    if (r.isEmpty) return true;
-    final had = jsonEncode(r.first['v']), now = jsonEncode(value);
+  /// Whether [value] beats the value the stored [row] holds in [column] on an equal clock: it differs and its canonical
+  /// JSON sorts higher (UTF-16 code units, the same on every device). A clock without its row (damage, [row] empty):
+  /// it wins.
+  static bool _tieWins(Map<String, Object?> row, String column, Object? value) {
+    if (row.isEmpty) return true;
+    final had = jsonEncode(row[column]), now = jsonEncode(value);
     return now != had && now.compareTo(had) > 0;
   }
 
@@ -244,41 +250,64 @@ extension WalletRepoSyncApply on WalletRepo {
     return ops.length;
   }
 
-  /// Lowercase hex SHA-256 of the synced state in a canonical form (V2): every entity of [entitySchema] by name, its
-  /// rows (deleted ones included) by id, each row's synced columns by name with their value and field clock (null
-  /// when never written). Device-local tables and values (meta, outbox, cursors, caches) are left out. Two devices
-  /// that applied the same ops give the same digest, on the VM and on the web alike (no map-order dependence; values
-  /// are SQLite integers, text or null).
+  /// Lowercase hex SHA-256 of the synced state in a canonical form (V2): every entity of [entitySchema] by name (a
+  /// line with the entity and its synced column names, sorted), then its rows (deleted ones included) by id (SQLite
+  /// binary order, the same on the VM and the web), one JSON line each: the id, then per column its value and field
+  /// clock (null when never written). Device-local tables and values (meta, outbox, cursors, caches) are left out. Two
+  /// devices that applied the same ops give the same digest (no map-order dependence; values are SQLite integers, text
+  /// or null).
+  ///
+  /// Cached per [dataVersion]: a second call without a data change in between returns the same text without reading
+  /// the tables ([stateDigestComputations] counts the real computations). A change behind the change log (raw SQL, a
+  /// bug) is seen once the next data change moves [dataVersion].
   String stateDigest() {
+    if (_digestCache case (final int v, final String hex) when v == dataVersion) return hex;
     final t = PerfTimer('repo.stateDigest', warnMs: 1000);
-    final out = BytesBuilder(copy: false);
+    final sink = const DartSha256().newHashSink();
+    final buf = StringBuffer(); // hashed in chunks of about 64 KiB: one UTF-8 conversion per chunk, not per row
+    void flush() {
+      sink.add(utf8.encode(buf.toString()));
+      buf.clear();
+    }
+
     var rows = 0;
     for (final entity in entitySchema.keys.toList()..sort()) {
       final def = entitySchema[entity]!;
       final cols = def.columnNames.toList()..sort();
+      buf
+        ..write(jsonEncode([entity, cols]))
+        ..write('\n');
       final clocks = <String, Map<String, String>>{}; // id -> field -> hlc
       for (final r in db.select('SELECT id, field, hlc FROM clocks WHERE entity = ?', [entity])) {
         if ((r['id'], r['field'], r['hlc']) case (final String id, final String f, final String h)) (clocks[id] ??= {})[f] = h;
       }
-      final all = db.select('SELECT * FROM ${def.table}').toList()..sort((a, b) => (a['id'] as String).compareTo(b['id'] as String));
-      for (final r in all) {
-        final id = r['id'] as String;
+      for (final r in db.select('SELECT id, ${cols.join(', ')} FROM ${def.table} ORDER BY id').rows) {
+        final id = r[0] as String;
         final c = clocks[id] ?? const <String, String>{};
-        out.add(utf8.encode(jsonEncode([
-          entity,
-          id,
-          [
-            for (final f in cols) [f, r[f], c[f]]
-          ],
-        ])));
-        out.addByte(10);
+        final line = <Object?>[id];
+        for (var i = 0; i < cols.length; i++) {
+          line
+            ..add(r[i + 1])
+            ..add(c[cols[i]]);
+        }
+        buf
+          ..write(jsonEncode(line))
+          ..write('\n');
+        if (buf.length > 65536) flush();
         rows++;
       }
     }
-    final hex = sha256Hex(out.takeBytes());
+    flush();
+    sink.close();
+    final hex = sink.hashSync().bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    _digestCache = (dataVersion, hex);
+    _digestRuns++;
     t.done({'rows': rows});
     return hex;
   }
+
+  /// How many times [stateDigest] really read the tables (not served from its cache), since the repo was opened.
+  int get stateDigestComputations => _digestRuns;
 
   /// Whether nothing has been put into this wallet yet: no transactions, goals, goal contributions, wishes, recurring
   /// bills, planned costs, bills (receipts, slips), accounts, categories (overrides included), tags, tag links, rule

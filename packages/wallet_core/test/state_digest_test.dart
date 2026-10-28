@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/synthetic.dart';
 
@@ -71,12 +72,52 @@ void main() {
       expect(a.stateDigest(), before);
     });
 
-    test('a field changed behind the change log (no clock change) changes it: what the digest exists to catch', () {
+    test('a field changed behind the change log changes it once data changes again (cached per dataVersion)', () {
       final a = repo()..applyRemote(ops, match: false);
       final before = a.stateDigest();
+      final runs = a.stateDigestComputations;
+      expect(a.stateDigest(), before);
+      expect(a.stateDigestComputations, runs, reason: 'the same dataVersion: served from the cache');
       a.db.execute("UPDATE settings SET value = '1' WHERE id = 'salary'");
-      expect(a.stateDigest(), isNot(before));
+      expect(a.stateDigest(), before, reason: 'raw SQL does not move dataVersion: still the cached text');
+      a.applyRemote([_setting('loan', '1', 30)], match: false);
+      final after = a.stateDigest();
+      expect(a.stateDigestComputations, runs + 1);
+      final fresh = repo()..applyRemote([...ops, _setting('loan', '1', 30)], match: false);
+      expect(after, isNot(fresh.stateDigest()), reason: 'the changed salary is in it');
+      a.applyRemote([_setting('loan', '1', 30)], match: false); // changes nothing: no new data version
+      a.stateDigest();
+      expect(a.stateDigestComputations, runs + 1);
     });
+
+    test('20k-row wallet: digest time and a whole-state tie-break apply (numbers in the output, no limit)', () {
+      final big = repo();
+      final start = DateTime.utc(2021, 1, 1);
+      big.importBatch(ImportBatch(source: 'pbz', transactions: [
+        for (var i = 0; i < 20000; i++)
+          n(start.add(Duration(days: i ~/ 11)).toIso8601String().substring(0, 10), -(100 + i % 9000), 'POS', 'SHOP ${i % 400} ZAGREB',
+              occ: i),
+      ]));
+      var sw = Stopwatch()..start();
+      final d = big.stateDigest();
+      final digestMs = sw.elapsedMilliseconds;
+      sw = Stopwatch()..start();
+      expect(big.stateDigest(), d);
+      final cachedMs = sw.elapsedMilliseconds;
+      big.applyRemote([_setting('loan', '1', 30)], match: false);
+      sw = Stopwatch()..start();
+      big.stateDigest();
+      final warmMs = sw.elapsedMilliseconds;
+      final copy = repo()..applyRemote(big.snapshotOps(), match: false);
+      final snap = big.snapshotOps();
+      sw = Stopwatch()..start();
+      expect(copy.applyRemote(snap, match: false, tieBreak: true), 0);
+      final tieMs = sw.elapsedMilliseconds;
+      expect(copy.stateDigest(), big.stateDigest());
+      // ignore: avoid_print
+      print('V2 perf: rows ${big.transactions().length}, stateDigest ${digestMs}ms (warm ${warmMs}ms), cached ${cachedMs}ms, '
+          'tie-break resend of ${snap.length} ops ${tieMs}ms');
+    }, timeout: const Timeout(Duration(minutes: 2)));
   });
 
   group('queueStateResend', () {
