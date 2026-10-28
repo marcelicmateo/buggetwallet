@@ -903,28 +903,40 @@ class WalletController extends ChangeNotifier {
       () => timed('wc.budgetPreset', () => budgetPreset(kind, txs, settings, month, currency: currency, table: categoryTable, goals: goals),
           fields: {'month': month, 'kind': kind.name}, warnMs: 50));
 
-  /// The menu words and the dialog header of a preset: (menu label, title, one line saying where the numbers come from).
-  (String, String, String) budgetPresetWords(BudgetPresetKind kind) {
+  /// The menu item of a preset.
+  String budgetPresetLabel(BudgetPresetKind kind) => switch (kind) {
+        BudgetPresetKind.avg3 => 'Average of the last 3 months',
+        BudgetPresetKind.avg6 => 'Average of the last 6 months',
+        BudgetPresetKind.avg12 => 'Average of the last 12 months',
+        BudgetPresetKind.spendLess => 'Spend 10% less',
+        BudgetPresetKind.fitPlan => 'Fit my plan',
+        BudgetPresetKind.fiftyThirtyTwenty => '50/30/20',
+      };
+
+  /// The header of a preset: (title, one line saying where the numbers come from and what they add up to a month, [total] = the
+  /// preset's own total in cents).
+  (String, String) budgetPresetNote(BudgetPresetKind kind, int total) {
     String euros(int cents) => money(cents ~/ 100 * 100, currency, decimals: 0);
-    switch (kind) {
-      case BudgetPresetKind.avg3:
-        return ('Average of the last 3 months', 'Average of 3 months', 'What you spent a month in the last 3 months, per category.');
-      case BudgetPresetKind.avg6:
-        return ('Average of the last 6 months', 'Average of 6 months', 'What you spent a month in the last 6 months, per category.');
-      case BudgetPresetKind.avg12:
-        return ('Average of the last 12 months', 'Average of 12 months', 'What you spent a month in the last 12 months, per category.');
-      case BudgetPresetKind.spendLess:
-        return ('Spend 10% less', 'Spend 10% less', '10 % under your average of the last 6 months, per category.');
-      case BudgetPresetKind.fitPlan:
-        final flex = monthlyFlex(settings, goals: goals, table: categoryTable);
-        return ('Fit my plan', 'Fit my plan', '${euros(flex)} a month of flexible money, split by what you spent in the last 6 months.');
-      case BudgetPresetKind.fiftyThirtyTwenty:
-        return (
-          '50/30/20',
-          '50/30/20',
-          '30 % of your salary for wants: ${euros(settings.salary * 30 ~/ 100)}. Needs are your payday plan; 20 % is for savings.'
-        );
-    }
+    final all = '${moneyExact(total, currency)} a month in all.';
+    final title = switch (kind) {
+      BudgetPresetKind.avg3 => 'Average of 3 months',
+      BudgetPresetKind.avg6 => 'Average of 6 months',
+      BudgetPresetKind.avg12 => 'Average of 12 months',
+      BudgetPresetKind.spendLess => 'Spend 10% less',
+      BudgetPresetKind.fitPlan => 'Fit my plan',
+      BudgetPresetKind.fiftyThirtyTwenty => '50/30/20',
+    };
+    final line = switch (kind) {
+      BudgetPresetKind.avg3 => 'What you spent a month in the last 3 months, per category.',
+      BudgetPresetKind.avg6 => 'What you spent a month in the last 6 months, per category.',
+      BudgetPresetKind.avg12 => 'What you spent a month in the last 12 months, per category.',
+      BudgetPresetKind.spendLess => '10 % under your average of the last 6 months, per category.',
+      BudgetPresetKind.fitPlan =>
+        '${euros(monthlyFlex(settings, goals: goals, table: categoryTable))} a month of flexible money, split by what you spent in the last 6 months.',
+      BudgetPresetKind.fiftyThirtyTwenty =>
+        '30 % of your salary for wants: ${euros(settings.salary * 30 ~/ 100)}. Needs are your payday plan; 20 % is for savings.',
+    };
+    return (title, '$line $all');
   }
 
   /// The budgeted category with the least money left this month, or null when nothing is budgeted.

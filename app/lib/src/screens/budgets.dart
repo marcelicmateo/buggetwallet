@@ -60,6 +60,9 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
 
   /// Suggest (core's `budgetProposals`): empty fields are filled at once; a field that already has a number is changed only when
   /// the owner ticks it in the dialog. Nothing is saved here: Save does that.
+  /// What the last "Start from…" was, shown under the menu until Save, so the header is seen even when nothing was asked.
+  String? _note;
+
   Future<void> _suggest() => _apply(widget.wc.suggestedBudgets(monthOf(widget.wc.today())), 'Not enough history yet.');
 
   /// "Start from…": the same flow with a preset's budgets and a header saying where they come from. Nothing is saved here.
@@ -71,7 +74,7 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
       toast(context, p.empty ?? 'Nothing to suggest.');
       return Future.value();
     }
-    final (_, title, subtitle) = wc.budgetPresetWords(kind);
+    final (title, subtitle) = wc.budgetPresetNote(kind, p.total);
     return _apply(p.budgets, 'Nothing new to suggest.', title: title, subtitle: subtitle);
   }
 
@@ -111,8 +114,9 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
       }
     }
     logNav('budgets.suggest', {'filled': filled, 'changed': changed});
-    setState(() {});
     final n = filled + changed;
+    if (n > 0 || title == null) _note = title == null ? null : '$title: $subtitle';
+    setState(() {});
     toast(
         context,
         n > 0
@@ -160,6 +164,7 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
       return;
     }
     wc.saveCategoryBudgets(next);
+    _note = null;
     setState(_resetShown);
     toast(context, 'Budgets saved');
   }
@@ -224,13 +229,22 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
         onSelected: _preset,
         itemBuilder: (_) => [
           for (final k in BudgetPresetKind.values)
-            PopupMenuItem(key: ValueKey('preset:${k.name}'), value: k, child: Text(widget.wc.budgetPresetWords(k).$1)),
+            PopupMenuItem(key: ValueKey('preset:${k.name}'), value: k, child: Text(widget.wc.budgetPresetLabel(k))),
         ],
         child: IgnorePointer(
-            child: ExcludeSemantics(
-                child: OutlinedButton.icon(
-                    style: accentOutlined(context), icon: const Icon(Icons.tune), label: const Text('Start from…'), onPressed: () {}))),
+            child: Semantics(
+                button: true,
+                label: 'Start from…',
+                excludeSemantics: true,
+                child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: touchMin),
+                    child: OutlinedButton.icon(
+                        style: accentOutlined(context),
+                        icon: const Icon(Icons.tune),
+                        label: const Text('Start from…'),
+                        onPressed: () {})))),
       ),
+      if (_note != null) Muted(_note!, key: const ValueKey('budgetsPresetNote'), size: BwType.bodySize),
       FilledButton(key: const ValueKey('budgetsSave'), onPressed: _save, child: const Text('Save budgets')),
     ]);
   }
