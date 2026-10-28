@@ -668,6 +668,12 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (`syncConflicts`); until then their digests differ, `devicesDisagree` stays and no automatic repair runs. A row whose
   clocks remain but whose row is gone takes the resend value (restores data, changes no value the owner sees as his).
   A conflict entry is device-local: a reinstall loses it (the digest mismatch shows again on the next data change).
+  A conflict keeps only the latest `theirs`: with three devices holding three values the owner sees two of them
+  (choosing either still settles all three, the choice gets a new clock). Open conflicts are dropped when every peer
+  digest read in a run matches (the other value is held by no device any more); after the 500 cap dropped entries, an
+  empty list lets one more repair run. A lost row whose own newer-clock fields cannot be read back is restored hidden
+  (`deleted` 1 when it has a `deleted` clock) with those fields as conflicts; a lost row without any `deleted` clock
+  and no resend field for it stays hidden silently.
   `stateDigest` is cached per `dataVersion`, so a change behind the change log shows only after the next data change.
   Two devices that see the mismatch in the same round both ask: each device then resends its state once per ask
   (bounded, accepted). An ask written by a device whose clock is behind this device's first relay sync is ignored.

@@ -872,7 +872,21 @@ class SyncEngine {
       }
       logEvent(_log, Level.FINE, 'sync.digest.compare', {'matched': matched, 'differ': differ.length, 'ignored': ignored});
       // VC: open conflicts keep devicesDisagree and stop automatic repair; the owner's choices settle them.
-      final conflicts = repo.syncConflicts().length;
+      var conflicts = repo.syncConflicts().length;
+      if (conflicts > 0 && differ.isEmpty && ignored == 0 && matched > 0) {
+        // Every peer digest read matched this device's: no device holds the other values any more (the one they came
+        // from was wiped or retired), so the open conflicts are stale.
+        repo.dropSyncConflicts();
+        conflicts = 0;
+      }
+      if (conflicts == 0 && repo.localValue(WalletRepoSyncApply.syncConflictsDroppedKey) != null) {
+        // The conflict cap dropped entries and the owner has settled the rest: let one more repair find what is left.
+        repo.setLocalValue(WalletRepoSyncApply.syncConflictsDroppedKey, null);
+        book
+          ..disagree = null
+          ..repairAt = null;
+        logEvent(_log, Level.INFO, 'sync.digest.capRetry');
+      }
       if (differ.isEmpty && matched > 0 && book.disagree != null && conflicts == 0) {
         book.disagree = null;
         logEvent(_log, Level.INFO, 'sync.digest.agree');

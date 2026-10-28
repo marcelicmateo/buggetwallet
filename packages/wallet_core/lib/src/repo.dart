@@ -251,6 +251,11 @@ class WalletRepo {
   (int, String)? _digestCache;
   int _digestRuns = 0;
 
+  /// Rows a repair resend is restoring in this session (`entity|id`): found missing while this device still held
+  /// clocks for them. Their equal-clock fields are restored, not conflicts (the row was recreated with defaults).
+  /// Cleared by the next apply that is not a repair (the parts of one resend are applied one after the other).
+  final _restoringRows = <String>{};
+
   /// Set by [_apply] when a field was written in the open transaction; [_tx] turns it into a [dataVersion] step on
   /// commit and drops it on rollback.
   bool _dataPending = false;
