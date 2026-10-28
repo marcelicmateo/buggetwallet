@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/clock_notice.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/sync_panel.dart';
 import 'package:budget_wallet/src/sync_status.dart';
 import 'package:budget_wallet/src/tabs.dart';
@@ -425,7 +426,9 @@ void main() {
       wall -= 3 * 3600 * 1000; // the date or time was set back by hours
 
       final chip = find.byKey(const ValueKey('reviewDay:5'));
-      await t.ensureVisible(chip);
+      // Settings is a lazy list: scroll until the chip is built (sections above it can grow, e.g. the budget presets).
+      await t.scrollUntilVisible(chip, 400,
+          scrollable: find.descendant(of: find.byType(SettingsScreen), matching: find.byType(Scrollable)).first);
       await t.pump();
       await t.tap(chip);
       await t.pump();
