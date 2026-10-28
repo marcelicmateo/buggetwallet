@@ -48,9 +48,9 @@ Merge order: VB → VA → VT → VU.
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
 | X0 | Context pack: onboarding/welcome_balance, import flow, P13 sheet, Plan › Suggestions, expected bills/incomes, rules, budgets panels; core detectors | scout | – | V merged | done (pack in lead brief) |
-| XC | `uncategorisedPayees` + tests (no setupProposals: lead decision) | core-builder | x-core | X0 | running (core-builder on sonnet: small pure function) |
-| XU | Wizard shell + 8 steps, entry points, widget tests, screenshots | ui-builder | x-ui | X0 (+ XC API) | running |
-| X | Review, merge, stage run, push, STATUS | lead | v2 | XC, XU | queued |
+| XC | `uncategorisedPayees` + tests (no setupProposals: lead decision) | core-builder | x-core | X0 | done 58ed712 (lead-reviewed), merged ef90cff |
+| XU | Wizard shell + 8 steps, entry points, widget tests, screenshots | ui-builder | x-ui | X0 (+ XC API) | done 69454f4 + 94a6b94 (review 2 med + 5 low fixed), merged b825cf2 |
+| X | Review, merge, stage run, push, STATUS | lead | v2 | XC, XU | done 2026-10-28: stage green on b825cf2; pushed |
 
 ## Relay on the Raspberry Pi (2026-10-28, owner; devops, runs beside the feature stages)
 Owner: host the relay on their Pi at home, native binary as a systemd service (no containers on the Pi); Caddy for HTTPS as
@@ -69,7 +69,7 @@ structural widget tests (no golden tests), screenshots at 320 dp / dark / deskto
 `theme.dart` changes.
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
-| C2a | Audit: list of charts × rule failures + validator output (read-only) | scout or lead | – | X done | queued |
+| C2a | Audit: list of charts × rule failures + validator output (read-only) | scout or lead | – | X done | next |
 | C2b | Fixes + tests + screenshots | ui-builder | c2-ui | C2a | queued |
 | C2 | Review, stage run, push, STATUS | lead | v2 | C2b | queued |
 

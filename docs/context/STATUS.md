@@ -394,6 +394,13 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Stage run** (8dd1f55, before VC): importer 400, core 2722, sync 359, relay 216, app 1962, desktop, web-test, emulator screens, perf ok. Final run after VC (ccfba02): importer 400, core 2727, sync 365, relay 216, app 1978, desktop relay_sync.
 - 2026-10-28: **Relay on the Raspberry Pi (PI1):** the owner will host the relay on a Pi at home as a native arm64 binary under systemd (no containers): `tools/build.sh relay-bin` cross-compiles it (Dart 3.13.5), hardened units + native Caddy config in `relay/deploy/native/`, lint step `native-units`. PI2 (OS setup, deploy script, setup.md) waits for the owner's Pi details.
 
+- 2026-10-28: **Stage X: "Set up my wallet"** (spec `X_SPEC.md`; on-device, no AI: the owner chose no API key; no schema change).
+  - After creating a wallet (and the save-key sheet) an 8-step guide: bank files → accounts and cash → payday plan → bills and subscriptions (with the month/year total) → extra income → payees without a main tag (top 10, pick a tag = payee rule, Undo) → budgets → "Here's your wallet" (safe to spend, payday, held for bills, accounts, a button per skipped step). Every step: Accept writes only that step, Skip writes nothing. A joined wallet never sees it.
+  - Close it half-way → Today "Finish setting up" (Continue / No thanks); Settings › "Set up my wallet again". The welcome cash sheet moved into step 2; the one-off "Looks right?" sheet only shows when the guide never showed the payday plan.
+  - Core: `uncategorisedPayees` (rows nothing decides: no rule, pattern or hint; never by amount).
+  - Review: 0 blocking, 2 medium (P13 sheet lost after "No thanks"; a restore left "Finish setting up" on a full wallet), 5 low; all fixed with tests. Today and Done share one hero figure.
+  - **Stage run** (b825cf2): importer 400, core 2737, sync 365, relay 216, app 2003, desktop, web-test 9, emulator screens, perf ok.
+
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -484,7 +491,8 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Schema 17:** update every device together; a device that stays on an older build for over 30 days after the others upgraded may miss IOUs until they are edited again.
 
 ## Next
-- **Stage X: "Set up my wallet" wizard** (spec `X_SPEC.md`, on-device, no AI: the owner chose no API key), then **Stage C2: chart audit** (`/dataviz` rules), then the M6 live test.
+- **Stage C2: chart audit** (`/dataviz` rules), then the M6 live test.
+- Owner checks after Stage X (phone): new wallet → save key → the guide with a real bank file: import preview, accounts + cash, plan, bills, payees (pick a tag, Undo), budgets, Done vs Today; close half-way → Today "Finish setting up" → continue; Settings › Set up my wallet again; large text.
 - **PI2 (waiting for the owner):** Pi model, OS (`/etc/os-release`), domain/DDNS name, router 80/443 forward, SSD for the data.
 - Owner checks after Stage V (phone + laptop, update both first):
   - Restore a backup with another wallet's key → "made with another wallet key"; cut a `.bwb` in half → "damaged".
