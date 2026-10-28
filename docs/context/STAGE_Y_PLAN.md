@@ -23,6 +23,9 @@ pattern as Suggest / `budgetProposals`).
   naming the preset and its total; one line explaining it.
 
 ## Stage WS — web sync (P18)
+**Rescoped after the scout (2026-10-28):** the browser already syncs through the relay since Stage R (sync panel, 5-min
+timer, `runRelaySync`, BlobStore, device id in localStorage; relay sends CORS + `Date` on every response incl. errors).
+Left: `bwk2` key wrap, CSP meta, Chrome/VM coverage of the web sync path, stale comments. One ui-builder.
 The browser build (localhost only, never published) syncs through the relay like phone and laptop.
 - Reuse `SyncEngine` + `RelayTransport` (web-safe already) and `BlobStore`; a sync timer while the tab is open and
   "Sync now"; device id per browser stored next to the wrapped key; Web Lock single tab (exists) means one engine.
