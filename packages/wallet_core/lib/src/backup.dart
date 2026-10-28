@@ -30,6 +30,11 @@ enum BackupFailure {
   /// A clock in it is more than [maxClockDrift] ahead of this device's clock (H7): made on a device with a wrong date,
   /// or this device's date is wrong. Nothing applied; restorable once the clocks agree.
   clockAhead,
+
+  /// Sealed with another wallet key (a `BWOP3` file whose key id is not the given key's). Not thrown as a
+  /// [BackupException]: [restoreBackupBytes] and [mergeBackupBytes] rethrow [unseal]'s [VaultException], whose
+  /// `failure` is [UnsealFailure.otherKey]; this value names the same case for callers that map both to one reason.
+  otherKey,
 }
 
 /// A backup file that cannot be restored. The message names no file content and no path.
@@ -110,7 +115,8 @@ Future<BackupResult> backupBytesWithInfo(WalletRepo repo, VaultKey key, {int max
 /// it go into the cache, queued for upload ([_takeBlobs]). Returns the number of ops in the file.
 ///
 /// Content that is not a backup or is of a newer format is a [BackupException]; a wrong key or a damaged seal is
-/// the [VaultException] from [unseal]. Nothing is applied unless the whole file parses. [key] opens the file; when it
+/// the [VaultException] from [unseal] (`failure`: [UnsealFailure.otherKey] for a `BWOP3` backup of another key,
+/// [UnsealFailure.damaged] for a changed one, [UnsealFailure.badKey] for either with an older `BWOP2` backup). Nothing is applied unless the whole file parses. [key] opens the file; when it
 /// is not this wallet's key, pass the wallet's as [walletKey]: the bill files (sealed with the other key) are left out.
 Future<int> restoreBackupBytes(WalletRepo repo, List<int> bytes, VaultKey key, {VaultKey? walletKey}) async {
   if (!repo.isEmpty) throw StateError('A backup can only be restored into an empty wallet.');

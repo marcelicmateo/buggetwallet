@@ -50,7 +50,7 @@ void main() {
       await b.sync();
       c.tick();
       final back = await a.sync();
-      expect(back.filesRead, 1);
+      expect(back.filesRead, 2, reason: "B's digest file after applying A's data (V2), then its edit");
       expect(_ids(a), contains(fromB));
       expect(await invariantViolations(c.transport, c.devs), isEmpty);
       await c.syncAll(rounds: 2);

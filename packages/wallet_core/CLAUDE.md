@@ -43,7 +43,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `_readSettings`/`_settingChanges` behind `settings()`/`updateSettings`).
   Stage Q0 split the core of `repo.dart` (moves only): `repo_import.dart` (`WalletRepoImport`: matching/transfer glue,
   `_reconcile`, `_reconcileLocal`, `runPendingMatch`), `repo_sync_apply.dart` (`WalletRepoSyncApply`: `_apply`, `_fieldValue`,
-  `applyRemote`, `snapshotOps`, `clockStats`, sync cursors/files), `repo_tx.dart` (`WalletRepoTx`: `setCategory`, delete/undelete
+  `applyRemote` (`tieBreak`: V2 repair, equal clock → higher canonical JSON wins), `snapshotOps`, `queueStateResend`,
+  `stateDigest` (V2: SHA-256 of the canonical synced state), `clockStats`, sync cursors/files), `repo_tx.dart` (`WalletRepoTx`: `setCategory`, delete/undelete
   transaction, merchant rules), `repo_meta.dart` (`WalletRepoMeta`: `_migrate`, `_meta`). An extension member is visible only
   where the barrel is imported, so public methods that app/sync files reach without that import (`importBatch`,
   `addTransaction`, `transactions`, `localValue`, `setLocalValue`, `pendingOps`) stay on the class.
@@ -378,14 +379,19 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `BackupException(BackupFailure.clockAhead)`, nothing applied), `vault.dart` (key + encryption; `VaultKey.parse` ignores case, spaces and dashes and reads a digit 0 as O (Base32 has
   no 0; 1 stays refused); `UnsealFailure` says why a
   file was refused, `tooLarge` past the inflate cap; `deriveKey` = HKDF-SHA256, empty salt).
-- `vault.dart` formats (H8): `seal(plain, key, {required aad, nonce})` writes `BWOP2` = magic | nonce(24) | mac(16) |
-  XChaCha20-Poly1305 of gzip with `aad` as associated data (`nonce` is a test seam for known-answer vectors). AAD per
-  use: `aadSyncFile(device, seq)` = `bw-sync-file\n<relay device name>\n<seq>`, `aadSnapshot(id)` = `bw-snapshot\n<id>`,
-  `aadBackup`, `aadBlob`, `aadWebKey` (the app's passphrase-wrapped key). `unseal(data, key, {required aad, maxBytes})`
-  reads `BWOP2` (another AAD = `badKey`, like a changed file) and `BWOP1` from older builds (no AAD, any `aad` given);
-  `BWOP3`+ = `newerFormat`. Inflate capped at `maxUnsealBytes` (256 MiB, `maxBytes` lower only in tests) through
-  `package:archive`'s `maxOutputSize` → `tooLarge` (quarantined as `corrupt`). `syncReaderVersion` = 2. Older builds
-  read `BWOP2` as `unknownVersion` (quarantined, read after their upgrade). `local_db.dart` pins
+- `vault.dart` formats (H8, V1): `seal(plain, key, {required aad, nonce, legacyFormat})` writes `BWOP3` = magic |
+  keyId(8) | nonce(24) | mac(16) | XChaCha20-Poly1305 of gzip with `aad || keyId` as associated data (`keyId` =
+  `VaultKey.keyIdBytes()`, the bytes of `keyId()`; `nonce` is a test seam for known-answer vectors). `legacyFormat:
+  true` writes `BWOP2` = magic | nonce(24) | mac(16) | ciphertext with `aad` alone: only the app's web key wrap (a wrong
+  passphrase must stay `badKey`). AAD per use: `aadSyncFile(device, seq)` = `bw-sync-file\n<relay device name>\n<seq>`,
+  `aadSnapshot(id)` = `bw-snapshot\n<id>`, `aadBackup`, `aadBlob`, `aadWebKey` (the app's passphrase-wrapped key).
+  `unseal(data, key, {required aad, maxBytes})` reads `BWOP3` (another key id = `otherKey`, nothing decrypted; this
+  key's id with a failing MAC, e.g. another AAD or a cut/changed file = `damaged`), `BWOP2` (any MAC failure =
+  `badKey`) and `BWOP1` from older builds (no AAD, any `aad` given); `BWOP4`+ = `newerFormat`. Inflate capped at
+  `maxUnsealBytes` (256 MiB, `maxBytes` lower only in tests) through `package:archive`'s `maxOutputSize` → `tooLarge`
+  (quarantined as `corrupt`). `syncReaderVersion` = 3. Builds before V read `BWOP3` as `unknownVersion` (quarantined,
+  read after their upgrade). Backups: restore/merge rethrow `unseal`'s `VaultException` (`failure` = `otherKey` /
+  `damaged` / `badKey`); `BackupFailure.otherKey` names the same case for callers mapping both to one reason. `local_db.dart` pins
   `PRAGMA cipher = 'chacha20'` (sqlite3mc's default so far) before every `PRAGMA key` / `rekey`.
 - Device id per install (H6): `WalletRepo.open(path, {dbKey, now, deviceId})`, `inMemory({now, deviceId})`,
   `fromDatabase(db, {file, now, deviceId})`. Null = the meta `device_id` (a new database makes one). Given and
@@ -647,6 +653,15 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - BWOP2 (H8): files, snapshots and backups written by Stage H builds are unreadable to older builds (`unknownVersion`
   / `newerFormat`, read after their upgrade); a `.bwb` made now does not restore on an older build. `BWOP1` from older
   builds is read without AAD, so an old file moved to another seq on the relay is not detected (only `BWOP2` binds it).
+- BWOP3 (V1): the same for Stage V files and `.bwb` on builds before V. Old `BWOP2` files still say only `badKey`
+  (another key or damaged). The key id is public (it is also stored next to the data as `keyId()`).
+- State digest (V2): compared only when two devices name the same data files (vector) with empty outboxes, so two
+  devices that keep writing at the same moment compare only once one of them is quiet; a device that started from a
+  snapshot compares only after every device whose covers ended on a records-only file wrote data again; a snapshot
+  written while its writer's outbox held ops (matches made in that run) holds state its covers do not name, so a
+  compare in that window can report a false mismatch (one needless repair). The repair
+  tie-break picks the higher canonical JSON, not "the right" value; a damaged value can therefore win (the owner sees
+  devicesDisagree only on a second mismatch within 7 days).
 - H9 repairs run only when caught up; a planned row a confirmed bill wants created is not created for a due date in
   the past.
 - Recurring bills: a device that imports a payee's rows before syncing writes the candidate's amount/due/label again
@@ -707,7 +722,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (goals: `test/goal_contrib_test.dart`, hints: `test/kind_hint_test.dart`,
   own transfers incl. two devices: `test/transfers_test.dart`, budgets per category incl. the setting and two devices:
   `test/budget_vs_actual_test.dart`, recurring bills + weekly review incl. two devices: `test/habits_test.dart`, M5 backup
-  round trip incl. two devices + resend: `test/backup_test.dart`, bills (repo API, planned row, auto link, two devices, backup, schema 6 → 7):
+  round trip incl. two devices + resend: `test/backup_test.dart`, V2 state digest / resend queue / tie-break and V1
+  backup key id: `test/state_digest_test.dart`, bills (repo API, planned row, auto link, two devices, backup, schema 6 → 7):
   `test/bills_test.dart` (+ `bills_spec_test.dart`; B5a review fixes incl. two devices `bills_b5a_test.dart`; B6
   `bills_b6_test.dart`; helper
   `support/bill_helpers.dart` `confirmWithCategory`), future spending (planned costs, .ics, Upcoming, two

@@ -152,7 +152,7 @@ void main() {
       await inOrder.run();
       net.relay.failGet(a.repo.deviceId, 3);
       final first = await late.run();
-      expect(first.filesRead, 2);
+      expect(first.filesRead, 3, reason: "a's files 1 and 2, and b's digest file (V2)");
       expect(late.repo.transaction(lidl)!.category, 'Eating out', reason: 'files 1 (the whole state, Shopping) and 2 only');
       expect(first.waiting.single.seq, 3);
       expect(first.waiting.single.reason, isNull);
@@ -286,7 +286,7 @@ void main() {
       expect((await VaultKey.parse(' ${text.toLowerCase().replaceAll('-', '\n')} ')).bytes, k.bytes);
     });
 
-    test('a device with another wallet\'s key on the same relay: its files are refused both ways as badKey', () async {
+    test('a device with another wallet\'s key on the same relay: its files are refused both ways as otherKey (V1)', () async {
       final a = device('a');
       a.repo.importBatch(january);
       await a.run();
@@ -294,11 +294,11 @@ void main() {
       devices.add(b);
       b.repo.updateSettings({'salary': 99});
       final rb = await b.run();
-      expect(rb.waiting.single.reason, SyncProblemReason.badKey);
+      expect(rb.waiting.single.reason, SyncProblemReason.otherKey);
       expect(rb.caughtUp, isFalse);
       expect(b.repo.transactions(), isEmpty);
       final ra = await a.run();
-      expect(ra.problems.single.reason, SyncProblemReason.badKey);
+      expect(ra.problems.single.reason, SyncProblemReason.otherKey);
       expect(a.repo.settings().salary, isNot(99));
     });
 

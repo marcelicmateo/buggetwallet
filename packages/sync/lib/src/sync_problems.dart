@@ -7,11 +7,11 @@ final _log = Logger('bw.sync');
 
 /// The highest sync file format (`BWOPn`) this build reads. Bump it with a new format: files refused as
 /// [SyncProblemReason.unknownVersion] are read again after the upgrade.
-const syncReaderVersion = 2;
+const syncReaderVersion = 3;
 
 /// Why a sync file from another device was not applied.
 enum SyncProblemReason {
-  /// Sealed with another wallet's key (or changed after sealing).
+  /// An old `BWOP1`/`BWOP2` file sealed with another wallet's key, or changed after sealing (those formats cannot tell).
   badKey,
 
   /// Damaged: cut off, not a sync file, or sealed correctly but not a list of valid ops.
@@ -35,6 +35,14 @@ enum SyncProblemReason {
   /// device's clock is behind). Quarantined; read again when it changes, the build changes, or the wall clock has
   /// caught up.
   clockDrift,
+
+  /// Sealed with another wallet key: a `BWOP3` file whose key id is not this wallet's (a device of another wallet on
+  /// the same relay, or one left on an old key after a key change). Nothing was decrypted; quarantined like [badKey].
+  otherKey,
+
+  /// Not a file: this device's state digest differed from a peer's twice within 7 days of a repair (V2), so automatic
+  /// repair stopped. Device-local, kept until a later compare matches. [SyncProblem.device] is the peer's short id.
+  devicesDisagree,
 }
 
 /// A file from another device that this run did not apply, for the UI ("1 file from device X could not be read").

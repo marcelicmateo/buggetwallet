@@ -311,11 +311,12 @@ void main() {
       }
     });
 
-    test('layout: BWOP2, 24-byte nonce, 16-byte tag; two seals of one payload differ', () async {
+    test('layout: BWOP3, 8-byte key id, 24-byte nonce, 16-byte tag; two seals of one payload differ', () async {
       final a = await seal(utf8.encode('hello'), key, aad: _aad), b = await seal(utf8.encode('hello'), key, aad: _aad);
-      expect(a.sublist(0, 5), utf8.encode('BWOP2'));
-      expect(a.length, greaterThanOrEqualTo(5 + 24 + 16 + 1));
-      expect(a.sublist(5, 29), isNot(b.sublist(5, 29)), reason: 'nonce reused');
+      expect(a.sublist(0, 5), utf8.encode('BWOP3'));
+      expect(a.sublist(5, 13), await key.keyIdBytes());
+      expect(a.length, greaterThanOrEqualTo(5 + 8 + 24 + 16 + 1));
+      expect(a.sublist(13, 37), isNot(b.sublist(13, 37)), reason: 'nonce reused');
       expect(a, isNot(b));
       expect(await unseal(a, key, aad: _aad), await unseal(b, key, aad: _aad));
     });
@@ -380,11 +381,11 @@ void main() {
       await expectLater(unseal([...a.sublist(0, 29), ...b.sublist(29, 45), ...a.sublist(45)], key, aad: _aad), _refused);
     });
 
-    test('version byte and magic: BWOP0, BWOP3, lowercase, truncated and zero magic are refused as not a sync file', () async {
+    test('version byte and magic: BWOP0, BWOP4, lowercase, truncated and zero magic are refused as not a sync file', () async {
       final good = await seal(utf8.encode('x'), key, aad: _aad);
       for (final magic in [
         [...'BWOP0'.codeUnits],
-        [...'BWOP3'.codeUnits],
+        [...'BWOP4'.codeUnits],
         [...'BWOP9'.codeUnits],
         [...'bwop1'.codeUnits],
         [...'WBOP1'.codeUnits],
@@ -397,8 +398,8 @@ void main() {
             throwsA(isA<VaultException>().having((e) => e.message, 'message', contains('Not a Budget Wallet'))),
             reason: String.fromCharCodes(magic));
       }
-      // A future file with a longer header is never read as BWOP2.
-      await expectLater(unseal([...utf8.encode('BWOP3'), ...good.sublist(5), ...List.filled(8, 1)], key, aad: _aad), _refused);
+      // A future file with a longer header is never read as BWOP3.
+      await expectLater(unseal([...utf8.encode('BWOP4'), ...good.sublist(5), ...List.filled(8, 1)], key, aad: _aad), _refused);
     });
 
     test('a file of plain JSON or plain gzip (not sealed) is refused', () async {
