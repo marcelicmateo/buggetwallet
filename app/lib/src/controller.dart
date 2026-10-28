@@ -896,6 +896,49 @@ class WalletController extends ChangeNotifier {
       () => timed('wc.suggestBudgets', () => suggestBudgets(txs, month, currency: currency, table: categoryTable),
           fields: {'month': month}, warnMs: 50));
 
+  /// Budgets for [month] by [kind] ("Start from…" on Budget › Budgets), per category in cents. Cached per kind and month until the
+  /// data changes. Nothing is written: the owner saves them like typed ones.
+  BudgetPreset budgetPresetFor(BudgetPresetKind kind, String month) => _cached(
+      MemoKey('budgetPreset', (kind, month)),
+      () => timed('wc.budgetPreset', () => budgetPreset(kind, txs, settings, month, currency: currency, table: categoryTable, goals: goals),
+          fields: {'month': month, 'kind': kind.name}, warnMs: 50));
+
+  /// The menu item of a preset.
+  String budgetPresetLabel(BudgetPresetKind kind) => switch (kind) {
+        BudgetPresetKind.avg3 => 'Average of the last 3 months',
+        BudgetPresetKind.avg6 => 'Average of the last 6 months',
+        BudgetPresetKind.avg12 => 'Average of the last 12 months',
+        BudgetPresetKind.spendLess => 'Spend 10% less',
+        BudgetPresetKind.fitPlan => 'Fit my plan',
+        BudgetPresetKind.fiftyThirtyTwenty => '50/30/20',
+      };
+
+  /// The header of a preset: (title, one line saying where the numbers come from and what they add up to a month, [total] = the
+  /// preset's own total in cents).
+  (String, String) budgetPresetNote(BudgetPresetKind kind, int total) {
+    String euros(int cents) => money(cents ~/ 100 * 100, currency, decimals: 0);
+    final all = '${moneyExact(total, currency)} a month in all.';
+    final title = switch (kind) {
+      BudgetPresetKind.avg3 => 'Average of 3 months',
+      BudgetPresetKind.avg6 => 'Average of 6 months',
+      BudgetPresetKind.avg12 => 'Average of 12 months',
+      BudgetPresetKind.spendLess => 'Spend 10% less',
+      BudgetPresetKind.fitPlan => 'Fit my plan',
+      BudgetPresetKind.fiftyThirtyTwenty => '50/30/20',
+    };
+    final line = switch (kind) {
+      BudgetPresetKind.avg3 => 'What you spent a month in the last 3 months, per category.',
+      BudgetPresetKind.avg6 => 'What you spent a month in the last 6 months, per category.',
+      BudgetPresetKind.avg12 => 'What you spent a month in the last 12 months, per category.',
+      BudgetPresetKind.spendLess => '10 % under your average of the last 6 months, per category.',
+      BudgetPresetKind.fitPlan =>
+        '${euros(monthlyFlex(settings, goals: goals, table: categoryTable))} a month of flexible money, split by what you spent in the last 6 months.',
+      BudgetPresetKind.fiftyThirtyTwenty =>
+        '30 % of your salary for wants: ${euros(settings.salary * 30 ~/ 100)}. Needs are your payday plan; 20 % is for savings.',
+    };
+    return (title, '$line $all');
+  }
+
   /// The budgeted category with the least money left this month, or null when nothing is budgeted.
   CategoryBudgetLine? tightestBudget() => _cached(const MemoKey('tightest'), () {
         CategoryBudgetLine? best;

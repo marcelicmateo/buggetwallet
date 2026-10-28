@@ -11,9 +11,12 @@ class SuggestBudgetsDialog extends StatefulWidget {
   final List<BudgetProposal> proposals;
   final String currency;
 
+  /// A header for a preset ("Fit my plan" and where its numbers come from); without it the plain "Change your budgets?".
+  final String? title, subtitle;
+
   /// Where the names come from (null: the built-in names).
   final CategoryTable? table;
-  const SuggestBudgetsDialog({super.key, required this.proposals, required this.currency, this.table});
+  const SuggestBudgetsDialog({super.key, required this.proposals, required this.currency, this.table, this.title, this.subtitle});
   @override
   State<SuggestBudgetsDialog> createState() => _SuggestBudgetsDialogState();
 }
@@ -25,11 +28,12 @@ class _SuggestBudgetsDialogState extends State<SuggestBudgetsDialog> {
   Widget build(BuildContext context) {
     final cur = widget.currency;
     return AlertDialog(
-      title: const Text('Change your budgets?'),
+      title: Text(widget.title ?? 'Change your budgets?'),
       content: SizedBox(
         width: 440,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (widget.subtitle != null) ...[Muted(widget.subtitle!, size: BwType.bodySize), const SizedBox(height: 8)],
             const Muted('These already have a number. Tick the ones to change.', size: BwType.bodySize),
             for (final p in widget.proposals)
               CheckboxListTile(
