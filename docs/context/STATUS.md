@@ -407,6 +407,14 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - Review: 0 blocking, 2 medium (legend listed undrawn series; meters took the chart blue), 3 low; fixed with tests.
   - **Stage run** (6833ff6): all green except desktop big_wallet over its 1.5 s import budget while a builder's suite ran alongside (every figure ~3× slower, core imports too); rerun alone on 31878a9: 432 ms, green; desktop chart_dpr + layout green; app 2027.
 
+- 2026-10-28: **Stage M (hardening before M6) + Stage BP (budget presets) + Pi relay groundwork** (owner away; plan `STAGE_Y_PLAN.md`).
+  - **Budget presets:** Budget › Budgets › "Start from…": average of the last 3 / 6 / 12 months, spend 10 % less, fit my plan (the payday plan's monthly flexible money split by 6-month share), 50/30/20 (wants = 30 % of salary). Proposals only (current → suggested, Accept all / per row), nothing saved until Save; each shows its total and a one-line explanation; splits add up to the exact euro.
+  - **Hardening:** mutation testing on the Stage V/X code (36 invariant tests, no bugs); the state digest now runs in a background isolate on native (UI stall 7–11 ms instead of ~300–550 ms on a 20k-row wallet; web unchanged); the wallet key can no longer reach a log line from a failing `PRAGMA key` (any path).
+  - **Pi relay (PI2a):** native relay + Caddy proven on real systemd (Fedora 43, Debian trixie containers): active, health, localhost only, no syscall-filter hits, `systemd-analyze security` 1.3; `tools/relay-deploy.sh native-install|native-upgrade|native-backup|native-status` (token shown once at creation, upgrade rolls back on a failed start, data dir safety); `docs/setup.md` §5 rewritten for the Pi with the owner's open choices.
+  - **M6 checklist:** `docs/context/M6_CHECKLIST.md` (159 items in order + disaster drills + known limits) replaces the scattered owner-check lists.
+  - Bugs found and fixed: remainder tie-break relied on List.sort being stable; a flaky log test mistook `"ms":80` for an amount; key hex could appear in a database error log line; deploy rollback blocked by systemd's start limit.
+  - **Stage run** (4657514): importer 400, core 2799, sync 379, relay 216, app 2042 (1 test failed: it assumed a tall window built all of Settings; fixed to scroll), desktop, web-test, emulator screens, perf ok.
+
 ## Decisions log
 - 2026-10-22: Matching window (gap 5) closed by the owner: ±3 days stays fixed, no setting; revisit only if M6 shows later postings.
 - 2026-10-15: v1 as claude.ai web-app artifact with its own database; single user; EUR default.
@@ -497,7 +505,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Schema 17:** update every device together; a device that stays on an older build for over 30 days after the others upgraded may miss IOUs until they are edited again.
 
 ## Next
-- **M6 live test** next (owner starts `ci` for the build). Every planned stage is built.
+- In progress (owner away, picked 2026-10-28): **web sync** (rescoped: bwk2 key wrap, CSP), **device keys + revocation** (relay api 5). Then the **M6 live test** with `docs/context/M6_CHECKLIST.md`.
 - Owner checks after Stage C2 (phone): dark mode Spending bars (a deeper blue) and the legend under the saved/lost chart; rounded bar tops on Insights; amber "Went out" on Income vs spending; tap the payday forecast chart.
 - Owner checks after Stage X (phone): new wallet → save key → the guide with a real bank file: import preview, accounts + cash, plan, bills, payees (pick a tag, Undo), budgets, Done vs Today; close half-way → Today "Finish setting up" → continue; Settings › Set up my wallet again; large text.
 - **PI2 (waiting for the owner):** Pi model, OS (`/etc/os-release`), domain/DDNS name, router 80/443 forward, SSD for the data.

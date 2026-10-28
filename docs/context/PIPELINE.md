@@ -33,15 +33,15 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 ## Stages BP, WS, DK (owner picked 2026-10-28; plan `STAGE_Y_PLAN.md`; one at a time after Stage M)
 | # | Item | Agent | Depends on | Status |
 |---|---|---|---|---|
-| BP | Budget presets (3/6/12-month average, 10% less, fit my plan, 50/30/20) as proposals | scout → core (sonnet) + ui | M | running (core sonnet + ui) |
-| WS | Web sync through the relay (P18), bwk2 key wrap, CSP | scout → core + ui + devops | BP | queued |
-| DK | Device keys + revocation (P17), relay api 5 | scout → core + ui + test-writer | WS | queued |
+| BP | Budget presets (3/6/12-month average, 10% less, fit my plan, 50/30/20) as proposals | scout → core (sonnet) + ui | M | done core 12e61df + 6a84a1c (lead tie-break fix), UI c85509b + 4ce0a0b (review fixed); merged; stage run with M |
+| WS | Web sync through the relay (P18), bwk2 key wrap, CSP | scout → core + ui + devops | BP | running (rescoped: bwk2, CSP, web sync tests; one ui-builder) |
+| DK | Device keys + revocation (P17), relay api 5 | scout → core + ui + test-writer | WS | core running (protocol api 5 first, relay, sync); UI after WS |
 
 ## Stage M: hardening before M6 (2026-10-28; every planned feature is built)
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
 | M1 | Mutation testing on V/X code (sync_digest, repo_sync_apply conflicts/repair/digest, vault BWOP3, uncategorisedPayees, reviewStreak); survivors → invariant tests, real bugs → `BUG:` skip + report | test-writer (sonnet/medium) | m-mutate | – | done d7a5590 + 21b1240 (36 invariant tests, 0 bugs; conflict/repair survivors 10 → 3 equivalent), merged |
-| M2 | Measure `stateDigest` on the emulator; move it off the UI isolate on native if > ~100 ms | core-builder | m-digest | – | running |
+| M2 | Measure `stateDigest` on the emulator; move it off the UI isolate on native if > ~100 ms | core-builder | m-digest | – | done 65b032c + e5281ac (digest in a background isolate; key redacted in logs), merged |
 | M | Review, stage run, push, STATUS | lead | v2 | M1, M2 | queued |
 | PI2a | Pi relay proven without the Pi: native unit on systemd containers (Fedora, Debian), caddy validate, deploy script native target, setup.md §5 | devops | pi2a | PI1 | done c93323c (systemd proof Fedora+Debian, security 1.3 OK, caddy validate, deploy native-*); review before merge |
 | D1 | docs/context/M6_CHECKLIST.md: one ordered owner checklist from every STATUS owner-check list + disaster drills | general-purpose (sonnet) | v2 (file only) | – | done cc091b4 (159 items; 2 stale items fixed by lead) |
