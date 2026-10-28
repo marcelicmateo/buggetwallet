@@ -45,3 +45,17 @@ Steps (each skippable, progress "Step 3 of 8", Back works, leaving mid-way keeps
   (skip/accept/back/resume), screenshots at 320 dp.
 - Delegation: scout (haiku/low) → core-builder (session model/high) + ui-builder (sonnet/high) in parallel on the
   fixed API → reviewer per half → stage run.
+
+## Lead decisions (2026-10-28, after the scout pack)
+- Entry: after `createWallet` only (device-local flag `setupWizard` = `pending` set there; join never sets it). HomeShell
+  (main.dart:340-348) after the key-backup prompt opens the wizard instead of `openWelcomeBalance`; the wizard's
+  accounts step holds the cash question (the WelcomeBalanceSheet logic moves into it, sheet kept for nothing else or
+  removed if unused).
+- Progress device-local (`setupWizard` = `step:<n>` / `done` / `skipped`); leaving mid-way → Today's `_SetupPanel`
+  gets a step `wizard` ("Finish setting up") that reopens it at the saved step; "done" removes it.
+- P13 "Looks right?" (`offerFirstPlan`) is not shown while the wizard is pending or after it ran (`markFirstPlanShown`
+  when step 3 is shown).
+- Settings: a row "Set up my wallet again" (new NavRow, not a SettingsSection) reopens it from step 1 with current
+  values as `current` in every proposal.
+- No `setupProposals` bundle: each step calls the existing controller methods. Core adds only
+  `uncategorisedPayees(rows, categorizer, {limit})` → `PayeeCount {merchantKey, merchantName, count}` (XC).
