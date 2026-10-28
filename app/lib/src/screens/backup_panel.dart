@@ -17,7 +17,7 @@ import '../widgets/sheets.dart';
 
 final _log = Logger('bw.backup');
 
-/// Plan › Backup: an encrypted copy of the wallet as a `.bwb` file, saved through the system save dialog (a download in a
+/// Settings › Backup: an encrypted copy of the wallet as a `.bwb` file, saved through the system save dialog (a download in a
 /// browser). "Restore from backup…" picks such a file and shows only while the wallet is empty.
 class BackupPanel extends StatefulWidget {
   final WalletController wc;

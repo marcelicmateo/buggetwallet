@@ -1,6 +1,7 @@
 // Stage DK (per-device keys): Settings › Sync › Devices (list, Remove this device, Approve, Require approval), the screen of a
 // device that waits for approval or was removed, the older-relay line. The relay's rules come from MemoryTransport.device.
 // All data and keys are SYNTHETIC.
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:budget_wallet/src/bill_inputs.dart';
@@ -400,6 +401,34 @@ void main() {
       await b.wc.syncNow();
       expect(b.wc.deviceStop, isNull);
       await t.pump(const Duration(seconds: 5));
+    });
+
+    test('Use a new device key waits for a sync run in flight, then asks to be approved again', () async {
+      final (a, b) = await twoDevices();
+      await a.wc.removeDevice(b.fp);
+      await b.wc.syncNow();
+      expect(b.wc.deviceStop, DeviceStop.revoked);
+      final gate = Completer<void>();
+      final run = b.wc.seams.syncRunner;
+      var gated = true;
+      b.wc.seams.syncRunner = (relay, k, r) async {
+        if (gated) {
+          gated = false;
+          await gate.future;
+        }
+        return run(relay, k, r);
+      };
+      final inFlight = b.wc.syncNow(trigger: 'relay');
+      expect(b.wc.syncing, isTrue);
+      final result = b.wc.useNewDeviceKey();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(b.rekeys, 0, reason: 'the key is not deleted under a run in flight');
+      gate.complete();
+      await inFlight;
+      expect(await result, isNull);
+      expect(b.rekeys, 1);
+      expect(b.wc.deviceStop, DeviceStop.pending, reason: 'the follow-up run was not skipped as busy');
+      expect(b.wc.deviceCode, b.fp);
     });
 
     testWidgets('How to change the key shows the steps behind the advice', (t) async {

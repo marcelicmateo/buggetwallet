@@ -63,6 +63,7 @@ class KeyStore {
 
   /// Deletes only the device key: the next need makes a new one (a removed device asking to be approved again).
   Future<void> deleteDeviceKey() async {
+    forgetDeviceKeyMemo(this);
     web.window.localStorage.removeItem(_devKeyName);
     forgetDeviceKeyMemo(this);
   }
