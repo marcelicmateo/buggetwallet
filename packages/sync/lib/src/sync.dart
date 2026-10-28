@@ -1,13 +1,18 @@
 // Sync types the app reads (compile for the web). The engine and its transports are in `sync_engine.dart`.
 import 'package:wallet_core/wallet_core.dart' show LogSafeError;
 
+import 'sync_engine.dart' show TransportFailure;
 import 'sync_problems.dart';
 
 export 'sync_problems.dart' show SyncProblem, SyncProblemReason, syncReaderVersion;
 
 class SyncException implements Exception, LogSafeError {
   final String message;
-  const SyncException(this.message);
+
+  /// The transport failure that ended the run (`revoked`, `pending`, `pendingFull`, `tooManyKeys`, `olderApi`,
+  /// `newerApi`, …), so the app can tell the cases apart without reading [message]; null when it was not one.
+  final TransportFailure? failure;
+  const SyncException(this.message, {this.failure});
   @override
   String toString() => message;
 }
