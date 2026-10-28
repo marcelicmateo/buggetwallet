@@ -36,6 +36,7 @@ Future<void> _started(String db) async {
   }
 }
 
+var _seq = 0;
 const _t0 = 1767225600000;
 String _hlc(int ms, [String node = 'n1']) => Hlc(_t0 + ms, 0, node).toString();
 Op _setting(String id, Object? value, int ms) => Op('setting', id, {'value': value, 'deleted': 0}, _hlc(ms));
@@ -101,6 +102,21 @@ void main() {
         expect(g.stateDigest(), await f.stateDigestAsync());
       });
     }
+
+    test('every synced column is in the digest: same row and clock, another value (or deleted flag) gives another digest', () async {
+      Op op(Object? value, int deleted) => Op('setting', 'salary', {'value': value, 'deleted': deleted}, _hlc(5));
+      Future<String?> digestOf(Op o) async {
+        final f = file('d${_seq++}');
+        f.applyRemote([o], match: false);
+        return f.stateDigestAsync();
+      }
+
+      final base = await digestOf(op('1', 0));
+      expect(base, isNotNull);
+      expect(await digestOf(op('1', 0)), base, reason: 'same data, same digest');
+      expect(await digestOf(op('2', 0)), isNot(base), reason: 'value');
+      expect(await digestOf(op('1', 1)), isNot(base), reason: 'deleted flag');
+    });
 
     test('a write while the digest is read: discarded (null, never cached), the next call reads the new state', () async {
       final f = file('a');
