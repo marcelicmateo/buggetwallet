@@ -530,6 +530,11 @@ class SyncEngine {
       }
     }
     final book = _book = DigestBook.load(repo);
+    if (book.first == null) {
+      // Ask ids are record clocks (the repo's wall clock), so "older than this device" is measured on that clock too.
+      book.first = repo.clock.now();
+      book.save(repo);
+    }
     _records = RunRecords();
     if (relayChanged) {
       book.vector.clear();
@@ -812,20 +817,21 @@ class SyncEngine {
   }
 
   /// Step 6 (V2, after matching): answers the repair asks read in this run that it has not answered yet (by id, see
-  /// [DigestBook.answered]) and that were written after this device first met the relay ([sinceKey]), with one resend
-  /// of its whole state (it goes with the next upload, see [_upload]); otherwise, when [caughtUp] with an empty outbox, compares
-  /// this device's state digest with each peer digest read in this run whose schema and data vector equal this
-  /// device's (others are stale or ahead: ignored). A mismatch starts a repair (whole state + an `ask` record), or,
-  /// within [SyncDigests.repairQuiet] of the last repair or while devicesDisagree is set, raises (keeps)
-  /// [SyncProblemReason.devicesDisagree] instead: no automatic repair until a compare matches, which clears it. Last, a device [caughtUp] with an empty outbox and no resend waiting that applied data since its last
-  /// digest uploads one: a file holding only the digest record, which never makes a peer send one back. (A device's
-  /// own data uploads carry their digest in their last part, see [_upload], so a writer sends no extra file.)
+  /// [DigestBook.answered]) and that were written after this device's first V2 run ([DigestBook.first]), with one
+  /// resend of its whole state (it goes with the next upload, see [_upload]); otherwise, when [caughtUp] with an empty
+  /// outbox, compares this device's state digest with each peer digest read in this run whose schema and data vector
+  /// equal this device's (others are stale or ahead: ignored). A mismatch starts a repair (whole state + an `ask`
+  /// record), or, within [SyncDigests.repairQuiet] of the last repair or while devicesDisagree is set, raises (keeps)
+  /// [SyncProblemReason.devicesDisagree] instead: no automatic repair until a compare matches, which clears it. Last,
+  /// a device [caughtUp] with an empty outbox and no resend waiting that applied data since its last digest uploads
+  /// one: a file holding only the digest record, which never makes a peer send one back. (A device's own data uploads
+  /// carry their digest in their last part, see [_upload], so a writer sends no extra file.)
   Future<void> _digests(WalletRepo repo, int myLast, {required bool caughtUp}) async {
     final book = _book!, recs = _records!;
     final nowMs = _now().millisecondsSinceEpoch;
     // An ask counts once (by id), and only when written after this device first met the relay: a new device replaying
     // old files must not answer a repair that ended long ago (and then take its own first real mismatch for a second).
-    final since = int.tryParse(repo.localValue(sinceKey) ?? '') ?? 0;
+    final since = book.first ?? 0;
     final asks = [
       for (final a in recs.asks)
         if (!book.answered.contains(a) && Hlc.parse(a).millis >= since) a
