@@ -86,7 +86,7 @@ Three rules shape every number:
 | ------------------- | ---------------- | ------------------------------------------------------------------------------ |
 | Android (arm64)     | Primary          | Camera scan, OCR, share-to-app, notifications, calendar read                   |
 | Linux desktop       | Full             | Same wallet; `.ics` file/link import; file import of bills                     |
-| Web (localhost)     | Full, local only | SQLite in WASM on IndexedDB, passphrase-wrapped key, no sync, no notifications |
+| Web (localhost)     | Full, local only | SQLite in WASM on IndexedDB, passphrase-wrapped key, syncs through the relay, no notifications |
 | iOS, Windows, macOS | Parked           | Builds exist from an early release; not maintained by decision                 |
 
 ## 3. Feature inventory
@@ -185,8 +185,7 @@ or forge anything.
   caught-up device later writes a snapshot that lets the stuck device skip the damaged file.
 - Snapshots every 7 days or 500 ops; the relay prunes files that both kept snapshots cover and every device seen in
   90 days has acknowledged. A new device starts from the latest snapshot, not from history.
-- Web is a full client without sync (no relay client in the browser build by decision) and keeps the key wrapped by a
-  passphrase.
+- Web is a full client that syncs through the relay (Stage R/WS) and keeps the key wrapped by a passphrase.
 
 ## 5. System architecture
 
@@ -202,13 +201,13 @@ HKDF-SHA256 under distinct labels, so nothing needs to be stored or synchronised
 | Local database                        | HKDF(key, `bw-local-db-v1`)                              | SQLite3 Multiple Ciphers, raw 32-byte key, `PRAGMA key`; same on Android, Linux and web (WASM build) |
 | Relay wallet id (`wid`)               | HKDF(key, `bw-relay-id-v1`, 16 bytes)                    | 32 hex chars; the relay never sees the key                                                           |
 | Relay signing                         | HKDF(key, `bw-relay-sign-v1`, 32 bytes) → Ed25519 seed   | Public key stored by the relay on first use (TOFU)                                                   |
-| Web key at rest                       | PBKDF2-HMAC-SHA256, 310,000 iterations, per-browser salt | Wraps the wallet key under the owner's passphrase; session unlock                                    |
+| Web key at rest                       | PBKDF2-HMAC-SHA256, 600,000 rounds (`bwk2`), per-browser salt | Wraps the wallet key under the owner's passphrase; session unlock                                    |
 | Key at rest, phone                    | system keystore (`flutter_secure_storage`)               | hardware-backed where available                                                                      |
 | Key at rest, desktop                  | private file in the app support directory                | file permissions only                                                                                |
 
 ### Local database
 
-SQLite with one schema shared by all platforms (schema version 7). Synced entities: `tx`, `goals`, `goal_contrib`,
+SQLite with one schema shared by all platforms (schema version 18). Synced entities: `tx`, `goals`, `goal_contrib`,
 `wish`, `settings`, `merchant_rules`, `recurring`, `planned`, `bills`. Device-local tables (never synced, never in
 backups): `clocks`, `outbox`, `sync_cursor`, `sync_files`, `meta`, `blob_cache`, `blob_outbox`, `blob_delete`, local
 values (relay address, chosen calendars, `.ics` sources, nudge switches).
@@ -235,20 +234,26 @@ Design consequences a reviewer should know:
   devices both count.
 - A device's clock far in the future is accepted as is (its writes win until real time catches up). Known limit.
 
-### Relay protocol (api 3)
+### Relay protocol (api 5)
 
 HTTP, JSON for metadata, octet streams for files. Every request under `/v2/w/<wid>/` is signed: `X-BW-Sig` = Ed25519
-over `bw-relay-v3\n<METHOD>\n<host>\n<path>\n<X-BW-Covers>\n<sha256(body)>\n<X-BW-Time>`, window ± 5 min, client
-clock offset learned from the relay's `Date` header and capped at 24 h. `GET state` carries a random relay `instance`
-id per wallet; a new one means "first connect". Full specification: `docs/context/RELAY_PROTOCOL.md`.
+over `bw-relay-v5\n<METHOD>\n<host>\n<path>\n<X-BW-Covers>\n<sha256(body)>\n<X-BW-Time>\n<devpub>`, signed by the
+device's own key (`X-BW-Dev` = its public key; the wallet key only countersigns creation and enrolment, `X-BW-WSig`),
+window ± 5 min, client clock offset learned from the relay's `Date` header and capped at 24 h. `GET state` carries a
+random relay `instance` id per wallet; a new one means "first connect". Full reference: `docs/context/RELAY_PROTOCOL.md`.
 
 | Endpoint                     | Semantics                                                                                                                                                                                             |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET state`                  | Per device: first and last seq, last seen, acks; current and previous snapshot; blob counts                                                                                                           |
+| `GET state`                  | Per device: first and last seq, last seen, acks; current and previous snapshot; blob counts; enrolled and pending device keys, `locked`                                                               |
 | `PUT d/<stream>/<seq>`       | Store a sealed file; never overwritten (same bytes 200, other bytes 409); no gaps (422); pruned (410); ≤ 16 MiB; the first file of a new wallet needs the creation token when the relay has one (403) |
 | `PUT ack/<device>`           | What this device has applied of each peer; only grows                                                                                                                                                 |
 | `PUT snapshot/<id>`          | Full-state snapshot with `X-BW-Covers`; must dominate the current one                                                                                                                                 |
-| `PUT/GET/DELETE blob/<hash>` | Content-addressed sealed bill files; hash of body checked; counted toward the wallet byte limit                                                                                                       |
+| `PUT snapshot/<id>/blobs`    | The snapshot's declared set of referenced bill-file hashes (api 4); a blob is deleted only when no kept snapshot declares it                                                                          |
+| `PUT/GET/DELETE blob/<hash>` | Content-addressed sealed bill files; hash of body checked; counted toward the wallet byte limit; DELETE is a 204 no-op since api 4                                                                    |
+| `PUT enrol`                  | A new device key asks to join (countersigned by the wallet key); approved at once or left pending when the wallet is locked                                                                           |
+| `PUT devices/<fp>`           | Approve or revoke the device key with that fingerprint                                                                                                                                                |
+| `PUT devices/others`         | Revoke every enrolled key but the signer's                                                                                                                                                            |
+| `PUT lock`                   | Switch "require approval for new devices" on or off                                                                                                                                                   |
 
 Every mutating endpoint is idempotent or monotonic, so a replay inside the signature window changes nothing. Limits:
 16 wallets, 1 GiB per wallet, 20 req/s per address, 32 MiB in flight per address. Storage is plain files plus a
@@ -258,11 +263,11 @@ Every mutating endpoint is idempotent or monotonic, so a replay inside the signa
 
 | Constant            | Value                   | Where                                                         | Changes when                                                 | Who notices                                                                              |
 | ------------------- | ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| Relay API           | 3                       | `apiVersion`, health and state `{"api":3}`, paths stay `/v2/` | endpoint or signature semantics change                       | client: `olderApi` / `newerApi` with a message; nothing uploaded or read                 |
+| Relay API           | 5                       | `apiVersion`, health and state `{"api":5}`, paths stay `/v2/` | endpoint or signature semantics change                       | client: `olderApi` / `newerApi` with a message; nothing uploaded or read                 |
 | Sealed-file magic   | `BWOP3` (reads `BWOP1`, `BWOP2`; web key wrap stays `BWOP2`) | `vault.dart`                     | the sealed layout or associated data changes                 | `unseal`: `newerFormat` → the file is quarantined until the app is updated               |
 | Payload version     | 1                       | `backupVersion`, `"v"` in snapshots and backups               | the JSON op envelope changes                                 | backup restore refuses a newer one                                                       |
 | Sync reader version | 3                       | `syncReaderVersion`                                           | how a file's ops are read                                    | part of the build string that retries a quarantined file once                            |
-| Schema version      | 8                       | `WalletRepo.schemaVersion`                                    | an entity or synced field is added, or settings change shape | cursors cleared once on upgrade → replay; snapshot id tag decides "this schema or newer" |
+| Schema version      | 18                      | `WalletRepo.schemaVersion`                                    | an entity or synced field is added, or settings change shape | cursors cleared once on upgrade → replay; snapshot id tag decides "this schema or newer" |
 | App version         | `pubspec.yaml`          | `appVersion`                                                  | every release                                                | in the build string only                                                                 |
 
 Policy: update the relay and every device together when the relay API changes (an older app stops with "update the
@@ -351,7 +356,7 @@ A typical new entity costs: one entry in the entity map, one `CREATE TABLE`, a m
 
 Structured log events (`bw.<area>`, `logEvent`/`logError`) with a hard privacy rule tested per package: counts,
 durations, enum words and setting keys only; never amounts, descriptions, merchants, names, keys, paths or file names.
-Logs rotate on device and can be exported from Plan › Diagnostics. A perf test in profile mode records frame timelines
+Logs rotate on device and can be exported from Settings › Diagnostics. A perf test in profile mode records frame timelines
 with budgets.
 
 ### Debt a reviewer will notice
@@ -383,10 +388,10 @@ ledger. The design system lives in `app/lib/src/theme.dart`; the spec is `docs/d
 
 ### Navigation and layout
 
-Five destinations (Today, Spending, Wishlist, Goals, Plan) in a bottom bar on compact windows (< 600 dp) and a
+Five destinations (Today, Budget, Bills, Save, Settings) in a bottom bar on compact windows (< 600 dp) and a
 `NavigationRail` from 600 dp. Content width is capped at 720 dp (medium) and 1040 dp (expanded, two columns on Today
 and Spending). Sheets open as bottom sheets on phones and as 480 dp dialogs from 600 dp with no change to callers.
-Keyboard: Ctrl+1–5 tabs, Ctrl+N add expense, Ctrl+F search, Ctrl+R sync. Pages keep their state across a resize.
+Keyboard: Ctrl+1–5 tabs, Ctrl+, Settings, Ctrl+N add expense, Ctrl+F search, Ctrl+R sync. Pages keep their state across a resize.
 
 ### User flow
 
@@ -429,9 +434,9 @@ after `tools/emulator.sh screens` and `tools/build.sh desktop-test screens`.
 | ![Search](spec/screens/search.png)                                                                                                      | ![Wishlist](spec/screens/wishlist.png)                                                                                   |
 | **Search** replaces the page in place; the page keeps its scroll when search closes.                                                    | **Wishlist.** Anything over 50 € waits 72 hours; "saved by waiting" is the reward.                                       |
 | ![Goals](spec/screens/goals.png)                                                                                                        | ![Expected bills](spec/screens/plan-expected-bills.png)                                                                  |
-| **Goals.** Ruled rows and a total; contributions are paid from the payday checklist.                                                    | **Plan › Expected bills.** Detected from bank history; nothing is reserved until the owner confirms it.                  |
+| **Goals.** Ruled rows and a total; contributions are paid from the payday checklist.                                                    | **Bills › Expected bills.** Detected from bank history; nothing is reserved until the owner confirms it.                  |
 | ![Bills](spec/screens/plan-bills.png)                                                                                                   | ![Weekly review](spec/screens/weekly-review.png)                                                                         |
-| **Plan › Bills.** Three lists; a bill in review does not count anywhere yet.                                                            | **Weekly review.** "About five minutes. Nothing changes until you tap." Each row is one decision.                        |
+| **Bills tab.** Three lists; a bill in review does not count anywhere yet.                                                            | **Weekly review.** "About five minutes. Nothing changes until you tap." Each row is one decision.                        |
 
 ![Desktop Today](spec/screens/desktop-today.png)
 
@@ -467,8 +472,7 @@ carry an "Unsure" mark until checked.
 ### Open UX questions for the reviewer
 
 - Plan is a long single scroll of ruled sections; a grouped settings index may read better as sections grow.
-- The web build has no sync; the Sync section is hidden there, but "same wallet everywhere" has one exception to
-  explain.
+- The web build syncs through the relay like the other platforms (Stage R/WS); it has no notifications.
 - Camera scan, OCR and share-to-app have only been exercised through fakes and the emulator; the owner's phone test is
   the first real use.
 
@@ -524,7 +528,7 @@ designed to be safe to expose.
 
 | Adversary                                                                                         | Can see or do                                                                                                                                                                                                           | Cannot                                                                                                                                                                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Network observer (TLS through the Caddy sidecar by default; plain `http://` only in dev/LAN mode) | With TLS: that a device talks to the relay host, when and how much. In plain-HTTP mode also wallet id, device ids, seqs, sizes, sealed bytes, and replaying a request unchanged within 5 min (idempotent, so no effect) | Read content, forge or alter files, ack, prune or delete anything, learn the key; replay a request against another relay (the host is in the signed text, `bw-relay-v3`)                                                                                                                                                  |
+| Network observer (TLS through the Caddy sidecar by default; plain `http://` only in dev/LAN mode) | With TLS: that a device talks to the relay host, when and how much. In plain-HTTP mode also wallet id, device ids, seqs, sizes, sealed bytes, and replaying a request unchanged within 5 min (idempotent, so no effect) | Read content, forge or alter files, ack, prune or delete anything, learn the key; replay a request against another relay (the host is in the signed text since `bw-relay-v3`; `bw-relay-v4` / `v5` today)                                                                                                                                                  |
 | Someone who controls the relay or steals its disk                                                 | Everything above plus: drop, withhold, roll back or delete files and blobs; lie in the state; correlate the wallet's activity (see metadata below)                                                                      | Read, forge or alter sealed content; serve one file, snapshot or backup in place of another (each is sealed with associated data naming what it is, `BWOP2`); sign requests to another relay; derive the key                                                                                                              |
 | Someone who wipes the relay before the owner reconnects                                           | Squat the wallet id only if they also hold the relay's creation token (devices then get 401: denial of service)                                                                                                         | Read anything; create wallets without the token; the owner points devices at a fresh relay and they re-upload (a new relay instance id makes every device treat it as a first connect)                                                                                                                                    |
 | Someone with the phone unlocked                                                                   | Use the app                                                                                                                                                                                                             | Export the key without seeing the "Show wallet key" screen; capture that screen in a screenshot or the recents thumbnail (`FLAG_SECURE` while it is open); read the database file from another app (sandbox + encryption); carry the database off by Android backup or device transfer (`allowBackup` off)                |
@@ -562,7 +566,7 @@ designed to be safe to expose.
   rekey, crash-safe conversion with a side copy that is deleted after verification.
 - **Memory:** Dart cannot zero memory, so key bytes stay in the heap for the life of the process. This is inherent to
   the platform.
-- **Web:** the key is wrapped under PBKDF2-HMAC-SHA256 (310,000 iterations) with a per-browser salt; the unwrapped
+- **Web:** the key is wrapped under PBKDF2-HMAC-SHA256 (600,000 rounds, `bwk2`; a `bwk1` blob with 310,000 is wrapped again on the next unlock; a stored round count above 10 million is refused) with a per-browser salt; the unwrapped
   key text lives in `sessionStorage` (readable by any script on the origin and inherited by tabs opened from the page;
   acceptable while web is localhost only, P18 moves it to memory); "Forget this browser" wipes it. Database in IndexedDB through the same encrypted VFS.
 
@@ -613,9 +617,9 @@ the owner starts it. Builds are reproducible in a rootless Podman image.
    data it had (sealed with the wallet key on it), and anyone who unlocks it holds the wallet key. A wallet started by
    an api-5 build requires approval from the start, at most 16 devices can be enrolled, and "Remove all other
    devices" revokes every key but the one in hand at once. If the device may have acted before it was removed, or may
-   be in someone else's hands, rotate the key: on a device you trust, Plan › Backup "Back up now" (sealed with the old key); start fresh on that device
+   be in someone else's hands, rotate the key: on a device you trust, Settings › Backup and export "Back up now" (sealed with the old key); start fresh on that device
    (Android: Settings › Apps › Budget Wallet › Clear storage; Linux: remove the app's data folder; web: "Forget this
-   browser"), then "Start a new wallet" (new key); Plan › Backup "Restore a backup made with another key…" with the old key typed or scanned;
+   browser"), then "Start a new wallet" (new key); Settings › Backup and export "Restore a backup made with another key…" with the old key typed or scanned;
    join every other device you still have with the new key; delete the old wallet's folder on the relay. The lost
    device keeps the data it had but sees nothing newer.
 3. **Restoring the relay's data folder from an older copy is the one dangerous operation.** Devices detect it (their
@@ -726,7 +730,7 @@ Documented in `docs/context/STATUS.md` and the package notes; either accepted by
 
 ### Platform
 
-- Web has no sync and no notifications by decision; one tab at a time.
+- Web has no notifications by decision; it syncs through the relay; one tab at a time.
 - iOS, Windows and macOS builds exist from an early release but are unmaintained.
 - Camera, OCR, PDF rendering and share-to-app are compile-proven and tested with fakes; first real use is the owner's
   phone test.
@@ -773,7 +777,7 @@ against.
 - [ ] The daily flow (Today → add expense) is two taps; the weekly review fits in five minutes.
 - [ ] Ledger tokens and contrast hold in light and dark at text scale 2.0 (screenshots in `dist/screens/`).
 - [ ] "Suggest, the owner confirms" is visible in the UI wherever a number is guessed (Unsure marks, suggestion chips).
-- [ ] Plan's long scroll and the web "no sync" exception are acceptable.
+- [ ] Plan's long scroll is acceptable.
 
 ### System architecture
 

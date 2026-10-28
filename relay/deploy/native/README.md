@@ -5,7 +5,7 @@ This folder is what gets installed. One command from the laptop does it all: `to
 
 | File | Goes to | What |
 |---|---|---|
-| `bw-relay-linux-arm64` (built, not in git) | `/usr/local/bin/bw-relay` (0755, root) | `tools/build.sh relay-bin arm64` -> `dist/relay/relay-linux-arm64` + `.sha256` (check it after copying) |
+| `relay-linux-arm64` (built, not in git) | `/usr/local/bin/bw-relay` (0755, root) | `tools/build.sh relay-bin arm64` -> `dist/relay/relay-linux-arm64` + `.sha256` (check it after copying) |
 | `bw-relay.service` | `/etc/systemd/system/` | hardened service, user `bw-relay`, data `/var/lib/bw-relay` (StateDirectory), token via `LoadCredential=` |
 | `bw-relay.sysusers` | `/etc/sysusers.d/bw-relay.conf` | creates the `bw-relay` system user |
 | `bw-relay.env.example` | `/etc/bw-relay/bw-relay.env` (root, 0640) | `BW_RELAY_DOMAIN` (public name) and optional limits; no secrets |
