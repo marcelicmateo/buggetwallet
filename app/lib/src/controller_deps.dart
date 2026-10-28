@@ -9,6 +9,8 @@ import 'bill_platform.dart';
 import 'calendar_platform.dart';
 import 'calendar_source.dart';
 import 'controller.dart' show WalletController;
+import 'device_key.dart';
+import 'device_relay.dart';
 import 'home_widget.dart';
 import 'ics_fetch.dart';
 import 'key_store.dart';
@@ -55,6 +57,8 @@ class WalletControllerDeps {
     required this.pdfParser,
     required this.billCategorySuggester,
     required this.backupBytesReader,
+    this.deviceRelayOpener,
+    this.deviceKeyDeleter,
   });
 
   /// The real ones. The four platform objects are looked up only when not given (tests pass the inert ones); [dbDir] points the
@@ -74,7 +78,8 @@ class WalletControllerDeps {
       calendars: calendars ?? defaultCalendarSource(),
       homeWidget: homeWidget ?? defaultHomeWidget(),
       billInputs: billInputs ?? defaultBillInputs(),
-      syncRunner: WalletController.runRelaySync,
+      syncRunner: (relay, key, repo) async =>
+          WalletController.runRelaySync(relay, key, repo, deviceKey: await _deviceKeyOrNull(ks), deviceId: repo.deviceId),
       healthCheck: RelayTransport.health,
       backupBytesWriter: backupBytesWithInfo,
       backupMerger: mergeBackupBytes,
@@ -100,7 +105,23 @@ class WalletControllerDeps {
       pdfParser: parsePdf,
       billCategorySuggester: (b, builtIn) => builtIn(),
       backupBytesReader: (r, bytes, opener, walletKey) => restoreBackupBytes(r, bytes, opener, walletKey: walletKey),
+      deviceKeyDeleter: ks.deleteDeviceKey,
+      deviceRelayOpener: (relay, key, repo) async {
+        final t = WalletController.relayTransport(relay, key, repo, deviceKey: await _deviceKeyOrNull(ks), deviceId: repo.deviceId);
+        return DeviceRelay(transport: t, devices: t, fingerprint: () => t.fingerprint, onClose: t.close);
+      },
     );
+  }
+
+  /// This install's device key (made on first need), or null when the store fails: the run then signs with the wallet key as an
+  /// api-4 app does, and the failure is logged.
+  static Future<List<int>?> _deviceKeyOrNull(KeyStore ks) async {
+    try {
+      return await deviceKeyOf(ks);
+    } catch (e, st) {
+      logError(Logger('bw.key'), 'deviceKey.unavailable', e, st);
+      return null;
+    }
   }
 
   /// The current time; tests move it.
@@ -196,6 +217,12 @@ class WalletControllerDeps {
   /// Restores picked backup bytes with [opener]; the controller always passes the wallet's own key too ([walletKey]).
   final Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey opener, VaultKey walletKey) backupBytesReader;
 
+  /// Opens the relay for the device list, approvals and removals (stage DK); null = no device features (a test without them).
+  final DeviceRelayOpener? deviceRelayOpener;
+
+  /// Deletes this install's device key (a removed device asks to be approved again with a new one); null = not offered.
+  final Future<void> Function()? deviceKeyDeleter;
+
   /// A copy with the given members replaced (a nullable member cannot be reset to null this way).
   WalletControllerDeps copyWith({
     DateTime Function()? clock,
@@ -229,6 +256,8 @@ class WalletControllerDeps {
     PdfParser? pdfParser,
     String? Function(Bill b, String? Function() builtIn)? billCategorySuggester,
     Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey opener, VaultKey walletKey)? backupBytesReader,
+    DeviceRelayOpener? deviceRelayOpener,
+    Future<void> Function()? deviceKeyDeleter,
   }) =>
       WalletControllerDeps(
         clock: clock ?? this.clock,
@@ -262,5 +291,7 @@ class WalletControllerDeps {
         pdfParser: pdfParser ?? this.pdfParser,
         billCategorySuggester: billCategorySuggester ?? this.billCategorySuggester,
         backupBytesReader: backupBytesReader ?? this.backupBytesReader,
+        deviceRelayOpener: deviceRelayOpener ?? this.deviceRelayOpener,
+        deviceKeyDeleter: deviceKeyDeleter ?? this.deviceKeyDeleter,
       );
 }

@@ -2,6 +2,7 @@
 // renamed. Real files in a temp folder; all keys are random and SYNTHETIC. POSIX modes: skipped on Windows.
 import 'dart:io';
 
+import 'package:budget_wallet/src/device_key.dart';
 import 'package:budget_wallet/src/key_store.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +10,28 @@ import 'package:wallet_core/wallet_core.dart';
 
 /// The permission bits of [path] as an octal string, e.g. `600`.
 String mode(String path) => (FileStat.statSync(path).mode & 0xFFF).toRadixString(8);
+
+/// A store whose reads are slow (a phone's secure storage), so concurrent callers all see "no key yet".
+class _SlowStore extends KeyStore {
+  _SlowStore(Directory dir) : super(keyDir: dir);
+  int writes = 0, failWrites = 0;
+
+  @override
+  Future<List<int>?> readDeviceKey() async {
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    return super.readDeviceKey();
+  }
+
+  @override
+  Future<void> writeDeviceKey(List<int> seed) async {
+    if (failWrites > 0) {
+      failWrites--;
+      throw const FileSystemException('disk full');
+    }
+    writes++;
+    await super.writeDeviceKey(seed);
+  }
+}
 
 void main() {
   late Directory dir;
@@ -163,6 +186,82 @@ void main() {
       await keyDir.create(recursive: true);
       File('${keyDir.path}/device.id').writeAsStringSync('\n');
       expect(await ks.readDeviceId(), isNull);
+    });
+  });
+
+  group('device key (DK)', () {
+    test('none stored reads null; written it is read back from device.key, 0600 in a 0700 folder', () async {
+      expect(await ks.readDeviceKey(), isNull);
+      final seed = List<int>.generate(32, (i) => i * 7 % 256);
+      await ks.writeDeviceKey(seed);
+      expect(await ks.readDeviceKey(), seed);
+      expect(mode('${keyDir.path}/device.key'), '600');
+      expect(mode(keyDir.path), '700');
+      expect(File('${keyDir.path}/device.key').readAsStringSync(), isNot(contains('\n')));
+    }, skip: posix);
+
+    test('deviceKeyOf makes a key once and gives the same one afterwards', () async {
+      final first = await deviceKeyOf(ks);
+      expect(first, hasLength(32));
+      expect(await deviceKeyOf(ks), first);
+      expect(await ks.readDeviceKey(), first);
+      // Another install (another folder) makes another key.
+      final other = KeyStore(keyDir: Directory('${dir.path}/other'));
+      expect(await deviceKeyOf(other), isNot(first));
+    });
+
+    test('forget removes it with the wallet key and the id; a wallet joined afterwards makes a new one', () async {
+      await ks.write(VaultKey.generate());
+      await ks.writeDeviceId('idid1234');
+      final first = await deviceKeyOf(ks);
+      await ks.forget();
+      expect(await ks.readDeviceKey(), isNull);
+      expect(File('${keyDir.path}/device.key').existsSync(), isFalse);
+      expect(await deviceKeyOf(ks), isNot(first));
+    });
+
+    test('a damaged or short file reads as none (a new key is made on the next need)', () async {
+      await keyDir.create(recursive: true);
+      for (final bad in ['', '\n', 'not base64 !!', 'AAAA']) {
+        File('${keyDir.path}/device.key').writeAsStringSync(bad);
+        expect(await ks.readDeviceKey(), isNull, reason: bad);
+      }
+      expect(decodeDeviceKey(null), isNull);
+      expect(decodeDeviceKey(encodeDeviceKey(List.filled(32, 9))), List.filled(32, 9));
+    });
+
+    test('two callers at once (first sync run and the Devices block, slow storage) get the same key, made once', () async {
+      final slow = _SlowStore(keyDir);
+      final keys = await Future.wait([deviceKeyOf(slow), deviceKeyOf(slow), deviceKeyOf(slow)]);
+      expect(keys[1], keys[0]);
+      expect(keys[2], keys[0]);
+      expect(slow.writes, 1);
+      expect(await slow.readDeviceKey(), keys[0]);
+      expect(await deviceKeyOf(slow), keys[0], reason: 'kept');
+      expect(slow.writes, 1);
+    });
+
+    test('a failed attempt is forgotten: the next call tries again; a deleted key is made anew', () async {
+      final flaky = _SlowStore(keyDir)..failWrites = 1;
+      await expectLater(deviceKeyOf(flaky), throwsA(isA<FileSystemException>()));
+      final key = await deviceKeyOf(flaky);
+      expect(key, hasLength(32));
+      expect(flaky.writes, 1);
+      await flaky.deleteDeviceKey();
+      expect(await flaky.readDeviceKey(), isNull);
+      expect(await deviceKeyOf(flaky), isNot(key), reason: 'the kept key was dropped with the stored one');
+    });
+
+    test('the key text is never in the log', () async {
+      final lines = <String>[];
+      Logger.root.level = Level.ALL;
+      final sub = Logger.root.onRecord.listen((r) => lines.add(r.message));
+      addTearDown(sub.cancel);
+      final seed = List<int>.generate(32, (i) => 200 - i);
+      await ks.writeDeviceKey(seed);
+      await ks.readDeviceKey();
+      expect(lines.join('\n'), isNot(contains(encodeDeviceKey(seed))));
+      expect(lines.join('\n'), contains('deviceKey'));
     });
   });
 }

@@ -8,7 +8,55 @@ import 'signing.dart';
 
 /// The protocol version this relay speaks (`api` in health and state). 3: requests sign the host (`bw-relay-v3`), state
 /// carries `instance`. 4: `bw-relay-v4` (v3 still accepted), blob DELETE is a no-op, declared sets and blob GC.
-const int apiVersion = 4;
+/// 5: per-device keys (`bw-relay-v5`, `X-BW-Dev`), enrolment, approve / revoke, lock; the wallet key serves older apps
+/// until the wallet is locked.
+const int apiVersion = 5;
+
+/// Most device keys a wallet keeps waiting for approval, and how long one waits before it is dropped.
+const int maxPending = 8;
+const Duration pendingExpiry = Duration(days: 7);
+
+/// Most enrolled (non-revoked) device keys per wallet (409 `tooManyKeys` beyond), and how many fingerprint
+/// reservations ([Wallet.fps]) a wallet keeps.
+const int maxActiveKeys = 16;
+const int maxReserved = 256;
+
+/// An enrolled (or revoked) device key of a wallet (api 5; RELAY_PROTOCOL.md "Device keys").
+class DeviceKey {
+  DeviceKey(this.fp, this.added, this.by, {this.revoked, this.deviceId, this.device});
+
+  /// [fingerprint] of the key.
+  final String fp;
+  final DateTime added;
+
+  /// `wallet` (enrolled with the wallet key's countersignature) or the approving key's `devpub`.
+  final String by;
+  DateTime? revoked;
+
+  /// The device id the enrolment named, if any.
+  final String? deviceId;
+
+  /// The relay device name (stream) of the last `PUT d` or ack this key signed.
+  String? device;
+
+  Map<String, Object?> toMeta() => {
+        'added': formatTime(added),
+        'by': by,
+        if (revoked case final r?) 'revoked': formatTime(r),
+        if (deviceId != null) 'deviceId': deviceId,
+        if (device != null) 'device': device,
+      };
+}
+
+/// A device key waiting for approval (api 5): asked [at] (it expires [pendingExpiry] later).
+class PendingKey {
+  PendingKey(this.fp, this.at, this.deviceId);
+  final String fp;
+  final DateTime at;
+  final String? deviceId;
+
+  Map<String, Object?> toMeta() => {'at': formatTime(at), if (deviceId != null) 'deviceId': deviceId};
+}
 
 /// A blob stored (or re-uploaded) more recently than this is never collected.
 const Duration gcGrace = Duration(days: 30);
@@ -156,6 +204,69 @@ class Wallet {
   Snap? snapshot;
   Snap? previous;
 
+  /// Device keys (api 5) by `devpub`: enrolled or revoked ([keys]), waiting for approval ([pending]); [locked] =
+  /// "require approval for new devices" (the wallet key alone is then refused), last changed by a request signed at
+  /// [lockTime] (Unix ms; older lock requests, i.e. replays, change nothing).
+  final Map<String, DeviceKey> keys = {};
+  final Map<String, PendingKey> pending = {};
+  bool locked = false;
+  int lockTime = 0;
+
+  /// Signed time (Unix ms) of the last applied `devices/others` revoke: older ones (replays) change nothing.
+  int othersTime = 0;
+
+  /// Free fingerprint reservations: fingerprint → the `devpub` of a pending request that expired, oldest first (the
+  /// newest [maxReserved] are kept). A fingerprint held by an enrolled, revoked or pending key is not in here: that key
+  /// holds it ([keyOf]). Together they keep a fingerprint bound to its first key, so another key with it never enrols.
+  final Map<String, String> fps = {};
+
+  /// Keeps [fp] reserved for [devpub] once no key or pending entry holds it (an expired request) as the newest free
+  /// reservation; beyond [maxReserved] the oldest free ones go.
+  void reserveFree(String fp, String devpub) {
+    fps
+      ..remove(fp)
+      ..[fp] = devpub;
+    while (fps.length > maxReserved) {
+      fps.remove(fps.keys.first);
+    }
+  }
+
+  /// The `devpub` that holds [fp]: an enrolled, revoked or pending key, else a reservation; null when free.
+  String? holderOf(String fp) => keyOf(fp) ?? fps[fp];
+
+  /// After a revoke: no lock change signed before now + the signature window (held back, sent later) can unlock.
+  void lockAfterRevoke(int signedTime, DateTime now) {
+    locked = true;
+    lockTime = [lockTime, signedTime, now.add(signatureWindow).millisecondsSinceEpoch].reduce(math.max);
+  }
+
+  /// Drops pending keys asked more than [pendingExpiry] before [now]; whether any went.
+  bool dropExpired(DateTime now) {
+    final gone = [
+      for (final MapEntry(key: pub, value: p) in pending.entries)
+        if (now.difference(p.at) > pendingExpiry) (pub, p),
+    ]..sort((a, b) => a.$2.at.compareTo(b.$2.at));
+    for (final (pub, p) in gone) {
+      pending.remove(pub);
+      reserveFree(p.fp, pub); // its fingerprint stays bound to it
+    }
+    return gone.isNotEmpty;
+  }
+
+  /// The `devpub` of the key (enrolled, revoked or pending) whose fingerprint is [fp], or null.
+  String? keyOf(String fp) {
+    for (final e in keys.entries) {
+      if (e.value.fp == fp) return e.key;
+    }
+    for (final e in pending.entries) {
+      if (e.value.fp == fp) return e.key;
+    }
+    return null;
+  }
+
+  /// Enrolled keys that are not revoked.
+  int get activeKeys => keys.values.where((k) => k.revoked == null).length;
+
   /// Bytes in sealed files and kept snapshots (blobs are counted apart: [blobBytes]).
   int bytes = 0;
 
@@ -211,8 +322,46 @@ class Wallet {
   }
 
   /// The state JSON (RELAY_PROTOCOL.md "State JSON"); [maxBytes] is the relay's `--max-bytes`, reported with [totalBytes].
-  /// [api] is 3 for a request signed with the api-3 text.
-  Map<String, Object?> stateJson({required int maxBytes, int api = apiVersion}) {
+  /// [api] is 3 for a request signed with the api-3 text, 4 for a wallet-key request; with a device key ([self], its
+  /// `devpub`) the device fields (`keys`, `pending`, `locked`) come too, pending keys older than [now] − 7 days left out.
+  Map<String, Object?> stateJson({required int maxBytes, int api = apiVersion, String? self, DateTime? now}) {
+    final json = _stateJson(maxBytes: maxBytes, api: api);
+    if (self == null) return json;
+    int byAdded(MapEntry<String, DeviceKey> a, MapEntry<String, DeviceKey> b) {
+      final c = a.value.added.compareTo(b.value.added);
+      return c != 0 ? c : a.value.fp.compareTo(b.value.fp);
+    }
+
+    final ks = keys.entries.toList()..sort(byAdded);
+    final ps = pending.values.where((p) => now == null || now.difference(p.at) <= pendingExpiry).toList()
+      ..sort((a, b) => a.at.compareTo(b.at));
+    return {
+      ...json,
+      'keys': [
+        for (final MapEntry(key: pub, value: k) in ks)
+          {
+            'fp': k.fp,
+            'added': formatTime(k.added),
+            'by': k.by == 'wallet' ? 'wallet' : (keys[k.by]?.fp ?? _fpOf(k.by)),
+            'revoked': k.revoked == null ? null : formatTime(k.revoked!),
+            'deviceId': k.deviceId,
+            'device': k.device,
+            'self': pub == self,
+          },
+      ],
+      'pending': [
+        for (final p in ps) {'fp': p.fp, 'at': formatTime(p.at), 'deviceId': p.deviceId},
+      ],
+      'locked': locked,
+    };
+  }
+
+  static String _fpOf(String devpub) {
+    final b = decodeBase64Url(devpub, 32);
+    return b == null ? 'wallet' : fingerprint(b);
+  }
+
+  Map<String, Object?> _stateJson({required int maxBytes, required int api}) {
     final names = devices.keys.toList()..sort();
     return {
       'api': api,
@@ -244,8 +393,14 @@ class Wallet {
   Future<void> saveMeta({bool load = false}) async {
     if (!load) await hooks?.beforeMetaSave?.call(wid);
     final meta = {
-      'v': 2,
+      'v': 3,
       'pub': pub,
+      'keys': {for (final e in keys.entries) e.key: e.value.toMeta()},
+      'pending': {for (final e in pending.entries) e.key: e.value.toMeta()},
+      'locked': locked,
+      'lockTime': lockTime,
+      'othersTime': othersTime,
+      'fps': fps,
       'instance': instance,
       'devices': {
         for (final e in devices.entries) e.key: {'last': e.value.last, 'lastSeen': formatTime(e.value.lastSeen), 'acks': e.value.acks},
@@ -285,6 +440,51 @@ class Wallet {
     }
   }
 
+  /// The device keys of a v3 meta (a v2 meta has none: no keys, nothing pending, not locked). Entries that do not
+  /// parse are skipped.
+  static void _loadKeys(Wallet w, Map<String, Object?> meta) {
+    DateTime? time(Object? v) => v is String ? DateTime.tryParse(v)?.toUtc() : null;
+    String? name(Object? v) => v is String && namePattern.hasMatch(v) ? v : null;
+    final ks = meta['keys'];
+    if (ks is Map<String, Object?>) {
+      for (final MapEntry(key: pub, value: v) in ks.entries) {
+        final bytes = decodeBase64Url(pub, 32);
+        if (bytes == null || v is! Map<String, Object?>) continue;
+        final added = time(v['added']);
+        final by = v['by'];
+        if (added == null || by is! String || (by != 'wallet' && decodeBase64Url(by, 32) == null)) continue;
+        // A `revoked` that is present but does not parse still counts as revoked (never re-admit a key by accident).
+        final r = v['revoked'];
+        final revoked = r == null ? null : (time(r) ?? DateTime.utc(1970));
+        w.keys[pub] = DeviceKey(fingerprint(bytes), added, by, revoked: revoked, deviceId: name(v['deviceId']), device: name(v['device']));
+      }
+    }
+    final ps = meta['pending'];
+    if (ps is Map<String, Object?>) {
+      for (final MapEntry(key: pub, value: v) in ps.entries) {
+        final bytes = decodeBase64Url(pub, 32);
+        if (bytes == null || v is! Map<String, Object?> || w.keys.containsKey(pub)) continue;
+        final at = time(v['at']);
+        if (at != null) w.pending[pub] = PendingKey(fingerprint(bytes), at, name(v['deviceId']));
+      }
+    }
+    w.locked = meta['locked'] == true;
+    final lt = meta['lockTime'];
+    if (lt is int && lt >= 0) w.lockTime = lt;
+    final ot = meta['othersTime'];
+    if (ot is int && ot >= 0) w.othersTime = ot;
+    final fs = meta['fps'];
+    if (fs is Map<String, Object?>) {
+      for (final MapEntry(key: fp, value: pub) in fs.entries) {
+        // Free reservations only, in their stored order (oldest first): a fingerprint a key or pending entry holds is
+        // that entry's (a meta written while reservations also listed held ones).
+        if (fingerprintPattern.hasMatch(fp) && pub is String && decodeBase64Url(pub, 32) != null && w.keyOf(fp) == null) {
+          w.reserveFree(fp, pub);
+        }
+      }
+    }
+  }
+
   /// Rebuilds a wallet from [dir]; null when `meta.json` is missing or unreadable.
   /// Files win over the meta for `last` (a crash between writing a file and the meta), unknown files are cleaned up.
   static Future<Wallet?> load(Directory dir, String wid, DateTime now, {RelayTestHooks? hooks}) async {
@@ -320,6 +520,7 @@ class Wallet {
         w.devices[e.key] = st;
       }
     }
+    _loadKeys(w, meta);
     final dData = Directory('${dir.path}/d');
     if (await dData.exists()) {
       await for (final ent in dData.list(followLinks: false)) {

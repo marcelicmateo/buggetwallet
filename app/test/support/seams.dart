@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/bill_inputs.dart';
 import 'package:budget_wallet/src/calendar_source.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/controller_deps.dart';
+import 'package:budget_wallet/src/device_relay.dart';
 import 'package:budget_wallet/src/home_widget.dart';
 import 'package:budget_wallet/src/nudges.dart';
 import 'package:budget_wallet/src/pdf_parse.dart';
@@ -44,7 +45,9 @@ class TestSeams {
         icsFetcher = base.icsFetcher,
         pdfParser = base.pdfParser,
         billCategorySuggester = null,
-        backupBytesReader = null;
+        backupBytesReader = null,
+        deviceRelayOpener = base.deviceRelayOpener,
+        deviceKeyDeleter = base.deviceKeyDeleter;
 
   Future<SyncReport> Function(Uri relay, VaultKey key, WalletRepo repo) syncRunner;
   Future<void> Function(Uri relay) healthCheck;
@@ -77,6 +80,12 @@ class TestSeams {
   /// null = the controller's own restore path (not forwarded).
   Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey key)? backupBytesReader;
 
+  /// The device list / approval relay (stage DK); null = none (the controller then offers no device features).
+  DeviceRelayOpener? deviceRelayOpener;
+
+  /// Deletes the device key (stage DK); null = not offered.
+  Future<void> Function()? deviceKeyDeleter;
+
   /// The deps for the controller: each function forwards to the field of the same name, read at call time.
   WalletControllerDeps build(WalletControllerDeps base) => base.copyWith(
         syncRunner: (relay, key, repo) => syncRunner(relay, key, repo),
@@ -108,6 +117,8 @@ class TestSeams {
         billCategorySuggester: (b, builtIn) => billCategorySuggester != null ? billCategorySuggester!(b) : builtIn(),
         backupBytesReader: (r, bytes, opener, walletKey) =>
             backupBytesReader != null ? backupBytesReader!(r, bytes, opener) : base.backupBytesReader(r, bytes, opener, walletKey),
+        deviceRelayOpener: (relay, key, repo) => deviceRelayOpener!(relay, key, repo),
+        deviceKeyDeleter: () => deviceKeyDeleter!(),
       );
 }
 

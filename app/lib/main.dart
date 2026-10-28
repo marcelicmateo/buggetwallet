@@ -292,6 +292,7 @@ class _HomeShellState extends State<HomeShell> {
               _billsRequest.request(BillsAnchor.review);
             },
             openAccounts: () => widget.wc.openSettings(SettingsSection.accounts, via: 'today'),
+            openSync: () => widget.wc.openSettings(SettingsSection.sync, via: 'today'),
             openIncome: () => widget.wc.openSettings(SettingsSection.income, via: 'today')),
         Tabs.budget => SpendingScreen(
             wc: widget.wc,

@@ -3,6 +3,7 @@ import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_sync/wallet_sync.dart';
 
 import '../controller.dart';
+import '../device_list.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../sync_status.dart';
@@ -11,6 +12,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'recent_changes.dart';
 import 'sync_conflicts.dart';
+import 'sync_devices.dart';
 
 final _log = Logger('bw.sync');
 
@@ -124,7 +126,6 @@ class _SyncPanelState extends State<SyncPanel> {
     final hasRelay = wc.relayUrl != null;
     final last = wc.lastSync;
     final status = syncStatusLine(caughtUp: wc.syncCaughtUp, waiting: wc.syncWaiting);
-    final now = wc.now;
     return Panel(children: [
       const SectionHead('Sync'),
       Explainer(wc, 'sync',
@@ -155,7 +156,7 @@ class _SyncPanelState extends State<SyncPanel> {
           child: OutlinedButton(
               key: const ValueKey('syncNow'),
               style: accentOutlined(context),
-              onPressed: !hasRelay || wc.syncing
+              onPressed: !hasRelay || wc.syncing || wc.deviceStop == DeviceStop.revoked
                   ? null
                   : () {
                       logNav('sync.pressed');
@@ -173,6 +174,7 @@ class _SyncPanelState extends State<SyncPanel> {
       if (!hasRelay)
         const Muted('No relay set: nothing is sent or received. The wallet works without it.')
       else ...[
+        DeviceStopNotice(wc: wc),
         if (wc.syncError != null)
           StatusLabel(key: const ValueKey('syncError'), good: false, text: wc.syncError!)
         else if (last != null)
@@ -235,15 +237,7 @@ class _SyncPanelState extends State<SyncPanel> {
         alignment: Alignment.centerLeft,
         child: OutlinedButton(key: const ValueKey('relayCreateTokenSave'), onPressed: _saveToken, child: const Text('Save token')),
       ),
-      if (wc.syncDevices.isNotEmpty) ...[
-        const Heading('Devices', size: BwType.headingSize),
-        for (final d in wc.syncDevices)
-          LineItem(
-            d.isThis ? '${d.device} · this device' : d.device,
-            '',
-            sub: 'Last seen ${lastSeenText(d.lastSeen, now)}',
-          ),
-      ],
+      if (hasRelay) SyncDevicesBlock(wc: wc),
       RecentChanges(wc: wc),
       if (!isWeb)
         OutlinedButton.icon(

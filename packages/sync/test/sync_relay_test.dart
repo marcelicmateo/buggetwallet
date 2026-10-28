@@ -228,6 +228,7 @@ void main() {
           client: MockClient((r) => Future.delayed(const Duration(seconds: 2), () => http.Response('{}', 200))));
       await expectLater(slow.get('d', 1), throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.unreachable)));
       for (final (body, failure) in [
+        ('{"api":6,"devices":{}}', TransportFailure.newerApi),
         ('{"api":5,"devices":{}}', TransportFailure.newerApi),
         ('{"api":2,"devices":{}}', TransportFailure.olderApi),
         ('{"api":1,"devices":{}}', TransportFailure.olderApi),
@@ -253,8 +254,10 @@ void main() {
       expect(requests.single.url.toString(), 'http://relay.test:8787/v2/health');
       expect(await RelayTransport.health(Uri.parse('http://relay.test'), client: answering('{"api":4}')), 4);
       requests.removeLast();
+      expect(await RelayTransport.health(Uri.parse('http://relay.test'), client: answering('{"api":5}')), 5);
+      requests.removeLast();
       expect(requests.single.headers.keys.where((h) => h.startsWith('X-BW') || h == 'Authorization'), isEmpty);
-      await expectLater(RelayTransport.health(Uri.parse('http://relay.test'), client: answering('{"api":5}')),
+      await expectLater(RelayTransport.health(Uri.parse('http://relay.test'), client: answering('{"api":6}')),
           throwsA(isA<TransportException>().having((e) => e.failure, 'f', TransportFailure.newerApi)));
       // A v1 relay: /v2/health is an unknown path there, /v1/health says api 1.
       final v1 = MockClient(

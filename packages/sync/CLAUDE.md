@@ -81,7 +81,7 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   `calls`, `instance` (random per transport, sent once the wallet exists; null = an api-2 relay), `maxBytes` (reported
   with `storedBytes` in state once the wallet exists, not enforced; null = an older relay), `wipe()` (empty, new
   instance), `copy()`/`restore(copy)` (a relay restored from an older copy of its data folder, same instance)) and
-  `RelayTransport` (`sync_relay.dart`, `package:http` + `cryptography`, api 4 (`relayApi`; api-3 relays too, `relayMinApi`), paths under `/v2/`: `wid` and the Ed25519
+  `RelayTransport` (`sync_relay.dart`, `package:http` + `cryptography`, api 5 (`relayApi`; api-4 and api-3 relays too, `relayMinApi`). **Device keys (Stage DK):** `RelayTransport(deviceKey:, deviceId:)` (32-byte seed, `newDeviceKey()`; null = signs as an api-4 app, `signApi` 4) signs `bw-relay-v5` with `X-BW-Dev`, seq-1 PUTs and `enrol()` add `X-BW-WSig` (wallet key); 401 `unenrolled` → one `enrol()` + the request again (202 → `TransportFailure.pending`); 401 `revoked` → `revoked`, never retried, no health; `DeviceKeyTransport` (`enrol`, `approveDevice(fp)`, `revokeDevice(fp)`, `revokeOthers()` (count), `setLocked`; `olderApi` without device features); failures `pendingFull` (never `pending`) and `tooManyKeys` (16); no downgrade: `minApi` (ctor, raised to 5 by an api-5 state, `onMinApi(5, instance)` for the app to store per relay address; a health below it after a 401 = `olderApi`); a wallet a view creates starts locked, `fingerprint` / `deviceFingerprint(pub)`; `RelayState.keys` (`RelayKey`)/`pending` (`RelayPendingKey`)/`locked` (null from an older relay); a state api above `signApi` = `newerApi` (a locked wallet to a wallet-key request); the engine stops a run on `revoked`/`pending` wherever it shows up (`_stopIfFinal`); `MemoryTransport.device(key)` = `MemoryDeviceTransport` (the relay's device rules in memory; the base transport is the wallet key: `newerApi` while `locked`); tests `test/device_keys_test.dart`. Older text: paths under `/v2/`: `wid` and the Ed25519
   key pair from `deriveKey` (`relayIdInfo`, `relaySignInfo`; `ids` = (wid, public key)); every request carries
   `X-BW-Time` (device clock + `clockOffsetMs`) and `X-BW-Sig` over `signedText` (`bw-relay-v4`, or `bw-relay-v3` once
   `signApi` fell back to 3: after a 401 that is not `clock`, health says 3, the request is sent again; method, `signedHost`
@@ -156,7 +156,7 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   (`syncHealAt`), and a second healer skips once the first one's snapshot covers the file. `SyncReport`:
   `sent` ops, `received` fields changed, `filesRead` (snapshots count), `problems`, `caughtUp`, `waiting`, `devices`
   (short ids, `lastSeen`, `isThis`). Fatal `SyncException`s (short, no address): unreachable, refused (401), relay
-  full, newer relay API, older relay API, other. Opening a database from the old folder-sync builds drops its `peer_files` table (`repo.peerFiles.dropped`).
+  full, newer relay API, older relay API, other; `SyncException.failure` names the `TransportFailure` (null when none), so the app never matches the message. Opening a database from the old folder-sync builds drops its `peer_files` table (`repo.peerFiles.dropped`).
 - `blob_store.dart` — `BlobStore(repo, key, maxCacheBytes:)`: `add` (async: seal, hash = SHA-256 of the sealed bytes, cached with `uploaded` 0), `read(hash, transport:)` (cache, else
   fetch, hash checked, unsealed, cached as uploaded). 
 

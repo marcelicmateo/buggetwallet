@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import '../device_list.dart';
 import '../file_chooser.dart';
 import '../format.dart';
 import '../hero.dart';
@@ -38,6 +39,9 @@ class TodayScreen extends StatelessWidget {
   /// Opens Settings › Accounts ("Held: …"); without it the line opens Budget.
   final VoidCallback? openAccounts;
 
+  /// Opens Settings › Sync (the "waiting for approval / removed" line); without it the line opens Settings.
+  final VoidCallback? openSync;
+
   /// Opens Settings › Expected income (the expected-income line); without it the line is not tappable.
   final VoidCallback? openIncome;
 
@@ -58,6 +62,7 @@ class TodayScreen extends StatelessWidget {
     this.openBills,
     this.openBillsReview,
     this.openAccounts,
+    this.openSync,
     this.openIncome,
     this.openSearch,
     this.chooser = const FileChooser(),
@@ -100,6 +105,7 @@ class TodayScreen extends StatelessWidget {
                   if (comingUp.count > 0 || suggestions > 0) _ComingUpLine(f, comingUp, suggestions),
                   for (final n in view.plannedNeedingCategory()) _NeedsCategoryLine(f, n),
                   for (final w in view.balanceWarnings()) _BalanceWarnLine(view, w),
+                  if (view.deviceStop != null) _DeviceStopLine(view.deviceStop!, view.deviceCode, openSync ?? openPlan),
                   if (held.isNotEmpty) _HeldLine(held, openAccounts ?? openPlan),
                   if (toReview > 0) _BillsToReviewLine(toReview, openBillsReview ?? openPlan),
                   for (final h in view.headsUpLines()) _HeadsUpLine(f, h),
@@ -413,6 +419,25 @@ class _HeldLine extends StatelessWidget {
       text: 'Held: ${held.entries.map((e) => moneyExact(e.value, e.key)).join(' · ')}',
       onTap: () {
         logNav('accounts.heldOpen');
+        open();
+      });
+}
+
+/// This device waits for approval or was removed from the wallet (stage DK); a tap opens Settings › Sync, where the code is.
+class _DeviceStopLine extends StatelessWidget {
+  const _DeviceStopLine(this.stop, this.code, this.open);
+  final DeviceStop stop;
+  final String? code;
+  final VoidCallback open;
+  @override
+  Widget build(BuildContext context) => _InfoLine(
+      key: const ValueKey('deviceStopLine'),
+      icon: stop == DeviceStop.pending ? Icons.hourglass_empty : Icons.block,
+      text: stop == DeviceStop.pending
+          ? 'Waiting for approval${code == null ? '' : ': $code'}. Tap for the QR code.'
+          : 'This device was removed from the wallet.',
+      onTap: () {
+        logNav('devices.stopOpen', {'stop': stop.name});
         open();
       });
 }

@@ -11,8 +11,8 @@ Never put a signature, public key, body, full id or client address in a log line
   on 127.0.0.1:port and exits 0/1 (the image's HEALTHCHECK; no `--data` needed). `relay/deploy/` = quadlets, Caddyfile, env templates (docs/setup.md §5).
 - `lib/relay.dart` — barrel. `lib/src/relay_server.dart` — `Relay({data, origins, maxWallets, maxBytes, maxInFlightBytes, now, log})`:
   `serve({host, port})` (port 0 for tests), `close()`, `handle(HttpRequest)`, `walletCount`. Routing, signature checks
-  (`_signature`: headers + ±5 min clock window, before any wallet lookup or body read; `_verify` after the body is read (v4 text, else v3 = `_Sig.version` 3: state then says api 3),
-  with the stored key or, on creation, `X-BW-Pub`), body limits, the per-wallet async lock (`_locked`), every endpoint.
+  (`_signature`: headers (+ `X-BW-Dev`/`X-BW-WSig`, api 5) + ±5 min clock window, before any wallet lookup or body read; `_verify` after the body is read (with `X-BW-Dev` the v5 text by that device key; else v4, else v3 = `_Sig.version` 3: state then says api 3),
+  with the stored key or, on creation, `X-BW-Pub`; `_verifyWallet` = `X-BW-WSig`; `_admit` (revoked / unenrolled / locked, before and inside the lock: `_lockedAs`)), body limits, the per-wallet async lock (`_locked`), every endpoint.
   `createToken` (403 `createToken` on a creating `PUT d` without `X-BW-Create-Token`; open when null, startup log says so), `trustProxy`
   (client address = last `X-Forwarded-For` hop). HEAD = GET without a body (signed as `HEAD`). A file the meta lists but the disk lacks = 404
   `missing` (kind `…!missing`), never 500. Pipeline order is protected: limit → OPTIONS → path/validate → signature headers (`_signature`) → create
@@ -20,10 +20,10 @@ Never put a signature, public key, body, full id or client address in a log line
   Every answer carries `Date` (relay clock, exposed to CORS). Body bytes buffered per client address (`_held`, released when the
   request is answered) are capped by `maxInFlightBytes` (32 MiB → 429 when other requests of that address hold bytes;
   test hook `onHold`); an unknown wallet's `PUT d` with seq ≠ 1 or on a full relay is refused before buffering. `now` drives lastSeen, the 90-day rule and the rate limit.
-- `lib/src/signing.dart` — `signedText` (`bw-relay-v4`, `v3: true` = the api-3 text it still accepts: method, host, path, covers, body hash, time; the host is
+- `lib/src/signing.dart` — `signedTextV5` (api 5, ends with `devpub`), `fingerprint` (`ABCD-EFGH`, `fingerprintPattern`), `signedText` (`bw-relay-v4`, `v3: true` = the api-3 text it still accepts: method, host, path, covers, body hash, time; the host is
   `Relay(publicHost:)` when set, else the request's `Host`, lower case), `sha256OfBytes`, `decodeBase64Url` (exact
   length, no padding), `verifySignature` (Ed25519, never throws), `signatureWindow`.
-- `lib/src/wallet.dart` — `apiVersion` (4), `gcGrace` (30 days), `maxDeclaredBlobs`, `parseBlobSet`/`encodeBlobSet`, `Wallet` (public key `pub`, `instance` (32 random hex per wallet, kept in
+- `lib/src/wallet.dart` — `apiVersion` (5), `DeviceKey`/`PendingKey`, `Wallet.keys`/`pending`/`locked`/`lockTime`/`othersTime`/`fps` (meta v3; `maxPending` 8, `pendingExpiry` 7 days, `maxActiveKeys` 16 → 409 `tooManyKeys`, `fps` = free fingerprint reservations of expired requests (`reserveFree` from `dropExpired`; newest `maxReserved` 256, oldest free dropped first; held fingerprints are their key's), `_revokeOthers` skips keys and requests newer than its signed time, `lockAfterRevoke` (lockTime ≥ now + 5 min); an api-5 creation starts locked; a v2 meta = none, unlocked; a present but unparsable `revoked` = revoked; `devices/others` = `_revokeOthers`), device endpoints `_enrol`/`_putDevice`/`_putLock` in relay_server.dart (RELAY_PROTOCOL.md "Device keys"; log `relay keys enrolled= pending=`), `gcGrace` (30 days), `maxDeclaredBlobs`, `parseBlobSet`/`encodeBlobSet`, `Wallet` (public key `pub`, `instance` (32 random hex per wallet, kept in
   `meta.json`, made and saved at the first load of a meta without one; state JSON `instance`), devices, snapshots, byte
   total), `meta.json` save/load (atomic temp + rename; load deletes `.tmp-*` files of an interrupted meta save), `prune`,
   name patterns, `writeAtomic`, `writeData` (sync file + `RelayTestHooks.afterFileWrite(wid, device, seq)`),
@@ -31,7 +31,7 @@ Never put a signature, public key, body, full id or client address in a log line
   a throw = a crash or full disk there). `lib/src/rate_limit.dart` — token bucket (20/s, burst 100) per client address.
 
 ## Rules
-- Storage: `<wid>/meta.json` (`v` 2, the public key `pub` stored by the creating request (trust on first use; nothing
+- Storage: `<wid>/meta.json` (`v` 3 since api 5 (`keys`, `pending`, `locked`, `lockTime`), the public key `pub` stored by the creating request (trust on first use; nothing
   in it can sign), per device `last`/`lastSeen`/`acks`, kept snapshots; a meta without a valid `pub`, e.g. v1's token
   hash, is not a wallet), `<wid>/d/<device>/<seq>`,
   `<wid>/snap/<id>`, `<wid>/blobs/<sha256 hex>` (bill photos/PDFs, `PUT/GET/DELETE …/blob/<hash>` (DELETE = 204 no-op since api 4): content-addressed, hash of
@@ -60,4 +60,4 @@ Never put a signature, public key, body, full id or client address in a log line
 comes with R7). Tests run over real HTTP on port 0 (`test/support.dart` `Harness`: temp folder, injectable clock, captured log
 sink, `restart()` over the same folder; requests are signed with the synthetic `keyA`/`keyB` (`TestKey`, written from the
 protocol text, not from `signing.dart`), `key: null` = unsigned, `skew` shifts `X-BW-Time`, `sign()` returns the headers
-and `replay()` sends captured headers again). Signatures, replays, the clock window, TOFU: `test/signing_test.dart`. Blobs: `test/blob_test.dart`; declared sets + GC + v3 compatibility: `test/blob_gc_test.dart`. `test/bin_test.dart` starts `bin/relay.dart` as a process (slow: ~3 s per start).
+and `replay()` sends captured headers again). Signatures, replays, the clock window, TOFU: `test/signing_test.dart`. Device keys (api 5: enrol, approve, revoke, lock, replays, pending cap/expiry, meta v2 → v3, restart, fuzz): `test/device_keys_test.dart` (`TestKey.headersV5`/`fp`, `Harness.sendV5`/`signV5`, `devA..devC`). Blobs: `test/blob_test.dart`; declared sets + GC + v3 compatibility: `test/blob_gc_test.dart`. `test/bin_test.dart` starts `bin/relay.dart` as a process (slow: ~3 s per start).

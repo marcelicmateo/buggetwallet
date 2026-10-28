@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:wallet_sync/wallet_sync.dart';
 
+import 'device_list.dart';
+
 /// A part of the controller's state that is a [Listenable] of its own. Its setters only mark it changed ([touch]); the controller
 /// calls [flush] right after it notified its own listeners, so this state tells its listeners at most once per controller
 /// notification, and only when something in it changed. The controller never listens to a sub-state: its own notifications are
@@ -84,6 +86,27 @@ class SyncState extends SubState {
   List<SyncProblem> get problems => _problems;
   set problems(List<SyncProblem> v) => _set(_problems, v, () => _problems = v);
 
+  DeviceStop? _deviceStop;
+  String? _deviceCode;
+  DeviceList? _deviceList;
+  bool? _deviceOlderRelay;
+
+  /// This install's key waits for approval or was removed (stage DK); null while it syncs normally.
+  DeviceStop? get deviceStop => _deviceStop;
+  set deviceStop(DeviceStop? v) => _set(_deviceStop, v, () => _deviceStop = v);
+
+  /// This install's own code `ABCD-EFGH` (shown while it waits for approval).
+  String? get deviceCode => _deviceCode;
+  set deviceCode(String? v) => _set(_deviceCode, v, () => _deviceCode = v);
+
+  /// The relay's device keys; null until read, or on a relay without them ([deviceOlderRelay]).
+  DeviceList? get deviceList => _deviceList;
+  set deviceList(DeviceList? v) => _set(_deviceList, v, () => _deviceList = v);
+
+  /// The relay answered and has no device keys (api below 5).
+  bool get deviceOlderRelay => _deviceOlderRelay ?? false;
+  set deviceOlderRelay(bool v) => _set(_deviceOlderRelay, v, () => _deviceOlderRelay = v);
+
   void _set<T>(T old, T v, void Function() assign) {
     if (identical(old, v) || old == v) return;
     assign();
@@ -105,5 +128,9 @@ class SyncState extends SubState {
     relayBytes = null;
     relayMaxBytes = null;
     problems = const [];
+    deviceStop = null;
+    deviceCode = null;
+    deviceList = null;
+    deviceOlderRelay = false;
   }
 }

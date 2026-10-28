@@ -1,5 +1,6 @@
 // In-memory relay for tests and the web smoke check: the same rules as `relay/` (docs/context/RELAY_PROTOCOL.md).
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -12,6 +13,24 @@ class _Dev {
   DateTime? lastSeen;
   final Map<String, int> acks = {};
   final Map<int, Uint8List> files = {};
+}
+
+/// A device key (api 5) in memory: enrolled or revoked.
+class _Key {
+  final String fp;
+  final DateTime added;
+  final String by;
+  final String? deviceId;
+  DateTime? revoked;
+  String? device;
+  _Key(this.fp, this.added, this.by, {this.deviceId, this.revoked});
+}
+
+class _Pending {
+  final String fp;
+  final DateTime at;
+  final String? deviceId;
+  _Pending(this.fp, this.at, this.deviceId);
 }
 
 class _Snap {
@@ -36,6 +55,13 @@ class _Snap {
 /// ([putSnapshotBlobs]); with both kept snapshots declared, a blob in neither set stored more than [gcGrace] ago is
 /// collected, as the relay does. [api] 3: no declared sets (404), no GC.
 ///
+/// Device keys (api 5) as the relay keeps them: [device] gives one install's view ([MemoryDeviceTransport]), which
+/// calls with its own key. This transport itself is the wallet key alone (an api-4 app): it works while the wallet is
+/// not [locked], else every call is `newerApi`. A view's key the wallet does not know is enrolled on its first call
+/// (not locked; on a new wallet by its first PUT) or put in `pending` (locked: `pending` failure); a revoked key gets
+/// `revoked` on every call; approve / revoke / lock follow the relay's rules (last key refused, a revoke locks, at most
+/// 8 pending, 7-day expiry). [enrolledKeys], [revokedKeys], [pendingKeys] (fingerprints) for tests.
+///
 /// Test hooks: [offline], [corrupt], [failGet], [failGetSnapshot], [replace], [files], [maxFileBytes], [blobs],
 /// [blobRoutes], [tamperBlob], [api], [declared], [gcRuns].
 class MemoryTransport implements SyncTransport {
@@ -55,6 +81,11 @@ class MemoryTransport implements SyncTransport {
   /// Test hook: the relay lost everything (wiped data directory): no devices, files, snapshots or blobs, and a new
   /// [instance] id.
   void wipe() {
+    _keys.clear();
+    _fps.clear();
+    _pending.clear();
+    locked = false;
+    _othersTime = _lockHeldUntil = null;
     _devs.clear();
     _snap = _prev = null;
     _blobs.clear();
@@ -203,9 +234,194 @@ class MemoryTransport implements SyncTransport {
         if (_prev case final s?) 'snapshot/${s.id}': s.bytes,
       });
 
-  void _call(String kind) {
+  void _call(String kind, {bool device = false}) {
     calls[kind] = (calls[kind] ?? 0) + 1;
     if (offline) throw const TransportException(TransportFailure.unreachable, 'offline');
+    // The wallet key alone (this transport, not a [device] view) on a locked wallet: an api-4 app told to update.
+    if (locked && !_deviceCall && !device) throw const TransportException(TransportFailure.newerApi, 'wallet locked');
+  }
+
+  // ---- device keys (api 5) --------------------------------------------------------------------------------------
+
+  final Map<String, _Key> _keys = {};
+  final Map<String, _Pending> _pending = {};
+
+  /// "Require approval for new devices" (tests may set it; a revoke sets it, and a wallet a [device] view creates
+  /// starts locked).
+  bool locked = false;
+
+  /// Fingerprint → the first key that showed it: another key with it never enrols (409 `fingerprint`: `conflict`).
+  final Map<String, String> _fps = {};
+
+  /// Most enrolled (non-revoked) keys, as the relay.
+  static const maxActiveKeys = 16;
+
+  int get _active => _keys.values.where((k) => k.revoked == null).length;
+
+  /// True while a [device] view's delegated call starts (its checks run synchronously, before the first await).
+  bool _deviceCall = false;
+
+  /// The view of the install whose device key is named [key] (any string; its fingerprint is [deviceFingerprint] of
+  /// its UTF-8 bytes); [deviceId] goes with its enrolment.
+  MemoryDeviceTransport device(String key, {String? deviceId}) => MemoryDeviceTransport._(this, key, deviceId);
+
+  /// Fingerprints of the enrolled (not revoked), the revoked and the pending keys, for tests.
+  Set<String> get enrolledKeys => {
+        for (final k in _keys.values)
+          if (k.revoked == null) k.fp
+      };
+  Set<String> get revokedKeys => {
+        for (final k in _keys.values)
+          if (k.revoked != null) k.fp
+      };
+  Set<String> get pendingKeys => {for (final p in _pending.values) p.fp};
+
+  static const pendingFor = Duration(days: 7);
+
+  void _dropExpired() => _pending.removeWhere((_, p) => _now().difference(p.at) > pendingFor);
+
+  String? _keyOf(String fp) {
+    for (final e in _keys.entries) {
+      if (e.value.fp == fp) return e.key;
+    }
+    for (final e in _pending.entries) {
+      if (e.value.fp == fp) return e.key;
+    }
+    return null;
+  }
+
+  /// Admits [key] as the relay does: enrolled → ok; revoked → `revoked`; unknown on a wallet that exists → enrolled
+  /// (not locked) or pending (locked: `pending`). A wallet that does not exist yet lets it through (its first PUT
+  /// enrols it).
+  void _admit(String key, String? deviceId, String kind) {
+    if (offline) return; // the delegated call fails as unreachable
+    final k = _keys[key];
+    if (k != null && k.revoked == null) return;
+    if (k == null && _devs.isEmpty && _keys.isEmpty) return;
+    if (k != null) {
+      calls[kind] = (calls[kind] ?? 0) + 1;
+      throw const TransportException(TransportFailure.revoked, 'revoked');
+    }
+    if (_enrol(key, deviceId) == EnrolResult.pending) {
+      calls[kind] = (calls[kind] ?? 0) + 1;
+      throw const TransportException(TransportFailure.pending, 'waiting for approval');
+    }
+  }
+
+  EnrolResult _enrol(String key, String? deviceId) {
+    final k = _keys[key];
+    if (k != null) {
+      if (k.revoked != null) throw const TransportException(TransportFailure.revoked, 'revoked');
+      return EnrolResult.enrolled;
+    }
+    if (_devs.isEmpty && _keys.isEmpty) throw const TransportException(TransportFailure.missing, 'unknown wallet');
+    _dropExpired();
+    final fp = deviceFingerprint(utf8.encode(key));
+    final other = _keyOf(fp) ?? _fps[fp];
+    if (other != null && other != key) throw const TransportException(TransportFailure.conflict, 'fingerprint');
+    if (!locked) {
+      if (_active >= maxActiveKeys) throw const TransportException(TransportFailure.tooManyKeys, 'too many keys');
+      _fps[fp] ??= key;
+      _pending.remove(key);
+      _keys[key] = _Key(fp, _now().toUtc(), 'wallet', deviceId: deviceId);
+      return EnrolResult.enrolled;
+    }
+    if (_pending.containsKey(key)) return EnrolResult.pending;
+    if (_pending.length >= 8) throw const TransportException(TransportFailure.pendingFull, 'pending full');
+    _fps[fp] ??= key;
+    _pending[key] = _Pending(fp, _now().toUtc(), deviceId);
+    return EnrolResult.pending;
+  }
+
+  void _change(String by, String fp, {required bool approve}) {
+    if (!_fpPattern.hasMatch(fp)) throw const TransportException(TransportFailure.rejected, 'bad fingerprint');
+    _dropExpired();
+    final target = _keyOf(fp);
+    if (target == null) throw const TransportException(TransportFailure.missing, 'no such key');
+    final k = _keys[target];
+    final now = _now().toUtc();
+    if (approve) {
+      if (k?.revoked != null) throw const TransportException(TransportFailure.conflict, 'revoked');
+      if (k == null) {
+        if (_active >= maxActiveKeys) throw const TransportException(TransportFailure.tooManyKeys, 'too many keys');
+        final p = _pending.remove(target)!;
+        _keys[target] = _Key(p.fp, now, _keys[by]!.fp, deviceId: p.deviceId);
+      }
+      return;
+    }
+    if (k == null) {
+      final p = _pending.remove(target)!;
+      _keys[target] = _Key(p.fp, now, _keys[by]!.fp, deviceId: p.deviceId, revoked: now);
+    } else if (k.revoked == null) {
+      if (_keys.values.where((x) => x.revoked == null).length <= 1) {
+        throw const TransportException(TransportFailure.lastDevice, 'last device');
+      }
+      k.revoked = now;
+      _lockAfterRevoke(now); // the removed device still holds the wallet key
+    }
+  }
+
+  /// Revokes every key but [by]'s, rejects every pending one, locks; how many keys it revoked.
+  /// Like the relay's: the call's time is its signed time; one not later than the last applied one changes nothing,
+  /// and keys or requests newer than it are left alone.
+  int _revokeOthers(String by) {
+    final now = _now().toUtc();
+    if (_othersTime != null && !now.isAfter(_othersTime!)) return 0;
+    var n = 0;
+    for (final MapEntry(key: pub, value: k) in _keys.entries) {
+      if (pub == by || k.revoked != null || k.added.isAfter(now)) continue;
+      k.revoked = now;
+      n++;
+    }
+    for (final MapEntry(key: pub, value: p) in _pending.entries.toList()) {
+      if (p.at.isAfter(now)) continue;
+      _pending.remove(pub);
+      _keys[pub] = _Key(p.fp, now, _keys[by]!.fp, deviceId: p.deviceId, revoked: now);
+    }
+    _othersTime = now;
+    _lockAfterRevoke(now);
+    return n;
+  }
+
+  DateTime? _othersTime;
+
+  /// No unlock before this (a revoke holds the lock for the relay's signature window, 5 minutes).
+  DateTime? _lockHeldUntil;
+
+  void _lockAfterRevoke(DateTime now) {
+    locked = true;
+    final until = now.add(const Duration(minutes: 5));
+    if (_lockHeldUntil == null || until.isAfter(_lockHeldUntil!)) _lockHeldUntil = until;
+  }
+
+  /// A lock change as the relay applies it: an unlock within 5 minutes of a revoke changes nothing.
+  void _setLocked(bool v) {
+    final held = _lockHeldUntil;
+    if (!v && held != null && _now().toUtc().isBefore(held)) return;
+    locked = v;
+  }
+
+  static final _fpPattern = RegExp(r'^[A-Z2-7]{4}-[A-Z2-7]{4}$');
+
+  /// [base] (a state answer) with the device fields as [self] sees them.
+  RelayState _stateFor(RelayState base, String self) {
+    final ks = _keys.entries.toList()..sort((a, b) => a.value.added.compareTo(b.value.added));
+    final ps = _pending.values.where((p) => _now().difference(p.at) <= pendingFor).toList()..sort((a, b) => a.at.compareTo(b.at));
+    return RelayState(
+      devices: base.devices,
+      snapshot: base.snapshot,
+      previous: base.previous,
+      instance: base.instance,
+      bytes: base.bytes,
+      maxBytes: base.maxBytes,
+      api: base.api == null ? null : 5,
+      keys: [
+        for (final MapEntry(key: pub, value: k) in ks)
+          RelayKey(k.fp, added: k.added, by: k.by, revoked: k.revoked, deviceId: k.deviceId, device: k.device, self: pub == self),
+      ],
+      pending: [for (final p in ps) RelayPendingKey(p.fp, at: p.at, deviceId: p.deviceId)],
+      locked: locked,
+    );
   }
 
   static final _name = RegExp(r'^[A-Za-z0-9_-]{1,64}$');
@@ -405,5 +621,109 @@ class MemoryTransport implements SyncTransport {
       if (a[i] != b[i]) return false;
     }
     return true;
+  }
+}
+
+/// One install's view of a [MemoryTransport] (api 5): every call is made with its device key [key] (see
+/// [MemoryTransport.device]); what is stored is shared.
+class MemoryDeviceTransport implements SyncTransport, DeviceKeyTransport {
+  MemoryDeviceTransport._(this.relay, this.key, this.deviceId);
+  final MemoryTransport relay;
+  final String key;
+  final String? deviceId;
+
+  /// This key's fingerprint (`ABCD-EFGH`).
+  String get fingerprint => deviceFingerprint(utf8.encode(key));
+
+  Future<T> _as<T>(String kind, Future<T> Function() call) {
+    try {
+      relay._admit(key, deviceId, kind);
+    } on TransportException catch (e) {
+      return Future.error(e);
+    }
+    relay._deviceCall = true;
+    try {
+      return call(); // the delegated call checks and counts synchronously, before its first await
+    } finally {
+      relay._deviceCall = false;
+    }
+  }
+
+  void _touch(String device) => relay._keys[key]?.device = device;
+
+  @override
+  Future<RelayState> state() => _as('state', () async {
+        final base = await relay.state();
+        // A wallet the relay does not know yet: no device fields (as the relay's 404).
+        return relay._devs.isEmpty && relay._keys.isEmpty ? base : relay._stateFor(base, key);
+      });
+
+  @override
+  Future<void> put(String device, int seq, List<int> bytes) => _as('put', () async {
+        final creates = relay._devs.isEmpty && relay._keys.isEmpty;
+        await relay.put(device, seq, bytes);
+        if (creates) {
+          // A wallet created by an api-5 app starts locked.
+          relay._keys[key] = _Key(fingerprint, relay._now().toUtc(), 'wallet', deviceId: deviceId);
+          relay._fps[fingerprint] ??= key;
+          relay.locked = true;
+        }
+        _touch(device);
+      });
+
+  @override
+  Future<List<int>> get(String device, int seq) => _as('get', () => relay.get(device, seq));
+
+  @override
+  Future<void> ack(String device, Map<String, int> cursors) => _as('ack', () async {
+        await relay.ack(device, cursors);
+        _touch(device);
+      });
+
+  @override
+  Future<void> putSnapshot(String id, Map<String, int> covers, List<int> bytes) =>
+      _as('putSnapshot', () => relay.putSnapshot(id, covers, bytes));
+
+  @override
+  Future<List<int>> getSnapshot(String id) => _as('getSnapshot', () => relay.getSnapshot(id));
+
+  @override
+  Future<void> putBlob(String hash, List<int> bytes) => _as('putBlob', () => relay.putBlob(hash, bytes));
+
+  @override
+  Future<List<int>?> getBlob(String hash) => _as('getBlob', () => relay.getBlob(hash));
+
+  @override
+  Future<void> putSnapshotBlobs(String id, List<String> hashes) => _as('putSnapshotBlobs', () => relay.putSnapshotBlobs(id, hashes));
+
+  @override
+  Future<EnrolResult> enrol() async {
+    relay._call('enrol', device: true);
+    return relay._enrol(key, deviceId);
+  }
+
+  /// A change only an enrolled, non-revoked key may make (a key not enrolled yet enrols first, as the relay client does).
+  Future<void> _byEnrolled(String kind, void Function() change) => _as(kind, () async {
+        relay._call(kind);
+        change();
+      });
+
+  @override
+  Future<void> approveDevice(String fp) => _byEnrolled('approve', () => relay._change(key, fp, approve: true));
+
+  @override
+  Future<void> revokeDevice(String fp) => _byEnrolled('revoke', () => relay._change(key, fp, approve: false));
+
+  @override
+  Future<int> revokeOthers() async {
+    var n = 0;
+    await _byEnrolled('revokeOthers', () => n = relay._revokeOthers(key));
+    return n;
+  }
+
+  @override
+  Future<bool> setLocked(bool locked) async {
+    await _byEnrolled('lock', () => relay._setLocked(locked));
+    return relay.locked;
   }
 }

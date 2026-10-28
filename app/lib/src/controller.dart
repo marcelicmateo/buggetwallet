@@ -13,6 +13,8 @@ import 'calendar_source.dart';
 import 'clock_notice.dart';
 import 'conflict_text.dart';
 import 'controller_deps.dart';
+import 'device_list.dart';
+import 'device_relay.dart';
 import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDateOrRaw;
 import 'hero.dart';
 import 'home_widget.dart';
@@ -24,6 +26,7 @@ import 'memo_key.dart';
 import 'nudges.dart';
 import 'platform.dart' show isWeb;
 import 'sub_state.dart';
+import 'sync_status.dart' show relayOlderThanBeforeText;
 import 'tabs.dart';
 import 'wallet_db.dart';
 
@@ -38,6 +41,7 @@ part 'controller_home.dart';
 part 'controller_splits.dart';
 part 'controller_fx.dart';
 part 'controller_sync.dart';
+part 'controller_devices.dart';
 part 'controller_import.dart';
 part 'controller_settings.dart';
 part 'controller_review.dart';
@@ -252,6 +256,8 @@ class WalletController extends ChangeNotifier {
   int dataVersion = 0;
   final Map<MemoKey, Object?> _memo = {};
 
+  bool _disposed = false;
+
   /// The day [_memo] was filled for: a new day drops every cached value (old days would only pile up).
   String? _memoDay;
 
@@ -269,9 +275,38 @@ class WalletController extends ChangeNotifier {
   static String? createTokenFor(Uri relay, String? stored) =>
       stored == null || stored.isEmpty || relayAddressIssue(relay.toString()) != null ? null : stored;
 
+  /// The device-local value holding the lowest relay api accepted at [relay] (no downgrade, DK): keyed by the normalised address,
+  /// cleared only when the owner saves an address in Settings › Sync ([setRelay]), never because a check or an error names a lower api.
+  static String minApiKey(Uri relay) {
+    final path = relay.path.endsWith('/') ? relay.path.substring(0, relay.path.length - 1) : relay.path;
+    return 'relayMinApi:${relay.scheme}://${relay.host.toLowerCase()}:${relay.port}$path';
+  }
+
+  /// The api floor kept for [relay] (null: none yet).
+  static int? minApiFor(WalletRepo repo, Uri relay) => int.tryParse(repo.localValue(minApiKey(relay)) ?? '');
+
+  /// A [RelayTransport] to [relay] for this wallet. Once the relay said api 5 it is never trusted below 5 again: the transport tells
+  /// us ([RelayTransport.onMinApi]) and the value is kept device-local (never synced, no address in it) until the address changes.
+  static RelayTransport relayTransport(Uri relay, VaultKey key, WalletRepo repo, {List<int>? deviceKey, String? deviceId}) {
+    final t = RelayTransport(relay, key,
+        createToken: createTokenFor(relay, repo.localValue(relayCreateTokenKey)),
+        deviceKey: deviceKey,
+        deviceId: deviceId, onMinApi: (min, instance) {
+      try {
+        repo.setLocalValue(minApiKey(relay), '$min');
+      } catch (e, st) {
+        logError(_sync, 'sync.minApiFailed', e, st);
+      }
+    });
+    final stored = minApiFor(repo, relay);
+    if (stored != null && stored > t.minApi) t.minApi = stored;
+    return t;
+  }
+
   /// The real sync run ([WalletControllerDeps.syncRunner]).
-  static Future<SyncReport> runRelaySync(Uri relay, VaultKey key, WalletRepo repo) async {
-    final transport = RelayTransport(relay, key, createToken: createTokenFor(relay, repo.localValue(relayCreateTokenKey)));
+  /// [deviceKey] (this install's seed) and [deviceId] make it an api-5 device (DK); null signs with the wallet key as before.
+  static Future<SyncReport> runRelaySync(Uri relay, VaultKey key, WalletRepo repo, {List<int>? deviceKey, String? deviceId}) async {
+    final transport = relayTransport(relay, key, repo, deviceKey: deviceKey, deviceId: deviceId);
     try {
       return await SyncEngine(transport, key, appVersion: appVersion).run(repo);
     } finally {
@@ -677,6 +712,7 @@ class WalletController extends ChangeNotifier {
   /// to storage within a second.
   @override
   void notifyListeners() {
+    if (_disposed) return; // a sync run that was still awaiting the device key or relay when the screen went away
     numberStyle = _numberStyle; // before the screens rebuild; read from the repo only on load, reload and change
     super.notifyListeners();
     sync.flush(); // the sub-states tell their own listeners after the controller's, never the other way round
@@ -1067,6 +1103,11 @@ class WalletController extends ChangeNotifier {
           {'trigger': trigger, 'reason': relay == null ? 'noRelay' : (k == null ? 'noKey' : (_joining ? 'joining' : 'busy'))});
       return;
     }
+    // A removed device does not try again by itself (no retry loop): only a new relay address, a key or an unlock starts a run.
+    if (sync.deviceStop == DeviceStop.revoked && !const {'relay', 'join', 'unlock'}.contains(trigger)) {
+      logEvent(_sync, Level.FINER, 'sync.skip', {'trigger': trigger, 'reason': 'revoked'});
+      return;
+    }
     syncing = true;
     final run = _syncRun = Completer<void>();
     if (!quiet) notifyListeners();
@@ -1091,6 +1132,7 @@ class WalletController extends ChangeNotifier {
       syncRelayBytes = r.relayBytes;
       syncRelayMaxBytes = r.relayMaxBytes;
       syncProblems = r.problems;
+      _deviceRunOk(r);
       if (r.relayChanged) repo.setLocalValue(_noticeRelayChanged, '1');
       if (r.problems.any((p) => p.reason == SyncProblemReason.deviceIdInUse)) repo.setLocalValue(_noticeIdInUse, '1');
       logEvent(_sync, Level.INFO, 'sync.done', {
@@ -1108,7 +1150,18 @@ class WalletController extends ChangeNotifier {
     } catch (e, st) {
       logError(_sync, 'sync.failed', e, st, fields: {'trigger': trigger});
       if (relay != relayUrl) return; // the old relay's failure: not shown for the new address
-      syncError = e is SyncException ? e.message : "Couldn't sync. Check the relay address and your connection.";
+      final stop = deviceStopOf(e);
+      if (stop != null) await _noteDeviceStop(stop);
+      if (relay != relayUrl) return;
+      // A removed or waiting key has its own notice (with the code); the plain error line would only repeat it.
+      // An older relay than this address answered before (api floor 5): a likely downgrade, not a plain "update the relay".
+      final downgraded =
+          e is SyncException && e.failure == TransportFailure.olderApi && (WalletController.minApiFor(repo, relay) ?? 0) >= 5;
+      syncError = stop != null
+          ? null
+          : downgraded
+              ? relayOlderThanBeforeText
+              : (e is SyncException ? e.message : "Couldn't sync. Check the relay address and your connection.");
       // A run that failed partway may already have applied some changes. Reload only if wallet data changed during the run:
       // a sync that keeps failing before applying anything must not reload the whole wallet every few minutes.
       if (_dataMark() != dataBefore) reload();
@@ -1154,6 +1207,7 @@ class WalletController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     logEvent(_log, Level.FINE, 'wc.dispose');
     _syncTimer?.cancel();
     _dayTimer?.cancel();

@@ -533,7 +533,7 @@ designed to be safe to expose.
 | Repository reader (code is on GitHub)                                                             | Read all code, tests, synthetic fixtures                                                                                                                                                                                | Learn any real figure: fixtures are generated; personal numbers live only in the owner's wallet                                                                                                                                                                                                                           |
 | A second install with the same device id (a copied app directory or database)                     | Write under that device id                                                                                                                                                                                              | Go unnoticed or split the data: the device id lives next to the key, per install, and on a 409 on its own sequence number (or more files in its stream than it sent) a device moves to a fresh stream, uploads its whole state again and says once "another install used this device id"; every device reads both streams |
 | A benign device with a wrong clock                                                                | Make its own edits sort as newer than they are, up to an hour                                                                                                                                                           | Push every device's clock into the future: files whose newest clock is over an hour ahead are held (`clockDrift`) until the clock is right, and a device whose wall clock is that far behind its stored clock refuses to write                                                                                            |
-| The owner's own lost device, still holding the key                                                | Everything the key allows, on any relay                                                                                                                                                                                 | Be cut off at the relay without rotating the key (no per-device keys yet): see key rotation below                                                                                                                                                                                                                         |
+| The owner's own lost device, still holding the key | What it already synced (sealed with the wallet key on that device); until it is removed, everything the key allows | After Settings › Sync › Devices › "Remove this device" (api 5, which also turns on "Require approval for new devices"): sign anything the relay accepts with its device key (401 `revoked`) or with the wallet key alone (401 `locked`; only a bare `GET state`), enrol a fresh device key without an approval on a device in hand. Cutting off what it already holds needs key rotation (below): the new key is a new wallet id |
 
 ### Cryptography
 
@@ -550,8 +550,12 @@ designed to be safe to expose.
 - **Key derivation:** HKDF-SHA256 with empty salt and distinct info strings (`bw-local-db-v1`, `bw-relay-id-v1`,
   `bw-relay-sign-v1`); the wallet key itself is 32 random bytes from the platform CSPRNG.
 - **Request authentication:** Ed25519 signatures over method, relay host, path, covers header, body SHA-256 and time
-  (`bw-relay-v3`); ± 5 min window; the relay stores the public key on wallet creation (trust on first use) and verifies every later request
-  with it. The signed text is specified byte-for-byte in `docs/context/RELAY_PROTOCOL.md`; the relay's tests use a
+  (`bw-relay-v4`); ± 5 min window; the relay stores the public key on wallet creation (trust on first use) and verifies every later request
+  with it. Since api 5 (Stage DK) each install signs with its own random Ed25519 **device key** (`bw-relay-v5`, the
+  text ends with the device's public key): the relay keeps the enrolled, pending and revoked device keys per wallet;
+  the wallet key only creates a wallet, countersigns an enrolment and serves older apps until the owner turns on
+  "Require approval for new devices". A device key is a revocable relay credential, never a data key: stored next to
+  the wallet key, never synced, never in backups. The signed text is specified byte-for-byte in `docs/context/RELAY_PROTOCOL.md`; the relay's tests use a
   hand-written signer from that text, not the client library.
 - **Local database:** SQLite3 Multiple Ciphers with a raw 32-byte key (no KDF inside SQLite), the cipher pinned with
   `PRAGMA cipher` before every `PRAGMA key` (a library default change cannot alter the format), WAL disabled during
@@ -565,7 +569,7 @@ designed to be safe to expose.
 ### What leaves the device
 
 Only to the owner's relay: sealed files, sealed snapshots, sealed blobs, the wallet id, device ids, sequence numbers,
-acks, signatures and the public key. From these the relay can correlate a stable wallet id, device count, activity
+acks, signatures, the wallet's public key and each install's device public key (and the device id it enrols with). From these the relay can correlate a stable wallet id, device count, activity
 rhythm, edit volume and blob sizes (it can tell a receipt photo was just taken), and link the wallet across every
 relay the owner uses, because the wallet id is derived from the key alone. Fine for a self-hosted relay; if a relay is
 ever shared, derive the wallet id per relay (HKDF salted with the relay's instance id). Nothing to any other host. `.ics` links the owner adds are fetched from the host
@@ -603,9 +607,13 @@ the owner starts it. Builds are reproducible in a rootless Podman image.
 
 1. **Desktop key at rest** is a private file (directory 0700, written to a temporary name, set to 0600, then renamed),
    not a keystore; a stolen unencrypted laptop disk exposes the key. Mitigation: full-disk encryption on the laptop.
-2. **No key rotation flow and no per-device revocation.** The wallet id and the signing key are derived from the wallet
-   key, so a lost device that still holds the key cannot be cut off at the relay. Procedure until per-device keys
-   exist: on a device you trust, Plan › Backup "Back up now" (sealed with the old key); start fresh on that device
+2. **No key rotation flow; revocation cuts off the relay only.** Since api 5 (Stage DK) a lost device can be removed in
+   Settings › Sync › Devices: the relay refuses its device key and, as removing a device turns on "Require approval
+   for new devices", the wallet key alone. That protects what is on the relay from now on; the lost device keeps the
+   data it had (sealed with the wallet key on it), and anyone who unlocks it holds the wallet key. A wallet started by
+   an api-5 build requires approval from the start, at most 16 devices can be enrolled, and "Remove all other
+   devices" revokes every key but the one in hand at once. If the device may have acted before it was removed, or may
+   be in someone else's hands, rotate the key: on a device you trust, Plan › Backup "Back up now" (sealed with the old key); start fresh on that device
    (Android: Settings › Apps › Budget Wallet › Clear storage; Linux: remove the app's data folder; web: "Forget this
    browser"), then "Start a new wallet" (new key); Plan › Backup "Restore a backup made with another key…" with the old key typed or scanned;
    join every other device you still have with the new key; delete the old wallet's folder on the relay. The lost
