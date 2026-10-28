@@ -44,3 +44,30 @@ String conflictValueText(String entity, String rowId, String field, Object? valu
   if (v is bool) return v ? 'yes' : 'no';
   return '$v';
 }
+
+/// The row's name in the owner's words: a payment by its date and description, a setting by its plain name, anything else by its kind.
+String conflictWhatText(WalletController wc, String entity, String rowId) {
+  switch (entity) {
+    case 'tx':
+      final t = wc.wholeTxs.where((x) => x.tx.id == rowId).firstOrNull;
+      if (t == null) return changeEntityWord(entity);
+      final d = t.tx.description.trim();
+      return d.isEmpty ? 'Payment ${shortDate(t.tx.date)}' : 'Payment ${shortDate(t.tx.date)} · $d';
+    case 'setting':
+      return changeSettingWord(rowId);
+    default:
+      return changeEntityWord(entity);
+  }
+}
+
+/// A [ConflictLine] from the raw conflict: row name, field word and both values as text.
+ConflictLine conflictLineOf(WalletController wc,
+    {required String id, required String entity, required String rowId, required String field, Object? mine, Object? theirs}) {
+  return ConflictLine(
+    id: id,
+    what: conflictWhatText(wc, entity, rowId),
+    field: conflictFieldWord(entity, field),
+    mine: conflictValueText(entity, rowId, field, mine, wc.currency),
+    theirs: conflictValueText(entity, rowId, field, theirs, wc.currency),
+  );
+}

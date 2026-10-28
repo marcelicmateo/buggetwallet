@@ -10,6 +10,7 @@ import 'package:budget_wallet/src/sync_status.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 import 'package:wallet_sync/wallet_sync.dart';
 
@@ -34,6 +35,15 @@ Future<void> _pump(WidgetTester t, Widget child,
     home: child,
   ));
   await t.pump();
+}
+
+/// Real conflicts in [wc]'s repo: each setting in [values] holds `mine` here and `theirs` arrives in a repair resend with the same clock.
+void _makeConflicts(WalletController wc, Map<String, (String, String)> values) {
+  final clock = Hlc(DateTime.now().millisecondsSinceEpoch - 5000, 0, 'peer1234').toString();
+  Op op(String key, String v) => Op('setting', key, {'value': v, 'deleted': 0}, clock);
+  wc.repo.applyRemote([for (final e in values.entries) op(e.key, e.value.$1)], match: false);
+  wc.repo.applyRemote([for (final e in values.entries) op(e.key, e.value.$2)], match: false, repair: true);
+  wc.reload();
 }
 
 void main() {
@@ -170,7 +180,8 @@ void main() {
       final wc = emptyWallet()..relayUrl = Uri.parse('http://homeserver.local:8787');
       addTearDown(wc.dispose);
       wc.syncProblems = const [SyncProblem('abcd1234', SyncProblemReason.devicesDisagree, bytes: 0)];
-      wc.syncConflictCount = 3;
+      _makeConflicts(wc, {'salary': ('10000', '20000'), 'rent': ('30000', '40000'), 'paydayDay': ('10', '25')});
+      expect(wc.syncConflictCount, 3, reason: 'read from the repo, so it shows before the first sync');
       await _pump(t, Scaffold(body: SingleChildScrollView(child: panel(wc))), size: const Size(320, 3000), scale: 2);
       expect(t.takeException(), isNull);
       expect(find.textContaining('Your devices have 3 different values. Choose the right ones.', findRichText: true), findsOneWidget);
@@ -182,7 +193,41 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 400));
       expect(find.text('Choose the right values'), findsWidgets);
-      expect(k('conflictsDone'), findsOneWidget, reason: 'the controller has no lines until core lands');
+      expect(k('conflictsDone'), findsNothing);
+      expect(find.text('Salary'), findsOneWidget);
+      expect(find.text('Rent'), findsOneWidget);
+      expect(find.text('Payday'), findsOneWidget);
+    });
+
+    testWidgets('a real conflict: the page lists it, Other device writes the other value and the list empties', (t) async {
+      final wc = emptyWallet();
+      addTearDown(wc.dispose);
+      _makeConflicts(wc, {'paydayDay': ('10', '25')});
+      expect(wc.settings.paydayDay, 10);
+      await _pump(t, ConflictsPage(wc: wc));
+      expect(find.text('Payday'), findsOneWidget);
+      expect(find.text('10'), findsOneWidget);
+      expect(find.text('25'), findsOneWidget);
+      await t.tap(k('conflictTheirs-setting|paydayDay|value'));
+      await t.pump();
+      expect(wc.settings.paydayDay, 25);
+      expect(wc.syncConflictCount, 0);
+      expect(k('conflictsDone'), findsOneWidget);
+      await t.pump(const Duration(seconds: 4)); // the sync debounce
+    });
+
+    testWidgets('a conflict settled elsewhere meanwhile: the row goes quietly with "Already settled."', (t) async {
+      final wc = emptyWallet();
+      addTearDown(wc.dispose);
+      _makeConflicts(wc, {'paydayDay': ('10', '25')});
+      await _pump(t, ConflictsPage(wc: wc));
+      wc.repo.updateSettings({'paydayDay': 12}); // an edit settles the entry behind the page's back
+      await t.tap(k('conflictMine-setting|paydayDay|value'));
+      await t.pump();
+      expect(wc.settings.paydayDay, 12, reason: 'nothing was written');
+      expect(find.text('Already settled.'), findsOneWidget);
+      expect(k('conflictsDone'), findsOneWidget);
+      await t.pump(const Duration(seconds: 4));
     });
 
     testWidgets('without conflicts: today\'s text with the Diagnostics button', (t) async {

@@ -337,17 +337,30 @@ class WalletController extends ChangeNotifier {
   /// A device's clock is ahead, so its newest file waits.
   bool get syncClockDrift => syncProblems.any((p) => p.reason == SyncProblemReason.clockDrift);
 
-  /// Open equal-clock conflicts after the last run (V, VC). TODO(VC): set from `SyncReport.conflicts` in `syncNow` when core lands.
-  int get syncConflictCount => sync.conflicts;
-  set syncConflictCount(int v) => sync.conflicts = v;
+  /// Open equal-clock conflicts (V, VC): fields two devices hold with the same clock and different values, waiting for the owner's
+  /// choice. Read from the repo (device-local, set by a repair resend), so it is right at start, after a sync and after a choice.
+  int get syncConflictCount => repo.syncConflicts().length;
 
-  /// The open conflicts for the "Choose the right values" page, in the owner's words. TODO(VC): build from `repo.syncConflicts()`
-  /// with `conflictLineOf` when core lands.
-  List<ConflictLine> conflictLines() => const [];
+  /// The open conflicts for the "Choose the right values" page, in the owner's words (never logged).
+  List<ConflictLine> conflictLines() => [
+        for (final c in repo.syncConflicts())
+          conflictLineOf(this, id: c.id, entity: c.entity, rowId: c.rowId, field: c.field, mine: c.mine, theirs: c.theirs)
+      ];
 
-  /// The owner's choice for one conflict. TODO(VC): `repo.resolveSyncConflict(id, keepMine: keepMine)` then `_changed()`.
-  void resolveConflict(String id, {required bool keepMine}) {
-    logEvent(_sync, Level.INFO, 'sync.conflict.resolve', {'keepMine': keepMine}); // never the field or a value
+  /// The owner's choice for one conflict: writes the chosen value (it syncs). False when the conflict was already settled (an edit or
+  /// another choice removed it): nothing is written. Logs the choice only.
+  bool resolveConflict(String id, {required bool keepMine}) {
+    try {
+      repo.resolveSyncConflict(id, keepMine: keepMine);
+    } on ArgumentError {
+      logEvent(_sync, Level.INFO, 'sync.conflict.gone', {});
+      _changed();
+      return false;
+    }
+    logEvent(_sync, Level.INFO, 'sync.conflict.resolve',
+        {'keepMine': keepMine, 'left': repo.syncConflicts().length}); // never the field or a value
+    _changed();
+    return true;
   }
 
   /// A file sealed with another wallet key is on the relay; it was ignored.

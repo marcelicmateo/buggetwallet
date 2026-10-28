@@ -194,7 +194,7 @@ class _SyncPanelState extends State<SyncPanel> {
               onOk: () => wc.dismissSyncNotice(relayChanged: false)),
         if (wc.syncClockDrift) const StatusLabel(key: ValueKey('clockDrift'), good: false, text: clockDriftText),
         if (wc.syncOtherKey) const StatusLabel(key: ValueKey('syncOtherKey'), good: false, text: otherKeyFileText),
-        if (wc.syncDevicesDisagree && wc.syncConflictCount > 0) ...[
+        if (wc.syncConflictCount > 0) ...[
           StatusLabel(key: const ValueKey('syncDevicesDisagree'), good: false, text: devicesConflictText(wc.syncConflictCount)),
           OutlinedButton(
               key: const ValueKey('syncChooseValues'),

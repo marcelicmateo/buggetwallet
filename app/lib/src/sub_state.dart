@@ -34,7 +34,6 @@ class SyncState extends SubState {
   String? _relayInstance;
   int? _relayBytes, _relayMaxBytes;
   List<SyncProblem> _problems = const [];
-  int _conflicts = 0;
 
   /// A run is in flight.
   bool get running => _running;
@@ -85,10 +84,6 @@ class SyncState extends SubState {
   List<SyncProblem> get problems => _problems;
   set problems(List<SyncProblem> v) => _set(_problems, v, () => _problems = v);
 
-  /// Fields where two devices hold different values with the same clock, waiting for the owner's choice (last run's count).
-  int get conflicts => _conflicts;
-  set conflicts(int v) => _set(_conflicts, v, () => _conflicts = v);
-
   void _set<T>(T old, T v, void Function() assign) {
     if (identical(old, v) || old == v) return;
     assign();
@@ -110,6 +105,5 @@ class SyncState extends SubState {
     relayBytes = null;
     relayMaxBytes = null;
     problems = const [];
-    conflicts = 0;
   }
 }

@@ -5,38 +5,10 @@ import 'package:flutter/material.dart';
 
 import '../conflict_text.dart';
 import '../controller.dart';
-import '../format.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
-
-/// The row's name in the owner's words: a payment by its date and description, a setting by its plain name, anything else by its kind.
-String conflictWhatText(WalletController wc, String entity, String rowId) {
-  switch (entity) {
-    case 'tx':
-      final t = wc.wholeTxs.where((x) => x.tx.id == rowId).firstOrNull;
-      if (t == null) return changeEntityWord(entity);
-      final d = t.tx.description.trim();
-      return d.isEmpty ? 'Payment ${shortDate(t.tx.date)}' : 'Payment ${shortDate(t.tx.date)} · $d';
-    case 'setting':
-      return changeSettingWord(rowId);
-    default:
-      return changeEntityWord(entity);
-  }
-}
-
-/// A [ConflictLine] from the raw conflict: row name, field word and both values as text.
-ConflictLine conflictLineOf(WalletController wc,
-    {required String id, required String entity, required String rowId, required String field, Object? mine, Object? theirs}) {
-  return ConflictLine(
-    id: id,
-    what: conflictWhatText(wc, entity, rowId),
-    field: conflictFieldWord(entity, field),
-    mine: conflictValueText(entity, rowId, field, mine, wc.currency),
-    theirs: conflictValueText(entity, rowId, field, theirs, wc.currency),
-  );
-}
 
 Future<void> openConflicts(BuildContext context, WalletController wc) {
   logNav('conflicts.open', {'count': wc.syncConflictCount});
@@ -66,7 +38,10 @@ class ConflictsPage extends StatelessWidget {
                 for (final l in list)
                   _ConflictRow(
                       line: l,
-                      onChoose: (keepMine) => onChoose != null ? onChoose!(l.id, keepMine) : wc.resolveConflict(l.id, keepMine: keepMine)),
+                      onChoose: (keepMine) {
+                        if (onChoose != null) return onChoose!(l.id, keepMine);
+                        if (!wc.resolveConflict(l.id, keepMine: keepMine)) toast(context, 'Already settled.');
+                      }),
               ],
             ]);
           },
