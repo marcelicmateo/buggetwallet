@@ -517,7 +517,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Schema 17:** update every device together; a device that stays on an older build for over 30 days after the others upgraded may miss IOUs until they are edited again.
 
 ## Next
-- **Next: the M6 live test** with `docs/context/M6_CHECKLIST.md` (owner starts `gh workflow run ci --ref v2`; update the relay and every device together: schema 18, relay api 5). Waiting on the owner: Pi details for PI2 (model, OS, DDNS name, router 80/443, SSD); delete the superseded `p6-tests`/`p9-tests` branches?
+- **Next: the M6 live test** with `docs/context/M6_CHECKLIST.md` (owner starts `gh workflow run ci --ref v2`; update the relay and every device together: schema 18, relay api 5). Waiting on the owner: Pi details for PI2 (model, OS, DDNS name, router 80/443, SSD) (superseded `p6-tests`/`p9-tests` branches deleted, owner OK).
 - Owner checks after Stage WS (laptop): `tools/build.sh web && tools/web.sh serve` → a fresh browser shows onboarding (no blank page); create a wallet, set the relay address, sync with the phone; reload → unlock with the passphrase.
 - Owner checks after Stage C2 (phone): dark mode Spending bars (a deeper blue) and the legend under the saved/lost chart; rounded bar tops on Insights; amber "Went out" on Income vs spending; tap the payday forecast chart.
 - Owner checks after Stage X (phone): new wallet → save key → the guide with a real bank file: import preview, accounts + cash, plan, bills, payees (pick a tag, Undo), budgets, Done vs Today; close half-way → Today "Finish setting up" → continue; Settings › Set up my wallet again; large text.
