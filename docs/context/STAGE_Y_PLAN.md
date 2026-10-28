@@ -61,6 +61,32 @@ off. New (relay api 5, `RELAY_PROTOCOL.md` first):
 - Limits to state: revocation protects the relay (future data, uploads); it cannot erase what the lost device already
   holds (its database is encrypted with the wallet key, so rotation + a new wallet key is the real cure).
 
+### DK protocol sketch (lead, 2026-10-28; the core-builder writes it into RELAY_PROTOCOL.md as api 5 FIRST, then builds)
+- **Device key:** random Ed25519 seed per install (`budget_wallet_device_key`; desktop file `device.key` 0600; web localStorage
+  `bw.deviceKey` — a revocable relay credential only, never a data key). `devpub` = base64url(pub). Fingerprint shown to the owner =
+  first 8 base32 chars of SHA-256(pub), as `ABCD-EFGH`.
+- **api 5 signing:** every request carries `X-BW-Dev: <devpub>` and `X-BW-Sig` by the device key over `bw-relay-v5\n<METHOD>\n<host>\n<path>\n<covers>\n<body hash>\n<time>\n<devpub>`.
+  The wallet key still derives `wid` (and the legacy wallet pub kept in meta for migration).
+- **meta.json v3:** `devices: {<devpub>: {added, by (devpub or "wallet"), revoked?, deviceId?}}`, `pending: {<devpub>: {at, deviceId?}}`
+  (cap 8, 7-day expiry), `locked: bool` ("require approval").
+- **Create (api 5):** first `PUT d/<device>/1` also signed by the legacy wallet key as today (`X-BW-Pub`) AND carries `X-BW-Dev`
+  → that device key is enrolled `by: "wallet"`.
+- **Join / upgrade while unlocked:** `PUT /v2/w/<wid>/enrol` (body `{deviceId}`), signed by the new device key AND counter-signed
+  by the legacy wallet key (header `X-BW-WSig` over the same text) → enrolled `by: "wallet"`. Locked → stored in `pending`, 202.
+- **Approve / revoke / lock:** `PUT /v2/w/<wid>/devices/<fingerprint>` body `{"approve":true}` or `{"revoke":true}`, and
+  `PUT /v2/w/<wid>/lock` `{"locked":true}` — signed by an enrolled, non-revoked device only. Idempotent (replays harmless).
+  Revoking the last non-revoked device → 409 `lastDevice`. A revoked key → 401 `{"error":"revoked"}` on everything.
+- **State JSON (api 5):** adds `keys: [{fp, added, by, revoked, deviceId, self}]`, `pending: [{fp, at, deviceId}]`, `locked`.
+- **Mixed versions:** api-4 app on api-5 relay: works while unlocked (v4 legacy signatures); once locked its v4 requests get 401 and
+  `GET state` answers `{"api":5}` → it shows "Update the app". api-5 app on api-4 relay: health says 4 → signs v4 as today, device
+  features hidden ("Device approval needs the relay updated").
+- **Client:** `RelayTransport(..., deviceKey:)`; a 401 `revoked` is fatal and never retried (`TransportFailure.revoked`, "This device
+  was removed from the wallet."); `MemoryTransport` mirrors enrol/approve/revoke/lock/revoked.
+- **App (UI half, after WS merges):** Settings › Sync › Devices: each key with its fingerprint + last sync, "Remove this device"
+  (confirm; not on the last one), pending devices with "Approve" (owner compares the code shown on the new device), a switch
+  "Require approval for new devices"; on a new/joining device while locked: "Waiting for approval — show this code on a device you
+  already use: ABCD-EFGH" (QR too); after a revoke: the rotate-the-key advice. Backups never contain device keys.
+
 ## Delegation (cap 4; one feature stage at a time; Stage M, PI2a run first/alongside)
 | Stage | Agents (model/effort) | Order |
 |---|---|---|
