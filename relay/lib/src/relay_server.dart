@@ -690,7 +690,6 @@ class Relay {
       // An api-5 creation: the creator is enrolled and the wallet starts locked (every other device needs an approval).
       final fp = fingerprint(decodeBase64Url(dev, 32)!);
       w.keys[dev] = DeviceKey(fp, _now(), 'wallet', device: device);
-      w.reserve(fp, dev);
       w.locked = true;
       w.lockTime = signedTime;
     }
@@ -937,7 +936,7 @@ class Relay {
           if (expired) await w.saveMeta();
           throw _HttpError(409, 'tooManyKeys');
         }
-        w.reserve(fp, dev);
+        w.fps.remove(fp); // the key holds its fingerprint now
         w.pending.remove(dev);
         w.keys[dev] = DeviceKey(fp, now, 'wallet', deviceId: deviceId);
         await w.saveMeta();
@@ -953,7 +952,7 @@ class Relay {
         throw _HttpError(409, 'pendingFull');
       }
       w.pending[dev] = PendingKey(fp, now, deviceId);
-      w.reserve(fp, dev);
+      w.fps.remove(fp);
       await w.saveMeta();
       _log('relay keys enrolled=${w.activeKeys} pending=${w.pending.length} w=${info.wid}');
       return _Out.json(202, {'pending': true});
@@ -1039,20 +1038,24 @@ class Relay {
       if (t <= w.othersTime) return _Out.json(200, {'revoked': 0});
       final now = _now();
       w.dropExpired(now);
+      // Only what existed when it was signed: a key enrolled (or a request made) after [t] is left alone, so a first
+      // delivery held back inside the window cannot remove a device approved meanwhile.
+      bool after(DateTime d) => d.millisecondsSinceEpoch > t;
       var n = 0;
       for (final MapEntry(key: pub, value: k) in w.keys.entries) {
-        if (pub == me || k.revoked != null) continue;
+        if (pub == me || k.revoked != null || after(k.added)) continue;
         k.revoked = now;
         n++;
       }
-      for (final MapEntry(key: pub, value: p) in w.pending.entries) {
+      for (final MapEntry(key: pub, value: p) in w.pending.entries.toList()) {
+        if (after(p.at)) continue;
+        w.pending.remove(pub);
         w.keys[pub] = DeviceKey(p.fp, now, me, revoked: now, deviceId: p.deviceId);
       }
-      w.pending.clear();
       w.othersTime = t;
       w.lockAfterRevoke(t, now);
       await w.saveMeta();
-      _log('relay keys enrolled=${w.activeKeys} pending=0 revoked=$n w=${info.wid}');
+      _log('relay keys enrolled=${w.activeKeys} pending=${w.pending.length} revoked=$n w=${info.wid}');
       return _Out.json(200, {'revoked': n});
     });
   }

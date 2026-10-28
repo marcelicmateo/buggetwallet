@@ -215,14 +215,17 @@ class Wallet {
   /// Signed time (Unix ms) of the last applied `devices/others` revoke: older ones (replays) change nothing.
   int othersTime = 0;
 
-  /// Fingerprint → the first `devpub` that showed it (newest [maxReserved]): another key with that fingerprint can never
-  /// enrol, also after its pending request expired or was rejected.
+  /// Free fingerprint reservations: fingerprint → the `devpub` of a pending request that expired, oldest first (the
+  /// newest [maxReserved] are kept). A fingerprint held by an enrolled, revoked or pending key is not in here: that key
+  /// holds it ([keyOf]). Together they keep a fingerprint bound to its first key, so another key with it never enrols.
   final Map<String, String> fps = {};
 
-  /// Reserves [fp] for [devpub] (no-op when already reserved); drops the oldest reservations beyond [maxReserved].
-  void reserve(String fp, String devpub) {
-    if (fps.containsKey(fp)) return;
-    fps[fp] = devpub;
+  /// Keeps [fp] reserved for [devpub] once no key or pending entry holds it (an expired request) as the newest free
+  /// reservation; beyond [maxReserved] the oldest free ones go.
+  void reserveFree(String fp, String devpub) {
+    fps
+      ..remove(fp)
+      ..[fp] = devpub;
     while (fps.length > maxReserved) {
       fps.remove(fps.keys.first);
     }
@@ -239,9 +242,15 @@ class Wallet {
 
   /// Drops pending keys asked more than [pendingExpiry] before [now]; whether any went.
   bool dropExpired(DateTime now) {
-    final before = pending.length;
-    pending.removeWhere((_, p) => now.difference(p.at) > pendingExpiry);
-    return pending.length != before;
+    final gone = [
+      for (final MapEntry(key: pub, value: p) in pending.entries)
+        if (now.difference(p.at) > pendingExpiry) (pub, p),
+    ]..sort((a, b) => a.$2.at.compareTo(b.$2.at));
+    for (final (pub, p) in gone) {
+      pending.remove(pub);
+      reserveFree(p.fp, pub); // its fingerprint stays bound to it
+    }
+    return gone.isNotEmpty;
   }
 
   /// The `devpub` of the key (enrolled, revoked or pending) whose fingerprint is [fp], or null.
@@ -467,15 +476,12 @@ class Wallet {
     final fs = meta['fps'];
     if (fs is Map<String, Object?>) {
       for (final MapEntry(key: fp, value: pub) in fs.entries) {
-        if (fingerprintPattern.hasMatch(fp) && pub is String && decodeBase64Url(pub, 32) != null) w.reserve(fp, pub);
+        // Free reservations only, in their stored order (oldest first): a fingerprint a key or pending entry holds is
+        // that entry's (a meta written while reservations also listed held ones).
+        if (fingerprintPattern.hasMatch(fp) && pub is String && decodeBase64Url(pub, 32) != null && w.keyOf(fp) == null) {
+          w.reserveFree(fp, pub);
+        }
       }
-    }
-    // Every key and pending entry holds its fingerprint too (a meta written before reservations).
-    for (final MapEntry(key: pub, value: k) in w.keys.entries) {
-      w.reserve(k.fp, pub);
-    }
-    for (final MapEntry(key: pub, value: p) in w.pending.entries) {
-      w.reserve(p.fp, pub);
     }
   }
 
