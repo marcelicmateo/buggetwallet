@@ -247,9 +247,9 @@ Future<({int changed, int ops, int data, List<Op> records})> _applyBytes(
     for (final op in ops)
       if (isSyncRecord(op)) op
   ];
-  final tieBreak = records.any((op) => op.entity == repairKind);
+  final repair = records.any((op) => op.entity == repairKind);
   try {
-    final changed = repo.applyRemote(ops, match: false, tieBreak: tieBreak);
+    final changed = repo.applyRemote(ops, match: false, repair: repair);
     return (changed: changed, ops: ops.length, data: ops.length - records.length, records: records);
   } on SqliteException catch (e, st) {
     if (_dbTrouble.contains(e.resultCode)) rethrow;
@@ -563,7 +563,8 @@ class SyncEngine {
       final queued = repo.queuedBlobs().toSet();
       final pre = [
         for (final h in repo.pendingBlobRefs())
-          if (repo.hasCachedBlob(h) && !queued.contains(h)) h
+          // Not the schema-15 re-upload list: those are marked uploaded but were deleted on the relay by api-3 builds.
+          if (repo.hasCachedBlob(h) && !queued.contains(h) && !(reuploadList?.contains(h) ?? false)) h
       ];
       blobsStored.addAll(pre);
       if (pre.isNotEmpty) logEvent(_log, Level.INFO, 'sync.repair.blobsKept', {'files': pre.length});
@@ -810,6 +811,7 @@ class SyncEngine {
         relayBytes: state.bytes,
         relayMaxBytes: state.maxBytes,
         relayApi: state.api,
+        conflicts: repo.syncConflicts().length,
         devices: [
           for (final d in ids)
             SyncDevice(_short(d), lastSeen: d == me ? (acked || sent > 0 ? now : seenById[d]) : seenById[d], isThis: d == me),
@@ -834,7 +836,9 @@ class SyncEngine {
     final since = book.first ?? 0;
     final asks = [
       for (final a in recs.asks)
-        if (!book.answered.contains(a) && Hlc.parse(a).millis >= since) a
+        // An hour of margin (maxClockDrift): a peer's clock a little behind must not lose an ask written just
+        // before this device's first V2 run.
+        if (!book.answered.contains(a) && Hlc.parse(a).millis >= since - maxClockDrift.inMilliseconds) a
     ];
     for (final a in recs.asks) {
       book.answer(a);
@@ -867,18 +871,21 @@ class SyncEngine {
         }
       }
       logEvent(_log, Level.FINE, 'sync.digest.compare', {'matched': matched, 'differ': differ.length, 'ignored': ignored});
-      if (differ.isEmpty && matched > 0 && book.disagree != null) {
+      // VC: open conflicts keep devicesDisagree and stop automatic repair; the owner's choices settle them.
+      final conflicts = repo.syncConflicts().length;
+      if (differ.isEmpty && matched > 0 && book.disagree != null && conflicts == 0) {
         book.disagree = null;
         logEvent(_log, Level.INFO, 'sync.digest.agree');
       }
       if (differ.isNotEmpty) {
         logEvent(_log, Level.WARNING, 'sync.digest.mismatch', {'peers': differ.length, 'matched': matched});
         final last = book.repairAt;
-        if (book.disagree != null || (last != null && nowMs - last < SyncDigests.repairQuiet.inMilliseconds)) {
+        if (conflicts > 0 || book.disagree != null || (last != null && nowMs - last < SyncDigests.repairQuiet.inMilliseconds)) {
           // devicesDisagree stops automatic repair until a compare matches: a field that never converges (one build
           // refuses it) must not cost every device a whole re-upload each week.
           book.disagree = _short(differ.first);
-          logEvent(_log, Level.WARNING, 'sync.digest.disagree', {'sinceRepairH': last == null ? -1 : (nowMs - last) ~/ 3600000});
+          logEvent(_log, Level.WARNING, 'sync.digest.disagree',
+              {'sinceRepairH': last == null ? -1 : (nowMs - last) ~/ 3600000, 'conflicts': conflicts});
         } else {
           final n = repo.queueStateResend();
           final h = _recordHlc(repo);

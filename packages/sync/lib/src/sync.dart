@@ -91,6 +91,10 @@ class SyncReport {
   /// up bill files no kept snapshot declares (P14), so the app can say "Old bill files are cleaned up on the relay."
   final int? relayApi;
 
+  /// Open sync conflicts on this device after the run (VC, `WalletRepo.syncConflicts`): fields another device holds
+  /// with the same clock but another value, waiting for the owner's choice.
+  final int conflicts;
+
   /// Whether the relay collects old bill files ([relayApi] ≥ 4).
   bool get relayCollectsBlobs => (relayApi ?? 0) >= 4;
 
@@ -98,6 +102,7 @@ class SyncReport {
       {this.problems = const [],
       this.caughtUp = false,
       this.waiting = const [],
+      this.conflicts = 0,
       this.devices = const [],
       this.blobsSent = 0,
       this.blobsWaiting = 0,
