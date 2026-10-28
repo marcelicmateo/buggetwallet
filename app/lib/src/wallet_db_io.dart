@@ -17,6 +17,9 @@ Future<String> _path(String? dir) async {
   return '${support.path}${Platform.pathSeparator}wallet.db';
 }
 
+/// The throwaway database a controller holds while no wallet is open (no key yet).
+WalletRepo placeholderRepo() => WalletRepo.inMemory();
+
 /// Phones and computers: nothing to claim (the browser build guards against a second tab here).
 Future<void> claimWalletDb() async {}
 

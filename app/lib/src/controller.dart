@@ -447,7 +447,7 @@ class WalletController extends ChangeNotifier {
       await claim();
     } on WalletInUse {
       logEvent(_log, Level.WARNING, 'app.start', {'phase': 'db', 'inUse': true});
-      return WalletController._(WalletRepo.inMemory(), null, deps: d, inUseElsewhere: true);
+      return WalletController._(placeholderRepo(), null, deps: d, inUseElsewhere: true);
     }
 
     VaultKey? key;
@@ -487,7 +487,7 @@ class WalletController extends ChangeNotifier {
         }
       } on WalletInUse {
         logEvent(_log, Level.WARNING, 'app.start', {'phase': 'db', 'inUse': true});
-        return WalletController._(WalletRepo.inMemory(), null, deps: d, inUseElsewhere: true);
+        return WalletController._(placeholderRepo(), null, deps: d, inUseElsewhere: true);
       } on WalletDbKeyException {
         var finished = false;
         if (marker != null) {
@@ -513,7 +513,7 @@ class WalletController extends ChangeNotifier {
     logEvent(_log, Level.INFO, 'app.start', {'phase': 'db', 'ms': sw.elapsedMilliseconds, 'opened': db != null, 'unopened': unopened});
 
     sw = Stopwatch()..start();
-    final c = WalletController._(db?.repo ?? WalletRepo.inMemory(), key, deps: d, db: db, locked: locked);
+    final c = WalletController._(db?.repo ?? placeholderRepo(), key, deps: d, db: db, locked: locked);
     c._dbPending = db == null;
     c.hasUnopenedDb = unopened;
     if (marker != null && db != null) {
