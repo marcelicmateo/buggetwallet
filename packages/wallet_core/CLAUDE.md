@@ -677,7 +677,13 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `stateDigest` is cached per `dataVersion`, so a change behind the change log shows only after the next data change.
   Two devices that see the mismatch in the same round both ask: each device then resends its state once per ask
   (bounded, accepted). An ask written by a device whose clock is behind this device's first relay sync is ignored.
-  About 270 ms per digest on a 20k-row wallet (VM, laptop), run on the UI isolate at most once per data version.
+  About 300 ms per digest on a 20k-row wallet (VM, laptop), at most once per data version. M2: the engine calls
+  `stateDigestAsync(atVersion:)`: for a file opened by `WalletRepo.open` (native) it runs in a new isolate on its own
+  read-only connection (same key, `readInIsolate` in `sqlite_io.dart`, one read transaction) and returns null (never
+  cached) when `dataVersion` moved meanwhile, so the engine records no digest for a state its vector does not name and
+  sends it on a later quiet run; in-memory/`fromDatabase` repos (tests, web) compute it synchronously; an isolate
+  failure falls back to the synchronous path (`repo.stateDigest.isolateFailed`). Tests: `test/state_digest_async_test.dart`,
+  `packages/sync/test/state_digest_async_sync_test.dart`.
 - H9 repairs run only when caught up; a planned row a confirmed bill wants created is not created for a due date in
   the past.
 - Recurring bills: a device that imports a payee's rows before syncing writes the candidate's amount/due/label again

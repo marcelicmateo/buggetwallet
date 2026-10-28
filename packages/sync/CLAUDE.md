@@ -44,7 +44,9 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   file holding data ops applied or written), the dirty mark, the last repair time, the ids of the asks answered or
   written (newest 32), a resend
   waiting (`send` = its record's clock, `ask`), `dis` (devicesDisagree peer). Engine rules: an own data upload that
-  carries every local change puts the digest (`WalletRepo.stateDigest()`, vector incl. that file) into its last part;
+  carries every local change puts the digest (`WalletRepo.stateDigestAsync(atVersion:)` = the state when the outbox
+  was read, off the UI isolate on native; null = a write landed meanwhile: no digest in that upload, `sync.digest.stale`,
+  likewise for the compare and the records-only file; vector incl. that file) into its last part;
   a caught-up run with an empty outbox that applied peer data sends a records-only digest file (never one for a file
   of records only: no ping-pong; digests only after a caught-up run, `stateDigest` cached per `dataVersion`). Step 6 of
   `run`: asks not answered yet (by id) and written after `DigestBook.first` (repo clock at this device's first V2

@@ -13,3 +13,7 @@ CommonDatabase openMemoryDb() =>
 /// Not available on the web; use `openKeyed` and `WalletRepo.fromDatabase`.
 CommonDatabase openKeyedFileDb(String path, List<int> dbKey, {void Function(String step)? step}) =>
     throw UnsupportedError('WalletRepo.open is not available on the web: open a WASM database with openKeyed');
+
+/// Not available on the web (no second connection, no isolates); `WalletRepo.fromDatabase` repos never call it.
+Future<T> readInIsolate<T>(String path, List<int>? dbKey, T Function(CommonDatabase db) read) =>
+    throw UnsupportedError('readInIsolate is not available on the web');

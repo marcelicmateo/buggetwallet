@@ -210,7 +210,8 @@ class WalletRepo {
   /// next sync is a first connect under it (whole state, clocks unchanged). [deviceId] (the getter) of a database
   /// opened without one is the id to move into the key store once.
   static WalletRepo open(String path, {List<int>? dbKey, int Function()? now, String? deviceId}) =>
-      _timedOpen(() => dbKey == null ? sqlite.openFileDb(path) : sqlite.openKeyedFileDb(path, dbKey), true, now, deviceId);
+      _timedOpen(() => dbKey == null ? sqlite.openFileDb(path) : sqlite.openKeyedFileDb(path, dbKey), true, now, deviceId)
+        .._file = (path, dbKey == null ? null : List<int>.unmodifiable(dbKey));
 
   /// A fresh in-memory database (tests). Native only: on the web use [fromDatabase]. [deviceId] as for [open].
   static WalletRepo inMemory({int Function()? now, String? deviceId}) => _timedOpen(sqlite.openMemoryDb, false, now, deviceId);
@@ -250,6 +251,10 @@ class WalletRepo {
   /// [stateDigest]'s last result and the [dataVersion] it was computed at; how many real computations ran.
   (int, String)? _digestCache;
   int _digestRuns = 0;
+
+  /// The database file and its key when opened by [open] (native): [WalletRepoSyncApply.stateDigestAsync] reads it on
+  /// a second connection in another isolate. Null for [inMemory] and [fromDatabase] (tests, the web): computed here.
+  (String, List<int>?)? _file;
 
   /// Rows a repair resend is restoring in this session (`entity|id`): found missing while this device still held
   /// clocks for them. Their equal-clock fields are restored, not conflicts (the row was recreated with defaults).
