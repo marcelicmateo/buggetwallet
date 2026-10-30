@@ -9,6 +9,7 @@ import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/period_report.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -119,13 +120,13 @@ void main() {
       expect(_contains('reportSplit', '400\u00A0€'), findsOneWidget);
       expect(_contains('reportSplit', 'Flexible'), findsOneWidget);
       expect(_contains('reportSplit', '111.70\u00A0€'), findsOneWidget);
-      // Out is 21 % under the 650.50 of the period before: down, and good.
-      expect(find.descendant(of: _k('reportDelta'), matching: find.text('Out 21 % vs 5 Sep – 4 Oct')), findsOneWidget);
-      expect(find.byIcon(Icons.arrow_drop_down), findsOneWidget);
-      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
-      // The running state is said once.
+      // The period is still running: its partial spending is not compared with a whole period (no "better" after 3 days).
+      expect(_k('reportDelta'), findsNothing);
+      expect(find.byIcon(Icons.check_circle_outline), findsNothing);
+      // The running state is said once, without the end date the title already has (16 days: 20 Oct to 4 Nov).
       expect(_k('reportRunning'), findsOneWidget);
-      expect(find.textContaining('Running until 4 Nov'), findsOneWidget);
+      expect(find.text('Running · 16 days left'), findsOneWidget);
+      expect(find.textContaining('4 Nov'), findsOneWidget, reason: 'only the title says the end date');
       expect(find.textContaining('so far'), findsNothing);
       // Reviews and saved by waiting count the period [5 Oct, 5 Nov).
       expect(_in('reportReviews', '3'), findsOneWidget);
@@ -194,7 +195,7 @@ void main() {
       expect(_title(tester), '5 Sep – 4 Oct');
       expect(_k('reportDelta'), findsNothing, reason: 'first period');
       await _tapIcon(tester, 'reportNext');
-      expect(_k('reportDelta'), findsOneWidget);
+      expect(_k('reportDelta'), findsNothing, reason: 'the running period is not compared');
 
       // The same wallet with a September that spent nothing: October has no figure to compare with.
       final empty = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => _clock);
@@ -212,13 +213,47 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('no periods yet: a plain note, no tiles', (tester) async {
+    testWidgets('a finished period that spent less than the one before: down, and good', (tester) async {
+      final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => _clock);
+      addTearDown(wc.dispose);
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        syntheticTx('2026-08-05', 150000, 'Plaća/Mirovina', 'Neto placa synthetic a'),
+        syntheticTx('2026-09-05', 150000, 'Plaća/Mirovina', 'Neto placa synthetic b'),
+        syntheticTx('2026-10-05', 150000, 'Plaća/Mirovina', 'Neto placa synthetic c'),
+      ]));
+      wc.repo.addTransaction(date: '2026-08-10', amount: 20000, category: 'Groceries');
+      wc.repo.addTransaction(date: '2026-09-10', amount: 15000, category: 'Groceries');
+      wc.repo.updateSettings({'salary': 150000, 'salaryConfirmed': true, 'paydayDay': 5});
+      wc.snoozeKeyBackup();
+      wc.reload();
+      await _pump(tester, wc);
+      await _tapIcon(tester, 'reportPrev');
+      expect(_title(tester), '5 Sep – 4 Oct');
+      expect(find.descendant(of: _k('reportDelta'), matching: find.text('Out 25 % vs 5 Aug – 4 Sep')), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_drop_down), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('no pay periods yet: one short line, no tiles', (tester) async {
       final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => _clock);
       addTearDown(wc.dispose);
       wc.snoozeKeyBackup();
       await _pump(tester, wc);
-      expect(find.textContaining('No pay periods yet'), findsOneWidget);
+      expect(find.text('No salary found yet.'), findsOneWidget);
       expect(_k('reportKept'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('imports without any salary row say the same short line', (tester) async {
+      final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => _clock);
+      addTearDown(wc.dispose);
+      wc.repo.addTransaction(date: '2026-10-12', amount: 8420, category: 'Groceries');
+      wc.snoozeKeyBackup();
+      wc.reload();
+      await _pump(tester, wc);
+      expect(find.text('No salary found yet.'), findsOneWidget);
+      expect(find.textContaining('Import'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   });
@@ -294,6 +329,22 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets('a day to come is not tappable: the readout never shows a future amount', (tester) async {
+      final wc = _wallet();
+      wc.repo.addTransaction(date: '2026-10-25', amount: 99999, category: 'Groceries');
+      wc.reload();
+      await _pump(tester, wc);
+      await tester.tap(_k('heatDay:2026-10-25'), warnIfMissed: false);
+      await tester.pump();
+      expect(_in('heatReadout', '12 Oct'), findsOneWidget);
+      expect(_in('heatReadout', moneyExact(99999, 'EUR')), findsNothing);
+      expect(_in('heatReadout', '25 Oct'), findsNothing);
+      // Today and earlier days still answer.
+      await tester.tap(_k('heatDay:2026-10-14'));
+      await tester.pump();
+      expect(_in('heatReadout', '14 Oct'), findsOneWidget);
+    });
+
     testWidgets('a period with no flexible spending says so and shows no readout', (tester) async {
       final handle = tester.ensureSemantics();
       final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => _clock);
@@ -330,6 +381,21 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('the chip and the badge can be activated by a screen reader (tap action), and it opens the page', (tester) async {
+      final handle = tester.ensureSemantics();
+      final wc = _wallet();
+      await pumpFull(tester, wc, 1, size: const Size(400, 800));
+      await tester.pump(const Duration(milliseconds: 400));
+      final chip = find.semantics.byLabel(RegExp('^Pay-period report, '));
+      expect(chip, findsOneWidget);
+      expect(chip.evaluate().single.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      tester.semantics.tap(chip);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(_k('reportKept'), findsOneWidget);
+      handle.dispose();
+    });
+
     testWidgets('the rail badge opens it as a dialog on a wide window', (tester) async {
       final wc = _wallet();
       await pumpFull(tester, wc, 1, size: const Size(1280, 800));
@@ -340,6 +406,20 @@ void main() {
       expect(find.byType(Dialog), findsOneWidget);
       expect(_kept('988.30\u00A0€'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the rail badge has a tap action for screen readers and it opens the dialog', (tester) async {
+      final handle = tester.ensureSemantics();
+      final wc = _wallet();
+      await pumpFull(tester, wc, 1, size: const Size(1280, 800));
+      await tester.pump(const Duration(milliseconds: 400));
+      final badge = find.semantics.byLabel(RegExp('^Pay-period report, '));
+      expect(badge, findsOneWidget);
+      expect(badge.evaluate().single.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      tester.semantics.tap(badge);
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byType(Dialog), findsOneWidget);
+      handle.dispose();
     });
   });
 

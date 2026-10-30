@@ -56,10 +56,11 @@ class _PeriodReportScreenState extends State<PeriodReportScreen> {
             body: ColoredBox(
               color: c.desk,
               child: reports.isEmpty
-                  ? const EmptyNote('No pay periods yet. Import your bank files first.')
+                  ? const EmptyNote('No salary found yet.')
                   : Column(children: [
                       _Stepper(
                         report: reports[i],
+                        daysLeft: wc.period().daysLeft,
                         onPrev: i > 0 ? () => go(i - 1) : null,
                         onNext: i < reports.length - 1 ? () => go(i + 1) : null,
                       ),
@@ -81,7 +82,8 @@ class _PeriodReportScreenState extends State<PeriodReportScreen> {
 class _Stepper extends StatelessWidget {
   final PeriodReport report;
   final VoidCallback? onPrev, onNext;
-  const _Stepper({required this.report, required this.onPrev, required this.onNext});
+  final int daysLeft;
+  const _Stepper({required this.report, required this.daysLeft, required this.onPrev, required this.onNext});
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -100,7 +102,8 @@ class _Stepper extends StatelessWidget {
               if (report.running)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: StateChip.date('Running until ${shortDate(addDays(report.end, -1))}', key: const ValueKey('reportRunning')),
+                  // The title already has the dates: the chip only says it is running and how long it has to go.
+                  child: StateChip.date('Running · $daysLeft ${daysLeft == 1 ? 'day' : 'days'} left', key: const ValueKey('reportRunning')),
                 ),
             ]),
           ),
@@ -117,7 +120,8 @@ class _Tiles extends StatelessWidget {
 
   DashChip? _delta() {
     final prev = previous;
-    if (prev == null) return null;
+    // A running period is partial: 3 days of spending against a whole period before would always look "better".
+    if (prev == null || report.running) return null;
     final change = changePermille(report.out, prev.out);
     if (change == null) return null;
     final name = dateRange(prev.start, prev.end);
@@ -233,11 +237,10 @@ class _HeatmapState extends State<_Heatmap> {
           : DecoratedBox(
               decoration: BoxDecoration(
                   color: _fill(c, heatLevel(d.spent, biggest)), border: d.date == shown?.date ? Border.all(color: c.ink, width: 2) : null));
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() => _picked = d.date),
-        child: SizedBox(key: ValueKey('heatDay:${d.date}'), width: sq, height: sq, child: box),
-      );
+      final square = SizedBox(key: ValueKey('heatDay:${d.date}'), width: sq, height: sq, child: box);
+      // A day to come has nothing to show: no tap, no amount.
+      if (_toCome(d)) return square;
+      return GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _picked = d.date), child: square);
     }
 
     final grid = Semantics(
