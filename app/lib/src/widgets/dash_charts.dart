@@ -5,7 +5,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../format.dart';
+import '../layout.dart';
 import '../theme.dart';
 import 'charts.dart' show snapPx, solidOver;
 import 'common.dart';
@@ -32,8 +32,8 @@ class Ring extends StatelessWidget {
         width: size,
         height: size,
         child: CustomPaint(
-          painter: _RingPainter(progress.clamp(0.0, 1.0), color ?? c.s1, c.line, px),
-          child: Padding(padding: EdgeInsets.all(stroke + 4), child: Center(child: child)),
+          painter: _RingPainter(progress.isFinite ? progress.clamp(0.0, 1.0) : 0.0, color ?? c.s1, c.line, px),
+          child: Padding(padding: EdgeInsets.all(stroke + (size < 60 ? 2 : 4)), child: Center(child: child)),
         ),
       ),
     );
@@ -67,14 +67,16 @@ class _RingPainter extends CustomPainter {
   bool shouldRepaint(_RingPainter old) => old.progress != progress || old.color != color || old.track != track || old.stroke != stroke;
 }
 
-/// A ring tile: label, the ring with [center] inside (a percent), the exact [value] under it and a sub line.
+/// A ring tile: label, the ring with [center] inside (a percent), the exact [value] and a sub line. [compact] puts a 44 dp ring beside
+/// the value instead of a big one above it, so goal and budget tiles stay short.
 class RingTile extends StatelessWidget {
   final String label, center, value;
   final String? sub;
   final double progress;
   final Color? color;
-  final DashChip? chip;
+  final DashChip? chip, trailing;
   final VoidCallback? onTap;
+  final bool compact, attention;
   const RingTile({
     super.key,
     required this.label,
@@ -84,37 +86,64 @@ class RingTile extends StatelessWidget {
     this.sub,
     this.color,
     this.chip,
+    this.trailing,
     this.onTap,
+    this.compact = false,
+    this.attention = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    return Tile(
-      onTap: onTap,
-      semanticLabel: [label, center, value, if (sub != null) sub, if (chip != null) chip!.spoken].join(', '),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        TileLabel(label),
-        const SizedBox(height: 8),
-        Center(
-          child: Ring(
-            progress: progress,
-            color: color,
-            child: FittedBox(
-                fit: BoxFit.scaleDown, child: Text(center, maxLines: 1, style: dashNumStyle(size: BwType.headingSize, color: c.ink))),
-          ),
-        ),
-        const SizedBox(height: 8),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(value, maxLines: 1, style: dashNumStyle(size: BwType.amountMdSize, color: c.ink)),
-        ),
-        if (sub != null)
-          Padding(
+    final valueText = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Text(value, maxLines: 1, style: dashNumStyle(size: BwType.amountMdSize, color: c.ink)),
+    );
+    final subText = sub == null
+        ? null
+        : Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Text(sub!, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+          );
+    return Tile(
+      onTap: onTap,
+      attention: attention,
+      semanticLabel:
+          [label, center, value, if (sub != null) sub, if (trailing != null) trailing!.spoken, if (chip != null) chip!.spoken].join(', '),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        trailing == null ? TileLabel(label) : SplitRow(start: TileLabel(label), end: trailing!),
+        const SizedBox(height: 8),
+        if (compact)
+          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            Ring(
+              progress: progress,
+              color: color,
+              size: 44,
+              stroke: 4,
+              child: FittedBox(
+                  fit: BoxFit.scaleDown, child: Text(center, maxLines: 1, style: dashNumStyle(size: BwType.eyebrowSize, color: c.ink))),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [valueText, if (subText != null) subText])),
+          ])
+        else ...[
+          Center(
+            child: Ring(
+              progress: progress,
+              color: color,
+              child: FittedBox(
+                  fit: BoxFit.scaleDown, child: Text(center, maxLines: 1, style: dashNumStyle(size: BwType.headingSize, color: c.ink))),
+            ),
           ),
+          const SizedBox(height: 8),
+          valueText,
+          if (subText != null) subText,
+        ],
         if (chip != null) Padding(padding: const EdgeInsets.only(top: 8), child: chip),
       ]),
     );
@@ -189,6 +218,9 @@ class DashSegment {
   final double weight;
   final Color color;
   const DashSegment({required this.label, required this.value, required this.weight, required this.color});
+
+  /// [weight] made safe to draw: not finite or negative counts as 0.
+  double get share => weight.isFinite && weight > 0 ? weight : 0;
 }
 
 /// The colour key with the values: a swatch, the label and the exact value, wrapping on narrow tiles.
@@ -229,7 +261,7 @@ class SplitBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shown = segments.where((s) => s.weight > 0).toList();
+    final shown = segments.where((s) => s.share > 0).toList();
     return Semantics(
       container: true,
       label: _spoken(segments),
@@ -242,7 +274,7 @@ class SplitBar extends StatelessWidget {
             child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               for (var i = 0; i < shown.length; i++) ...[
                 if (i > 0) const SizedBox(width: 2),
-                Expanded(flex: math.max(1, (shown[i].weight * 1000).round()), child: ColoredBox(color: shown[i].color)),
+                Expanded(flex: math.max(1, (shown[i].share * 1000).round()), child: ColoredBox(color: shown[i].color)),
               ],
             ]),
           ),
@@ -271,7 +303,7 @@ class Donut extends StatelessWidget {
           width: size,
           height: size,
           child: CustomPaint(
-            painter: _DonutPainter(segments.where((s) => s.weight > 0).toList(), stroke),
+            painter: _DonutPainter(segments.where((s) => s.share > 0).toList(), stroke),
             child: Padding(padding: EdgeInsets.all(stroke + 6), child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: center))),
           ),
         ),
@@ -288,7 +320,7 @@ class _DonutPainter extends CustomPainter {
   _DonutPainter(this.segments, this.stroke);
   @override
   void paint(Canvas canvas, Size size) {
-    final total = segments.fold<double>(0, (a, s) => a + s.weight);
+    final total = segments.fold<double>(0, (a, s) => a + s.share);
     if (total <= 0) return;
     final rect = Offset(stroke / 2, stroke / 2) & Size(size.width - stroke, size.height - stroke);
     final radius = rect.width / 2;
@@ -297,7 +329,7 @@ class _DonutPainter extends CustomPainter {
     final avail = 2 * math.pi - gap * segments.length;
     var at = -math.pi / 2 + gap / 2;
     for (final s in segments) {
-      final sweep = avail * s.weight / total;
+      final sweep = avail * s.share / total;
       canvas.drawArc(
         rect,
         at,
@@ -338,28 +370,23 @@ class HatchPainter extends CustomPainter {
   bool shouldRepaint(HatchPainter old) => old.color != color || old.ground != ground;
 }
 
-/// One budget meter of a [BarList]. [fraction] is spent / budget (more than 1 = over); [value] and [note] are shown as given
-/// ("48 € left", "Over by 12 €").
+/// One budget meter of a [BarList]. [fraction] is spent / budget (a number that is not finite or is negative counts as 0; more than 1
+/// = over, [over] is derived from it); [value] and [note] are shown as given ("48 € left", "Over by 12 €").
 class BarRow {
   final String label, value, note;
   final double fraction;
-  final bool over;
   final Color? color;
   final VoidCallback? onTap;
   final Key? key;
-  const BarRow(
-      {required this.label,
-      required this.value,
-      required this.note,
-      required this.fraction,
-      this.over = false,
-      this.color,
-      this.onTap,
-      this.key});
+  const BarRow({required this.label, required this.value, required this.note, required this.fraction, this.color, this.onTap, this.key});
+
+  /// [fraction] made safe to draw.
+  double get ratio => fraction.isFinite && fraction > 0 ? fraction : 0;
+  bool get over => ratio > 1;
 }
 
-/// Budget meters: name and exact amount, a track with a fill, a note. Over = the fill is hatched and the note carries ▲ and the
-/// word, so colour is never the only cue.
+/// Budget meters: name and exact amount, a track with a fill, a note. The bar is the budget; when over, the fill is solid up to the
+/// budget mark (a 2 px tick) and hatched beyond it, and the note carries a warning icon and bold words, so colour is never the only cue.
 class BarList extends StatelessWidget {
   final List<BarRow> rows;
   const BarList({super.key, required this.rows});
@@ -378,53 +405,64 @@ class BarList extends StatelessWidget {
           child: InkWell(
             key: r.key,
             onTap: r.onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                SplitRow(
-                  start: Text(r.label, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: BwType.bodySize)),
-                  end: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
-                    child: Text(r.value, maxLines: 1, style: BwType.amount.copyWith(color: c.ink, fontSize: BwType.bodySize)),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: r.onTap != null ? touchMin : 0),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  SplitRow(
+                    start: Text(r.label, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: BwType.bodySize)),
+                    end: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(r.value, maxLines: 1, style: BwType.amount.copyWith(color: c.ink, fontSize: BwType.bodySize)),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: SizedBox(
-                    height: 8,
-                    child: Stack(children: [
-                      Positioned.fill(child: ColoredBox(color: c.line)),
-                      if (r.over)
-                        Positioned.fill(child: CustomPaint(painter: HatchPainter(c.bad, c.badSoft)))
-                      else
-                        Positioned.fill(
-                          child: FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: r.fraction.clamp(0.0, 1.0),
+                  const SizedBox(height: 4),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: SizedBox(
+                      height: 8,
+                      child: LayoutBuilder(builder: (context, box) {
+                        final w = box.maxWidth;
+                        final budgetAt = r.over ? w / r.ratio : w; // where 100 % of the budget is
+                        return Stack(children: [
+                          Positioned.fill(child: ColoredBox(color: c.line)),
+                          Positioned(
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: r.over ? budgetAt : w * r.ratio.clamp(0.0, 1.0),
                             child: ColoredBox(color: r.color ?? c.s1),
                           ),
-                        ),
-                    ]),
+                          if (r.over) ...[
+                            Positioned(
+                                left: budgetAt, top: 0, bottom: 0, right: 0, child: CustomPaint(painter: HatchPainter(c.bad, c.badSoft))),
+                            Positioned(
+                                left: (budgetAt - 1).clamp(0.0, w - 2), top: 0, bottom: 0, width: 2, child: ColoredBox(color: c.ink)),
+                          ],
+                        ]);
+                      }),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 3),
-                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  if (r.over)
-                    Padding(
-                        padding: const EdgeInsets.only(right: 3, top: 1), child: Icon(Icons.warning_amber_rounded, size: 15, color: c.bad)),
-                  Expanded(
-                    child: Text(r.note,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: BwType.metaSize,
-                            fontWeight: r.over ? FontWeight.w600 : FontWeight.w400,
-                            color: r.over ? c.bad : c.muted)),
-                  ),
+                  const SizedBox(height: 3),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    if (r.over)
+                      Padding(
+                          padding: const EdgeInsets.only(right: 3, top: 1),
+                          child: Icon(Icons.warning_amber_rounded, size: 15, color: c.bad)),
+                    Expanded(
+                      child: Text(r.note,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: BwType.metaSize,
+                              fontWeight: r.over ? FontWeight.w600 : FontWeight.w400,
+                              color: r.over ? c.bad : c.muted)),
+                    ),
+                  ]),
                 ]),
-              ]),
+              ),
             ),
           ),
         ),
@@ -432,20 +470,68 @@ class BarList extends StatelessWidget {
   }
 }
 
-/// One bar of [NetBars]: kept (above the line) or lost (below, hatched) in cents; [running] = the period still going (faded, dashed).
-class NetBar {
-  final String label;
-  final int cents;
-  final bool running;
-  const NetBar({required this.label, required this.cents, this.running = false});
+/// A pace meter: the bar is the whole period, the fill is the share of money [used], a 2 px tick is where the period [expected] to be
+/// (both 0..1; not finite counts as 0). When [over], the fill is solid up to the tick and hatched beyond it.
+class PaceMeter extends StatelessWidget {
+  final double used, expected;
+  final bool over;
+  final String? semanticLabel;
+  const PaceMeter({super.key, required this.used, required this.expected, this.over = false, this.semanticLabel});
+
+  static double _unit(double v) => v.isFinite ? v.clamp(0.0, 1.0) : 0.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final u = _unit(used), e = _unit(expected);
+    return Semantics(
+      label: semanticLabel,
+      container: semanticLabel != null,
+      excludeSemantics: semanticLabel != null,
+      child: SizedBox(
+        height: 16,
+        child: LayoutBuilder(builder: (context, box) {
+          final w = box.maxWidth;
+          final solid = over ? math.min(u, e) : u;
+          return Stack(clipBehavior: Clip.none, children: [
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 3,
+              height: 10,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(5),
+                child: Stack(children: [
+                  Positioned.fill(child: ColoredBox(color: c.line)),
+                  Positioned(left: 0, top: 0, bottom: 0, width: w * solid, child: ColoredBox(color: c.s1)),
+                  if (over && u > e)
+                    Positioned(
+                        left: w * e, top: 0, bottom: 0, width: w * (u - e), child: CustomPaint(painter: HatchPainter(c.bad, c.badSoft))),
+                ]),
+              ),
+            ),
+            Positioned(left: (w * e - 1).clamp(0.0, math.max(0.0, w - 2)), top: 0, bottom: 0, width: 2, child: ColoredBox(color: c.ink)),
+          ]);
+        }),
+      ),
+    );
+  }
 }
 
-/// Kept or lost per period as bars around a zero line, the labels under. Heights scale to the largest bar (drawing only).
+/// One bar of [NetBars]: [cents] only sets how tall it is (kept above the line, lost below and hatched); [value] is the exact text
+/// shown under its label ("180.16 €", "−80 €"), formatted by the caller; [running] = the period still going (faded, dashed).
+class NetBar {
+  final String label, value;
+  final int cents;
+  final bool running;
+  const NetBar({required this.label, required this.value, required this.cents, this.running = false});
+}
+
+/// Kept or lost per period as bars around a zero line; label and exact value under each. Heights scale to the largest bar.
 class NetBars extends StatelessWidget {
   final List<NetBar> bars;
-  final String currency;
   final double height;
-  const NetBars({super.key, required this.bars, required this.currency, this.height = 96});
+  const NetBars({super.key, required this.bars, this.height = 96});
 
   @override
   Widget build(BuildContext context) {
@@ -453,10 +539,7 @@ class NetBars extends StatelessWidget {
     final dpr = MediaQuery.devicePixelRatioOf(context);
     return Semantics(
       container: true,
-      label: [
-        for (final b in bars)
-          '${b.label} ${b.cents >= 0 ? 'kept' : 'lost'} ${moneyExact(b.cents.abs(), currency)}${b.running ? ' so far' : ''}'
-      ].join(', '),
+      label: [for (final b in bars) '${b.label} ${b.cents >= 0 ? 'kept' : 'lost'} ${b.value}${b.running ? ' so far' : ''}'].join(', '),
       excludeSemantics: true,
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         SizedBox(
@@ -465,13 +548,20 @@ class NetBars extends StatelessWidget {
           child: CustomPaint(painter: _NetPainter(bars, c.s3, c.bad, c.surface, c.lineStrong, snapPx(1, dpr))),
         ),
         const SizedBox(height: 4),
-        Row(children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           for (final b in bars)
             Expanded(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(b.label, maxLines: 1, style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
-              ),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(b.label, maxLines: 1, style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
+                ),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(b.value,
+                      maxLines: 1, style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500, color: c.ink)),
+                ),
+              ]),
             ),
         ]),
       ]),
@@ -540,33 +630,81 @@ class _NetPainter extends CustomPainter {
 
 enum CalKind { none, bill, planned, payday }
 
-/// A day of a [CalendarStrip]: [label] is the day number as shown.
+/// A day of a [CalendarStrip]: [label] is the day number as shown, [amount] an optional short preformatted text under it (the cost
+/// of that day), scaled down to fit the cell.
 class CalDay {
   final String label;
   final CalKind kind;
   final bool today;
-  const CalDay(this.label, {this.kind = CalKind.none, this.today = false});
+  final String? amount;
+  const CalDay(this.label, {this.kind = CalKind.none, this.today = false, this.amount});
 }
 
 /// The days until payday as small squares: a bill = filled, a planned cost = dashed, payday = dashed teal with a flag, today = a bar
-/// under the number. [semanticLabel] says it in words (the caller knows the names and amounts).
+/// under the number. With [startWeekday] (1 = Monday .. 7 = Sunday, the weekday of the first day) the days sit in Monday-first
+/// weekday columns under a one-letter header, like a calendar; without it they flow like a strip. [semanticLabel] says it in words
+/// (the caller knows the names and amounts).
 class CalendarStrip extends StatelessWidget {
   final List<CalDay> days;
+  final int? startWeekday;
+  final List<String> weekdayLabels;
   final String? semanticLabel;
   final bool legend;
-  const CalendarStrip({super.key, required this.days, this.semanticLabel, this.legend = true});
+  const CalendarStrip({
+    super.key,
+    required this.days,
+    this.startWeekday,
+    this.weekdayLabels = const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+    this.semanticLabel,
+    this.legend = true,
+  });
+
+  static const _gap = 4.0;
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final cell = MediaQuery.textScalerOf(context).scale(30).clamp(30.0, 44.0);
+    final scaler = MediaQuery.textScalerOf(context);
+    final base = scaler.scale(30).clamp(30.0, 44.0);
+    final hasAmount = days.any((d) => d.amount != null);
+    final height = hasAmount ? base + scaler.scale(BwType.eyebrowSize) * 1.2 + 2 : base;
     final kinds = days.map((d) => d.kind).toSet();
+    final Widget cells;
+    if (startWeekday == null) {
+      cells = Wrap(spacing: _gap, runSpacing: _gap, children: [for (final d in days) _CalCell(d, width: base, height: height)]);
+    } else {
+      final lead = (startWeekday! - 1).clamp(0, 6);
+      final rows = (lead + days.length + 6) ~/ 7;
+      Widget line(Widget Function(int col) cell) => Row(children: [
+            for (var col = 0; col < 7; col++) ...[
+              if (col > 0) const SizedBox(width: _gap),
+              Expanded(child: cell(col)),
+            ],
+          ]);
+      cells = Column(mainAxisSize: MainAxisSize.min, children: [
+        ExcludeSemantics(
+          child: line((col) => Center(
+                child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(weekdayLabels[col], style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted))),
+              )),
+        ),
+        for (var r = 0; r < rows; r++)
+          Padding(
+            padding: const EdgeInsets.only(top: _gap),
+            child: line((col) {
+              final i = r * 7 + col - lead;
+              return i >= 0 && i < days.length ? _CalCell(days[i], height: height) : SizedBox(height: height);
+            }),
+          ),
+      ]);
+    }
     return Semantics(
       container: true,
       label: semanticLabel,
       excludeSemantics: semanticLabel != null,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        Wrap(spacing: 4, runSpacing: 4, children: [for (final d in days) _CalCell(d, cell)]),
+        cells,
         if (legend && kinds.any((k) => k != CalKind.none)) ...[
           const SizedBox(height: 8),
           Wrap(spacing: 14, runSpacing: 4, children: [
@@ -587,7 +725,7 @@ class _CalKey extends StatelessWidget {
   const _CalKey(this.day, this.text, this.c);
   @override
   Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
-        _CalCell(day, 16),
+        _CalCell(day, width: 16, height: 16),
         const SizedBox(width: 6),
         Text(text, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       ]);
@@ -595,8 +733,9 @@ class _CalKey extends StatelessWidget {
 
 class _CalCell extends StatelessWidget {
   final CalDay day;
-  final double size;
-  const _CalCell(this.day, this.size);
+  final double? width;
+  final double height;
+  const _CalCell(this.day, {this.width, required this.height});
   @override
   Widget build(BuildContext context) {
     final c = context.c;
@@ -608,33 +747,30 @@ class _CalCell extends StatelessWidget {
       CalKind.payday =>
         DashedBorderPainter(color: c.s3, radius: 4, width: 2, dash: 3, fill: solidOver(c.s3.withValues(alpha: 0.18), c.surface)),
     };
-    final small = size < 20;
+    final ink = day.kind == CalKind.none ? c.muted : c.ink;
     return SizedBox(
-      width: size,
-      height: size,
+      width: width,
+      height: height,
       child: CustomPaint(
         painter: painter,
-        child: small
+        child: height < 20
             ? null
             : Stack(alignment: Alignment.center, children: [
-                if (day.kind == CalKind.payday)
-                  Positioned(top: 1, left: 0, right: 0, child: Center(child: Icon(Icons.flag, size: 10, color: c.s3)))
-                else
-                  const SizedBox.shrink(),
-                Align(
-                    alignment: day.kind == CalKind.payday ? const Alignment(0, 0.55) : Alignment.center,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Padding(
-                        padding: const EdgeInsets.all(2),
-                        child: Text(day.label,
-                            maxLines: 1,
-                            style: numStyle.copyWith(
-                                fontSize: BwType.metaSize,
-                                fontWeight: day.today ? FontWeight.w700 : FontWeight.w400,
-                                color: day.kind == CalKind.none ? c.muted : c.ink)),
-                      ),
-                    )),
+                Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      if (day.kind == CalKind.payday) Icon(Icons.flag, size: 10, color: c.s3),
+                      Text(day.label,
+                          maxLines: 1,
+                          style: numStyle.copyWith(
+                              fontSize: BwType.metaSize, fontWeight: day.today ? FontWeight.w700 : FontWeight.w400, color: ink)),
+                      if (day.amount != null)
+                        Text(day.amount!, maxLines: 1, style: numStyle.copyWith(fontSize: BwType.eyebrowSize, color: c.ink2)),
+                    ]),
+                  ),
+                ),
                 if (day.today) Positioned(left: 6, right: 6, bottom: 3, height: 3, child: ColoredBox(color: c.ink)),
               ]),
       ),
