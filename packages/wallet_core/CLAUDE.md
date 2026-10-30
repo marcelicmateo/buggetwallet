@@ -556,6 +556,13 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   budget}` (+ `overBy`, `over`; spent = `rollUp(byCategory)[category]`, budget = `st.categoryBudgets[category]` per pay
   period); `savedByWaiting(wishes, fromMillis:, toMillis:)` / `savedByWaitingAll` → `SavedByWaiting {count, cents}`
   (skipped wishes, `decided` in [from, to)). txs = the expanded list (P6). Tests: `test/p8_reports_test.dart`.
+  **Period rule (RX7b, `periods.dart` `_periodStarts`/`_runningEnd`):** periods are contiguous `[start, end)`; the running
+  one's `end` = max(nextPayday(start), today + 1), so a late salary keeps it running and it always holds today (rows up
+  to today only). Starts = `detectPaydays`, except a saved `periodStart` ≤ today that lies 1..20 days before a real
+  payday replaces that payday (the report starts where `computePeriod` does); a saved start after its salary is not
+  used (it would move the salary row back), one > 20 days after the last payday is `detectPaydays`' own. `rangeFor`
+  (Insights "This pay period") still uses plain `detectPaydays`. Identities pinned in `test/rx7b_periods_test.dart`
+  (every row/review/wish in one period, Σ `periodDaySpend` over `[start, min(end, today + 1))` == flex).
 - RXc dashboard numbers (pure, web-safe): `averageOut(txs, month, months: 6, currency:)` (budget.dart) = Σ of the `months` months
   before `month` of `monthSummary.out` ÷ months, rounded like `averageByCategory` (it is the rounded total, so it can differ
   by cents from Σ of the rounded per-category values); `changePermille(now, before)` = (now − before)·1000/|before| half away
