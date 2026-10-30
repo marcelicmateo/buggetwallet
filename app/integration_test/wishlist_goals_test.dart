@@ -50,7 +50,7 @@ void main() {
 
     await check(t, 'Robot vacuum synthetic', '30');
     expect(status('Fits this month'), findsOneWidget);
-    expect(find.text('Under 50\u00A0€, no wait needed.'), findsOneWidget);
+    expect(find.textContaining('no wait needed'), findsNothing, reason: 'the tile note already says what waits');
     expect(find.textContaining('Put on wishlist'), findsNothing);
 
     await check(t, 'Robot vacuum synthetic', '2500');

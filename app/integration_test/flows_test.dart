@@ -16,8 +16,8 @@ import 'support/harness.dart';
 Map<String, Object?> plan(String start) =>
     {'salary': 200000, 'rent': 50000, 'loan': 0, 'subs': 0, 'paydayDay': 28, 'periodStart': start, 'salaryConfirmed': true};
 
-/// The big "safe to spend today" number: a [MoneyText] (Text.rich in three spans), read as its plain text.
-Finder safeAmount() => find.descendant(of: find.byKey(const ValueKey('safeToSpend')), matching: find.byType(Text));
+/// The big "safe to spend today" number: the keyed Text.rich itself (the key sits on the Text, not above it), read as its plain text.
+Finder safeAmount() => find.byKey(const ValueKey('safeToSpend'));
 String safeText(WidgetTester t) {
   final w = t.widget<Text>(safeAmount());
   return w.data ?? w.textSpan!.toPlainText();

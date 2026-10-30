@@ -109,7 +109,10 @@ class _WishlistScreenState extends State<WishlistScreen> {
         DashItem(
           span: 2,
           child: Tile(
+            key: const ValueKey('readyToDecide'),
             attention: true,
+            exposeChildren: true, // Buy it / Skip stay reachable for a screen reader
+            semanticLabel: 'Ready to decide, ${ready.length} ${ready.length == 1 ? 'wish' : 'wishes'}',
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
               SplitRow(start: const TileLabel('Ready to decide'), end: TileNote('${ready.length}')),
               Rows(children: [
@@ -123,7 +126,12 @@ class _WishlistScreenState extends State<WishlistScreen> {
           ),
         ),
       if (waiting.isEmpty)
-        const StatTile(key: ValueKey('emptySection:Cooling off'), label: 'Waiting', value: '0', sub: 'Wishlist is empty')
+        // "Wishlist is empty" only when nothing is ready either; a wish ready to decide sits in the tile beside this one.
+        StatTile(
+            key: const ValueKey('emptySection:Cooling off'),
+            label: 'Waiting',
+            value: '0',
+            sub: ready.isEmpty ? 'Wishlist is empty' : 'Nothing cooling off')
       else
         DashItem(
           span: 2,
@@ -154,7 +162,8 @@ class _WishlistScreenState extends State<WishlistScreen> {
           ),
         ),
       if (done.isEmpty)
-        const StatTile(key: ValueKey('emptySection:Decided'), label: 'Saved by waiting', value: '0', sub: 'Nothing decided yet')
+        StatTile(
+            key: const ValueKey('emptySection:Decided'), label: 'Saved by waiting', value: moneyExact(0, cur), sub: 'Nothing decided yet')
       else ...[
         StatTile(
           key: const ValueKey('savedByWaiting'),
@@ -236,9 +245,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
               toast(context, 'On the wishlist. Decide in ${s.coolHours} hours.');
             },
             child: Text('Put on wishlist (${s.coolHours}h)'),
-          )
-        else
-          Padding(padding: const EdgeInsets.only(top: 10), child: Muted('Under ${moneyExact(s.impulse, cur)}, no wait needed.')),
+          ),
         OutlinedButton(
           onPressed: () => showSheet<void>(
               context, GoalSheet(wc: wc, name: name.text.trim().isEmpty ? 'Big purchase' : name.text.trim(), target: price)),
