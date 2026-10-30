@@ -149,8 +149,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
                 const EmptyNote('No card spending this month yet.')
               else
                 Rows(children: [
-                  for (final (name, n, total) in top)
-                    LineItem(name, money(total, cur, decimals: 0), sub: '$n ${n == 1 ? 'payment' : 'payments'}')
+                  for (final (name, n, total) in top) LineItem(name, moneyExact(total, cur), sub: '$n ${n == 1 ? 'payment' : 'payments'}')
                 ]),
             ]),
           ], right: [
@@ -197,21 +196,28 @@ class _SpendingScreenState extends State<SpendingScreen> {
 
   Widget _outTile(SpendingView v, String cur, String current) {
     final series = v.outByMonth.sublist(v.outByMonth.length - 12);
+    final markedAt = v.months.indexOf(v.month) - (v.months.length - series.length); // the chosen month's place among the 12
     final change = v.outChange;
     // Spending less than the average is the good direction; a missing average (nothing in the 6 months before) shows no chip.
+    // Under half a percent (5 permille) it is the same as the average: a flat chip, never "0 % worse".
     final chip = change == null
         ? null
-        : DeltaChip(
-            key: const ValueKey('outDelta'),
-            trend: change > 0 ? Trend.up : (change < 0 ? Trend.down : Trend.flat),
-            text: '${(change.abs() + 5) ~/ 10} % vs avg',
-            good: change == 0 ? null : change < 0);
+        : change.abs() < 5
+            ? const DeltaChip(key: ValueKey('outDelta'), trend: Trend.flat, text: 'same as avg')
+            : DeltaChip(
+                key: const ValueKey('outDelta'),
+                trend: change > 0 ? Trend.up : Trend.down,
+                text: '${(change.abs() + 5) ~/ 10} % vs avg',
+                good: change < 0);
     return StatTile(
       key: const ValueKey('outTile'),
       label: 'Out in ${_monthName(v.month, current)}',
       value: moneyExact(v.summary.out, cur),
       visual: Sparkline(
-          values: [for (final c in series) c / 100], color: context.c.s1, semanticLabel: 'Out per month, the last ${series.length} months'),
+          values: [for (final c in series) c / 100],
+          marked: markedAt < 0 ? null : markedAt,
+          color: context.c.s1,
+          semanticLabel: 'Out per month, the last ${series.length} months, ${monthLong(v.month)} marked'),
       chip: chip,
     );
   }
@@ -290,6 +296,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
         if (chip != null) Padding(padding: const EdgeInsets.only(top: 6), child: chip),
         const SizedBox(height: 4),
         if (cats.isEmpty) const EmptyNote('Nothing spent this month yet.') else BarList(rows: [for (final k in cats) row(k)]),
+        // CX: `BudgetVsActual.budgetedActual` replaces this subtraction when stage CX lands.
         if (budgeted && budget.remainingTotal != null)
           Padding(
             padding: const EdgeInsets.only(top: 6),

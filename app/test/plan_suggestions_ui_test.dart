@@ -1,6 +1,7 @@
 // Stage N2 UI: Plan › "Suggestions from your imports" (accept one, accept all, Not now, none when equal). All data is SYNTHETIC.
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
+import 'package:budget_wallet/src/screens/plan_suggestions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -102,6 +103,9 @@ void main() {
     expect(wc.settings.salaryConfirmed, isTrue);
     expect(wc.dataVersion, before + 1);
     expect(find.byKey(const ValueKey('planSuggestions')), findsNothing);
+    await t.pumpAndSettle();
+    expect(find.byType(PlanSuggestionsSheet), findsNothing, reason: 'the sheet closed itself, once, when the last row went');
+    expect(find.byType(Scaffold), findsOneWidget, reason: 'and only the sheet: the page under it is still there');
     await settle(t);
   });
 

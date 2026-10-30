@@ -4,6 +4,7 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/today_view.dart';
+import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart' show WalletRepoSettings;
@@ -84,6 +85,20 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
+
+    testWidgets('only the over row is hatched beyond its budget mark; a behind-pace row is solid', (tester) async {
+      final wc = budgetWallet();
+      await pumpApp(tester, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(360, 3000));
+      bool hatched(String id) => find
+          .descendant(
+              of: find.byKey(ValueKey('categoryRow_$id')),
+              matching: find.byWidgetPredicate((w) => w is CustomPaint && w.painter is HatchPainter))
+          .evaluate()
+          .isNotEmpty;
+      expect(hatched('Eating out'), isTrue, reason: '112 of 100: over');
+      expect(hatched('Groceries'), isFalse, reason: '252 of 300 is behind pace, not over: no hatch, the words say it');
+      expect(hatched('Shopping'), isFalse, reason: 'no budget');
+    });
 
     testWidgets('nothing budgeted: the rows show amounts and averages, no chip or total', (tester) async {
       final wc = budgetWallet(budgets: false);

@@ -290,6 +290,22 @@ void main() {
       expect(find.textContaining('Salary received so far'), findsOneWidget);
     });
 
+    testWidgets('the warning and its buttons show exact cents, never whole euros', (tester) async {
+      final wc = wallet('2026-10-01', '2026-10-02');
+      wc.repo.updateSettings({'salary': 150050});
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        syntheticTx('2026-10-03', 25, 'Plaća/Mirovina', 'Neto placa synthetic second part'), // 1000.25 received in all
+      ]));
+      wc.reload();
+      expect(wc.period().lowIncome, isTrue);
+      await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
+      final received = moneyExact(wc.period().received, 'EUR'), planned = moneyExact(150050, 'EUR');
+      expect(received, contains('.25'));
+      expect(find.textContaining('Salary received so far is $received, below your planned $planned.'), findsOneWidget);
+      expect(find.text('Plan on $planned'), findsOneWidget);
+      expect(find.text('Plan on $received'), findsOneWidget);
+    });
+
     testWidgets('inside the window (parts still arriving) no warning', (tester) async {
       final wc = wallet('2026-10-15', '2026-10-16');
       expect(wc.period().lowIncome, isFalse);

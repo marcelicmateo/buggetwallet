@@ -93,20 +93,30 @@ class PlanSuggestionsPanel extends StatelessWidget {
 }
 
 /// The Suggestions tile opens this: the proposals with Accept / Not now per row and Accept all (the panel above). It follows the
-/// controller, so a row leaves as it is accepted, and closes itself when none are left.
-class PlanSuggestionsSheet extends StatelessWidget {
+/// controller, so a row leaves as it is accepted, and it closes itself, once, when none are left (only if it is the route on top).
+class PlanSuggestionsSheet extends StatefulWidget {
   final WalletController wc;
   const PlanSuggestionsSheet({super.key, required this.wc});
+  @override
+  State<PlanSuggestionsSheet> createState() => _PlanSuggestionsSheetState();
+}
+
+class _PlanSuggestionsSheetState extends State<PlanSuggestionsSheet> {
+  bool _closing = false;
+
+  void _closeWhenEmpty() {
+    if (_closing || widget.wc.planProposalList().isNotEmpty) return;
+    _closing = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) Navigator.pop(context);
+    });
+  }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-      listenable: wc,
+      listenable: widget.wc,
       builder: (context, _) {
-        if (wc.planProposalList().isEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (context.mounted && Navigator.canPop(context)) Navigator.pop(context);
-          });
-        }
-        return PlanSuggestionsPanel(wc: wc);
+        _closeWhenEmpty();
+        return PlanSuggestionsPanel(wc: widget.wc);
       });
 }

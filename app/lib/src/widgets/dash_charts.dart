@@ -150,13 +150,15 @@ class RingTile extends StatelessWidget {
   }
 }
 
-/// A line of [values] (oldest first) with a dot on the last one. No axes: the number it belongs to is in the tile.
+/// A line of [values] (oldest first) with a dot on the [marked] one (default: the last). No axes: the number it belongs to is in the
+/// tile. When an earlier value is marked, the last one keeps a small plain dot so the line still ends somewhere.
 class Sparkline extends StatelessWidget {
   final List<double> values;
   final Color? color;
   final double height;
+  final int? marked;
   final String? semanticLabel;
-  const Sparkline({super.key, required this.values, this.color, this.height = 40, this.semanticLabel});
+  const Sparkline({super.key, required this.values, this.color, this.height = 40, this.marked, this.semanticLabel});
 
   @override
   Widget build(BuildContext context) {
@@ -169,7 +171,7 @@ class Sparkline extends StatelessWidget {
       child: SizedBox(
         height: height,
         width: double.infinity,
-        child: CustomPaint(painter: _SparkPainter(values, color ?? c.s1, c.surface, snapPx(2, dpr))),
+        child: CustomPaint(painter: _SparkPainter(values, marked, color ?? c.s1, c.surface, snapPx(2, dpr))),
       ),
     );
   }
@@ -177,9 +179,10 @@ class Sparkline extends StatelessWidget {
 
 class _SparkPainter extends CustomPainter {
   final List<double> values;
+  final int? marked;
   final Color color, ground;
   final double stroke;
-  _SparkPainter(this.values, this.color, this.ground, this.stroke);
+  _SparkPainter(this.values, this.marked, this.color, this.ground, this.stroke);
   @override
   void paint(Canvas canvas, Size size) {
     if (values.isEmpty) return;
@@ -203,13 +206,17 @@ class _SparkPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round,
       );
     }
-    final end = Offset(x(values.length - 1), y(values.last));
-    canvas.drawCircle(end, r + 1.5, Paint()..color = ground);
-    canvas.drawCircle(end, r, Paint()..color = color);
+    final last = values.length - 1;
+    final at = (marked ?? last).clamp(0, last);
+    if (at != last) canvas.drawCircle(Offset(x(last), y(values.last)), 2, Paint()..color = color);
+    final dot = Offset(x(at), y(values[at]));
+    canvas.drawCircle(dot, r + 1.5, Paint()..color = ground);
+    canvas.drawCircle(dot, r, Paint()..color = color);
   }
 
   @override
-  bool shouldRepaint(_SparkPainter old) => old.values != values || old.color != color || old.ground != ground || old.stroke != stroke;
+  bool shouldRepaint(_SparkPainter old) =>
+      old.values != values || old.marked != marked || old.color != color || old.ground != ground || old.stroke != stroke;
 }
 
 /// One part of a [SplitBar] or [Donut]: [weight] sets its size, [value] is the exact text shown next to its [label].
@@ -527,45 +534,60 @@ class NetBar {
   const NetBar({required this.label, required this.value, required this.cents, this.running = false});
 }
 
-/// Kept or lost per period as bars around a zero line; label and exact value under each. Heights scale to the largest bar.
+/// Kept or lost per period as bars around a zero line; label and exact value under each. Heights scale to the largest bar. Each bar
+/// gets at least [minCell] dp for its label and value (the value scales down inside the cell, with [cellGap] dp on each side so
+/// neighbours never touch): when [bars] do not all fit, the newest ones are shown.
 class NetBars extends StatelessWidget {
   final List<NetBar> bars;
   final double height;
-  const NetBars({super.key, required this.bars, this.height = 96});
+  final double minCell;
+  static const cellGap = 3.0;
+  const NetBars({super.key, required this.bars, this.height = 96, this.minCell = 56});
+
+  /// How many of [count] bars fit in [width].
+  static int fit(double width, int count, double minCell) =>
+      width.isFinite ? math.max(1, math.min(count, (width / minCell).floor())) : count;
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     final dpr = MediaQuery.devicePixelRatioOf(context);
-    return Semantics(
-      container: true,
-      label: [for (final b in bars) '${b.label} ${b.cents >= 0 ? 'kept' : 'lost'} ${b.value}${b.running ? ' so far' : ''}'].join(', '),
-      excludeSemantics: true,
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        SizedBox(
-          height: height,
-          width: double.infinity,
-          child: CustomPaint(painter: _NetPainter(bars, c.s3, c.bad, c.surface, c.lineStrong, snapPx(1, dpr))),
-        ),
-        const SizedBox(height: 4),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          for (final b in bars)
-            Expanded(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(b.label, maxLines: 1, style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
+    return LayoutBuilder(builder: (context, box) {
+      final n = fit(box.maxWidth, bars.length, minCell);
+      final shown = bars.length > n ? bars.sublist(bars.length - n) : bars;
+      return Semantics(
+        container: true,
+        label: [for (final b in shown) '${b.label} ${b.cents >= 0 ? 'kept' : 'lost'} ${b.value}${b.running ? ' so far' : ''}'].join(', '),
+        excludeSemantics: true,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          SizedBox(
+            height: height,
+            width: double.infinity,
+            child: CustomPaint(painter: _NetPainter(shown, c.s3, c.bad, c.surface, c.lineStrong, snapPx(1, dpr))),
+          ),
+          const SizedBox(height: 4),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (final b in shown)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: cellGap),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(b.label, maxLines: 1, style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
+                    ),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(b.value,
+                          maxLines: 1, style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500, color: c.ink)),
+                    ),
+                  ]),
                 ),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(b.value,
-                      maxLines: 1, style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500, color: c.ink)),
-                ),
-              ]),
-            ),
+              ),
+          ]),
         ]),
-      ]),
-    );
+      );
+    });
   }
 }
 
