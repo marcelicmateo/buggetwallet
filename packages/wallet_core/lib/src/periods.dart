@@ -90,7 +90,9 @@ List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String to
 /// the expected payday). It moves only that one boundary, by at most 20 days. A saved start after its salary is not
 /// used (it would move the salary row into the period before); one more than 20 days after the last payday is
 /// already a start of [detectPaydays].
-List<String> _periodStarts(List<CategorizedTx> txs, WalletSettings st, String today) {
+/// RX7c: the one period rule, shared by [periodSummaries] (and so `periodReports`) and the pay-period ranges of
+/// `rangeFor`/`shiftRange` (ranges.dart); not exported from the barrel.
+List<String> payPeriodStarts(List<CategorizedTx> txs, WalletSettings st, String today) {
   final days = detectPaydays(txs, st, today);
   final ps = st.periodStart;
   if (ps == null || days.isEmpty || ps.compareTo(today) > 0 || days.contains(ps)) return days;
@@ -108,7 +110,7 @@ List<String> _periodStarts(List<CategorizedTx> txs, WalletSettings st, String to
 /// The periods follow one another without gaps, each `[start, end)`; the running one always holds [today] (end =
 /// max(nextPayday(start), today + 1), so a late salary keeps it running) and counts rows up to [today] only.
 List<PeriodSummary> periodSummaries(List<CategorizedTx> txs, WalletSettings st, String today, {int count = 12}) {
-  final days = _periodStarts(txs, st, today);
+  final days = payPeriodStarts(txs, st, today);
   if (days.isEmpty || count <= 0) return const [];
   final from = days.length > count ? days.length - count : 0;
   final starts = days.sublist(from);
@@ -150,7 +152,7 @@ List<PeriodSummary> periodSummaries(List<CategorizedTx> txs, WalletSettings st, 
     for (var i = 0; i < starts.length; i++)
       PeriodSummary(
         start: starts[i],
-        end: i < last ? starts[i + 1] : _runningEnd(starts[i], st.paydayDay, today),
+        end: i < last ? starts[i + 1] : runningPeriodEnd(starts[i], st.paydayDay, today),
         income: income[i],
         out: out[i],
         byCategory: byCat[i],
@@ -159,8 +161,9 @@ List<PeriodSummary> periodSummaries(List<CategorizedTx> txs, WalletSettings st, 
   ];
 }
 
-/// The running period's end (exclusive): the expected payday, or tomorrow while the salary is late.
-String _runningEnd(String start, int paydayDay, String today) {
+/// The running period's end (exclusive): the expected payday, or tomorrow while the salary is late. Shared with the
+/// pay-period ranges (ranges.dart), whose inclusive running range ends the day before.
+String runningPeriodEnd(String start, int paydayDay, String today) {
   final payday = nextPayday(start, paydayDay), tomorrow = addDays(today, 1);
   return payday.compareTo(tomorrow) >= 0 ? payday : tomorrow;
 }

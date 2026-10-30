@@ -1,7 +1,7 @@
 // Date ranges for the graphs (stage N3, docs/context/N3_SPEC.md §1): pay periods, calendar months, custom spans.
 import 'dates.dart';
 import 'models.dart';
-import 'periods.dart' show detectPaydays;
+import 'periods.dart' show payPeriodStarts, runningPeriodEnd;
 
 /// What a graph's range control offers.
 enum RangeKind { payPeriod, month, months3, months6, months12, custom }
@@ -46,9 +46,12 @@ int? _monthCount(RangeKind kind) => switch (kind) {
 const _maxCustomYears = 5;
 
 /// The range of [kind] around [today] (see N3_SPEC.md §1 and its clarifications).
-/// - [RangeKind.payPeriod]: from the latest of `detectPaydays(txs, st, today)` (no paydays at all: the latest
-///   expected `paydayDay` on or before today) to the day before the next expected payday, but never before today
-///   (a late salary keeps the running period open).
+/// - [RangeKind.payPeriod]: the running period of `periodSummaries(txs, st, today)` (RX7c: the same starts,
+///   `payPeriodStarts`), inclusive: from its start to the day before its exclusive end, i.e. to the day before the
+///   next expected payday but never before today (a late salary keeps the running period open). No paydays at all
+///   (`periodSummaries` is empty): from the latest expected `paydayDay` on or before today, same end rule.
+///   Pass the same [txs] and [st] as `periodSummaries` (whole or expanded rows give the same paydays) to get its
+///   boundaries.
 /// - Month kinds: the N calendar months ending with today's month, whole months (the last one ends after today).
 /// - [RangeKind.custom]: [from]..[to], both required; refused ([ArgumentError]) when not dates, `from > to`, ending
 ///   after today's month or spanning 5 years or more.
@@ -69,9 +72,11 @@ DateRange rangeFor(RangeKind kind, String today, WalletSettings st, {List<Catego
   return DateRange(start: from, end: to);
 }
 
-/// [r] moved by [steps] ranges of [kind] (negative = back). Pay periods walk the real payday list (extended with
-/// expected paydays beyond its ends), month kinds move by whole groups of their month count, custom ranges by their
-/// own length in days (the end clamped to the end of [today]'s month). A result starting after [today]'s month is
+/// [r] moved by [steps] ranges of [kind] (negative = back). Pay periods walk the periods of `periodSummaries`
+/// (`payPeriodStarts`; each `[start, end − 1]`, the running one as in [rangeFor]), extended with expected paydays
+/// before the first one and after today (a forward step from a late running period goes to the first expected payday
+/// after today, so the days between are in no range), month kinds move by whole groups of their month count, custom
+/// ranges by their own length in days (the end clamped to the end of [today]'s month). A result starting after [today]'s month is
 /// refused ([ArgumentError]).
 DateRange shiftRange(DateRange r, RangeKind kind, int steps, WalletSettings st,
     {List<CategorizedTx> txs = const [], required String today}) {
@@ -129,17 +134,19 @@ void _addExpected(List<String> days, int paydayDay, String today) {
   days.add(next);
 }
 
-/// The pay period starting at `days[i]`; the [running] one never ends before [today].
+/// The pay period starting at `days[i]`, inclusive. The [running] one ends where `periodSummaries`' running period
+/// does (`runningPeriodEnd` − 1: never before [today]), also when expected paydays after today follow it in [days].
 DateRange _periodAt(List<String> days, int i, int running, int paydayDay, String today) {
   final start = days[i];
-  var end = addDays(i + 1 < days.length ? days[i + 1] : nextPayday(start, paydayDay), -1);
-  if (i == running && end.compareTo(today) < 0) end = today;
-  return DateRange(start: start, end: end);
+  final next =
+      i == running ? runningPeriodEnd(start, paydayDay, today) : (i + 1 < days.length ? days[i + 1] : nextPayday(start, paydayDay));
+  return DateRange(start: start, end: addDays(next, -1));
 }
 
-/// Paydays as `detectPaydays` finds them; never empty (no paydays: the latest expected one on or before [today]).
+/// The period starts of `periodSummaries` (`payPeriodStarts`); never empty (none: the latest expected payday on or
+/// before [today]).
 List<String> _paydays(List<CategorizedTx> txs, WalletSettings st, String today) {
-  final days = detectPaydays(txs, st, today);
+  final days = payPeriodStarts(txs, st, today);
   if (days.isNotEmpty) return days;
   final here = _paydayIn(monthOf(today), st.paydayDay);
   return [here.compareTo(today) <= 0 ? here : _paydayIn(_shiftMonth(monthOf(today), -1), st.paydayDay)];
