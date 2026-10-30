@@ -50,6 +50,9 @@ class PeriodBudget {
   /// ([RecurringBill.coveredByPlan]) is already in `fixedPlan`, so it is listed but not added; a long bill never is.
   final int reservedBills;
 
+  /// How many cycles of [dueCycles] [reservedBills] sums (those not covered by a plan line).
+  final int reservedBillCycles;
+
   /// The distinct bills of [dueCycles], ordered by `nextDue`, then label, then id ([dueBills]).
   final List<RecurringBill> dueBills;
 
@@ -102,6 +105,7 @@ class PeriodBudget {
     required this.elapsed,
     required this.fixedPaid,
     this.reservedBills = 0,
+    this.reservedBillCycles = 0,
     this.dueBills = const [],
     this.dueCycles = const [],
     this.reservedPlanned = 0,
@@ -118,6 +122,13 @@ class PeriodBudget {
 
   /// Positive = under budget so far, negative = over.
   int get aheadOfPace => (flexBudget * elapsed).round() - spent;
+
+  /// "Before payday" on the dashboards (RX, owner 2026-10-30): the money held for bills and planned costs before payday,
+  /// exactly what comes off the flexible money for them: [reservedBills] + [reservedPlanned].
+  int get beforePayday => reservedBills + reservedPlanned;
+
+  /// How many costs [beforePayday] holds: the bill cycles it reserves (not covered by a plan line) + [reservedPlannedRows].
+  int get beforePaydayCount => reservedBillCycles + reservedPlannedRows.length;
 
   /// How far the period's spending is over the flexible money: max(0, −[remaining]).
   int get overBy => remaining < 0 ? -remaining : 0;
@@ -393,6 +404,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
       if (seenBills.add(c.bill.id)) c.bill
   ];
   final reservedBills = cycles.fold<int>(0, (s, c) => _ok(s + (c.coveredIn(table) ? 0 : c.reserve)));
+  final reservedBillCycles = cycles.where((c) => !c.coveredIn(table)).length;
   final duePl = duePlanned(planned, today, end);
   final counted = {for (final c in cycles) occurrenceKey(c.bill.id, c.due)};
   final reservedRows = [
@@ -478,6 +490,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     elapsed: elapsed,
     fixedPaid: fixedPaid,
     reservedBills: reservedBills,
+    reservedBillCycles: reservedBillCycles,
     dueBills: due,
     dueCycles: cycles,
     reservedPlanned: reservedPlanned,

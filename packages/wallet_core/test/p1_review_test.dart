@@ -67,6 +67,8 @@ void main() {
       final p = computePeriod(txs, st, const [], today, bills: bills, table: _table);
       expect(p.fixedPlan, 30000);
       expect(p.reservedBills, 1000, reason: 'only the flex bill; the others are in the plan');
+      expect((p.reservedBillCycles, p.beforePayday, p.beforePaydayCount), (1, 1000, 1),
+          reason: 'Before payday counts only the reserved cycle');
       expect(p.dueBills, hasLength(4));
       expect(p.fixedPaid, {_fixedChild: 1000, _fixed: 500, _rentChild: 700});
       expect(p.flexBudget, 200000 - 30000 - 1000);

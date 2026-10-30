@@ -318,6 +318,7 @@ void main() {
           table: CategoryTable.builtIn);
       expect((p.reservedBills, p.reservedPlanned), (2999, 1500));
       expect(p.flexBudget, 200000 - 50000 - 2999 - 1500);
+      expect((p.beforePayday, p.beforePaydayCount), (2999 + 1500, 1 + 2), reason: 'dashboard "Before payday" = exactly what is reserved');
       expect(p.remaining, p.flexBudget);
     });
 
@@ -329,6 +330,7 @@ void main() {
           planned: [rent, pc('2026-03-06', 700, category: 'Loan')], table: CategoryTable.builtIn);
       expect(p.reservedPlanned, 0);
       expect(p.duePlanned, hasLength(2));
+      expect((p.beforePayday, p.beforePaydayCount), (0, 0), reason: 'covered by the plan: not before payday');
       expect(p.flexBudget, computePeriod(const [], st, const [], today, table: CategoryTable.builtIn).flexBudget);
       final items = upcoming(planned: [rent], bills: const [], events: const [], from: today, to: '2026-03-31');
       expect(items.single.amount, 50000);
