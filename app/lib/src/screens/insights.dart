@@ -67,17 +67,17 @@ class InsightPanel extends StatelessWidget {
           'budget' => _budget(context, r, cur),
           _ => _biggest(context, r, cur),
         };
-        final (eyebrow, note) = switch (id) {
-          'spending' => ('Spending per month', 'What went out each month.'),
-          'share' => ('Where it goes', 'Each main tag as a share of the spending. Tap one to see where it went.'),
-          'tags' => ('Tags', 'Spent per extra tag. Tap one to see its payments.'),
-          'income' => ('Income and spending', 'What came in against what went out, per month.'),
-          'budget' => ('Budget and actual', 'Each bar is a whole calendar month.'),
-          _ => ('Biggest payments', 'The ten largest. Tap one to change its main tag.'),
+        // Title only: no note restating it (owner 2026-10-30, no duplicated information).
+        final eyebrow = switch (id) {
+          'spending' => 'Spending per month',
+          'share' => 'Where it goes',
+          'tags' => 'Tags',
+          'income' => 'Income and spending',
+          'budget' => 'Budget and actual',
+          _ => 'Biggest payments',
         };
         return Panel(children: [
           Eyebrow(eyebrow),
-          Muted(note),
           control,
           ...body,
           if (foreign.isNotEmpty)

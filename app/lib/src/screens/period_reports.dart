@@ -57,7 +57,6 @@ class _PeriodsPanelState extends State<PeriodsPanel> {
         String sub(int i, int f, int x) => 'In ${moneyExact(i, cur)} · Fixed ${moneyExact(f, cur)} · Flexible ${moneyExact(x, cur)}';
         return Panel(children: [
           const Eyebrow('Per pay period'),
-          const Muted('Salary to salary: what came in, the fixed and flexible spending, and what was saved or lost.'),
           _CountChips(id: 'periods', count: _count, onPick: (n) => setState(() => _count = n)),
           if (reports.isEmpty)
             const EmptyNote('No pay periods yet. Import your bank files first.')
@@ -107,7 +106,7 @@ class _CategoryBudgetPanelState extends State<CategoryBudgetPanel> {
         final sel = _pick != null && ids.contains(_pick) ? _pick : ids.firstOrNull;
         return Panel(children: [
           const Eyebrow('Main tag vs budget'),
-          const Muted('One main tag, each pay period. The line is its monthly budget.'),
+          const Muted('The line is its monthly budget.'),
           _CountChips(id: 'categoryBudget', count: _count, onPick: (n) => setState(() => _count = n)),
           if (sel == null)
             const EmptyNote('No spending main tags yet.')

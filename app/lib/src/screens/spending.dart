@@ -137,8 +137,8 @@ class _SpendingScreenState extends State<SpendingScreen> {
           if (budgeted) BudgetSummary(budget, cur),
           if (selSum.foreignByCurrency.isNotEmpty)
             ForeignNote(selSum.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: wc.openCurrencies),
-          Muted('Income ${money(selSum.income, cur, decimals: 0)}. Spending and bills by main tag; '
-              '${budgeted ? 'the solid mark is the budget, the dark tick' : 'the dark tick'} is your average of the 6 months before.'),
+          Muted('Income ${money(selSum.income, cur, decimals: 0)}. '
+              '${budgeted ? 'The solid mark is the budget, the dark tick' : 'The dark tick'} is your average of the 6 months before.'),
           _MonthChips(
             months: v.months.sublist(v.months.length - 7),
             current: current,
@@ -293,6 +293,5 @@ String _savedNote(SavingsOverview o) {
   final r = o.savingsRate;
   if (r != null) parts.add(r >= 0 ? 'You kept ${percent(r)} of what came in.' : 'You spent ${percent(-r)} more than came in.');
   if (o.periods > 0) parts.add('${o.saved} of ${o.periods} ${o.periods == 1 ? 'period' : 'periods'} saved.');
-  parts.add('Each bar runs from one salary to the next; the line is the 3-period average. The faded bar is still running.');
   return parts.join(' ');
 }

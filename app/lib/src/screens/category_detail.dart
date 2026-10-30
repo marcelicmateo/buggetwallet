@@ -99,7 +99,6 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
       Panel(children: [
         Eyebrow(rangeLabel(range)),
         Heading(moneyExact(total, cur), key: const ValueKey('detailTotal')),
-        Muted('Spent on $name in this range.'),
       ]),
       Panel(children: [
         const Eyebrow('Compared'),

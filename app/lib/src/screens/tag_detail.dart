@@ -39,8 +39,7 @@ class TagDetailScreen extends StatelessWidget {
                 Panel(children: [
                   Eyebrow(rangeLabel(range)),
                   Heading(moneyExact(total, cur), key: const ValueKey('tagDetailTotal')),
-                  Muted('Spent on $name in this range, ${rows.length} ${rows.length == 1 ? 'payment' : 'payments'}. '
-                      'A payment can have other tags too.'),
+                  Muted('${rows.length} ${rows.length == 1 ? 'payment' : 'payments'}. A payment can have other tags too.'),
                 ]),
                 Panel(children: [
                   const Eyebrow('Per month'),
