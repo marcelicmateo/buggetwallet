@@ -276,7 +276,9 @@ class _HeroNumber extends StatelessWidget {
       textDirection: TextDirection.ltr,
       textScaler: MediaQuery.textScalerOf(context),
     )..layout();
-    return painter.width;
+    final w = painter.width;
+    painter.dispose();
+    return w;
   }
 }
 

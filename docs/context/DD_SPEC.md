@@ -7,7 +7,7 @@ standard". Picked from four options (ring, upright gauge, burn-down line, hourgl
 - Right of the hero number (`safeToSpend`): a grid with **one square per day of the current pay period**, Monday-first
   columns aligned to weekdays (like a calendar), rows of 7.
   - **within** (past day, its flexible spending ≤ that day's money): filled, `c.accent`.
-  - **over** (past day, spending > that day's money): filled `c.bad` (with the hatch used for over elsewhere).
+  - **over** (past day, spending > that day's money): filled `c.bad` with thin surface-coloured hatch lines (the over-budget hatch inverted: at 11–13 dp a red fill reads better than red lines on grey).
   - **today**: outlined, thick accent border (no verdict yet).
   - **to come** (after today, before payday): thin `c.lineStrong` outline, empty.
 - Under the grid one muted line: `12 within · 3 over` (counts only, no amounts; omitted while both are 0).

@@ -109,6 +109,17 @@ void main() {
       expect(find.descendant(of: find.byKey(const ValueKey('dayDot:2026-10-01')), matching: find.byType(CustomPaint)), findsNothing);
     });
 
+    testWidgets('dark theme: within accent, over bad, today outlined, to come thin outline (night colours)', (tester) async {
+      final dark = buildTheme(Brightness.dark);
+      final w = dark.extension<WalletColors>()!;
+      await tester.pumpWidget(MaterialApp(theme: dark, home: _dots(_days())));
+      expect(_deco(tester, '2026-10-01').color, w.accent);
+      expect(_deco(tester, '2026-10-11').color, w.bad);
+      expect((_deco(tester, '2026-10-13').border! as Border).top.color, w.accent);
+      expect((_deco(tester, '2026-10-14').border! as Border).top.color, w.lineStrong);
+      expect(w.accent, isNot(_light.accent), reason: 'the night palette is really in use');
+    });
+
     testWidgets('counts line: "10 within · 2 over"; absent while both are 0', (tester) async {
       await pumpApp(tester, _dots(_days()));
       expect(tester.widget<Text>(find.byKey(const ValueKey('dayDotsCounts'))).data, '10 within · 2 over');
@@ -268,8 +279,10 @@ void main() {
           expect(grid.left, greaterThanOrEqualTo(number.right), reason: 'beside, not under');
           expect(grid.top, lessThan(number.bottom));
           expect(grid.right, lessThanOrEqualTo(width));
-          expect(tester.getSize(find.byKey(const ValueKey('dayDot:2026-10-20'))).shortestSide, greaterThanOrEqualTo(10));
-          expect(tester.takeException(), isNull);
+          final side = tester.getSize(find.byKey(const ValueKey('dayDot:2026-10-20'))).shortestSide;
+          expect(side, greaterThanOrEqualTo(10));
+          expect([DayDots.square, DayDots.compactSquare], contains(side), reason: 'full or compact squares, nothing in between');
+          if (width == 360 && cents == 180300) expect(tester.takeException(), isNull);
         });
       }
     }

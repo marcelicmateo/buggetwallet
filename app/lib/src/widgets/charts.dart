@@ -696,7 +696,7 @@ class DayDots extends StatelessWidget {
             child: SizedBox(
               width: _width,
               child: Text('$within within · $over over',
-                  key: const ValueKey('dayDotsCounts'), style: TextStyle(fontSize: 12, height: 1.25, color: c.muted)),
+                  key: const ValueKey('dayDotsCounts'), style: TextStyle(fontSize: BwType.metaSize, height: 1.25, color: c.muted)),
             ),
           ),
       ]),
