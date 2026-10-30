@@ -105,7 +105,7 @@ DateRange _shiftPeriod(DateRange r, int steps, WalletSettings st, List<Categoriz
   final days = [..._paydays(txs, st, today)];
   var running = days.length - 1;
   while (days.first.compareTo(r.start) > 0) {
-    days.insert(0, _prevPayday(days.first, pd));
+    days.insert(0, previousPayday(days.first, pd));
     running++;
   }
   // A future period (from an earlier forward step) starts on an expected payday after today: list those first.
@@ -114,7 +114,7 @@ DateRange _shiftPeriod(DateRange r, int steps, WalletSettings st, List<Categoriz
   }
   var target = days.lastIndexWhere((d) => d.compareTo(r.start) <= 0) + steps;
   while (target < 0) {
-    days.insert(0, _prevPayday(days.first, pd));
+    days.insert(0, previousPayday(days.first, pd));
     running++;
     target++;
   }
@@ -148,17 +148,8 @@ DateRange _periodAt(List<String> days, int i, int running, int paydayDay, String
 List<String> _paydays(List<CategorizedTx> txs, WalletSettings st, String today) {
   final days = payPeriodStarts(txs, st, today);
   if (days.isNotEmpty) return days;
-  final here = _paydayIn(monthOf(today), st.paydayDay);
-  return [here.compareTo(today) <= 0 ? here : _paydayIn(_shiftMonth(monthOf(today), -1), st.paydayDay)];
-}
-
-/// The expected payday in the month before [date]'s month.
-String _prevPayday(String date, int paydayDay) => _paydayIn(_shiftMonth(monthOf(date), -1), paydayDay);
-
-/// [paydayDay] of month [ym], clamped to its last day (like `nextPayday`).
-String _paydayIn(String ym, int paydayDay) {
-  final last = daysInMonth(ym);
-  return '$ym-${_p(paydayDay > last ? last : paydayDay)}';
+  final here = paydayIn(monthOf(today), st.paydayDay);
+  return [here.compareTo(today) <= 0 ? here : paydayIn(_shiftMonth(monthOf(today), -1), st.paydayDay)];
 }
 
 /// The [n] whole calendar months ending with [ym].
