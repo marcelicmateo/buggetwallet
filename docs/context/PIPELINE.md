@@ -37,6 +37,14 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | WS | Web sync through the relay (P18), bwk2 key wrap, CSP | scout → core + ui + devops | BP | done cc0090e..b85cef0 (blank-page bug fixed; review 2 med fixed), merged 852f893; app 2053, web-test 13 |
 | DK | Device keys + revocation (P17), relay api 5 | scout → core + ui + test-writer | WS | done: core da5dae1..10a4d85, spec tests 9ddcd18, UI 0fd713d..bff312f; 4 reviews; stage green on 01c6bb7; pushed |
 
+## Owner feedback during M6 (2026-10-30)
+| # | Item | Agent | Branch | Depends on | Status |
+|---|---|---|---|---|---|
+| FB1 | Today's Add expense = only add button (no FAB, nothing in the rail) | lead | v2 | – | done 2c99d30 |
+| FB2 | Graph panels: title only, no restating note | lead | v2 | – | done c495203~1 |
+| DD | Today day dots (spec `DD_SPEC.md`): DD1 core `periodDays` + DD2 UI `DayDots` in parallel | core-builder + ui-builder | worktrees | DD0 scout done | running |
+| ZC | Zoomable, scrollable graphs (spec `ZC_SPEC.md`, owner answers in §6) | scout → core + test-writer + ui | worktrees | DD | queued |
+
 ## Stage HP: hardening pass during the M6 live test (2026-10-30; tests and reviews only, bug fixes with a test)
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
