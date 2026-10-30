@@ -460,6 +460,12 @@ class HeroTile extends StatelessWidget {
   final String? sub, dotsSpoken, paceSpoken;
   final DashChip? chip;
   final Widget? dots;
+
+  /// A tighter [dots] (the same widget at a smaller size) and the widths of both, so the tile can put the grid beside the figure:
+  /// beside it whenever the figure keeps at least [dotsMinScale] of its size, under it otherwise.
+  final Widget? dotsCompact;
+  final double dotsWidth, dotsCompactWidth;
+  static const double dotsGap = 12, dotsMinScale = 0.65;
   final double? paceUsed, paceExpected;
   final bool paceOver;
   final VoidCallback? onTap;
@@ -475,6 +481,9 @@ class HeroTile extends StatelessWidget {
     this.sub,
     this.chip,
     this.dots,
+    this.dotsCompact,
+    this.dotsWidth = 0,
+    this.dotsCompactWidth = 0,
     this.dotsSpoken,
     this.paceUsed,
     this.paceExpected,
@@ -488,28 +497,72 @@ class HeroTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.c;
     final hasPace = paceUsed != null && paceExpected != null;
+    final style = dashNumStyle(size: 44, color: valueColor ?? c.ink);
+    final number = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Text(value, key: valueKey, maxLines: 1, style: style),
+    );
+    final subText = sub == null
+        ? null
+        : Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(sub!, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+          );
+    final chipRow = chip == null ? null : Padding(padding: const EdgeInsets.only(top: 8), child: chip);
+    Widget figure() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [number, if (subText != null) subText, if (chipRow != null) chipRow]);
+    Widget slot(Widget w) => IgnorePointer(child: w);
+
+    final body = LayoutBuilder(builder: (context, box) {
+      if (dots == null) return figure();
+      // The dots beside the figure whenever they fit: the figure may shrink to [dotsMinScale] of its size, the grid to its compact
+      // size; under the figure only when even that does not fit (320 dp at a large text scale, a huge amount).
+      final natural = _naturalWidth(context, value, style);
+      for (final compact in const [false, true]) {
+        final grid = compact ? dotsCompactWidth : dotsWidth;
+        final w = compact ? dotsCompact : dots;
+        if (w == null) continue;
+        if (box.maxWidth - dotsGap - grid >= natural * dotsMinScale) {
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: figure()),
+            const SizedBox(width: dotsGap),
+            slot(w),
+          ]);
+        }
+      }
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        figure(),
+        Padding(padding: const EdgeInsets.only(top: 12), child: slot(dots!)),
+      ]);
+    });
+
     return Tile(
       onTap: onTap,
       semanticLabel: _spokenJoin([label, value, sub, chip?.spoken, dotsSpoken, paceSpoken]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         TileLabel(label),
         const SizedBox(height: 6),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(value, key: valueKey, maxLines: 1, style: dashNumStyle(size: 44, color: valueColor ?? c.ink)),
-        ),
-        if (sub != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(sub!, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
-          ),
-        if (chip != null) Padding(padding: const EdgeInsets.only(top: 8), child: chip),
-        if (dots != null) Padding(padding: const EdgeInsets.only(top: 12), child: IgnorePointer(child: dots)),
+        body,
         if (hasPace)
           Padding(padding: const EdgeInsets.only(top: 12), child: PaceMeter(used: paceUsed!, expected: paceExpected!, over: paceOver)),
       ]),
     );
+  }
+
+  /// The figure's width at full size and the current text scale.
+  static double _naturalWidth(BuildContext context, String text, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final w = painter.width;
+    painter.dispose();
+    return w;
   }
 }
 
