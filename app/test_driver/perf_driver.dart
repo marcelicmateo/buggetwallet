@@ -29,10 +29,10 @@ const _insights = PerfBudget(minFrames: 50);
 const _firstSwitch = PerfBudget(minFrames: 20);
 
 /// The same tabs opened at once after a data change, before the warm-up had time: each switch works its data out one task per frame
-/// and then builds the page. Two single units cannot be split from the app and show as one slow frame each (2026-10-30, 20k rows,
-/// profile mode on a busy laptop): the first build of the Budget page (~80 ms) and core's `recurringPayments` for Bills (~90 ms,
-/// logged as `warmup.slow`). So the worst build frame may be 110 ms here (everything else as for every action); lower it when
-/// core's recurring plan or the Budget page get cheaper.
+/// and then builds the page. The first build of the Budget page is one unit that cannot be split from the app (~80 ms, 2026-10-30,
+/// 20k rows, profile mode on a busy laptop); core's `recurringPayments` was the other (~90 ms) until stage CX made it 3-5 ms. So
+/// the worst build frame may be 110 ms here (everything else as for every action); lower it to the shared 50 ms once the Budget
+/// page's first build is cheaper.
 const _earlySwitch = PerfBudget(minFrames: 20, buildMaxMs: 110);
 const budgets = <String, PerfBudget>{
   'spending_scroll': _scroll,

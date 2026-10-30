@@ -190,9 +190,10 @@ class _PaydayPlanState extends State<PaydayPlan> {
     final loanLeft = wc.loanLeftNow();
     final planIds = wc.categoryTable.planLineIds;
 
-    // Fixed = the plan's fixed lines and what is due before payday (both are bills and fixed costs: one colour). Spending is what is
-    // left; a plan that is over has no spending slice.
-    final fixed = p.fixedPlan + p.beforePayday;
+    // Core's split of the money coming in: fixed (plan lines + bills and planned costs before payday), saved, spending (what is
+    // left; none when the plan is over). fixed + saved + spending − over == inTotal, so the slices always add up.
+    final split = p.planSplit;
+    final fixed = split.fixed;
     final spending = p.flexBudget;
     // The state in icon + word; the amounts are in the legend and the lines (said once).
     final DashChip state = spending < 0
@@ -202,8 +203,8 @@ class _PaydayPlanState extends State<PaydayPlan> {
             : const StateChip.onPace(key: ValueKey('planHeading'), text: 'On plan');
     final segments = [
       DashSegment(label: 'Fixed', value: moneyExact(fixed, cur), weight: fixed.toDouble(), color: c.s2),
-      DashSegment(label: 'Saved', value: moneyExact(p.goalMonthly, cur), weight: p.goalMonthly.toDouble(), color: c.s3),
-      DashSegment(label: 'Spending', value: '', weight: spending > 0 ? spending.toDouble() : 0, color: c.s1),
+      DashSegment(label: 'Saved', value: moneyExact(split.saved, cur), weight: split.saved.toDouble(), color: c.s3),
+      DashSegment(label: 'Spending', value: '', weight: split.spending.toDouble(), color: c.s1),
     ];
 
     // A fixed line is paid once what left the account for it since payday reaches the planned amount.
@@ -260,8 +261,8 @@ class _PaydayPlanState extends State<PaydayPlan> {
               segments: segments,
               size: 112,
               stroke: 14,
-              // CX: the slices and the centre come from `PeriodBudget.planSplit` when stage CX lands. The salary is in the Salary row and
-              // the spending in the Spending money row, so the ring says each only once (here: Fixed and Saved with values).
+              // Slices from core's `planSplit`. The salary is in the Salary row and the spending in the Spending money row, so the
+              // ring says each only once (here: Fixed and Saved with values).
             ),
           ]),
         ),

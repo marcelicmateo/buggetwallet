@@ -296,14 +296,11 @@ class _SpendingScreenState extends State<SpendingScreen> {
         if (chip != null) Padding(padding: const EdgeInsets.only(top: 6), child: chip),
         const SizedBox(height: 4),
         if (cats.isEmpty) const EmptyNote('Nothing spent this month yet.') else BarList(rows: [for (final k in cats) row(k)]),
-        // CX: `BudgetVsActual.budgetedActual` replaces this subtraction when stage CX lands.
         if (budgeted && budget.remainingTotal != null)
           Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Text(
-                '${moneyExact(budget.budgetTotal - budget.remainingTotal!, cur)} of ${moneyExact(budget.budgetTotal, cur)} budgeted',
-                key: const ValueKey('budgetTotal'),
-                style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+            child: Text('${moneyExact(budget.budgetedActual, cur)} of ${moneyExact(budget.budgetTotal, cur)} budgeted',
+                key: const ValueKey('budgetTotal'), style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
           ),
       ]),
     );
