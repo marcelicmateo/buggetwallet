@@ -7,6 +7,8 @@ import '../logging.dart';
 import '../theme.dart';
 import '../widgets/charts.dart' show ForecastStepChart;
 import '../widgets/common.dart';
+import '../widgets/dash.dart';
+import '../widgets/sheets.dart';
 import 'plan_suggestions.dart';
 
 /// Budget › Payday plan (P5: moved from the Plan tab): the ledger lines with an Edit button that turns them into the fields, and the
@@ -97,11 +99,6 @@ class _PaydayPlanState extends State<PaydayPlan> {
   @override
   Widget build(BuildContext context) {
     final wc = widget.wc;
-    final s = wc.settings;
-    final cur = wc.currency;
-    final p = wc.period();
-    final loanLeft = wc.loanLeftNow();
-    final lowIncome = p.lowIncome;
     final planIds = wc.categoryTable.planLineIds;
 
     Widget field(String key, String label, {bool money = true, TextEditingController? ctl, Key? fieldKey}) {
@@ -180,94 +177,162 @@ class _PaydayPlanState extends State<PaydayPlan> {
               ]),
             ])
           else
-            Panel(children: [
-              SectionHead('Payday plan',
-                  trailing: TextButton.icon(
-                      key: const ValueKey('planEdit'),
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: const Text('Edit'),
-                      onPressed: _startEdit)),
-              Heading(
-                  p.flexBudget < 0
-                      ? 'Nothing to spend: the plan is ${moneyExact(-p.flexBudget, cur)} over'
-                      : p.flexBudget == 0
-                          ? 'Nothing to spend: the plan leaves no spending money'
-                          : '${moneyExact(p.flexBudget, cur)} to spend · ${moneyExact(p.planDaily, cur)}/day',
-                  key: const ValueKey('planHeading')),
-              const Muted('Salary minus bills minus savings. Whatever is left is your spending money until the next payday.'),
-              Rows(children: [
-                LineItem('Salary ${s.incomeMode == 'received' && p.received > 0 ? '(received)' : '(planned)'}', moneyExact(p.income, cur)),
-                LineItem('Rent', moneyExact(-s.rent, cur), sub: 'Paid since payday: ${moneyExact(p.fixedPaid['Rent'] ?? 0, cur)}'),
-                Column(children: [
-                  LineItem('Loan', moneyExact(-s.loan, cur),
-                      sub:
-                          'Paid since payday: ${moneyExact(p.fixedPaid['Loan'] ?? 0, cur)}${s.loanEnd != null ? ' · ends ${monthLong(s.loanEnd!)}' : ''}'),
-                  if (loanLeft != null)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Muted(
-                            key: const ValueKey('ledgerLoanLeft'),
-                            '${loanLeft.payments} payment${loanLeft.payments == 1 ? '' : 's'} left · ${moneyExact(loanLeft.cents, cur)} at this rate'),
-                      ),
-                    ),
-                ]),
-                LineItem('Bills & subscriptions', moneyExact(-s.subs, cur),
-                    sub: 'Paid since payday: ${moneyExact(p.fixedPaid['Bills & subscriptions'] ?? 0, cur)}'),
-                for (final id in planIds)
-                  LineItem(wc.categoryTable.label(id), moneyExact(-(s.planLines[id] ?? 0), cur),
-                      key: ValueKey('ledgerPlanLine_$id'),
-                      sub: 'Paid since payday: ${moneyExact(p.fixedPaid[id] ?? 0, cur)}'
-                          '${(s.planLines[id] ?? 0) > 0 ? '' : '\nNot taken off your daily money until you fill this in.'}'),
-                for (final g in wc.goals) LineItem(g.name, moneyExact(-g.monthly, cur), sub: 'savings goal'),
-                // P9: money from a confirmed recurring income that has landed is spending money; one not landed yet is only listed.
-                if (p.landedIncome > 0)
-                  LineItem('Extra income received', '+${moneyExact(p.landedIncome, cur)}',
-                      key: const ValueKey('ledgerLandedIncome'), sub: 'Regular income that is in; it is spending money now'),
-                if (p.expectedIncome.isNotEmpty)
-                  Padding(
-                    key: const ValueKey('ledgerExpectedIncome'),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      for (final x in p.expectedIncome)
-                        Text(
-                            'Expected, not counted yet: ${x.bill.label.isNotEmpty ? x.bill.label : x.bill.payee.replaceAll('_', ' ')} '
-                            '${moneyExact(x.amount, cur)} on ${shortDateOrRaw(x.due)}',
-                            style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
-                    ]),
-                  ),
-                // Bills and planned costs due before payday come off the spending money too: the rows add up to the total.
-                if (p.reservedBills + p.reservedPlanned > 0)
-                  LineItem('Set aside for coming costs', moneyExact(-(p.reservedBills + p.reservedPlanned), cur),
-                      key: const ValueKey('ledgerSetAside'), sub: 'Bills and planned costs due before payday'),
-              ]),
-              TotalRule(
-                  padding: EdgeInsets.zero,
-                  child: LineItem(
-                      'Spending money', p.flexBudget < 0 ? 'Over by ${moneyExact(-p.flexBudget, cur)}' : moneyExact(p.flexBudget, cur),
-                      key: const ValueKey('ledgerSpendingMoney'),
-                      valueColor: p.flexBudget < 0 ? context.c.bad : null,
-                      bold: true,
-                      sub: '${p.length} days, ${shortDate(p.start)} to ${shortDate(addDays(p.end, -1))}')),
-              if (lowIncome)
-                Panel(color: context.c.warnBg, children: [
-                  Text(
-                      'Salary received so far is ${money(p.received, cur, decimals: 0)}, below your planned ${money(s.salary, cur, decimals: 0)}.',
-                      style: TextStyle(color: context.c.warnInk)),
-                  SegmentedButton<String>(
-                    segments: [
-                      ButtonSegment(value: 'planned', label: Text('Plan on ${money(s.salary, cur, decimals: 0)}')),
-                      ButtonSegment(value: 'received', label: Text('Plan on ${money(p.received, cur, decimals: 0)}')),
-                    ],
-                    selected: {s.incomeMode},
-                    onSelectionChanged: (v) => wc.updateSettings({'incomeMode': v.first}),
-                  ),
-                ]),
-            ]),
-          if (!_editing) ForecastPanel(wc: wc),
-          PlanSuggestionsPanel(wc: wc),
+            ..._dashboard(context, wc),
         ]));
+  }
+
+  // ---------- the Plan dashboard (RX4) ----------
+
+  /// Budget › Plan, not editing: the salary split (donut), per day, the suggestions tile, the plan lines and the forecast.
+  List<Widget> _dashboard(BuildContext context, WalletController wc) {
+    final s = wc.settings, cur = wc.currency, p = wc.period(), c = context.c;
+    final proposals = wc.planProposalList();
+    final loanLeft = wc.loanLeftNow();
+    final planIds = wc.categoryTable.planLineIds;
+
+    // Fixed = the plan's fixed lines and what is due before payday (both are bills and fixed costs: one colour). Spending is what is
+    // left; a plan that is over has no spending slice.
+    final fixed = p.fixedPlan + p.beforePayday;
+    final spending = p.flexBudget;
+    // The state in icon + word; the amounts are in the legend and the lines (said once).
+    final DashChip state = spending < 0
+        ? const StateChip.over(key: ValueKey('planHeading'), text: 'Over the plan')
+        : spending == 0
+            ? const StateChip.over(key: ValueKey('planHeading'), text: 'Nothing to spend')
+            : const StateChip.onPace(key: ValueKey('planHeading'), text: 'On plan');
+    final segments = [
+      DashSegment(label: 'Fixed', value: moneyExact(fixed, cur), weight: fixed.toDouble(), color: c.s2),
+      DashSegment(label: 'Saved', value: moneyExact(p.goalMonthly, cur), weight: p.goalMonthly.toDouble(), color: c.s3),
+      DashSegment(label: 'Spending', value: moneyExact(spending, cur), weight: spending > 0 ? spending.toDouble() : 0, color: c.s1),
+    ];
+
+    // A fixed line is paid once what left the account for it since payday reaches the planned amount.
+    DashRowData fixedLine(String id, String title, int cents, {Key? key, String? sub}) => DashRowData(
+        key: key,
+        title: title,
+        amount: moneyExact(-cents, cur),
+        sub: sub,
+        chip: cents > 0 && (p.fixedPaid[id] ?? 0) >= cents ? const StateChip.onPace(text: 'Paid') : null);
+
+    final before = p.beforePayday;
+    final rows = <DashRowData>[
+      DashRowData(
+          title: 'Salary ${s.incomeMode == 'received' && p.received > 0 ? '(received)' : '(planned)'}', amount: moneyExact(p.income, cur)),
+      fixedLine('Rent', 'Rent', s.rent),
+      fixedLine('Loan', 'Loan', s.loan,
+          key: loanLeft == null ? null : const ValueKey('ledgerLoanLeft'),
+          sub: loanLeft == null
+              ? null
+              : '${loanLeft.payments} payment${loanLeft.payments == 1 ? '' : 's'} left · ${moneyExact(loanLeft.cents, cur)} at this rate'),
+      fixedLine('Bills & subscriptions', 'Bills & subscriptions', s.subs),
+      for (final id in planIds)
+        fixedLine(id, wc.categoryTable.label(id), s.planLines[id] ?? 0,
+            key: ValueKey('ledgerPlanLine_$id'), sub: (s.planLines[id] ?? 0) > 0 ? null : 'Not counted until you fill it in'),
+      for (final g in wc.goals) DashRowData(title: g.name, amount: moneyExact(-g.monthly, cur)),
+      if (p.landedIncome > 0)
+        DashRowData(key: const ValueKey('ledgerLandedIncome'), title: 'Extra in', amount: '+${moneyExact(p.landedIncome, cur)}'),
+      if (before > 0)
+        DashRowData(
+            key: const ValueKey('ledgerSetAside'),
+            title: 'Before payday',
+            amount: moneyExact(-before, cur),
+            sub: '${p.beforePaydayCount} ${p.beforePaydayCount == 1 ? 'cost' : 'costs'}'),
+      DashRowData(
+          key: const ValueKey('ledgerSpendingMoney'),
+          title: 'Spending money',
+          sub: dateRange(p.start, p.end),
+          amount: spending < 0 ? null : moneyExact(spending, cur),
+          chip: spending < 0 ? StateChip.over(text: 'Over by ${moneyExact(-spending, cur)}') : null),
+    ];
+
+    final tiles = <Widget>[
+      DashItem(
+        span: 2,
+        child: Tile(
+          key: const ValueKey('planTile'),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            SplitRow(
+                start: const TileLabel('Payday plan'), end: TileAction(key: const ValueKey('planEdit'), label: 'Edit', onTap: _startEdit)),
+            const SizedBox(height: 6),
+            Align(alignment: Alignment.centerLeft, child: state),
+            const SizedBox(height: 10),
+            Donut(
+              segments: segments,
+              size: 112,
+              stroke: 14,
+              center: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text(moneyExact(p.income, cur), maxLines: 1, style: dashNumStyle(size: BwType.headingSize, color: c.ink)),
+                        Text('salary', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+                      ]))),
+            ),
+          ]),
+        ),
+      ),
+      DashItem(
+          span: proposals.isEmpty ? 2 : 1,
+          child: StatTile(
+              key: const ValueKey('planPerDay'),
+              label: 'Per day',
+              value: moneyExact(p.planDaily > 0 ? p.planDaily : 0, cur),
+              sub: '${p.length} days')),
+      if (proposals.isNotEmpty)
+        StatTile(
+          key: const ValueKey('planSuggestionsTile'),
+          label: 'Suggestions',
+          value: '${proposals.length}',
+          sub: 'from your imports',
+          attention: true,
+          chip: const TileNote('Review'),
+          onTap: () {
+            logNav('plan.suggestions.open');
+            showSheet<void>(context, PlanSuggestionsSheet(wc: wc));
+          },
+        ),
+      DashItem(
+        span: 2,
+        child: Tile(
+          key: const ValueKey('planLines'),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            const TileLabel('Lines'),
+            const SizedBox(height: 4),
+            DashRows(rows: rows),
+            if (p.expectedIncome.isNotEmpty)
+              Padding(
+                key: const ValueKey('ledgerExpectedIncome'),
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  for (final x in p.expectedIncome)
+                    Text(
+                        'Expected, not counted yet: ${x.bill.label.isNotEmpty ? x.bill.label : x.bill.payee.replaceAll('_', ' ')} '
+                        '${moneyExact(x.amount, cur)} on ${shortDateOrRaw(x.due)}',
+                        style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+                ]),
+              ),
+          ]),
+        ),
+      ),
+      if (wc.paydayForecast() case final f?) DashItem(span: 2, child: ForecastTile(wc: wc, forecast: f)),
+    ];
+    return [
+      DashGrid(children: tiles),
+      if (p.lowIncome)
+        Panel(color: c.warnBg, children: [
+          Text('Salary received so far is ${money(p.received, cur, decimals: 0)}, below your planned ${money(s.salary, cur, decimals: 0)}.',
+              style: TextStyle(color: c.warnInk)),
+          SegmentedButton<String>(
+            segments: [
+              ButtonSegment(value: 'planned', label: Text('Plan on ${money(s.salary, cur, decimals: 0)}')),
+              ButtonSegment(value: 'received', label: Text('Plan on ${money(p.received, cur, decimals: 0)}')),
+            ],
+            selected: {s.incomeMode},
+            onSelectionChanged: (v) => wc.updateSettings({'incomeMode': v.first}),
+          ),
+        ]),
+    ];
   }
 
   void _startEdit() {
@@ -360,32 +425,48 @@ class _PaydayPlanState extends State<PaydayPlan> {
   }
 }
 
-/// Budget › under the payday plan (Q11): "On payday: about X (after bills, before day-to-day spending)" and the steps that lead there.
-/// Hidden until a bank account in the wallet currency has a balance the app trusts (confirmed lately).
-class ForecastPanel extends StatelessWidget {
+/// Budget › Plan, the forecast tile (Q11): "On payday, after bills" with the exact balance, the balance after the daily allowance, the
+/// steps that lead there and a note when an account was left out. Shown only when a bank account in the wallet currency has a balance
+/// the app trusts (confirmed lately).
+class ForecastTile extends StatelessWidget {
   final WalletController wc;
-  const ForecastPanel({super.key, required this.wc});
+  final PaydayForecast forecast;
+  const ForecastTile({super.key, required this.wc, required this.forecast});
 
   @override
   Widget build(BuildContext context) {
-    final f = wc.paydayForecast();
-    if (f == null) return const SizedBox.shrink();
-    final cur = wc.currency;
-    final c = context.c;
+    final f = forecast, cur = wc.currency, c = context.c;
     final below = f.onPayday < 0;
-    return Panel(key: const ValueKey('forecastPanel'), children: [
-      const SectionHead('Until payday'),
-      Text('On payday: about ${moneyExact(f.onPayday, cur)} (after bills, before day-to-day spending)',
-          key: const ValueKey('forecastLine'), style: TextStyle(fontWeight: FontWeight.w600, color: below ? c.bad : null)),
-      if (f.afterSpending != null)
-        Muted('After your daily allowance: about ${moneyExact(f.afterSpending!, cur)}', key: const ValueKey('forecastAfter')),
-      if (f.points.length > 1 || f.points.first.cents != 0)
-        Semantics(
-          label: 'Balance until payday',
-          child: ForecastStepChart(key: const ValueKey('forecastChart'), points: f.points, payday: f.payday, currency: cur),
+    return Tile(
+      key: const ValueKey('forecastPanel'),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        const TileLabel('On payday, after bills'),
+        const SizedBox(height: 6),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(moneyExact(f.onPayday, cur),
+              key: const ValueKey('forecastLine'), maxLines: 1, style: dashNumStyle(color: below ? c.bad : null)),
         ),
-      if (f.leftOut != null) Muted(_capital(f.leftOut!), key: const ValueKey('forecastUnchecked')),
-    ]);
+        if (below) const Padding(padding: EdgeInsets.only(top: 6), child: StateChip.over(text: 'Below zero')),
+        if (f.afterSpending != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text('After daily spending ${moneyExact(f.afterSpending!, cur)}',
+                key: const ValueKey('forecastAfter'), style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+          ),
+        if (f.points.length > 1 || f.points.first.cents != 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Semantics(
+              label: 'Balance until payday',
+              child: ForecastStepChart(key: const ValueKey('forecastChart'), points: f.points, payday: f.payday, currency: cur),
+            ),
+          ),
+        if (f.leftOut != null)
+          Padding(padding: const EdgeInsets.only(top: 6), child: Muted(_capital(f.leftOut!), key: const ValueKey('forecastUnchecked'))),
+      ]),
+    );
   }
 }
 

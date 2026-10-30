@@ -16,6 +16,10 @@ Future<void> _tapKey(WidgetTester tester, String k) async {
   await tester.pump();
 }
 
+/// The Spending money row's texts (the amount changes with the plan).
+String _spendingMoney(WidgetTester t) =>
+    t.widgetList<Text>(find.descendant(of: _key('ledgerSpendingMoney'), matching: find.byType(Text))).map((w) => w.data).join('|');
+
 void main() {
   testWidgets('without Edit the section lists the ledger lines and has no fields', (tester) async {
     final wc = demoWallet();
@@ -50,7 +54,7 @@ void main() {
     final wc = demoWallet();
     await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
     final before = wc.settings.toMap();
-    final heading = tester.widget<Text>(find.descendant(of: _key('planHeading'), matching: find.byType(Text))).data;
+    final heading = _spendingMoney(tester);
     await openPlanEdit(tester);
     await tester.enterText(_field('Loan'), '300');
     await _tapKey(tester, 'planSave');
@@ -66,8 +70,8 @@ void main() {
     expect(_field('Loan'), findsNothing, reason: 'back to the ledger lines');
     expect(_key('planEdit'), findsOneWidget);
     expect(_key('ledgerSpendingMoney'), findsOneWidget);
-    final heading2 = tester.widget<Text>(find.descendant(of: _key('planHeading'), matching: find.byType(Text))).data;
-    expect(heading2, isNot(heading), reason: 'the ledger shows the new loan');
+    final heading2 = _spendingMoney(tester);
+    expect(heading2, isNot(heading), reason: 'the lines show the new loan in the spending money');
   });
 
   testWidgets('Cancel leaves the settings unchanged and the next Edit shows the saved values', (tester) async {

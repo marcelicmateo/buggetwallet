@@ -4,8 +4,6 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/today_view.dart';
-import 'package:budget_wallet/src/theme.dart';
-import 'package:budget_wallet/src/widgets/charts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart' show WalletRepoSettings;
@@ -65,65 +63,64 @@ void main() {
   });
 
   group('Spending › Where it goes', () {
+    // RX4: a BarList tile. The value is "spent / budget" (exact), the note says what is left, "over by" with a warning icon or
+    // "behind pace"; the tile's chip counts the over and behind-pace categories; the total is one muted line.
+    Finder row(String id) => find.byKey(ValueKey('categoryRow_$id'));
     for (final (name, size, scale) in _sizes) {
-      testWidgets('$name: budgeted rows show what is left, the over one is marked, a summary and a total row', (tester) async {
+      testWidgets('$name: budgeted rows show what is left, the over one is marked, a chip and a total line', (tester) async {
         final wc = budgetWallet();
         await pumpApp(tester, Scaffold(body: SpendingScreen(wc: wc)), size: size, textScale: scale);
-        expect(find.text(_eur('48 € left')), findsOneWidget);
+        expect(find.text(_eur('252 € / 300 €')), findsOneWidget);
+        expect(find.text(_eur('112 € / 100 €')), findsOneWidget);
+        expect(find.text(_eur('48 € left · behind pace')), findsOneWidget, reason: 'Groceries: 84 % spent, 65 % of the month gone');
         expect(find.text(_eur('over by 12 €')), findsOneWidget);
-        expect(find.text(_eur('of 300 €')), findsOneWidget);
-        expect(find.text(_eur('of 100 €')), findsOneWidget);
-        expect(find.byIcon(Icons.error_outline), findsNWidgets(2), reason: 'the over row and the summary line');
-        expect(find.byKey(const ValueKey('overHatch')), findsOneWidget);
-        expect(find.textContaining('1 over, 1 behind pace, ${_eur('36 € left')} in total'), findsOneWidget);
-        expect(find.byKey(const ValueKey('behindPace')), findsOneWidget, reason: 'Groceries: 84 % spent, 65 % of the month gone');
-        expect(find.byIcon(Icons.warning_amber_outlined), findsOneWidget);
-        expect(find.byKey(const ValueKey('budgetTotal')), findsOneWidget);
-        expect(find.text(_eur('364 € of 400 €')), findsOneWidget);
-        expect(find.descendant(of: find.byType(CategoryBars), matching: find.text(_eur('60 €'))), findsOneWidget,
-            reason: 'Shopping has no budget: its amount as before');
+        expect(find.descendant(of: row('Eating out'), matching: find.byIcon(Icons.warning_amber_rounded)), findsOneWidget,
+            reason: 'the over row: icon and bold words, not colour alone');
+        expect(
+            find.descendant(of: find.byKey(const ValueKey('budgetState')), matching: find.text('1 over · 1 behind pace')), findsOneWidget);
+        expect(find.text(_eur('364 € of 400 € budgeted')), findsOneWidget);
+        expect(find.descendant(of: row('Shopping'), matching: find.text(_eur('60 €'))), findsOneWidget,
+            reason: 'Shopping has no budget: its amount and the average');
         expect(tester.takeException(), isNull);
       });
     }
 
-    testWidgets('nothing budgeted: the rows are as before and there is no summary or total', (tester) async {
+    testWidgets('nothing budgeted: the rows show amounts and averages, no chip or total', (tester) async {
       final wc = budgetWallet(budgets: false);
       await pumpApp(tester, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(360, 3000));
       expect(find.textContaining('left'), findsNothing);
-      expect(find.textContaining('over budget'), findsNothing);
-      expect(find.byKey(const ValueKey('overHatch')), findsNothing);
+      expect(find.byKey(const ValueKey('budgetState')), findsNothing);
       expect(find.byKey(const ValueKey('budgetTotal')), findsNothing);
       for (final v in ['252 €', '112 €']) {
-        expect(find.descendant(of: find.byType(CategoryBars), matching: find.text(_eur(v))), findsOneWidget);
+        expect(find.descendant(of: find.byKey(const ValueKey('whereTile')), matching: find.text(_eur(v))), findsOneWidget);
       }
+      expect(find.text(_eur('Average 290 €')), findsOneWidget);
     });
 
-    testWidgets('within budget but behind pace: "behind pace" with a warning icon in warnInk, no hatch', (tester) async {
+    testWidgets('within budget but behind pace: the word with the numbers, the chip says so', (tester) async {
       final wc = budgetWallet(eatingOutBudget: 20000);
       await pumpApp(tester, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(360, 3000));
-      expect(find.byKey(const ValueKey('overHatch')), findsNothing);
-      expect(find.textContaining('0 over, 1 behind pace, ${_eur('136 € left')} in total'), findsOneWidget);
-      final label = find.descendant(of: find.byKey(const ValueKey('behindPace')), matching: find.text('behind pace'));
-      expect(label, findsOneWidget);
-      expect(tester.widget<Text>(label).style!.color, WalletColors.light.warnInk);
-      expect(find.byIcon(Icons.warning_amber_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsNWidgets(1), reason: 'the chip only: no row is over');
+      expect(find.descendant(of: find.byKey(const ValueKey('budgetState')), matching: find.text('1 behind pace')), findsOneWidget);
+      expect(find.text(_eur('48 € left · behind pace')), findsOneWidget);
+      expect(find.textContaining('over by'), findsNothing);
     });
 
-    testWidgets('on pace: nothing extra, the summary counts none over', (tester) async {
+    testWidgets('on pace: nothing extra, the chip says On pace with a tick', (tester) async {
       // Groceries 252 of 400 is 63 % of the budget at 65 % of the month: on pace. Eating out 112 of 200 likewise.
       final wc = budgetWallet(eatingOutBudget: 20000, groceriesBudget: 40000);
       await pumpApp(tester, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(360, 3000));
-      expect(find.byKey(const ValueKey('behindPace')), findsNothing);
-      expect(find.byKey(const ValueKey('overHatch')), findsNothing);
-      expect(find.textContaining('0 of 2 categories over budget, ${_eur('236 € left')} in total'), findsOneWidget);
-      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
-      expect(find.byIcon(Icons.warning_amber_outlined), findsNothing);
+      expect(find.textContaining('behind pace'), findsNothing);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+      expect(find.descendant(of: find.byKey(const ValueKey('budgetState')), matching: find.text('On pace')), findsOneWidget);
+      expect(find.byIcon(Icons.check), findsWidgets);
+      expect(find.text(_eur('364 € of 600 € budgeted')), findsOneWidget);
     });
 
     testWidgets('behind pace fits 320 dp at text 2.0', (tester) async {
       final wc = budgetWallet(eatingOutBudget: 20000);
       await pumpApp(tester, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(320, 4000), textScale: 2.0);
-      expect(find.byKey(const ValueKey('behindPace')), findsOneWidget);
+      expect(find.textContaining('behind pace'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
 
@@ -131,11 +128,11 @@ void main() {
       // Groceries 252 of 299.50 (4750 left), Eating out 112 of 111.51 (49 over).
       final wc = budgetWallet(groceriesBudget: 29950, eatingOutBudget: 11151);
       await pumpApp(tester, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(360, 3000));
-      expect(find.text(_eur('47.50 € left')), findsOneWidget);
+      expect(find.text(_eur('47.50 € left · behind pace')), findsOneWidget);
       expect(find.text(_eur('over by 0.49 €')), findsOneWidget);
-      expect(find.text(_eur('of 299.50 €')), findsOneWidget);
-      expect(find.text(_eur('of 111.51 €')), findsOneWidget);
-      expect(find.textContaining('1 over, 1 behind pace, ${_eur('47.01 € left')} in total'), findsOneWidget);
+      expect(find.text(_eur('252 € / 299.50 €')), findsOneWidget);
+      expect(find.text(_eur('112 € / 111.51 €')), findsOneWidget);
+      expect(find.text(_eur('364 € of 411.01 € budgeted')), findsOneWidget);
       expect(find.textContaining('over by 0 €'), findsNothing);
       expect(find.textContaining('48 € left'), findsNothing);
     });
@@ -145,8 +142,9 @@ void main() {
       wc.repo.setCategoryBudget('Sport & fitness', 4000);
       wc.reload();
       await pumpApp(tester, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(360, 3000));
-      expect(find.text(_eur('40 € left')), findsNWidgets(2), reason: 'the row and the total');
-      expect(find.textContaining('0 of 1 category over budget'), findsOneWidget);
+      expect(find.text(_eur('40 € left')), findsOneWidget);
+      expect(find.text(_eur('0 € / 40 €')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('budgetState')), matching: find.text('On pace')), findsOneWidget);
     });
   });
 

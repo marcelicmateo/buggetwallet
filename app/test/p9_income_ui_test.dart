@@ -305,7 +305,7 @@ void main() {
       await plan(tester, wc);
       await see(tester, find.byKey(const ValueKey('ledgerSpendingMoney')));
       expect(find.byKey(const ValueKey('ledgerLandedIncome')), findsOneWidget);
-      expect(find.text('Extra income received'), findsOneWidget);
+      expect(find.text('Extra in'), findsOneWidget);
       expect(find.textContaining('+300'), findsOneWidget);
       expect(find.byKey(const ValueKey('ledgerExpectedIncome')), findsNothing);
     });

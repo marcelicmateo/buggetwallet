@@ -190,6 +190,14 @@ class SpendingView {
 
   /// Every transaction of the month except transfers between own accounts.
   final List<CategorizedTx> transactions;
+
+  /// What went out in each of [months] (same order, cents), the "Out in October" sparkline.
+  final List<int> outByMonth;
+
+  /// Core's `averageOut`: the 6 months before [month] as one monthly average (cents), and `changePermille` of this month's
+  /// out against it (1000 = +100 %); null when the average is 0 (nothing to compare with).
+  final int averageOut;
+  final int? outChange;
   const SpendingView({
     required this.month,
     required this.months,
@@ -201,6 +209,9 @@ class SpendingView {
     required this.overview,
     required this.topPlaces,
     required this.transactions,
+    required this.outByMonth,
+    required this.averageOut,
+    required this.outChange,
   });
 }
 
@@ -901,6 +912,7 @@ class WalletController extends ChangeNotifier {
               final selSum = sums.firstWhere((s) => s.month == month);
               final avg = averageByCategory(txs, month,
                   currency: currency, table: categoryTable); // the same 6-month average the suggested budgets use
+              final avgOut = averageOut(txs, month, currency: currency);
               final periods = payPeriods(count: 12);
 
               final merch = <String, (int, int)>{};
@@ -931,6 +943,9 @@ class WalletController extends ChangeNotifier {
                 overview: savingsOverview(periods),
                 topPlaces: [for (final e in top.take(8)) (e.key, e.value.$1, e.value.$2)],
                 transactions: monthTxs,
+                outByMonth: [for (final m in sums) m.out],
+                averageOut: avgOut,
+                outChange: changePermille(selSum.out, avgOut),
               );
             }, fields: {'month': month, 'tx': txs.length}, warnMs: 100));
   }

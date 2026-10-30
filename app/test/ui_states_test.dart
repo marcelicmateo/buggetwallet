@@ -2,6 +2,7 @@
 // toasts (2.5 s, Undo, Open), form defaults, backup and relay texts. All data SYNTHETIC; fixed clocks (20 Oct 2026).
 import 'package:budget_wallet/src/clock_notice.dart';
 import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/backup_panel.dart';
 import 'package:budget_wallet/src/screens/review.dart';
@@ -11,6 +12,7 @@ import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/screens/wishlist.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
+import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -123,12 +125,13 @@ void main() {
       expect(key('ledgerSetAside'), findsOneWidget, reason: 'precondition: a coming cost is set aside');
       String value(Finder row) =>
           t.widgetList<Text>(find.descendant(of: row, matching: find.byType(Text))).map((w) => w.data ?? '').toList().last;
-      final rows = find.ancestor(of: find.text('Salary (planned)'), matching: find.byType(Rows)).first;
-      final items = find.descendant(of: rows, matching: find.byType(LineItem));
+      final items = find.descendant(of: find.byType(DashRows), matching: find.byType(RuledRow));
+      final n = items.evaluate().length;
       var sum = 0.0;
-      for (var i = 0; i < items.evaluate().length; i++) {
+      for (var i = 0; i < n - 1; i++) {
+        // the last row is the total itself
         final texts = t.widgetList<Text>(find.descendant(of: items.at(i), matching: find.byType(Text))).map((w) => w.data ?? '').toList();
-        // label, optional sub-line, value last
+        // title, optional sub-line and chip, amount last
         sum += valueOf(texts.last);
       }
       final total = valueOf(value(key('ledgerSpendingMoney')));
@@ -145,10 +148,13 @@ void main() {
       final p = wc.period();
       expect(p.flexBudget > 0 && p.planDaily == 0, isTrue, reason: 'precondition: ${p.flexBudget} cents, ${p.planDaily}/day');
       await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
-      final h = textOf(t, 'planHeading');
+      final row = find.descendant(of: key('ledgerSpendingMoney'), matching: find.byType(Text));
+      final h = t.widgetList<Text>(row).map((w) => w.data ?? '').join(' ');
       expect(h, contains('0.10'));
-      expect(h, isNot(contains('over')));
+      expect(h, isNot(contains('Over')));
       expect(h.contains('-') || h.contains('\u2212'), isFalse);
+      expect(t.widget<StateChip>(key('planHeading')).text, 'On plan');
+      expect(find.descendant(of: key('planPerDay'), matching: find.text(moneyExact(0, 'EUR'))), findsOneWidget);
     });
   });
 

@@ -156,7 +156,7 @@ void main() {
       wc.dispose();
     }, timeout: _timeout);
 
-    testWidgets('the ledger lists the line with what was paid; no line yet says it is not taken off', (t) async {
+    testWidgets('the lines list it with a Paid tick once covered; no amount yet says it is not counted', (t) async {
       final (:wc, :id) = await withFixed();
       wc.repo.addTransaction(date: '2026-10-08', amount: 5000, category: id, note: 'Cover');
       wc.reload();
@@ -164,14 +164,18 @@ void main() {
       final row = _key('ledgerPlanLine_$id');
       expect(row, findsOneWidget);
       expect(find.descendant(of: row, matching: find.text('Pet insurance')), findsOneWidget);
-      expect(find.descendant(of: row, matching: find.textContaining('Paid since payday: ${moneyExact(wc.period().fixedPaid[id]!, 'EUR')}')),
-          findsOneWidget);
-      expect(find.descendant(of: row, matching: find.textContaining('Not taken off your daily money until you fill this in.')),
-          findsOneWidget);
+      expect(find.descendant(of: row, matching: find.text('Not counted until you fill it in')), findsOneWidget);
+      expect(find.descendant(of: row, matching: find.text('Paid')), findsNothing, reason: 'no amount, nothing to be paid');
       wc.savePlanLines({id: 12000});
       await t.pump();
       expect(find.descendant(of: _key('ledgerPlanLine_$id'), matching: find.text(moneyExact(-12000, 'EUR'))), findsOneWidget);
-      expect(find.descendant(of: _key('ledgerPlanLine_$id'), matching: find.textContaining('Not taken off')), findsNothing);
+      expect(find.descendant(of: _key('ledgerPlanLine_$id'), matching: find.textContaining('Not counted')), findsNothing);
+      expect(find.descendant(of: _key('ledgerPlanLine_$id'), matching: find.text('Paid')), findsNothing, reason: '50 € of 120 €');
+      wc.savePlanLines({id: 5000});
+      await t.pump();
+      expect(wc.period().fixedPaid[id], 5000);
+      expect(find.descendant(of: _key('ledgerPlanLine_$id'), matching: find.text('Paid')), findsOneWidget,
+          reason: 'covered: icon and word');
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);

@@ -11,7 +11,6 @@ import 'package:budget_wallet/src/screens/category_detail.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/category_picker.dart';
-import 'package:budget_wallet/src/widgets/charts.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -432,7 +431,7 @@ void main() {
       await pumpApp(t, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(400, 3000));
       expect(find.byKey(const ValueKey('categoryRow_Groceries')), findsOneWidget);
       expect(find.byKey(ValueKey('categoryRow_$bakery')), findsOneWidget);
-      expect(find.descendant(of: find.byType(CategoryBars), matching: find.text(money(25200, 'EUR', decimals: 0))), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('whereTile')), matching: find.text(moneyExact(25200, 'EUR'))), findsOneWidget);
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);
@@ -441,8 +440,8 @@ void main() {
       final wc = budgetWallet(budgets: false);
       await wc.renameCategory('Eating out', 'Dining');
       await pumpApp(t, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(400, 3000));
-      expect(find.descendant(of: find.byType(CategoryBars), matching: find.text('Dining')), findsOneWidget);
-      expect(find.descendant(of: find.byType(CategoryBars), matching: find.text('Eating out')), findsNothing);
+      expect(find.descendant(of: find.byKey(const ValueKey('whereTile')), matching: find.text('Dining')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('whereTile')), matching: find.text('Eating out')), findsNothing);
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);

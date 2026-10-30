@@ -27,6 +27,9 @@ class TodayView implements Listenable {
   @override
   void removeListener(VoidCallback listener) => _wc.removeListener(listener);
 
+  /// Picks the Budget tab's page (`'plan'` or `'spending'`) before Today switches to the tab.
+  void showBudgetView(String view) => _wc.setBudgetView(view);
+
   // ---------- reads ----------
   WalletSettings get settings => _wc.settings;
   String get currency => _wc.currency;

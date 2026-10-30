@@ -91,3 +91,22 @@ class PlanSuggestionsPanel extends StatelessWidget {
     if (n > 0 && context.mounted) toast(context, n == 1 ? 'Plan updated' : 'Plan updated: $n values');
   }
 }
+
+/// The Suggestions tile opens this: the proposals with Accept / Not now per row and Accept all (the panel above). It follows the
+/// controller, so a row leaves as it is accepted, and closes itself when none are left.
+class PlanSuggestionsSheet extends StatelessWidget {
+  final WalletController wc;
+  const PlanSuggestionsSheet({super.key, required this.wc});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+      listenable: wc,
+      builder: (context, _) {
+        if (wc.planProposalList().isEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted && Navigator.canPop(context)) Navigator.pop(context);
+          });
+        }
+        return PlanSuggestionsPanel(wc: wc);
+      });
+}

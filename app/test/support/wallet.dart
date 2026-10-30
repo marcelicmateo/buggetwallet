@@ -84,13 +84,30 @@ Future<void> pumpApp(WidgetTester tester, Widget child, {Size size = const Size(
   await tester.pump();
 }
 
-/// Plan › Payday plan: taps Edit so the number fields show (the section lists the ledger lines until then).
+/// Budget › Plan › Payday plan: taps Edit so the number fields show (the section lists the lines until then).
 Future<void> openPlanEdit(WidgetTester tester) async {
   final edit = find.byKey(const ValueKey('planEdit'));
+  // On the Budget tab the plan sits behind the Spending | Plan switch: choose Plan first.
+  final plan = find.byKey(const ValueKey('budgetPlan'));
+  if (edit.evaluate().isEmpty && plan.evaluate().isNotEmpty) {
+    await tester.tap(plan);
+    await tester.pump(const Duration(milliseconds: 300));
+  }
   await Scrollable.ensureVisible(tester.element(edit), alignment: 0.5);
   await tester.pump();
   await tester.tap(edit);
   await tester.pump();
+}
+
+/// Budget › Plan: opens the Suggestions tile's sheet (the proposals with Accept / Not now); nothing happens without proposals.
+Future<void> openSuggestions(WidgetTester tester) async {
+  final tile = find.byKey(const ValueKey('planSuggestionsTile'));
+  if (tile.evaluate().isEmpty) return;
+  await Scrollable.ensureVisible(tester.element(tile), alignment: 0.5);
+  await tester.pump();
+  await tester.tap(tile);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 500));
 }
 
 /// The day [budgetWallet] lives on (day 20 of 31, so a monthly budget is about two thirds through its month).

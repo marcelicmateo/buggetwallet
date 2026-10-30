@@ -81,6 +81,18 @@ class TodayScreen extends StatelessWidget {
     final suggestions = view.suggestionCount();
     final tight = view.tightestBudget();
     final toReview = view.billsToReview();
+    // The Budget tab has two pages (Spending | Plan): each link picks the one it means before the tab opens.
+    void toPlan() {
+      view.showBudgetView('plan');
+      openPlan();
+    }
+
+    final VoidCallback? toSpending = openSpending == null
+        ? null
+        : () {
+            view.showBudgetView('spending');
+            openSpending!();
+          };
     final wide = sizeFor(MediaQuery.sizeOf(context).width) == LayoutSize.expanded;
     final recent = view.wholeTxs.where((t) => t.kind != BudgetKind.transfer || t.iou).take(wide ? 8 : 3).toList();
     final today = view.today();
@@ -100,15 +112,14 @@ class TodayScreen extends StatelessWidget {
             if (f.ended && f.newPayday == null) DashItem(span: 2, child: _PeriodEndedTile(f)),
             if (f.setupSteps.isNotEmpty)
               DashItem(
-                  span: 2,
-                  child: _SetupTile(view: view, steps: f.setupSteps, openPlan: openPlan, newPayday: f.newPayday, chooser: chooser)),
-            if (view.deviceStop != null) _DeviceStopTile(view.deviceStop!, view.deviceCode, openSync ?? openPlan),
+                  span: 2, child: _SetupTile(view: view, steps: f.setupSteps, openPlan: toPlan, newPayday: f.newPayday, chooser: chooser)),
+            if (view.deviceStop != null) _DeviceStopTile(view.deviceStop!, view.deviceCode, openSync ?? toPlan),
             for (final w in view.balanceWarnings()) _BalanceWarnTile(view, w),
             for (final n in view.plannedNeedingCategory()) _NeedsCategoryTile(f, n),
-            if (toReview > 0) _BillsToReviewTile(toReview, openBillsReview ?? openPlan),
+            if (toReview > 0) _BillsToReviewTile(toReview, openBillsReview ?? toPlan),
             if (overdue > 0) _OverdueTile(overdue, openBills),
             for (final h in view.headsUpLines()) _HeadsUpTile(f, h),
-            if (review.due) DashItem(span: 2, child: _ReviewCard(view, review, openSpending, chooser)),
+            if (review.due) DashItem(span: 2, child: _ReviewCard(view, review, toSpending, chooser)),
             if (f.s.savedFor != p.start && view.goals.isNotEmpty) DashItem(span: 2, child: _PaydayChecklist(f)),
             if (f.deliveryHour) DashItem(span: 2, child: _DeliveryHourPanel(f)),
             // The numbers.
@@ -118,8 +129,8 @@ class TodayScreen extends StatelessWidget {
               _BeforePaydayTile(f, () => _openUpcoming(context, view))
             else if (suggestions > 0)
               _CalendarCheckTile(suggestions, () => _openUpcoming(context, view)),
-            if (tight != null) _BudgetTile(tight, view.categoryTable.label(tight.category), f.cur, openSpending),
-            if (held.isNotEmpty) _HeldTile(held, f.cur, openAccounts ?? openPlan),
+            if (tight != null) _BudgetTile(tight, view.categoryTable.label(tight.category), f.cur, toSpending),
+            if (held.isNotEmpty) _HeldTile(held, f.cur, openAccounts ?? toPlan),
             if (p.expectedIncome.isNotEmpty) _IncomeDueTile(f, openIncome),
             if (f.reviewTile) _ReviewTile(f, review),
             if (p.foreignByCurrency.isNotEmpty)

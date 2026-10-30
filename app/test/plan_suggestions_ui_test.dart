@@ -42,6 +42,7 @@ void main() {
     final wc = proposalWallet();
     final before = wc.dataVersion;
     await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
+    await openSuggestions(t);
     expect(find.text('SUGGESTIONS FROM YOUR IMPORTS'), findsOneWidget);
     expect(valueOf(t, 'salary'), '${moneyExact(150000, 'EUR')} → ${moneyExact(120000, 'EUR')}');
     expect(valueOf(t, 'paydayDay'), 'day 15 → day 10');
@@ -61,6 +62,7 @@ void main() {
     wc.repo.updateSettings({'salaryConfirmed': false});
     wc.reload();
     await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
+    await openSuggestions(t);
     final before = wc.settings.toMap();
     await tapKey(t, 'proposalAccept:salary');
     final after = wc.settings.toMap();
@@ -83,6 +85,7 @@ void main() {
   testWidgets('Accept on rent changes the rent only', (t) async {
     final wc = proposalWallet();
     await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
+    await openSuggestions(t);
     await tapKey(t, 'proposalAccept:rent');
     expect(wc.settings.rent, 60000);
     expect(wc.settings.salary, 150000);
@@ -92,6 +95,7 @@ void main() {
   testWidgets('Accept all writes every listed value in one change; the panel goes', (t) async {
     final wc = proposalWallet();
     await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
+    await openSuggestions(t);
     final before = wc.dataVersion;
     await tapKey(t, 'proposalAcceptAll');
     expect((wc.settings.salary, wc.settings.paydayDay, wc.settings.rent), (120000, 10, 60000));
@@ -107,8 +111,9 @@ void main() {
     final field = find.byKey(const ValueKey('budget:Groceries'));
     await t.ensureVisible(field);
     await t.enterText(field, '123');
-    t.state<ScrollableState>(find.byType(Scrollable).first).position.jumpTo(0); // back to the suggestions
+    t.state<ScrollableState>(find.byType(Scrollable).first).position.jumpTo(0); // back to the suggestions tile
     await t.pump();
+    await openSuggestions(t);
     await tapKey(t, 'proposalAcceptAll');
     expect(find.byKey(const ValueKey('planSuggestions')), findsNothing, reason: 'the panel left the page');
     expect(t.widget<TextField>(field).controller!.text, '123', reason: 'the Budgets panel kept its state');
@@ -118,6 +123,7 @@ void main() {
   testWidgets('Not now hides the row without writing; it comes back when the suggested value changes', (t) async {
     final wc = proposalWallet();
     await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
+    await openSuggestions(t);
     final before = wc.dataVersion;
     await tapKey(t, 'proposalLater:salary');
     expect(find.byKey(const ValueKey('proposal:salary')), findsNothing);
@@ -147,6 +153,7 @@ void main() {
     wc.reload();
     expect(wc.planProposalList(), isEmpty);
     await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
+    await openSuggestions(t);
     expect(find.byKey(const ValueKey('planSuggestions')), findsNothing);
     expect(find.text('SUGGESTIONS FROM YOUR IMPORTS'), findsNothing);
     await settle(t);
@@ -155,6 +162,7 @@ void main() {
   testWidgets('no panel in an empty wallet', (t) async {
     final wc = emptyWallet();
     await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 6000));
+    await openSuggestions(t);
     expect(find.byKey(const ValueKey('planSuggestions')), findsNothing);
     await settle(t);
   });
@@ -163,6 +171,8 @@ void main() {
     testWidgets('fits at ${w.toInt()} dp, text ${s}x, with 48 dp buttons', (t) async {
       final wc = proposalWallet();
       await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: Size(w, 6000), textScale: s);
+      expect(find.byKey(const ValueKey('planSuggestionsTile')), findsOneWidget);
+      await openSuggestions(t);
       expect(t.takeException(), isNull);
       for (final k in ['proposalAccept:salary', 'proposalLater:salary', 'proposalAcceptAll']) {
         expect(t.getSize(find.byKey(ValueKey(k))).height, greaterThanOrEqualTo(48), reason: k);

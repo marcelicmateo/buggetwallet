@@ -2,6 +2,7 @@
 // content width, no overflow on any tab, page State kept across tab switches and resizes, Today's columns, sheets as
 // dialogs and the keyboard shortcuts. More edge cases: adaptive_edge_test.dart. All data is SYNTHETIC.
 import 'package:budget_wallet/src/layout.dart';
+import 'package:budget_wallet/src/screens/budget.dart';
 import 'package:budget_wallet/src/screens/save.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
@@ -195,7 +196,7 @@ void main() {
       await tester.enterText(field, '1');
       await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
       await tester.pump();
-      expect(find.byType(SpendingScreen), findsOneWidget);
+      expect(find.byType(BudgetScreen), findsOneWidget);
       expect(tester.widget<TextField>(field).controller!.text, '1');
     });
   });

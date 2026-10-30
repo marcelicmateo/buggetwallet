@@ -88,6 +88,18 @@ extension DeviceSettings on WalletController {
     notifyListeners();
   }
 
+  /// Budget tab's switch (RX4): 'spending' (default) or 'plan'. Device-local, never synced, remembered across starts.
+  String get budgetView => repo.localValue('budgetView') == 'plan' ? 'plan' : 'spending';
+
+  /// Chooses Spending or Plan on the Budget tab. Today's links call it before they switch tabs.
+  void setBudgetView(String view) {
+    if (view != 'spending' && view != 'plan') return;
+    if (view == budgetView) return;
+    repo.setLocalValue('budgetView', view == 'plan' ? 'plan' : null);
+    logEvent(_log, Level.INFO, 'budget.view', {'view': view});
+    notifyListeners();
+  }
+
   /// Whether the explainer paragraphs (the muted text under section heads) have been shown once. Device-local.
   bool explainerSeen(String key) => repo.localValue('explainer:$key') != null;
 

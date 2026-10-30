@@ -89,14 +89,15 @@ void main() {
     Future<void> plan(WidgetTester t, WalletController wc, {double scale = 1, Size size = const Size(400, 2200)}) =>
         pumpApp(t, Scaffold(body: SingleChildScrollView(child: PaydayPlan(wc: wc))), textScale: scale, size: size);
 
-    tw('a trusted balance: "On payday: about X" after the bill, and the chart', (t) async {
+    tw('a trusted balance: "On payday, after bills" X after the bill, and the chart', (t) async {
       final wc = _wallet(openingDate: '2026-10-10');
       wc.addRecurringBill(label: 'Synthetic phone', category: 'Groceries', amount: 30000, intervalDays: 30, firstDue: '2026-10-25');
       final f = wc.paydayForecast()!;
       expect(f.onPayday, 70000);
       expect(f.points.first.cents, 100000);
       await plan(t, wc);
-      expect(find.text('On payday: about ${moneyExact(70000, 'EUR')} (after bills, before day-to-day spending)'), findsOneWidget);
+      expect(find.text('ON PAYDAY, AFTER BILLS'), findsOneWidget);
+      expect(t.widget<Text>(_key('forecastLine')).data, moneyExact(70000, 'EUR'), reason: 'exact, in its own figure');
       expect(_key('forecastChart'), findsOneWidget);
     }, timeout: _t);
 

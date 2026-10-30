@@ -8,6 +8,7 @@ import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/screens/wishlist.dart';
 import 'package:budget_wallet/src/widgets/charts.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
+import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -297,23 +298,26 @@ void main() {
     });
   });
 
-  group('Plan: heading', () {
-    testWidgets('a plan with nothing left says by how much it is over, not a negative per day', (tester) async {
+  group('Plan: state', () {
+    testWidgets('a plan with nothing left says it is over, with the amount on the Spending money row, never a negative per day',
+        (tester) async {
       final wc = budgetWallet(budgets: false);
       wc.repo.updateSettings({'salary': 0, 'rent': 10000});
       wc.reload();
       final p = wc.period();
       expect(p.planDaily, lessThanOrEqualTo(0));
       await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
-      final heading = tester.widget<Heading>(find.byKey(const ValueKey('planHeading'))).text;
-      expect(heading, 'Nothing to spend: the plan is ${moneyExact(-p.flexBudget, 'EUR')} over');
-      expect(heading.contains('−'), isFalse);
+      expect(tester.widget<StateChip>(find.byKey(const ValueKey('planHeading'))).text, 'Over the plan');
+      final row = find.byKey(const ValueKey('ledgerSpendingMoney'));
+      expect(find.descendant(of: row, matching: find.text('Over by ${moneyExact(-p.flexBudget, 'EUR')}')), findsOneWidget);
+      final perDay = find.descendant(of: find.byKey(const ValueKey('planPerDay')), matching: find.text(moneyExact(0, 'EUR')));
+      expect(perDay, findsOneWidget, reason: 'per day never goes below 0');
     });
 
-    testWidgets('a normal plan keeps "to spend"', (tester) async {
+    testWidgets('a normal plan is On plan', (tester) async {
       final wc = budgetWallet(budgets: false);
       await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
-      expect(tester.widget<Heading>(find.byKey(const ValueKey('planHeading'))).text, contains('to spend'));
+      expect(tester.widget<StateChip>(find.byKey(const ValueKey('planHeading'))).text, 'On plan');
     });
   });
 
