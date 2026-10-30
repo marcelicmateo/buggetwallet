@@ -4,9 +4,9 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
+import 'package:budget_wallet/src/screens/budget.dart';
 import 'package:budget_wallet/src/screens/diagnostics.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
-import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
@@ -20,13 +20,24 @@ import '../test/support/seams.dart';
 import 'demo_data.dart';
 import 'support/harness.dart';
 
-/// The payday plan sits on the Budget tab.
-Finder inPlan(Finder f) => find.descendant(of: find.byType(SpendingScreen), matching: f);
+/// The payday plan sits on the Budget tab, behind the Spending | Plan switch.
+Finder inPlan(Finder f) => find.descendant(of: find.byType(BudgetScreen), matching: f);
+
+/// Chooses Plan on the Budget tab (no-op when it is shown).
+Future<void> showPlan(WidgetTester t) async {
+  final plan = find.byKey(const ValueKey('budgetPlan'));
+  if (plan.evaluate().isEmpty || find.byKey(const ValueKey('planTile')).evaluate().isNotEmpty) return;
+  await tapVisible(t, plan);
+  await t.pumpAndSettle();
+}
+
 String fieldText(WidgetTester t, String label) => t.widget<TextField>(inPlan(field(label))).controller!.text;
 
 /// Payday plan lists the ledger lines until Edit is tapped (then it has the fields); no-op when the fields are already showing.
 Future<void> edit(WidgetTester t) async {
-  await scrollTo(t, find.text('PAYDAY PLAN'), SpendingScreen, delta: -250);
+  if (find.byKey(const ValueKey('planSave')).evaluate().isNotEmpty) return;
+  await showPlan(t);
+  await scrollTo(t, find.byKey(const ValueKey('planTile')), BudgetScreen, delta: -250);
   final button = inPlan(find.byKey(const ValueKey('planEdit')));
   if (button.evaluate().isEmpty) return;
   await tapVisible(t, button);
@@ -36,14 +47,14 @@ Future<void> edit(WidgetTester t) async {
 Future<void> fill(WidgetTester t, Map<String, String> values) async {
   await edit(t);
   for (final e in values.entries) {
-    await scrollTo(t, inPlan(field(e.key)), SpendingScreen);
+    await scrollTo(t, inPlan(field(e.key)), BudgetScreen);
     await t.enterText(inPlan(field(e.key)), e.value);
   }
   await t.pumpAndSettle();
 }
 
 Future<void> save(WidgetTester t) async {
-  await scrollTo(t, find.byKey(const ValueKey('planSave')), SpendingScreen);
+  await scrollTo(t, find.byKey(const ValueKey('planSave')), BudgetScreen);
   await tapVisible(t, find.byKey(const ValueKey('planSave')));
   await t.pumpAndSettle();
 }
@@ -94,8 +105,11 @@ void main() {
     final p = wc.period();
     // 2500 - 600.50 - 250 - 45.99 - 200 (default goals) = 1403.51
     expect(p.flexBudget, 140351);
-    await scrollTo(t, find.text('PAYDAY PLAN'), SpendingScreen, delta: -250);
-    expect(find.text('${moneyExact(140351, 'EUR')} to spend · ${moneyExact(p.planDaily, 'EUR')}/day'), findsOneWidget);
+    await scrollTo(t, find.byKey(const ValueKey('ledgerSpendingMoney')), BudgetScreen);
+    expect(inPlan(find.descendant(of: find.byKey(const ValueKey('ledgerSpendingMoney')), matching: find.text(moneyExact(140351, 'EUR')))),
+        findsOneWidget);
+    expect(
+        find.descendant(of: find.byKey(const ValueKey('planPerDay')), matching: find.text(moneyExact(p.planDaily, 'EUR'))), findsOneWidget);
     await goTab(t, 'Save');
     expect(find.text('Anything over 80\u00A0€ waits 48 hours on the wishlist first.'), findsOneWidget);
     await goTab(t, 'Today');
@@ -115,7 +129,7 @@ void main() {
 
     // Currency.
     await edit(t);
-    await scrollTo(t, inPlan(find.byType(DropdownButtonFormField<String>)), SpendingScreen);
+    await scrollTo(t, inPlan(find.byType(DropdownButtonFormField<String>)), BudgetScreen);
     await pickDropdown(t, inPlan(find.byType(DropdownButtonFormField<String>)), 'USD');
     await save(t);
     expect(wc.settings.currency, 'USD');
@@ -128,7 +142,7 @@ void main() {
     await t.pumpAndSettle();
     await goTab(t, 'Budget');
     await edit(t);
-    await scrollTo(t, inPlan(field('Rent')), SpendingScreen);
+    await scrollTo(t, inPlan(field('Rent')), BudgetScreen);
     expect(fieldText(t, 'Rent'), '700', reason: 'Plan fields follow changes made elsewhere');
     await save(t);
     expect(find.text('Nothing to save'), findsOneWidget);
@@ -157,7 +171,10 @@ void main() {
     await goTab(t, 'Budget');
 
     // Suggestions from the imports: nothing is written until a tap; Not now hides one, Accept writes one key.
-    await scrollTo(t, find.text('SUGGESTIONS FROM YOUR IMPORTS'), SpendingScreen);
+    await showPlan(t);
+    await scrollTo(t, find.byKey(const ValueKey('planSuggestionsTile')), BudgetScreen);
+    await tapVisible(t, find.byKey(const ValueKey('planSuggestionsTile')));
+    await t.pumpAndSettle();
     expect(find.byKey(const ValueKey('proposal:salary')), findsOneWidget);
     expect(find.byKey(const ValueKey('proposal:paydayDay')), findsOneWidget);
     expect(wc.settings.salary, 100000);
@@ -169,6 +186,11 @@ void main() {
     await tapVisible(t, find.byKey(const ValueKey('proposalAccept:paydayDay')));
     await t.pumpAndSettle();
     expect(wc.settings.paydayDay, 10);
+    if (find.byKey(const ValueKey('planSuggestions')).evaluate().isNotEmpty) {
+      // Other rows are left: the sheet stays open until they are answered; close it.
+      await t.sendKeyEvent(LogicalKeyboardKey.escape);
+      await t.pumpAndSettle();
+    }
 
     // Accounts: balances, correct, delete + Undo.
     await goSettings(t, SettingsSection.accounts);

@@ -195,14 +195,14 @@ void main() {
       return texts.last.data ?? texts.last.textSpan!.toPlainText();
     }
 
-    testWidgets('a planned cost before payday shows as "Set aside for coming costs", and the rows sum to the total', (tester) async {
+    testWidgets('a planned cost before payday shows as "Before payday", and the rows sum to the total', (tester) async {
       // Reserved: a 90.00 planned cost on 30 Oct (before payday). Spending money = 1250.00 - 90.00 = 1160.00.
       final wc = _wallet();
       wc.repo.addPlanned(title: 'Synthetic dentist', date: '2026-10-30', amount: 9000, category: 'Health');
       wc.reload();
       await pumpPlan(tester, wc);
       expect(find.byKey(const ValueKey('ledgerSetAside')), findsOneWidget);
-      expect(find.descendant(of: find.byKey(const ValueKey('ledgerSetAside')), matching: find.textContaining('Set aside for coming costs')),
+      expect(find.descendant(of: find.byKey(const ValueKey('ledgerSetAside')), matching: find.textContaining('Before payday')),
           findsOneWidget);
       expect(valueOf(tester, 'ledgerSetAside'), contains('90'));
       expect(valueOf(tester, 'ledgerSetAside'), anyOf(contains('−'), contains('-')));

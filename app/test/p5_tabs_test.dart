@@ -3,6 +3,7 @@
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
+import 'package:budget_wallet/src/screens/budget.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
 import 'package:budget_wallet/src/screens/save.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
@@ -81,17 +82,18 @@ void main() {
   });
 
   group('Budget', () {
-    tw('the payday plan is above everything else', (t) async {
+    tw('Budget opens on Spending; the payday plan is one tap away behind the switch', (t) async {
       await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
       await tapTab(t, 'Budget');
       expect(find.byType(SpendingScreen), findsOneWidget);
+      expect(_key('budgetSwitch'), findsOneWidget);
+      expect(_key('outTile'), findsOneWidget);
+      expect(_key('planHeading'), findsNothing, reason: 'Plan is the other page');
+      await t.tap(_key('budgetPlan'));
+      await t.pump(const Duration(milliseconds: 300));
       expect(_key('planHeading'), findsOneWidget);
       expect(_key('planEdit'), findsOneWidget);
-      final plan = _top(t, _key('planHeading'));
-      await _scrollInto(t, find.text('WHERE IT GOES'), SpendingScreen);
-      // After the scroll the plan is above the view: its top is negative, "Where it goes" is on screen.
-      expect(_top(t, find.text('WHERE IT GOES')), greaterThan(0));
-      expect(plan, lessThan(900));
+      expect(_key('outTile'), findsNothing);
       expect(t.takeException(), isNull);
     });
 
@@ -351,7 +353,8 @@ void main() {
       await t.pump();
       await t.tap(open);
       await t.pumpAndSettle();
-      expect(find.byType(SpendingScreen), findsOneWidget);
+      expect(find.byType(BudgetScreen), findsOneWidget);
+      expect(wc.budgetView, 'plan', reason: 'the link picks the Plan page');
       expect(_key('planHeading'), findsOneWidget);
     });
 

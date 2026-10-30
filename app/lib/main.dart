@@ -14,14 +14,13 @@ import 'src/logging.dart';
 import 'src/platform.dart';
 import 'src/screens/bill_sheet.dart';
 import 'src/screens/bills_tab.dart';
+import 'src/screens/budget.dart';
 import 'src/screens/in_use.dart';
 import 'src/screens/key_backup.dart';
 import 'src/screens/onboarding.dart';
-import 'src/screens/payday_plan.dart';
 import 'src/screens/save.dart';
 import 'src/screens/settings.dart';
 import 'src/screens/setup_wizard.dart';
-import 'src/screens/spending.dart';
 import 'src/screens/today.dart';
 import 'src/screens/today_view.dart';
 import 'src/screens/unlock.dart';
@@ -294,10 +293,10 @@ class _HomeShellState extends State<HomeShell> {
             openAccounts: () => widget.wc.openSettings(SettingsSection.accounts, via: 'today'),
             openSync: () => widget.wc.openSettings(SettingsSection.sync, via: 'today'),
             openIncome: () => widget.wc.openSettings(SettingsSection.income, via: 'today')),
-        Tabs.budget => SpendingScreen(
+        Tabs.budget => BudgetScreen(
             wc: widget.wc,
             searchRequest: _searchRequest,
-            header: [PaydayPlan(key: _paydayKey, wc: widget.wc)],
+            planKey: _paydayKey,
             openTab: (i) => _go(i, 'search'),
             openBills: () {
               _go(Tabs.bills, 'search');

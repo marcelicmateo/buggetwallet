@@ -79,6 +79,18 @@ class TodayScreen extends StatelessWidget {
     final suggestions = view.suggestionCount();
     final tight = view.tightestBudget();
     final toReview = view.billsToReview();
+    // The Budget tab has two pages (Spending | Plan): each link picks the one it means before the tab opens.
+    void toPlan() {
+      view.showBudgetView('plan');
+      openPlan();
+    }
+
+    final VoidCallback? toSpending = openSpending == null
+        ? null
+        : () {
+            view.showBudgetView('spending');
+            openSpending!();
+          };
     final recent =
         view.wholeTxs.where((t) => t.kind != BudgetKind.transfer || t.iou).take(12).toList(); // an IOU-linked payment shows, tagged
 
@@ -98,23 +110,23 @@ class TodayScreen extends StatelessWidget {
                   if (p.planDaily > 0) _PaceSummary(f),
                   if (p.foreignByCurrency.isNotEmpty)
                     ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: view.openCurrencies),
-                  if (tight != null) _BudgetLine(tight, view.categoryTable.label(tight.category), f.cur, openSpending),
+                  if (tight != null) _BudgetLine(tight, view.categoryTable.label(tight.category), f.cur, toSpending),
                   if (p.expectedIncome.isNotEmpty) _ExpectedIncomeLine(f, openIncome),
                   if (p.dueCycles.isNotEmpty) _BillsLine(p.dueCycles, p.end, view.today(), f.cur, openBills, view.categoryTable),
                   if (comingUp.count > 0 || suggestions > 0) _ComingUpLine(f, comingUp, suggestions),
                   for (final n in view.plannedNeedingCategory()) _NeedsCategoryLine(f, n),
                   for (final w in view.balanceWarnings()) _BalanceWarnLine(view, w),
-                  if (view.deviceStop != null) _DeviceStopLine(view.deviceStop!, view.deviceCode, openSync ?? openPlan),
-                  if (held.isNotEmpty) _HeldLine(held, openAccounts ?? openPlan),
-                  if (toReview > 0) _BillsToReviewLine(toReview, openBillsReview ?? openPlan),
+                  if (view.deviceStop != null) _DeviceStopLine(view.deviceStop!, view.deviceCode, openSync ?? toPlan),
+                  if (held.isNotEmpty) _HeldLine(held, openAccounts ?? toPlan),
+                  if (toReview > 0) _BillsToReviewLine(toReview, openBillsReview ?? toPlan),
                   for (final h in view.headsUpLines()) _HeadsUpLine(f, h),
                   if (f.reviewedToday)
                     StatusLabel(key: const ValueKey('reviewed'), good: true, text: 'Reviewed · ${streakText(review.streak)}'),
                   _AddExpenseButton(view, addExpense),
                 ]),
                 if (f.setupSteps.isNotEmpty)
-                  _SetupPanel(view: view, steps: f.setupSteps, openPlan: openPlan, newPayday: f.newPayday, chooser: chooser),
-                if (review.due) _ReviewCard(view, review, openSpending, chooser),
+                  _SetupPanel(view: view, steps: f.setupSteps, openPlan: toPlan, newPayday: f.newPayday, chooser: chooser),
+                if (review.due) _ReviewCard(view, review, toSpending, chooser),
                 if (f.s.savedFor != p.start && view.goals.isNotEmpty) _PaydayChecklist(f),
                 if (f.deliveryHour) _DeliveryHourPanel(f),
               ], right: [

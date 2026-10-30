@@ -49,7 +49,7 @@ void main() {
     await pumpApp(tester, Scaffold(body: SpendingScreen(wc: demoWallet())), size: const Size(360, 800));
     await tester.pumpAndSettle();
     final page = find.byWidgetPredicate((w) => w is Scrollable && axisDirectionToAxis(w.axisDirection) == Axis.vertical).first;
-    await tester.drag(page, const Offset(0, -150));
+    await tester.drag(page, const Offset(0, -60)); // the chips stay on screen (they sit near the top now)
     await tester.pumpAndSettle();
     final pos = tester.state<ScrollableState>(page).position;
     final before = pos.pixels;

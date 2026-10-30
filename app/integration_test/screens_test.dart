@@ -93,6 +93,12 @@ void main() {
       await tester.pumpAndSettle();
       await binding.takeScreenshot('${i + 2}-${tab.toLowerCase()}');
     }
+    // RX4: Budget has two pages; Plan is the other one (the choice is remembered, the search below goes back to Spending).
+    await tester.tap(navTab('Budget'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('budgetPlan')));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('2-budget-plan');
 
     // Stage Q: the payday forecast under the plan, the bills cost header, the Owed panel with its IOU sheet, the import preview and the
     // bank balance question.
@@ -226,6 +232,8 @@ void main() {
     // Search (M5): the icon on Budget, a query, the ruled results, Esc closes.
     await tester.tap(navTab('Budget'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('budgetSpending')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('searchOpen')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('searchField')), 'lidl');
@@ -238,6 +246,8 @@ void main() {
 
     // Stage Q: the payday forecast under the plan (last on Budget: it scrolls the page).
     await tester.tap(navTab('Budget'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('budgetPlan')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('forecastPanel')));
     await tester.pumpAndSettle();

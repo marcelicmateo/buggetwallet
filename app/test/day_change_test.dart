@@ -119,7 +119,7 @@ void main() {
     await pumpApp(t, HomeShell(wc: wc));
     await t.tap(find.text('Budget').last);
     await t.pump();
-    expect(find.textContaining('October 2026: '), findsOneWidget);
+    expect(find.text('OUT IN OCTOBER'), findsOneWidget);
     expect(find.byType(SpendingScreen), findsOneWidget);
 
     clock.now = DateTime(2026, 11, 1, 0, 5); // midnight passes while the app is open: nothing notifies
@@ -127,8 +127,8 @@ void main() {
     await t.pump();
     await t.tap(find.text('Budget').last);
     await t.pump();
-    expect(find.textContaining('November 2026: '), findsOneWidget);
-    expect(find.textContaining('October 2026: '), findsNothing);
+    expect(find.text('OUT IN NOVEMBER'), findsOneWidget);
+    expect(find.text('OUT IN OCTOBER'), findsNothing);
   });
 
   testWidgets('a new day shows on the open tab when the app resumes', (t) async {
@@ -137,13 +137,13 @@ void main() {
     await _pumpApp(t, wc);
     await t.tap(find.text('Budget').last);
     await t.pump();
-    expect(find.textContaining('October 2026: '), findsOneWidget);
+    expect(find.text('OUT IN OCTOBER'), findsOneWidget);
 
     clock.now = DateTime(2026, 11, 1, 6);
     t.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     t.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await t.pump();
-    expect(find.textContaining('November 2026: '), findsOneWidget);
+    expect(find.text('OUT IN NOVEMBER'), findsOneWidget);
   });
 
   testWidgets('a payday crossing shows the new-month offer on Today when the day is checked', (t) async {
