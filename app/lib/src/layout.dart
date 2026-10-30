@@ -21,8 +21,8 @@ const twoColMin = 1040.0;
 /// Side padding of the scrolling pages; TwoCol adds it back to the width it sees.
 const pagePad = 16.0;
 
-/// Space under the last row of a tab, so the add button (bottom right on phones) never covers it.
-const pageBottomPad = 88.0;
+/// Space under the last row of a tab (no floating button: Today's Add expense is the only add action).
+const pageBottomPad = 24.0;
 
 /// Minimum heights of tappable things. [rowMin] = a list row (same as touchMin: 48 dp is the floor everywhere), [touchMin] = a field, chip or small button, [buttonMin] = a full button.
 const rowMin = 48.0;

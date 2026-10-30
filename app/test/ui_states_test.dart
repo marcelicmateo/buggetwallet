@@ -465,7 +465,9 @@ void main() {
         // The outbox insert of every write fails: a real SqliteException out of a real repo write.
         wc.repo.db.execute("CREATE TEMP TRIGGER bw_fail BEFORE INSERT ON outbox BEGIN SELECT RAISE(ABORT, 'disk full'); END");
         await pumpFull(t, wc, 1, size: const Size(400, 900));
-        await t.tap(key('addFab'));
+        await t.ensureVisible(key('addExpense'));
+        await t.pumpAndSettle();
+        await t.tap(key('addExpense'));
         await t.pumpAndSettle();
         await t.enterText(find.byType(TextField).first, '5');
         await t.pump();

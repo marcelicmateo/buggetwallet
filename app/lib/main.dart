@@ -435,45 +435,6 @@ class _HomeShellState extends State<HomeShell> {
 
   Widget _logo(WalletColors c) => const LedgerLogo();
 
-  /// The persistent add action (same path as Ctrl+N; a second tap while the sheet opens does nothing).
-  Widget _addButton(BuildContext context, {bool small = false}) {
-    final c = context.c;
-    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(3));
-    final label = _hint('Add expense', 'Ctrl+N');
-    void tap() {
-      logNav('nav.addFab');
-      _addExpense();
-    }
-
-    return small
-        ? FloatingActionButton.small(
-            key: const ValueKey('addFab'),
-            heroTag: null,
-            tooltip: label,
-            backgroundColor: c.ink,
-            foregroundColor: c.bg,
-            elevation: 0,
-            focusElevation: 0,
-            hoverElevation: 0,
-            highlightElevation: 0,
-            shape: shape,
-            onPressed: tap,
-            child: const Icon(Icons.add))
-        : FloatingActionButton(
-            key: const ValueKey('addFab'),
-            heroTag: null,
-            tooltip: label,
-            backgroundColor: c.ink,
-            foregroundColor: c.bg,
-            elevation: 0,
-            focusElevation: 0,
-            hoverElevation: 0,
-            highlightElevation: 0,
-            shape: shape,
-            onPressed: tap,
-            child: const Icon(Icons.add));
-  }
-
   Widget _searchButton() => IconButton(
         key: const ValueKey('appBarSearch'),
         tooltip: _hint('Search', 'Ctrl+F'),
@@ -547,8 +508,6 @@ class _HomeShellState extends State<HomeShell> {
                       ]),
                     ),
                     const SizedBox(height: 16),
-                    _addButton(context, small: true),
-                    const SizedBox(height: 8),
                     _searchButton(),
                     const SizedBox(height: 4),
                     _periodBadge(context, extended),
@@ -664,7 +623,6 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ),
       ),
-      floatingActionButton: compact ? _addButton(context) : null,
       bottomNavigationBar: compact
           ? NavBarFrame(
               selected: tab,

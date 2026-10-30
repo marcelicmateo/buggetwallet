@@ -5,8 +5,8 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
 
 ## Files
 - `lib/main.dart` — app shell (`HomeShell`): bottom bar on compact windows, `NavigationRail` from 600 dp, one shared destinations
-  list (the app bar with search icon, sync spinner and pay-period chip exists on compact windows only; from 600 dp the rail holds the add button, `appBarSearch`, `periodBadge`
-  and the spinner, so nothing stays pinned above the page), Ctrl shortcuts (Ctrl+1..5 tabs, Ctrl+N add expense, Ctrl+R/F5 sync, Ctrl+, Settings; logged as `nav.key`).
+  list (the app bar with search icon, sync spinner and pay-period chip exists on compact windows only; from 600 dp the rail holds `appBarSearch`, `periodBadge`
+  and the spinner, so nothing stays pinned above the page), Ctrl shortcuts (Ctrl+1..5 tabs, Ctrl+N add expense (Today's `addExpense` button is the only add button: no FAB, nothing in the rail; owner 2026-10-30), Ctrl+R/F5 sync, Ctrl+, Settings; logged as `nav.key`).
   The pages are built once (see below) and the body keeps the same widget shape at every size (keyed `Expanded`), so a
   resize keeps every page's State: never build pages in `build()` or a `LayoutBuilder`.
 - Tabs (P5; spec `docs/context/P5_SPEC.md`): `Today · Budget · Bills · Save · Settings` (`lib/src/tabs.dart`: `Tabs.today|budget|bills|save|settings` = 0..4 and `Tabs.names`; bar/rail destination keys `tab:today|budget|bills|save|settings`;

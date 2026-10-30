@@ -1,4 +1,4 @@
-// Stage I (IUa): add button on every tab, search icon, device-local theme choice, explainers shown once, type tokens.
+// Stage I (IUa): add button only on Today (owner 2026-10-30), search icon, device-local theme choice, explainers shown once, type tokens.
 // SYNTHETIC data only.
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/search.dart';
@@ -17,28 +17,34 @@ void main() {
   const tabs = ['Today', 'Budget', 'Bills', 'Save', 'Settings'];
 
   group('add button', () {
+    // Owner (2026-10-30): Today's Add expense button is the only add action in the app (Ctrl+N and the launcher shortcut stay).
     for (final tab in tabs) {
-      testWidgets('phone: the add FAB is on $tab and opens Add expense once, even tapped twice', (tester) async {
+      testWidgets('phone: no floating add button on $tab', (tester) async {
         await pumpFull(tester, demoWallet(), 1.0);
         await tapTab(tester, tab);
-        final fab = find.byKey(const ValueKey('addFab'));
-        expect(fab, findsOneWidget);
-        expect(tester.getSize(fab).shortestSide, greaterThanOrEqualTo(48));
-        await tester.tap(fab);
-        await tester.tap(fab, warnIfMissed: false);
-        await tester.pumpAndSettle();
-        expect(find.byType(AddExpenseSheet), findsOneWidget);
+        expect(find.byType(FloatingActionButton), findsNothing);
+        expect(find.byKey(const ValueKey('addFab')), findsNothing);
       });
     }
 
-    testWidgets('rail layouts: the add action sits in the rail, no bottom-right FAB', (tester) async {
-      await pumpFull(tester, demoWallet(), 1.0, size: const Size(1280, 800));
-      expect(find.byKey(const ValueKey('addFab')), findsOneWidget);
-      expect(find.byType(NavigationRail), findsOneWidget);
-      expect(find.descendant(of: find.byType(NavigationRail), matching: find.byKey(const ValueKey('addFab'))), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('addFab')));
+    testWidgets("phone: Today's Add expense opens the sheet once, even tapped twice", (tester) async {
+      await pumpFull(tester, demoWallet(), 1.0);
+      final add = find.byKey(const ValueKey('addExpense'));
+      await tester.ensureVisible(add);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(add).shortestSide, greaterThanOrEqualTo(48));
+      await tester.tap(add);
+      await tester.tap(add, warnIfMissed: false);
       await tester.pumpAndSettle();
       expect(find.byType(AddExpenseSheet), findsOneWidget);
+    });
+
+    testWidgets('rail layouts: no add button in the rail or bottom right', (tester) async {
+      await pumpFull(tester, demoWallet(), 1.0, size: const Size(1280, 800));
+      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(find.byKey(const ValueKey('addFab')), findsNothing);
+      expect(find.byKey(const ValueKey('addExpense')), findsOneWidget);
     });
   });
 
