@@ -61,6 +61,30 @@ class MainActivity : FlutterActivity() {
         // A picture left behind when Android killed the app while the camera app was open (its path was lost with it).
         clearBillPhotos()
         publishShortcut()
+        preferSixtyHertz()
+    }
+
+    /**
+     * Asks for a 60 Hz display mode (the app's frame budget is 16.7 ms, so a 90/120 Hz panel only costs battery and heat). API 23+: the
+     * mode with the current size and 60 Hz is preferred (the system may still pick another when another window or setting needs it);
+     * if the panel has none, `preferredRefreshRate` is a hint. Nothing is logged: a failure just leaves the system's choice.
+     */
+    private fun preferSixtyHertz() {
+        try {
+            if (Build.VERSION.SDK_INT < 23) return
+            @Suppress("DEPRECATION")
+            val display = if (Build.VERSION.SDK_INT >= 30) this.display else windowManager.defaultDisplay
+            val current = display?.mode ?: return
+            val sixty = display.supportedModes.firstOrNull {
+                it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight &&
+                    Math.abs(it.refreshRate - 60f) < 1f
+            }
+            val params = window.attributes
+            if (sixty != null) params.preferredDisplayModeId = sixty.modeId else params.preferredRefreshRate = 60f
+            window.attributes = params
+        } catch (e: Throwable) {
+            // A display that cannot be asked: the system's refresh rate stays.
+        }
     }
 
     /**

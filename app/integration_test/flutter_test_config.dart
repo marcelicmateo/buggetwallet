@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:budget_wallet/src/warm_up.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,8 @@ import 'package:integration_test/integration_test.dart';
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
     final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+    // `flutter test` has no rasterizer to report the first frame: the background work (HomeShell) must not wait for it.
+    WarmUp.waitForFirstRaster = false;
     final dir = Platform.environment['BW_SCREENS_DIR'];
     binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/integration_test'), (call) async {
       if (call.method != 'captureScreenshot') return null;

@@ -21,7 +21,7 @@ import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDate
 import 'hero.dart';
 import 'home_widget.dart';
 import 'ics_fetch.dart';
-import 'insights_api.dart' show InsightRange;
+import 'insights_api.dart' show InsightRange, WalletInsights, insightGraphs;
 import 'key_store.dart';
 import 'logging.dart';
 import 'memo_key.dart';
@@ -31,6 +31,7 @@ import 'sub_state.dart';
 import 'sync_status.dart' show relayOlderThanBeforeText;
 import 'tabs.dart';
 import 'wallet_db.dart';
+import 'warm_up.dart';
 
 part 'controller_accounts.dart';
 part 'controller_categories.dart';
@@ -52,6 +53,7 @@ part 'controller_forecast.dart';
 part 'controller_iou.dart';
 part 'controller_suggest.dart';
 part 'controller_setup.dart';
+part 'controller_warmup.dart';
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');
@@ -256,6 +258,9 @@ class WalletController extends ChangeNotifier {
 
   /// Counts [reload]s: the derived values below are cached per version (and per day) and recomputed only after the data changed.
   int dataVersion = 0;
+
+  /// The idle warm-up of the derived values the tabs need (see `controller_warmup.dart`).
+  final WarmUp warmUp = WarmUp();
   final Map<MemoKey, Object?> _memo = {};
 
   bool _disposed = false;
@@ -1219,6 +1224,7 @@ class WalletController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    warmUp.cancel();
     logEvent(_log, Level.FINE, 'wc.dispose');
     _syncTimer?.cancel();
     _dayTimer?.cancel();
