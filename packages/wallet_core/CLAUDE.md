@@ -94,6 +94,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   least 4 days in and not in the first `samePaydayDays` (7) days; in `incomeMode == 'received'` those first 7 days count
   `max(received, salary)` (salary parts still landing; owner: paid 10th–15th). `periods.dart`'s grouping constant is
   `_salaryGroupDays` (20). `WalletSettings.fromMap` reads a stored `paydayDay` 29..31 as 28 (`maxPaydayDay`).
+  **Day dots (DD):** `periodDays(...)` (same arguments as `computePeriod`) → one `PeriodDay {date, mark, spent, allowance}`
+  per day of `[start, end)`; each day before today (all once the payday passed) has exactly `computePeriod(today: d)`'s
+  `spentToday`/`allowanceToday` (rows known now), `DayMark.over` iff spent > allowance; today/later = `today`/`toCome`
+  (0/0). One pass over the rows plus per-day sums (bill cycles once, `duePlanned` per day); a change to
+  `computePeriod`'s allowance maths must be mirrored there (`test/dd_day_dots_test.dart` pins equality; about 2 ms on 20k rows).
   Budget vs actual per category (calendar months, owner decision 2026-10-20): `budgetVsActual(txs, month, budgets, today:, currency:)` →
   `BudgetVsActual` (one `CategoryBudgetLine` per category with a budget or any spend, actual desc then name; `actual` =
   `monthSummary(...).byCategory`, i.e. the "Where it goes" sums: live rows, fixed + flex, refunds subtracted, transfers

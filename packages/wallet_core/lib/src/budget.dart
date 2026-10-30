@@ -941,3 +941,124 @@ int? monthsToGoal(Goal g) {
   if (g.monthly <= 0) return null;
   return (left / g.monthly).ceil();
 }
+
+/// The verdict of one day of the pay period on Today's day dots (DD).
+enum DayMark { within, over, today, toCome }
+
+/// One day of the pay period ([periodDays]). [spent] and [allowance] (cents) are what Today said that day; both 0 for
+/// [DayMark.today] and [DayMark.toCome] (no verdict yet).
+class PeriodDay {
+  const PeriodDay({required this.date, required this.mark, this.spent = 0, this.allowance = 0});
+
+  final String date; // YYYY-MM-DD
+  final DayMark mark;
+
+  /// `computePeriod(..., today: date).spentToday`: that day's net flexible spending (negative = a net refund).
+  final int spent;
+
+  /// `computePeriod(..., today: date).allowanceToday`: that day's money.
+  final int allowance;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PeriodDay && other.date == date && other.mark == mark && other.spent == spent && other.allowance == allowance;
+
+  @override
+  int get hashCode => Object.hash(date, mark, spent, allowance);
+
+  @override
+  String toString() => 'PeriodDay($date, ${mark.name}, $spent/$allowance)';
+}
+
+/// One [PeriodDay] per day of the pay period `[start, end)` that [computePeriod] gives for [today] (same arguments),
+/// ascending. Each day before [today] (every day once the payday passed) is judged with exactly what
+/// `computePeriod(..., today: d)` returns for `spentToday` and `allowanceToday`, with the rows known now:
+/// [DayMark.over] when spent > allowance, else [DayMark.within] (equal, nothing spent or a net refund). [today] is
+/// [DayMark.today], later days [DayMark.toCome]. Without a saved `periodStart` the period starts today, so no day is
+/// judged. One pass over [txs]: the parts that do not depend on the day (bill cycles, fixed plan, goals) are computed
+/// once, the rest from per-day sums; only the planned costs are re-checked per day ([duePlanned] depends on it).
+List<PeriodDay> periodDays(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today,
+    {List<RecurringBill> bills = const [],
+    List<PlannedCost> planned = const [],
+    required CategoryTable table,
+    List<CategorizedTx>? matchRows}) {
+  final start = st.periodStart ?? today;
+  final end = nextPayday(start, st.paydayDay);
+  final dates = <String>[];
+  for (var d = start; d.compareTo(end) < 0 && dates.length < 1000; d = addDays(d, 1)) {
+    dates.add(d);
+  }
+  final judged = dates.takeWhile((d) => d.compareTo(today) < 0).length;
+  final out = <PeriodDay>[];
+  if (judged > 0) {
+    final raw = matchRows ?? txs;
+    final incomes = [
+      for (final b in bills)
+        if (b.isIncome) b
+    ];
+    final outBills = incomes.isEmpty
+        ? bills
+        : [
+            for (final b in bills)
+              if (!b.isIncome) b
+          ];
+    final index = {for (var i = 0; i < judged; i++) dates[i]: i};
+    final byPayee = <String, List<RecurringBill>>{};
+    for (final b in incomes) {
+      if (b.confirmed && b.payee.isNotEmpty) (byPayee[b.payee] ??= []).add(b);
+    }
+    // Per judged day: income rows, flexible rows, landed recurring income (the same rows computePeriod sums).
+    final received = List<int>.filled(judged, 0);
+    final flex = List<int>.filled(judged, 0);
+    final landed = List<int>.filled(judged, 0);
+    for (final t in txs) {
+      if (!t.tx.live || t.tx.currency != st.currency) continue;
+      final i = index[t.date];
+      if (i == null) continue;
+      switch (t.kind) {
+        case BudgetKind.income:
+          received[i] = _ok(received[i] + t.amount);
+        case BudgetKind.flex:
+          flex[i] = _ok(flex[i] + t.amount);
+        case BudgetKind.extra:
+          if (byPayee.isEmpty || t.amount == 0 || t.originalCurrency != null) break;
+          final mine = byPayee[merchantKey(t.tx)];
+          if (mine == null) break;
+          if (t.amount < 0 || mine.any((b) => incomeFits(b, t.tx.amount))) landed[i] += t.amount;
+        default:
+          break;
+      }
+    }
+    final goalMonthly = goals.fold<int>(0, (s, g) => _ok(s + g.monthly));
+    final fixedPlan =
+        st.rent + st.loan + st.subs + st.planLines.entries.fold<int>(0, (s, e) => table.hasPlanLine(e.key) ? _ok(s + e.value) : s);
+    final cycles = dueCycles(outBills, raw, start, end, currency: st.currency);
+    final reservedBills = cycles.fold<int>(0, (s, c) => _ok(s + (c.coveredIn(table) ? 0 : c.reserve)));
+    final counted = {for (final c in cycles) occurrenceKey(c.bill.id, c.due)};
+    var receivedSoFar = 0, flexBefore = 0, landedSoFar = 0;
+    for (var i = 0; i < judged; i++) {
+      final d = dates[i];
+      receivedSoFar = _ok(receivedSoFar + received[i]);
+      landedSoFar += landed[i];
+      // i = daysBetween(start, d), and d < end: the period still runs on d.
+      final partsArriving = i < samePaydayDays;
+      final income = st.incomeMode == 'received' && receivedSoFar > 0
+          ? (partsArriving && st.salary > receivedSoFar ? st.salary : receivedSoFar)
+          : st.salary;
+      final reservedPlanned = [
+        for (final p in duePlanned(planned, d, end))
+          if (plannedReserves(p, outBills, counted, table: table)) p
+      ].fold<int>(0, (s, p) => _ok(s + p.amount!));
+      final flexBudget = income - fixedPlan - goalMonthly - reservedBills - reservedPlanned + (landedSoFar < 0 ? 0 : landedSoFar);
+      final spentToday = -flex[i];
+      final leftForToday = flexBudget + flexBefore; // flexBudget − (spent − spentToday)
+      final allowance = leftForToday <= 0 ? 0 : (leftForToday / daysBetween(d, end)).round();
+      out.add(PeriodDay(date: d, mark: spentToday > allowance ? DayMark.over : DayMark.within, spent: spentToday, allowance: allowance));
+      flexBefore = _ok(flexBefore + flex[i]);
+    }
+  }
+  for (var i = judged; i < dates.length; i++) {
+    out.add(PeriodDay(date: dates[i], mark: dates[i] == today ? DayMark.today : DayMark.toCome));
+  }
+  return out;
+}
