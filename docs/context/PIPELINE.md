@@ -46,7 +46,7 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | RX1 | Dashboard redesign concept: 2 directions, mockups `docs/design/dashboard/` | ui-builder (opus/high) | worktree | – | done d24e8d4, merged |
 | RX2d | Owner decisions: B Paper Tiles, Spending/Plan switch, keep 3 payments on Today, always exact cents (CONCEPT.md §8) | owner | – | RX1 | done |
 | RX2 | Tokens (`desk`, series s1–s3, soft states) + kit `widgets/dash.dart` (Tile, StatTile, chips, Ring, Sparkline, SplitBar/Donut, BarList, NetBars, CalendarTile, DashGrid) + widget tests | scout → ui-builder (sonnet/high) | worktree | RX2d | queued |
-| RXc | Core for RX4/RX7: month out vs 6-month average; `periodDays` for a past period; out delta vs previous period; reviews per period | scout → core-builder (session/high) | worktree | RX2d | queued (parallel with RX2) |
+| RXc | Core for RX4/RX7: month out vs 6-month average; `periodDays` for a past period; out delta vs previous period; reviews per period | scout → core-builder (session/high) | worktree | RX2d | done 42971d3 (19 tests), merged; past-period day dots deferred to RX7 (rule needs an owner call) |
 | RX3–RX6 | Today, Budget (Spending/Plan), Bills, Save dashboards on the kit | ui-builder ×2 (parallel by tab) | worktrees | RX2 (+RXc for RX4) | queued |
 | RX7–RX8 | Pay-period report page; tag detail dashboard; desktop 4 columns; screenshots/layout tests | ui-builder | worktree | RX3–RX6, RXc | queued |
 | ZC | Zoomable, scrollable graphs (spec `ZC_SPEC.md`, owner answers in §6) | scout → core + test-writer + ui | worktrees | DD, RX2 (chart look follows the picked direction) | on hold |
