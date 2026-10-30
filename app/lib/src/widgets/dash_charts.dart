@@ -1,0 +1,643 @@
+// Small charts for the dashboard tiles (RX2; kit in `dash.dart`). Values come in already formatted or as plain numbers to draw;
+// nothing here reads the controller or decides what a number means. Strokes snap to whole device pixels (`snapPx`); colours are
+// opaque; a state is never colour alone (position, hatch, dash, icon or word says it too).
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+
+import '../format.dart';
+import '../theme.dart';
+import 'charts.dart' show snapPx, solidOver;
+import 'common.dart';
+import 'dash.dart';
+
+/// A progress ring with something in the middle (usually a percent). [progress] 0..1 (more is drawn as full).
+class Ring extends StatelessWidget {
+  final double progress;
+  final Color? color;
+  final double size, stroke;
+  final Widget? child;
+  final String? semanticLabel;
+  const Ring({super.key, required this.progress, this.color, this.size = 84, this.stroke = 8, this.child, this.semanticLabel});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final px = snapPx(stroke, MediaQuery.devicePixelRatioOf(context));
+    return Semantics(
+      label: semanticLabel,
+      container: semanticLabel != null,
+      excludeSemantics: semanticLabel != null,
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(
+          painter: _RingPainter(progress.clamp(0.0, 1.0), color ?? c.s1, c.line, px),
+          child: Padding(padding: EdgeInsets.all(stroke + 4), child: Center(child: child)),
+        ),
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  final double progress, stroke;
+  final Color color, track;
+  _RingPainter(this.progress, this.color, this.track, this.stroke);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset(stroke / 2, stroke / 2) & Size(size.width - stroke, size.height - stroke);
+    final p = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke;
+    canvas.drawArc(rect, 0, 2 * math.pi, false, p..color = track);
+    if (progress > 0) {
+      canvas.drawArc(
+          rect,
+          -math.pi / 2,
+          2 * math.pi * progress,
+          false,
+          p
+            ..color = color
+            ..strokeCap = progress >= 1 ? StrokeCap.butt : StrokeCap.round);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) => old.progress != progress || old.color != color || old.track != track || old.stroke != stroke;
+}
+
+/// A ring tile: label, the ring with [center] inside (a percent), the exact [value] under it and a sub line.
+class RingTile extends StatelessWidget {
+  final String label, center, value;
+  final String? sub;
+  final double progress;
+  final Color? color;
+  final DashChip? chip;
+  final VoidCallback? onTap;
+  const RingTile({
+    super.key,
+    required this.label,
+    required this.center,
+    required this.value,
+    required this.progress,
+    this.sub,
+    this.color,
+    this.chip,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Tile(
+      onTap: onTap,
+      semanticLabel: [label, center, value, if (sub != null) sub, if (chip != null) chip!.spoken].join(', '),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        TileLabel(label),
+        const SizedBox(height: 8),
+        Center(
+          child: Ring(
+            progress: progress,
+            color: color,
+            child: FittedBox(
+                fit: BoxFit.scaleDown, child: Text(center, maxLines: 1, style: dashNumStyle(size: BwType.headingSize, color: c.ink))),
+          ),
+        ),
+        const SizedBox(height: 8),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(value, maxLines: 1, style: dashNumStyle(size: BwType.amountMdSize, color: c.ink)),
+        ),
+        if (sub != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(sub!, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+          ),
+        if (chip != null) Padding(padding: const EdgeInsets.only(top: 8), child: chip),
+      ]),
+    );
+  }
+}
+
+/// A line of [values] (oldest first) with a dot on the last one. No axes: the number it belongs to is in the tile.
+class Sparkline extends StatelessWidget {
+  final List<double> values;
+  final Color? color;
+  final double height;
+  final String? semanticLabel;
+  const Sparkline({super.key, required this.values, this.color, this.height = 40, this.semanticLabel});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    return Semantics(
+      label: semanticLabel,
+      container: semanticLabel != null,
+      excludeSemantics: semanticLabel != null,
+      child: SizedBox(
+        height: height,
+        width: double.infinity,
+        child: CustomPaint(painter: _SparkPainter(values, color ?? c.s1, c.surface, snapPx(2, dpr))),
+      ),
+    );
+  }
+}
+
+class _SparkPainter extends CustomPainter {
+  final List<double> values;
+  final Color color, ground;
+  final double stroke;
+  _SparkPainter(this.values, this.color, this.ground, this.stroke);
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.isEmpty) return;
+    const r = 3.5, pad = r + 2;
+    final lo = values.reduce(math.min), hi = values.reduce(math.max);
+    final span = hi - lo;
+    double x(int i) => values.length == 1 ? size.width - pad : pad + (size.width - 2 * pad) * i / (values.length - 1);
+    double y(double v) => span == 0 ? size.height / 2 : size.height - pad - (size.height - 2 * pad) * (v - lo) / span;
+    if (values.length > 1) {
+      final path = Path()..moveTo(x(0), y(values[0]));
+      for (var i = 1; i < values.length; i++) {
+        path.lineTo(x(i), y(values[i]));
+      }
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeJoin = StrokeJoin.round
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+    final end = Offset(x(values.length - 1), y(values.last));
+    canvas.drawCircle(end, r + 1.5, Paint()..color = ground);
+    canvas.drawCircle(end, r, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_SparkPainter old) => old.values != values || old.color != color || old.ground != ground || old.stroke != stroke;
+}
+
+/// One part of a [SplitBar] or [Donut]: [weight] sets its size, [value] is the exact text shown next to its [label].
+class DashSegment {
+  final String label, value;
+  final double weight;
+  final Color color;
+  const DashSegment({required this.label, required this.value, required this.weight, required this.color});
+}
+
+/// The colour key with the values: a swatch, the label and the exact value, wrapping on narrow tiles.
+class DashLegend extends StatelessWidget {
+  final List<DashSegment> segments;
+  const DashLegend(this.segments, {super.key});
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Wrap(spacing: 14, runSpacing: 4, children: [
+      for (final s in segments)
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 10, height: 10, decoration: BoxDecoration(color: s.color, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(text: s.label, style: TextStyle(color: c.ink2)),
+                const TextSpan(text: ' '),
+                TextSpan(text: s.value, style: numStyle.copyWith(color: c.ink, fontWeight: FontWeight.w500)),
+              ]),
+              style: const TextStyle(fontSize: BwType.metaSize),
+            ),
+          ),
+        ]),
+    ]);
+  }
+}
+
+String _spoken(List<DashSegment> s) => s.map((e) => '${e.label} ${e.value}').join(', ');
+
+/// A horizontal bar cut into [segments] by 2 dp gaps (sizes by weight), with the legend and its values under it.
+class SplitBar extends StatelessWidget {
+  final List<DashSegment> segments;
+  final double height;
+  final bool legend;
+  const SplitBar({super.key, required this.segments, this.height = 12, this.legend = true});
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = segments.where((s) => s.weight > 0).toList();
+    return Semantics(
+      container: true,
+      label: _spoken(segments),
+      excludeSemantics: true,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(height / 2),
+          child: SizedBox(
+            height: height,
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              for (var i = 0; i < shown.length; i++) ...[
+                if (i > 0) const SizedBox(width: 2),
+                Expanded(flex: math.max(1, (shown[i].weight * 1000).round()), child: ColoredBox(color: shown[i].color)),
+              ],
+            ]),
+          ),
+        ),
+        if (legend) ...[const SizedBox(height: 8), DashLegend(segments)],
+      ]),
+    );
+  }
+}
+
+/// A ring cut into [segments] by 2 dp gaps, [center] inside, the legend with values under it.
+class Donut extends StatelessWidget {
+  final List<DashSegment> segments;
+  final Widget? center;
+  final double size, stroke;
+  const Donut({super.key, required this.segments, this.center, this.size = 132, this.stroke = 16});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      label: _spoken(segments),
+      excludeSemantics: true,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(
+          width: size,
+          height: size,
+          child: CustomPaint(
+            painter: _DonutPainter(segments.where((s) => s.weight > 0).toList(), stroke),
+            child: Padding(padding: EdgeInsets.all(stroke + 6), child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: center))),
+          ),
+        ),
+        const SizedBox(height: 10),
+        DashLegend(segments),
+      ]),
+    );
+  }
+}
+
+class _DonutPainter extends CustomPainter {
+  final List<DashSegment> segments;
+  final double stroke;
+  _DonutPainter(this.segments, this.stroke);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = segments.fold<double>(0, (a, s) => a + s.weight);
+    if (total <= 0) return;
+    final rect = Offset(stroke / 2, stroke / 2) & Size(size.width - stroke, size.height - stroke);
+    final radius = rect.width / 2;
+    // 2 dp gaps measured on the middle of the ring.
+    final gap = segments.length > 1 ? 2 / radius : 0.0;
+    final avail = 2 * math.pi - gap * segments.length;
+    var at = -math.pi / 2 + gap / 2;
+    for (final s in segments) {
+      final sweep = avail * s.weight / total;
+      canvas.drawArc(
+        rect,
+        at,
+        sweep,
+        false,
+        Paint()
+          ..color = s.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke,
+      );
+      at += sweep + gap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DonutPainter old) => old.segments != segments || old.stroke != stroke;
+}
+
+/// Diagonal lines over [ground]: "over" and "lost" stay readable without colour.
+class HatchPainter extends CustomPainter {
+  final Color color, ground;
+  const HatchPainter(this.color, this.ground);
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = ground);
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = 2;
+    for (var x = -size.height; x < size.width + size.height; x += 5) {
+      canvas.drawLine(Offset(x, size.height), Offset(x + size.height, 0), p);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(HatchPainter old) => old.color != color || old.ground != ground;
+}
+
+/// One budget meter of a [BarList]. [fraction] is spent / budget (more than 1 = over); [value] and [note] are shown as given
+/// ("48 € left", "Over by 12 €").
+class BarRow {
+  final String label, value, note;
+  final double fraction;
+  final bool over;
+  final Color? color;
+  final VoidCallback? onTap;
+  final Key? key;
+  const BarRow(
+      {required this.label,
+      required this.value,
+      required this.note,
+      required this.fraction,
+      this.over = false,
+      this.color,
+      this.onTap,
+      this.key});
+}
+
+/// Budget meters: name and exact amount, a track with a fill, a note. Over = the fill is hatched and the note carries ▲ and the
+/// word, so colour is never the only cue.
+class BarList extends StatelessWidget {
+  final List<BarRow> rows;
+  const BarList({super.key, required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      for (final r in rows)
+        Semantics(
+          container: true,
+          button: r.onTap != null,
+          label: '${r.label}, ${r.value}, ${r.note}',
+          onTap: r.onTap,
+          excludeSemantics: true,
+          child: InkWell(
+            key: r.key,
+            onTap: r.onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SplitRow(
+                  start: Text(r.label, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: BwType.bodySize)),
+                  end: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(r.value, maxLines: 1, style: BwType.amount.copyWith(color: c.ink, fontSize: BwType.bodySize)),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: SizedBox(
+                    height: 8,
+                    child: Stack(children: [
+                      Positioned.fill(child: ColoredBox(color: c.line)),
+                      if (r.over)
+                        Positioned.fill(child: CustomPaint(painter: HatchPainter(c.bad, c.badSoft)))
+                      else
+                        Positioned.fill(
+                          child: FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: r.fraction.clamp(0.0, 1.0),
+                            child: ColoredBox(color: r.color ?? c.s1),
+                          ),
+                        ),
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  if (r.over)
+                    Padding(
+                        padding: const EdgeInsets.only(right: 3, top: 1), child: Icon(Icons.warning_amber_rounded, size: 15, color: c.bad)),
+                  Expanded(
+                    child: Text(r.note,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: BwType.metaSize,
+                            fontWeight: r.over ? FontWeight.w600 : FontWeight.w400,
+                            color: r.over ? c.bad : c.muted)),
+                  ),
+                ]),
+              ]),
+            ),
+          ),
+        ),
+    ]);
+  }
+}
+
+/// One bar of [NetBars]: kept (above the line) or lost (below, hatched) in cents; [running] = the period still going (faded, dashed).
+class NetBar {
+  final String label;
+  final int cents;
+  final bool running;
+  const NetBar({required this.label, required this.cents, this.running = false});
+}
+
+/// Kept or lost per period as bars around a zero line, the labels under. Heights scale to the largest bar (drawing only).
+class NetBars extends StatelessWidget {
+  final List<NetBar> bars;
+  final String currency;
+  final double height;
+  const NetBars({super.key, required this.bars, required this.currency, this.height = 96});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    return Semantics(
+      container: true,
+      label: [
+        for (final b in bars)
+          '${b.label} ${b.cents >= 0 ? 'kept' : 'lost'} ${moneyExact(b.cents.abs(), currency)}${b.running ? ' so far' : ''}'
+      ].join(', '),
+      excludeSemantics: true,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(
+          height: height,
+          width: double.infinity,
+          child: CustomPaint(painter: _NetPainter(bars, c.s3, c.bad, c.surface, c.lineStrong, snapPx(1, dpr))),
+        ),
+        const SizedBox(height: 4),
+        Row(children: [
+          for (final b in bars)
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(b.label, maxLines: 1, style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
+              ),
+            ),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _NetPainter extends CustomPainter {
+  final List<NetBar> bars;
+  final Color kept, lost, ground, axis;
+  final double hair;
+  _NetPainter(this.bars, this.kept, this.lost, this.ground, this.axis, this.hair);
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (bars.isEmpty) return;
+    final maxUp = bars.fold<int>(0, (a, b) => b.cents > a ? b.cents : a);
+    final maxDown = bars.fold<int>(0, (a, b) => -b.cents > a ? -b.cents : a);
+    final total = math.max(1, maxUp + maxDown);
+    final zeroY = (size.height * maxUp / total).clamp(0.0, size.height);
+    final unit = size.height / total;
+    final slot = size.width / bars.length;
+    final bw = math.min(slot * 0.6, 28.0);
+    for (var i = 0; i < bars.length; i++) {
+      final b = bars[i];
+      final h = math.max(b.cents == 0 ? 0.0 : 2.0, b.cents.abs() * unit);
+      final left = slot * i + (slot - bw) / 2;
+      final rect = b.cents >= 0 ? Rect.fromLTWH(left, zeroY - h, bw, h) : Rect.fromLTWH(left, zeroY, bw, h);
+      final rr = RRect.fromRectAndCorners(
+        rect,
+        topLeft: b.cents >= 0 ? const Radius.circular(3) : Radius.zero,
+        topRight: b.cents >= 0 ? const Radius.circular(3) : Radius.zero,
+        bottomLeft: b.cents < 0 ? const Radius.circular(3) : Radius.zero,
+        bottomRight: b.cents < 0 ? const Radius.circular(3) : Radius.zero,
+      );
+      final base = b.cents >= 0 ? kept : lost;
+      canvas.save();
+      canvas.clipRRect(rr);
+      if (b.cents < 0) {
+        canvas.translate(rect.left, rect.top);
+        HatchPainter(lost, solidOver(lost.withValues(alpha: 0.18), ground)).paint(canvas, rect.size);
+      } else {
+        canvas.drawRect(rect, Paint()..color = b.running ? solidOver(base.withValues(alpha: 0.35), ground) : base);
+      }
+      canvas.restore();
+      if (b.running || b.cents < 0) {
+        canvas.drawRRect(
+          rr.deflate(hair / 2),
+          Paint()
+            ..color = base
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = hair,
+        );
+      }
+    }
+    canvas.drawLine(
+        Offset(0, zeroY),
+        Offset(size.width, zeroY),
+        Paint()
+          ..color = axis
+          ..strokeWidth = hair);
+  }
+
+  @override
+  bool shouldRepaint(_NetPainter old) => old.bars != bars || old.kept != kept || old.lost != lost || old.hair != hair;
+}
+
+enum CalKind { none, bill, planned, payday }
+
+/// A day of a [CalendarStrip]: [label] is the day number as shown.
+class CalDay {
+  final String label;
+  final CalKind kind;
+  final bool today;
+  const CalDay(this.label, {this.kind = CalKind.none, this.today = false});
+}
+
+/// The days until payday as small squares: a bill = filled, a planned cost = dashed, payday = dashed teal with a flag, today = a bar
+/// under the number. [semanticLabel] says it in words (the caller knows the names and amounts).
+class CalendarStrip extends StatelessWidget {
+  final List<CalDay> days;
+  final String? semanticLabel;
+  final bool legend;
+  const CalendarStrip({super.key, required this.days, this.semanticLabel, this.legend = true});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final cell = MediaQuery.textScalerOf(context).scale(30).clamp(30.0, 44.0);
+    final kinds = days.map((d) => d.kind).toSet();
+    return Semantics(
+      container: true,
+      label: semanticLabel,
+      excludeSemantics: semanticLabel != null,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        Wrap(spacing: 4, runSpacing: 4, children: [for (final d in days) _CalCell(d, cell)]),
+        if (legend && kinds.any((k) => k != CalKind.none)) ...[
+          const SizedBox(height: 8),
+          Wrap(spacing: 14, runSpacing: 4, children: [
+            if (kinds.contains(CalKind.bill)) _CalKey(const CalDay('', kind: CalKind.bill), 'Bill', c),
+            if (kinds.contains(CalKind.planned)) _CalKey(const CalDay('', kind: CalKind.planned), 'Planned', c),
+            if (kinds.contains(CalKind.payday)) _CalKey(const CalDay('', kind: CalKind.payday), 'Payday', c),
+          ]),
+        ],
+      ]),
+    );
+  }
+}
+
+class _CalKey extends StatelessWidget {
+  final CalDay day;
+  final String text;
+  final WalletColors c;
+  const _CalKey(this.day, this.text, this.c);
+  @override
+  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
+        _CalCell(day, 16),
+        const SizedBox(width: 6),
+        Text(text, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+      ]);
+}
+
+class _CalCell extends StatelessWidget {
+  final CalDay day;
+  final double size;
+  const _CalCell(this.day, this.size);
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final painter = switch (day.kind) {
+      CalKind.none => DashedBorderPainter(color: c.line, radius: 4, width: 1, dash: null),
+      CalKind.bill =>
+        DashedBorderPainter(color: c.s2, radius: 4, width: 2, dash: null, fill: solidOver(c.s2.withValues(alpha: 0.22), c.surface)),
+      CalKind.planned => DashedBorderPainter(color: c.s2, radius: 4, width: 1.5, dash: 3),
+      CalKind.payday =>
+        DashedBorderPainter(color: c.s3, radius: 4, width: 2, dash: 3, fill: solidOver(c.s3.withValues(alpha: 0.18), c.surface)),
+    };
+    final small = size < 20;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: painter,
+        child: small
+            ? null
+            : Stack(alignment: Alignment.center, children: [
+                if (day.kind == CalKind.payday)
+                  Positioned(top: 1, left: 0, right: 0, child: Center(child: Icon(Icons.flag, size: 10, color: c.s3)))
+                else
+                  const SizedBox.shrink(),
+                Align(
+                    alignment: day.kind == CalKind.payday ? const Alignment(0, 0.55) : Alignment.center,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Padding(
+                        padding: const EdgeInsets.all(2),
+                        child: Text(day.label,
+                            maxLines: 1,
+                            style: numStyle.copyWith(
+                                fontSize: BwType.metaSize,
+                                fontWeight: day.today ? FontWeight.w700 : FontWeight.w400,
+                                color: day.kind == CalKind.none ? c.muted : c.ink)),
+                      ),
+                    )),
+                if (day.today) Positioned(left: 6, right: 6, bottom: 3, height: 3, child: ColoredBox(color: c.ink)),
+              ]),
+      ),
+    );
+  }
+}

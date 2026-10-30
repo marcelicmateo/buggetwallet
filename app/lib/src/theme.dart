@@ -12,6 +12,11 @@ class WalletColors extends ThemeExtension<WalletColors> {
   /// chart surfaces (light #F9F6EE/#F2EEE4, dark #21242B/#1B1D23): {chartPos, chartNeg} and {chartPos, chart2} each pass lightness band,
   /// chroma floor, CVD (light 17.4 / 22.9 protan, dark 18.1 / 25.3), normal-vision floor (light 23.9 / 26.2, dark 22.2 / 25.5) and contrast.
   final Color chartPos, chartNeg, chart2;
+
+  /// Dashboard tiles (RX2, `widgets/dash.dart`): [desk] is the ground behind the tiles (darker than [surface]); [s1] flexible spending,
+  /// [s2] bills and fixed costs, [s3] saved and goals (series colours: charts and fills only, never text; checked with the dataviz
+  /// validator, light and dark, 3:1 on bg and surface); [goodSoft]/[badSoft] are the chip grounds under `good` / `bad` text.
+  final Color desk, s1, s2, s3, goodSoft, badSoft;
   const WalletColors({
     required this.bg,
     required this.surface,
@@ -33,6 +38,12 @@ class WalletColors extends ThemeExtension<WalletColors> {
     required this.chartPos,
     required this.chartNeg,
     required this.chart2,
+    required this.desk,
+    required this.s1,
+    required this.s2,
+    required this.s3,
+    required this.goodSoft,
+    required this.badSoft,
   });
 
   /// Paper and ink.
@@ -57,6 +68,12 @@ class WalletColors extends ThemeExtension<WalletColors> {
     chartPos: Color(0xFF3A559E),
     chartNeg: Color(0xFFA93A32),
     chart2: Color(0xFFA8650F),
+    desk: Color(0xFFE6E1D3),
+    s1: Color(0xFF3A559E),
+    s2: Color(0xFFB0721A),
+    s3: Color(0xFF008F96),
+    goodSoft: Color(0xFFE3EBDD),
+    badSoft: Color(0xFFF3DEDA),
   );
 
   /// Night ledger.
@@ -81,6 +98,12 @@ class WalletColors extends ThemeExtension<WalletColors> {
     chartPos: Color(0xFF6F8FE0),
     chartNeg: Color(0xFFD56F66),
     chart2: Color(0xFFC27F20),
+    desk: Color(0xFF15171C),
+    s1: Color(0xFF7088D6),
+    s2: Color(0xFFBD7F22),
+    s3: Color(0xFF1A9AA0),
+    goodSoft: Color(0xFF243126),
+    badSoft: Color(0xFF3A2523),
   );
 
   @override
