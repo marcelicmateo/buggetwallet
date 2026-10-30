@@ -541,8 +541,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `docs/context/DESIGN_DECISIONS.md` §4.10. Logs: `bills.*`, `blob.*`,
   `sync.blob*` with counts, sources and enum words only.
 - `ranges.dart` + `insights.dart` — graph ranges, graph data and the Spending drill-down (N3, spec + clarifications in
-  `docs/context/N3_SPEC.md`), pure and web-safe. `DateRange` (inclusive `YYYY-MM-DD`, checked), `rangeFor` (pay period from
-  `detectPaydays`, whole calendar months, custom ≤ 5 years and not past today's month), `shiftRange` (needs `today:`), `rangeLabel`.
+  `docs/context/N3_SPEC.md`), pure and web-safe. `DateRange` (inclusive `YYYY-MM-DD`, checked), `rangeFor` (pay period =
+  `periodSummaries`' period `[start, end − 1]` (RX7c), whole calendar months, custom ≤ 5 years and not past today's month), `shiftRange` (needs `today:`), `rangeLabel`.
   `insights.dart` never counts on its own: per month it clips the rows to the range and calls `monthSummary` (spending,
   income; extra = `monthSummary` of the extra rows), `budgetVsActual` (`budgetVsActualSeries`) and `averageByCategory`
   (`compareCategory`); the row lists (`merchantsIn`, `rowsFor`, `merchantTrend`, `biggestRows`) use `_isSpending`, the same
@@ -556,12 +556,16 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   budget}` (+ `overBy`, `over`; spent = `rollUp(byCategory)[category]`, budget = `st.categoryBudgets[category]` per pay
   period); `savedByWaiting(wishes, fromMillis:, toMillis:)` / `savedByWaitingAll` → `SavedByWaiting {count, cents}`
   (skipped wishes, `decided` in [from, to)). txs = the expanded list (P6). Tests: `test/p8_reports_test.dart`.
-  **Period rule (RX7b, `periods.dart` `_periodStarts`/`_runningEnd`):** periods are contiguous `[start, end)`; the running
+  **Period rule (RX7b, `periods.dart` `payPeriodStarts`/`runningPeriodEnd`, not exported):** periods are contiguous `[start, end)`; the running
   one's `end` = max(nextPayday(start), today + 1), so a late salary keeps it running and it always holds today (rows up
   to today only). Starts = `detectPaydays`, except a saved `periodStart` ≤ today that lies 1..20 days before a real
   payday replaces that payday (the report starts where `computePeriod` does); a saved start after its salary is not
-  used (it would move the salary row back), one > 20 days after the last payday is `detectPaydays`' own. `rangeFor`
-  (Insights "This pay period") still uses plain `detectPaydays`. Identities pinned in `test/rx7b_periods_test.dart`
+  used (it would move the salary row back), one > 20 days after the last payday is `detectPaydays`' own. RX7c: `rangeFor`
+  / `shiftRange` pay periods use the same two functions: each range = `[start, end − 1]` of its `periodSummaries` period
+  (the running one so never ends before today); beyond the list they extend with expected paydays (before the first; after
+  today, so a forward step from a late running period skips to the next expected payday); no starts at all = the latest
+  expected payday ≤ today (`periodSummaries` is empty then). Same boundaries only with the same `txs`/`st` (the app's
+  Insights must pass `settings`, not `effectiveSettings`). Tests `test/rx7c_ranges_test.dart`. Identities pinned in `test/rx7b_periods_test.dart`
   (every row/review/wish in one period, Σ `periodDaySpend` over `[start, min(end, today + 1))` == flex).
 - RXc dashboard numbers (pure, web-safe): `averageOut(txs, month, months: 6, currency:)` (budget.dart) = Σ of the `months` months
   before `month` of `monthSummary.out` ÷ months, rounded like `averageByCategory` (it is the rounded total, so it can differ
