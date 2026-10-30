@@ -9,6 +9,7 @@ import '../logging.dart';
 import '../tabs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/jump_when_built.dart';
 import '../widgets/rebuild_when_shown.dart';
 import 'bills_panel.dart';
 import 'habits_panels.dart';
@@ -36,6 +37,7 @@ class _BillsScreenState extends State<BillsScreen> {
   void initState() {
     super.initState();
     widget.request?.addListener(_jump);
+    jumpWhenBuilt(widget.request, () => mounted, _jump); // a link that opened this tab before its page existed
   }
 
   @override

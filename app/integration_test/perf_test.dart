@@ -109,6 +109,15 @@ void main() {
       }
     }, reportKey: '${perfPrefix}first_switch');
 
+    // Early switch: the data changes and the tabs are opened at once, before the warm-up and the staged page builds had their time
+    // (a tab whose page is not built yet is built by the switch itself).
+    opened.addExpense(amount: -2345, category: 'Groceries', note: 'perf early switch', date: opened.today());
+    await binding.traceAction(() async {
+      for (final tab in ['Budget', 'Bills', 'Save', 'Settings', 'Today']) {
+        await goTab(t, tab);
+      }
+    }, reportKey: '${perfPrefix}early_switch');
+
     await Harness.checkLog();
   });
 }

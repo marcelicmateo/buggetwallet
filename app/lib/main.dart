@@ -267,6 +267,40 @@ class _HomeShellState extends State<HomeShell> {
   final List<String?> _pageKeys = List.filled(Tabs.names.length, null);
   String? _pagesKey;
 
+  /// Tabs whose data is being worked out, one task per frame, before their page is built (`_prepare`).
+  final Set<int> _preparing = {};
+
+  /// What waits for the page of a tab to exist (`_goThen`).
+  final Map<int, List<VoidCallback>> _whenBuilt = {};
+
+  /// Builds the page of tab [i] for the data version and day [key]; what waited for it runs after its first frame.
+  void _build(int i, String key) {
+    _pages[i] = _page(i);
+    _pageKeys[i] = key;
+    final waiting = _whenBuilt.remove(i);
+    if (waiting == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        for (final f in waiting) {
+          f();
+        }
+      }
+    });
+  }
+
+  /// A tab was opened before its page was ready for the current data: its derived values are worked out one per frame while the
+  /// page fades in (the owner's time to calculate), then the page is built. A page built for older data stays shown meanwhile.
+  void _prepare(int i) {
+    if (!_preparing.add(i)) return;
+    final key = _pagesKey!;
+    WarmUp.perFrame(widget.wc.warmUpTasksFor(i),
+        wanted: () => mounted && key == _pagesKey,
+        done: (completed) {
+          _preparing.remove(i);
+          if (completed && mounted && key == _pagesKey) setState(() => _build(i, key));
+        });
+  }
+
   /// The controller was replaced: no page built for the old one may stay.
   bool _wcReplaced = false;
 
@@ -286,8 +320,7 @@ class _HomeShellState extends State<HomeShell> {
     final staged = WarmUp.enabled;
     for (var i = 0; i < _pages.length; i++) {
       if (staged && i != tab) continue;
-      _pages[i] = _page(i);
-      _pageKeys[i] = key;
+      _build(i, key);
     }
     if (staged) _startBackground(key);
   }
@@ -310,12 +343,11 @@ class _HomeShellState extends State<HomeShell> {
     WarmUp.whenIdle(() {
       final i = [
         for (var i = 0; i < _pages.length; i++)
-          if (i != tab && _pageKeys[i] != key) i
+          if (i != tab && _pageKeys[i] != key && !_preparing.contains(i)) i
       ].firstOrNull;
       if (i == null) return;
       setState(() {
-        _pages[i] = _page(i);
-        _pageKeys[i] = key;
+        _build(i, key);
       });
       _stageNext(key);
     }, wanted: () => mounted && key == _pagesKey);
@@ -328,8 +360,14 @@ class _HomeShellState extends State<HomeShell> {
             openSpending: () => _go(Tabs.budget, 'today'),
             openSearch: () => _goThen(Tabs.budget, 'today', () => _searchRequest.value++),
             addExpense: _addExpense,
-            openBills: () => _goThen(Tabs.bills, 'today', () => _billsRequest.request(BillsAnchor.comingUp)),
-            openBillsReview: () => _goThen(Tabs.bills, 'today', () => _billsRequest.request(BillsAnchor.review)),
+            openBills: () {
+              _go(Tabs.bills, 'today');
+              _billsRequest.request(BillsAnchor.comingUp);
+            },
+            openBillsReview: () {
+              _go(Tabs.bills, 'today');
+              _billsRequest.request(BillsAnchor.review);
+            },
             openAccounts: () => widget.wc.openSettings(SettingsSection.accounts, via: 'today'),
             openSync: () => widget.wc.openSettings(SettingsSection.sync, via: 'today'),
             openIncome: () => widget.wc.openSettings(SettingsSection.income, via: 'today')),
@@ -338,7 +376,10 @@ class _HomeShellState extends State<HomeShell> {
             searchRequest: _searchRequest,
             planKey: _paydayKey,
             openTab: (i) => _go(i, 'search'),
-            openBills: () => _goThen(Tabs.bills, 'search', () => _billsRequest.request(BillsAnchor.expected))),
+            openBills: () {
+              _go(Tabs.bills, 'search');
+              _billsRequest.request(BillsAnchor.expected);
+            }),
         Tabs.bills => BillsScreen(wc: widget.wc, request: _billsRequest),
         Tabs.save => SaveScreen(wc: widget.wc),
         _ => SettingsScreen(wc: widget.wc),
@@ -390,24 +431,23 @@ class _HomeShellState extends State<HomeShell> {
     clearToasts(context);
     logNav('nav.tab', {'from': Tabs.names[tab], 'to': Tabs.names[i], 'via': via});
     AppLog.setScreen(Tabs.names[i]);
+    // A page that was not built yet, or for older data, waits for its data (`_prepare`; at once when the background work is off).
     // Today and Save (the wishlist) show the time of day (delivery hour, hours left): they get a fresh build when opened.
     // The data they use is cached in the controller, so this is cheap.
-    // A page that was not built yet, or for older data, is built now.
-    if (i == Tabs.today || i == Tabs.save || _pageKeys[i] != _pagesKey) {
-      _pages[i] = _page(i);
-      _pageKeys[i] = _pagesKey;
+    final stale = _pageKeys[i] != _pagesKey;
+    if (stale && WarmUp.enabled) {
+      _prepare(i);
+    } else if (stale || i == Tabs.today || i == Tabs.save) {
+      _build(i, _pagesKey!);
     }
     setState(() => tab = i);
   }
 
-  /// [_go], then [then] once the page exists: a page that was not built yet has no listener for a jump request before its frame.
+  /// [_go], then [then] once the page exists: a page that is not built yet has no listener for a request before its first frame.
   void _goThen(int i, String via, VoidCallback then) {
-    final unbuilt = _pages[i] == null;
     _go(i, via);
-    if (!unbuilt) return then();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) then();
-    });
+    if (_pages[i] != null) return then();
+    (_whenBuilt[i] ??= []).add(then);
   }
 
   /// Opens the Add expense sheet for a launcher shortcut (once per request; nothing when there is none).
@@ -665,6 +705,7 @@ class _HomeShellState extends State<HomeShell> {
                             TabFade(
                               key: ValueKey('tabFade:${Tabs.names[i]}'),
                               active: i == tab,
+                              ready: page != null,
                               child: TickerMode(enabled: i == tab, child: page ?? const SizedBox.shrink(key: ValueKey('tabPlaceholder'))),
                             ),
                         ]),
@@ -720,26 +761,31 @@ class _SyncSlot extends StatelessWidget {
 /// How long the page that was just opened takes to fade in.
 const tabFadeDuration = Duration(milliseconds: 180);
 
-/// Fades its child in when [active] turns true (0 to 1 over [tabFadeDuration]); at once when the system asks for reduced motion.
-/// The child keeps its place in the tree, so its State survives; it is the same widget instance while the page does not change,
-/// so a hidden page is not rebuilt by a tab switch. Where the first page starts, there is no fade.
+/// Fades its child in when [active] and [ready] turn true (0 to 1 over [tabFadeDuration]); at once when the system asks for reduced
+/// motion. A page that is not [ready] (still being prepared) stays invisible until it is. The child keeps its place in the tree,
+/// so its State survives; it is the same widget instance while the page does not change, so a hidden page is not rebuilt by a tab
+/// switch. Where the first page starts, there is no fade.
 class TabFade extends StatefulWidget {
-  final bool active;
+  final bool active, ready;
   final Widget child;
-  const TabFade({super.key, required this.active, required this.child});
+  const TabFade({super.key, required this.active, this.ready = true, required this.child});
   @override
   State<TabFade> createState() => _TabFadeState();
 }
 
 class _TabFadeState extends State<TabFade> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: tabFadeDuration, value: widget.active ? 1 : 0);
+  bool get _shown => widget.active && widget.ready;
+
+  late final AnimationController _c = AnimationController(vsync: this, duration: tabFadeDuration, value: _shown ? 1 : 0);
 
   @override
   void didUpdateWidget(TabFade old) {
     super.didUpdateWidget(old);
-    if (widget.active == old.active) return;
-    if (!widget.active) {
+    final was = old.active && old.ready;
+    if (_shown == was) return;
+    if (!_shown) {
       _c.stop();
+      if (widget.active) _c.value = 0; // opened, page not ready yet
     } else if (MediaQuery.disableAnimationsOf(context)) {
       _c.value = 1;
     } else {

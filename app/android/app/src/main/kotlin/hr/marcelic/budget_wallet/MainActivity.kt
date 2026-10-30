@@ -14,6 +14,7 @@ import android.net.Uri
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -68,6 +69,7 @@ class MainActivity : FlutterActivity() {
      * Asks for a 60 Hz display mode (the app's frame budget is 16.7 ms, so a 90/120 Hz panel only costs battery and heat). API 23+: the
      * mode with the current size and 60 Hz is preferred (the system may still pick another when another window or setting needs it);
      * if the panel has none, `preferredRefreshRate` is a hint. Nothing is logged: a failure just leaves the system's choice.
+     * Called again when the display changes (a resolution switch, a folded phone opened), only when the request would differ.
      */
     private fun preferSixtyHertz() {
         try {
@@ -80,11 +82,41 @@ class MainActivity : FlutterActivity() {
                     Math.abs(it.refreshRate - 60f) < 1f
             }
             val params = window.attributes
-            if (sixty != null) params.preferredDisplayModeId = sixty.modeId else params.preferredRefreshRate = 60f
+            if (sixty != null) {
+                if (params.preferredDisplayModeId == sixty.modeId) return
+                params.preferredDisplayModeId = sixty.modeId
+            } else {
+                if (params.preferredRefreshRate == 60f) return
+                params.preferredRefreshRate = 60f
+            }
             window.attributes = params
         } catch (e: Throwable) {
             // A display that cannot be asked: the system's refresh rate stays.
         }
+    }
+
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) {}
+        override fun onDisplayRemoved(displayId: Int) {}
+        override fun onDisplayChanged(displayId: Int) = preferSixtyHertz()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        preferSixtyHertz()
+        try {
+            getSystemService(DisplayManager::class.java)?.registerDisplayListener(displayListener, main)
+        } catch (e: Throwable) {
+            // No display service: the preference stays as it was set.
+        }
+    }
+
+    override fun onPause() {
+        try {
+            getSystemService(DisplayManager::class.java)?.unregisterDisplayListener(displayListener)
+        } catch (e: Throwable) {
+        }
+        super.onPause()
     }
 
     /**

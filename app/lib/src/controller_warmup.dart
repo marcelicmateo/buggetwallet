@@ -6,35 +6,57 @@
 part of 'controller.dart';
 
 extension WarmUpTasks on WalletController {
-  /// The steps, cheapest and most visible first: Today, Budget, Bills, Save, then the default Insights ranges (the heaviest: they
-  /// read every row of the range). One call per step, so no frame waits for more than one memo. A step that throws is logged
-  /// by name and skipped.
-  List<WarmTask> warmUpTasks() {
+  /// The steps one tab needs, cheapest and most visible first. One call per step (a month of the Spending figures counts as one),
+  /// so no frame waits for more than one memo. A step that throws is logged by name and skipped. A value several tabs read is
+  /// listed in each: the second time it is only a cache hit.
+  List<WarmTask> warmUpTasksFor(int tab) {
     final month = monthOf(today());
+    return switch (tab) {
+      Tabs.today => <WarmTask>[
+          ('period', period),
+          ('periodDays', this.periodDays),
+          ('heldTotals', heldTotals),
+          ('tightestBudget', tightestBudget),
+          ('comingUp', comingUp),
+          ('reviewState', this.reviewState),
+          ('balanceWarnings', balanceWarningList),
+          ('headsUps', headsUpLines),
+          ('deliveries', () => deliveries),
+          ('deliveryOrders90', () => deliveryOrders90),
+          ('latestBySource', () => latestBySource),
+        ],
+      Tabs.budget => <WarmTask>[
+          ('period', period),
+          ('payPeriods', () => payPeriods(count: 12)),
+          for (final m in monthsEnding(month, 13)) ('monthSummary', () => monthSummaryFor(m)),
+          ('averageSpending', () => averageSpending(month)),
+          ('spending', spending),
+          ('budgetVsActual', () => this.budgetVsActual(month)),
+          ('paceRows', paceRows),
+          ('paydayForecast', paydayForecast),
+        ],
+      Tabs.bills => <WarmTask>[
+          ('billLists', billLists),
+          ('expectedBills', expectedBills),
+          ('expectedIncomes', expectedIncomes),
+          ('recurringPayments', recurringPayments),
+          ('billsCost', billsCost),
+        ],
+      Tabs.save => <WarmTask>[
+          ('owedTotals', owedTotals),
+          ('goalTargetTotal', () => goalTargetTotal),
+        ],
+      _ => const <WarmTask>[],
+    };
+  }
+
+  /// Every step of every tab, then the default Insights ranges (the heaviest: they read every row of the range).
+  List<WarmTask> warmUpTasks() {
+    final seen = <String>{};
     return <WarmTask>[
-      ('period', period),
-      ('periodDays', this.periodDays),
-      ('heldTotals', heldTotals),
-      ('tightestBudget', tightestBudget),
-      ('comingUp', comingUp),
-      ('reviewState', this.reviewState),
-      ('billLists', billLists),
-      ('paydayForecast', paydayForecast),
-      ('balanceWarnings', balanceWarningList),
-      ('headsUps', headsUpLines),
-      ('deliveries', () => deliveries),
-      ('deliveryOrders90', () => deliveryOrders90),
-      ('payPeriods', () => payPeriods(count: 12)),
-      ('spending', spending),
-      ('budgetVsActual', () => this.budgetVsActual(month)),
-      ('paceRows', paceRows),
-      ('expectedBills', expectedBills),
-      ('expectedIncomes', expectedIncomes),
-      ('recurringPayments', recurringPayments),
-      ('billsCost', billsCost),
-      ('owedTotals', owedTotals),
-      ('latestBySource', () => latestBySource),
-      ('goalTargetTotal', () => goalTargetTotal),
+      for (var tab = 0; tab < Tabs.names.length; tab++)
+        for (final t in warmUpTasksFor(tab))
+          if (t.$1 == 'monthSummary' || seen.add(t.$1)) t,
       for (final id in insightGraphs) ('insights.$id', () => _warmInsight(id)),
     ];
   }
