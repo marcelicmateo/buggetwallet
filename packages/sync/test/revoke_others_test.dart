@@ -157,10 +157,10 @@ void main() {
       expect(calls, RelayTransport.revokeOthersRounds);
     });
 
-    test('a state read that fails after an accepted call returns the count so far', () async {
+    test('HP-R1c: a state read that fails after an accepted call fails the call (never "done" unchecked)', () async {
       final t = stub(
           (r) => r.url.path.endsWith('/devices/others') ? http.Response('{"revoked":2}', 200) : http.Response('{"error":"internal"}', 500));
-      expect(await t.revokeOthers(), 2);
+      await expectLater(t.revokeOthers(), fails(TransportFailure.other));
     });
 
     test('pending requests alone: one call, done', () async {

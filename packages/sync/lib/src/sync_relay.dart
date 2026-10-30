@@ -181,7 +181,8 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
 
   /// How long sending a request body of [bytes] (until the answer's headers), or reading an answer of [bytes], may
   /// take: [timeout] (30 s) plus 1 s per [minTransferRate] bytes, so a big bill file or snapshot on a slow uplink is not
-  /// cut off while a small request still fails after [timeout].
+  /// cut off while a small request still fails after [timeout]. An answer without `Content-Length` gets [timeout] only
+  /// (the relay always sends one).
   Duration deadlineFor(int bytes) => timeout + Duration(microseconds: bytes * Duration.microsecondsPerSecond ~/ minTransferRate);
 
   /// Runs [call] with an overall [timeout] (null: [call] keeps its own deadlines) and maps failures to
@@ -510,7 +511,7 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
   /// request's time (state times are whole seconds; so the requests then waiting are rejected too), at most
   /// [revokeOthersRounds] times; then [TransportFailure.other] `others remain` (the app says to try again). Pending
   /// requests alone never fail it (a key holder can keep asking; each call rejects what it saw, none gets in without an
-  /// approval), and a state read that fails after an accepted call returns the count so far.
+  /// approval); a state read that fails after a call fails it with that read's failure.
   @override
   Future<int> revokeOthers() async {
     _needDeviceApi();
@@ -521,14 +522,8 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
           body: utf8.encode(jsonEncode({'revoke': true})), headers: {'Content-Type': 'application/json'}, notBefore: notBefore);
       logEvent(_log, Level.INFO, 'relay.device', {'action': 'revokeOthers', 'round': round});
       total += _revokedCount(r);
-      final RelayState st;
-      try {
-        st = await state();
-      } on TransportException catch (e) {
-        // The call itself was accepted: report it as done rather than as a failure.
-        logEvent(_log, Level.WARNING, 'relay.revokeOthers.unchecked', {'failure': e.failure.name});
-        return total;
-      }
+      // A failed check fails the whole call (it is idempotent: the owner tries again), never "done" unchecked.
+      final st = await state();
       final keys = st.keys;
       if (keys == null) return total; // no key list (not a device-signed answer): nothing to check against
       final active = [

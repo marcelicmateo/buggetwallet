@@ -430,26 +430,6 @@ class Wallet {
     await writeAtomic(metaFile, utf8.encode(jsonEncode(meta)));
   }
 
-  /// Forgets the device streams that hold no file (all pruned, or only ever acked) and were not seen for [deviceMemory]
-  /// (the 90-day rule), so a wallet at `Relay.maxDevices` can take a new one; their empty folders go too. The caller's
-  /// meta save keeps it. Returns how many were forgotten.
-  int forgetIdleDevices(DateTime now) {
-    final cutoff = now.subtract(deviceMemory);
-    final idle = [
-      for (final MapEntry(key: name, value: st) in devices.entries)
-        if (st.first > st.last && st.lastSeen.isBefore(cutoff)) name,
-    ];
-    for (final name in idle) {
-      devices.remove(name);
-      try {
-        Directory('${dir.path}/d/$name').deleteSync(); // only when empty
-      } on FileSystemException {
-        // absent, or not empty (left alone)
-      }
-    }
-    return idle.length;
-  }
-
   /// Deletes every file the kept snapshots cover and every device seen within 90 days acked (see RELAY_PROTOCOL.md).
   Future<void> prune(DateTime now) async {
     final kept = [snapshot, previous].whereType<Snap>().toList();
@@ -482,13 +462,22 @@ class Wallet {
     skipLost();
   }
 
-  /// A lost file ([DeviceState.lost]) at a device's `first` that the latest snapshot covers counts as pruned: `first`
-  /// moves past it, so a reader starts from that snapshot (state `first`) instead of waiting on it for good (HP-R1b).
+  /// What every kept snapshot covers of [device] (the minimum over `snapshot` and `previous`, as [prune] uses and as a
+  /// client falling back to `previous` needs); 0 without a snapshot.
+  int keptCovers(String device) {
+    final kept = [snapshot, previous].whereType<Snap>();
+    if (kept.isEmpty) return 0;
+    return kept.map((s) => s.covers[device] ?? 0).reduce(math.min);
+  }
+
+  /// A lost file ([DeviceState.lost]) at a device's `first` that every kept snapshot covers ([keptCovers]) counts as
+  /// pruned: `first` moves past it, so a reader starts from a snapshot (state `first`) instead of waiting on it for good
+  /// (HP-R1b).
   void skipLost() {
-    final s = snapshot;
-    if (s == null) return;
     for (final MapEntry(key: name, value: st) in devices.entries) {
-      while (st.lost.contains(st.first) && st.first <= (s.covers[name] ?? 0)) {
+      if (!st.lost.contains(st.first)) continue;
+      final covered = keptCovers(name);
+      while (st.lost.contains(st.first) && st.first <= covered) {
         st.lost.remove(st.first);
         st.first++;
       }

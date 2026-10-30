@@ -132,7 +132,7 @@ lock or unlock is a no-op (200 with the current value).
 | `GET /v2/health` (not signed) | 200 `{"api":5}` |
 | `GET /v2/w/<wid>/state` | 200 state JSON (below) |
 | `PUT /v2/w/<wid>/d/<device>/<seq>` body = sealed bytes (≤ 16 MiB) | 201 stored; 200 same bytes already stored; 409 other bytes already stored for that seq (never overwritten); 422 `seq > last + 1` (no gaps on the relay); 410 `seq < first` (pruned); 413 too big; 507 `wallet full` (see "Limits") or `too many devices` (a new device name when the wallet already holds 256) |
-| `GET /v2/w/<wid>/d/<device>/<seq>` | 200 bytes; 410 pruned (`seq < first`, or since HP-R1b a listed file gone from disk that the latest snapshot covers, so a reader starts from that snapshot); 404 never stored; 404 `{"error":"missing"}` when the relay's own state says the file exists but it is gone from disk and no snapshot covers it (damaged or restored data folder; never 500) |
+| `GET /v2/w/<wid>/d/<device>/<seq>` | 200 bytes; 410 pruned (`seq < first`, or since HP-R1b a listed file gone from disk that every kept snapshot covers); 404 never stored; 404 `{"error":"missing"}` when the relay's own state says the file exists but it is gone from disk and no snapshot covers it (damaged or restored data folder; never 500) |
 | `PUT /v2/w/<wid>/ack/<device>` body `{"<peer>": seq, …}` | 204. Each ack only ever grows (max with the stored one); an ack above the peer's `last` → 422; an ack as a new device name when the wallet already holds 256 → 507 `too many devices` |
 | `PUT /v2/w/<wid>/snapshot/<id>` header `X-BW-Covers: {"<device>": seq, …}`, body = sealed bytes (≤ 64 MiB) | 201 when `covers` ≥ the current snapshot's covers for every device in it (a device missing from `covers` counts as 0), and ≤ each device's `last`; checked in that order: 422 beyond `last` (unknown device = `last` 0), then 409 does not dominate; same id with the same bytes and covers again = 200, same id with other content = 409; missing/invalid `X-BW-Covers` = 400 |
 | `PUT /v2/w/<wid>/snapshot/<id>/blobs` body = JSON array of blob hashes (api 4) | The snapshot's declared set (see "Blob garbage collection"): 201 stored; 200 the same set again; 409 another set already stored for that id; 404 `<id>` is not a kept snapshot (or unknown wallet); 400 not a JSON array of distinct `[0-9a-f]{64}` strings, or more than 100,000; 413 over 7 MiB |
@@ -185,7 +185,7 @@ the pending ones (`devpub` → at, deviceId; at most 8, each dropped 7 days afte
   most 3 calls in all; keys still left after the third = failure `other` (`others remain`; the app says to try
   again). The count it returns is the sum of the calls' `revoked`. Pending requests alone end it (HP-R1b: a key holder
   can keep asking; each call rejects the requests it saw and none gets in without an approval), and a `state` read
-  that fails after an accepted call returns the count so far.
+  that fails after a call fails the whole call with that failure (HP-R1c: never "done" unchecked; the owner retries).
 - **Lock:** `PUT lock` `{"locked":true|false}` by an enrolled key; applied only when its `X-BW-Time` is later than the
   stored `lockTime` (a revoke's lock sets it too). Unlocking reopens the wallet to the wallet key: every holder of it
   can enrol again (and older apps sync again).
@@ -299,11 +299,14 @@ revoked key, oldest first: `fp` its fingerprint, `added`, `by` (`"wallet"` or th
 (time or `null`), `deviceId` and `device` (or `null`, see "Device keys"), `self` true for the key that signed this
 request. `pending`: the keys waiting for approval (not expired), oldest first.
 `first` = lowest seq still stored, or `last + 1` when all were pruned (after a restart: the lowest seq on disk; a file
-missing above it stays listed and answers 404 `missing`, HP-R1; HP-R1b: a missing file the latest snapshot covers
-answers 410 and, once it is the lowest left, counts as pruned, so `first` moves past it and readers take the snapshot). `snapshot`/`previous` are `null` when absent. A
-device appears once it has stored a file or sent an ack; a wallet holds at most 256 devices (streams). When a new one
-would pass that, the relay first forgets every stream that holds no file and was not seen for 90 days (HP-R1b; it is
-then no longer listed, and a snapshot need not dominate it any more).
+missing above it stays listed and answers 404 `missing`, HP-R1; HP-R1b: a missing file every kept snapshot covers
+answers 410 and, once it is the lowest left, counts as pruned, so `first` moves past it and readers take the snapshot).
+Known limits (HP-R1c): a lost covered file above `first` answers 410 while `first` stays below it; a client treats that
+410 as unreadable and waits until acks prune the files below it, then `first` moves past it and it takes the snapshot
+(one more run, not a stall). A file lost below the lowest file still on disk counts as pruned on load (`first` = that
+lowest file) whether a snapshot covers it or not: a reader that still needed it starts from a snapshot, which may lack it. `snapshot`/`previous` are `null` when absent. A
+device appears once it has stored a file or sent an ack; a wallet holds at most 256 devices (streams), never removed
+(a 257th = 507 `too many devices`).
 
 `bytes` and `maxBytes` (Stage I, additive): the wallet's stored bytes as `--max-bytes` counts them (sync
 files + kept snapshots + blobs, each file counted as at least 4096 bytes since HP-R1, so tiny files cannot use up the

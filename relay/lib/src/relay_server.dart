@@ -811,12 +811,12 @@ class Relay {
       try {
         return await _stored(w.dataFile(device, seq), info);
       } on _HttpError catch (e) {
-        // A listed file gone from disk (e.g. a power cut before its folder entry was written) that the latest snapshot
+        // A listed file gone from disk (e.g. a power cut before its folder entry was written) that every kept snapshot
         // covers: answered as pruned, so a reader starts from that snapshot instead of waiting on it forever.
         if (e.status != 404) rethrow;
         st.lost.add(seq);
         w.skipLost();
-        if ((w.snapshot?.covers[device] ?? 0) >= seq) throw _HttpError(410, 'pruned');
+        if (w.keptCovers(device) >= seq) throw _HttpError(410, 'pruned');
         rethrow;
       }
     });
@@ -916,9 +916,7 @@ class Relay {
         }
         throw _HttpError(422, 'seq beyond last + 1');
       }
-      if (st == null && w.devices.length >= maxDevices && w.forgetIdleDevices(_now()) == 0) {
-        throw _HttpError(507, 'too many devices');
-      }
+      if (st == null && w.devices.length >= maxDevices) throw _HttpError(507, 'too many devices');
       if (w.totalBytes + w.storedSize(body.length) > maxBytes) throw _HttpError(507, 'wallet full');
       await w.writeData(device, seq, body);
       w.bytes += w.storedSize(body.length);
@@ -986,9 +984,7 @@ class Relay {
       for (final e in acks.entries) {
         if (e.value > (w.devices[e.key]?.last ?? 0)) throw _HttpError(422, 'ack beyond last');
       }
-      if (!w.devices.containsKey(device) && w.devices.length >= maxDevices && w.forgetIdleDevices(_now()) == 0) {
-        throw _HttpError(507, 'too many devices');
-      }
+      if (!w.devices.containsKey(device) && w.devices.length >= maxDevices) throw _HttpError(507, 'too many devices');
       _touchKey(w, sig, device);
       final dev = w.devices.putIfAbsent(device, () => DeviceState(_now()));
       dev.lastSeen = _now();
@@ -1021,8 +1017,6 @@ class Relay {
       final cur = w.snapshot;
       if (cur != null) {
         for (final e in cur.covers.entries) {
-          // A device stream the relay forgot ([Wallet.forgetIdleDevices]: no files, unseen 90 days) is not listed any more.
-          if (!w.devices.containsKey(e.key)) continue;
           if ((covers[e.key] ?? 0) < e.value) throw _HttpError(409, 'does not dominate');
         }
       }

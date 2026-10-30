@@ -25,7 +25,9 @@ Uint8List noise(int n, int seed) {
 /// A raw HTTP/1.1 connection: the request head with [headers] and `Content-Length: [length]` (when > 0), then [part]
 /// of the body. What the relay answers is collected; [closed] completes when the relay closes the connection.
 class Raw {
-  Raw._(this.socket, {bool read = true}) {
+  Raw._(this.socket, {bool read = true, bool smallBuffer = false}) {
+    // SO_RCVBUF (Linux 8) = 4 KiB: a reader that stops reading stalls the relay's send after a few MiB at most.
+    if (smallBuffer) socket.setRawOption(RawSocketOption.fromInt(RawSocketOption.levelSocket, 8, 4096));
     sub = socket.listen((b) {
       received.addAll(b);
       if (!answered.isCompleted && latin1.decode(received).contains('\r\n\r\n')) answered.complete();
@@ -47,8 +49,12 @@ class Raw {
   }
 
   static Future<Raw> open(Harness h, String method, String path,
-      {int length = 0, List<int> part = const [], Map<String, String> headers = const {}, bool read = true}) async {
-    final raw = Raw._(await Socket.connect('127.0.0.1', h.server.port), read: read);
+      {int length = 0,
+      List<int> part = const [],
+      Map<String, String> headers = const {},
+      bool read = true,
+      bool smallBuffer = false}) async {
+    final raw = Raw._(await Socket.connect('127.0.0.1', h.server.port), read: read, smallBuffer: smallBuffer);
     final head = [for (final e in headers.entries) '${e.key}: ${e.value}\r\n'].join();
     raw.socket.write('$method $path HTTP/1.1\r\nHost: ${h.base.authority}\r\n$head${length > 0 ? 'Content-Length: $length\r\n' : ''}\r\n');
     await raw.send(part);
@@ -227,15 +233,16 @@ void main() {
     test('downloads count as open requests of their address until sent: one past the cap is 429', () async {
       final h = await Harness.start(maxOpenPerClient: 2);
       addTearDown(h.stop);
-      final big = Uint8List(48 << 20);
+      final big = Uint8List(8 << 20);
       expect((await h.putData(w1, 'dev1', 1, 'a')).statusCode, 201);
       expect((await h.send('PUT', '/v2/w/$w1/snapshot/big', key: keyA, body: big, headers: {'x-bw-covers': '{"dev1":1}'})).statusCode, 201);
       const path = '/v2/w/$w1/snapshot/big';
       final opened = openReaches(h, 2);
-      // Two downloads whose readers do not read: the relay cannot finish sending 48 MiB into them.
+      // Two downloads whose readers do not read (small receive buffers): the relay cannot finish sending 8 MiB into them.
       final readers = [
         for (var i = 0; i < 2; i++)
-          await Raw.open(h, 'GET', path, headers: await h.sign(keyA, 'GET', path, const [], withPub: false), read: false),
+          await Raw.open(h, 'GET', path,
+              headers: await h.sign(keyA, 'GET', path, const [], withPub: false), read: false, smallBuffer: true),
       ];
       await opened;
       final released = Completer<void>();
@@ -403,7 +410,7 @@ void main() {
       expect((await h.device(w1, 'dev2'))['first'], 1, reason: 'its lost file 2 is not covered');
     });
 
-    test('a wallet at maxDevices forgets a stream with no files unseen for 90 days; snapshots no longer need to cover it', () async {
+    test('HP-R1c: a stream with no files unseen for 200 days is never forgotten at maxDevices; snapshots still dominate it', () async {
       final h = await Harness.start(maxDevices: 2);
       addTearDown(h.stop);
       expect((await h.putData(w1, 'dev1', 1, 'a')).statusCode, 201);
@@ -412,23 +419,31 @@ void main() {
       expect((await h.ack(w1, 'dev1', {'dev2': 1})).statusCode, 204);
       expect((await h.ack(w1, 'dev2', {'dev1': 1})).statusCode, 204); // dev2's file is pruned: it holds none now
       expect((await h.device(w1, 'dev2'))['first'], 2);
-      h.advance(const Duration(days: 89));
-      expect((await h.ack(w1, 'dev1', {'dev2': 1})).statusCode, 204); // dev1 stays seen
-      expect((await h.putData(w1, 'dev3', 1, 'c')).statusCode, 507, reason: 'dev2 seen 89 days ago: kept');
-      h.advance(const Duration(days: 2));
-      expect((await h.ack(w1, 'dev1', {'dev2': 1})).statusCode, 204);
-      expect((await h.putData(w1, 'dev3', 1, 'c')).statusCode, 201);
-      expect(((await h.state(w1))['devices'] as Map).keys, unorderedEquals(['dev1', 'dev3']));
-      expect(Directory('${h.dir.path}/$w1/d/dev2').existsSync(), isFalse);
-      // The kept snapshot still names dev2: a new one without it is accepted.
-      expect((await h.putSnapshot(w1, 's2', {'dev1': 1, 'dev3': 1}, 'snap2')).statusCode, 201);
-      await h.restart();
-      expect(((await h.state(w1))['devices'] as Map).keys, unorderedEquals(['dev1', 'dev3']));
-      // Long after: dev1 (no files left) is forgotten for a new stream, dev3 (still holds its file) never is.
       h.advance(const Duration(days: 200));
-      expect((await h.putData(w1, 'dev4', 1, 'd')).statusCode, 201);
-      expect(((await h.state(w1))['devices'] as Map).keys, unorderedEquals(['dev3', 'dev4']));
-      expect((await h.putData(w1, 'dev5', 1, 'e')).statusCode, 507);
+      expect((await h.ack(w1, 'dev1', {'dev2': 1})).statusCode, 204);
+      final r = await h.putData(w1, 'dev3', 1, 'c');
+      expect(r.statusCode, 507);
+      expect(jsonDecode(r.body), {'error': 'too many devices'});
+      expect(((await h.state(w1))['devices'] as Map).keys, unorderedEquals(['dev1', 'dev2']));
+      expect((await h.putSnapshot(w1, 's2', {'dev1': 1}, 'snap2')).statusCode, 409, reason: 'dev2 counts as 0 < 1');
+    });
+
+    test('HP-R1c: a lost file counts as covered only when every kept snapshot covers it (the minimum, as prune)', () async {
+      final h = await freshHarness();
+      for (var seq = 1; seq <= 5; seq++) {
+        expect((await h.putData(w1, 'dev1', seq, 'f$seq')).statusCode, 201);
+      }
+      expect((await h.putSnapshot(w1, 's1', {'dev1': 3}, 'older')).statusCode, 201); // prunes 1..3
+      expect((await h.putSnapshot(w1, 's2', {'dev1': 5}, 'newer')).statusCode, 201); // previous still covers only 3
+      expect((await h.device(w1, 'dev1'))['first'], 4);
+      await File('${h.dir.path}/$w1/d/dev1/4').delete();
+      final g = await h.getData(w1, 'dev1', 4);
+      expect(g.statusCode, 404, reason: 'a reader falling back to the previous snapshot (covers 3) still needs it');
+      expect(jsonDecode(g.body), {'error': 'missing'});
+      expect((await h.device(w1, 'dev1'))['first'], 4);
+      // Once both kept snapshots cover it, it is pruned like any other.
+      expect((await h.putSnapshot(w1, 's3', {'dev1': 5}, 'newest')).statusCode, 201);
+      expect((await h.getData(w1, 'dev1', 4)).statusCode, 410);
     });
 
     test('a refusal before the body (no create token) drains for refusalTimeout only, not bodyTimeout', () async {
@@ -445,12 +460,12 @@ void main() {
       final h = await Harness.start();
       addTearDown(h.stop);
       expect((await h.putData(w1, 'dev1', 1, 'a')).statusCode, 201);
-      final big = Uint8List(48 << 20);
+      final big = Uint8List(8 << 20);
       expect((await h.send('PUT', '/v2/w/$w1/snapshot/big', key: keyA, body: big, headers: {'x-bw-covers': '{"dev1":1}'})).statusCode, 201);
       const path = '/v2/w/$w1/snapshot/big';
-      final reader = await Raw.open(h, 'GET', path, headers: await h.sign(keyA, 'GET', path, const [], withPub: false));
+      final reader = await Raw.open(h, 'GET', path, headers: await h.sign(keyA, 'GET', path, const [], withPub: false), smallBuffer: true);
       await reader.answered.future.timeout(const Duration(seconds: 10)); // streaming has started (outside the lock)
-      reader.sub.pause(); // and now it cannot finish: 48 MiB into a reader that stopped reading
+      reader.sub.pause(); // and now it cannot finish: 8 MiB into a small buffer that stopped reading
       expect(reader.status, 200);
       expect((await h.putData(w1, 'dev1', 2, 'b')).statusCode, 201);
       expect((await h.ack(w1, 'dev2', {'dev1': 2})).statusCode, 204);

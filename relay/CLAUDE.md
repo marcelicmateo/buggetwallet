@@ -31,8 +31,8 @@ Never put a signature, public key, body, full id or client address in a log line
   `HttpServer.idleTimeout` (also cuts connections stuck in their headers) and `onError` on the server stream (`relay accept-error`). Stored files
   are answered by `_stored` → `_Out.file` (a `RandomAccessFile` opened inside the wallet lock, streamed in 64 KiB chunks by `_send`, closed there);
   replays compare with `_sameStored` (length first, then chunks). Client address = `clientKey` (`rate_limit.dart`: IPv4 as is, IPv4-mapped IPv6 → IPv4,
-  IPv6 → its /64). New device names past `maxDevices` = 507 `too many devices` (PUT d, ack) unless `Wallet.forgetIdleDevices` frees a slot (streams with no file,
-  unseen 90 days; a snapshot need not dominate a stream the relay no longer lists).
+  IPv6 → its /64). New device names past `maxDevices` = 507 `too many devices` (PUT d, ack) (streams are never removed: a forgotten
+  name's acks and covers would make a re-used name lose ops, HP-R1c).
 - `lib/src/signing.dart` — `signedTextV5` (api 5, ends with `devpub`), `fingerprint` (`ABCD-EFGH`, `fingerprintPattern`), `signedText` (`bw-relay-v4`, `v3: true` = the api-3 text it still accepts: method, host, path, covers, body hash, time; the host is
   `Relay(publicHost:)` when set, else the request's `Host`, lower case), `sha256OfBytes`, `decodeBase64Url` (exact
   length, no padding), `verifySignature` (Ed25519, never throws), `signatureWindow`.
@@ -56,7 +56,7 @@ Never put a signature, public key, body, full id or client address in a log line
   `last`, never a declared or < 30-day-old blob; a stored time that cannot be set = the file rewritten, else 500, hook `touchBlob`;
   log `relay gc kept= deleted= bytes=`), no lastSeen change; counted in `Wallet.blobCount/blobBytes`, rebuilt from the folder on
   load; `--max-bytes` = `Wallet.totalBytes` = files + kept snapshots + blobs, checked by PUT d, snapshot PUT and blob PUT; state JSON `blobs`, and `bytes` (= `totalBytes`) + `maxBytes` (Stage I:
-  `Wallet.stateJson(maxBytes:)`, passed by `relay_server.dart`; additive)). `first` is not stored: it is the lowest seq on disk, or `last + 1` when the device has no file left (a missing file above the lowest stays listed: 404 `missing`; `DeviceState.lost` + `Wallet.skipLost`: a lost file the latest snapshot covers answers 410 and, at `first`, is skipped like a pruned one, HP-R1b). `last` = max of
+  `Wallet.stateJson(maxBytes:)`, passed by `relay_server.dart`; additive)). `first` is not stored: it is the lowest seq on disk, or `last + 1` when the device has no file left (a missing file above the lowest stays listed: 404 `missing`; `DeviceState.lost` + `Wallet.skipLost`: a lost file every kept snapshot covers (`Wallet.keptCovers` = the minimum, as prune) answers 410 and, at `first`, is skipped like a pruned one, HP-R1b). `last` = max of
   meta and disk, so a crash between a file and the meta loses nothing. Load deletes temp files and snapshot files the meta does
   not name; a folder without a readable meta is not a wallet (a new first PUT replaces it).
 - Every wallet operation runs inside `_locked(wid, ...)`; wallet creation reserves its slot in `_wallets` before any await so
