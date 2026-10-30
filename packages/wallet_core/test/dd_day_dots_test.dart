@@ -208,7 +208,101 @@ void main() {
       _checked(txs, '2026-04-03', bills: [_bill(payee)], matchRows: raw);
     }, timeout: _t);
 
-    test('random synthetic periods (seeded): every day equals computePeriod', () {
+    test('random synthetic periods (seeded) with bills (monthly, weekly, yearly), an income, a goal, a covered slip and matchRows', () {
+      String key(String desc) => merchantKey(_row(_start, -1, 'Groceries', desc: desc).tx);
+      final power = key('SYNTH POWER 0000'), gym = key('SYNTH GYM 0000'), cover = key('SYNTH COVER 0000');
+      final client = key('SYNTH CLIENT 0000');
+      var reservedSeen = false, coveredSlipSeen = false, clampSeen = false, landedSeen = false;
+      for (var seed = 1; seed <= 12; seed++) {
+        final rnd = Random(seed);
+        final monthlyDue = addDays(_start, rnd.nextInt(28));
+        final incomeDue = addDays(_start, 8 + rnd.nextInt(12));
+        final bills = [
+          RecurringBill(
+              id: 'rec:dd_m',
+              payee: power,
+              label: 'SYNTH POWER',
+              category: 'Bills & one-offs',
+              expectedAmount: 3000,
+              nextDue: monthlyDue,
+              status: 'confirmed'),
+          RecurringBill(
+              id: 'rec:dd_w',
+              payee: gym,
+              label: 'SYNTH GYM',
+              category: 'Bills & one-offs',
+              expectedAmount: 1500,
+              intervalDays: 7,
+              nextDue: addDays(_start, rnd.nextInt(10) - 3),
+              status: 'confirmed'),
+          RecurringBill(
+              id: 'rec:dd_y',
+              payee: cover,
+              label: 'SYNTH COVER',
+              category: 'Bills & one-offs',
+              expectedAmount: 20000,
+              intervalDays: 365,
+              nextDue: addDays(_start, rnd.nextInt(60)),
+              status: 'confirmed'),
+          RecurringBill(
+              id: 'rec:dd_in',
+              payee: client,
+              label: 'SYNTH CLIENT',
+              category: 'Extra income',
+              expectedAmount: 30000,
+              nextDue: incomeDue,
+              status: 'confirmed',
+              direction: 'in'),
+        ];
+        final txs = <CategorizedTx>[
+          if (rnd.nextBool()) _row(monthlyDue, -3000, 'Bills & one-offs', desc: 'SYNTH POWER 0000'),
+          _row(addDays(_start, 2), -1500, 'Bills & one-offs', desc: 'SYNTH GYM 0000'),
+          if (rnd.nextBool()) _row(addDays(_start, 9), -1500, 'Bills & one-offs', desc: 'SYNTH GYM 0000'),
+          // A refund to the client before its income lands: landed income is clamped to 0 until then.
+          _row(addDays(_start, 1 + rnd.nextInt(6)), -2000, 'Extra income', desc: 'SYNTH CLIENT 0000'),
+          _row(incomeDue, 30000, 'Extra income', desc: 'SYNTH CLIENT 0000'),
+        ];
+        const cats = ['Groceries', 'Eating out', 'Shopping', 'Transport', 'Rent', 'Salary', 'Extra income'];
+        for (var k = 0; k < 120; k++) {
+          final date = addDays('2026-03-10', rnd.nextInt(40));
+          final cat = cats[rnd.nextInt(cats.length)];
+          final cents = (rnd.nextInt(10) == 0 ? 1 : -1) * (1 + rnd.nextInt(9000));
+          txs.add(_row(date, cents, cat, currency: rnd.nextInt(15) == 0 ? 'USD' : 'EUR', deleted: rnd.nextInt(20) == 0));
+        }
+        // matchRows: the raw list holds a foreign payment of the bill too (never pays a cycle by its converted amount).
+        final raw = [...txs, _row(addDays(monthlyDue, 1), -3000, 'Bills & one-offs', desc: 'SYNTH POWER 0000', currency: 'USD')];
+        final st = WalletSettings(
+            salary: 100000 + rnd.nextInt(150000),
+            rent: rnd.nextInt(60000),
+            periodStart: _start,
+            incomeMode: rnd.nextBool() ? 'received' : 'planned');
+        final goals = [Goal(id: 'g$seed', name: 'Synth goal', monthly: rnd.nextInt(20000))];
+        final planned = [
+          PlannedCost(
+              id: 'p$seed', title: 'Synth', date: addDays(_start, rnd.nextInt(31)), amount: 1 + rnd.nextInt(20000), category: 'Shopping'),
+          // The monthly bill's slip: covered by its counted cycle, listed but not reserved.
+          PlannedCost(
+              id: 'bill:dd$seed',
+              title: 'Synth Power',
+              date: monthlyDue,
+              amount: 3100,
+              category: 'Bills & one-offs',
+              source: PlannedSource.bill),
+        ];
+        final today = addDays(_start, rnd.nextInt(36));
+        _checked(txs, today, st: st, goals: goals, bills: bills, planned: planned, matchRows: raw);
+        for (var d = _start; d.compareTo(today) < 0 && d.compareTo(_end) < 0; d = addDays(d, 1)) {
+          final p = computePeriod(txs, st, goals, d, bills: bills, planned: planned, table: CategoryTable.builtIn, matchRows: raw);
+          reservedSeen |= p.reservedBills > 0;
+          coveredSlipSeen |= p.duePlanned.any((x) => x.id == 'bill:dd$seed') && !p.reservedPlannedRows.any((x) => x.id == 'bill:dd$seed');
+          clampSeen |= d.compareTo(incomeDue) < 0 && d.compareTo(addDays(_start, 7)) >= 0 && p.landedIncome == 0;
+          landedSeen |= p.landedIncome > 0;
+        }
+      }
+      expect((reservedSeen, coveredSlipSeen, clampSeen, landedSeen), (true, true, true, true), reason: 'every path was exercised');
+    }, timeout: _t);
+
+    test('random synthetic periods, rows only (seeded): every day equals computePeriod', () {
       for (var seed = 1; seed <= 12; seed++) {
         final rnd = Random(seed);
         final txs = <CategorizedTx>[];
@@ -233,7 +327,8 @@ void main() {
     }, timeout: _t);
   });
 
-  test('fast on a 20k-row wallet: under 100 ms, and equal to computePeriod on it', () {
+  // Measured about 2 ms on the laptop (2026-10-30); the bound is loose so a busy machine does not flake it.
+  test('fast on a 20k-row wallet (about 2 ms): under 500 ms, and equal to computePeriod on it', () {
     const today = '2026-10-30';
     final txs = bigWalletRows(today, days: 2000);
     expect(txs.length, greaterThan(19000));
@@ -242,7 +337,7 @@ void main() {
     final sw = Stopwatch()..start();
     final days = periodDays(txs, st, const [], today, table: CategoryTable.builtIn);
     sw.stop();
-    expect(sw.elapsedMilliseconds, lessThan(100), reason: '${sw.elapsedMilliseconds} ms');
+    expect(sw.elapsedMilliseconds, lessThan(500), reason: '${sw.elapsedMilliseconds} ms');
     // ignore: avoid_print
     print('periodDays on ${txs.length} rows: ${sw.elapsedMicroseconds} µs');
     for (final d in days.where((d) => d.mark == DayMark.within || d.mark == DayMark.over)) {
