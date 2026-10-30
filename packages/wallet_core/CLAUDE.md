@@ -94,6 +94,13 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   least 4 days in and not in the first `samePaydayDays` (7) days; in `incomeMode == 'received'` those first 7 days count
   `max(received, salary)` (salary parts still landing; owner: paid 10th–15th). `periods.dart`'s grouping constant is
   `_salaryGroupDays` (20). `WalletSettings.fromMap` reads a stored `paydayDay` 29..31 as 28 (`maxPaydayDay`).
+  **Plan split (CX):** `PeriodBudget.planSplit` → `PlanSplit {inTotal, fixed, saved, spending, over}` for the Plan donut
+  (pure getter): `inTotal` = income + landedIncome, `fixed` = fixedPlan + reservedBills + reservedPlanned (= fixedPlan +
+  `beforePayday`), `saved` = goalMonthly, `spending` = max(0, flexBudget), `over` = max(0, −flexBudget); identity
+  `fixed + saved + spending − over == inTotal` (asserted; follows from computePeriod's flexBudget formula, so a change
+  there must keep it). `goalTotals(goals)` → `GoalTotals {saved, target, count}` = plain sums over `WalletRepo.goals()`
+  (live goals only, each saved already `goalTotal`-clamped; negative allowed) for the Save dashboard. Tests:
+  `test/cx_dashboard_core_test.dart`.
   **Day dots (DD):** `periodDays(...)` (same arguments as `computePeriod`) → one `PeriodDay {date, mark, spent, allowance}`
   per day of `[start, end)`; each day before today (all once the payday passed) has exactly `computePeriod(today: d)`'s
   `spentToday`/`allowanceToday` (rows known now), `DayMark.over` iff spent > allowance; today/later = `today`/`toCome`
@@ -105,7 +112,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   and income out; `average6` = `averageByCategory`, the mean of the 6 months before, always ÷ 6; `remaining` = budget −
   actual; `pace` = actual ÷ (budget × elapsedDays ÷ daysInMonth), null without a budget, with budget 0 or for a future
   month; elapsedDays = day of `today` in the current month, the whole month for a past one; `remainingTotal` = Σ
-  remaining over budgeted lines, null when none is budgeted). `suggestBudgets(txs, month)` = that average rounded UP to
+  remaining over budgeted lines, null when none is budgeted; `budgetedActual` (CX) = Σ `actual` over budgeted lines, 0
+  when none, = `budgetTotal − remainingTotal`: "364 € of 400 € budgeted"). `suggestBudgets(txs, month)` = that average rounded UP to
   1000 cents, zero or negative averages omitted. Ints in cents everywhere, floats only in `pace`.
   `computePeriod(txs, st, goals, today, bills:)`: the confirmed recurring bills due before the next payday (exclusive)
   and not paid in this period are `dueBills`; those in flex categories sum to `reservedBills`, which comes off the
@@ -131,7 +139,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   derives the same row; ordered by label. One extra purchase at the payee breaks the chain (shops are never bills).
   `planRecurringPayments(bills, rows, currency:)`: for each confirmed bill the live bank row with its payee key within ± 3 days of
   `nextDue` and within 10 % of `expectedAmount` (closest, then earliest, then smallest id; never the row that paid the
-  last cycle). `RecurringBill` (`models.dart`): synced entity `recurring` (`payee`, `label`, `category`,
+  last cycle). Speed (CX): only rows dated inside a bill's match window (± tolerance, parts window) get a `merchantKey`
+  (the cost: 83–175 ms → 3–5 ms on 20k rows in the test container; `refreshRecurring`'s up to 120 passes gain the same); the old every-row version
+  lives in `test/cx_dashboard_core_test.dart` and is compared on 400 seeded wallets. `dueCycles` keeps only the
+  `lastPaidTx` dates. `RecurringBill` (`models.dart`): synced entity `recurring` (`payee`, `label`, `category`,
   `expected_amount`, `interval_days`, `next_due`, `status` candidate|confirmed|dismissed, `last_paid_tx`, `deleted`).
   `WalletRepo.refreshRecurring(today)` runs after `importBatch` and once per sync run (`runPendingMatch`): adds new
   candidates (the creation op carries no `status`/`deleted`, so a late detection cannot undo a dismiss or delete made

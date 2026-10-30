@@ -194,20 +194,35 @@ bool _paysInOne(RecurringBill b, int cents) =>
 /// P9: for an income ([RecurringBill.isIncome]) the sign flips: a positive row of the payee within ± tolerance of
 /// `nextDue` whose amount is in the range (or band) lands the cycle, by the same closest-first rule. Incomes have no
 /// parts: nothing is ever counted towards one.
+///
+/// Speed (CX, 60 Hz): only rows dated inside some bill's match window (single payment and parts, [_window]) get a
+/// payee key ([merchantKey] is the expensive part), and only the `lastPaidTx` rows' dates are kept; the result is the
+/// one of matching every row (`test/cx_dashboard_core_test.dart` compares both on random wallets).
 RecurringPayments planRecurringPayments(List<RecurringBill> bills, List<Tx> rows, {required String currency}) {
+  final live = [
+    for (final b in bills)
+      if (b.confirmed && b.payee.isNotEmpty && b.nextDue.length == 10 && b.expectedAmount > 0 && !b.finished) b
+  ];
+  if (live.isEmpty) return const RecurringPayments({});
+  final windows = _Windows([for (final b in live) _window(b)]);
+  final payees = {for (final b in live) b.payee};
+  final lastPaid = {
+    for (final b in live)
+      if (b.lastPaidTx case final id?) id
+  };
   final byPayee = <String, List<Tx>>{};
   final inByPayee = <String, List<Tx>>{};
   final dateOf = <String, String>{};
   for (final t in rows) {
-    dateOf[t.id] = t.date;
-    if (!t.live || t.manual || t.amount == 0 || t.date.length != 10 || t.currency != currency) continue;
-    ((t.amount < 0 ? byPayee : inByPayee)[merchantKey(t)] ??= []).add(t);
+    if (lastPaid.contains(t.id)) dateOf[t.id] = t.date;
+    if (!t.live || t.manual || t.amount == 0 || t.date.length != 10 || t.currency != currency || !windows.holds(t.date)) continue;
+    final key = merchantKey(t);
+    if (payees.contains(key)) ((t.amount < 0 ? byPayee : inByPayee)[key] ??= []).add(t);
   }
   final paid = <String, Tx>{};
   final parts = <String, List<Tx>>{};
   final inParts = <String>{};
-  for (final b in bills) {
-    if (!b.confirmed || b.payee.isEmpty || b.nextDue.length != 10 || b.expectedAmount <= 0 || b.finished) continue;
+  for (final b in live) {
     final income = b.isIncome;
     final mine = (income ? inByPayee : byPayee)[b.payee];
     if (mine == null) continue;
@@ -265,6 +280,52 @@ RecurringPayments planRecurringPayments(List<RecurringBill> bills, List<Tx> rows
     }
   }
   return RecurringPayments(paid, parts: parts, paidInParts: inParts);
+}
+
+/// The dates (inclusive, `YYYY-MM-DD`) a row of [b] may carry to pay or land its current cycle in
+/// [planRecurringPayments]: ± tolerance for a single payment, plus the parts window before `nextDue` for a bill. A due
+/// date that does not parse gives every date (the matching then fails exactly as it would on all rows).
+(String, String) _window(RecurringBill b) {
+  final tol = b.tolerance;
+  final parts = b.manual || b.hasRange ? partsDays(b) : tol;
+  final back = b.isIncome || parts < tol ? tol : parts;
+  try {
+    return (addDays(b.nextDue, -back), addDays(b.nextDue, tol));
+  } on FormatException {
+    return ('', '\u{10FFFF}');
+  }
+}
+
+/// A union of date ranges: sorted, merged, searched by halves.
+class _Windows {
+  final List<String> _from = [], _to = [];
+
+  _Windows(List<(String, String)> ranges) {
+    ranges.sort((a, b) => a.$1.compareTo(b.$1));
+    for (final (f, t) in ranges) {
+      if (_to.isNotEmpty && f.compareTo(_to.last) <= 0) {
+        if (t.compareTo(_to.last) > 0) _to[_to.length - 1] = t;
+      } else {
+        _from.add(f);
+        _to.add(t);
+      }
+    }
+  }
+
+  /// [date] is in one of the ranges.
+  bool holds(String date) {
+    // The last range starting on or before date.
+    var lo = 0, hi = _from.length;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (_from[mid].compareTo(date) <= 0) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo > 0 && date.compareTo(_to[lo - 1]) <= 0;
+  }
 }
 
 /// What the confirmed bills cost a month and a year (Q10, display only; integer cents, rounded down per bill): bills
