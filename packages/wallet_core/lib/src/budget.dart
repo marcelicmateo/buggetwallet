@@ -130,6 +130,21 @@ class PeriodBudget {
   /// How many costs [beforePayday] holds: the bill cycles it reserves (not covered by a plan line) + [reservedPlannedRows].
   int get beforePaydayCount => reservedBillCycles + reservedPlannedRows.length;
 
+  /// The payday plan as the Plan donut shows it (CX): where this period's money goes. Pure, from the fields above;
+  /// `fixed + saved + spending − over == inTotal` always holds (asserted), because [flexBudget] = [income] − [fixedPlan]
+  /// − [goalMonthly] − [reservedBills] − [reservedPlanned] + [landedIncome] in [computePeriod].
+  PlanSplit get planSplit {
+    final s = PlanSplit(
+      inTotal: income + landedIncome,
+      fixed: fixedPlan + reservedBills + reservedPlanned,
+      saved: goalMonthly,
+      spending: flexBudget > 0 ? flexBudget : 0,
+      over: flexBudget < 0 ? -flexBudget : 0,
+    );
+    assert(s.fixed + s.saved + s.spending - s.over == s.inTotal, 'planSplit does not add up');
+    return s;
+  }
+
   /// How far the period's spending is over the flexible money: max(0, −[remaining]).
   int get overBy => remaining < 0 ? -remaining : 0;
 
@@ -139,6 +154,34 @@ class PeriodBudget {
   /// The plan is over: spending passed the flexible money ([overBy] > 0) or the plan leaves none ([planDaily] ≤ 0).
   /// [affordability] then answers [Verdict.overBudget].
   bool get overBudget => overBy > 0 || planDaily <= 0;
+}
+
+/// The payday plan split into the Plan donut's slices ([PeriodBudget.planSplit]), integer cents:
+/// - [inTotal] = `income + landedIncome`: the plan's money in (the donut's centre);
+/// - [fixed] = `fixedPlan + reservedBills + reservedPlanned`: the fixed plan lines plus what is held before payday;
+/// - [saved] = `goalMonthly`;
+/// - [spending] = max(0, `flexBudget`): the flexible money;
+/// - [over] = max(0, −`flexBudget`): how far the fixed and saved slices pass the money in (then [spending] is 0).
+/// Identity: `fixed + saved + spending − over == inTotal`. Without [over] the three slices add up to the centre; with it
+/// they add up to `inTotal + over`.
+class PlanSplit {
+  final int inTotal, fixed, saved, spending, over;
+  const PlanSplit({required this.inTotal, required this.fixed, required this.saved, required this.spending, required this.over});
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlanSplit &&
+      other.inTotal == inTotal &&
+      other.fixed == fixed &&
+      other.saved == saved &&
+      other.spending == spending &&
+      other.over == over;
+
+  @override
+  int get hashCode => Object.hash(inTotal, fixed, saved, spending, over);
+
+  @override
+  String toString() => 'PlanSplit(in $inTotal, fixed $fixed, saved $saved, spending $spending, over $over)';
 }
 
 /// Below 2^53 (the largest whole number a web number holds exactly): every sum of amounts asserts it in debug builds
@@ -275,7 +318,14 @@ List<DueCycle> dueCycles(List<RecurringBill> bills, List<CategorizedTx> txs, Str
               if (!t.iou) t
           ]),
           currency: currency);
-  final paidOn = <String, String>{for (final t in txs) t.tx.id: t.date};
+  final lastPaid = {
+    for (final b in live)
+      if (b.lastPaidTx case final id?) id
+  };
+  final paidOn = <String, String>{
+    for (final t in txs)
+      if (lastPaid.contains(t.tx.id)) t.tx.id: t.date
+  };
   final out = <DueCycle>[];
   DueCycle first(RecurringBill b) {
     final paid = addDays(b.nextDue, b.tolerance).compareTo(start) < 0 ? 0 : pay.partsPaid(b.id);
@@ -784,6 +834,10 @@ class BudgetVsActual {
   final int budgetTotal; // over budgeted categories
   final int actualTotal; // over all lines
   final int? remainingTotal; // Σ remaining over budgeted categories; null when nothing is budgeted
+
+  /// Σ `actual` over the budgeted lines (those with a budget, 0 included): "364 € of 400 € budgeted". Equals
+  /// `budgetTotal − remainingTotal` when something is budgeted; 0 when nothing is.
+  final int budgetedActual;
   final int overCount, budgetedCount;
   final int elapsedDays; // day of month for the current month, the whole month for a past one, 0 for a future one
   final int daysInMonth;
@@ -794,6 +848,7 @@ class BudgetVsActual {
     required this.budgetTotal,
     required this.actualTotal,
     required this.remainingTotal,
+    required this.budgetedActual,
     required this.overCount,
     required this.budgetedCount,
     required this.elapsedDays,
@@ -828,7 +883,7 @@ BudgetVsActual budgetVsActual(List<CategorizedTx> txs, String month, Map<String,
       final d = b.actual.compareTo(a.actual);
       return d != 0 ? d : a.category.compareTo(b.category);
     });
-  var budgetTotal = 0, actualTotal = 0, remainingTotal = 0, overCount = 0, budgetedCount = 0;
+  var budgetTotal = 0, actualTotal = 0, remainingTotal = 0, budgetedActual = 0, overCount = 0, budgetedCount = 0;
   for (final l in lines) {
     actualTotal += l.actual;
     if (l.over) overCount++;
@@ -836,6 +891,7 @@ BudgetVsActual budgetVsActual(List<CategorizedTx> txs, String month, Map<String,
       budgetedCount++;
       budgetTotal += b;
       remainingTotal += b - l.actual;
+      budgetedActual += l.actual;
     }
   }
   // Month and counts only, never amounts.
@@ -849,6 +905,7 @@ BudgetVsActual budgetVsActual(List<CategorizedTx> txs, String month, Map<String,
     budgetTotal: budgetTotal,
     actualTotal: actualTotal,
     remainingTotal: budgetedCount == 0 ? null : remainingTotal,
+    budgetedActual: budgetedActual,
     overCount: overCount,
     budgetedCount: budgetedCount,
     elapsedDays: elapsed,
@@ -978,6 +1035,34 @@ int? monthsToGoal(Goal g) {
   if (left <= 0) return 0;
   if (g.monthly <= 0) return null;
   return (left / g.monthly).ceil();
+}
+
+/// The Save dashboard's goal totals ([goalTotals]), integer cents: [saved] = Σ saved, [target] = Σ target, [count] =
+/// how many goals.
+class GoalTotals {
+  final int saved, target, count;
+  const GoalTotals({required this.saved, required this.target, required this.count});
+
+  @override
+  bool operator ==(Object other) => other is GoalTotals && other.saved == saved && other.target == target && other.count == count;
+
+  @override
+  int get hashCode => Object.hash(saved, target, count);
+
+  @override
+  String toString() => 'GoalTotals(saved $saved, target $target, count $count)';
+}
+
+/// The totals of [goals] (CX, the Save dashboard): pass `WalletRepo.goals()`, which lists the live goals only (a deleted
+/// goal and its contributions are left out) with each saved total already [goalTotal] (clamped to ±[Goal.maxSaved],
+/// negative allowed). Plain sums of those values, as the app summed them before; a target of 0 adds 0.
+GoalTotals goalTotals(List<Goal> goals) {
+  var saved = 0, target = 0;
+  for (final g in goals) {
+    saved = _ok(saved + g.saved);
+    target = _ok(target + g.target);
+  }
+  return GoalTotals(saved: saved, target: target, count: goals.length);
 }
 
 /// The verdict of one day of the pay period on Today's day dots (DD).
