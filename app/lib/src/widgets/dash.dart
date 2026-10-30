@@ -1,12 +1,19 @@
 // The dashboard kit (RX2, "Paper Tiles", docs/design/dashboard/CONCEPT.md §5): paper tiles on a darker desk. Dumb widgets: values
 // arrive formatted (use `moneyExact`: always exact cents, a tile scales its number down instead of rounding), nothing here reads the
 // controller or computes money. Charts live in `dash_charts.dart` (exported from here).
+//
+// Layout contract: [DashGrid] is its own render object and never asks its tiles for intrinsic sizes, so a tile must not hold an
+// IntrinsicWidth/IntrinsicHeight, an AlertDialog or anything else that needs them. A tile is laid out with a bounded width and an
+// UNBOUNDED height: no Spacer, Expanded or Flexible in a tile's main-axis Column (the grid stretches the tile, not its children).
+// A tile's `visual` and `dots` slots only show things: nothing in them is tappable (the tile is).
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../layout.dart';
 import '../theme.dart';
 import 'common.dart';
+
+import 'dash_charts.dart';
 
 export 'dash_charts.dart';
 
@@ -21,16 +28,19 @@ TextStyle dashNumStyle({double size = BwType.displaySize, Color? color}) => Text
       color: color,
     );
 
-/// One cell of a [DashGrid]: [span] columns wide (2 makes a wide tile; a grid with one column clamps it to 1).
+/// One cell of a [DashGrid]: [span] columns wide (2 makes a wide tile; a grid with one column clamps it to 1) and [rowSpan] rows tall
+/// (a 2×2 hero on desktop). A [rowSpan] counts only when the tile leaves room beside it (its span is under the column count): a
+/// full-width tile is one row high.
 class DashItem extends ParentDataWidget<_DashParentData> {
-  final int span;
-  const DashItem({super.key, this.span = 1, required super.child});
+  final int span, rowSpan;
+  const DashItem({super.key, this.span = 1, this.rowSpan = 1, required super.child});
 
   @override
   void applyParentData(RenderObject renderObject) {
     final data = renderObject.parentData! as _DashParentData;
-    if (data.span != span) {
+    if (data.span != span || data.rowSpan != rowSpan) {
       data.span = span;
+      data.rowSpan = rowSpan;
       renderObject.parent?.markNeedsLayout();
     }
   }
@@ -40,19 +50,20 @@ class DashItem extends ParentDataWidget<_DashParentData> {
 }
 
 class _DashParentData extends ContainerBoxParentData<RenderBox> {
-  int span = 1;
+  int span = 1, rowSpan = 1;
 }
 
-/// Tiles in 1, 2 or 4 columns, in the same order at every size. Columns come from the window ([sizeFor]: compact and medium 2,
-/// expanded 4) and drop (4 → 2 → 1) while a column would be under [minColumn] dp, so 320 dp at text scale 2.0 gets one column.
-/// A row's tiles are stretched to the tallest one. Children are tiles, optionally wrapped in [DashItem] to span 2.
+/// Tiles in 1, 2 or 4 columns, in the same reading order at every size. Columns come from the window ([sizeFor]: compact and medium 2,
+/// expanded 4) and drop (4 → 2 → 1) while a column would be under [minColumn] dp scaled by the text scale (130 dp at 1.0, 260 dp at
+/// 2.0), so 320 dp at text scale 2.0 and 360 dp at 2.0 get one column. A tile's row is as tall as its tallest tile; a [DashItem] with
+/// `rowSpan` 2 is as tall as two rows, the next tiles fill the cells beside it. Children are tiles, optionally wrapped in [DashItem].
 class DashGrid extends MultiChildRenderObjectWidget {
   final double gap;
   final double minColumn;
-  const DashGrid({super.key, super.children, this.gap = 10, this.minColumn = 150});
+  const DashGrid({super.key, super.children, this.gap = 10, this.minColumn = 130});
 
-  /// Columns for a grid [width] dp wide in a window [windowWidth] dp wide.
-  static int columnsFor(double width, double windowWidth, {double gap = 10, double minColumn = 150}) {
+  /// Columns for a grid [width] dp wide in a window [windowWidth] dp wide; [minColumn] is already scaled (see [minColumnFor]).
+  static int columnsFor(double width, double windowWidth, {double gap = 10, double minColumn = 130}) {
     var cols = sizeFor(windowWidth) == LayoutSize.expanded ? 4 : 2;
     while (cols > 1 && (width - gap * (cols - 1)) / cols < minColumn) {
       cols = cols == 4 ? 2 : 1;
@@ -60,9 +71,15 @@ class DashGrid extends MultiChildRenderObjectWidget {
     return cols;
   }
 
+  /// The column minimum at the given text scaler.
+  static double minColumnFor(TextScaler scaler, [double minColumn = 130]) => scaler.scale(minColumn);
+
   @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderDash(windowWidth: MediaQuery.sizeOf(context).width, gap: gap, minColumn: minColumn);
+  RenderObject createRenderObject(BuildContext context) => _RenderDash(
+        windowWidth: MediaQuery.sizeOf(context).width,
+        gap: gap,
+        minColumn: minColumnFor(MediaQuery.textScalerOf(context), minColumn),
+      );
 
   @override
   void updateRenderObject(BuildContext context, covariant RenderObject renderObject) {
@@ -70,8 +87,17 @@ class DashGrid extends MultiChildRenderObjectWidget {
     renderObject
       ..windowWidth = MediaQuery.sizeOf(context).width
       ..gap = gap
-      ..minColumn = minColumn;
+      ..minColumn = minColumnFor(MediaQuery.textScalerOf(context), minColumn);
   }
+}
+
+class _Place {
+  final RenderBox child;
+  final int row, col, span, rows;
+  final double width;
+  double natural = 0;
+  _Place(this.child, this.row, this.col, this.span, this.rows, this.width);
+  int get end => row + rows - 1;
 }
 
 class _RenderDash extends RenderBox
@@ -111,37 +137,73 @@ class _RenderDash extends RenderBox
     final w = constraints.maxWidth;
     final cols = DashGrid.columnsFor(w, _windowWidth, gap: _gap, minColumn: _minColumn);
     final colW = (w - _gap * (cols - 1)) / cols;
-    var y = 0.0, used = 0;
-    final row = <(RenderBox, double)>[]; // child, width
-    var rowH = 0.0;
 
-    void flush() {
-      if (row.isEmpty) return;
-      var col = 0;
-      for (final (child, width) in row) {
-        final data = child.parentData! as _DashParentData;
-        if (child.size.height < rowH) child.layout(BoxConstraints.tightFor(width: width, height: rowH), parentUsesSize: true);
-        data.offset = Offset(col * (colW + _gap), y);
-        col += data.span.clamp(1, cols);
+    // Place every tile in reading order on a grid of cells; a tall tile blocks the cells under it.
+    final taken = <List<bool>>[];
+    bool free(int r, int c, int span, int rows) {
+      for (var rr = r; rr < r + rows && rr < taken.length; rr++) {
+        for (var cc = c; cc < c + span; cc++) {
+          if (taken[rr][cc]) return false;
+        }
       }
-      y += rowH + _gap;
-      row.clear();
-      used = 0;
-      rowH = 0;
+      return true;
     }
 
+    final places = <_Place>[];
+    var r = 0, c = 0;
     for (var child = firstChild; child != null; child = childAfter(child)) {
       final data = child.parentData! as _DashParentData;
       final span = data.span.clamp(1, cols);
-      if (used + span > cols) flush();
+      final rows = span < cols ? data.rowSpan.clamp(1, 1 << 10) : 1;
+      while (true) {
+        if (c + span > cols) {
+          r++;
+          c = 0;
+        } else if (!free(r, c, span, rows)) {
+          c++;
+        } else {
+          break;
+        }
+      }
+      while (taken.length < r + rows) {
+        taken.add(List.filled(cols, false));
+      }
+      for (var rr = r; rr < r + rows; rr++) {
+        for (var cc = c; cc < c + span; cc++) {
+          taken[rr][cc] = true;
+        }
+      }
       final width = colW * span + _gap * (span - 1);
+      final place = _Place(child, r, c, span, rows, width);
       child.layout(BoxConstraints.tightFor(width: width), parentUsesSize: true);
-      row.add((child, width));
-      used += span;
-      if (child.size.height > rowH) rowH = child.size.height;
+      place.natural = child.size.height;
+      places.add(place);
+      c += span;
     }
-    flush();
-    size = constraints.constrain(Size(w, y > 0 ? y - _gap : 0));
+
+    // Row heights: the tallest single-row tile; a tall tile that does not fit its rows widens the last of them.
+    final rowH = List<double>.filled(taken.length, 0);
+    for (final p in places.where((p) => p.rows == 1)) {
+      if (p.natural > rowH[p.row]) rowH[p.row] = p.natural;
+    }
+    final tall = places.where((p) => p.rows > 1).toList()..sort((a, b) => a.end.compareTo(b.end));
+    for (final p in tall) {
+      var have = _gap * (p.rows - 1);
+      for (var i = p.row; i <= p.end; i++) {
+        have += rowH[i];
+      }
+      if (p.natural > have) rowH[p.end] += p.natural - have;
+    }
+    final top = List<double>.filled(taken.length, 0);
+    for (var i = 1; i < taken.length; i++) {
+      top[i] = top[i - 1] + rowH[i - 1] + _gap;
+    }
+    for (final p in places) {
+      final h = top[p.end] + rowH[p.end] - top[p.row];
+      if ((p.child.size.height - h).abs() > 0.01) p.child.layout(BoxConstraints.tightFor(width: p.width, height: h), parentUsesSize: true);
+      (p.child.parentData! as _DashParentData).offset = Offset(p.col * (colW + _gap), top[p.row]);
+    }
+    size = constraints.constrain(Size(w, taken.isEmpty ? 0 : top.last + rowH.last));
   }
 
   @override
@@ -152,13 +214,17 @@ class _RenderDash extends RenderBox
 }
 
 /// A paper tile: 12 dp radius, `surface` on the `desk`, a 1 px `line` border, no shadow. With [onTap] it answers a touch with
-/// the ink response (no chevron). [semanticLabel] replaces what a screen reader would read from the parts.
+/// the ink response (no chevron). [semanticLabel] replaces what a screen reader would read from the parts. [attention] marks a tile
+/// that needs the owner (a 2 px accent border instead of the 1 px line, and "Needs action" in the spoken label): put a chip or a
+/// word on the tile too, the border is not the only cue.
 class Tile extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
   final EdgeInsetsGeometry padding;
   final String? semanticLabel;
-  const Tile({super.key, required this.child, this.onTap, this.padding = const EdgeInsets.all(12), this.semanticLabel});
+  final bool attention;
+  const Tile(
+      {super.key, required this.child, this.onTap, this.padding = const EdgeInsets.all(12), this.semanticLabel, this.attention = false});
 
   static const radius = 12.0;
 
@@ -168,11 +234,21 @@ class Tile extends StatelessWidget {
     final body = Material(
       color: c.surface,
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius), side: BorderSide(color: c.line)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radius),
+        side: BorderSide(color: attention ? c.accent : c.line, width: attention ? 2 : 1),
+      ),
       child: InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
     );
     if (semanticLabel == null) return body;
-    return Semantics(container: true, button: onTap != null, label: semanticLabel, onTap: onTap, excludeSemantics: true, child: body);
+    return Semantics(
+      container: true,
+      button: onTap != null,
+      label: attention ? 'Needs action: $semanticLabel' : semanticLabel,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: body,
+    );
   }
 }
 
@@ -185,7 +261,8 @@ class TileLabel extends StatelessWidget {
       Text(text.toUpperCase(), maxLines: 2, overflow: TextOverflow.ellipsis, style: BwType.eyebrow.copyWith(color: context.c.muted));
 }
 
-/// A chip that says its state in an icon and a word, never in colour alone. [spoken] is what a screen reader says.
+/// Something small that sits in a tile's label row or under its number and says its state in an icon or a word, never in colour
+/// alone. [spoken] is what a screen reader says.
 abstract class DashChip extends StatelessWidget {
   const DashChip({super.key});
   String get spoken;
@@ -193,14 +270,15 @@ abstract class DashChip extends StatelessWidget {
 
 class _Chip extends StatelessWidget {
   final IconData icon;
+  final IconData? trailing;
   final String text;
   final Color fg, bg;
-  const _Chip({required this.icon, required this.text, required this.fg, required this.bg});
+  const _Chip({required this.icon, required this.text, required this.fg, required this.bg, this.trailing});
   @override
   Widget build(BuildContext context) => DecoratedBox(
         decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 2, 8, 2),
+          padding: EdgeInsets.fromLTRB(4, 2, trailing == null ? 8 : 4, 2),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(icon, size: 16, color: fg),
             const SizedBox(width: 2),
@@ -210,6 +288,7 @@ class _Chip extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: BwType.metaSize, fontWeight: FontWeight.w600, color: fg)),
             ),
+            if (trailing != null) ...[const SizedBox(width: 3), Icon(trailing, size: 14, color: fg)],
           ]),
         ),
       );
@@ -218,7 +297,8 @@ class _Chip extends StatelessWidget {
 enum Trend { up, down, flat }
 
 /// A change against something: ▲ / ▼ / – and the figure and a word ("12 % vs last period"). [good] says whether that direction is
-/// good news (spending up is not): green or red ground; null = neutral.
+/// good news (spending up is not): a green ground and a check, or a red ground and a warning icon, and "better" / "worse" for a
+/// screen reader; null = neutral, no second icon.
 class DeltaChip extends DashChip {
   final Trend trend;
   final String text;
@@ -229,8 +309,8 @@ class DeltaChip extends DashChip {
   String get spoken => '${switch (trend) {
         Trend.up => 'up',
         Trend.down => 'down',
-        Trend.flat => 'unchanged',
-      }} $text';
+        Trend.flat => 'unchanged'
+      }} $text${good == null ? '' : (good! ? ', better' : ', worse')}';
 
   @override
   Widget build(BuildContext context) {
@@ -245,7 +325,8 @@ class DeltaChip extends DashChip {
       Trend.down => Icons.arrow_drop_down,
       Trend.flat => Icons.remove,
     };
-    return _Chip(icon: icon, text: text, fg: fg, bg: bg);
+    final second = good == null ? null : (good! ? Icons.check_circle_outline : Icons.error_outline);
+    return _Chip(icon: icon, text: text, fg: fg, bg: bg, trailing: second);
   }
 }
 
@@ -277,25 +358,82 @@ class StateChip extends DashChip {
   }
 }
 
-/// One number: label (1–3 words), the figure scaled down to fit (never wrapped, never rounded), an optional sub line, one
-/// optional [visual] and one optional [chip].
+/// A muted note in a tile's label row, such as a date ("30 Oct"). Text only.
+class TileNote extends DashChip {
+  final String text;
+  const TileNote(this.text, {super.key});
+  @override
+  String get spoken => text;
+  @override
+  Widget build(BuildContext context) => Text(text,
+      textAlign: TextAlign.end,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(fontSize: BwType.metaSize, color: context.c.muted));
+}
+
+/// A small text action in a tile's label row ("Edit"). It is a button of its own (48 dp high), so a [StatTile] with one reads its
+/// parts instead of one sentence.
+class TileAction extends DashChip {
+  final String label;
+  final VoidCallback onTap;
+  const TileAction({super.key, required this.label, required this.onTap});
+  @override
+  String get spoken => label;
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: touchMin, minWidth: touchMin),
+          child: Center(
+            widthFactor: 1,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Text(label,
+                  maxLines: 1, style: TextStyle(fontSize: BwType.metaSize, fontWeight: FontWeight.w600, color: context.c.accent)),
+            ),
+          ),
+        ),
+      );
+}
+
+String _spokenJoin(List<String?> parts) => parts.whereType<String>().where((p) => p.isNotEmpty).join(', ');
+
+/// One number: label (1–3 words) with an optional [trailing] note, chip or action at the right of it, the figure scaled down to fit
+/// (never wrapped, never rounded), an optional sub line, one optional [visual] (shown only, not tappable; [visualSpoken] says it) and
+/// one optional [chip].
 class StatTile extends StatelessWidget {
   final String label, value;
-  final String? sub;
+  final String? sub, visualSpoken;
   final Widget? visual;
-  final DashChip? chip;
+  final DashChip? chip, trailing;
   final VoidCallback? onTap;
   final Color? valueColor;
-  const StatTile({super.key, required this.label, required this.value, this.sub, this.visual, this.chip, this.onTap, this.valueColor});
+  final bool attention;
+  const StatTile({
+    super.key,
+    required this.label,
+    required this.value,
+    this.sub,
+    this.visual,
+    this.visualSpoken,
+    this.chip,
+    this.trailing,
+    this.onTap,
+    this.valueColor,
+    this.attention = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     return Tile(
       onTap: onTap,
-      semanticLabel: [label, value, if (sub != null) sub, if (chip != null) chip!.spoken].join(', '),
+      attention: attention,
+      semanticLabel: trailing is TileAction ? null : _spokenJoin([label, value, sub, trailing?.spoken, visualSpoken, chip?.spoken]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        TileLabel(label),
+        trailing == null ? TileLabel(label) : SplitRow(start: TileLabel(label), end: trailing!),
         const SizedBox(height: 6),
         FittedBox(
           fit: BoxFit.scaleDown,
@@ -307,8 +445,65 @@ class StatTile extends StatelessWidget {
             padding: const EdgeInsets.only(top: 2),
             child: Text(sub!, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
           ),
-        if (visual != null) Padding(padding: const EdgeInsets.only(top: 8), child: visual),
+        if (visual != null) Padding(padding: const EdgeInsets.only(top: 8), child: IgnorePointer(child: visual)),
         if (chip != null) Padding(padding: const EdgeInsets.only(top: 8), child: chip),
+      ]),
+    );
+  }
+}
+
+/// The big tile of a dashboard (Today's hero): the exact figure scaled to fit, a [StateChip], a [dots] slot (the day dots, shown
+/// only; [dotsSpoken] says them) and a pace meter with the expected mark ([paceUsed] and [paceExpected] as 0..1 shares; [paceSpoken]
+/// says it). Wrap it in `DashItem(span: 2, rowSpan: 2)` for the desktop 2×2 hero.
+class HeroTile extends StatelessWidget {
+  final String label, value;
+  final String? sub, dotsSpoken, paceSpoken;
+  final DashChip? chip;
+  final Widget? dots;
+  final double? paceUsed, paceExpected;
+  final bool paceOver;
+  final VoidCallback? onTap;
+  final Color? valueColor;
+  const HeroTile({
+    super.key,
+    required this.label,
+    required this.value,
+    this.sub,
+    this.chip,
+    this.dots,
+    this.dotsSpoken,
+    this.paceUsed,
+    this.paceExpected,
+    this.paceOver = false,
+    this.paceSpoken,
+    this.onTap,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final hasPace = paceUsed != null && paceExpected != null;
+    return Tile(
+      onTap: onTap,
+      semanticLabel: _spokenJoin([label, value, sub, chip?.spoken, dotsSpoken, paceSpoken]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        TileLabel(label),
+        const SizedBox(height: 6),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(value, maxLines: 1, style: dashNumStyle(size: 44, color: valueColor ?? c.ink)),
+        ),
+        if (sub != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(sub!, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+          ),
+        if (chip != null) Padding(padding: const EdgeInsets.only(top: 8), child: chip),
+        if (dots != null) Padding(padding: const EdgeInsets.only(top: 12), child: IgnorePointer(child: dots)),
+        if (hasPace)
+          Padding(padding: const EdgeInsets.only(top: 12), child: PaceMeter(used: paceUsed!, expected: paceExpected!, over: paceOver)),
       ]),
     );
   }
@@ -327,7 +522,8 @@ class DashRowData {
   const DashRowData({required this.title, this.amount, this.sub, this.chip, this.onTap, this.key});
 }
 
-/// Ruled rows for a tile (a name, a muted line, a state chip and a mono amount): the Ledger list inside a tile.
+/// Ruled rows for a tile (a name, a muted line, a state chip and a mono amount): the Ledger list inside a tile. A tappable row is at
+/// least [touchMin] high.
 class DashRows extends StatelessWidget {
   final List<DashRowData> rows;
   const DashRows({super.key, required this.rows});
@@ -340,13 +536,14 @@ class DashRows extends StatelessWidget {
         Semantics(
           container: true,
           button: r.onTap != null,
-          label: [r.title, if (r.amount != null) r.amount, if (r.sub != null) r.sub, if (r.chip != null) r.chip!.spoken].join(', '),
+          label: _spokenJoin([r.title, r.amount, r.sub, r.chip?.spoken]),
           onTap: r.onTap,
           excludeSemantics: true,
           child: InkWell(
             key: r.key,
             onTap: r.onTap,
             child: RuledRow(
+              minHeight: r.onTap != null ? touchMin : rowMin,
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: SplitRow(
                 crossAxisAlignment: CrossAxisAlignment.start,
