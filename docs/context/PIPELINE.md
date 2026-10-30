@@ -37,12 +37,23 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | WS | Web sync through the relay (P18), bwk2 key wrap, CSP | scout → core + ui + devops | BP | done cc0090e..b85cef0 (blank-page bug fixed; review 2 med fixed), merged 852f893; app 2053, web-test 13 |
 | DK | Device keys + revocation (P17), relay api 5 | scout → core + ui + test-writer | WS | done: core da5dae1..10a4d85, spec tests 9ddcd18, UI 0fd713d..bff312f; 4 reviews; stage green on 01c6bb7; pushed |
 
+## Stage HP: hardening pass during the M6 live test (2026-10-30; tests and reviews only, bug fixes with a test)
+| # | Item | Agent | Branch | Depends on | Status |
+|---|---|---|---|---|---|
+| HP-S | Context pack: test files per mutation target | scout (haiku/low) | – | – | done (pack in lead briefs) |
+| HP-R | Adversarial review of `relay/` (code + native units + Caddy) before the Pi | reviewer (high) | – | – | done: 1 high (slow-body DoS), 3 medium (device cap/inodes, whole-file reads vs MemoryMax, devices/others cutoff: owner chose client repeats until alone (in HP-R1)), 4 low |
+| HP-T1 | Mutation testing: `sync_engine`, `sync_relay`, `sync_problems` | test-writer (sonnet/medium) | worktree | HP-S | done eca62c5 (4 hp_* files, sync 446, 0 bugs; engine 25→36/60, relay 31→34/40, problems 19→28/31); HP-T1b 09ddc36 (5 killed, 7 equivalent/unobservable; sync 452) |
+| HP-T2 | Mutation testing: matching, transfers, repo_splits, planned, bills, bill_history, accounts, backup, hlc | test-writer (sonnet/medium) | worktree | HP-S | done e5be3cb (9 hp_* test files, 0 bugs; survivors e.g. matching 12→1, bill_history 18→4, hlc 5→0, rest equivalent/log-only; some confirm re-runs incomplete) |
+| HP-R1 | Relay fixes from HP-R: body deadline + per-address request cap + onError, device cap + 4 KiB per file, streamed reads, IPv6 /64 keys, `first` from disk, folder fsync/dirsync, time-sync + Caddy timeouts | core-builder (high) | worktree | HP-R | done b50e57e + 125d8e9 + 7fa309b (relay 272, sync 412, lint green; client revokeOthers repeats); reviewed: 1 medium (lost newest file stalls readers), 4 low + client 30 s whole-request timeout (uploads > 30 s never finish) → HP-R1b f66c9ad + f426082 (all fixed; relay 276, sync 419); re-review: 3 medium (stream forget could lose ops → removed; revokeOthers success on failed check → rethrow; lost-file rule must use min of both snapshots), 3 low → HP-R1c 924cba8 (relay 277, sync 419); merged d88f59e |
+| HP-T3 | Mutation testing: csv_generic, csv_mapping, pbz, revolut, xls_reader, text_codec | test-writer (sonnet/medium) | worktree | T1 or T2 done | done 025d5d7 (52 tests, 0 bugs; csv_mapping 11→0, revolut 6→0, pbz 17→4, csv_generic 16→7, rest equivalent) |
+| HP-F | Bug fixes (test + fix), merge, review, stage run (haiku watcher), push, STATUS | lead + builder | v2 | all | stage run running |
+
 ## Stage M: hardening before M6 (2026-10-28; every planned feature is built)
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
 | M1 | Mutation testing on V/X code (sync_digest, repo_sync_apply conflicts/repair/digest, vault BWOP3, uncategorisedPayees, reviewStreak); survivors → invariant tests, real bugs → `BUG:` skip + report | test-writer (sonnet/medium) | m-mutate | – | done d7a5590 + 21b1240 (36 invariant tests, 0 bugs; conflict/repair survivors 10 → 3 equivalent), merged |
 | M2 | Measure `stateDigest` on the emulator; move it off the UI isolate on native if > ~100 ms | core-builder | m-digest | – | done 65b032c + e5281ac (digest in a background isolate; key redacted in logs), merged |
-| M | Review, stage run, push, STATUS | lead | v2 | M1, M2 | queued |
+| M | Review, stage run, push, STATUS | lead | v2 | M1, M2 | done (with BP/WS/DK stage run) |
 | PI2a | Pi relay proven without the Pi: native unit on systemd containers (Fedora, Debian), caddy validate, deploy script native target, setup.md §5 | devops | pi2a | PI1 | done c93323c (systemd proof Fedora+Debian, security 1.3 OK, caddy validate, deploy native-*); review before merge |
 | D1 | docs/context/M6_CHECKLIST.md: one ordered owner checklist from every STATUS owner-check list + disaster drills | general-purpose (sonnet) | v2 (file only) | – | done cc091b4 (159 items; 2 stale items fixed by lead) |
 
