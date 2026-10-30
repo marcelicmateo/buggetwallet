@@ -106,6 +106,15 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `spentToday`/`allowanceToday` (rows known now), `DayMark.over` iff spent > allowance; today/later = `today`/`toCome`
   (0/0). One pass over the rows plus per-day sums (bill cycles once, `duePlanned` per day); a change to
   `computePeriod`'s allowance maths must be mirrored there (`test/dd_day_dots_test.dart` pins equality; about 2 ms on 20k rows).
+  **Report (CX2):** `PeriodBudget.salary` (= `st.salary`, set by `computePeriod`, default 0) and `aboveSalary` =
+  received − salary when salary > 0 and received > salary, else 0 (received = live home-currency income rows only; with no
+  salary nothing is "above plan"). `periodDaySpend(txs, st, start, end, table:)` → one `DaySpend {date, spent}` per day of
+  `[start, end)` ascending (≤ 1000 days; `start >= end` → empty; a bad date → `ArgumentError`), no verdict (owner
+  2026-10-30: a past period's plan is not stored). Rows exactly as `spentToday` (live, home currency, `CategorizedTx.kind`
+  flex of the expanded list, so transfers/IOU-linked/fixed/income out; `table` is not consulted: the kind comes from the
+  Categorizer built with it). Identities (`test/cx2_report_core_test.dart`): judged days == `periodDays(...).spent`; Σ over a
+  past `periodReports` period == `PeriodReport.flex` (same rows when the same table categorized `txs`); for the running
+  period the report counts rows up to today only, so Σ over `[start, today]` == its flex (rows dated later differ).
   Budget vs actual per category (calendar months, owner decision 2026-10-20): `budgetVsActual(txs, month, budgets, today:, currency:)` →
   `BudgetVsActual` (one `CategoryBudgetLine` per category with a budget or any spend, actual desc then name; `actual` =
   `monthSummary(...).byCategory`, i.e. the "Where it goes" sums: live rows, fixed + flex, refunds subtracted, transfers

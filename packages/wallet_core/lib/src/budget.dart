@@ -34,6 +34,9 @@ class PeriodBudget {
   final Map<String, int> foreignByCurrency;
   final int received, extras, income, goalMonthly, fixedPlan;
 
+  /// The planned salary (`WalletSettings.salary`) this period was computed with; 0 when none is set.
+  final int salary;
+
   /// [allowanceToday] is never negative (0 once the flexible money is used up or [paydayPassed]); [safeToday] =
   /// allowanceToday − spentToday is negative when today's spending went over ([overToday]). [planDaily] (flexBudget ÷
   /// length) is 0 or negative when the plan leaves no flexible money ([overBudget]).
@@ -98,6 +101,7 @@ class PeriodBudget {
     required this.income,
     required this.goalMonthly,
     required this.fixedPlan,
+    this.salary = 0,
     required this.flexBudget,
     required this.spent,
     required this.spentToday,
@@ -123,6 +127,12 @@ class PeriodBudget {
   /// [landedIncome] (those are spending money now), so nothing is counted twice.
   /// Never negative.
   int get extrasForGoals => extras - landedIncome < 0 ? 0 : extras - landedIncome;
+
+  /// CX2: income received above the planned salary this period (report): [received] − [salary] when a salary is set
+  /// and [received] passed it, else 0. Only [received] counts (live income rows in the wallet's currency, so income in
+  /// another currency never does; extras are not income here). With no salary set (0) nothing is "above plan". In
+  /// `incomeMode == 'received'` the first [samePaydayDays] days still compare the real [received], not [income].
+  int get aboveSalary => salary > 0 && received > salary ? received - salary : 0;
 
   /// Positive = under budget so far, negative = over.
   int get aheadOfPace => (flexBudget * elapsed).round() - spent;
@@ -536,6 +546,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     income: income,
     goalMonthly: goalMonthly,
     fixedPlan: fixedPlan,
+    salary: st.salary,
     flexBudget: flexBudget,
     spent: spent,
     spentToday: spentToday,
@@ -1191,4 +1202,63 @@ List<PeriodDay> periodDays(List<CategorizedTx> txs, WalletSettings st, List<Goal
     out.add(PeriodDay(date: dates[i], mark: dates[i] == today ? DayMark.today : DayMark.toCome));
   }
   return out;
+}
+
+/// One day of a pay period on the report heatmap ([periodDaySpend]).
+class DaySpend {
+  const DaySpend(this.date, this.spent);
+
+  final String date; // YYYY-MM-DD
+
+  /// Net flexible spending that day in cents, positive = spent, negative = net refund; the same rows and sign as
+  /// `PeriodBudget.spentToday` / `PeriodDay.spent`.
+  final int spent;
+
+  @override
+  bool operator ==(Object other) => other is DaySpend && other.date == date && other.spent == spent;
+
+  @override
+  int get hashCode => Object.hash(date, spent);
+
+  @override
+  String toString() => 'DaySpend($date, $spent)';
+}
+
+/// CX2: the net flexible spending of every day of `[start, end)` (any pay period, past or running), ascending, for the
+/// report heatmap: spending only, no verdict (the plan of a past period is not stored, owner decision 2026-10-30).
+/// At most 1000 days, as [periodDays]; `start >= end` gives an empty list; a date that is not `YYYY-MM-DD` throws
+/// [ArgumentError]. Days after today are listed like the others (0 unless a row is dated there).
+///
+/// The row rule is exactly [computePeriod]'s `spentToday`: live rows ([Tx.live]: no deleted rows, no hand-added entry
+/// replaced by its bank row) in `st.currency` whose kind ([CategorizedTx.kind]) is flex; [txs] is the expanded list
+/// (P6: each split part counts by its own kind), so own transfers and IOU-linked payments (kind transfer), fixed,
+/// income and extra rows are out. So for the running period `periodDays(...)[i].spent == periodDaySpend(...)[i].spent`
+/// on every judged day. [table] is the table [txs] were categorized with: the kind is the row's own (the
+/// `Categorizer` set it from that table), so it is not looked up again. One pass over [txs].
+///
+/// Against `periodReports` (same [txs] and [table], a report's start/end): Σ `spent` == `PeriodReport.flex` for every
+/// past period, because the report's flex (out − fixed main tags) is the same live, home-currency rows of kind flex.
+/// For the running period the report counts rows up to today only: Σ over `[start, today]` == its flex.
+List<DaySpend> periodDaySpend(List<CategorizedTx> txs, WalletSettings st, String start, String end, {required CategoryTable table}) {
+  requireIsoDate(start);
+  requireIsoDate(end);
+  if (start.compareTo(end) >= 0) return const [];
+  final dates = <String>[];
+  for (var d = start; d.compareTo(end) < 0 && dates.length < 1000; d = addDays(d, 1)) {
+    dates.add(d);
+  }
+  final last = dates.last;
+  final index = {for (var i = 0; i < dates.length; i++) dates[i]: i};
+  final spent = List<int>.filled(dates.length, 0);
+  var rows = 0;
+  for (final t in txs) {
+    if (t.kind != BudgetKind.flex || !t.tx.live || t.tx.currency != st.currency) continue;
+    if (t.date.compareTo(start) < 0 || t.date.compareTo(last) > 0) continue;
+    final i = index[t.date];
+    if (i == null) continue;
+    spent[i] = _ok(spent[i] - t.amount);
+    rows++;
+  }
+  if (_log.isLoggable(Level.FINER)) logEvent(_log, Level.FINER, 'budget.daySpend', {'days': dates.length, 'tx': rows});
+  return [for (var i = 0; i < dates.length; i++) DaySpend(dates[i], spent[i])];
 }
