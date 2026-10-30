@@ -544,6 +544,7 @@ class _HomeShellState extends State<HomeShell> {
       child: Semantics(
         button: true,
         label: 'Pay-period report, $from – $to',
+        onTap: () => openPeriodReport(context, widget.wc),
         excludeSemantics: true,
         child: InkWell(
           key: const ValueKey('periodBadgeTap'),
@@ -681,16 +682,24 @@ class _HomeShellState extends State<HomeShell> {
                       child: Semantics(
                         button: true,
                         label: 'Pay-period report, ${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}',
+                        onTap: () => openPeriodReport(context, wc),
                         excludeSemantics: true,
-                        child: ActionChip(
-                            key: const ValueKey('periodChip'),
-                            onPressed: () => openPeriodReport(context, wc),
-                            label: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}',
-                                    style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500))),
-                            side: BorderSide(color: context.c.ink),
-                            visualDensity: VisualDensity.compact),
+                        // The chip stays small to look at; its node (and the area around it) is 48 dp for a screen reader.
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: Center(
+                            widthFactor: 1,
+                            child: ActionChip(
+                                key: const ValueKey('periodChip'),
+                                onPressed: () => openPeriodReport(context, wc),
+                                label: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}',
+                                        style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500))),
+                                side: BorderSide(color: context.c.ink),
+                                visualDensity: VisualDensity.compact),
+                          ),
+                        ),
                       ),
                     ),
                   ),

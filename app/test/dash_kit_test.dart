@@ -6,6 +6,7 @@ import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -611,6 +612,19 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       errors.check();
+    });
+
+    testWidgets('TileInfo can be activated by a screen reader: a tap action on its node', (tester) async {
+      final handle = tester.ensureSemantics();
+      var taps = 0;
+      await _pump(tester, Center(child: TileInfo(onTap: () => taps++)));
+      final node = find.semantics.byLabel('What is this?');
+      expect(node, findsOneWidget);
+      expect(node.evaluate().single.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      tester.semantics.tap(node);
+      await tester.pump();
+      expect(taps, 1);
+      handle.dispose();
     });
   });
 }

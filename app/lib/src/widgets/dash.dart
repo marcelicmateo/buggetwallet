@@ -423,6 +423,7 @@ class TileInfo extends DashChip {
   Widget build(BuildContext context) => Semantics(
         button: true,
         label: label,
+        onTap: onTap,
         excludeSemantics: true,
         child: InkWell(
           onTap: onTap,
