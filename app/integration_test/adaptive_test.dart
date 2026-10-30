@@ -52,7 +52,10 @@ void main() {
       }
       // Budget's transaction list is the right column on a wide window, below the charts otherwise.
       await goTab(t, 'Budget');
+      await scrollTo(t, find.textContaining('All transactions in'), SpendingScreen);
       expect(find.textContaining('All transactions in'), findsOneWidget);
+      t.state<ScrollableState>(pageList(SpendingScreen)).position.jumpTo(0);
+      await t.pumpAndSettle();
       // Insights: four graphs with their range controls, then a category's detail on top of it
       await tapVisible(t, find.byKey(const ValueKey('insightsOpen')));
       await Harness.shot(t, '$name-insights');

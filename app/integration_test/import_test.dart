@@ -10,6 +10,7 @@ import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
@@ -120,10 +121,11 @@ void main() {
     expect(wc.txs.where((x) => x.tx.description == 'IKEA ZAGREB'), isEmpty);
 
     await goTab(t, 'Budget');
-    expect(find.text('${monthLong(monthOf(today))}: 87\u00A0€ out'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('outTile')), matching: find.text(moneyExact(2345 + 890 + 5499, 'EUR'))),
+        findsOneWidget);
     await scrollTo(t, find.text('Top places in ${monthLong(monthOf(today))}'), SpendingScreen);
     expect(find.widgetWithText(LineItem, 'DECATHLON ZAGREB'), findsOneWidget);
-    expect(find.widgetWithText(LineItem, '55\u00A0€'), findsWidgets);
+    expect(find.widgetWithText(LineItem, moneyExact(5499, 'EUR')), findsWidgets);
     await scrollTo(t, find.widgetWithText(TxTile, 'LIDL ZAGREB'), SpendingScreen);
     expect(find.text('Weekly shop synthetic'), findsNothing);
     expect(find.text('Top-up by *0000'), findsNothing, reason: 'transfers are hidden');
