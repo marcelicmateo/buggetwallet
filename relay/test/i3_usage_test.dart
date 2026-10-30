@@ -13,7 +13,7 @@ Future<String> _hash(List<int> b) async => [for (final x in (await Sha256().hash
 
 void main() {
   test('state names maxBytes (the --max-bytes flag) and bytes (11 after one 11-byte file); api stays 3', () async {
-    final h = await freshHarness(maxBytes: 4096);
+    final h = await freshHarness(minFileCost: 1, maxBytes: 4096);
     expect((await h.putData(w1, 'dev1', 1, 'hello world')).statusCode, 201);
     final s = await h.state(w1);
     expect(s['api'], 4);
@@ -22,7 +22,7 @@ void main() {
   }, skip: _skip);
 
   test('bytes grows with every file, a snapshot and a blob, and equals their sum', () async {
-    final h = await freshHarness(maxBytes: 1 << 20);
+    final h = await freshHarness(minFileCost: 1, maxBytes: 1 << 20);
     expect((await h.putData(w1, 'dev1', 1, 'hello world')).statusCode, 201); // 11
     expect((await h.putData(w1, 'dev1', 2, 'abcde')).statusCode, 201); // 5
     expect((await h.state(w1))['bytes'], 16);
@@ -32,7 +32,7 @@ void main() {
   }, skip: _skip);
 
   test('bytes never exceeds maxBytes: a PUT past the limit is refused and not counted', () async {
-    final h = await freshHarness(maxBytes: 20);
+    final h = await freshHarness(minFileCost: 1, maxBytes: 20);
     expect((await h.putData(w1, 'dev1', 1, 'hello world')).statusCode, 201); // 11
     expect((await h.putData(w1, 'dev1', 2, 'abcdefghij')).statusCode, 507); // 11 + 10 > 20
     final s = await h.state(w1);
@@ -41,13 +41,13 @@ void main() {
   }, skip: _skip);
 
   test('maxBytes follows the configured limit, not a fixed one', () async {
-    final h = await freshHarness(maxBytes: 12345);
+    final h = await freshHarness(minFileCost: 1, maxBytes: 12345);
     expect((await h.putData(w1, 'dev1', 1, 'x')).statusCode, 201);
     expect((await h.state(w1))['maxBytes'], 12345);
   }, skip: _skip);
 
   test('control: the state of a wallet that exists still answers 200 with the old fields', () async {
-    final h = await freshHarness();
+    final h = await freshHarness(minFileCost: 1);
     expect((await h.putData(w1, 'dev1', 1, 'hello world')).statusCode, 201);
     final s = await h.state(w1);
     expect(s['api'], 4);

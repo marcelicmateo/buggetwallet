@@ -459,7 +459,7 @@ void main() {
     test('a near-full relay: a file over the limit (507) does not stop the snapshot that frees room', () async {
       final small = Directory.systemTemp.createTempSync('bw-p14-full-');
       final slogs = <String>[];
-      final full = Relay(data: small, log: slogs.add, maxBytes: 16000);
+      final full = Relay(data: small, log: slogs.add, maxBytes: 16000, minFileCost: 1); // byte-exact sums (HP-R1 minimum off)
       final sbase = Uri.parse('http://127.0.0.1:${(await full.serve(port: 0)).port}');
       addTearDown(() async {
         await full.close();

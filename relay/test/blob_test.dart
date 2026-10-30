@@ -18,7 +18,7 @@ void main() {
   late String hash;
 
   setUp(() async {
-    h = await freshHarness();
+    h = await freshHarness(minFileCost: 1);
     expect((await h.putData(w1, 'dev1', 1, 'a')).statusCode, 201);
     data = bytes('sealed photo bytes');
     hash = await hashOf(data);
@@ -155,7 +155,7 @@ void main() {
 
   group('--max-bytes counts blobs', () {
     test('blob, file and snapshot PUTs all count the blobs', () async {
-      final small = await freshHarness(maxBytes: 100);
+      final small = await freshHarness(minFileCost: 1, maxBytes: 100);
       Future<int> sput(Uint8List b) async => (await small.send('PUT', bp(w1, await hashOf(b)), key: keyA, body: b)).statusCode;
       expect((await small.putData(w1, 'dev1', 1, 'x' * 10)).statusCode, 201); // 10
       expect(await sput(Uint8List(60)), 201); // 70
@@ -172,7 +172,7 @@ void main() {
     });
 
     test('a refused blob leaves nothing behind', () async {
-      final small = await freshHarness(maxBytes: 50);
+      final small = await freshHarness(minFileCost: 1, maxBytes: 50);
       expect((await small.putData(w1, 'dev1', 1, 'x')).statusCode, 201);
       final b = Uint8List(60);
       expect((await small.send('PUT', bp(w1, await hashOf(b)), key: keyA, body: b)).statusCode, 507);
@@ -182,7 +182,7 @@ void main() {
     });
 
     test('state reports bytes (files + snapshots + blobs) and maxBytes (Stage I)', () async {
-      final small = await freshHarness(maxBytes: 100);
+      final small = await freshHarness(minFileCost: 1, maxBytes: 100);
       Future<int> sput(Uint8List b) async => (await small.send('PUT', bp(w1, await hashOf(b)), key: keyA, body: b)).statusCode;
       expect((await small.putData(w1, 'dev1', 1, 'x' * 10)).statusCode, 201);
       var st = await small.state(w1);
@@ -234,7 +234,7 @@ void main() {
     });
 
     test('restart counts blobs toward --max-bytes and removes temp files', () async {
-      final small = await freshHarness(maxBytes: 50);
+      final small = await freshHarness(minFileCost: 1, maxBytes: 50);
       expect((await small.putData(w1, 'dev1', 1, 'x')).statusCode, 201);
       final b = Uint8List(40);
       expect((await small.send('PUT', bp(w1, await hashOf(b)), key: keyA, body: b)).statusCode, 201);
