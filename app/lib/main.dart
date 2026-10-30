@@ -18,6 +18,7 @@ import 'src/screens/budget.dart';
 import 'src/screens/in_use.dart';
 import 'src/screens/key_backup.dart';
 import 'src/screens/onboarding.dart';
+import 'src/screens/period_report.dart';
 import 'src/screens/save.dart';
 import 'src/screens/settings.dart';
 import 'src/screens/setup_wizard.dart';
@@ -537,18 +538,29 @@ class _HomeShellState extends State<HomeShell> {
   Widget _periodBadge(BuildContext context, bool extended) {
     final p = widget.wc.period();
     final from = shortDate(p.start), to = shortDate(addDays(p.end, -1));
+    final radius = BorderRadius.circular(2);
     return Tooltip(
-      message: 'This pay period',
-      child: Container(
-        key: const ValueKey('periodBadge'),
-        // The narrow rail grows with the text scale (like the rail itself), so large text still gets a box that fits it.
-        width: extended ? 188 : (72 * MediaQuery.textScalerOf(context).scale(1)).clamp(72.0, 152.0),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        decoration: BoxDecoration(border: Border.all(color: context.c.ink), borderRadius: BorderRadius.circular(2)),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(extended ? '$from – $to' : '$from –\n$to',
-              textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500)),
+      message: 'Pay-period report',
+      child: Semantics(
+        button: true,
+        label: 'Pay-period report, $from – $to',
+        excludeSemantics: true,
+        child: InkWell(
+          key: const ValueKey('periodBadgeTap'),
+          borderRadius: radius,
+          onTap: () => openPeriodReport(context, widget.wc),
+          child: Container(
+            key: const ValueKey('periodBadge'),
+            // The narrow rail grows with the text scale (like the rail itself), so large text still gets a box that fits it.
+            width: extended ? 188 : (72 * MediaQuery.textScalerOf(context).scale(1)).clamp(72.0, 152.0),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            decoration: BoxDecoration(border: Border.all(color: context.c.ink), borderRadius: radius),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(extended ? '$from – $to' : '$from –\n$to',
+                  textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500)),
+            ),
+          ),
         ),
       ),
     );
@@ -665,14 +677,21 @@ class _HomeShellState extends State<HomeShell> {
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: width / 2 < 280 ? width / 2 : 280),
                     child: Tooltip(
-                      message: 'This pay period',
-                      child: Chip(
-                          label: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}',
-                                  style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500))),
-                          side: BorderSide(color: context.c.ink),
-                          visualDensity: VisualDensity.compact),
+                      message: 'Pay-period report',
+                      child: Semantics(
+                        button: true,
+                        label: 'Pay-period report, ${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}',
+                        excludeSemantics: true,
+                        child: ActionChip(
+                            key: const ValueKey('periodChip'),
+                            onPressed: () => openPeriodReport(context, wc),
+                            label: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}',
+                                    style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500))),
+                            side: BorderSide(color: context.c.ink),
+                            visualDensity: VisualDensity.compact),
+                      ),
                     ),
                   ),
                 ),

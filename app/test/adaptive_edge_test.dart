@@ -303,7 +303,7 @@ void main() {
           }
         }
         // Compact: the AppBar period chip. From 600 dp there is no app bar: the period sits in the rail and scales down, never overflows.
-        expect(find.byType(Chip), w >= 600 ? findsNothing : findsOneWidget);
+        expect(find.byKey(const ValueKey('periodChip')), w >= 600 ? findsNothing : findsOneWidget);
         expect(find.byType(AppBar), w >= 600 ? findsNothing : findsOneWidget);
         expect(find.byKey(const ValueKey('periodBadge')), w >= 600 ? findsOneWidget : findsNothing);
         if (w >= 600) {

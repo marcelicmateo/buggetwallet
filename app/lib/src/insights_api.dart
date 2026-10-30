@@ -255,6 +255,22 @@ extension WalletInsights on WalletController {
         return savedByWaiting(wish, fromMillis: from, toMillis: now.millisecondsSinceEpoch + 1);
       });
 
+  /// Wishes skipped in the pay period [start, end) (end excluded): `decided` from local midnight of [start] to local midnight of [end].
+  SavedByWaiting savedBetween(String start, String end) => memo(
+      MemoKey('rep.savedIn', (start, end)),
+      () => savedByWaiting(wish,
+          fromMillis: DateTime.parse(start).millisecondsSinceEpoch, toMillis: DateTime.parse(end).millisecondsSinceEpoch));
+
+  /// The weekly reviews done in the pay period [start, end) (end excluded), as dates, ascending.
+  List<String> reviewsBetween(String start, String end) =>
+      memo(MemoKey('rep.reviewsIn', (start, end)), () => reviewsIn(repo.reviewDates(), start, end));
+
+  /// Net flexible spending per day of [start, end) (end excluded), oldest day first: + = spent, − = a net refund.
+  List<DaySpend> periodDaySpendFor(String start, String end) => memo(
+      MemoKey('rep.daySpend', (start, end)),
+      () => timed('reports.daySpend', () => periodDaySpend(txs, settings, start, end, table: categoryTable),
+          fields: {'tx': txs.length}, warnMs: 50));
+
   /// Every skipped wish, all time.
   SavedByWaiting savedAllTime() => memo(const MemoKey('rep.savedAll'), () => savedByWaitingAll(wish));
 
