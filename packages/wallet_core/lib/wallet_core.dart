@@ -56,6 +56,8 @@ export 'src/budget.dart'
         Affordability,
         affordability,
         averageByCategory,
+        averageOut,
+        changePermille,
         BudgetPreset,
         BudgetPresetKind,
         budgetPreset,
@@ -238,7 +240,7 @@ export 'src/repo.dart'
         WalletRepoTags,
         WalletRepoTx;
 export 'src/reports.dart'
-    show CategoryPeriod, categoryByPeriod, PeriodReport, periodReports, SavedByWaiting, savedByWaiting, savedByWaitingAll;
+    show CategoryPeriod, categoryByPeriod, PeriodReport, periodReports, reviewsIn, SavedByWaiting, savedByWaiting, savedByWaitingAll;
 export 'src/rules.dart' show PayeeCount, RuleSuggestion, ruleSuggestionFor, ruleSuggestions, uncategorisedPayees;
 export 'src/rules.dart' show merchantPatternId, MerchantPattern, MerchantRule, MoveDirection, RuleKind, ruleHits, rulesView, RuleView;
 export 'src/search.dart' show matchSpans, SearchFilter;
