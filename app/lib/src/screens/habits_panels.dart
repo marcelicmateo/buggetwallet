@@ -8,6 +8,7 @@ import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/dash.dart';
+import '../widgets/sheets.dart';
 import 'bill_history.dart';
 import 'recurring_sheet.dart';
 
@@ -95,7 +96,15 @@ class ExpectedBillsPanel extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
       Tile(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-          trailing == null ? label : HeadingRow(label, trailing!),
+          HeadingRow(
+              label,
+              Wrap(alignment: WrapAlignment.end, children: [
+                TileInfo(
+                    key: const ValueKey('expectedInfo'),
+                    onTap: () => showInfoSheet(context, 'Expected bills',
+                        'Found in your imports, or added by you. A confirmed bill is set aside from your daily money until it is paid. A bill that comes less often than monthly is set aside in full. Rent, loan and bills in your plan are already counted.')),
+                if (trailing != null) trailing!,
+              ])),
           if (candidates.isEmpty && confirmed.isEmpty)
             const Padding(
                 padding: EdgeInsets.only(top: 8),
@@ -182,7 +191,6 @@ class ExpectedBillsPanel extends StatelessWidget {
       key: ValueKey('bill:${b.id}'),
       constraints: const BoxConstraints(minHeight: touchMin),
       padding: const EdgeInsets.symmetric(vertical: 4),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: context.c.line))),
       child: Row(children: [
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -198,7 +206,7 @@ class ExpectedBillsPanel extends StatelessWidget {
                 [
                   wc.categoryTable.label(b.category),
                   if (!monthly) billPeriodText(b.intervalDays),
-                  if (!dateInChip) 'next ${shortDateOrRaw(b.nextDue)}',
+                  if (!dateInChip && !b.finished) 'next ${shortDateOrRaw(b.nextDue)}',
                 ].join(' · ')),
             if (range != null) _meta(context, range, key: ValueKey('billRange:${b.id}')),
             if (instalments != null) _meta(context, instalments, key: ValueKey('billInstalments:${b.id}')),

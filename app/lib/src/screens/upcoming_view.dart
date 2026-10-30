@@ -27,6 +27,16 @@ class UpcomingView implements Listenable {
   List<UpcomingItem> upcomingItems(String from, String to) => _wc.upcomingItems(from, to);
   ({int count, int total}) countedIn(List<UpcomingItem> items) => _wc.countedIn(items);
 
+  /// The costs "Before payday" holds that fall after payday: long bills held until paid. The list of the period ends at payday, so
+  /// they are listed apart (core's `reservedCycles`, each with its own reserve).
+  List<DueCycle> heldCycles() {
+    final end = _wc.period().end;
+    return [
+      for (final x in _wc.period().reservedCycles)
+        if (x.due.compareTo(end) >= 0) x
+    ];
+  }
+
   // ---------- actions ----------
   void confirmSuggestion(UpcomingItem it, {required int amount, String? title, String? date, String? category}) =>
       _wc.confirmSuggestion(it, amount: amount, title: title, date: date, category: category);

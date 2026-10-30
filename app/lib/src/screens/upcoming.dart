@@ -92,6 +92,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                   if (i.date == _day) i
               ];
         final counted = view.countedIn(items);
+        final held = view.heldCycles();
         final today = view.today();
         return Scaffold(
           appBar: DialogAppBar(
@@ -176,6 +177,15 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                       ),
                     ),
                 ]),
+                if (!_next && _day == null && held.isNotEmpty)
+                  Panel(key: const ValueKey('upcomingHeld'), children: [
+                    const SectionHead('Held until paid'),
+                    Rows(children: [
+                      for (final x in held)
+                        LineItem(x.bill.label.isNotEmpty ? x.bill.label : x.bill.payee, moneyExact(x.reserve, cur),
+                            key: ValueKey('upcomingHeld:${x.bill.id}'), sub: 'Due ${shortDateOrRaw(x.due)}'),
+                    ]),
+                  ]),
               ])),
         );
       });
