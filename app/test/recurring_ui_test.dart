@@ -125,7 +125,7 @@ void main() {
       await see(tester, find.byKey(ValueKey('bill:$id')));
       expect(find.descendant(of: find.byKey(ValueKey('bill:$id')), matching: find.textContaining('yearly')), findsOneWidget);
       expect(find.byKey(ValueKey('billHeld:$id')), findsOneWidget);
-      expect(find.text('Held in full until paid'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(ValueKey('bill:$id')), matching: find.text('Held')), findsOneWidget);
       expect(wc.period().dueCycles.any((c) => c.bill.id == id && c.reserve == 60000), isTrue);
     });
 

@@ -7,6 +7,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/dash.dart';
 import 'bill_history.dart';
 import 'recurring_sheet.dart';
 
@@ -42,13 +43,15 @@ class ReviewDayRow extends StatelessWidget {
   }
 }
 
-/// Plan › Expected bills: bills found in the imports and bills added by hand. Candidates come first (Confirm / Not a bill), then
-/// confirmed bills (amount, how often, next date, a "Paid" mark once the payment is in, Edit, Mark paid or Skip, History, Remove).
-/// A long bill (less often than monthly) says it is held in full until paid; a range says what it sets aside; a bill paid in parts
-/// says how much is paid. Dismissed ones are not shown.
+/// Bills › Expected bills (a paper tile): bills found in the imports and bills added by hand. Candidates come first (Confirm / Not a
+/// bill), then confirmed bills: amount, how often, ONE state chip (Paid, Overdue, a date, Held) and Edit, Mark paid or Skip, History,
+/// Remove. A long bill (less often than monthly) is held in full until paid (the Held chip); a range says what it sets aside; a bill
+/// paid in parts says how much is paid. Dismissed ones are not shown. [trailing] (the Bills tab: Scan and Add bill) sits in the label
+/// row; without it the tile is followed by a "+ Bill" tile of its own.
 class ExpectedBillsPanel extends StatelessWidget {
   final WalletController wc;
-  const ExpectedBillsPanel({super.key, required this.wc});
+  final Widget? trailing;
+  const ExpectedBillsPanel({super.key, required this.wc, this.trailing});
 
   static String _name(RecurringBill b) => b.label.isNotEmpty ? b.label : b.payee;
 
@@ -88,79 +91,82 @@ class ExpectedBillsPanel extends StatelessWidget {
     final candidates = bills.where((b) => b.status == 'candidate').toList();
     final confirmed = bills.where((b) => b.status == 'confirmed').toList();
     final allMonthly = candidates.every((b) => RecurringPeriod.of(b.intervalDays) == RecurringPeriod.monthly);
-    return Panel(children: [
-      const SectionHead('Expected bills'),
-      Explainer(wc, 'expectedBills',
-          'Found in your imports, or added by you. A confirmed bill is set aside from your daily money until it is paid. A bill that comes less often than monthly is set aside in full. Rent, loan and bills in your plan are already counted.'),
-      if (wc.billsCost() case final cost?)
-        Text(
-            'Bills and subscriptions: ${cost.approximate ? 'about ' : ''}${moneyExact(cost.monthly, cur)} a month · '
-            '${cost.approximate ? 'about ' : ''}${moneyExact(cost.yearly, cur)} a year',
-            key: const ValueKey('recurringCost'),
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-      if (candidates.isEmpty && confirmed.isEmpty)
-        const EmptyNote('No repeating bills found yet. They show up after a few months of imports.'),
-      if (candidates.isNotEmpty) ...[
-        Heading(allMonthly ? 'Looks like a monthly bill' : 'Looks like a repeating bill', size: BwType.headingSize),
-        Rows(children: [
-          for (final b in candidates)
-            Padding(
-              key: ValueKey('candidate:${b.id}'),
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                SplitRow(
-                    start: Text(_name(b), style: const TextStyle(fontWeight: FontWeight.w500)),
-                    end: Text(moneyExact(b.expectedAmount, cur),
-                        textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
-                Text(
-                    RecurringPeriod.of(b.intervalDays) == RecurringPeriod.monthly
-                        ? 'Next about ${shortDateOrRaw(b.nextDue)}'
-                        : '${billPeriodText(b.intervalDays)[0].toUpperCase()}${billPeriodText(b.intervalDays).substring(1)} · next about ${shortDateOrRaw(b.nextDue)}',
-                    style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
-                const SizedBox(height: 4),
-                Wrap(spacing: 8, runSpacing: 4, children: [
-                  OutlinedButton(
-                      key: ValueKey('confirm:${b.id}'),
-                      style: accentOutlined(context),
-                      onPressed: () {
-                        logNav('bill.confirm');
-                        wc.confirmRecurring(b.id);
-                      },
-                      child: const Text('Confirm')),
-                  TextButton(
-                      key: ValueKey('dismiss:${b.id}'),
-                      onPressed: () {
-                        logNav('bill.dismiss');
-                        wc.dismissRecurring(b.id);
-                      },
-                      child: const Text('Not a bill')),
-                  TextButton(
-                      key: ValueKey('recurringEdit:${b.id}'),
-                      onPressed: () => openRecurringForm(context, wc, edit: b),
-                      child: const Text('Edit')),
-                ]),
-              ]),
-            ),
+    const label = TileLabel('Expected bills');
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+      Tile(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          trailing == null ? label : HeadingRow(label, trailing!),
+          if (candidates.isEmpty && confirmed.isEmpty)
+            const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: EmptyNote('No repeating bills found yet. They show up after a few months of imports.')),
+          if (candidates.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Heading(allMonthly ? 'Looks like a monthly bill' : 'Looks like a repeating bill', size: BwType.headingSize),
+            Rows(children: [
+              for (final b in candidates)
+                Padding(
+                  key: ValueKey('candidate:${b.id}'),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    SplitRow(
+                        start: Text(_name(b), style: const TextStyle(fontWeight: FontWeight.w500)),
+                        end: Text(moneyExact(b.expectedAmount, cur),
+                            textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
+                    Text(
+                        RecurringPeriod.of(b.intervalDays) == RecurringPeriod.monthly
+                            ? 'Next about ${shortDateOrRaw(b.nextDue)}'
+                            : '${billPeriodText(b.intervalDays)[0].toUpperCase()}${billPeriodText(b.intervalDays).substring(1)} · next about ${shortDateOrRaw(b.nextDue)}',
+                        style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+                    const SizedBox(height: 4),
+                    Wrap(spacing: 8, runSpacing: 4, children: [
+                      OutlinedButton(
+                          key: ValueKey('confirm:${b.id}'),
+                          style: accentOutlined(context),
+                          onPressed: () {
+                            logNav('bill.confirm');
+                            wc.confirmRecurring(b.id);
+                          },
+                          child: const Text('Confirm')),
+                      TextButton(
+                          key: ValueKey('dismiss:${b.id}'),
+                          onPressed: () {
+                            logNav('bill.dismiss');
+                            wc.dismissRecurring(b.id);
+                          },
+                          child: const Text('Not a bill')),
+                      TextButton(
+                          key: ValueKey('recurringEdit:${b.id}'),
+                          onPressed: () => openRecurringForm(context, wc, edit: b),
+                          child: const Text('Edit')),
+                    ]),
+                  ]),
+                ),
+            ]),
+          ],
+          if (confirmed.isNotEmpty) ...[
+            if (candidates.isNotEmpty) const Heading('Confirmed', size: BwType.headingSize),
+            Rows(children: [
+              for (final b in confirmed) _confirmedRow(context, b, cur, today),
+            ]),
+          ],
         ]),
-      ],
-      if (confirmed.isNotEmpty) ...[
-        const Heading('Confirmed', size: BwType.headingSize),
-        Rows(children: [
-          for (final b in confirmed) _confirmedRow(context, b, cur, today),
-        ]),
-      ],
-      const SizedBox(height: 8),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: OutlinedButton.icon(
-          key: const ValueKey('addRecurring'),
-          style: accentOutlined(context),
-          onPressed: () => openRecurringForm(context, wc),
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('Add bill'),
-        ),
       ),
+      if (trailing == null) ...[
+        const SizedBox(height: 10),
+        AddTile(key: const ValueKey('addRecurring'), label: 'Bill', onTap: () => openRecurringForm(context, wc)),
+      ],
     ]);
+  }
+
+  /// The one state a bill shows: All paid, Overdue, Paid (a monthly or shorter bill whose payment is in), Held (a long bill) or the
+  /// date it is due. The date also lives in the chip, so the grey line says "next …" only for the other states.
+  StateChip _chip(RecurringBill b, String today) {
+    if (b.finished) return const StateChip.onPace(text: 'All paid');
+    if (b.nextDue.compareTo(today) < 0) return const StateChip.over(text: 'Overdue');
+    if (!b.isShort && !b.isLong && wc.billPaidThisPeriod(b)) return const StateChip.onPace(text: 'Paid');
+    if (b.isLong) return StateChip.held(key: ValueKey('billHeld:${b.id}'));
+    return StateChip.date(shortDateOrRaw(b.nextDue));
   }
 
   Widget _confirmedRow(BuildContext context, RecurringBill b, String cur, String today) {
@@ -169,35 +175,39 @@ class ExpectedBillsPanel extends StatelessWidget {
     final instalments = billInstalmentText(b);
     final monthly = RecurringPeriod.of(b.intervalDays) == RecurringPeriod.monthly;
     final markPaid = parts > 0 || b.payee.isEmpty;
+    final chip = _chip(b, today);
+    final dateInChip = chip.state == DashState.date;
+    final heldInChip = chip.state == DashState.held;
     return Container(
       key: ValueKey('bill:${b.id}'),
       constraints: const BoxConstraints(minHeight: touchMin),
       padding: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: context.c.line))),
       child: Row(children: [
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // The amount shares the name's line (at most half the row): at large text a side-by-side amount left the column 34 dp wide.
             SplitRow(
                 start: Text(_name(b), style: const TextStyle(fontWeight: FontWeight.w500)),
-                end: Text(moneyExact(b.reserveAmount, cur),
-                    textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
+                end: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(moneyExact(b.reserveAmount, cur), style: numStyle.copyWith(fontWeight: FontWeight.w500)))),
             _meta(
                 context,
-                [wc.categoryTable.label(b.category), if (!monthly) billPeriodText(b.intervalDays), 'next ${shortDateOrRaw(b.nextDue)}']
-                    .join(' · ')),
+                [
+                  wc.categoryTable.label(b.category),
+                  if (!monthly) billPeriodText(b.intervalDays),
+                  if (!dateInChip) 'next ${shortDateOrRaw(b.nextDue)}',
+                ].join(' · ')),
             if (range != null) _meta(context, range, key: ValueKey('billRange:${b.id}')),
             if (instalments != null) _meta(context, instalments, key: ValueKey('billInstalments:${b.id}')),
             if (parts > 0)
               _meta(context, billPaidText(parts, b.reserveAmount, cur), icon: Icons.timelapse, key: ValueKey('billParts:${b.id}')),
-            if (b.isLong && !b.finished)
+            if (b.isLong && !b.finished && !heldInChip)
               _meta(context, 'Held in full until paid', icon: Icons.lock_outline, key: ValueKey('billHeld:${b.id}')),
             if (b.coveredByPlanIn(wc.categoryTable) && !b.isLong) _meta(context, 'Covered by your plan'),
-            if (b.finished)
-              const StatusLabel(good: true, text: 'All payments made')
-            else if (b.nextDue.compareTo(today) < 0)
-              const StatusLabel(good: false, text: 'Overdue')
-            else if (!b.isShort && !b.isLong && wc.billPaidThisPeriod(b))
-              const StatusLabel(good: true, text: 'Paid'),
+            Padding(padding: const EdgeInsets.only(top: 4), child: chip),
             Wrap(spacing: 4, children: [
               if (markPaid)
                 TextButton(

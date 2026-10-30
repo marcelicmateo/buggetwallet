@@ -1,5 +1,7 @@
 // Every money amount on Today, Spending, Wishlist and Goals uses IBM Plex Mono with tabular figures, and amounts in a list
 // share one right edge. SYNTHETIC data only.
+import 'package:budget_wallet/src/theme.dart';
+import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -89,8 +91,11 @@ int _check(WidgetTester tester, String tab) {
     if (s == null || !_money.hasMatch(s)) continue;
     n++;
     final st = _resolved(tester, e)!;
-    expect(st.fontFamily, 'IBM Plex Mono', reason: '$tab: "$s"');
-    expect(st.fontFeatures, contains(const FontFeature.tabularFigures()), reason: '$tab: "$s"');
+    // A dashboard tile's big figure is Plex Sans semibold with proportional figures (RX, CONCEPT §5); every other amount is Plex Mono.
+    final inTile = find.ancestor(of: find.byElementPredicate((x) => x == e), matching: find.byType(Tile)).evaluate().isNotEmpty;
+    final big = inTile && (st.fontSize ?? 0) >= BwType.displaySize - 0.5;
+    expect(st.fontFamily, big ? 'IBM Plex Sans' : 'IBM Plex Mono', reason: '$tab: "$s"');
+    if (!big) expect(st.fontFeatures, contains(const FontFeature.tabularFigures()), reason: '$tab: "$s"');
   }
   return n;
 }

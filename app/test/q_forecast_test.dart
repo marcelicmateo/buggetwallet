@@ -2,7 +2,7 @@
 // chart under the payday plan, hidden without a trusted bank balance). Fixed clock (20 Oct 2026), synthetic data only.
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
-import 'package:budget_wallet/src/screens/habits_panels.dart';
+import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/payday_plan.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/charts.dart';
@@ -38,18 +38,19 @@ void tw(String name, Future<void> Function(WidgetTester t) body, {Timeout? timeo
 void main() {
   group('Q10 bills cost header', () {
     Future<void> panel(WidgetTester t, WalletController wc, {double scale = 1, Size size = const Size(400, 1400)}) =>
-        pumpApp(t, Scaffold(body: SingleChildScrollView(child: ExpectedBillsPanel(wc: wc))), textScale: scale, size: size);
+        pumpApp(t, Scaffold(body: BillsScreen(wc: wc)), textScale: scale, size: size);
 
-    tw('a monthly and a yearly bill: X a month · Y a year', (t) async {
+    tw('a monthly and a yearly bill: the Per month and Per year tiles', (t) async {
       final wc = _wallet();
       wc.addRecurringBill(label: 'Synthetic phone', category: 'Groceries', amount: 30000, intervalDays: 30, firstDue: '2026-10-25');
       wc.addRecurringBill(label: 'Synthetic cover', category: 'Groceries', amount: 60000, intervalDays: 365, firstDue: '2027-03-01');
       await panel(t, wc);
       final cost = wc.billsCost()!;
       expect((cost.monthly, cost.yearly, cost.approximate), (35000, 420000, false));
-      expect(
-          find.text('Bills and subscriptions: ${moneyExact(35000, 'EUR')} a month · ${moneyExact(420000, 'EUR')} a year'), findsOneWidget);
-      expect(find.textContaining('about'), findsNothing);
+      expect(find.descendant(of: _key('recurringCost'), matching: find.text(moneyExact(35000, 'EUR'))), findsOneWidget);
+      expect(find.text('PER YEAR'), findsOneWidget);
+      expect(find.text(moneyExact(420000, 'EUR')), findsOneWidget);
+      expect(find.text('about'), findsNothing);
     }, timeout: _t);
 
     tw('a bill whose amount changes makes the figures "about"', (t) async {
@@ -64,19 +65,18 @@ void main() {
           firstDue: '2026-10-25');
       await panel(t, wc);
       expect(wc.billsCost()!.approximate, isTrue);
-      expect(
-          find.textContaining(
-              'Bills and subscriptions: about ${moneyExact(10000, 'EUR')} a month · about ${moneyExact(120000, 'EUR')} a year'),
-          findsOneWidget);
+      expect(find.text(moneyExact(10000, 'EUR')), findsOneWidget);
+      expect(find.text(moneyExact(120000, 'EUR')), findsOneWidget);
+      expect(find.text('about'), findsNWidgets(2), reason: 'one word on each tile, not a sentence');
     }, timeout: _t);
 
-    tw('no confirmed bill: no header', (t) async {
+    tw('no confirmed bill: no cost tiles', (t) async {
       final wc = _wallet();
       await panel(t, wc);
       expect(_key('recurringCost'), findsNothing);
     }, timeout: _t);
 
-    tw('the header fits 320 dp at text 2.0', (t) async {
+    tw('the cost tiles fit 320 dp at text 2.0', (t) async {
       final wc = _wallet();
       wc.addRecurringBill(label: 'Synthetic phone', category: 'Groceries', amount: 30000, intervalDays: 30, firstDue: '2026-10-25');
       await panel(t, wc, scale: 2, size: const Size(320, 900));
