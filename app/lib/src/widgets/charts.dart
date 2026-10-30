@@ -620,13 +620,20 @@ class PaceBar extends StatelessWidget {
 /// (hatched) = over, thick accent outline = today, thin outline = still to come. Under it one muted counts line.
 class DayDots extends StatelessWidget {
   final List<PeriodDay> days;
-  const DayDots({super.key, required this.days});
+
+  /// A tighter grid (11 dp squares) for a narrow row next to the hero number.
+  final bool compact;
+  const DayDots({super.key, required this.days, this.compact = false});
 
   /// Square and gap sizes (dp); a square is never smaller than 10.
-  static const double square = 13, gap = 3;
+  static const double square = 13, gap = 3, compactSquare = 11, compactGap = 2;
 
   /// The grid's width: seven columns.
-  static const double width = 7 * square + 6 * gap;
+  static const double width = 7 * square + 6 * gap, compactWidth = 7 * compactSquare + 6 * compactGap;
+
+  double get _square => compact ? compactSquare : square;
+  double get _gap => compact ? compactGap : gap;
+  double get _width => compact ? compactWidth : width;
 
   static int _count(List<PeriodDay> days, DayMark m) => days.where((d) => d.mark == m).length;
 
@@ -657,7 +664,7 @@ class DayDots extends StatelessWidget {
         case DayMark.toCome:
           box = DecoratedBox(decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.lineStrong)));
       }
-      return SizedBox(key: ValueKey('dayDot:${d.date}'), width: square, height: square, child: box);
+      return SizedBox(key: ValueKey('dayDot:${d.date}'), width: _square, height: _square, child: box);
     }
 
     return Semantics(
@@ -667,17 +674,17 @@ class DayDots extends StatelessWidget {
       child:
           Column(key: const ValueKey('dayDots'), crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         SizedBox(
-          width: width,
+          width: _width,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             for (var r = 0; r < rows; r++)
               Padding(
-                padding: EdgeInsets.only(top: r == 0 ? 0 : gap),
+                padding: EdgeInsets.only(top: r == 0 ? 0 : _gap),
                 child: Row(children: [
                   for (var col = 0; col < 7; col++) ...[
-                    if (col > 0) const SizedBox(width: gap),
+                    if (col > 0) SizedBox(width: _gap),
                     () {
                       final i = r * 7 + col - offset;
-                      return i >= 0 && i < days.length ? cell(days[i]) : const SizedBox(width: square, height: square);
+                      return i >= 0 && i < days.length ? cell(days[i]) : SizedBox(width: _square, height: _square);
                     }(),
                   ],
                 ]),
@@ -688,7 +695,7 @@ class DayDots extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: SizedBox(
-              width: width,
+              width: _width,
               child: Text('$within within · $over over',
                   key: const ValueKey('dayDotsCounts'), style: TextStyle(fontSize: 12, height: 1.25, color: c.muted)),
             ),

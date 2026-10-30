@@ -8,7 +8,14 @@ class PeriodDay {
   final String date;
   final DayMark mark;
   final int spent, allowance; // cents; 0/0 for today and to come
-  const PeriodDay(this.date, this.mark, this.spent, this.allowance);
+  const PeriodDay({required this.date, required this.mark, this.spent = 0, this.allowance = 0});
+
+  @override
+  bool operator ==(Object other) =>
+      other is PeriodDay && other.date == date && other.mark == mark && other.spent == spent && other.allowance == allowance;
+
+  @override
+  int get hashCode => Object.hash(date, mark, spent, allowance);
 }
 
 /// One entry per day of the period, ascending. Stand-in: one `computePeriod` per past day.
@@ -22,12 +29,16 @@ List<PeriodDay> periodDays(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final out = <PeriodDay>[];
   for (var d = p.start; d.compareTo(p.end) < 0; d = addDays(d, 1)) {
     if (!p.paydayPassed && d == today) {
-      out.add(PeriodDay(d, DayMark.today, 0, 0));
+      out.add(PeriodDay(date: d, mark: DayMark.today));
     } else if (!p.paydayPassed && d.compareTo(today) > 0) {
-      out.add(PeriodDay(d, DayMark.toCome, 0, 0));
+      out.add(PeriodDay(date: d, mark: DayMark.toCome));
     } else {
       final q = at(d);
-      out.add(PeriodDay(d, q.spentToday > q.allowanceToday ? DayMark.over : DayMark.within, q.spentToday, q.allowanceToday));
+      out.add(PeriodDay(
+          date: d,
+          mark: q.spentToday > q.allowanceToday ? DayMark.over : DayMark.within,
+          spent: q.spentToday,
+          allowance: q.allowanceToday));
     }
   }
   return out;

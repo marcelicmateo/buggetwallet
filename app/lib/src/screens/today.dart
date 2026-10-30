@@ -223,6 +223,9 @@ class _HeroNumber extends StatelessWidget {
 
   static const double _gap = 12;
 
+  /// The smallest share of its normal size the number is scaled to, to keep the dots beside it.
+  static const double _minScale = 0.65;
+
   @override
   Widget build(BuildContext context) {
     final c = context.c;
@@ -237,15 +240,21 @@ class _HeroNumber extends StatelessWidget {
       child: days.isEmpty
           ? number
           : LayoutBuilder(builder: (context, box) {
-              final dots = DayDots(days: days);
-              if (_naturalWidth(context, text, style) + _gap + DayDots.width <= box.maxWidth) {
-                return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(child: Align(alignment: Alignment.centerLeft, child: number)),
-                  const SizedBox(width: _gap),
-                  dots,
-                ]);
+              // Beside the number whenever it can be: the number may shrink to _minScale, the squares to 11 dp. Under it only
+              // when even that does not fit (320 dp at a large text scale, a huge amount).
+              final natural = _naturalWidth(context, text, style);
+              for (final compact in const [false, true]) {
+                final grid = compact ? DayDots.compactWidth : DayDots.width;
+                if (box.maxWidth - _gap - grid >= natural * _minScale) {
+                  return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: Align(alignment: Alignment.centerLeft, child: number)),
+                    const SizedBox(width: _gap),
+                    DayDots(days: days, compact: compact),
+                  ]);
+                }
               }
-              return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [number, const SizedBox(height: 10), dots]);
+              return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, children: [number, const SizedBox(height: 10), DayDots(days: days)]);
             }),
     );
   }

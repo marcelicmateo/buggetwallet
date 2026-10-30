@@ -1,5 +1,7 @@
 // Today's day dots (DD): one square per day of the pay period, Monday-first columns, counts line, spoken label, wrapping
 // under the number on a narrow, large-text screen. SYNTHETIC wallets on the fixed clock of `budgetWallet` (Tuesday 20 Oct 2026).
+import 'dart:io';
+
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/dd_standin.dart';
 import 'package:budget_wallet/src/screens/today.dart';
@@ -7,6 +9,7 @@ import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/charts.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/wallet.dart';
@@ -28,7 +31,7 @@ List<PeriodDay> _days({int length = 31, int within = 10, int over = 2, bool toda
     } else {
       m = DayMark.toCome;
     }
-    out.add(PeriodDay(d, m, 0, 0));
+    out.add(PeriodDay(date: d, mark: m));
   }
   return out;
 }
@@ -44,7 +47,20 @@ Finder get _anyDot => find.byWidgetPredicate((w) => w.key is ValueKey<String> &&
 
 Offset _at(WidgetTester tester, String date) => tester.getTopLeft(find.byKey(ValueKey('dayDot:$date')));
 
+/// The real IBM Plex fonts: the hero number's width decides beside or under, and the test font (Ahem) is far wider.
+Future<void> _loadFonts() async {
+  for (final (fam, prefix) in [('IBM Plex Sans', 'IBMPlexSans'), ('IBM Plex Mono', 'IBMPlexMono')]) {
+    final l = FontLoader(fam);
+    for (final w in ['Regular', 'Medium', 'SemiBold']) {
+      l.addFont(File('assets/fonts/$prefix-$w.ttf').readAsBytes().then(ByteData.sublistView));
+    }
+    await l.load();
+  }
+}
+
 void main() {
+  setUpAll(_loadFonts);
+
   group('DayDots', () {
     testWidgets('one square per day, none smaller than 10 dp', (tester) async {
       await pumpApp(tester, _dots(_days()));
@@ -68,8 +84,8 @@ void main() {
     });
 
     testWidgets('a month starting on Monday begins in the first column', (tester) async {
-      await pumpApp(
-          tester, _dots([for (var i = 0; i < 14; i++) PeriodDay('2026-06-${(i + 1).toString().padLeft(2, '0')}', DayMark.toCome, 0, 0)]));
+      await pumpApp(tester,
+          _dots([for (var i = 0; i < 14; i++) PeriodDay(date: '2026-06-${(i + 1).toString().padLeft(2, '0')}', mark: DayMark.toCome)]));
       expect(_at(tester, '2026-06-01').dx, _at(tester, '2026-06-08').dx);
       expect(_at(tester, '2026-06-08').dy - _at(tester, '2026-06-01').dy, DayDots.square + DayDots.gap);
     });
@@ -111,11 +127,25 @@ void main() {
       h.dispose();
     });
 
+    testWidgets('no saved period start: today first, the rest to come; a start after today: all to come', (tester) async {
+      final h = tester.ensureSemantics();
+      await pumpApp(tester, _dots(_days(length: 20, within: 0, over: 0)));
+      expect(_anyDot, findsNWidgets(20));
+      expect(find.byKey(const ValueKey('dayDotsCounts')), findsNothing);
+      expect(tester.getSemantics(find.byKey(const ValueKey('dayDots'))).label,
+          'Pay period, 20 days: 0 within the day\'s money, 0 over, today, 19 to come.');
+      await pumpApp(tester, _dots([for (final d in _days(length: 20, within: 0, over: 0)) PeriodDay(date: d.date, mark: DayMark.toCome)]));
+      expect(tester.getSemantics(find.byKey(const ValueKey('dayDots'))).label,
+          'Pay period, 20 days: 0 within the day\'s money, 0 over, 20 to come.');
+      expect(tester.takeException(), isNull);
+      h.dispose();
+    });
+
     testWidgets('an ended period: every day has its verdict, no today square', (tester) async {
       final h = tester.ensureSemantics();
       final days = [
         for (var i = 0; i < 30; i++)
-          PeriodDay('2026-09-${(i + 1).toString().padLeft(2, '0')}', i % 5 == 0 ? DayMark.over : DayMark.within, 0, 0)
+          PeriodDay(date: '2026-09-${(i + 1).toString().padLeft(2, '0')}', mark: i % 5 == 0 ? DayMark.over : DayMark.within)
       ];
       await pumpApp(tester, _dots(days));
       expect(_anyDot, findsNWidgets(30));
@@ -207,6 +237,47 @@ void main() {
       expect(grid.left, lessThan(number.left + 4), reason: 'left-aligned under the number');
       expect(tester.getSize(find.byKey(const ValueKey('dayDot:2026-10-20'))).shortestSide, greaterThanOrEqualTo(10));
       expect(grid.right, lessThanOrEqualTo(320));
+      expect(tester.takeException(), isNull);
+    });
+
+    /// A wallet whose safe-to-spend today is about [cents] (the salary is fitted from two probes: the figure is affine in it).
+    WalletController heroOf(int cents) {
+      int safe(int salary) {
+        final w = budgetWallet(budgets: false);
+        w.repo.updateSettings({'salary': salary});
+        w.reload();
+        return w.period().safeToday;
+      }
+
+      final a = safe(100000), b = safe(300000);
+      final salary = 100000 + ((cents - a) * 200000 / (b - a)).round();
+      final wc = budgetWallet(budgets: false);
+      wc.repo.updateSettings({'salary': salary});
+      wc.reload();
+      expect(wc.period().safeToday, closeTo(cents, cents * 0.05), reason: 'the fitted wallet');
+      return wc;
+    }
+
+    for (final width in [360.0, 411.0]) {
+      for (final cents in [5200, 67100, 180300]) {
+        testWidgets('phone ${width.round()} dp, hero about ${cents ~/ 100}: the dots sit beside the number, no overflow', (tester) async {
+          final wc = heroOf(cents);
+          await pumpApp(tester, screen(wc), size: Size(width, 3000));
+          final number = tester.getRect(find.byKey(const ValueKey('safeToSpend')));
+          final grid = tester.getRect(find.byKey(const ValueKey('dayDots')));
+          expect(grid.left, greaterThanOrEqualTo(number.right), reason: 'beside, not under');
+          expect(grid.top, lessThan(number.bottom));
+          expect(grid.right, lessThanOrEqualTo(width));
+          expect(tester.getSize(find.byKey(const ValueKey('dayDot:2026-10-20'))).shortestSide, greaterThanOrEqualTo(10));
+          expect(tester.takeException(), isNull);
+        });
+      }
+    }
+
+    testWidgets('a huge amount does not fit beside the dots: they go under it', (tester) async {
+      await pumpApp(tester, screen(heroOf(99999900)), size: const Size(360, 3000));
+      final number = tester.getRect(find.byKey(const ValueKey('safeToSpend')));
+      expect(tester.getRect(find.byKey(const ValueKey('dayDots'))).top, greaterThanOrEqualTo(number.bottom));
       expect(tester.takeException(), isNull);
     });
 
