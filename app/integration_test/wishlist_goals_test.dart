@@ -2,8 +2,8 @@
 // money, delete, months-to-goal text). Run: tools/emulator.sh test wishlist_goals
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/save.dart';
-import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/wishlist.dart';
+import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,6 +31,12 @@ String byMonth(String periodEnd, int n) {
   return 'by ${monthYear(d.year, d.month)}';
 }
 
+/// The "Saved by waiting" tile showing [value].
+Finder saved(String value) => find.descendant(of: find.byKey(const ValueKey('savedByWaiting')), matching: find.text(value));
+
+/// The ring tile of the goal called [name] (its label is shown in capitals).
+Finder goalTile(String name) => find.ancestor(of: find.text(name.toUpperCase()), matching: find.byType(Tile));
+
 void main() {
   Harness.init();
   Harness.private(
@@ -39,8 +45,8 @@ void main() {
   itest('Wishlist: price check, cooling off, then buy or skip', (t) async {
     final wc = await Harness.start(t, settings: plan(todayIso()));
     await goTab(t, 'Save');
-    expect(find.text('Anything over 50\u00A0€ waits 72 hours on the wishlist first.'), findsOneWidget);
-    expect(find.text('Your wishlist is empty. Check something above to add it.'), findsOneWidget);
+    expect(find.text('Over 50\u00A0€ waits 72 h'), findsOneWidget);
+    expect(find.byKey(const ValueKey('emptySection:Cooling off')), findsOneWidget);
 
     await check(t, 'Robot vacuum synthetic', '30');
     expect(status('Fits this month'), findsOneWidget);
@@ -54,6 +60,7 @@ void main() {
     await check(t, 'Espresso synthetic', '120');
     expect(status('Fits this month'), findsOneWidget);
     await Harness.shot(t, 'wishlist-check');
+    await scrollTo(t, find.text('Put on wishlist (72h)'), SaveScreen);
     await tapVisible(t, find.text('Put on wishlist (72h)'));
     await t.pumpAndSettle();
     expect(find.text('On the wishlist. Decide in 72 hours.'), findsOneWidget);
@@ -67,13 +74,14 @@ void main() {
     await tapVisible(t, find.text("Don't need it"));
     await t.pumpAndSettle();
     expect(wc.wish.single.status, 'skipped');
-    expect(find.text('Saved by waiting: 120\u00A0€'), findsOneWidget);
+    expect(saved('120\u00A0€'), findsOneWidget);
     expect(find.text('Skipped'), findsOneWidget);
 
     // No waiting time: items are ready to decide right away.
     wc.updateSettings({'coolHours': 0});
     await t.pumpAndSettle();
     await check(t, 'Desk chair synthetic', '80');
+    await scrollTo(t, find.text('Put on wishlist (0h)'), SaveScreen);
     await tapVisible(t, find.text('Put on wishlist (0h)'));
     await t.pumpAndSettle();
     expect(find.text('Waited 0h'), findsOneWidget);
@@ -96,12 +104,13 @@ void main() {
 
     await scrollTo(t, find.text('Can I afford it?'.toUpperCase()), SaveScreen, delta: -250);
     await check(t, 'Bookshelf synthetic', '90');
+    await scrollTo(t, find.text('Put on wishlist (0h)'), SaveScreen);
     await tapVisible(t, find.text('Put on wishlist (0h)'));
     await t.pumpAndSettle();
     await scrollTo(t, find.text('Skip'), SaveScreen);
     await tapVisible(t, find.text('Skip'));
     await t.pumpAndSettle();
-    expect(find.text('Saved by waiting: 210\u00A0€'), findsOneWidget);
+    expect(saved('210\u00A0€'), findsOneWidget);
     expect(wc.wish.map((x) => x.status), ['skipped', 'bought', 'skipped']);
     await Harness.checkLog();
   });
@@ -110,6 +119,7 @@ void main() {
     final wc = await Harness.start(t, settings: plan(todayIso()));
     await goTab(t, 'Save');
     await check(t, 'Camera synthetic', '600');
+    await scrollTo(t, find.text('Save for it'), SaveScreen);
     await tapVisible(t, find.text('Save for it'));
     await t.pumpAndSettle();
     expect(inSheet(GoalSheet, find.text('New goal')), findsOneWidget);
@@ -126,11 +136,11 @@ void main() {
     final wc = await Harness.start(t, settings: plan(todayIso()));
     final flex0 = wc.period().flexBudget;
     await goTab(t, 'Save');
-    expect(find.text('0\u00A0€ put aside'), findsOneWidget);
-    expect(find.text('Emergency fund'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('goalsTotal')), matching: find.text('0\u00A0€')), findsOneWidget);
+    expect(find.text('EMERGENCY FUND'), findsOneWidget);
 
-    await scrollTo(t, find.text('New goal'), SaveScreen);
-    await tapVisible(t, find.text('New goal'));
+    await scrollTo(t, find.byKey(const ValueKey('addGoal')), SaveScreen);
+    await tapVisible(t, find.byKey(const ValueKey('addGoal')));
     await t.pumpAndSettle();
     await t.enterText(inSheet(GoalSheet, field('Name')), 'Bike synthetic goal');
     await t.enterText(inSheet(GoalSheet, field('Target')), '600');
@@ -143,12 +153,12 @@ void main() {
     expect((g.target, g.saved, g.monthly), (60000, 0, 15000));
     expect(wc.period().flexBudget, flex0 - 15000, reason: 'a goal takes its monthly amount off the spending money');
     final end = wc.period().end;
-    expect(find.text('0\u00A0€ / 600\u00A0€'), findsOneWidget);
-    expect(find.text('150\u00A0€ a month · ${byMonth(end, 4)}'), findsOneWidget);
+    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.textContaining('0% of 600\u00A0€')), findsOneWidget);
+    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.textContaining(byMonth(end, 4))), findsOneWidget);
 
     Future<void> edit(void Function() fill) async {
-      await scrollTo(t, find.text('Bike synthetic goal'), SaveScreen);
-      await tapVisible(t, find.text('Bike synthetic goal'));
+      await scrollTo(t, find.text('BIKE SYNTHETIC GOAL'), SaveScreen);
+      await tapVisible(t, find.text('BIKE SYNTHETIC GOAL'));
       await t.pumpAndSettle();
       expect(inSheet(GoalSheet, find.text('Edit goal')), findsOneWidget);
       fill();
@@ -163,36 +173,38 @@ void main() {
     await t.pumpAndSettle();
     g = wc.goals.firstWhere((x) => x.id == g.id);
     expect(g.saved, 30000);
-    expect(find.text('300\u00A0€ / 600\u00A0€'), findsOneWidget);
-    expect(find.text('300\u00A0€ put aside'), findsOneWidget);
-    expect(find.text('150\u00A0€ a month · ${byMonth(end, 2)}'), findsOneWidget);
+    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.text('300\u00A0€')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('goalsTotal')), matching: find.text('300\u00A0€')), findsOneWidget);
+    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.textContaining(byMonth(end, 2))), findsOneWidget);
 
     await edit(() {});
     await t.enterText(inSheet(GoalSheet, field('Each month')), '0');
     await tapVisible(t, find.text('Save goal'));
     await t.pumpAndSettle();
-    expect(find.text('0\u00A0€ a month · Set a monthly amount'), findsOneWidget);
+    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.textContaining('Set a monthly amount')), findsOneWidget);
 
     await edit(() {});
     await t.enterText(inSheet(GoalSheet, field('Put aside so far')), '600');
     await tapVisible(t, find.text('Save goal'));
     await t.pumpAndSettle();
-    expect(find.text('0\u00A0€ a month · Reached'), findsOneWidget);
-    expect(find.text('600\u00A0€ / 600\u00A0€'), findsOneWidget);
+    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.text('Reached')), findsOneWidget);
+    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.text('600\u00A0€')), findsOneWidget);
 
     await goTab(t, 'Budget');
-    expect(find.descendant(of: find.byType(SpendingScreen), matching: find.text('Bike synthetic goal')), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('budgetPlan')));
+    await t.pumpAndSettle();
+    expect(find.text('Bike synthetic goal'), findsOneWidget, reason: 'a goal line in the payday plan');
     await goTab(t, 'Save');
 
     await edit(() {});
     await tapVisible(t, inSheet(GoalSheet, find.text('Delete')));
     await t.pumpAndSettle();
     expect(wc.goals.map((x) => x.name), ['Emergency fund', 'Yearly costs']);
-    expect(find.text('Bike synthetic goal'), findsNothing);
+    expect(find.text('BIKE SYNTHETIC GOAL'), findsNothing);
 
     // A goal without a name is called "Goal".
-    await scrollTo(t, find.text('New goal'), SaveScreen);
-    await tapVisible(t, find.text('New goal'));
+    await scrollTo(t, find.byKey(const ValueKey('addGoal')), SaveScreen);
+    await tapVisible(t, find.byKey(const ValueKey('addGoal')));
     await t.pumpAndSettle();
     await t.enterText(inSheet(GoalSheet, field('Target')), '100');
     await tapVisible(t, find.text('Save goal'));

@@ -7,7 +7,9 @@ import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/dash.dart';
 import '../widgets/sheets.dart';
+import 'save.dart';
 
 /// The text of a refused value: core's owner-readable [ArgumentError] message.
 String _problem(Object e) => e is ArgumentError ? e.message.toString() : 'Could not save. Try again.';
@@ -51,84 +53,120 @@ class _OwedPanelState extends State<OwedPanel> {
         if (v.iou.closed) v
     ];
     final t = wc.owedTotals();
-    // [named] false: the person's name is the group header above, so the line says what it is instead.
-    Widget line(IouView v, {bool named = true}) {
+    // One ruled row per IOU. [named] false: the person's name is the group header above, so the row says what it is instead.
+    DashRowData row(IouView v, {bool named = true}) {
       final i = v.iou;
       final lent = i.direction == IouDirection.lent;
-      final state = i.closed ? 'settled' : (lent ? 'owes you' : 'you owe');
-      final reps = v.parts.isEmpty ? '' : ' · ${v.parts.length} ${v.parts.length == 1 ? 'repayment' : 'repayments'}';
-      return InkWell(
+      final reps = v.parts.isEmpty ? null : '${v.parts.length} ${v.parts.length == 1 ? 'repayment' : 'repayments'}';
+      final when = shortDateOrRaw(i.date);
+      final sub = [if (named) when, if (reps != null) reps].join(' · ');
+      return DashRowData(
         key: ValueKey('iou:${i.id}'),
+        title: named ? i.person : '${lent ? 'Lent' : 'Borrowed'} $when',
+        sub: sub.isEmpty ? null : sub,
+        chip: _DirectionChip(lent: lent, settled: i.closed),
+        amount: moneyExact(v.outstanding, i.currency),
         onTap: () => _open(i.id),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: rowMin),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: SplitRow(
-              start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(named ? i.person : '${lent ? 'Lent' : 'Borrowed'} ${shortDateOrRaw(i.date)}',
-                    maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-                Text(named ? '$state · ${shortDateOrRaw(i.date)}$reps' : '$state$reps',
-                    style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
-              ]),
-              end: Text(moneyExact(v.outstanding, i.currency),
-                  textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500, color: lent ? c.good : c.bad)),
-            ),
-          ),
-        ),
       );
     }
 
-    // One line per IOU (each has its own date and repayments); a person with more than one is a group under their name.
-    List<Widget> lines(List<IouView> vs) {
+    // One tile of rows per list; a person with more than one IOU is a group under their name.
+    Widget rowsTile(String label, List<IouView> vs) {
       final groups = <String, List<IouView>>{};
       for (final v in vs) {
         (groups[v.iou.person.trim().toLowerCase()] ??= []).add(v);
       }
-      return [
-        for (final e in groups.entries)
-          if (e.value.length == 1)
-            line(e.value.single)
-          else
-            Padding(
-              key: ValueKey('owedPerson:${e.key}'),
-              padding: const EdgeInsets.only(top: 6),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text(e.value.first.iou.person,
-                    maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-                Padding(
-                    padding: const EdgeInsets.only(left: 12), child: Column(children: [for (final v in e.value) line(v, named: false)])),
-              ]),
-            ),
-      ];
+      return Tile(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          Padding(padding: const EdgeInsets.only(bottom: 4), child: TileLabel(label)),
+          for (final e in groups.entries)
+            if (e.value.length == 1)
+              DashRows(rows: [row(e.value.single)])
+            else
+              Padding(
+                key: ValueKey('owedPerson:${e.key}'),
+                padding: const EdgeInsets.only(top: 6),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Text(e.value.first.iou.person,
+                      maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  Padding(padding: const EdgeInsets.only(left: 12), child: DashRows(rows: [for (final v in e.value) row(v, named: false)])),
+                ]),
+              ),
+        ]),
+      );
     }
 
-    return Panel(key: const ValueKey('owedPanel'), children: [
-      SectionHead('Owed',
-          trailing: TextButton.icon(
-              key: const ValueKey('owedAdd'),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add'),
-              onPressed: () => _open(null))),
+    // A pair of totals per currency, never added together: the wallet's own first, the others marked "In USD".
+    Widget summary(String cc) {
+      final toYou = moneyExact(t.owedToYou[cc] ?? 0, cc), byYou = moneyExact(t.youOwe[cc] ?? 0, cc);
+      Widget figure(String label, String value) =>
+          Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            TileLabel(label),
+            const SizedBox(height: 6),
+            FittedBox(
+                fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(value, maxLines: 1, style: dashNumStyle(color: c.ink))),
+          ]);
+      return Tile(
+        key: ValueKey(cc == cur ? 'owedSummary' : 'owedSummary:$cc'),
+        semanticLabel: '${cc == cur ? '' : 'In $cc: '}People owe you $toYou, you owe $byYou',
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          if (cc != cur) Padding(padding: const EdgeInsets.only(bottom: 6), child: TileNote('In $cc')),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: figure('People owe you', toYou)),
+            const SizedBox(width: 12),
+            Expanded(child: figure('You owe', byYou)),
+          ]),
+        ]),
+      );
+    }
+
+    final grid = DashGrid(children: [
       if (open.isEmpty)
-        const EmptyNote('Nothing owed. Add money you lent or borrowed to keep track of it.')
-      else ...[
-        // A total per currency, never added together: the wallet's own first, the others as "In USD: ...".
-        for (final cc in t.currencies)
-          Text(
-              '${cc == cur ? '' : 'In $cc: '}People owe you ${moneyExact(t.owedToYou[cc] ?? 0, cc)} · You owe ${moneyExact(t.youOwe[cc] ?? 0, cc)}',
-              key: ValueKey(cc == cur ? 'owedSummary' : 'owedSummary:$cc'),
-              style: TextStyle(fontWeight: FontWeight.w600, color: cc == cur ? null : c.ink2)),
-        Rows(children: lines(open)),
-      ],
-      if (closed.isNotEmpty) ...[
-        TextButton(
-            key: const ValueKey('owedShowClosed'),
-            style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
-            onPressed: () => setState(() => showClosed = !showClosed),
-            child: Text(showClosed ? 'Hide settled' : 'Show settled (${closed.length})')),
-        if (showClosed) Rows(children: lines(closed)),
-      ],
+        const StatTile(label: 'Open IOUs', value: '0', sub: 'Nothing owed')
+      else
+        for (final cc in t.currencies) DashItem(span: 2, child: summary(cc)),
+      if (open.isNotEmpty) DashItem(span: 2, child: rowsTile('Open', open)),
+      if (closed.isNotEmpty && showClosed) DashItem(span: 2, child: rowsTile('Settled', closed)),
+      AddTile(key: const ValueKey('owedAdd'), label: 'IOU', onTap: () => _open(null)),
+    ]);
+    return Column(key: const ValueKey('owedPanel'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const SaveSectionHead('Owed'),
+      grid,
+      if (closed.isNotEmpty)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+              key: const ValueKey('owedShowClosed'),
+              style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+              onPressed: () => setState(() => showClosed = !showClosed),
+              child: Text(showClosed ? 'Hide settled' : 'Show settled (${closed.length})')),
+        ),
+    ]);
+  }
+}
+
+/// Who owes whom, in an icon and a word (never colour alone): "owes you", "you owe" or "settled".
+class _DirectionChip extends DashChip {
+  final bool lent, settled;
+  const _DirectionChip({required this.lent, required this.settled});
+
+  String get _text => settled ? 'settled' : (lent ? 'owes you' : 'you owe');
+
+  @override
+  String get spoken => _text;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final (icon, fg) = settled
+        ? (Icons.check, c.ink2)
+        : lent
+            ? (Icons.south_west, c.good)
+            : (Icons.north_east, c.bad);
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 16, color: fg),
+      const SizedBox(width: 3),
+      Flexible(child: Text(_text, style: TextStyle(fontSize: BwType.metaSize, fontWeight: FontWeight.w600, color: fg))),
     ]);
   }
 }

@@ -5,14 +5,16 @@ import '../controller.dart';
 import '../format.dart';
 import '../layout.dart';
 import '../theme.dart';
-import '../widgets/charts.dart';
-import '../widgets/common.dart';
+import '../widgets/dash.dart';
 import '../widgets/sheets.dart';
+import 'save.dart';
 
+/// Save tab › Goals (RX6): the total as one tile with a bar, a compact ring tile per goal (a tap opens its sheet), "+ Goal", and the
+/// money that came in above plan. Exact cents everywhere; a ring is a display ratio of two core amounts.
 class GoalsScreen extends StatelessWidget {
   final WalletController wc;
 
-  /// On the Save tab the panels sit in that tab's scroll: no list or margin line of their own.
+  /// On the Save tab the panels sit in that tab's scroll: no list or margin of their own.
   final bool embedded;
   const GoalsScreen({super.key, required this.wc, this.embedded = false});
 
@@ -22,9 +24,10 @@ class GoalsScreen extends StatelessWidget {
     final cur = wc.currency;
     final p = wc.period();
     final extraAbove = p.received - wc.settings.salary;
-    final total = wc.goals.fold<int>(0, (a, g) => a + g.saved);
+    final tot = goalTotals(wc.goals);
 
     String eta(Goal g) {
+      if (g.target <= 0) return 'No target';
       final n = monthsToGoal(g);
       if (n == null) return 'Set a monthly amount';
       if (n == 0) return 'Reached';
@@ -33,65 +36,81 @@ class GoalsScreen extends StatelessWidget {
       return 'by ${monthYear(d.year, d.month)}';
     }
 
-    Widget card(Goal g) => InkWell(
-          hoverColor: c.surface2,
-          focusColor: c.accentSoft,
-          mouseCursor: SystemMouseCursors.click,
-          onTap: () async {
-            final r = await showSheet<String>(context, GoalSheet(wc: wc, goal: g));
-            if (context.mounted) goalSheetToast(context, wc, r);
-          },
-          child: RuledRow(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              SplitRow(
-                  start: Text(g.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  end: Text('${money(g.saved, cur, decimals: 0)} / ${money(g.target, cur, decimals: 0)}',
-                      textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
-              const SizedBox(height: 8),
-              RuledBar(value: g.target > 0 ? g.saved / g.target : 0.0),
-              const SizedBox(height: 6),
-              Text('${money(g.monthly, cur, decimals: 0)} a month · ${eta(g)}', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
-            ]),
-          ),
-        );
+    // The share of the target, 0..1 (display only); the percent is rounded down so "100%" means reached.
+    double share(int saved, int target) => target > 0 ? (saved / target).clamp(0.0, 1.0) : 0.0;
 
-    final panels = gapped([
-      if (p.extrasForGoals > 0 || extraAbove > 0)
-        Panel(color: c.accentSoft, children: [
-          const Heading('Extra money this month', size: BwType.headingSize),
-          Text(
-            '${extraAbove > 0 ? 'Salary came in ${money(extraAbove, cur, decimals: 0)} above plan. ' : ''}'
-            '${p.extrasForGoals > 0 ? 'Other income: ${money(p.extrasForGoals, cur, decimals: 0)}. ' : ''}'
-            "Put it straight into a goal so it doesn't leak into daily spending.",
-            style: const TextStyle(fontSize: BwType.bodySize),
-          ),
-        ]),
-      Panel(children: [
-        const Eyebrow('Goals'),
-        Heading('${money(total, cur, decimals: 0)} put aside'),
-        const Muted('Each goal takes its monthly amount off the top on payday. Emergency fund first: 3 months of rent, loan and bills.'),
-        if (wc.goals.isEmpty) const EmptyNote('No goals yet.'),
-        if (wc.goals.isNotEmpty)
-          LayoutBuilder(builder: (context, box) {
-            // Cards side by side from the medium size up.
-            final cols = layoutOf(context) == LayoutSize.compact ? 1 : 2;
-            final w = (box.maxWidth - (cols - 1) * 16) / cols;
-            return Wrap(spacing: 16, children: [
-              for (final g in wc.goals) SizedBox(width: w, child: card(g)),
-            ]);
-          }),
-        if (wc.goals.isNotEmpty)
-          TotalRule(
-              child: SplitRow(
-                  start: const Text('Put aside in total', style: TextStyle(fontWeight: FontWeight.w600)),
-                  end: Text('${money(total, cur, decimals: 0)} / ${money(wc.goalTargetTotal, cur, decimals: 0)}',
-                      textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w600)))),
-        OutlinedButton.icon(
-            icon: const Icon(Icons.add), label: const Text('New goal'), onPressed: () => showSheet<void>(context, GoalSheet(wc: wc))),
-      ]),
+    Widget goal(Goal g) {
+      final f = share(g.saved, g.target);
+      final reached = g.target > 0 && g.saved >= g.target;
+      return RingTile(
+        key: ValueKey('goal:${g.id}'),
+        label: g.name,
+        center: '', // the percent sits in the sub line: 12 dp text, not 11
+        value: moneyExact(g.saved, cur),
+        progress: f,
+        color: c.s3,
+        compact: true,
+        // A reached goal says so once, in the chip.
+        sub: g.target > 0 ? '${(f * 100).floor()}% of ${moneyExact(g.target, cur)}${reached ? '' : '\n${eta(g)}'}' : eta(g),
+        chip: g.saved < 0
+            ? const StateChip.over(text: 'Below zero')
+            : reached
+                ? const StateChip.onPace(text: 'Reached')
+                : null,
+        onTap: () async {
+          final r = await showSheet<String>(context, GoalSheet(wc: wc, goal: g));
+          if (context.mounted) goalSheetToast(context, wc, r);
+        },
+      );
+    }
+
+    final hasBar = tot.count > 0 && tot.target > 0;
+    final grid = DashGrid(children: [
+      DashItem(
+        span: 2,
+        child: StatTile(
+          key: const ValueKey('goalsTotal'),
+          label: 'Put aside',
+          value: moneyExact(tot.saved, cur),
+          trailing: p.goalMonthly > 0 ? TileNote('${moneyExact(p.goalMonthly, cur)} a month') : null,
+          sub: hasBar ? 'of ${moneyExact(tot.target, cur)}' : (tot.count == 0 ? 'No goals yet' : null),
+          visual: hasBar ? _TotalBar(share(tot.saved, tot.target), c.s3) : null,
+          visualSpoken: hasBar ? '${(share(tot.saved, tot.target) * 100).floor()} percent of the target' : null,
+        ),
+      ),
+      if (extraAbove > 0)
+        StatTile(
+            key: const ValueKey('goalsAbovePlan'), label: 'Above plan', value: moneyExact(extraAbove, cur), sub: 'Salary came in higher'),
+      if (p.extrasForGoals > 0)
+        StatTile(
+            key: const ValueKey('goalsOtherIncome'),
+            label: 'Other income',
+            value: moneyExact(p.extrasForGoals, cur),
+            sub: 'Not in your plan'),
+      for (final g in wc.goals) goal(g),
+      AddTile(key: const ValueKey('addGoal'), label: 'Goal', onTap: () => showSheet<void>(context, GoalSheet(wc: wc))),
     ]);
-    if (embedded) return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: panels);
-    return MarginLine(child: ListView(padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad), children: panels));
+    final panel = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [const SaveSectionHead('Goals'), grid]);
+    if (embedded) return panel;
+    return ColoredBox(
+        color: c.desk, child: ListView(padding: const EdgeInsets.fromLTRB(pagePad, 12, pagePad, pageBottomPad), children: [panel]));
   }
+}
+
+/// The total's bar: [fraction] of the track in the goals colour (shown only).
+class _TotalBar extends StatelessWidget {
+  final double fraction;
+  final Color color;
+  const _TotalBar(this.fraction, this.color);
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+        borderRadius: BorderRadius.circular(5),
+        child: SizedBox(
+          height: 10,
+          child: Stack(fit: StackFit.expand, children: [
+            ColoredBox(color: context.c.surface2),
+            Align(alignment: Alignment.centerLeft, child: FractionallySizedBox(widthFactor: fraction, child: ColoredBox(color: color))),
+          ]),
+        ),
+      );
 }
