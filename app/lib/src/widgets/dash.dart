@@ -464,8 +464,12 @@ class HeroTile extends StatelessWidget {
   final bool paceOver;
   final VoidCallback? onTap;
   final Color? valueColor;
+
+  /// A key for the figure's own `Text` (tests and screens that read the number).
+  final Key? valueKey;
   const HeroTile({
     super.key,
+    this.valueKey,
     required this.label,
     required this.value,
     this.sub,
@@ -493,7 +497,7 @@ class HeroTile extends StatelessWidget {
         FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
-          child: Text(value, maxLines: 1, style: dashNumStyle(size: 44, color: valueColor ?? c.ink)),
+          child: Text(value, key: valueKey, maxLines: 1, style: dashNumStyle(size: 44, color: valueColor ?? c.ink)),
         ),
         if (sub != null)
           Padding(

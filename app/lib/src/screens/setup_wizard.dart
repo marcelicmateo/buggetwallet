@@ -20,7 +20,6 @@ import 'accounts_panel.dart';
 import 'import_flow.dart';
 import 'plan_suggestions.dart';
 import 'recurring_sheet.dart' show billPeriodText;
-import 'today.dart' show shown;
 
 /// Opens the wizard as a full-screen page (a dialog on wide windows). [restart]: from step 1 (Settings › Set up my wallet again);
 /// otherwise where the last run stopped. A restart keeps no progress unless the wizard was already under way (a finished or declined
@@ -715,7 +714,7 @@ class _DoneStep extends StatelessWidget {
         child: FittedBox(
           alignment: Alignment.centerLeft,
           fit: BoxFit.scaleDown,
-          child: MoneyText(bad ? shown(s.hero, cur) : money(s.hero, cur, decimals: 0),
+          child: MoneyText(moneyExact(s.hero, cur),
               key: const ValueKey('setupSafe'),
               style: numStyle.copyWith(
                   fontSize: BwType.heroSize, height: 0.95, fontWeight: FontWeight.w500, letterSpacing: -3, color: bad ? c.bad : c.ink)),

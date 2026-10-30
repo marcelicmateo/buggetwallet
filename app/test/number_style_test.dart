@@ -33,17 +33,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
   }
 
-  String hero(WidgetTester tester) => tester
-      .widget<Text>(find.descendant(of: find.byKey(const ValueKey('safeToSpend')), matching: find.byType(Text)))
-      .textSpan!
-      .toPlainText();
+  String hero(WidgetTester tester) => tester.widget<Text>(find.byKey(const ValueKey('safeToSpend'))).data!;
+
+  /// The same figure in the other style: thousands and decimal marks swapped.
+  String swapped(String v) => v.replaceAll(',', '\u0001').replaceAll('.', ',').replaceAll('\u0001', '.');
 
   testWidgets('Settings › Look switches Today and Budget, and a new controller on the same repo keeps it', (tester) async {
     final wc = wallet();
     await pumpFull(tester, wc, 1.0, size: const Size(400, 900));
     final before = hero(tester);
     expect(before, contains(','), reason: 'hero is grouped in the default style: $before');
-    expect(before, isNot(contains('.')));
     await tapTab(tester, 'Budget');
     expect(find.textContaining('1,234.56'), findsWidgets);
 
@@ -53,7 +52,7 @@ void main() {
     expect(wc.numberStyleName, 'comma');
     expect(numberStyle, NumberStyle.comma);
     await tapTab(tester, 'Today');
-    expect(hero(tester), before.replaceAll(',', '.'));
+    expect(hero(tester), swapped(before));
     await tapTab(tester, 'Budget');
     expect(find.textContaining('1.234,56'), findsWidgets);
     expect(find.textContaining('1,234.56'), findsNothing);

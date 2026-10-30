@@ -282,7 +282,9 @@ void main() {
       await seed(wc);
       var opened = 0;
       await pumpApp(t, todayOf(wc, () => opened++), size: const Size(400, 2400));
-      expect(find.text('Held: ${moneyExact(102450, 'EUR')} · ${moneyExact(8000, 'USD')}'), findsOneWidget);
+      final held = find.byKey(const ValueKey('heldLine'));
+      expect(find.descendant(of: held, matching: find.text(moneyExact(102450, 'EUR'))), findsOneWidget);
+      expect(find.descendant(of: held, matching: find.text(moneyExact(8000, 'USD'))), findsOneWidget);
       await t.ensureVisible(find.byKey(const ValueKey('heldLine')));
       await t.tap(find.byKey(const ValueKey('heldLine')));
       expect(opened, 1);

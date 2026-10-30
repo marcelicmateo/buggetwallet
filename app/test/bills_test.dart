@@ -850,12 +850,13 @@ void main() {
       addBill(wc, syntheticBill('t2', payee: 'Second'));
       var opened = 0;
       await pumpApp(tester, todayOf(wc, openBillsReview: () => opened++), size: const Size(400, 1400));
-      expect(find.text('2 bills to review'), findsOneWidget);
+      expect(find.descendant(of: key('billsToReview'), matching: find.text('2')), findsOneWidget);
+      expect(find.descendant(of: key('billsToReview'), matching: find.text('bills')), findsOneWidget);
       await tester.tap(key('billsToReview'));
       expect(opened, 1);
       wc.confirmBill(wc.billLists().review.first.id);
       await pumpApp(tester, todayOf(wc), size: const Size(400, 1400));
-      expect(find.text('1 bill to review'), findsOneWidget);
+      expect(find.descendant(of: key('billsToReview'), matching: find.text('bill')), findsOneWidget);
     });
 
     tw('a payment with a linked bill shows the receipt mark and "Open bill"', (tester) async {
@@ -1408,8 +1409,8 @@ void main() {
       await pumpApp(tester, todayOf(w.wc), size: const Size(320, 4000), textScale: 2);
       final line = key('needsCategory:${WalletRepo.billPlannedId(w.gas)}');
       expect(line, findsOneWidget);
-      expect(find.descendant(of: line, matching: find.textContaining('needs a category')), findsOneWidget);
-      expect(find.textContaining('· needs a category'), findsNWidgets(2), reason: 'its own line and its heads-up line');
+      expect(find.descendant(of: line, matching: find.text('Needs a category')), findsOneWidget);
+      expect(find.text('Needs a category'), findsNWidgets(2), reason: 'its own tile and its heads-up tile');
       await tester.ensureVisible(line);
       await tester.tap(line);
       await tester.pumpAndSettle();

@@ -6,6 +6,7 @@ import 'package:budget_wallet/src/screens/save.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -94,20 +95,23 @@ void main() {
   });
 
   group('Today columns', () {
-    Offset at(WidgetTester tester, String text) => tester.getTopLeft(find.text(text));
+    Rect rectOf(WidgetTester tester, String key) => tester.getRect(find.byKey(ValueKey(key)));
 
-    testWidgets('1280: the recent transactions sit right of the main panel', (tester) async {
+    testWidgets('1280: four tile columns, the first tile sits right of the hero at the top', (tester) async {
       await pumpFull(tester, demoWallet(), 1.0, size: const Size(1280, 800));
-      final main = tester.getTopLeft(find.byKey(const ValueKey('safeToSpend'))), recent = at(tester, 'Recent');
-      expect(recent.dx, greaterThan(main.dx + 300));
-      expect((recent.dy - main.dy).abs(), lessThan(60), reason: 'both columns start at the top');
+      final hero = rectOf(tester, 'heroTile');
+      final tiles = find.byType(Tile);
+      final beside = [for (var i = 0; i < tiles.evaluate().length; i++) tester.getRect(tiles.at(i))]
+          .where((r) => r.left >= hero.right - 1 && (r.top - hero.top).abs() < 2);
+      expect(beside, isNotEmpty);
     });
 
-    testWidgets('800: the recent transactions sit below the main panel', (tester) async {
+    testWidgets('800: two tile columns, the hero spans both and the number tiles sit below it', (tester) async {
       await pumpFull(tester, demoWallet(), 1.0, size: const Size(800, 1280));
-      final main = tester.getTopLeft(find.byKey(const ValueKey('safeToSpend'))), recent = at(tester, 'Recent');
-      expect((recent.dx - main.dx).abs(), lessThan(40));
-      expect(recent.dy, greaterThan(main.dy + 200));
+      final hero = rectOf(tester, 'heroTile'), left = rectOf(tester, 'leftTile'), pay = rectOf(tester, 'paydayTile');
+      expect(left.top, greaterThanOrEqualTo(hero.bottom - 1));
+      expect((left.top - pay.top).abs(), lessThan(2), reason: 'two tiles side by side');
+      expect(pay.left, greaterThan(left.right - 1));
     });
   });
 

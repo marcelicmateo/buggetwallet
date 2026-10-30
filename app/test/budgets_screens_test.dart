@@ -152,41 +152,45 @@ void main() {
 
   group('Today › budget line', () {
     for (final (name, size, scale) in _sizes) {
-      testWidgets('$name: the least-left category shows under the stats', (tester) async {
+      testWidgets('$name: the least-left category is a ring tile with the amount left', (tester) async {
         final wc = budgetWallet(eatingOutBudget: 20000);
         await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
             size: size, textScale: scale);
-        expect(find.text(_eur('Groceries: 48 € left this month')), findsOneWidget);
+        final tile = find.byKey(const ValueKey('budgetLine'));
+        expect(find.descendant(of: tile, matching: find.text('GROCERIES')), findsOneWidget);
+        expect(find.descendant(of: tile, matching: find.text(_eur('48 €'))), findsOneWidget);
+        expect(find.descendant(of: tile, matching: find.text('left')), findsOneWidget);
         expect(tester.takeException(), isNull);
       });
     }
 
-    testWidgets('amounts are exact on the line: 47.50 € left, over by 0.49 €', (tester) async {
+    testWidgets('amounts are exact on the line: 47.50 € left, 0.49 € over', (tester) async {
       Future<void> pumpToday(WalletController wc) =>
           pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
               size: const Size(360, 3000));
       await pumpToday(budgetWallet(groceriesBudget: 29950, eatingOutBudget: 20000));
-      expect(find.text(_eur('Groceries: 47.50 € left this month')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('budgetLine')), matching: find.text(_eur('47.50 €'))), findsOneWidget);
       await pumpToday(budgetWallet(groceriesBudget: 29950, eatingOutBudget: 11151));
-      expect(find.text(_eur('Eating out: over by 0.49 €')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('budgetLine')), matching: find.text(_eur('0.49 €'))), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('budgetLine')), matching: find.text('EATING OUT')), findsOneWidget);
     });
 
-    testWidgets('over budget: the line says so, in the bad colour with an icon', (tester) async {
+    testWidgets('over budget: the tile says so in a chip with an icon, the amount over in the value', (tester) async {
       final wc = budgetWallet();
       await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
           size: const Size(360, 3000));
-      final t = find.text(_eur('Eating out: over by 12 €'));
-      expect(t, findsOneWidget);
-      expect(tester.widget<Text>(t).style!.color, WalletColors.light.bad);
-      expect(find.descendant(of: find.byKey(const ValueKey('budgetLine')), matching: find.byIcon(Icons.error_outline)), findsOneWidget);
+      final tile = find.byKey(const ValueKey('budgetLine'));
+      expect(find.descendant(of: tile, matching: find.text(_eur('12 €'))), findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.text('Over budget')), findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.byIcon(Icons.warning_amber_rounded)), findsOneWidget);
     });
 
-    testWidgets('the line sits below the pace line and above Add expense', (tester) async {
+    testWidgets('the tile sits among the number tiles, above Add expense', (tester) async {
       final wc = budgetWallet();
       await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
           size: const Size(360, 3000));
       final y = tester.getTopLeft(find.byKey(const ValueKey('budgetLine'))).dy;
-      expect(y, greaterThan(tester.getBottomLeft(find.textContaining('used').first).dy));
+      expect(y, greaterThan(tester.getBottomLeft(find.byKey(const ValueKey('heroTile'))).dy));
       expect(y, lessThan(tester.getTopLeft(find.text('Add expense').first).dy));
     });
 

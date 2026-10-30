@@ -42,16 +42,18 @@ WalletController _wallet({required bool behind}) {
 
 void main() {
   for (final behind in [false, true]) {
-    final label = behind ? 'behind pace' : 'ahead of pace';
-    testWidgets('"$label" is right-aligned on a wide window', (tester) async {
+    // Behind pace here means money spent today beyond today's allowance, so "Over today" outranks "Behind pace" as the one chip.
+    final label = behind ? 'Over today' : 'On pace';
+    testWidgets('"$label" is one chip with an icon in the hero tile on a wide window', (tester) async {
       await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(_wallet(behind: behind)), openPlan: () {})),
           size: const Size(1200, 3000));
       expect(tester.takeException(), isNull);
-      final text = find.textContaining(label, findRichText: true);
+      final text = find.text(label);
       expect(text, findsOneWidget);
-      final used = find.textContaining(' used');
-      final rowRight = tester.getTopRight(find.ancestor(of: used, matching: find.byType(Row)).first).dx;
-      expect(tester.getTopRight(text).dx, closeTo(rowRight, 1), reason: '$label ends at the row end');
+      final hero = find.byKey(const ValueKey('heroTile'));
+      expect(find.descendant(of: hero, matching: text), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.byIcon(behind ? Icons.warning_amber_rounded : Icons.check)), findsOneWidget);
+      expect(tester.getTopLeft(text).dx, lessThan(tester.getRect(hero).center.dx), reason: 'the chip sits at the left under the number');
     });
   }
 

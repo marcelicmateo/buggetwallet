@@ -348,22 +348,26 @@ void main() {
     Widget today(WalletController wc) => Scaffold(
         body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser(), openBills: () {}));
 
-    tw('a held yearly bill: "Car cover 600 € held until paid"', (tester) async {
+    tw('a held yearly bill is in the Before payday tile: 600 €', (tester) async {
       final wc = hw();
       wc.addRecurringBill(label: 'Car cover', category: 'Car & transport', amount: 60000, intervalDays: 365, firstDue: '2027-03-01');
       expect(wc.period().reservedBills, 60000);
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
-      expect(find.text('Car cover ${moneyExact(60000, 'EUR')} held until paid'), findsOneWidget);
+      expect(
+          find.descendant(of: find.byKey(const ValueKey('comingUpLine')), matching: find.text(moneyExact(60000, 'EUR'))), findsOneWidget);
+      expect(find.textContaining('held until paid'), findsNothing, reason: 'the held text lives on the Bills page');
       expect(find.textContaining('Due by payday'), findsNothing, reason: 'nothing else is due before payday');
     });
 
-    tw('a weekly bill counts each payment of the period', (tester) async {
+    tw('a weekly bill adds each payment of the period to Before payday', (tester) async {
       final wc = hw();
       wc.addRecurringBill(label: 'Zorblex weekly', category: 'Groceries', amount: 2000, intervalDays: 7, firstDue: '2026-10-21');
       final n = wc.period().dueCycles.length;
       expect(n, greaterThan(2));
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
-      expect(find.text('Due by payday: 1 bill ($n payments), ${moneyExact(2000 * n, 'EUR')}'), findsOneWidget);
+      final tile = find.byKey(const ValueKey('comingUpLine'));
+      expect(find.descendant(of: tile, matching: find.text(moneyExact(2000 * n, 'EUR'))), findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.text('${wc.period().beforePaydayCount} costs')), findsOneWidget);
     });
   });
 

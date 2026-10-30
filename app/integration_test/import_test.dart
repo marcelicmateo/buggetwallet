@@ -68,7 +68,7 @@ void main() {
     expect(catOf('Top-up by *0000'), 'Internal transfer');
 
     await goTab(t, 'Today');
-    await scrollTo(t, find.text('Recent'), TodayScreen);
+    await scrollTo(t, find.text('RECENT'), TodayScreen);
     final pbz = lastDate(pbzXls), rev = [lastDate(revolutXlsx), lastDate(revolutCsvFile)].reduce((a, b) => a.compareTo(b) > 0 ? a : b);
     expect(find.text('PBZ ${shortDate(pbz)} · Revolut ${shortDate(rev)}'), findsOneWidget);
     expect(find.textContaining('Plaćanje po računu'), findsWidgets);

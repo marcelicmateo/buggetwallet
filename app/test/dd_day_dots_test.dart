@@ -229,74 +229,36 @@ void main() {
     Widget screen(WalletController wc) =>
         Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => DateTime(2026, 10, 20, 10)));
 
-    testWidgets('wide window: the dots sit right of the number', (tester) async {
-      final wc = budgetWallet(budgets: false);
-      await pumpApp(tester, screen(wc), size: const Size(900, 1400));
-      final number = tester.getRect(find.byKey(const ValueKey('safeToSpend')));
-      final grid = tester.getRect(find.byKey(const ValueKey('dayDots')));
-      expect(grid.left, greaterThanOrEqualTo(number.right));
-      expect(grid.top, lessThan(number.bottom));
-      expect(tester.takeException(), isNull);
-    });
+    /// RX3: the dots are a slot of the hero tile, under the number and its chip, inside the tile at every size.
+    for (final (name, size, scale) in [
+      ('900 dp', const Size(900, 1400), 1.0),
+      ('411 dp', const Size(411, 3000), 1.0),
+      ('360 dp', const Size(360, 3000), 1.0),
+      ('320 dp at text scale 2.0', const Size(320, 3000), 2.0),
+    ]) {
+      testWidgets('$name: the grid sits under the number, inside the hero tile, squares keep their size, nothing overflows',
+          (tester) async {
+        final wc = budgetWallet(budgets: false);
+        await pumpApp(tester, screen(wc), size: size, textScale: scale);
+        final number = tester.getRect(find.byKey(const ValueKey('safeToSpend')));
+        final grid = tester.getRect(find.byKey(const ValueKey('dayDots')));
+        final hero = tester.getRect(find.byKey(const ValueKey('heroTile')));
+        expect(grid.top, greaterThanOrEqualTo(number.bottom));
+        expect(grid.left, lessThan(number.left + 4), reason: 'left-aligned under the number');
+        expect(grid.right, lessThanOrEqualTo(hero.right));
+        expect(grid.bottom, lessThanOrEqualTo(hero.bottom));
+        expect(tester.getSize(find.byKey(const ValueKey('dayDot:2026-10-20'))).shortestSide, DayDots.square);
+        expect(tester.takeException(), isNull);
+      });
+    }
 
-    testWidgets('320 dp at text scale 2.0: the grid wraps under the number, squares keep their size, nothing overflows', (tester) async {
+    testWidgets('a huge amount scales down in the tile, the dots stay', (tester) async {
       final wc = budgetWallet(budgets: false);
-      await pumpApp(tester, screen(wc), size: const Size(320, 3000), textScale: 2.0);
-      final number = tester.getRect(find.byKey(const ValueKey('safeToSpend')));
-      final grid = tester.getRect(find.byKey(const ValueKey('dayDots')));
-      expect(grid.top, greaterThanOrEqualTo(number.bottom));
-      expect(grid.left, lessThan(number.left + 4), reason: 'left-aligned under the number');
-      expect(tester.getSize(find.byKey(const ValueKey('dayDot:2026-10-20'))).shortestSide, greaterThanOrEqualTo(10));
-      expect(grid.right, lessThanOrEqualTo(320));
-      expect(tester.takeException(), isNull);
-    });
-
-    /// A wallet whose safe-to-spend today is about [cents] (the salary is fitted from two probes: the figure is affine in it).
-    WalletController heroOf(int cents) {
-      int safe(int salary) {
-        final w = budgetWallet(budgets: false);
-        w.repo.updateSettings({'salary': salary});
-        w.reload();
-        return w.period().safeToday;
-      }
-
-      final a = safe(100000), b = safe(300000);
-      final salary = 100000 + ((cents - a) * 200000 / (b - a)).round();
-      final wc = budgetWallet(budgets: false);
-      wc.repo.updateSettings({'salary': salary});
+      wc.repo.updateSettings({'salary': 99999900});
       wc.reload();
-      expect(wc.period().safeToday, closeTo(cents, cents * 0.05), reason: 'the fitted wallet');
-      return wc;
-    }
-
-    for (final width in [360.0, 411.0]) {
-      for (final cents in [5200, 67100, 180300]) {
-        testWidgets('phone ${width.round()} dp, hero about ${cents ~/ 100}: the dots sit beside the number, no overflow', (tester) async {
-          final wc = heroOf(cents);
-          await pumpApp(tester, screen(wc), size: Size(width, 3000));
-          final number = tester.getRect(find.byKey(const ValueKey('safeToSpend')));
-          final grid = tester.getRect(find.byKey(const ValueKey('dayDots')));
-          expect(grid.left, greaterThanOrEqualTo(number.right), reason: 'beside, not under');
-          expect(grid.top, lessThan(number.bottom));
-          expect(grid.right, lessThanOrEqualTo(width));
-          final side = tester.getSize(find.byKey(const ValueKey('dayDot:2026-10-20'))).shortestSide;
-          expect(side, greaterThanOrEqualTo(10));
-          expect([DayDots.square, DayDots.compactSquare], contains(side), reason: 'full or compact squares, nothing in between');
-          if (width == 360 && cents == 180300) expect(tester.takeException(), isNull);
-        });
-      }
-    }
-
-    testWidgets('a huge amount does not fit beside the dots: they go under it', (tester) async {
-      await pumpApp(tester, screen(heroOf(99999900)), size: const Size(360, 3000));
-      final number = tester.getRect(find.byKey(const ValueKey('safeToSpend')));
-      expect(tester.getRect(find.byKey(const ValueKey('dayDots'))).top, greaterThanOrEqualTo(number.bottom));
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('320 dp at text scale 1.0 fits without overflow', (tester) async {
-      await pumpApp(tester, screen(budgetWallet(budgets: false)), size: const Size(320, 3000));
+      await pumpApp(tester, screen(wc), size: const Size(360, 3000));
       expect(find.byKey(const ValueKey('dayDots')), findsOneWidget);
+      expect(tester.getRect(find.byKey(const ValueKey('safeToSpend'))).right, lessThanOrEqualTo(360));
       expect(tester.takeException(), isNull);
     });
   });

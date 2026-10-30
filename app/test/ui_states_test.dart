@@ -52,8 +52,8 @@ void main() {
       expect(p.overToday > 0 && p.overBy == 0, isTrue, reason: 'precondition: over today only (${p.overToday}, ${p.overBy})');
       await pumpApp(t, today(wc), size: const Size(400, 1600));
       final s = textOf(t, 'overSentence');
-      expect(s, contains('over for today'));
-      expect(s, contains('Nothing more today; tomorrow starts at'));
+      expect(s, 'Over today');
+      expect(find.textContaining('Tomorrow'), findsOneWidget);
       expect(find.textContaining('-'), findsNothing, reason: 'no minus sign on Today');
       expect(find.textContaining('OVER TODAY BY'), findsOneWidget);
     });
@@ -64,10 +64,8 @@ void main() {
       wc.reload();
       expect(wc.period().overBy > 0, isTrue);
       await pumpApp(t, today(wc), size: const Size(400, 1600));
-      expect(find.descendant(of: key('overSentence'), matching: find.textContaining('over the plan for this period.', findRichText: true)),
-          findsOneWidget);
-      expect(find.textContaining('over the plan', findRichText: true), findsWidgets);
-      expect(find.textContaining('for this period', findRichText: true), findsOneWidget, reason: 'said once');
+      expect(find.descendant(of: key('overSentence'), matching: find.textContaining('over plan', findRichText: true)), findsOneWidget);
+      expect(find.textContaining('over plan', findRichText: true), findsOneWidget, reason: 'said once');
     });
 
     testWidgets('last day, over the plan: the period sentence, no tomorrow figure', (t) async {
@@ -83,9 +81,8 @@ void main() {
               body: TodayScreen(
                   key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {}, clock: () => DateTime(2026, 10, 31, 12))),
           size: const Size(400, 1600));
-      expect(find.descendant(of: key('overSentence'), matching: find.textContaining('over the plan for this period.', findRichText: true)),
-          findsOneWidget);
-      expect(find.textContaining('tomorrow', findRichText: true), findsNothing);
+      expect(find.descendant(of: key('overSentence'), matching: find.textContaining('over plan', findRichText: true)), findsOneWidget);
+      expect(find.textContaining('Tomorrow'), findsNothing);
       expect(find.textContaining('-'), findsNothing, reason: 'no minus sign on Today');
     });
 

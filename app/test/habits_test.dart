@@ -99,7 +99,8 @@ void main() {
       wc.reload();
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
       expect(find.byKey(const ValueKey('reviewCard')), findsNothing);
-      expect(find.textContaining('Reviewed · 1 week in a row'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('reviewed')), matching: find.text('Reviewed')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('reviewed')), matching: find.text('week in a row')), findsOneWidget);
     });
 
     test('confirming the guessed category of a row takes it off the review list', () {
@@ -198,8 +199,8 @@ void main() {
       wc.markReviewDone();
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
       expect(find.byKey(const ValueKey('reviewCard')), findsNothing);
-      expect(find.textContaining('Reviewed · 1 week in a row'), findsOneWidget);
-      expect(find.byIcon(Icons.check_circle_outline), findsWidgets);
+      expect(find.descendant(of: find.byKey(const ValueKey('reviewed')), matching: find.text('Reviewed')), findsOneWidget);
+      expect(find.byIcon(Icons.check), findsWidgets);
     });
 
     tw('a review that is not done yet shows no "Reviewed" line', (tester) async {
@@ -214,16 +215,16 @@ void main() {
       expect(find.textContaining('Nothing to fix'), findsOneWidget);
     });
 
-    tw('Due by payday: confirmed bills only, count and exact sum; a tap calls openBills; hidden at zero', (tester) async {
-      var taps = 0;
+    tw('Before payday: confirmed bills only, exact sum and count in one tile; hidden at zero', (tester) async {
       final wc = hw();
-      await pumpApp(tester, today(wc, openBills: () => taps++), size: const Size(400, 3000));
-      expect(find.textContaining('Due by payday'), findsNothing, reason: 'only a candidate so far');
+      await pumpApp(tester, today(wc), size: const Size(400, 3000));
+      expect(find.byKey(const ValueKey('comingUpLine')), findsNothing, reason: 'only a candidate so far');
       wc.confirmRecurring(wc.recurringBills().single.id);
-      await pumpApp(tester, today(wc, openBills: () => taps++), size: const Size(400, 3000));
-      expect(find.text(eur('Due by payday: 1 bill, 29.99 €')), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('billsLine')));
-      expect(taps, 1);
+      await pumpApp(tester, today(wc), size: const Size(400, 3000));
+      final tile = find.byKey(const ValueKey('comingUpLine'));
+      expect(find.descendant(of: tile, matching: find.text(eur('29.99 €'))), findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.text('1 cost')), findsOneWidget);
+      expect(find.textContaining('Due by payday'), findsNothing);
     });
   });
 
@@ -250,11 +251,16 @@ void main() {
       expect(p.reservedBills, 2999 + 4500);
     });
 
-    tw('Today: the sum leaves out the covered bill, which is named apart; the late one is marked overdue', (tester) async {
-      await pumpApp(tester, today(wallet()), size: const Size(400, 3000));
-      expect(find.text(eur('Due by payday: 2 bills, 74.99 € · 1 covered by your plan')), findsOneWidget);
+    tw('Today: Before payday leaves out the covered bill; the late one gets an Overdue tile that opens Bills', (tester) async {
+      var taps = 0;
+      await pumpApp(tester, today(wallet(), openBills: () => taps++), size: const Size(400, 3000));
+      final before = find.byKey(const ValueKey('comingUpLine'));
+      expect(find.descendant(of: before, matching: find.text(eur('74.99 €'))), findsOneWidget);
+      expect(find.descendant(of: before, matching: find.text('2 costs')), findsOneWidget);
       expect(find.byKey(const ValueKey('billsOverdue')), findsOneWidget);
-      expect(find.textContaining('1 overdue'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('billsLine')), matching: find.text('Overdue')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('billsLine')));
+      expect(taps, 1);
     });
 
     tw('Plan: covered and overdue are written on the bill rows', (tester) async {
@@ -264,7 +270,7 @@ void main() {
       expect(find.byIcon(Icons.error_outline), findsWidgets);
     });
 
-    tw('only covered bills: no amount in the Today line', (tester) async {
+    tw('only covered bills: no Before payday tile', (tester) async {
       final wc = hw();
       wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
         for (final d in const ['2026-07-27', '2026-08-27', '2026-09-27']) syntheticTx(d, -1299, 'POS plaćanje', 'POS NETFLIX.COM'),
@@ -273,7 +279,7 @@ void main() {
       wc.refreshRecurring();
       wc.confirmRecurring(wc.recurringBills().firstWhere((b) => b.coveredByPlan).id);
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
-      expect(find.text('Due by payday: 1 covered by your plan'), findsOneWidget);
+      expect(find.byKey(const ValueKey('comingUpLine')), findsNothing);
       expect(find.byKey(const ValueKey('billsOverdue')), findsNothing);
     });
   });
@@ -447,13 +453,13 @@ void main() {
       expect(find.text('Bill removed'), findsOneWidget);
     });
 
-    tw('expected bills: Skip this cycle moves the due date on and the Today line stops counting the bill', (tester) async {
+    tw('expected bills: Skip this cycle moves the due date on and the Before payday tile stops counting the bill', (tester) async {
       final wc = hw(confirmBill: true);
       final bill = wc.recurringBills().single;
       expect(bill.nextDue, '2026-10-25');
       expect(wc.period().reservedBills, 2999, reason: 'unmatched payment: still reserved');
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
-      expect(find.text(eur('Due by payday: 1 bill, 29.99 €')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('comingUpLine')), matching: find.text(eur('29.99 €'))), findsOneWidget);
       await plan(tester, wc);
       expect(find.textContaining('next 25 Oct'), findsOneWidget);
       await tester.ensureVisible(find.byKey(ValueKey('skip:${bill.id}')));
@@ -465,7 +471,7 @@ void main() {
       expect(find.textContaining('next 24 Nov', skipOffstage: false), findsOneWidget);
       expect(find.textContaining('next 25 Oct', skipOffstage: false), findsNothing);
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
-      expect(find.textContaining('Due by payday'), findsNothing);
+      expect(find.byKey(const ValueKey('comingUpLine')), findsNothing);
     });
 
     tw('nudges switch: on asks, schedules and stays on; says amounts never show', (tester) async {
