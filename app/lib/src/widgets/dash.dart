@@ -227,8 +227,17 @@ class Tile extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final String? semanticLabel;
   final bool attention;
+
+  /// Keep the parts of the tile (buttons, rows) in the semantics tree next to [semanticLabel] instead of replacing them.
+  final bool exposeChildren;
   const Tile(
-      {super.key, required this.child, this.onTap, this.padding = const EdgeInsets.all(12), this.semanticLabel, this.attention = false});
+      {super.key,
+      required this.child,
+      this.onTap,
+      this.padding = const EdgeInsets.all(12),
+      this.semanticLabel,
+      this.attention = false,
+      this.exposeChildren = false});
 
   static const radius = 12.0;
 
@@ -250,7 +259,7 @@ class Tile extends StatelessWidget {
       button: onTap != null,
       label: attention ? 'Needs action: $semanticLabel' : semanticLabel,
       onTap: onTap,
-      excludeSemantics: true,
+      excludeSemantics: !exposeChildren,
       child: body,
     );
   }

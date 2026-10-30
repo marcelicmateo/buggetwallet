@@ -9,6 +9,10 @@ import '../widgets/dash.dart';
 import '../widgets/sheets.dart';
 import 'save.dart';
 
+/// Whole percent of [target] that is [saved], rounded down so 100 means reached; 0 without a target, never below 0 or above 100.
+/// Integer maths: a double gives 28 for 290 of 1000.
+int goalPercent(int saved, int target) => target <= 0 ? 0 : (saved.clamp(0, target) * 100) ~/ target;
+
 /// Save tab › Goals (RX6): the total as one tile with a bar, a compact ring tile per goal (a tap opens its sheet), "+ Goal", and the
 /// money that came in above plan. Exact cents everywhere; a ring is a display ratio of two core amounts.
 class GoalsScreen extends StatelessWidget {
@@ -36,7 +40,7 @@ class GoalsScreen extends StatelessWidget {
       return 'by ${monthYear(d.year, d.month)}';
     }
 
-    // The share of the target, 0..1 (display only); the percent is rounded down so "100%" means reached.
+    // The share of the target, 0..1 (ring and bar fill only); the shown percent is [goalPercent] (integer maths).
     double share(int saved, int target) => target > 0 ? (saved / target).clamp(0.0, 1.0) : 0.0;
 
     Widget goal(Goal g) {
@@ -51,7 +55,7 @@ class GoalsScreen extends StatelessWidget {
         color: c.s3,
         compact: true,
         // A reached goal says so once, in the chip.
-        sub: g.target > 0 ? '${(f * 100).floor()}% of ${moneyExact(g.target, cur)}${reached ? '' : '\n${eta(g)}'}' : eta(g),
+        sub: g.target > 0 ? '${goalPercent(g.saved, g.target)}% of ${moneyExact(g.target, cur)}${reached ? '' : '\n${eta(g)}'}' : eta(g),
         chip: g.saved < 0
             ? const StateChip.over(text: 'Below zero')
             : reached
@@ -75,7 +79,7 @@ class GoalsScreen extends StatelessWidget {
           trailing: p.goalMonthly > 0 ? TileNote('${moneyExact(p.goalMonthly, cur)} a month') : null,
           sub: hasBar ? 'of ${moneyExact(tot.target, cur)}' : (tot.count == 0 ? 'No goals yet' : null),
           visual: hasBar ? _TotalBar(share(tot.saved, tot.target), c.s3) : null,
-          visualSpoken: hasBar ? '${(share(tot.saved, tot.target) * 100).floor()} percent of the target' : null,
+          visualSpoken: hasBar ? '${goalPercent(tot.saved, tot.target)} percent of the target' : null,
         ),
       ),
       if (extraAbove > 0)

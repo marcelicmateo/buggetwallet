@@ -109,8 +109,8 @@ class RingTile extends StatelessWidget {
     return Tile(
       onTap: onTap,
       attention: attention,
-      semanticLabel:
-          [label, center, value, if (sub != null) sub, if (trailing != null) trailing!.spoken, if (chip != null) chip!.spoken].join(', '),
+      // An empty centre (the goal rings) is skipped, not spoken as a gap.
+      semanticLabel: [label, center, value, sub, trailing?.spoken, chip?.spoken].whereType<String>().where((p) => p.isNotEmpty).join(', '),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         trailing == null ? TileLabel(label) : SplitRow(start: TileLabel(label), end: trailing!),
         const SizedBox(height: 8),

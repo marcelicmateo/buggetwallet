@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
+import 'package:budget_wallet/src/screens/goals.dart' show goalPercent;
 import 'package:budget_wallet/src/screens/save.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
@@ -134,6 +135,42 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    test('goalPercent: integer maths, rounded down, clamped', () {
+      expect(goalPercent(29000, 100000), 29, reason: '290 of 1000 is 29, a double says 28');
+      expect(goalPercent(57000, 100000), 57);
+      expect(goalPercent(14000, 100000), 14);
+      expect(goalPercent(99999, 100000), 99, reason: 'rounded down: 100 means reached');
+      expect(goalPercent(100000, 100000), 100);
+      expect(goalPercent(150000, 100000), 100, reason: 'more than the target');
+      expect(goalPercent(-2550, 100000), 0, reason: 'below zero');
+      expect(goalPercent(5000, 0), 0, reason: 'no target');
+      expect(goalPercent(5000, -1), 0);
+    });
+
+    testWidgets('the shown percent is exact: 29, 57 and 14, not 28, 56 and 13', (tester) async {
+      final wc = _wallet();
+      wc.repo.saveGoal(name: 'Aaa', target: 100000, saved: 29000, monthly: 0, sort: 1);
+      wc.repo.saveGoal(name: 'Bbb', target: 100000, saved: 57000, monthly: 0, sort: 2);
+      wc.repo.saveGoal(name: 'Ccc', target: 100000, saved: 14000, monthly: 0, sort: 3);
+      wc.reload();
+      await _pump(tester, wc);
+      for (final (n, pc) in [('Aaa', 29), ('Bbb', 57), ('Ccc', 14)]) {
+        final g = wc.goals.firstWhere((g) => g.name == n);
+        expect(find.descendant(of: _k('goal:${g.id}'), matching: find.textContaining('$pc% of 1,000')), findsOneWidget, reason: n);
+      }
+    });
+
+    testWidgets('a goal ring is spoken without an empty part', (tester) async {
+      final handle = tester.ensureSemantics();
+      final wc = _busy();
+      await _pump(tester, wc);
+      final g = wc.goals.firstWhere((g) => g.name == 'Emergency fund');
+      final label = tester.getSemantics(_k('goal:${g.id}')).label;
+      expect(label, isNot(contains(', ,')));
+      expect(label, startsWith('Emergency fund, 1,234.56'));
+      handle.dispose();
+    });
+
     testWidgets('a tap on a goal opens its sheet', (tester) async {
       final wc = _busy();
       await _pump(tester, wc);
@@ -169,6 +206,38 @@ void main() {
       expect(find.text('Skipped'), findsOneWidget);
     });
 
+    testWidgets('one wish ready and none cooling: the tile beside does not say the wishlist is empty', (tester) async {
+      final wc = _wallet();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      wc.repo.applyRemote([
+        Op('wish', 'w-r', {'name': 'Rain jacket', 'price': 8999, 'added': now - 100 * 3600000, 'status': 'waiting', 'deleted': 0},
+            Hlc(now + 1000, 0, 'peer').toString()),
+      ]);
+      wc.reload();
+      await _pump(tester, wc);
+      expect(_k('readyToDecide'), findsOneWidget);
+      expect(_in('emptySection:Cooling off', 'Nothing cooling off'), findsOneWidget);
+      expect(find.text('Wishlist is empty'), findsNothing);
+    });
+
+    testWidgets('an empty wishlist says so once; nothing decided shows an exact zero', (tester) async {
+      final wc = _wallet();
+      await _pump(tester, wc);
+      expect(_in('emptySection:Cooling off', 'Wishlist is empty'), findsOneWidget);
+      expect(_in('emptySection:Decided', moneyExact(0, 'EUR')), findsOneWidget);
+      expect(_in('emptySection:Decided', '0'), findsNothing, reason: 'a bare 0 has no unit');
+    });
+
+    testWidgets('the ready tile is spoken as needing action and keeps Buy it / Skip reachable', (tester) async {
+      final handle = tester.ensureSemantics();
+      final wc = _busy();
+      await _pump(tester, wc);
+      expect(tester.getSemantics(_k('readyToDecide')).label, startsWith('Needs action: Ready to decide, 1 wish'));
+      expect(find.bySemanticsLabel('Buy it'), findsOneWidget);
+      expect(find.bySemanticsLabel('Skip'), findsOneWidget);
+      handle.dispose();
+    });
+
     testWidgets('Skip moves a ready wish out of the attention tile', (tester) async {
       final wc = _busy();
       await _pump(tester, wc);
@@ -189,7 +258,8 @@ void main() {
       await tester.pump();
       expect(find.byType(StatusLabel), findsOneWidget);
       expect(find.text('Save for it'), findsOneWidget);
-      expect(find.textContaining('no wait needed'), findsOneWidget);
+      expect(find.textContaining('no wait needed'), findsNothing, reason: 'the tile note already says "Over 50 € waits 72 h"');
+      expect(find.textContaining('waits 72 h'), findsOneWidget);
     });
   });
 
