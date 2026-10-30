@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
+import '../dd_standin.dart';
 import '../device_list.dart';
 import '../file_chooser.dart';
 import '../widgets/sheets.dart';
@@ -32,6 +33,7 @@ class TodayView implements Listenable {
   String get currency => _wc.currency;
   String today() => _wc.today();
   PeriodBudget period() => _wc.period();
+  List<PeriodDay> periodDays() => _wc.periodDays();
   String? newPayday(String periodStart) => _wc.newPayday(periodStart);
   bool get keyBackupRowVisible => _wc.keyBackupRowVisible;
   DeviceStop? get deviceStop => _wc.deviceStop;

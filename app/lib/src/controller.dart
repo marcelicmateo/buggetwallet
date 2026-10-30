@@ -13,6 +13,9 @@ import 'calendar_source.dart';
 import 'clock_notice.dart';
 import 'conflict_text.dart';
 import 'controller_deps.dart';
+import 'dd_standin.dart' show PeriodDay;
+// The method below has the core function's name, so the function is reached through a prefix.
+import 'dd_standin.dart' as dd show periodDays;
 import 'device_list.dart';
 import 'device_relay.dart';
 import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDateOrRaw;
@@ -864,6 +867,15 @@ class WalletController extends ChangeNotifier {
           () => computePeriod(txs, effectiveSettings, goals, today(),
               bills: recurringBills(), planned: plannedOpen(), table: categoryTable, matchRows: rawExpanded),
           warnMs: 50));
+
+  /// One entry per day of the running pay period: within the day's money, over, today or to come (Today's day dots).
+  List<PeriodDay> periodDays() => _cached(
+      const MemoKey('periodDays'),
+      () => timed(
+          'wc.periodDays',
+          () => dd.periodDays(txs, effectiveSettings, goals, today(),
+              bills: recurringBills(), planned: plannedOpen(), table: categoryTable, matchRows: rawExpanded),
+          warnMs: 100));
 
   /// Saved or lost per pay period (salary to salary), oldest first; the last one is still running.
   List<PeriodSummary> payPeriods({int count = 12}) => _cached(MemoKey('payPeriods', count),

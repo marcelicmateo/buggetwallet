@@ -95,7 +95,6 @@ class TodayScreen extends StatelessWidget {
                   _HeroStats(f),
                   // Over the plan is said once (icon + sentence); a plan with no money in it says so.
                   if (!f.ended && p.overBudget) _OverPlanNote(f),
-                  if (p.planDaily > 0) PaceBar(used: f.used, elapsed: p.elapsed, over: p.spent > p.flexBudget * p.elapsed),
                   if (p.planDaily > 0) _PaceSummary(f),
                   if (p.foreignByCurrency.isNotEmpty)
                     ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: view.openCurrencies),
@@ -217,28 +216,58 @@ class _HeroHeader extends StatelessWidget {
       ]);
 }
 
-/// The big number.
+/// The big number, with the day dots on its right (under it when both do not fit on one row).
 class _HeroNumber extends StatelessWidget {
   const _HeroNumber(this.f);
   final _TodayFigures f;
+
+  static const double _gap = 12;
+
   @override
   Widget build(BuildContext context) {
     final c = context.c;
+    final text = f.over && !f.ended ? shown(f.hero, f.cur) : money(f.hero, f.cur, decimals: 0);
+    final style = numStyle.copyWith(
+        fontSize: BwType.heroSize, height: 0.95, fontWeight: FontWeight.w500, letterSpacing: -3, color: f.over && !f.ended ? c.bad : c.ink);
+    final number = FittedBox(
+        alignment: Alignment.centerLeft, fit: BoxFit.scaleDown, child: MoneyText(text, key: const ValueKey('safeToSpend'), style: style));
+    final days = f.view.periodDays();
     return TotalRule(
       padding: const EdgeInsets.fromLTRB(0, 8, 0, 10),
-      child: FittedBox(
-        alignment: Alignment.centerLeft,
-        fit: BoxFit.scaleDown,
-        child: MoneyText((f.over && !f.ended ? shown(f.hero, f.cur) : money(f.hero, f.cur, decimals: 0)),
-            key: const ValueKey('safeToSpend'),
-            style: numStyle.copyWith(
-                fontSize: BwType.heroSize,
-                height: 0.95,
-                fontWeight: FontWeight.w500,
-                letterSpacing: -3,
-                color: f.over && !f.ended ? c.bad : c.ink)),
-      ),
+      child: days.isEmpty
+          ? number
+          : LayoutBuilder(builder: (context, box) {
+              final dots = DayDots(days: days);
+              if (_naturalWidth(context, text, style) + _gap + DayDots.width <= box.maxWidth) {
+                return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(child: Align(alignment: Alignment.centerLeft, child: number)),
+                  const SizedBox(width: _gap),
+                  dots,
+                ]);
+              }
+              return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [number, const SizedBox(height: 10), dots]);
+            }),
     );
+  }
+
+  /// The number's width at full size and the current text scale (what `MoneyText` lays out).
+  static double _naturalWidth(BuildContext context, String text, TextStyle style) {
+    final i = text.indexOf('\u00A0');
+    final size = style.fontSize ?? 14;
+    final painter = TextPainter(
+      text: TextSpan(
+          style: style,
+          children: i < 0
+              ? [TextSpan(text: text)]
+              : [
+                  TextSpan(text: text.substring(0, i)),
+                  TextSpan(text: '\u00A0', style: TextStyle(fontSize: size * 0.4)),
+                  TextSpan(text: text.substring(i + 1)),
+                ]),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    return painter.width;
   }
 }
 

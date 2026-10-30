@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import '../dd_standin.dart';
 import '../format.dart';
 import '../insights_api.dart';
 import '../layout.dart';
@@ -613,6 +614,109 @@ class PaceBar extends StatelessWidget {
       }),
     );
   }
+}
+
+/// One square per day of the pay period, Monday-first columns like a calendar: accent = within that day's money, `bad`
+/// (hatched) = over, thick accent outline = today, thin outline = still to come. Under it one muted counts line.
+class DayDots extends StatelessWidget {
+  final List<PeriodDay> days;
+  const DayDots({super.key, required this.days});
+
+  /// Square and gap sizes (dp); a square is never smaller than 10.
+  static const double square = 13, gap = 3;
+
+  /// The grid's width: seven columns.
+  static const double width = 7 * square + 6 * gap;
+
+  static int _count(List<PeriodDay> days, DayMark m) => days.where((d) => d.mark == m).length;
+
+  /// What a screen reader says: the whole grid in one sentence.
+  static String label(List<PeriodDay> days) {
+    final within = _count(days, DayMark.within), over = _count(days, DayMark.over);
+    final today = _count(days, DayMark.today), toCome = _count(days, DayMark.toCome);
+    return 'Pay period, ${days.length} days: $within within the day\'s money, $over over'
+        '${today > 0 ? ', today' : ''}${toCome > 0 ? ', $toCome to come' : ''}.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    if (days.isEmpty) return const SizedBox.shrink();
+    final within = _count(days, DayMark.within), over = _count(days, DayMark.over);
+    final offset = DateTime.parse(days.first.date).weekday - 1; // Monday = 0
+    final rows = (offset + days.length + 6) ~/ 7;
+    Widget cell(PeriodDay d) {
+      final Widget box;
+      switch (d.mark) {
+        case DayMark.within:
+          box = DecoratedBox(decoration: BoxDecoration(color: c.accent));
+        case DayMark.over:
+          box = DecoratedBox(decoration: BoxDecoration(color: c.bad), child: CustomPaint(painter: _DotHatchPainter(c.surface)));
+        case DayMark.today:
+          box = DecoratedBox(decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.accent, width: 3)));
+        case DayMark.toCome:
+          box = DecoratedBox(decoration: BoxDecoration(color: c.surface, border: Border.all(color: c.lineStrong)));
+      }
+      return SizedBox(key: ValueKey('dayDot:${d.date}'), width: square, height: square, child: box);
+    }
+
+    return Semantics(
+      label: label(days),
+      container: true,
+      excludeSemantics: true,
+      child:
+          Column(key: const ValueKey('dayDots'), crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        SizedBox(
+          width: width,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            for (var r = 0; r < rows; r++)
+              Padding(
+                padding: EdgeInsets.only(top: r == 0 ? 0 : gap),
+                child: Row(children: [
+                  for (var col = 0; col < 7; col++) ...[
+                    if (col > 0) const SizedBox(width: gap),
+                    () {
+                      final i = r * 7 + col - offset;
+                      return i >= 0 && i < days.length ? cell(days[i]) : const SizedBox(width: square, height: square);
+                    }(),
+                  ],
+                ]),
+              ),
+          ]),
+        ),
+        if (within + over > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: SizedBox(
+              width: width,
+              child: Text('$within within · $over over',
+                  key: const ValueKey('dayDotsCounts'), style: TextStyle(fontSize: 12, height: 1.25, color: c.muted)),
+            ),
+          ),
+      ]),
+    );
+  }
+}
+
+/// Thin diagonal lines over a filled `bad` square: "over" stays readable without colour.
+class _DotHatchPainter extends CustomPainter {
+  final Color color;
+  _DotHatchPainter(this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    for (var x = -size.height; x < size.width + size.height; x += 4) {
+      canvas.drawLine(Offset(x, size.height), Offset(x + size.height, 0), p);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_DotHatchPainter old) => old.color != color;
 }
 
 /// Opens the date range picker for [RangeControl]; tests give their own.
