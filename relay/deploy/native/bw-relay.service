@@ -2,8 +2,10 @@
 # The relay listens on 127.0.0.1 only; Caddy (native, HTTPS) is the one thing the router forwards to.
 [Unit]
 Description=Budget Wallet relay
-After=network-online.target
-Wants=network-online.target
+# time-sync.target: a Pi has no hardware clock and boots with a stale time; signatures are checked against the relay
+# clock (±5 min), so the relay starts once the clock is set (enable systemd-time-wait-sync.service, see README.md).
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
 
 [Service]
 Type=exec
