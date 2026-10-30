@@ -7,16 +7,18 @@ import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../tabs.dart';
-import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/dash.dart';
 import '../widgets/rebuild_when_shown.dart';
 import 'bills_panel.dart';
 import 'habits_panels.dart';
 import 'recurring_sheet.dart';
 import 'scan_bill.dart';
+import 'upcoming.dart';
+import 'upcoming_view.dart';
 
-/// The Bills tab (P5): what is due before payday, the slips to review, the expected (repeating) bills and the bills database,
-/// with Scan bill (where there is a camera) and Add bill on top. The panels are the ones that used to be in Plan.
+/// The Bills tab (RX5, Paper Tiles): Before payday, the cost per month and per year, the days until payday, the slips to review, the
+/// expected (repeating) bills with Scan bill and Add bill, then the bills database.
 class BillsScreen extends StatefulWidget {
   final WalletController wc;
   final FileChooser chooser;
@@ -72,6 +74,8 @@ class _BillsScreenState extends State<BillsScreen> {
   Widget _page(BuildContext context) {
     final wc = widget.wc;
     final review = wc.billLists().review;
+    final cost = wc.billsCost();
+    final cur = wc.currency;
     return NarrowPage(
       child: SingleChildScrollView(
         key: const ValueKey('billsPage'),
@@ -80,50 +84,75 @@ class _BillsScreenState extends State<BillsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: gapped([
-            KeyedSubtree(key: _keys[BillsAnchor.comingUp], child: _Actions(wc: wc, chooser: widget.chooser)),
-            ComingUpPanel(wc: wc),
-            if (review.isNotEmpty)
-              KeyedSubtree(
-                key: _keys[BillsAnchor.review],
-                child: Panel(key: const ValueKey('billsReviewPanel'), children: [
-                  SectionHead('To review', trailing: Tag('${review.length}')),
-                  const Muted('Read from a code, file or photo. Nothing counts until you check and confirm it.'),
-                  Rows(children: [for (final b in review) BillRow(wc: wc, chooser: widget.chooser, bill: b)]),
-                ]),
+            DashGrid(children: [
+              DashItem(span: 2, child: KeyedSubtree(key: _keys[BillsAnchor.comingUp], child: BeforePaydayTile(wc: wc))),
+              if (cost != null) ...[
+                DashItem(
+                    child: StatTile(
+                        key: const ValueKey('recurringCost'),
+                        label: 'Per month',
+                        value: moneyExact(cost.monthly, cur),
+                        trailing: cost.approximate ? const TileNote('about') : null)),
+                DashItem(
+                    child: StatTile(
+                        label: 'Per year',
+                        value: moneyExact(cost.yearly, cur),
+                        trailing: cost.approximate ? const TileNote('about') : null)),
+              ],
+              if (_hasCalendar(wc)) DashItem(span: 2, child: UntilPaydayTile(wc: wc)),
+              if (review.isNotEmpty)
+                DashItem(
+                  span: 2,
+                  child: KeyedSubtree(
+                    key: _keys[BillsAnchor.review],
+                    child: Tile(
+                      key: const ValueKey('billsReviewPanel'),
+                      attention: true,
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+                        HeadingRow(const TileLabel('To review'), TileNote('${review.length} to check')),
+                        Rows(children: [for (final b in review) BillRow(wc: wc, chooser: widget.chooser, bill: b)]),
+                      ]),
+                    ),
+                  ),
+                ),
+              DashItem(
+                span: 4, // the whole row, on a wide window too (the grid clamps it to the columns it has)
+                child: KeyedSubtree(
+                  key: _keys[BillsAnchor.expected],
+                  child: ExpectedBillsPanel(wc: wc, trailing: _Actions(wc: wc, chooser: widget.chooser)),
+                ),
               ),
-            KeyedSubtree(key: _keys[BillsAnchor.expected], child: ExpectedBillsPanel(wc: wc)),
+            ]),
             KeyedSubtree(key: _keys[BillsAnchor.slips], child: BillsPanel(wc: wc, chooser: widget.chooser, showReview: false)),
           ]),
         ),
       ),
     );
   }
+
+  static bool _hasCalendar(WalletController wc) => _calendarDays(wc).days.any((d) => d.kind == CalKind.bill || d.kind == CalKind.planned);
 }
 
-/// Scan bill (only where there is a camera) and Add bill (a repeating bill).
+/// Scan bill (only where there is a camera) and Add bill (a repeating bill), in the label row of the Expected bills tile.
 class _Actions extends StatelessWidget {
   final WalletController wc;
   final FileChooser chooser;
   const _Actions({required this.wc, required this.chooser});
   @override
-  Widget build(BuildContext context) => Wrap(spacing: 8, runSpacing: 8, children: [
+  Widget build(BuildContext context) => Wrap(alignment: WrapAlignment.end, children: [
         if (wc.billInputs.camera.supported)
-          OutlinedButton.icon(
+          TileAction(
             key: const ValueKey('billsScan'),
-            style: accentOutlined(context),
-            icon: const Icon(Icons.document_scanner_outlined),
-            label: const Text('Scan bill'),
-            onPressed: () {
+            label: 'Scan bill',
+            onTap: () {
               logNav('bills.scanTab');
               scanBillFlow(context, wc, chooser: chooser);
             },
           ),
-        OutlinedButton.icon(
+        TileAction(
           key: const ValueKey('billsAdd'),
-          style: accentOutlined(context),
-          icon: const Icon(Icons.add),
-          label: const Text('Add bill'),
-          onPressed: () {
+          label: 'Add bill',
+          onTap: () {
             logNav('bills.addTab');
             openRecurringForm(context, wc);
           },
@@ -131,69 +160,88 @@ class _Actions extends StatelessWidget {
       ]);
 }
 
-/// "N bills before payday: total", then each bill with its due date and what it sets aside. The numbers are core's (`dueCycles`,
-/// the same as Today's "Due by payday" line); a bill in a plan line is listed as covered and not added; a long bill after payday
-/// says it is held until paid.
-class ComingUpPanel extends StatelessWidget {
+/// "Before payday": the money held for the bills and planned costs due before payday (core's `PeriodBudget.beforePayday`, the same
+/// number and label as Today) and how many costs it holds. A tap opens Upcoming, the list with dates.
+class BeforePaydayTile extends StatelessWidget {
   final WalletController wc;
-  const ComingUpPanel({super.key, required this.wc});
-
-  static String _name(RecurringBill b) => b.label.isNotEmpty ? b.label : b.payee;
-
+  const BeforePaydayTile({super.key, required this.wc});
   @override
   Widget build(BuildContext context) {
     final p = wc.period();
-    final cur = wc.currency, today = wc.today();
-    final table = wc.categoryTable;
-    bool held(DueCycle x) => x.bill.isLong && x.due.compareTo(p.end) >= 0;
-    final soon = [
-      for (final x in p.dueCycles)
-        if (!held(x)) x
-    ];
-    final heldCycles = [
-      for (final x in p.dueCycles)
-        if (held(x) && x.reserve > 0) x
-    ];
-    final counted = [
-      for (final x in soon)
-        if (!x.coveredIn(table)) x
-    ];
-    final billCount = {for (final x in counted) x.bill.id}.length;
-    final reserved = counted.fold<int>(0, (s, x) => s + x.reserve);
-    final heldTotal = heldCycles.fold<int>(0, (s, x) => s + x.reserve);
-    final payments = counted.length > billCount ? ' (${counted.length} payments)' : '';
-    final shown = [...soon]..sort((a, b) => a.due.compareTo(b.due));
-    return Panel(key: const ValueKey('comingUpPanel'), children: [
-      const SectionHead('Coming up'),
-      if (shown.isEmpty && heldCycles.isEmpty)
-        const EmptyNote('No bills due before payday. Bills get here when you add one, scan a slip or import a bill file.')
-      else ...[
-        Heading(
-            billCount > 0
-                ? '$billCount ${billCount == 1 ? 'bill' : 'bills'}$payments before payday: ${moneyExact(reserved, cur)}'
-                : heldCycles.isNotEmpty
-                    ? 'Held until paid: ${moneyExact(heldTotal, cur)}'
-                    : 'Nothing to set aside before payday',
-            key: const ValueKey('comingUpHeading')),
-        const Muted('These come off your daily money until they are paid.'),
-        if (shown.isNotEmpty)
-          Rows(children: [
-            for (final x in shown)
-              LineItem(_name(x.bill), moneyExact(x.reserve, cur),
-                  key: ValueKey('comingUp:${x.bill.id}:${x.due}'),
-                  sub: [
-                    'Due ${shortDateOrRaw(x.due)}',
-                    if (x.due.compareTo(today) < 0) 'overdue',
-                    if (x.coveredIn(table)) 'covered by your plan, not added',
-                  ].join(' · ')),
-          ]),
-        for (final x in heldCycles)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text('${_name(x.bill)} ${moneyExact(x.reserve, cur)} held until paid',
-                key: ValueKey('comingHeld:${x.bill.id}'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
-          ),
-      ],
-    ]);
+    final n = p.beforePaydayCount;
+    return StatTile(
+      key: const ValueKey('comingUpPanel'),
+      label: 'Before payday',
+      value: moneyExact(p.beforePayday, wc.currency),
+      sub: n > 0 ? '$n ${n == 1 ? 'cost' : 'costs'}' : 'Nothing due',
+      onTap: () {
+        logNav('bills.upcoming');
+        openUpcoming(context, UpcomingView(wc));
+      },
+    );
+  }
+}
+
+/// What the calendar shows: [days] from today to payday (Monday-first with [startWeekday]), and the spoken form.
+({List<CalDay> days, int startWeekday, String spoken}) _calendarDays(WalletController wc) {
+  final p = wc.period();
+  final cur = wc.currency, today = wc.today();
+  final end = p.end;
+  // Counted costs only (the ones Before payday holds): a bill in a plan line is covered, not set aside again; a long bill held
+  // until paid and due after payday is not before payday.
+  final table = wc.categoryTable;
+  final items = <String, List<({String name, int amount, bool bill})>>{};
+  for (final x in p.dueCycles) {
+    if (x.coveredIn(table) || x.due.compareTo(today) < 0 || x.due.compareTo(end) >= 0) continue;
+    final name = x.bill.label.isNotEmpty ? x.bill.label : x.bill.payee;
+    (items[x.due] ??= []).add((name: name, amount: x.reserve, bill: true));
+  }
+  for (final x in p.reservedPlannedRows) {
+    if (x.date.compareTo(today) < 0 || x.date.compareTo(end) >= 0) continue;
+    (items[x.date] ??= []).add((name: x.title, amount: x.amount ?? 0, bill: false));
+  }
+  final days = <CalDay>[];
+  final spoken = <String>[];
+  for (var d = today; d.compareTo(end) <= 0 && days.length < 62; d = addDays(d, 1)) {
+    final label = '${int.parse(d.substring(8))}';
+    final here = items[d] ?? const [];
+    if (d == end) {
+      days.add(CalDay(label, kind: CalKind.payday, today: d == today));
+      spoken.add('${shortDateOrRaw(d)}: payday');
+    } else if (here.isEmpty) {
+      days.add(CalDay(label, today: d == today));
+    } else {
+      // One item: its amount. Several: how many (the widget adds nothing up).
+      days.add(CalDay(label,
+          kind: here.any((i) => i.bill) ? CalKind.bill : CalKind.planned,
+          today: d == today,
+          amount: here.length == 1 ? moneyExact(here.first.amount, cur) : '${here.length}×'));
+      spoken.add('${shortDateOrRaw(d)}: ${here.map((i) => i.name).join(', ')}');
+    }
+  }
+  return (days: days, startWeekday: DateTime.parse(today).weekday, spoken: spoken.join('. '));
+}
+
+/// The days until payday: a bill is filled, a planned cost dashed, payday flagged. A day with one cost shows its amount, a day with
+/// several shows how many. A tap opens Upcoming.
+class UntilPaydayTile extends StatelessWidget {
+  final WalletController wc;
+  const UntilPaydayTile({super.key, required this.wc});
+  @override
+  Widget build(BuildContext context) {
+    final cal = _calendarDays(wc);
+    return Tile(
+      key: const ValueKey('untilPaydayTile'),
+      onTap: () {
+        logNav('bills.upcoming');
+        openUpcoming(context, UpcomingView(wc));
+      },
+      semanticLabel: 'Until payday. ${cal.spoken}',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+        HeadingRow(const TileLabel('Until payday'), TileNote('payday ${shortDateOrRaw(wc.period().end)}')),
+        const SizedBox(height: 8),
+        IgnorePointer(child: CalendarStrip(days: cal.days, startWeekday: cal.startWeekday)),
+      ]),
+    );
   }
 }

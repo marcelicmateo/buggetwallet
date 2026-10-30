@@ -98,6 +98,7 @@ void main() {
     // bank balance question.
     await tester.tap(navTab('Bills'));
     await tester.pumpAndSettle();
+    await binding.takeScreenshot('3-bills-top');
     await tester.ensureVisible(find.byKey(const ValueKey('recurringCost')));
     await tester.pumpAndSettle();
     await binding.takeScreenshot('3-bills-cost');

@@ -261,7 +261,7 @@ void main() {
       await pumpApp(tester, Scaffold(body: PlanPage(wc: wallet())), size: const Size(400, 4000));
       expect(find.text('Covered by your plan'), findsOneWidget);
       expect(find.textContaining('Overdue'), findsOneWidget);
-      expect(find.byIcon(Icons.error_outline), findsWidgets);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsWidgets, reason: 'the Overdue chip has an icon and a word');
     });
 
     tw('only covered bills: no amount in the Today line', (tester) async {
@@ -422,7 +422,7 @@ void main() {
       await tester.tap(_keyed('confirm:'));
       await tester.pump();
       expect(find.text('Looks like a monthly bill'), findsNothing);
-      expect(find.text('Confirmed'), findsOneWidget);
+      expect(_keyed('bill:'), findsOneWidget, reason: 'a confirmed bill row (the Confirmed heading only shows beside candidates)');
       expect(find.byTooltip('Remove bill'), findsOneWidget);
       expect(wc.period().reservedBills, 2999);
     });
@@ -455,15 +455,15 @@ void main() {
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
       expect(find.text(eur('Due by payday: 1 bill, 29.99 €')), findsOneWidget);
       await plan(tester, wc);
-      expect(find.textContaining('next 25 Oct'), findsOneWidget);
+      expect(find.text('25 Oct'), findsOneWidget, reason: 'the date is the row\'s state chip');
       await tester.ensureVisible(find.byKey(ValueKey('skip:${bill.id}')));
       await tester.tap(find.byKey(ValueKey('skip:${bill.id}')));
       await tester.pumpAndSettle();
       expect(wc.recurringBills().single.nextDue, '2026-11-24');
       expect(wc.period().reservedBills, 0);
       // The page keeps its scroll position and may now be shorter: the row can sit outside the built window.
-      expect(find.textContaining('next 24 Nov', skipOffstage: false), findsOneWidget);
-      expect(find.textContaining('next 25 Oct', skipOffstage: false), findsNothing);
+      expect(find.text('24 Nov', skipOffstage: false), findsOneWidget);
+      expect(find.text('25 Oct', skipOffstage: false), findsNothing);
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
       expect(find.textContaining('Due by payday'), findsNothing);
     });

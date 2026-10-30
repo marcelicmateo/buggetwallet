@@ -132,40 +132,43 @@ void main() {
   });
 
   group('Bills', () {
-    tw('Coming up, Expected bills and the bills database, with Add bill', (t) async {
+    tw('Before payday, Expected bills and the bills database, with Add bill', (t) async {
       final wc = _wallet(bill: true);
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
       await tapTab(t, 'Bills');
       expect(find.byType(BillsScreen), findsOneWidget);
       expect(_key('comingUpPanel'), findsOneWidget);
-      expect(find.textContaining('before payday'), findsWidgets);
+      expect(find.text('BEFORE PAYDAY'), findsOneWidget);
       expect(_key('billsAdd'), findsOneWidget);
-      expect(find.text('Add bill'), findsWidgets, reason: 'the button on top and the one in Expected bills');
-      await _scrollInto(t, _key('addRecurring'), BillsScreen);
+      expect(find.text('Add bill'), findsOneWidget, reason: 'one Add bill, in the Expected bills tile (no second button)');
+      expect(_key('addRecurring'), findsNothing);
       expect(find.text('EXPECTED BILLS'), findsOneWidget);
       await _scrollInto(t, _key('importBill'), BillsScreen);
       expect(t.takeException(), isNull);
     });
 
-    tw('Coming up lists each bill with its due date and what it sets aside', (t) async {
+    tw('Before payday shows core\'s number and count; each bill has one state chip with its date', (t) async {
       final wc = _wallet(bill: true);
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
       await tapTab(t, 'Bills');
       final p = wc.period();
       expect(p.dueCycles, isNotEmpty);
+      final tile = _key('comingUpPanel');
+      expect(find.descendant(of: tile, matching: find.text(moneyExact(p.beforePayday, wc.currency))), findsOneWidget);
+      final n = p.beforePaydayCount;
+      expect(find.descendant(of: tile, matching: find.text('$n ${n == 1 ? 'cost' : 'costs'}')), findsOneWidget);
       for (final x in p.dueCycles) {
-        final row = _key('comingUp:${x.bill.id}:${x.due}');
+        final row = _key('bill:${x.bill.id}');
         expect(row, findsOneWidget);
-        expect(find.descendant(of: row, matching: find.textContaining('Due ')), findsOneWidget);
+        expect(find.descendant(of: row, matching: find.text(shortDateOrRaw(x.due))), findsOneWidget);
       }
       expect(find.textContaining('29.99'), findsWidgets);
     });
 
-    tw('no bills before payday: an empty state that says how bills get here', (t) async {
+    tw('no bills before payday: the tile says Nothing due', (t) async {
       await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
       await tapTab(t, 'Bills');
-      expect(find.textContaining('No bills due before payday'), findsOneWidget);
-      expect(find.textContaining('scan a slip or import a bill file'), findsOneWidget);
+      expect(find.descendant(of: _key('comingUpPanel'), matching: find.text('Nothing due')), findsOneWidget);
     });
 
     tw('Add bill opens the repeating bill form', (t) async {
@@ -237,7 +240,7 @@ void main() {
       expect(_top(t, find.text('EXPECTED BILLS')), lessThan(400), reason: 'scrolled to Expected bills');
     });
 
-    tw('Coming up with only a long bill held until paid says so, with the held total', (t) async {
+    tw('a long bill held until paid shows the Held chip with its whole amount, and core counts it in Before payday', (t) async {
       final wc = _wallet();
       final due = addDays(wc.period().end, 40);
       final id = wc.addRecurringBill(label: 'Car cover', category: 'Car & transport', amount: 60000, intervalDays: 365, firstDue: due);
@@ -246,9 +249,11 @@ void main() {
       expect(held.reserve, 60000, reason: 'core holds the whole yearly amount');
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
       await tapTab(t, 'Bills');
-      expect(find.text('Held until paid: ${moneyExact(60000, wc.currency)}'), findsOneWidget);
-      expect(find.textContaining('Nothing to set aside'), findsNothing);
-      expect(_key('comingHeld:$id'), findsOneWidget);
+      expect(find.descendant(of: _key('bill:$id'), matching: find.text('Held')), findsOneWidget);
+      expect(find.descendant(of: _key('bill:$id'), matching: find.text(moneyExact(60000, wc.currency))), findsOneWidget);
+      expect(_key('billHeld:$id'), findsOneWidget);
+      expect(p.beforePayday, 60000, reason: 'core holds the whole yearly amount from the start');
+      expect(find.descendant(of: _key('comingUpPanel'), matching: find.text(moneyExact(60000, wc.currency))), findsOneWidget);
     });
 
     tw('a device-local switch still updates Settings while shown, and after the tab was hidden', (t) async {
