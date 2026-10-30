@@ -5,6 +5,7 @@ import 'package:cryptography/cryptography.dart' show Sha256;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show AppLifecycleListener, AppLifecycleState, WidgetsBinding;
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_core/wallet_core.dart' as core show periodDays;
 import 'package:wallet_importer/wallet_importer.dart';
 import 'package:wallet_sync/wallet_sync.dart';
 
@@ -13,6 +14,7 @@ import 'calendar_source.dart';
 import 'clock_notice.dart';
 import 'conflict_text.dart';
 import 'controller_deps.dart';
+// The method below has the core function's name, so the function is reached through a prefix.
 import 'device_list.dart';
 import 'device_relay.dart';
 import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDateOrRaw;
@@ -864,6 +866,15 @@ class WalletController extends ChangeNotifier {
           () => computePeriod(txs, effectiveSettings, goals, today(),
               bills: recurringBills(), planned: plannedOpen(), table: categoryTable, matchRows: rawExpanded),
           warnMs: 50));
+
+  /// One entry per day of the running pay period: within the day's money, over, today or to come (Today's day dots).
+  List<PeriodDay> periodDays() => _cached(
+      const MemoKey('periodDays'),
+      () => timed(
+          'wc.periodDays',
+          () => core.periodDays(txs, effectiveSettings, goals, today(),
+              bills: recurringBills(), planned: plannedOpen(), table: categoryTable, matchRows: rawExpanded),
+          warnMs: 100));
 
   /// Saved or lost per pay period (salary to salary), oldest first; the last one is still running.
   List<PeriodSummary> payPeriods({int count = 12}) => _cached(MemoKey('payPeriods', count),

@@ -170,6 +170,7 @@ void main() {
       expect(find.textContaining('tomorrow gets more'), findsNothing);
       // item 5: no pace bar or "used" line that contradicts the message
       expect(find.byType(PaceBar), findsNothing);
+      expect(find.byKey(const ValueKey('dayDots')), findsOneWidget, reason: 'the dots stay over the plan');
       expect(find.textContaining('behind pace'), findsNothing);
       expect(find.textContaining(' used'), findsNothing);
       expect(_texts(tester).where(_negativeAmount.hasMatch), isEmpty);
@@ -179,7 +180,8 @@ void main() {
       await pumpApp(tester, today(budgetWallet(budgets: false)), size: const Size(400, 3000));
       expect(find.textContaining('On plan'), findsOneWidget);
       expect(find.textContaining('tomorrow gets more'), findsOneWidget);
-      expect(find.byType(PaceBar), findsOneWidget);
+      expect(find.byType(PaceBar), findsNothing, reason: 'the day dots replaced the bar on Today');
+      expect(find.byKey(const ValueKey('dayDots')), findsOneWidget);
     });
 
     testWidgets('a small overspend is shown to the cent, never "0 €"', (tester) async {

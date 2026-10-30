@@ -32,6 +32,7 @@ class TodayView implements Listenable {
   String get currency => _wc.currency;
   String today() => _wc.today();
   PeriodBudget period() => _wc.period();
+  List<PeriodDay> periodDays() => _wc.periodDays();
   String? newPayday(String periodStart) => _wc.newPayday(periodStart);
   bool get keyBackupRowVisible => _wc.keyBackupRowVisible;
   DeviceStop? get deviceStop => _wc.deviceStop;
