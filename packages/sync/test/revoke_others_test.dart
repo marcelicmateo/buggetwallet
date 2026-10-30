@@ -4,6 +4,7 @@
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:relay/relay.dart';
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -107,7 +108,7 @@ void main() {
     expect(await a.revokeOthers(), 0, reason: 'nothing left: one more call, nothing removed');
   });
 
-  test('a device that keeps asking between the calls: after 3 rounds it fails clearly, each round removed what it saw', () async {
+  test('a device that keeps asking between the calls does not make it fail: done once no other key is active', () async {
     var n = 10;
     final askers = <RelayTransport>[];
     late _Interleave client;
@@ -120,13 +121,60 @@ void main() {
     });
     final a = transport(seed(1), behind: const Duration(minutes: 3), client: client);
     await create(a);
-    await expectLater(a.revokeOthers(), fails(TransportFailure.other, 'others remain'));
-    expect(client.others, RelayTransport.revokeOthersRounds);
-    expect(askers, hasLength(3));
-    // The first two were rejected by the rounds after them; the last one still waits.
-    for (final t in askers.take(2)) {
-      await expectLater(t.state(), fails(TransportFailure.revoked));
+    final helper = transport(seed(2));
+    await expectLater(helper.state(), fails(TransportFailure.pending));
+    await a.approveDevice((await helper.fingerprint)!);
+    relayNow = relayNow.add(const Duration(minutes: 1));
+    // Round 1 (signed 3 min behind) spares the helper; round 2 revokes it and rejects the request made meanwhile.
+    expect(await a.revokeOthers(), 1);
+    expect(client.others, 2);
+    await expectLater(helper.state(), fails(TransportFailure.revoked));
+    await expectLater(askers.first.state(), fails(TransportFailure.revoked));
+    expect((await a.state()).pending, hasLength(1), reason: 'the one that asked after the last call waits, enrolled by nobody');
+  });
+
+  group('against a stub relay', () {
+    const self = '{"fp":"AAAA-AAAA","added":"2026-10-30T12:00:00Z","by":"wallet","revoked":null,"self":true}';
+    const other = '{"fp":"BBBB-BBBB","added":"2026-10-30T12:00:00Z","by":"wallet","revoked":null,"self":false}';
+    String stateWith(String keys) => '{"api":5,"devices":{},"keys":[$keys],"pending":[],"locked":true}';
+
+    RelayTransport stub(http.Response Function(http.Request r) answer) {
+      final t = RelayTransport(Uri.parse('http://relay.test'), key, deviceKey: seed(1), client: MockClient((r) async => answer(r)));
+      addTearDown(t.close);
+      return t;
     }
-    expect((await a.state()).pending, hasLength(1));
+
+    test('a key that stays active after 3 calls fails clearly with others remain', () async {
+      var calls = 0;
+      final t = stub((r) {
+        if (r.url.path.endsWith('/devices/others')) {
+          calls++;
+          return http.Response('{"revoked":0}', 200);
+        }
+        return http.Response(stateWith('$self,$other'), 200);
+      });
+      await expectLater(t.revokeOthers(), fails(TransportFailure.other, 'others remain'));
+      expect(calls, RelayTransport.revokeOthersRounds);
+    });
+
+    test('a state read that fails after an accepted call returns the count so far', () async {
+      final t = stub(
+          (r) => r.url.path.endsWith('/devices/others') ? http.Response('{"revoked":2}', 200) : http.Response('{"error":"internal"}', 500));
+      expect(await t.revokeOthers(), 2);
+    });
+
+    test('pending requests alone: one call, done', () async {
+      var calls = 0;
+      final t = stub((r) {
+        if (r.url.path.endsWith('/devices/others')) {
+          calls++;
+          return http.Response('{"revoked":1}', 200);
+        }
+        return http.Response(
+            '{"api":5,"devices":{},"keys":[$self],"pending":[{"fp":"CCCC-CCCC","at":"2026-10-30T12:00:00Z"}],"locked":true}', 200);
+      });
+      expect(await t.revokeOthers(), 1);
+      expect(calls, 1);
+    });
   });
 }
