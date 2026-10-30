@@ -147,7 +147,16 @@ String formatTime(DateTime t) {
 
 int _counter = 0;
 
+/// Default for `Relay.maxDevices`: device streams one wallet may hold (each is a folder and a `meta.json` entry).
+const int defaultMaxDevices = 256;
+
+/// Default for `Relay.minFileCost`: the least a stored file counts toward `--max-bytes` ([Wallet.storedSize]), so tiny
+/// files cannot use up the disk's inodes (a file takes at least one 4 KiB block anyway).
+const int defaultMinFileCost = 4096;
+
 /// Writes [bytes] to [target] through a temp file in the same folder, then renames it over [target].
+/// The file is flushed before the rename; the folder itself is not (dart:io cannot open a folder to fsync it): the data
+/// disk is mounted with `dirsync` (relay/deploy/native/README.md) so a rename survives a power cut.
 Future<void> writeAtomic(File target, List<int> bytes) async {
   await target.parent.create(recursive: true);
   final tmp = File('${target.parent.path}/.tmp-$pid-${_counter++}');
@@ -164,6 +173,9 @@ class DeviceState {
   int last = 0;
   DateTime lastSeen;
   final Map<String, int> acks = {};
+
+  /// Seqs at or above [first] that the meta lists but the disk lacks (found on load or by a read; not stored).
+  final Set<int> lost = {};
 }
 
 /// A kept snapshot: id, what it covers and its size on disk.
@@ -183,9 +195,15 @@ class Snap {
 
 /// One wallet: its public signing key, devices, snapshots and the byte total, rebuilt from its folder on start.
 class Wallet {
-  Wallet(this.wid, this.dir, this.pub, {String? instance, this.hooks})
+  Wallet(this.wid, this.dir, this.pub, {String? instance, this.hooks, this.minFileCost = defaultMinFileCost})
       : pubBytes = decodeBase64Url(pub, 32)!,
         instance = instance ?? newInstanceId();
+
+  /// The least a stored file counts toward `--max-bytes` ([storedSize]).
+  final int minFileCost;
+
+  /// What a stored file of [bytes] counts toward `--max-bytes` ([totalBytes]): its size, at least [minFileCost].
+  int storedSize(int bytes) => bytes < minFileCost ? minFileCost : bytes;
 
   /// This store's id for the wallet (`instance` in state, kept in `meta.json`): random when the wallet is created (or
   /// first loaded by a relay that did not have one), so a wiped or replaced data folder names another one.
@@ -267,10 +285,11 @@ class Wallet {
   /// Enrolled keys that are not revoked.
   int get activeKeys => keys.values.where((k) => k.revoked == null).length;
 
-  /// Bytes in sealed files and kept snapshots (blobs are counted apart: [blobBytes]).
+  /// Bytes in sealed files and kept snapshots (blobs are counted apart: [blobBytes]), each file at least
+  /// [minFileCost] ([storedSize]).
   int bytes = 0;
 
-  /// Stored blobs (`blobs/<hash>`): how many and their total size.
+  /// Stored blobs (`blobs/<hash>`): how many and their total size (each at least [minFileCost]).
   int blobCount = 0;
   int blobBytes = 0;
 
@@ -311,7 +330,7 @@ class Wallet {
         final size = await f.length();
         await f.delete();
         blobCount--;
-        blobBytes -= size;
+        blobBytes -= storedSize(size);
         deleted++;
         freed += size;
       } on FileSystemException {
@@ -430,11 +449,36 @@ class Wallet {
       while (st.first <= limit) {
         final f = dataFile(owner, st.first);
         try {
-          bytes -= await f.length();
+          final size = await f.length();
           await f.delete();
+          bytes -= storedSize(size);
         } on FileSystemException {
           // already gone
         }
+        st.lost.remove(st.first);
+        st.first++;
+      }
+    }
+    skipLost();
+  }
+
+  /// What every kept snapshot covers of [device] (the minimum over `snapshot` and `previous`, as [prune] uses and as a
+  /// client falling back to `previous` needs); 0 without a snapshot.
+  int keptCovers(String device) {
+    final kept = [snapshot, previous].whereType<Snap>();
+    if (kept.isEmpty) return 0;
+    return kept.map((s) => s.covers[device] ?? 0).reduce(math.min);
+  }
+
+  /// A lost file ([DeviceState.lost]) at a device's `first` that every kept snapshot covers ([keptCovers]) counts as
+  /// pruned: `first` moves past it, so a reader starts from a snapshot (state `first`) instead of waiting on it for good
+  /// (HP-R1b).
+  void skipLost() {
+    for (final MapEntry(key: name, value: st) in devices.entries) {
+      if (!st.lost.contains(st.first)) continue;
+      final covered = keptCovers(name);
+      while (st.lost.contains(st.first) && st.first <= covered) {
+        st.lost.remove(st.first);
         st.first++;
       }
     }
@@ -487,7 +531,8 @@ class Wallet {
 
   /// Rebuilds a wallet from [dir]; null when `meta.json` is missing or unreadable.
   /// Files win over the meta for `last` (a crash between writing a file and the meta), unknown files are cleaned up.
-  static Future<Wallet?> load(Directory dir, String wid, DateTime now, {RelayTestHooks? hooks}) async {
+  static Future<Wallet?> load(Directory dir, String wid, DateTime now,
+      {RelayTestHooks? hooks, int minFileCost = defaultMinFileCost}) async {
     final Map<String, Object?> meta;
     try {
       final decoded = jsonDecode(await File('${dir.path}/meta.json').readAsString());
@@ -500,7 +545,7 @@ class Wallet {
     if (pub is! String || decodeBase64Url(pub, 32) == null) return null; // a v1 meta (token hash) is not a wallet any more
     final stored = meta['instance'];
     final hadInstance = stored is String && _instancePattern.hasMatch(stored);
-    final w = Wallet(wid, dir, pub, instance: hadInstance ? stored : null, hooks: hooks);
+    final w = Wallet(wid, dir, pub, instance: hadInstance ? stored : null, hooks: hooks, minFileCost: minFileCost);
     final devs = meta['devices'];
     if (devs is Map<String, Object?>) {
       for (final e in devs.entries) {
@@ -522,6 +567,7 @@ class Wallet {
     }
     _loadKeys(w, meta);
     final dData = Directory('${dir.path}/d');
+    final withFiles = <String>{};
     if (await dData.exists()) {
       await for (final ent in dData.list(followLinks: false)) {
         if (ent is! Directory) continue;
@@ -537,22 +583,24 @@ class Wallet {
             continue;
           }
           seqs.add(seq);
-          w.bytes += await f.length();
+          w.bytes += w.storedSize(await f.length());
         }
         if (seqs.isEmpty) continue;
         seqs.sort();
+        withFiles.add(name);
         final st = w.devices.putIfAbsent(name, () => DeviceState(now));
         st.last = math.max(st.last, seqs.last);
         st.first = seqs.first;
+        final have = seqs.toSet();
+        for (var q = seqs.first; q <= st.last; q++) {
+          if (!have.contains(q)) st.lost.add(q);
+        }
       }
     }
-    for (final st in w.devices.values) {
-      if (st.first > st.last + 1) st.first = st.last + 1;
-    }
-    // Devices without files: everything up to `last` was pruned.
-    for (final e in w.devices.entries) {
-      final f = w.dataFile(e.key, e.value.last);
-      if (e.value.last > 0 && !await f.exists()) e.value.first = e.value.last + 1;
+    // `first` = the lowest seq on disk (set above); a device without any file had everything up to `last` pruned. A
+    // missing file above `first` stays listed (GET = 404 `missing`), it does not hide the lower ones.
+    for (final MapEntry(key: name, value: st) in w.devices.entries) {
+      if (!withFiles.contains(name) || st.first > st.last + 1) st.first = st.last + 1;
     }
     final keep = <String>{};
     Future<Snap?> snap(Object? raw) async {
@@ -569,12 +617,13 @@ class Wallet {
       }
       final size = await f.length();
       keep.add(id);
-      w.bytes += size;
+      w.bytes += w.storedSize(size);
       return Snap(id, map, size);
     }
 
     w.snapshot = await snap(meta['snapshot']);
     w.previous = await snap(meta['previous']);
+    w.skipLost();
     // Declared sets of the kept snapshots; any other set file (a dropped snapshot's, a temp file) goes.
     final dSets = Directory('${dir.path}/sets');
     if (await dSets.exists()) {
@@ -611,7 +660,7 @@ class Wallet {
           continue;
         }
         w.blobCount++;
-        w.blobBytes += await f.length();
+        w.blobBytes += w.storedSize(await f.length());
       }
     }
     // A meta from before instance ids: the new id is kept at once, so a restart before the next write names the same.

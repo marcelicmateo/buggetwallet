@@ -18,7 +18,7 @@ void main() {
   late String ha, hb, hc;
 
   setUp(() async {
-    h = await freshHarness();
+    h = await freshHarness(minFileCost: 1);
     expect((await h.putData(w1, 'dev1', 1, 'f1')).statusCode, 201);
     a = bytes('sealed file a');
     b = bytes('sealed file bb');

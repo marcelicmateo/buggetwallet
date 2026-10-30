@@ -120,7 +120,7 @@ void main() {
     }, timeout: _t);
 
     test('a failed write leaves no temp file after a restart, and its bytes never count against the quota', () async {
-      final h = await freshHarness(maxBytes: 100);
+      final h = await freshHarness(minFileCost: 1, maxBytes: 100);
       expect((await h.putData(w1, 'dev1', 1, 'a' * 60)).statusCode, 201);
       Directory(_p(h, w1, 'd/dev1/2')).createSync();
       expect((await h.putData(w1, 'dev1', 2, 'b' * 30)).statusCode, greaterThanOrEqualTo(500));
@@ -152,7 +152,7 @@ void main() {
     }, timeout: _t);
 
     test('the relay quota (--max-bytes) is the 507 path: refused, state unchanged, a smaller file still fits', () async {
-      final h = await freshHarness(maxBytes: 100);
+      final h = await freshHarness(minFileCost: 1, maxBytes: 100);
       expect((await h.putData(w1, 'dev1', 1, 'a' * 60)).statusCode, 201);
       final before = await _norm(h, w1);
       final full = await h.putData(w1, 'dev1', 2, 'b' * 60);

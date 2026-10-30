@@ -23,6 +23,22 @@ const int maxBlobSetBytes = 7 * _mib;
 /// Default for [Relay.maxInFlightBytes]: request body bytes one client address may have buffered at once.
 const int defaultMaxInFlightBytes = 32 * _mib;
 
+/// Default for [Relay.maxTotalInFlightBytes]: request body bytes all clients together may have buffered at once.
+const int defaultMaxTotalInFlightBytes = 192 * _mib;
+
+/// Defaults for [Relay.maxOpenPerClient] and [Relay.maxOpen]: requests being read or answered at once.
+const int defaultMaxOpenPerClient = 16;
+const int defaultMaxOpen = 512;
+
+/// Defaults for [Relay.bodyTimeout], [Relay.minBodyRate] and [Relay.idleTimeout].
+const Duration defaultBodyTimeout = Duration(seconds: 30);
+const Duration defaultRefusalTimeout = Duration(seconds: 5);
+const int defaultMinBodyRate = 8 * 1024;
+const Duration defaultIdleTimeout = Duration(seconds: 60);
+
+/// Bytes read from a stored file per chunk of a streamed answer.
+const int _chunkBytes = 64 * 1024;
+
 /// Header that carries the creation token on the `PUT d/<device>/1` that creates a wallet (see `Relay.createToken`).
 const String createTokenHeader = 'x-bw-create-token';
 const List<String> defaultOrigins = ['http://127.0.0.1:8080', 'http://localhost:8080'];
@@ -40,24 +56,41 @@ class _Out {
   _Out.json(this.status, Object? body)
       : bytes = utf8.encode(jsonEncode(body)),
         contentType = 'application/json; charset=utf-8',
-        close = false;
-  _Out.octets(this.bytes)
-      : status = 200,
-        contentType = 'application/octet-stream',
-        close = false;
+        close = false,
+        file = null,
+        fileLength = 0;
   _Out.empty(this.status)
       : bytes = const [],
         contentType = null,
-        close = false;
+        close = false,
+        file = null,
+        fileLength = 0;
   _Out.error(this.status, String message, {this.close = false})
       : bytes = utf8.encode(jsonEncode({'error': message})),
-        contentType = 'application/json; charset=utf-8';
+        contentType = 'application/json; charset=utf-8',
+        file = null,
+        fileLength = 0;
+
+  /// A stored file, streamed from [file] (opened inside the wallet lock, so a later delete cannot cut it short) and
+  /// closed by [Relay._send].
+  _Out.file(RandomAccessFile this.file, this.fileLength)
+      : status = 200,
+        bytes = const [],
+        contentType = 'application/octet-stream',
+        close = false;
 
   final int status;
   final List<int> bytes;
   final String? contentType;
   final bool close;
+  final RandomAccessFile? file;
+  final int fileLength;
+
+  int get length => file == null ? bytes.length : fileLength;
 }
+
+/// What [Relay._consume] does after a body chunk: keep it (the body deadline grows), only drain it, or stop reading.
+enum _Take { keep, drain, stop }
 
 /// The signature headers of a request and what it signs besides method and body (RELAY_PROTOCOL.md "Signed requests").
 class _Sig {
@@ -112,6 +145,15 @@ class Relay {
     this.maxWallets = 16,
     this.maxBytes = 1024 * _mib,
     this.maxInFlightBytes = defaultMaxInFlightBytes,
+    this.maxTotalInFlightBytes = defaultMaxTotalInFlightBytes,
+    this.maxOpenPerClient = defaultMaxOpenPerClient,
+    this.maxOpen = defaultMaxOpen,
+    this.maxDevices = defaultMaxDevices,
+    this.minFileCost = defaultMinFileCost,
+    this.bodyTimeout = defaultBodyTimeout,
+    this.refusalTimeout = defaultRefusalTimeout,
+    this.minBodyRate = defaultMinBodyRate,
+    this.idleTimeout = defaultIdleTimeout,
     this.createToken,
     this.trustProxy = false,
     DateTime Function()? now,
@@ -129,6 +171,34 @@ class Relay {
   /// Body bytes one client address may have buffered across its concurrent requests; a request that would pass it
   /// while others from that address hold bytes gets 429 (a lone request is limited only by its own size limit).
   final int maxInFlightBytes;
+
+  /// Body bytes all client addresses together may have buffered; the same rule (429 unless nothing else is held).
+  final int maxTotalInFlightBytes;
+
+  /// Requests one client address may have open (being read or answered) at once, and all together; one more is 429
+  /// before anything of it is read. `/v2/health` is not counted.
+  final int maxOpenPerClient;
+  final int maxOpen;
+
+  /// Device streams one wallet may hold; a new one past it (`PUT d/<new>/1`, an ack as a new name) is 507.
+  final int maxDevices;
+
+  /// The least one stored file counts toward [maxBytes] (sync files, snapshots, blobs; state `bytes` likewise).
+  final int minFileCost;
+
+  /// The body deadline: a body must arrive within [bodyTimeout] plus 1 s per [minBodyRate] bytes received; a slow or
+  /// stalled upload has its connection dropped, unanswered (logged `…!slow 429`). A refusal that needs no body drains
+  /// it for at most [refusalTimeout]. An answer gets the same time to be sent.
+  final Duration bodyTimeout;
+  final int minBodyRate;
+
+  /// How long a refusal decided before the body is read (403 `createToken`, an unknown wallet's 422/507/401/400, a
+  /// declared length over the limit or the in-flight budget) drains that body before the connection is closed: short,
+  /// so unauthenticated refusals do not hold the open-request slots ([maxOpen]) for long.
+  final Duration refusalTimeout;
+
+  /// [HttpServer.idleTimeout]: an idle connection, or one still sending its request headers, is closed after 1 to 2×.
+  final Duration idleTimeout;
 
   /// When set, the `PUT d/<device>/1` that creates a wallet must carry this value in `X-BW-Create-Token` (403 otherwise).
   /// Null = creation is open (development mode). Existing wallets are not affected.
@@ -153,9 +223,16 @@ class Relay {
   final RateLimiter _limiter = RateLimiter();
   final Set<Future<void>> _inFlight = {};
   final Map<String, int> _held = {};
+  int _heldTotal = 0;
+  final Map<String, int> _open = {};
+  int _openTotal = 0;
 
-  /// Test hook: called with the client address's in-flight body bytes each time a request buffers a chunk.
+  /// Test hook: called with the client address's in-flight body bytes each time a request reserves its declared
+  /// length or buffers a chunk (a body without `Content-Length`).
   void Function(int total)? onHold;
+
+  /// Test hook: called with the client address's open requests each time one is counted or done.
+  void Function(int open)? onOpen;
   Future<void>? _loaded;
   HttpServer? _server;
 
@@ -166,12 +243,13 @@ class Relay {
   Future<HttpServer> serve({String host = '127.0.0.1', int port = 8787}) async {
     await _ensureLoaded();
     final server = await HttpServer.bind(host, port);
+    server.idleTimeout = idleTimeout;
     _server = server;
     server.listen((req) {
       late final Future<void> f;
       f = handle(req).whenComplete(() => _inFlight.remove(f));
       _inFlight.add(f);
-    });
+    }, onError: (Object e) => _log('relay accept-error ${e.runtimeType}'));
     return server;
   }
 
@@ -193,15 +271,23 @@ class Relay {
       if (ent is! Directory) continue;
       final wid = ent.uri.pathSegments.lastWhere((s) => s.isNotEmpty);
       if (!widPattern.hasMatch(wid)) continue;
-      final w = await Wallet.load(ent, wid, _now(), hooks: hooks);
+      final w = await Wallet.load(ent, wid, _now(), hooks: hooks, minFileCost: minFileCost);
       if (w != null) _wallets[wid] = w;
     }
   }
 
   /// Handles one request: never throws, always answers and logs one line.
   Future<void> handle(HttpRequest req) async {
-    final info = _LogInfo();
+    final info = _LogInfo()..remote = _client(req);
+    final counted = req.uri.path != '/v2/health'; // the raw path: decoding segments may throw, outside the try below
     _Out out;
+    if (counted && !_enter(info.remote)) {
+      // Too many open requests: refused before anything of the body is read; the connection is closed after it.
+      out = _Out.error(429, 'too many open requests', close: true);
+      await _send(req, out);
+      _log('relay busy ${out.status} 0 w=- d=-');
+      return;
+    }
     try {
       await _ensureLoaded();
       out = await _dispatch(req, info);
@@ -213,11 +299,55 @@ class Relay {
     } finally {
       _release(info);
     }
-    await _send(req, out);
+    try {
+      await _send(req, out);
+    } finally {
+      if (counted) _leave(info.remote);
+    }
     _log('relay ${info.kind} ${out.status} ${info.bytes} w=${info.wid} d=${info.device}');
   }
 
+  /// Counts an open request of [remote]; false (nothing counted) when that address or the relay is at its cap.
+  bool _enter(String remote) {
+    final n = _open[remote] ?? 0;
+    if (n >= maxOpenPerClient || _openTotal >= maxOpen) return false;
+    _open[remote] = n + 1;
+    _openTotal++;
+    onOpen?.call(n + 1);
+    return true;
+  }
+
+  void _leave(String remote) {
+    _openTotal--;
+    final n = (_open[remote] ?? 1) - 1;
+    if (n > 0) {
+      _open[remote] = n;
+    } else {
+      _open.remove(remote);
+    }
+    onOpen?.call(n);
+  }
+
+  /// Sends [out] within the answer deadline ([bodyTimeout] plus 1 s per [minBodyRate] bytes): a client that does not
+  /// read its answer has its connection closed then ([HttpResponse.deadline]). Closes [_Out.file].
   Future<void> _send(HttpRequest req, _Out out) async {
+    final deadline = bodyTimeout + Duration(microseconds: out.length * 1000000 ~/ minBodyRate);
+    try {
+      req.response.deadline = deadline;
+      // The deadline closes the socket; the extra second only guards the bookkeeping should a write never complete.
+      await _write(req, out).timeout(deadline + const Duration(seconds: 1), onTimeout: () {});
+    } on Object {
+      // client went away
+    } finally {
+      try {
+        await out.file?.close();
+      } on Object {
+        // already closed
+      }
+    }
+  }
+
+  Future<void> _write(HttpRequest req, _Out out) async {
     final res = req.response;
     try {
       res.statusCode = out.status;
@@ -239,18 +369,34 @@ class Relay {
       if (out.status == 429) res.headers.set('Retry-After', '1');
       if (out.close) res.headers.set('Connection', 'close');
       if (out.contentType != null) res.headers.set('Content-Type', out.contentType!);
-      res.contentLength = out.bytes.length;
-      if (req.method != 'HEAD' && out.bytes.isNotEmpty) res.add(out.bytes);
+      res.contentLength = out.length;
+      final file = out.file;
+      if (req.method != 'HEAD') {
+        if (file != null) {
+          await res.addStream(_chunks(file, out.length));
+        } else if (out.bytes.isNotEmpty) {
+          res.add(out.bytes);
+        }
+      }
       await res.close();
     } on Object {
       // client went away
     }
   }
 
+  /// [length] bytes of [f] from its current position, [_chunkBytes] at a time (paused while the socket is full).
+  static Stream<List<int>> _chunks(RandomAccessFile f, int length) async* {
+    var left = length;
+    while (left > 0) {
+      final b = await f.read(left < _chunkBytes ? left : _chunkBytes);
+      if (b.isEmpty) throw const FileSystemException('short read');
+      left -= b.length;
+      yield b;
+    }
+  }
+
   Future<_Out> _dispatch(HttpRequest req, _LogInfo info) async {
-    final remote = _client(req);
-    info.remote = remote;
-    if (!_limiter.allow(remote, _now())) {
+    if (!_limiter.allow(info.remote, _now())) {
       info.kind = 'limited';
       return _Out.error(429, 'too many requests');
     }
@@ -351,15 +497,15 @@ class Relay {
     throw _HttpError(404, 'not found');
   }
 
-  /// The client address: the connection's, or with [trustProxy] the last hop of `X-Forwarded-For` (the one the proxy
-  /// appended) when it is a valid IP address.
+  /// The client address as a limit key ([clientKey]: an IPv6 address by its /64): the connection's, or with
+  /// [trustProxy] the last hop of `X-Forwarded-For` (the one the proxy appended) when it is a valid IP address.
   String _client(HttpRequest req) {
-    final peer = req.connectionInfo?.remoteAddress.address ?? '?';
-    if (!trustProxy) return peer;
-    final xff = req.headers['x-forwarded-for'];
-    if (xff == null || xff.isEmpty) return peer;
-    final last = xff.last.split(',').last.trim();
-    return InternetAddress.tryParse(last)?.address ?? peer;
+    var a = req.connectionInfo?.remoteAddress;
+    if (trustProxy) {
+      final xff = req.headers['x-forwarded-for'];
+      if (xff != null && xff.isNotEmpty) a = InternetAddress.tryParse(xff.last.split(',').last.trim()) ?? a;
+    }
+    return a == null ? '?' : clientKey(a);
   }
 
   static String _short(String name) => name.length > 6 ? name.substring(0, 6) : name;
@@ -465,68 +611,141 @@ class Relay {
 
   // ---- body ---------------------------------------------------------------------------------------------------------
 
-  /// Reads the body (at most [limit] bytes: 413 beyond). The bytes count against the client address's in-flight
-  /// budget ([maxInFlightBytes]) until the request is answered; passing it while other requests from that address
-  /// hold bytes is 429. Either refusal drains (and discards) a little more so the client sees the status.
+  /// Reads the body (at most [limit] bytes: 413 beyond) under the body deadline ([_consume]; too slow = the connection
+  /// is dropped, logged as 429 `slow`).
+  /// The bytes count against the client address's in-flight budget ([maxInFlightBytes]) and the relay's
+  /// ([maxTotalInFlightBytes]) until the request is answered, a declared `Content-Length` in full from the start (it is
+  /// read into one buffer of that size, no copy at the end); passing either while other requests hold bytes is 429.
+  /// A refusal drains (and discards) a little more, within the deadline, so the client sees the status.
   Future<Uint8List> _readBody(HttpRequest req, int limit, _LogInfo info) async {
-    var over = req.contentLength > limit;
-    var busy = !over && req.contentLength > 0 && _wouldPass(info, req.contentLength);
+    final declared = req.contentLength;
+    var over = declared > limit;
+    var busy = !over && declared > 0 && _wouldPass(info, declared);
+    if (!over && !busy && declared > 0) _hold(info, declared);
+    Uint8List? buf; // a declared length: allocated at the first chunk, so a stalled request costs nothing yet
     final b = BytesBuilder(copy: false);
     var n = 0;
     var drained = 0;
-    await for (final chunk in req) {
+    // Refused from the start (declared too big or over the in-flight budget): only the short refusal drain.
+    final inTime = await _consume(req, over || busy ? refusalTimeout : bodyTimeout, (chunk) {
       if (over || busy) {
         drained += chunk.length;
-        if (drained > limit * 2) break; // enough of a polite drain
-        continue;
+        return drained > limit * 2 ? _Take.stop : _Take.drain; // enough of a polite drain
       }
       n += chunk.length;
-      if (n > limit) {
+      if (n > limit || (declared >= 0 && n > declared)) {
         over = true;
         _release(info);
         b.clear();
-        continue;
+        buf = null;
+        return _Take.drain;
+      }
+      if (declared >= 0) {
+        (buf ??= Uint8List(declared)).setRange(n - chunk.length, n, chunk);
+        return _Take.keep;
       }
       if (_wouldPass(info, chunk.length)) {
         busy = true;
         _release(info);
         b.clear();
-        continue;
+        return _Take.drain;
       }
       _hold(info, chunk.length);
       b.add(chunk);
-    }
+      return _Take.keep;
+    });
     info.bytes = over ? limit + 1 : n;
+    if (!inTime) {
+      info.kind = '${info.kind}!slow';
+      throw _HttpError(429, 'slow', close: true);
+    }
     if (over) throw _HttpError(413, 'too big', close: true);
     if (busy) throw _HttpError(429, 'too many bytes in flight', close: true);
+    if (declared >= 0) return buf ?? Uint8List(0);
     return b.takeBytes();
   }
 
-  /// Refuses a body without buffering it: reads and discards up to 2× [limit] (so the client sees the status), then
-  /// throws [status].
+  /// Refuses a body without buffering it: reads and discards up to 2× [limit] within [refusalTimeout] (so a client
+  /// that sends its whole body sees the status; a slow one is cut off then), then throws [status].
   Future<Never> _refuseBody(HttpRequest req, int limit, int status, String message) async {
     var drained = 0;
-    await for (final chunk in req) {
+    await _consume(req, refusalTimeout, (chunk) {
       drained += chunk.length;
-      if (drained > limit * 2) break;
-    }
+      return drained > limit * 2 ? _Take.stop : _Take.drain;
+    });
     throw _HttpError(status, message, close: true);
   }
 
-  /// Whether [more] bytes would put this address over [maxInFlightBytes] while other requests of it hold bytes.
+  /// Feeds the body of [req] to [take] chunk by chunk until it ends, [take] says stop, or the body deadline passes:
+  /// [bodyTimeout] from the start plus 1 s per [minBodyRate] bytes [take] kept (drained bytes add nothing). Returns
+  /// false when the deadline passed. Stopping early (deadline or stop) cancels the body stream, which makes dart:io
+  /// drop the connection: whatever the caller answers then is not delivered.
+  Future<bool> _consume(HttpRequest req, Duration base, _Take Function(Uint8List chunk) take) {
+    final done = Completer<bool>();
+    final clock = Stopwatch()..start();
+    var allowedUs = base.inMicroseconds;
+    late final StreamSubscription<Uint8List> sub;
+    Timer? timer;
+    void finish(bool inTime) {
+      timer?.cancel();
+      if (!done.isCompleted) done.complete(inTime);
+    }
+
+    void arm() {
+      final left = allowedUs - clock.elapsedMicroseconds;
+      timer = Timer(Duration(microseconds: left < 0 ? 0 : left), () {
+        if (clock.elapsedMicroseconds < allowedUs) return arm(); // bytes arrived meanwhile: a later deadline
+        unawaited(sub.cancel());
+        finish(false);
+      });
+    }
+
+    sub = req.listen((chunk) {
+      final _Take t;
+      try {
+        t = take(chunk);
+      } on Object catch (e, s) {
+        // never let a throw escape into the stream (an uncaught error would end the process)
+        timer?.cancel();
+        unawaited(sub.cancel());
+        if (!done.isCompleted) done.completeError(e, s);
+        return;
+      }
+      switch (t) {
+        case _Take.keep:
+          allowedUs += chunk.length * Duration.microsecondsPerSecond ~/ minBodyRate;
+        case _Take.drain:
+          break;
+        case _Take.stop:
+          unawaited(sub.cancel());
+          finish(true);
+      }
+    }, onError: (Object e, StackTrace s) {
+      timer?.cancel();
+      if (!done.isCompleted) done.completeError(e, s);
+    }, onDone: () => finish(true), cancelOnError: true);
+    arm();
+    return done.future;
+  }
+
+  /// Whether [more] bytes would put this address over [maxInFlightBytes], or the relay over [maxTotalInFlightBytes],
+  /// while other requests (of that address, or any) hold bytes.
   bool _wouldPass(_LogInfo info, int more) {
     final all = _held[info.remote] ?? 0;
-    return all + more > maxInFlightBytes && all - info.held > 0;
+    if (all + more > maxInFlightBytes && all - info.held > 0) return true;
+    return _heldTotal + more > maxTotalInFlightBytes && _heldTotal - info.held > 0;
   }
 
   void _hold(_LogInfo info, int n) {
     info.held += n;
+    _heldTotal += n;
     _held[info.remote] = (_held[info.remote] ?? 0) + n;
     onHold?.call(_held[info.remote]!);
   }
 
   void _release(_LogInfo info) {
     if (info.held == 0) return;
+    _heldTotal -= info.held;
     final left = (_held[info.remote] ?? 0) - info.held;
     info.held = 0;
     if (left > 0) {
@@ -589,22 +808,63 @@ class Relay {
       final st = w.devices[device];
       if (st == null || seq > st.last) throw _HttpError(404, 'not stored');
       if (seq < st.first) throw _HttpError(410, 'pruned');
-      final bytes = await _stored(w.dataFile(device, seq), info);
-      info.bytes = bytes.length;
-      return _Out.octets(bytes);
+      try {
+        return await _stored(w.dataFile(device, seq), info);
+      } on _HttpError catch (e) {
+        // A listed file gone from disk (e.g. a power cut before its folder entry was written) that every kept snapshot
+        // covers: answered as pruned, so a reader starts from that snapshot instead of waiting on it forever.
+        if (e.status != 404) rethrow;
+        st.lost.add(seq);
+        w.skipLost();
+        if (w.keptCovers(device) >= seq) throw _HttpError(410, 'pruned');
+        rethrow;
+      }
     });
   }
 
-  /// Reads a file the meta says exists. A missing file (the data folder was damaged or restored from an older copy) is
-  /// 404 `missing` (410 stays for pruned), logged as kind `...!missing`. Any other read error stays a 500 `storage`.
-  Future<Uint8List> _stored(File f, _LogInfo info) async {
+  /// Opens a file the meta says exists, to be streamed as the answer (never read whole into memory). A missing file
+  /// (the data folder was damaged or restored from an older copy) is 404 `missing` (410 stays for pruned), logged as
+  /// kind `...!missing`. Any other read error stays a 500 `storage`.
+  Future<_Out> _stored(File f, _LogInfo info) async {
+    final RandomAccessFile raf;
     try {
-      return await f.readAsBytes();
+      raf = await f.open();
     } on PathNotFoundException {
       info.kind = '${info.kind}!missing';
       throw _HttpError(404, 'missing');
     } on FileSystemException {
       throw _HttpError(500, 'storage');
+    }
+    try {
+      info.bytes = await raf.length();
+      return _Out.file(raf, info.bytes);
+    } on FileSystemException {
+      await raf.close();
+      throw _HttpError(500, 'storage');
+    }
+  }
+
+  /// Whether a stored file (one the meta says exists: [_stored]'s errors) holds exactly [body], read a chunk at a time.
+  Future<bool> _sameStored(File f, List<int> body, _LogInfo info) async {
+    final out = await _stored(f, info);
+    final raf = out.file!;
+    try {
+      if (out.fileLength != body.length) return false;
+      var at = 0;
+      while (at < body.length) {
+        final b = await raf.read(_chunkBytes);
+        if (b.isEmpty) return false;
+        for (var i = 0; i < b.length; i++) {
+          if (b[i] != body[at + i]) return false;
+        }
+        at += b.length;
+      }
+      return true;
+    } on FileSystemException {
+      throw _HttpError(500, 'storage');
+    } finally {
+      info.bytes = body.length;
+      await raf.close();
     }
   }
 
@@ -646,8 +906,7 @@ class Relay {
         st!.lastSeen = _now();
         await w.saveMeta();
         if (seq < first) throw _HttpError(410, 'pruned');
-        final stored = await _stored(w.dataFile(device, seq), info);
-        if (_same(stored, body)) return _Out.json(200, {'seq': seq});
+        if (await _sameStored(w.dataFile(device, seq), body, info)) return _Out.json(200, {'seq': seq});
         throw _HttpError(409, 'other bytes stored');
       }
       if (seq > last + 1) {
@@ -657,9 +916,10 @@ class Relay {
         }
         throw _HttpError(422, 'seq beyond last + 1');
       }
-      if (w.totalBytes + body.length > maxBytes) throw _HttpError(507, 'wallet full');
+      if (st == null && w.devices.length >= maxDevices) throw _HttpError(507, 'too many devices');
+      if (w.totalBytes + w.storedSize(body.length) > maxBytes) throw _HttpError(507, 'wallet full');
       await w.writeData(device, seq, body);
-      w.bytes += body.length;
+      w.bytes += w.storedSize(body.length);
       final dev = w.devices.putIfAbsent(device, () => DeviceState(_now()));
       dev.last = seq;
       dev.lastSeen = _now();
@@ -683,9 +943,9 @@ class Relay {
   Future<_Out> _createWallet(String wid, String pub, String device, int seq, Uint8List body, String? dev, int signedTime) async {
     if (seq != 1) throw _HttpError(422, 'seq beyond last + 1');
     if (_wallets.length >= maxWallets) throw _HttpError(507, 'relay full');
-    if (body.length > maxBytes) throw _HttpError(507, 'wallet full');
     final dir = Directory('${data.path}/$wid');
-    final w = Wallet(wid, dir, pub, hooks: hooks);
+    final w = Wallet(wid, dir, pub, hooks: hooks, minFileCost: minFileCost);
+    if (w.storedSize(body.length) > maxBytes) throw _HttpError(507, 'wallet full');
     if (dev != null) {
       // An api-5 creation: the creator is enrolled and the wallet starts locked (every other device needs an approval).
       final fp = fingerprint(decodeBase64Url(dev, 32)!);
@@ -697,7 +957,7 @@ class Relay {
     try {
       if (await dir.exists()) await dir.delete(recursive: true); // left over from an interrupted creation
       await w.writeData(device, 1, body);
-      w.bytes = body.length;
+      w.bytes = w.storedSize(body.length);
       final st = DeviceState(_now())..last = 1;
       w.devices[device] = st;
       await w.saveMeta();
@@ -724,6 +984,7 @@ class Relay {
       for (final e in acks.entries) {
         if (e.value > (w.devices[e.key]?.last ?? 0)) throw _HttpError(422, 'ack beyond last');
       }
+      if (!w.devices.containsKey(device) && w.devices.length >= maxDevices) throw _HttpError(507, 'too many devices');
       _touchKey(w, sig, device);
       final dev = w.devices.putIfAbsent(device, () => DeviceState(_now()));
       dev.lastSeen = _now();
@@ -745,8 +1006,9 @@ class Relay {
     return _lockedAs(wid, sig, (w) async {
       final existing = w.snapshot?.id == id ? w.snapshot : (w.previous?.id == id ? w.previous : null);
       if (existing != null) {
-        final stored = await _stored(w.snapFile(id), info);
-        if (_same(stored, body) && _sameCovers(existing.covers, covers)) return _Out.json(200, {'id': id});
+        if (_sameCovers(existing.covers, covers) && await _sameStored(w.snapFile(id), body, info)) {
+          return _Out.json(200, {'id': id});
+        }
         throw _HttpError(409, 'snapshot id in use');
       }
       for (final e in covers.entries) {
@@ -759,15 +1021,17 @@ class Relay {
         }
       }
       // Snapshots are what frees room, so only the kept snapshots (and the blobs) count here, not the files they will prune.
-      if ((cur?.size ?? 0) + w.blobBytes + body.length > maxBytes) throw _HttpError(507, 'wallet full');
+      if ((cur == null ? 0 : w.storedSize(cur.size)) + w.blobBytes + w.storedSize(body.length) > maxBytes) {
+        throw _HttpError(507, 'wallet full');
+      }
       await writeAtomic(w.snapFile(id), body);
       final dropped = w.previous;
       w.previous = cur;
       w.snapshot = Snap(id, covers, body.length);
-      w.bytes += body.length;
+      w.bytes += w.storedSize(body.length);
       await w.saveMeta();
       if (dropped != null) {
-        w.bytes -= dropped.size;
+        w.bytes -= w.storedSize(dropped.size);
         for (final f in [w.snapFile(dropped.id), w.setFile(dropped.id)]) {
           try {
             await f.delete();
@@ -813,9 +1077,7 @@ class Relay {
     _admit(w, sig);
     return _lockedAs(wid, sig, (w) async {
       if (w.snapshot?.id != id && w.previous?.id != id) throw _HttpError(404, 'no such snapshot');
-      final bytes = await _stored(w.snapFile(id), info);
-      info.bytes = bytes.length;
-      return _Out.octets(bytes);
+      return _stored(w.snapFile(id), info);
     });
   }
 
@@ -824,14 +1086,11 @@ class Relay {
     await _verify(w.pubBytes, sig, sig.method, const []);
     _admit(w, sig);
     return _lockedAs(wid, sig, (w) async {
+      final kind = info.kind;
       try {
-        final bytes = await w.blobFile(hash).readAsBytes();
-        info.bytes = bytes.length;
-        return _Out.octets(bytes);
-      } on PathNotFoundException {
-        throw _HttpError(404, 'missing');
-      } on FileSystemException {
-        throw _HttpError(500, 'storage');
+        return await _stored(w.blobFile(hash), info);
+      } finally {
+        info.kind = kind; // an absent blob is an ordinary 404, not a damaged folder
       }
     });
   }
@@ -849,10 +1108,10 @@ class Relay {
         await _touch(file, body);
         return _Out.json(200, {'hash': hash});
       }
-      if (w.totalBytes + body.length > maxBytes) throw _HttpError(507, 'wallet full');
+      if (w.totalBytes + w.storedSize(body.length) > maxBytes) throw _HttpError(507, 'wallet full');
       await writeAtomic(file, body);
       w.blobCount++;
-      w.blobBytes += body.length;
+      w.blobBytes += w.storedSize(body.length);
       await _touch(file, body);
       return _Out.json(201, {'hash': hash});
     });
@@ -1104,14 +1363,6 @@ class Relay {
     if (a.length != b.length) return false;
     for (final e in a.entries) {
       if (b[e.key] != e.value) return false;
-    }
-    return true;
-  }
-
-  static bool _same(List<int> a, List<int> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
     }
     return true;
   }

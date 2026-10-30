@@ -93,7 +93,7 @@ void main() {
     });
 
     test('a wallet over --max-bytes is refused, at the boundary exactly', () async {
-      final h = await freshHarness(maxBytes: 100);
+      final h = await freshHarness(minFileCost: 1, maxBytes: 100);
       expect((await h.putData(w1, 'dev1', 1, 'x' * 60)).statusCode, 201);
       expect((await h.putData(w1, 'dev1', 2, 'x' * 41)).statusCode, 507);
       expect((await h.putData(w1, 'dev1', 2, 'x' * 40)).statusCode, 201);
@@ -104,13 +104,13 @@ void main() {
     });
 
     test('a first PUT larger than --max-bytes creates nothing', () async {
-      final h = await freshHarness(maxBytes: 10);
+      final h = await freshHarness(minFileCost: 1, maxBytes: 10);
       expect((await h.putData(w1, 'dev1', 1, 'x' * 11)).statusCode, 507);
       expect(h.relay.walletCount, 0);
     });
 
     test('a snapshot may exceed the room taken by files, because pruning frees it', () async {
-      final h = await freshHarness(maxBytes: 100);
+      final h = await freshHarness(minFileCost: 1, maxBytes: 100);
       await h.putData(w1, 'dev1', 1, 'x' * 40);
       await h.putData(w1, 'dev1', 2, 'x' * 40);
       expect((await h.putData(w1, 'dev1', 3, 'x' * 40)).statusCode, 507);
@@ -122,7 +122,7 @@ void main() {
     });
 
     test('kept snapshots together are limited by --max-bytes; a dropped previous is freed', () async {
-      final h = await freshHarness(maxBytes: 100);
+      final h = await freshHarness(minFileCost: 1, maxBytes: 100);
       await h.putData(w1, 'dev1', 1, 'x' * 10);
       expect((await h.putSnapshot(w1, 's1', {'dev1': 1}, 'y' * 101)).statusCode, 507);
       expect((await h.putSnapshot(w1, 's1', {'dev1': 1}, 'y' * 50)).statusCode, 201);

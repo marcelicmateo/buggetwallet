@@ -8,6 +8,14 @@
 	log default {
 		exclude http.log.error
 	}
+	# Slow clients: request headers within 10 s, the whole body within 10 min (a 64 MiB snapshot at about 1 Mbit/s).
+	# The relay has its own body deadline as well (RELAY_PROTOCOL.md "Limits and CORS").
+	servers {
+		timeouts {
+			read_header 10s
+			read_body 10m
+		}
+	}
 }
 
 {$BW_RELAY_DOMAIN} {
@@ -22,6 +30,11 @@
 	reverse_proxy bw-relay:8787 {
 		health_uri /v2/health
 		health_interval 30s
+		# Idle upstream connections are dropped after 30 s, before the relay closes them (60 s), so Caddy never sends
+		# a request on a connection the relay is closing.
+		transport http {
+			keepalive 30s
+		}
 	}
 
 	header -Server

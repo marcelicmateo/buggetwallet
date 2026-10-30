@@ -108,6 +108,15 @@ class Harness {
     DateTime? clock,
     String? publicHost,
     RelayTestHooks? hooks,
+    int maxTotalInFlightBytes = defaultMaxTotalInFlightBytes,
+    int maxOpenPerClient = defaultMaxOpenPerClient,
+    int maxOpen = defaultMaxOpen,
+    int maxDevices = defaultMaxDevices,
+    int minFileCost = defaultMinFileCost,
+    Duration bodyTimeout = defaultBodyTimeout,
+    Duration refusalTimeout = defaultRefusalTimeout,
+    int minBodyRate = defaultMinBodyRate,
+    Duration idleTimeout = defaultIdleTimeout,
   }) async {
     final h = Harness._(dir ?? await Directory.systemTemp.createTemp('relay-test-'), clock ?? DateTime.utc(2026, 10, 22, 10));
     h._origins = origins;
@@ -118,6 +127,17 @@ class Harness {
     h.hooks = hooks;
     h._createToken = createToken;
     h._trustProxy = trustProxy;
+    h._limits = (
+      maxTotalInFlightBytes: maxTotalInFlightBytes,
+      maxOpenPerClient: maxOpenPerClient,
+      maxOpen: maxOpen,
+      maxDevices: maxDevices,
+      minFileCost: minFileCost,
+      bodyTimeout: bodyTimeout,
+      refusalTimeout: refusalTimeout,
+      minBodyRate: minBodyRate,
+      idleTimeout: idleTimeout,
+    );
     await h._boot();
     return h;
   }
@@ -128,6 +148,17 @@ class Harness {
   late int _maxInFlight;
   String? _createToken;
   bool _trustProxy = false;
+  late ({
+    int maxTotalInFlightBytes,
+    int maxOpenPerClient,
+    int maxOpen,
+    int maxDevices,
+    int minFileCost,
+    Duration bodyTimeout,
+    Duration refusalTimeout,
+    int minBodyRate,
+    Duration idleTimeout,
+  }) _limits;
 
   /// Passed to [Relay] on every boot (tests may change them before [restart]).
   String? publicHost;
@@ -147,6 +178,15 @@ class Harness {
       maxWallets: _maxWallets,
       maxBytes: _maxBytes,
       maxInFlightBytes: _maxInFlight,
+      maxTotalInFlightBytes: _limits.maxTotalInFlightBytes,
+      maxOpenPerClient: _limits.maxOpenPerClient,
+      maxOpen: _limits.maxOpen,
+      maxDevices: _limits.maxDevices,
+      minFileCost: _limits.minFileCost,
+      bodyTimeout: _limits.bodyTimeout,
+      refusalTimeout: _limits.refusalTimeout,
+      minBodyRate: _limits.minBodyRate,
+      idleTimeout: _limits.idleTimeout,
       createToken: _createToken,
       trustProxy: _trustProxy,
       now: () => clock,
@@ -256,15 +296,24 @@ class Harness {
 }
 
 /// Starts a [Harness] and stops it when the test ends.
+///
+/// [minFileCost] 1 = byte-exact accounting (every file counts its own size): the tests of the byte sums written before
+/// HP-R1's 4 KiB minimum use it; the minimum itself is tested in `hp_r1_test.dart`.
 Future<Harness> freshHarness({
   int maxWallets = 16,
   int maxBytes = 1024 * 1024 * 1024,
   List<String>? origins,
   String? createToken,
   bool trustProxy = false,
+  int minFileCost = defaultMinFileCost,
 }) async {
-  final h =
-      await Harness.start(maxWallets: maxWallets, maxBytes: maxBytes, origins: origins, createToken: createToken, trustProxy: trustProxy);
+  final h = await Harness.start(
+      maxWallets: maxWallets,
+      maxBytes: maxBytes,
+      origins: origins,
+      createToken: createToken,
+      trustProxy: trustProxy,
+      minFileCost: minFileCost);
   addTearDown(h.stop);
   return h;
 }

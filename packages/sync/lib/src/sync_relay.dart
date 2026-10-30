@@ -175,9 +175,21 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
     }
   }
 
-  static Future<http.Response> _send(Future<http.Response> Function() call, Duration timeout, String kind) async {
+  /// Bytes per second a transfer must at least average: [deadlineFor] gives 1 s per this many bytes on top of
+  /// [timeout]. The relay allows 1 s per 8 KiB, so the client gives up first.
+  static const minTransferRate = 64 * 1024;
+
+  /// How long sending a request body of [bytes] (until the answer's headers), or reading an answer of [bytes], may
+  /// take: [timeout] (30 s) plus 1 s per [minTransferRate] bytes, so a big bill file or snapshot on a slow uplink is not
+  /// cut off while a small request still fails after [timeout]. An answer without `Content-Length` gets [timeout] only
+  /// (the relay always sends one).
+  Duration deadlineFor(int bytes) => timeout + Duration(microseconds: bytes * Duration.microsecondsPerSecond ~/ minTransferRate);
+
+  /// Runs [call] with an overall [timeout] (null: [call] keeps its own deadlines) and maps failures to
+  /// [TransportFailure.unreachable].
+  static Future<http.Response> _send(Future<http.Response> Function() call, Duration? timeout, String kind) async {
     try {
-      return await call().timeout(timeout);
+      return await (timeout == null ? call() : call().timeout(timeout));
     } on TimeoutException {
       logEvent(_log, Level.WARNING, 'relay.unreachable', {'kind': kind, 'timeout': true});
       throw const TransportException(TransportFailure.unreachable, 'timeout');
@@ -276,15 +288,20 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
   /// One signed request. [withPub]: the request may create the wallet (`X-BW-Pub`, and with a device key the wallet
   /// key's countersignature `X-BW-WSig`); [withWallet]: countersign (enrolment). A 401 `unenrolled` (a device key the
   /// relay does not know yet) enrols once ([enrol]) and sends the request again; 401 `revoked` is final.
+  /// [notBefore]: sign with at least this `X-BW-Time` (ms, relay clock), whatever this device's clock says.
   Future<http.Response> _req(String method, String path, String kind,
-      {List<int> body = const [], Map<String, String> headers = const {}, bool withPub = false, bool withWallet = false}) async {
+      {List<int> body = const [],
+      Map<String, String> headers = const {},
+      bool withPub = false,
+      bool withWallet = false,
+      int? notBefore}) async {
     final id = await _id;
     final signedPath = '/v2/w/${id.wid}/$path';
     final url = _url(base, signedPath.substring(1));
     final host = signedHost(url);
     final hash = (await Sha256().hash(body)).bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     Future<http.Response> attempt() async {
-      final time = '${_now().millisecondsSinceEpoch + clockOffsetMs}';
+      final time = '${max(_now().millisecondsSinceEpoch + clockOffsetMs, notBefore ?? 0)}';
       // api 5: the device key signs; the wallet key countersigns what needs it. Older relays: the wallet key signs.
       final dev = signApi >= 5 ? id.devPair : null;
       final devpub = dev == null ? null : id.devpub;
@@ -302,7 +319,10 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
           if (withPub) 'X-BW-Pub': id.pub,
         });
       if (method != 'GET') req.bodyBytes = body;
-      return _send(() async => http.Response.fromStream(await _client.send(req)), timeout, kind);
+      return _send(() async {
+        final streamed = await _client.send(req).timeout(deadlineFor(method == 'GET' ? 0 : body.length));
+        return http.Response.fromStream(streamed).timeout(deadlineFor(streamed.contentLength ?? 0));
+      }, null, kind);
     }
 
     var r = await attempt();
@@ -480,14 +500,48 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
     logEvent(_log, Level.INFO, 'relay.device', {'action': action});
   }
 
+  /// How many times [revokeOthers] sends `devices/others` before it gives up on keys that stay active.
+  static const revokeOthersRounds = 3;
+
   /// Revokes every device key but this install's and rejects every pending one, and locks the wallet ("Remove all
-  /// other devices", for a device that may have been taken); returns how many keys it revoked now (0 when replayed).
+  /// other devices", for a device that may have been taken); returns how many keys it revoked (0 when replayed).
+  /// The relay spares keys and requests newer than the request's `X-BW-Time` (RELAY_PROTOCOL.md "Device keys"), so a
+  /// clock up to 5 min behind the relay's would spare a key approved in those minutes: after each call it reads the
+  /// state again and, while another key is still active, sends it again signed 1 s after the newest remaining key's or
+  /// request's time (state times are whole seconds; so the requests then waiting are rejected too), at most
+  /// [revokeOthersRounds] times; then [TransportFailure.other] `others remain` (the app says to try again). Pending
+  /// requests alone never fail it (a key holder can keep asking; each call rejects what it saw, none gets in without an
+  /// approval); a state read that fails after a call fails it with that read's failure.
   @override
   Future<int> revokeOthers() async {
     _needDeviceApi();
-    final r = await _req('PUT', 'devices/others', 'revokeOthers',
-        body: utf8.encode(jsonEncode({'revoke': true})), headers: {'Content-Type': 'application/json'});
-    logEvent(_log, Level.INFO, 'relay.device', {'action': 'revokeOthers'});
+    var total = 0;
+    int? notBefore;
+    for (var round = 1;; round++) {
+      final r = await _req('PUT', 'devices/others', 'revokeOthers',
+          body: utf8.encode(jsonEncode({'revoke': true})), headers: {'Content-Type': 'application/json'}, notBefore: notBefore);
+      logEvent(_log, Level.INFO, 'relay.device', {'action': 'revokeOthers', 'round': round});
+      total += _revokedCount(r);
+      // A failed check fails the whole call (it is idempotent: the owner tries again), never "done" unchecked.
+      final st = await state();
+      final keys = st.keys;
+      if (keys == null) return total; // no key list (not a device-signed answer): nothing to check against
+      final active = [
+        for (final k in keys)
+          if (!k.self && !k.isRevoked) k.added,
+      ];
+      if (active.isEmpty) return total;
+      if (round >= revokeOthersRounds) {
+        logEvent(_log, Level.WARNING, 'relay.revokeOthers.left', {'keys': active.length, 'rounds': round});
+        throw const TransportException(TransportFailure.other, 'others remain');
+      }
+      // A time the relay accepts (within its window) and later than every key and request still there.
+      final newest = [...active, for (final p in st.pending) p.at].map((t) => t?.millisecondsSinceEpoch ?? 0).fold(0, max);
+      notBefore = max(newest + 1000, (notBefore ?? 0) + 1);
+    }
+  }
+
+  static int _revokedCount(http.Response r) {
     try {
       final j = jsonDecode(r.body);
       if (j is Map && j['revoked'] is int) return j['revoked'] as int;
