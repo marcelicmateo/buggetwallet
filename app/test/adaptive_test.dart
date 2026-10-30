@@ -59,6 +59,12 @@ void main() {
           await tapTab(tester, tab);
           await scrollThrough(tester);
         }
+        // The Pay-period report (RX7), opened from the period chip (bar) or badge (rail).
+        final chip = find.byKey(const ValueKey('periodChip')), badge = find.byKey(const ValueKey('periodBadgeTap'));
+        await tester.tap(chip.evaluate().isNotEmpty ? chip : badge);
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(find.byKey(const ValueKey('reportKept')), findsOneWidget);
+        await scrollThrough(tester);
         errors.check();
         expect(tester.takeException(), isNull);
       });

@@ -273,6 +273,18 @@ void main() {
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
 
+    // The Pay-period report (RX7): the chip in the app bar (phone) or the badge in the rail opens it; one step back to a finished period.
+    final chip = find.byKey(const ValueKey('periodChip')), badge = find.byKey(const ValueKey('periodBadgeTap'));
+    await tester.tap(chip.evaluate().isNotEmpty ? chip : badge);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('reportKept')), findsOneWidget);
+    await binding.takeScreenshot('9-period-report');
+    await tester.tap(find.byKey(const ValueKey('reportPrev')));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('9-period-report-previous');
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+
     // After the screenshots: logged actions with private-looking synthetic values, to prove they stay out of the log.
     wc.addExpense(amount: 9876, category: 'Home & tools', note: 'Desk lamp note', date: wc.today());
     wc.addWish('Gift card wish', 4321);
