@@ -97,9 +97,7 @@ void main() {
       ];
       expect(views(periodSummaries(txs, st, '2026-04-20')), [
         period('2026-03-10', '2026-04-05', income: 2000),
-        // RX7d: 5 Apr is 10 days before the 15 Apr payday (not an early salary), so it ends there; 15 Apr passed
-        // without a salary, so the period runs to today (was 15 May).
-        period('2026-04-05', '2026-04-21', income: 1000, running: true),
+        period('2026-04-05', '2026-05-15', income: 1000, running: true),
       ]);
     });
 
@@ -171,12 +169,10 @@ void main() {
         ct('2026-09-30', -2000, 'Groceries'),
         ct('2026-10-05', -40000, 'Rent'),
       ];
-      // 2026-08-12 -> today 2026-10-16 is 65 days. RX7d: 12 Aug is July's salary (late), so the assumed paydays are
-      // 2026-08-31 (was skipped) and 2026-09-30 (Sep has 30 days); 2026-10-31 is after today.
+      // 2026-08-12 -> today 2026-10-16 is 65 days. Assumed: 2026-09-30 (Sep has 30 days); 2026-10-31 is after today.
       final ps = periodSummaries(txs, st31, '2026-10-16');
       expect(views(ps), [
-        period('2026-08-12', '2026-08-31', income: 200000),
-        period('2026-08-31', '2026-09-30', out: 1000, byCategory: {'Groceries': 1000}),
+        period('2026-08-12', '2026-09-30', income: 200000, out: 1000, byCategory: {'Groceries': 1000}),
         period('2026-09-30', '2026-10-31', out: 42000, byCategory: {'Groceries': 2000, 'Rent': 40000}, running: true),
       ]);
       expect(ps.last.net, -42000);
@@ -191,8 +187,8 @@ void main() {
         ct('2026-02-28', -200, 'Groceries'),
         ct('2026-03-25', 3000, 'Salary'), // 79 days after 01-05
       ];
-      // RX7d: 5 Jan is December's salary (late), so assumed 2026-01-29 and 2026-02-28 (was 2026-02-28 only);
-      // 2026-03-29 comes after the real 03-25 payday (its early salary), so not assumed.
+      // RX7d/RX7e: 5 Jan is December's salary (29 Dec, exactly 7 days late), so assumed 2026-01-29 and 2026-02-28
+      // (before RX7d 2026-02-28 only); 2026-03-29 comes after the real 03-25 payday (its early salary), so not assumed.
       expect(views(periodSummaries(txs, st29, '2026-04-01')), [
         period('2026-01-05', '2026-01-29', income: 1000),
         period('2026-01-29', '2026-02-28', out: 100, byCategory: {'Groceries': 100}),
@@ -270,9 +266,7 @@ void main() {
       const s = WalletSettings(periodStart: '2026-10-01');
       final only = [ct('2026-09-30', -100, 'Groceries'), ct('2026-10-02', -200, 'Groceries')];
       expect(views(periodSummaries(only, s, '2026-10-16')), [
-        // RX7d: 1 Oct is 14 days before the 15 Oct payday, so the period ends there; it passed without a salary, so
-        // the period runs to today (was 15 Nov).
-        period('2026-10-01', '2026-10-17', out: 200, byCategory: {'Groceries': 200}, running: true),
+        period('2026-10-01', '2026-11-15', out: 200, byCategory: {'Groceries': 200}, running: true),
       ]);
     });
   });

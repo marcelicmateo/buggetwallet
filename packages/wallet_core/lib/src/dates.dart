@@ -26,9 +26,9 @@ String addDays(String iso, int n) {
 
 int daysBetween(String a, String b) => parseIso(b).difference(parseIso(a)).inDays;
 
-/// How many days before an expected payday a period start still counts as that payday's (early) salary (RX7d; the
-/// same 7 days as `samePaydayDays`).
-const earlySalaryDays = 7;
+/// How many days from an expected payday (late or early) a period start still belongs to that payday's salary (RX7e
+/// rule C; the same 7 days as `samePaydayDays`).
+const paydayWindowDays = 7;
 
 /// [paydayDay] of month `YYYY-MM` [ym], clamped to the month's last day (29..31 in a shorter month = its last day).
 String paydayIn(String ym, int paydayDay) => _paydayAt(int.parse(ym.substring(0, 4)), int.parse(ym.substring(5, 7)), paydayDay);
@@ -40,36 +40,47 @@ String _paydayAt(int y, int m, int paydayDay) {
   return isoDate(DateTime.utc(first.year, first.month, paydayDay > last ? last : paydayDay));
 }
 
-/// RX7d: the expected payday a period start [date] belongs to: the next expected payday when it is at most
-/// [earlySalaryDays] days away (an early salary), else the latest expected payday on or before [date] (on time, a late
-/// salary, also across a month end, or a start set by hand mid-period). The one rule behind [nextPayday] and
-/// [previousPayday], so every period (computePeriod, periodDays, periodSummaries, rangeFor) agrees.
-String paydayOf(String date, int paydayDay) {
+/// The expected payday a period start [date] belongs to, or null (rule C, owner-approved 2026-10-30): the latest
+/// expected payday in [date − 7, date] (a salary on time or up to 7 days late, also across a month or year end), else
+/// the expected payday in (date, date + 7] (up to 7 days early). Expected paydays are at least 28 days apart, so there
+/// is at most one of each and never both.
+String? _salaryPayday(String date, int paydayDay) {
   final d = parseIso(date);
   final here = _paydayAt(d.year, d.month, paydayDay);
-  if (here.compareTo(date) > 0) {
-    return daysBetween(date, here) <= earlySalaryDays ? here : _paydayAt(d.year, d.month - 1, paydayDay);
+  if (here.compareTo(date) <= 0) {
+    if (daysBetween(here, date) <= paydayWindowDays) return here;
+    final next = _paydayAt(d.year, d.month + 1, paydayDay);
+    return daysBetween(date, next) <= paydayWindowDays ? next : null;
   }
-  final next = _paydayAt(d.year, d.month + 1, paydayDay);
-  return daysBetween(date, next) <= earlySalaryDays ? next : here;
+  final before = _paydayAt(d.year, d.month - 1, paydayDay);
+  if (daysBetween(before, date) <= paydayWindowDays) return before;
+  return daysBetween(date, here) <= paydayWindowDays ? here : null;
 }
 
-/// The expected next payday after a period starting on [periodStart]: the expected payday after [paydayOf]`(start)`,
-/// i.e. the first expected payday more than [earlySalaryDays] days after the start. A salary 2 Mar for the 28 Feb
-/// payday ends on the March payday (not April's); one 2 days early (8 Mar for the 10th) on 10 Apr.
+/// The expected next payday after a period starting on [periodStart] (rule C, RX7e): a start within 7 days of an
+/// expected payday belongs to it (late: the payday in [start − 7, start]; else early: the one in (start, start + 7])
+/// and the period ends on the expected payday after it, so February's salary paid 2 Mar (payday 31) ends on 31 Mar and
+/// January's paid 29 Jan (payday 3) on 3 Mar. Any other start (set by hand mid-period, a first run, a salary more than
+/// 7 days early or late) keeps the old rule: [paydayDay] of the month after the start's month, so 1 Oct and 7 Oct with
+/// payday 15 end on 15 Nov (the period keeps the salary it holds; ending on 15 Oct would count it again in the next).
 String nextPayday(String periodStart, int paydayDay) {
-  final p = parseIso(paydayOf(periodStart, paydayDay));
-  return _paydayAt(p.year, p.month + 1, paydayDay);
+  final p = _salaryPayday(periodStart, paydayDay);
+  final d = parseIso(p ?? periodStart);
+  return _paydayAt(d.year, d.month + 1, paydayDay);
 }
 
-/// The expected payday before [paydayOf]`(date)`: where the period before the one starting on [date] starts.
+/// Where the period before one starting on [date] starts (rangeFor's steps back before the first known start): the
+/// latest expected payday more than 7 days before [date], i.e. the expected payday before the one [date] belongs to
+/// (rule C), or for a start that belongs to none, the latest expected payday before it.
 String previousPayday(String date, int paydayDay) {
-  final p = parseIso(paydayOf(date, paydayDay));
-  return _paydayAt(p.year, p.month - 1, paydayDay);
+  final cut = addDays(date, -paydayWindowDays - 1);
+  final c = parseIso(cut);
+  final here = _paydayAt(c.year, c.month, paydayDay);
+  return here.compareTo(cut) <= 0 ? here : _paydayAt(c.year, c.month - 1, paydayDay);
 }
 
-/// The start of the pay period [today] falls in, from a saved [periodStart]: the latest expected payday on or before
-/// [today] ([periodStart] itself when no payday has passed since). Several missed paydays move on in one step.
+/// The start of the pay period [today] falls in, from a saved [periodStart]: [periodStart] itself until its
+/// [nextPayday], then the latest expected payday on or before [today]. Several missed paydays move on in one step.
 String currentPeriodStart(String periodStart, int paydayDay, String today) {
   var start = periodStart;
   for (var next = nextPayday(start, paydayDay); next.compareTo(today) <= 0; next = nextPayday(start, paydayDay)) {
