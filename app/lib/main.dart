@@ -362,7 +362,7 @@ class _HomeShellState extends State<HomeShell> {
             addExpense: _addExpense,
             openBills: () {
               _go(Tabs.bills, 'today');
-              _billsRequest.request(BillsAnchor.comingUp);
+              _billsRequest.request(BillsAnchor.expected); // Today's Overdue tile: the Overdue chips are on the Expected bills rows
             },
             openBillsReview: () {
               _go(Tabs.bills, 'today');

@@ -653,13 +653,15 @@ class _NetPainter extends CustomPainter {
 enum CalKind { none, bill, planned, payday }
 
 /// A day of a [CalendarStrip]: [label] is the day number as shown, [amount] an optional short preformatted text under it (the cost
-/// of that day), scaled down to fit the cell.
+/// of that day), shown at its own size or left out when it would not fit (the day number never shrinks for it). [overdue] marks a
+/// cell that holds costs already past due (a warning icon on the cell and "Overdue" in the legend: not colour alone).
 class CalDay {
   final String label;
   final CalKind kind;
   final bool today;
   final String? amount;
-  const CalDay(this.label, {this.kind = CalKind.none, this.today = false, this.amount});
+  final bool overdue;
+  const CalDay(this.label, {this.kind = CalKind.none, this.today = false, this.amount, this.overdue = false});
 }
 
 /// The days until payday as small squares: a bill = filled, a planned cost = dashed, payday = dashed teal with a flag, today = a bar
@@ -689,7 +691,20 @@ class CalendarStrip extends StatelessWidget {
     final scaler = MediaQuery.textScalerOf(context);
     final base = scaler.scale(30).clamp(30.0, 44.0);
     final hasAmount = days.any((d) => d.amount != null);
-    final height = hasAmount ? base + scaler.scale(BwType.eyebrowSize) * 1.2 + 2 : base;
+    // A cell is as tall as its content needs at this text scale (the number never shrinks to fit): the day number, a flag or warning
+    // icon above it where a day has one, an amount under it where one day has one.
+    final dts = DefaultTextStyle.of(context).style;
+    double lineH(TextStyle st) =>
+        (TextPainter(text: TextSpan(text: '0', style: dts.merge(st)), textDirection: TextDirection.ltr, textScaler: scaler, maxLines: 1)
+              ..layout())
+            .height;
+    final hasMark = days.any((d) => d.kind == CalKind.payday || d.overdue);
+    final need = 4 +
+        lineH(numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w700)) +
+        (hasMark ? 10 : 0) +
+        (hasAmount ? lineH(numStyle.copyWith(fontSize: BwType.eyebrowSize)) : 0);
+    final oldHeight = hasAmount ? base + scaler.scale(BwType.eyebrowSize) * 1.2 + 2 : base;
+    final height = need > oldHeight ? need : oldHeight;
     final kinds = days.map((d) => d.kind).toSet();
     final Widget cells;
     if (startWeekday == null) {
@@ -733,6 +748,12 @@ class CalendarStrip extends StatelessWidget {
             if (kinds.contains(CalKind.bill)) _CalKey(const CalDay('', kind: CalKind.bill), 'Bill', c),
             if (kinds.contains(CalKind.planned)) _CalKey(const CalDay('', kind: CalKind.planned), 'Planned', c),
             if (kinds.contains(CalKind.payday)) _CalKey(const CalDay('', kind: CalKind.payday), 'Payday', c),
+            if (days.any((d) => d.overdue))
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.warning_amber_rounded, size: 16, color: c.bad),
+                const SizedBox(width: 6),
+                Text('Overdue', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+              ]),
           ]),
         ],
       ]),
@@ -770,6 +791,9 @@ class _CalCell extends StatelessWidget {
         DashedBorderPainter(color: c.s3, radius: 4, width: 2, dash: 3, fill: solidOver(c.s3.withValues(alpha: 0.18), c.surface)),
     };
     final ink = day.kind == CalKind.none ? c.muted : c.ink;
+    final scaler = MediaQuery.textScalerOf(context);
+    final numStyleDay = numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: day.today ? FontWeight.w700 : FontWeight.w400, color: ink);
+    final amountStyle = numStyle.copyWith(fontSize: BwType.eyebrowSize, color: c.ink2);
     return SizedBox(
       width: width,
       height: height,
@@ -777,24 +801,46 @@ class _CalCell extends StatelessWidget {
         painter: painter,
         child: height < 20
             ? null
-            : Stack(alignment: Alignment.center, children: [
-                Padding(
-                  padding: const EdgeInsets.all(2),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+            : LayoutBuilder(builder: (context, box) {
+                // The day number is scaled on its own (only when it cannot fit at all). The amount is shown only when it fits at
+                // about its own size (not under 80 %) and under the number; otherwise it is left out (Upcoming and the spoken label
+                // have it).
+                const pad = 2.0;
+                // The same style the Text widgets resolve (the theme's default height included), so what is measured is what is drawn.
+                final base = DefaultTextStyle.of(context).style;
+                final availW = box.maxWidth - 2 * pad, availH = box.maxHeight - 2 * pad;
+                final mark = day.kind == CalKind.payday || day.overdue ? 10.0 : 0.0;
+                double textH(String t, TextStyle st) {
+                  final tp = TextPainter(
+                      text: TextSpan(text: t, style: base.merge(st)), textDirection: TextDirection.ltr, textScaler: scaler, maxLines: 1)
+                    ..layout();
+                  return tp.height;
+                }
+
+                double textW(String t, TextStyle st) {
+                  final tp = TextPainter(
+                      text: TextSpan(text: t, style: base.merge(st)), textDirection: TextDirection.ltr, textScaler: scaler, maxLines: 1)
+                    ..layout();
+                  return tp.width;
+                }
+
+                final numH = textH(day.label, numStyleDay);
+                final amount = day.amount;
+                final showAmount =
+                    amount != null && availW / textW(amount, amountStyle) >= 0.8 && mark + numH + textH(amount, amountStyle) <= availH;
+                return Stack(alignment: Alignment.center, children: [
+                  Padding(
+                    padding: const EdgeInsets.all(pad),
+                    child: Column(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, children: [
                       if (day.kind == CalKind.payday) Icon(Icons.flag, size: 10, color: c.s3),
-                      Text(day.label,
-                          maxLines: 1,
-                          style: numStyle.copyWith(
-                              fontSize: BwType.metaSize, fontWeight: day.today ? FontWeight.w700 : FontWeight.w400, color: ink)),
-                      if (day.amount != null)
-                        Text(day.amount!, maxLines: 1, style: numStyle.copyWith(fontSize: BwType.eyebrowSize, color: c.ink2)),
+                      if (day.overdue) Icon(Icons.warning_amber_rounded, size: 10, color: c.bad),
+                      FittedBox(fit: BoxFit.scaleDown, child: Text(day.label, maxLines: 1, style: numStyleDay)),
+                      if (showAmount) FittedBox(fit: BoxFit.scaleDown, child: Text(amount, maxLines: 1, style: amountStyle)),
                     ]),
                   ),
-                ),
-                if (day.today) Positioned(left: 6, right: 6, bottom: 3, height: 3, child: ColoredBox(color: c.ink)),
-              ]),
+                  if (day.today) Positioned(left: 6, right: 6, bottom: 3, height: 3, child: ColoredBox(color: c.ink)),
+                ]);
+              }),
       ),
     );
   }

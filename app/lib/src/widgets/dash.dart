@@ -398,6 +398,30 @@ class TileAction extends DashChip {
       );
 }
 
+/// A small (i) in a tile's label row: the help text of the tile opens behind it (a short sheet), never on the dashboard. It is a
+/// button of its own (48 dp), so a [StatTile] with one reads its parts instead of one sentence.
+class TileInfo extends DashChip {
+  final VoidCallback onTap;
+  final String label;
+  const TileInfo({super.key, required this.onTap, this.label = 'What is this?'});
+  @override
+  String get spoken => label;
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: label,
+        excludeSemantics: true,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: touchMin, minWidth: touchMin),
+            child: Center(widthFactor: 1, child: Icon(Icons.info_outline, size: 20, color: context.c.ink2)),
+          ),
+        ),
+      );
+}
+
 String _spokenJoin(List<String?> parts) => parts.whereType<String>().where((p) => p.isNotEmpty).join(', ');
 
 /// One number: label (1–3 words) with an optional [trailing] note, chip or action at the right of it, the figure scaled down to fit
@@ -431,7 +455,9 @@ class StatTile extends StatelessWidget {
     return Tile(
       onTap: onTap,
       attention: attention,
-      semanticLabel: trailing is TileAction ? null : _spokenJoin([label, value, sub, trailing?.spoken, visualSpoken, chip?.spoken]),
+      semanticLabel: trailing is TileAction || trailing is TileInfo
+          ? null
+          : _spokenJoin([label, value, sub, trailing?.spoken, visualSpoken, chip?.spoken]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         trailing == null ? TileLabel(label) : SplitRow(start: TileLabel(label), end: trailing!),
         const SizedBox(height: 6),

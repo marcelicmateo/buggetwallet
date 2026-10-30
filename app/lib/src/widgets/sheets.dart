@@ -21,6 +21,21 @@ import 'common.dart';
 import 'split_sheet.dart';
 import 'tag_picker.dart';
 
+/// The help text a dashboard tile keeps behind its (i): a title and a few plain lines (the sheet brings its own close button).
+Future<void> showInfoSheet(BuildContext context, String title, String text) =>
+    showSheet<void>(context, InfoSheet(title: title, text: text));
+
+class InfoSheet extends StatelessWidget {
+  final String title, text;
+  const InfoSheet({super.key, required this.title, required this.text});
+  @override
+  Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Heading(title, size: BwType.headingSize),
+        const SizedBox(height: 8),
+        Text(text, key: const ValueKey('infoText')),
+      ]);
+}
+
 /// Opens a bottom sheet on a phone, a dialog on windows [dialogMin] wide or more; logs `sheet.open` / `sheet.close` with
 /// the sheet's type and result word. With `scrolls: false` the sheet scrolls its own body (a `Flexible` scroll view) and
 /// keeps a button pinned below it. Both pop with the same result (the dialog's close button pops null).
