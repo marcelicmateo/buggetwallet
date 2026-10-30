@@ -431,6 +431,7 @@ void main() {
             value: '1,320.47 €',
             chip: StateChip.over(),
             dots: SizedBox(key: ValueKey('dotsSlot'), height: 20, width: 40),
+            dotsWidth: 40,
             dotsSpoken: '3 over',
             paceUsed: 0.8,
             paceExpected: 0.5,
@@ -447,7 +448,37 @@ void main() {
       expect(find.byType(PaceMeter), findsOneWidget);
       expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
       expect(tester.getSemantics(find.byKey(const ValueKey('h'))).label, 'Left, 1,320.47 €, Over, 3 over, 80 % used');
+      // 320 dp at text scale 2.0: the slot does not fit beside the figure, so it sits under it.
+      final slot = tester.getRect(find.byKey(const ValueKey('dotsSlot')));
+      expect(slot.top, greaterThanOrEqualTo(tester.getRect(find.byKey(const ValueKey('h'))).top + 40));
       handle.dispose();
+    });
+
+    testWidgets('HeroTile: the dots slot sits beside the figure when it fits (360 dp), under it when it does not (320 dp at 2.0)',
+        (tester) async {
+      Widget hero() => const Padding(
+            padding: EdgeInsets.all(16),
+            child: HeroTile(
+              label: 'Left',
+              value: '132.04 €',
+              valueKey: ValueKey('v'),
+              dots: SizedBox(key: ValueKey('dotsSlot'), height: 20, width: 100),
+              dotsWidth: 100,
+            ),
+          );
+      await _pump(tester, hero(), size: const Size(360, 700));
+      expect(tester.getRect(find.byKey(const ValueKey('dotsSlot'))).left,
+          greaterThanOrEqualTo(tester.getRect(find.byKey(const ValueKey('v'))).right));
+      await _pump(tester, hero(), size: const Size(320, 700), scale: 2);
+      expect(tester.getRect(find.byKey(const ValueKey('dotsSlot'))).top,
+          greaterThanOrEqualTo(tester.getRect(find.byKey(const ValueKey('v'))).bottom));
+      expect(tester.takeException(), isNull);
+    });
+
+    test('HeroTile: dots without a width is refused', () {
+      expect(() => HeroTile(label: 'a', value: 'b', dots: const SizedBox()), throwsAssertionError);
+      expect(() => HeroTile(label: 'a', value: 'b', dots: const SizedBox(), dotsWidth: 10, dotsCompact: const SizedBox()),
+          throwsAssertionError);
     });
 
     test('BarRow: over comes from the fraction; a number that is not finite counts as 0', () {

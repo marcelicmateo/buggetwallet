@@ -128,7 +128,8 @@ void main() {
       expect(find.text('OVER TODAY BY'), findsOneWidget);
       expect(_hero(tester), moneyExact(2048, 'EUR'));
       expect(_k('overSentence'), findsOneWidget);
-      expect(find.text('Over today'), findsOneWidget);
+      expect(find.text('Nothing more today'), findsOneWidget);
+      expect(find.text('Over today'), findsNothing, reason: 'the label says it');
       expect(_k('overBudget'), findsNothing);
       expect(find.text('Tomorrow ${moneyExact(5850, 'EUR')}'), findsOneWidget);
       expect(find.byIcon(Icons.warning_amber_rounded), findsWidgets);
@@ -144,7 +145,7 @@ void main() {
       expect(_under(tester, 'leftTile'), contains(moneyExact(0, 'EUR')));
     });
 
-    testWidgets('period ended: chip, one Start button, Payday tile says passed', (tester) async {
+    testWidgets('period ended: each fact once (hero chip, the Start button), no Left or Payday tile repeating the hero', (tester) async {
       final now = DateTime(2026, 11, 20, 12);
       final wc = _wallet(now: now);
       await _pump(tester, wc, now: now);
@@ -152,8 +153,44 @@ void main() {
       expect(find.text('Pay period ended'), findsOneWidget);
       expect(_k('periodEndedPanel'), findsOneWidget);
       expect(_k('startNewPeriod'), findsOneWidget);
-      expect(find.text('Passed'), findsOneWidget);
-      expect(find.text('LEFT THIS PAY PERIOD'), findsOneWidget);
+      expect(find.text('LEFT THIS PAY PERIOD'), findsOneWidget, reason: 'the hero says what is left');
+      expect(_k('leftTile'), findsNothing);
+      expect(_k('paydayTile'), findsNothing);
+      expect(find.text('Passed'), findsNothing);
+    });
+
+    testWidgets('no money in plan: flexible budget exactly 0 and nothing spent gives the overBudget chip, no pace meter', (tester) async {
+      // Rent + loan + subs = the whole salary (2000), so the plan leaves exactly 0.
+      final wc = _wallet();
+      wc.repo.updateSettings({'rent': 175000});
+      wc.reload();
+      final p = wc.period();
+      expect(p.flexBudget, 0);
+      expect(p.overBy, 0);
+      expect(p.overBudget, isTrue);
+      await _pump(tester, wc);
+      expect(find.text('No money in plan'), findsOneWidget);
+      expect(_k('overBudget'), findsOneWidget);
+      expect(_k('overSentence'), findsNothing);
+      expect(find.text('On pace'), findsNothing);
+      expect(find.byType(PaceMeter), findsNothing);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsWidgets);
+    });
+
+    testWidgets('behind pace: spending before today over the pace and none today gives the Behind pace chip', (tester) async {
+      // 600 spent on the 20th, none on the 25th: the day's allowance is fine, the pace (10 of 31 days gone) is not.
+      final wc = _wallet(spentBefore: 60000);
+      final p = wc.period();
+      expect(p.spentToday, 0);
+      expect(p.overToday, 0);
+      expect(p.overBy, 0);
+      expect(p.aheadOfPace, lessThan(0));
+      await _pump(tester, wc);
+      expect(find.text('Behind pace'), findsOneWidget);
+      expect(find.text('On pace'), findsNothing);
+      expect(_k('overBudget'), findsNothing);
+      expect(find.descendant(of: _k('heroTile'), matching: find.byIcon(Icons.warning_amber_rounded)), findsOneWidget);
+      expect(find.byType(PaceMeter), findsOneWidget);
     });
 
     testWidgets('empty wallet: hero and Add expense, an empty Recent note, no number tiles it cannot fill', (tester) async {

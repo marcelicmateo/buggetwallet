@@ -173,6 +173,16 @@ void main() {
       final layout = _read('src/main/res/layout/widget_safe_today.xml');
       expect(RegExp(r'<TextView').allMatches(layout), hasLength(3), reason: 'eyebrow, amount, one muted line');
     });
+
+    test('the widget amount is sized to fit, never ellipsized (exact cents at the 110 dp minimum width)', () {
+      final layout = _read('src/main/res/layout/widget_safe_today.xml');
+      final amount = RegExp(r'<TextView[^>]*widget_amount[^>]*/>', dotAll: true).firstMatch(layout)!.group(0)!;
+      expect(amount, contains('android:autoSizeTextType="uniform"'));
+      expect(amount, isNot(contains('ellipsize')));
+      expect(amount, contains('android:maxLines="1"'));
+      expect(widget, contains('SDK_INT < 26'), reason: 'below API 26 the size follows the length');
+      expect(widget, contains('setTextViewTextSize(R.id.widget_amount'));
+    });
   });
 
   group('key sheet', () {

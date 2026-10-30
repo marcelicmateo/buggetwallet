@@ -123,8 +123,8 @@ class TodayScreen extends StatelessWidget {
             if (f.s.savedFor != p.start && view.goals.isNotEmpty) DashItem(span: 2, child: _PaydayChecklist(f)),
             if (f.deliveryHour) DashItem(span: 2, child: _DeliveryHourPanel(f)),
             // The numbers.
-            _LeftTile(f),
-            _PaydayTile(f),
+            if (!f.ended) _LeftTile(f),
+            if (!f.ended) _PaydayTile(f),
             if (p.beforePaydayCount > 0 || p.beforePayday > 0)
               _BeforePaydayTile(f, () => _openUpcoming(context, view))
             else if (suggestions > 0)
@@ -228,7 +228,7 @@ class _Hero extends StatelessWidget {
           key: const ValueKey('overBudget'),
           chip: _KeyedChip(key: const ValueKey('overSentence'), chip: StateChip.over(text: '${moneyExact(p.overBy, cur)} over plan')));
     }
-    if (f.over) return const _KeyedChip(key: ValueKey('overSentence'), chip: StateChip.over(text: 'Over today'));
+    if (f.over) return const _KeyedChip(key: ValueKey('overSentence'), chip: StateChip.over(text: 'Nothing more today'));
     if (p.overBudget) return const _KeyedChip(key: ValueKey('overBudget'), chip: StateChip.over(text: 'No money in plan'));
     return f.ahead >= 0 ? const StateChip.onPace() : const StateChip.over(text: 'Behind pace');
   }
@@ -310,9 +310,6 @@ class _PaydayTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = f.p;
-    if (f.ended) {
-      return StatTile(key: const ValueKey('paydayTile'), label: 'Payday', value: shortDate(p.end), chip: const StateChip.date('Passed'));
-    }
     return RingTile(
         key: const ValueKey('paydayTile'),
         label: 'Payday',
@@ -665,8 +662,8 @@ class _DeliveryHourPanel extends StatelessWidget {
       ]),
       const SizedBox(height: 6),
       Text(
-        'This month: $deliveryCount ${deliveryCount == 1 ? 'order' : 'orders'}, ${money(deliverySum, cur)}. '
-        '${f.ended ? 'The pay period has ended; start the new one to get a daily budget.' : p.allowanceToday > 0 ? 'A typical ${money(typicalOrderCents, cur, decimals: 0)} order is ${(typicalOrderCents / p.allowanceToday * 100).round()}% of today\'s money.' : 'Today\'s money is used up.'}',
+        'This month: $deliveryCount ${deliveryCount == 1 ? 'order' : 'orders'}, ${moneyExact(deliverySum, cur)}. '
+        '${f.ended ? 'The pay period has ended; start the new one to get a daily budget.' : p.allowanceToday > 0 ? 'A typical ${moneyExact(typicalOrderCents, cur)} order is ${(typicalOrderCents / p.allowanceToday * 100).round()}% of today\'s money.' : 'Today\'s money is used up.'}',
         style: const TextStyle(fontSize: BwType.bodySize),
       ),
     ]));

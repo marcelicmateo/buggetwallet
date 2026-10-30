@@ -54,7 +54,7 @@ void main() {
       expect(p.overToday > 0 && p.overBy == 0, isTrue, reason: 'precondition: over today only (${p.overToday}, ${p.overBy})');
       await pumpApp(t, today(wc), size: const Size(400, 1600));
       final s = textOf(t, 'overSentence');
-      expect(s, 'Over today');
+      expect(s, 'Nothing more today');
       expect(find.textContaining('Tomorrow'), findsOneWidget);
       expect(find.textContaining('-'), findsNothing, reason: 'no minus sign on Today');
       expect(find.textContaining('OVER TODAY BY'), findsOneWidget);

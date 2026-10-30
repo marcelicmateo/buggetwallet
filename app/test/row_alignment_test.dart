@@ -43,7 +43,7 @@ WalletController _wallet({required bool behind}) {
 void main() {
   for (final behind in [false, true]) {
     // Behind pace here means money spent today beyond today's allowance, so "Over today" outranks "Behind pace" as the one chip.
-    final label = behind ? 'Over today' : 'On pace';
+    final label = behind ? 'Nothing more today' : 'On pace';
     testWidgets('"$label" is one chip with an icon in the hero tile on a wide window', (tester) async {
       await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(_wallet(behind: behind)), openPlan: () {})),
           size: const Size(1200, 3000));
