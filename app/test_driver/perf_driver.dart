@@ -14,20 +14,25 @@ import 'package:integration_test/integration_test_driver.dart';
 
 import 'perf_budget.dart';
 
-/// Budgets per action, from baseline runs on 2026-10-19 after the tab-switch fix (build p90 ≤ 1.4 ms, 0 missed build
-/// frames, ~190–250 frames; build max: tab switch ≤ 10 ms, Spending scroll 8.9–14.0 ms). Build limits are strict; raster
-/// limits are loose because Xvfb uses software GL and the shared laptop's load moves raster p90 between 8 and 20 ms.
-/// Scrolling gets a wider build max (28 ms) than switching tabs (20 ms): post-fix runs under load reached 14.0 ms
-/// (history/perf.jsonl), so 20 left only about 1.4x headroom on a shared laptop. Lasting jank is still caught by the
-/// missed-build-frames limit of 2. An action without an entry gets the default.
-const _baseline = PerfBudget(buildP90Ms: 4, buildMaxMs: 20, rasterP90Ms: 30, rasterMaxMs: 60, missedBuildFrames: 2, minFrames: 100);
-const _scroll = PerfBudget(buildP90Ms: 4, buildMaxMs: 28, rasterP90Ms: 30, rasterMaxMs: 60, missedBuildFrames: 2, minFrames: 100);
+/// Budgets per action (owner, 2026-10-30): the app targets 60 Hz, so one frame is 16.7 ms. The gates are build p90 <= 16.7 ms,
+/// at most 10 % of the frames missing the build budget, worst build frame <= 50 ms and worst raster frame <= 250 ms (software GL
+/// under Xvfb; raster p90 is recorded, not gated). Every action has the same budget except for the frame count: the minimum
+/// is what a healthy run of that action produces, so a trace that lost its frames fails. An action without an entry gets the
+/// default (10 frames).
+const _baseline = PerfBudget(minFrames: 100);
+const _scroll = _baseline;
 
-/// Insights (2026-10-25): open, six range switches over ~20k rows, a scroll through five graphs, close. Measured 92-94 frames,
-/// build p90 1.8-1.9 ms, build max 4.9-8.1 ms, raster p90 24 ms, raster max 27-31 ms, 0 missed build frames. Raster is higher
-/// than elsewhere (software GL draws the bar charts); limits sit at about 1.5-2x the measured numbers.
-const _insights = PerfBudget(buildP90Ms: 4, buildMaxMs: 28, rasterP90Ms: 40, rasterMaxMs: 80, missedBuildFrames: 2, minFrames: 50);
-const budgets = <String, PerfBudget>{'spending_scroll': _scroll, 'tab_switch': _baseline, 'insights': _insights};
+/// Insights: open, six range switches over ~20k rows, a scroll through five graphs, close. About 92-94 frames were measured.
+const _insights = PerfBudget(minFrames: 50);
+
+/// First visit of every tab after the data changed (what the idle warm-up should make cheap). Few frames: one per tab and a fade.
+const _firstSwitch = PerfBudget(minFrames: 20);
+const budgets = <String, PerfBudget>{
+  'spending_scroll': _scroll,
+  'tab_switch': _baseline,
+  'insights': _insights,
+  'first_switch': _firstSwitch,
+};
 
 /// Counts timeline events that look like shader compilation (any stream). Flutter 3.47 has no summary field for shader
 /// jank, so this is the closest available signal; a run with Impeller (precompiled shaders) is expected to show 0.

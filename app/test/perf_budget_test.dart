@@ -54,11 +54,11 @@ void main() {
 
   group('PerfBudget defaults', () {
     test('match the documented values', () {
-      expect(budget.buildP90Ms, 8);
-      expect(budget.buildMaxMs, 32);
-      expect(budget.rasterP90Ms, 40);
-      expect(budget.rasterMaxMs, 200);
-      expect(budget.missedBuildFrames, 5);
+      expect(budget.buildP90Ms, closeTo(16.67, 0.01), reason: 'one frame at 60 Hz');
+      expect(budget.buildP90Ms, PerfBudget.frame60HzMs);
+      expect(budget.buildMaxMs, 50);
+      expect(budget.rasterMaxMs, 250);
+      expect(budget.missedBuildShare, 0.10);
       expect(budget.minFrames, 10);
     });
   });
@@ -136,8 +136,21 @@ void main() {
     });
 
     test('every limit exactly equal passes', () {
-      final m = _ok(frameCount: 10, buildP90: 8, buildMax: 32, rasterP90: 40, rasterMax: 200, missedBuild: 5);
+      final m = _ok(frameCount: 10, buildP90: PerfBudget.frame60HzMs, buildMax: 50, rasterMax: 250, missedBuild: 1);
       expect(overruns(m, budget), isEmpty);
+    });
+
+    test('raster p90 is recorded, not gated', () {
+      expect(overruns(_ok(rasterP90: 5000), budget), isEmpty);
+    });
+
+    test('missed build frames are gated as a share of the frames, not as a count', () {
+      expect(overruns(_ok(frameCount: 200, missedBuild: 20), budget), isEmpty, reason: '10 %');
+      expect(overruns(_ok(frameCount: 200, missedBuild: 21), budget), hasLength(1), reason: '10.5 %');
+      expect(overruns(_ok(frameCount: 1000, missedBuild: 100), budget), isEmpty);
+      expect(overruns(_ok(frameCount: 20, missedBuild: 3), budget), hasLength(1), reason: '15 % of a short run');
+      expect(overruns(_ok(frameCount: 20, missedBuild: 2), budget), isEmpty);
+      expect(_ok(frameCount: 0, missedBuild: 4).missedBuildShare, 0, reason: 'no frames: no division by zero');
     });
 
     test('missed raster frames never cause an overrun', () {
@@ -153,7 +166,7 @@ void main() {
     });
 
     test('zero frames is an overrun and other checks still run', () {
-      final r = overruns(_ok(frameCount: 0, buildP90: 9), budget);
+      final r = overruns(_ok(frameCount: 0, buildP90: 17), budget);
       expect(r, hasLength(2));
       expect(r[0].toLowerCase(), contains('frame'));
       expect(r[1].toLowerCase(), contains('build'));
@@ -161,11 +174,10 @@ void main() {
 
     test('just above each limit fails with exactly one line naming the metric', () {
       final cases = <String, PerfMetrics>{
-        'build p90': _ok(buildP90: 8.001),
-        'build max': _ok(buildMax: 32.001),
-        'raster p90': _ok(rasterP90: 40.001),
-        'raster max': _ok(rasterMax: 200.001),
-        'missed': _ok(missedBuild: 6),
+        'build p90': _ok(buildP90: 16.7),
+        'build max': _ok(buildMax: 50.001),
+        'raster max': _ok(rasterMax: 250.001),
+        'missed': _ok(missedBuild: 11),
       };
       for (final e in cases.entries) {
         final r = overruns(e.value, budget);
@@ -186,19 +198,18 @@ void main() {
         missedRaster: 40,
       );
       final r = overruns(m, budget);
-      expect(r, hasLength(6));
+      expect(r, hasLength(5));
       expect(r.every((l) => l.isNotEmpty), isTrue);
       expect(r[0].toLowerCase(), contains('frame'));
       expect(r[1].toLowerCase(), contains('build'));
       expect(r[2].toLowerCase(), contains('build'));
       expect(r[3].toLowerCase(), contains('raster'));
-      expect(r[4].toLowerCase(), contains('raster'));
-      expect(r[5].toLowerCase(), contains('missed'));
-      expect(r.toSet(), hasLength(6), reason: 'lines must be distinct');
+      expect(r[4].toLowerCase(), contains('missed'));
+      expect(r.toSet(), hasLength(5), reason: 'lines must be distinct');
     });
 
     test('order holds for a subset: raster max before missed build', () {
-      final r = overruns(_ok(rasterMax: 300, missedBuild: 9), budget);
+      final r = overruns(_ok(rasterMax: 300, missedBuild: 11), budget);
       expect(r, hasLength(2));
       expect(r[0].toLowerCase(), contains('raster'));
       expect(r[1].toLowerCase(), contains('missed'));
@@ -208,26 +219,24 @@ void main() {
       const tight = PerfBudget(
         buildP90Ms: 2,
         buildMaxMs: 4,
-        rasterP90Ms: 6,
         rasterMaxMs: 8,
-        missedBuildFrames: 0,
+        missedBuildShare: 0,
         minFrames: 200,
       );
-      expect(overruns(_ok(missedBuild: 1), tight), hasLength(6));
+      expect(overruns(_ok(missedBuild: 1), tight), hasLength(5));
       const loose = PerfBudget(
         buildP90Ms: 100,
         buildMaxMs: 1000,
-        rasterP90Ms: 100,
         rasterMaxMs: 1000,
-        missedBuildFrames: 1000,
+        missedBuildShare: 1,
         minFrames: 1,
       );
-      expect(overruns(_ok(buildP90: 50, buildMax: 900, missedBuild: 999, frameCount: 1), loose), isEmpty);
+      expect(overruns(_ok(buildP90: 50, buildMax: 900, missedBuild: 999, frameCount: 1000), loose), isEmpty);
       expect(overruns(_ok(frameCount: 0), loose), hasLength(1));
     });
 
     test('custom budget limits are inclusive too', () {
-      const b = PerfBudget(buildP90Ms: 3.5, missedBuildFrames: 0, minFrames: 1);
+      const b = PerfBudget(buildP90Ms: 3.5, missedBuildShare: 0, minFrames: 1);
       expect(overruns(_ok(frameCount: 1, buildP90: 3.5), b), isEmpty);
       expect(overruns(_ok(frameCount: 1, buildP90: 3.6), b), hasLength(1));
       expect(overruns(_ok(frameCount: 1, buildP90: 1, missedBuild: 1), b), hasLength(1));
@@ -283,9 +292,9 @@ void main() {
     });
 
     test('ok is false when anything overruns', () {
-      final r = historyRecord('scroll', _ok(buildMax: 33), budget, commit: 'c', time: 't');
+      final r = historyRecord('scroll', _ok(buildMax: 50.5), budget, commit: 'c', time: 't');
       expect(r['ok'], isFalse);
-      expect(r['build_max_ms'], 33.0);
+      expect(r['build_max_ms'], 50.5);
     });
 
     test('ok is false for a broken trace and respects a custom budget', () {

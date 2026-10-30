@@ -85,6 +85,11 @@ void main() {
     final wc = await Harness.start(t);
     wc.repo.importBatch(demoBatch(wc.today()));
     await _resize(t, const Size(1280, 800));
+    // The hidden pages are built one by one while the app is idle (HomeShell), a frame each: pump until they are all there.
+    for (var i = 0; i < 40; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    await t.pumpAndSettle();
     final plan = t.state(find.byType(SettingsScreen, skipOffstage: false));
     final spending = t.state(find.byType(SpendingScreen, skipOffstage: false));
 

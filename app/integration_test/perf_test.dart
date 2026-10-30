@@ -1,5 +1,6 @@
 // Profile-mode frame performance with a big SYNTHETIC wallet (~5 years, ~20,000 transactions) on the Linux desktop app:
-// scrolling the Spending tab top to bottom and back, and switching through all five tabs twice. Each action runs inside
+// scrolling the Spending tab top to bottom and back, switching through all five tabs twice, Insights, and `first_switch`
+// (the first visit of every tab after the data changed: what the idle warm-up should make cheap). Each action runs inside
 // `binding.traceAction`; the timelines go to the host driver (test_driver/perf_driver.dart), which writes the summary
 // and the full trace per action and checks the budgets (test_driver/perf_budget.dart).
 // Run: tools/build.sh perf   (that is `flutter drive --profile`; a plain `flutter test` run has no timeline to trace)
@@ -95,6 +96,18 @@ void main() {
       await t.tap(find.byKey(const ValueKey('sheetClose')));
       await t.pumpAndSettle();
     }, reportKey: '${perfPrefix}insights');
+
+    // First visit of every tab after the data changed: an expense is added (the shown page rebuilds at once), the app is left idle for a
+    // moment (the idle warm-up works out the derived values, then the other pages are built one per frame), then each tab is opened once.
+    // Without the warm-up each of these switches builds its page and works its data out in the switch's own frame.
+    await goTab(t, 'Today');
+    opened.addExpense(amount: -1234, category: 'Groceries', note: 'perf first switch', date: opened.today());
+    await t.pump(const Duration(seconds: 4));
+    await binding.traceAction(() async {
+      for (final tab in ['Budget', 'Bills', 'Save', 'Settings', 'Today']) {
+        await goTab(t, tab);
+      }
+    }, reportKey: '${perfPrefix}first_switch');
 
     await Harness.checkLog();
   });

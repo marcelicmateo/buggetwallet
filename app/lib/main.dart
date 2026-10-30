@@ -27,6 +27,7 @@ import 'src/screens/today_view.dart';
 import 'src/screens/unlock.dart';
 import 'src/tabs.dart';
 import 'src/theme.dart';
+import 'src/warm_up.dart';
 import 'src/widgets/common.dart';
 import 'src/widgets/sheets.dart';
 
@@ -260,37 +261,76 @@ class _HomeShellState extends State<HomeShell> {
 
   /// The five tab pages, built once per data version and day (not on every tab switch): switching tabs only moves the
   /// IndexedStack, so the pages are not rebuilt and their derived data is not worked out again.
-  late List<Widget> _pages;
+  /// On a new data version only the shown page is built at once; the others are built one per idle frame (`_stageNext`, after the
+  /// idle warm-up of their data), and a tab opened before its turn is built then. An entry is null until its page was built for the
+  /// first time (a placeholder fills its slot); `_pageKeys` says for which data version and day each page was built.
+  final List<Widget?> _pages = List.filled(Tabs.names.length, null);
+  final List<String?> _pageKeys = List.filled(Tabs.names.length, null);
   String? _pagesKey;
 
-  /// Builds the pages again when the data or the day changed since they were built (a new day moves the period and months).
+  /// The controller was replaced: no page built for the old one may stay.
+  bool _wcReplaced = false;
+
+  /// Whether the first frame was rasterized (the warm-up starts after it, so it never delays the start).
+  bool _firstFrameDone = false;
+
+  /// Builds the shown page again when the data or the day changed since it was built (a new day moves the period and months).
   void _refreshPages() {
     final key = '${widget.wc.dataVersion}|${widget.wc.today()}|${widget.wc.numberStyleName}';
     if (key == _pagesKey) return;
     _pagesKey = key;
-    _pages = _buildPages();
+    if (_wcReplaced) {
+      _pages.fillRange(0, _pages.length, null);
+      _pageKeys.fillRange(0, _pageKeys.length, null);
+      _wcReplaced = false;
+    }
+    final staged = WarmUp.enabled;
+    for (var i = 0; i < _pages.length; i++) {
+      if (staged && i != tab) continue;
+      _pages[i] = _page(i);
+      _pageKeys[i] = key;
+    }
+    if (staged) _startBackground(key);
   }
 
-  List<Widget> _buildPages() => [for (var i = 0; i < Tabs.names.length; i++) _page(i)];
+  /// After the first frame (and after every new data version or day): the idle warm-up of the derived values, then the other pages.
+  void _startBackground(String key) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || key != _pagesKey) return;
+      if (!_firstFrameDone && WarmUp.waitForFirstRaster) {
+        await WidgetsBinding.instance.waitUntilFirstFrameRasterized;
+        _firstFrameDone = true;
+        if (!mounted || key != _pagesKey) return;
+      }
+      widget.wc.startWarmUp(onDone: () => _stageNext(key));
+    });
+  }
+
+  /// Builds the next hidden page that is missing or built for older data: one per idle moment (after the frame that shows the last). Stops when the data moved on (the new key starts its own round).
+  void _stageNext(String key) {
+    WarmUp.whenIdle(() {
+      final i = [
+        for (var i = 0; i < _pages.length; i++)
+          if (i != tab && _pageKeys[i] != key) i
+      ].firstOrNull;
+      if (i == null) return;
+      setState(() {
+        _pages[i] = _page(i);
+        _pageKeys[i] = key;
+      });
+      _stageNext(key);
+    }, wanted: () => mounted && key == _pagesKey);
+  }
 
   Widget _page(int i) => switch (i) {
         Tabs.today => TodayScreen(
             view: TodayView(widget.wc),
             openPlan: () => _go(Tabs.budget, 'today'),
             openSpending: () => _go(Tabs.budget, 'today'),
-            openSearch: () {
-              _go(Tabs.budget, 'today');
-              _searchRequest.value++;
-            },
+            openSearch: () => _goThen(Tabs.budget, 'today', () => _searchRequest.value++),
             addExpense: _addExpense,
-            openBills: () {
-              _go(Tabs.bills, 'today');
-              _billsRequest.request(BillsAnchor.comingUp);
-            },
-            openBillsReview: () {
-              _go(Tabs.bills, 'today');
-              _billsRequest.request(BillsAnchor.review);
-            },
+            openBills: () => _goThen(Tabs.bills, 'today', () => _billsRequest.request(BillsAnchor.comingUp)),
+            openBillsReview: () => _goThen(Tabs.bills, 'today', () => _billsRequest.request(BillsAnchor.review)),
             openAccounts: () => widget.wc.openSettings(SettingsSection.accounts, via: 'today'),
             openSync: () => widget.wc.openSettings(SettingsSection.sync, via: 'today'),
             openIncome: () => widget.wc.openSettings(SettingsSection.income, via: 'today')),
@@ -299,10 +339,7 @@ class _HomeShellState extends State<HomeShell> {
             searchRequest: _searchRequest,
             header: [PaydayPlan(key: _paydayKey, wc: widget.wc)],
             openTab: (i) => _go(i, 'search'),
-            openBills: () {
-              _go(Tabs.bills, 'search');
-              _billsRequest.request(BillsAnchor.expected);
-            }),
+            openBills: () => _goThen(Tabs.bills, 'search', () => _billsRequest.request(BillsAnchor.expected))),
         Tabs.bills => BillsScreen(wc: widget.wc, request: _billsRequest),
         Tabs.save => SaveScreen(wc: widget.wc),
         _ => SettingsScreen(wc: widget.wc),
@@ -356,8 +393,22 @@ class _HomeShellState extends State<HomeShell> {
     AppLog.setScreen(Tabs.names[i]);
     // Today and Save (the wishlist) show the time of day (delivery hour, hours left): they get a fresh build when opened.
     // The data they use is cached in the controller, so this is cheap.
-    if (i == Tabs.today || i == Tabs.save) _pages[i] = _page(i);
+    // A page that was not built yet, or for older data, is built now.
+    if (i == Tabs.today || i == Tabs.save || _pageKeys[i] != _pagesKey) {
+      _pages[i] = _page(i);
+      _pageKeys[i] = _pagesKey;
+    }
     setState(() => tab = i);
+  }
+
+  /// [_go], then [then] once the page exists: a page that was not built yet has no listener for a jump request before its frame.
+  void _goThen(int i, String via, VoidCallback then) {
+    final unbuilt = _pages[i] == null;
+    _go(i, via);
+    if (!unbuilt) return then();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) then();
+    });
   }
 
   /// Opens the Add expense sheet for a launcher shortcut (once per request; nothing when there is none).
@@ -399,18 +450,18 @@ class _HomeShellState extends State<HomeShell> {
     _AddIntent: CallbackAction<_AddIntent>(onInvoke: (_) => _key('ctrlN', _addExpense)),
     _SyncIntent: CallbackAction<_SyncIntent>(onInvoke: (_) => _key('sync', _syncNow)),
     _SettingsIntent: CallbackAction<_SettingsIntent>(onInvoke: (_) => _key('ctrlComma', () => _go(Tabs.settings, 'key'))),
-    _SearchIntent: CallbackAction<_SearchIntent>(
-        onInvoke: (_) => _key('ctrlF', () {
-              _go(Tabs.budget, 'key');
-              _searchRequest.value++;
-            })),
+    _SearchIntent:
+        CallbackAction<_SearchIntent>(onInvoke: (_) => _key('ctrlF', () => _goThen(Tabs.budget, 'key', () => _searchRequest.value++))),
   };
 
   // The parent rebuilds this widget when the wallet changes; build() then makes new pages if the data or the day moved on.
   @override
   void didUpdateWidget(HomeShell old) {
     super.didUpdateWidget(old);
-    if (old.wc != widget.wc) _pagesKey = null;
+    if (old.wc != widget.wc) {
+      _pagesKey = null;
+      _wcReplaced = true;
+    }
   }
 
   @override
@@ -439,10 +490,7 @@ class _HomeShellState extends State<HomeShell> {
         key: const ValueKey('appBarSearch'),
         tooltip: _hint('Search', 'Ctrl+F'),
         icon: const Icon(Icons.search),
-        onPressed: () => _key('appBarSearch', () {
-          _go(Tabs.budget, 'appbar');
-          _searchRequest.value++;
-        }),
+        onPressed: () => _key('appBarSearch', () => _goThen(Tabs.budget, 'appbar', () => _searchRequest.value++)),
       );
 
   /// The pay period as a small boxed label for the rail (the wide layouts have no app bar): one line when the rail is extended,
@@ -611,8 +659,15 @@ class _HomeShellState extends State<HomeShell> {
                         constraints: BoxConstraints(maxWidth: maxContentWidth(size)),
                         // A tab that is not shown has its tickers off (IndexedStack keeps it built, and does not do this itself): pages that wait
                         // for it (Explainer, RebuildWhenShown) know they are hidden.
+                        // The page that is shown fades in (~180 ms; at once with reduce motion); the others keep their State, scroll and
+                        // tickers off. A page that is not built yet leaves an empty slot.
                         child: IndexedStack(index: tab, children: [
-                          for (final (i, page) in _pages.indexed) TickerMode(enabled: i == tab, child: page),
+                          for (final (i, page) in _pages.indexed)
+                            TabFade(
+                              key: ValueKey('tabFade:${Tabs.names[i]}'),
+                              active: i == tab,
+                              child: TickerMode(enabled: i == tab, child: page ?? const SizedBox.shrink(key: ValueKey('tabPlaceholder'))),
+                            ),
                         ]),
                       ),
                     ),
@@ -661,4 +716,44 @@ class _SyncSlot extends StatelessWidget {
                     Tooltip(message: 'Syncing', child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))))
             : null,
       );
+}
+
+/// How long the page that was just opened takes to fade in.
+const tabFadeDuration = Duration(milliseconds: 180);
+
+/// Fades its child in when [active] turns true (0 to 1 over [tabFadeDuration]); at once when the system asks for reduced motion.
+/// The child keeps its place in the tree, so its State survives; it is the same widget instance while the page does not change,
+/// so a hidden page is not rebuilt by a tab switch. Where the first page starts, there is no fade.
+class TabFade extends StatefulWidget {
+  final bool active;
+  final Widget child;
+  const TabFade({super.key, required this.active, required this.child});
+  @override
+  State<TabFade> createState() => _TabFadeState();
+}
+
+class _TabFadeState extends State<TabFade> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: tabFadeDuration, value: widget.active ? 1 : 0);
+
+  @override
+  void didUpdateWidget(TabFade old) {
+    super.didUpdateWidget(old);
+    if (widget.active == old.active) return;
+    if (!widget.active) {
+      _c.stop();
+    } else if (MediaQuery.disableAnimationsOf(context)) {
+      _c.value = 1;
+    } else {
+      _c.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(opacity: _c, child: widget.child);
 }

@@ -60,6 +60,10 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   (`'${dataVersion}|${today()}'`), so a tab switch only moves the `IndexedStack` (keep it that way: 20,000 rows made every
   switch miss frames). The controller takes a clock (`forTest(clock:)`); `checkDay()` (resume, 2-minute timer) notifies when
   the day changed, so a wallet without a relay also moves on at midnight.
+- Background work (stage PF, owner 2026-10-30; 60 Hz target, frame budget in the root `CLAUDE.md`): `HomeShell` fades the opened page in (`TabFade`, 180 ms, `tabFade:<tab>` keys; at once with `MediaQuery.disableAnimationsOf`; the `IndexedStack` and every page's State stay).
+  On a new data version or day only the shown page is built; the other four are built one per idle frame (`_stageNext`) after the idle warm-up, an unbuilt slot holds `tabPlaceholder`, and a tab opened early is built at once (`_go`; a jump request to a page that did not exist yet waits for its frame: `_goThen`).
+  `warm_up.dart` `WarmUp` runs the task list of `controller_warmup.dart` (`warmUpTasks()`: period, periodDays, heldTotals, tightestBudget, comingUp, billLists, paydayForecast, spending, budgetVsActual, the default Insights ranges...) as idle-priority scheduler tasks, one memo each, started after the first frame is rasterized and after every data/day change (`wc.startWarmUp`), ended when the data version changes; logs `warmup.done {tasks, ms, slowestMs, wallMs}` only.
+  A new derived value that a tab reads first belongs in `warmUpTasks()`. `WarmUp.enabled` is false in `app/test` (`test/flutter_test_config.dart`: an idle task is a pending timer to fake async); `test/pf_warm_up_test.dart` switches it on.
 - Habits (M4): `screens/review.dart` (`openReview` = page on phones, 560 dp dialog from `dialogMin`; `ReviewScreen` = four ruled steps with a
   square tick: Import (`screens/import_flow.dart` `pickAndImport`, shared with Plan), Confirm categories (`reviewRows()`: the rows core counts;
   "Looks right"/"Change" call `confirmCategory` = pin the category + teach the merchant, so the row leaves), Pace (`paceRows()`, tap → Spending),
