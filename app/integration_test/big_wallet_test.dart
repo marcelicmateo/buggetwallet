@@ -117,6 +117,10 @@ void main() {
     phase('derive');
     wc.reload();
     await t.pump();
+    // Since RX4 nothing on screen asks for the Spending view while Today is shown, so ask for it here (the uncached work: its month
+    // summaries and pay periods), as the Budget tab does the first time it is opened.
+    wc.spending();
+    await t.pump();
 
     phase('tabs');
     final framesTabs = await frames(t, () async {
@@ -147,7 +151,9 @@ void main() {
     final months = monthsEnding(monthOf(today), 13);
     for (final m in months.sublist(months.length - 7, months.length - 1).reversed) {
       await tapVisible(t, find.widgetWithText(ChoiceChip, monthShort(m)));
-      expect(find.textContaining('${monthLong(m)}: '), findsWidgets);
+      // The Out tile names the month ("Out in September", with the year for another year than today's).
+      final name = m.substring(0, 4) == monthOf(today).substring(0, 4) ? monthLong(m).split(' ').first : monthLong(m);
+      expect(find.descendant(of: find.byKey(const ValueKey('outTile')), matching: find.text('Out in $name'.toUpperCase())), findsOneWidget);
     }
     phase('end');
     AppLog.logFrameWindow();

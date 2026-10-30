@@ -111,7 +111,7 @@ void main() {
     expect(
         find.descendant(of: find.byKey(const ValueKey('planPerDay')), matching: find.text(moneyExact(p.planDaily, 'EUR'))), findsOneWidget);
     await goTab(t, 'Save');
-    expect(find.text('Anything over 80\u00A0€ waits 48 hours on the wishlist first.'), findsOneWidget);
+    expect(find.text('Over 80\u00A0€ waits 48 h'), findsOneWidget);
     await goTab(t, 'Today');
     expect(find.textContaining('Planning on'), findsNothing);
 
