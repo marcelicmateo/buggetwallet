@@ -141,11 +141,12 @@ tile numbers switch to Plex Sans semibold (proportional figures read better larg
 - Both directions share the IA and most components (`StatTile` vs `LedgerCell` is a skin); if the owner prefers A, the
   build plan is the same minus the tile skin.
 
-## 8. Open questions for the owner
-1. A (Ledger Board) or B (Paper Tiles)?
-2. Budget tab: the **Spending | Plan** switch (B), or one page with the plan on top (A, like today)?
-3. Should Today keep the last 3 payments under Add expense, or leave rows to Budget and search?
-4. Tile money: whole euros on tiles from 100 € up (cents in the rows they open), or always exact cents?
+## 8. Owner decisions (2026-10-30)
+1. **B · Paper Tiles.**
+2. Budget tab: **Spending | Plan switch** (remembered on the device).
+3. Today **keeps the last 3 payments** under Add expense.
+4. **Always exact cents**, on tiles too (the hero included); tiles keep their size by scaling the number down
+   (`FittedBox`), never by rounding. Mockups at https://claude.ai/artifact/Nh3PjMvaTu6jqoywVURDAP (private).
 
 ## 9. Build split (rough)
 | Step | Work | Kind |

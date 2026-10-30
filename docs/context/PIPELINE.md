@@ -43,8 +43,12 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | FB1 | Today's Add expense = only add button (no FAB, nothing in the rail) | lead | v2 | – | done 2c99d30 |
 | FB2 | Graph panels: title only, no restating note | lead | v2 | – | done c495203~1 |
 | DD | Today day dots (spec `DD_SPEC.md`): DD1 core `periodDays` + DD2 UI `DayDots` in parallel | core-builder + ui-builder | worktrees | DD0 scout done | running |
-| RX1 | Dashboard redesign concept (owner: too much text, look like a dashboard, more dashboards; Figma free kits): 2–3 directions, HTML mockups, `docs/design/dashboard/` | ui-builder (opus/high) | worktree | – | running |
-| RX2 | Publish mockups for the owner, owner picks a direction | lead | – | RX1 | queued |
+| RX1 | Dashboard redesign concept: 2 directions, mockups `docs/design/dashboard/` | ui-builder (opus/high) | worktree | – | done d24e8d4, merged |
+| RX2d | Owner decisions: B Paper Tiles, Spending/Plan switch, keep 3 payments on Today, always exact cents (CONCEPT.md §8) | owner | – | RX1 | done |
+| RX2 | Tokens (`desk`, series s1–s3, soft states) + kit `widgets/dash.dart` (Tile, StatTile, chips, Ring, Sparkline, SplitBar/Donut, BarList, NetBars, CalendarTile, DashGrid) + widget tests | scout → ui-builder (sonnet/high) | worktree | RX2d | queued |
+| RXc | Core for RX4/RX7: month out vs 6-month average; `periodDays` for a past period; out delta vs previous period; reviews per period | scout → core-builder (session/high) | worktree | RX2d | queued (parallel with RX2) |
+| RX3–RX6 | Today, Budget (Spending/Plan), Bills, Save dashboards on the kit | ui-builder ×2 (parallel by tab) | worktrees | RX2 (+RXc for RX4) | queued |
+| RX7–RX8 | Pay-period report page; tag detail dashboard; desktop 4 columns; screenshots/layout tests | ui-builder | worktree | RX3–RX6, RXc | queued |
 | ZC | Zoomable, scrollable graphs (spec `ZC_SPEC.md`, owner answers in §6) | scout → core + test-writer + ui | worktrees | DD, RX2 (chart look follows the picked direction) | on hold |
 
 ## Stage HP: hardening pass during the M6 live test (2026-10-30; tests and reviews only, bug fixes with a test)
