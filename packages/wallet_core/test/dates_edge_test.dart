@@ -40,20 +40,21 @@ void main() {
 
     test('a start late in the month still moves to the NEXT month (no skipped or repeated month)', () {
       expect(nextPayday('2026-01-31', 15), '2026-02-15');
-      expect(nextPayday('2026-01-01', 15), '2026-02-15');
+      // RX7d: 14 days before the 15 Jan payday is not an early salary (more than 7 days): it ends on 15 Jan (was 15 Feb).
+      expect(nextPayday('2026-01-01', 15), '2026-01-15');
       expect(nextPayday('2026-01-14', 15), '2026-02-15');
     });
 
-    test('property: lands in the following month on min(paydayDay, month length)', () {
+    test('property (RX7d): the first expected payday, min(paydayDay, month length), more than 7 days after the start', () {
       final r = Random(fuzzSeed(31));
       for (var i = 0; i < fuzzIterations(2000); i++) {
         final d = addDays('1999-12-01', r.nextInt(365 * 102));
         final day = 1 + r.nextInt(31);
-        final got = parseIso(nextPayday(d, day));
-        final from = parseIso(d);
-        final wantMonth = DateTime.utc(from.year, from.month + 1, 1);
-        expect((got.year, got.month), (wantMonth.year, wantMonth.month), reason: '$d $day');
-        expect(got.day, min(day, _lastDay(wantMonth.year, wantMonth.month)), reason: '$d $day');
+        var want = addDays(d, 8);
+        while (dayOf(want) != min(day, _lastDay(parseIso(want).year, parseIso(want).month))) {
+          want = addDays(want, 1);
+        }
+        expect(nextPayday(d, day), want, reason: '$d $day');
       }
     });
   });

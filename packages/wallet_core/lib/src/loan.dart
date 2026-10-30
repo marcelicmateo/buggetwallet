@@ -22,8 +22,8 @@ LoanLeft? loanLeft(WalletSettings st, String today) {
   while (month.compareTo(end) <= 0) {
     final y = int.parse(month.substring(0, 4));
     final m = int.parse(month.substring(5, 7));
-    // `nextPayday` of the month before gives this month's payday (clamped to the month's last day).
-    final payday = nextPayday(isoDate(DateTime.utc(y, m - 1, 1)), st.paydayDay);
+    // This month's payday (clamped to the month's last day).
+    final payday = paydayIn(month, st.paydayDay);
     if (payday.compareTo(today) >= 0) n++;
     month = monthOf(isoDate(DateTime.utc(y, m + 1, 1)));
   }
