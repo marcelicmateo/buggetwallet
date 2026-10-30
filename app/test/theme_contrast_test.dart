@@ -28,6 +28,12 @@ void main() {
         'good/bg': (c.good, c.bg),
         'warnInk/warnBg': (c.warnInk, c.warnBg),
         'bg on accent (filled button)': (c.bg, c.accent),
+        'good/goodSoft (chip)': (c.good, c.goodSoft),
+        'bad/badSoft (chip)': (c.bad, c.badSoft),
+        'accent/accentSoft (chip)': (c.accent, c.accentSoft),
+        'ink2/surface2 (chip)': (c.ink2, c.surface2),
+        'muted/surface (tile label)': (c.muted, c.surface),
+        'ink/desk': (c.ink, c.desk),
       };
       text.forEach((n, p) => test('text $n >= 4.5', () => expect(contrastRatio(p.$1, p.$2), greaterThanOrEqualTo(4.5), reason: n)));
 
@@ -36,7 +42,8 @@ void main() {
         'accent/bg': (c.accent, c.bg),
         'pos/bg': (c.pos, c.bg),
         'neg/bg': (c.neg, c.bg),
-        for (final n in {'chartPos': c.chartPos, 'chartNeg': c.chartNeg, 'chart2': c.chart2}.entries) ...{
+        for (final n
+            in {'chartPos': c.chartPos, 'chartNeg': c.chartNeg, 'chart2': c.chart2, 's1': c.s1, 's2': c.s2, 's3': c.s3}.entries) ...{
           '${n.key}/bg': (n.value, c.bg),
           '${n.key}/surface': (n.value, c.surface),
         },
@@ -65,6 +72,12 @@ void main() {
           'chartPos': c.chartPos,
           'chartNeg': c.chartNeg,
           'chart2': c.chart2,
+          'desk': c.desk,
+          's1': c.s1,
+          's2': c.s2,
+          's3': c.s3,
+          'goodSoft': c.goodSoft,
+          'badSoft': c.badSoft,
         };
         tokens.forEach((n, col) => expect(col.toARGB32() >>> 24, 255, reason: n));
       });
@@ -89,6 +102,29 @@ void main() {
       const light = WalletColors.light, dark = WalletColors.dark;
       expect([light.chartPos, light.chartNeg, light.chart2], const [Color(0xFF3A559E), Color(0xFFA93A32), Color(0xFFA8650F)]);
       expect([dark.chartPos, dark.chartNeg, dark.chart2], const [Color(0xFF6F8FE0), Color(0xFFD56F66), Color(0xFFC27F20)]);
+    });
+  });
+
+  // Dashboard tokens (RX2): the series are three different hues, never the status colours, and the desk is darker than a tile.
+  group('dashboard tokens', () {
+    test('series colours differ from each other and from the status colours', () {
+      for (final c in themes.values) {
+        final series = {c.s1.toARGB32(), c.s2.toARGB32(), c.s3.toARGB32()};
+        expect(series.length, 3);
+        expect(series.intersection({c.bad.toARGB32(), c.good.toARGB32(), c.neg.toARGB32()}), isEmpty);
+      }
+    });
+
+    test('the desk is darker than the tile ground in both themes', () {
+      for (final c in themes.values) {
+        expect(c.desk.computeLuminance(), lessThan(c.surface.computeLuminance()));
+      }
+    });
+
+    test('hold the validated series values', () {
+      const light = WalletColors.light, dark = WalletColors.dark;
+      expect([light.s1, light.s2, light.s3], const [Color(0xFF3A559E), Color(0xFFB0721A), Color(0xFF008F96)]);
+      expect([dark.s1, dark.s2, dark.s3], const [Color(0xFF7088D6), Color(0xFFBD7F22), Color(0xFF1A9AA0)]);
     });
   });
 }
