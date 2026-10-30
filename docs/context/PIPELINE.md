@@ -43,7 +43,9 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | FB1 | Today's Add expense = only add button (no FAB, nothing in the rail) | lead | v2 | – | done 2c99d30 |
 | FB2 | Graph panels: title only, no restating note | lead | v2 | – | done c495203~1 |
 | DD | Today day dots (spec `DD_SPEC.md`): DD1 core `periodDays` + DD2 UI `DayDots` in parallel | core-builder + ui-builder | worktrees | DD0 scout done | running |
-| ZC | Zoomable, scrollable graphs (spec `ZC_SPEC.md`, owner answers in §6) | scout → core + test-writer + ui | worktrees | DD | queued |
+| RX1 | Dashboard redesign concept (owner: too much text, look like a dashboard, more dashboards; Figma free kits): 2–3 directions, HTML mockups, `docs/design/dashboard/` | ui-builder (opus/high) | worktree | – | running |
+| RX2 | Publish mockups for the owner, owner picks a direction | lead | – | RX1 | queued |
+| ZC | Zoomable, scrollable graphs (spec `ZC_SPEC.md`, owner answers in §6) | scout → core + test-writer + ui | worktrees | DD, RX2 (chart look follows the picked direction) | on hold |
 
 ## Stage HP: hardening pass during the M6 live test (2026-10-30; tests and reviews only, bug fixes with a test)
 | # | Item | Agent | Branch | Depends on | Status |
