@@ -13,6 +13,7 @@ export 'src/relay_server.dart'
         defaultMaxTotalInFlightBytes,
         defaultMinBodyRate,
         defaultOrigins,
+        defaultRefusalTimeout,
         maxBlobSetBytes,
         maxFileBytes,
         maxSnapshotBytes;

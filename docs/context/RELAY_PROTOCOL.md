@@ -132,7 +132,7 @@ lock or unlock is a no-op (200 with the current value).
 | `GET /v2/health` (not signed) | 200 `{"api":5}` |
 | `GET /v2/w/<wid>/state` | 200 state JSON (below) |
 | `PUT /v2/w/<wid>/d/<device>/<seq>` body = sealed bytes (≤ 16 MiB) | 201 stored; 200 same bytes already stored; 409 other bytes already stored for that seq (never overwritten); 422 `seq > last + 1` (no gaps on the relay); 410 `seq < first` (pruned); 413 too big; 507 `wallet full` (see "Limits") or `too many devices` (a new device name when the wallet already holds 256) |
-| `GET /v2/w/<wid>/d/<device>/<seq>` | 200 bytes; 410 pruned (`seq < first`); 404 never stored; 404 `{"error":"missing"}` when the relay's own state says the file exists but it is gone from disk (damaged or restored data folder; never 500) |
+| `GET /v2/w/<wid>/d/<device>/<seq>` | 200 bytes; 410 pruned (`seq < first`, or since HP-R1b a listed file gone from disk that the latest snapshot covers, so a reader starts from that snapshot); 404 never stored; 404 `{"error":"missing"}` when the relay's own state says the file exists but it is gone from disk and no snapshot covers it (damaged or restored data folder; never 500) |
 | `PUT /v2/w/<wid>/ack/<device>` body `{"<peer>": seq, …}` | 204. Each ack only ever grows (max with the stored one); an ack above the peer's `last` → 422; an ack as a new device name when the wallet already holds 256 → 507 `too many devices` |
 | `PUT /v2/w/<wid>/snapshot/<id>` header `X-BW-Covers: {"<device>": seq, …}`, body = sealed bytes (≤ 64 MiB) | 201 when `covers` ≥ the current snapshot's covers for every device in it (a device missing from `covers` counts as 0), and ≤ each device's `last`; checked in that order: 422 beyond `last` (unknown device = `last` 0), then 409 does not dominate; same id with the same bytes and covers again = 200, same id with other content = 409; missing/invalid `X-BW-Covers` = 400 |
 | `PUT /v2/w/<wid>/snapshot/<id>/blobs` body = JSON array of blob hashes (api 4) | The snapshot's declared set (see "Blob garbage collection"): 201 stored; 200 the same set again; 409 another set already stored for that id; 404 `<id>` is not a kept snapshot (or unknown wallet); 400 not a JSON array of distinct `[0-9a-f]{64}` strings, or more than 100,000; 413 over 7 MiB |
@@ -183,7 +183,9 @@ the pending ones (`devpub` → at, deviceId; at most 8, each dropped 7 days afte
   sends `devices/others` again signed at least 1 s after the newest remaining `added`/`at` (state times are whole
   seconds; that time is not ahead of the relay's clock, so it is inside the window and later than `othersTime`), at
   most 3 calls in all; keys still left after the third = failure `other` (`others remain`; the app says to try
-  again). The count it returns is the sum of the calls' `revoked`.
+  again). The count it returns is the sum of the calls' `revoked`. Pending requests alone end it (HP-R1b: a key holder
+  can keep asking; each call rejects the requests it saw and none gets in without an approval), and a `state` read
+  that fails after an accepted call returns the count so far.
 - **Lock:** `PUT lock` `{"locked":true|false}` by an enrolled key; applied only when its `X-BW-Time` is later than the
   stored `lockTime` (a revoke's lock sets it too). Unlocking reopens the wallet to the wallet key: every holder of it
   can enrol again (and older apps sync again).
@@ -297,8 +299,11 @@ revoked key, oldest first: `fp` its fingerprint, `added`, `by` (`"wallet"` or th
 (time or `null`), `deviceId` and `device` (or `null`, see "Device keys"), `self` true for the key that signed this
 request. `pending`: the keys waiting for approval (not expired), oldest first.
 `first` = lowest seq still stored, or `last + 1` when all were pruned (after a restart: the lowest seq on disk; a file
-missing above it stays listed and answers 404 `missing`, HP-R1). `snapshot`/`previous` are `null` when absent. A
-device appears once it has stored a file or sent an ack; a wallet holds at most 256 devices (streams), never removed.
+missing above it stays listed and answers 404 `missing`, HP-R1; HP-R1b: a missing file the latest snapshot covers
+answers 410 and, once it is the lowest left, counts as pruned, so `first` moves past it and readers take the snapshot). `snapshot`/`previous` are `null` when absent. A
+device appears once it has stored a file or sent an ack; a wallet holds at most 256 devices (streams). When a new one
+would pass that, the relay first forgets every stream that holds no file and was not seen for 90 days (HP-R1b; it is
+then no longer listed, and a snapshot need not dominate it any more).
 
 `bytes` and `maxBytes` (Stage I, additive): the wallet's stored bytes as `--max-bytes` counts them (sync
 files + kept snapshots + blobs, each file counted as at least 4096 bytes since HP-R1, so tiny files cannot use up the
@@ -383,10 +388,14 @@ rule); a declared `Content-Length` counts in full from the start (HP-R1); 507 re
   any of its body is read (`/v2/health` is not counted). A request body must arrive within 30 s plus 1 s per 8 KiB
   received (a 64 MiB snapshot may take over two hours; a body that stalls is cut off after 30 s): past that the relay
   stops reading and drops the connection without an answer (logged `…!slow 429`). A refusal that needs no body (403
-  `createToken`, an unknown wallet's 422/507/401/400) drains it for at most those 30 s, then closes. An answer gets the
+  `createToken`, an unknown wallet's 422/507/401/400, a declared length over the limit or the in-flight budget) drains
+  it for at most 5 s (HP-R1b), then closes. An answer gets the
   same time to be sent (a client that does not read it loses the connection). Stored files (sync files, snapshots, blobs)
   are streamed from disk, never read whole into memory. An idle connection, or one still sending its request headers, is
   closed after 60–120 s. Clients are unaffected: a refused or dropped request is a network failure the next run repeats.
+  The client's own deadline (`RelayTransport`, HP-R1b) is 30 s plus 1 s per 64 KiB sent (until the answer's headers)
+  and again per 64 KiB of the answer's `Content-Length`, so it gives up before the relay does and a big upload on a
+  slow link (a 15 MB bill at 4 Mbit/s) is not cut off.
 - Client address (rate limit, open requests, in-flight bytes): an IPv4 address as is (also IPv4-mapped IPv6), an IPv6
   address by its /64 (HP-R1).
 - CORS: `Access-Control-Allow-Origin` echoes the request `Origin` only if it is in the configured list (default

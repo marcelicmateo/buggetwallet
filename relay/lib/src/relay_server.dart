@@ -32,6 +32,7 @@ const int defaultMaxOpen = 512;
 
 /// Defaults for [Relay.bodyTimeout], [Relay.minBodyRate] and [Relay.idleTimeout].
 const Duration defaultBodyTimeout = Duration(seconds: 30);
+const Duration defaultRefusalTimeout = Duration(seconds: 5);
 const int defaultMinBodyRate = 8 * 1024;
 const Duration defaultIdleTimeout = Duration(seconds: 60);
 
@@ -150,6 +151,7 @@ class Relay {
     this.maxDevices = defaultMaxDevices,
     this.minFileCost = defaultMinFileCost,
     this.bodyTimeout = defaultBodyTimeout,
+    this.refusalTimeout = defaultRefusalTimeout,
     this.minBodyRate = defaultMinBodyRate,
     this.idleTimeout = defaultIdleTimeout,
     this.createToken,
@@ -186,9 +188,14 @@ class Relay {
 
   /// The body deadline: a body must arrive within [bodyTimeout] plus 1 s per [minBodyRate] bytes received; a slow or
   /// stalled upload has its connection dropped, unanswered (logged `…!slow 429`). A refusal that needs no body drains
-  /// it for at most [bodyTimeout]. An answer gets the same time to be sent.
+  /// it for at most [refusalTimeout]. An answer gets the same time to be sent.
   final Duration bodyTimeout;
   final int minBodyRate;
+
+  /// How long a refusal decided before the body is read (403 `createToken`, an unknown wallet's 422/507/401/400, a
+  /// declared length over the limit or the in-flight budget) drains that body before the connection is closed: short,
+  /// so unauthenticated refusals do not hold the open-request slots ([maxOpen]) for long.
+  final Duration refusalTimeout;
 
   /// [HttpServer.idleTimeout]: an idle connection, or one still sending its request headers, is closed after 1 to 2×.
   final Duration idleTimeout;
@@ -619,7 +626,8 @@ class Relay {
     final b = BytesBuilder(copy: false);
     var n = 0;
     var drained = 0;
-    final inTime = await _consume(req, (chunk) {
+    // Refused from the start (declared too big or over the in-flight budget): only the short refusal drain.
+    final inTime = await _consume(req, over || busy ? refusalTimeout : bodyTimeout, (chunk) {
       if (over || busy) {
         drained += chunk.length;
         return drained > limit * 2 ? _Take.stop : _Take.drain; // enough of a polite drain
@@ -657,11 +665,11 @@ class Relay {
     return b.takeBytes();
   }
 
-  /// Refuses a body without buffering it: reads and discards up to 2× [limit] within the body deadline (so a client
-  /// that sends its whole body sees the status; a slow one is cut off at [bodyTimeout]), then throws [status].
+  /// Refuses a body without buffering it: reads and discards up to 2× [limit] within [refusalTimeout] (so a client
+  /// that sends its whole body sees the status; a slow one is cut off then), then throws [status].
   Future<Never> _refuseBody(HttpRequest req, int limit, int status, String message) async {
     var drained = 0;
-    await _consume(req, (chunk) {
+    await _consume(req, refusalTimeout, (chunk) {
       drained += chunk.length;
       return drained > limit * 2 ? _Take.stop : _Take.drain;
     });
@@ -672,10 +680,10 @@ class Relay {
   /// [bodyTimeout] from the start plus 1 s per [minBodyRate] bytes [take] kept (drained bytes add nothing). Returns
   /// false when the deadline passed. Stopping early (deadline or stop) cancels the body stream, which makes dart:io
   /// drop the connection: whatever the caller answers then is not delivered.
-  Future<bool> _consume(HttpRequest req, _Take Function(Uint8List chunk) take) {
+  Future<bool> _consume(HttpRequest req, Duration base, _Take Function(Uint8List chunk) take) {
     final done = Completer<bool>();
     final clock = Stopwatch()..start();
-    var allowedUs = bodyTimeout.inMicroseconds;
+    var allowedUs = base.inMicroseconds;
     late final StreamSubscription<Uint8List> sub;
     Timer? timer;
     void finish(bool inTime) {
@@ -800,7 +808,17 @@ class Relay {
       final st = w.devices[device];
       if (st == null || seq > st.last) throw _HttpError(404, 'not stored');
       if (seq < st.first) throw _HttpError(410, 'pruned');
-      return _stored(w.dataFile(device, seq), info);
+      try {
+        return await _stored(w.dataFile(device, seq), info);
+      } on _HttpError catch (e) {
+        // A listed file gone from disk (e.g. a power cut before its folder entry was written) that the latest snapshot
+        // covers: answered as pruned, so a reader starts from that snapshot instead of waiting on it forever.
+        if (e.status != 404) rethrow;
+        st.lost.add(seq);
+        w.skipLost();
+        if ((w.snapshot?.covers[device] ?? 0) >= seq) throw _HttpError(410, 'pruned');
+        rethrow;
+      }
     });
   }
 
@@ -898,7 +916,9 @@ class Relay {
         }
         throw _HttpError(422, 'seq beyond last + 1');
       }
-      if (st == null && w.devices.length >= maxDevices) throw _HttpError(507, 'too many devices');
+      if (st == null && w.devices.length >= maxDevices && w.forgetIdleDevices(_now()) == 0) {
+        throw _HttpError(507, 'too many devices');
+      }
       if (w.totalBytes + w.storedSize(body.length) > maxBytes) throw _HttpError(507, 'wallet full');
       await w.writeData(device, seq, body);
       w.bytes += w.storedSize(body.length);
@@ -966,7 +986,9 @@ class Relay {
       for (final e in acks.entries) {
         if (e.value > (w.devices[e.key]?.last ?? 0)) throw _HttpError(422, 'ack beyond last');
       }
-      if (!w.devices.containsKey(device) && w.devices.length >= maxDevices) throw _HttpError(507, 'too many devices');
+      if (!w.devices.containsKey(device) && w.devices.length >= maxDevices && w.forgetIdleDevices(_now()) == 0) {
+        throw _HttpError(507, 'too many devices');
+      }
       _touchKey(w, sig, device);
       final dev = w.devices.putIfAbsent(device, () => DeviceState(_now()));
       dev.lastSeen = _now();
@@ -999,6 +1021,8 @@ class Relay {
       final cur = w.snapshot;
       if (cur != null) {
         for (final e in cur.covers.entries) {
+          // A device stream the relay forgot ([Wallet.forgetIdleDevices]: no files, unseen 90 days) is not listed any more.
+          if (!w.devices.containsKey(e.key)) continue;
           if ((covers[e.key] ?? 0) < e.value) throw _HttpError(409, 'does not dominate');
         }
       }

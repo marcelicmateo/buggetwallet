@@ -114,6 +114,7 @@ class Harness {
     int maxDevices = defaultMaxDevices,
     int minFileCost = defaultMinFileCost,
     Duration bodyTimeout = defaultBodyTimeout,
+    Duration refusalTimeout = defaultRefusalTimeout,
     int minBodyRate = defaultMinBodyRate,
     Duration idleTimeout = defaultIdleTimeout,
   }) async {
@@ -133,6 +134,7 @@ class Harness {
       maxDevices: maxDevices,
       minFileCost: minFileCost,
       bodyTimeout: bodyTimeout,
+      refusalTimeout: refusalTimeout,
       minBodyRate: minBodyRate,
       idleTimeout: idleTimeout,
     );
@@ -153,6 +155,7 @@ class Harness {
     int maxDevices,
     int minFileCost,
     Duration bodyTimeout,
+    Duration refusalTimeout,
     int minBodyRate,
     Duration idleTimeout,
   }) _limits;
@@ -181,6 +184,7 @@ class Harness {
       maxDevices: _limits.maxDevices,
       minFileCost: _limits.minFileCost,
       bodyTimeout: _limits.bodyTimeout,
+      refusalTimeout: _limits.refusalTimeout,
       minBodyRate: _limits.minBodyRate,
       idleTimeout: _limits.idleTimeout,
       createToken: _createToken,

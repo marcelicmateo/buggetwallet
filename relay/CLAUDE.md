@@ -10,8 +10,8 @@ Never put a signature, public key, body, full id or client address in a log line
   CREATE_TOKEN(_FILE)/TRUST_PROXY/PUBLIC_HOST (or DOMAIN)` (flags win); usage error = exit 64; SIGINT/SIGTERM = graceful stop. `--health-check` GETs `/v2/health`
   on 127.0.0.1:port and exits 0/1 (the image's HEALTHCHECK; no `--data` needed). `relay/deploy/` = quadlets, Caddyfile, env templates (docs/setup.md §5).
 - `lib/relay.dart` — barrel. `lib/src/relay_server.dart` — `Relay({data, origins, maxWallets, maxBytes, maxInFlightBytes, maxTotalInFlightBytes,
-  maxOpenPerClient, maxOpen, maxDevices, minFileCost, bodyTimeout, minBodyRate, idleTimeout, now, log})` (HP-R1 defaults: 192 MiB, 16, 512, 256,
-  4096, 30 s, 8 KiB/s, 60 s; `default*` constants):
+  maxOpenPerClient, maxOpen, maxDevices, minFileCost, bodyTimeout, refusalTimeout, minBodyRate, idleTimeout, now, log})` (HP-R1 defaults: 192 MiB,
+  16, 512, 256, 4096, 30 s, 5 s, 8 KiB/s, 60 s; `default*` constants):
   `serve({host, port})` (port 0 for tests), `close()`, `handle(HttpRequest)`, `walletCount`. Routing, signature checks
   (`_signature`: headers (+ `X-BW-Dev`/`X-BW-WSig`, api 5) + ±5 min clock window, before any wallet lookup or body read; `_verify` after the body is read (with `X-BW-Dev` the v5 text by that device key; else v4, else v3 = `_Sig.version` 3: state then says api 3),
   with the stored key or, on creation, `X-BW-Pub`; `_verifyWallet` = `X-BW-WSig`; `_admit` (revoked / unenrolled / locked, before and inside the lock: `_lockedAs`)), body limits, the per-wallet async lock (`_locked`), every endpoint.
@@ -26,12 +26,13 @@ Never put a signature, public key, body, full id or client address in a log line
   **Slow clients (HP-R1):** `handle` counts open requests per client address (`_enter`/`_leave`, `maxOpenPerClient`, relay-wide `maxOpen`; one more = 429
   `too many open requests` + close before any body read; `/v2/health` not counted; test hook `onOpen(open)` on every count change). Every body read
   goes through `_consume` (real-time deadline: `bodyTimeout` + 1 s per `minBodyRate` bytes kept; drained bytes add nothing): a passed deadline
-  or an early stop cancels the body stream, which makes dart:io drop the connection unanswered (log `…!slow 429`); `_refuseBody` drains at most
-  `bodyTimeout`. `_send` sets `HttpResponse.deadline` (same formula on the answer length) and guards the write with a timeout. `serve` sets
+  or an early stop cancels the body stream, which makes dart:io drop the connection unanswered (log `…!slow 429`); `_refuseBody` (and a body refused from the start) drains at most
+  `refusalTimeout` (5 s). `_send` sets `HttpResponse.deadline` (same formula on the answer length) and guards the write with a timeout. `serve` sets
   `HttpServer.idleTimeout` (also cuts connections stuck in their headers) and `onError` on the server stream (`relay accept-error`). Stored files
   are answered by `_stored` → `_Out.file` (a `RandomAccessFile` opened inside the wallet lock, streamed in 64 KiB chunks by `_send`, closed there);
   replays compare with `_sameStored` (length first, then chunks). Client address = `clientKey` (`rate_limit.dart`: IPv4 as is, IPv4-mapped IPv6 → IPv4,
-  IPv6 → its /64). New device names past `maxDevices` = 507 `too many devices` (PUT d, ack).
+  IPv6 → its /64). New device names past `maxDevices` = 507 `too many devices` (PUT d, ack) unless `Wallet.forgetIdleDevices` frees a slot (streams with no file,
+  unseen 90 days; a snapshot need not dominate a stream the relay no longer lists).
 - `lib/src/signing.dart` — `signedTextV5` (api 5, ends with `devpub`), `fingerprint` (`ABCD-EFGH`, `fingerprintPattern`), `signedText` (`bw-relay-v4`, `v3: true` = the api-3 text it still accepts: method, host, path, covers, body hash, time; the host is
   `Relay(publicHost:)` when set, else the request's `Host`, lower case), `sha256OfBytes`, `decodeBase64Url` (exact
   length, no padding), `verifySignature` (Ed25519, never throws), `signatureWindow`.
@@ -55,7 +56,7 @@ Never put a signature, public key, body, full id or client address in a log line
   `last`, never a declared or < 30-day-old blob; a stored time that cannot be set = the file rewritten, else 500, hook `touchBlob`;
   log `relay gc kept= deleted= bytes=`), no lastSeen change; counted in `Wallet.blobCount/blobBytes`, rebuilt from the folder on
   load; `--max-bytes` = `Wallet.totalBytes` = files + kept snapshots + blobs, checked by PUT d, snapshot PUT and blob PUT; state JSON `blobs`, and `bytes` (= `totalBytes`) + `maxBytes` (Stage I:
-  `Wallet.stateJson(maxBytes:)`, passed by `relay_server.dart`; additive)). `first` is not stored: it is the lowest seq on disk, or `last + 1` when the device has no file left (a missing file above the lowest stays listed: 404 `missing`). `last` = max of
+  `Wallet.stateJson(maxBytes:)`, passed by `relay_server.dart`; additive)). `first` is not stored: it is the lowest seq on disk, or `last + 1` when the device has no file left (a missing file above the lowest stays listed: 404 `missing`; `DeviceState.lost` + `Wallet.skipLost`: a lost file the latest snapshot covers answers 410 and, at `first`, is skipped like a pruned one, HP-R1b). `last` = max of
   meta and disk, so a crash between a file and the meta loses nothing. Load deletes temp files and snapshot files the meta does
   not name; a folder without a readable meta is not a wallet (a new first PUT replaces it).
 - Every wallet operation runs inside `_locked(wid, ...)`; wallet creation reserves its slot in `_wallets` before any await so

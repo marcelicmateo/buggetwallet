@@ -375,4 +375,86 @@ void main() {
     expect((await h.device(w1, 'dev1'))['first'], 3);
     expect((await h.getData(w1, 'dev1', 1)).statusCode, 410);
   });
+
+  group('HP-R1b review fixes', () {
+    test('a listed file gone from disk that the latest snapshot covers is 410 pruned; an uncovered one stays 404 missing', () async {
+      final h = await freshHarness();
+      expect((await h.putData(w1, 'dev1', 1, 'one')).statusCode, 201);
+      expect((await h.putData(w1, 'dev1', 2, 'two')).statusCode, 201);
+      expect((await h.putData(w1, 'dev2', 1, 'other')).statusCode, 201);
+      expect((await h.putData(w1, 'dev2', 2, 'other two')).statusCode, 201);
+      expect((await h.putSnapshot(w1, 's1', {'dev1': 2, 'dev2': 1}, 'snap')).statusCode, 201);
+      await File('${h.dir.path}/$w1/d/dev1/2').delete();
+      await File('${h.dir.path}/$w1/d/dev2/2').delete();
+      await h.restart();
+      final covered = await h.getData(w1, 'dev1', 2);
+      expect(covered.statusCode, 410);
+      expect(jsonDecode(covered.body), {'error': 'pruned'});
+      expect((await h.send('HEAD', '/v2/w/$w1/d/dev1/2', key: keyA)).statusCode, 410);
+      final uncovered = await h.getData(w1, 'dev2', 2);
+      expect(uncovered.statusCode, 404);
+      expect(jsonDecode(uncovered.body), {'error': 'missing'});
+      expect((await h.getData(w1, 'dev1', 1)).statusCode, 200);
+      expect((await h.device(w1, 'dev1'))['first'], 1, reason: 'file 1 is still there');
+      // Once file 1 is pruned, the lost file 2 the snapshot covers counts as pruned too: state first moves past it, so
+      // a reader (also an older app) takes the snapshot path.
+      expect((await h.ack(w1, 'dev2', {'dev1': 1})).statusCode, 204);
+      expect((await h.device(w1, 'dev1'))['first'], 3);
+      expect((await h.device(w1, 'dev2'))['first'], 1, reason: 'its lost file 2 is not covered');
+    });
+
+    test('a wallet at maxDevices forgets a stream with no files unseen for 90 days; snapshots no longer need to cover it', () async {
+      final h = await Harness.start(maxDevices: 2);
+      addTearDown(h.stop);
+      expect((await h.putData(w1, 'dev1', 1, 'a')).statusCode, 201);
+      expect((await h.putData(w1, 'dev2', 1, 'b')).statusCode, 201);
+      expect((await h.putSnapshot(w1, 's1', {'dev1': 1, 'dev2': 1}, 'snap')).statusCode, 201);
+      expect((await h.ack(w1, 'dev1', {'dev2': 1})).statusCode, 204);
+      expect((await h.ack(w1, 'dev2', {'dev1': 1})).statusCode, 204); // dev2's file is pruned: it holds none now
+      expect((await h.device(w1, 'dev2'))['first'], 2);
+      h.advance(const Duration(days: 89));
+      expect((await h.ack(w1, 'dev1', {'dev2': 1})).statusCode, 204); // dev1 stays seen
+      expect((await h.putData(w1, 'dev3', 1, 'c')).statusCode, 507, reason: 'dev2 seen 89 days ago: kept');
+      h.advance(const Duration(days: 2));
+      expect((await h.ack(w1, 'dev1', {'dev2': 1})).statusCode, 204);
+      expect((await h.putData(w1, 'dev3', 1, 'c')).statusCode, 201);
+      expect(((await h.state(w1))['devices'] as Map).keys, unorderedEquals(['dev1', 'dev3']));
+      expect(Directory('${h.dir.path}/$w1/d/dev2').existsSync(), isFalse);
+      // The kept snapshot still names dev2: a new one without it is accepted.
+      expect((await h.putSnapshot(w1, 's2', {'dev1': 1, 'dev3': 1}, 'snap2')).statusCode, 201);
+      await h.restart();
+      expect(((await h.state(w1))['devices'] as Map).keys, unorderedEquals(['dev1', 'dev3']));
+      // Long after: dev1 (no files left) is forgotten for a new stream, dev3 (still holds its file) never is.
+      h.advance(const Duration(days: 200));
+      expect((await h.putData(w1, 'dev4', 1, 'd')).statusCode, 201);
+      expect(((await h.state(w1))['devices'] as Map).keys, unorderedEquals(['dev3', 'dev4']));
+      expect((await h.putData(w1, 'dev5', 1, 'e')).statusCode, 507);
+    });
+
+    test('a refusal before the body (no create token) drains for refusalTimeout only, not bodyTimeout', () async {
+      final h = await Harness.start(createToken: 'synthetic-token', refusalTimeout: const Duration(milliseconds: 200));
+      addTearDown(h.stop);
+      expect(h.relay.bodyTimeout, const Duration(seconds: 30));
+      const path = '/v2/w/$w1/d/a/1';
+      final slow = await Raw.open(h, 'PUT', path, length: 30000000, part: [0], headers: await h.sign(keyA, 'PUT', path, Uint8List(0)));
+      await slow.closed.future.timeout(const Duration(seconds: 5));
+      slow.socket.destroy();
+    });
+
+    test('a stalled streamed download leaves the wallet lock free: a PUT to the same wallet goes through', () async {
+      final h = await Harness.start();
+      addTearDown(h.stop);
+      expect((await h.putData(w1, 'dev1', 1, 'a')).statusCode, 201);
+      final big = Uint8List(48 << 20);
+      expect((await h.send('PUT', '/v2/w/$w1/snapshot/big', key: keyA, body: big, headers: {'x-bw-covers': '{"dev1":1}'})).statusCode, 201);
+      const path = '/v2/w/$w1/snapshot/big';
+      final reader = await Raw.open(h, 'GET', path, headers: await h.sign(keyA, 'GET', path, const [], withPub: false));
+      await reader.answered.future.timeout(const Duration(seconds: 10)); // streaming has started (outside the lock)
+      reader.sub.pause(); // and now it cannot finish: 48 MiB into a reader that stopped reading
+      expect(reader.status, 200);
+      expect((await h.putData(w1, 'dev1', 2, 'b')).statusCode, 201);
+      expect((await h.ack(w1, 'dev2', {'dev1': 2})).statusCode, 204);
+      reader.socket.destroy();
+    });
+  });
 }

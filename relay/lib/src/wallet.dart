@@ -173,6 +173,9 @@ class DeviceState {
   int last = 0;
   DateTime lastSeen;
   final Map<String, int> acks = {};
+
+  /// Seqs at or above [first] that the meta lists but the disk lacks (found on load or by a read; not stored).
+  final Set<int> lost = {};
 }
 
 /// A kept snapshot: id, what it covers and its size on disk.
@@ -427,6 +430,26 @@ class Wallet {
     await writeAtomic(metaFile, utf8.encode(jsonEncode(meta)));
   }
 
+  /// Forgets the device streams that hold no file (all pruned, or only ever acked) and were not seen for [deviceMemory]
+  /// (the 90-day rule), so a wallet at `Relay.maxDevices` can take a new one; their empty folders go too. The caller's
+  /// meta save keeps it. Returns how many were forgotten.
+  int forgetIdleDevices(DateTime now) {
+    final cutoff = now.subtract(deviceMemory);
+    final idle = [
+      for (final MapEntry(key: name, value: st) in devices.entries)
+        if (st.first > st.last && st.lastSeen.isBefore(cutoff)) name,
+    ];
+    for (final name in idle) {
+      devices.remove(name);
+      try {
+        Directory('${dir.path}/d/$name').deleteSync(); // only when empty
+      } on FileSystemException {
+        // absent, or not empty (left alone)
+      }
+    }
+    return idle.length;
+  }
+
   /// Deletes every file the kept snapshots cover and every device seen within 90 days acked (see RELAY_PROTOCOL.md).
   Future<void> prune(DateTime now) async {
     final kept = [snapshot, previous].whereType<Snap>().toList();
@@ -452,6 +475,21 @@ class Wallet {
         } on FileSystemException {
           // already gone
         }
+        st.lost.remove(st.first);
+        st.first++;
+      }
+    }
+    skipLost();
+  }
+
+  /// A lost file ([DeviceState.lost]) at a device's `first` that the latest snapshot covers counts as pruned: `first`
+  /// moves past it, so a reader starts from that snapshot (state `first`) instead of waiting on it for good (HP-R1b).
+  void skipLost() {
+    final s = snapshot;
+    if (s == null) return;
+    for (final MapEntry(key: name, value: st) in devices.entries) {
+      while (st.lost.contains(st.first) && st.first <= (s.covers[name] ?? 0)) {
+        st.lost.remove(st.first);
         st.first++;
       }
     }
@@ -564,6 +602,10 @@ class Wallet {
         final st = w.devices.putIfAbsent(name, () => DeviceState(now));
         st.last = math.max(st.last, seqs.last);
         st.first = seqs.first;
+        final have = seqs.toSet();
+        for (var q = seqs.first; q <= st.last; q++) {
+          if (!have.contains(q)) st.lost.add(q);
+        }
       }
     }
     // `first` = the lowest seq on disk (set above); a device without any file had everything up to `last` pruned. A
@@ -592,6 +634,7 @@ class Wallet {
 
     w.snapshot = await snap(meta['snapshot']);
     w.previous = await snap(meta['previous']);
+    w.skipLost();
     // Declared sets of the kept snapshots; any other set file (a dropped snapshot's, a temp file) goes.
     final dSets = Directory('${dir.path}/sets');
     if (await dSets.exists()) {
