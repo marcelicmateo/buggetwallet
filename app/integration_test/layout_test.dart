@@ -187,8 +187,8 @@ void main() {
         where = 'goal-sheet';
         debugPrint('layout $name: $where');
         await goTab(t, 'Save');
-        await scrollTo(t, find.text(longGoal), SaveScreen);
-        await tapVisible(t, find.text(longGoal));
+        await scrollTo(t, find.text(longGoal.toUpperCase()), SaveScreen);
+        await tapVisible(t, find.text(longGoal.toUpperCase()));
         await Harness.shot(t, '$name-sheet-goal');
         await closeSheet(t, GoalSheet);
 

@@ -1,6 +1,7 @@
 // Amounts and notes sit at the right end of their rows (SplitRow), and names get the rest of the row instead of half.
 // Synthetic wallets only.
 import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/today_view.dart';
@@ -59,13 +60,17 @@ void main() {
 
   double rowRight(WidgetTester tester, Finder f) => tester.getTopRight(find.ancestor(of: f, matching: find.byType(Row)).first).dx;
 
-  testWidgets('goal and wishlist amounts end at the row end on a wide window', (tester) async {
+  testWidgets('wishlist amounts end at the row end on a wide window; goal tiles keep their figure inside', (tester) async {
     final wc = demoWallet();
     await pumpApp(tester, Scaffold(body: GoalsScreen(wc: wc)), size: const Size(1200, 3000));
-    final goal = find.textContaining(' / ').first;
-    expect(tester.getTopRight(goal).dx, closeTo(rowRight(tester, goal), 1));
+    for (final g in wc.goals) {
+      final tile = tester.getRect(find.byKey(ValueKey('goal:${g.id}')));
+      final fig =
+          tester.getRect(find.descendant(of: find.byKey(ValueKey('goal:${g.id}')), matching: find.text(moneyExact(g.saved, wc.currency))));
+      expect(fig.right, lessThanOrEqualTo(tile.right));
+    }
     await pumpApp(tester, Scaffold(body: WishlistScreen(wc: wc)), size: const Size(1200, 3000));
-    final price = find.text('120\u00A0€');
+    final price = find.descendant(of: find.byType(WishRow), matching: find.text('120\u00A0€'));
     expect(price, findsWidgets);
     expect(tester.getTopRight(price.first).dx, closeTo(rowRight(tester, price.first), 1));
   });

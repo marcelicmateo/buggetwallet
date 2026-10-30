@@ -24,10 +24,13 @@ void main() {
     expect(tester.getTopLeft(find.byKey(const ValueKey('page'))).dx + pagePad, greaterThanOrEqualTo(marginLineX + marginLineWidth));
   });
 
-  testWidgets('margin line on the real pages: absent at 599 dp, present at 600 dp', (tester) async {
+  // The dashboards (Today, Bills, Save: Paper Tiles on the desk) have no margin line; the Budget pages keep it.
+  testWidgets('margin line on the real pages: absent at 599 dp, present at 600 dp (Budget)', (tester) async {
     await pumpFull(tester, demoWallet(), 1.0, size: const Size(599, 800));
+    await tapTab(tester, 'Budget');
     expect(marginLine, findsNothing);
     await pumpFull(tester, demoWallet(), 1.0, size: const Size(600, 800));
+    await tapTab(tester, 'Budget');
     expect(marginLine, findsOneWidget);
   });
 

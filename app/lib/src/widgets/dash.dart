@@ -200,7 +200,11 @@ class _RenderDash extends RenderBox
     }
     for (final p in places) {
       final h = top[p.end] + rowH[p.end] - top[p.row];
-      if ((p.child.size.height - h).abs() > 0.01) p.child.layout(BoxConstraints.tightFor(width: p.width, height: h), parentUsesSize: true);
+      // A minimum height, not a tight one: a tight size would make the tile a relayout boundary, and a tile that grows later (a form
+      // showing its verdict) would never reach this grid again and paint past its own box.
+      if ((p.child.size.height - h).abs() > 0.01) {
+        p.child.layout(BoxConstraints(minWidth: p.width, maxWidth: p.width, minHeight: h), parentUsesSize: true);
+      }
       (p.child.parentData! as _DashParentData).offset = Offset(p.col * (colW + _gap), top[p.row]);
     }
     size = constraints.constrain(Size(w, taken.isEmpty ? 0 : top.last + rowH.last));

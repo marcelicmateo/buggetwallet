@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/screens/save.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
+import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +19,10 @@ import 'support/wallet.dart';
 const _t = Timeout(Duration(seconds: 60));
 
 Finder _key(String k) => find.byKey(ValueKey(k));
+
+/// What the summary tile with [key] says (its spoken label: both numbers), and the two figures it shows.
+String _sum(WidgetTester t, String key) => t.widget<Tile>(_key(key)).semanticLabel!;
+Finder _fig(String key, String text) => find.descendant(of: _key(key), matching: find.text(text));
 
 WalletController _wallet() {
   final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => budgetToday);
@@ -60,7 +65,7 @@ void main() {
       final wc = _wallet();
       await _panel(t, wc);
       expect(_key('owedPanel'), findsOneWidget);
-      expect(find.textContaining('Nothing owed'), findsOneWidget);
+      expect(find.text('Nothing owed'), findsOneWidget);
       await t.tap(_key('owedAdd'));
       await _settle(t);
       expect(_key('iouSheet'), findsOneWidget);
@@ -71,7 +76,8 @@ void main() {
       final v = wc.iousAll().single;
       expect((v.iou.person, v.iou.amount, v.iou.direction), ('Sam', 5000, IouDirection.lent));
       expect(_key('iou:${v.iou.id}'), findsOneWidget);
-      expect(find.text('People owe you ${moneyExact(5000, 'EUR')} · You owe ${moneyExact(0, 'EUR')}'), findsOneWidget);
+      expect(_sum(t, 'owedSummary'), 'People owe you ${moneyExact(5000, 'EUR')}, you owe ${moneyExact(0, 'EUR')}');
+      expect(_fig('owedSummary', moneyExact(5000, 'EUR')), findsOneWidget);
       await t.pump(const Duration(seconds: 4));
     }, timeout: _t);
 
@@ -79,7 +85,8 @@ void main() {
       final wc = _wallet();
       wc.addIou(person: 'Alex', direction: IouDirection.borrowed, amount: 3500, date: '2026-10-10');
       await _panel(t, wc);
-      expect(find.text('People owe you ${moneyExact(0, 'EUR')} · You owe ${moneyExact(3500, 'EUR')}'), findsOneWidget);
+      expect(_sum(t, 'owedSummary'), 'People owe you ${moneyExact(0, 'EUR')}, you owe ${moneyExact(3500, 'EUR')}');
+      expect(_fig('owedSummary', moneyExact(3500, 'EUR')), findsOneWidget);
       expect(find.textContaining('you owe'), findsWidgets);
     }, timeout: _t);
 
@@ -89,7 +96,8 @@ void main() {
       wc.addIou(person: 'Alex', direction: IouDirection.borrowed, amount: 2000, date: '2026-10-10', currency: 'USD');
       await _panel(t, wc);
       expect(_key('owedSummary'), findsNothing);
-      expect(find.text('In USD: People owe you ${moneyExact(5000, 'USD')} · You owe ${moneyExact(2000, 'USD')}'), findsOneWidget);
+      expect(_sum(t, 'owedSummary:USD'), 'In USD: People owe you ${moneyExact(5000, 'USD')}, you owe ${moneyExact(2000, 'USD')}');
+      expect(find.descendant(of: _key('owedSummary:USD'), matching: find.text('In USD')), findsOneWidget);
       expect(find.textContaining('0 €'), findsNothing);
     }, timeout: _t);
 
@@ -98,8 +106,9 @@ void main() {
       wc.addIou(person: 'Sam', direction: IouDirection.lent, amount: 5000, date: '2026-10-10');
       wc.addIou(person: 'Alex', direction: IouDirection.lent, amount: 3000, date: '2026-10-10', currency: 'USD');
       await _panel(t, wc);
-      expect(find.text('People owe you ${moneyExact(5000, 'EUR')} · You owe ${moneyExact(0, 'EUR')}'), findsOneWidget);
-      expect(find.text('In USD: People owe you ${moneyExact(3000, 'USD')} · You owe ${moneyExact(0, 'USD')}'), findsOneWidget);
+      expect(_sum(t, 'owedSummary'), 'People owe you ${moneyExact(5000, 'EUR')}, you owe ${moneyExact(0, 'EUR')}');
+      expect(_sum(t, 'owedSummary:USD'), 'In USD: People owe you ${moneyExact(3000, 'USD')}, you owe ${moneyExact(0, 'USD')}');
+      expect(t.getTopLeft(_key('owedSummary')).dy, lessThan(t.getTopLeft(_key('owedSummary:USD')).dy), reason: 'the wallet currency first');
     }, timeout: _t);
 
     tw('a person with two IOUs is one group, a line per IOU under the name; one IOU stays a single line', (t) async {
@@ -220,6 +229,8 @@ void main() {
         wc.addIou(person: 'Alex', direction: IouDirection.borrowed, amount: 3500, date: '2026-10-10');
         await _panel(t, wc, scale: 2, size: const Size(320, 640));
         expect(t.takeException(), isNull);
+        await t.ensureVisible(_key('iou:$id'));
+        await t.pump();
         await t.tap(_key('iou:$id'));
         await _settle(t);
         expect(t.takeException(), isNull);

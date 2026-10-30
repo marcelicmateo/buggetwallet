@@ -91,9 +91,10 @@ int _check(WidgetTester tester, String tab) {
     if (s == null || !_money.hasMatch(s)) continue;
     n++;
     final st = _resolved(tester, e)!;
-    // A dashboard tile's big figure is Plex Sans semibold with proportional figures (RX, CONCEPT §5); every other amount is Plex Mono.
+    // A dashboard tile's figure (its value, incl. a compact ring tile's at amountMdSize) is Plex Sans semibold with proportional
+    // figures (RX, CONCEPT §5); every other amount (list rows, calendar cells, sentences) is Plex Mono with tabular figures.
     final inTile = find.ancestor(of: find.byElementPredicate((x) => x == e), matching: find.byType(Tile)).evaluate().isNotEmpty;
-    final big = inTile && (st.fontSize ?? 0) >= BwType.displaySize - 0.5;
+    final big = inTile && (st.fontSize ?? 0) >= BwType.amountMdSize - 0.5;
     expect(st.fontFamily, big ? 'IBM Plex Sans' : 'IBM Plex Mono', reason: '$tab: "$s"');
     if (!big) expect(st.fontFeatures, contains(const FontFeature.tabularFigures()), reason: '$tab: "$s"');
   }

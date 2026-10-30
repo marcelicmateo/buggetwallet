@@ -203,11 +203,10 @@ void main() {
       final id = wc.goals.first.id;
       wc.repo.addGoalContribution(id, 5000);
       wc.reload();
-      final name = wc.goals.first.name;
       final saved = wc.goals.first.saved;
       await _pumpHome(tester, wc);
       await tapTab(tester, 'Save');
-      await tester.tap(find.text(name).first);
+      await tester.tap(find.byKey(ValueKey('goal:$id')));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const ValueKey('goalDelete')));
       await tester.tap(find.byKey(const ValueKey('goalDelete')));

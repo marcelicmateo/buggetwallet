@@ -386,16 +386,17 @@ void main() {
       expect(p.extrasForGoals, 12000);
       expect(p.extras, 42000);
       await pumpApp(tester, Scaffold(body: GoalsScreen(wc: wc)), size: const Size(400, 1600));
-      expect(find.text('Extra money this month'), findsOneWidget);
-      expect(find.textContaining('Other income: ${money(12000, wc.currency, decimals: 0)}.'), findsOneWidget);
-      expect(find.textContaining('Other income: ${money(42000, wc.currency, decimals: 0)}'), findsNothing);
+      expect(find.byKey(const ValueKey('goalsOtherIncome')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('goalsOtherIncome')), matching: find.text(moneyExact(12000, wc.currency))),
+          findsOneWidget);
+      expect(find.text(moneyExact(42000, wc.currency)), findsNothing);
     });
 
     tw('only landed income and no other extras: no "Extra money" panel', (tester) async {
       final wc = incomeWallet(landed: true, confirm: true);
       expect(wc.period().extrasForGoals, 0);
       await pumpApp(tester, Scaffold(body: GoalsScreen(wc: wc)), size: const Size(400, 1600));
-      expect(find.text('Extra money this month'), findsNothing);
+      expect(find.byKey(const ValueKey('goalsOtherIncome')), findsNothing);
     });
   });
 
