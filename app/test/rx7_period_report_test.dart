@@ -4,7 +4,6 @@
 // badge) and layout at 320 dp x 2.0 / 360 / 1280, light and dark. SYNTHETIC data; the clock is fixed at 20 Oct 2026.
 import 'dart:io';
 
-import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/period_report.dart';
@@ -89,9 +88,10 @@ Future<void> _pump(WidgetTester tester, WalletController wc,
 
 Finder _k(String key) => find.byKey(ValueKey(key));
 Finder _in(String key, String text) => find.descendant(of: _k(key), matching: find.text(text));
+
 /// The hero figure is one `Text.rich` (number, narrow gap, sign).
-Finder _kept(String text) => find.byWidgetPredicate(
-    (w) => w is Text && w.key == const ValueKey('reportKept') && (w.textSpan?.toPlainText() ?? w.data) == text);
+Finder _kept(String text) =>
+    find.byWidgetPredicate((w) => w is Text && w.key == const ValueKey('reportKept') && (w.textSpan?.toPlainText() ?? w.data) == text);
 Finder _contains(String key, String text) => find.descendant(of: _k(key), matching: find.textContaining(text));
 String _title(WidgetTester t) => t.widget<Text>(_k('reportTitle')).data!;
 Color? _fill(WidgetTester t, String date) =>
@@ -282,6 +282,18 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets('a row dated after today stays a day to come: no shade, not the biggest day', (tester) async {
+      final handle = tester.ensureSemantics();
+      final wc = _wallet();
+      wc.repo.addTransaction(date: '2026-10-25', amount: 99999, category: 'Groceries');
+      wc.reload();
+      await _pump(tester, wc);
+      expect(_fill(tester, '2026-10-25'), isNull);
+      expect(_in('heatReadout', '12 Oct'), findsOneWidget);
+      expect(find.bySemanticsLabel('31 days, spending on 3, biggest day 12 Oct, 84.20\u00A0€, 15 to come'), findsOneWidget);
+      handle.dispose();
+    });
+
     testWidgets('a period with no flexible spending says so and shows no readout', (tester) async {
       final handle = tester.ensureSemantics();
       final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => _clock);
@@ -307,10 +319,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(_k('reportKept'), findsNothing);
       await tester.tap(_k('periodChip'));
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 600));
       expect(_k('reportKept'), findsOneWidget);
       expect(_kept('988.30\u00A0€'), findsOneWidget);
       await tester.tap(_k('sheetClose'));
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 600));
       expect(_k('reportKept'), findsNothing);
       expect(tester.takeException(), isNull);

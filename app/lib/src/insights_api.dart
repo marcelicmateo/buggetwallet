@@ -6,7 +6,6 @@ import 'package:wallet_core/wallet_core.dart';
 
 import 'controller.dart';
 import 'memo_key.dart';
-import 'stand_in_cx2.dart'; // STAND-IN: deleted when CX2 merges
 
 final _log = Logger('bw.insights');
 

@@ -9,7 +9,6 @@ import '../controller.dart';
 import '../format.dart';
 import '../insights_api.dart';
 import '../logging.dart';
-import '../stand_in_cx2.dart'; // STAND-IN: deleted when CX2 merges
 import '../theme.dart';
 import '../widgets/charts.dart' show DayDots;
 import '../widgets/common.dart';
@@ -201,7 +200,7 @@ class _HeatmapState extends State<_Heatmap> {
   DaySpend? get _biggest {
     DaySpend? best;
     for (final d in widget.days) {
-      if (d.spent > 0 && (best == null || d.spent > best.spent)) best = d;
+      if (d.spent > 0 && !_toCome(d) && (best == null || d.spent > best.spent)) best = d;
     }
     return best;
   }
@@ -209,7 +208,7 @@ class _HeatmapState extends State<_Heatmap> {
   bool _toCome(DaySpend d) => widget.today != null && d.date.compareTo(widget.today!) > 0;
 
   String _spoken() {
-    final days = widget.days, spendDays = days.where((d) => d.spent > 0).length, toCome = days.where(_toCome).length;
+    final days = widget.days, spendDays = days.where((d) => d.spent > 0 && !_toCome(d)).length, toCome = days.where(_toCome).length;
     final best = _biggest;
     final head = '${days.length} days, ${spendDays == 0 ? 'no spending' : 'spending on $spendDays'}';
     final big = best == null ? '' : ', biggest day ${shortDate(best.date)}, ${moneyExact(best.spent, widget.currency)}';
