@@ -79,6 +79,11 @@ class SafeTodayWidget : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_eyebrow, context.getString(R.string.widget_eyebrow))
                 views.setViewVisibility(R.id.widget_amount, android.view.View.VISIBLE)
                 views.setTextViewText(R.id.widget_amount, amount)
+                // An exact amount is never cut: from API 26 the layout sizes it to fit (autoSizeTextType); below that the size follows
+                // the length (a monospace character is about 0.6 em wide; 143 sp covers the 86 dp of the narrowest widget).
+                if (android.os.Build.VERSION.SDK_INT < 26) {
+                    views.setTextViewTextSize(R.id.widget_amount, android.util.TypedValue.COMPLEX_UNIT_SP, (143f / amount.length).coerceIn(10f, 28f))
+                }
                 var worry = false
                 val line = when (status) {
                     "overToday" -> { worry = true; context.getString(R.string.widget_over_today) }

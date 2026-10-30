@@ -80,7 +80,7 @@ void main() {
       await _pumpToday(tester, wc);
       final s = find.byKey(const ValueKey('overSentence'));
       expect(s, findsOneWidget);
-      expect(_under(tester, 'overSentence'), contains('Over today'));
+      expect(_under(tester, 'overSentence'), contains('Nothing more today'));
       expect(find.text('Tomorrow 58.50$_nbsp€'), findsOneWidget);
     }, skip: _skipOver);
 

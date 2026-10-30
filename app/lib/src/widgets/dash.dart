@@ -491,7 +491,8 @@ class HeroTile extends StatelessWidget {
     this.paceSpoken,
     this.onTap,
     this.valueColor,
-  });
+  })  : assert(dots == null || dotsWidth > 0, 'dots needs dotsWidth so the tile can decide beside or under'),
+        assert(dotsCompact == null || dotsCompactWidth > 0, 'dotsCompact needs dotsCompactWidth');
 
   @override
   Widget build(BuildContext context) {
