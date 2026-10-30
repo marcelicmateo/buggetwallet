@@ -203,7 +203,7 @@ class _PaydayPlanState extends State<PaydayPlan> {
     final segments = [
       DashSegment(label: 'Fixed', value: moneyExact(fixed, cur), weight: fixed.toDouble(), color: c.s2),
       DashSegment(label: 'Saved', value: moneyExact(p.goalMonthly, cur), weight: p.goalMonthly.toDouble(), color: c.s3),
-      DashSegment(label: 'Spending', value: moneyExact(spending, cur), weight: spending > 0 ? spending.toDouble() : 0, color: c.s1),
+      DashSegment(label: 'Spending', value: '', weight: spending > 0 ? spending.toDouble() : 0, color: c.s1),
     ];
 
     // A fixed line is paid once what left the account for it since payday reaches the planned amount.
@@ -260,14 +260,8 @@ class _PaydayPlanState extends State<PaydayPlan> {
               segments: segments,
               size: 112,
               stroke: 14,
-              center: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text(moneyExact(p.income, cur), maxLines: 1, style: dashNumStyle(size: BwType.headingSize, color: c.ink)),
-                        Text('salary', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
-                      ]))),
+              // CX: the slices and the centre come from `PeriodBudget.planSplit` when stage CX lands. The salary is in the Salary row and
+              // the spending in the Spending money row, so the ring says each only once (here: Fixed and Saved with values).
             ),
           ]),
         ),
@@ -321,12 +315,12 @@ class _PaydayPlanState extends State<PaydayPlan> {
       DashGrid(children: tiles),
       if (p.lowIncome)
         Panel(color: c.warnBg, children: [
-          Text('Salary received so far is ${money(p.received, cur, decimals: 0)}, below your planned ${money(s.salary, cur, decimals: 0)}.',
+          Text('Salary received so far is ${moneyExact(p.received, cur)}, below your planned ${moneyExact(s.salary, cur)}.',
               style: TextStyle(color: c.warnInk)),
           SegmentedButton<String>(
             segments: [
-              ButtonSegment(value: 'planned', label: Text('Plan on ${money(s.salary, cur, decimals: 0)}')),
-              ButtonSegment(value: 'received', label: Text('Plan on ${money(p.received, cur, decimals: 0)}')),
+              ButtonSegment(value: 'planned', label: Text('Plan on ${moneyExact(s.salary, cur)}')),
+              ButtonSegment(value: 'received', label: Text('Plan on ${moneyExact(p.received, cur)}')),
             ],
             selected: {s.incomeMode},
             onSelectionChanged: (v) => wc.updateSettings({'incomeMode': v.first}),
