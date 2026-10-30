@@ -170,14 +170,14 @@ extension WalletInsights on WalletController {
   /// [ArgumentError] for a range core refuses.
   DateRange resolveRange(RangeKind kind, {int offset = 0, String? from, String? to}) {
     if (kind == RangeKind.custom) {
-      return memo(MemoKey('ins.range.custom', (from, to)), () => rangeFor(kind, today(), effectiveSettings, txs: txs, from: from, to: to));
+      return memo(MemoKey('ins.range.custom', (from, to)), () => rangeFor(kind, today(), settings, txs: txs, from: from, to: to));
     }
-    final base = memo(MemoKey('ins.range', kind), () => rangeFor(kind, today(), effectiveSettings, txs: txs));
+    final base = memo(MemoKey('ins.range', kind), () => rangeFor(kind, today(), settings, txs: txs));
     return offset == 0 ? base : shiftedRange(base, kind, offset);
   }
 
   /// [r] moved by [steps] ranges of [kind]; [ArgumentError] when core refuses the result.
-  DateRange shiftedRange(DateRange r, RangeKind kind, int steps) => shiftRange(r, kind, steps, effectiveSettings, txs: txs, today: today());
+  DateRange shiftedRange(DateRange r, RangeKind kind, int steps) => shiftRange(r, kind, steps, settings, txs: txs, today: today());
 
   MemoKey _k(String what, DateRange r, [Object? extra]) => MemoKey('ins.$what', (r.start, r.end, extra));
 

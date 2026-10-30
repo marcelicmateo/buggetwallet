@@ -531,7 +531,8 @@ void main() {
       final m = wc.insightRange('spending');
       expect(m.error, isNull);
       expect(m.kind, RangeKind.custom);
-      expect(m.range.start, '2026-10-10');
+      // The saved period start (1 Oct, 9 days before the 10 Oct salary) starts the pay period, as on Today (RX7b rule).
+      expect(m.range.start, '2026-10-01');
       expect(m.range.end, '2026-10-31');
     });
 
