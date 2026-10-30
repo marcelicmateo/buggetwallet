@@ -27,11 +27,19 @@ const _insights = PerfBudget(minFrames: 50);
 
 /// First visit of every tab after the data changed (what the idle warm-up should make cheap). Few frames: one per tab and a fade.
 const _firstSwitch = PerfBudget(minFrames: 20);
+
+/// The same tabs opened at once after a data change, before the warm-up had time: each switch works its data out one task per frame
+/// and then builds the page. Two single units cannot be split from the app and show as one slow frame each (2026-10-30, 20k rows,
+/// profile mode on a busy laptop): the first build of the Budget page (~80 ms) and core's `recurringPayments` for Bills (~90 ms,
+/// logged as `warmup.slow`). So the worst build frame may be 110 ms here (everything else as for every action); lower it when
+/// core's recurring plan or the Budget page get cheaper.
+const _earlySwitch = PerfBudget(minFrames: 20, buildMaxMs: 110);
 const budgets = <String, PerfBudget>{
   'spending_scroll': _scroll,
   'tab_switch': _baseline,
   'insights': _insights,
   'first_switch': _firstSwitch,
+  'early_switch': _earlySwitch,
 };
 
 /// Counts timeline events that look like shader compilation (any stream). Flutter 3.47 has no summary field for shader

@@ -40,11 +40,22 @@ enum SettingsSection {
 enum BillsAnchor { comingUp, review, expected, slips }
 
 /// A "go there" request: a section or place to show. Each [request] notifies, also for the same value twice.
+/// A request made while no page listens (the tab's page is not built yet: the shell builds hidden pages one by one) is kept as
+/// pending; the page that is built next collects it with `jumpWhenBuilt` (widgets/jump_when_built.dart) in its initState.
 class JumpRequest<T> extends ChangeNotifier {
   T? _value;
+  bool _pending = false;
   T? get value => _value;
   void request(T v) {
     _value = v;
+    _pending = !hasListeners;
     notifyListeners();
+  }
+
+  /// The value of a request nobody was listening for, once; null when there is none.
+  T? takePending() {
+    if (!_pending) return null;
+    _pending = false;
+    return _value;
   }
 }

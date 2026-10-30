@@ -7,6 +7,7 @@ import '../logging.dart';
 import '../platform.dart';
 import '../tabs.dart';
 import '../theme.dart';
+import '../widgets/jump_when_built.dart';
 import '../widgets/rebuild_when_shown.dart';
 import '../widgets/scroll_to.dart';
 import 'accounts_panel.dart';
@@ -85,6 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     widget.wc.settingsRequest.addListener(_jump);
+    jumpWhenBuilt(widget.wc.settingsRequest, () => mounted, _jump); // a link that opened this tab before its page existed
   }
 
   @override

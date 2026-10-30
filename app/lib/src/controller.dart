@@ -885,6 +885,14 @@ class WalletController extends ChangeNotifier {
   List<PeriodSummary> payPeriods({int count = 12}) => _cached(MemoKey('payPeriods', count),
       () => timed('wc.payPeriods', () => periodSummaries(txs, settings, today(), count: count), fields: {'count': count}, warnMs: 50));
 
+  /// The month's totals ([month] `YYYY-MM`). Cached per month until the data changes (the idle warm-up fills one month at a time).
+  MonthSummary monthSummaryFor(String month) => _cached(MemoKey('monthSummary', month),
+      () => timed('wc.monthSummary', () => monthSummary(txs, month, currency: currency), fields: {'month': month}));
+
+  /// The 6-month average per category before [month], the same one the suggested budgets use. Cached per month.
+  Map<String, int> averageSpending(String month) =>
+      _cached(MemoKey('averageSpending', month), () => averageByCategory(txs, month, currency: currency, table: categoryTable));
+
   /// What the Spending tab shows for month [sel] (`YYYY-MM`, default: this month). Cached per month until the data changes.
   SpendingView spending([String? sel]) {
     final current = monthOf(today());
@@ -893,14 +901,8 @@ class WalletController extends ChangeNotifier {
     return _cached(
         MemoKey('spending', month),
         () => timed('spending.derive', () {
-              final sums = [
-                for (final m in months)
-                  _cached(MemoKey('monthSummary', m),
-                      () => timed('wc.monthSummary', () => monthSummary(txs, m, currency: currency), fields: {'month': m}))
-              ];
-              final selSum = sums.firstWhere((s) => s.month == month);
-              final avg = averageByCategory(txs, month,
-                  currency: currency, table: categoryTable); // the same 6-month average the suggested budgets use
+              final selSum = monthSummaryFor(month);
+              final avg = averageSpending(month);
               final periods = payPeriods(count: 12);
 
               final merch = <String, (int, int)>{};
