@@ -5,7 +5,6 @@ import 'dart:typed_data';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
-import 'package:wallet_importer/wallet_importer.dart' show BillSource, NormalizedBill;
 import 'package:wallet_sync/wallet_sync.dart';
 
 import 'support/synthetic.dart';
@@ -83,10 +82,10 @@ void main() {
         <Object>[],
         {'v': 1},
         {'v': 1, 'ops': 'x'},
-        {'v': 1, 'ops': [], 'blobs': []},
-        {'ops': []},
-        {'v': '1', 'ops': []},
-        {'v': 0, 'ops': []}
+        {'v': 1, 'ops': <Object>[], 'blobs': <Object>[]},
+        {'ops': <Object>[]},
+        {'v': '1', 'ops': <Object>[]},
+        {'v': 0, 'ops': <Object>[]}
       ]) {
         final bytes = await _seal(bad, key);
         await expectLater(restoreBackupBytes(repo(), bytes, key), _fails(BackupFailure.damaged), reason: '$bad');
@@ -97,12 +96,12 @@ void main() {
     });
 
     test('a newer version is refused as such; version 1 with no ops is a valid empty backup', () async {
+      await expectLater(restoreBackupBytes(repo(), await _seal({'v': backupVersion + 1, 'ops': <Object>[]}, key), key),
+          _fails(BackupFailure.newerVersion));
       await expectLater(
-          restoreBackupBytes(repo(), await _seal({'v': backupVersion + 1, 'ops': []}, key), key), _fails(BackupFailure.newerVersion));
-      await expectLater(
-          mergeBackupBytes(repo(), await _seal({'v': backupVersion + 1, 'ops': []}, key), key), _fails(BackupFailure.newerVersion));
+          mergeBackupBytes(repo(), await _seal({'v': backupVersion + 1, 'ops': <Object>[]}, key), key), _fails(BackupFailure.newerVersion));
       final b = repo();
-      expect(await restoreBackupBytes(b, await _seal({'v': backupVersion, 'ops': []}, key), key), 0);
+      expect(await restoreBackupBytes(b, await _seal({'v': backupVersion, 'ops': <Object>[]}, key), key), 0);
     });
 
     test('one bad op or a bad clock spoils the whole file and nothing is applied', () async {

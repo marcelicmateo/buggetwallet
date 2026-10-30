@@ -1,7 +1,6 @@
 // HP-T2: invariants for billHistory (monthly and per-cycle), pinned from mutation testing. All data is SYNTHETIC.
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
-import 'package:wallet_importer/wallet_importer.dart' show BillSource, TxKind;
 
 const _payee = 'lumen_power';
 
@@ -218,7 +217,7 @@ void main() {
         _slip('bin', date: '2026-06-09', total: 100, deleted: true),
         _slip('usd', date: '2026-06-09', total: 200, currency: 'USD'),
         _slip('other', date: '2026-06-09', total: 400, payee: 'Other Co'),
-        Bill(id: 'att', source: BillSource.attachment, payee: 'Lumen Power', date: '2026-06-09', total: 800),
+        const Bill(id: 'att', source: BillSource.attachment, payee: 'Lumen Power', date: '2026-06-09', total: 800),
         const Bill(id: 'nopayee', date: '2026-06-09', total: 1600),
       ];
       expect(_h([], slips: slips).single.slips.map((s) => s.id).toList()..sort(), ['ok1', 'ok2']);
@@ -337,7 +336,7 @@ void main() {
     });
 
     test('a range bill uses its minimum as the threshold', () {
-      final b = RecurringBill(
+      const b = RecurringBill(
           id: 'r',
           payee: _payee,
           label: 'L',

@@ -1,7 +1,6 @@
 // HP-T2: invariants pinned from mutation testing of transfers. All data is SYNTHETIC.
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
-import 'package:wallet_importer/wallet_importer.dart' show TxKind;
 
 Tx _t(String id, String date, int amount, {String source = 'pbz', bool own = true, String currency = 'EUR'}) =>
     Tx(id: id, source: source, date: date, amount: amount, currency: currency, kindHint: own ? TxKind.ownTransfer : null, bankType: 'x');
@@ -92,13 +91,13 @@ void main() {
 
     test('a stale link is cleared when no partner is found; a holding link is left alone', () {
       final holding = [
-        Tx(id: 'o', source: 'pbz', date: '2026-03-10', amount: -5000, kindHint: TxKind.ownTransfer, transferTo: 'i'),
-        Tx(id: 'i', source: 'rev', date: '2026-03-10', amount: 5000, transferTo: 'o'),
+        const Tx(id: 'o', source: 'pbz', date: '2026-03-10', amount: -5000, kindHint: TxKind.ownTransfer, transferTo: 'i'),
+        const Tx(id: 'i', source: 'rev', date: '2026-03-10', amount: 5000, transferTo: 'o'),
       ];
       expect(planTransfers(holding).isEmpty, isTrue);
       final stale = [
         holding[0],
-        Tx(id: 'i', source: 'rev', date: '2026-03-10', amount: 5000, transferTo: 'o', deleted: true),
+        const Tx(id: 'i', source: 'rev', date: '2026-03-10', amount: 5000, transferTo: 'o', deleted: true),
       ];
       final p = planTransfers(stale);
       expect(p.transferTo, {'o': null});

@@ -262,7 +262,7 @@ void main() {
     });
 
     test('an invalid or reversed range gives nothing, whichever end is bad', () {
-      final p = PlannedCost(id: 'p1', title: 'Dentist', date: '2026-04-09', amount: 100, category: 'Health');
+      const p = PlannedCost(id: 'p1', title: 'Dentist', date: '2026-04-09', amount: 100, category: 'Health');
       List<UpcomingItem> run(String from, String to) => upcoming(planned: [p], bills: const [], events: const [], from: from, to: to);
       expect(run('2026-04-01', '2026-04-30'), hasLength(1));
       expect(run('2026-04-09', '2026-04-09'), hasLength(1), reason: 'both ends inclusive');

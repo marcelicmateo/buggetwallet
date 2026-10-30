@@ -106,8 +106,8 @@ void main() {
 
   group('bill items', () {
     test('limits are inclusive: 500 items and 200-character names fit, one more does not', () {
-      expect(encodeBillItems([for (var i = 0; i < 500; i++) BillItem(name: 'a', amount: 1)]), isNotNull);
-      expect(encodeBillItems([for (var i = 0; i < 501; i++) BillItem(name: 'a', amount: 1)]), isNull);
+      expect(encodeBillItems([for (var i = 0; i < 500; i++) const BillItem(name: 'a', amount: 1)]), isNotNull);
+      expect(encodeBillItems([for (var i = 0; i < 501; i++) const BillItem(name: 'a', amount: 1)]), isNull);
       expect(encodeBillItems([BillItem(name: 'a' * 200, amount: 1)]), isNotNull);
       expect(encodeBillItems([BillItem(name: 'a' * 201, amount: 1)]), isNull);
       expect(decodeBillItems('[${List.filled(500, '{"name":"a","amount":1}').join(',')}]'), hasLength(500));
