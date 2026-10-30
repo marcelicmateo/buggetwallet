@@ -182,14 +182,15 @@ void main() {
         pumpApp(t, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
             textScale: scale, size: size ?? const Size(400, 1600));
 
-    tw('an untrusted balance shows only "Check your PBZ current balance", never a warning, and a tap opens the question', (t) async {
+    tw('an untrusted balance shows only "a Check tile", never a warning, and a tap opens the question', (t) async {
       // Opening is old and negative: a number we do not trust must not say "below zero".
       final (wc, id) = await _wallet(openingDate: '2026-07-01', opening: -50000);
       expect(wc.balanceWarningList().map((w) => w.kind), [BalanceWarningKind.checkBalance]);
       await today(t, wc);
       expect(_key('balanceWarn:$id'), findsOneWidget);
-      expect(find.text('Check your PBZ current balance'), findsOneWidget);
-      expect(find.textContaining('below zero'), findsNothing);
+      expect(find.descendant(of: _key('balanceWarn:$id'), matching: find.text('PBZ CURRENT')), findsOneWidget);
+      expect(find.descendant(of: _key('balanceWarn:$id'), matching: find.text('Check')), findsOneWidget);
+      expect(find.text('Below zero'), findsNothing);
       await t.tap(_key('balanceWarn:$id'));
       await _settle(t);
       expect(_key('bankCheckSheet'), findsOneWidget);
@@ -198,7 +199,8 @@ void main() {
     tw('a confirmed balance below zero says so', (t) async {
       final (wc, id) = await _wallet(openingDate: '2026-10-15', opening: -5000);
       await today(t, wc);
-      expect(find.textContaining('PBZ current is below zero now'), findsOneWidget);
+      expect(find.descendant(of: _key('balanceWarn:$id'), matching: find.text('Below zero')), findsOneWidget);
+      expect(find.descendant(of: _key('balanceWarn:$id'), matching: find.text(moneyExact(-5000, 'EUR'))), findsOneWidget);
       expect(_key('balanceWarn:$id'), findsOneWidget);
     }, timeout: _t);
 

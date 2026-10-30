@@ -176,8 +176,16 @@ void main() {
       expect(_key('recurringSheet'), findsOneWidget);
     });
 
-    tw('Today\'s "Due by payday" line opens the Bills tab', (t) async {
-      final wc = _wallet(bill: true);
+    tw('Today\'s Overdue tile (an unpaid bill past its date) opens the Bills tab', (t) async {
+      final wc = _wallet();
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        for (final d in const ['2026-06-10', '2026-07-10', '2026-08-10']) syntheticTx(d, -4500, 'POS plaćanje', 'POS SYNTHPOOL ZAGREB'),
+      ]));
+      wc.reload();
+      wc.refreshRecurring();
+      for (final b in wc.recurringBills()) {
+        wc.confirmRecurring(b.id);
+      }
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
       await _scrollInto(t, _key('billsLine'), TodayScreen);
       await t.tap(_key('billsLine'));

@@ -8,6 +8,7 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -80,6 +81,15 @@ bool? _twoColumns(Finder root) {
 }
 
 Finder _byName(String n) => find.byWidgetPredicate((w) => w.runtimeType.toString() == n, skipOffstage: false);
+
+/// Today is a tile grid: four columns when another tile sits beside the hero (which is two columns wide).
+bool _todayWide(WidgetTester tester) {
+  final hero = tester.getRect(find.byKey(const ValueKey('heroTile')));
+  final tiles = find.byType(Tile);
+  return [for (var i = 0; i < tiles.evaluate().length; i++) tester.getRect(tiles.at(i))]
+      .any((r) => r.left >= hero.right - 1 && r.top < hero.bottom - 1);
+}
+
 Finder _twoColOn(Type screen) =>
     find.descendant(of: find.byType(screen, skipOffstage: false), matching: _byName('TwoCol'), skipOffstage: false);
 
@@ -212,13 +222,13 @@ void main() {
   });
 
   group('two columns depend on the content width, not the window width', () {
-    testWidgets('Today: one column at content 1039, two at 1040 and 1041', (tester) async {
+    testWidgets('Today: four tile columns at any content width of an expanded window', (tester) async {
       await _pumpShell(tester, demoWallet(), w: 1500, h: 900);
       final rail = tester.getSize(_rail).width;
       for (final c in [1039.0, 1040.0, 1041.0]) {
         await _size(tester, rail + c, 900);
         expect(tester.getSize(find.byType(TodayScreen)).width, closeTo(c > 1040 ? 1040 : c, 1.0), reason: 'content width at $c');
-        expect(_twoColumns(_twoColOn(TodayScreen)), c >= 1040, reason: 'Today at content $c');
+        expect(_todayWide(tester), isTrue, reason: 'Today grid at content $c');
       }
       expect(tester.takeException(), isNull);
     });
@@ -232,21 +242,21 @@ void main() {
       }
       expect(tester.takeException(), isNull);
     });
-    testWidgets('a window of 1024..1295 is wide but its content is not: one column', (tester) async {
+    testWidgets('a window of 1024..1295 gets the four-column Today grid', (tester) async {
       await _pumpShell(tester, demoWallet(), w: 1024, h: 900);
-      expect(_twoColumns(_twoColOn(TodayScreen)), isFalse);
+      expect(_todayWide(tester), isTrue);
       await _size(tester, 1100, 900);
-      expect(_twoColumns(_twoColOn(TodayScreen)), isFalse);
+      expect(_todayWide(tester), isTrue);
     });
-    testWidgets('huge window: content capped at 1040 still gives two columns', (tester) async {
+    testWidgets('huge window: content capped at 1040 still gives four tile columns', (tester) async {
       await _pumpShell(tester, demoWallet(), w: 3840, h: 1080);
-      expect(_twoColumns(_twoColOn(TodayScreen)), isTrue);
+      expect(_todayWide(tester), isTrue);
     });
-    testWidgets('compact and medium never use two columns', (tester) async {
+    testWidgets('compact and medium never use four tile columns', (tester) async {
       await _pumpShell(tester, demoWallet(), w: 360, h: 800);
-      expect(_twoColumns(_twoColOn(TodayScreen)), isNot(isTrue));
+      expect(_todayWide(tester), isFalse);
       await _size(tester, 800, 800);
-      expect(_twoColumns(_twoColOn(TodayScreen)), isNot(isTrue));
+      expect(_todayWide(tester), isFalse);
     });
   });
 

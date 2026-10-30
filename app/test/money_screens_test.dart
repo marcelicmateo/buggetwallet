@@ -33,7 +33,7 @@ List<String> _texts(WidgetTester tester) => [
         if (e.findAncestorWidgetOfExactType<TxTile>() == null) (e.widget as Text).data ?? (e.widget as Text).textSpan!.toPlainText(),
     ];
 
-String _hero(WidgetTester tester) => tester.widget<MoneyText>(find.byKey(const ValueKey('safeToSpend'))).text;
+String _hero(WidgetTester tester) => tester.widget<Text>(find.byKey(const ValueKey('safeToSpend'))).data!;
 
 final _negativeAmount = RegExp('−\\s?\\d');
 
@@ -56,7 +56,7 @@ void main() {
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
       final all = _texts(tester);
       expect(find.byKey(const ValueKey('periodEnded')), findsOneWidget);
-      expect(all.any((t) => t.contains('The pay period ended on')), isTrue);
+      expect(all.contains('Pay period ended'), isTrue);
       expect(all.where((t) => t.contains('0 days') || t.contains('already used') || t.contains('Safe to spend')), isEmpty);
       expect(all.where(_negativeAmount.hasMatch), isEmpty);
       expect(find.byKey(const ValueKey('startNewPeriod')), findsOneWidget);
@@ -122,7 +122,7 @@ void main() {
       expect(p.paydayPassed && p.overBy > 0, isTrue);
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
       final all = _texts(tester);
-      expect(all.any((t) => t.contains('over the plan') && t.contains(money(p.overBy, 'EUR'))), isTrue);
+      expect(all.contains('${moneyExact(p.overBy, 'EUR')} over plan'), isTrue, reason: 'the hero sub line names the overspend once');
       expect(all.where(_negativeAmount.hasMatch), isEmpty);
     });
   });
@@ -137,11 +137,10 @@ void main() {
       expect(p.paydayPassed, isFalse);
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
       expect(find.byKey(const ValueKey('overBudget')), findsOneWidget);
-      expect(find.textContaining("You're ${money(p.overBy, 'EUR')} over the plan for this period."), findsOneWidget);
-      expect(_hero(tester), money(0, 'EUR', decimals: 0)); // nothing left for today
-      expect(find.textContaining('ON PLAN'), findsNothing);
+      expect(find.text('${moneyExact(p.overBy, 'EUR')} over plan'), findsOneWidget);
+      expect(_hero(tester), moneyExact(0, 'EUR')); // nothing left for today
+      expect(find.text('On pace'), findsNothing);
       expect(find.textContaining('On plan'), findsNothing);
-      expect(find.textContaining('Over the plan'), findsWidgets);
       expect(_texts(tester).where(_negativeAmount.hasMatch), isEmpty);
     });
 
@@ -154,7 +153,7 @@ void main() {
       expect(p.allowanceToday, greaterThanOrEqualTo(0));
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
       expect(find.text('OVER TODAY BY'), findsOneWidget);
-      expect(_hero(tester), money(p.overToday, 'EUR', decimals: 0));
+      expect(_hero(tester), moneyExact(p.overToday, 'EUR'));
       expect(_texts(tester).where(_negativeAmount.hasMatch), isEmpty);
     });
 
@@ -165,8 +164,8 @@ void main() {
       expect(wc.period().planDaily, lessThanOrEqualTo(0));
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
       expect(find.byKey(const ValueKey('overBudget')), findsOneWidget);
-      expect(find.textContaining('On plan'), findsNothing, reason: 'a green label while the plan is over');
-      expect(find.textContaining('Over the plan'), findsWidgets);
+      expect(find.text('On pace'), findsNothing, reason: 'a green label while the plan is over');
+      expect(find.textContaining('over plan'), findsOneWidget);
       expect(find.textContaining('tomorrow gets more'), findsNothing);
       // item 5: no pace bar or "used" line that contradicts the message
       expect(find.byType(PaceBar), findsNothing);
@@ -176,10 +175,10 @@ void main() {
       expect(_texts(tester).where(_negativeAmount.hasMatch), isEmpty);
     });
 
-    testWidgets('a running plan keeps "On plan" and the tomorrow sentence', (tester) async {
+    testWidgets('a running plan says "On pace" once and has no sentence under the hero', (tester) async {
       await pumpApp(tester, today(budgetWallet(budgets: false)), size: const Size(400, 3000));
-      expect(find.textContaining('On plan'), findsOneWidget);
-      expect(find.textContaining('tomorrow gets more'), findsOneWidget);
+      expect(find.text('On pace'), findsOneWidget);
+      expect(find.textContaining('tomorrow gets more'), findsNothing);
       expect(find.byType(PaceBar), findsNothing, reason: 'the day dots replaced the bar on Today');
       expect(find.byKey(const ValueKey('dayDots')), findsOneWidget);
     });
@@ -198,7 +197,7 @@ void main() {
       w2.reload();
       expect(w2.period().overBy, 50);
       await pumpApp(tester, today(w2), size: const Size(400, 3000));
-      expect(find.text(moneyExact(50, 'EUR')), findsOneWidget); // the stat strip
+      expect(find.text('${moneyExact(50, 'EUR')} over plan'), findsOneWidget);
     });
 
     testWidgets('320 dp at text scale 2.0 does not overflow (ended, over, foreign)', (tester) async {

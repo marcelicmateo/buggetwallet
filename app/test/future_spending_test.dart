@@ -412,14 +412,18 @@ void main() {
   });
 
   group('Today', () {
-    tw('shows the Coming up line and a heads-up line for the big cost', (tester) async {
+    tw('shows the Before payday tile and a heads-up tile for the big cost', (tester) async {
       final wc = fw();
       await pumpApp(tester, todayOf(wc), size: const Size(400, 1400));
-      expect(
-          find.descendant(of: key('comingUpLine'), matching: find.text(eur('Coming up: 2 costs before payday · 420 €'))), findsOneWidget);
+      final tile = key('comingUpLine');
+      expect(find.descendant(of: tile, matching: find.text('BEFORE PAYDAY')), findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.text(eur('420 €'))), findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.text('2 costs')), findsOneWidget);
       final head = find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('headsUp:'));
       expect(head, findsOneWidget);
-      expect(find.text(eur('Car insurance in 3 days · 340 €')), findsOneWidget);
+      expect(find.descendant(of: head, matching: find.text('CAR INSURANCE')), findsOneWidget);
+      expect(find.descendant(of: head, matching: find.text(eur('340 €'))), findsOneWidget);
+      expect(find.descendant(of: head, matching: find.text('In 3 days')), findsOneWidget);
     });
 
     tw('has neither line without planned costs', (tester) async {
@@ -434,7 +438,7 @@ void main() {
       await wc.setCalendarOn('c1', false);
       await wc.setCalendarOn('c1', true);
       await pumpApp(tester, todayOf(wc), size: const Size(400, 1400));
-      expect(find.text(eur('Coming up: 2 costs before payday · 420 €')), findsOneWidget);
+      expect(find.descendant(of: key('comingUpLine'), matching: find.text(eur('420 €'))), findsOneWidget);
     });
 
     tw('tapping Coming up opens Upcoming', (tester) async {

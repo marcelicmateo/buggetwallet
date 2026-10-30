@@ -80,7 +80,8 @@ void main() {
       await _pumpToday(tester, wc);
       final s = find.byKey(const ValueKey('overSentence'));
       expect(s, findsOneWidget);
-      expect(_under(tester, 'overSentence'), "You're 20.48$_nbsp€ over for today. Nothing more today; tomorrow starts at 58.50$_nbsp€.");
+      expect(_under(tester, 'overSentence'), contains('Over today'));
+      expect(find.text('Tomorrow 58.50$_nbsp€'), findsOneWidget);
     }, skip: _skipOver);
 
     testWidgets('payday tomorrow: over today is over the period too, so no "tomorrow starts at" figure is promised', (tester) async {
@@ -90,8 +91,8 @@ void main() {
       final wc = _wallet(now: at, spentBefore: 120000, spentToday: 9000);
       await _pumpToday(tester, wc, now: at);
       final text = _under(tester, 'overSentence');
-      expect(text, contains('over the plan for this period.'));
-      expect(text, isNot(contains('tomorrow starts at')));
+      expect(text, contains('over plan'));
+      expect(find.textContaining('Tomorrow'), findsNothing);
     }, skip: _skipOver);
 
     testWidgets('not over today: no overSentence', (tester) async {
@@ -104,7 +105,7 @@ void main() {
       final wc = _wallet(spentBefore: 130000);
       await _pumpToday(tester, wc);
       expect(find.byKey(const ValueKey('overSentence')), findsOneWidget);
-      expect(_under(tester, 'overSentence'), contains("You're 50$_nbsp€ over the plan for this period."));
+      expect(_under(tester, 'overSentence'), contains('50$_nbsp€ over plan'));
     }, skip: _skipOver);
 
     testWidgets('no negative figure on Today, over today or over the period', (tester) async {

@@ -288,7 +288,7 @@ void main() {
     }
 
     testWidgets('a huge amount does not fit beside the dots: they go under it', (tester) async {
-      await pumpApp(tester, screen(heroOf(99999900)), size: const Size(360, 3000));
+      await pumpApp(tester, screen(heroOf(999999900)), size: const Size(360, 3000), textScale: 1.3);
       final number = tester.getRect(find.byKey(const ValueKey('safeToSpend')));
       expect(tester.getRect(find.byKey(const ValueKey('dayDots'))).top, greaterThanOrEqualTo(number.bottom));
       expect(tester.takeException(), isNull);

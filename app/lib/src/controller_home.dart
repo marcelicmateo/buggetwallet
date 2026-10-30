@@ -24,7 +24,7 @@ extension HomeIntegration on WalletController {
                 ? WidgetStatus.overBudget
                 : WidgetStatus.ok;
     // The same text as Today's hero (`safeToSpend`) when it shows the safe amount; the other states give 0 and say why in the status.
-    final amount = money(status == WidgetStatus.ok ? p.safeToday : 0, cur, decimals: 0);
+    final amount = moneyExact(status == WidgetStatus.ok ? p.safeToday : 0, cur);
     return HomeWidgetState(amount: amount, status: status, date: today(), until: status == WidgetStatus.ok ? p.end : null);
   }
 

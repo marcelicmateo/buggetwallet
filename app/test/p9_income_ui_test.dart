@@ -9,6 +9,7 @@ import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/tabs.dart';
+import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -332,8 +333,8 @@ void main() {
       final flexBefore = wc.period().flexBudget;
       await todayPage(tester, wc);
       expect(find.byKey(const ValueKey('expectedIncomeLine')), findsOneWidget);
-      expect(find.textContaining('Expected income:'), findsOneWidget);
-      expect(find.textContaining('(counts when it lands)'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('expectedIncomeLine')), matching: find.text('INCOME DUE')), findsOneWidget);
+      expect(find.textContaining('Expected income:'), findsNothing);
       expect(wc.period().flexBudget, flexBefore);
 
       landPayout(wc);
@@ -341,18 +342,16 @@ void main() {
       expect(find.byKey(const ValueKey('expectedIncomeLine')), findsNothing);
     });
 
-    tw('a tap on the line opens Plan at Expected income; without an action it has no chevron', (tester) async {
+    tw('a tap on the tile opens Plan at Expected income; without an action it is not tappable', (tester) async {
       final wc = incomeWallet(confirm: true);
       var opened = 0;
       await todayPage(tester, wc, openIncome: () => opened++);
       await tester.tap(find.byKey(const ValueKey('expectedIncomeLine')));
       await tester.pump();
       expect(opened, 1);
-      expect(find.descendant(of: find.byKey(const ValueKey('expectedIncomeLine')), matching: find.byIcon(Icons.chevron_right)),
-          findsOneWidget);
+      expect(tester.widget<StatTile>(find.byKey(const ValueKey('expectedIncomeLine'))).onTap, isNotNull);
       await todayPage(tester, wc);
-      expect(
-          find.descendant(of: find.byKey(const ValueKey('expectedIncomeLine')), matching: find.byIcon(Icons.chevron_right)), findsNothing);
+      expect(tester.widget<StatTile>(find.byKey(const ValueKey('expectedIncomeLine'))).onTap, isNull);
     });
 
     tw('Settings scrolls to Expected income when asked (what the line uses)', (tester) async {

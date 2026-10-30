@@ -311,13 +311,17 @@ void main() {
       }
 
       await pumpToday(c.wc);
-      expect(find.text('Waiting for approval: ${c.fp}. Tap for the QR code.'), findsOneWidget);
+      expect(find.text('Waiting'), findsOneWidget);
+      expect(find.text('Code ${c.fp}'), findsOneWidget);
+      expect(find.text('Needs approval'), findsOneWidget);
       await pumpToday(a.wc);
       expect(_k('deviceStopLine'), findsNothing);
       await a.wc.removeDevice(b.fp);
       await b.wc.syncNow();
       await pumpToday(b.wc);
-      expect(find.text('This device was removed from the wallet.'), findsOneWidget);
+      expect(find.text('Removed'), findsOneWidget);
+      expect(find.text('No access'), findsOneWidget);
+      expect(find.text('This device'.toUpperCase()), findsOneWidget);
       await t.pump(const Duration(seconds: 5));
     });
   });
