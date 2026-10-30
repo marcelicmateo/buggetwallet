@@ -276,15 +276,20 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
   /// One signed request. [withPub]: the request may create the wallet (`X-BW-Pub`, and with a device key the wallet
   /// key's countersignature `X-BW-WSig`); [withWallet]: countersign (enrolment). A 401 `unenrolled` (a device key the
   /// relay does not know yet) enrols once ([enrol]) and sends the request again; 401 `revoked` is final.
+  /// [notBefore]: sign with at least this `X-BW-Time` (ms, relay clock), whatever this device's clock says.
   Future<http.Response> _req(String method, String path, String kind,
-      {List<int> body = const [], Map<String, String> headers = const {}, bool withPub = false, bool withWallet = false}) async {
+      {List<int> body = const [],
+      Map<String, String> headers = const {},
+      bool withPub = false,
+      bool withWallet = false,
+      int? notBefore}) async {
     final id = await _id;
     final signedPath = '/v2/w/${id.wid}/$path';
     final url = _url(base, signedPath.substring(1));
     final host = signedHost(url);
     final hash = (await Sha256().hash(body)).bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     Future<http.Response> attempt() async {
-      final time = '${_now().millisecondsSinceEpoch + clockOffsetMs}';
+      final time = '${max(_now().millisecondsSinceEpoch + clockOffsetMs, notBefore ?? 0)}';
       // api 5: the device key signs; the wallet key countersigns what needs it. Older relays: the wallet key signs.
       final dev = signApi >= 5 ? id.devPair : null;
       final devpub = dev == null ? null : id.devpub;
@@ -480,14 +485,46 @@ class RelayTransport implements SyncTransport, DeviceKeyTransport {
     logEvent(_log, Level.INFO, 'relay.device', {'action': action});
   }
 
+  /// How many times [revokeOthers] sends `devices/others` before it gives up on keys that stay active.
+  static const revokeOthersRounds = 3;
+
   /// Revokes every device key but this install's and rejects every pending one, and locks the wallet ("Remove all
-  /// other devices", for a device that may have been taken); returns how many keys it revoked now (0 when replayed).
+  /// other devices", for a device that may have been taken); returns how many keys it revoked (0 when replayed).
+  /// The relay spares keys and requests newer than the request's `X-BW-Time` (RELAY_PROTOCOL.md "Device keys"), so a
+  /// clock up to 5 min behind the relay's would spare a key approved in those minutes: after each call it reads the
+  /// state again and, while another key is active or a request pending, sends it again signed 1 s after the newest
+  /// one's time (state times are whole seconds), at most [revokeOthersRounds] times; then
+  /// [TransportFailure.other] `others remain` (the app says to try again).
   @override
   Future<int> revokeOthers() async {
     _needDeviceApi();
-    final r = await _req('PUT', 'devices/others', 'revokeOthers',
-        body: utf8.encode(jsonEncode({'revoke': true})), headers: {'Content-Type': 'application/json'});
-    logEvent(_log, Level.INFO, 'relay.device', {'action': 'revokeOthers'});
+    var total = 0;
+    int? notBefore;
+    for (var round = 1;; round++) {
+      final r = await _req('PUT', 'devices/others', 'revokeOthers',
+          body: utf8.encode(jsonEncode({'revoke': true})), headers: {'Content-Type': 'application/json'}, notBefore: notBefore);
+      logEvent(_log, Level.INFO, 'relay.device', {'action': 'revokeOthers', 'round': round});
+      total += _revokedCount(r);
+      final st = await state();
+      final keys = st.keys;
+      if (keys == null) return total; // no key list (not a device-signed answer): nothing to check against
+      final left = [
+        for (final k in keys)
+          if (!k.self && !k.isRevoked) k.added,
+        for (final p in st.pending) p.at,
+      ];
+      if (left.isEmpty) return total;
+      if (round >= revokeOthersRounds) {
+        logEvent(_log, Level.WARNING, 'relay.revokeOthers.left', {'keys': left.length, 'rounds': round});
+        throw const TransportException(TransportFailure.other, 'others remain');
+      }
+      // A time the relay accepts (within its window) and later than every key and request still there.
+      final newest = left.map((t) => t?.millisecondsSinceEpoch ?? 0).fold(0, max);
+      notBefore = max(newest + 1000, (notBefore ?? 0) + 1);
+    }
+  }
+
+  static int _revokedCount(http.Response r) {
     try {
       final j = jsonDecode(r.body);
       if (j is Map && j['revoked'] is int) return j['revoked'] as int;

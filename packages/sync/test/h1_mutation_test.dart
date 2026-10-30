@@ -26,8 +26,12 @@ void main() {
 
   group('revokeOthers answer', () {
     Future<Object?> run(String body) async {
-      final t =
-          RelayTransport(Uri.parse('http://relay.test'), key, deviceKey: seed, client: MockClient((r) async => http.Response(body, 200)));
+      // HP-R1: revokeOthers reads the state after the call; this one lists no other key, so one call is all.
+      final t = RelayTransport(Uri.parse('http://relay.test'), key,
+          deviceKey: seed,
+          client: MockClient((r) async => r.url.path.endsWith('/state')
+              ? http.Response('{"api":5,"devices":{},"keys":[],"pending":[],"locked":true}', 200)
+              : http.Response(body, 200)));
       addTearDown(t.close);
       try {
         return await t.revokeOthers();

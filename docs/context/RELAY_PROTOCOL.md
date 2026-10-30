@@ -177,6 +177,13 @@ the pending ones (`devpub` → at, deviceId; at most 8, each dropped 7 days afte
   `lockTime` = max(`lockTime`, its signed time, relay now + 5 min), so no unlock signed before it, held back and sent
   later, can reopen the wallet (an unlock right after a revoke needs to wait those 5 minutes).
 - **Remove all other devices:** `PUT devices/others` `{"revoke":true}` (above), for a device that may have been taken.
+  The relay spares keys and requests newer than the request's `X-BW-Time`, and a client's clock may be up to 5 min
+  behind the relay's without a `clock` retry, so one call could spare a key approved in those minutes (HP-R1). The
+  client therefore reads `state` after the call and, while a key other than its own is active or a request pending,
+  sends `devices/others` again signed at least 1 s after the newest remaining `added`/`at` (state times are whole
+  seconds; that time is not ahead of the relay's clock, so it is inside the window and later than `othersTime`), at
+  most 3 calls in all; keys still left after the third = failure `other` (`others remain`; the app says to try
+  again). The count it returns is the sum of the calls' `revoked`.
 - **Lock:** `PUT lock` `{"locked":true|false}` by an enrolled key; applied only when its `X-BW-Time` is later than the
   stored `lockTime` (a revoke's lock sets it too). Unlocking reopens the wallet to the wallet key: every holder of it
   can enrol again (and older apps sync again).
