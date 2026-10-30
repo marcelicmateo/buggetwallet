@@ -551,6 +551,31 @@ Map<String, int> averageByCategory(List<CategorizedTx> txs, String month,
   return {for (final e in sums.entries) e.key: (e.value / months).round()};
 }
 
+/// Average monthly spending over the [months] calendar months before [month] (the month itself left out) as ONE
+/// total, in cents: the same rows as `monthSummary(...).out` of each of those months (live, in [currency], fixed + flex,
+/// refunds subtracted, transfers and income left out), summed and divided by [months] with the rounding of
+/// [averageByCategory] (`(sum / months).round()`, half away from zero). A month without rows counts as zero. It is
+/// the rounded total, not the sum of the rounded per-category averages: the two can differ by a few cents.
+int averageOut(List<CategorizedTx> txs, String month, {int months = 6, required String currency}) {
+  final set = _monthsBefore(month, months).toSet();
+  var sum = 0;
+  for (final t in txs) {
+    if (countsAsSpending(t, currency) && set.contains(monthOf(t.date))) sum -= t.amount;
+  }
+  return (sum / months).round();
+}
+
+/// Change from [before] to [now] in permille (1000 = +100 %), rounded half away from zero, exact integer maths;
+/// null when [before] is 0. A negative [before] (a month of net refunds) is measured against its size: the result is
+/// `(now - before) * 1000 / |before|`, so a rise still comes out positive. Such a ratio says little; callers may prefer
+/// to show only the cents difference.
+int? changePermille(int now, int before) {
+  if (before == 0) return null;
+  final num = (now - before) * 1000, den = before.abs();
+  final q = (num.abs() * 2 + den) ~/ (den * 2);
+  return num < 0 ? -q : q;
+}
+
 /// Budgets to propose for [month]: each category's average over the 6 months before it, rounded UP to the nearest
 /// 1000 cents (10 €). A category whose average is zero or negative (refunds) is omitted. Only rows in [currency] count.
 /// With [table], per top-level category (children rolled up, [rollUp]): budgets are set on top-level categories only.

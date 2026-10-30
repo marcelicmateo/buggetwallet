@@ -536,6 +536,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   budget}` (+ `overBy`, `over`; spent = `rollUp(byCategory)[category]`, budget = `st.categoryBudgets[category]` per pay
   period); `savedByWaiting(wishes, fromMillis:, toMillis:)` / `savedByWaitingAll` → `SavedByWaiting {count, cents}`
   (skipped wishes, `decided` in [from, to)). txs = the expanded list (P6). Tests: `test/p8_reports_test.dart`.
+- RXc dashboard numbers (pure, web-safe): `averageOut(txs, month, months: 6, currency:)` (budget.dart) = Σ of the `months` months
+  before `month` of `monthSummary.out` ÷ months, rounded like `averageByCategory` (it is the rounded total, so it can differ
+  by cents from Σ of the rounded per-category values); `changePermille(now, before)` = (now − before)·1000/|before| half away
+  from zero, null when before is 0; `reviewsIn(reviewDates, start, end)` (reports.dart) = valid dates in [start, end),
+  ascending, once each. Tests: `test/rxc_dashboard_numbers_test.dart`.
 - `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:, planned:)` → `SearchResult` (`txs` newest first capped at
   `searchTxLimit` 200, `goals`, `wishlist`, `bills`, `planned`, `billsDb` (stored bills: payee, description, item
   names, exact total), `isEmpty`; blank query → `SearchResult.empty`). Text: `foldText`

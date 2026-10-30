@@ -1,5 +1,6 @@
 // Reports (P8): per pay period breakdowns and "saved by waiting". Pure, read-time only: nothing is written.
 import 'categories.dart';
+import 'dates.dart' show isIsoDate;
 import 'logs.dart';
 import 'models.dart';
 import 'periods.dart';
@@ -24,6 +25,19 @@ class PeriodReport {
   });
   int get out => fixed + flex;
   int get net => income - out; // = PeriodSummary.net
+}
+
+/// The review dates (YYYY-MM-DD, `WalletRepo.reviewDates`) inside [start, end): [start] included, [end] excluded.
+/// Ascending, each date once; strings that are not valid dates are ignored. An invalid [start] or [end] gives an
+/// empty list.
+List<String> reviewsIn(List<String> reviewDates, String start, String end) {
+  if (!isIsoDate(start) || !isIsoDate(end)) return const [];
+  final out = {
+    for (final d in reviewDates)
+      if (isIsoDate(d) && d.compareTo(start) >= 0 && d.compareTo(end) < 0) d,
+  }.toList()
+    ..sort();
+  return out;
 }
 
 /// The pay periods of [periodSummaries] (same periods, same income and out; oldest first, the last one running), each
