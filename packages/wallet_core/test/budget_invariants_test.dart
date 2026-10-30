@@ -91,11 +91,16 @@ void main() {
           expect(ps[k].running, k == ps.length - 1, reason: '$why: running flag');
           if (k + 1 < ps.length) expect(ps[k].end, ps[k + 1].start, reason: '$why: gap/overlap after ${ps[k].start}');
         }
-        expect(ps.last.end, nextPayday(ps.last.start, st.paydayDay), reason: why);
+        // RX7b: the running period holds today (a late salary keeps it running past the expected payday).
+        final payday = nextPayday(ps.last.start, st.paydayDay), tomorrow = addDays(today, 1);
+        expect(ps.last.end, payday.compareTo(tomorrow) >= 0 ? payday : tomorrow, reason: why);
 
-        // Every real payday (first salary part) starts a period.
+        // Every real payday (first salary part) starts a period, except the one a saved periodStart 1..20 days before
+        // it names (RX7b): that period starts on the saved day instead.
         for (final d in salaryPaydays(w.txs, today, currency: 'EUR')) {
-          expect(ps.map((p) => p.start), contains(d), reason: '$why: payday $d');
+          final saved = st.periodStart;
+          final gap = saved == null || saved.compareTo(today) > 0 ? 0 : daysBetween(saved, d);
+          expect(ps.map((p) => p.start), contains(gap > 0 && gap <= 20 ? saved : d), reason: '$why: payday $d');
         }
 
         // Brute force per period: live rows with start <= date < end (the running one: up to today).

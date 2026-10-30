@@ -8,7 +8,7 @@ final _log = Logger('bw.budget');
 /// Money in and out over one pay period (salary to salary).
 class PeriodSummary {
   final String start; // first day, YYYY-MM-DD, inclusive (a payday)
-  final String end; // next period's start, exclusive; for the running period: nextPayday(start, st.paydayDay)
+  final String end; // next period's start, exclusive; running: max(nextPayday(start, st.paydayDay), today + 1)
   final int income; // cents: BudgetKind.income + BudgetKind.extra amounts in [start, end)
   final int out; // cents: -(BudgetKind.fixed + BudgetKind.flex amounts) in [start, end); refunds lower it
   final Map<String, int> byCategory; // category -> positive cents out (fixed + flex only)
@@ -84,10 +84,31 @@ List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String to
   return out;
 }
 
+/// The period starts of [periodSummaries]: [detectPaydays], except that a saved `st.periodStart` (on or before
+/// [today]) up to 20 days before a real payday names that payday: it replaces the salary date as the start, so the
+/// period `computePeriod` shows starts on the same day in the report (salary late: the owner started the period on
+/// the expected payday). It moves only that one boundary, by at most 20 days. A saved start after its salary is not
+/// used (it would move the salary row into the period before); one more than 20 days after the last payday is
+/// already a start of [detectPaydays].
+List<String> _periodStarts(List<CategorizedTx> txs, WalletSettings st, String today) {
+  final days = detectPaydays(txs, st, today);
+  final ps = st.periodStart;
+  if (ps == null || days.isEmpty || ps.compareTo(today) > 0 || days.contains(ps)) return days;
+  final named = salaryPaydays(txs, today, currency: st.currency).where((r) {
+    final gap = daysBetween(ps, r);
+    return gap > 0 && gap <= _salaryGroupDays;
+  }).firstOrNull; // real paydays are over 20 days apart: at most one
+  if (named == null) return days;
+  final i = days.indexOf(named);
+  return i < 0 ? days : [...days.sublist(0, i), ps, ...days.sublist(i + 1)];
+}
+
 /// Pay periods, oldest first; the last one is the running period. At most [count] entries. Only rows in
 /// `st.currency` count, in the sums and in finding the paydays. P6: [txs] is the expanded list (`Categorizer.expand`).
+/// The periods follow one another without gaps, each `[start, end)`; the running one always holds [today] (end =
+/// max(nextPayday(start), today + 1), so a late salary keeps it running) and counts rows up to [today] only.
 List<PeriodSummary> periodSummaries(List<CategorizedTx> txs, WalletSettings st, String today, {int count = 12}) {
-  final days = detectPaydays(txs, st, today);
+  final days = _periodStarts(txs, st, today);
   if (days.isEmpty || count <= 0) return const [];
   final from = days.length > count ? days.length - count : 0;
   final starts = days.sublist(from);
@@ -129,13 +150,19 @@ List<PeriodSummary> periodSummaries(List<CategorizedTx> txs, WalletSettings st, 
     for (var i = 0; i < starts.length; i++)
       PeriodSummary(
         start: starts[i],
-        end: i < last ? starts[i + 1] : nextPayday(starts[i], st.paydayDay),
+        end: i < last ? starts[i + 1] : _runningEnd(starts[i], st.paydayDay, today),
         income: income[i],
         out: out[i],
         byCategory: byCat[i],
         running: i == last,
       ),
   ];
+}
+
+/// The running period's end (exclusive): the expected payday, or tomorrow while the salary is late.
+String _runningEnd(String start, int paydayDay, String today) {
+  final payday = nextPayday(start, paydayDay), tomorrow = addDays(today, 1);
+  return payday.compareTo(tomorrow) >= 0 ? payday : tomorrow;
 }
 
 /// Rolling average of `net` (rounded to whole cents) over the [window] periods ending at each index.
