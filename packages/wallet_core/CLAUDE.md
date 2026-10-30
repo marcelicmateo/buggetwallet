@@ -84,18 +84,19 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   currency (they are entered in the wallet's).
   **Payday and over budget (H2):** `paydayPassed` = today ≥ `end`; once passed, only rows dated before `end` count (later
   rows are the next period's; salary parts are "arriving" only while the period runs); `currentPeriodStart(periodStart,
-  paydayDay, today)` (dates.dart) = the latest expected payday on or before today, for "start the new period" after
-  several missed paydays; `daysLeft` is the real count (0 once passed);
-  **Period end (RX7d, owner-approved rule B, dates.dart):** `nextPayday(start, paydayDay)` = the first expected payday
-  (`paydayIn(month, day)`, clamped to the month's last day) more than `earlySalaryDays` (7, = `samePaydayDays`) days
-  after the start: `paydayOf(start)` = the expected payday the start is up to 7 days before (early salary), else the
-  latest one on or before it (on time, late also across a month/year end, or set by hand mid-period); next = the one
-  after it, `previousPayday` = the one before (rangeFor's steps back). So February's salary on 2 Mar ends on 31 Mar
-  (was 30 Apr), 8 Mar for the 10th on 10 Apr, a first run on 26 Mar with payday 10 on 10 Apr. One rule for
-  `computePeriod`, `periodDays`, `currentPeriodStart`, `detectPaydays`' assumed paydays, `runningPeriodEnd` and ranges;
-  `loanLeft` uses `paydayIn` directly. **Known limit:** a first run or a start without a salary within 7 days before a
-  payday (the app saves `periodStart` = today when it detects no salary) counts as that payday's early salary, so the
-  period lasts about a month and a week (30 Mar with payday 3 → 3 May). Tests `test/rx7d_next_payday_test.dart`.
+  paydayDay, today)` (dates.dart) = `periodStart` until its `nextPayday`, then the latest expected payday on or before
+  today, for "start the new period" after several missed paydays; `daysLeft` is the real count (0 once passed);
+  **Period end (RX7e, owner-approved rule C 2026-10-30, dates.dart; replaces RX7d's rule B):** `nextPayday(start,
+  paydayDay)`: expected paydays = `paydayIn(month, day)`, clamped to the month's last day. A start within
+  `paydayWindowDays` (7, = `samePaydayDays`) of an expected payday belongs to it: late = the latest one in
+  [start − 7, start], else early = the one in (start, start + 7]; the period ends on the expected payday after it.
+  Otherwise (a hand-set or mid-cycle start, a first run, a salary more than 7 days early or late) the old rule: the
+  payday of the month after the start's month. So 2 Mar with payday 31 → 31 Mar (was 30 Apr), 29 Jan / 3 → 3 Mar (old
+  rule: 5 days), 8 Mar / 10 → 10 Apr, 1 Oct and 7 Oct / 15 → 15 Nov (one period holds the salary; rule B ended 7 Oct on
+  15 Oct and the next period counted `salary` again). Every period is 8..62 days. `previousPayday(date)` = the latest
+  expected payday more than 7 days before `date` (rangeFor's steps back). One rule for `computePeriod`, `periodDays`,
+  `currentPeriodStart`, `detectPaydays`' assumed paydays, `runningPeriodEnd` and ranges; `loanLeft` uses `paydayIn`
+  directly. Tests `test/rx7d_next_payday_test.dart` (incl. day-by-day reference over two years, every payday day).
   `allowanceToday` ≥ 0 always (0 when passed or the money is used up); `allowanceTomorrow` (Stage I) = max(0,
   round((flexBudget − spent) ÷ (daysLeft − 1))), null when `daysLeft` ≤ 1 or passed; `safeToday` = allowance − spentToday (negative =
   `overToday`); `overBy` = max(0, −remaining); `overBudget` = `overBy > 0 || planDaily <= 0`. `affordability`:
@@ -406,8 +407,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   skip both entities (replayed on upgrade). Logs `iou.*` with direction/linked/count only. Tests: `test/q8_iou_test.dart`,
   schema-16 ↔ 17 old-build replay `test/q8_iou_old_build_test.dart`.
 - `loan.dart` — `loanLeft(settings, today)` → `LoanLeft {payments, cents, endMonth}` or null (no loan, no `loanEnd`, none left): counts the months from today's month to `loanEnd` inclusive whose payday (`paydayDay`, clamped to the month's last day) is today or later; `cents = payments × loan` (no interest data). Tests: `test/loan_left_test.dart`.
-- `dates.dart` — `YYYY-MM-DD` string helpers; payday rule `paydayIn`/`paydayOf`/`nextPayday`/`previousPayday` (RX7d,
-  see H2). `hlc.dart` (H7 bounded HLC: `maxClockDrift` 1 h; an owner write (the
+- `dates.dart` — `YYYY-MM-DD` string helpers; payday rule `paydayIn`/`nextPayday`/`previousPayday` (rule C,
+  RX7e, see H2). `hlc.dart` (H7 bounded HLC: `maxClockDrift` 1 h; an owner write (the
   public write API) throws `ClockBehindException` (nothing written, message without clock values) while this device's
   wall clock is more than that behind the highest reading it wrote with (device-local meta `wall_high`, raised by every
   write, owner or internal; never a peer's clock, so a database holding a far-future HLC from before Stage H still accepts owner
@@ -568,9 +569,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   period); `savedByWaiting(wishes, fromMillis:, toMillis:)` / `savedByWaitingAll` → `SavedByWaiting {count, cents}`
   (skipped wishes, `decided` in [from, to)). txs = the expanded list (P6). Tests: `test/p8_reports_test.dart`.
   **Period rule (RX7b, `periods.dart` `payPeriodStarts`/`runningPeriodEnd`, not exported):** periods are contiguous `[start, end)`; the running
-  one's `end` = max(nextPayday(start), today + 1) (RX7d rule above), so a late salary keeps it running and it always holds today (rows up
+  one's `end` = max(nextPayday(start), today + 1) (rule C above), so a late salary keeps it running and it always holds today (rows up
   to today only). Starts = `detectPaydays`, except a saved `periodStart` ≤ today that lies 1..20 days before a real
-  payday replaces that payday (the report starts where `computePeriod` does); a saved start after its salary is not
+  payday inside `computePeriod`'s period (salary < `nextPayday(ps)`, RX7e) replaces that payday: the running period is
+  then exactly `computePeriod`'s `[ps, end)`, extended to today + 1 only once that payday passed without a salary (a
+  salary on or after `nextPayday(ps)` stays the next period's start); a saved start after its salary is not
   used (it would move the salary row back), one > 20 days after the last payday is `detectPaydays`' own. RX7c: `rangeFor`
   / `shiftRange` pay periods use the same two functions: each range = `[start, end − 1]` of its `periodSummaries` period
   (the running one so never ends before today); beyond the list they extend with expected paydays (before the first; after

@@ -143,8 +143,8 @@ void main() {
     });
 
     test('the salary lands on 2 Mar: the late period ends on 1 Mar; the new one runs to the day before the March payday', () {
-      // RX7d: 2 Mar is February's (28 Feb) salary, late, so nextPayday = 31 Mar (was 30 Apr), as periodSummaries and
-      // computePeriod use.
+      // RX7d/RX7e: 2 Mar is February's (28 Feb) salary, 2 days late, so nextPayday = 31 Mar (was 30 Apr), as
+      // periodSummaries and computePeriod use.
       final more = _cat([...rows, _tx('2027-03-02', 200000, 'Salary')]);
       expect(rangeFor(RangeKind.payPeriod, '2027-03-05', st, txs: more), DateRange(start: '2027-03-02', end: '2027-03-30'));
       _checkWalk(more, st, '2027-03-05');

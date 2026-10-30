@@ -60,9 +60,7 @@ void main() {
 
     test('missing salary at the end: assumed until today, clamped to month end', () {
       final txs = [tx('2026-01-12', 90000, BudgetKind.income)];
-      // RX7d: 12 Jan is December's salary (late) for payday 31, so 31 Jan is assumed too (was skipped).
-      expect(
-          detectPaydays(txs, const WalletSettings(paydayDay: 31), '2026-03-31'), ['2026-01-12', '2026-01-31', '2026-02-28', '2026-03-31']);
+      expect(detectPaydays(txs, const WalletSettings(paydayDay: 31), '2026-03-31'), ['2026-01-12', '2026-02-28', '2026-03-31']);
       // 45 days or fewer: nothing assumed yet
       expect(detectPaydays(txs, st, '2026-02-26'), ['2026-01-12']);
       expect(detectPaydays(txs, st, '2026-02-27'), ['2026-01-12', '2026-02-15']);

@@ -40,21 +40,40 @@ void main() {
 
     test('a start late in the month still moves to the NEXT month (no skipped or repeated month)', () {
       expect(nextPayday('2026-01-31', 15), '2026-02-15');
-      // RX7d: 14 days before the 15 Jan payday is not an early salary (more than 7 days): it ends on 15 Jan (was 15 Feb).
-      expect(nextPayday('2026-01-01', 15), '2026-01-15');
+      expect(nextPayday('2026-01-01', 15), '2026-02-15');
       expect(nextPayday('2026-01-14', 15), '2026-02-15');
     });
 
-    test('property (RX7d): the first expected payday, min(paydayDay, month length), more than 7 days after the start', () {
+    test('property (RX7e rule C): a start within 7 days of an expected payday ends on the one after it, else in the following month', () {
+      bool expected(String x, int day) => dayOf(x) == min(day, _lastDay(parseIso(x).year, parseIso(x).month));
+      String after(String x, int day) {
+        var y = addDays(x, 1);
+        while (!expected(y, day)) {
+          y = addDays(y, 1);
+        }
+        return y;
+      }
+
       final r = Random(fuzzSeed(31));
       for (var i = 0; i < fuzzIterations(2000); i++) {
         final d = addDays('1999-12-01', r.nextInt(365 * 102));
         final day = 1 + r.nextInt(31);
-        var want = addDays(d, 8);
-        while (dayOf(want) != min(day, _lastDay(parseIso(want).year, parseIso(want).month))) {
-          want = addDays(want, 1);
+        String? owner;
+        for (var k = 0; k <= 7 && owner == null; k++) {
+          if (expected(addDays(d, -k), day)) owner = addDays(d, -k);
         }
-        expect(nextPayday(d, day), want, reason: '$d $day');
+        for (var k = 1; k <= 7 && owner == null; k++) {
+          if (expected(addDays(d, k), day)) owner = addDays(d, k);
+        }
+        final got = nextPayday(d, day);
+        if (owner != null) {
+          expect(got, after(owner, day), reason: '$d $day');
+        } else {
+          final from = parseIso(d);
+          final wantMonth = DateTime.utc(from.year, from.month + 1, 1);
+          expect((parseIso(got).year, parseIso(got).month), (wantMonth.year, wantMonth.month), reason: '$d $day');
+          expect(dayOf(got), min(day, _lastDay(wantMonth.year, wantMonth.month)), reason: '$d $day');
+        }
       }
     });
   });

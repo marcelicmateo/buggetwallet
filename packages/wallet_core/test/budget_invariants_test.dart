@@ -96,11 +96,13 @@ void main() {
         expect(ps.last.end, payday.compareTo(tomorrow) >= 0 ? payday : tomorrow, reason: why);
 
         // Every real payday (first salary part) starts a period, except the one a saved periodStart 1..20 days before
-        // it names (RX7b): that period starts on the saved day instead.
+        // it names (RX7b) inside computePeriod's period [saved, nextPayday(saved)) (RX7e): that period starts on the
+        // saved day instead.
         for (final d in salaryPaydays(w.txs, today, currency: 'EUR')) {
           final saved = st.periodStart;
           final gap = saved == null || saved.compareTo(today) > 0 ? 0 : daysBetween(saved, d);
-          expect(ps.map((p) => p.start), contains(gap > 0 && gap <= 20 ? saved : d), reason: '$why: payday $d');
+          final named = gap > 0 && gap <= 20 && d.compareTo(nextPayday(saved!, st.paydayDay)) < 0;
+          expect(ps.map((p) => p.start), contains(named ? saved : d), reason: '$why: payday $d');
         }
 
         // Brute force per period: live rows with start <= date < end (the running one: up to today).

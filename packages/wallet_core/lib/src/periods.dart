@@ -87,18 +87,21 @@ List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String to
 /// The period starts of [periodSummaries]: [detectPaydays], except that a saved `st.periodStart` (on or before
 /// [today]) up to 20 days before a real payday names that payday: it replaces the salary date as the start, so the
 /// period `computePeriod` shows starts on the same day in the report (salary late: the owner started the period on
-/// the expected payday). It moves only that one boundary, by at most 20 days. A saved start after its salary is not
-/// used (it would move the salary row into the period before); one more than 20 days after the last payday is
-/// already a start of [detectPaydays].
+/// the expected payday). It moves only that one boundary, by at most 20 days, and only when the salary lies inside
+/// `computePeriod`'s period `[ps, nextPayday(ps))` (RX7e): then the running period is exactly that one (extended to
+/// today + 1 only once its payday passed without a salary). A salary on or after `nextPayday(ps)` is the next period's
+/// and stays a start. A saved start after its salary is not used (it would move the salary row into the period
+/// before); one more than 20 days after the last payday is already a start of [detectPaydays].
 /// RX7c: the one period rule, shared by [periodSummaries] (and so `periodReports`) and the pay-period ranges of
 /// `rangeFor`/`shiftRange` (ranges.dart); not exported from the barrel.
 List<String> payPeriodStarts(List<CategorizedTx> txs, WalletSettings st, String today) {
   final days = detectPaydays(txs, st, today);
   final ps = st.periodStart;
   if (ps == null || days.isEmpty || ps.compareTo(today) > 0 || days.contains(ps)) return days;
+  final end = nextPayday(ps, st.paydayDay);
   final named = salaryPaydays(txs, today, currency: st.currency).where((r) {
     final gap = daysBetween(ps, r);
-    return gap > 0 && gap <= _salaryGroupDays;
+    return gap > 0 && gap <= _salaryGroupDays && r.compareTo(end) < 0;
   }).firstOrNull; // real paydays are over 20 days apart: at most one
   if (named == null) return days;
   final i = days.indexOf(named);
