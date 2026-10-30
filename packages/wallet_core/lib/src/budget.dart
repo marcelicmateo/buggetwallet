@@ -50,8 +50,12 @@ class PeriodBudget {
   /// ([RecurringBill.coveredByPlan]) is already in `fixedPlan`, so it is listed but not added; a long bill never is.
   final int reservedBills;
 
-  /// How many cycles of [dueCycles] [reservedBills] sums (those not covered by a plan line).
-  final int reservedBillCycles;
+  /// The cycles of [dueCycles] that [reservedBills] holds money for: not covered by a plan line and with a reserve above 0
+  /// (a cycle fully paid in parts reserves nothing). The dashboards' "Before payday" count and calendar use exactly these.
+  final List<DueCycle> reservedCycles;
+
+  /// How many cycles [reservedBills] holds money for (= [reservedCycles].length).
+  int get reservedBillCycles => reservedCycles.length;
 
   /// The distinct bills of [dueCycles], ordered by `nextDue`, then label, then id ([dueBills]).
   final List<RecurringBill> dueBills;
@@ -105,7 +109,7 @@ class PeriodBudget {
     required this.elapsed,
     required this.fixedPaid,
     this.reservedBills = 0,
-    this.reservedBillCycles = 0,
+    this.reservedCycles = const [],
     this.dueBills = const [],
     this.dueCycles = const [],
     this.reservedPlanned = 0,
@@ -454,7 +458,10 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
       if (seenBills.add(c.bill.id)) c.bill
   ];
   final reservedBills = cycles.fold<int>(0, (s, c) => _ok(s + (c.coveredIn(table) ? 0 : c.reserve)));
-  final reservedBillCycles = cycles.where((c) => !c.coveredIn(table)).length;
+  final reservedCycles = [
+    for (final c in cycles)
+      if (!c.coveredIn(table) && c.reserve > 0) c
+  ];
   final duePl = duePlanned(planned, today, end);
   final counted = {for (final c in cycles) occurrenceKey(c.bill.id, c.due)};
   final reservedRows = [
@@ -540,7 +547,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     elapsed: elapsed,
     fixedPaid: fixedPaid,
     reservedBills: reservedBills,
-    reservedBillCycles: reservedBillCycles,
+    reservedCycles: reservedCycles,
     dueBills: due,
     dueCycles: cycles,
     reservedPlanned: reservedPlanned,

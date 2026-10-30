@@ -388,6 +388,18 @@ void main() {
       expect(cycles([yearly], early, '2026-12-10', '2027-01-10').single.reserve, 60000);
     });
 
+    test('a cycle whose part already covers it reserves 0 and is not counted "before payday" (dashboards)', () {
+      final b = bill('2026-11-15', 10000, manual: true);
+      final rows = [
+        for (final t in [bank('2026-11-10', 10000)]) cat(t)
+      ];
+      const st = WalletSettings(salary: 200000, periodStart: '2026-11-10', paydayDay: 10);
+      final p = computePeriod(rows, st, const [], '2026-11-12', bills: [b], table: CategoryTable.builtIn);
+      expect(p.dueCycles.single.reserve, 0);
+      expect(p.reservedCycles, isEmpty);
+      expect((p.reservedBillCycles, p.beforePaydayCount, p.reservedBills), (0, 0, 0));
+    });
+
     test('HIGH 2: monthly instalments run on calendar months; the last one is still reserved', () {
       expect(RecurringBill.lastDueFor('2027-01-15', 30, 12), '2027-12-15');
       expect(RecurringBill.lastDueFor('2027-01-31', 30, 2), '2027-02-28');
