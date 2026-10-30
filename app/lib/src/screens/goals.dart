@@ -27,7 +27,7 @@ class GoalsScreen extends StatelessWidget {
     final c = context.c;
     final cur = wc.currency;
     final p = wc.period();
-    final extraAbove = p.received - wc.settings.salary;
+    final extraAbove = p.aboveSalary;
     final tot = goalTotals(wc.goals);
 
     String eta(Goal g) {

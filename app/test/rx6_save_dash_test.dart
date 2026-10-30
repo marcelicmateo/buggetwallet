@@ -79,6 +79,24 @@ Finder _in(String key, String text) => find.descendant(of: _k(key), matching: fi
 void main() {
   setUpAll(_loadFonts);
 
+  group('Above plan (core aboveSalary)', () {
+    testWidgets('income above the salary shows the exact excess; no salary set shows no tile', (tester) async {
+      final wc = _wallet();
+      // addTransaction takes money spent as positive, so income is negative.
+      wc.repo.addTransaction(date: wc.today(), amount: -212345, category: 'Salary');
+      wc.reload();
+      await _pump(tester, wc);
+      expect(_k('goalsAbovePlan'), findsOneWidget);
+      expect(_in('goalsAbovePlan', moneyExact(12345, 'EUR')), findsOneWidget);
+
+      wc.repo.updateSettings({'salary': 0});
+      wc.reload();
+      await tester.pump();
+      expect(_k('goalsAbovePlan'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('empty Save', () {
     testWidgets('a zero total, the add tiles and an empty tile per wishlist part; no sentences', (tester) async {
       final wc = _wallet();
