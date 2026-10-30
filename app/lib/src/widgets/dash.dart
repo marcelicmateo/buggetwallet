@@ -528,7 +528,7 @@ class HeroTile extends StatelessWidget {
     final number = FittedBox(
       fit: BoxFit.scaleDown,
       alignment: Alignment.centerLeft,
-      child: Text(value, key: valueKey, maxLines: 1, style: style),
+      child: Text.rich(_narrowGap(value, style), key: valueKey, maxLines: 1, style: style),
     );
     final subText = sub == null
         ? null
@@ -579,10 +579,22 @@ class HeroTile extends StatelessWidget {
     );
   }
 
+  /// The hero figure as one text: the number, a narrow no-break space (0.4 of the size, as `MoneyText`) and the currency sign, so
+  /// the big number keeps its sign close without a widget in between.
+  static TextSpan _narrowGap(String text, TextStyle style) {
+    final i = text.indexOf('\u00A0');
+    if (i < 0) return TextSpan(text: text, style: style);
+    return TextSpan(style: style, children: [
+      TextSpan(text: text.substring(0, i)),
+      TextSpan(text: '\u00A0', style: TextStyle(fontSize: (style.fontSize ?? 14) * 0.4)),
+      TextSpan(text: text.substring(i + 1)),
+    ]);
+  }
+
   /// The figure's width at full size and the current text scale.
   static double _naturalWidth(BuildContext context, String text, TextStyle style) {
     final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
+      text: _narrowGap(text, style),
       textDirection: TextDirection.ltr,
       textScaler: MediaQuery.textScalerOf(context),
       maxLines: 1,

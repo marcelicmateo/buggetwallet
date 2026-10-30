@@ -74,7 +74,10 @@ String _under(WidgetTester tester, String key) => [
         t.data ?? t.textSpan?.toPlainText() ?? '',
     ].join(' | ');
 
-String _hero(WidgetTester tester) => tester.widget<Text>(_k('safeToSpend')).data!;
+String _hero(WidgetTester tester) {
+  final t = tester.widget<Text>(_k('safeToSpend'));
+  return t.textSpan?.toPlainText() ?? t.data!; // a rich text: number, narrow gap, sign
+}
 
 /// The tiles of the page that are there, by the keys this test knows.
 Set<String> _tiles() {

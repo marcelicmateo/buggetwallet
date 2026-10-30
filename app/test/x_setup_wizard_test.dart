@@ -391,7 +391,8 @@ void main() {
       expect(find.byKey(const ValueKey('setupWizard')), findsNothing);
       await pumpApp(t, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
           size: const Size(400, 2400));
-      expect(t.widget<Text>(find.byKey(const ValueKey('safeToSpend'))).data, safe);
+      final heroText = t.widget<Text>(find.byKey(const ValueKey('safeToSpend')));
+      expect(heroText.textSpan?.toPlainText() ?? heroText.data, safe);
       await settle(t);
     });
   });

@@ -33,7 +33,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
   }
 
-  String hero(WidgetTester tester) => tester.widget<Text>(find.byKey(const ValueKey('safeToSpend'))).data!;
+  String hero(WidgetTester tester) => _plain(tester.widget<Text>(find.byKey(const ValueKey('safeToSpend'))));
 
   /// The same figure in the other style: thousands and decimal marks swapped.
   String swapped(String v) => v.replaceAll(',', '\u0001').replaceAll('.', ',').replaceAll('\u0001', '.');
@@ -112,3 +112,6 @@ void main() {
     expect(find.text('0,00'), findsOneWidget);
   });
 }
+
+/// The hero figure's text (a rich text: number, narrow gap, sign).
+String _plain(Text t) => t.textSpan?.toPlainText() ?? t.data!;

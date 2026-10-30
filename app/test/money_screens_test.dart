@@ -34,7 +34,7 @@ List<String> _texts(WidgetTester tester) => [
         if (e.findAncestorWidgetOfExactType<TxTile>() == null) (e.widget as Text).data ?? (e.widget as Text).textSpan!.toPlainText(),
     ];
 
-String _hero(WidgetTester tester) => tester.widget<Text>(find.byKey(const ValueKey('safeToSpend'))).data!;
+String _hero(WidgetTester tester) => _plain(tester.widget<Text>(find.byKey(const ValueKey('safeToSpend'))));
 
 final _negativeAmount = RegExp('−\\s?\\d');
 
@@ -414,3 +414,6 @@ void main() {
     });
   });
 }
+
+/// The hero figure's text (a rich text: number, narrow gap, sign).
+String _plain(Text t) => t.textSpan?.toPlainText() ?? t.data!;

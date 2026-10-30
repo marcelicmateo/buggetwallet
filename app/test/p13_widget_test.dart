@@ -92,7 +92,8 @@ void main() {
       final wc = wallet(w);
       await t.runAsync(flush);
       await pumpApp(t, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {})), size: const Size(400, 3000));
-      final shown = t.widget<Text>(find.byKey(const ValueKey('safeToSpend'))).data!;
+      final heroText = t.widget<Text>(find.byKey(const ValueKey('safeToSpend')));
+      final shown = heroText.textSpan?.toPlainText() ?? heroText.data!;
       expect(w.updates.last.status, WidgetStatus.ok);
       expect(w.updates.last.amount, shown);
       await t.pump(const Duration(seconds: 4));
