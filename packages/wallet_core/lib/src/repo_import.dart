@@ -5,15 +5,15 @@ part of 'repo.dart';
 extension WalletRepoImport on WalletRepo {
   /// The `on` links (T1) of each hand-added entry in [matchedTo] (entry id → bank row id; null = reopened, skipped), copied to its bank row
   /// (`<bankId>|<tagId>`), so the row that replaces it keeps the tags the owner gave it. `off` links are never copied,
-  /// nor a link the bank row already has for that tag. Written with the match; a later reopen leaves them (like the
-  /// category).
+  /// nor a link the bank row already has for that tag (on or off; a cleared link, state '', counts as none). Written
+  /// with the match; a later reopen leaves them (like the category).
   List<(String, String, Map<String, Object?>)> _matchedTagLinks(Map<String, String?> matchedTo) {
     if (matchedTo.isEmpty) return const [];
     final out = <(String, String, Map<String, Object?>)>[];
     for (final MapEntry(key: entry, value: bank) in matchedTo.entries) {
       if (bank == null) continue; // a reopened match keeps what was copied
       final have = {
-        for (final r in db.select('SELECT tag FROM tx_tags WHERE tx = ?', [bank])) r['tag'] as String
+        for (final r in db.select("SELECT tag FROM tx_tags WHERE tx = ? AND state IN ('on', 'off')", [bank])) r['tag'] as String
       };
       for (final r in db.select("SELECT tag FROM tx_tags WHERE tx = ? AND state = 'on' AND tag != ''", [entry])) {
         final tag = r['tag'] as String;
