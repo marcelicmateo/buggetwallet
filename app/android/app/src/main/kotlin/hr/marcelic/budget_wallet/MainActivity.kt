@@ -415,18 +415,17 @@ class MainActivity : FlutterActivity() {
      * Every occurrence that starts on a day from [from] to [to] (inclusive `YYYY-MM-DD`) in the calendars [ids]. Instances.CONTENT_BY_DAY_URI
      * expands recurring events and gives each occurrence's start day as a Julian day (all-day events by their own date, not shifted by
      * the time zone). `date` is that day; `status` is the provider's (2 = cancelled). `uid2445` is the event's iCal UID (Events.UID_2445,
-     * API 26+, filled by Google/CalDAV calendars; null otherwise, never the row `_ID`), `startMinutes` the local start time in minutes after
+     * API 17+, filled by Google/CalDAV calendars; null otherwise, never the row `_ID`), `startMinutes` the local start time in minutes after
      * midnight in the device time zone (null for all-day events). At most 5000 rows.
      */
     private fun events(ids: List<String>, from: String, to: String): List<Map<String, Any?>> {
         if (ids.isEmpty()) return ArrayList()
-        // UID_2445 needs API 26; a provider that does not know the column fails the query, so it is asked again without it.
-        if (Build.VERSION.SDK_INT >= 26) {
-            try {
-                return eventsQuery(ids, from, to, true)
-            } catch (e: RuntimeException) {
-                // fall through: events without a uid (their ref then falls back to title + date + start time)
-            }
+        // UID_2445 exists since API 17 (a compile-time constant); a provider that does not know the column fails the query, so it is
+        // asked again without it.
+        try {
+            return eventsQuery(ids, from, to, true)
+        } catch (e: RuntimeException) {
+            // fall through: events without a uid (their ref then falls back to title + date + start time)
         }
         return eventsQuery(ids, from, to, false)
     }

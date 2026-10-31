@@ -16,6 +16,7 @@ import '../widgets/charts.dart' show RangePicker, systemRangePicker;
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 import 'bill_sheet.dart';
+import 'planned_sheets.dart';
 import 'rules_panel.dart' show openRuleForm;
 import 'search_filters.dart';
 import 'upcoming.dart';
@@ -198,7 +199,11 @@ class _SearchResults extends StatelessWidget {
                     p.amount == null ? 'No amount' : moneyExact(p.amount!, cur),
                     '${shortDateOrRaw(p.date)}${p.category == null ? '' : ' · ${wc.categoryTable.label(p.category!)}'}${p.status == PlannedStatus.open ? '' : ' · ${p.status == PlannedStatus.paid ? 'Paid' : 'Skipped'}'}',
                     'planned',
-                    () => p.isBill ? openBill(context, wc, p.sourceRef!) : openUpcoming(context, UpcomingView(wc)),
+                    () => p.isBill
+                        ? openBill(context, wc, p.sourceRef!)
+                        : p.isOpen
+                            ? openUpcoming(context, UpcomingView(wc))
+                            : _openClosedPlanned(context, wc, p),
                     query),
             ]),
           ]),
@@ -339,4 +344,12 @@ class _TxResults extends StatelessWidget {
               onTap: () => onOpenTx(t)),
         if (r.txs.length > searchTxLimit) const Muted('Showing the first 50. Type more to narrow it down.'),
       ]);
+}
+
+/// A paid or skipped planned cost (Upcoming lists open ones only): its sheet, where Reopen brings it back.
+Future<void> _openClosedPlanned(BuildContext context, WalletController wc, PlannedCost p) async {
+  logNav('planned.openClosed');
+  final r = await showSheet<String>(context, PlannedEntrySheet(wc: wc, planned: p));
+  if (r == null || !context.mounted) return;
+  toast(context, plannedEntryToast(r));
 }

@@ -801,21 +801,36 @@ void toast(BuildContext context, String msg, {String? actionLabel, VoidCallback?
     actionLabel: actionLabel,
     onAction: onAction);
 
+/// The toast with an action on screen per messenger (completes when it closed, whatever the reason).
+final Expando<Future<void>> _actionToasts = Expando('actionToast');
+
+/// Completes when the toast with an action that is on screen in [messenger] has closed; null when there is none. Something that is
+/// not the owner's own doing (the auto-Paid toast) waits for it instead of replacing it.
+Future<void>? actionToastClosed(ScaffoldMessengerState messenger) => _actionToasts[messenger];
+
 /// [toast] through a messenger taken earlier: for a message shown after the widget that asked may be gone (an Undo action).
-void toastOn(ScaffoldMessengerState messenger, String msg,
+/// Returns the snack bar's controller (its `closed` future says why it went).
+ScaffoldFeatureController<SnackBar, SnackBarClosedReason> toastOn(ScaffoldMessengerState messenger, String msg,
     {required bool wide, required bool accessible, String? actionLabel, VoidCallback? onAction}) {
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(
-        content: Text(msg),
-        behavior: SnackBarBehavior.floating,
-        width: wide ? 400 : null,
-        duration: toastDuration,
-        // With an action it stays for screen-reader users (they need time to reach it); otherwise it times out (I4).
-        persist: onAction != null && accessible,
-        action: actionLabel == null || onAction == null
-            ? null
-            : SnackBarAction(key: ValueKey(actionLabel == 'Undo' ? 'toastUndo' : 'toastAction'), label: actionLabel, onPressed: onAction)));
+  messenger.hideCurrentSnackBar();
+  final c = messenger.showSnackBar(SnackBar(
+      content: Text(msg),
+      behavior: SnackBarBehavior.floating,
+      width: wide ? 400 : null,
+      duration: toastDuration,
+      // With an action it stays for screen-reader users (they need time to reach it); otherwise it times out (I4).
+      persist: onAction != null && accessible,
+      action: actionLabel == null || onAction == null
+          ? null
+          : SnackBarAction(key: ValueKey(actionLabel == 'Undo' ? 'toastUndo' : 'toastAction'), label: actionLabel, onPressed: onAction)));
+  if (actionLabel != null && onAction != null) {
+    final done = c.closed.then<void>((_) {});
+    _actionToasts[messenger] = done;
+    done.whenComplete(() {
+      if (identical(_actionToasts[messenger], done)) _actionToasts[messenger] = null;
+    });
+  }
+  return c;
 }
 
 /// Removes the toast on screen and any queued one: called on a tab change and when a sheet or page opens.
@@ -824,11 +839,17 @@ void clearToasts(BuildContext context) => ScaffoldMessenger.maybeOf(context)?.cl
 /// Clears toasts when a route is pushed (any `Navigator.push`, sheet or dialog), so a message never stays over a new screen.
 class ToastClearer extends NavigatorObserver {
   final GlobalKey<ScaffoldMessengerState> messenger;
-  ToastClearer(this.messenger);
+
+  /// Called when a route was popped: what waited for the page to be on top again can show.
+  final VoidCallback? onPopped;
+  ToastClearer(this.messenger, {this.onPopped});
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     if (previousRoute != null) messenger.currentState?.clearSnackBars();
   }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => onPopped?.call();
 }
 
 /// The bottom bar with a 1 px ink rule on top and a 3 px accent bar over the selected destination (the bar's destinations

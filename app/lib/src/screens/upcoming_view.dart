@@ -27,14 +27,16 @@ class UpcomingView implements Listenable {
   List<UpcomingItem> upcomingItems(String from, String to) => _wc.upcomingItems(from, to);
   ({int count, int total}) setAside(List<UpcomingItem> items, {bool next = false}) => _wc.setAside(items, next: next);
   bool isOverdueCycle(UpcomingItem i) => _wc.isOverdueCycle(i);
-  List<DueCycle> overdueEarlier() => _wc.overdueEarlier();
+  bool billNotSetAside(UpcomingItem i, {bool next = false}) => _wc.billNotSetAside(i, next: next);
+  bool billCovered(RecurringBill b) => billCoveredIn(b, _wc.categoryTable);
+  List<DueCycle> overdueEarlier({bool next = false}) => _wc.overdueEarlier(next: next);
 
   /// The costs "Before payday" holds that fall after payday: long bills held until paid. The list of the period ends at payday, so
   /// they are listed apart (core's `reservedCycles`, each with its own reserve).
-  List<DueCycle> heldCycles() {
-    final end = _wc.period().end;
+  List<DueCycle> heldCycles({bool next = false}) {
+    final end = next ? nextPayday(_wc.period().end, _wc.effectiveSettings.paydayDay) : _wc.period().end;
     return [
-      for (final x in _wc.period().reservedCycles)
+      for (final x in _wc.reservedCyclesFor(next: next))
         if (x.due.compareTo(end) >= 0) x
     ];
   }

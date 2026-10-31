@@ -208,18 +208,32 @@ void main() {
       expect(tester.takeException(), isNull);
     }, timeout: _timeout);
 
-    testWidgets('a range of several months: the hero is the range, so October gets its own tile with the chip', (tester) async {
+    testWidgets('a range that starts mid-month: the hero is the range, so October gets its own tile with the chip', (tester) async {
+      final (:wc, :tag) = await _wallet();
+      final r = DateRange(start: '2026-10-03', end: '2026-10-31');
+      await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: const Size(1280, 3000));
+      final cmp = wc.compareTagFor(tag, r);
+      expect(inTile('compareThis', moneyExact(cmp.thisMonth, 'EUR')), findsOneWidget);
+      expect(find.descendant(of: _k('compareThis'), matching: find.byKey(const ValueKey('compareDelta'))), findsOneWidget);
+      expect(inTile('compareLast', moneyExact(cmp.lastMonth, 'EUR')), findsOneWidget, reason: 'September is not a row of this range');
+      expect(tester.takeException(), isNull);
+    }, timeout: _timeout);
+
+    testWidgets('a range with both months as rows: the This month and Last month tiles would repeat them, only Average stays',
+        (tester) async {
       final (:wc, :tag) = await _wallet();
       final r = DateRange(start: '2026-08-01', end: '2026-10-31');
       await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: const Size(1280, 3000));
       final cmp = wc.compareTagFor(tag, r);
       expect(heroIs('tagDetailTotal', moneyExact(29000 + 29544, 'EUR')), findsOneWidget);
-      expect(inTile('compareThis', moneyExact(cmp.thisMonth, 'EUR')), findsOneWidget);
-      expect(find.descendant(of: _k('compareThis'), matching: find.byKey(const ValueKey('compareDelta'))), findsOneWidget);
-      // Several months: the list of months is there.
       for (final b in wc.tagBars(tag, r)) {
         expect(_k('tagDetailRow_${b.month}'), findsOneWidget);
       }
+      expect(_k('tagDetailRow_2026-10'), findsOneWidget);
+      expect(_k('tagDetailRow_2026-09'), findsOneWidget);
+      expect(_k('compareThis'), findsNothing);
+      expect(_k('compareLast'), findsNothing);
+      expect(inTile('compareAverage', moneyExact(cmp.average6, 'EUR')), findsOneWidget);
       expect(tester.takeException(), isNull);
     }, timeout: _timeout);
 

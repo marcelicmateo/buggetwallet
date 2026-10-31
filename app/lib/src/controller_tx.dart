@@ -52,6 +52,8 @@ extension TxEdits on WalletController {
       return e.message;
     }
     lastUnlinked = (entryId, bankId);
+    // Core's unlinkMatch rematches at once: the entry may already stand for another bank row.
+    lastUnlinkedRematched = repo.transaction(entryId)?.matchedTo != null;
     logEvent(_log, Level.INFO, 'match.unlink', {'ok': true});
     _changed();
     return null;

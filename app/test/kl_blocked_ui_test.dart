@@ -181,6 +181,43 @@ void main() {
       await t.pumpAndSettle(const Duration(seconds: 5)).catchError((_) => 0);
     });
 
+    test('skipBlocked says null when it skipped, core\'s text when it refused (nothing is stored then)', () {
+      final wc = emptyWallet()..relayUrl = _relay;
+      _block(wc, SyncProblemReason.applyFailed, seenDaysAgo: 40);
+      final f = blockedFiles(wc.repo).single;
+      expect(wc.skipBlocked(f), 'Only a damaged sync file can be skipped.');
+      expect(blockedFiles(wc.repo), hasLength(1), reason: 'still blocked');
+      _block(wc, SyncProblemReason.corrupt, seenDaysAgo: 40);
+      expect(wc.skipBlocked(blockedFiles(wc.repo).single), isNull);
+      expect(blockedFiles(wc.repo), isEmpty);
+    });
+
+    testWidgets('a refused skip shows the reason, no "Skipped" toast, no sync, and the row stays', (t) async {
+      final wc = emptyWallet()..relayUrl = _relay;
+      _block(wc, SyncProblemReason.corrupt, seenDaysAgo: 40);
+      var runs = 0;
+      wc.seams.syncRunner = (r, k, repo) async {
+        runs++;
+        return const SyncReport(0, 0, 0, caughtUp: true);
+      };
+      await _pump(t, wc);
+      expect(_k(_skipKey), findsOneWidget);
+      // The file turns out to be one that must wait (a newer format) after the row was drawn.
+      _block(wc, SyncProblemReason.unknownVersion, seenDaysAgo: 40);
+      await t.tap(_k(_skipKey));
+      await t.pump();
+      await t.tap(_k('skipBlockedConfirm'));
+      await t.pump();
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump();
+      expect(find.textContaining('Only a damaged sync file can be skipped.'), findsOneWidget);
+      expect(find.textContaining(blockedSkippedToast, findRichText: true), findsNothing);
+      expect(_k(_rowKey), findsOneWidget);
+      expect(blockedFiles(wc.repo), hasLength(1));
+      expect(runs, 0);
+      await t.pumpAndSettle(const Duration(seconds: 5)).catchError((_) => 0);
+    });
+
     testWidgets('the confirm text names the device by its short id and the skip button is not offered while the author is around',
         (t) async {
       final wc = emptyWallet()..relayUrl = _relay;

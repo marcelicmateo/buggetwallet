@@ -79,7 +79,9 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
   List<Widget> _categoryView(BuildContext context, String cur, List<MerchantTotal> merchants) {
     final c = context.c;
     final total = wc.categoryTotal(widget.category, range);
-    final parts = compareParts(wc.compareFor(widget.category, range), month: wc.monthIn(range), range: range, total: total, cur: cur);
+    final bars = wc.categoryBars(widget.category, range);
+    final parts =
+        compareParts(wc.compareFor(widget.category, range), month: wc.monthIn(range), range: range, total: total, cur: cur, bars: bars);
     final biggest = merchants.fold<int>(1, (m, x) => x.spent > m ? x.spent : m);
     return [
       DashItem(
@@ -93,7 +95,7 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
         ),
       ),
       ...parts.tiles,
-      _bars(cur, wc.categoryBars(widget.category, range), '$name per month', 'category'),
+      _bars(cur, bars, '$name per month', 'category'),
       DashItem(
         span: 2,
         child: Tile(
