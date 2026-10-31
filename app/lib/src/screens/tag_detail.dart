@@ -1,18 +1,19 @@
-// Drill-down for an extra tag (T1): its total over a range, the spending per month, and the payments behind it. The total is the sum of
-// the rows listed (core's `rowsForTag`), so they always add up. A payment can have several tags, so one payment shows under each.
+// Drill-down for an extra tag (T1, RX8 dashboard): the total over a range, this month against last month and the average, the spending
+// per month, and the payments behind it. Every figure is core's (`tagTotalFor`, `compareTagFor`, `tagBars`); the total is the sum of the
+// rows listed, so they always add up. A payment can have several tags, so one payment shows under each.
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
-import '../theme.dart';
-import '../widgets/common.dart';
-import '../widgets/insight_charts.dart';
+import '../insights_api.dart';
+import '../widgets/dash.dart';
+import '../widgets/detail_tiles.dart';
 import '../widgets/sheets.dart';
 
 /// Opens [tag] over [range] (a page on a phone, a dialog from 600 dp).
 Future<void> openTag(BuildContext context, WalletController wc, String tag, DateRange range) =>
-    openPageOrDialog<void>(context, TagDetailScreen(wc: wc, tag: tag, range: range), width: 640, logName: 'TagDetail');
+    openPageOrDialog<void>(context, TagDetailScreen(wc: wc, tag: tag, range: range), width: 840, logName: 'TagDetail');
 
 class TagDetailScreen extends StatelessWidget {
   final WalletController wc;
@@ -24,70 +25,59 @@ class TagDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: wc,
         builder: (context, _) {
-          final c = context.c;
           final cur = wc.currency;
           final name = '#${wc.tagTable.label(tag)}';
           final rows = wc.rowsOfTag(tag, range);
-          final total = -rows.fold<int>(0, (s, t) => s + t.amount);
-          final bars = wc.tagBars(tag, range);
-          final now = monthOf(wc.today());
-          String note(MonthBar b) => !b.partial ? '' : (b.month == now ? ' · so far' : ' · part of the month');
+          final total = wc.tagTotalFor(tag, range);
+          final cmp = wc.compareTagFor(tag, range);
+          final parts = compareParts(cmp, month: wc.monthIn(range), range: range, total: total.spent, cur: cur);
           return Scaffold(
             appBar: DialogAppBar(title: name),
-            body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 88), children: [
-              ...gapped([
-                Panel(children: [
-                  Eyebrow(rangeLabel(range)),
-                  Heading(moneyExact(total, cur), key: const ValueKey('tagDetailTotal')),
-                  Muted('${rows.length} ${rows.length == 1 ? 'payment' : 'payments'}. A payment can have other tags too.'),
-                ]),
-                Panel(children: [
-                  const Eyebrow('Per month'),
-                  MonthlyBars(
-                    key: const ValueKey('tagDetailBars'),
-                    label: '$name per month',
-                    groups: [
-                      for (final b in bars)
-                        BarGroup(
-                          month: b.month,
-                          partial: b.partial,
-                          rods: [BarRod(b.spent, c.chartPos)],
-                          tip: '${monthLong(b.month)}${note(b)}\n${moneyExact(b.spent, cur)}',
-                          spoken: '${monthLong(b.month)}${note(b)}: ${moneyExact(b.spent, cur)}',
-                        ),
-                    ],
+            body: DetailPage(children: [
+              DashItem(
+                span: 2,
+                child: HeroTile(
+                  valueKey: const ValueKey('tagDetailTotal'),
+                  label: name,
+                  value: moneyExact(total.spent, cur),
+                  sub: '${rangeLabel(range)} · ${total.count} ${total.count == 1 ? 'payment' : 'payments'}',
+                  chip: parts.heroChip,
+                ),
+              ),
+              ...parts.tiles,
+              DashItem(
+                span: 2,
+                child: MonthBarsTile(
+                  label: '$name per month',
+                  currency: cur,
+                  nowMonth: monthOf(wc.today()),
+                  bars: wc.tagBars(tag, range),
+                  barsKey: const ValueKey('tagDetailBars'),
+                  rowKey: (m) => ValueKey('tagDetailRow_$m'),
+                  // The months list is a tile beside the bars when the row has room (the hero is the month); else it sits under them.
+                  rows: !parts.monthIsHero,
+                ),
+              ),
+              if (parts.monthIsHero)
+                DashItem(
+                  span: 2,
+                  child: MonthRowsTile(
+                    currency: cur,
+                    nowMonth: monthOf(wc.today()),
+                    bars: wc.tagBars(tag, range),
+                    rowKey: (m) => ValueKey('tagDetailRow_$m'),
                   ),
-                  const SizedBox(height: 8),
-                  Rows(children: [
-                    for (final b in bars)
-                      LineItem('${monthLong(b.month)}${note(b)}', moneyExact(b.spent, cur), key: ValueKey('tagDetailRow_${b.month}')),
-                  ]),
-                ]),
-                Panel(children: [
-                  const Eyebrow('Payments'),
-                  const Muted('Tap one to change it.'),
-                  if (rows.isEmpty)
-                    const EmptyNote('Nothing spent with this tag in this range.')
-                  else
-                    Column(key: const ValueKey('tagRows'), children: [
-                      const TxHeaderRow(),
-                      for (final t in rows)
-                        TxTile(
-                            table: wc.categoryTable,
-                            tagTable: wc.tagTable,
-                            t: t,
-                            currency: cur,
-                            fxRates: wc.settings.fxRates,
-                            hasBill: wc.billForTx(t.tx.id) != null,
-                            matched: wc.isMatchedBank(t.tx.id),
-                            iouTag: wc.iouTagOf(t.tx.id),
-                            onTap: () async {
-                              final res = await showSheet<String>(context, TxSheet(wc: wc, t: t));
-                              if (context.mounted) txSheetToast(context, wc, res);
-                            }),
-                    ]),
-                ]),
-              ], gap: 16),
+                ),
+              DashItem(
+                span: 4,
+                child: PaymentsTile(
+                  wc: wc,
+                  rows: rows,
+                  rowsKey: const ValueKey('tagRows'),
+                  emptyText: 'Nothing spent with this tag in this range.',
+                  help: 'Tap a payment to change it. A payment can have other tags too, so it shows under each of them.',
+                ),
+              ),
             ]),
           );
         },

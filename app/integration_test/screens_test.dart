@@ -14,6 +14,7 @@ import 'package:budget_wallet/src/screens/import_preview_sheet.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
+import 'package:budget_wallet/src/screens/tag_detail.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:flutter/material.dart';
@@ -282,6 +283,38 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('reportPrev')));
     await tester.pumpAndSettle();
     await binding.takeScreenshot('9-period-report-previous');
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+
+    // Category and tag detail (RX8): a category row on Budget opens the category dashboard; a tag on the newest spending rows opens the tag's.
+    await tester.tap(navTab('Budget'));
+    // The review changed data: the Budget page is rebuilt while the app is idle, a frame at a time.
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.pumpAndSettle();
+    // Plan was left scrolled down (its switch is out of view): choose Spending through the setting the switch writes.
+    wc.setBudgetView('spending');
+    await tester.pumpAndSettle();
+    final catRow =
+        find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('categoryRow_'));
+    await tester.ensureVisible(catRow.first);
+    await tester.pumpAndSettle();
+    await tester.tap(catRow.first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('detailTotal')), findsOneWidget);
+    await binding.takeScreenshot('9-category-detail');
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+    final tag = await wc.addTag('Synthetic trip');
+    final newest = wc.txs.where((x) => x.amount < 0 && x.kind != BudgetKind.transfer).toList()..sort((a, b) => b.date.compareTo(a.date));
+    for (final x in newest.take(5)) {
+      await wc.setPaymentTag(x.tx.id, tag, true);
+    }
+    unawaited(openTag(tester.element(find.byType(Scaffold).first), wc, tag, DateRange(start: addDays(wc.today(), -45), end: wc.today())));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('tagDetailTotal')), findsOneWidget);
+    await binding.takeScreenshot('9-tag-detail');
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
 

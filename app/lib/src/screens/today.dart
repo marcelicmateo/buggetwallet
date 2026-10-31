@@ -137,8 +137,9 @@ class TodayScreen extends StatelessWidget {
               DashItem(
                   span: 2, child: ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: view.openCurrencies)),
             // Add expense, then the last payments.
-            DashItem(span: 2, child: _AddExpenseButton(view, addExpense)),
-            DashItem(span: 2, rowSpan: wide ? 2 : 1, child: _RecentTile(view, recent, f.cur, openSearch)),
+            // On four columns both take the whole row: a two-cell button beside a tall list left the cells under it empty (RX8).
+            DashItem(span: wide ? 4 : 2, child: _AddExpenseButton(view, addExpense)),
+            DashItem(span: wide ? 4 : 2, child: _RecentTile(view, recent, f.cur, openSearch)),
           ]),
         ],
       ),

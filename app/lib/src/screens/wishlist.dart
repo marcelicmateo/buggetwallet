@@ -104,7 +104,9 @@ class _WishlistScreenState extends State<WishlistScreen> {
         ),
       ),
       if (ready.isEmpty)
-        const StatTile(key: ValueKey('emptySection:Ready to decide'), label: 'Ready', value: '0', sub: 'Nothing yet')
+        // Two cells wide, like the tiles around it: beside the check form it fills the row on a wide window.
+        const DashItem(
+            span: 2, child: StatTile(key: ValueKey('emptySection:Ready to decide'), label: 'Ready', value: '0', sub: 'Nothing yet'))
       else
         DashItem(
           span: 2,
@@ -127,11 +129,13 @@ class _WishlistScreenState extends State<WishlistScreen> {
         ),
       if (waiting.isEmpty)
         // "Wishlist is empty" only when nothing is ready either; a wish ready to decide sits in the tile beside this one.
-        StatTile(
-            key: const ValueKey('emptySection:Cooling off'),
-            label: 'Waiting',
-            value: '0',
-            sub: ready.isEmpty ? 'Wishlist is empty' : 'Nothing cooling off')
+        DashItem(
+            span: 2,
+            child: StatTile(
+                key: const ValueKey('emptySection:Cooling off'),
+                label: 'Waiting',
+                value: '0',
+                sub: ready.isEmpty ? 'Wishlist is empty' : 'Nothing cooling off'))
       else
         DashItem(
           span: 2,
@@ -162,14 +166,22 @@ class _WishlistScreenState extends State<WishlistScreen> {
           ),
         ),
       if (done.isEmpty)
-        StatTile(
-            key: const ValueKey('emptySection:Decided'), label: 'Saved by waiting', value: moneyExact(0, cur), sub: 'Nothing decided yet')
+        DashItem(
+            span: 2,
+            child: StatTile(
+                key: const ValueKey('emptySection:Decided'),
+                label: 'Saved by waiting',
+                value: moneyExact(0, cur),
+                sub: 'Nothing decided yet'))
       else ...[
-        StatTile(
-          key: const ValueKey('savedByWaiting'),
-          label: 'Saved by waiting',
-          value: moneyExact(saved.cents, cur),
-          sub: '${saved.count} skipped',
+        DashItem(
+          span: 2,
+          child: StatTile(
+            key: const ValueKey('savedByWaiting'),
+            label: 'Saved by waiting',
+            value: moneyExact(saved.cents, cur),
+            sub: '${saved.count} skipped',
+          ),
         ),
         DashItem(
           span: 2,
