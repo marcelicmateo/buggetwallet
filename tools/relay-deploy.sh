@@ -361,6 +361,8 @@ native_self_test() {
   if "$me" --dry-run native-install pi wallet.example.org --data-dir '/mnt/a b' > /dev/null 2>&1; then echo "relay-deploy self-test: bad data dir accepted" >&2; rc=1; fi
   if "$me" --dry-run native-install pi wallet.example.org --data-dir '/mnt/../etc' > /dev/null 2>&1; then echo "relay-deploy self-test: .. in data dir accepted" >&2; rc=1; fi
   if "$me" --dry-run native-install pi wallet.example.org --data-dir /etc/x > /dev/null 2>&1; then echo "relay-deploy self-test: system data dir accepted" >&2; rc=1; fi
+  if "$me" --dry-run native-install -oProxyCommand=x wallet.example.org > /dev/null 2>&1; then echo "relay-deploy self-test: option-like host accepted" >&2; rc=1; fi
+  if "$me" --dry-run native-install pi 'bad domain' > /dev/null 2>&1; then echo "relay-deploy self-test: bad domain accepted" >&2; rc=1; fi
   if "$me" --print-script usage > /dev/null 2>&1; then echo "relay-deploy self-test: --print-script accepted any function" >&2; rc=1; fi
   out=$("$me" --dry-run native-upgrade pi) || rc=1
   chk native-upgrade 'systemctl restart bw-relay' "$out"
