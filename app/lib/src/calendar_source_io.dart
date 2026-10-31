@@ -60,6 +60,7 @@ List<CalendarEvent> calendarEventsFrom(Iterable<Map<Object?, Object?>> list) => 
           CalendarEvent(
             calendarId: '${e['calendarId']}',
             uid: (e['uid2445'] as String?) ?? '',
+            legacyUid: '${e['id']}', // the uid builds before KL-A used (row id): keeps their decisions on letterless titles
             startMinutes: e['startMinutes'] is int ? e['startMinutes'] as int : null,
             title: (e['title'] as String?) ?? '',
             notes: e['notes'] as String?,

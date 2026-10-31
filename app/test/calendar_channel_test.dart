@@ -67,6 +67,8 @@ void main() {
     expect(list.map((e) => (e.uid, e.title, e.date, e.allDay, e.startMinutes)),
         [('uid-dinner@example.com', 'Dinner', '2026-10-24', false, 1170), ('', 'Holiday', '2026-10-25', true, null)]);
     expect(list.first.notes, 'n');
+    // RF5: the row id is kept only as the pre-KL uid, so old decisions on letterless titles still match (`legacyRef`).
+    expect(list.map((e) => e.legacyUid), ['e1', 'e3']);
     expect(calls.single.method, 'events');
     expect(calls.single.arguments, {
       'ids': ['3'],

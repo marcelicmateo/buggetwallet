@@ -651,8 +651,7 @@ extension FutureSpending on WalletController {
   /// [ExportFile.rows] is the number of events; 0 means there is nothing to save.
   ExportFile exportPlannedIcs() {
     final t = today();
-    final text =
-        plannedIcs(plannedOpen(), recurringBills(), from: t, to: addDays(t, 365), payeeAliases: payeeAliases(), events: cal.events);
+    final text = plannedIcs(plannedOpen(), recurringBills(), from: t, to: addDays(t, 365), payeeAliases: payeeAliases());
     final rows = 'BEGIN:VEVENT'.allMatches(text).length;
     return ExportFile('budget-wallet-planned.ics', Uint8List.fromList(utf8.encode(text)), rows);
   }
