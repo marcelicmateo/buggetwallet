@@ -65,10 +65,11 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | ZC | Zoomable graphs (`ZC_SPEC.md`), "budget share" label | scout → core + test-writer + ui | worktrees | RX8 | queued after RX8 |
 | KL | Known limits fixed: Upcoming = Today reserved; planned cost auto-Paid (same category, exact amount, ±3 days, Undo); search rule names; slip alias picker; calendar ids (UID/event id + time); "Add as new" copy id per device; damaged file: ask author resend + "Skip damaged file" | core-builder + ui-builder | worktrees | G2 | queued (parallel with RX8 where files don't overlap) |
 | T1 | Trim: remove install-hooks.sh, quadlet files + setup.md parts, ci-watcher agent, deleted desktop tests' history lines | devops (sonnet/medium) | worktree | – | done c5f7e0f merged 87e6023 (lint + native dry-runs ok) |
-| T2 | Remove merged agent worktrees (28 GB), list unmerged | lead | – | G2 | queued |
+| T2 | Remove merged agent worktrees (28 GB), list unmerged | lead | – | G2 | done 2026-10-31: 39 merged worktrees + branches removed (30 GB → 36 MB), none unmerged |
 | T3 | Ruflo: token use per commit vs baseline → owner decides | lead | – | – | done: per non-merge commit 3.6M → 8.1M tokens (confounded by heavier work, no saving seen); owner: disable; ruflo-mods/swarm/console disabled (local scope) 2026-10-31 |
-| T4 | Re-sync the design-system artifact (Paper Tiles tokens, dash kit) | ui-builder | – | – | queued (before ZC mockups) |
-| D2 | Core `unlinkMatch`/`relinkMatch` + synced `match_off` (schema 19: every device updates together), then the sheet's Unlink button + Undo toast | core-builder (session/high) → ui | worktree | G1 | core running |
+| T4 | Re-sync the design-system artifact (Paper Tiles tokens, dash kit) | general-purpose (sonnet) | – | – | running |
+| D2 | Core `unlinkMatch`/`relinkMatch` + synced `match_off` (schema 19: every device updates together), then the sheet's Unlink button + Undo toast | core-builder (session/high) → ui-builder (sonnet/high) | worktree | G1 | core fb3d57d merged 148920b (core 3077; match_off = JSON list of bank ids, newest 20; matchedBankIds); UI running |
+| RX7f | Core: rule C fallback = first expected payday more than 20 days after the start (owner 2026-10-31: an 8+-day-early salary in the previous month no longer makes a short period that 'Start new period' counts twice) | core-builder (session/high) | worktree | – | running |
 | M6+ | M6 checklist: add key-rotation drill; Pi setup starts with a CG-NAT check; Lenovo VPN relay until then | lead | – | – | queued |
 
 ## Stage HP: hardening pass during the M6 live test (2026-10-30; tests and reviews only, bug fixes with a test)
