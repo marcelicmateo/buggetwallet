@@ -80,7 +80,8 @@ String relayTestFailureText(TransportFailure f) => switch (f) {
 
 // ---------- KL: a sync file that cannot be read and blocks the device's later files ----------
 
-/// The author counts as around while it synced within this many days: it is asked, not skipped.
+/// The author counts as around until it was last seen more than this many days ago (exactly 7 days is still around), or when
+/// its last-seen time is unknown: it is asked, not skipped.
 const blockedAuthorDays = 7;
 
 /// "A sync file from device ab12cd can't be read. Changes from that device after it are waiting."
@@ -112,20 +113,20 @@ class BlockedRow {
   /// A second line: asked / clock / update; null when none applies.
   final String? hint;
 
-  /// Offer "Skip damaged file": a damaged / other-key file whose author was last seen over 7 days ago, or never.
+  /// Offer "Skip damaged file": a damaged / wrong-key file whose author was last seen MORE than 7 days ago (never when unknown).
   final bool canSkip;
   const BlockedRow(this.file, this.seen, this.hint, this.canSkip);
 }
 
 BlockedRow blockedRowOf(BlockedFile f, DateTime now) {
   final seen = f.authorSeen;
-  final recent = seen != null && now.difference(seen) < const Duration(days: blockedAuthorDays);
+  final gone = seen != null && now.difference(seen) > const Duration(days: blockedAuthorDays);
   final damaged = f.reason == SyncProblemReason.corrupt || f.reason == SyncProblemReason.badKey || f.reason == SyncProblemReason.otherKey;
   final hint = switch (f.reason) {
     SyncProblemReason.clockDrift => clockDriftText,
     SyncProblemReason.unknownVersion => blockedUpdateText,
-    _ when recent => blockedAskedText(f.short),
+    _ when !gone => blockedAskedText(f.short),
     _ => null,
   };
-  return BlockedRow(f, blockedAuthorSeenText(f, now), hint, damaged && !recent);
+  return BlockedRow(f, blockedAuthorSeenText(f, now), hint, damaged && gone);
 }

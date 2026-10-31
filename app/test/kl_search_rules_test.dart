@@ -40,6 +40,9 @@ void main() {
       expect(_k('searchRule:${r.id}'), findsOneWidget);
     }
     expect(find.text('RULES'), findsOneWidget);
+    // Only rules match (the wallet has no payments): the page is not "Nothing found".
+    expect(wc.search('zorba').txs, isEmpty);
+    expect(find.text('Nothing found'), findsNothing);
     // The match is a bold span inside the rule's text.
     final bolds = find.descendant(
         of: _k('searchRule:${rules.first.id}'),

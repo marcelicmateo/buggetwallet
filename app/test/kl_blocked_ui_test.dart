@@ -1,5 +1,5 @@
 // KL-UI2: Settings › Sync lists each sync file that blocks the device's later files. "Skip damaged file" is offered only for a
-// damaged / wrong-key file whose author was last seen over 7 days ago (or never). All data is SYNTHETIC.
+// damaged / wrong-key file whose author was last seen MORE than 7 days ago (never when the last-seen time is unknown). All data is SYNTHETIC.
 import 'dart:convert';
 
 import 'package:budget_wallet/src/controller.dart';
@@ -60,7 +60,7 @@ void main() {
   group('what is offered', () {
     for (final (reason, days, skip, label) in [
       (SyncProblemReason.corrupt, 10, true, 'damaged, author gone 10 days'),
-      (SyncProblemReason.corrupt, null, true, 'damaged, author never seen'),
+      (SyncProblemReason.corrupt, null, false, 'damaged, author last-seen unknown: asked, no skip'),
       (SyncProblemReason.badKey, 8, true, 'old file with another key'),
       (SyncProblemReason.otherKey, 30, true, 'sealed with another wallet key'),
       (SyncProblemReason.corrupt, 6, false, '6 days still counts as around'),
@@ -80,8 +80,8 @@ void main() {
         expect(find.textContaining(blockedFileText(_short), findRichText: true), findsOneWidget);
         expect(_k(_skipKey), skip ? findsOneWidget : findsNothing);
         expect(find.text('Skip damaged file'), skip ? findsOneWidget : findsNothing);
-        expect(find.textContaining(blockedAskedText(_short), findRichText: true),
-            days != null && days < 7 && reason == SyncProblemReason.corrupt ? findsOneWidget : findsNothing);
+        final asks = reason != SyncProblemReason.clockDrift && reason != SyncProblemReason.unknownVersion && (days == null || days <= 7);
+        expect(find.textContaining(blockedAskedText(_short), findRichText: true), asks ? findsOneWidget : findsNothing);
         expect(find.textContaining('That device last synced'), days == null ? findsNothing : findsOneWidget);
         expect(find.textContaining(clockDriftText, findRichText: true),
             reason == SyncProblemReason.clockDrift ? findsOneWidget : findsNothing);
@@ -90,6 +90,27 @@ void main() {
         expect(find.textContaining(_device), findsNothing, reason: 'only the short id is shown');
       });
     }
+
+    test('the 7 day limit: exactly 7 days is still around, one second more is gone, unknown never skips', () {
+      final now = DateTime(2026, 10, 31, 12);
+      BlockedRow row(SyncProblemReason r, Duration? ago) =>
+          blockedRowOf(BlockedFile(_device, '3', r, since: now, authorSeen: ago == null ? null : now.subtract(ago)), now);
+      const week = Duration(days: 7);
+      expect(row(SyncProblemReason.corrupt, week).canSkip, isFalse);
+      expect(row(SyncProblemReason.corrupt, week).hint, blockedAskedText(_short));
+      expect(row(SyncProblemReason.corrupt, week + const Duration(seconds: 1)).canSkip, isTrue);
+      expect(row(SyncProblemReason.corrupt, week + const Duration(seconds: 1)).hint, isNull);
+      expect(row(SyncProblemReason.corrupt, week - const Duration(seconds: 1)).canSkip, isFalse);
+      expect(row(SyncProblemReason.corrupt, null).canSkip, isFalse);
+      expect(row(SyncProblemReason.corrupt, null).seen, isNull);
+      for (final r in [SyncProblemReason.badKey, SyncProblemReason.otherKey]) {
+        expect(row(r, const Duration(days: 8)).canSkip, isTrue, reason: r.name);
+      }
+      for (final r in [SyncProblemReason.clockDrift, SyncProblemReason.unknownVersion, SyncProblemReason.applyFailed]) {
+        expect(row(r, const Duration(days: 400)).canSkip, isFalse, reason: r.name);
+        expect(row(r, null).canSkip, isFalse, reason: r.name);
+      }
+    });
 
     testWidgets('the author line reads as a relative time', (t) async {
       final wc = emptyWallet()..relayUrl = _relay;
