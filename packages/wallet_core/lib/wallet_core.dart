@@ -86,9 +86,11 @@ export 'src/budget.dart'
         monthSummary,
         PeriodBudget,
         PeriodDay,
+        PeriodReserves,
         periodDays,
         periodDaySpend,
         PlanSplit,
+        projectedReserves,
         reviewState,
         reviewStreak,
         samePaydayDays,
@@ -215,6 +217,7 @@ export 'src/periods.dart' show detectPaydays, periodSummaries, PeriodSummary, sa
 export 'src/planned.dart'
     show
         amountFromText,
+        billOccurrences,
         HeadsUp,
         headsUps,
         maxAmountCents,

@@ -1,6 +1,5 @@
 // HP-T2: invariants pinned from mutation testing of accounts and planned. All data is SYNTHETIC.
 import 'package:test/test.dart';
-import 'package:wallet_core/src/planned.dart' show billOccurrences;
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart' show bankProfiles, csvSourcePrefix;
 

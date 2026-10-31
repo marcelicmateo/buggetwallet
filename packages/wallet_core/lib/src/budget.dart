@@ -3,6 +3,7 @@ import 'categories.dart';
 import 'dates.dart';
 import 'logs.dart';
 import 'models.dart';
+import 'planned.dart' show billOccurrences, firstDueFrom;
 import 'recurring.dart' show incomeFits, planRecurringPayments, RecurringPayments;
 
 final _log = Logger('bw.budget');
@@ -467,23 +468,14 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   // Plan lines of custom fixed categories (P1) count with rent, loan and subs; only lines the table still allows.
   final fixedPlan =
       st.rent + st.loan + st.subs + st.planLines.entries.fold<int>(0, (s, e) => table.hasPlanLine(e.key) ? _ok(s + e.value) : s);
-  final cycles = dueCycles(outBills, raw, start, end, currency: st.currency);
+  final set = _setAside(outBills, raw, planned, start, today, end, currency: st.currency, table: table, payeeAliases: payeeAliases);
+  final cycles = set.cycles, reservedCycles = set.reservedCycles, duePl = set.duePlanned, reservedRows = set.reservedRows;
   final seenBills = <String>{};
   final due = [
     for (final c in cycles)
       if (seenBills.add(c.bill.id)) c.bill
   ];
   final reservedBills = cycles.fold<int>(0, (s, c) => _ok(s + (c.coveredIn(table) ? 0 : c.reserve)));
-  final reservedCycles = [
-    for (final c in cycles)
-      if (!c.coveredIn(table) && c.reserve > 0) c
-  ];
-  final duePl = duePlanned(planned, today, end);
-  final counted = {for (final c in cycles) occurrenceKey(c.bill.id, c.due)};
-  final reservedRows = [
-    for (final p in duePl)
-      if (plannedReserves(p, outBills, counted, table: table, payeeAliases: payeeAliases)) p
-  ];
   final reservedPlanned = reservedRows.fold<int>(0, (s, p) => _ok(s + p.amount!));
   // P9: only the payees of confirmed incomes; the actual landed amounts (never the expected ones).
   final byPayee = <String, List<RecurringBill>>{};
@@ -573,6 +565,85 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     expectedIncome: expected,
     landedIncome: landedIncome,
   );
+}
+
+/// What a pay period [start] .. [end] (exclusive) sets aside, one path for [computePeriod] and [projectedReserves]:
+/// [dueCycles] of [outBills] (no incomes), the cycles that reserve (not [DueCycle.coveredIn] a plan line, reserve > 0),
+/// [duePlanned] from [from] (today in [computePeriod]) and the rows [plannedReserves] accepts given those cycles.
+({List<DueCycle> cycles, List<DueCycle> reservedCycles, List<PlannedCost> duePlanned, List<PlannedCost> reservedRows}) _setAside(
+    List<RecurringBill> outBills, List<CategorizedTx> raw, List<PlannedCost> planned, String start, String from, String end,
+    {required String currency, required CategoryTable table, required Map<String, String> payeeAliases}) {
+  final cycles = dueCycles(outBills, raw, start, end, currency: currency);
+  final reservedCycles = [
+    for (final c in cycles)
+      if (!c.coveredIn(table) && c.reserve > 0) c
+  ];
+  final due = duePlanned(planned, from, end);
+  final counted = {for (final c in cycles) occurrenceKey(c.bill.id, c.due)};
+  final reservedRows = [
+    for (final p in due)
+      if (plannedReserves(p, outBills, counted, table: table, payeeAliases: payeeAliases)) p
+  ];
+  return (cycles: cycles, reservedCycles: reservedCycles, duePlanned: due, reservedRows: reservedRows);
+}
+
+/// What a pay period will set aside ([projectedReserves]): the bill cycles and planned costs that reserve, exactly as
+/// [PeriodBudget.reservedCycles] and [PeriodBudget.reservedPlannedRows] would list them once that period runs.
+class PeriodReserves {
+  /// The bill cycles that reserve (not covered by a plan line, reserve > 0), in [dueCycles] order: due date, then
+  /// label, then id.
+  final List<DueCycle> cycles;
+
+  /// The planned costs that reserve ([plannedReserves] accepts them), in [comparePlanned] order.
+  final List<PlannedCost> planned;
+
+  const PeriodReserves({this.cycles = const [], this.planned = const []});
+
+  /// How many costs are set aside: [cycles] + [planned] (as [PeriodBudget.beforePaydayCount]).
+  int get count => cycles.length + planned.length;
+
+  /// Σ `reserve` of [cycles] + Σ `amount` of [planned], exact cents (as [PeriodBudget.beforePayday]).
+  int get total => _ok(cycles.fold<int>(0, (s, c) => _ok(s + c.reserve)) + planned.fold<int>(0, (s, p) => _ok(s + p.amount!)));
+}
+
+/// What the pay period [start, end) will set aside when it starts, if every bill cycle due before [start] is paid on time.
+///
+/// The bills are moved to where they stand on [start] once paid: each confirmed bill ([RecurringBill.isIncome] never;
+/// a [RecurringBill.finished] one is left as it is) that is not [RecurringBill.isLong] gets as `nextDue` its first
+/// occurrence in the period ([billOccurrences] over `[start, end − 1]`, the Upcoming rows' rule), or, with no occurrence
+/// there, its first date on or after [start] ([firstDueFrom]): such a bill holds nothing but still covers its slips as it
+/// will then. A long bill is kept as it is (held for its `nextDue` cycle whatever the date, as [dueCycles] holds it).
+/// Then the period's own path ([computePeriod]: [dueCycles], [DueCycle.coveredIn], [duePlanned] from [start],
+/// [plannedReserves] with these bills and their cycles). [txs] = the rows bills are matched on ([computePeriod]'s
+/// `matchRows`: parts already paid count). So `projectedReserves(...).total` == `computePeriod(...).beforePayday` on
+/// [start] after those payments (and `count` == `beforePaydayCount`). Pure. A bad date or [start] not before [end]:
+/// [ArgumentError].
+PeriodReserves projectedReserves(
+    {required String start,
+    required String end,
+    required List<RecurringBill> bills,
+    required List<CategorizedTx> txs,
+    required List<PlannedCost> planned,
+    required String currency,
+    required CategoryTable table,
+    Map<String, String> payeeAliases = const {}}) {
+  if (!isIsoDate(start)) throw ArgumentError.value(start, 'start', 'not a date');
+  if (!isIsoDate(end)) throw ArgumentError.value(end, 'end', 'not a date');
+  if (start.compareTo(end) >= 0) throw ArgumentError.value(end, 'end', 'must be after start');
+  final last = addDays(end, -1);
+  final moved = <RecurringBill>[];
+  for (final b in bills) {
+    if (b.isIncome || !b.confirmed) continue;
+    if (b.isLong || b.finished || !isIsoDate(b.nextDue)) {
+      moved.add(b);
+      continue;
+    }
+    final occ = billOccurrences(b, start, last);
+    final due = occ.isNotEmpty ? occ.first : firstDueFrom(b, start);
+    moved.add(due == b.nextDue ? b : b.copyWith(nextDue: due));
+  }
+  final set = _setAside(moved, txs, planned, start, start, end, currency: currency, table: table, payeeAliases: payeeAliases);
+  return PeriodReserves(cycles: List.unmodifiable(set.reservedCycles), planned: List.unmodifiable(set.reservedRows));
 }
 
 class MonthSummary {
