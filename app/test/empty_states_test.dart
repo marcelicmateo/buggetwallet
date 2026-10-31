@@ -98,7 +98,10 @@ void main() {
 
   _scenario('everything happened on one day (today), zero days of history', (wc) {
     final d = wc.today();
-    wc.repo.updateSettings({'salary': 150000, 'rent': 50000, 'periodStart': d});
+    // The start is an expected payday (day clamped to 28), so the period is one month on any real date and the
+    // day's money stays above the 33 € spent (rule C would otherwise stretch a mid-cycle start to ~45 days).
+    final payday = int.parse(d.substring(8)).clamp(1, 28);
+    wc.repo.updateSettings({'salary': 300000, 'rent': 50000, 'paydayDay': payday, 'periodStart': d});
     for (final c in [1000, 2000, 300]) {
       wc.repo.addTransaction(date: d, amount: c, category: 'Shopping', note: 'Item $c');
     }

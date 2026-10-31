@@ -69,7 +69,7 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | T3 | Ruflo: token use per commit vs baseline → owner decides | lead | – | – | done: per non-merge commit 3.6M → 8.1M tokens (confounded by heavier work, no saving seen); owner: disable; ruflo-mods/swarm/console disabled (local scope) 2026-10-31 |
 | T4 | Re-sync the design-system artifact (Paper Tiles tokens, dash kit) | general-purpose (sonnet) | – | – | running |
 | D2 | Core `unlinkMatch`/`relinkMatch` + synced `match_off` (schema 19: every device updates together), then the sheet's Unlink button + Undo toast | core-builder (session/high) → ui-builder (sonnet/high) | worktree | G1 | core fb3d57d merged 148920b (core 3077; match_off = JSON list of bank ids, newest 20; matchedBankIds); UI c20ad23 merged 24d68f9 (app 2372) — done |
-| RX7f | Core: rule C fallback = first expected payday more than 20 days after the start (owner 2026-10-31: an 8+-day-early salary in the previous month no longer makes a short period that 'Start new period' counts twice) | core-builder (session/high) | worktree | – | running |
+| RX7f | Core: rule C fallback = first expected payday more than 20 days after the start (owner 2026-10-31: an 8+-day-early salary in the previous month no longer makes a short period that 'Start new period' counts twice) | core-builder (session/high) | worktree | – | done 5cf1395 merged (core 3079; periods 21..51 days; empty_states scenario pinned to a payday start) |
 | M6+ | M6 checklist: add key-rotation drill; Pi setup starts with a CG-NAT check; Lenovo VPN relay until then | lead | – | – | queued |
 
 ## Stage HP: hardening pass during the M6 live test (2026-10-30; tests and reviews only, bug fixes with a test)

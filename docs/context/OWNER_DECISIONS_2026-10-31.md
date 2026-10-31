@@ -6,6 +6,9 @@ Source of truth for these answers; PIPELINE.md holds the work they create. No pe
 - **Payday rule C** (replaces the RX7d 7-day early rule, which double-counted early salaries): a start within 7 days
   (`samePaydayDays`) of an expected payday belongs to it (late first, then early); otherwise the old rule (payday of the
   month after the start's month). Feb's pay on 2 Mar → period to 31 Mar. Built: RX7e (core, merged a4c9b41).
+  **Refined 2026-10-31 (RX7f):** a start that belongs to no payday ends at the first expected payday more than 20 days
+  later (a salary 8+ days early in the previous month, e.g. 25 Sep with payday 3, runs to 3 Nov and is never counted
+  twice; a start set by hand in the last ~20 days before a payday runs to the payday after). Periods are 21–51 days.
 - **Saved start after the salary row** (salary 10 Oct, start set to 12 Oct): the salary day wins; the salary stays in the
   period it was paid in.
 - **One stored period start**: accepted. Past reports group by salary dates; no history of starts (no schema change).
