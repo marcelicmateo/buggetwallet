@@ -110,6 +110,14 @@ void txSheetToast(BuildContext context, WalletController wc, String? result) {
     toast(context, 'Split removed', actionLabel: 'Undo', onAction: () {
       if (!wc.restoreSplitOf(removed.$1, removed.$2)) toastOn(messenger, "Couldn't put the split back", wide: wide, accessible: accessible);
     });
+  } else if (result == 'unlinked' && wc.lastUnlinked != null) {
+    final (entry, bank) = wc.lastUnlinked!;
+    final messenger = ScaffoldMessenger.of(context);
+    final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
+    toast(context, 'Unlinked: the cash entry counts again', actionLabel: 'Undo', onAction: () {
+      final failure = wc.relinkCashMatch(entry, bank);
+      if (failure != null) toastOn(messenger, failure, wide: wide, accessible: accessible);
+    });
   } else if (result == 'split') {
     toast(context, 'Split saved');
   } else if (result == 'deleted' && id != null) {
@@ -473,10 +481,35 @@ class _TxSheetState extends State<TxSheet> {
   bool saving = false;
 
   /// The bank row that replaced this hand-added expense, or the expense a bank row replaced (read once: it scans the rows).
-  /// Read-only: core has no unlink write yet (D2 Unlink is queued on it).
   late final Tx? matchedBank =
       row.tx.manual && row.tx.matchedTo != null && !row.tx.matchPending ? widget.wc.repo.transaction(row.tx.matchedTo!) : null;
   late final Tx? matchedEntry = row.tx.manual ? null : widget.wc.entryMatchedTo(row.tx.id);
+
+  /// The "Matched" line with its Unlink button (D2). Unlink undoes a wrong automatic match: the hand-added expense counts again.
+  Widget _matchMark(BuildContext context, String text, {required String entryId, required String bankId}) {
+    return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(key: const ValueKey('matchedMark'), children: [
+            Icon(Icons.link, size: 16, color: context.c.good),
+            const SizedBox(width: 6),
+            Expanded(child: Text(text, style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2))),
+          ]),
+          TextButton.icon(
+              key: const ValueKey('unlinkMatch'),
+              style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+              icon: const Icon(Icons.link_off, size: 18),
+              label: const Text('Unlink'),
+              onPressed: () {
+                final failure = widget.wc.unlinkCashMatch(entryId, bankId);
+                if (failure != null) {
+                  toast(context, failure);
+                } else if (context.mounted) {
+                  Navigator.pop(context, 'unlinked');
+                }
+              }),
+        ]));
+  }
 
   /// Bank and hand-added payments can be split, transfers cannot (P6).
   bool get canSplit => row.kind != BudgetKind.transfer && row.tx.transferTo == null && row.tx.amount != 0 && row.tx.live;
@@ -584,25 +617,10 @@ class _TxSheetState extends State<TxSheet> {
       const SizedBox(height: 6),
       Muted('${longDateOrRaw(t.date)} · $src${t.bankType.isNotEmpty ? ' · ${t.bankType}' : ''}'),
       if (matchedBank != null)
-        Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Row(key: const ValueKey('matchedMark'), children: [
-              Icon(Icons.link, size: 16, color: context.c.good),
-              const SizedBox(width: 6),
-              Expanded(
-                  child: Text('Matched with your bank · ${longDateOrRaw(matchedBank!.date)}',
-                      style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2))),
-            ])),
+        _matchMark(context, 'Matched with your bank · ${longDateOrRaw(matchedBank!.date)}', entryId: t.id, bankId: matchedBank!.id),
       if (matchedEntry != null)
-        Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Row(key: const ValueKey('matchedMark'), children: [
-              Icon(Icons.link, size: 16, color: context.c.good),
-              const SizedBox(width: 6),
-              Expanded(
-                  child: Text('Matched with your bank · you added it on ${longDateOrRaw(matchedEntry!.date)}',
-                      style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2))),
-            ])),
+        _matchMark(context, 'Matched with your bank · you added it on ${longDateOrRaw(matchedEntry!.date)}',
+            entryId: matchedEntry!.id, bankId: t.id),
       if (!manual)
         Padding(
             padding: const EdgeInsets.only(top: 8),

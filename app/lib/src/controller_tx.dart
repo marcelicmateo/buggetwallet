@@ -36,13 +36,42 @@ extension TxEdits on WalletController {
   }
 
   /// The bank row [bankId] replaced a hand-added expense (D2 cash match): its list row shows a "Matched" mark. One cheap query per data
-  /// version, not a scan of every row per tile.
-  bool isMatchedBank(String bankId) => _cached<Set<String>>(
-      const MemoKey('matchedBanks'),
-      () => {
-            for (final r in repo.db.select('SELECT matched_to FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to IS NOT NULL'))
-              r['matched_to'] as String
-          }).contains(bankId);
+  /// version (core's `matchedBankIds`), not a scan of every row per tile.
+  bool isMatchedBank(String bankId) => _cached<Set<String>>(const MemoKey('matchedBanks'), () => repo.matchedBankIds()).contains(bankId);
+
+  /// D2 Unlink: hand-added expense [entryId] stops being replaced by bank row [bankId]; the entry counts again. Returns null when it
+  /// worked (the pair stays in [lastUnlinked] for the toast's Undo, [relinkCashMatch]) or core's readable refusal.
+  String? unlinkCashMatch(String entryId, String bankId) {
+    try {
+      repo.unlinkMatch(entryId);
+    } on ArgumentError catch (e) {
+      logEvent(_log, Level.INFO, 'match.unlink', {'ok': false});
+      return '${e.message}';
+    } on StateError catch (e) {
+      logEvent(_log, Level.INFO, 'match.unlink', {'ok': false});
+      return e.message;
+    }
+    lastUnlinked = (entryId, bankId);
+    logEvent(_log, Level.INFO, 'match.unlink', {'ok': true});
+    _changed();
+    return null;
+  }
+
+  /// Undo of [unlinkCashMatch]; null when done, else core's readable refusal (the bank row went, or got another expense).
+  String? relinkCashMatch(String entryId, String bankId) {
+    try {
+      repo.relinkMatch(entryId, bankId);
+    } on ArgumentError catch (e) {
+      logEvent(_log, Level.INFO, 'match.relink', {'ok': false});
+      return '${e.message}';
+    } on StateError catch (e) {
+      logEvent(_log, Level.INFO, 'match.relink', {'ok': false});
+      return e.message;
+    }
+    logEvent(_log, Level.INFO, 'match.relink', {'ok': true});
+    _changed();
+    return null;
+  }
 
   void deleteTransaction(Tx t) {
     lastDeletedTx = t.id;

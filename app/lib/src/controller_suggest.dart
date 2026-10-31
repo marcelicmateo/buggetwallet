@@ -24,6 +24,7 @@ const _fieldWords = <String, String>{
   'kind_hint': 'type',
   'transfer_to': 'transfer',
   'matched_to': 'match',
+  'match_off': 'match',
   'seen_bank': 'match',
   'bank_type': 'bank type',
   'expected_amount': 'amount',
