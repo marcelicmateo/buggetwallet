@@ -77,3 +77,56 @@ String relayTestFailureText(TransportFailure f) => switch (f) {
       TransportFailure.unreachable => "Can't reach the relay",
       _ => 'The relay answered, but not as expected',
     };
+
+// ---------- KL: a sync file that cannot be read and blocks the device's later files ----------
+
+/// The author counts as around until it was last seen more than this many days ago (exactly 7 days is still around), or when
+/// its last-seen time is unknown: it is asked, not skipped.
+const blockedAuthorDays = 7;
+
+/// "A sync file from device ab12cd can't be read. Changes from that device after it are waiting."
+String blockedFileText(String short) => "A sync file from device $short can't be read. Changes from that device after it are waiting.";
+
+/// "That device last synced 3 days ago." (null when the relay never said).
+String? blockedAuthorSeenText(BlockedFile f, DateTime now) =>
+    f.authorSeen == null ? null : 'That device last synced ${lastSeenText(f.authorSeen, now)}.';
+
+String blockedAskedText(String short) => 'Asked $short to send its data again.';
+
+/// A file of a newer format: only an update reads it.
+const blockedUpdateText = 'It was made by a newer version of the app. Update the app to read it.';
+
+const blockedSkipTitle = 'Skip this file?';
+
+String blockedSkipConfirmText(String short) =>
+    "Its changes will be missing on this device unless $short syncs again and resends its data. Later changes from $short will sync normally. This can't be undone.";
+
+const blockedSkippedToast = 'Skipped. Syncing again.';
+
+/// What Settings › Sync shows for one blocked file (pure; the screen only draws it).
+class BlockedRow {
+  final BlockedFile file;
+
+  /// "That device last synced …", when known.
+  final String? seen;
+
+  /// A second line: asked / clock / update; null when none applies.
+  final String? hint;
+
+  /// Offer "Skip damaged file": a damaged / wrong-key file whose author was last seen MORE than 7 days ago (never when unknown).
+  final bool canSkip;
+  const BlockedRow(this.file, this.seen, this.hint, this.canSkip);
+}
+
+BlockedRow blockedRowOf(BlockedFile f, DateTime now) {
+  final seen = f.authorSeen;
+  final gone = seen != null && now.difference(seen) > const Duration(days: blockedAuthorDays);
+  final damaged = f.reason == SyncProblemReason.corrupt || f.reason == SyncProblemReason.badKey || f.reason == SyncProblemReason.otherKey;
+  final hint = switch (f.reason) {
+    SyncProblemReason.clockDrift => clockDriftText,
+    SyncProblemReason.unknownVersion => blockedUpdateText,
+    _ when !gone => blockedAskedText(f.short),
+    _ => null,
+  };
+  return BlockedRow(f, blockedAuthorSeenText(f, now), hint, damaged && gone);
+}
