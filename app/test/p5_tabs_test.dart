@@ -427,13 +427,14 @@ void main() {
 
     for (final (name, size, scale) in [('320 dp at text 2.0', const Size(320, 640), 2.0), ('dark 600 dp', const Size(600, 900), 1.0)]) {
       tw('$name: scrolled through without overflow', (t) async {
-        final errors = Errors();
-        await pumpFull(t, _wallet(bill: true), scale, size: size);
-        for (final tab in ['Budget', 'Bills', 'Save', 'Settings']) {
-          await tapTab(t, tab);
-          await scrollThrough(t);
-        }
-        errors.check();
+        await withErrors((errors) async {
+          await pumpFull(t, _wallet(bill: true), scale, size: size);
+          for (final tab in ['Budget', 'Bills', 'Save', 'Settings']) {
+            await tapTab(t, tab);
+            await scrollThrough(t);
+          }
+          errors.check();
+        });
       });
     }
   });
@@ -524,7 +525,7 @@ void main() {
     });
 
     tw('text 1.3 at 1280 wide is one page (the rail grows): scrolled through, then Accounts is found again from the top', (t) async {
-      await pumpFull(t, demoWallet(), 1.3, size: const Size(1280, 720));
+      await pumpFull(t, demoWallet(clock: pinnedNoon), 1.3, size: const Size(1280, 720));
       await tapTab(t, 'Settings');
       expect(_key('settingsPage'), findsOneWidget);
       await scrollThrough(t);
@@ -535,18 +536,19 @@ void main() {
     });
 
     tw('1040 dp: every section, scrolled through, without overflow', (t) async {
-      final errors = Errors();
-      await pumpFull(t, _wallet(bill: true), 1.0, size: wide);
-      for (final tab in ['Budget', 'Bills', 'Save', 'Settings']) {
-        await tapTab(t, tab);
-        await scrollThrough(t);
-      }
-      for (final s in SettingsSection.listed) {
-        await t.tap(_key('settingsNav:${s.name}'));
-        await t.pumpAndSettle();
-        await scrollThrough(t);
-      }
-      errors.check();
+      await withErrors((errors) async {
+        await pumpFull(t, _wallet(bill: true), 1.0, size: wide);
+        for (final tab in ['Budget', 'Bills', 'Save', 'Settings']) {
+          await tapTab(t, tab);
+          await scrollThrough(t);
+        }
+        for (final s in SettingsSection.listed) {
+          await t.tap(_key('settingsNav:${s.name}'));
+          await t.pumpAndSettle();
+          await scrollThrough(t);
+        }
+        errors.check();
+      });
     });
   });
 

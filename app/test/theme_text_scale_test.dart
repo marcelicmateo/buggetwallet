@@ -34,15 +34,16 @@ void main() {
         testWidgets('${w.toInt()} wide ${b.name}: every tab scrolls through', (tester) async {
           tester.platformDispatcher.platformBrightnessTestValue = b;
           addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
-          final errors = Errors();
-          await pumpFull(tester, demoWallet(), 2.0, size: Size(w, 700));
-          await scrollThrough(tester);
-          for (final tab in _tabs) {
-            await tapTab(tester, tab);
+          await withErrors((errors) async {
+            await pumpFull(tester, demoWallet(clock: pinnedNoon), 2.0, size: Size(w, 700));
             await scrollThrough(tester);
-            expect(tester.takeException(), isNull, reason: tab);
-          }
-          errors.check();
+            for (final tab in _tabs) {
+              await tapTab(tester, tab);
+              await scrollThrough(tester);
+              expect(tester.takeException(), isNull, reason: tab);
+            }
+            errors.check();
+          });
         });
       }
     }

@@ -58,7 +58,7 @@ void main() {
   group('tab fade', () {
     testWidgets('the opened page fades in over about 180 ms and the first page does not fade', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       expect(_opacity(t, 'today'), 1, reason: 'the first page is simply there');
       await _settle(t); // the other pages are built by now
@@ -74,7 +74,7 @@ void main() {
 
     testWidgets('reduced motion: the page is shown at once', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc), reduceMotion: true);
       await _settle(t);
       await t.tap(find.text('Bills').last);
@@ -85,7 +85,7 @@ void main() {
 
     testWidgets('Ctrl+2 goes through the fade too', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       await _settle(t);
       await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -101,7 +101,7 @@ void main() {
 
     testWidgets('pages keep their State across switches, and a switch builds no new page', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       await _settle(t);
       final spendingState = t.state(find.byType(SpendingScreen, skipOffstage: false));
@@ -119,7 +119,7 @@ void main() {
 
     testWidgets('a hidden page is not rebuilt while another tab fades in', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       await _settle(t);
       final bills = find.byType(BillsScreen, skipOffstage: false);
@@ -137,7 +137,7 @@ void main() {
   group('a tab opened before its data is ready', () {
     testWidgets('the data is worked out one task per frame, then the page appears and fades in', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       await t.tap(find.text('Budget').last);
       await t.pump();
@@ -158,7 +158,7 @@ void main() {
 
     testWidgets('a hidden page for older data stays shown until its new data is ready, then is built again', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, ListenableBuilder(listenable: wc, builder: (context, child) => HomeShell(wc: wc)));
       await _settle(t);
       final old = t.widget(find.byType(SpendingScreen, skipOffstage: false));
@@ -178,7 +178,7 @@ void main() {
   group('staged pages', () {
     testWidgets('only the shown page is built at first; the others follow one per frame; a tab opened early is built at once', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       expect(find.byType(TodayScreen), findsOneWidget);
       expect(find.byType(SpendingScreen, skipOffstage: false), findsNothing);
@@ -197,7 +197,7 @@ void main() {
 
     testWidgets('new data builds the shown page now and the hidden ones later', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       // the app rebuilds the shell when the wallet changes
       await _pumpShell(t, ListenableBuilder(listenable: wc, builder: (context, child) => HomeShell(wc: wc)));
       await _settle(t);
@@ -275,7 +275,7 @@ void main() {
 
     testWidgets('the controller list works out on a wallet with data and every task finishes', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       var done = false;
       wc.startWarmUp(onDone: () => done = true);
       await t.pump(_frame);
@@ -289,7 +289,7 @@ void main() {
 
     testWidgets('a reload during the run stops it', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       var done = false;
       wc.startWarmUp(onDone: () => done = true);
       wc.reload();
@@ -305,7 +305,7 @@ void main() {
 
     testWidgets('openSettings during staging scrolls the new Settings page to the section', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       expect(find.byType(SettingsScreen, skipOffstage: false), findsNothing, reason: 'Settings is not built yet');
       wc.openSettings(SettingsSection.diagnostics, via: 'link');
@@ -322,7 +322,7 @@ void main() {
 
     testWidgets('a Bills anchor requested before the Bills page exists is delivered when it is built', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       final request = JumpRequest<BillsAnchor>()..request(BillsAnchor.slips);
       t.view.physicalSize = const Size(400, 300);
       t.view.devicePixelRatio = 1;
@@ -353,7 +353,7 @@ void main() {
 
     testWidgets('search from Today reaches the Budget page that is built by the click', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       expect(find.byType(SpendingScreen, skipOffstage: false), findsNothing);
       t.widget<TodayScreen>(find.byType(TodayScreen)).openSearch!();
@@ -370,7 +370,7 @@ void main() {
   group('the shell under changes', () {
     testWidgets('a replaced controller leaves no page of the old one', (t) async {
       _background();
-      final first = demoWallet(), second = demoWallet();
+      final first = demoWallet(clock: pinnedNoon), second = demoWallet(clock: pinnedNoon);
       final current = ValueNotifier<WalletController>(first);
       addTearDown(current.dispose);
       await _pumpShell(t, ValueListenableBuilder<WalletController>(valueListenable: current, builder: (c, wc, _) => HomeShell(wc: wc)));
@@ -411,7 +411,7 @@ void main() {
 
     testWidgets('unmounting the shell in the middle of a run is quiet', (t) async {
       _background();
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       await t.pump(_frame);
       await t.pump(_frame);
@@ -423,7 +423,7 @@ void main() {
     testWidgets('waiting for the first raster: nothing starts before it, the shell works', (t) async {
       _background();
       WarmUp.waitForFirstRaster = true;
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       await _settle(t);
       if (!WidgetsBinding.instance.firstFrameRasterized) {

@@ -201,11 +201,12 @@ void main() {
 
   for (final (w, h, scale) in [(320.0, 640.0, 2.0), (360.0, 800.0, 1.0), (1280.0, 800.0, 1.0)]) {
     testWidgets('layout at ${w.toInt()} dp, text ${scale}x: no overflow', (t) async {
-      final errors = Errors();
-      await pumpPanel(t, wallet(), FakeSaver(), size: Size(w, h), scale: scale);
-      await t.ensureVisible(find.text('Plain files, not encrypted.'));
-      scanFlex(t);
-      errors.check();
+      await withErrors((errors) async {
+        await pumpPanel(t, wallet(), FakeSaver(), size: Size(w, h), scale: scale);
+        await t.ensureVisible(find.text('Plain files, not encrypted.'));
+        scanFlex(t);
+        errors.check();
+      });
     });
   }
 }

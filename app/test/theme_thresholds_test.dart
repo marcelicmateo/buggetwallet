@@ -26,10 +26,10 @@ void main() {
 
   // The dashboards (Today, Bills, Save: Paper Tiles on the desk) have no margin line; the Budget pages keep it.
   testWidgets('margin line on the real pages: absent at 599 dp, present at 600 dp (Budget)', (tester) async {
-    await pumpFull(tester, demoWallet(), 1.0, size: const Size(599, 800));
+    await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(599, 800));
     await tapTab(tester, 'Budget');
     expect(marginLine, findsNothing);
-    await pumpFull(tester, demoWallet(), 1.0, size: const Size(600, 800));
+    await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(600, 800));
     await tapTab(tester, 'Budget');
     expect(marginLine, findsOneWidget);
   });
@@ -37,7 +37,7 @@ void main() {
   group('TxTile columns', () {
     // Columns need text scale <= 1.15 and a window of 400 dp or more; below 400 dp the date sits under the name.
     Future<void> pumpTile(WidgetTester tester, double scale, {double width = 420}) async {
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       final t = wc.txs.firstWhere((t) => t.amount < 0);
       await pumpApp(tester, Scaffold(body: TxTile(t: t, currency: 'EUR')), size: Size(width, 640), textScale: scale);
       expect(tester.takeException(), isNull);

@@ -334,3 +334,7 @@ WalletController futureWallet({FakeNudges? nudges, FakeCalendars? calendars}) {
 
 /// What the core's `backupBytesWithInfo` returns, for tests that replace `backupBytesWriter` ([blobs] bill files inside).
 BackupResult fakeBackup(Uint8List bytes, {int blobs = 0}) => BackupResult(bytes, ops: 0, blobs: blobs, blobBytes: 0, blobsSkipped: 0);
+
+/// A fixed Wednesday midday for tests that pump the whole app: tile sets that depend on the hour or weekday (Today's delivery-hour
+/// tile at 14:00-19:00, Sundays) cannot flake. Pass as `demoWallet(clock: pinnedNoon)`.
+DateTime pinnedNoon() => DateTime(2026, 10, 28, 12);

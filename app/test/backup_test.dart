@@ -216,11 +216,12 @@ void main() {
 
   for (final (w, h, scale) in [(320.0, 640.0, 2.0), (360.0, 800.0, 1.0), (1280.0, 800.0, 1.0)]) {
     testWidgets('layout at ${w.toInt()} dp, text ${scale}x: no overflow, both buttons reachable', (t) async {
-      final errors = Errors();
-      await pumpPanel(t, wallet(), FakeChooser(), size: Size(w, h), scale: scale);
-      await t.ensureVisible(restoreBtn);
-      scanFlex(t);
-      errors.check();
+      await withErrors((errors) async {
+        await pumpPanel(t, wallet(), FakeChooser(), size: Size(w, h), scale: scale);
+        await t.ensureVisible(restoreBtn);
+        scanFlex(t);
+        errors.check();
+      });
     });
   }
 }

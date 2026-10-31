@@ -21,7 +21,7 @@ void main() {
     testWidgets('${b.name}: money texts are Plex Mono with tabular figures', (tester) async {
       tester.platformDispatcher.platformBrightnessTestValue = b;
       addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
-      await pumpFull(tester, demoWallet(), 1.0, size: const Size(800, 1000));
+      await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(800, 1000));
       var total = 0;
       for (final tab in ['Today', 'Budget', 'Bills', 'Save']) {
         await tapTab(tester, tab);
@@ -43,7 +43,7 @@ void main() {
   }
 
   testWidgets('Today hero and stat strip: one narrow gap, no widget between number and sign', (tester) async {
-    await pumpFull(tester, demoWallet()..snoozeKeyBackup(), 1.0, size: const Size(800, 1000)); // no key row above the hero
+    await pumpFull(tester, demoWallet(clock: pinnedNoon)..snoozeKeyBackup(), 1.0, size: const Size(800, 1000)); // no key row above the hero
     await tapTab(tester, 'Today');
     for (final scale in [1.0, 2.0]) {
       tester.platformDispatcher.textScaleFactorTestValue = scale;
@@ -69,7 +69,7 @@ void main() {
   });
 
   testWidgets('transaction amounts share one right edge', (tester) async {
-    await pumpFull(tester, demoWallet(), 1.0, size: const Size(800, 1000));
+    await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(800, 1000));
     await tapTab(tester, 'Budget');
     final amounts =
         find.byWidgetPredicate((w) => w is Text && w.data != null && RegExp(r'^[+−-]\d').hasMatch(w.data!) && _money.hasMatch(w.data!));

@@ -387,14 +387,15 @@ void main() {
               const SyncDevice('c9d8e7', isThis: true),
             ]);
         await wc.syncNow();
-        final errors = Errors();
-        await _pumpSync(t, wc, size: Size(w, h), scale: scale);
-        await t.enterText(_address, 'http://a-rather-long-host-name-for-the-home-server.local:8787');
-        await t.ensureVisible(_test);
-        await t.tap(_test);
-        await t.pump();
-        scanFlex(t);
-        errors.check();
+        await withErrors((errors) async {
+          await _pumpSync(t, wc, size: Size(w, h), scale: scale);
+          await t.enterText(_address, 'http://a-rather-long-host-name-for-the-home-server.local:8787');
+          await t.ensureVisible(_test);
+          await t.tap(_test);
+          await t.pump();
+          scanFlex(t);
+          errors.check();
+        });
       });
     }
   });

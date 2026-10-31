@@ -353,12 +353,13 @@ void main() {
     }
 
     testWidgets('320 dp at 2.0: a long amount is left out and the day number keeps the size it has without one', (t) async {
-      final errors = Errors();
-      await strip(t, const [CalDay('25', kind: CalKind.bill, amount: '1,234.57 €'), CalDay('26', kind: CalKind.bill)]);
-      expect(find.text('1,234.57 €'), findsNothing, reason: 'it would shrink below 80 %: left out');
-      expect(ratio(t, '25'), closeTo(ratio(t, '26'), 0.001));
-      expect(t.takeException(), isNull);
-      errors.check();
+      await withErrors((errors) async {
+        await strip(t, const [CalDay('25', kind: CalKind.bill, amount: '1,234.57 €'), CalDay('26', kind: CalKind.bill)]);
+        expect(find.text('1,234.57 €'), findsNothing, reason: 'it would shrink below 80 %: left out');
+        expect(ratio(t, '25'), closeTo(ratio(t, '26'), 0.001));
+        expect(t.takeException(), isNull);
+        errors.check();
+      });
     });
 
     testWidgets('400 dp at 1.0: a short amount shows at its own size beside an unchanged day number', (t) async {
@@ -432,11 +433,12 @@ void main() {
           wc.repo.importBill(
               const NormalizedBill(source: BillSource.manual, externalId: 'rx5-slip', payee: 'Synthetic Slip Shop', total: 5000));
           wc.reload();
-          final errors = Errors();
-          await _pump(t, wc, size: e.value.$1, scale: e.value.$2, mode: mode);
-          await scrollThrough(t);
-          expect(t.takeException(), isNull);
-          errors.check();
+          await withErrors((errors) async {
+            await _pump(t, wc, size: e.value.$1, scale: e.value.$2, mode: mode);
+            await scrollThrough(t);
+            expect(t.takeException(), isNull);
+            errors.check();
+          });
           for (final w in find.byType(Tile).evaluate()) {
             final r = t.getRect(find.byElementPredicate((x) => x == w));
             expect(r.right, lessThanOrEqualTo(e.value.$1.width + 0.5));
