@@ -56,7 +56,7 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | PF | Perf (owner 2026-10-30): budgets for 60 Hz (build p90 ≤ 16.7 ms, ≤ 10 % frames over 16.7 ms, worst build ≤ 50 ms, raster only gated at ≤ 250 ms: software GL); Android asks 60 Hz (MainActivity preferred refresh rate); tab cross-fade ~180 ms (off with reduce motion); idle warm-up of every tab's derived data after the first frame and after each reload (Priority.idle, cancelled by a new data version, logs counts/ms only); hidden tabs built one per idle frame; perf action "first switch after new data" | ui-builder (sonnet/high) | worktree | perf A/B | done, merged 6244ce6 + PF2 bfebdf0 → 868e6c7 (A/B: pre-DD tab_switch 21.4 ms FAIL, DD 15.2 ms ok = host noise, not DD) |
 | ZC | Zoomable, scrollable graphs (spec `ZC_SPEC.md`, owner answers in §6) | scout → core + test-writer + ui | worktrees | DD, RX2 (chart look follows the picked direction) | on hold |
 
-## Resume here (end of day 2026-10-31)
+## Resume here (end of day 2026-10-31) — done 2026-11-01, pushed (stage run green on ed85b27)
 v2 is pushed up to 8fc7718. Merged locally and **not pushed** (no full stage run or review yet): D2 Unlink (core+UI), RX7f
 (20-day fallback), KL-A core, KL-B sync, RX8, setup.md/self-test fixes. That code includes **schema 19** (`tx.match_off`,
 `planned.auto_off`, `payee_alias`): relay, phone and laptop update together when it ships.
