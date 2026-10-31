@@ -30,6 +30,11 @@ int daysBetween(String a, String b) => parseIso(b).difference(parseIso(a)).inDay
 /// rule C; the same 7 days as `samePaydayDays`).
 const paydayWindowDays = 7;
 
+/// Salary parts this close to a payday's first payment belong to that payday (`periods.dart` grouping; the
+/// received-income window is `samePaydayDays`), and a period start that belongs to no expected payday runs more than
+/// this many days ([nextPayday]'s fallback, RX7f).
+const salaryGroupDays = 20;
+
 /// [paydayDay] of month `YYYY-MM` [ym], clamped to the month's last day (29..31 in a shorter month = its last day).
 String paydayIn(String ym, int paydayDay) => _paydayAt(int.parse(ym.substring(0, 4)), int.parse(ym.substring(5, 7)), paydayDay);
 
@@ -57,16 +62,23 @@ String? _salaryPayday(String date, int paydayDay) {
   return daysBetween(date, here) <= paydayWindowDays ? here : null;
 }
 
-/// The expected next payday after a period starting on [periodStart] (rule C, RX7e): a start within 7 days of an
-/// expected payday belongs to it (late: the payday in [start − 7, start]; else early: the one in (start, start + 7])
-/// and the period ends on the expected payday after it, so February's salary paid 2 Mar (payday 31) ends on 31 Mar and
-/// January's paid 29 Jan (payday 3) on 3 Mar. Any other start (set by hand mid-period, a first run, a salary more than
-/// 7 days early or late) keeps the old rule: [paydayDay] of the month after the start's month, so 1 Oct and 7 Oct with
-/// payday 15 end on 15 Nov (the period keeps the salary it holds; ending on 15 Oct would count it again in the next).
+/// The expected next payday after a period starting on [periodStart] (rule C, RX7e; fallback RX7f, owner 2026-10-31):
+/// a start within 7 days of an expected payday belongs to it (late: the payday in [start − 7, start]; else early: the
+/// one in (start, start + 7]) and the period ends on the expected payday after it, so February's salary paid 2 Mar
+/// (payday 31) ends on 31 Mar and January's paid 29 Jan (payday 3) on 3 Mar. Any other start (set by hand mid-period,
+/// a first run, a salary more than 7 days early or late) ends on the first expected payday more than [salaryGroupDays]
+/// (20) days after it: a salary paid 25 Sep with payday 3 runs to 3 Nov, not to 3 Oct (8 days that would hold the
+/// whole salary, with "Start new period" on 3 Oct counting it again); 1 Oct and 7 Oct with payday 15 run to 15 Nov; a
+/// start 26 Mar with payday 10 runs to 10 May (a start in the last 20 days before a payday runs to the one after,
+/// owner-accepted). Every period is 21..51 days.
 String nextPayday(String periodStart, int paydayDay) {
   final p = _salaryPayday(periodStart, paydayDay);
   final d = parseIso(p ?? periodStart);
-  return _paydayAt(d.year, d.month + 1, paydayDay);
+  if (p != null) return _paydayAt(d.year, d.month + 1, paydayDay);
+  for (var m = d.month;; m++) {
+    final next = _paydayAt(d.year, m, paydayDay);
+    if (daysBetween(periodStart, next) > salaryGroupDays) return next; // at most the payday two months on
+  }
 }
 
 /// Where the period before one starting on [date] starts (rangeFor's steps back before the first known start): the

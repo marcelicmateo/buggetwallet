@@ -38,13 +38,14 @@ void main() {
       expect(nextPayday('2026-11-30', 31), '2026-12-31');
     });
 
-    test('a start late in the month still moves to the NEXT month (no skipped or repeated month)', () {
-      expect(nextPayday('2026-01-31', 15), '2026-02-15');
+    test('a start late in the month: the first payday more than 20 days on, never a repeated month', () {
+      expect(nextPayday('2026-01-31', 15), '2026-03-15'); // 15 Feb is 15 days on (RX7f)
+      expect(nextPayday('2026-01-25', 15), '2026-02-15'); // 21 days on
       expect(nextPayday('2026-01-01', 15), '2026-02-15');
       expect(nextPayday('2026-01-14', 15), '2026-02-15');
     });
 
-    test('property (RX7e rule C): a start within 7 days of an expected payday ends on the one after it, else in the following month', () {
+    test('property (rule C, RX7f): within 7 days of an expected payday the one after it, else the first more than 20 days on', () {
       bool expected(String x, int day) => dayOf(x) == min(day, _lastDay(parseIso(x).year, parseIso(x).month));
       String after(String x, int day) {
         var y = addDays(x, 1);
@@ -69,10 +70,9 @@ void main() {
         if (owner != null) {
           expect(got, after(owner, day), reason: '$d $day');
         } else {
-          final from = parseIso(d);
-          final wantMonth = DateTime.utc(from.year, from.month + 1, 1);
-          expect((parseIso(got).year, parseIso(got).month), (wantMonth.year, wantMonth.month), reason: '$d $day');
-          expect(dayOf(got), min(day, _lastDay(wantMonth.year, wantMonth.month)), reason: '$d $day');
+          // RX7f: the first expected payday more than 20 days after the start.
+          expect(got, after(addDays(d, 20), day), reason: '$d $day');
+          expect(daysBetween(d, got), inInclusiveRange(21, 51), reason: '$d $day');
         }
       }
     });

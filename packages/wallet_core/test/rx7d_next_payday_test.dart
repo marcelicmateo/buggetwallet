@@ -1,11 +1,15 @@
 // RX7d/RX7e: `nextPayday` (dates.dart), rule C (owner-approved 2026-10-30). A period start within 7 days of an
 // expected payday (clamped to the month's last day) belongs to it: late = the latest expected payday in
 // [start − 7, start], else early = the expected payday in (start, start + 7]; the period then ends on the expected payday
-// after it. Any other start (set by hand mid-period, a first run, a salary more than 7 days early or late) keeps the
-// old rule: the payday of the month after the start's month. Before RX7d a salary a few days late across a month end
+// after it. Any other start (set by hand mid-period, a first run, a salary more than 7 days early or late) ends on the
+// first expected payday more than 20 days after it (RX7f, owner 2026-10-31; RX7e's "payday of the month after the
+// start's month" let a salary 8+ days early in the month before fund an 8-day period, 25 Sep → 3 Oct with payday 3,
+// and "Start new period" on 3 Oct counted it again). Before RX7d a salary a few days late across a month end
 // (28 Feb payday paid 2 Mar) made a ~2-month period. RX7d's rule B ("the first expected payday more than 7 days after
 // the start") cut hand-set starts short and let one salary fund two periods (7 Oct with payday 15 ended on 15 Oct).
 // All data is SYNTHETIC.
+import 'dart:math';
+
 import 'package:test/test.dart';
 import 'package:wallet_core/src/dates.dart' show paydayIn, previousPayday;
 import 'package:wallet_core/wallet_core.dart';
@@ -35,8 +39,11 @@ String _reference(String start, int pd) {
     if (_isPayday(addDays(start, k), pd)) owner = addDays(start, k);
   }
   if (owner == null) {
-    final d = parseIso(start);
-    return paydayIn(isoDate(DateTime.utc(d.year, d.month + 1, 1)).substring(0, 7), pd);
+    var next = addDays(start, 21);
+    while (!_isPayday(next, pd)) {
+      next = addDays(next, 1);
+    }
+    return next;
   }
   var next = addDays(owner, 1);
   while (!_isPayday(next, pd)) {
@@ -70,14 +77,19 @@ void main() {
       expect(nextPayday('2026-10-17', 10), '2026-11-10'); // exactly 7 days late
     });
 
-    test('a start more than 7 days from any expected payday keeps the old rule (month after the start\'s month)', () {
+    test('a start more than 7 days from any expected payday: the first expected payday more than 20 days after it', () {
+      expect(nextPayday('2026-09-25', 3), '2026-11-03'); // salary 8 days early in the month before (was 3 Oct, 8 days)
+      expect(nextPayday('2026-09-30', 10), '2026-11-10'); // 10 days early (was 10 Oct)
       expect(nextPayday('2026-10-01', 15), '2026-11-15'); // hand-set start (app fixtures)
       expect(nextPayday('2026-10-07', 15), '2026-11-15'); // 8 days early: one period holds the salary
-      expect(nextPayday('2027-03-26', 10), '2027-04-10'); // first run 26 Mar
+      expect(nextPayday('2027-03-26', 10), '2027-05-10'); // hand-set 26 Mar, 15 days before 10 Apr (was 10 Apr)
+      expect(nextPayday('2027-03-20', 10), '2027-04-10'); // 21 days before 10 Apr
+      expect(nextPayday('2027-03-21', 10), '2027-05-10'); // exactly 20 days before 10 Apr: the one after
       expect(nextPayday('2027-01-01', 15), '2027-02-15');
       expect(nextPayday('2027-03-02', 10), '2027-04-10'); // 8 days before 10 Mar
       expect(nextPayday('2026-10-18', 10), '2026-11-10'); // 8 days late
-      expect(nextPayday('2027-01-08', 31), '2027-02-28'); // 8 days after 31 Dec: old rule (7 Jan → 31 Jan)
+      expect(nextPayday('2027-01-08', 31), '2027-01-31'); // 8 days after 31 Dec, 23 days before 31 Jan (was 28 Feb)
+      expect(nextPayday('2027-02-08', 31), '2027-03-31'); // 8 days after 31 Jan, 20 before 28 Feb: the longest, 51 days
       expect(nextPayday('2027-01-07', 31), '2027-01-31');
     });
 
@@ -113,12 +125,16 @@ void main() {
       expect(paydayIn('2027-04', 10), '2027-04-10');
     });
 
-    test('every date of two years, every payday day: the rule day by day, 8..62 days, an expected payday', () {
+    test('every date of two years, every payday day: the rule day by day, 21..51 days, an expected payday', () {
+      var shortest = 1000, longest = 0;
       for (var pd = 1; pd <= 31; pd++) {
         for (var d = '2027-01-01'; d.compareTo('2029-01-01') < 0; d = addDays(d, 1)) {
           final end = nextPayday(d, pd);
           expect(end, _reference(d, pd), reason: '$d payday $pd');
-          expect(daysBetween(d, end), inInclusiveRange(8, 62), reason: '$d payday $pd → $end');
+          final length = daysBetween(d, end);
+          expect(length, inInclusiveRange(21, 51), reason: '$d payday $pd → $end');
+          shortest = min(shortest, length);
+          longest = max(longest, length);
           expect(_isPayday(end, pd), isTrue, reason: '$d payday $pd → $end');
           // From an expected payday the next one is the next month's.
           expect(nextPayday(end, pd), paydayIn(monthOf(addDays('${monthOf(end)}-01', 32)), pd));
@@ -129,6 +145,8 @@ void main() {
           expect(_isPayday(previousPayday(end, pd), pd) && nextPayday(previousPayday(end, pd), pd) == end, isTrue);
         }
       }
+      // The app's first start walks on from 62 days back (controller `latestExpectedPayday`): no period is that long.
+      expect((shortest, longest), (21, 51));
     });
   });
 
@@ -213,11 +231,11 @@ void main() {
       expect(p.length, 28);
     });
 
-    test('first run on 26 Mar with payday 10 (no salary yet): to 10 Apr, 15 days', () {
+    test('a hand-set start 26 Mar with payday 10 (15 days before it): to 10 May, 45 days', () {
       const s = WalletSettings(paydayDay: 10, salary: 300000, periodStart: '2027-03-26');
       final p = computePeriod(txs, s, const [], '2027-03-26', table: _table);
-      expect(p.end, '2027-04-10');
-      expect(p.length, 15);
+      expect(p.end, '2027-05-10');
+      expect(p.length, 45);
     });
 
     test('a start 4 days before payday 3 belongs to it: 30 Mar runs to 3 May (its salary lands inside)', () {
@@ -240,6 +258,24 @@ void main() {
       final p = computePeriod(early, s, const [], '2026-10-15', table: _table);
       expect((p.start, p.end, p.paydayPassed, p.received), ('2026-10-07', '2026-11-15', false, 300000));
       expect(currentPeriodStart('2026-10-07', 15, '2026-10-15'), '2026-10-07'); // no "start new period" yet
+    });
+
+    test('a salary 8 days early in the month before (25 Sep, payday 3) is counted once: 25 Sep–3 Nov, running on 3 Oct', () {
+      // RX7f regression: RX7e ended this period on 3 Oct (8 days holding the whole salary); "Start new period" on 3 Oct
+      // with incomeMode planned then counted `salary` again for 3 Oct–3 Nov.
+      const s = WalletSettings(paydayDay: 3, salary: 300000, periodStart: '2026-09-25');
+      final early = _cat([_tx('2026-09-25', 300000, 'Salary'), _tx('2026-09-28', -2500, 'Groceries')]);
+      final first = computePeriod(early, s, const [], '2026-09-26', table: _table);
+      expect((first.start, first.end, first.length), ('2026-09-25', '2026-11-03', 39));
+      expect(first.planDaily, (first.flexBudget / 39).round());
+      final days = periodDays(early, s, const [], '2026-09-26', table: _table);
+      expect((days.length, days.first.date, days.last.date), (39, '2026-09-25', '2026-11-02'));
+      final onPayday = computePeriod(early, s, const [], '2026-10-03', table: _table);
+      expect((onPayday.start, onPayday.end, onPayday.paydayPassed, onPayday.daysLeft), ('2026-09-25', '2026-11-03', false, 31));
+      expect(currentPeriodStart('2026-09-25', 3, '2026-10-03'), '2026-09-25'); // no "Start new period" on 3 Oct
+      expect(currentPeriodStart('2026-09-25', 3, '2026-11-03'), '2026-11-03');
+      final last = periodSummaries(early, s, '2026-10-03').last;
+      expect((last.start, last.end, last.running, last.income), ('2026-09-25', '2026-11-03', true, 300000));
     });
   });
 
@@ -304,9 +340,19 @@ void main() {
       expect(rangeFor(RangeKind.payPeriod, today, st, txs: txs), DateRange(start: '2026-10-01', end: '2026-11-14'));
     });
 
-    test('a salary on or after computePeriod\'s payday is the next period\'s start, not replaced by the saved start', () {
-      // 25 Sep with payday 10 is mid-period (old rule): computePeriod = [25 Sep, 10 Oct); the 10 Oct salary is next.
+    test('a saved start 15 days before its payday: the salary on that payday is inside computePeriod\'s period', () {
+      // 25 Sep with payday 10 belongs to no payday: computePeriod = [25 Sep, 10 Nov) (RX7f; RX7e ended it on 10 Oct and
+      // the 10 Oct salary started the next period). Every period is over 20 days now, so a salary 1..20 days after a
+      // saved start always lies inside its period and the saved start replaces it in the report.
       const st = WalletSettings(paydayDay: 10, periodStart: '2026-09-25');
+      final txs = _cat([_tx('2026-09-10', 300000, 'Salary'), _tx('2026-10-10', 300000, 'Salary')]);
+      const today = '2026-10-20';
+      expect(computePeriod(txs, st, const [], today, table: _table).end, '2026-11-10');
+      expect(_periods(txs, st, today), ['2026-09-10..2026-09-25', '2026-09-25..2026-11-10']);
+    });
+
+    test('a salary more than 20 days after the saved start stays the next period\'s start', () {
+      const st = WalletSettings(paydayDay: 10, periodStart: '2026-09-15'); // 5 days late for 10 Sep: ends 10 Oct
       final txs = _cat([_tx('2026-09-10', 300000, 'Salary'), _tx('2026-10-10', 300000, 'Salary')]);
       const today = '2026-10-20';
       expect(computePeriod(txs, st, const [], today, table: _table).end, '2026-10-10');
