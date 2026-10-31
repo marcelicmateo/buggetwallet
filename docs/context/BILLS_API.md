@@ -236,8 +236,8 @@ linked, Upcoming warranty/return entries, reminders. Linux/web: file import (PDF
   `coveredByPlan`, not `needsCategory`, and not a slip whose covering cycle is held (bill `coveredByPlan`, cycle just
   paid/skipped, or occurrence in `counted`). `computePeriod` uses it with its `dueBills` and exposes the accepted rows as
   `PeriodBudget.reservedPlannedRows` (Σ = `reservedPlanned`). App: Today's "Coming up" = `reservedPlannedRows.length` /
-  `reservedPlanned`; Upcoming's "Set aside" (`countedIn`) counts planned rows by `plannedReserves` with the bill occurrences it
-  counts in the shown range (any range). "Needs a category": a red mark on the Upcoming row, a Today line per such bill row due
+  `reservedPlanned`; Upcoming's "Set aside" = `beforePayday` for the running period and core's
+  `projectedReserves` for the next one (NP). "Needs a category": a red mark on the Upcoming row, a Today line per such bill row due
   this period (`plannedNeedingCategory()`) and a suffix on its heads-up line; each opens the bill sheet.
 - **Bill photos.** `MainActivity` deletes everything in `cache/bill_photos` on create and at the start of each `takePhoto`
   (a picture left when Android killed the app while the camera app was open). No unit test (Kotlin).

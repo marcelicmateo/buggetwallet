@@ -71,9 +71,9 @@ Next steps in order: 1) resume KL-UI1 + KL-UI2 from their branches (finish, test
 ## Stage NP: next period's Set aside in core (2026-11-01)
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
-| NP1 | Core `projectedReserves(start, end, bills, txs, planned, currency, table, payeeAliases)` → `PeriodReserves {cycles, planned, count, total}` (bills moved to their first `billOccurrences` in the period, long bills held, then computePeriod's own path; identity: equals `beforePayday` when that period starts with every earlier cycle paid); export `billOccurrences` | core-builder (session/high) | worktree | – | running |
-| NP2 | App: `nextPeriodSetAside` → core call; drop `countedIn` if unused | lead | v2 | NP1 | queued |
-| NP3 | Review + targeted run + push | reviewer + lead | v2 | NP2 | queued |
+| NP1 | Core `projectedReserves(start, end, bills, txs, planned, currency, table, payeeAliases)` → `PeriodReserves {cycles, planned, count, total}` (bills moved to their first `billOccurrences` in the period, long bills held, then computePeriod's own path; identity: equals `beforePayday` when that period starts with every earlier cycle paid); export `billOccurrences` | core-builder (session/high) | worktree | – | done 18fd7fc + 8074e35 merged 3a955d5 (core 3238; one path with computePeriod via _setAside; finished bills and bills with no date in the period still cover their slips: the app's old sum missed both) |
+| NP2 | App: `nextPeriodSetAside` → core call; drop `countedIn` if unused | lead | v2 | NP1 | done d9ae636 (countedIn removed, its tests check setAside) |
+| NP3 | Review + targeted run + push | reviewer + lead | v2 | NP2 | done: review 0 high/medium, 3 low (stale docs, dangling comment, 2 always-true asserts) fixed; full test green on d9ae636 (importer 452, core 3238, sync 476, relay 277, app 2499) |
 
 ## Owner grill 2026-10-31 (answers in `OWNER_DECISIONS_2026-10-31.md`)
 | # | Item | Agent | Branch | Depends on | Status |

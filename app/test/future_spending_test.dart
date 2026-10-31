@@ -873,7 +873,6 @@ void main() {
         expect(items.where((i) => i.kind == UpcomingKind.bill), hasLength(2));
         final p = wc.period();
         expect(p.reservedBills, 2999);
-        expect(wc.setAside(items).total, p.reservedBills + p.reservedPlanned);
         expect(wc.setAside(items).total, 2999 + 42000);
         expect(wc.setAside(items).count, 3);
       });

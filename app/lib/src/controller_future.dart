@@ -165,7 +165,6 @@ extension FutureSpending on WalletController {
   /// Upcoming's "Set aside" (KL-A: always what Today's "Before payday" holds). The running period: core's own numbers for the period
   /// (`beforePayday` = Σ `reservedCycles` reserve + Σ `reservedPlannedRows` amount, overdue bill cycles and held long bills included), so
   /// the two screens can never differ. The next period has no budget yet: [nextPeriodSetAside], core's `projectedReserves`.
-  /// [plannedReserves]) over the next period.
   ({int count, int total}) setAside(List<UpcomingItem> items, {bool next = false}) {
     if (next) {
       final n = nextPeriodSetAside();
