@@ -126,6 +126,18 @@ void main() {
     });
   });
 
+  group('odd gesture numbers', () {
+    test('a scale of 0, NaN or infinity changes nothing but the position; never throws', () {
+      final w = r('2026-01-01', '2026-04-10');
+      final e = edgesFor(w, first: '2020-01-01');
+      for (final s in [0.0, -1.0, double.nan, double.infinity, double.negativeInfinity]) {
+        expect(e.transform(w, s, 0.5, 0.5).days, w.days, reason: '$s');
+        expect(e.zoom(w, s).days, w.days, reason: '$s');
+      }
+      expect(e.transform(w, 1, double.nan, double.nan).days, w.days);
+    });
+  });
+
   group('a week across New Year', () {
     test('moves over the year line without a jump', () {
       final w = r('2025-12-20', '2026-01-18');

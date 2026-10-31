@@ -59,6 +59,8 @@ class ChartEdges {
   /// [w] zoomed by [factor] (above 1 = shorter, finer bars) around [focal] (0 = its first day, 1 = its last): the day under that
   /// point stays under it.
   DateRange zoom(DateRange w, double factor, {double focal = 0.5}) {
+    if (!factor.isFinite || factor <= 0) factor = 1; // a wheel or a gesture can report 0 or NaN
+    if (!focal.isFinite) focal = 0.5;
     final len = w.days;
     final next = (len / factor).round().clamp(1, chartMaxDays);
     final at = epochDay(w.start) + focal * len;
@@ -68,6 +70,9 @@ class ChartEdges {
   /// A drag and pinch together: [w0] is the window when the fingers went down, [scale] how far they spread since (above 1 = shorter),
   /// [f0] / [f1] where their middle was then / is now, as 0..1 of the graph's width. The day that was under the middle stays under it.
   DateRange transform(DateRange w0, double scale, double f0, double f1) {
+    if (!scale.isFinite || scale <= 0) scale = 1; // a gesture can report 0 or NaN (found by the perf run)
+    if (!f0.isFinite) f0 = 0.5;
+    if (!f1.isFinite) f1 = f0;
     final len0 = w0.days;
     final len = (len0 / scale).round().clamp(1, chartMaxDays);
     final day = epochDay(w0.start) + f0 * len0;
