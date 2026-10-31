@@ -174,7 +174,21 @@ extension WalletRepoPlanned on WalletRepo {
           [currency, ...amounts]))
         if (Tx.fromRow(r) case final tx when tx.live && !billPaid.contains(tx.id)) cz.categorize(tx)
     ];
-    final plan = rows.isEmpty ? const <(String, String)>[] : planAutoPaid(all, rows, table: cz.table);
+    // A cost paid by a hand-added entry stays paid by that entry's bank row once it replaces the entry (`matched_to`).
+    final paidIds = {
+      for (final p in all)
+        if (p.paidTx case final t?) t
+    };
+    final replacedBy = rows.isEmpty || paidIds.isEmpty
+        ? const <String, String>{}
+        : {
+            for (final r in db.select(
+                'SELECT id, matched_to FROM tx WHERE manual = 1 AND matched_to IS NOT NULL '
+                'AND id IN (${List.filled(paidIds.length, '?').join(',')})',
+                [...paidIds]))
+              r['id'] as String: r['matched_to'] as String
+          };
+    final plan = rows.isEmpty ? const <(String, String)>[] : planAutoPaid(all, rows, table: cz.table, replacedBy: replacedBy);
     if (plan.isNotEmpty) {
       _write([
         for (final (id, tx) in plan) ('planned', id, {'status': PlannedStatus.paid.name, 'paid_tx': tx})

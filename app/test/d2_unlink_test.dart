@@ -119,13 +119,16 @@ void main() {
       expect(wc.period().spentToday, 2 * _cash);
     });
 
-    testWidgets("core's refusal shows in the toast and the sheet stays open", (t) async {
+    testWidgets("core's refusal shows inside the sheet (a toast would sit under it) and the sheet stays open", (t) async {
       final wc = _wallet();
       await _open(t, wc, _bank(wc, -_cash));
       wc.repo.deleteTransaction(_entry(wc).id); // gone since the sheet opened
       await t.tap(key('unlinkMatch'));
       await _settle(t);
-      expect(find.text('No such transaction.'), findsOneWidget);
+      expect(key('unlinkError'), findsOneWidget);
+      expect(find.descendant(of: key('unlinkError'), matching: find.textContaining('No such transaction.', findRichText: true)),
+          findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing, reason: 'not a toast under the sheet');
       expect(key('unlinkMatch'), findsOneWidget, reason: 'the sheet is still open');
       await t.pump(const Duration(seconds: 4));
     });

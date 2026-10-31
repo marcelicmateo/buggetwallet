@@ -128,6 +128,7 @@ extension ForecastDb on WalletController {
           planned: plannedOpen(),
           incomes: p.expectedIncome,
           bills: recurringBills(),
+          payeeAliases: payeeAliases(),
         );
         final after = p.allowanceToday > 0 ? forecastAfterAllowance(points, allowance: p.allowanceToday, daysLeft: p.daysLeft) : null;
         return PaydayForecast(points, p.end, points.last.cents, after, leftOut);

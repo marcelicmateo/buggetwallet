@@ -42,7 +42,7 @@ void main() {
     return (a, b);
   }
 
-  test('blocked B asks the author; the author resends and writes a covering snapshot; B goes on without skipping', () async {
+  test('blocked B asks the author; the author writes a covering snapshot (the answer, no resend); B goes on without skipping', () async {
     final (a, b) = await blockedPair();
     final blocked = blockedFiles(b.repo);
     expect(blocked, hasLength(1));
@@ -57,11 +57,11 @@ void main() {
 
     sim.tick();
     final snapBefore = (await state()).snapshot?.id;
-    await a.sync(); // reads the ask: snapshot now, resend queued
+    await a.sync(); // reads the ask: snapshot now
     final snap = (await state()).snapshot;
     expect(snap?.id, isNot(snapBefore));
     expect(snap!.covers[a.id], greaterThanOrEqualTo(2));
-    expect(resendQueued(a), isTrue);
+    expect(resendQueued(a), isFalse, reason: 'RF7: the snapshot covers the asked file, so it is the answer');
 
     sim.tick();
     final r = await b.sync();
@@ -70,10 +70,7 @@ void main() {
     expect(blockedFiles(b.repo), isEmpty);
     expect(b.repo.localValue('syncSkipped'), isNull, reason: 'nothing skipped');
 
-    final aLast = await lastOf(a);
-    await a.sync(); // the resend
-    expect(await lastOf(a), greaterThan(aLast));
-    expect(resendQueued(a), isFalse);
+    await a.sync();
     await b.sync();
     expect(canon(b.repo), canon(a.repo));
     // Settled: no more asks, snapshots or resends.
@@ -113,7 +110,40 @@ void main() {
     await c.sync();
     expect(resendQueued(c), isFalse);
     await a.sync();
-    expect(resendQueued(a), isTrue);
+    expect((await state()).snapshot!.covers[a.id], greaterThanOrEqualTo(2), reason: 'the author answers with a covering snapshot');
+    expect(resendQueued(a), isFalse);
+  });
+
+  /// [blockedPair] with a third device C whose newest file A cannot read (its GETs fail): A is never caught up, so it
+  /// writes no snapshot and answers B's ask with a state resend.
+  Future<(Dev, Dev)> blockedAuthorBehind() async {
+    final c = sim.device();
+    final (a, b) = await blockedPair(c: c);
+    c.repo.addTransaction(date: '2026-01-11', amount: 310, category: 'Groceries');
+    await c.sync();
+    sim.transport.failGet(c.id, await lastOf(c), times: 1000);
+    sim.tick();
+    await b.sync(); // the ask
+    return (a, b);
+  }
+
+  test('RF7: an ask no snapshot covers gets one resend; the ask repeated a day later gets no second one', () async {
+    final (a, b) = await blockedAuthorBehind();
+    sim.tick();
+    final r = await a.sync();
+    expect(r.caughtUp, isFalse, reason: 'precondition: A cannot write a snapshot');
+    expect(resendQueued(a), isTrue, reason: 'the first ask is answered with a resend');
+    await a.sync(); // sends it
+    expect(resendQueued(a), isFalse);
+    final bLast = await lastOf(b);
+    sim.tick(const Duration(hours: 25));
+    await b.sync();
+    expect(blockedFiles(b.repo), hasLength(1), reason: 'precondition: B is still blocked');
+    expect(await lastOf(b), bLast + 1, reason: 'precondition: B asked again');
+    sim.tick();
+    await a.sync();
+    expect(resendQueued(a), isFalse, reason: 'one resend per asked file');
+    expect(a.repo.localValue(SyncEngine.unblockSentKey), contains('${a.id}/2'));
   });
 
   test('author gone: blockedFiles shows it with an old authorSeen; skip lets B read the later files', () async {
@@ -225,5 +255,67 @@ void main() {
     skipBlockedFile(b.repo, a.id, '3');
     expect(b.repo.localValue('syncSkipped'), isNull);
     expect(blockedFiles(b.repo), hasLength(1));
+  });
+
+  /// B's quarantine entry of A's file 2 rewritten to [reason] (same bytes, same hash), as if it had been refused so.
+  void requarantine(Dev b, SyncProblemReason reason) {
+    final list = jsonDecode(b.repo.localValue('syncBadFiles')!) as List;
+    for (final j in list) {
+      (j as Map)['r'] = reason.name;
+    }
+    b.repo.setLocalValue('syncBadFiles', jsonEncode(list));
+    final book = jsonDecode(b.repo.localValue('syncBlocked')!) as Map;
+    for (final e in book.values) {
+      (e as Map)['r'] = reason.name;
+    }
+    b.repo.setLocalValue('syncBlocked', jsonEncode(book));
+  }
+
+  for (final reason in [SyncProblemReason.unknownVersion, SyncProblemReason.clockDrift, SyncProblemReason.applyFailed]) {
+    test('RF3: a file quarantined as ${reason.name} is listed as not skippable and cannot be skipped', () async {
+      final (_, b) = await blockedPair();
+      expect(blockedFiles(b.repo).single.skippable, isTrue, reason: 'precondition: a damaged file');
+      requarantine(b, reason);
+      final blocked = blockedFiles(b.repo).single;
+      expect((blocked.reason, blocked.skippable), (reason, false));
+      expect(() => skipBlockedFile(b.repo, blocked.device, blocked.file), throwsArgumentError);
+      expect(b.repo.localValue('syncSkipped'), isNull, reason: 'nothing stored');
+      expect(blockedFiles(b.repo), hasLength(1));
+    });
+  }
+
+  test('RF3: the engine never honours a skip of a file now quarantined for a reason that waits', () async {
+    final (a, b) = await blockedPair();
+    final blocked = blockedFiles(b.repo).single;
+    skipBlockedFile(b.repo, blocked.device, blocked.file);
+    // The skip of the damaged bytes is stored; the same bytes are then refused as a newer format (another build).
+    final skipped = b.repo.localValue('syncSkipped');
+    expect(skipped, isNotNull);
+    final bad = jsonDecode(b.repo.localValue('syncBadFiles')!) as List;
+    for (final j in bad) {
+      (j as Map)['r'] = SyncProblemReason.unknownVersion.name;
+    }
+    b.repo.setLocalValue('syncBadFiles', jsonEncode(bad));
+    final r = await b.sync();
+    expect(r.caughtUp, isFalse);
+    expect(r.waiting.single.seq, 2, reason: 'still waiting for the update, not skipped');
+    expect(b.repo.syncCursors()[a.id], 1);
+  });
+
+  test('RF3: a skipped damaged file stays skipped over later runs', () async {
+    final (a, b) = await blockedPair();
+    final blocked = blockedFiles(b.repo).single;
+    expect(blocked.reason, SyncProblemReason.corrupt);
+    skipBlockedFile(b.repo, blocked.device, blocked.file);
+    for (var i = 0; i < 3; i++) {
+      sim.tick(const Duration(days: 2));
+      final r = await b.sync();
+      expect(r.caughtUp, isTrue, reason: 'run $i');
+      expect(r.problems, isEmpty, reason: 'run $i');
+      expect(blockedFiles(b.repo), isEmpty);
+    }
+    expect(b.repo.localValue('syncBadFiles'), isNull, reason: 'no longer quarantined');
+    expect((jsonDecode(b.repo.localValue('syncSkipped')!) as Map).keys, ['${blocked.device}/2']);
+    expect(b.repo.syncCursors()[a.id], 3);
   });
 }

@@ -55,37 +55,42 @@ class ComparePart {
 
 /// This month (only when the hero is not that month), last month and the 6-month average of [cmp], all core's. The hero total
 /// [total] over [range] is "the month" when the range starts on the 1st, ends in [month] and equals this month's figure, so the
-/// month is then said once, by the hero.
-ComparePart compareParts(CategoryCompare cmp, {required String month, required DateRange range, required int total, required String cur}) {
+/// month is then said once, by the hero. When the bars the page shows ([bars]) are month bars that include both [month] and the month
+/// before, the two tiles would repeat them: only the Average stays (and the page lays out as when the hero is the month). Day and week
+/// bars do not hold the months, so the tiles stay.
+ComparePart compareParts(CategoryCompare cmp,
+    {required String month, required DateRange range, required int total, required String cur, List<SeriesBar> bars = const []}) {
   final prev = monthsEnding(month, 2).first;
   final single = range.start == '$month-01' && monthOf(range.end) == month && cmp.thisMonth == total;
+  bool has(String m) => bars.any((b) => b.bucket == Bucket.month && monthOf(b.span.start) == m);
+  final listed = !single && has(month) && has(prev);
   final delta = spendDelta(cmp.thisMonth, cmp.lastMonth, monthShort(prev), key: const ValueKey('compareDelta'));
   return ComparePart(
       single ? delta : null,
       [
-        if (!single)
+        if (!single && !listed)
           StatTile(
               key: const ValueKey('compareThis'),
               label: 'This month',
               value: moneyExact(cmp.thisMonth, cur),
               sub: monthLong(month),
               chip: delta),
-        StatTile(key: const ValueKey('compareLast'), label: 'Last month', value: moneyExact(cmp.lastMonth, cur), sub: monthLong(prev)),
-        // Two cells wide when it follows "this month" and "last month": the row under the hero is then full (hero 2 + 1 + 1), this one
-        // holds Average + the bars.
+        if (!listed)
+          StatTile(key: const ValueKey('compareLast'), label: 'Last month', value: moneyExact(cmp.lastMonth, cur), sub: monthLong(prev)),
+        // Two cells wide when it follows "this month" and "last month" or stands alone beside the hero: the row under the hero is
+        // then full (hero 2 + 1 + 1, or hero 2 + 2), this one holds Average + the bars.
         DashItem(
           span: single ? 1 : 2,
           child: StatTile(
               key: const ValueKey('compareAverage'), label: 'Average', value: moneyExact(cmp.average6, cur), sub: 'of the 6 months before'),
         ),
       ],
-      monthIsHero: single);
+      monthIsHero: single || listed);
 }
 
 /// The spending of a category, merchant or tag over time as bars you can drag and zoom (ZC), with the exact amount of each bar under
 /// them. The window starts as the page's [range] (Reset goes back to it); drag, pinch and the buttons change it. [bars] reads the day
-/// index, [payments] gives the payments behind one bar (a tap on it or its row). While the window is still the page's single month, its
-/// one figure is the hero's, so the rows are left out ([hideRows]).
+/// index, [payments] gives the payments behind one bar (a tap on it or its row). A single bar is the hero's one figure: no row for it.
 class SeriesBarsTile extends StatelessWidget {
   final WalletController wc;
   final String id, label;
@@ -94,7 +99,6 @@ class SeriesBarsTile extends StatelessWidget {
   final List<CategorizedTx> Function(DateRange span) payments;
   final Key barsKey;
   final Key Function(String rowId) rowKey;
-  final bool hideRows;
   const SeriesBarsTile({
     super.key,
     required this.wc,
@@ -105,7 +109,6 @@ class SeriesBarsTile extends StatelessWidget {
     required this.payments,
     required this.barsKey,
     required this.rowKey,
-    this.hideRows = false,
   });
 
   @override
@@ -126,7 +129,8 @@ class SeriesBarsTile extends StatelessWidget {
           id: id,
           initial: range,
           edges: wc.chartEdges,
-          datesText: rangeLabel,
+          // The page's range is the hero's sub line; the dates show once the window has moved off it.
+          datesText: (w) => w == range ? null : rangeLabel(w),
           chart: (context, w, b) {
             final list = bars(w, b);
             return SeriesBars(
@@ -149,11 +153,13 @@ class SeriesBarsTile extends StatelessWidget {
           legend: (context, w, b) =>
               bars(w, b).any((x) => x.partial) ? Legend([LegendItem(c.chartPos, barFadedText(b), dashed: true)]) : const SizedBox.shrink(),
           rows: (context, w, b) {
-            if (hideRows && w == range) return const SizedBox.shrink();
+            final list = bars(w, b);
+            // One bar is its one figure, the hero's: no row for it.
+            if (list.length <= 1) return const SizedBox.shrink();
             return Padding(
               padding: const EdgeInsets.only(top: 8),
               child: DashRows(rows: [
-                for (final x in bars(w, b))
+                for (final x in list)
                   DashRowData(key: rowKey(barRowId(x.span, b)), title: name(x), amount: moneyExact(x.spent, cur), onTap: () => open(x)),
               ]),
             );

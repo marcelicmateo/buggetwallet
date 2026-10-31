@@ -51,7 +51,7 @@ Future<void> _toWishPanel(WidgetTester tester, {String note = ''}) async {
 
 /// A wallet with one hand-added expense (the only kind with a Delete button) and a clean Today.
 WalletController _manualWallet() {
-  final wc = demoWallet();
+  final wc = demoWallet(clock: pinnedNoon);
   wc.snoozeKeyBackup();
   wc.repo.addTransaction(date: wc.today(), amount: 450, category: 'Eating out', note: 'Synthetic tea room');
   wc.reload();
@@ -103,7 +103,7 @@ void main() {
     }, skip: _skipWish);
 
     testWidgets('the "On the wishlist" toast has an Open action that opens the Wishlist tab on that item', (tester) async {
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       wc.snoozeKeyBackup();
       await _pumpHome(tester, wc);
       await tester.tap(find.byKey(const ValueKey('addExpense')));
@@ -198,7 +198,7 @@ void main() {
     }, skip: _skipToast);
 
     testWidgets('Undo after deleting a goal brings the goal back with its saved amount', (tester) async {
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       wc.snoozeKeyBackup();
       final id = wc.goals.first.id;
       wc.repo.addGoalContribution(id, 5000);

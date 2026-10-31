@@ -22,6 +22,13 @@ import 'support/layout.dart';
 import 'support/wallet.dart';
 
 const _timeout = Timeout(Duration(seconds: 120));
+const _quick = Timeout(Duration(seconds: 40));
+
+/// A Wednesday at noon: Today shows no delivery-hour tile (14:00-19:00 or a Sunday), so its tile set is the same whenever the test runs.
+final _wednesday = DateTime(2026, 10, 28, 12);
+
+/// The demo wallet on a pinned day. `demoWallet()` follows the real clock, and Today's tile set follows the hour and the weekday.
+WalletController _demo([DateTime? at]) => demoWallet(clock: () => at ?? _wednesday);
 
 Future<void> _loadFonts() async {
   for (final (fam, prefix) in [('IBM Plex Sans', 'IBMPlexSans'), ('IBM Plex Mono', 'IBMPlexMono')]) {
@@ -185,11 +192,13 @@ void main() {
       expect(inTile('compareAverage', moneyExact(cmp.average6, 'EUR')), findsOneWidget);
       expect(cmp.average6, (29000 / 6).round());
       expect(_k('tagDetailBars'), findsOneWidget);
-      // One month: its one figure is the hero's, so the months list is left out (the bars stay).
-      expect(wc.tagBars(tag, r), hasLength(1));
-      for (final b in wc.spendingSeriesFor(r, bucketFor(r), tag: tag)) {
-        expect(_k('tagDetailRow_${b.span.start}'), findsNothing);
+      // One month is ~30 day bars: the rows follow them (they are hidden only when there is a single bar), and add up to the hero.
+      final days = wc.spendingSeriesFor(r, bucketFor(r), tag: tag);
+      expect(days, hasLength(31));
+      for (final b in days) {
+        expect(_k('tagDetailRow_${b.span.start}'), findsOneWidget);
       }
+      expect(days.fold<int>(0, (a, b) => a + b.spent), 29544);
       // The hero label does not repeat the title.
       expect(find.descendant(of: find.byType(AppBar), matching: find.text('#${wc.tagTable.label(tag)}')), findsOneWidget);
       expect(find.text('TOTAL'), findsOneWidget, reason: 'the hero says Total, not the title again');
@@ -199,21 +208,51 @@ void main() {
       expect(tester.takeException(), isNull);
     }, timeout: _timeout);
 
-    testWidgets('a range of several months: the hero is the range, so October gets its own tile with the chip', (tester) async {
+    testWidgets('a range that starts mid-month: the hero is the range, so October gets its own tile with the chip', (tester) async {
       final (:wc, :tag) = await _wallet();
-      final r = DateRange(start: '2026-08-01', end: '2026-10-31');
+      final r = DateRange(start: '2026-10-03', end: '2026-10-31');
+      await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: const Size(1280, 3000));
+      final cmp = wc.compareTagFor(tag, r);
+      expect(inTile('compareThis', moneyExact(cmp.thisMonth, 'EUR')), findsOneWidget);
+      expect(find.descendant(of: _k('compareThis'), matching: find.byKey(const ValueKey('compareDelta'))), findsOneWidget);
+      expect(inTile('compareLast', moneyExact(cmp.lastMonth, 'EUR')), findsOneWidget, reason: 'September is not a row of this range');
+      expect(tester.takeException(), isNull);
+    }, timeout: _timeout);
+
+    testWidgets('a range that shows month rows with both months: the This month and Last month tiles would repeat them, only Average stays',
+        (tester) async {
+      final (:wc, :tag) = await _wallet();
+      final r = DateRange(start: '2026-04-01', end: '2026-10-31'); // 214 days: a bar per month
       await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: const Size(1280, 3000));
       final cmp = wc.compareTagFor(tag, r);
       expect(heroIs('tagDetailTotal', moneyExact(29000 + 29544, 'EUR')), findsOneWidget);
-      expect(inTile('compareThis', moneyExact(cmp.thisMonth, 'EUR')), findsOneWidget);
-      expect(find.descendant(of: _k('compareThis'), matching: find.byKey(const ValueKey('compareDelta'))), findsOneWidget);
-      // Three months (92 days) are weeks now: one exact row per week bar, and the weeks add up to the hero.
+      final months = wc.spendingSeriesFor(r, bucketFor(r), tag: tag);
+      expect(months.first.bucket, Bucket.month);
+      for (final b in months) {
+        expect(_k('tagDetailRow_${monthOf(b.span.start)}'), findsOneWidget);
+      }
+      expect(_k('tagDetailRow_2026-10'), findsOneWidget);
+      expect(_k('tagDetailRow_2026-09'), findsOneWidget);
+      expect(_k('compareThis'), findsNothing);
+      expect(_k('compareLast'), findsNothing);
+      expect(inTile('compareAverage', moneyExact(cmp.average6, 'EUR')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }, timeout: _timeout);
+
+    testWidgets('a range shown as weeks does not hold the months as rows: This month and Last month stay, the weeks add up to the hero',
+        (tester) async {
+      final (:wc, :tag) = await _wallet();
+      final r = DateRange(start: '2026-08-01', end: '2026-10-31'); // 92 days: a bar per week
+      await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: const Size(1280, 3000));
+      final cmp = wc.compareTagFor(tag, r);
       final weeks = wc.spendingSeriesFor(r, bucketFor(r), tag: tag);
       expect(weeks.first.bucket, Bucket.week);
       for (final b in weeks) {
         expect(_k('tagDetailRow_${b.span.start}'), findsOneWidget);
       }
       expect(weeks.fold<int>(0, (a, b) => a + b.spent), 29000 + 29544);
+      expect(inTile('compareThis', moneyExact(cmp.thisMonth, 'EUR')), findsOneWidget);
+      expect(inTile('compareLast', moneyExact(cmp.lastMonth, 'EUR')), findsOneWidget);
       expect(tester.takeException(), isNull);
     }, timeout: _timeout);
 
@@ -242,10 +281,12 @@ void main() {
       expect(_k('compareThis'), findsNothing);
       expect(_k('compareDelta'), findsOneWidget);
       expect(_k('detailBars_category'), findsOneWidget);
-      // One month: no months list under the hero's figure; the hero label is not the title again.
-      for (final b in wc.spendingSeriesFor(r, bucketFor(r), category: 'Groceries')) {
-        expect(_k('detailRow_category_${b.span.start}'), findsNothing);
+      // One month is ~30 day bars: a row each, adding up to the hero; the hero label is not the title again.
+      final days = wc.spendingSeriesFor(r, bucketFor(r), category: 'Groceries');
+      for (final b in days) {
+        expect(_k('detailRow_category_${b.span.start}'), findsOneWidget);
       }
+      expect(days.fold<int>(0, (a, b) => a + b.spent), total);
       expect(find.descendant(of: find.byType(AppBar), matching: find.text(wc.categoryTable.label('Groceries'))), findsOneWidget);
       expect(find.text('TOTAL'), findsOneWidget, reason: 'the hero says Total, not the title again');
       final merchants = wc.merchantsFor('Groceries', r);
@@ -324,48 +365,76 @@ void main() {
     ]) {
       testWidgets('$name: Today, Spending, Plan, Bills, Save and the period report keep their order, overlap nothing, overflow nothing',
           (tester) async {
-        final errors = Errors();
         overflowing.clear();
-        await pumpFull(tester, demoWallet(), scale, size: size);
-        void check(String what) {
-          final grids = find.byType(DashGrid).evaluate().length;
-          expect(grids, greaterThan(0), reason: '$name $what has a grid');
-          for (var i = 0; i < grids; i++) {
-            _expectOrdered(_boxes(tester, i), tester.getSize(find.byType(DashGrid).at(i)).width, '$name $what grid $i');
-            // Bills and Save hold their tiles in rows that fill (the others end in what the wallet has: see their own tests).
-            if (what == 'Today' || what == 'Bills' || what == 'Save') _expectNoHoles(tester, scale, '$name $what grid $i', i);
+        await withErrors((errors) async {
+          await pumpFull(tester, _demo(), scale, size: size);
+          void check(String what) {
+            final grids = find.byType(DashGrid).evaluate().length;
+            expect(grids, greaterThan(0), reason: '$name $what has a grid');
+            for (var i = 0; i < grids; i++) {
+              _expectOrdered(_boxes(tester, i), tester.getSize(find.byType(DashGrid).at(i)).width, '$name $what grid $i');
+              // Bills and Save hold their tiles in rows that fill (the others end in what the wallet has: see their own tests).
+              if (what == 'Today' || what == 'Bills' || what == 'Save') _expectNoHoles(tester, scale, '$name $what grid $i', i);
+            }
           }
-        }
 
-        await pumpIdle(tester);
-        check('Today');
-        for (final tab in const ['Budget', 'Bills', 'Save']) {
-          await tapTab(tester, tab);
           await pumpIdle(tester);
-          check(tab);
+          check('Today');
+          for (final tab in const ['Budget', 'Bills', 'Save']) {
+            await tapTab(tester, tab);
+            await pumpIdle(tester);
+            check(tab);
+            await scrollThrough(tester);
+          }
+          await tapTab(tester, 'Budget');
+          await tester.tap(_k('budgetPlan'));
+          await pumpIdle(tester);
+          check('Plan');
           await scrollThrough(tester);
-        }
-        await tapTab(tester, 'Budget');
-        await tester.tap(_k('budgetPlan'));
-        await pumpIdle(tester);
-        check('Plan');
-        await scrollThrough(tester);
-        final badge = find.byKey(const ValueKey('periodBadgeTap'));
-        await tester.tap(badge);
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 600));
-        expect(_k('reportKept'), findsOneWidget);
-        check('Period report');
-        await scrollThrough(tester);
-        errors.check();
-        expect(overflowing, isEmpty);
-        expect(tester.takeException(), isNull);
+          final badge = find.byKey(const ValueKey('periodBadgeTap'));
+          await tester.tap(badge);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 600));
+          expect(_k('reportKept'), findsOneWidget);
+          check('Period report');
+          await scrollThrough(tester);
+          errors.check();
+          expect(overflowing, isEmpty);
+          expect(tester.takeException(), isNull);
+        });
       }, timeout: _timeout);
     }
 
+    testWidgets(
+        'Today follows the wallet clock, not the real one: the delivery-hour tile on a Sunday and at 15:00, not on a Wednesday noon',
+        (tester) async {
+      Future<bool> deliveryTile(DateTime at) async {
+        await pumpFull(tester, _demo(at), 1.0, size: const Size(1280, 800));
+        await pumpIdle(tester);
+        final shown = find.textContaining('delivery hour', findRichText: true).evaluate().isNotEmpty;
+        await tester.pumpWidget(const SizedBox());
+        return shown;
+      }
+
+      expect(await deliveryTile(DateTime(2026, 10, 28, 12)), isFalse, reason: 'Wednesday 12:00');
+      expect(await deliveryTile(DateTime(2026, 10, 28, 15)), isTrue, reason: 'Wednesday 15:00');
+      expect(await deliveryTile(DateTime(2026, 11, 1, 12)), isTrue, reason: 'Sunday 12:00');
+      expect(await deliveryTile(DateTime(2026, 11, 2, 12)), isFalse, reason: 'Monday 12:00');
+    }, timeout: _quick);
+
+    testWidgets('Today at 1280 keeps four full columns across a month boundary (no hole above the last row)', (tester) async {
+      for (final day in [DateTime(2026, 10, 29), DateTime(2026, 10, 31), DateTime(2026, 11, 2), DateTime(2026, 11, 3)]) {
+        await pumpFull(tester, _demo(DateTime(day.year, day.month, day.day, 12)), 1.0, size: const Size(1280, 800));
+        await pumpIdle(tester);
+        _expectOrdered(_boxes(tester), tester.getSize(find.byType(DashGrid)).width, 'Today on ${isoDate(day)}');
+        _expectNoHoles(tester, 1.0, 'Today on ${isoDate(day)}');
+        await tester.pumpWidget(const SizedBox());
+      }
+    }, timeout: _quick);
+
     testWidgets('Today: four columns at 1280 with a tile right of the hero, two at 800, one at 320 with text 2.0', (tester) async {
       Future<List<Rect>> boxes(Size size, double scale) async {
-        await pumpFull(tester, demoWallet(), scale, size: size);
+        await pumpFull(tester, _demo(), scale, size: size);
         await pumpIdle(tester);
         return _boxes(tester);
       }

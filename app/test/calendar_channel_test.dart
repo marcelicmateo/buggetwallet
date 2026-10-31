@@ -46,16 +46,29 @@ void main() {
 
   test('events: ids and range go to the channel; cancelled and bad entries are dropped', () async {
     answer = (_) => [
-          {'id': 'e1', 'calendarId': '3', 'title': 'Dinner', 'date': '2026-10-24', 'allDay': false, 'status': 1, 'notes': 'n'},
+          {
+            'id': 'e1',
+            'calendarId': '3',
+            'title': 'Dinner',
+            'date': '2026-10-24',
+            'allDay': false,
+            'status': 1,
+            'notes': 'n',
+            'uid2445': 'uid-dinner@example.com',
+            'startMinutes': 1170,
+          },
           {'id': 'e2', 'calendarId': '3', 'title': 'Called off', 'date': '2026-10-24', 'status': 2},
           {'id': 'e3', 'calendarId': '3', 'title': 'Holiday', 'date': '2026-10-25', 'allDay': true},
           {'id': 'e4', 'calendarId': '3', 'title': 'Bad date', 'date': '25.10.2026'},
           {'calendarId': '3', 'title': 'No id', 'date': '2026-10-25'},
         ];
     final list = await AndroidCalendars().events({'3'}, '2026-10-20', '2026-11-20');
-    expect(list.map((e) => (e.uid, e.title, e.date, e.allDay)),
-        [('e1', 'Dinner', '2026-10-24', false), ('e3', 'Holiday', '2026-10-25', true)]);
+    // KL-A: the uid is the calendar's iCal UID (never the provider's row id, here e1/e3); '' when the calendar has none.
+    expect(list.map((e) => (e.uid, e.title, e.date, e.allDay, e.startMinutes)),
+        [('uid-dinner@example.com', 'Dinner', '2026-10-24', false, 1170), ('', 'Holiday', '2026-10-25', true, null)]);
     expect(list.first.notes, 'n');
+    // RF5: the row id is kept only as the pre-KL uid, so old decisions on letterless titles still match (`legacyRef`).
+    expect(list.map((e) => e.legacyUid), ['e1', 'e3']);
     expect(calls.single.method, 'events');
     expect(calls.single.arguments, {
       'ids': ['3'],

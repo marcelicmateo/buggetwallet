@@ -121,7 +121,7 @@ class BlockedRow {
 BlockedRow blockedRowOf(BlockedFile f, DateTime now) {
   final seen = f.authorSeen;
   final gone = seen != null && now.difference(seen) > const Duration(days: blockedAuthorDays);
-  final damaged = f.reason == SyncProblemReason.corrupt || f.reason == SyncProblemReason.badKey || f.reason == SyncProblemReason.otherKey;
+  final damaged = f.skippable; // core's rule: corrupt, badKey, otherKey (skipBlockedFile refuses the rest)
   final hint = switch (f.reason) {
     SyncProblemReason.clockDrift => clockDriftText,
     SyncProblemReason.unknownVersion => blockedUpdateText,

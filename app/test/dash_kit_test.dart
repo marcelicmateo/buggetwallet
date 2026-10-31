@@ -62,11 +62,12 @@ void main() {
     for (final mode in Brightness.values) {
       for (final e in sizes.entries) {
         testWidgets('${mode.name}, ${e.key}', (tester) async {
-          final errors = Errors();
-          await _pump(tester, const DashGallery(), size: e.value.$1, scale: e.value.$2, mode: mode);
-          await scrollThrough(tester);
-          expect(tester.takeException(), isNull);
-          errors.check();
+          await withErrors((errors) async {
+            await _pump(tester, const DashGallery(), size: e.value.$1, scale: e.value.$2, mode: mode);
+            await scrollThrough(tester);
+            expect(tester.takeException(), isNull);
+            errors.check();
+          });
           // Nothing is wider than the window (a tile that overflows sideways).
           for (final w in find.byType(Tile).evaluate()) {
             final r = tester.getRect(find.byElementPredicate((x) => x == w));
@@ -92,13 +93,14 @@ void main() {
     });
 
     testWidgets('a huge amount scales down inside its tile instead of overflowing', (tester) async {
-      final errors = Errors();
-      await _pump(tester, _gridOf(const StatTile(label: 'Held', value: '123,456,789.01 €')), size: const Size(320, 600), scale: 2);
-      final tile = tester.getRect(find.byType(Tile));
-      final fit = tester.getRect(find.byType(FittedBox));
-      expect(fit.right, lessThanOrEqualTo(tile.right));
-      expect(find.text('123,456,789.01 €'), findsOneWidget);
-      errors.check();
+      await withErrors((errors) async {
+        await _pump(tester, _gridOf(const StatTile(label: 'Held', value: '123,456,789.01 €')), size: const Size(320, 600), scale: 2);
+        final tile = tester.getRect(find.byType(Tile));
+        final fit = tester.getRect(find.byType(FittedBox));
+        expect(fit.right, lessThanOrEqualTo(tile.right));
+        expect(find.text('123,456,789.01 €'), findsOneWidget);
+        errors.check();
+      });
     });
   });
 
@@ -524,94 +526,97 @@ void main() {
     });
 
     testWidgets('non-finite numbers never break a drawing', (tester) async {
-      final errors = Errors();
-      await _pump(
-        tester,
-        const SingleChildScrollView(
-          child: Column(children: [
-            Ring(progress: double.nan),
-            SplitBar(segments: [
-              DashSegment(label: 'A', value: '1', weight: double.nan, color: Colors.red),
-              DashSegment(label: 'B', value: '2', weight: 2, color: Colors.blue),
+      await withErrors((errors) async {
+        await _pump(
+          tester,
+          const SingleChildScrollView(
+            child: Column(children: [
+              Ring(progress: double.nan),
+              SplitBar(segments: [
+                DashSegment(label: 'A', value: '1', weight: double.nan, color: Colors.red),
+                DashSegment(label: 'B', value: '2', weight: 2, color: Colors.blue),
+              ]),
+              Donut(segments: [DashSegment(label: 'A', value: '1', weight: double.infinity, color: Colors.red)]),
+              BarList(rows: [
+                BarRow(label: 'a', value: '1', note: 'n', fraction: double.nan),
+                BarRow(label: 'b', value: '1', note: 'n', fraction: double.infinity),
+              ]),
+              PaceMeter(used: double.nan, expected: double.infinity),
+              CalendarStrip(days: [], startWeekday: 3),
             ]),
-            Donut(segments: [DashSegment(label: 'A', value: '1', weight: double.infinity, color: Colors.red)]),
-            BarList(rows: [
-              BarRow(label: 'a', value: '1', note: 'n', fraction: double.nan),
-              BarRow(label: 'b', value: '1', note: 'n', fraction: double.infinity),
-            ]),
-            PaceMeter(used: double.nan, expected: double.infinity),
-            CalendarStrip(days: [], startWeekday: 3),
-          ]),
-        ),
-      );
-      expect(tester.takeException(), isNull);
-      errors.check();
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        errors.check();
+      });
     });
   });
 
   group('edge cases', () {
     testWidgets('empty and zero data draw nothing wrong', (tester) async {
-      final errors = Errors();
-      await _pump(
-        tester,
-        const SingleChildScrollView(
-          child: Column(children: [
-            Sparkline(values: []),
-            Sparkline(values: [5]),
-            Sparkline(values: [3, 3, 3]),
-            Ring(progress: 0, child: Text('0 %')),
-            Ring(progress: 1.7, child: Text('170 %')),
-            Ring(progress: -1),
-            SplitBar(segments: []),
-            SplitBar(segments: [DashSegment(label: 'A', value: '0 €', weight: 0, color: Colors.red)]),
-            Donut(segments: []),
-            Donut(segments: [DashSegment(label: 'A', value: '0 €', weight: 0, color: Colors.red)]),
-            NetBars(bars: []),
-            NetBars(bars: [NetBar(label: 'Jan', value: '0 €', cents: 0), NetBar(label: 'Feb', value: '0 €', cents: 0)]),
-            CalendarStrip(days: []),
-            DashRows(rows: []),
-            BarList(rows: []),
-          ]),
-        ),
-        size: const Size(320, 900),
-        scale: 2,
-      );
-      expect(tester.takeException(), isNull);
-      errors.check();
+      await withErrors((errors) async {
+        await _pump(
+          tester,
+          const SingleChildScrollView(
+            child: Column(children: [
+              Sparkline(values: []),
+              Sparkline(values: [5]),
+              Sparkline(values: [3, 3, 3]),
+              Ring(progress: 0, child: Text('0 %')),
+              Ring(progress: 1.7, child: Text('170 %')),
+              Ring(progress: -1),
+              SplitBar(segments: []),
+              SplitBar(segments: [DashSegment(label: 'A', value: '0 €', weight: 0, color: Colors.red)]),
+              Donut(segments: []),
+              Donut(segments: [DashSegment(label: 'A', value: '0 €', weight: 0, color: Colors.red)]),
+              NetBars(bars: []),
+              NetBars(bars: [NetBar(label: 'Jan', value: '0 €', cents: 0), NetBar(label: 'Feb', value: '0 €', cents: 0)]),
+              CalendarStrip(days: []),
+              DashRows(rows: []),
+              BarList(rows: []),
+            ]),
+          ),
+          size: const Size(320, 900),
+          scale: 2,
+        );
+        expect(tester.takeException(), isNull);
+        errors.check();
+      });
     });
 
     testWidgets('long labels and a long row title wrap, they do not overflow', (tester) async {
-      final errors = Errors();
-      await _pump(
-        tester,
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: SingleChildScrollView(
-            child: DashGrid(children: [
-              const StatTile(
-                  label: 'A very long label for a tile',
-                  value: '1.00 €',
-                  sub: 'And a long sub line that wants three lines or more of room'),
-              DashItem(
-                span: 2,
-                child: Tile(
-                  child: DashRows(rows: [
-                    DashRowData(
-                        title: 'A rather long name of a bill that does not fit on one line',
-                        amount: _m(123456),
-                        chip: const StateChip.date('1 Nov')),
-                  ]),
+      await withErrors((errors) async {
+        await _pump(
+          tester,
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: SingleChildScrollView(
+              child: DashGrid(children: [
+                const StatTile(
+                    label: 'A very long label for a tile',
+                    value: '1.00 €',
+                    sub: 'And a long sub line that wants three lines or more of room'),
+                DashItem(
+                  span: 2,
+                  child: Tile(
+                    child: DashRows(rows: [
+                      DashRowData(
+                          title: 'A rather long name of a bill that does not fit on one line',
+                          amount: _m(123456),
+                          chip: const StateChip.date('1 Nov')),
+                    ]),
+                  ),
                 ),
-              ),
-              const AddTile(label: 'A long add label that wraps'),
-            ]),
+                const AddTile(label: 'A long add label that wraps'),
+              ]),
+            ),
           ),
-        ),
-        size: const Size(320, 900),
-        scale: 2,
-      );
-      expect(tester.takeException(), isNull);
-      errors.check();
+          size: const Size(320, 900),
+          scale: 2,
+        );
+        expect(tester.takeException(), isNull);
+        errors.check();
+      });
     });
 
     testWidgets('TileInfo can be activated by a screen reader: a tap action on its node', (tester) async {

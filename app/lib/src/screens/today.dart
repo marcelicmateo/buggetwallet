@@ -54,8 +54,8 @@ class TodayScreen extends StatelessWidget {
   /// The file chooser of the review's Import step (tests pass one that fails).
   final FileChooser chooser;
 
-  /// The time of day the screen shows (tests pass a fixed one).
-  final DateTime Function() clock;
+  /// The time of day the screen shows (tests pass a fixed one). Null = the wallet's clock (`wc.now`, so a pinned test clock moves Today too).
+  final DateTime Function()? clock;
   const TodayScreen({
     super.key,
     required this.view,
@@ -69,12 +69,12 @@ class TodayScreen extends StatelessWidget {
     this.openIncome,
     this.openSearch,
     this.chooser = const FileChooser(),
-    this.clock = DateTime.now,
+    this.clock,
   });
 
   @override
   Widget build(BuildContext context) {
-    final f = _TodayFigures(view, clock());
+    final f = _TodayFigures(view, clock?.call() ?? view.now);
     final p = f.p;
     final review = view.reviewState();
     final held = view.heldTotals();

@@ -392,7 +392,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   never revives or undoes a per-key change; new patterns get orders after the largest live one; a clock-less legacy row
   goes through `_write`; the map rows are left in place for older builds; `repo.migrate` logs `perKeySettings` (count);
   9 = the `account` entity, no data migration; 10 = the `category` entity (P1), no data migration; 11 = tags (T1); 12 = P4
-  recurring columns, no data migration; 13 = splits; 14 = recurring income; 15 = P14 local blob tables, no synced change; 16 = `bills.attached_tx` (P16b), no data migration; 17 = the `iou` and `iou_part` entities (Q8), no data migration; 18 = the `review` entity (V3), no data migration; 19 = `tx.match_off` (D2 Unlink), no data migration). Opening an existing database with an older version
+  recurring columns, no data migration; 13 = splits; 14 = recurring income; 15 = P14 local blob tables, no synced change; 16 = `bills.attached_tx` (P16b), no data migration; 17 = the `iou` and `iou_part` entities (Q8), no data migration; 18 = the `review` entity (V3), no data migration; 19 = `tx.match_off` (D2 Unlink), `planned.auto_off` (KL-A auto-Paid Undo) and the `payee_alias` entity (KL-A slip payee aliases), no data migration). Opening an existing database with an older version
   clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
   written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
 - `local_db.dart` — encrypted local database (§4.9, SQLite3MultipleCiphers, web-safe): `localDbKey(VaultKey)` = HKDF
@@ -504,9 +504,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   and web-safe. `PlannedCost` (`models.dart`): synced entity `planned` (schema 6: `title`, `date`, `amount` nullable
   cents > 0, `category`, `source` manual|calendar|bill, `source_ref` = `CalendarEvent.ref` = `calendarEventRef`
   (KL-A: SHA-256 prefix over the stable uid (.ics UID / Android `UID_2445`, never `_ID`) + date + `startMinutes`, else
-  normalized title + date + start time; all-day without uid = `legacyCalendarEventRef`, the pre-KL title + date ref
-  that every lookup also checks: `CalendarEvent.refs`, `dismissCalendarEvent(legacyRef:)`, `supersededCalendarRows`
-  in `upcoming`/`plannedIcs(events:)`; never a raw id or title), `status` open|paid|skipped, `paid_tx`, `deleted`,
+  normalized title + date + start time or an all-day marker (never equal to a legacy ref); `legacyCalendarEventRef` =
+  the pre-KL title + date ref (`CalendarEvent.legacyUid`: parseIcs's pre-KL `bw-nouid-<n>` for letterless no-UID
+  titles), used only to look up rows written before KL-A: `CalendarEvent.refs`, `dismissCalendarEvent(legacyRef:)`;
+  never a raw id or title), `status` open|paid|skipped, `paid_tx`, `deleted`,
   v19 `auto_off` = JSON list of rows `reopenPlanned` reopened it from). KL-A auto-Paid: `planAutoPaid` (exactly one
   bank row, same category, exact amount, ±3 days) runs in `_reconcile` (`_autoPayPlanned`, caught up only); toast list
   `autoPaidPlanned()`/`ackAutoPaidPlanned` (device-local `local.autoPaidPlanned`, max 50). Repo: `plannedCosts(includeClosed:)`, `addPlanned` (id
@@ -828,7 +829,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - Calendar refs (KL-A, `calendarEventRef`): stable uid + date + start time, else normalized title + date + start time;
   the same event read from two sources (phone calendar and an `.ics` link with another uid) gives two suggestions. A
   title without letters and no uid gets a per-calendar ref, so its "No cost" or confirm on one device does not reach
-  the same event read on another device. A huge `.ics` file
+  the same event read on another device. A pre-KL decision stored under the legacy title + date ref applies to every
+  event with that title on that day (pre-KL builds could not tell them apart). Two builds deciding the same event (one
+  under the legacy ref, one under the new) leave two rows: both reserve, and Upcoming and the `.ics` export list both
+  (Upcoming = Today, exactly), so the owner deletes one. A huge `.ics` file
   (over 10⁶ recurrence steps) gives later recurring events their first in-range occurrence only.
 
 ## Tests

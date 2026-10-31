@@ -7,7 +7,7 @@ import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
-import 'planned_sheets.dart' show sourceLabel;
+import 'planned_sheets.dart' show plannedEntryToast, sourceLabel;
 import 'upcoming_view.dart';
 
 /// Opens Upcoming: a page on a phone, a dialog from [dialogMin] wide (like the weekly review).
@@ -53,13 +53,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
     logNav('planned.open');
     final r = await widget.view.showEntry(context, p);
     if (!mounted) return;
-    final msg = switch (r) {
-      'saved' => 'Saved',
-      'paid' => 'Marked paid',
-      'skipped' => 'Skipped',
-      'deleted' => 'Deleted',
-      _ => null,
-    };
+    final msg = r == null || plannedEntryToast(r).isEmpty ? null : plannedEntryToast(r);
     if (msg == null) return;
     if (r == 'paid' || r == 'skipped') {
       toast(context, msg, actionLabel: 'Undo', onAction: () {
@@ -91,8 +85,9 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                 for (final i in items)
                   if (i.date == _day) i
               ];
-        final counted = view.countedIn(items);
-        final held = view.heldCycles();
+        final counted = view.setAside(items, next: _next);
+        final overdue = view.overdueEarlier(next: _next);
+        final held = view.heldCycles(next: _next);
         final today = view.today();
         return Scaffold(
           appBar: DialogAppBar(
@@ -158,7 +153,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                         : 'Nothing on this day.')
                   else
                     Rows(children: [
-                      for (final i in shown) _UpcomingRow(view: view, item: i, today: today, onOpen: _open, onChange: _change)
+                      for (final i in shown) _UpcomingRow(view: view, item: i, today: today, next: _next, onOpen: _open, onChange: _change)
                     ]),
                   if (_day == null && counted.count > 0)
                     TotalRule(
@@ -167,7 +162,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           const Text('Set aside', style: TextStyle(fontWeight: FontWeight.w600)),
-                          Text('${counted.count} ${counted.count == 1 ? 'cost' : 'costs'} from today',
+                          Text('${counted.count} ${counted.count == 1 ? 'cost' : 'costs'}',
                               style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
                         ]),
                         end: FittedBox(
@@ -177,7 +172,16 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                       ),
                     ),
                 ]),
-                if (!_next && _day == null && held.isNotEmpty)
+                if (_day == null && overdue.isNotEmpty)
+                  Panel(key: const ValueKey('upcomingOverdue'), children: [
+                    const SectionHead('Overdue'),
+                    Rows(children: [
+                      for (final x in overdue)
+                        LineItem(x.bill.label.isNotEmpty ? x.bill.label : x.bill.payee, moneyExact(x.reserve, cur),
+                            key: ValueKey('upcomingOverdue:${x.bill.id}'), sub: 'Due ${shortDateOrRaw(x.due)}, still set aside'),
+                    ]),
+                  ]),
+                if (_day == null && held.isNotEmpty)
                   Panel(key: const ValueKey('upcomingHeld'), children: [
                     const SectionHead('Held until paid'),
                     Rows(children: [
@@ -379,9 +383,11 @@ class _UpcomingRow extends StatelessWidget {
   final UpcomingView view;
   final UpcomingItem item;
   final String today;
+  final bool next;
   final Future<void> Function(UpcomingItem) onOpen;
   final Future<void> Function(UpcomingItem) onChange;
-  const _UpcomingRow({required this.view, required this.item, required this.today, required this.onOpen, required this.onChange});
+  const _UpcomingRow(
+      {required this.view, required this.item, required this.today, required this.next, required this.onOpen, required this.onChange});
 
   @override
   Widget build(BuildContext context) {
@@ -394,9 +400,14 @@ class _UpcomingRow extends StatelessWidget {
     final sub = Wrap(spacing: 8, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
       Text(shortDateOrRaw(i.date), style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       Tag(sourceLabel(i)),
-      if (past && !isSuggestion) Text('past', style: TextStyle(fontSize: BwType.metaSize, color: c.muted)),
-      if ((i.planned?.coveredByPlanIn(view.categoryTable) ?? false) || (i.bill?.coveredByPlanIn(view.categoryTable) ?? false))
-        Text('covered by your plan', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+      if (view.isOverdueCycle(i) && !view.billNotSetAside(i, next: next))
+        StatusLabel(key: ValueKey('overdue:${i.key}'), good: false, text: 'Overdue')
+      else if (past && !isSuggestion)
+        Text('past', style: TextStyle(fontSize: BwType.metaSize, color: c.muted)),
+      if ((i.planned?.coveredByPlanIn(view.categoryTable) ?? false) || (i.bill != null && view.billCovered(i.bill!)))
+        Text('covered by your plan', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2))
+      else if (view.billNotSetAside(i, next: next))
+        Text('Not set aside yet', key: ValueKey('notSetAside:${i.key}'), style: TextStyle(fontSize: BwType.metaSize, color: c.muted)),
       if (i.planned?.needsCategory ?? false) StatusLabel(key: ValueKey('needsCategory:${i.key}'), good: false, text: 'Needs a category'),
     ]);
     final title =

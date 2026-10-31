@@ -63,8 +63,7 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
     );
   }
 
-  /// The bars over time, starting at the page's range. One month: its one figure is the hero's, so the exact rows are left out until
-  /// the window moves (the bars stay).
+  /// The bars over time, starting at the page's range; one month is a row of days.
   Widget _bars(String id, String label, {String? merchantKey}) {
     final oneMonth = monthOf(range.start) == monthOf(range.end);
     return DashItem(
@@ -78,14 +77,16 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
           payments: (span) => wc.rowsOf(widget.category, merchantKey, span),
           barsKey: ValueKey('detailBars_$id'),
           rowKey: (r) => ValueKey('detailRow_${id}_$r'),
-          hideRows: oneMonth,
         ));
   }
 
   List<Widget> _categoryView(BuildContext context, String cur, List<MerchantTotal> merchants) {
     final c = context.c;
     final total = wc.categoryTotal(widget.category, range);
-    final parts = compareParts(wc.compareFor(widget.category, range), month: wc.monthIn(range), range: range, total: total, cur: cur);
+    // The bars the tile shows when it opens (the same window, so the same bar size).
+    final bars = wc.spendingSeriesFor(range, bucketFor(range), category: widget.category);
+    final parts =
+        compareParts(wc.compareFor(widget.category, range), month: wc.monthIn(range), range: range, total: total, cur: cur, bars: bars);
     final biggest = merchants.fold<int>(1, (m, x) => x.spent > m ? x.spent : m);
     return [
       DashItem(

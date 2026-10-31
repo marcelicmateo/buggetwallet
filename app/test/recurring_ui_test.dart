@@ -591,34 +591,36 @@ void main() {
     ];
     for (final (name, size, scale) in sizes) {
       tw('$name: Plan with every kind of bill row', (tester) async {
-        final errors = Errors();
-        final wc = partsWallet();
-        wc.addRecurringBill(label: 'Car cover', category: 'Car & transport', amount: 60000, intervalDays: 365, firstDue: '2027-03-01');
-        wc.addRecurringBill(
-            label: 'Zorblex power',
-            category: 'Groceries',
-            amount: 7000,
-            minAmount: 4000,
-            maxAmount: 7000,
-            intervalDays: 7,
-            firstDue: '2026-10-21',
-            instalments: 12);
-        await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
-        await scrollThrough(tester);
-        errors.check();
+        await withErrors((errors) async {
+          final wc = partsWallet();
+          wc.addRecurringBill(label: 'Car cover', category: 'Car & transport', amount: 60000, intervalDays: 365, firstDue: '2027-03-01');
+          wc.addRecurringBill(
+              label: 'Zorblex power',
+              category: 'Groceries',
+              amount: 7000,
+              minAmount: 4000,
+              maxAmount: 7000,
+              intervalDays: 7,
+              firstDue: '2026-10-21',
+              instalments: 12);
+          await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
+          await scrollThrough(tester);
+          errors.check();
+        });
       });
 
       tw('$name: the add sheet with the range and instalments open', (tester) async {
-        final errors = Errors();
-        final wc = hw();
-        await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
-        await openAdd(tester);
-        await tapKey(tester, 'recurringRange');
-        await tapKey(tester, 'recurringEnds');
-        await tapKey(tester, 'recurringPeriod:biweekly');
-        await tester.ensureVisible(find.byKey(const ValueKey('recurringSave')));
-        await tester.pump();
-        errors.check();
+        await withErrors((errors) async {
+          final wc = hw();
+          await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
+          await openAdd(tester);
+          await tapKey(tester, 'recurringRange');
+          await tapKey(tester, 'recurringEnds');
+          await tapKey(tester, 'recurringPeriod:biweekly');
+          await tester.ensureVisible(find.byKey(const ValueKey('recurringSave')));
+          await tester.pump();
+          errors.check();
+        });
       });
     }
   });

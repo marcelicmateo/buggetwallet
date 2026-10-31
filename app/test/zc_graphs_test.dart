@@ -10,6 +10,7 @@ import 'package:budget_wallet/src/screens/insights.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/charts.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -412,25 +413,115 @@ void main() {
     }, timeout: _timeout);
   });
 
+  group('what a bar opens', () {
+    int sum(Iterable<CategorizedTx> rows) => rows.fold<int>(0, (a, t) => a - t.amount);
+
+    test('a budget bar: only the rows of budgeted categories, adding up to its actual (not Shopping, which has no budget)', () {
+      final wc = insightsWallet();
+      final r = wc.insightRange('budget').range;
+      for (final b in [Bucket.month, Bucket.week, Bucket.day]) {
+        for (final x in wc.budgetSeriesFor(r, b)) {
+          final rows = wc.paymentsIn(x.span, budgeted: true);
+          expect(sum(rows), x.actual, reason: '${b.name} ${x.span}');
+        }
+      }
+      final oct = wc.budgetSeriesFor(r, Bucket.month).last;
+      expect(wc.paymentsIn(oct.span).any((t) => t.category == 'Shopping'), isTrue, reason: 'the plain spending list has it');
+      expect(wc.paymentsIn(oct.span, budgeted: true).any((t) => t.category == 'Shopping'), isFalse);
+    });
+
+    test('an income bar: the rows are the spending rows (sum = spent) and the income and extra rows (sum = income + extra)', () {
+      final wc = insightsWallet();
+      wc.repo.addTransaction(date: '2026-10-14', amount: 2500, category: 'Other income', note: 'Side job');
+      wc.reload();
+      final r = wc.insightRange('income').range;
+      for (final b in [Bucket.month, Bucket.week, Bucket.day]) {
+        for (final x in wc.incomeSeriesFor(r, b)) {
+          final rows = wc.paymentsIn(x.span, income: true);
+          final spent = rows.where((t) => t.kind == BudgetKind.fixed || t.kind == BudgetKind.flex);
+          final inc = rows.where((t) => t.kind == BudgetKind.income || t.kind == BudgetKind.extra);
+          expect(sum(spent), x.spent, reason: '${b.name} ${x.span} spent');
+          expect(inc.fold<int>(0, (a, t) => a + t.amount), x.income + x.extra, reason: '${b.name} ${x.span} in');
+        }
+      }
+    });
+
+    testWidgets('the budget graph row opens exactly the payments that make its actual', (t) async {
+      final wc = insightsWallet();
+      await pump(t, InsightsScreen(wc: wc), size: const Size(400, 9000));
+      final oct = wc.budgetSeriesFor(wc.insightRange('budget').range, Bucket.month).last;
+      await show(t, 'barRow_budget_2026-10');
+      await t.tap(find.byKey(const ValueKey('barRow_budget_2026-10')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      final rows = t.widgetList<TxTile>(find.descendant(of: find.byKey(const ValueKey('bucketRows')), matching: find.byType(TxTile)));
+      expect(rows, isNotEmpty);
+      expect(sum(rows.map((x) => x.t)), oct.actual);
+    }, timeout: _timeout);
+  });
+
+  group('touch and focus', () {
+    BoxDecoration outline(WidgetTester t) {
+      final box =
+          find.descendant(of: graph('spending'), matching: find.byType(DecoratedBox)).evaluate().map((e) => e.widget as DecoratedBox);
+      return box.firstWhere((d) => d.position == DecorationPosition.foreground).decoration as BoxDecoration;
+    }
+
+    testWidgets('after a touch there is no focus outline; with the keyboard there is', (t) async {
+      final wc = insightsWallet();
+      await pump(t, InsightsScreen(wc: wc));
+      await show(t, 'chartGestures_spending');
+      addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
+      FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTouch;
+      await swipe(t, graph('spending'), -40); // a finger: the graph takes the focus, but nothing is outlined
+      expect(Focus.of(t.element(graph('spending'))).hasFocus, isTrue);
+      expect(outline(t).border!.top.color, Colors.transparent);
+      FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional; // keyboard or mouse user
+      await t.pump();
+      expect(outline(t).border!.top.color, isNot(Colors.transparent));
+    }, timeout: _timeout);
+
+    testWidgets('a vertical drag that starts on a graph scrolls the page and leaves the window alone', (t) async {
+      final wc = insightsWallet();
+      await pump(t, InsightsScreen(wc: wc), size: const Size(400, 700));
+      final m = wc.insightRange('spending');
+      final before = m.range;
+      final list = find.byType(Scrollable).first;
+      final pixels = t.state<ScrollableState>(list).position.pixels;
+      final g = await t.startGesture(t.getCenter(graph('spending')));
+      for (var i = 0; i < 20; i++) {
+        await g.moveBy(const Offset(0, -12));
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      await g.up();
+      await t.pumpAndSettle();
+      expect(t.state<ScrollableState>(list).position.pixels, greaterThan(pixels));
+      expect(m.range, before);
+      expect(m.isFree, isFalse);
+    }, timeout: _timeout);
+  });
+
   group('drill-down bars', () {
-    testWidgets('a category over one month: day bars, no rows until the window moves; zoom out shows weeks or months with rows', (t) async {
+    testWidgets('a category over one month: day bars with a row each; the dates show only once the window moved', (t) async {
       final wc = insightsWallet();
       final r = wc.monthRange('2026-10');
       await pump(t, CategoryDetailScreen(wc: wc, category: 'Groceries', range: r), size: const Size(1280, 3000));
       expect(find.byKey(const ValueKey('detailBars_category')), findsOneWidget);
-      expect(rowCountOf(t, 'detailRow_category_'), 0);
-      expect(find.byKey(const ValueKey('chartDates_category')), findsOneWidget);
+      expect(rowCountOf(t, 'detailRow_category_'), 31, reason: 'one month is 31 day bars, a row each (M1)');
+      expect(find.byKey(const ValueKey('chartDates_category')), findsNothing, reason: 'the hero already says the dates');
       await show(t, 'chartZoomOut_category');
       await t.tap(find.byKey(const ValueKey('chartZoomOut_category')));
       await t.pump();
+      expect(find.byKey(const ValueKey('chartDates_category')), findsOneWidget);
       // 62 days: weeks, one row each, adding up to the category in those days
       final w = wc.spendingSeriesFor(DateRange(start: '2026-09-01', end: '2026-10-31'), Bucket.week, category: 'Groceries');
-      expect(rowCountOf(t, 'detailRow_category_'), greaterThan(0));
+      expect(rowCountOf(t, 'detailRow_category_'), w.length);
       expect(w.fold<int>(0, (a, b) => a + b.spent), wc.categoryTotal('Groceries', DateRange(start: '2026-09-01', end: '2026-10-31')));
       await show(t, 'chartReset_category');
       await t.tap(find.byKey(const ValueKey('chartReset_category')));
       await t.pump();
-      expect(rowCountOf(t, 'detailRow_category_'), 0);
+      expect(rowCountOf(t, 'detailRow_category_'), 31);
+      expect(find.byKey(const ValueKey('chartDates_category')), findsNothing);
       expect(t.takeException(), isNull);
     }, timeout: _timeout);
   });
@@ -457,7 +548,27 @@ void main() {
       await t.tap(find.byKey(const ValueKey('chartReset_forecast')));
       await t.pump();
       expect(find.text('Today'), findsOneWidget);
+      expect(find.byKey(const ValueKey('chartDates_forecast')), findsNothing, reason: 'its end labels already carry the dates');
       expect(t.takeException(), isNull);
+    }, timeout: _timeout);
+
+    testWidgets('a dip on the first day stays on the line (both points of that day)', (t) async {
+      await t.pumpWidget(MaterialApp(
+          theme: buildTheme(Brightness.light),
+          home: const Scaffold(
+              body: SingleChildScrollView(
+                  child: ForecastStepChart(points: [
+            ForecastPoint('2026-10-20', 100000, null),
+            ForecastPoint('2026-10-20', 40000, 'Rent', delta: -60000),
+          ], payday: '2026-10-30', currency: 'EUR')))));
+      final ys = t.widget<LineChart>(find.byType(LineChart)).data.lineBarsData.single.spots.map((s) => s.y).toList();
+      expect(ys, contains(1000.0), reason: 'the balance before the dip');
+      expect(ys, contains(400.0));
+      // zoomed in the window starts after the dip: the line begins at the balance in force then
+      await t.tap(find.byKey(const ValueKey('chartZoomIn_forecast')));
+      await t.pump();
+      final zoomed = t.widget<LineChart>(find.byType(LineChart)).data.lineBarsData.single.spots.map((s) => s.y).toList();
+      expect(zoomed.first, 400.0);
     }, timeout: _timeout);
   });
 }

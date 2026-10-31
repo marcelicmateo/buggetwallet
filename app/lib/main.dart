@@ -85,7 +85,7 @@ class BudgetWalletApp extends StatefulWidget {
 class _BudgetWalletAppState extends State<BudgetWalletApp> {
   final _navigator = GlobalKey<NavigatorState>();
   final _messenger = GlobalKey<ScaffoldMessengerState>();
-  late final _toastClearer = ToastClearer(_messenger);
+  late final _toastClearer = ToastClearer(_messenger, onPopped: _autoPaid);
   bool _noticeOpen = false;
   bool _failedOpen = false;
   final _light = buildTheme(Brightness.light);
@@ -105,15 +105,65 @@ class _BudgetWalletAppState extends State<BudgetWalletApp> {
     clockBehindNotice.addListener(_clockBehind);
     writeFailedNotice.addListener(_writeFailed);
     widget.wc.addListener(_syncMode);
+    widget.wc.addListener(_autoPaid);
   }
 
   @override
   void dispose() {
     widget.wc.removeListener(_syncMode);
+    widget.wc.removeListener(_autoPaid);
+    _autoPaidRetry?.cancel();
     _mode.dispose();
     clockBehindNotice.removeListener(_clockBehind);
     writeFailedNotice.removeListener(_writeFailed);
     super.dispose();
+  }
+
+  /// The planned costs the toast on screen announces (null: none).
+  List<AutoPaid>? _autoPaidOnScreen;
+  Timer? _autoPaidRetry;
+
+  /// KL-A: after an import or a sync run closed planned costs by itself, one toast: "Marked paid: <title>" (or the count) with Undo,
+  /// which reopens all of them. The costs stay pending until the toast closed by timeout or by its action: it is not shown while a
+  /// sheet or page covers the app (it shows when the page is on top again, [ToastClearer.onPopped]), never replaces a toast that has
+  /// an action (it waits for it), and one that was hidden or removed comes back.
+  void _autoPaid() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showAutoPaid());
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  void _showAutoPaid() {
+    final ctx = _navigator.currentContext, messenger = _messenger.currentState, nav = _navigator.currentState;
+    if (!mounted || ctx == null || !ctx.mounted || messenger == null || nav == null) return;
+    if (_autoPaidOnScreen != null || nav.canPop()) return;
+    final wc = widget.wc;
+    final done = wc.pendingAutoPaid();
+    if (done.isEmpty) return;
+    final busy = actionToastClosed(messenger);
+    if (busy != null) {
+      busy.whenComplete(_autoPaid);
+      return;
+    }
+    _autoPaidOnScreen = done;
+    toastOn(messenger, wc.autoPaidText(done),
+        wide: layoutOf(ctx) != LayoutSize.compact, accessible: MediaQuery.accessibleNavigationOf(ctx), actionLabel: 'Undo', onAction: () {
+      logNav('planned.autoPaid.undo');
+      wc.undoAutoPaid(done);
+    }).closed.then((reason) {
+      _autoPaidOnScreen = null;
+      if (!mounted) return;
+      switch (reason) {
+        case SnackBarClosedReason.timeout || SnackBarClosedReason.action || SnackBarClosedReason.dismiss || SnackBarClosedReason.swipe:
+          wc.ackAutoPaid(done);
+          _autoPaid(); // more may have come while this one showed
+        case SnackBarClosedReason.hide:
+          // Another toast replaced it: try again once that one is gone.
+          _autoPaidRetry?.cancel();
+          _autoPaidRetry = Timer(toastDuration + const Duration(milliseconds: 300), _autoPaid);
+        case SnackBarClosedReason.remove:
+          _autoPaid(); // a page or sheet opened (it waits for the pop) or the tab changed (the page is on top)
+      }
+    });
   }
 
   /// A write failed in the database (any screen): a dialog on the top route like the clock notice, so it shows over an open

@@ -77,6 +77,15 @@ class _BillHeader extends StatelessWidget {
                 child: Text('Planned by ${planner.label}',
                     key: const ValueKey('plannedBy'), style: TextStyle(fontSize: BwType.metaSize, color: c.ink2))),
           ]),
+        )
+      else if (v.wc.billsForSlip(v.b).isNotEmpty)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+              key: const ValueKey('slipBelongsTo'),
+              icon: const Icon(Icons.event_repeat, size: 18),
+              label: const Text('Belongs to bill…'),
+              onPressed: () => v.s._belongsTo(v.b)),
         ),
     ]);
   }

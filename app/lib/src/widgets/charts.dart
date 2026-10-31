@@ -47,7 +47,6 @@ class ForecastStepChart extends StatelessWidget {
       id: 'forecast',
       initial: whole,
       edges: (_) => ChartEdges(earliest: lo, latest: hi),
-      datesText: rangeLabel,
       chart: (context, w, _) => _chart(context, w),
     );
   }
@@ -58,17 +57,22 @@ class ForecastStepChart extends StatelessWidget {
     double px(double logical) => snapPx(logical, dpr);
     // The step line inside the window: the balance in force on its first day, then every point that lands in it, then flat to its end.
     final dates = <String>[], cents = <int>[];
+    // The balance in force before the window's first day, then every point from that day on (a dip on the first day stays).
     var start = points.first.cents;
     for (final p in points) {
-      if (p.date.compareTo(w.start) <= 0) start = p.cents;
+      if (p.date.compareTo(w.start) < 0) start = p.cents;
     }
-    dates.add(w.start);
-    cents.add(start);
-    for (final p in points) {
-      if (p.date.compareTo(w.start) > 0 && p.date.compareTo(w.end) <= 0) {
-        dates.add(p.date);
-        cents.add(p.cents);
-      }
+    final inside = [
+      for (final p in points)
+        if (p.date.compareTo(w.start) >= 0 && p.date.compareTo(w.end) <= 0) p
+    ];
+    if (inside.isEmpty || inside.first.date != w.start) {
+      dates.add(w.start);
+      cents.add(start);
+    }
+    for (final p in inside) {
+      dates.add(p.date);
+      cents.add(p.cents);
     }
     final end = daysBetween(w.start, w.end).clamp(1, 100000).toDouble();
     dates.add(w.end);

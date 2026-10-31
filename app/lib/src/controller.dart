@@ -27,7 +27,6 @@ import 'logging.dart';
 import 'memo_key.dart';
 import 'nudges.dart';
 import 'platform.dart' show isWeb;
-import 'stand_in_rx8.dart' as rx8; // STAND-IN: deleted when core compareTag merges
 import 'sub_state.dart';
 import 'sync_status.dart' show relayOlderThanBeforeText;
 import 'tabs.dart';
@@ -270,6 +269,10 @@ class WalletController extends ChangeNotifier {
 
   /// Counts [reload]s: the derived values below are cached per version (and per day) and recomputed only after the data changed.
   int dataVersion = 0;
+
+  /// The [dataVersion] [pendingAutoPaid] last looked at, and what it found.
+  int _autoPaidSeen = -1;
+  List<AutoPaid> _autoPaidPending = const [];
 
   /// The idle warm-up of the derived values the tabs need (see `controller_warmup.dart`).
   final WarmUp warmUp = WarmUp();
@@ -880,13 +883,17 @@ class WalletController extends ChangeNotifier {
   /// A payday more than 20 days after the current period start, not yet started as a new month.
   String? newPayday(String periodStart) => _paydays.where((d) => d.compareTo(addDays(periodStart, 20)) > 0).lastOrNull;
 
+  /// KL-A: slip payee key -> the recurring bill payee key it stands for (`repo.payeeAliases()`), kept per data version. Every core call that
+  /// takes `payeeAliases:` gets it, so a slip spelled differently is covered, listed and counted like the bill it belongs to.
+  Map<String, String> payeeAliases() => _cached(const MemoKey('payeeAliases'), repo.payeeAliases);
+
   /// The budget of the running pay period. Confirmed recurring bills are reserved in it (`reservedBills`, `dueBills`).
   PeriodBudget period() => _cached(
       const MemoKey('period'),
       () => timed(
           'wc.period',
           () => computePeriod(txs, effectiveSettings, goals, today(),
-              bills: recurringBills(), planned: plannedOpen(), table: categoryTable, matchRows: rawExpanded),
+              bills: recurringBills(), planned: plannedOpen(), table: categoryTable, matchRows: rawExpanded, payeeAliases: payeeAliases()),
           warnMs: 50));
 
   /// One entry per day of the running pay period: within the day's money, over, today or to come (Today's day dots).
@@ -895,7 +902,7 @@ class WalletController extends ChangeNotifier {
       () => timed(
           'wc.periodDays',
           () => core.periodDays(txs, effectiveSettings, goals, today(),
-              bills: recurringBills(), planned: plannedOpen(), table: categoryTable, matchRows: rawExpanded),
+              bills: recurringBills(), planned: plannedOpen(), table: categoryTable, matchRows: rawExpanded, payeeAliases: payeeAliases()),
           warnMs: 100));
 
   /// Saved or lost per pay period (salary to salary), oldest first; the last one is still running.
@@ -1386,6 +1393,12 @@ class WalletController extends ChangeNotifier {
 
   /// The (hand-added expense, bank row) pair unlinked last (D2): the toast's Undo links it again (`relinkCashMatch`).
   (String, String)? lastUnlinked;
+
+  /// The alias a slip's payee key had before "Belongs to bill…" replaced it (null: none), for the Undo ([unlinkSlip]).
+  final Map<String, String?> _aliasBeforeLink = {};
+
+  /// After [unlinkCashMatch]: core matched the entry to another bank row at once (the toast says so).
+  bool lastUnlinkedRematched = false;
 
   /// The payee rule offered after the last hand-set main tag (Q6): the toast after the sheet reads it once (`takeRuleOffer`).
   RuleOffer? ruleOffer;

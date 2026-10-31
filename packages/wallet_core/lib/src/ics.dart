@@ -28,6 +28,11 @@ class CalendarEvent {
   /// KL-A: the local start time in minutes after midnight (0..1439); null for an all-day event or when the source
   /// does not say.
   final int? startMinutes;
+
+  /// The uid builds before KL-A gave this event when it differs from [uid]: [parseIcs] gives an event without a `UID`
+  /// `bw-nouid-<n>` here (what those builds used as its uid), so [legacyRef] of a title without letters is still the
+  /// pre-KL one. Null: [uid].
+  final String? legacyUid;
   const CalendarEvent(
       {required this.calendarId,
       required this.uid,
@@ -35,16 +40,17 @@ class CalendarEvent {
       required this.date,
       this.notes,
       this.allDay = true,
-      this.startMinutes});
+      this.startMinutes,
+      this.legacyUid});
 
   /// [calendarEventRef] of this occurrence: what a new planned row stores as `sourceRef`.
   String get ref => calendarEventRef(calendarId: calendarId, uid: uid, title: title, date: date, startMinutes: startMinutes);
 
   /// [legacyCalendarEventRef] of this occurrence: the ref builds before KL-A stored. A decision stored under it (a
   /// confirm or a dismiss) still holds: every lookup checks both ([refs]).
-  String get legacyRef => legacyCalendarEventRef(calendarId: calendarId, uid: uid, title: title, date: date);
+  String get legacyRef => legacyCalendarEventRef(calendarId: calendarId, uid: legacyUid ?? uid, title: title, date: date);
 
-  /// [ref] and [legacyRef] (one element when they are equal).
+  /// [ref] and [legacyRef] (never equal: [calendarEventRef] has its own formats).
   Set<String> get refs => {ref, legacyRef};
 }
 
@@ -59,15 +65,15 @@ String calendarRef(String calendarId, String uid, String date) => _hashRef('bw-c
 /// - With a uid: the first 32 hex characters of the SHA-256 of [uid], [date] and [startMinutes] (none for all-day), so
 ///   a renamed event keeps its decision and two same-name events on one day are separate. [calendarId] is left out:
 ///   an `.ics` source's id is device-local, so the same file or link read again, or on another device, keeps its refs.
-/// - Without one: [normalizeTitle] of [title], [date] and [startMinutes], so same-name events at different times are
-///   separate and the ref is still the same on every device; an all-day event (no [startMinutes]) gets exactly its
-///   [legacyCalendarEventRef]. A title that normalizes to '' falls back to a per-calendar ref ([calendarRef]'s rule)
-///   with the time.
+/// - Without one: [normalizeTitle] of [title], [date] and [startMinutes] (an all-day marker when none), so same-name
+///   events at different times are separate and the ref is still the same on every device. A title that normalizes to
+///   '' falls back to a per-calendar ref ([calendarRef]'s rule) with the time or the marker.
+/// Never equal to a [legacyCalendarEventRef] (other hash inputs), so an event's legacy ref matches only rows written
+/// before KL-A, never a new row of another event (an all-day "Dentist" decision never hides a timed "Dentist 15:00").
 /// No raw title or id is kept. Every lookup also checks [legacyCalendarEventRef] (`CalendarEvent.refs`).
 String calendarEventRef({required String calendarId, required String uid, required String title, required String date, int? startMinutes}) {
-  final at = startMinutes == null ? '' : '$startMinutes';
-  if (uid.isNotEmpty) return _hashRef('bw-cal-v3\u0000$uid\u0000$date\u0000$at');
-  if (startMinutes == null) return legacyCalendarEventRef(calendarId: calendarId, uid: uid, title: title, date: date);
+  final at = startMinutes == null ? 'all-day' : '$startMinutes';
+  if (uid.isNotEmpty) return _hashRef('bw-cal-v3\u0000$uid\u0000$date\u0000${startMinutes ?? ''}');
   final t = normalizeTitle(title);
   return t.isEmpty ? _hashRef('bw-cal-v1\u0000$calendarId\u0000\u0000$date\u0000$at') : _hashRef('bw-cal-v4\u0000$t\u0000$date\u0000$at');
 }
@@ -185,6 +191,7 @@ IcsParseResult parseIcs(String text,
     out['${e.uid}\u0000$date'] = CalendarEvent(
         calendarId: calendarId,
         uid: e.hasUid ? e.uid : '',
+        legacyUid: e.hasUid ? null : e.uid,
         title: e.summary,
         date: date,
         notes: e.description,
@@ -618,17 +625,16 @@ String _compact(String iso) => iso.replaceAll('-', '');
 /// and per occurrence of a confirmed bill ([billOccurrences]),
 /// dated in [from, to]. `SUMMARY` = `<title> · <amount>` ([_euroText], so [amountFromText] reads the amount back),
 /// stable UIDs (`planned-<id>@budget-wallet`, `bill-<id>-<yyyymmdd>@budget-wallet`), `DTSTAMP` from [from] so the same
-/// data gives the same text. CRLF, folded at 75 octets, text escaped. KL-A: with the calendar [events] read on this
-/// device, a legacy-ref row that a new-ref row stands for ([supersededCalendarRows]) is not exported twice;
-/// [payeeAliases] as in `billPayeeKey`.
+/// data gives the same text. CRLF, folded at 75 octets, text escaped. Every such row is exported, also both rows of an
+/// event two builds decided under its legacy and its new ref (both reserve, as in `upcoming`); [payeeAliases] as in
+/// `billPayeeKey`.
 String plannedIcs(List<PlannedCost> planned, List<RecurringBill> bills,
-    {required String from, required String to, Map<String, String> payeeAliases = const {}, List<CalendarEvent> events = const []}) {
+    {required String from, required String to, Map<String, String> payeeAliases = const {}}) {
   final rows = <(String uid, String date, String title, int amount)>[];
   if (isIsoDate(from) && isIsoDate(to) && from.compareTo(to) <= 0) {
     bool inRange(String d) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
-    final superseded = supersededCalendarRows(planned, events);
     for (final p in planned) {
-      if (p.deleted || p.status == PlannedStatus.skipped || p.amount == null || superseded.contains(p.id)) continue;
+      if (p.deleted || p.status == PlannedStatus.skipped || p.amount == null) continue;
       if (plannedCoverage(p, bills, payeeAliases: payeeAliases) case final c? when c.occurrence == null || inRange(c.occurrence!)) continue;
       if (p.date.compareTo(from) < 0 || p.date.compareTo(to) > 0 || !isIsoDate(p.date)) continue;
       rows.add(('planned-${p.id}@budget-wallet', p.date, p.title, p.amount!));

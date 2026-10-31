@@ -947,35 +947,37 @@ void main() {
     });
 
     tw('Plan › Calendars warns under an http:// link, not under https://, at 320 dp x2.0', (tester) async {
-      final errors = Errors();
-      final wc = fw();
-      await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: CalendarsPanel(wc: wc))),
-          size: const Size(320, 900), textScale: 2.0);
-      await tester.ensureVisible(key('calLink'));
-      await tester.tap(key('calLink'));
-      await tester.pump();
-      expect(key('calLinkInsecure'), findsNothing);
-      await tester.enterText(key('calLinkField'), 'https://example.org/a.ics');
-      await tester.pump();
-      expect(key('calLinkInsecure'), findsNothing);
-      await tester.enterText(key('calLinkField'), ' HTTP://example.org/a.ics');
-      await tester.pump();
-      expect(key('calLinkInsecure'), findsOneWidget);
-      expect(find.textContaining("This link isn't encrypted", findRichText: true), findsOneWidget);
-      expect(find.byIcon(Icons.error_outline), findsWidgets, reason: 'icon plus text');
-      errors.check();
+      await withErrors((errors) async {
+        final wc = fw();
+        await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: CalendarsPanel(wc: wc))),
+            size: const Size(320, 900), textScale: 2.0);
+        await tester.ensureVisible(key('calLink'));
+        await tester.tap(key('calLink'));
+        await tester.pump();
+        expect(key('calLinkInsecure'), findsNothing);
+        await tester.enterText(key('calLinkField'), 'https://example.org/a.ics');
+        await tester.pump();
+        expect(key('calLinkInsecure'), findsNothing);
+        await tester.enterText(key('calLinkField'), ' HTTP://example.org/a.ics');
+        await tester.pump();
+        expect(key('calLinkInsecure'), findsOneWidget);
+        expect(find.textContaining("This link isn't encrypted", findRichText: true), findsOneWidget);
+        expect(find.byIcon(Icons.error_outline), findsWidgets, reason: 'icon plus text');
+        errors.check();
+      });
     });
 
     tw('a saved http:// link keeps its warning in the list', (tester) async {
-      final errors = Errors();
-      final wc = fw();
-      wc.seams.icsFetcher = (u) async => fakeIcs([('u2', '2026-10-26', 'Link event')]);
-      expect(await wc.addIcsLink('http://example.org/a.ics'), isNull, reason: 'accepted, with a warning');
-      expect(wc.calendarEntries().single.insecure, isTrue);
-      await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: CalendarsPanel(wc: wc))),
-          size: const Size(320, 900), textScale: 2.0);
-      expect(find.textContaining("This link isn't encrypted", findRichText: true), findsOneWidget);
-      errors.check();
+      await withErrors((errors) async {
+        final wc = fw();
+        wc.seams.icsFetcher = (u) async => fakeIcs([('u2', '2026-10-26', 'Link event')]);
+        expect(await wc.addIcsLink('http://example.org/a.ics'), isNull, reason: 'accepted, with a warning');
+        expect(wc.calendarEntries().single.insecure, isTrue);
+        await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: CalendarsPanel(wc: wc))),
+            size: const Size(320, 900), textScale: 2.0);
+        expect(find.textContaining("This link isn't encrypted", findRichText: true), findsOneWidget);
+        errors.check();
+      });
     });
 
     test('a cost added for tomorrow with a 3 day heads-up still gets a notification (the next 09:00)', () async {
@@ -1085,21 +1087,23 @@ void main() {
     ];
     for (final (name, size, scale) in sizes) {
       tw('$name: Today with the Coming up and heads-up lines', (tester) async {
-        final errors = Errors();
-        final wc = fw();
-        await pumpApp(tester, todayOf(wc), size: size, textScale: scale);
-        await scrollThrough(tester);
-        errors.check();
+        await withErrors((errors) async {
+          final wc = fw();
+          await pumpApp(tester, todayOf(wc), size: size, textScale: scale);
+          await scrollThrough(tester);
+          errors.check();
+        });
       });
 
       tw('$name: Upcoming with planned costs, suggestions and a long title', (tester) async {
-        final errors = Errors();
-        final wc = await withCalendar();
-        wc.addPlannedCost(
-            title: 'A very long synthetic planned cost name that has to wrap on a narrow screen', date: '2026-10-29', amount: 123456);
-        await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: size, textScale: scale);
-        await scrollThrough(tester);
-        errors.check();
+        await withErrors((errors) async {
+          final wc = await withCalendar();
+          wc.addPlannedCost(
+              title: 'A very long synthetic planned cost name that has to wrap on a narrow screen', date: '2026-10-29', amount: 123456);
+          await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: size, textScale: scale);
+          await scrollThrough(tester);
+          errors.check();
+        });
       });
 
       tw('$name: the planned cost sheet and the entry sheet', (tester) async {
@@ -1122,18 +1126,19 @@ void main() {
       });
 
       tw('$name: Plan › Calendars with calendars, files, a link error and the heads-up fields', (tester) async {
-        final errors = Errors();
-        final cals = FakeCalendars(eventList: _events);
-        final wc = fw(calendars: cals, nudges: FakeNudges());
-        await wc.requestCalendarAccess();
-        await wc.importIcsFile('a-rather-long-synthetic-calendar-file-name.ics', bytesOf(fakeIcs([('u1', '2026-10-25', 'Car service')])));
-        wc.seams.icsFetcher = (u) async => fakeIcs([('u2', '2026-10-26', 'Link event')]);
-        await wc.addIcsLink('https://example.org/a/very/long/path/to/a/calendar.ics');
-        wc.seams.icsFetcher = (u) async => throw const IcsFetchException('The link took too long to answer.');
-        await wc.readCalendars();
-        await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
-        await scrollThrough(tester);
-        errors.check();
+        await withErrors((errors) async {
+          final cals = FakeCalendars(eventList: _events);
+          final wc = fw(calendars: cals, nudges: FakeNudges());
+          await wc.requestCalendarAccess();
+          await wc.importIcsFile('a-rather-long-synthetic-calendar-file-name.ics', bytesOf(fakeIcs([('u1', '2026-10-25', 'Car service')])));
+          wc.seams.icsFetcher = (u) async => fakeIcs([('u2', '2026-10-26', 'Link event')]);
+          await wc.addIcsLink('https://example.org/a/very/long/path/to/a/calendar.ics');
+          wc.seams.icsFetcher = (u) async => throw const IcsFetchException('The link took too long to answer.');
+          await wc.readCalendars();
+          await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
+          await scrollThrough(tester);
+          errors.check();
+        });
       });
     }
   });

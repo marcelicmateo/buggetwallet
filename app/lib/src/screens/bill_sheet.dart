@@ -64,7 +64,7 @@ String _billFileLabel(String? type) => switch (type) {
     };
 
 /// One bill: fields (a mark on the ones guessed from text), items, the original photo or PDF, Confirm, who paid it, warranty and
-/// return-by dates, Delete. Pops `'confirmed'`, `'saved'`, `'deleted'` or `'paid'`.
+/// return-by dates, Delete. Pops `'confirmed'`, `'saved'`, `'deleted'`, `'paid'` or `'linked'` ("Belongs to bill…", which toasts by itself).
 class BillSheet extends StatefulWidget {
   final WalletController wc;
   final String billId;
@@ -195,6 +195,28 @@ class _BillSheetState extends State<BillSheet> {
     }
   }
 
+  /// "Belongs to bill…": the owner says this slip is an expected bill spelled differently. The sheet closes (a toast under a modal sheet
+  /// would not be seen) and the toast on the page below says it, with Undo.
+  Future<void> _belongsTo(Bill b) async {
+    logNav('bill.belongsTo');
+    if (!_save(b)) return;
+    final saved = widget.wc.bill(b.id);
+    if (saved == null) return;
+    final r = await showSheet<RecurringBill>(context, _BelongsSheet(wc: widget.wc, bill: saved));
+    if (r == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
+    final wc = widget.wc;
+    final err = wc.linkSlipToBill(saved, r);
+    if (err != null) {
+      setState(() => error = err);
+      return;
+    }
+    Navigator.pop(context, 'linked'); // no message of its own: openBill's "Saved" would replace the Undo toast below
+    toastOn(messenger, 'Belongs to ${r.label.isEmpty ? r.payee : r.label} from now on',
+        wide: wide, accessible: accessible, actionLabel: 'Undo', onAction: () => wc.unlinkSlip(saved));
+  }
+
   Future<void> _cash(Bill b) async {
     logNav('bill.cash');
     final cat = await showSheet<String>(context, _CashSheet(wc: widget.wc, bill: b));
@@ -300,6 +322,34 @@ class _CandidatesSheet extends StatelessWidget {
                 onTap: () {
                   Navigator.pop(context, t.tx.id);
                 }),
+        ]),
+    ]);
+  }
+}
+
+/// "Belongs to bill…": the confirmed expected bills, one row each. Pops the chosen [RecurringBill].
+class _BelongsSheet extends StatelessWidget {
+  final WalletController wc;
+  final Bill bill;
+  const _BelongsSheet({required this.wc, required this.bill});
+  @override
+  Widget build(BuildContext context) {
+    final list = wc.billsForSlip(bill);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const Heading('Belongs to bill…'),
+      const SizedBox(height: 4),
+      const Muted('Pick the expected bill this slip is for. The way the payee is spelled here is remembered for it.',
+          size: BwType.metaSize),
+      const SizedBox(height: 8),
+      if (list.isEmpty)
+        const EmptyNote('No expected bill to pick. Confirm one in Plan › Expected bills first.')
+      else
+        Rows(children: [
+          for (final r in list)
+            InkWell(
+                key: ValueKey('belongs:${r.id}'),
+                onTap: () => Navigator.pop(context, r),
+                child: LineItem(r.label.isEmpty ? r.payee : r.label, moneyExact(r.reserveAmount, wc.currency), sub: r.payee)),
         ]),
     ]);
   }

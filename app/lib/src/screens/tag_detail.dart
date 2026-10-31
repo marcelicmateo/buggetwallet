@@ -30,7 +30,9 @@ class TagDetailScreen extends StatelessWidget {
           final rows = wc.rowsOfTag(tag, range);
           final total = wc.tagTotalFor(tag, range);
           final cmp = wc.compareTagFor(tag, range);
-          final parts = compareParts(cmp, month: wc.monthIn(range), range: range, total: total.spent, cur: cur);
+          // The bars the tile shows when it opens (the same window, so the same bar size).
+          final bars = wc.spendingSeriesFor(range, bucketFor(range), tag: tag);
+          final parts = compareParts(cmp, month: wc.monthIn(range), range: range, total: total.spent, cur: cur, bars: bars);
           // One month: its one figure is the hero's, so no exact rows until the window moves (the bars stay).
           final oneMonth = monthOf(range.start) == monthOf(range.end);
           return Scaffold(
@@ -58,7 +60,6 @@ class TagDetailScreen extends StatelessWidget {
                   payments: (span) => wc.rowsOfTag(tag, span),
                   barsKey: const ValueKey('tagDetailBars'),
                   rowKey: (r) => ValueKey('tagDetailRow_$r'),
-                  hideRows: oneMonth,
                 ),
               ),
               DashItem(

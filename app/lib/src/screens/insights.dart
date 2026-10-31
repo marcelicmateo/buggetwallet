@@ -113,11 +113,12 @@ class InsightPanel extends StatelessWidget {
     required List<Widget> Function(bool anyPartial, bool anyShare, Bucket b) legend,
     bool Function(T)? prorated,
     bool income = false,
+    bool budgeted = false,
   }) {
     void open(T bar, Bucket b) {
       final sp = span(bar);
       logNav('insights.bar', {'graph': id, 'bucket': b.name});
-      openBucketPayments(context, wc, title: _name(sp, b, false), rows: () => wc.paymentsIn(sp, income: income));
+      openBucketPayments(context, wc, title: _name(sp, b, false), rows: () => wc.paymentsIn(sp, income: income, budgeted: budgeted));
     }
 
     return ChartViewport(
@@ -264,6 +265,7 @@ class InsightPanel extends StatelessWidget {
         span: (x) => x.span,
         partial: (x) => x.partial,
         prorated: (x) => x.prorated,
+        budgeted: true,
         group: (x, name, b, first) {
           final what = x.prorated ? 'Budget share' : 'Budget';
           return BarGroup(

@@ -251,19 +251,17 @@ extension WalletInsights on WalletController {
     }
   }
 
-  /// The payments behind a bar of [span], newest first: spending rows (refunds too, so they add up to the bar) and, with [income],
-  /// the income rows.
-  List<CategorizedTx> paymentsIn(DateRange span, {bool income = false}) => memo(
-      _k('payments', span, income),
+  /// The payments behind a bar of [span], newest first. They add up to what the bar shows: spending rows (refunds too, so they sum to
+  /// `spent`) and, with [income], the income and extra rows (they sum to `income + extra`); with [budgeted] only the rows of the
+  /// categories that have a budget (they sum to `BudgetBar.actual`).
+  List<CategorizedTx> paymentsIn(DateRange span, {bool income = false, bool budgeted = false}) => memo(
+      _k('payments', span, (income, budgeted)),
       () => [
             for (final t in txs)
-              // The day index's rules (core's `countsAsSpending`, which wallet_core does not export): live, home currency, fixed or flex.
               if (span.contains(t.date) &&
-                  t.tx.live &&
-                  t.tx.currency == currency &&
-                  (t.kind == BudgetKind.fixed ||
-                      t.kind == BudgetKind.flex ||
-                      (income && (t.kind == BudgetKind.income || t.kind == BudgetKind.extra))))
+                  (countsAsSpending(t, currency)
+                      ? !budgeted || categoryBudgets.containsKey(categoryTable.topLevel(t.category))
+                      : income && t.tx.live && t.tx.currency == currency && (t.kind == BudgetKind.income || t.kind == BudgetKind.extra)))
                 t
           ]);
 

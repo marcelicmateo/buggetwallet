@@ -184,22 +184,35 @@ class _PlannedEntrySheetState extends State<PlannedEntrySheet> {
                 if (r == 'saved' && context.mounted) Navigator.pop(context, 'saved');
               },
               child: const Text('Change')),
-          OutlinedButton(
-              key: const ValueKey('entryPaid'),
-              style: accentOutlined(context),
-              onPressed: () {
-                logNav('planned.paidOpen');
-                setState(() => _paying = true);
-              },
-              child: const Text('Paid')),
-          OutlinedButton(
-              key: const ValueKey('entrySkip'),
-              onPressed: () {
-                logNav('planned.skip');
-                wc.skipPlanned(p);
-                Navigator.pop(context, 'skipped');
-              },
-              child: const Text('Skip')),
+          // A paid or skipped cost (opened from search) can be brought back; Paid and Skip are for open ones.
+          if (!p.isOpen)
+            OutlinedButton(
+                key: const ValueKey('entryReopen'),
+                style: accentOutlined(context),
+                onPressed: () {
+                  logNav('planned.reopen');
+                  wc.reopenPlanned(p);
+                  Navigator.pop(context, 'reopened');
+                },
+                child: const Text('Reopen')),
+          if (p.isOpen)
+            OutlinedButton(
+                key: const ValueKey('entryPaid'),
+                style: accentOutlined(context),
+                onPressed: () {
+                  logNav('planned.paidOpen');
+                  setState(() => _paying = true);
+                },
+                child: const Text('Paid')),
+          if (p.isOpen)
+            OutlinedButton(
+                key: const ValueKey('entrySkip'),
+                onPressed: () {
+                  logNav('planned.skip');
+                  wc.skipPlanned(p);
+                  Navigator.pop(context, 'skipped');
+                },
+                child: const Text('Skip')),
           TextButton(
               key: const ValueKey('entryDelete'),
               onPressed: () {
@@ -246,3 +259,13 @@ class _PlannedEntrySheetState extends State<PlannedEntrySheet> {
     ]);
   }
 }
+
+/// The toast after the planned-cost sheet answered [result] (`saved|paid|skipped|reopened|deleted`); empty for anything else.
+String plannedEntryToast(String result) => switch (result) {
+      'saved' => 'Saved',
+      'paid' => 'Marked paid',
+      'skipped' => 'Skipped',
+      'reopened' => 'Open again',
+      'deleted' => 'Deleted',
+      _ => '',
+    };

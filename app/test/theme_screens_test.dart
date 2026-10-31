@@ -18,27 +18,28 @@ void main() {
       testWidgets('$name: tabs scroll through, right navigation, no Card, square Panels', (tester) async {
         tester.platformDispatcher.platformBrightnessTestValue = b;
         addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
-        final errors = Errors();
-        await pumpFull(tester, demoWallet(), 1.0, size: size);
-        expect(tester.takeException(), isNull);
-        final compact = sizeFor(size.width) == LayoutSize.compact;
-        expect(find.byType(NavigationBar), compact ? findsOneWidget : findsNothing);
-        expect(find.byType(NavigationRail), compact ? findsNothing : findsOneWidget);
-        expect(Theme.of(tester.element(find.byType(Scaffold).first)).brightness, b);
+        await withErrors((errors) async {
+          await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: size);
+          expect(tester.takeException(), isNull);
+          final compact = sizeFor(size.width) == LayoutSize.compact;
+          expect(find.byType(NavigationBar), compact ? findsOneWidget : findsNothing);
+          expect(find.byType(NavigationRail), compact ? findsNothing : findsOneWidget);
+          expect(Theme.of(tester.element(find.byType(Scaffold).first)).brightness, b);
 
-        for (final tab in _tabs) {
-          await tapTab(tester, tab);
-          await scrollThrough(tester);
-          expect(tester.takeException(), isNull, reason: tab);
-          expect(find.byType(Card), findsNothing, reason: '$tab has a Card');
-          for (final p in find.byType(Panel).evaluate()) {
-            // The Panel's own box (the first DecoratedBox under it). Tags, chips and fields inside it keep their own 2 px radius.
-            final own = find.descendant(of: find.byElementPredicate((e) => e == p), matching: find.byType(DecoratedBox)).evaluate().first;
-            final dec = (own.widget as DecoratedBox).decoration;
-            if (dec is BoxDecoration) expect(dec.borderRadius, anyOf(isNull, BorderRadius.zero), reason: '$tab Panel radius');
+          for (final tab in _tabs) {
+            await tapTab(tester, tab);
+            await scrollThrough(tester);
+            expect(tester.takeException(), isNull, reason: tab);
+            expect(find.byType(Card), findsNothing, reason: '$tab has a Card');
+            for (final p in find.byType(Panel).evaluate()) {
+              // The Panel's own box (the first DecoratedBox under it). Tags, chips and fields inside it keep their own 2 px radius.
+              final own = find.descendant(of: find.byElementPredicate((e) => e == p), matching: find.byType(DecoratedBox)).evaluate().first;
+              final dec = (own.widget as DecoratedBox).decoration;
+              if (dec is BoxDecoration) expect(dec.borderRadius, anyOf(isNull, BorderRadius.zero), reason: '$tab Panel radius');
+            }
           }
-        }
-        errors.check();
+          errors.check();
+        });
       });
     }
   }

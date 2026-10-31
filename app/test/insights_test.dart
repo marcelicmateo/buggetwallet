@@ -343,7 +343,7 @@ void main() {
       expect(find.byKey(const ValueKey('detailBars_merchant')), findsOneWidget);
       await tapKey(tester, 'detailBack');
       expect(find.byKey(const ValueKey('merchantRows')), findsNothing);
-      expect(find.byKey(const ValueKey('compareLast')), findsOneWidget);
+      expect(find.byKey(const ValueKey('compareAverage')), findsOneWidget);
     });
 
     testWidgets('the category trend is the merchants\' trends added up', (tester) async {

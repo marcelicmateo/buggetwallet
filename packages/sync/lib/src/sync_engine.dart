@@ -551,6 +551,12 @@ class SyncEngine {
   /// one is not covered, a caught-up run writes a snapshot at once (like a heal, without waiting [stuckAfter]).
   static const unblockKey = 'syncUnblock';
 
+  /// Device-local (KL): the asked files (`"<stream>/<seq>"` → ms) this install already answered with a state resend,
+  /// so a repeated ask for the same file (the asker asks again after [askEvery] while still blocked) queues no second
+  /// one; the newest [maxUnblockSent] are kept.
+  static const unblockSentKey = 'syncUnblockSent';
+  static const maxUnblockSent = 64;
+
   /// KL: a device blocked on a quarantined file for more than one run asks that file's author at most this often.
   static const askEvery = Duration(hours: 24);
 
@@ -874,6 +880,7 @@ class SyncEngine {
     // 5. Caught up: match, and maybe write a snapshot.
     final mine = {...ownOld, stream};
     final unblockAsks = _takeUnblockAsks(repo, mine);
+    Map<String, int>? wrote;
     final heal = _trackStuck(repo, state, cursors, myLast, now, stream, mine) | _unblockWanted(repo, state, mine);
     // deviceIdInUse is information about this install's own stream (already handled), not a file left unread.
     final caughtUp = waiting.isEmpty &&
@@ -901,7 +908,7 @@ class SyncEngine {
       // While a file that did not fit waits, this device's state names it where the others (and the relay) may still
       // name another file for that bill: a set from it could let GC drop theirs. The snapshot goes, its set does not.
       final fullHeld = waitingRefs.any((h) => blobFailures[h] == TransportFailure.full);
-      await _maybeSnapshot(repo, state, cursors, myLast, now, heal: heal, heldBlobs: heldBlobs, declare: !fullHeld);
+      wrote = await _maybeSnapshot(repo, state, cursors, myLast, now, heal: heal, heldBlobs: heldBlobs, declare: !fullHeld);
       // One snapshot attempt per unblock ask: the asker asks again after [askEvery] if it is still blocked.
       if (repo.localValue(unblockKey) != null) {
         repo.setLocalValue(unblockKey, null);
@@ -912,15 +919,10 @@ class SyncEngine {
     }
 
     // KL: blocked behind a quarantined file for more than one run: ask its author (records only, once per file per
-    // [askEvery]). An unblock ask read here is answered with one resend of this device's state.
+    // [askEvery]). An unblock ask read here is answered by a snapshot covering the file (the one just written, or the
+    // relay's newest of this schema); else with one resend of this device's state, once per asked file.
     if (inUse == null && await _askAuthors(repo, blockedBook, myLast, stream, now)) myLast++;
-    if (unblockAsks > 0 && book.send == null) {
-      final n = repo.queueStateResend();
-      book
-        ..send = _recordHlc(repo)
-        ..save(repo);
-      logEvent(_log, Level.WARNING, 'sync.unblock.answer', {'asks': unblockAsks, 'ops': n});
-    }
+    if (unblockAsks.isNotEmpty) _answerUnblock(repo, unblockAsks, wrote ?? _currentCovers(state), now);
 
     // 6. State digests (V2): answer a repair ask, compare with the peers' digests, send this device's own.
     final disagreeBefore = book.disagree;
@@ -1208,8 +1210,9 @@ class SyncEngine {
       }
       final was = run.bad.byKey[k], skip = run.skipped.byKey[k];
       final hash = was != null || skip != null ? await fileHash(bytes) : null;
-      if (skip != null && skip == hash) {
-        // KL: the owner skipped these bytes (skipBlockedFile): applied as an empty file, never read again.
+      if (skip != null && skip == hash && (was == null || BlockedFile.skippableReasons.contains(was.reason))) {
+        // KL: the owner skipped these bytes (skipBlockedFile): applied as an empty file, never read again. Only bytes
+        // quarantined as damaged or sealed with another key: a newer format or a clock ahead is read again later.
         if (run.bad.byKey.remove(k) != null) run.badChanged = true;
         repo.setSyncCursor(d, seq);
         repo.recordSyncFile(d, seq, 0);
@@ -1686,24 +1689,61 @@ class SyncEngine {
 
   /// KL: the unblock asks read in this run that name one of this install's streams ([mine]) and that it has not answered
   /// yet (by id; asks written before this device's first V2 run are ignored, like repair asks): each marks its file in
-  /// [unblockKey]. Returns how many were taken (the caller queues one state resend for them).
-  int _takeUnblockAsks(WalletRepo repo, Set<String> mine) {
+  /// [unblockKey]. Returns the asked files (stream, seq) taken ([_answerUnblock] answers them).
+  List<(String, int)> _takeUnblockAsks(WalletRepo repo, Set<String> mine) {
     final recs = _records!, book = _book!;
-    if (recs.unblock.isEmpty) return 0;
+    if (recs.unblock.isEmpty) return const [];
     final since = (book.first ?? 0) - maxClockDrift.inMilliseconds;
     final marks = _map(repo, unblockKey);
-    var n = 0;
+    final taken = <(String, int)>[];
     for (final MapEntry(key: id, value: (to, seq)) in recs.unblock.entries) {
       if (!mine.contains(to) || book.answered.contains(id) || Hlc.parse(id).millis < since) continue;
       book.answer(id);
-      n++;
+      taken.add((to, seq));
       if (((marks[to] as int?) ?? 0) < seq) marks[to] = seq;
     }
-    if (n == 0) return 0;
+    if (taken.isEmpty) return const [];
     book.save(repo);
     _setMap(repo, unblockKey, marks);
-    logEvent(_log, Level.INFO, 'sync.unblock.asked', {'asks': n});
-    return n;
+    logEvent(_log, Level.INFO, 'sync.unblock.asked', {'asks': taken.length});
+    return taken;
+  }
+
+  /// The covers of the relay's newest snapshot when it is of this schema (one the asker can start from), else none.
+  Map<String, int> _currentCovers(RelayState state) => switch (state.snapshot) {
+        final s? when _current(s) => s.covers,
+        _ => const <String, int>{},
+      };
+
+  /// KL: answers the unblock asks taken this run ([asks]): a file [covers] (a snapshot of this schema) includes needs
+  /// nothing more, the snapshot is the answer; a file already answered with a resend ([unblockSentKey]) gets no second
+  /// one. Any other queues one state resend for them all (unless one is queued already, which answers them too).
+  void _answerUnblock(WalletRepo repo, List<(String, int)> asks, Map<String, int> covers, DateTime now) {
+    final book = _book!;
+    final sent = _map(repo, unblockSentKey);
+    final open = {
+      for (final (to, seq) in asks)
+        if ((covers[to] ?? 0) < seq && !sent.containsKey('$to/$seq')) '$to/$seq'
+    };
+    if (open.isEmpty) {
+      logEvent(_log, Level.INFO, 'sync.unblock.answered', {'asks': asks.length});
+      return;
+    }
+    if (book.send == null) {
+      final n = repo.queueStateResend();
+      book
+        ..send = _recordHlc(repo)
+        ..save(repo);
+      logEvent(_log, Level.WARNING, 'sync.unblock.answer', {'asks': asks.length, 'files': open.length, 'ops': n});
+    }
+    for (final k in open) {
+      sent.remove(k);
+      sent[k] = now.millisecondsSinceEpoch;
+    }
+    while (sent.length > maxUnblockSent) {
+      sent.remove(sent.keys.first);
+    }
+    _setMap(repo, unblockSentKey, sent);
   }
 
   /// KL: whether a file in [unblockKey] still needs a snapshot (the relay's newest does not cover it); marks of covered
@@ -1721,7 +1761,8 @@ class SyncEngine {
   /// Writes a snapshot when the newest is older than [snapshotAge] or [snapshotOpsBehind] ops behind, or at once with
   /// [heal] ([_trackStuck]) (called only when caught up). Failures are logged: another device may simply have written a
   /// newer one.
-  Future<void> _maybeSnapshot(WalletRepo repo, RelayState state, Map<String, int> cursors, int myLast, DateTime now,
+  /// Returns the written snapshot's covers; null when none was written.
+  Future<Map<String, int>?> _maybeSnapshot(WalletRepo repo, RelayState state, Map<String, int> cursors, int myLast, DateTime now,
       {bool heal = false, bool heldBlobs = false, bool declare = true}) async {
     final me = _streamOf(repo);
     final current = state.snapshot;
@@ -1729,7 +1770,7 @@ class SyncEngine {
     // lacks the record kinds this device may be missing, and a current snapshot clears the mark (see [wantCurrentKey]).
     if (!heal && _wantCurrent(repo, now)) {
       logEvent(_log, Level.INFO, 'sync.snapshot.skipped', {'reason': 'wantCurrent'});
-      return;
+      return null;
     }
     final old = current?.covers ?? const <String, int>{};
     repo.forgetSyncFiles(old);
@@ -1737,7 +1778,7 @@ class SyncEngine {
     // Q8: the newest snapshot was written by an older schema, so it lacks what this build added; once files it covers
     // are pruned, a device replaying after its upgrade could only start from it. Write one of this schema now.
     final olderSchema = current != null && !_current(current);
-    if (behind == 0 && !heal && !olderSchema) return;
+    if (behind == 0 && !heal && !olderSchema) return null;
     final since = current == null
         ? switch (int.tryParse(repo.localValue(sinceKey) ?? '')) {
             final int ms => DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true),
@@ -1745,7 +1786,7 @@ class SyncEngine {
           }
         : _snapshotTime(current.id);
     final aged = since != null && now.difference(since) > snapshotAge;
-    if (behind < snapshotOpsBehind && !aged && !heal && !olderSchema) return;
+    if (behind < snapshotOpsBehind && !aged && !heal && !olderSchema) return null;
     final covers = <String, int>{
       for (final d in state.devices.keys)
         if (d != me) d: cursors[d] ?? 0,
@@ -1754,7 +1795,7 @@ class SyncEngine {
     for (final MapEntry(key: d, value: seq) in old.entries) {
       if ((covers[d] ?? 0) < seq) {
         logEvent(_log, Level.INFO, 'sync.snapshot.skipped', {'reason': 'behind'});
-        return;
+        return null;
       }
     }
     // A snapshot holds the whole state, file references included: none while an op still waits for a file that can be
@@ -1762,7 +1803,7 @@ class SyncEngine {
     // the relay does not have yet. A file the relay is too full for does not hold it back: the snapshot frees room.
     if (heldBlobs) {
       logEvent(_log, Level.INFO, 'sync.snapshot.skipped', {'reason': 'heldBlobs'});
-      return;
+      return null;
     }
     final t = PerfTimer('sync.snapshot.write', warnMs: 2000);
     final ops = repo.snapshotOps();
@@ -1775,7 +1816,7 @@ class SyncEngine {
     } on TransportException catch (e) {
       _stopIfFinal('putSnapshot', e);
       logEvent(_log, Level.WARNING, 'sync.snapshot.refused', {'failure': e.failure.name});
-      return;
+      return null;
     }
     if ((state.api ?? 0) >= 4 && !declare) {
       logEvent(_log, Level.INFO, 'sync.snapshot.blobs.skipped', {'reason': 'fullHeld'});
@@ -1800,6 +1841,7 @@ class SyncEngine {
       'heal': heal,
       'olderSchema': olderSchema
     });
+    return covers;
   }
 }
 

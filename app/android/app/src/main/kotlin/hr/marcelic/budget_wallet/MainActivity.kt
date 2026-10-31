@@ -33,6 +33,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlin.concurrent.thread
 
 /**
@@ -413,11 +414,24 @@ class MainActivity : FlutterActivity() {
     /**
      * Every occurrence that starts on a day from [from] to [to] (inclusive `YYYY-MM-DD`) in the calendars [ids]. Instances.CONTENT_BY_DAY_URI
      * expands recurring events and gives each occurrence's start day as a Julian day (all-day events by their own date, not shifted by
-     * the time zone). `date` is that day; `status` is the provider's (2 = cancelled). At most 5000 rows.
+     * the time zone). `date` is that day; `status` is the provider's (2 = cancelled). `uid2445` is the event's iCal UID (Events.UID_2445,
+     * API 17+, filled by Google/CalDAV calendars; null otherwise, never the row `_ID`), `startMinutes` the local start time in minutes after
+     * midnight in the device time zone (null for all-day events). At most 5000 rows.
      */
     private fun events(ids: List<String>, from: String, to: String): List<Map<String, Any?>> {
+        if (ids.isEmpty()) return ArrayList()
+        // UID_2445 exists since API 17 (a compile-time constant); a provider that does not know the column fails the query, so it is
+        // asked again without it.
+        try {
+            return eventsQuery(ids, from, to, true)
+        } catch (e: RuntimeException) {
+            // fall through: events without a uid (their ref then falls back to title + date + start time)
+        }
+        return eventsQuery(ids, from, to, false)
+    }
+
+    private fun eventsQuery(ids: List<String>, from: String, to: String, hasUid: Boolean): List<Map<String, Any?>> {
         val out = ArrayList<Map<String, Any?>>()
-        if (ids.isEmpty()) return out
         val startDay = LocalDate.parse(from).toEpochDay() + JULIAN_EPOCH
         val endDay = LocalDate.parse(to).toEpochDay() + JULIAN_EPOCH
         val uri = CalendarContract.Instances.CONTENT_BY_DAY_URI.buildUpon().appendPath(startDay.toString()).appendPath(endDay.toString()).build()
@@ -428,20 +442,28 @@ class MainActivity : FlutterActivity() {
             CalendarContract.Instances.DESCRIPTION,
             CalendarContract.Instances.ALL_DAY,
             CalendarContract.Instances.STATUS,
-            CalendarContract.Instances.START_DAY
+            CalendarContract.Instances.START_DAY,
+            CalendarContract.Instances.BEGIN,
+            if (hasUid) CalendarContract.Instances.UID_2445 else CalendarContract.Instances.TITLE
         )
+        val zone = ZoneId.systemDefault()
         val selection = "${CalendarContract.Instances.CALENDAR_ID} IN (${ids.joinToString(",") { "?" }})"
         contentResolver.query(uri, projection, selection, ids.toTypedArray(), CalendarContract.Instances.BEGIN)?.use { c ->
             while (c.moveToNext() && out.size < 5000) {
                 val day = c.getLong(6)
                 if (day < startDay || day > endDay) continue
+                val allDay = c.getInt(4) == 1
+                val start = if (allDay || c.isNull(7)) null
+                else java.time.Instant.ofEpochMilli(c.getLong(7)).atZone(zone).toLocalTime().let { it.hour * 60 + it.minute }
                 out.add(
                     mapOf(
                         "id" to c.getLong(0).toString(),
                         "calendarId" to c.getLong(1).toString(),
                         "title" to (c.getString(2) ?: ""),
                         "notes" to c.getString(3),
-                        "allDay" to (c.getInt(4) == 1),
+                        "allDay" to allDay,
+                        "uid2445" to (if (hasUid) c.getString(8)?.takeIf { it.isNotEmpty() } else null),
+                        "startMinutes" to start,
                         "status" to c.getInt(5),
                         "date" to LocalDate.ofEpochDay(day - JULIAN_EPOCH).toString()
                     )

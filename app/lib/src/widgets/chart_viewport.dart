@@ -87,7 +87,7 @@ class ChartViewport extends StatefulWidget {
   final ViewBuilder? legend, rows;
 
   /// Show the dates between the buttons (the graph has no range control above it).
-  final String Function(DateRange window)? datesText;
+  final String? Function(DateRange window)? datesText;
 
   /// Smaller buttons row for a narrow tile.
   final bool buttons;
@@ -138,6 +138,12 @@ class _ChartViewportState extends State<ChartViewport> with SingleTickerProvider
     _focus.addListener(() {
       if (mounted && _focus.hasFocus != _focused) setState(() => _focused = _focus.hasFocus);
     });
+    FocusManager.instance.addHighlightModeListener(_highlightChanged);
+  }
+
+  // The outline shows for a keyboard or mouse user only; a change of mode redraws it.
+  void _highlightChanged(FocusHighlightMode _) {
+    if (mounted && _focused) setState(() {});
   }
 
   @override
@@ -149,6 +155,7 @@ class _ChartViewportState extends State<ChartViewport> with SingleTickerProvider
 
   @override
   void dispose() {
+    FocusManager.instance.removeHighlightModeListener(_highlightChanged);
     _wheelCommit?.cancel();
     _fling.dispose();
     _live.dispose();
@@ -289,6 +296,7 @@ class _ChartViewportState extends State<ChartViewport> with SingleTickerProvider
     final c = context.c;
     final committed = _committed;
     final edges = widget.edges(committed);
+    final dates = widget.datesText?.call(committed);
     return LayoutBuilder(builder: (context, box) {
       _width = math.max(1, box.maxWidth);
       final bucket = _bucket(committed, _width);
@@ -310,7 +318,11 @@ class _ChartViewportState extends State<ChartViewport> with SingleTickerProvider
               onDoubleTap: () => _doubleTap(_start),
               child: DecoratedBox(
                 position: DecorationPosition.foreground,
-                decoration: BoxDecoration(border: Border.all(color: _focused ? c.lineStrong : Colors.transparent)),
+                decoration: BoxDecoration(
+                    border: Border.all(
+                        color: _focused && FocusManager.instance.highlightMode == FocusHighlightMode.traditional
+                            ? c.lineStrong
+                            : Colors.transparent)),
                 child: ValueListenableBuilder<DateRange>(
                   valueListenable: live,
                   builder: (context, w, _) => widget.chart(context, w, _bucket(w, _width)),
@@ -328,10 +340,9 @@ class _ChartViewportState extends State<ChartViewport> with SingleTickerProvider
               onIn: ChartEdges.canZoomIn(committed) ? () => _zoom(2) : null,
               onOut: ChartEdges.canZoomOut(committed) && _canZoomOutMore(edges, committed) ? () => _zoom(0.5) : null,
               onReset: _canReset ? _reset : null,
-              middle: widget.datesText == null
+              middle: dates == null
                   ? null
-                  : Text(widget.datesText!(committed),
-                      key: ValueKey('chartDates_${widget.id}'), style: numStyle.copyWith(fontSize: BwType.metaSize)),
+                  : Text(dates, key: ValueKey('chartDates_${widget.id}'), style: numStyle.copyWith(fontSize: BwType.metaSize)),
             ),
           ),
         if (widget.rows != null) widget.rows!(context, committed, bucket),
