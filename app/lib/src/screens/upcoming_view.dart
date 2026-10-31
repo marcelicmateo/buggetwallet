@@ -25,7 +25,9 @@ class UpcomingView implements Listenable {
   CategoryTable get categoryTable => _wc.categoryTable;
   ({String start, String end}) upcomingRange({bool next = false}) => _wc.upcomingRange(next: next);
   List<UpcomingItem> upcomingItems(String from, String to) => _wc.upcomingItems(from, to);
-  ({int count, int total}) countedIn(List<UpcomingItem> items) => _wc.countedIn(items);
+  ({int count, int total}) setAside(List<UpcomingItem> items, {bool next = false}) => _wc.setAside(items, next: next);
+  bool isOverdueCycle(UpcomingItem i) => _wc.isOverdueCycle(i);
+  List<DueCycle> overdueEarlier() => _wc.overdueEarlier();
 
   /// The costs "Before payday" holds that fall after payday: long bills held until paid. The list of the period ends at payday, so
   /// they are listed apart (core's `reservedCycles`, each with its own reserve).

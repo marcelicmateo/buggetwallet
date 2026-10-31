@@ -91,7 +91,8 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                 for (final i in items)
                   if (i.date == _day) i
               ];
-        final counted = view.countedIn(items);
+        final counted = view.setAside(items, next: _next);
+        final overdue = _next ? const <DueCycle>[] : view.overdueEarlier();
         final held = view.heldCycles();
         final today = view.today();
         return Scaffold(
@@ -167,7 +168,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           const Text('Set aside', style: TextStyle(fontWeight: FontWeight.w600)),
-                          Text('${counted.count} ${counted.count == 1 ? 'cost' : 'costs'} from today',
+                          Text('${counted.count} ${counted.count == 1 ? 'cost' : 'costs'}',
                               style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
                         ]),
                         end: FittedBox(
@@ -177,6 +178,15 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
                       ),
                     ),
                 ]),
+                if (_day == null && overdue.isNotEmpty)
+                  Panel(key: const ValueKey('upcomingOverdue'), children: [
+                    const SectionHead('Overdue'),
+                    Rows(children: [
+                      for (final x in overdue)
+                        LineItem(x.bill.label.isNotEmpty ? x.bill.label : x.bill.payee, moneyExact(x.reserve, cur),
+                            key: ValueKey('upcomingOverdue:${x.bill.id}'), sub: 'Due ${shortDateOrRaw(x.due)}, still set aside'),
+                    ]),
+                  ]),
                 if (!_next && _day == null && held.isNotEmpty)
                   Panel(key: const ValueKey('upcomingHeld'), children: [
                     const SectionHead('Held until paid'),
@@ -394,7 +404,10 @@ class _UpcomingRow extends StatelessWidget {
     final sub = Wrap(spacing: 8, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
       Text(shortDateOrRaw(i.date), style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       Tag(sourceLabel(i)),
-      if (past && !isSuggestion) Text('past', style: TextStyle(fontSize: BwType.metaSize, color: c.muted)),
+      if (view.isOverdueCycle(i))
+        StatusLabel(key: ValueKey('overdue:${i.key}'), good: false, text: 'Overdue')
+      else if (past && !isSuggestion)
+        Text('past', style: TextStyle(fontSize: BwType.metaSize, color: c.muted)),
       if ((i.planned?.coveredByPlanIn(view.categoryTable) ?? false) || (i.bill?.coveredByPlanIn(view.categoryTable) ?? false))
         Text('covered by your plan', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
       if (i.planned?.needsCategory ?? false) StatusLabel(key: ValueKey('needsCategory:${i.key}'), good: false, text: 'Needs a category'),
