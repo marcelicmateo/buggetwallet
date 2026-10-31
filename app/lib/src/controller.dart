@@ -1381,6 +1381,9 @@ class WalletController extends ChangeNotifier {
   /// The ids last deleted in this session: the toast's Undo restores them.
   String? lastDeletedTx, lastDeletedGoal;
 
+  /// The (hand-added expense, bank row) pair unlinked last (D2): the toast's Undo links it again (`relinkCashMatch`).
+  (String, String)? lastUnlinked;
+
   /// The payee rule offered after the last hand-set main tag (Q6): the toast after the sheet reads it once (`takeRuleOffer`).
   RuleOffer? ruleOffer;
 
