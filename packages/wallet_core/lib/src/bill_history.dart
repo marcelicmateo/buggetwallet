@@ -115,7 +115,9 @@ List<BillMonth> billHistory(
         s.isAttachment ||
         s.currency != currency ||
         !seenSlips.add(s.id) ||
-        billPayeeKey(s, payeeAliases: payeeAliases) != bill.payee) continue;
+        billPayeeKey(s, payeeAliases: payeeAliases) != bill.payee) {
+      continue;
+    }
     final linked = payments[s.linkedTx];
     final date = linked?.date ?? _slipDate(s);
     if (date == null) continue;
@@ -204,7 +206,9 @@ List<BillMonth> _cycleHistory(
         s.isAttachment ||
         s.currency != currency ||
         !seenSlips.add(s.id) ||
-        billPayeeKey(s, payeeAliases: payeeAliases) != bill.payee) continue;
+        billPayeeKey(s, payeeAliases: payeeAliases) != bill.payee) {
+      continue;
+    }
     final date = payments[s.linkedTx]?.date ?? _slipDate(s);
     if (date == null) continue;
     if (cycleOf(date) case final k?) (slipBy[k] ??= []).add(s);
