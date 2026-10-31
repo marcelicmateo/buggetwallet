@@ -1,17 +1,20 @@
 // Adaptive layout on a desktop window: screenshots of every tab and the Add expense dialog at 1280x800, 1920x1080 and
 // 800x1280, plus the rail, shortcuts and window resizing on the real app. Desktop only (a resized phone view hangs the
 // screenshot). Run: tools/build.sh desktop-test adaptive -> dist/screens/linux/adaptive/<size>-<screen>.png
+import 'package:budget_wallet/src/controller.dart' show TagsDb;
 import 'package:budget_wallet/src/layout.dart';
 import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/screens/category_detail.dart';
 import 'package:budget_wallet/src/screens/insights.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
+import 'package:budget_wallet/src/screens/tag_detail.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallet_core/wallet_core.dart' show BudgetKind;
 
 import 'demo_data.dart';
 import 'support/harness.dart';
@@ -41,6 +44,12 @@ void main() {
       wc.saveGoal(name: 'Synthetic goal', target: 98765 * 10, saved: 12345, monthly: 9876);
       wc.saveGoal(name: 'Synthetic goal two', target: 120000, saved: 0, monthly: 10000);
       wc.addWish('Synthetic wish', 98765);
+      // An extra tag on the newest spending rows, so the tag dashboard has something to show.
+      final tag = await wc.addTag('Synthetic trip');
+      final newest = wc.txs.where((x) => x.amount < 0 && x.kind != BudgetKind.transfer).toList()..sort((a, b) => b.date.compareTo(a.date));
+      for (final x in newest.take(5)) {
+        await wc.setPaymentTag(x.tx.id, tag, true);
+      }
       await _resize(t, Size(w, h));
       final kind = sizeFor(w);
       expect(find.byType(NavigationRail), findsOneWidget);
@@ -50,6 +59,16 @@ void main() {
         await goTab(t, tab);
         await Harness.shot(t, '$name-${tab.toLowerCase()}');
       }
+      // Budget › Plan and the pay-period report (RX7), the other wide dashboards.
+      await goTab(t, 'Budget');
+      await tapVisible(t, find.byKey(const ValueKey('budgetPlan')));
+      await Harness.shot(t, '$name-plan');
+      await tapVisible(t, find.byKey(const ValueKey('budgetSpending')));
+      await tapVisible(t, find.byKey(const ValueKey('periodBadgeTap')));
+      expect(find.byKey(const ValueKey('reportKept')), findsOneWidget);
+      await Harness.shot(t, '$name-period-report');
+      await t.tap(find.byKey(const ValueKey('sheetClose')).last);
+      await t.pumpAndSettle();
       // Budget's transaction list is the right column on a wide window, below the charts otherwise.
       await goTab(t, 'Budget');
       await scrollTo(t, find.textContaining('All transactions in'), SpendingScreen);
@@ -68,6 +87,13 @@ void main() {
       await tapVisible(t, shareRow);
       expect(find.byType(CategoryDetailScreen), findsOneWidget);
       await Harness.shot(t, '$name-category-detail');
+      await t.tap(find.byKey(const ValueKey('sheetClose')).last);
+      await t.pumpAndSettle();
+      // The tag's detail (RX8) from the tags panel of Insights.
+      await scrollTo(t, find.byKey(const ValueKey('insightPanel_tags')), InsightsScreen);
+      await tapVisible(t, find.byKey(ValueKey('tagRow_$tag')));
+      expect(find.byType(TagDetailScreen), findsOneWidget);
+      await Harness.shot(t, '$name-tag-detail');
       await t.tap(find.byKey(const ValueKey('sheetClose')).last);
       await t.pumpAndSettle();
       await t.tap(find.byKey(const ValueKey('sheetClose')).last);

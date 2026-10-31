@@ -1,5 +1,5 @@
-// Drill-down (stage N3): a category over a range (compare, trend, merchants), then one merchant's rows. Every total shown is
-// core's; the rows listed are core's `rowsFor`, so they add up to it.
+// Drill-down (stage N3, RX8 dashboard): a category over a range (total, compare, trend, merchants), then one merchant's rows. Every total
+// shown is core's; the rows listed are core's `rowsFor`, so they add up to it.
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -9,12 +9,13 @@ import '../insights_api.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
-import '../widgets/insight_charts.dart';
+import '../widgets/dash.dart';
+import '../widgets/detail_tiles.dart';
 import '../widgets/sheets.dart';
 
 /// Opens [category] over [range] (a page on a phone, a dialog from 600 dp).
 Future<void> openCategory(BuildContext context, WalletController wc, String category, DateRange range) =>
-    openPageOrDialog<void>(context, CategoryDetailScreen(wc: wc, category: category, range: range), width: 640, logName: 'CategoryDetail');
+    openPageOrDialog<void>(context, CategoryDetailScreen(wc: wc, category: category, range: range), width: 840, logName: 'CategoryDetail');
 
 class CategoryDetailScreen extends StatefulWidget {
   final WalletController wc;
@@ -55,126 +56,103 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
             onPopInvokedWithResult: (didPop, _) {
               if (!didPop) _open(null);
             },
-            child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 88), children: [
-              if (shown == null) ..._categoryView(context, cur, merchants) else ..._merchantView(context, cur, shown),
-            ]),
+            child: DetailPage(children: shown == null ? _categoryView(context, cur, merchants) : _merchantView(cur, shown)),
           );
         },
       ),
     );
   }
 
-  Widget _bars(BuildContext context, List<MonthBar> bars, String cur, String label, String id) {
-    final c = context.c;
-    final now = monthOf(wc.today());
-    String note(MonthBar b) => !b.partial ? '' : (b.month == now ? ' · so far' : ' · part of the month');
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      MonthlyBars(
-        key: ValueKey('detailBars_$id'),
+  MonthBarsTile _bars(String cur, List<MonthBar> bars, String label, String id) => MonthBarsTile(
         label: label,
-        groups: [
-          for (final b in bars)
-            BarGroup(
-              month: b.month,
-              partial: b.partial,
-              rods: [BarRod(b.spent, c.chartPos)],
-              tip: '${monthLong(b.month)}${note(b)}\n${moneyExact(b.spent, cur)}',
-              spoken: '${monthLong(b.month)}${note(b)}: ${moneyExact(b.spent, cur)}',
-            ),
-        ],
-      ),
-      const SizedBox(height: 8),
-      Rows(children: [
-        for (final b in bars)
-          LineItem('${monthLong(b.month)}${note(b)}', moneyExact(b.spent, cur), key: ValueKey('detailRow_${id}_${b.month}')),
-      ]),
-    ]);
-  }
+        currency: cur,
+        nowMonth: monthOf(wc.today()),
+        bars: bars,
+        barsKey: ValueKey('detailBars_$id'),
+        rowKey: (m) => ValueKey('detailRow_${id}_$m'),
+      );
 
   List<Widget> _categoryView(BuildContext context, String cur, List<MerchantTotal> merchants) {
+    final c = context.c;
     final total = wc.categoryTotal(widget.category, range);
-    final cmp = wc.compareFor(widget.category, range);
-    final month = wc.monthIn(range);
-    return gapped([
-      Panel(children: [
-        Eyebrow(rangeLabel(range)),
-        Heading(moneyExact(total, cur), key: const ValueKey('detailTotal')),
-      ]),
-      Panel(children: [
-        const Eyebrow('Compared'),
-        Rows(children: [
-          LineItem(monthLong(month), moneyExact(cmp.thisMonth, cur), key: const ValueKey('compareThis')),
-          LineItem(monthLong(monthsEnding(month, 2).first), moneyExact(cmp.lastMonth, cur), key: const ValueKey('compareLast')),
-          LineItem('Average of the 6 months before', moneyExact(cmp.average6, cur), key: const ValueKey('compareAverage')),
-        ]),
-      ]),
-      Panel(children: [
-        const Eyebrow('Per month'),
-        _bars(context, wc.categoryBars(widget.category, range), cur, '$name per month', 'category'),
-      ]),
-      Panel(children: [
-        const Eyebrow('Where it went'),
-        if (merchants.isEmpty)
-          const EmptyNote('Nothing spent in this range.')
-        else
-          Rows(children: [
-            for (final m in merchants)
-              InkWell(
-                key: ValueKey('merchantRow_${m.key}'),
-                onTap: () => _open(m.key),
-                child: LineItem(m.label, moneyExact(m.spent, cur),
-                    sub: '${m.count} ${m.count == 1 ? 'payment' : 'payments'} · last ${shortDateOrRaw(m.lastDate)}'),
-              ),
+    final parts = compareParts(wc.compareFor(widget.category, range), month: wc.monthIn(range), range: range, total: total, cur: cur);
+    final biggest = merchants.fold<int>(1, (m, x) => x.spent > m ? x.spent : m);
+    return [
+      DashItem(
+        span: 2,
+        child: HeroTile(
+          valueKey: const ValueKey('detailTotal'),
+          label: name,
+          value: moneyExact(total, cur),
+          sub: rangeLabel(range),
+          chip: parts.heroChip,
+        ),
+      ),
+      ...parts.tiles,
+      DashItem(span: 2, child: _bars(cur, wc.categoryBars(widget.category, range), '$name per month', 'category')),
+      DashItem(
+        span: 2,
+        child: Tile(
+          key: const ValueKey('merchantsTile'),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+            const TileLabel('Where it went'),
+            const SizedBox(height: 4),
+            if (merchants.isEmpty)
+              const EmptyNote('Nothing spent in this range.')
+            else
+              BarList(rows: [
+                for (final m in merchants)
+                  BarRow(
+                    key: ValueKey('merchantRow_${m.key}'),
+                    label: m.label,
+                    value: moneyExact(m.spent, cur),
+                    note: '${m.count} ${m.count == 1 ? 'payment' : 'payments'} · last ${shortDateOrRaw(m.lastDate)}',
+                    fraction: m.spent > 0 ? m.spent / biggest : 0,
+                    color: c.s1,
+                    onTap: () => _open(m.key),
+                  ),
+              ]),
           ]),
-      ]),
-    ], gap: 16);
+        ),
+      ),
+    ];
   }
 
-  List<Widget> _merchantView(BuildContext context, String cur, MerchantTotal m) {
+  List<Widget> _merchantView(String cur, MerchantTotal m) {
     final rows = wc.rowsOf(widget.category, m.key, range);
     return [
-      Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-            key: const ValueKey('detailBack'),
-            style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
-            onPressed: () => _open(null),
-            icon: const Icon(Icons.chevron_left),
-            label: Text('Back to $name')),
+      DashItem(
+        span: 4,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+              key: const ValueKey('detailBack'),
+              style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+              onPressed: () => _open(null),
+              icon: const Icon(Icons.chevron_left),
+              label: Text('Back to $name')),
+        ),
       ),
-      ...gapped([
-        Panel(children: [
-          Eyebrow(rangeLabel(range)),
-          Heading(m.label),
-          Heading(moneyExact(m.spent, cur), key: const ValueKey('detailTotal'), size: BwType.amountMdSize),
-          Muted('${m.count} ${m.count == 1 ? 'payment' : 'payments'} in $name.'),
-        ]),
-        Panel(children: [
-          const Eyebrow('Per month'),
-          _bars(context, wc.merchantBars(widget.category, m.key, range), cur, '${m.label} per month', 'merchant'),
-        ]),
-        Panel(children: [
-          const Eyebrow('Payments'),
-          const Muted('Tap one to change it.'),
-          Column(key: const ValueKey('merchantRows'), children: [
-            const TxHeaderRow(),
-            for (final t in rows)
-              TxTile(
-                  table: wc.categoryTable,
-                  tagTable: wc.tagTable,
-                  t: t,
-                  currency: cur,
-                  fxRates: wc.settings.fxRates,
-                  hasBill: wc.billForTx(t.tx.id) != null,
-                  matched: wc.isMatchedBank(t.tx.id),
-                  iouTag: wc.iouTagOf(t.tx.id),
-                  onTap: () async {
-                    final res = await showSheet<String>(context, TxSheet(wc: wc, t: t));
-                    if (context.mounted) txSheetToast(context, wc, res);
-                  }),
-          ]),
-        ]),
-      ], gap: 16),
+      DashItem(
+        span: 2,
+        child: HeroTile(
+          valueKey: const ValueKey('detailTotal'),
+          label: m.label,
+          value: moneyExact(m.spent, cur),
+          sub: '${rangeLabel(range)} · ${m.count} ${m.count == 1 ? 'payment' : 'payments'} in $name',
+        ),
+      ),
+      DashItem(span: 2, child: _bars(cur, wc.merchantBars(widget.category, m.key, range), '${m.label} per month', 'merchant')),
+      DashItem(
+        span: 4,
+        child: PaymentsTile(
+          wc: wc,
+          rows: rows,
+          rowsKey: const ValueKey('merchantRows'),
+          emptyText: 'Nothing spent in this range.',
+          help: 'Tap a payment to change it.',
+        ),
+      ),
     ];
   }
 }

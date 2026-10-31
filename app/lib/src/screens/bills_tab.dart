@@ -81,7 +81,8 @@ class _BillsScreenState extends State<BillsScreen> {
     final cur = wc.currency;
     // Derived once per build: the tile shows whenever Before payday counts a cost, and the calendar holds exactly those costs.
     final cal = wc.period().beforePaydayCount > 0 ? billsCalendar(wc) : null;
-    return NarrowPage(
+    // The content column of the window (720 on a tablet, 1040 on a desktop), not the 720 of a narrow page: the tiles have four columns.
+    return MarginLine(
       child: SingleChildScrollView(
         key: const ValueKey('billsPage'),
         controller: _scroll,
@@ -90,7 +91,11 @@ class _BillsScreenState extends State<BillsScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: gapped([
             DashGrid(children: [
-              DashItem(span: 2, child: KeyedSubtree(key: _keys[BillsAnchor.comingUp], child: BeforePaydayTile(wc: wc))),
+              // Two cells wide beside Per month / Per year, the calendar or the review tile; alone it takes the row (a wide window would
+              // leave two empty cells under it).
+              DashItem(
+                  span: cost == null && cal == null && review.isEmpty ? 4 : 2,
+                  child: KeyedSubtree(key: _keys[BillsAnchor.comingUp], child: BeforePaydayTile(wc: wc))),
               if (cost != null) ...[
                 DashItem(
                     child: StatTile(

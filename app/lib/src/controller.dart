@@ -27,6 +27,7 @@ import 'logging.dart';
 import 'memo_key.dart';
 import 'nudges.dart';
 import 'platform.dart' show isWeb;
+import 'stand_in_rx8.dart' as rx8; // STAND-IN: deleted when core compareTag merges
 import 'sub_state.dart';
 import 'sync_status.dart' show relayOlderThanBeforeText;
 import 'tabs.dart';

@@ -18,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'support/detail.dart';
 import 'support/wallet.dart';
 
 const _timeout = Timeout(Duration(seconds: 90));
@@ -666,7 +667,13 @@ void main() {
       expect(rows, hasLength(2));
       final sum = -rows.fold<int>(0, (a, x) => a + x.amount);
       expect(sum, 2790);
-      expect(t.widget<Text>(find.descendant(of: k('tagDetailTotal'), matching: find.byType(Text))).data, moneyExact(sum, 'EUR'));
+      expect(heroText(t, 'tagDetailTotal'), moneyExact(sum, 'EUR'));
+      expect(wc.tagTotalFor(holiday, r), (spent: sum, count: 2), reason: 'the hero total and count are the controller\'s (core slice)');
+      expect(find.text('A payment can have other tags too.'), findsNothing, reason: 'help sits behind the (i)');
+      await t.ensureVisible(k('paymentsInfo'));
+      await t.tap(k('paymentsInfo'));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.textContaining('other tags too'), findsOneWidget);
       expect(find.descendant(of: k('tagRows'), matching: find.byType(TxTile)), findsNWidgets(2));
       expect(wc.tagBars(holiday, r).fold<int>(0, (a, b) => a + b.spent), sum, reason: 'the per-month bars add up to the same total');
       expect(k('tagDetailBars'), findsOneWidget);

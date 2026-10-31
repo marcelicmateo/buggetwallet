@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'support/detail.dart';
 import 'support/wallet.dart';
 
 /// 20 Oct 2026. Groceries (Lidl, Spar) and Eating out (Pizzeria, one row without a name) over Jul–Oct, Shopping, a salary,
@@ -298,12 +299,20 @@ void main() {
       final r = wc.insightRange('share').range;
       final total = wc.categoryTotal('Groceries', r);
       expect(total, 25200);
-      expect(find.descendant(of: find.byKey(const ValueKey('detailTotal')), matching: find.text(moneyExact(total, 'EUR'))), findsOneWidget);
+      expect(heroIs('detailTotal', moneyExact(total, 'EUR')), findsOneWidget);
       final cmp = wc.compareFor('Groceries', r);
       expect(cmp.thisMonth, 25200);
       expect(cmp.lastMonth, 34000);
-      for (final (key, v) in [('compareThis', cmp.thisMonth), ('compareLast', cmp.lastMonth), ('compareAverage', cmp.average6)]) {
-        expect(find.descendant(of: find.byKey(ValueKey(key)), matching: find.text(moneyExact(v, 'EUR'))), findsOneWidget, reason: key);
+      // The month is said once: when the hero already is this month there is no "this month" tile, only the chip against last month.
+      final single = cmp.thisMonth == total && r.start.endsWith('-01');
+      expect(find.byKey(const ValueKey('compareThis')), single ? findsNothing : findsOneWidget);
+      expect(find.byKey(const ValueKey('compareDelta')), findsOneWidget);
+      for (final (key, v) in [
+        if (!single) ('compareThis', cmp.thisMonth),
+        ('compareLast', cmp.lastMonth),
+        ('compareAverage', cmp.average6)
+      ]) {
+        expect(inTile(key, moneyExact(v, 'EUR')), findsOneWidget, reason: key);
       }
       expect(find.byKey(const ValueKey('detailBars_category')), findsOneWidget);
       final merchants = wc.merchantsFor('Groceries', r);
@@ -329,12 +338,11 @@ void main() {
           tester.widgetList<TxTile>(find.descendant(of: find.byKey(const ValueKey('merchantRows')), matching: find.byType(TxTile)));
       expect(tiles.length, lidl.count);
       expect(-tiles.fold<int>(0, (a, t) => a + t.t.amount), lidl.spent);
-      expect(find.descendant(of: find.byKey(const ValueKey('detailTotal')), matching: find.text(moneyExact(lidl.spent, 'EUR'))),
-          findsOneWidget);
+      expect(heroIs('detailTotal', moneyExact(lidl.spent, 'EUR')), findsOneWidget);
       expect(find.byKey(const ValueKey('detailBars_merchant')), findsOneWidget);
       await tapKey(tester, 'detailBack');
       expect(find.byKey(const ValueKey('merchantRows')), findsNothing);
-      expect(find.byKey(const ValueKey('compareThis')), findsOneWidget);
+      expect(find.byKey(const ValueKey('compareLast')), findsOneWidget);
     });
 
     testWidgets('the category trend is the merchants\' trends added up', (tester) async {
@@ -355,7 +363,7 @@ void main() {
       expect(find.byKey(const ValueKey('categoryRow_Groceries')), findsOneWidget);
       await tapKey(tester, 'categoryRow_Groceries');
       expect(find.byType(CategoryDetailScreen), findsOneWidget);
-      expect(find.descendant(of: find.byKey(const ValueKey('detailTotal')), matching: find.text(moneyExact(25200, 'EUR'))), findsOneWidget);
+      expect(heroIs('detailTotal', moneyExact(25200, 'EUR')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('sheetClose')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
@@ -367,16 +375,12 @@ void main() {
     testWidgets('editing a payment from the drill-down moves the totals', (tester) async {
       final wc = insightsWallet();
       await pump(tester, CategoryDetailScreen(wc: wc, category: 'Groceries', range: wc.monthRange('2026-10')), size: const Size(400, 3000));
-      expect(find.descendant(of: find.byKey(const ValueKey('detailTotal')), matching: find.text(moneyExact(25200, 'EUR'))), findsOneWidget);
+      expect(heroIs('detailTotal', moneyExact(25200, 'EUR')), findsOneWidget);
       final id = wc.rowsOf('Groceries', null, wc.monthRange('2026-10')).first.tx.id;
       wc.repo.setCategory(id, 'Shopping');
       wc.reload();
       await tester.pump();
-      expect(
-          find.descendant(
-              of: find.byKey(const ValueKey('detailTotal')),
-              matching: find.text(moneyExact(wc.categoryTotal('Groceries', wc.monthRange('2026-10')), 'EUR'))),
-          findsOneWidget);
+      expect(heroIs('detailTotal', moneyExact(wc.categoryTotal('Groceries', wc.monthRange('2026-10')), 'EUR')), findsOneWidget);
     });
   });
 
@@ -461,7 +465,7 @@ void main() {
       expect(rows.fold<int>(0, (a, t) => a + t.amount), 500);
       expect(wc.categoryTotal('Sport & fitness', r), -500);
       await pump(tester, CategoryDetailScreen(wc: wc, category: 'Sport & fitness', range: r), size: const Size(400, 3000));
-      expect(find.descendant(of: find.byKey(const ValueKey('detailTotal')), matching: find.text(moneyExact(-500, 'EUR'))), findsOneWidget);
+      expect(heroIs('detailTotal', moneyExact(-500, 'EUR')), findsOneWidget);
     });
 
     test('the category bars and total equal the month summaries, per month', () {
@@ -550,7 +554,7 @@ void main() {
       wc.reload();
       await tester.pump();
       expect(find.byKey(const ValueKey('merchantRows')), findsNothing);
-      expect(find.byKey(const ValueKey('compareThis')), findsOneWidget);
+      expect(find.byKey(const ValueKey('compareLast')), findsOneWidget);
       expect(scope().canPop, isTrue);
     });
   });

@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'support/detail.dart';
 import 'support/wallet.dart';
 
 const _timeout = Timeout(Duration(seconds: 90));
@@ -450,8 +451,7 @@ void main() {
       final (:wc, :bakery) = await withBakery();
       final range = wc.monthRange('2026-10');
       await pumpApp(t, CategoryDetailScreen(wc: wc, category: 'Groceries', range: range), size: const Size(400, 5000));
-      expect(t.widget<Text>(find.descendant(of: find.byKey(const ValueKey('detailTotal')), matching: find.byType(Text))).data,
-          moneyExact(25200, 'EUR'));
+      expect(heroText(t, 'detailTotal'), moneyExact(25200, 'EUR'));
       expect(wc.categoryTotal('Groceries', range), 25200);
       expect(-wc.rowsOf('Groceries', null, range).fold<int>(0, (a, e) => a + e.amount), 25200);
       expect(find.byKey(const ValueKey('subcategories')), findsNothing);
