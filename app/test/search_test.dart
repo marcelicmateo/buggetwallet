@@ -181,19 +181,20 @@ void main() {
             date: '2026-09-${(i % 27 + 1).toString().padLeft(2, '0')}', amount: 1000 + i, category: 'Shopping', note: 'Synthetic item $i');
       }
       wc.reload();
-      final errors = Errors();
-      await pumpFull(t, wc, 2.0);
-      await t.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Budget')));
-      await t.pump();
-      await t.pump(const Duration(milliseconds: 500));
-      await t.tap(find.byKey(const ValueKey('searchOpen')));
-      await t.pump();
-      await t.pump(const Duration(milliseconds: 100));
-      await _type(t, 'synth');
-      final before = t.getTopLeft(find.byKey(const ValueKey('searchField')));
-      await scrollThrough(t);
-      expect(t.getTopLeft(find.byKey(const ValueKey('searchField'))), before);
-      errors.check();
+      await withErrors((errors) async {
+        await pumpFull(t, wc, 2.0);
+        await t.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Budget')));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 500));
+        await t.tap(find.byKey(const ValueKey('searchOpen')));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 100));
+        await _type(t, 'synth');
+        final before = t.getTopLeft(find.byKey(const ValueKey('searchField')));
+        await scrollThrough(t);
+        expect(t.getTopLeft(find.byKey(const ValueKey('searchField'))), before);
+        errors.check();
+      });
       await t.pump(const Duration(seconds: 4));
     });
 

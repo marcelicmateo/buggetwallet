@@ -16,7 +16,7 @@ void main() {
   // A 1,234.56 expense (shows grouped in Spending) and a salary large enough that the hero has a thousands separator on any
   // day of the period (the hero is money left / days left, so it depends on the real date).
   WalletController wallet() {
-    final wc = demoWallet();
+    final wc = demoWallet(clock: pinnedNoon);
     wc.repo.updateSettings({'salary': 9000000, 'rent': 0, 'loan': 0, 'subs': 0});
     wc.reload();
     wc.addExpense(amount: 123456, category: 'Eating out', note: 'Synthetic big one', date: wc.today(), tags: const []);

@@ -20,7 +20,7 @@ void main() {
     // Owner (2026-10-30): Today's Add expense button is the only add action in the app (Ctrl+N and the launcher shortcut stay).
     for (final tab in tabs) {
       testWidgets('phone: no floating add button on $tab', (tester) async {
-        await pumpFull(tester, demoWallet(), 1.0);
+        await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0);
         await tapTab(tester, tab);
         expect(find.byType(FloatingActionButton), findsNothing);
         expect(find.byKey(const ValueKey('addFab')), findsNothing);
@@ -28,7 +28,7 @@ void main() {
     }
 
     testWidgets("phone: Today's Add expense opens the sheet once, even tapped twice", (tester) async {
-      await pumpFull(tester, demoWallet(), 1.0);
+      await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0);
       final add = find.byKey(const ValueKey('addExpense'));
       await tester.ensureVisible(add);
       await tester.pumpAndSettle();
@@ -40,7 +40,7 @@ void main() {
     });
 
     testWidgets('rail layouts: no add button in the rail or bottom right', (tester) async {
-      await pumpFull(tester, demoWallet(), 1.0, size: const Size(1280, 800));
+      await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(1280, 800));
       expect(find.byType(NavigationRail), findsOneWidget);
       expect(find.byType(FloatingActionButton), findsNothing);
       expect(find.byKey(const ValueKey('addFab')), findsNothing);
@@ -51,7 +51,7 @@ void main() {
   group('search icon', () {
     for (final size in const [Size(360, 800), Size(1280, 800)]) {
       testWidgets('the app bar search icon opens Spending search at ${size.width.toInt()} dp', (tester) async {
-        await pumpFull(tester, demoWallet(), 1.0, size: size);
+        await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: size);
         await tester.tap(find.byKey(const ValueKey('appBarSearch')));
         await tester.pumpAndSettle();
         expect(find.byType(SearchPane), findsOneWidget);
@@ -61,7 +61,7 @@ void main() {
 
   group('theme mode', () {
     testWidgets('Settings › Look switches to dark and back, kept as a device-local value', (tester) async {
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await pumpFull(tester, wc, 1.0);
       expect(wc.themeModeName, 'system');
       await tapTab(tester, 'Settings');
@@ -169,7 +169,7 @@ void main() {
 
   group('theme stays put', () {
     testWidgets('a notify does not build a new theme (no theme animation after a sync or write)', (tester) async {
-      final wc = demoWallet();
+      final wc = demoWallet(clock: pinnedNoon);
       await pumpFull(tester, wc, 1.0);
       ThemeData? theme() => tester.widget<MaterialApp>(find.byType(MaterialApp)).theme;
       final before = theme();

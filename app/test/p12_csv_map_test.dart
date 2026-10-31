@@ -524,22 +524,23 @@ void main() {
 
     for (final (w, scale) in [(320.0, 2.0), (360.0, 2.0), (360.0, 1.0), (1280.0, 1.0)]) {
       testWidgets('layout at $w dp, text scale $scale', (t) async {
-        final errors = Errors();
-        final wc = emptyWallet();
-        await _openImportButton(t, wc, _Chooser([_pf('statement.csv', _csvA)]), size: Size(w, 900), scale: scale);
-        expect(find.byKey(const ValueKey('csvMapSheet')), findsOneWidget);
-        for (final k in [
-          'csvMap:headerRow',
-          'csvMap:name',
-          'csvMap:date',
-          'csvMap:amount',
-          'csvMap:currency',
-          'csvMapPreview',
-          'csvMapSave'
-        ]) {
-          await _scrollTo(t, k);
-        }
-        errors.check();
+        await withErrors((errors) async {
+          final wc = emptyWallet();
+          await _openImportButton(t, wc, _Chooser([_pf('statement.csv', _csvA)]), size: Size(w, 900), scale: scale);
+          expect(find.byKey(const ValueKey('csvMapSheet')), findsOneWidget);
+          for (final k in [
+            'csvMap:headerRow',
+            'csvMap:name',
+            'csvMap:date',
+            'csvMap:amount',
+            'csvMap:currency',
+            'csvMapPreview',
+            'csvMapSave'
+          ]) {
+            await _scrollTo(t, k);
+          }
+          errors.check();
+        });
         await _settle(t);
       }, timeout: _t);
     }
@@ -741,10 +742,11 @@ void main() {
 
     for (final (w, scale) in [(320.0, 2.0), (360.0, 2.0)]) {
       testWidgets('layout at $w dp, text scale $scale', (t) async {
-        final errors = Errors();
-        final wc = await layoutWallet();
-        await pumpApp(t, Scaffold(body: SingleChildScrollView(child: CsvLayoutsPanel(wc: wc))), size: Size(w, 800), textScale: scale);
-        errors.check();
+        await withErrors((errors) async {
+          final wc = await layoutWallet();
+          await pumpApp(t, Scaffold(body: SingleChildScrollView(child: CsvLayoutsPanel(wc: wc))), size: Size(w, 800), textScale: scale);
+          errors.check();
+        });
         await _settle(t);
       });
     }

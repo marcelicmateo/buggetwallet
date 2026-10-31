@@ -286,21 +286,22 @@ void main() {
     final sizes = [('320 dp at text 2.0', const Size(320, 640), 2.0), ('1280 wide', const Size(1280, 900), 1.0)];
     for (final (name, size, scale) in sizes) {
       tw('$name: the history with a month open', (tester) async {
-        final errors = Errors();
-        final wc = historyWallet();
-        await openHistory(tester, wc, size: size, scale: scale);
-        expect(find.byType(BillHistoryScreen), findsOneWidget);
-        expect(find.byType(Dialog), size.width >= 600 ? findsOneWidget : findsNothing, reason: 'dialog from 600 dp, a page below');
-        await tester.ensureVisible(find.byKey(const ValueKey('historyToggle_2026-05')));
-        await tester.tap(find.byKey(const ValueKey('historyToggle_2026-05')));
-        await tester.pump();
-        await scrollThrough(tester);
-        // 48 dp targets.
-        for (final k in ['historyToggle_2026-05', 'historyToggle_2026-09']) {
-          final f = find.byKey(ValueKey(k));
-          if (f.evaluate().isNotEmpty) expect(tester.getSize(f).height, greaterThanOrEqualTo(48), reason: k);
-        }
-        errors.check();
+        await withErrors((errors) async {
+          final wc = historyWallet();
+          await openHistory(tester, wc, size: size, scale: scale);
+          expect(find.byType(BillHistoryScreen), findsOneWidget);
+          expect(find.byType(Dialog), size.width >= 600 ? findsOneWidget : findsNothing, reason: 'dialog from 600 dp, a page below');
+          await tester.ensureVisible(find.byKey(const ValueKey('historyToggle_2026-05')));
+          await tester.tap(find.byKey(const ValueKey('historyToggle_2026-05')));
+          await tester.pump();
+          await scrollThrough(tester);
+          // 48 dp targets.
+          for (final k in ['historyToggle_2026-05', 'historyToggle_2026-09']) {
+            final f = find.byKey(ValueKey(k));
+            if (f.evaluate().isNotEmpty) expect(tester.getSize(f).height, greaterThanOrEqualTo(48), reason: k);
+          }
+          errors.check();
+        });
       });
     }
   });

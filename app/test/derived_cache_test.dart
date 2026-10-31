@@ -8,7 +8,7 @@ import 'support/wallet.dart';
 
 void main() {
   test('period, payPeriods and spending are computed once per data change', () {
-    final wc = demoWallet();
+    final wc = demoWallet(clock: pinnedNoon);
     final p = wc.period();
     expect(identical(wc.period(), p), isTrue);
     final periods = wc.payPeriods(count: 12);
@@ -26,7 +26,7 @@ void main() {
   });
 
   testWidgets('switching tabs keeps the other pages as they are', (t) async {
-    final wc = demoWallet();
+    final wc = demoWallet(clock: pinnedNoon);
     await pumpApp(t, HomeShell(wc: wc));
     final spending = t.widget<SpendingScreen>(find.byType(SpendingScreen, skipOffstage: false));
     await t.tap(find.text('Budget').last);

@@ -33,7 +33,7 @@ void main() {
       final name = '${size.width.toInt()}x${size.height.toInt()} text $scale';
 
       testWidgets('$name: the right navigation and a centered content column', (tester) async {
-        await pumpFull(tester, demoWallet(), scale, size: size);
+        await pumpFull(tester, demoWallet(clock: pinnedNoon), scale, size: size);
         final kind = _kind(size);
         expect(find.byType(NavigationBar), kind == LayoutSize.compact ? findsOneWidget : findsNothing);
         expect(find.byType(NavigationRail), kind == LayoutSize.compact ? findsNothing : findsOneWidget);
@@ -52,26 +52,27 @@ void main() {
       });
 
       testWidgets('$name: every tab scrolls through without an error', (tester) async {
-        final errors = Errors();
-        await pumpFull(tester, demoWallet(), scale, size: size);
-        await scrollThrough(tester);
-        for (final tab in _tabs) {
-          await tapTab(tester, tab);
+        await withErrors((errors) async {
+          await pumpFull(tester, demoWallet(clock: pinnedNoon), scale, size: size);
           await scrollThrough(tester);
-        }
-        // The Pay-period report (RX7), opened from the period chip (bar) or badge (rail).
-        final chip = find.byKey(const ValueKey('periodChip')), badge = find.byKey(const ValueKey('periodBadgeTap'));
-        await tester.tap(chip.evaluate().isNotEmpty ? chip : badge);
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 600));
-        expect(find.byKey(const ValueKey('reportKept')), findsOneWidget);
-        await scrollThrough(tester);
-        errors.check();
+          for (final tab in _tabs) {
+            await tapTab(tester, tab);
+            await scrollThrough(tester);
+          }
+          // The Pay-period report (RX7), opened from the period chip (bar) or badge (rail).
+          final chip = find.byKey(const ValueKey('periodChip')), badge = find.byKey(const ValueKey('periodBadgeTap'));
+          await tester.tap(chip.evaluate().isNotEmpty ? chip : badge);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 600));
+          expect(find.byKey(const ValueKey('reportKept')), findsOneWidget);
+          await scrollThrough(tester);
+          errors.check();
+        });
         expect(tester.takeException(), isNull);
       });
 
       testWidgets('$name: a tap shows the page and the other pages keep their State', (tester) async {
-        await pumpFull(tester, demoWallet(), scale, size: size);
+        await pumpFull(tester, demoWallet(clock: pinnedNoon), scale, size: size);
         final plan = tester.state(find.byType(SettingsScreen, skipOffstage: false));
         final spending = tester.state(find.byType(SpendingScreen, skipOffstage: false));
         for (final tab in ['Settings', 'Budget', 'Settings', 'Today']) {
@@ -88,7 +89,7 @@ void main() {
   }
 
   testWidgets('resizing 360 -> 1280 -> 360 keeps the pages and their State', (tester) async {
-    await pumpFull(tester, demoWallet(), 1.0, size: const Size(360, 800));
+    await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(360, 800));
     final plan = tester.state(find.byType(SettingsScreen, skipOffstage: false));
     final spending = tester.state(find.byType(SpendingScreen, skipOffstage: false));
     final todayWidget = tester.widget(find.byType(TodayScreen, skipOffstage: false));
@@ -106,7 +107,7 @@ void main() {
     Rect rectOf(WidgetTester tester, String key) => tester.getRect(find.byKey(ValueKey(key)));
 
     testWidgets('1280: four tile columns, the first tile sits right of the hero at the top', (tester) async {
-      await pumpFull(tester, demoWallet(), 1.0, size: const Size(1280, 800));
+      await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(1280, 800));
       final hero = rectOf(tester, 'heroTile');
       final tiles = find.byType(Tile);
       final beside = [for (var i = 0; i < tiles.evaluate().length; i++) tester.getRect(tiles.at(i))]
@@ -115,7 +116,7 @@ void main() {
     });
 
     testWidgets('800: two tile columns, the hero spans both and the number tiles sit below it', (tester) async {
-      await pumpFull(tester, demoWallet(), 1.0, size: const Size(800, 1280));
+      await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(800, 1280));
       final hero = rectOf(tester, 'heroTile'), left = rectOf(tester, 'leftTile'), pay = rectOf(tester, 'paydayTile');
       expect(left.top, greaterThanOrEqualTo(hero.bottom - 1));
       expect((left.top - pay.top).abs(), lessThan(2), reason: 'two tiles side by side');
@@ -180,7 +181,7 @@ void main() {
     }
 
     testWidgets('Ctrl+1..5 switch tabs, Ctrl+N opens Add expense', (tester) async {
-      await pumpFull(tester, demoWallet(), 1.0, size: const Size(1280, 800));
+      await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(1280, 800));
       await tester.pump();
       await ctrl(tester, LogicalKeyboardKey.digit4);
       expect(find.byType(SaveScreen), findsOneWidget);
@@ -194,7 +195,7 @@ void main() {
     });
 
     testWidgets('a plain "1" is not a shortcut: the Plan field keeps its focus and the tab stays', (tester) async {
-      await pumpFull(tester, demoWallet(), 1.0, size: const Size(1280, 800));
+      await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(1280, 800));
       await tapTab(tester, 'Budget'); // the payday plan is on Budget
       await openPlanEdit(tester);
       final field = find.widgetWithText(TextField, 'Rent');

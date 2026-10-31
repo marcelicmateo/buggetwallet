@@ -223,7 +223,7 @@ void main() {
 
   group('two columns depend on the content width, not the window width', () {
     testWidgets('Today: four tile columns at any content width of an expanded window', (tester) async {
-      await _pumpShell(tester, demoWallet(), w: 1500, h: 900);
+      await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 1500, h: 900);
       final rail = tester.getSize(_rail).width;
       for (final c in [1039.0, 1040.0, 1041.0]) {
         await _size(tester, rail + c, 900);
@@ -233,7 +233,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
     testWidgets('Budget: one column at content 1039, two at 1040 and 1041', (tester) async {
-      await _pumpShell(tester, demoWallet(), w: 1500, h: 900);
+      await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 1500, h: 900);
       final rail = tester.getSize(_rail).width;
       await _goTab(tester, 1);
       for (final c in [1039.0, 1040.0, 1041.0]) {
@@ -243,17 +243,17 @@ void main() {
       expect(tester.takeException(), isNull);
     });
     testWidgets('a window of 1024..1295 gets the four-column Today grid', (tester) async {
-      await _pumpShell(tester, demoWallet(), w: 1024, h: 900);
+      await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 1024, h: 900);
       expect(_todayWide(tester), isTrue);
       await _size(tester, 1100, 900);
       expect(_todayWide(tester), isTrue);
     });
     testWidgets('huge window: content capped at 1040 still gives four tile columns', (tester) async {
-      await _pumpShell(tester, demoWallet(), w: 3840, h: 1080);
+      await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 3840, h: 1080);
       expect(_todayWide(tester), isTrue);
     });
     testWidgets('compact and medium never use four tile columns', (tester) async {
-      await _pumpShell(tester, demoWallet(), w: 360, h: 800);
+      await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 360, h: 800);
       expect(_todayWide(tester), isFalse);
       await _size(tester, 800, 800);
       expect(_todayWide(tester), isFalse);
@@ -274,7 +274,7 @@ void main() {
     ];
     for (final (w, h) in sizes) {
       testWidgets('demo wallet ${w.toInt()}x${h.toInt()}', (tester) async {
-        await _pumpShell(tester, demoWallet(), w: w, h: h);
+        await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: w, h: h);
         await _allTabsClean(tester);
       });
     }
@@ -295,7 +295,7 @@ void main() {
   group('text scale 2.0', () {
     for (final w in [360.0, 600.0, 1024.0, 1400.0]) {
       testWidgets('demo wallet at $w', (tester) async {
-        await _pumpShell(tester, demoWallet(), w: w, h: 800, scale: 2.0);
+        await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: w, h: 800, scale: 2.0);
         expect(tester.takeException(), isNull);
         if (w >= 600) {
           for (final l in _tabLabels) {
@@ -314,7 +314,7 @@ void main() {
       });
     }
     testWidgets('rail at 600x400, scale 2.0', (tester) async {
-      await _pumpShell(tester, demoWallet(), w: 600, h: 400, scale: 2.0);
+      await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 600, h: 400, scale: 2.0);
       await _allTabsClean(tester);
     });
   });
@@ -324,7 +324,7 @@ void main() {
 
     for (final w in [700.0, 1400.0]) {
       testWidgets('width $w: the spinner shows while syncing and nothing below it moves', (tester) async {
-        final wc = demoWallet();
+        final wc = demoWallet(clock: pinnedNoon);
         await _pumpShell(tester, wc, w: w, h: 800);
         expect(find.byTooltip('Syncing'), findsNothing);
         final idle = today(tester);
@@ -342,11 +342,11 @@ void main() {
     }
 
     testWidgets('narrow rail: the period badge and its text are taller at text scale 2.0 than at 1.0', (tester) async {
-      await _pumpShell(tester, demoWallet(), w: 700, h: 800);
+      await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 700, h: 800);
       final badge = find.byKey(const ValueKey('periodBadge'));
       final small = tester.getSize(badge), smallText = tester.getSize(find.descendant(of: badge, matching: find.byType(Text)));
       await tester.pumpWidget(const SizedBox.shrink());
-      await _pumpShell(tester, demoWallet(), w: 700, h: 800, scale: 2.0);
+      await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 700, h: 800, scale: 2.0);
       final big = tester.getSize(badge), bigText = tester.getSize(find.descendant(of: badge, matching: find.byType(Text)));
       expect(bigText.height, greaterThan(smallText.height));
       expect(big.height, greaterThan(small.height));
@@ -426,7 +426,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
     testWidgets('rapid resizes across boundaries keep the State of the pages', (tester) async {
-      await _pumpShell(tester, demoWallet(), w: 400, h: 800);
+      await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 400, h: 800);
       final plan = tester.state(find.byType(SettingsScreen, skipOffstage: false));
       final planWidget = tester.widget(find.byType(SettingsScreen, skipOffstage: false));
       final spending = tester.state(find.byType(SpendingScreen, skipOffstage: false));
@@ -444,7 +444,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
     testWidgets('tab switches at any width keep the Plan and Spending pages (not rebuilt)', (tester) async {
-      await _pumpShell(tester, demoWallet(), w: 1300, h: 800);
+      await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 1300, h: 800);
       final plan = tester.widget(find.byType(SettingsScreen, skipOffstage: false));
       final spending = tester.widget(find.byType(SpendingScreen, skipOffstage: false));
       for (final i in [4, 1, 3, 0, 2, 4]) {
@@ -584,7 +584,7 @@ void main() {
 
   group('dark theme', () {
     testWidgets('1280x800: every tab, demo wallet', (tester) async {
-      await _pumpShell(tester, demoWallet(), w: 1280, h: 800, dark: true);
+      await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 1280, h: 800, dark: true);
       expect(Theme.of(tester.element(find.byType(Scaffold).first)).brightness, Brightness.dark);
       await _allTabsClean(tester);
     });

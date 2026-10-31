@@ -10,29 +10,31 @@ import 'support/wallet.dart';
 void main() {
   for (final scale in [1.0, 2.0]) {
     testWidgets('every tab fits 320 dp at text scale $scale', (tester) async {
-      final wc = demoWallet();
-      final errors = Errors();
-      await pumpFull(tester, wc, scale);
-      await scrollThrough(tester);
-      for (final tab in ['Budget', 'Bills', 'Save', 'Settings', 'Today']) {
-        await tapTab(tester, tab);
+      final wc = demoWallet(clock: pinnedNoon);
+      await withErrors((errors) async {
+        await pumpFull(tester, wc, scale);
         await scrollThrough(tester);
-      }
-      errors.check();
+        for (final tab in ['Budget', 'Bills', 'Save', 'Settings', 'Today']) {
+          await tapTab(tester, tab);
+          await scrollThrough(tester);
+        }
+        errors.check();
+      });
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('onboarding fits 320 dp at text scale $scale', (tester) async {
       final wc = emptyWallet(withKey: false);
-      final errors = Errors();
-      await pumpFull(tester, wc, scale);
-      await scrollThrough(tester);
-      await tester.ensureVisible(find.byKey(const ValueKey('joinStart')));
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('joinStart')));
-      await tester.pump();
-      await scrollThrough(tester);
-      errors.check();
+      await withErrors((errors) async {
+        await pumpFull(tester, wc, scale);
+        await scrollThrough(tester);
+        await tester.ensureVisible(find.byKey(const ValueKey('joinStart')));
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('joinStart')));
+        await tester.pump();
+        await scrollThrough(tester);
+        errors.check();
+      });
       expect(tester.takeException(), isNull);
     });
   }

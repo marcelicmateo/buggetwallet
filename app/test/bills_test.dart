@@ -1521,53 +1521,56 @@ void main() {
       }
 
       tw('$name: Plan with the Bills panel', (tester) async {
-        final errors = Errors();
-        await pumpApp(tester, Scaffold(body: PlanPage(wc: full())), size: size, textScale: scale);
-        await scrollThrough(tester);
-        errors.check();
+        await withErrors((errors) async {
+          await pumpApp(tester, Scaffold(body: PlanPage(wc: full())), size: size, textScale: scale);
+          await scrollThrough(tester);
+          errors.check();
+        });
       });
 
       tw('$name: the bill sheet with items, unsure marks, paid state and the dates', (tester) async {
-        final errors = Errors();
-        final wc = bw();
-        final id = addBill(
-            wc,
-            NormalizedBill(
-                source: BillSource.pdf,
-                externalId: 'inv:long',
-                date: '2026-10-10',
-                dueDate: '2026-10-25',
-                total: 9999999,
-                payee: 'A very long synthetic payee name that has to wrap on a narrow screen',
-                iban: 'HR1210010051863000160',
-                reference: 'HR01 1234-5678-9012-3456',
-                description: 'A long synthetic description of what was bought, to see the wrapping at large text',
-                items: [
-                  for (var i = 0; i < 4; i++)
-                    BillItem(name: 'A synthetic item with a rather long name number $i', quantity: '2', amount: 12345)
-                ]));
-        await openSheetFor(tester, wc, id, size: size, scale: scale);
-        for (final k in ['confirmBill', 'deleteBill']) {
-          await tester.ensureVisible(key(k));
+        await withErrors((errors) async {
+          final wc = bw();
+          final id = addBill(
+              wc,
+              NormalizedBill(
+                  source: BillSource.pdf,
+                  externalId: 'inv:long',
+                  date: '2026-10-10',
+                  dueDate: '2026-10-25',
+                  total: 9999999,
+                  payee: 'A very long synthetic payee name that has to wrap on a narrow screen',
+                  iban: 'HR1210010051863000160',
+                  reference: 'HR01 1234-5678-9012-3456',
+                  description: 'A long synthetic description of what was bought, to see the wrapping at large text',
+                  items: [
+                    for (var i = 0; i < 4; i++)
+                      BillItem(name: 'A synthetic item with a rather long name number $i', quantity: '2', amount: 12345)
+                  ]));
+          await openSheetFor(tester, wc, id, size: size, scale: scale);
+          for (final k in ['confirmBill', 'deleteBill']) {
+            await tester.ensureVisible(key(k));
+            await tester.pump();
+          }
+          wc.updateBill(id, category: 'Bills & subscriptions');
+          expect(wc.confirmBill(id), isTrue, reason: 'a bill due from today on needs a category to confirm');
           await tester.pump();
-        }
-        wc.updateBill(id, category: 'Bills & subscriptions');
-        expect(wc.confirmBill(id), isTrue, reason: 'a bill due from today on needs a category to confirm');
-        await tester.pump();
-        await tester.ensureVisible(key('paidBy'));
-        await tester.pump();
-        errors.check();
+          await tester.ensureVisible(key('paidBy'));
+          await tester.pump();
+          errors.check();
+        });
       });
 
       tw('$name: Today with the line, Upcoming with bill dates, the camera screen', (tester) async {
-        final errors = Errors();
-        final wc = full();
-        await pumpApp(tester, todayOf(wc), size: size, textScale: scale);
-        await scrollThrough(tester);
-        await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: size, textScale: scale);
-        await scrollThrough(tester);
-        await pumpApp(tester, ScanBillScreen(wc: wc), size: size, textScale: scale);
-        errors.check();
+        await withErrors((errors) async {
+          final wc = full();
+          await pumpApp(tester, todayOf(wc), size: size, textScale: scale);
+          await scrollThrough(tester);
+          await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: size, textScale: scale);
+          await scrollThrough(tester);
+          await pumpApp(tester, ScanBillScreen(wc: wc), size: size, textScale: scale);
+          errors.check();
+        });
       });
     }
   });

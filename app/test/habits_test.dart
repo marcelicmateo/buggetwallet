@@ -529,28 +529,31 @@ void main() {
     ];
     for (final (name, size, scale) in sizes) {
       tw('$name: Today with the review card and the bills line', (tester) async {
-        final errors = Errors();
-        final wc = hw(confirmBill: true);
-        await pumpApp(tester, today(wc), size: size, textScale: scale);
-        expect(find.byKey(const ValueKey('reviewCard')), findsOneWidget);
-        await scrollThrough(tester);
-        errors.check();
+        await withErrors((errors) async {
+          final wc = hw(confirmBill: true);
+          await pumpApp(tester, today(wc), size: size, textScale: scale);
+          expect(find.byKey(const ValueKey('reviewCard')), findsOneWidget);
+          await scrollThrough(tester);
+          errors.check();
+        });
       });
 
       tw('$name: the review with every step filled', (tester) async {
-        final errors = Errors();
-        final wc = hw(confirmBill: true);
-        await pumpApp(tester, ReviewScreen(wc: wc), size: size, textScale: scale);
-        await scrollThrough(tester);
-        errors.check();
+        await withErrors((errors) async {
+          final wc = hw(confirmBill: true);
+          await pumpApp(tester, ReviewScreen(wc: wc), size: size, textScale: scale);
+          await scrollThrough(tester);
+          errors.check();
+        });
       });
 
       tw('$name: Plan with the review day, expected bills and nudges', (tester) async {
-        final errors = Errors();
-        final wc = hw(confirmBill: true, nudges: FakeNudges());
-        await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
-        await scrollThrough(tester);
-        errors.check();
+        await withErrors((errors) async {
+          final wc = hw(confirmBill: true, nudges: FakeNudges());
+          await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: size, textScale: scale);
+          await scrollThrough(tester);
+          errors.check();
+        });
       });
     }
   });
