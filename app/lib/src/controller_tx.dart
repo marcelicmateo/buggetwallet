@@ -35,6 +35,15 @@ extension TxEdits on WalletController {
     return null;
   }
 
+  /// The bank row [bankId] replaced a hand-added expense (D2 cash match): its list row shows a "Matched" mark. One cheap query per data
+  /// version, not a scan of every row per tile.
+  bool isMatchedBank(String bankId) => _cached<Set<String>>(
+      const MemoKey('matchedBanks'),
+      () => {
+            for (final r in repo.db.select('SELECT matched_to FROM tx WHERE manual = 1 AND deleted = 0 AND matched_to IS NOT NULL'))
+              r['matched_to'] as String
+          }).contains(bankId);
+
   void deleteTransaction(Tx t) {
     lastDeletedTx = t.id;
     repo.deleteTransaction(t.id);

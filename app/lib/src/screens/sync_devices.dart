@@ -198,6 +198,7 @@ class _SyncDevicesBlockState extends State<SyncDevicesBlock> {
       ]);
     }
     return Column(key: const ValueKey('deviceList'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (wc.approvalPromptDue) _approvalPrompt(context),
       const Heading('Devices', size: BwType.headingSize),
       for (final d in list.rows) _row(context, d, now),
       if (list.pending.isNotEmpty) ...[
@@ -243,6 +244,33 @@ class _SyncDevicesBlockState extends State<SyncDevicesBlock> {
           ]),
         ]),
     ]);
+  }
+
+  /// The one-time question for wallets made before approval was on by default.
+  Widget _approvalPrompt(BuildContext context) {
+    final c = context.c;
+    return Container(
+      key: const ValueKey('approvalPrompt'),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(border: Border.all(color: c.lineStrong), borderRadius: BorderRadius.circular(3)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Heading('Require approval for new devices?', size: BwType.headingSize),
+        const SizedBox(height: 4),
+        const Muted('A new device then waits until you approve its code here.'),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 4, children: [
+          FilledButton(
+              key: const ValueKey('approvalPromptOn'),
+              onPressed: _busy ? null : () => _act(() => widget.wc.answerApprovalPrompt(turnOn: true), 'Approval is required.'),
+              child: const Text('Turn on')),
+          TextButton(
+              key: const ValueKey('approvalPromptLater'),
+              onPressed: _busy ? null : () => widget.wc.answerApprovalPrompt(turnOn: false),
+              child: const Text('Not now')),
+        ]),
+      ]),
+    );
   }
 
   Future<void> _toggleLock(bool on, DeviceList list) async {

@@ -6,6 +6,9 @@ part of 'controller.dart';
 
 const _noticeDeviceRemoved = 'noticeDeviceRemoved';
 
+/// Device-local: the owner answered (or used the switch) once; the one-time "Require approval for new devices?" prompt is gone for good.
+const _approvalPromptDone = 'approvalPromptDone';
+
 /// Set once the Devices block was opened: from then on each successful sync run reads the device list again.
 final _devicesWanted = Expando<bool>('devicesWanted');
 
@@ -25,6 +28,22 @@ extension DeviceKeys on WalletController {
 
   /// A device was removed on this install: the advice to change the wallet key stays until OK.
   bool get deviceRemovedNote => repo.localValue(_noticeDeviceRemoved) != null;
+
+  /// The one-time prompt for existing wallets: the relay's list is read, approval is off and the owner has not answered yet. A new wallet
+  /// has approval on from the start, so it never shows.
+  bool get approvalPromptDue => repo.localValue(_approvalPromptDone) == null && deviceList != null && !deviceList!.locked;
+
+  /// The prompt's two buttons. [turnOn] calls [setRequireApproval]; a failure returns its message and keeps the prompt. "Not now" hides it
+  /// for good. Logs the action word only.
+  Future<String?> answerApprovalPrompt({required bool turnOn}) async {
+    logEvent(_sync, Level.INFO, 'devices.approvalPrompt', {'action': turnOn ? 'turnOn' : 'notNow'});
+    if (!turnOn) {
+      repo.setLocalValue(_approvalPromptDone, '1');
+      notifyListeners();
+      return null;
+    }
+    return setRequireApproval(true);
+  }
 
   /// The Devices block closed: sync runs stop reading the device list again.
   void stopWatchingDevices() => _devicesWanted[this] = false;
@@ -154,6 +173,7 @@ extension DeviceKeys on WalletController {
       stayed = !on && now;
       return now;
     });
+    if (error == null) repo.setLocalValue(_approvalPromptDone, '1'); // the switch is an answer too
     return error ?? (stayed ? approvalStaysOnText : null);
   }
 

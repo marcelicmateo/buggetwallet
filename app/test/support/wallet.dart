@@ -32,8 +32,13 @@ WalletController emptyWallet({bool withKey = true}) => seamedController(WalletRe
 /// the payday checklist, goals, recent rows, wishlist items waiting / ready / decided.
 /// [currency]: the rows' currency (the wallet setting stays EUR unless a test sets it; rows in another currency are
 /// left out of every total).
-WalletController demoWallet({String currency = 'EUR'}) {
-  final wc = emptyWallet();
+///
+/// The pay period does not depend on the real date (payday rule C): the period starts 25 days before today and
+/// [demoPaydayDay] makes that start an expected payday (day 29..31 is not a payday day: 28, and a start on the 29th..31st
+/// is then 1..3 days late for it), so the next payday is 28..31 days after the start, i.e. 3..6 days ahead of today.
+/// [clock] pins today (tests that go through every day of a year).
+WalletController demoWallet({String currency = 'EUR', DateTime Function()? clock}) {
+  final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: clock);
   final today = wc.today();
   final start = addDays(today, -25);
   wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
@@ -46,9 +51,15 @@ WalletController demoWallet({String currency = 'EUR'}) {
   ]));
   wc.repo.saveGoal(name: 'Emergency fund with a long synthetic name', target: 300000, saved: 0, monthly: 10000, sort: 1);
   wc.repo.saveGoal(name: 'Yearly costs', target: 120000, saved: 0, monthly: 10000, sort: 2);
-  // paydayDay 28 keeps the period running on any real date (start is 25 days ago; the next payday is the 28th of the next month).
-  wc.repo.updateSettings(
-      {'salary': 150000, 'rent': 55000, 'loan': 25000, 'subs': 1299, 'periodStart': start, 'paydayDay': 28, 'salaryConfirmed': false});
+  wc.repo.updateSettings({
+    'salary': 150000,
+    'rent': 55000,
+    'loan': 25000,
+    'subs': 1299,
+    'periodStart': start,
+    'paydayDay': demoPaydayDay(start),
+    'salaryConfirmed': false
+  });
   final now = DateTime.now().millisecondsSinceEpoch;
   wc.repo.addWish('Synthetic headphones with a long name', 12000);
   final decided = wc.repo.addWish('Synthetic jacket', 9000);
@@ -61,6 +72,9 @@ WalletController demoWallet({String currency = 'EUR'}) {
   wc.reload();
   return wc;
 }
+
+/// The payday day that makes [start] an expected payday (core clamps 29..31 to 28; see [demoWallet]).
+int demoPaydayDay(String start) => dayOf(start) > 28 ? 28 : dayOf(start);
 
 /// A setting changed on another device, as a sync would apply it (newer HLC), then reloaded.
 void remoteSetting(WalletController wc, String key, Object? value) {
