@@ -65,6 +65,7 @@ Stopped mid-task, work kept as WIP commits on their branches (not merged, unveri
 - `worktree-agent-a04c36fd4c70685c0` (8d84b17) KL-UI2: rule search section, blocked sync files + Skip, RX8 repeats.
 - `worktree-agent-a9b1ea814ccc39ab3` (30bcda6) ZC Z1 core: `series.dart` (buckets, DayIndex, series, pro-rated budget).
 - `worktree-agent-a85badd66d4df2738` (eea1d8f) ZC Z2 spec tests: 57 tests in `zc_series_spec_test.dart` (complete; compiles once Z1 lands). Spec gaps to settle in ZC_SPEC §4 before merging: `IncomeSpendingBar` fields; pro-rating per category vs total; `over` for several categories (sum of per-category overs, like `budgetVsActualSeries`?); `partial` rules for clipped/after-today buckets; label for a week spanning two months; whether `bucketsOf` enforces the 5-year cap; DayIndex extents with deleted/foreign rows.
+**2026-11-01:** resumed: KL-UI1, KL-UI2 (ui-builder sonnet/high, in their worktrees) and Z1 + Z2 tests (core-builder high; Z2 gaps settled in ZC_SPEC §4) running.
 Next steps in order: 1) resume KL-UI1 + KL-UI2 from their branches (finish, tests) and merge; 2) resume Z1, settle the Z2 gaps, merge both; 3) stage run (test, desktop, web) + review of 8fc7718..HEAD; 4) push, STATUS; 5) ZC Z3 UI.
 
 ## Owner grill 2026-10-31 (answers in `OWNER_DECISIONS_2026-10-31.md`)

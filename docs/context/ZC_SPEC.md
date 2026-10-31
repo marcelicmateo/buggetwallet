@@ -90,6 +90,21 @@ String bucketLabel(DateRange span, Bucket b);                        // "14", "6
 ```
 `spendingByMonth`/`incomeVsSpending`/`tagTrend`/`merchantTrend` stay (old callers, and the month-equality tests).
 
+**Settled by the lead 2026-11-01 (Z2 gaps):**
+- `IncomeSpendingBar {DateRange span; Bucket bucket; int income; int extra; int spent; bool partial; int get net}`,
+  `net = income + extra - spent` (as `IncomeVsSpending`).
+- Pro-rating is **per category**: each budgeted category's month budget is split over its days on its own; a bucket's
+  `budgeted` = the sum of those shares. `over` is a **field**, Σ per category of max(0, actual_c − share_c), as
+  `BudgetMonth.over`, so whole-month buckets equal `budgetVsActualSeries` exactly (budgeted, actual, over).
+- `partial` = the whole bucket holds today, or the window clips it (the `_partial` rule of `insights.dart`). Buckets after
+  today are not partial (as `MonthBar`); the app keeps windows from going past today.
+- A clipped budget bucket counts only its days: `budgeted` = their shares, `prorated = true` (it is not a whole month).
+  Budget vs actual at month/quarter widens its window to whole months in the app (owner 2026-10-20: calendar months).
+- Week labels: `5–11 Oct`; across months `29 Sep – 5 Oct`; across years `29 Dec 25 – 4 Jan 26`; a one-day piece `12 Oct`.
+- `bucketsOf` and every series function throw `ArgumentError` for a window of 5 years or more (`to >= from + 5 years`).
+- `DayIndex.first/last` = the first/last date holding a counted row (live, home currency, spending/income/extra);
+  deleted rows, transfers and other currencies don't move them; null when there is none.
+
 ## 5. App
 - `widgets/chart_viewport.dart` `ChartViewport`: owns the window (start/end), turns drag/pinch/double tap/buttons into a
   new window (clamped), asks for bars, keys `chartZoomIn_<id>`, `chartZoomOut_<id>`, `chartReset_<id>`. Desktop: Shift +
