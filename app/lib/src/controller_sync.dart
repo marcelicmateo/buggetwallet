@@ -378,6 +378,18 @@ extension WalletSync on WalletController {
     }
   }
 
+  /// KL: the peer files that stop this device's later files of that device, as the last complete run found them (local, no network;
+  /// not skipped yet). Nothing here is logged.
+  List<BlockedFile> get syncBlockedFiles => relayUrl == null ? const [] : blockedFiles(repo);
+
+  /// Skips the blocked file [f] (the owner confirmed), then syncs once. Logs the reason word only.
+  Future<void> skipBlocked(BlockedFile f) async {
+    skipBlockedFile(repo, f.device, f.file);
+    logEvent(_sync, Level.INFO, 'sync.skip', {'reason': f.reason.name});
+    notifyListeners();
+    await syncNow(trigger: 'skip');
+  }
+
   /// Changes when wallet data changes: every data write (local or applied from a peer) records its field clock. Bookkeeping
   /// a failed run still makes (the next file number in `meta`, the outbox) doesn't count.
   (WalletRepo, int) _dataMark() => (repo, repo.dataVersion);
