@@ -35,7 +35,6 @@ The script runs the same steps as CI.
 
 ```sh
 tools/make-signing-key.sh       # once: the Android signing key, kept in ~/.config/budget-wallet/
-tools/install-hooks.sh          # once, optional: pre-commit hook that runs `tools/build.sh lint`
 tools/build.sh test             # lint, then importer + core + app: analyze and tests
 tools/build.sh lint             # quick: Dart format check, shellcheck, actionlint
 tools/build.sh format           # reformat Dart code (dart format)

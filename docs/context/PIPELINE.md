@@ -17,7 +17,7 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 - One targeted check per agent at the end, one Haiku full run per stage, one reviewer pass per stage on the whole diff.
   Live-mode screenshots only for visual changes.
 - Batch follow-ups into one message per agent instead of resuming it repeatedly.
-- Fewer, bigger stages: each stage costs a full run and a review. CI is manual only (owner, 2026-10-21): no ci-watcher after a push.
+- Fewer, bigger stages: each stage costs a full run and a review. CI is manual only (owner, 2026-10-21): no CI watching after a push; when the owner starts a run, the lead waits with `tools/ci-status.sh --wait` itself.
 
 ## Procedure on each event
 | Event | Do |
@@ -27,7 +27,7 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 | Haiku run red | Fix items first (owner rule: bugs before features), then re-run only the failing suite. |
 | Owner message | Owner bug reports go before anything queued. |
 
-Agent models: scout, ci-watcher haiku/low; test-writer, devops sonnet/medium; ui-builder sonnet/high; core-builder, reviewer Fable/high.
+Agent models: scout haiku/low; test-writer, devops sonnet/medium; ui-builder sonnet/high; core-builder, reviewer Fable/high.
 Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the lead from the branch named in "Base".
 
 ## Stages BP, WS, DK (owner picked 2026-10-28; plan `STAGE_Y_PLAN.md`; one at a time after Stage M)

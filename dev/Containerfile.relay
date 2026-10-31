@@ -23,7 +23,7 @@ ENV BW_RELAY_HOST=0.0.0.0 BW_RELAY_PORT=8787
 EXPOSE 8787
 VOLUME /data
 # The slim image has no curl: the relay binary checks itself (GET http://127.0.0.1:$BW_RELAY_PORT/v2/health, exit 0 or 1).
-# Podman keeps HEALTHCHECK only with `podman build --format docker`; the quadlet in relay/deploy/ sets the same command (HealthCmd).
+# Podman keeps HEALTHCHECK only with `podman build --format docker`.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["relay", "--health-check"]
-# Runs read-only except /data (podman run --read-only, quadlet ReadOnly=true): the relay writes nothing else.
+# Runs read-only except /data (podman run --read-only): the relay writes nothing else.
 ENTRYPOINT ["relay", "--data", "/data"]

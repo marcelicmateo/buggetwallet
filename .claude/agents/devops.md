@@ -19,7 +19,7 @@ Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner 
 You maintain how Budget Wallet is built, tested and released. The root `CLAUDE.md` is already loaded.
 
 You own: `tools/build.sh`, `tools/emulator.sh`, `tools/timing.sh` + `tools/build_log.py` + `tools/build-times.sh`
-(run logs and timing history in `~/.local/share/budget-wallet/`), `tools/ci-status.sh`, `tools/make-signing-key.sh`, `tools/install-hooks.sh`,
+(run logs and timing history in `~/.local/share/budget-wallet/`), `tools/ci-status.sh`, `tools/make-signing-key.sh`,
 `dev/Containerfile`, `dev/install-lint-tools.sh` (pinned shellcheck/actionlint), the root `analysis_options.yaml`,
 `.github/workflows/*.yml`, `.github/scripts/`, `app/android/**/build.gradle.kts`, the Flutter pin
 (`environment: flutter:` in `app/pubspec.yaml`, read by both local builds and CI).

@@ -10,7 +10,7 @@ This folder is what gets installed. One command from the laptop does it all: `to
 | `bw-relay.sysusers` | `/etc/sysusers.d/bw-relay.conf` | creates the `bw-relay` system user |
 | `bw-relay.env.example` | `/etc/bw-relay/bw-relay.env` (root, 0640) | `BW_RELAY_DOMAIN` (public name) and optional limits; no secrets |
 | (you create) | `/etc/bw-relay/create-token` (root, 0600) | the wallet-creation token, one line; systemd passes it to the relay only |
-| `Caddyfile` | `/etc/caddy/Caddyfile` | same headers and limits as `relay/deploy/Caddyfile`, upstream `127.0.0.1:8787` |
+| `Caddyfile` | `/etc/caddy/Caddyfile` | hardened headers and limits (no access log, 64 MiB bodies), upstream `127.0.0.1:8787` |
 | `caddy.service.d/bw-relay.conf` | `/etc/systemd/system/caddy.service.d/` | gives Caddy `BW_RELAY_DOMAIN`, orders it after the relay |
 
 Data on another path (an SSD): `/etc/systemd/system/bw-relay.service.d/data.conf` with `[Service]`, `StateDirectory=` (empty), `ReadWritePaths=<dir>`, `ExecStart=` (empty) and the `ExecStart=` line from the unit with `--data <dir>`; the folder is `bw-relay:bw-relay` mode 0700. `native-install --data-dir` writes this and `/etc/bw-relay/data-dir` (so backup and upgrade know it).
