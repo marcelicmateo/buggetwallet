@@ -169,15 +169,25 @@ List<String> billOccurrences(RecurringBill b, String from, String until) {
   final to = switch (b.endsBy) { final e? when e.compareTo(until) < 0 => e, _ => until };
   if (!isIsoDate(b.nextDue) || !isIsoDate(from) || !isIsoDate(to) || from.compareTo(to) > 0) return const [];
   final step = b.intervalDays;
-  var d = b.nextDue;
-  if (step < 1) return d.compareTo(from) >= 0 && d.compareTo(to) <= 0 ? [d] : const [];
-  if (d.compareTo(from) < 0) d = addDays(d, (daysBetween(d, from) + step - 1) ~/ step * step);
+  if (step < 1) return b.nextDue.compareTo(from) >= 0 && b.nextDue.compareTo(to) <= 0 ? [b.nextDue] : const [];
+  var d = firstDueFrom(b, from);
   final out = <String>[];
   while (d.compareTo(to) <= 0 && out.length < _maxOccurrences) {
     out.add(d);
     d = addDays(d, step);
   }
   return out;
+}
+
+/// The first of [b]'s dates `nextDue + k × intervalDays` (k ≥ 0) on or after [from]: `nextDue` itself when it is not
+/// before [from] or the interval is below 1. Not capped by `endsBy` ([billOccurrences] is). Both dates must be valid.
+/// This is where `nextDue` stands on [from] once every cycle before it was paid on its date (a payment moves `nextDue`
+/// to its date + `intervalDays`), so [billOccurrences] and `projectedReserves` share it.
+String firstDueFrom(RecurringBill b, String from) {
+  final step = b.intervalDays;
+  final d = b.nextDue;
+  if (step < 1 || d.compareTo(from) >= 0) return d;
+  return addDays(d, (daysBetween(d, from) + step - 1) ~/ step * step);
 }
 
 /// A bill's planned row whose covering recurring occurrence ([plannedCoverage]) is listed in the same range, or is the

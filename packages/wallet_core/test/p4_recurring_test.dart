@@ -3,7 +3,6 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
-import 'package:wallet_core/src/planned.dart' show billOccurrences;
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 

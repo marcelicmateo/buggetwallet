@@ -144,6 +144,18 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   drop until the paying row lands (a bill with `lastPaidTx` dated in the period is released even if its next due date
   still falls before payday). A due bill in a fixed category (`RecurringBill.coveredByPlan`: Rent, Loan, Bills &
   subscriptions) is already in `rent`/`loan`/`subs` and is listed but never reserved twice (owner rule: exact).
+  **Next period (NP):** `projectedReserves(start:, end:, bills:, txs:, planned:, currency:, table:, payeeAliases:)` →
+  `PeriodReserves {cycles, planned, count, total}` = what `[start, end)` will set aside once it starts, if every cycle due
+  before `start` is paid on its date. Confirmed bills only (incomes never); a non-long, unfinished bill moves to its first
+  `billOccurrences` date in `[start, end − 1]`, else to `firstDueFrom(b, start)` (planned.dart, the same stepping;
+  holds nothing but covers its slips as it will); a long bill due before `start` moves to `firstDueFrom(b, start)` and is
+  held in full (parts paid of the old cycle never lower the next one), one due on or after `start` stays as it is (parts
+  already paid of that cycle count); finished bills stay as they are. Then `computePeriod`'s own
+  path through the shared `_setAside` (dueCycles → not `coveredIn`, reserve > 0; `duePlanned` from `start`;
+  `plannedReserves` with the moved bills and their occurrence keys). `start >= end` or a bad date → `ArgumentError`.
+  Identity (`test/np_projected_reserves_test.dart`, repo + `refreshRecurring`): `total`/`count` (and the cycles) ==
+  `computePeriod(today: start)`'s `beforePayday`/`beforePaydayCount`/`reservedCycles` after those payments. Timing: a
+  paying row already imported but not yet recorded by `refreshRecurring` makes `dueCycles` hold that long cycle at 0.
   `reviewState(txs, st, wishes, budgets, today:, reviewDates:)` (M4 weekly review) → `ReviewState`: `due` from the
   first `reviewDay` after the last review (newest of `reviewDates` and the legacy `lastReview`) until done (never
   reviewed: due at once), `nextReviewDate` = that day (or the coming one), `streak` = `reviewStreak(...)`,
