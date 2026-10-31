@@ -356,14 +356,17 @@ List<CategorizedTx> paidCandidates(PlannedCost p, List<CategorizedTx> txs, List<
 /// - `amount == -planned.amount` exactly,
 /// - dated within the planned date ± 3 days,
 /// - not already the `paidTx` of another planned row in [planned] (pass every row: `plannedCosts(includeClosed: true)`),
+///   nor the bank row that replaced such a `paidTx` ([replacedBy]: hand-added entry id → its `matched_to` bank row; a
+///   cost the owner marked Paid by a hand-added entry is still paid by it once its bank row arrives),
 /// - not one of the cost's [PlannedCost.autoOff] rows (the owner reopened it from that row).
 /// A row that fits two such costs closes neither (it could be either). Never by amount alone: the category and the
 /// date are the evidence (owner rule). The caller passes rows in the wallet currency only and leaves out the payments
 /// linked to a bill (`Bill.linkedTx`). Pairs in [planned] order. Pure.
-List<(String plannedId, String txId)> planAutoPaid(List<PlannedCost> planned, List<CategorizedTx> rows, {required CategoryTable table}) {
+List<(String plannedId, String txId)> planAutoPaid(List<PlannedCost> planned, List<CategorizedTx> rows,
+    {required CategoryTable table, Map<String, String> replacedBy = const {}}) {
   final taken = {
     for (final q in planned)
-      if (q.paidTx != null) q.paidTx!
+      if (q.paidTx case final paid?) ...[paid, if (replacedBy[paid] case final bank?) bank]
   };
   bool rowOk(CategorizedTx t) =>
       t.tx.live &&

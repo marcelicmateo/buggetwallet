@@ -141,6 +141,27 @@ void main() {
       expect(r.plannedCosts(includeClosed: true).single.paidTx, txOf(bank));
     });
 
+    test('RF1: the bank row that replaced the hand-added entry paying one cost never auto-pays a twin cost', () {
+      final p1 = r.addPlanned(title: 'Synthetic dentist', date: '2026-03-10', amount: 8000, category: 'Health & care');
+      final p2 = r.addPlanned(title: 'Synthetic dentist', date: '2026-03-11', amount: 8000, category: 'Health & care');
+      final e = r.addTransaction(date: '2026-03-10', amount: 8000, category: 'Health & care', note: 'cash');
+      r.markPlannedPaid(p1, e);
+      final bank = n('2026-03-10', -8000, 'POS plaćanje', 'PBZ POS Synthetic clinic ZAGREB');
+      r.importBatch(ImportBatch(source: 'pbz', transactions: [bank]));
+      expect(r.transaction(e)!.matchedTo, bank.id, reason: 'the bank row replaced the entry');
+      final byId = {for (final p in r.plannedCosts(includeClosed: true)) p.id: p};
+      expect((byId[p1]!.status, byId[p1]!.paidTx), (PlannedStatus.paid, e));
+      expect((byId[p2]!.status, byId[p2]!.paidTx), (PlannedStatus.open, null));
+      expect(r.autoPaidPlanned(), isEmpty);
+    });
+
+    test('RF1 (pure): replacedBy marks the replacing bank row taken', () {
+      final paid = pc('p0', '2026-03-09', 4500, paidTx: 'm1');
+      expect(planAutoPaid([paid, pc('p1', '2026-03-10', 4500)], [row('t1', '2026-03-10', -4500)], table: _t), [('p1', 't1')]);
+      expect(planAutoPaid([paid, pc('p1', '2026-03-10', 4500)], [row('t1', '2026-03-10', -4500)], table: _t, replacedBy: {'m1': 't1'}),
+          isEmpty);
+    });
+
     test('two fitting rows: nothing closes (the owner gets "Paid by this?")', () {
       r.addPlanned(title: 'Synthetic food', date: '2026-03-10', amount: 4500, category: 'Groceries');
       r.importBatch(ImportBatch(source: 'pbz', transactions: [lidl('2026-03-09', -4500), lidl('2026-03-11', -4500)]));
