@@ -147,6 +147,9 @@ const Map<String, EntityDef> entitySchema = {
     ColumnDef('status', defaultSql: "'open'"),
     ColumnDef('paid_tx', nullable: true),
     ColumnDef.flag('deleted'),
+    // v19 (KL-A): the bank rows the owner reopened this cost from after it was paid by them, a JSON list
+    // (`PlannedCost.autoOff`): auto-Paid ([planAutoPaid]) never picks one of them again.
+    ColumnDef('auto_off', nullable: true),
   ], indexes: {
     'planned_date': 'date'
   }),
@@ -250,6 +253,13 @@ const Map<String, EntityDef> entitySchema = {
   // = that date. The streak is read from these rows (`reviewStreak`), so two devices never overwrite each other's count.
   'review': EntityDef('reviews', [
     ColumnDef('done'),
+    ColumnDef.flag('deleted'),
+  ]),
+  // Payee aliases (v19, KL-A): id = `pa:` + 16 hex of the SHA-256 of [alias] (`payeeAliasId`); a slip's payee key
+  // ([alias], `billPayeeKey` of the slip) read as the recurring bill payee key [payee] (one step, never a chain).
+  'payee_alias': EntityDef('payee_aliases', [
+    ColumnDef('alias'),
+    ColumnDef('payee'),
     ColumnDef.flag('deleted'),
   ]),
 };

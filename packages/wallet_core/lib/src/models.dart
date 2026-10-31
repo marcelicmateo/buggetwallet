@@ -1,3 +1,4 @@
+import 'dart:convert' show jsonDecode;
 import 'dart:math' show min;
 
 import 'package:wallet_importer/wallet_importer.dart' show CsvMapping, TxKind;
@@ -727,6 +728,10 @@ class PlannedCost {
   /// Deleted rows are kept (so a calendar event never comes back) and listed only with `includeClosed`.
   final bool deleted;
 
+  /// KL-A (schema 19 `auto_off`): the bank rows this cost was reopened from after it was paid by them
+  /// (`WalletRepoPlanned.reopenPlanned`). Auto-Paid (`planAutoPaid`) never picks one of them again. Empty when none.
+  final Set<String> autoOff;
+
   /// The planned row of a stored bill (`bill:<billId>`, kept in step by the repo's bill writes).
   bool get isBill => source == PlannedSource.bill && sourceRef != null;
 
@@ -741,6 +746,7 @@ class PlannedCost {
     this.source = PlannedSource.manual,
     this.status = PlannedStatus.open,
     this.deleted = false,
+    this.autoOff = const {},
   });
 
   /// Open and not deleted.
@@ -775,7 +781,24 @@ class PlannedCost {
         source: PlannedSource.values.asNameMap()[r['source']] ?? PlannedSource.manual,
         status: PlannedStatus.values.asNameMap()[r['status']] ?? PlannedStatus.open,
         deleted: r['deleted'] == 1,
+        autoOff: _idList(r['auto_off']),
       );
+}
+
+/// The ids in a JSON list column (`auto_off`); null, empty or damaged: none (every device reads it the same).
+Set<String> _idList(Object? v) {
+  if (v is! String || v.isEmpty) return const {};
+  try {
+    final l = jsonDecode(v);
+    return l is List
+        ? {
+            for (final s in l)
+              if (s is String) s
+          }
+        : const {};
+  } on FormatException {
+    return const {};
+  }
 }
 
 /// Display order of planned costs: date, then title, then id.

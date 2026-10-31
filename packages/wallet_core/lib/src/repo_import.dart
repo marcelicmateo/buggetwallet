@@ -316,13 +316,15 @@ extension WalletRepoImport on WalletRepo {
 
   /// After rows changed (import, delete, remote ops): pairs own-account transfers, then matches hand-added expenses
   /// (a paired row is a transfer, so it is no longer a payment a cash entry could be), then links confirmed bills to
-  /// their payments ([planBillLinks]). Returns (pairs, matches).
+  /// their payments ([planBillLinks]) and closes the planned costs one bank row pays ([planAutoPaid]). Returns (pairs,
+  /// matches).
   (int, int) _reconcile() => _asInternal(() {
         final pairs = _pairTransfers();
         final matches = _matchManual();
         _moveMatchedAttachments();
         _repairFieldPairs();
         _autoLinkBills();
+        _autoPayPlanned();
         return (pairs, matches);
       });
 

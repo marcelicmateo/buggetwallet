@@ -16,17 +16,36 @@ final _log = Logger('bw.ics');
 
 /// One occurrence of a calendar event, read on this device (Android calendar or [parseIcs]).
 class CalendarEvent {
+  /// [uid]: the event's globally stable id (the `.ics` `UID`, Android's `Events.UID_2445`); '' when the source has
+  /// none (never a per-device row id: [calendarEventRef]).
   final String calendarId, uid, title;
 
   /// The occurrence's local date, `YYYY-MM-DD`.
   final String date;
   final String? notes;
   final bool allDay;
-  const CalendarEvent(
-      {required this.calendarId, required this.uid, required this.title, required this.date, this.notes, this.allDay = true});
 
-  /// [calendarEventRef] of this occurrence: what a planned row stores as `sourceRef`.
-  String get ref => calendarEventRef(calendarId: calendarId, uid: uid, title: title, date: date);
+  /// KL-A: the local start time in minutes after midnight (0..1439); null for an all-day event or when the source
+  /// does not say.
+  final int? startMinutes;
+  const CalendarEvent(
+      {required this.calendarId,
+      required this.uid,
+      required this.title,
+      required this.date,
+      this.notes,
+      this.allDay = true,
+      this.startMinutes});
+
+  /// [calendarEventRef] of this occurrence: what a new planned row stores as `sourceRef`.
+  String get ref => calendarEventRef(calendarId: calendarId, uid: uid, title: title, date: date, startMinutes: startMinutes);
+
+  /// [legacyCalendarEventRef] of this occurrence: the ref builds before KL-A stored. A decision stored under it (a
+  /// confirm or a dismiss) still holds: every lookup checks both ([refs]).
+  String get legacyRef => legacyCalendarEventRef(calendarId: calendarId, uid: uid, title: title, date: date);
+
+  /// [ref] and [legacyRef] (one element when they are equal).
+  Set<String> get refs => {ref, legacyRef};
 }
 
 /// A stable reference to one occurrence of one event in one calendar: the first 32 hex characters of the SHA-256 of
@@ -34,13 +53,29 @@ class CalendarEvent {
 /// per device and per import, so [calendarEventRef] uses this only for titles with no letters.
 String calendarRef(String calendarId, String uid, String date) => _hashRef('bw-cal-v1\u0000$calendarId\u0000$uid\u0000$date');
 
-/// The ref of one calendar event occurrence, the same on every device and from every source (Android calendar,
-/// imported `.ics` file, `.ics` link of the same calendar): the first 32 hex characters of the SHA-256 of
-/// `normalizeTitle(title)` and [date]. A title that normalizes to '' (no letters, e.g. `80 €`) falls back to
-/// [calendarRef] (per calendar and device). No raw title or id is kept. Consequences: two events with the same
-/// normalized title on the same day (amounts are stripped, so `Dentist 80 €` and `Dentist 90 €`) are one suggestion,
-/// and renaming an event in the calendar makes it a new suggestion.
-String calendarEventRef({required String calendarId, required String uid, required String title, required String date}) {
+/// KL-A (owner 2026-10-31): the ref of one calendar event occurrence, the same on every device that reads the same
+/// source. [uid] must be a globally stable event id or '': the `.ics` `UID` (RFC 5545), on Android the iCal UID
+/// (`Events.UID_2445`, filled by Google/CalDAV calendars), never a per-device row id (`Events._ID`).
+/// - With a uid: the first 32 hex characters of the SHA-256 of [uid], [date] and [startMinutes] (none for all-day), so
+///   a renamed event keeps its decision and two same-name events on one day are separate. [calendarId] is left out:
+///   an `.ics` source's id is device-local, so the same file or link read again, or on another device, keeps its refs.
+/// - Without one: [normalizeTitle] of [title], [date] and [startMinutes], so same-name events at different times are
+///   separate and the ref is still the same on every device; an all-day event (no [startMinutes]) gets exactly its
+///   [legacyCalendarEventRef]. A title that normalizes to '' falls back to a per-calendar ref ([calendarRef]'s rule)
+///   with the time.
+/// No raw title or id is kept. Every lookup also checks [legacyCalendarEventRef] (`CalendarEvent.refs`).
+String calendarEventRef({required String calendarId, required String uid, required String title, required String date, int? startMinutes}) {
+  final at = startMinutes == null ? '' : '$startMinutes';
+  if (uid.isNotEmpty) return _hashRef('bw-cal-v3\u0000$uid\u0000$date\u0000$at');
+  if (startMinutes == null) return legacyCalendarEventRef(calendarId: calendarId, uid: uid, title: title, date: date);
+  final t = normalizeTitle(title);
+  return t.isEmpty ? _hashRef('bw-cal-v1\u0000$calendarId\u0000\u0000$date\u0000$at') : _hashRef('bw-cal-v4\u0000$t\u0000$date\u0000$at');
+}
+
+/// The ref builds before KL-A stored (`calendarEventRef` then), kept so their decisions still apply: the first 32 hex
+/// characters of the SHA-256 of `normalizeTitle(title)` and [date], the same from every source; a title that
+/// normalizes to '' (no letters, e.g. `80 €`) falls back to [calendarRef] (per calendar and device).
+String legacyCalendarEventRef({required String calendarId, required String uid, required String title, required String date}) {
   final t = normalizeTitle(title);
   return t.isEmpty ? calendarRef(calendarId, uid, date) : _hashRef('bw-cal-v2\u0000$t\u0000$date');
 }
@@ -147,8 +182,14 @@ IcsParseResult parseIcs(String text,
   }
   void emit(_Event e, String date) {
     if (date.compareTo(from) < 0 || date.compareTo(to) > 0) return;
-    out['${e.uid}\u0000$date'] =
-        CalendarEvent(calendarId: calendarId, uid: e.uid, title: e.summary, date: date, notes: e.description, allDay: e.allDay);
+    out['${e.uid}\u0000$date'] = CalendarEvent(
+        calendarId: calendarId,
+        uid: e.hasUid ? e.uid : '',
+        title: e.summary,
+        date: date,
+        notes: e.description,
+        allDay: e.allDay,
+        startMinutes: e.allDay ? null : e.startMinutes);
   }
 
   final budget = _Budget(_stepBudget);
@@ -248,8 +289,9 @@ String _unescape(String s) {
   return sb.toString();
 }
 
-/// A DATE or DATE-TIME value → (local date, is a date only); null if broken.
-(String, bool)? _parseStamp(String v, Map<String, String> params, DateTime Function(DateTime)? toLocal) {
+/// A DATE or DATE-TIME value → (local date, is a date only, local minutes after midnight or null for a date); null if
+/// broken.
+(String, bool, int?)? _parseStamp(String v, Map<String, String> params, DateTime Function(DateTime)? toLocal) {
   v = v.trim();
   final m = RegExp(r'^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$').firstMatch(v);
   if (m == null) return null;
@@ -257,31 +299,36 @@ String _unescape(String s) {
   if (y < 1000 || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
   final day = DateTime.utc(y, mo, d);
   if (day.month != mo) return null; // 2026-02-30
-  if (m.group(4) == null) return (isoDate(day), true);
+  if (m.group(4) == null) return (isoDate(day), true, null);
   final h = int.parse(m.group(4)!), mi = int.parse(m.group(5)!), s = int.parse(m.group(6) ?? '0');
   if (h > 24 || mi > 59 || s > 60) return null;
   final dateOnly = params['VALUE']?.toUpperCase() == 'DATE';
   if (m.group(7) != null && toLocal != null) {
     final local = toLocal(DateTime.utc(y, mo, d, h, mi, s));
-    return (isoDate(DateTime.utc(local.year, local.month, local.day)), dateOnly);
+    return (isoDate(DateTime.utc(local.year, local.month, local.day)), dateOnly, dateOnly ? null : local.hour * 60 + local.minute);
   }
-  return (isoDate(day), dateOnly);
+  return (isoDate(day), dateOnly, dateOnly ? null : (h * 60 + mi).clamp(0, 1439));
 }
 
 class _Event {
   final String uid, summary, start;
   final String? description, recurrenceId;
   final bool allDay, cancelled;
+
+  /// False when the event had no `UID` ([uid] is then a per-file placeholder, never shown as the event's id).
+  final bool hasUid;
+  final int? startMinutes;
   final Map<String, String>? rule; // null = no RRULE
   final bool ruleBroken;
   final Set<String> exdates, rdates;
 
   _Event(this.uid, this.summary, this.description, this.start, this.allDay, this.cancelled, this.rule, this.ruleBroken, this.exdates,
-      this.rdates, this.recurrenceId);
+      this.rdates, this.recurrenceId,
+      {this.hasUid = true, this.startMinutes});
 
   static _Event? from(_RawEvent r, int index, DateTime Function(DateTime)? toLocal) {
     String? uid, summary, description, recurrenceId;
-    (String, bool)? start;
+    (String, bool, int?)? start;
     Map<String, String>? rule;
     var ruleBroken = false, cancelled = false;
     final ex = <String>{}, rd = <String>{};
@@ -319,7 +366,8 @@ class _Event {
     }
     if (start == null) return null;
     final id = uid == null || uid.isEmpty ? 'bw-nouid-$index' : uid;
-    return _Event(id, summary ?? '', description, start.$1, start.$2, cancelled, rule, ruleBroken, ex, rd, recurrenceId);
+    return _Event(id, summary ?? '', description, start.$1, start.$2, cancelled, rule, ruleBroken, ex, rd, recurrenceId,
+        hasUid: uid != null && uid.isNotEmpty, startMinutes: start.$3);
   }
 }
 
@@ -570,14 +618,18 @@ String _compact(String iso) => iso.replaceAll('-', '');
 /// and per occurrence of a confirmed bill ([billOccurrences]),
 /// dated in [from, to]. `SUMMARY` = `<title> · <amount>` ([_euroText], so [amountFromText] reads the amount back),
 /// stable UIDs (`planned-<id>@budget-wallet`, `bill-<id>-<yyyymmdd>@budget-wallet`), `DTSTAMP` from [from] so the same
-/// data gives the same text. CRLF, folded at 75 octets, text escaped.
-String plannedIcs(List<PlannedCost> planned, List<RecurringBill> bills, {required String from, required String to}) {
+/// data gives the same text. CRLF, folded at 75 octets, text escaped. KL-A: with the calendar [events] read on this
+/// device, a legacy-ref row that a new-ref row stands for ([supersededCalendarRows]) is not exported twice;
+/// [payeeAliases] as in `billPayeeKey`.
+String plannedIcs(List<PlannedCost> planned, List<RecurringBill> bills,
+    {required String from, required String to, Map<String, String> payeeAliases = const {}, List<CalendarEvent> events = const []}) {
   final rows = <(String uid, String date, String title, int amount)>[];
   if (isIsoDate(from) && isIsoDate(to) && from.compareTo(to) <= 0) {
     bool inRange(String d) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
+    final superseded = supersededCalendarRows(planned, events);
     for (final p in planned) {
-      if (p.deleted || p.status == PlannedStatus.skipped || p.amount == null) continue;
-      if (plannedCoverage(p, bills) case final c? when c.occurrence == null || inRange(c.occurrence!)) continue;
+      if (p.deleted || p.status == PlannedStatus.skipped || p.amount == null || superseded.contains(p.id)) continue;
+      if (plannedCoverage(p, bills, payeeAliases: payeeAliases) case final c? when c.occurrence == null || inRange(c.occurrence!)) continue;
       if (p.date.compareTo(from) < 0 || p.date.compareTo(to) > 0 || !isIsoDate(p.date)) continue;
       rows.add(('planned-${p.id}@budget-wallet', p.date, p.title, p.amount!));
     }

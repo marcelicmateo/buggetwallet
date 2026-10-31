@@ -16,7 +16,7 @@ import 'import_preview.dart';
 import 'logs.dart';
 import 'matching.dart';
 import 'models.dart';
-import 'planned.dart' show isSafeCents, legacyRowCapCents, maxAmountCents;
+import 'planned.dart' show AutoPaid, isSafeCents, legacyRowCapCents, maxAmountCents, planAutoPaid;
 import 'recurring.dart';
 import 'rules.dart';
 import 'schema.dart';

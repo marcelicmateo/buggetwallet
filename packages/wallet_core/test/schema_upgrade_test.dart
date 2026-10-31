@@ -171,6 +171,10 @@ void main() {
           if (v < 14) expect(r.db.select('SELECT direction FROM recurring').first['direction'], isNull);
           if (v < 16) expect(r.db.select('SELECT attached_tx FROM bills').first['attached_tx'], isNull);
           if (v < 18) expect(r.reviewDates(), isEmpty, reason: 'the reviews table is new and empty');
+          if (v < 19) {
+            expect(r.db.select('SELECT auto_off FROM planned').first['auto_off'], isNull);
+            expect(r.payeeAliases(), isEmpty, reason: 'the payee_aliases table is new and empty');
+          }
         }, timeout: _t);
 
         test('the upgraded wallet takes new rows of every newer kind', () async {
@@ -186,6 +190,8 @@ void main() {
           expect(r.categoryTable().isLive(cat), isTrue);
           r.markReviewDone('2026-01-15');
           expect(r.reviewDates(), ['2026-01-15']);
+          r.setPayeeAlias('synth_power', 'synth_energy');
+          expect(r.payeeAliases(), {'synth_power': 'synth_energy'});
         }, timeout: _t);
 
         test('a second open is a no-op: same rows, no new ops, version unchanged', () {

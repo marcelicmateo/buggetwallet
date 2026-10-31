@@ -64,6 +64,7 @@ List<ForecastPoint> forecastToPayday({
   required List<PlannedCost> planned,
   required List<IncomeCycle> incomes,
   required List<RecurringBill> bills,
+  Map<String, String> payeeAliases = const {},
 }) {
   final events = <({String date, int delta, String cause, String id})>[];
   final counted = <String>{};
@@ -76,7 +77,7 @@ List<ForecastPoint> forecastToPayday({
   for (final p in planned) {
     final a = p.amount;
     if (!p.isOpen || a == null || a <= 0 || p.date.compareTo(today) < 0 || p.date.compareTo(payday) >= 0) continue;
-    final cov = plannedCoverage(p, bills);
+    final cov = plannedCoverage(p, bills, payeeAliases: payeeAliases);
     if (cov != null && (cov.occurrence == null || counted.contains(occurrenceKey(cov.bill.id, cov.occurrence!)))) continue;
     events.add((date: p.date, delta: -a, cause: p.title, id: p.id));
   }

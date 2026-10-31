@@ -69,7 +69,8 @@ class BillMonth {
 /// Payments: live bank outflows in [currency] (not hand-added, not an own transfer: `transferTo` set, an
 /// `ownTransfer`/`exchange` hint or a transfer category set by the owner) whose `merchantKey` equals `bill.payee`, plus
 /// the row `bill.lastPaidTx` under the same conditions; never picked by amount. Slips: live stored bills in [currency]
-/// with `billPayeeKey(slip) == bill.payee`; a slip linked (`Bill.linkedTx`) to a listed payment is in that payment's
+/// with `billPayeeKey(slip, payeeAliases: payeeAliases) == bill.payee` (KL-A: a slip spelled differently counts once the
+/// owner linked it, [WalletRepoBills.linkSlipToBill]); a slip linked (`Bill.linkedTx`) to a listed payment is in that payment's
 /// month, any other in the month of its `date` (else `dueDate`; neither = not listed).
 ///
 /// Months: the [months] calendar months ending with today's month, from the oldest one holding a payment or slip (the
@@ -89,6 +90,7 @@ List<BillMonth> billHistory(
   required String currency,
   CategoryTable? table,
   Set<String> iouTx = const {},
+  Map<String, String> payeeAliases = const {},
 }) {
   final cats = table ?? CategoryTable.builtIn;
   if (months < 1) throw ArgumentError.value(months, 'months', 'must be at least 1');
@@ -100,7 +102,7 @@ List<BillMonth> billHistory(
     if (t.id == bill.lastPaidTx || merchantKey(t) == bill.payee) payments[t.id] = t;
   }
 
-  if ((bill.isShort || bill.isLong) && isIsoDate(bill.nextDue)) return _cycleHistory(bill, payments, slips, months, currency);
+  if ((bill.isShort || bill.isLong) && isIsoDate(bill.nextDue)) return _cycleHistory(bill, payments, slips, months, currency, payeeAliases);
 
   final payByMonth = <String, List<Tx>>{};
   for (final t in payments.values) {
@@ -109,7 +111,11 @@ List<BillMonth> billHistory(
   final slipByMonth = <String, List<Bill>>{};
   final seenSlips = <String>{};
   for (final s in slips) {
-    if (s.deleted || s.isAttachment || s.currency != currency || !seenSlips.add(s.id) || billPayeeKey(s) != bill.payee) continue;
+    if (s.deleted ||
+        s.isAttachment ||
+        s.currency != currency ||
+        !seenSlips.add(s.id) ||
+        billPayeeKey(s, payeeAliases: payeeAliases) != bill.payee) continue;
     final linked = payments[s.linkedTx];
     final date = linked?.date ?? _slipDate(s);
     if (date == null) continue;
@@ -179,7 +185,8 @@ List<BillMonth> billHistory(
 /// [partsThreshold], or a past cycle (k ≥ 1) holds one payment (as for months); else [BillMonthState.slipOnly] (no
 /// payment, a slip), [BillMonthState.upcoming] (k ≤ 0, parts so far in [BillMonth.paidCents]) or
 /// [BillMonthState.missing] (a past cycle with nothing, or with parts that never added up). No `paidNearby` for cycles.
-List<BillMonth> _cycleHistory(RecurringBill bill, Map<String, Tx> payments, List<Bill> slips, int months, String currency) {
+List<BillMonth> _cycleHistory(
+    RecurringBill bill, Map<String, Tx> payments, List<Bill> slips, int months, String currency, Map<String, String> payeeAliases) {
   final step = bill.intervalDays;
   int? cycleOf(String date) {
     final k = (daysBetween(date, bill.nextDue) / step).round();
@@ -193,7 +200,11 @@ List<BillMonth> _cycleHistory(RecurringBill bill, Map<String, Tx> payments, List
   final slipBy = <int, List<Bill>>{};
   final seenSlips = <String>{};
   for (final s in slips) {
-    if (s.deleted || s.isAttachment || s.currency != currency || !seenSlips.add(s.id) || billPayeeKey(s) != bill.payee) continue;
+    if (s.deleted ||
+        s.isAttachment ||
+        s.currency != currency ||
+        !seenSlips.add(s.id) ||
+        billPayeeKey(s, payeeAliases: payeeAliases) != bill.payee) continue;
     final date = payments[s.linkedTx]?.date ?? _slipDate(s);
     if (date == null) continue;
     if (cycleOf(date) case final k?) (slipBy[k] ??= []).add(s);

@@ -503,8 +503,13 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - `planned.dart` + `ics.dart` — future spending (§4.3, API and decisions in `docs/context/FUTURE_SPENDING_API.md`), pure
   and web-safe. `PlannedCost` (`models.dart`): synced entity `planned` (schema 6: `title`, `date`, `amount` nullable
   cents > 0, `category`, `source` manual|calendar|bill, `source_ref` = `CalendarEvent.ref` = `calendarEventRef`
-  (SHA-256 prefix over the normalized title + date, the same on every device and source; `calendarRef` per calendar
-  only for titles without letters; never a raw id or title), `status` open|paid|skipped, `paid_tx`, `deleted`). Repo: `plannedCosts(includeClosed:)`, `addPlanned` (id
+  (KL-A: SHA-256 prefix over the stable uid (.ics UID / Android `UID_2445`, never `_ID`) + date + `startMinutes`, else
+  normalized title + date + start time; all-day without uid = `legacyCalendarEventRef`, the pre-KL title + date ref
+  that every lookup also checks: `CalendarEvent.refs`, `dismissCalendarEvent(legacyRef:)`, `supersededCalendarRows`
+  in `upcoming`/`plannedIcs(events:)`; never a raw id or title), `status` open|paid|skipped, `paid_tx`, `deleted`,
+  v19 `auto_off` = JSON list of rows `reopenPlanned` reopened it from). KL-A auto-Paid: `planAutoPaid` (exactly one
+  bank row, same category, exact amount, ±3 days) runs in `_reconcile` (`_autoPayPlanned`, caught up only); toast list
+  `autoPaidPlanned()`/`ackAutoPaidPlanned` (device-local `local.autoPaidPlanned`, max 50). Repo: `plannedCosts(includeClosed:)`, `addPlanned` (id
   `<source>:<ref>` when a ref is given, so devices converge on one row per event; else random `p…`), `updatePlanned`,
   `markPlannedPaid`, `skipPlanned`, `reopenPlanned`, `deletePlanned`, `dismissCalendarEvent` (writes no title).
   Calendar events (`CalendarEvent`) are never stored by core. `computePeriod(..., planned:)`: `duePlanned` = open
@@ -789,7 +794,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   A slip is matched to a confirmed recurring bill by exact payee key only (slip payee vs bank text may differ; then only
   its category keeps it from being reserved on top of the fixed plan). An unattached file (added, bill not saved) is
   uploaded and later collected by the relay GC. A key holder declaring empty sets twice lets GC drop files older than
-  30 days (recoverable from caches and backups). Two devices adding an `asNew` copy before syncing make one bill.
+  30 days (recoverable from caches and backups). Two devices adding an `asNew` copy before syncing make two bills (KL-A: the copy id holds the device id).
   Attachments (P16b): the 5-per-payment cap is checked on local adds and restores only; two devices attaching offline
   can leave more than 5 live after a merge (all kept, never deleted; no add or restore until the payment is below 5).
   Builds before P16b read `source: attachment` as `manual` and ignore `attached_tx`: they list an attachment as a
@@ -808,11 +813,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   that still have no row (with the map's clock); its edits to entries that have one are lost. Upgraded devices'
   per-key edits never reach an older build (it keeps showing its own map).
 
-- Calendar refs are built from the normalized title and date (`calendarEventRef`): two events with the same normalized
-
-  title on the same day (amounts stripped: `Dentist 80 €` and `Dentist 90 €`) show as one suggestion, and renaming an
-  event in the calendar makes it a new suggestion. A title without letters (`80 €`) gets a per-calendar ref, so its
-  "No cost" or confirm on one device does not reach the same event read on another device. A huge `.ics` file
+- Calendar refs (KL-A, `calendarEventRef`): stable uid + date + start time, else normalized title + date + start time;
+  the same event read from two sources (phone calendar and an `.ics` link with another uid) gives two suggestions. A
+  title without letters and no uid gets a per-calendar ref, so its "No cost" or confirm on one device does not reach
+  the same event read on another device. A huge `.ics` file
   (over 10⁶ recurrence steps) gives later recurring events their first in-range occurrence only.
 
 ## Tests
@@ -827,7 +831,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `bills_b6_test.dart`; helper
   `support/bill_helpers.dart` `confirmWithCategory`), future spending (planned costs, .ics, Upcoming, two
   devices): `test/future_spending_test.dart` (+ `future_spending_spec_test.dart`, `ics_spec_test.dart`; F4a: content refs
-  incl. two devices `calendar_ref_test.dart`, parseIcs cost bounds + dismiss title `future_spending_fixes_test.dart`), CSV: `test/export_test.dart`, search: `test/search_test.dart`, clock stats (`WalletRepo.clockStats`, two devices): `test/clock_stats_test.dart`, data version: `test/data_version_test.dart`,
+  incl. two devices `calendar_ref_test.dart`; KL-A known limits fixed: `kl_1_auto_paid_test.dart`,
+  `kl_2_search_rules_test.dart`, `kl_3_payee_alias_test.dart` (synced `payee_alias`, schema 19), `kl_4_calendar_ids_test.dart`,
+  `kl_5_copy_id_test.dart`, `kl_6_upcoming_today_test.dart`, RX8 `kl_compare_tag_test.dart`, parseIcs cost bounds + dismiss title `future_spending_fixes_test.dart`), CSV: `test/export_test.dart`, search: `test/search_test.dart`, clock stats (`WalletRepo.clockStats`, two devices): `test/clock_stats_test.dart`, data version: `test/data_version_test.dart`,
   web-safe core (`fromDatabase`, `backupBytes`/`restoreBackupBytes`, `MemoryLogSink`, gzip compatibility): `test/web_core_test.dart`,
   encrypted local database (new/convert/wrong key/WAL/interrupted conversion/perf numbers): `test/local_db_test.dart`
   (sqlite3mc proof tests: `test/encrypted_db_test.dart`);

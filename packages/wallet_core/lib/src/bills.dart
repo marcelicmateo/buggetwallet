@@ -343,8 +343,18 @@ List<CategorizedTx> billCandidates(Bill b, List<CategorizedTx> txs, List<Bill> a
 // ---------- categories and recurring bills (docs/context/BILLS_API.md §2) ----------
 
 /// The bill's payee as a recurring-bill payee key ([merchantKey] of a bank row described by the payee, the rule
-/// [RecurringBill.payee] uses), or null without a payee (or one without letters).
-String? billPayeeKey(Bill b) => _payeeKey(b.payee);
+/// [RecurringBill.payee] uses), or null without a payee (or one without letters). KL-A: a key in [payeeAliases]
+/// (`WalletRepoBills.payeeAliases`: a slip's spelling → the recurring bill's payee key) reads as its payee, one step
+/// ([resolvePayeeAlias]).
+String? billPayeeKey(Bill b, {Map<String, String> payeeAliases = const {}}) => resolvePayeeAlias(_payeeKey(b.payee), payeeAliases);
+
+/// KL-A: [key] through [payeeAliases] (alias key → payee key), exactly and one step only: an alias that maps to
+/// another alias is never followed further (no chains). null stays null.
+String? resolvePayeeAlias(String? key, Map<String, String> payeeAliases) => key == null ? null : payeeAliases[key] ?? key;
+
+/// KL-A: the synced row id of payee alias [aliasKey]: `pa:` + the first 16 hex characters of the SHA-256 of its UTF-8
+/// bytes (the same alias set on two devices is one row; the id does not show the payee). Not safe in a log.
+String payeeAliasId(String aliasKey) => 'pa:${sha256Hex(utf8.encode(aliasKey)).substring(0, 16)}';
 
 String? _payeeKey(String? payee) {
   final p = _nonEmpty(payee);
@@ -360,12 +370,14 @@ String? _payeeKey(String? payee) {
 /// read, so the order of confirming the two never matters and nothing is written): the recurring bill reserves that
 /// payment, or the fixed plan holds it. The bill
 /// itself is listed as before (Plan › Bills, linking, reminders).
-RecurringBill? billCoveredBy(Bill b, List<RecurringBill> recurring) => _coverage(billPayeeKey(b), b.dueDate, recurring)?.bill;
+RecurringBill? billCoveredBy(Bill b, List<RecurringBill> recurring, {Map<String, String> payeeAliases = const {}}) =>
+    _coverage(billPayeeKey(b, payeeAliases: payeeAliases), b.dueDate, recurring)?.bill;
 
 /// [billCoveredBy] for a bill's planned row (`source` bill: payee = its title, due date = its date); null for any
 /// other planned cost. Whether that keeps the row out of a total depends on where the covering occurrence falls
 /// ([plannedCoverage]): `computePeriod`, `upcoming` and `plannedIcs` decide per period or range (BILLS_API.md §3).
-RecurringBill? plannedCoveredBy(PlannedCost p, List<RecurringBill> recurring) => plannedCoverage(p, recurring)?.bill;
+RecurringBill? plannedCoveredBy(PlannedCost p, List<RecurringBill> recurring, {Map<String, String> payeeAliases = const {}}) =>
+    plannedCoverage(p, recurring, payeeAliases: payeeAliases)?.bill;
 
 /// Which recurring bill covers a bill's planned row [p] ([plannedCoveredBy]) and through which cycle: `occurrence` =
 /// the covering cycle's date `nextDue + k × intervalDays` (k ≥ 0), or null for k = −1 (the cycle just paid or skipped
@@ -374,8 +386,12 @@ RecurringBill? plannedCoveredBy(PlannedCost p, List<RecurringBill> recurring) =>
 /// `coveredByPlan`, the cycle is k = −1, or the occurrence is the `nextDue` that this period's `dueBills` lists;
 /// `upcoming` / `plannedIcs` list the row unless the cycle is k = −1 or the occurrence is in their range. So a slip due
 /// before payday whose recurring cycle falls just after it is reserved in this period, not dropped from both.
-({RecurringBill bill, String? occurrence})? plannedCoverage(PlannedCost p, List<RecurringBill> recurring) =>
-    p.source != PlannedSource.bill || p.title == 'Bill' ? null : _coverage(_payeeKey(p.title), p.date, recurring);
+/// [payeeAliases]: as in [billPayeeKey] (the row's title is the slip's payee).
+({RecurringBill bill, String? occurrence})? plannedCoverage(PlannedCost p, List<RecurringBill> recurring,
+        {Map<String, String> payeeAliases = const {}}) =>
+    p.source != PlannedSource.bill || p.title == 'Bill'
+        ? null
+        : _coverage(resolvePayeeAlias(_payeeKey(p.title), payeeAliases), p.date, recurring);
 
 /// The key of one recurring bill occurrence in the set [plannedReserves] takes: `<bill id>@<YYYY-MM-DD>`.
 String occurrenceKey(String recurringId, String date) => '$recurringId@$date';
@@ -389,9 +405,11 @@ String occurrenceKey(String recurringId, String date) => '$recurringId@$date';
 /// is `coveredByPlan`, the cycle is the one just paid or skipped, or the covering occurrence is in [counted]). Dates are
 /// the caller's to check (today .. payday for a period).
 /// [table] decides which categories are fixed ([PlannedCost.coveredByPlanIn], [RecurringBill.coveredByPlanIn]).
-bool plannedReserves(PlannedCost p, List<RecurringBill> recurring, Set<String> counted, {required CategoryTable table}) {
+/// [payeeAliases]: as in [billPayeeKey].
+bool plannedReserves(PlannedCost p, List<RecurringBill> recurring, Set<String> counted,
+    {required CategoryTable table, Map<String, String> payeeAliases = const {}}) {
   if (!p.isOpen || (p.amount ?? 0) <= 0 || p.coveredByPlanIn(table) || p.needsCategory) return false;
-  final c = plannedCoverage(p, recurring);
+  final c = plannedCoverage(p, recurring, payeeAliases: payeeAliases);
   if (c == null) return true;
   return !(c.bill.coveredByPlanIn(table) || c.occurrence == null || counted.contains(occurrenceKey(c.bill.id, c.occurrence!)));
 }
@@ -419,9 +437,14 @@ bool plannedReserves(PlannedCost p, List<RecurringBill> recurring, Set<String> c
 /// of the latest live bank expense (not hand-added, not an own transfer) whose description holds a payee word
 /// ([_billPayeeWords], like [billCandidates]); else null. Never by amount.
 /// P6: expects whole payments (`Categorizer.categorize`, one row per payment), never the expanded list (`Categorizer.expand`).
-String? suggestBillCategory(Bill b, {required List<RecurringBill> recurring, required List<CategorizedTx> txs, CategoryTable? table}) {
+/// [payeeAliases]: as in [billPayeeKey].
+String? suggestBillCategory(Bill b,
+    {required List<RecurringBill> recurring,
+    required List<CategorizedTx> txs,
+    CategoryTable? table,
+    Map<String, String> payeeAliases = const {}}) {
   final cats = table ?? CategoryTable.builtIn;
-  final key = billPayeeKey(b);
+  final key = billPayeeKey(b, payeeAliases: payeeAliases);
   if (key != null) {
     for (final r in recurring) {
       if (r.confirmed && !r.isIncome && r.payee == key && r.category.isNotEmpty && cats.isLive(r.category)) return r.category;

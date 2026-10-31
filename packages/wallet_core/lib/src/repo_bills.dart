@@ -40,8 +40,9 @@ extension WalletRepoBills on WalletRepo {
   ///
   /// [asNew] (the owner said "this is a new bill", e.g. next month's slip that reads exactly like this one): stored as
   /// a separate bill even though a live bill has the same external id: id [Bill.idFor] of `<externalId>#<n>` with the
-  /// first n >= 1 not used by a live bill (a deleted copy is revived), external id unchanged. Two devices adding a copy
-  /// before they sync pick the same n, so their copies become one bill (the later import's read fields win).
+  /// first n >= 1 not used by a live bill (a deleted copy is revived), external id unchanged. KL-A: the copy id holds
+  /// this device's id (`<externalId>#<deviceId>-<n>`; never logged), so two devices adding a copy before they sync
+  /// make two bills; copies made before KL-A (`<externalId>#<n>`) keep their ids.
   (String, bool) importBill(NormalizedBill b, {BlobRef? file, bool asNew = false}) {
     if (file != null && !blobTypes.contains(file.type)) throw ArgumentError('Unknown file type.');
     String? text(String? s) => s == null || s.trim().isEmpty ? null : s.trim();
@@ -70,7 +71,7 @@ extension WalletRepoBills on WalletRepo {
     var old = ext != null ? bill(id) : null;
     if (asNew && old != null && !old.deleted) {
       for (var n = 1; old != null && !old.deleted; n++) {
-        id = Bill.idFor('$ext#$n');
+        id = Bill.idFor('$ext#$deviceId-$n');
         old = bill(id);
       }
     }
@@ -525,5 +526,68 @@ extension WalletRepoBills on WalletRepo {
       for (final e in plan.entries) ..._billWrites(byId[e.key]!, {'linked_tx': e.value}, today),
     ]);
     t.done({'bills': open.length, 'rows': rows.length, 'linked': plan.length});
+  }
+
+  // ---------- payee aliases (KL-A) ----------
+
+  /// The live payee aliases: a slip's payee key ([billPayeeKey] without aliases) → the recurring bill payee key it
+  /// stands for. Pass it as `payeeAliases` to [billPayeeKey], [billCoveredBy], [plannedCoverage], `computePeriod`,
+  /// `periodDays`, `upcoming`, `plannedIcs`, `billHistory`, `suggestBillCategory` and `forecastToPayday`. Rows that
+  /// would map a key to itself or to '' are left out; a chain two devices made at once is read one step only.
+  Map<String, String> payeeAliases() => {
+        for (final r in db.select("SELECT alias, payee FROM payee_aliases WHERE deleted = 0 AND alias != '' AND payee != ''"))
+          if (r['alias'] case final String a when a != r['payee']) a: r['payee'] as String,
+      };
+
+  /// Reads slip payee key [aliasKey] as recurring bill payee key [payeeKey] from now on (exactly; no similar-name
+  /// guessing), on every device (synced row [payeeAliasId]). [ArgumentError]: an empty key, the two equal, or a chain
+  /// (one step only: [payeeKey] is itself an alias, or [aliasKey] is already what another alias maps to).
+  void setPayeeAlias(String aliasKey, String payeeKey) {
+    final a = aliasKey.trim(), p = payeeKey.trim();
+    if (a.isEmpty || p.isEmpty) throw ArgumentError('Empty payee key.');
+    if (a == p) throw ArgumentError('An alias cannot map a payee to itself.');
+    final have = payeeAliases();
+    if (have.containsKey(p) || have.values.contains(a)) throw ArgumentError('Payee aliases are one step only.');
+    if (have[a] == p) return;
+    _write([
+      ('payee_alias', payeeAliasId(a), {'alias': a, 'payee': p, 'deleted': 0})
+    ]);
+    logEvent(_log, Level.INFO, 'bills.alias.set', {'replaced': have.containsKey(a)});
+  }
+
+  /// Forgets the alias of [aliasKey] (the row stays, deleted). No alias: nothing happens.
+  void removePayeeAlias(String aliasKey) {
+    final a = aliasKey.trim();
+    if (a.isEmpty || !payeeAliases().containsKey(a)) return;
+    _write([
+      ('payee_alias', payeeAliasId(a), {'deleted': 1})
+    ]);
+    logEvent(_log, Level.INFO, 'bills.alias.remove');
+  }
+
+  /// "Belongs to bill…" on a slip: the slip's payee key ([billPayeeKey] of bill [billId], without aliases) becomes an
+  /// alias of recurring bill [recurringId]'s payee ([setPayeeAlias]), so its coverage, history and category follow that
+  /// bill; then bills are linked to payments again ([planBillLinks]: at once while [syncCaughtUp], else at the next
+  /// caught-up sync). A slip whose key already is that payee only loses an alias it had. [ArgumentError]: an unknown or
+  /// deleted bill, an attachment, a bill without a payee key, an unknown recurring bill, an income or one without a
+  /// payee, and the chain rules of [setPayeeAlias].
+  void linkSlipToBill(String billId, String recurringId) {
+    final b = _liveBill(billId);
+    if (b.isAttachment) throw ArgumentError('An attachment belongs to its payment.');
+    final key = billPayeeKey(b);
+    if (key == null) throw ArgumentError('The bill has no payee.');
+    final r = recurringBills(includeDismissed: true).where((x) => x.id == recurringId).firstOrNull;
+    if (r == null || r.isIncome || r.payee.isEmpty) throw ArgumentError('No such recurring bill.');
+    if (key == r.payee) {
+      removePayeeAlias(key);
+    } else {
+      setPayeeAlias(key, r.payee);
+    }
+    if (syncCaughtUp) {
+      _autoLinkBills();
+    } else {
+      _setMeta('match_pending', '1');
+    }
+    logEvent(_log, Level.INFO, 'bills.linkSlip', {'alias': key != r.payee});
   }
 }
