@@ -225,7 +225,7 @@ void main() {
       wc.reload();
       final r = wc.upcomingRange();
       final items = wc.upcomingItems(r.start, r.end);
-      expect(wc.countedIn(items), (count: 1, total: 90000), reason: 'the long bill is set aside, the monthly one is in the plan');
+      expect(wc.setAside(items), (count: 1, total: 90000), reason: 'the long bill is set aside, the monthly one is in the plan');
       expect(wc.setAside(items), (count: 1, total: wc.period().beforePayday));
       await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: const Size(400, 2400));
       final long = find.descendant(of: key('up:${rowIdOf(wc, 'Synth insurance')}'), matching: find.text('covered by your plan'));

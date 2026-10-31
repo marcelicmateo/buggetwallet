@@ -78,7 +78,7 @@ void main() {
       expect(p.duePlanned.firstWhere((x) => x.title == 'Vet plan').coveredByPlanIn(wc.categoryTable), isTrue);
       // Upcoming's "Set aside" total follows the same rule.
       final items = wc.upcomingItems('2026-10-21', '2026-10-31');
-      expect(wc.countedIn(items).total, 3000);
+      expect(wc.setAside(items).total, 3000);
       wc.dispose();
     });
 

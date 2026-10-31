@@ -415,7 +415,6 @@ void main() {
       final dates = items.where((i) => i.key.startsWith('w:') || i.key.startsWith('r:')).toList();
       expect(dates.map((i) => i.key), ['r:$id', 'w:$id']);
       expect(dates.every((i) => i.amount == null), isTrue);
-      expect(wc.countedIn(items).count, 0, reason: 'dates are never counted');
       wc.setBillDates(id, clearWarranty: true);
       expect(wc.upcomingItems('2026-10-20', '2026-10-31').where((i) => i.key.startsWith('w:')), isEmpty);
     });
@@ -1390,15 +1389,9 @@ void main() {
       expect(w.wc.comingUp(), (count: p.reservedPlannedRows.length, total: p.reservedPlanned));
       final range = w.wc.upcomingRange();
       final items = w.wc.upcomingItems(range.start, range.end);
-      final counted = w.wc.countedIn(items);
+      final counted = w.wc.setAside(items);
       final bills = p.dueBills.where((b) => !b.coveredByPlan);
       expect(counted, (count: p.reservedPlannedRows.length + bills.length, total: p.reservedPlanned + p.reservedBills));
-      // Each planned row in Upcoming is counted exactly when the period reserves it.
-      final shownPlanned = [
-        for (final i in items)
-          if (i.planned != null) i
-      ];
-      expect(w.wc.countedIn(shownPlanned), (count: 1, total: 8000));
       expect(w.wc.plannedNeedingCategory().single.isBill, isTrue);
       expect(w.wc.plannedNeedingCategory().single.sourceRef, w.gas);
     });
