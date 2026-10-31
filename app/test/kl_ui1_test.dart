@@ -38,22 +38,24 @@ ImportBatch lidl(String date, int cents) =>
 
 void main() {
   group('auto-Paid toast', () {
-    test('takeAutoPaid gives the closed costs once; Undo reopens them and they stay open', () {
+    test('pendingAutoPaid lists the closed costs until they are acknowledged; Undo reopens them and they stay open', () {
       final wc = wallet();
       final id = wc.repo.addPlanned(title: 'Synthetic groceries', date: '2026-10-18', amount: 4500, category: 'Groceries');
       wc.reload();
-      expect(wc.takeAutoPaid(), isEmpty);
+      expect(wc.pendingAutoPaid(), isEmpty);
       wc.repo.importBatch(lidl('2026-10-19', -4500));
       wc.reload();
-      final done = wc.takeAutoPaid();
+      final done = wc.pendingAutoPaid();
       expect(done.map((a) => a.plannedId), [id]);
       expect(wc.autoPaidText(done), 'Marked paid: Synthetic groceries');
       expect(wc.plannedOpen(), isEmpty);
-      expect(wc.takeAutoPaid(), isEmpty, reason: 'shown once');
+      expect(wc.pendingAutoPaid(), hasLength(1), reason: 'asking again does not acknowledge');
+      wc.ackAutoPaid(done);
+      expect(wc.pendingAutoPaid(), isEmpty, reason: 'shown once');
       expect(wc.repo.autoPaidPlanned(), isEmpty, reason: 'acknowledged');
       wc.undoAutoPaid(done);
       expect(wc.plannedOpen().map((p) => p.id), [id]);
-      expect(wc.takeAutoPaid(), isEmpty, reason: 'the undo itself is not announced');
+      expect(wc.pendingAutoPaid(), isEmpty, reason: 'the undo itself is not announced');
       wc.reload();
       expect(wc.plannedOpen(), hasLength(1), reason: 'the same bank row never closes it again');
     });
@@ -106,7 +108,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 800));
       expect(find.byType(SnackBar), findsNothing);
       expect(wc.plannedOpen().map((p) => p.id), [id]);
-      expect(wc.takeAutoPaid(), isEmpty);
+      expect(wc.pendingAutoPaid(), isEmpty);
     });
   });
 
@@ -274,7 +276,10 @@ void main() {
       expect(find.text('4 costs'), findsOneWidget);
       final marked = wc.upcomingItems(wc.upcomingRange().start, wc.upcomingRange().end).where(wc.isOverdueCycle);
       for (final i in marked) {
-        expect(key('overdue:${i.key}'), findsOneWidget);
+        // The 10 Oct cycle of "Synth old" is not what core holds (its September cycle is, in the Overdue panel below).
+        final held = !wc.billNotSetAside(i);
+        expect(key('overdue:${i.key}'), held ? findsOneWidget : findsNothing);
+        expect(key('notSetAside:${i.key}'), held ? findsNothing : findsOneWidget);
       }
       expect(key('upcomingOverdue'), findsOneWidget);
       expect(find.text('OVERDUE'), findsOneWidget, reason: 'the panel heading');

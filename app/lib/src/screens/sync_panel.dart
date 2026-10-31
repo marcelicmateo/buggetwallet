@@ -295,8 +295,13 @@ class _BlockedFileRow extends StatelessWidget {
       ),
     );
     if (ok != true || !context.mounted) return;
+    final problem = wc.skipBlocked(row.file);
+    if (problem != null) {
+      toast(context, problem);
+      return;
+    }
     toast(context, blockedSkippedToast);
-    await wc.skipBlocked(row.file);
+    await wc.syncNow(trigger: 'skip');
   }
 
   @override

@@ -382,12 +382,19 @@ extension WalletSync on WalletController {
   /// not skipped yet). Nothing here is logged.
   List<BlockedFile> get syncBlockedFiles => relayUrl == null ? const [] : blockedFiles(repo);
 
-  /// Skips the blocked file [f] (the owner confirmed), then syncs once. Logs the reason word only.
-  Future<void> skipBlocked(BlockedFile f) async {
-    skipBlockedFile(repo, f.device, f.file);
+  /// Skips the blocked file [f] (the owner confirmed). Null when it is skipped (the caller syncs again); else a short text for the
+  /// owner: core refuses a file that is not damaged (a newer format, a clock ahead, a refused apply), nothing is stored then.
+  /// Logs the reason word only.
+  String? skipBlocked(BlockedFile f) {
+    try {
+      skipBlockedFile(repo, f.device, f.file);
+    } on ArgumentError catch (e) {
+      logEvent(_sync, Level.INFO, 'sync.skip.refused', {'reason': f.reason.name});
+      return '${e.message}';
+    }
     logEvent(_sync, Level.INFO, 'sync.skip', {'reason': f.reason.name});
     notifyListeners();
-    await syncNow(trigger: 'skip');
+    return null;
   }
 
   /// Changes when wallet data changes: every data write (local or applied from a peer) records its field clock. Bookkeeping

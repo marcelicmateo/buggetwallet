@@ -142,7 +142,9 @@ extension FutureSpending on WalletController {
   /// The dates Upcoming shows: the pay period, or the next one of the same length ([next]). `end` is the last day shown.
   ({String start, String end}) upcomingRange({bool next = false}) {
     final p = period();
-    return next ? (start: p.end, end: addDays(p.end, p.length - 1)) : (start: p.start, end: addDays(p.end, -1));
+    return next
+        ? (start: p.end, end: addDays(nextPayday(p.end, effectiveSettings.paydayDay), -1))
+        : (start: p.start, end: addDays(p.end, -1));
   }
 
   /// "Coming up": exactly the planned costs this period reserves (core's `PeriodBudget.reservedPlannedRows`, summed into
@@ -162,11 +164,65 @@ extension FutureSpending on WalletController {
 
   /// Upcoming's "Set aside" (KL-A: always what Today's "Before payday" holds). The running period: core's own numbers for the period
   /// (`beforePayday` = Σ `reservedCycles` reserve + Σ `reservedPlannedRows` amount, overdue bill cycles and held long bills included), so
-  /// the two screens can never differ. The next period has no budget yet: [countedIn] over its [items].
+  /// the two screens can never differ. The next period has no budget yet: [nextPeriodSetAside], core's own rules ([dueCycles],
+  /// [plannedReserves]) over the next period.
   ({int count, int total}) setAside(List<UpcomingItem> items, {bool next = false}) {
-    if (next) return countedIn(items);
+    if (next) {
+      final n = nextPeriodSetAside();
+      return (count: n.count, total: n.total);
+    }
     final p = period();
     return (count: p.beforePaydayCount, total: p.beforePayday);
+  }
+
+  /// What the next pay period will set aside when it starts, if every bill of this period is paid in time: each bill moved to its
+  /// first occurrence in the next period, then core's rules as `computePeriod` applies them ([dueCycles] with [DueCycle.coveredIn]
+  /// and [plannedReserves]), so a monthly bill holds one cycle, a short one each occurrence and a long one is held until paid.
+  /// `cycles` are the bill cycles that reserve; `count`/`total` add the planned costs core accepts.
+  ({List<DueCycle> cycles, int count, int total}) nextPeriodSetAside() => _cached(const MemoKey('nextSetAside'), () {
+        final start = period().end;
+        final end = nextPayday(start, effectiveSettings.paydayDay);
+        final last = addDays(end, -1);
+        // Core's own occurrence list for the range (`upcoming`, sorted by date): the first one of each bill is its cycle then.
+        final firstDue = <String, String>{};
+        for (final i in upcomingItems(start, last)) {
+          if (i.kind == UpcomingKind.bill && i.bill != null) firstDue.putIfAbsent(i.bill!.id, () => i.date);
+        }
+        final bills = <RecurringBill>[];
+        for (final b in expectedBills()) {
+          if (b.isLong) {
+            bills.add(b);
+          } else if (firstDue[b.id] case final d?) {
+            bills.add(b.copyWith(nextDue: d));
+          }
+        }
+        final table = categoryTable;
+        final cycles = dueCycles(bills, rawExpanded, start, end, currency: effectiveSettings.currency);
+        final reserved = [
+          for (final c in cycles)
+            if (!c.coveredIn(table) && c.reserve > 0) c
+        ];
+        final counted = {for (final c in cycles) occurrenceKey(c.bill.id, c.due)};
+        final rows = [
+          for (final p in duePlanned(plannedOpen(), start, end))
+            if (plannedReserves(p, bills, counted, table: table, payeeAliases: payeeAliases())) p
+        ];
+        return (
+          cycles: reserved,
+          count: reserved.length + rows.length,
+          total: reserved.fold<int>(0, (a, c) => a + c.reserve) + rows.fold<int>(0, (a, p) => a + p.amount!),
+        );
+      });
+
+  /// The bill cycles a period sets aside ([next]: the next one), as core reserves them.
+  List<DueCycle> reservedCyclesFor({bool next = false}) => next ? nextPeriodSetAside().cycles : period().reservedCycles;
+
+  /// A bill row of Upcoming whose occurrence core does not set aside: the second occurrence of a monthly bill in a long period, or
+  /// the in-period cycle of a bill whose earlier cycle is still overdue. Rows covered by a plan line say so instead.
+  bool billNotSetAside(UpcomingItem i, {bool next = false}) {
+    final b = i.bill;
+    if (i.kind != UpcomingKind.bill || b == null || billCoveredIn(b, categoryTable)) return false;
+    return !reservedCyclesFor(next: next).any((c) => c.bill.id == b.id && c.due == i.date);
   }
 
   /// A bill's cycle listed in Upcoming that is already past its due date and unpaid ("Overdue"; it is still set aside).
@@ -174,11 +230,11 @@ extension FutureSpending on WalletController {
 
   /// Cycles that are set aside but fall before the period's first day (an old unpaid bill): the list of the period cannot show them,
   /// so Upcoming lists them apart (core's `reservedCycles`, each with its own reserve).
-  List<DueCycle> overdueEarlier() {
-    final p = period();
+  List<DueCycle> overdueEarlier({bool next = false}) {
+    final start = next ? period().end : period().start;
     return [
-      for (final x in p.reservedCycles)
-        if (x.due.compareTo(p.start) < 0) x
+      for (final x in reservedCyclesFor(next: next))
+        if (x.due.compareTo(start) < 0) x
     ];
   }
 
@@ -195,7 +251,7 @@ extension FutureSpending on WalletController {
     final recurring = expectedBills();
     final aliases = payeeAliases();
     final xs = items.where((i) => switch (i.kind) {
-          UpcomingKind.bill => i.amount != null && !(i.bill?.coveredByPlanIn(categoryTable) ?? false),
+          UpcomingKind.bill => i.amount != null && !(i.bill != null && billCoveredIn(i.bill!, categoryTable)),
           UpcomingKind.planned => ahead(i) &&
               i.planned != null &&
               plannedReserves(i.planned!, recurring, occurrences, table: categoryTable, payeeAliases: aliases),
@@ -255,16 +311,27 @@ extension FutureSpending on WalletController {
     _changed();
   }
 
-  /// KL-A: the planned costs this device closed by itself (an import or a sync run matched exactly one bank row), once per data change:
-  /// they are acknowledged here, so the toast shows once. Empty when nothing new. Logs the count only.
-  List<AutoPaid> takeAutoPaid() {
-    if (_autoPaidSeen == dataVersion) return const [];
-    _autoPaidSeen = dataVersion;
-    final done = repo.autoPaidPlanned();
-    if (done.isEmpty) return const [];
+  /// KL-A: the planned costs this device closed by itself (an import or a sync run matched exactly one bank row) that no toast has
+  /// shown yet. Not acknowledged here: the toast calls [ackAutoPaid] once it closed by timeout or by its action, so a toast that never
+  /// showed (a sheet on top) or was replaced comes back. Read from core once per data version.
+  List<AutoPaid> pendingAutoPaid() {
+    if (_autoPaidSeen != dataVersion) {
+      _autoPaidSeen = dataVersion;
+      _autoPaidPending = repo.autoPaidPlanned();
+    }
+    return _autoPaidPending;
+  }
+
+  /// The owner saw the toast for [done]: they leave the list for good. Logs the count only.
+  void ackAutoPaid(List<AutoPaid> done) {
+    if (done.isEmpty) return;
     repo.ackAutoPaidPlanned([for (final a in done) a.plannedId]);
+    final ids = {for (final a in done) a.plannedId};
+    _autoPaidPending = [
+      for (final a in _autoPaidPending)
+        if (!ids.contains(a.plannedId)) a
+    ];
     logEvent(_planLog, Level.INFO, 'planned.autoPaid', {'count': done.length});
-    return done;
   }
 
   /// The toast's text: the title of one cost, else the count.
@@ -659,3 +726,7 @@ extension FutureSpending on WalletController {
   /// Planned costs matching [query] (the planned part of [search]).
   List<PlannedCost> searchPlanned(String query) => search(query).planned;
 }
+
+/// Whether a plan line covers [b]'s cycles (so they are listed but not set aside): core's rule, which never covers a long bill
+/// (the money must be there, [DueCycle.coveredIn]).
+bool billCoveredIn(RecurringBill b, CategoryTable table) => !b.isLong && b.coveredByPlanIn(table);

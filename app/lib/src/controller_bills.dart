@@ -464,35 +464,53 @@ extension BillsDb on WalletController {
   RecurringBill? billPlannedBy(Bill b) => billCoveredBy(b, expectedBills(), payeeAliases: payeeAliases());
 
   /// KL-A "Belongs to bill…": the confirmed expected bills slip [b] could belong to, when no expected bill covers it yet. Bills whose payee
-  /// already is the slip's payee are left out (nothing to link). Empty for an attachment or a slip without a payee.
+  /// already is the slip's payee are left out (nothing to link), and so are the ones core would refuse (aliases are one step only):
+  /// a bill whose payee is itself an alias, and every bill when the slip's key is what another alias maps to. Empty for an attachment
+  /// or a slip without a payee.
   List<RecurringBill> billsForSlip(Bill b) {
     final key = billPayeeKey(b);
     if (key == null || b.isAttachment || billPlannedBy(b) != null) return const [];
+    final aliases = payeeAliases();
+    if (aliases.values.contains(key)) return const [];
     return [
       for (final r in expectedBills())
-        if (r.confirmed && r.payee.isNotEmpty && r.payee != key) r
+        if (r.confirmed && r.payee.isNotEmpty && r.payee != key && !aliases.containsKey(r.payee)) r
     ];
   }
 
   /// The slip's spelling of its payee becomes an alias of expected bill [r]'s payee (exact, on every device). Returns core's text when it
   /// refuses (the chain rules), else null. Undo = [unlinkSlip].
   String? linkSlipToBill(Bill b, RecurringBill r) {
+    final key = billPayeeKey(b);
+    final before = key == null ? null : payeeAliases()[key];
     try {
       repo.linkSlipToBill(b.id, r.id);
     } on ArgumentError catch (e) {
       logEvent(_billLog, Level.INFO, 'bill.belongsTo', {'ok': false});
       return '${e.message}';
     }
+    if (key != null) _aliasBeforeLink[key] = before;
     logEvent(_billLog, Level.INFO, 'bill.belongsTo', {'ok': true});
     _changed();
     return null;
   }
 
-  /// The Undo of [linkSlipToBill]: the alias of [b]'s payee spelling is forgotten again.
+  /// The Undo of [linkSlipToBill]: [b]'s payee spelling gets the alias it had before (none: it is forgotten again).
   void unlinkSlip(Bill b) {
     final key = billPayeeKey(b);
     if (key == null) return;
-    repo.removePayeeAlias(key);
+    final before = _aliasBeforeLink.remove(key);
+    try {
+      if (before == null) {
+        repo.removePayeeAlias(key);
+      } else {
+        repo.setPayeeAlias(key, before);
+      }
+    } on ArgumentError {
+      // The earlier alias no longer fits (a chain made on another device meanwhile): forget this one instead.
+      logEvent(_billLog, Level.INFO, 'bill.belongsTo.undoRestoreFailed', {});
+      repo.removePayeeAlias(key);
+    }
     logEvent(_billLog, Level.INFO, 'bill.belongsTo.undo', {});
     _changed();
   }

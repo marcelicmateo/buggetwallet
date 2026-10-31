@@ -98,6 +98,9 @@ Future<T?> showSheet<T>(BuildContext context, Widget child, {bool scrolls = true
       ));
 }
 
+/// The Unlink toast when core matched the cash entry to another bank payment at once.
+const unlinkedRematchedText = 'Unlinked; the cash entry now matches another bank payment.';
+
 /// The toast after a transaction sheet closed with [result] ('deleted' has an Undo, I4).
 void txSheetToast(BuildContext context, WalletController wc, String? result) {
   if (result == null) return;
@@ -114,7 +117,8 @@ void txSheetToast(BuildContext context, WalletController wc, String? result) {
     final (entry, bank) = wc.lastUnlinked!;
     final messenger = ScaffoldMessenger.of(context);
     final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
-    toast(context, 'Unlinked: the cash entry counts again', actionLabel: 'Undo', onAction: () {
+    toast(context, wc.lastUnlinkedRematched ? unlinkedRematchedText : 'Unlinked: the cash entry counts again', actionLabel: 'Undo',
+        onAction: () {
       final failure = wc.relinkCashMatch(entry, bank);
       if (failure != null) toastOn(messenger, failure, wide: wide, accessible: accessible);
     });
@@ -480,6 +484,9 @@ class _TxSheetState extends State<TxSheet> {
   Set<String>? tagOn, tagRule;
   bool saving = false;
 
+  /// Core's refusal of Unlink, shown inside the sheet.
+  String? unlinkError;
+
   /// The bank row that replaced this hand-added expense, or the expense a bank row replaced (read once: it scans the rows).
   late final Tx? matchedBank =
       row.tx.manual && row.tx.matchedTo != null && !row.tx.matchPending ? widget.wc.repo.transaction(row.tx.matchedTo!) : null;
@@ -503,11 +510,13 @@ class _TxSheetState extends State<TxSheet> {
               onPressed: () {
                 final failure = widget.wc.unlinkCashMatch(entryId, bankId);
                 if (failure != null) {
-                  toast(context, failure);
+                  // A toast would sit under this sheet: the refusal shows inside it.
+                  setState(() => unlinkError = failure);
                 } else if (context.mounted) {
                   Navigator.pop(context, 'unlinked');
                 }
               }),
+          if (unlinkError != null) StatusLabel(key: const ValueKey('unlinkError'), good: false, text: unlinkError!),
         ]));
   }
 

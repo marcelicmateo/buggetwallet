@@ -30,8 +30,8 @@ class TagDetailScreen extends StatelessWidget {
           final rows = wc.rowsOfTag(tag, range);
           final total = wc.tagTotalFor(tag, range);
           final cmp = wc.compareTagFor(tag, range);
-          final parts = compareParts(cmp, month: wc.monthIn(range), range: range, total: total.spent, cur: cur);
           final bars = wc.tagBars(tag, range);
+          final parts = compareParts(cmp, month: wc.monthIn(range), range: range, total: total.spent, cur: cur, bars: bars);
           // One month: its one figure is the hero's, so no months list (the bars stay).
           final oneMonth = bars.length <= 1;
           return Scaffold(
