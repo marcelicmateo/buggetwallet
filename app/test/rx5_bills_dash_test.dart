@@ -145,7 +145,10 @@ void main() {
       await t.tap(_key('comingUpPanel'));
       await t.pump(const Duration(milliseconds: 600));
       await t.pump(const Duration(milliseconds: 600));
-      expect(find.byKey(ValueKey('upcomingHeld:${wc.recurringBills().single.id}')), findsOneWidget);
+      // "Set aside" now counts the held bill too (= Before payday), so the Held panel sits lower: scroll to it.
+      final held = find.byKey(ValueKey('upcomingHeld:${wc.recurringBills().single.id}'));
+      await t.scrollUntilVisible(held, 200, scrollable: find.byType(Scrollable).last);
+      expect(held, findsOneWidget);
     });
 
     tw('a slip to review: an attention tile that lists it', (t) async {

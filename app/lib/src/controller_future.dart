@@ -128,8 +128,16 @@ extension FutureSpending on WalletController {
   List<PlannedCost> plannedOpen() => _cached(const MemoKey('plannedOpen'), () => repo.plannedCosts());
 
   /// Planned costs, confirmed bills and unconfirmed calendar events from [from] to [to] (inclusive), by date. Cached.
-  List<UpcomingItem> upcomingItems(String from, String to) => _cached(MemoKey('upcoming', (from, to, cal.version)),
-      () => upcoming(planned: plannedEverything(), bills: recurringBills(), events: cal.events, from: from, to: to, billsDb: billsAll()));
+  List<UpcomingItem> upcomingItems(String from, String to) => _cached(
+      MemoKey('upcoming', (from, to, cal.version)),
+      () => upcoming(
+          planned: plannedEverything(),
+          bills: recurringBills(),
+          events: cal.events,
+          from: from,
+          to: to,
+          billsDb: billsAll(),
+          payeeAliases: payeeAliases()));
 
   /// The dates Upcoming shows: the pay period, or the next one of the same length ([next]). `end` is the last day shown.
   ({String start, String end}) upcomingRange({bool next = false}) {
@@ -152,21 +160,45 @@ extension FutureSpending on WalletController {
               if (p.needsCategory && p.sourceRef != null) p
           ]);
 
-  /// What [items] set aside from today on (suggestions never count): confirmed recurring bills with an amount outside the fixed
-  /// plan, and the planned costs core's `plannedReserves` accepts, given those bill occurrences (the same rule as `computePeriod`,
-  /// for whatever range is shown).
+  /// Upcoming's "Set aside" (KL-A: always what Today's "Before payday" holds). The running period: core's own numbers for the period
+  /// (`beforePayday` = Σ `reservedCycles` reserve + Σ `reservedPlannedRows` amount, overdue bill cycles and held long bills included), so
+  /// the two screens can never differ. The next period has no budget yet: [countedIn] over its [items].
+  ({int count, int total}) setAside(List<UpcomingItem> items, {bool next = false}) {
+    if (next) return countedIn(items);
+    final p = period();
+    return (count: p.beforePaydayCount, total: p.beforePayday);
+  }
+
+  /// A bill's cycle listed in Upcoming that is already past its due date and unpaid ("Overdue"; it is still set aside).
+  bool isOverdueCycle(UpcomingItem i) => i.kind == UpcomingKind.bill && i.date.compareTo(today()) < 0;
+
+  /// Cycles that are set aside but fall before the period's first day (an old unpaid bill): the list of the period cannot show them,
+  /// so Upcoming lists them apart (core's `reservedCycles`, each with its own reserve).
+  List<DueCycle> overdueEarlier() {
+    final p = period();
+    return [
+      for (final x in p.reservedCycles)
+        if (x.due.compareTo(p.start) < 0) x
+    ];
+  }
+
+  /// What [items] set aside, rule by rule (used for the next period and for any shown subset): confirmed recurring bills with an amount
+  /// outside the fixed plan (an overdue cycle too), and the planned costs core's `plannedReserves` accepts, given those bill
+  /// occurrences (the same rule as `computePeriod`).
   ({int count, int total}) countedIn(List<UpcomingItem> items) {
     final t = today();
     bool ahead(UpcomingItem i) => i.amount != null && i.date.compareTo(t) >= 0;
     final occurrences = {
       for (final i in items)
-        if (i.kind == UpcomingKind.bill && i.bill != null && ahead(i)) occurrenceKey(i.bill!.id, i.date)
+        if (i.kind == UpcomingKind.bill && i.bill != null && i.amount != null) occurrenceKey(i.bill!.id, i.date)
     };
     final recurring = expectedBills();
+    final aliases = payeeAliases();
     final xs = items.where((i) => switch (i.kind) {
-          UpcomingKind.bill => ahead(i) && !(i.bill?.coveredByPlanIn(categoryTable) ?? false),
-          UpcomingKind.planned =>
-            ahead(i) && i.planned != null && plannedReserves(i.planned!, recurring, occurrences, table: categoryTable),
+          UpcomingKind.bill => i.amount != null && !(i.bill?.coveredByPlanIn(categoryTable) ?? false),
+          UpcomingKind.planned => ahead(i) &&
+              i.planned != null &&
+              plannedReserves(i.planned!, recurring, occurrences, table: categoryTable, payeeAliases: aliases),
           _ => false,
         });
     return (count: xs.length, total: xs.fold<int>(0, (a, i) => a + i.amount!));
@@ -205,7 +237,7 @@ extension FutureSpending on WalletController {
 
   /// "No cost" on a calendar suggestion: stores only a dismissed marker (no title) so no device suggests it again.
   void dismissSuggestion(UpcomingItem it) {
-    repo.dismissCalendarEvent(it.event!.ref, it.date);
+    repo.dismissCalendarEvent(it.event!.ref, it.date, legacyRef: it.event!.legacyRef);
     logEvent(_planLog, Level.INFO, 'planned.dismiss', {});
     _changed();
   }
@@ -220,6 +252,32 @@ extension FutureSpending on WalletController {
   void skipPlanned(PlannedCost p) {
     repo.skipPlanned(p.id);
     logEvent(_planLog, Level.INFO, 'planned.skip', {});
+    _changed();
+  }
+
+  /// KL-A: the planned costs this device closed by itself (an import or a sync run matched exactly one bank row), once per data change:
+  /// they are acknowledged here, so the toast shows once. Empty when nothing new. Logs the count only.
+  List<AutoPaid> takeAutoPaid() {
+    if (_autoPaidSeen == dataVersion) return const [];
+    _autoPaidSeen = dataVersion;
+    final done = repo.autoPaidPlanned();
+    if (done.isEmpty) return const [];
+    repo.ackAutoPaidPlanned([for (final a in done) a.plannedId]);
+    logEvent(_planLog, Level.INFO, 'planned.autoPaid', {'count': done.length});
+    return done;
+  }
+
+  /// The toast's text: the title of one cost, else the count.
+  String autoPaidText(List<AutoPaid> done) => done.length == 1
+      ? 'Marked paid: ${done.single.title.isEmpty ? 'planned cost' : done.single.title}'
+      : '${done.length} planned costs marked paid';
+
+  /// "Undo" on the auto-Paid toast: all of [done] are open again (core keeps them from closing by the same bank row).
+  void undoAutoPaid(List<AutoPaid> done) {
+    for (final a in done) {
+      repo.reopenPlanned(a.plannedId);
+    }
+    logEvent(_planLog, Level.INFO, 'planned.autoPaid.undo', {'count': done.length});
     _changed();
   }
 
@@ -593,7 +651,8 @@ extension FutureSpending on WalletController {
   /// [ExportFile.rows] is the number of events; 0 means there is nothing to save.
   ExportFile exportPlannedIcs() {
     final t = today();
-    final text = plannedIcs(plannedOpen(), recurringBills(), from: t, to: addDays(t, 365));
+    final text =
+        plannedIcs(plannedOpen(), recurringBills(), from: t, to: addDays(t, 365), payeeAliases: payeeAliases(), events: cal.events);
     final rows = 'BEGIN:VEVENT'.allMatches(text).length;
     return ExportFile('budget-wallet-planned.ics', Uint8List.fromList(utf8.encode(text)), rows);
   }

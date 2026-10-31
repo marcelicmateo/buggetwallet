@@ -50,14 +50,17 @@ class AndroidCalendars implements CalendarSource {
 
 final _isoDate = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 
-/// The channel's events as [CalendarEvent]s; cancelled ones (`status` 2 = STATUS_CANCELED) are left out (like `STATUS:CANCELLED` in an
+/// The channel's events as [CalendarEvent]s. `uid2445` = the iCal UID (null when the calendar has none: the uid is then '' and the ref
+/// falls back to title + date + start time; the provider's row `id` is never used), `startMinutes` the local start time (null all-day).
+/// Cancelled ones (`status` 2 = STATUS_CANCELED) are left out (like `STATUS:CANCELLED` in an
 /// `.ics` file). An entry without id, calendar or a valid date is skipped.
 List<CalendarEvent> calendarEventsFrom(Iterable<Map<Object?, Object?>> list) => [
       for (final e in list)
         if (e['status'] != 2 && e['calendarId'] != null && e['id'] != null && e['date'] is String && _isoDate.hasMatch(e['date'] as String))
           CalendarEvent(
             calendarId: '${e['calendarId']}',
-            uid: '${e['id']}',
+            uid: (e['uid2445'] as String?) ?? '',
+            startMinutes: e['startMinutes'] is int ? e['startMinutes'] as int : null,
             title: (e['title'] as String?) ?? '',
             notes: e['notes'] as String?,
             date: e['date'] as String,

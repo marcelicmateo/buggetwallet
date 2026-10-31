@@ -105,15 +105,34 @@ class _BudgetWalletAppState extends State<BudgetWalletApp> {
     clockBehindNotice.addListener(_clockBehind);
     writeFailedNotice.addListener(_writeFailed);
     widget.wc.addListener(_syncMode);
+    widget.wc.addListener(_autoPaid);
   }
 
   @override
   void dispose() {
     widget.wc.removeListener(_syncMode);
+    widget.wc.removeListener(_autoPaid);
     _mode.dispose();
     clockBehindNotice.removeListener(_clockBehind);
     writeFailedNotice.removeListener(_writeFailed);
     super.dispose();
+  }
+
+  /// KL-A: after an import or a sync run closed planned costs by itself, one toast over whatever is open: "Marked paid: <title>" (or
+  /// the count) with Undo, which reopens all of them. Taken once per data change; the controller acknowledges them.
+  void _autoPaid() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _navigator.currentContext, messenger = _messenger.currentState;
+      if (!mounted || ctx == null || !ctx.mounted || messenger == null) return;
+      final wc = widget.wc;
+      final done = wc.takeAutoPaid();
+      if (done.isEmpty) return;
+      toastOn(messenger, wc.autoPaidText(done),
+          wide: layoutOf(ctx) != LayoutSize.compact, accessible: MediaQuery.accessibleNavigationOf(ctx), actionLabel: 'Undo', onAction: () {
+        logNav('planned.autoPaid.undo');
+        wc.undoAutoPaid(done);
+      });
+    });
   }
 
   /// A write failed in the database (any screen): a dialog on the top route like the clock notice, so it shows over an open

@@ -135,7 +135,8 @@ extension BillsDb on WalletController {
                 billsAll(),
                 today: today(),
                 currency: currency,
-                table: categoryTable));
+                table: categoryTable,
+                payeeAliases: payeeAliases()));
         final byId = {for (final c in wholeTxs) c.tx.id: c};
         return BillHistoryView(bill, months, {
           for (final m in months)
@@ -455,12 +456,46 @@ extension BillsDb on WalletController {
   bool billNeedsCategory(Bill b) => b.category == null && b.dueDate != null && b.dueDate!.compareTo(today()) >= 0;
 
   /// The category worth suggesting for [b] (earlier bills and payments of the same payee); null when nothing fits.
-  String? suggestedBillCategory(Bill b) =>
-      deps.billCategorySuggester(b, () => suggestBillCategory(b, recurring: expectedBills(), txs: wholeTxs, table: categoryTable));
+  String? suggestedBillCategory(Bill b) => deps.billCategorySuggester(
+      b, () => suggestBillCategory(b, recurring: expectedBills(), txs: wholeTxs, table: categoryTable, payeeAliases: payeeAliases()));
 
   /// The confirmed expected bill that already plans this slip (same payee, due about one cycle), or null. Such a bill's planned row is
   /// listed but not reserved (decided by core when read).
-  RecurringBill? billPlannedBy(Bill b) => billCoveredBy(b, expectedBills());
+  RecurringBill? billPlannedBy(Bill b) => billCoveredBy(b, expectedBills(), payeeAliases: payeeAliases());
+
+  /// KL-A "Belongs to bill…": the confirmed expected bills slip [b] could belong to, when no expected bill covers it yet. Bills whose payee
+  /// already is the slip's payee are left out (nothing to link). Empty for an attachment or a slip without a payee.
+  List<RecurringBill> billsForSlip(Bill b) {
+    final key = billPayeeKey(b);
+    if (key == null || b.isAttachment || billPlannedBy(b) != null) return const [];
+    return [
+      for (final r in expectedBills())
+        if (r.confirmed && r.payee.isNotEmpty && r.payee != key) r
+    ];
+  }
+
+  /// The slip's spelling of its payee becomes an alias of expected bill [r]'s payee (exact, on every device). Returns core's text when it
+  /// refuses (the chain rules), else null. Undo = [unlinkSlip].
+  String? linkSlipToBill(Bill b, RecurringBill r) {
+    try {
+      repo.linkSlipToBill(b.id, r.id);
+    } on ArgumentError catch (e) {
+      logEvent(_billLog, Level.INFO, 'bill.belongsTo', {'ok': false});
+      return '${e.message}';
+    }
+    logEvent(_billLog, Level.INFO, 'bill.belongsTo', {'ok': true});
+    _changed();
+    return null;
+  }
+
+  /// The Undo of [linkSlipToBill]: the alias of [b]'s payee spelling is forgotten again.
+  void unlinkSlip(Bill b) {
+    final key = billPayeeKey(b);
+    if (key == null) return;
+    repo.removePayeeAlias(key);
+    logEvent(_billLog, Level.INFO, 'bill.belongsTo.undo', {});
+    _changed();
+  }
 
   /// "Paid by…": the owner picked the payment. Returns false when that payment already belongs to another bill.
   bool linkBill(String id, String txId) {
