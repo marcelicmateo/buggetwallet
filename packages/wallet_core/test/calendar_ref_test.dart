@@ -21,7 +21,9 @@ void main() {
       final ics = cev('ics1761000000000000', '', '2026-03-10', 'dentist 80 €');
       expect(android.ref, ics.ref);
       expect(android.ref, calendarEventRef(calendarId: 'x', uid: '', title: 'DENTIST', date: '2026-03-10'));
-      expect(android.ref, legacyCalendarEventRef(calendarId: 'x', uid: 'y', title: 'DENTIST', date: '2026-03-10'));
+      // RF5: all-day refs have their own format; the pre-KL title + date ref is only looked up (CalendarEvent.legacyRef).
+      expect(android.ref, isNot(legacyCalendarEventRef(calendarId: 'x', uid: 'y', title: 'DENTIST', date: '2026-03-10')));
+      expect(android.legacyRef, legacyCalendarEventRef(calendarId: 'x', uid: 'y', title: 'DENTIST', date: '2026-03-10'));
       expect(android.ref, matches(RegExp(r'^[0-9a-f]{32}$')));
       expect(android.ref, isNot(calendarRef('7', '', '2026-03-10')));
     });
@@ -32,11 +34,14 @@ void main() {
       expect(calendarEventRef(calendarId: 'c', uid: '', title: 'Concert', date: '2026-03-10'), isNot(r));
     });
 
-    test('a title with no letters falls back to the per-calendar ref', () {
+    test('a title with no letters falls back to a per-calendar ref', () {
+      final r = calendarEventRef(calendarId: 'c1', uid: '', title: '80 €', date: '2026-03-10');
       for (final title in ['80 €', '', '  2026 ']) {
-        expect(calendarEventRef(calendarId: 'c1', uid: '', title: title, date: '2026-03-10'), calendarRef('c1', '', '2026-03-10'),
-            reason: title);
+        expect(calendarEventRef(calendarId: 'c1', uid: '', title: title, date: '2026-03-10'), r, reason: title);
+        // RF5: not the legacy per-calendar ref, which is only looked up.
+        expect(cev('c1', '', '2026-03-10', title).legacyRef, calendarRef('c1', '', '2026-03-10'), reason: title);
       }
+      expect(r, isNot(calendarRef('c1', '', '2026-03-10')));
       expect(cev('c1', '', '2026-03-10', '80 €').ref, isNot(cev('c2', '', '2026-03-10', '80 €').ref));
     });
   });

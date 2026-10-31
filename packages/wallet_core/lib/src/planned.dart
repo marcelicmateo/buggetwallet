@@ -187,28 +187,6 @@ bool _shownByBill(PlannedCost p, List<RecurringBill> bills, bool Function(String
   return c != null && (c.occurrence == null || inRange(c.occurrence!));
 }
 
-/// KL-A: the ids of calendar rows stored under the legacy ref ([CalendarEvent.legacyRef]) of events in [events] when
-/// every such event also has a row (not deleted) under its own new ref ([CalendarEvent.ref]): two devices on different
-/// builds decided the same event, and the new-ref rows stand for it. Such a row is not listed in [upcoming] or
-/// exported by `plannedIcs`. Pure.
-Set<String> supersededCalendarRows(List<PlannedCost> planned, List<CalendarEvent> events) {
-  if (events.isEmpty) return const {};
-  final byRef = <String, PlannedCost>{
-    for (final p in planned)
-      if (p.source == PlannedSource.calendar && p.sourceRef != null && !p.deleted) p.sourceRef!: p
-  };
-  final covered = <String, bool>{}; // legacy ref → every event with it has a new-ref row
-  for (final e in events) {
-    final l = e.legacyRef, n = e.ref;
-    if (l == n || !byRef.containsKey(l)) continue;
-    covered[l] = (covered[l] ?? true) && byRef.containsKey(n);
-  }
-  return {
-    for (final e in covered.entries)
-      if (e.value) byRef[e.key]!.id
-  };
-}
-
 /// The Upcoming list for [from, to] (both inclusive; from after to = empty): open planned costs (not deleted), the
 /// occurrences of confirmed recurring bills ([billOccurrences]; `coveredByPlan` ones included: their [UpcomingItem.bill]
 /// tells), and calendar events with no planned row of the same ref in [planned] (any status, deleted included: pass
@@ -218,7 +196,9 @@ Set<String> supersededCalendarRows(List<PlannedCost> planned, List<CalendarEvent
 /// same non-empty [normalizeTitle], an amount, open or paid and not deleted (`'earlier'`; its category is suggested
 /// too). Events with the same ref ([calendarEventRef]: same normalized title and date, from any calendar) are listed
 /// once: the one first by calendar id, uid, title, then notes, so every device picks the same whatever the list order.
-/// A legacy-ref row every event of which has a new-ref row ([supersededCalendarRows]) is not listed.
+/// Every open planned row is listed, also a legacy-ref row of an event that has a new-ref row too (two builds decided
+/// the same event): both reserve in `computePeriod`, `periodDays` and `forecastToPayday`, so Upcoming lists both
+/// (Upcoming = Today, exactly) and the owner can delete one.
 /// [payeeAliases]: as in `billPayeeKey` (KL-A).
 /// [billsDb] (`WalletRepo.bills()`): the `warrantyUntil` / `returnBy` dates of confirmed, live bills in range
 /// (title = payee, else description; amount null; a bill's planned row is already in [planned]). A bill's planned row a
@@ -237,9 +217,8 @@ List<UpcomingItem> upcoming({
   if (!isIsoDate(from) || !isIsoDate(to) || from.compareTo(to) > 0) return const [];
   bool inRange(String d) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
   final out = <UpcomingItem>[];
-  final superseded = supersededCalendarRows(planned, events);
   for (final p in planned) {
-    if (!p.isOpen || !inRange(p.date) || superseded.contains(p.id) || _shownByBill(p, bills, inRange, payeeAliases)) continue;
+    if (!p.isOpen || !inRange(p.date) || _shownByBill(p, bills, inRange, payeeAliases)) continue;
     out.add(UpcomingItem(
         kind: UpcomingKind.planned, key: 'p:${p.id}', date: p.date, title: p.title, amount: p.amount, category: p.category, planned: p));
   }
@@ -356,14 +335,17 @@ List<CategorizedTx> paidCandidates(PlannedCost p, List<CategorizedTx> txs, List<
 /// - `amount == -planned.amount` exactly,
 /// - dated within the planned date ± 3 days,
 /// - not already the `paidTx` of another planned row in [planned] (pass every row: `plannedCosts(includeClosed: true)`),
+///   nor the bank row that replaced such a `paidTx` ([replacedBy]: hand-added entry id → its `matched_to` bank row; a
+///   cost the owner marked Paid by a hand-added entry is still paid by it once its bank row arrives),
 /// - not one of the cost's [PlannedCost.autoOff] rows (the owner reopened it from that row).
 /// A row that fits two such costs closes neither (it could be either). Never by amount alone: the category and the
 /// date are the evidence (owner rule). The caller passes rows in the wallet currency only and leaves out the payments
 /// linked to a bill (`Bill.linkedTx`). Pairs in [planned] order. Pure.
-List<(String plannedId, String txId)> planAutoPaid(List<PlannedCost> planned, List<CategorizedTx> rows, {required CategoryTable table}) {
+List<(String plannedId, String txId)> planAutoPaid(List<PlannedCost> planned, List<CategorizedTx> rows,
+    {required CategoryTable table, Map<String, String> replacedBy = const {}}) {
   final taken = {
     for (final q in planned)
-      if (q.paidTx != null) q.paidTx!
+      if (q.paidTx case final paid?) ...[paid, if (replacedBy[paid] case final bank?) bank]
   };
   bool rowOk(CategorizedTx t) =>
       t.tx.live &&

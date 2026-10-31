@@ -46,11 +46,15 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   (24 h; `sync.unblock.ask {files}`; not while `deviceIdInUse`). The author (an install whose current or listed stream
   is `to`; ids answered once, like repair asks, and not before `DigestBook.first` − drift) marks `syncUnblock`
   (`{"<stream>": seq}`), which makes its next caught-up run write a snapshot at once (heal, no 24 h wait; one attempt per
-  ask, mark then cleared; dropped when the newest snapshot covers it) and queues one state resend (`book.send`,
-  `sync.unblock.answer`); the blocked device goes on via `_unblockBySnapshot`. Owner skip: `blockedFiles(repo)` →
-  `BlockedFile {device (stream, never shown), file (seq), reason, since, authorSeen, short}`;
-  `skipBlockedFile(repo, device, file)` stores the quarantined bytes' hash in local `syncSkipped` (newest 64, kept for
-  good, `sync.skipFile {reason}`); `_applyPeer` then treats exactly those bytes as an applied empty file (cursor moves,
+  ask, mark then cleared; dropped when the newest snapshot covers it). The snapshot it wrote (else the relay's newest of
+  this schema) covering the asked file is the answer (`sync.unblock.answered`); only an ask no such snapshot covers
+  queues one state resend (`book.send`, `sync.unblock.answer {asks, files, ops}`), once per asked file (local
+  `syncUnblockSent` = `{"<stream>/<seq>": ms}`, newest 64). The blocked device goes on via `_unblockBySnapshot`. Owner
+  skip: `blockedFiles(repo)` → `BlockedFile {device (stream, never shown), file (seq), reason, since, authorSeen, short,
+  skippable}`; `skipBlockedFile(repo, device, file)` (only `skippable` = corrupt / badKey / otherKey; unknownVersion,
+  clockDrift and applyFailed throw `ArgumentError`, `sync.skipFile.refused`) stores the quarantined bytes' hash in local
+  `syncSkipped` (newest 64, kept for good, `sync.skipFile {reason}`); `_applyPeer` then treats exactly those bytes (when
+  not re-quarantined for a reason that waits) as an applied empty file (cursor moves,
   quarantine record dropped, `sync.file.skipped`); other bytes under that seq (repaired on the relay) are read normally.
   Its changes are lost on this device until a state resend (the author's, or a digest repair with a device that holds
   them) brings them back.

@@ -178,7 +178,9 @@ class WalletRepo {
   /// blob sets), version 16: attachments (P16b: `bills` gains `attached_tx`; no data migration), version 17: IOUs (Q8:
   /// the `iou` and `iou_part` entities; no data migration), version 18: weekly reviews as dated rows (V3: the `review`
   /// entity; no data migration, the legacy `lastReview` / `reviewStreak` settings stay the streak's base), version 19:
-  /// unlinked cash matches (D2: `tx` gains `match_off`, [WalletRepoMatch.unlinkMatch]; no data migration).
+  /// unlinked cash matches (D2: `tx` gains `match_off`, [WalletRepoMatch.unlinkMatch]), auto-Paid Undo marks (KL-A:
+  /// `planned` gains `auto_off`, `WalletRepoPlanned.reopenPlanned`) and slip payee aliases (KL-A: the `payee_alias`
+  /// entity); no data migration.
   static const schemaVersion = 19;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file

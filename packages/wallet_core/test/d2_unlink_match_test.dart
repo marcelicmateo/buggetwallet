@@ -220,6 +220,47 @@ void main() {
       expect(r.transactions().where((x) => x.amount == -240).map((x) => x.id).toSet(), {first, second});
     });
 
+    /// A wallet with tagged cash entry `entry` matched to `first`; `second` (no category, no tags) waits in the window.
+    Future<(WalletRepo, String, String, String, String)> twoRows() async {
+      final r = WalletRepo.inMemory(now: now);
+      addTearDown(r.close);
+      final tag = await r.addTag('Synthetic trip');
+      final entry = r.addTransaction(date: '2026-01-19', amount: 240, category: 'Eating out');
+      await r.setTxTag(entry, tag, true);
+      r.importBatch(_pos([('2026-01-19', -240, 'POS SYNTH CAFE'), ('2026-01-21', -240, 'POS SYNTH KIOSK')]));
+      final first = _bankId('2026-01-19', -240, 'POS SYNTH CAFE'), second = _bankId('2026-01-21', -240, 'POS SYNTH KIOSK');
+      expect(r.transaction(entry)!.matchedTo, first, reason: 'precondition');
+      expect(_row(r, second)['category'], isNull, reason: 'precondition');
+      return (r, entry, first, second, tag);
+    }
+
+    test('RF2: the Undo also takes back what the rematch copied onto the freed row (category, tags)', () async {
+      final (r, entry, first, second, tag) = await twoRows();
+      final secondRow = _row(r, second), links = r.tagLinks()[second];
+      r.unlinkMatch(entry);
+      expect(r.transaction(entry)!.matchedTo, second);
+      expect(_row(r, second)['category'], 'Eating out', reason: 'the rematch copied the category');
+      expect(r.tagLinks()[second], {tag: true}, reason: 'and the tag');
+      r.relinkMatch(entry, first);
+      expect(r.transaction(entry)!.matchedTo, first);
+      expect(_row(r, second), secondRow, reason: 'a net no-op: the freed row is as it was');
+      expect(r.tagLinks()[second], links);
+      expect(r.categorizer().categorize(r.transaction(second)!).tags, isNot(contains(tag)));
+      expect(r.db.select("SELECT 1 FROM meta WHERE key LIKE 'undo.match.%'"), isEmpty, reason: 'the record is used up');
+    });
+
+    test('RF2: an owner change of the freed row made after the rematch stays after the Undo', () async {
+      final (r, entry, first, second, tag) = await twoRows();
+      r.unlinkMatch(entry);
+      expect(r.transaction(entry)!.matchedTo, second);
+      r.setCategory(second, 'Groceries');
+      await r.setTxTag(second, tag, false);
+      await r.setTxTag(second, tag, true);
+      r.relinkMatch(entry, first);
+      expect(_row(r, second)['category'], 'Groceries', reason: 'the later owner write wins');
+      expect(r.tagLinks()[second], {tag: true}, reason: 'the owner set this tag again after the copy');
+    });
+
     test('errors: unknown entry, not unlinked from that row, bank row gone; nothing written', () {
       final (r, entry, bank) = matched();
       expect(() => r.relinkMatch('nope', bank), throwsArgumentError);
