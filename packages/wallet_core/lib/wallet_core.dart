@@ -256,6 +256,19 @@ export 'src/rules.dart' show merchantPatternId, MerchantPattern, MerchantRule, M
 export 'src/search.dart' show matchSpans, SearchFilter;
 export 'src/search.dart'
     show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchRuleLimit, searchTxLimit;
+export 'src/series.dart'
+    show
+        Bucket,
+        bucketFor,
+        bucketLabel,
+        bucketsOf,
+        BudgetBar,
+        budgetSeries,
+        DayIndex,
+        IncomeSpendingBar,
+        incomeSeries,
+        SeriesBar,
+        spendingSeries;
 export 'src/splits.dart' show decodeSplitParts, encodeSplitParts, SplitPart, splitFits;
 export 'src/suggest.dart' show PlanSuggestion, planProposals, SettingProposal, Suggested, suggestPlan;
 export 'src/sync_conflicts.dart' show SyncConflict;

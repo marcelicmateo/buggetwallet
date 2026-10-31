@@ -86,8 +86,8 @@ class CategoryCompare {
 }
 
 /// The key the drill-down groups by: `merchantKey`, or '' for a row without one (a hand-added row without a note,
-/// or a description with nothing left after cleaning).
-String _merchantOf(Tx t) {
+/// or a description with nothing left after cleaning). Shared with `series.dart` (`DayIndex.spent(merchantKey:)`).
+String merchantGroupKey(Tx t) {
   if (t.source == 'manual' && (t.note == null || t.note!.isEmpty)) return '';
   final k = merchantKey(t);
   return k == 'x' ? '' : k;
@@ -226,7 +226,7 @@ List<BudgetMonth> budgetVsActualSeries(List<CategorizedTx> txs, DateRange r, Map
 List<MerchantTotal> merchantsIn(String category, List<CategorizedTx> txs, DateRange r, {required String currency, CategoryTable? table}) {
   final groups = <String, List<CategorizedTx>>{};
   for (final t in _categoryRows(category, txs, r, currency, table)) {
-    (groups[_merchantOf(t.tx)] ??= []).add(t);
+    (groups[merchantGroupKey(t.tx)] ??= []).add(t);
   }
   final out = [
     for (final MapEntry(key: k, value: rows) in groups.entries)
@@ -254,7 +254,7 @@ List<CategorizedTx> rowsFor(String category, String? merchantKey, List<Categoriz
       ? rows
       : [
           for (final t in rows)
-            if (_merchantOf(t.tx) == merchantKey) t
+            if (merchantGroupKey(t.tx) == merchantKey) t
         ];
 }
 
