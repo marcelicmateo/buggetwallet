@@ -60,7 +60,7 @@ WalletController demoWallet({String currency = 'EUR', DateTime Function()? clock
     'paydayDay': demoPaydayDay(start),
     'salaryConfirmed': false
   });
-  final now = DateTime.now().millisecondsSinceEpoch;
+  final now = wc.now.millisecondsSinceEpoch;
   wc.repo.addWish('Synthetic headphones with a long name', 12000);
   final decided = wc.repo.addWish('Synthetic jacket', 9000);
   wc.repo.decideWish(decided, 'skipped');

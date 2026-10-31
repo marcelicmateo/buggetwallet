@@ -64,11 +64,27 @@ class Errors {
     _old = FlutterError.onError;
     FlutterError.onError = (d) => found.add('${d.exceptionAsString()}\n${d.informationCollector?.call().join('\n') ?? ''}');
   }
+
+  /// Gives the framework's handler back. A test that fails an `expect` before [check] must still do this (see [withErrors]): with
+  /// the collector left in place the binding's own check fails inside the test zone and the test hangs until its timeout.
+  void restore() => FlutterError.onError = _old;
+
   void check() {
-    FlutterError.onError = _old;
+    restore();
     final rows = overflowing.toList();
     overflowing.clear();
     expect(found, isEmpty, reason: 'OVERFLOWING:\n${rows.join('\n')}\n\n${found.length} errors, first:\n${found.firstOrNull}');
+  }
+}
+
+/// Runs [body] with an [Errors] collector and always restores the handler, so a failing `expect` in [body] fails the test at once
+/// with its own message instead of hanging until the test timeout.
+Future<void> withErrors(Future<void> Function(Errors errors) body) async {
+  final errors = Errors();
+  try {
+    await body(errors);
+  } finally {
+    errors.restore();
   }
 }
 
