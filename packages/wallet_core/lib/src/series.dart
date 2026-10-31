@@ -311,7 +311,8 @@ List<IncomeSpendingBar> incomeSeries(DayIndex ix, DateRange window, Bucket b, {r
 
 /// Budgets ([budgets]: category → cents per calendar month, `WalletSettings.categoryBudgets`) against the spending of
 /// the budgeted categories ([category] null: every category in [budgets]; else that one) per bucket of [window]
-/// ([bucketsOf]). Rows count in their top-level category ([table], as `budgetVsActual`).
+/// ([bucketsOf]). A [category] with no entry in [budgets] counts nowhere: every bar is budgeted 0, actual 0, over 0
+/// (a budget set to 0 is a real one: its spending is over). Rows count in their top-level category ([table], as `budgetVsActual`).
 /// Each category's month budget is split over the month's days in integer cents by largest remainder (all remainders
 /// tie, so the earlier days get the extra cent), on its own (owner §6 Q2, settled 2026-11-01); a bar's `budgeted` is
 /// the sum of its days' shares, so the days of a month add up to its budget exactly and a whole month or quarter is
@@ -321,7 +322,13 @@ List<BudgetBar> budgetSeries(DayIndex ix, DateRange window, Bucket b, Map<String
     {required String today, required CategoryTable table, String? category}) {
   final (lo, hi) = _window(window);
   final t = _today(today);
-  final lines = category != null ? {category: budgets[category] ?? 0} : budgets;
+  // A [category] without an entry in [budgets] counts nowhere (budgetVsActualSeries sums budgeted lines only); a budget
+  // set to 0 is a real budget, so its spending is over.
+  final lines = category == null
+      ? budgets
+      : {
+          if (budgets[category] case final c?) category: c,
+        };
   // Each budgeted category: its month budget and the prefix sums of the index categories that roll up into it.
   final keys = lines.keys.toList(growable: false);
   final cents = [for (final k in keys) lines[k]!];

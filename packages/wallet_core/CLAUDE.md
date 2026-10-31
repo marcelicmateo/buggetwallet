@@ -590,7 +590,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   only (≈0.1 ms per 40-bar window on 20k rows); windows of 5 years or more → `ArgumentError`. `partial` = holds today or
   clipped. `budgetSeries`: each category's month budget split over its days by largest remainder (earlier days get the
   extra cent), a bar's `budgeted` = Σ of its days' shares, `over` = Σ per category max(0, actual − share), `prorated` =
-  not whole calendar months. Whole months equal `spendingByMonth`/`tagTrend`/`merchantTrend`/`incomeVsSpending`/
+  not whole calendar months; a `category:` without a `budgets` entry counts nowhere (0/0/0), a 0 budget is real (spending =
+  over). Whole months equal `spendingByMonth`/`tagTrend`/`merchantTrend`/`incomeVsSpending`/
   `budgetVsActualSeries`. Tests: `test/series_test.dart` (incl. perf), spec tests `test/zc_series_spec_test.dart`.
 - `reports.dart` — reports (P8, spec `docs/context/P8_SPEC.md`), pure and web-safe, nothing written. `periodReports(txs, st, today,
   table:, count:)` → `PeriodReport {start, end, running, income, fixed, flex}` (+ `out`, `net`) on the periods of

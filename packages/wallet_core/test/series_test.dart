@@ -293,6 +293,29 @@ void main() {
           today: today, table: table);
       expect([b.single.budgeted, b.single.actual, b.single.over], [500, 0, 0]);
     });
+
+    test('category: without a budget entry it counts nowhere; a budget set to 0 is real and its spending is over', () {
+      final r = [row('2026-10-05', -300, 'Groceries'), row('2026-10-06', -50, 'Shopping')];
+      final ix = DayIndex(r, currency: 'EUR');
+      for (final b in Bucket.values) {
+        final w = dr('2026-09-15', '2026-10-31');
+        final none = budgetSeries(ix, w, b, {'Shopping': 3100}, today: today, table: table, category: 'Groceries');
+        final shopping = budgetSeries(ix, w, b, {'Shopping': 3100}, today: today, table: table, category: 'Shopping');
+        expect(none.length, shopping.length);
+        for (var k = 0; k < none.length; k++) {
+          expect([none[k].budgeted, none[k].actual, none[k].over], [0, 0, 0], reason: '$b ${none[k].span}');
+          expect(none[k].prorated, shopping[k].prorated, reason: 'prorated follows the bucket');
+          expect(none[k].span, shopping[k].span);
+        }
+        final zero = budgetSeries(ix, w, b, {'Groceries': 0}, today: today, table: table, category: 'Groceries');
+        expect(zero.fold<int>(0, (s, e) => s + e.budgeted), 0);
+        expect(zero.fold<int>(0, (s, e) => s + e.actual), 300, reason: '$b');
+        expect(zero.fold<int>(0, (s, e) => s + e.over), 300, reason: '$b');
+      }
+      final month =
+          budgetSeries(ix, dr('2026-10-01', '2026-10-31'), Bucket.month, const {}, today: today, table: table, category: 'Groceries');
+      expect([month.single.budgeted, month.single.actual, month.single.over, month.single.prorated], [0, 0, 0, false]);
+    });
   });
 
   group('limits', () {
