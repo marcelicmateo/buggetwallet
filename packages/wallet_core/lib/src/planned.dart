@@ -4,6 +4,7 @@
 library;
 
 import 'bills.dart';
+import 'categories.dart';
 import 'dates.dart';
 import 'ics.dart';
 import 'models.dart';
@@ -181,19 +182,44 @@ List<String> billOccurrences(RecurringBill b, String from, String until) {
 
 /// A bill's planned row whose covering recurring occurrence ([plannedCoverage]) is listed in the same range, or is the
 /// cycle just paid or skipped: left out of `upcoming` / `plannedIcs`.
-bool _shownByBill(PlannedCost p, List<RecurringBill> bills, bool Function(String) inRange) {
-  final c = plannedCoverage(p, bills);
+bool _shownByBill(PlannedCost p, List<RecurringBill> bills, bool Function(String) inRange, Map<String, String> payeeAliases) {
+  final c = plannedCoverage(p, bills, payeeAliases: payeeAliases);
   return c != null && (c.occurrence == null || inRange(c.occurrence!));
+}
+
+/// KL-A: the ids of calendar rows stored under the legacy ref ([CalendarEvent.legacyRef]) of events in [events] when
+/// every such event also has a row (not deleted) under its own new ref ([CalendarEvent.ref]): two devices on different
+/// builds decided the same event, and the new-ref rows stand for it. Such a row is not listed in [upcoming] or
+/// exported by `plannedIcs`. Pure.
+Set<String> supersededCalendarRows(List<PlannedCost> planned, List<CalendarEvent> events) {
+  if (events.isEmpty) return const {};
+  final byRef = <String, PlannedCost>{
+    for (final p in planned)
+      if (p.source == PlannedSource.calendar && p.sourceRef != null && !p.deleted) p.sourceRef!: p
+  };
+  final covered = <String, bool>{}; // legacy ref → every event with it has a new-ref row
+  for (final e in events) {
+    final l = e.legacyRef, n = e.ref;
+    if (l == n || !byRef.containsKey(l)) continue;
+    covered[l] = (covered[l] ?? true) && byRef.containsKey(n);
+  }
+  return {
+    for (final e in covered.entries)
+      if (e.value) byRef[e.key]!.id
+  };
 }
 
 /// The Upcoming list for [from, to] (both inclusive; from after to = empty): open planned costs (not deleted), the
 /// occurrences of confirmed recurring bills ([billOccurrences]; `coveredByPlan` ones included: their [UpcomingItem.bill]
 /// tells), and calendar events with no planned row of the same ref in [planned] (any status, deleted included: pass
-/// `plannedCosts(includeClosed: true)`) as suggestions. A suggestion's amount comes from the event's title, else its
+/// `plannedCosts(includeClosed: true)`; KL-A: a row under the event's [CalendarEvent.legacyRef] counts too, so a
+/// decision made before KL-A still holds) as suggestions. A suggestion's amount comes from the event's title, else its
 /// notes ([amountFromText], `suggestedFrom: 'title'`), else from the latest planned cost dated before the event with the
 /// same non-empty [normalizeTitle], an amount, open or paid and not deleted (`'earlier'`; its category is suggested
 /// too). Events with the same ref ([calendarEventRef]: same normalized title and date, from any calendar) are listed
 /// once: the one first by calendar id, uid, title, then notes, so every device picks the same whatever the list order.
+/// A legacy-ref row every event of which has a new-ref row ([supersededCalendarRows]) is not listed.
+/// [payeeAliases]: as in `billPayeeKey` (KL-A).
 /// [billsDb] (`WalletRepo.bills()`): the `warrantyUntil` / `returnBy` dates of confirmed, live bills in range
 /// (title = payee, else description; amount null; a bill's planned row is already in [planned]). A bill's planned row a
 /// confirmed recurring bill already plans ([plannedCoverage]) is left out when that bill's covering occurrence is in
@@ -206,12 +232,14 @@ List<UpcomingItem> upcoming({
   required String from,
   required String to,
   List<Bill> billsDb = const [],
+  Map<String, String> payeeAliases = const {},
 }) {
   if (!isIsoDate(from) || !isIsoDate(to) || from.compareTo(to) > 0) return const [];
   bool inRange(String d) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
   final out = <UpcomingItem>[];
+  final superseded = supersededCalendarRows(planned, events);
   for (final p in planned) {
-    if (!p.isOpen || !inRange(p.date) || _shownByBill(p, bills, inRange)) continue;
+    if (!p.isOpen || !inRange(p.date) || superseded.contains(p.id) || _shownByBill(p, bills, inRange, payeeAliases)) continue;
     out.add(UpcomingItem(
         kind: UpcomingKind.planned, key: 'p:${p.id}', date: p.date, title: p.title, amount: p.amount, category: p.category, planned: p));
   }
@@ -254,7 +282,7 @@ List<UpcomingItem> upcoming({
   for (final e in [...events]..sort(byIdentity)) {
     if (!inRange(e.date)) continue;
     final ref = e.ref;
-    if (stored.contains(ref) || !seen.add(ref)) continue;
+    if (stored.contains(ref) || stored.contains(e.legacyRef) || !seen.add(ref)) continue;
     int? suggested = amountFromText(e.title);
     if (suggested == null && e.notes != null) suggested = amountFromText(e.notes!);
     String? from0 = suggested != null ? 'title' : null;
@@ -318,6 +346,89 @@ List<CategorizedTx> paidCandidates(PlannedCost p, List<CategorizedTx> txs, List<
     return c != 0 ? c : a.tx.id.compareTo(b.tx.id);
   });
   return out;
+}
+
+/// KL-A: which open planned costs close themselves ([WalletRepo] runs it while caught up and marks each pair Paid,
+/// as `markPlannedPaid` does). A planned cost (open, not deleted, an amount > 0, a category, a real date, not a stored
+/// bill's row: those close through their bill) is paid by a row only when EXACTLY ONE row of [rows] fits it:
+/// - a live bank row (not hand-added, not an own transfer, not linked to an IOU), a whole payment (never a part),
+/// - in the same category ([CategoryTable.topLevel] of both through [table]),
+/// - `amount == -planned.amount` exactly,
+/// - dated within the planned date ± 3 days,
+/// - not already the `paidTx` of another planned row in [planned] (pass every row: `plannedCosts(includeClosed: true)`),
+/// - not one of the cost's [PlannedCost.autoOff] rows (the owner reopened it from that row).
+/// A row that fits two such costs closes neither (it could be either). Never by amount alone: the category and the
+/// date are the evidence (owner rule). The caller passes rows in the wallet currency only and leaves out the payments
+/// linked to a bill (`Bill.linkedTx`). Pairs in [planned] order. Pure.
+List<(String plannedId, String txId)> planAutoPaid(List<PlannedCost> planned, List<CategorizedTx> rows, {required CategoryTable table}) {
+  final taken = {
+    for (final q in planned)
+      if (q.paidTx != null) q.paidTx!
+  };
+  bool rowOk(CategorizedTx t) =>
+      t.tx.live &&
+      !t.tx.manual &&
+      t.tx.source != 'manual' &&
+      !t.isPart &&
+      t.tx.transferTo == null &&
+      !t.iou &&
+      t.kind != BudgetKind.transfer &&
+      t.amount < 0 &&
+      isIsoDate(t.date) &&
+      !taken.contains(t.tx.id);
+  final usable = [
+    for (final t in rows)
+      if (rowOk(t)) t
+  ];
+  final byAmount = <int, List<CategorizedTx>>{};
+  for (final t in usable) {
+    (byAmount[t.amount] ??= []).add(t);
+  }
+  final picks = <(String, String)>[];
+  for (final p in planned) {
+    final cat = p.category, amount = p.amount;
+    if (!p.isOpen || p.isBill || p.source == PlannedSource.bill || amount == null || amount <= 0) continue;
+    if (cat == null || cat.trim().isEmpty || !isIsoDate(p.date)) continue;
+    final top = table.topLevel(cat);
+    final fit = {
+      for (final t in byAmount[-amount] ?? const <CategorizedTx>[])
+        if (table.topLevel(t.category) == top && !p.autoOff.contains(t.tx.id) && daysBetween(p.date, t.date).abs() <= _paidWindowDays)
+          t.tx.id
+    };
+    if (fit.length == 1) picks.add((p.id, fit.single));
+  }
+  final uses = <String, int>{};
+  for (final (_, tx) in picks) {
+    uses[tx] = (uses[tx] ?? 0) + 1;
+  }
+  return [
+    for (final pick in picks)
+      if (uses[pick.$2] == 1) pick
+  ];
+}
+
+/// One planned cost auto-Paid on this device ([WalletRepoPlanned.autoPaidPlanned]): the app's "Marked paid" toast with
+/// Undo (`reopenPlanned`). [title] is the planned cost's title (shown, never logged).
+class AutoPaid {
+  final String plannedId, txId, title;
+  const AutoPaid({required this.plannedId, required this.txId, required this.title});
+
+  Map<String, Object?> toJson() => {'p': plannedId, 't': txId, 'n': title};
+
+  /// null for a damaged entry.
+  static AutoPaid? fromJson(Object? j) => switch (j) {
+        {'p': final String p, 't': final String t, 'n': final String n} => AutoPaid(plannedId: p, txId: t, title: n),
+        _ => null,
+      };
+
+  @override
+  bool operator ==(Object other) => other is AutoPaid && other.plannedId == plannedId && other.txId == txId && other.title == title;
+
+  @override
+  int get hashCode => Object.hash(plannedId, txId, title);
+
+  @override
+  String toString() => 'AutoPaid($plannedId, $txId)';
 }
 
 /// A heads-up before a big cost: the item and the days until it (0 = today).

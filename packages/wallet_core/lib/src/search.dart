@@ -4,6 +4,7 @@ library;
 import 'bills.dart';
 import 'categories.dart' show CategoryTable;
 import 'models.dart';
+import 'rules.dart' show RuleKind, RuleView;
 import 'schema.dart';
 import 'tags.dart' show TagTable;
 
@@ -171,6 +172,10 @@ class SearchResult {
   /// Stored bills (receipts, slips), in input order.
   final List<Bill> billsDb;
 
+  /// KL-A: the merchant rules whose pattern text, payee or category label holds the query ([searchAll]'s `rules`),
+  /// in input order, at most [searchRuleLimit].
+  final List<RuleView> rules;
+
   /// Matches among the raw rows passed as [searchAll]'s `rows` (entity → matching rows, input order; see [searchRows]).
   final Map<String, List<Map<String, Object?>>> rows;
 
@@ -185,6 +190,7 @@ class SearchResult {
       this.bills = const [],
       this.planned = const [],
       this.billsDb = const [],
+      this.rules = const [],
       this.rows = const {}});
 
   static const empty = SearchResult();
@@ -196,6 +202,7 @@ class SearchResult {
       bills.isEmpty &&
       planned.isEmpty &&
       billsDb.isEmpty &&
+      rules.isEmpty &&
       rows.values.every((l) => l.isEmpty);
 }
 
@@ -261,6 +268,10 @@ List<Map<String, Object?>> searchRows(String entity, String query, Iterable<Map<
 /// payments with a live attachment, for [SearchFilter.hasAttachment]: fill it from `WalletRepoBills.attachedTxIds()`
 /// ([billsDb] never holds attachments: `bills()` leaves them out). With [table], [SearchFilter.categories] and the rows'
 /// main tags compare as their originals ([CategoryTable.duplicateOf]), so a row on a sync duplicate is found by its twin.
+///
+/// KL-A: [rules] (the Rules screen's list, `rulesView`: live rules only) match when the folded query is a substring of
+/// a rule's text (the pattern's contains text or regex source, or the payee's name), of a payee rule's key, or of its
+/// category (id, or its label through [table], else [RuleView.categoryLabel]); at most [searchRuleLimit], input order.
 SearchResult searchAll(
   String query, {
   required List<CategorizedTx> txs,
@@ -274,6 +285,7 @@ SearchResult searchAll(
   TagTable? tags,
   SearchFilter? filter,
   Set<String> attachedTx = const {},
+  List<RuleView> rules = const [],
 }) {
   final q = foldText(query.trim());
   final f = filter == null || filter.isEmpty ? null : filter;
@@ -359,6 +371,19 @@ SearchResult searchAll(
             (text(b.payee) || text(b.description) || b.items.any((i) => text(i.name)) || (b.total != null && amount(b.total!))))
           b
     ],
+    rules: q.isEmpty
+        ? const []
+        : [
+            for (final r in rules)
+              if (text(r.text) ||
+                  (r.kind == RuleKind.payee || r.kind == RuleKind.payeeTags) && text(r.id.substring(r.id.indexOf(':') + 1)) ||
+                  category(r.category) ||
+                  text(r.categoryLabel))
+                r
+          ].take(searchRuleLimit).toList(),
     rows: {for (final e in rows.entries) e.key: searchRows(e.key, query, e.value)},
   );
 }
+
+/// Most rules [searchAll] returns ([SearchResult.rules]).
+const searchRuleLimit = 50;

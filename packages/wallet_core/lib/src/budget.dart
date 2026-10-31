@@ -417,11 +417,17 @@ List<PlannedCost> duePlanned(List<PlannedCost> planned, String today, String end
 /// P15: [txs] may be the converted list (`inHomeCurrency`); then [matchRows] is the raw expanded list. Bills and incomes
 /// are matched on [matchRows] (default [txs]), so a payment in another currency never pays or lands a recurring cycle by
 /// its converted amount; the sums use [txs].
+///
+/// KL-A: [payeeAliases] (`WalletRepoBills.payeeAliases`) lets a slip spelled differently be covered by its recurring
+/// bill ([plannedCoverage]). Upcoming's "Set aside" equals [PeriodBudget.beforePayday] when it sums
+/// [PeriodBudget.reservedCycles] (`reserve`, overdue cycles included: `due` before today) and
+/// [PeriodBudget.reservedPlannedRows] (`amount`).
 PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today,
     {List<RecurringBill> bills = const [],
     List<PlannedCost> planned = const [],
     required CategoryTable table,
-    List<CategorizedTx>? matchRows}) {
+    List<CategorizedTx>? matchRows,
+    Map<String, String> payeeAliases = const {}}) {
   final raw = matchRows ?? txs;
   final incomes = [
     for (final b in bills)
@@ -476,7 +482,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final counted = {for (final c in cycles) occurrenceKey(c.bill.id, c.due)};
   final reservedRows = [
     for (final p in duePl)
-      if (plannedReserves(p, outBills, counted, table: table)) p
+      if (plannedReserves(p, outBills, counted, table: table, payeeAliases: payeeAliases)) p
   ];
   final reservedPlanned = reservedRows.fold<int>(0, (s, p) => _ok(s + p.amount!));
   // P9: only the payees of confirmed incomes; the actual landed amounts (never the expected ones).
@@ -1122,7 +1128,8 @@ List<PeriodDay> periodDays(List<CategorizedTx> txs, WalletSettings st, List<Goal
     {List<RecurringBill> bills = const [],
     List<PlannedCost> planned = const [],
     required CategoryTable table,
-    List<CategorizedTx>? matchRows}) {
+    List<CategorizedTx>? matchRows,
+    Map<String, String> payeeAliases = const {}}) {
   final start = st.periodStart ?? today;
   final end = nextPayday(start, st.paydayDay);
   final dates = <String>[];
@@ -1188,7 +1195,7 @@ List<PeriodDay> periodDays(List<CategorizedTx> txs, WalletSettings st, List<Goal
           : st.salary;
       final reservedPlanned = [
         for (final p in duePlanned(planned, d, end))
-          if (plannedReserves(p, outBills, counted, table: table)) p
+          if (plannedReserves(p, outBills, counted, table: table, payeeAliases: payeeAliases)) p
       ].fold<int>(0, (s, p) => _ok(s + p.amount!));
       final flexBudget = income - fixedPlan - goalMonthly - reservedBills - reservedPlanned + (landedSoFar < 0 ? 0 : landedSoFar);
       final spentToday = -flex[i];

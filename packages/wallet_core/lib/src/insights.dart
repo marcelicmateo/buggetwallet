@@ -353,6 +353,25 @@ List<CategorizedTx> rowsForTag(String tag, List<CategorizedTx> txs, DateRange r,
         if (t.tags.contains(tag) && r.contains(t.date) && countsAsSpending(t, currency)) t
     ]..sort(_newestFirst);
 
+/// RX8: extra tag [tag] in calendar [month] (`YYYY-MM`) against the month before and the 6-month average, shaped and
+/// rounded like [compareCategory] (average6 = the sum over the 6 months before [month], ÷ 6, `.round()`). The rows are
+/// [rowsForTag]'s: every live row in [currency] carrying the tag counts as "Where it goes" ([countsAsSpending], refunds
+/// subtracted, a split part by its own tags), so tags overlap. [today] is the caller's day (not used by the sums: a
+/// month still running counts what it holds so far, as in [compareCategory]).
+CategoryCompare compareTag(String tag, List<CategorizedTx> txs, String month, {required String today, required String currency}) {
+  final before = monthsEnding(month, 2).first;
+  final six = monthsEnding(before, 6).toSet();
+  var now = 0, last = 0, sum = 0;
+  for (final t in txs) {
+    if (!t.tags.contains(tag) || !countsAsSpending(t, currency)) continue;
+    final m = monthOf(t.date);
+    if (m == month) now -= t.amount;
+    if (m == before) last -= t.amount;
+    if (six.contains(m)) sum -= t.amount;
+  }
+  return CategoryCompare(thisMonth: now, lastMonth: last, average6: (sum / 6).round());
+}
+
 /// [tag]'s spending per calendar month overlapping [r], shaped like [spendingByMonth].
 List<MonthBar> tagTrend(String tag, List<CategorizedTx> txs, DateRange r, {required String today, required String currency}) {
   final spent = {for (final m in _monthsOf(r)) m: 0};

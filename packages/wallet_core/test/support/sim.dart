@@ -48,7 +48,7 @@ const entityTables = {
       'min_amount', 'max_amount', 'ends_on', 'manual', 'own_category', 'direction',
     ]
   ),
-  'planned': ('planned', ['title', 'date', 'amount', 'category', 'source', 'source_ref', 'status', 'paid_tx', 'deleted']),
+  'planned': ('planned', ['title', 'date', 'amount', 'category', 'source', 'source_ref', 'status', 'paid_tx', 'deleted', 'auto_off']),
   'bill': (
     'bills',
     [
@@ -66,6 +66,7 @@ const entityTables = {
   'iou': ('ious', ['person', 'direction', 'amount', 'currency', 'date', 'note', 'tx', 'closed', 'deleted']),
   'iou_part': ('iou_parts', ['iou_id', 'amount', 'date', 'tx', 'deleted']),
   'review': ('reviews', ['done', 'deleted']),
+  'payee_alias': ('payee_aliases', ['alias', 'payee', 'deleted']),
 };
 
 const dataTables = [
@@ -86,7 +87,8 @@ const dataTables = [
   'tx_splits',
   'ious',
   'iou_parts',
-  'reviews'
+  'reviews',
+  'payee_aliases'
 ];
 
 /// Every row of the data tables (and the field clocks), in a stable order, as plain maps.

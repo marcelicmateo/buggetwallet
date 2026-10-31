@@ -263,11 +263,11 @@ void main() {
       expect((b, newB), (a, false));
       final (c, newC) = repo.importBill(slip(date: '2026-03-27', due: '2026-04-10'), asNew: true);
       expect(newC, isTrue);
-      expect(c, Bill.idFor('${slip().externalId}#1'));
+      expect(c, Bill.idFor('${slip().externalId}#${repo.deviceId}-1'));
       expect(repo.bill(c)!.dueDate, '2026-04-10');
       expect(repo.bill(a)!.dueDate, '2026-03-10', reason: 'the first bill is untouched');
       final (d, _) = repo.importBill(slip(), asNew: true);
-      expect(d, Bill.idFor('${slip().externalId}#2'));
+      expect(d, Bill.idFor('${slip().externalId}#${repo.deviceId}-2'));
       expect(repo.bills(), hasLength(3));
       expect(newA, isTrue);
       // A deleted copy is the first free number again (revived as a new review bill).

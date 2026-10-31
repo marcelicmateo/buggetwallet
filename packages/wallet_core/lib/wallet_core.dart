@@ -45,10 +45,12 @@ export 'src/bills.dart'
         maxBillItemName,
         maxBillItems,
         occurrenceKey,
+        payeeAliasId,
         planBillLinks,
         plannedCoverage,
         plannedCoveredBy,
         plannedReserves,
+        resolvePayeeAlias,
         sha256Hex,
         suggestBillCategory;
 export 'src/budget.dart'
@@ -134,7 +136,7 @@ export 'src/forecast.dart'
     show BalanceWarning, BalanceWarningKind, balanceWarnings, ForecastPoint, forecastAfterAllowance, forecastToPayday;
 export 'src/fx.dart' show convertMinor, homeAmount, inHomeCurrency;
 export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
-export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, parseIcs, plannedIcs;
+export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, legacyCalendarEventRef, parseIcs, plannedIcs;
 export 'src/import_preview.dart' show ImportPreview, PreviewRow, PreviewStatus;
 export 'src/insights.dart'
     show
@@ -146,6 +148,7 @@ export 'src/insights.dart'
         categoryShare,
         CategorySlice,
         compareCategory,
+        compareTag,
         IncomeVsSpending,
         incomeVsSpending,
         MerchantTotal,
@@ -221,6 +224,7 @@ export 'src/planned.dart'
         UpcomingItem,
         UpcomingKind;
 export 'src/planned.dart' show isSafeCents, legacyRowCapCents;
+export 'src/planned.dart' show AutoPaid, planAutoPaid;
 export 'src/ranges.dart' show DateRange, RangeKind, rangeFor, rangeLabel, shiftRange;
 export 'src/recurring.dart' show recurringCost;
 export 'src/recurring.dart' show detectRecurring, medianCents, partsDays, partsThreshold, planRecurringPayments, RecurringPayments;
@@ -250,7 +254,8 @@ export 'src/reports.dart'
 export 'src/rules.dart' show PayeeCount, RuleSuggestion, ruleSuggestionFor, ruleSuggestions, uncategorisedPayees;
 export 'src/rules.dart' show merchantPatternId, MerchantPattern, MerchantRule, MoveDirection, RuleKind, ruleHits, rulesView, RuleView;
 export 'src/search.dart' show matchSpans, SearchFilter;
-export 'src/search.dart' show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchTxLimit;
+export 'src/search.dart'
+    show foldText, parseAmountQuery, searchableColumns, searchAll, SearchResult, searchRows, searchRuleLimit, searchTxLimit;
 export 'src/splits.dart' show decodeSplitParts, encodeSplitParts, SplitPart, splitFits;
 export 'src/suggest.dart' show PlanSuggestion, planProposals, SettingProposal, Suggested, suggestPlan;
 export 'src/sync_conflicts.dart' show SyncConflict;
