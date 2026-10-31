@@ -3,7 +3,6 @@
 import 'dart:convert';
 
 import 'package:budget_wallet/src/controller.dart';
-import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/sync_panel.dart';
 import 'package:budget_wallet/src/sync_status.dart';
 import 'package:flutter/material.dart';
@@ -46,7 +45,7 @@ String get _rowKey => 'blocked:$_short-3';
 String get _skipKey => 'skipBlocked:$_short-3';
 
 SyncReport _report() =>
-    SyncReport(0, 0, 0, caughtUp: true, problems: const [SyncProblem('devabcde', SyncProblemReason.corrupt, bytes: 10, isNew: true)]);
+    const SyncReport(0, 0, 0, caughtUp: true, problems: [SyncProblem('devabcde', SyncProblemReason.corrupt, bytes: 10, isNew: true)]);
 
 void main() {
   late List<String> lines;
@@ -148,7 +147,7 @@ void main() {
       var runs = 0;
       wc.seams.syncRunner = (r, k, repo) async {
         runs++;
-        return SyncReport(0, 0, 0, caughtUp: true);
+        return const SyncReport(0, 0, 0, caughtUp: true);
       };
       await _pump(t, wc);
 
