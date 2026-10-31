@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import '../chart_window.dart';
 import '../format.dart';
 import '../insights_api.dart';
 import '../layout.dart';
 import '../theme.dart';
+import 'chart_viewport.dart' show ChartViewport, ZoomButtons;
 import 'common.dart';
-import 'insight_charts.dart' show Legend, LegendItem;
+import 'insight_charts.dart' show ChartTip, Legend, LegendItem;
 
 /// [logical] dp rounded to a whole number of device pixels (at least one), so a line or bar edge covers whole pixels and does
 /// not blur or look grainy at 1.25 or 1.5 device pixels per dp.
@@ -26,6 +28,7 @@ BorderRadius dataEndRadius(bool positive, double radius) =>
 
 /// The balance from today to payday as steps (Q11): it stays flat until a bill or income lands, then jumps. [points] are core's
 /// forecast points; the line runs on to [payday]. Strokes snap to whole device pixels and are opaque, like the other charts.
+/// You can drag and zoom it like the other time graphs (ZC), between today and payday and down to 7 days; Reset shows it all.
 class ForecastStepChart extends StatelessWidget {
   final List<ForecastPoint> points;
   final String payday;
@@ -36,16 +39,41 @@ class ForecastStepChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final first = points.first.date;
+    final whole = DateRange(start: first, end: payday.compareTo(first) < 0 ? first : payday);
+    final lo = epochDay(whole.start), hi = epochDay(whole.end);
+    return ChartViewport(
+      key: ValueKey('forecastViewport|$first|$payday'),
+      id: 'forecast',
+      initial: whole,
+      edges: (_) => ChartEdges(earliest: lo, latest: hi),
+      datesText: rangeLabel,
+      chart: (context, w, _) => _chart(context, w),
+    );
+  }
+
+  Widget _chart(BuildContext context, DateRange w) {
     final c = context.c;
     final dpr = MediaQuery.devicePixelRatioOf(context);
     double px(double logical) => snapPx(logical, dpr);
-    final first = points.first.date;
-    double x(String d) => daysBetween(first, d).toDouble();
-    final end = x(payday).clamp(1, 1000).toDouble();
-    final spots = [
-      for (final p in points) FlSpot(x(p.date).clamp(0, end).toDouble(), p.cents / 100),
-      FlSpot(end, points.last.cents / 100),
-    ];
+    // The step line inside the window: the balance in force on its first day, then every point that lands in it, then flat to its end.
+    final dates = <String>[], cents = <int>[];
+    var start = points.first.cents;
+    for (final p in points) {
+      if (p.date.compareTo(w.start) <= 0) start = p.cents;
+    }
+    dates.add(w.start);
+    cents.add(start);
+    for (final p in points) {
+      if (p.date.compareTo(w.start) > 0 && p.date.compareTo(w.end) <= 0) {
+        dates.add(p.date);
+        cents.add(p.cents);
+      }
+    }
+    final end = daysBetween(w.start, w.end).clamp(1, 100000).toDouble();
+    dates.add(w.end);
+    cents.add(cents.last);
+    final spots = [for (var i = 0; i < dates.length; i++) FlSpot(daysBetween(w.start, dates[i]).clamp(0, end).toDouble(), cents[i] / 100)];
     final ys = [for (final s in spots) s.y];
     var maxY = ys.reduce((a, b) => a > b ? a : b);
     var minY = ys.reduce((a, b) => a < b ? a : b);
@@ -56,9 +84,6 @@ class ForecastStepChart extends StatelessWidget {
     if (minY < 0) minY -= pad;
     const hidden = AxisTitles(sideTitles: SideTitles(showTitles: false));
     final line = solidOver(c.ink.withValues(alpha: 0.8), c.bg);
-    // Spot i is point i; the last spot is the flat run on to payday.
-    String dateOf(int i) => i < points.length ? points[i].date : payday;
-    int centsOf(int i) => i < points.length ? points[i].cents : points.last.cents;
     final low = points.reduce((a, b) => b.cents < a.cents ? b : a);
     final spoken = 'Balance until payday. Starts at ${moneyExact(points.first.cents, currency)} on ${shortDateOrRaw(points.first.date)}, '
         'lowest ${moneyExact(low.cents, currency)} on ${shortDateOrRaw(low.date)}, '
@@ -70,52 +95,51 @@ class ForecastStepChart extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SizedBox(
             height: _height,
-            child: LineChart(LineChartData(
-              minX: 0,
-              maxX: end,
-              minY: minY,
-              maxY: maxY,
-              borderData: FlBorderData(show: false),
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                getDrawingHorizontalLine: (v) => FlLine(color: v == 0 ? c.lineStrong : c.line, strokeWidth: px(1)),
-              ),
-              titlesData: const FlTitlesData(leftTitles: hidden, rightTitles: hidden, topTitles: hidden, bottomTitles: hidden),
-              lineTouchData: LineTouchData(
-                touchTooltipData: LineTouchTooltipData(
-                  getTooltipColor: (_) => c.ink,
-                  tooltipBorderRadius: BorderRadius.circular(2),
-                  fitInsideHorizontally: true,
-                  fitInsideVertically: true,
-                  getTooltipItems: (touched) => [
-                    for (final t in touched)
-                      LineTooltipItem(
-                        '${shortDateOrRaw(dateOf(t.spotIndex))}\n${moneyExact(centsOf(t.spotIndex), currency)}',
-                        numStyle.copyWith(fontSize: BwType.metaSize, color: c.bg),
-                      ),
-                  ],
+            child: ChartTip(
+              // The balance in force on the day under the pointer.
+              tipAt: (f) {
+                final day = (f * end).round().clamp(0, end.round());
+                final date = addDays(w.start, day);
+                var i = 0;
+                while (i + 1 < dates.length - 1 && dates[i + 1].compareTo(date) <= 0) {
+                  i++;
+                }
+                return '${shortDateOrRaw(date)}\n${moneyExact(cents[i], currency)}';
+              },
+              child: LineChart(LineChartData(
+                minX: 0,
+                maxX: end,
+                minY: minY,
+                maxY: maxY,
+                borderData: FlBorderData(show: false),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (v) => FlLine(color: v == 0 ? c.lineStrong : c.line, strokeWidth: px(1)),
                 ),
-              ),
-              lineBarsData: [
-                LineChartBarData(
-                  spots: spots,
-                  isStepLineChart: true,
-                  lineChartStepData: const LineChartStepData(stepDirection: LineChartStepData.stepDirectionForward),
-                  isCurved: false,
-                  color: line,
-                  barWidth: px(2),
-                  dotData: FlDotData(
-                    getDotPainter: (s, p, b, i) => FlDotCirclePainter(radius: px(4), color: line, strokeWidth: px(2), strokeColor: c.bg),
+                titlesData: const FlTitlesData(leftTitles: hidden, rightTitles: hidden, topTitles: hidden, bottomTitles: hidden),
+                lineTouchData: const LineTouchData(enabled: false), // our own touch layer (ChartTip)
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    isStepLineChart: true,
+                    lineChartStepData: const LineChartStepData(stepDirection: LineChartStepData.stepDirectionForward),
+                    isCurved: false,
+                    color: line,
+                    barWidth: px(2),
+                    dotData: FlDotData(
+                      getDotPainter: (s, p, b, i) => FlDotCirclePainter(radius: px(4), color: line, strokeWidth: px(2), strokeColor: c.bg),
+                    ),
                   ),
-                ),
-              ],
-            )),
+                ],
+              )),
+            ),
           ),
           const SizedBox(height: 4),
           SplitRow(
-              start: Text('Today', style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
-              end: Text('${shortDateOrRaw(payday)} · ${moneyExact(points.last.cents, currency)}',
+              start: Text(w.start == points.first.date ? 'Today' : shortDateOrRaw(w.start),
+                  style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
+              end: Text('${shortDateOrRaw(w.end)} · ${moneyExact(cents.last, currency)}',
                   key: const ValueKey('forecastEndLabel'),
                   textAlign: TextAlign.end,
                   style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.ink2))),
@@ -738,7 +762,11 @@ Future<DateTimeRange?> systemRangePicker(BuildContext context, DateTimeRange ini
 class RangeControl extends StatelessWidget {
   final InsightRange model;
   final RangePicker picker;
-  const RangeControl({super.key, required this.model, this.picker = systemRangePicker});
+
+  /// A list graph (share, tags, biggest): a swipe on the dates moves the range, and − / + / Reset make it shorter / longer / the chip's
+  /// again (ZC). Time graphs have their own buttons under the bars.
+  final bool zoom;
+  const RangeControl({super.key, required this.model, this.picker = systemRangePicker, this.zoom = false});
 
   Future<void> _pick(BuildContext context) async {
     final now = model.wc.now;
@@ -780,45 +808,66 @@ class RangeControl extends StatelessWidget {
               ChoiceChip(
                   key: ValueKey('rangeChip_${id}_${k.name}'),
                   label: Text(rangeKindLabel(k)),
-                  selected: model.kind == k,
+                  selected: !model.isFree && model.kind == k,
                   onSelected: (_) => model.select(k)),
           ]),
           Focus(
             canRequestFocus: false,
             onKeyEvent: _key,
-            child: Row(children: [
-              IconButton(
-                  key: ValueKey('rangeBack_$id'),
-                  tooltip: 'Earlier',
-                  constraints: const BoxConstraints(minWidth: touchMin, minHeight: touchMin),
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: () => model.step(-1)),
-              Expanded(
-                child: Semantics(
-                  button: true,
-                  label: 'Dates $text. Opens the date picker.',
-                  excludeSemantics: true,
-                  onTap: () => _pick(context),
-                  child: TextButton(
-                    key: ValueKey('rangeLabel_$id'),
-                    style: TextButton.styleFrom(minimumSize: const Size(0, touchMin), foregroundColor: c.ink),
-                    onPressed: () => _pick(context),
-                    child: Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
-                      Flexible(child: Text(text, textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: BwType.bodySize))),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.calendar_today_outlined, size: 16),
-                    ]),
+            child: GestureDetector(
+              key: ValueKey('rangeSwipe_$id'),
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragEnd: !zoom
+                  ? null
+                  : (d) {
+                      final v = d.primaryVelocity ?? 0;
+                      if (v < -150 && model.canForward) model.step(1);
+                      if (v > 150) model.step(-1);
+                    },
+              child: Row(children: [
+                IconButton(
+                    key: ValueKey('rangeBack_$id'),
+                    tooltip: 'Earlier',
+                    constraints: const BoxConstraints(minWidth: touchMin, minHeight: touchMin),
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: () => model.step(-1)),
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    label: 'Dates $text. Opens the date picker.',
+                    excludeSemantics: true,
+                    onTap: () => _pick(context),
+                    child: TextButton(
+                      key: ValueKey('rangeLabel_$id'),
+                      style: TextButton.styleFrom(minimumSize: const Size(0, touchMin), foregroundColor: c.ink),
+                      onPressed: () => _pick(context),
+                      child: Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+                        Flexible(child: Text(text, textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: BwType.bodySize))),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.calendar_today_outlined, size: 16),
+                      ]),
+                    ),
                   ),
                 ),
-              ),
-              IconButton(
-                  key: ValueKey('rangeForward_$id'),
-                  tooltip: 'Later',
-                  constraints: const BoxConstraints(minWidth: touchMin, minHeight: touchMin),
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: model.canForward ? () => model.step(1) : null),
-            ]),
+                IconButton(
+                    key: ValueKey('rangeForward_$id'),
+                    tooltip: 'Later',
+                    constraints: const BoxConstraints(minWidth: touchMin, minHeight: touchMin),
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: model.canForward ? () => model.step(1) : null),
+              ]),
+            ),
           ),
+          if (zoom)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ZoomButtons(
+                id: id,
+                onIn: ChartEdges.canZoomIn(range) ? () => model.zoom(2) : null,
+                onOut: model.edges().zoom(range, 0.5) != range ? () => model.zoom(0.5) : null,
+                onReset: model.isFree ? model.reset : null,
+              ),
+            ),
           if (err != null)
             Padding(
               key: ValueKey('rangeError_$id'),

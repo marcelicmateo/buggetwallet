@@ -5,7 +5,11 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
+import '../insights_api.dart';
+import '../logging.dart';
+import '../screens/bucket_payments.dart';
 import '../theme.dart';
+import 'chart_viewport.dart';
 import 'common.dart';
 import 'dash.dart';
 import 'insight_charts.dart';
@@ -78,84 +82,83 @@ ComparePart compareParts(CategoryCompare cmp, {required String month, required D
       monthIsHero: single);
 }
 
-String _monthNote(MonthBar b, String nowMonth) => !b.partial ? '' : (b.month == nowMonth ? ' · so far' : ' · part of the month');
-
-/// The exact amount of each month ([rowKey] names a row), the figures the bars cannot give to the cent. A tile of its own for a page
-/// with room beside the chart; [MonthBarsTile] with `rows: true` holds the same rows under the bars.
-class MonthRowsTile extends StatelessWidget {
-  final String currency, nowMonth;
-  final List<MonthBar> bars;
-  final Key Function(String month) rowKey;
-  const MonthRowsTile({super.key, required this.currency, required this.nowMonth, required this.bars, required this.rowKey});
-
-  @override
-  Widget build(BuildContext context) => Tile(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-          const TileLabel('Months'),
-          const SizedBox(height: 4),
-          _MonthRows(currency: currency, nowMonth: nowMonth, bars: bars, rowKey: rowKey),
-        ]),
-      );
-}
-
-class _MonthRows extends StatelessWidget {
-  final String currency, nowMonth;
-  final List<MonthBar> bars;
-  final Key Function(String month) rowKey;
-  const _MonthRows({required this.currency, required this.nowMonth, required this.bars, required this.rowKey});
-
-  @override
-  Widget build(BuildContext context) => DashRows(rows: [
-        for (final b in bars)
-          DashRowData(
-              key: rowKey(b.month), title: '${monthLong(b.month)}${_monthNote(b, nowMonth)}', amount: moneyExact(b.spent, currency)),
-      ]);
-}
-
-/// The spending per month as bars; with [rows] the exact amount of each month under them (otherwise a [MonthRowsTile] shows them).
-class MonthBarsTile extends StatelessWidget {
-  final String label, currency, nowMonth;
-  final List<MonthBar> bars;
+/// The spending of a category, merchant or tag over time as bars you can drag and zoom (ZC), with the exact amount of each bar under
+/// them. The window starts as the page's [range] (Reset goes back to it); drag, pinch and the buttons change it. [bars] reads the day
+/// index, [payments] gives the payments behind one bar (a tap on it or its row). While the window is still the page's single month, its
+/// one figure is the hero's, so the rows are left out ([hideRows]).
+class SeriesBarsTile extends StatelessWidget {
+  final WalletController wc;
+  final String id, label;
+  final DateRange range;
+  final List<SeriesBar> Function(DateRange window, Bucket bucket) bars;
+  final List<CategorizedTx> Function(DateRange span) payments;
   final Key barsKey;
-  final Key Function(String month) rowKey;
-  final bool rows;
-  const MonthBarsTile({
+  final Key Function(String rowId) rowKey;
+  final bool hideRows;
+  const SeriesBarsTile({
     super.key,
+    required this.wc,
+    required this.id,
     required this.label,
-    required this.currency,
-    required this.nowMonth,
+    required this.range,
     required this.bars,
+    required this.payments,
     required this.barsKey,
     required this.rowKey,
-    this.rows = true,
+    this.hideRows = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    String note(MonthBar b) => _monthNote(b, nowMonth);
+    final cur = wc.currency, today = wc.today();
+    String name(SeriesBar x) => barName(x.span, x.bucket, x.partial, today);
+    void open(SeriesBar x) {
+      logNav('detail.bar', {'graph': id, 'bucket': x.bucket.name});
+      openBucketPayments(context, wc, title: barName(x.span, x.bucket, false, today), rows: () => payments(x.span));
+    }
+
     return Tile(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-        const TileLabel('Per month'),
+        const TileLabel('Over time'),
         const SizedBox(height: 8),
-        MonthlyBars(
-          key: barsKey,
-          label: label,
-          groups: [
-            for (final b in bars)
-              BarGroup(
-                month: b.month,
-                partial: b.partial,
-                rods: [BarRod(b.spent, c.chartPos)],
-                tip: '${monthLong(b.month)}${note(b)}\n${moneyExact(b.spent, currency)}',
-                spoken: '${monthLong(b.month)}${note(b)}: ${moneyExact(b.spent, currency)}',
-              ),
-          ],
+        ChartViewport(
+          id: id,
+          initial: range,
+          edges: wc.chartEdges,
+          datesText: rangeLabel,
+          chart: (context, w, b) {
+            final list = bars(w, b);
+            return SeriesBars(
+              key: barsKey,
+              label: label,
+              groups: [
+                for (var i = 0; i < list.length; i++)
+                  BarGroup(
+                    start: list[i].span.start,
+                    axis: barAxisText(list[i].span, b, firstOfAll: i == 0),
+                    partial: list[i].partial,
+                    rods: [BarRod(list[i].spent, c.chartPos)],
+                    tip: '${name(list[i])}\n${moneyExact(list[i].spent, cur)}',
+                    spoken: '${name(list[i])}: ${moneyExact(list[i].spent, cur)}',
+                  ),
+              ],
+              onOpen: (i) => open(list[i]),
+            );
+          },
+          legend: (context, w, b) =>
+              bars(w, b).any((x) => x.partial) ? Legend([LegendItem(c.chartPos, barFadedText(b), dashed: true)]) : const SizedBox.shrink(),
+          rows: (context, w, b) {
+            if (hideRows && w == range) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: DashRows(rows: [
+                for (final x in bars(w, b))
+                  DashRowData(key: rowKey(barRowId(x.span, b)), title: name(x), amount: moneyExact(x.spent, cur), onTap: () => open(x)),
+              ]),
+            );
+          },
         ),
-        if (rows) ...[
-          const SizedBox(height: 8),
-          _MonthRows(currency: currency, nowMonth: nowMonth, bars: bars, rowKey: rowKey),
-        ],
       ]),
     );
   }

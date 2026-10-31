@@ -21,22 +21,136 @@ class BarRod {
   const BarRod(this.cents, this.color, {this.overCents = 0});
 }
 
-/// A month: one to three rods side by side. A [partial] month (not complete yet, or cut by the range) is drawn faded with a
-/// dashed outline. [tip] is the tooltip, [spoken] what a screen reader says for it.
+/// Touch layer of a time graph: the text [tipAt] gives for the place under a mouse pointer or a long press (a fraction of the width,
+/// 0..1) floats at the top, and a tap calls [onTapAt]. fl_chart's own touch handling is off for these graphs: its pan recognizer wins
+/// the drag from the viewport.
+class ChartTip extends StatefulWidget {
+  final Widget child;
+  final String? Function(double fraction) tipAt;
+  final ValueChanged<double>? onTapAt;
+  const ChartTip({super.key, required this.child, required this.tipAt, this.onTapAt});
+  @override
+  State<ChartTip> createState() => _ChartTipState();
+}
+
+class _ChartTipState extends State<ChartTip> {
+  double? _at;
+
+  void _set(Offset p, double w) {
+    final f = (p.dx / math.max(1, w)).clamp(0.0, 1.0);
+    if (_at != f) setState(() => _at = f);
+  }
+
+  void _clear() {
+    if (_at != null) setState(() => _at = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return LayoutBuilder(builder: (context, box) {
+      final w = box.maxWidth;
+      final f = _at;
+      final tip = f == null ? null : widget.tipAt(f);
+      return Stack(children: [
+        MouseRegion(
+          onHover: (e) => _set(e.localPosition, w),
+          onExit: (_) => _clear(),
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onLongPressStart: (d) => _set(d.localPosition, w),
+            onLongPressMoveUpdate: (d) => _set(d.localPosition, w),
+            onLongPressEnd: (_) => _clear(),
+            onTapUp: widget.onTapAt == null ? null : (d) => widget.onTapAt!((d.localPosition.dx / math.max(1, w)).clamp(0.0, 1.0)),
+            child: widget.child,
+          ),
+        ),
+        if (tip != null && f != null)
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: IgnorePointer(
+              child: Align(
+                alignment: Alignment(f * 2 - 1, -1),
+                child: Container(
+                  key: const ValueKey('chartTip'),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: c.ink, borderRadius: BorderRadius.circular(2)),
+                  child: Text(tip, style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.bg)),
+                ),
+              ),
+            ),
+          ),
+      ]);
+    });
+  }
+}
+
+/// One bar of a time graph (a day, week, month or quarter): one to three rods side by side. A [partial] bar (not complete yet, or
+/// cut by the window) is drawn faded with a dashed outline. [axis] is the text under it (one or two lines), [start] the first day
+/// it covers, [tip] the tooltip, [spoken] what a screen reader says for it.
 class BarGroup {
-  final String month; // YYYY-MM
+  final String start; // YYYY-MM-DD
+  final String axis;
   final List<BarRod> rods;
   final bool partial;
   final String tip, spoken;
-  const BarGroup({required this.month, required this.rods, required this.partial, required this.tip, required this.spoken});
+  const BarGroup(
+      {required this.start, required this.axis, required this.rods, required this.partial, required this.tip, required this.spoken});
 }
 
-/// Grouped bars per month with a zero line. [label] is what a screen reader says first; each group's [BarGroup.spoken] follows,
-/// so the amounts are all heard. The exact amounts also sit in a list under the graph.
-class MonthlyBars extends StatelessWidget {
+/// The axis text under a bar of [span]: the month and year of a month, `Q4` and the year of a quarter, the day (and the month
+/// under the first one of a month) of a day, the first day and month of a week.
+String barAxisText(DateRange span, Bucket b, {bool firstOfAll = false}) {
+  final m = monthOf(span.start), d = dayOf(span.start);
+  return switch (b) {
+    Bucket.month => '${monthShort(m)}\n${m.substring(2, 4)}',
+    Bucket.quarter => bucketLabel(span, b).replaceFirst(' ', '\n'),
+    Bucket.week => '$d\n${monthShort(m)}',
+    Bucket.day => d == 1 || firstOfAll ? '$d\n${monthShort(m)}' : '$d',
+  };
+}
+
+/// A bar's name in the rows and the tooltip: "October 2026", "Q4 2026", "6–12 Oct", "20 Oct", with "· so far" when it holds [today] and
+/// what makes it partial otherwise (not a whole week, part of the month).
+String barName(DateRange span, Bucket b, bool partial, String today) {
+  final base = switch (b) {
+    Bucket.month => monthLong(monthOf(span.start)),
+    Bucket.quarter => 'Q${(int.parse(span.start.substring(5, 7)) - 1) ~/ 3 + 1} ${span.start.substring(0, 4)}',
+    Bucket.week => bucketLabel(span, b),
+    Bucket.day => shortDateOrRaw(span.start),
+  };
+  if (!partial) return base;
+  if (span.contains(today)) return '$base · so far';
+  final note = switch (b) {
+    Bucket.day => null,
+    Bucket.week => 'not a whole week',
+    Bucket.month => 'part of the month',
+    Bucket.quarter => 'part of the quarter',
+  };
+  return note == null ? base : '$base · $note';
+}
+
+/// The legend words for a faded bar.
+String barFadedText(Bucket b) => switch (b) {
+      Bucket.day => 'Faded: today, not over yet',
+      Bucket.week => 'Faded: not a whole week',
+      Bucket.month => 'Faded: not a whole month',
+      Bucket.quarter => 'Faded: not a whole quarter',
+    };
+
+/// The key part of a bar's row: the month (`2026-10`) for a month bar, else the first day.
+String barRowId(DateRange span, Bucket b) => b == Bucket.month ? monthOf(span.start) : span.start;
+
+/// Grouped bars over time with a zero line, any bar size ([Bucket]). [label] is what a screen reader says first; each group's
+/// [BarGroup.spoken] follows, so the amounts are all heard. The exact amounts also sit in a list under the graph. [onOpen] is a tap on
+/// a bar (its index).
+class SeriesBars extends StatelessWidget {
   final List<BarGroup> groups;
   final String label;
-  const MonthlyBars({super.key, required this.groups, required this.label});
+  final ValueChanged<int>? onOpen;
+  const SeriesBars({super.key, required this.groups, required this.label, this.onOpen});
 
   static const _height = 200.0, _labels = 34.0;
 
@@ -65,9 +179,10 @@ class MonthlyBars extends StatelessWidget {
             final perRod = groups.isEmpty ? 1 : groups.map((g) => g.rods.length).reduce(math.max);
             final slot = w / math.max(1, n);
             final rodW = px(((slot * 0.72 - (perRod - 1) * 2) / perRod).clamp(2.0, 18.0));
-            // Month names every few bars when they would touch.
-            final every = math.max(1, (n / math.max(1, (w / 40).floor())).ceil());
-            return BarChart(
+            // The text under a bar every few bars when they would touch.
+            final longest = groups.fold<int>(1, (m, g) => math.max(m, g.axis.split('\n').map((l) => l.length).reduce(math.max)));
+            final every = math.max(1, (n / math.max(1, (w / (longest * 7.0 + 10)).floor())).ceil());
+            final chart = BarChart(
               BarChartData(
                 maxY: maxY,
                 minY: minY,
@@ -89,10 +204,9 @@ class MonthlyBars extends StatelessWidget {
                       getTitlesWidget: (value, meta) {
                         final i = value.toInt();
                         if (i < 0 || i >= n || i % every != 0) return const SizedBox.shrink();
-                        final m = groups[i].month;
                         return Padding(
                           padding: const EdgeInsets.only(top: 3),
-                          child: Text('${monthShort(m)}\n${m.substring(2, 4)}',
+                          child: Text(groups[i].axis,
                               textAlign: TextAlign.center,
                               style: numStyle.copyWith(fontSize: BwType.metaSize, height: 1.15, color: c.muted)),
                         );
@@ -100,16 +214,8 @@ class MonthlyBars extends StatelessWidget {
                     ),
                   ),
                 ),
-                barTouchData: BarTouchData(
-                  touchTooltipData: BarTouchTooltipData(
-                    getTooltipColor: (_) => c.ink,
-                    tooltipBorderRadius: BorderRadius.circular(2),
-                    fitInsideHorizontally: true,
-                    fitInsideVertically: true,
-                    getTooltipItem: (group, gi, rod, ri) =>
-                        ri == 0 ? BarTooltipItem(groups[group.x].tip, numStyle.copyWith(fontSize: BwType.metaSize, color: c.bg)) : null,
-                  ),
-                ),
+                barTouchData:
+                    const BarTouchData(enabled: false), // our own touch layer: fl_chart's pan would take the drag from the viewport
                 barGroups: [
                   for (var i = 0; i < n; i++)
                     BarChartGroupData(x: i, barsSpace: px(2), barRods: [
@@ -117,6 +223,12 @@ class MonthlyBars extends StatelessWidget {
                     ]),
                 ],
               ),
+            );
+            if (n == 0) return chart;
+            return ChartTip(
+              tipAt: (f) => groups[(f * n).floor().clamp(0, n - 1)].tip,
+              onTapAt: onOpen == null ? null : (f) => onOpen!((f * n).floor().clamp(0, n - 1)),
+              child: chart,
             );
           }),
         ),

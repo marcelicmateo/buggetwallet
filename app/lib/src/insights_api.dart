@@ -4,6 +4,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'chart_window.dart';
 import 'controller.dart';
 import 'memo_key.dart';
 
@@ -42,6 +43,9 @@ class InsightRange extends ChangeNotifier {
   DateRange? _range;
   String? _stamp;
 
+  /// The window after a drag, a pinch or a zoom button (ZC): while set, no chip is ticked. Not remembered, like the offset.
+  DateRange? _free;
+
   InsightRange(this.wc, this.id) : kind = defaultKindFor(id) {
     final saved = wc.repo.localValue('insightRange:$id');
     if (saved == null) return;
@@ -63,6 +67,8 @@ class InsightRange extends ChangeNotifier {
 
   /// The range to draw now. Worked out again when the data or the day changed.
   DateRange get range {
+    final free = _free;
+    if (free != null) return free;
     final stamp = '${wc.dataVersion}|${wc.today()}';
     final cached = _range;
     if (cached != null && _stamp == stamp) return cached;
@@ -81,8 +87,16 @@ class InsightRange extends ChangeNotifier {
     }
   }
 
+  /// A window made by a gesture or the zoom buttons (no chip is ticked).
+  bool get isFree => _free != null;
+
+  /// Where a window of this graph may go (first data day, today).
+  ChartEdges edges([DateRange? w]) => wc.chartEdges(w ?? range);
+
   /// Whether a step forward is possible (never past the current range).
   bool get canForward {
+    final free = _free;
+    if (free != null) return free.end.compareTo(wc.today()) < 0;
     if (kind != RangeKind.custom) return offset < 0;
     try {
       wc.shiftedRange(range, kind, 1);
@@ -100,6 +114,7 @@ class InsightRange extends ChangeNotifier {
   /// Picks a kind (the current period of that kind). A custom range without dates yet keeps the shown range's dates.
   void select(RangeKind k) {
     final shown = range;
+    _free = null;
     if (k == RangeKind.custom) {
       _from = shown.start;
       // A pay period can run into next month; a custom range may not go past the end of this month.
@@ -121,6 +136,12 @@ class InsightRange extends ChangeNotifier {
   /// One range back (-1) or forward (+1) of the same kind.
   void step(int by) {
     if (by == 0) return;
+    final free = _free;
+    if (free != null) {
+      final next = edges(free).pan(free, by * free.days);
+      if (next != free) setWindow(next);
+      return;
+    }
     try {
       if (kind == RangeKind.custom) {
         final next = wc.shiftedRange(range, kind, by);
@@ -149,10 +170,29 @@ class InsightRange extends ChangeNotifier {
       return;
     }
     kind = RangeKind.custom;
+    _free = null;
     offset = 0;
     _from = from;
     _to = to;
     _afterChange('custom');
+  }
+
+  /// A window the owner dragged, pinched or zoomed to (ZC). The kind stays remembered; the window does not. The viewport logs the view.
+  void setWindow(DateRange w) {
+    if (_free == w) return;
+    _free = w;
+    error = null;
+    _range = null;
+    notifyListeners();
+  }
+
+  /// Zooms the shown window by [factor] (above 1 = shorter); lists use this for their − / + buttons.
+  void zoom(double factor) => setWindow(edges().zoom(range, factor));
+
+  /// The chip's range again (Reset).
+  void reset() {
+    _free = null;
+    _afterChange('reset');
   }
 
   void _afterChange(String how) {
@@ -178,6 +218,54 @@ extension WalletInsights on WalletController {
 
   /// [r] moved by [steps] ranges of [kind]; [ArgumentError] when core refuses the result.
   DateRange shiftedRange(DateRange r, RangeKind kind, int steps) => shiftRange(r, kind, steps, settings, txs: txs, today: today());
+
+  /// The per-day index of this data version (ZC): every graph window and bar size reads sums from it.
+  DayIndex get dayIndex => memo(
+      const MemoKey('ins.dayIndex'),
+      () => timed('insights.dayIndex', () => DayIndex(txs, currency: currency, table: categoryTable),
+          fields: {'tx': txs.length}, warnMs: 50));
+
+  /// Where a window may go: from the first day with data (at most 5 years back) to today.
+  ChartEdges chartEdges(DateRange w) => ChartEdges.forWindow(w, first: dayIndex.first, today: today());
+
+  /// Spending per bar of [w] (a window of at most 5 years), read from the day index; no memo, a drag frame asks for it.
+  List<SeriesBar> spendingSeriesFor(DateRange w, Bucket b, {String? category, String? tag, String? merchantKey}) =>
+      spendingSeries(dayIndex, w, b, today: today(), category: category, tag: tag, merchantKey: merchantKey);
+
+  List<IncomeSpendingBar> incomeSeriesFor(DateRange w, Bucket b) => incomeSeries(dayIndex, w, b, today: today());
+
+  /// Budget and actual per bar. Month and quarter bars use whole calendar months (owner 2026-10-20): the window grows to them.
+  List<BudgetBar> budgetSeriesFor(DateRange w, Bucket b) {
+    var win = w;
+    if (b == Bucket.month || b == Bucket.quarter) {
+      try {
+        win = DateRange(start: '${monthOf(w.start)}-01', end: monthRange(monthOf(w.end)).end);
+      } on ArgumentError {
+        win = w;
+      }
+    }
+    try {
+      return budgetSeries(dayIndex, win, b, categoryBudgets, today: today(), table: categoryTable);
+    } on ArgumentError {
+      return budgetSeries(dayIndex, w, b, categoryBudgets, today: today(), table: categoryTable);
+    }
+  }
+
+  /// The payments behind a bar of [span], newest first: spending rows (refunds too, so they add up to the bar) and, with [income],
+  /// the income rows.
+  List<CategorizedTx> paymentsIn(DateRange span, {bool income = false}) => memo(
+      _k('payments', span, income),
+      () => [
+            for (final t in txs)
+              // The day index's rules (core's `countsAsSpending`, which wallet_core does not export): live, home currency, fixed or flex.
+              if (span.contains(t.date) &&
+                  t.tx.live &&
+                  t.tx.currency == currency &&
+                  (t.kind == BudgetKind.fixed ||
+                      t.kind == BudgetKind.flex ||
+                      (income && (t.kind == BudgetKind.income || t.kind == BudgetKind.extra))))
+                t
+          ]);
 
   MemoKey _k(String what, DateRange r, [Object? extra]) => MemoKey('ins.$what', (r.start, r.end, extra));
 

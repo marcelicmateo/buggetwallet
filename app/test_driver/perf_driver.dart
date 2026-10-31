@@ -25,6 +25,9 @@ const _scroll = _baseline;
 /// Insights: open, six range switches over ~20k rows, a scroll through five graphs, close. About 92-94 frames were measured.
 const _insights = PerfBudget(minFrames: 50);
 
+/// Insights pan and pinch (ZC): drags and pinches of the spending graph over ~20k rows. The same budget as the other chart actions.
+const _insightsPan = PerfBudget(minFrames: 50);
+
 /// First visit of every tab after the data changed (what the idle warm-up should make cheap). Few frames: one per tab and a fade.
 const _firstSwitch = PerfBudget(minFrames: 20);
 
@@ -38,6 +41,7 @@ const budgets = <String, PerfBudget>{
   'spending_scroll': _scroll,
   'tab_switch': _baseline,
   'insights': _insights,
+  'insights_pan': _insightsPan,
   'first_switch': _firstSwitch,
   'early_switch': _earlySwitch,
 };

@@ -11,7 +11,6 @@ import 'package:budget_wallet/src/screens/tag_detail.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/common.dart' show TxTile;
 import 'package:budget_wallet/src/widgets/dash.dart';
-import 'package:budget_wallet/src/widgets/detail_tiles.dart' show MonthRowsTile;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -188,10 +187,9 @@ void main() {
       expect(_k('tagDetailBars'), findsOneWidget);
       // One month: its one figure is the hero's, so the months list is left out (the bars stay).
       expect(wc.tagBars(tag, r), hasLength(1));
-      for (final b in wc.tagBars(tag, r)) {
-        expect(_k('tagDetailRow_${b.month}'), findsNothing);
+      for (final b in wc.spendingSeriesFor(r, bucketFor(r), tag: tag)) {
+        expect(_k('tagDetailRow_${b.span.start}'), findsNothing);
       }
-      expect(find.byType(MonthRowsTile), findsNothing);
       // The hero label does not repeat the title.
       expect(find.descendant(of: find.byType(AppBar), matching: find.text('#${wc.tagTable.label(tag)}')), findsOneWidget);
       expect(find.text('TOTAL'), findsOneWidget, reason: 'the hero says Total, not the title again');
@@ -209,10 +207,13 @@ void main() {
       expect(heroIs('tagDetailTotal', moneyExact(29000 + 29544, 'EUR')), findsOneWidget);
       expect(inTile('compareThis', moneyExact(cmp.thisMonth, 'EUR')), findsOneWidget);
       expect(find.descendant(of: _k('compareThis'), matching: find.byKey(const ValueKey('compareDelta'))), findsOneWidget);
-      // Several months: the list of months is there.
-      for (final b in wc.tagBars(tag, r)) {
-        expect(_k('tagDetailRow_${b.month}'), findsOneWidget);
+      // Three months (92 days) are weeks now: one exact row per week bar, and the weeks add up to the hero.
+      final weeks = wc.spendingSeriesFor(r, bucketFor(r), tag: tag);
+      expect(weeks.first.bucket, Bucket.week);
+      for (final b in weeks) {
+        expect(_k('tagDetailRow_${b.span.start}'), findsOneWidget);
       }
+      expect(weeks.fold<int>(0, (a, b) => a + b.spent), 29000 + 29544);
       expect(tester.takeException(), isNull);
     }, timeout: _timeout);
 
@@ -242,8 +243,8 @@ void main() {
       expect(_k('compareDelta'), findsOneWidget);
       expect(_k('detailBars_category'), findsOneWidget);
       // One month: no months list under the hero's figure; the hero label is not the title again.
-      for (final b in wc.categoryBars('Groceries', r)) {
-        expect(_k('detailRow_category_${b.month}'), findsNothing);
+      for (final b in wc.spendingSeriesFor(r, bucketFor(r), category: 'Groceries')) {
+        expect(_k('detailRow_category_${b.span.start}'), findsNothing);
       }
       expect(find.descendant(of: find.byType(AppBar), matching: find.text(wc.categoryTable.label('Groceries'))), findsOneWidget);
       expect(find.text('TOTAL'), findsOneWidget, reason: 'the hero says Total, not the title again');

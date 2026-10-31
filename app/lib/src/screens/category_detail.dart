@@ -63,18 +63,24 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
     );
   }
 
-  /// One month: its one figure is the hero's, so the exact-months rows are left out (the bars stay).
-  Widget _bars(String cur, List<MonthBar> bars, String label, String id) => DashItem(
-      span: bars.length <= 1 ? 4 : 2,
-      child: MonthBarsTile(
-        rows: bars.length > 1,
-        label: label,
-        currency: cur,
-        nowMonth: monthOf(wc.today()),
-        bars: bars,
-        barsKey: ValueKey('detailBars_$id'),
-        rowKey: (m) => ValueKey('detailRow_${id}_$m'),
-      ));
+  /// The bars over time, starting at the page's range. One month: its one figure is the hero's, so the exact rows are left out until
+  /// the window moves (the bars stay).
+  Widget _bars(String id, String label, {String? merchantKey}) {
+    final oneMonth = monthOf(range.start) == monthOf(range.end);
+    return DashItem(
+        span: oneMonth ? 4 : 2,
+        child: SeriesBarsTile(
+          wc: wc,
+          id: id,
+          label: label,
+          range: range,
+          bars: (w, b) => wc.spendingSeriesFor(w, b, category: widget.category, merchantKey: merchantKey),
+          payments: (span) => wc.rowsOf(widget.category, merchantKey, span),
+          barsKey: ValueKey('detailBars_$id'),
+          rowKey: (r) => ValueKey('detailRow_${id}_$r'),
+          hideRows: oneMonth,
+        ));
+  }
 
   List<Widget> _categoryView(BuildContext context, String cur, List<MerchantTotal> merchants) {
     final c = context.c;
@@ -93,7 +99,7 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
         ),
       ),
       ...parts.tiles,
-      _bars(cur, wc.categoryBars(widget.category, range), '$name per month', 'category'),
+      _bars('category', '$name over time'),
       DashItem(
         span: 2,
         child: Tile(
@@ -146,7 +152,7 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
           sub: '${rangeLabel(range)} · ${m.count} ${m.count == 1 ? 'payment' : 'payments'} in $name',
         ),
       ),
-      _bars(cur, wc.merchantBars(widget.category, m.key, range), '${m.label} per month', 'merchant'),
+      _bars('merchant', '${m.label} over time', merchantKey: m.key),
       DashItem(
         span: 4,
         child: PaymentsTile(
