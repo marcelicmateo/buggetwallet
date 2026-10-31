@@ -520,6 +520,7 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   - **Schema 17:** update every device together; a device that stays on an older build for over 30 days after the others upgraded may miss IOUs until they are edited again.
 
 ## Next
+- **Resume (end of day 2026-10-31):** see `PIPELINE.md` "Resume here": unpushed merged work (schema 19), four WIP branches (KL-UI1, KL-UI2, ZC Z1, ZC Z2), then stage run + review + push.
 - **2026-10-31 owner grill:** every open question answered in `docs/context/OWNER_DECISIONS_2026-10-31.md`; the work is queued in `PIPELINE.md` (G1 → G2 push → RX8 → ZC, KL fixes, trims). Repo stays private; Pi not set up yet (Lenovo VPN relay for M6).
 - **Next: the M6 live test** with `docs/context/M6_CHECKLIST.md` (owner starts `gh workflow run ci --ref v2`; update the relay and every device together: schema 18, relay api 5). Waiting on the owner: Pi details for PI2 (model, OS, DDNS name, router 80/443, SSD) (superseded `p6-tests`/`p9-tests` branches deleted, owner OK).
 - Owner checks after Stage WS (laptop): `tools/build.sh web && tools/web.sh serve` → a fresh browser shows onboarding (no blank page); create a wallet, set the relay address, sync with the phone; reload → unlock with the passphrase.

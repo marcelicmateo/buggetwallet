@@ -56,6 +56,17 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 | PF | Perf (owner 2026-10-30): budgets for 60 Hz (build p90 ≤ 16.7 ms, ≤ 10 % frames over 16.7 ms, worst build ≤ 50 ms, raster only gated at ≤ 250 ms: software GL); Android asks 60 Hz (MainActivity preferred refresh rate); tab cross-fade ~180 ms (off with reduce motion); idle warm-up of every tab's derived data after the first frame and after each reload (Priority.idle, cancelled by a new data version, logs counts/ms only); hidden tabs built one per idle frame; perf action "first switch after new data" | ui-builder (sonnet/high) | worktree | perf A/B | done, merged 6244ce6 + PF2 bfebdf0 → 868e6c7 (A/B: pre-DD tab_switch 21.4 ms FAIL, DD 15.2 ms ok = host noise, not DD) |
 | ZC | Zoomable, scrollable graphs (spec `ZC_SPEC.md`, owner answers in §6) | scout → core + test-writer + ui | worktrees | DD, RX2 (chart look follows the picked direction) | on hold |
 
+## Resume here (end of day 2026-10-31)
+v2 is pushed up to 8fc7718. Merged locally and **not pushed** (no full stage run or review yet): D2 Unlink (core+UI), RX7f
+(20-day fallback), KL-A core, KL-B sync, RX8, setup.md/self-test fixes. That code includes **schema 19** (`tx.match_off`,
+`planned.auto_off`, `payee_alias`): relay, phone and laptop update together when it ships.
+Stopped mid-task, work kept as WIP commits on their branches (not merged, unverified):
+- `worktree-agent-a15f3e72e6f7a5794` (ed790dd) KL-UI1: auto-Paid toast, slip "Belongs to bill…", payeeAliases wiring, Android UID_2445/startMinutes, Upcoming = Today, compareTag swap. Brief in this session's KL-UI1 row.
+- `worktree-agent-a04c36fd4c70685c0` (8d84b17) KL-UI2: rule search section, blocked sync files + Skip, RX8 repeats.
+- `worktree-agent-a9b1ea814ccc39ab3` (30bcda6) ZC Z1 core: `series.dart` (buckets, DayIndex, series, pro-rated budget).
+- `worktree-agent-a85badd66d4df2738` (eea1d8f) ZC Z2 spec tests: 57 tests in `zc_series_spec_test.dart` (complete; compiles once Z1 lands). Spec gaps to settle in ZC_SPEC §4 before merging: `IncomeSpendingBar` fields; pro-rating per category vs total; `over` for several categories (sum of per-category overs, like `budgetVsActualSeries`?); `partial` rules for clipped/after-today buckets; label for a week spanning two months; whether `bucketsOf` enforces the 5-year cap; DayIndex extents with deleted/foreign rows.
+Next steps in order: 1) resume KL-UI1 + KL-UI2 from their branches (finish, tests) and merge; 2) resume Z1, settle the Z2 gaps, merge both; 3) stage run (test, desktop, web) + review of 8fc7718..HEAD; 4) push, STATUS; 5) ZC Z3 UI.
+
 ## Owner grill 2026-10-31 (answers in `OWNER_DECISIONS_2026-10-31.md`)
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
