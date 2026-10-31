@@ -504,9 +504,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   and web-safe. `PlannedCost` (`models.dart`): synced entity `planned` (schema 6: `title`, `date`, `amount` nullable
   cents > 0, `category`, `source` manual|calendar|bill, `source_ref` = `CalendarEvent.ref` = `calendarEventRef`
   (KL-A: SHA-256 prefix over the stable uid (.ics UID / Android `UID_2445`, never `_ID`) + date + `startMinutes`, else
-  normalized title + date + start time; all-day without uid = `legacyCalendarEventRef`, the pre-KL title + date ref
-  that every lookup also checks: `CalendarEvent.refs`, `dismissCalendarEvent(legacyRef:)`, `supersededCalendarRows`
-  in `upcoming`/`plannedIcs(events:)`; never a raw id or title), `status` open|paid|skipped, `paid_tx`, `deleted`,
+  normalized title + date + start time or an all-day marker (never equal to a legacy ref); `legacyCalendarEventRef` =
+  the pre-KL title + date ref (`CalendarEvent.legacyUid`: parseIcs's pre-KL `bw-nouid-<n>` for letterless no-UID
+  titles), used only to look up rows written before KL-A: `CalendarEvent.refs`, `dismissCalendarEvent(legacyRef:)`;
+  never a raw id or title), `status` open|paid|skipped, `paid_tx`, `deleted`,
   v19 `auto_off` = JSON list of rows `reopenPlanned` reopened it from). KL-A auto-Paid: `planAutoPaid` (exactly one
   bank row, same category, exact amount, ±3 days) runs in `_reconcile` (`_autoPayPlanned`, caught up only); toast list
   `autoPaidPlanned()`/`ackAutoPaidPlanned` (device-local `local.autoPaidPlanned`, max 50). Repo: `plannedCosts(includeClosed:)`, `addPlanned` (id

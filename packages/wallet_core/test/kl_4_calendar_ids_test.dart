@@ -39,11 +39,14 @@ void main() {
       expect(a.ref, matches(RegExp(r'^[0-9a-f]{32}$')));
     });
 
-    test('without a uid: normalized title + date + start time, the same on every source; all-day = the legacy ref', () {
+    test('without a uid: normalized title + date + start time (or all-day), the same on every source; never a legacy ref', () {
       expect(ev('', 'Dentist 80 €', at: 600, cal: 'x').ref, ev('', 'dentist', at: 600, cal: 'y').ref);
       expect(ev('', 'Dentist', at: 600).ref, isNot(ev('', 'Dentist', at: 900).ref), reason: 'same name, other time');
-      expect(ev('', 'Dentist').ref, ev('', 'Dentist').legacyRef);
-      expect(ev('', 'Dentist').refs, hasLength(1));
+      expect(ev('', 'Dentist 80 €', cal: 'x').ref, ev('', 'dentist', cal: 'y').ref, reason: 'all-day: the same on every source');
+      expect(ev('', 'Dentist').ref, isNot(ev('', 'Dentist').legacyRef), reason: 'RF5: an all-day ref is not the legacy ref');
+      expect(ev('', 'Dentist').refs, hasLength(2));
+      expect(ev('', 'Dentist').ref, isNot(ev('', 'Dentist', at: 900).legacyRef));
+      expect(ev('', '80 €').ref, isNot(ev('', '80 €').legacyRef));
       expect(ev('', '80 €', at: 600, cal: 'c1').ref, isNot(ev('', '80 €', at: 600, cal: 'c2').ref), reason: 'no letters: per calendar');
     });
 
@@ -52,6 +55,47 @@ void main() {
       expect(ev('u1', 'Dentist 80 €', at: 600).legacyRef, legacy);
       expect(ev('u1', 'Dentist 80 €', at: 600).refs, hasLength(2));
       expect(legacyCalendarEventRef(calendarId: 'c1', uid: 'u1', title: '80 €', date: '2026-03-10'), calendarRef('c1', 'u1', '2026-03-10'));
+    });
+  });
+
+  group('RF5: all-day events without a uid', () {
+    test('a decision on an all-day "Dentist" does not hide a timed "Dentist 15:00" the same day', () {
+      final r = WalletRepo.inMemory();
+      addTearDown(r.close);
+      final allDay = ev('', 'Synth dentist'), timed = ev('', 'Synth dentist', at: 900);
+      r.dismissCalendarEvent(allDay.ref, allDay.date, legacyRef: allDay.legacyRef);
+      final rows = r.plannedCosts(includeClosed: true);
+      expect(sugg(rows, [allDay]), isEmpty, reason: 'the decided event stays decided');
+      expect(sugg(rows, [timed]).map((i) => i.event!.startMinutes), [900], reason: 'the other event is still suggested');
+      // The same for a confirm.
+      final r2 = WalletRepo.inMemory();
+      addTearDown(r2.close);
+      r2.addPlanned(title: 'Synth dentist', date: allDay.date, amount: 8000, source: PlannedSource.calendar, sourceRef: allDay.ref);
+      expect(sugg(r2.plannedCosts(includeClosed: true), [timed]), hasLength(1));
+    });
+
+    test('a pre-KL decision (the legacy ref) still applies after the upgrade, also for a title without letters from an .ics', () {
+      final r = WalletRepo.inMemory();
+      addTearDown(r.close);
+      final allDay = ev('', 'Synth dentist');
+      r.dismissCalendarEvent(allDay.legacyRef, allDay.date); // what a pre-KL build wrote
+      expect(sugg(r.plannedCosts(includeClosed: true), [allDay]), isEmpty);
+
+      final parsed = parseIcs(
+              ics([
+                ['DTSTART;VALUE=DATE:20260312', 'SUMMARY:80 €'],
+              ]),
+              calendarId: 'cal1',
+              from: '2026-03-01',
+              to: '2026-03-31')
+          .events
+          .single;
+      expect(parsed.uid, '');
+      // Pre-KL builds gave a no-UID event the uid `bw-nouid-<n>` (n = its place in the file).
+      final preKl = calendarRef('cal1', 'bw-nouid-0', '2026-03-12');
+      expect(parsed.legacyRef, preKl);
+      r.addPlanned(title: '80 €', date: '2026-03-12', amount: 8000, source: PlannedSource.calendar, sourceRef: preKl);
+      expect(sugg(r.plannedCosts(includeClosed: true), [parsed]), isEmpty, reason: 'its old confirm still stands for it');
     });
   });
 
